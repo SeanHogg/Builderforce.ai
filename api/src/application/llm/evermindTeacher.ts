@@ -60,12 +60,35 @@ export interface TeacherExemplar {
 }
 
 /**
+ * Why a teacher call produced no exemplar. Every one of these used to collapse into a
+ * bare `null` that the coordinator silently swallowed — so a teach-a-task whose teacher
+ * never answered looked IDENTICAL in the console to one that worked, because the
+ * fallback re-recorded the raw input (== the task) as the "Learned" text. Naming the
+ * cause is what makes a broken teacher diagnosable instead of invisible.
+ */
+export type TeacherFailureReason =
+  /** The input was below the length worth spending a frontier call on. */
+  | 'input_too_short'
+  /** The gateway answered 4xx/5xx (bad model pin, no credit, vendor down). */
+  | 'gateway_error'
+  /** The teacher replied, but with less than {@link TEACHER_MIN_OUTPUT_CHARS}. */
+  | 'empty_output'
+  /** The call threw (network, abort, malformed payload). */
+  | 'exception';
+
+/** The outcome of one teacher call — an exemplar, or the REASON there isn't one. */
+export type TeacherResult =
+  | { ok: true; exemplar: TeacherExemplar }
+  | { ok: false; reason: TeacherFailureReason; detail?: string };
+
+/**
  * Ask a frontier `teacherModel` for an exemplar given `input` (a task prompt in
  * `answer` mode, or a run output in `refine` mode). Strict-pins the chosen model (no
  * silent substitution — a manager who picks Opus gets Opus or nothing) and routes
  * through the premium gateway pool so any vendor (Anthropic / Mistral / OpenRouter /
- * …) is reachable and metered. Returns null on any failure or a too-short exemplar so
- * the caller can fall back to raw-text adaptation.
+ * …) is reachable and metered. Never throws: every failure comes back as a NAMED
+ * {@link TeacherFailureReason} so the caller can both fall back to raw-text adaptation
+ * AND record why distillation didn't happen.
  */
 export async function generateTeacherExemplar(
   env: Env,
@@ -74,10 +97,10 @@ export async function generateTeacherExemplar(
   input: string,
   mode: TeacherMode = 'refine',
   signal?: AbortSignal,
-): Promise<TeacherExemplar | null> {
+): Promise<TeacherResult> {
   const model = teacherModel.trim();
   const text = input.trim();
-  if (!model || text.length < 20) return null;
+  if (!model || text.length < 20) return { ok: false, reason: 'input_too_short' };
 
   try {
     // Thread the tenant's connected BYO account so a strict-pinned frontier teacher
@@ -104,17 +127,31 @@ export async function generateTeacherExemplar(
       undefined,
       signal,
     );
-    if (result.response.status >= 400) return null;
+    if (result.response.status >= 400) {
+      return { ok: false, reason: 'gateway_error', detail: `HTTP ${result.response.status}` };
+    }
     const { content: output } = await readProxyChoice(result);
-    if (output.length < TEACHER_MIN_OUTPUT_CHARS) return null;
-    return { model: result.resolvedModel || model, output };
-  } catch {
-    return null;
+    if (output.length < TEACHER_MIN_OUTPUT_CHARS) {
+      return { ok: false, reason: 'empty_output', detail: `${output.length} chars` };
+    }
+    return { ok: true, exemplar: { model: result.resolvedModel || model, output } };
+  } catch (err) {
+    return { ok: false, reason: 'exception', detail: err instanceof Error ? err.message : String(err) };
   }
 }
 
-/** Why a teacher distillation was skipped (falls back to raw-text learning). */
-export type TeacherSkipReason = 'no_teacher' | 'teacher_failed';
+/**
+ * Why a teacher distillation didn't happen (the entry still learns, un-distilled).
+ * `not_pinned` = no manager ever chose a teacher; `budget_exhausted` = one IS pinned
+ * but the tenant is out of platform tokens — two very different fixes, so they must
+ * never collapse into one reason. The rest are {@link TeacherFailureReason} verbatim.
+ */
+export type TeacherSkipReason = 'not_pinned' | 'budget_exhausted' | TeacherFailureReason;
+
+/** The effective teacher for an alarm: the model to use, or WHY there isn't one. */
+export type EffectiveTeacher =
+  | { model: string }
+  | { model: null; reason: Extract<TeacherSkipReason, 'not_pinned' | 'budget_exhausted'> };
 
 export interface EvermindTrainingText {
   /** The text the coordinator adapts the SSM on. */
@@ -130,6 +167,12 @@ export interface EvermindTrainingText {
   exemplar?: string;
   /** Present when NOT distilled: why the teacher was skipped. */
   skipReason?: TeacherSkipReason;
+  /** Present when NOT distilled: the machine detail behind `skipReason` (HTTP status,
+   *  exception message, …). Operator-facing diagnosis, never shown raw to end users. */
+  skipDetail?: string;
+  /** Present when NOT distilled but a teacher WAS pinned: which model failed. Lets the
+   *  console name the model that isn't answering rather than just "not distilled". */
+  attemptedTeacherModel?: string;
 }
 
 /**
@@ -154,19 +197,19 @@ export async function resolveEvermindTeacherModel(
   db: Db,
   tenantId: number,
   teacherModel: string | null | undefined,
-): Promise<string | null> {
+): Promise<EffectiveTeacher> {
   const model = (teacherModel ?? '').trim();
-  if (!model) return null;
+  if (!model) return { model: null, reason: 'not_pinned' };
   try {
     // A connected BYO frontier account funds the teacher itself → never budget-gate it.
     const byoConnected = (await listTenantProviderKeys(env, tenantId).catch(() => [])).length > 0;
-    if (byoConnected) return model;
+    if (byoConnected) return { model };
     const availability = await getTenantTokenAvailability(db, tenantId, undefined, env);
-    if (!availability.hasTokens) return null;
+    if (!availability.hasTokens) return { model: null, reason: 'budget_exhausted' };
   } catch {
     /* fail open — keep the teacher */
   }
-  return model;
+  return { model };
 }
 
 /**
@@ -181,19 +224,33 @@ export async function resolveEvermindTeacherModel(
 export async function buildEvermindTrainingText(
   env: Env,
   tenantId: number,
-  teacherModel: string | null,
+  teacher: EffectiveTeacher,
   runText: string,
   opts?: { prompt?: string | null; signal?: AbortSignal },
 ): Promise<EvermindTrainingText> {
-  const model = (teacherModel ?? '').trim();
-  if (!model) return { text: runText, distilled: false, skipReason: 'no_teacher' };
+  if (teacher.model === null) {
+    return { text: runText, distilled: false, skipReason: teacher.reason };
+  }
+  const model = teacher.model;
 
   const prompt = (opts?.prompt ?? '').trim();
   const [input, mode] = prompt ? [prompt, 'answer' as const] : [runText, 'refine' as const];
-  const exemplar = await generateTeacherExemplar(env, tenantId, model, input, mode, opts?.signal);
-  if (!exemplar) return { text: runText, distilled: false, skipReason: 'teacher_failed' };
+  const result = await generateTeacherExemplar(env, tenantId, model, input, mode, opts?.signal);
+  if (!result.ok) {
+    // A pinned teacher that produced nothing is an OPERATIONAL FAULT, not a normal
+    // path — carry the reason + the model that failed so the console can say so
+    // instead of silently presenting the un-distilled input as what was learned.
+    return {
+      text: runText,
+      distilled: false,
+      skipReason: result.reason,
+      attemptedTeacherModel: model,
+      ...(result.detail ? { skipDetail: result.detail } : {}),
+    };
+  }
 
   // Teach the (input → exemplar) mapping, mirroring DistillationEngine's shape.
   const context = input.trim().slice(0, 1500);
+  const { exemplar } = result;
   return { text: `${context}\n${exemplar.output}`, distilled: true, teacherModel: exemplar.model, exemplar: exemplar.output };
 }

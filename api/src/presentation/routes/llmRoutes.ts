@@ -1021,8 +1021,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         error: `${provider} connection test could not run because no current test model is configured.`,
       });
     }
+    // 64 rather than a handful: the OpenAI Responses surface rejects a
+    // `max_output_tokens` under 16, and a reasoning model spends its first
+    // tokens on reasoning, so too small a budget fails a healthy credential.
     const body: ChatCompletionRequest = {
-      model, modelStrict: true, max_tokens: 8,
+      model, modelStrict: true, max_tokens: 64,
       messages: [{ role: 'user', content: 'Reply OK.' }],
     };
     const service = proxyForCompletion(c.env, access, body, {
@@ -1037,17 +1040,27 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     if (result.response.status >= 400) {
       const payload = await result.response.clone().text();
       let upstreamMessage = payload.slice(0, 1000);
+      // A 400/422 carries the upstream's own diagnostic verbatim, but a
+      // retryable failure (401/403/429/5xx) collapses into the gateway's
+      // cascade summary — which reads as a bare "failed" to the operator.
+      // Append the per-attempt upstream status so the reason is actionable.
       try {
         const parsed = JSON.parse(payload) as { error?: { message?: string } | string; message?: string };
         upstreamMessage = typeof parsed.error === 'string' ? parsed.error : parsed.error?.message ?? parsed.message ?? upstreamMessage;
       } catch { /* retain bounded raw response */ }
-      const error = `${provider} connection test failed: ${upstreamMessage || `upstream HTTP ${result.response.status}`}`;
+      const attemptDetail = result.failovers
+        ?.map((f) => `${f.vendor}/${f.model} → HTTP ${f.code}`)
+        .join('; ');
+      const error = [
+        `${provider} connection test failed: ${upstreamMessage || `upstream HTTP ${result.response.status}`}`,
+        attemptDetail ? `(${attemptDetail})` : '',
+      ].filter(Boolean).join(' ');
       return c.json({
         ok: false,
         status: 'failed',
         error,
         code: 'provider_test_failed',
-        details: { provider, model, upstreamStatus: result.response.status },
+        details: { provider, model, upstreamStatus: result.response.status, attempts: result.failovers ?? [] },
       });
     }
     return c.json({ ok: true, status: 'ready', model: result.resolvedModel, testedAt: new Date().toISOString() });

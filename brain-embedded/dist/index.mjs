@@ -160,6 +160,12 @@ async function streamChatCompletion(opts, handlers = {}) {
   if (opts.reasoning && opts.reasoning.level !== "off") {
     body.reasoning = { level: opts.reasoning.level };
   }
+  if (opts.metadata) {
+    const meta = Object.fromEntries(
+      Object.entries(opts.metadata).filter(([, v]) => v !== void 0 && v !== null)
+    );
+    if (Object.keys(meta).length > 0) body.metadata = meta;
+  }
   const doFetch = transport.fetch ?? ((input, init) => fetch(input, init));
   const res = await doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
     method: "POST",
@@ -1921,6 +1927,10 @@ async function runLoop(chatId, c, req) {
   const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
   const tools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
+  const metadata = {
+    chatId,
+    ...req.projectId != null ? { projectId: req.projectId } : {}
+  };
   let systemPrompt = resolvedSystemPrompt;
   let recalled = null;
   if (evermind?.recall) {
@@ -2006,7 +2016,7 @@ ${chatWorkLinkingDirective(chatId)}`;
     let result;
     try {
       result = await stream(
-        { messages: working, tools, tool_choice: tools ? "auto" : void 0, model, maxTokens, reasoning, signal: c.abort?.signal },
+        { messages: working, tools, tool_choice: tools ? "auto" : void 0, model, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         { onTextDelta: (d) => {
           if (firstTokenAt === void 0) firstTokenAt = nowMs2();
           c.streamingText += d;
@@ -2212,7 +2222,7 @@ ${chatWorkLinkingDirective(chatId)}`;
       let closeFirstTokenAt;
       const closing = await stream(
         // No `tools` → the model can't call another tool and must produce text.
-        { messages: working, model, maxTokens, reasoning, signal: c.abort?.signal },
+        { messages: working, model, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         { onTextDelta: (d) => {
           if (closeFirstTokenAt === void 0) closeFirstTokenAt = nowMs2();
           c.streamingText += d;

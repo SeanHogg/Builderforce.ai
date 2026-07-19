@@ -214,6 +214,48 @@ export async function sendVerificationCodeEmail(
   await provider.send({ to, subject, html });
 }
 
+const WELCOME_BODY = `
+      <p>Hi {{RecipientName}},</p>
+      <p>Welcome to Builderforce — your account is live.</p>
+      <p>Builderforce gives you an AI workforce that plans, codes, reviews and ships
+         alongside your team. Three things worth doing first:</p>
+      <ul style="margin: 0 0 16px; padding-left: 20px;">
+        <li style="margin-bottom: 8px;"><strong>Create a project</strong> and connect your repository.</li>
+        <li style="margin-bottom: 8px;"><strong>Hire an agent</strong> from the workforce and assign it a ticket.</li>
+        <li style="margin-bottom: 8px;"><strong>Invite your team</strong> so they share the same board and agents.</li>
+      </ul>
+      <p style="text-align:center; margin: 28px 0;">
+        <a href="{{AppUrl}}/dashboard" class="button">Open your dashboard</a>
+      </p>
+      <p style="font-size:13px; color:#64748b;">
+        Need a hand getting started? Just reply to this email — a human reads it.
+      </p>`;
+
+/**
+ * Sent exactly once, when a user account is first created — from every signup
+ * path (OAuth/social, verified password signup, marketplace). Linking a new
+ * provider to an existing account is NOT a signup and must not trigger it.
+ */
+export async function sendWelcomeEmail(
+  env: EmailEnv,
+  to: string,
+  name: string,
+  appBaseUrl: string,
+): Promise<void> {
+  const provider = getEmailProvider(env);
+  if (!provider) return;
+
+  const subject = 'Welcome to Builderforce';
+  const html = render(HEADER + WELCOME_BODY + FOOTER, {
+    Subject: subject,
+    RecipientName: name || to,
+    AppUrl: appBaseUrl,
+    Year: String(new Date().getFullYear()),
+  });
+
+  await provider.send({ to, subject, html });
+}
+
 const ADMIN_RESET_BODY = `
       <p>Hi,</p>
       <p>An administrator has reset access for your Builderforce account (<strong>{{Email}}</strong>).</p>

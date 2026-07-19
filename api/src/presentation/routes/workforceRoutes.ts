@@ -23,6 +23,7 @@ import { runtimeHiredAgentsCacheKey } from './runtimeRoutes';
 import { tenantHasFeature } from '../middleware/featureGate';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
 import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
+import { assignableWorkforceCacheKey } from '../../application/kanban/assignableWorkforce';
 import { parseJsonArray } from '../../domain/shared/json';
 import type { Env, HonoEnv } from '../../env';
 
@@ -35,6 +36,17 @@ const purchasedCacheKey = (tenantId: number): string => `wf:purchased:${tenantId
  *  could appear in it (create/update/hire/delete), including an eval-score change. */
 export const PUBLIC_LIST_CACHE_KEY = 'wf:public:agents';
 const PUBLIC_LIST_CACHE_TTL_SECONDS = 120;
+
+/** Every cached read an agent create/update/delete can stale: the public listing,
+ *  this tenant's assignee-hovercard profiles, and the assignable-workforce union the
+ *  role/ticket pickers read (so a just-created agent is pickable immediately). */
+async function invalidateAgentCaches(env: Env, tenantId: number): Promise<void> {
+  await Promise.all([
+    invalidateCached(env, PUBLIC_LIST_CACHE_KEY),
+    invalidateCached(env, assigneeProfilesCacheKey(tenantId)),
+    invalidateCached(env, assignableWorkforceCacheKey(tenantId)),
+  ]);
+}
 
 /**
  * The PUBLIC projection of a marketplace agent. Marketing promises agents listed
@@ -317,10 +329,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
          ${body.published ?? false}, ${psychometric})
       RETURNING *
     `;
-    // A newly-created active/published agent can appear in the public listing, and —
-    // if it carries a personality — in the assignee-hovercard map for this tenant.
-    await invalidateCached(c.env as Env, PUBLIC_LIST_CACHE_KEY);
-    await invalidateCached(c.env as Env, assigneeProfilesCacheKey(tenantId));
+    await invalidateAgentCaches(c.env as Env, tenantId);
     return c.json(mapAgentRow(row), 201);
   });
 
@@ -390,10 +399,8 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       RETURNING *
     `;
     // Name/title/bio/skills/status/published — and the agent's eval score, if a
-    // training-publish flow patches it — all surface in the public listing; a
-    // name/personality change also alters this agent's assignee hovercard.
-    await invalidateCached(c.env as Env, PUBLIC_LIST_CACHE_KEY);
-    await invalidateCached(c.env as Env, assigneeProfilesCacheKey(tenantId));
+    // training-publish flow patches it — all surface in the cached reads.
+    await invalidateAgentCaches(c.env as Env, tenantId);
     return c.json(mapAgentRow(row));
   });
 
@@ -439,8 +446,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
         WHERE tenant_id = ${tenantId} AND scope = 'agent' AND scope_id = ${bridgeId}
       `;
     }
-    await invalidateCached(c.env as Env, PUBLIC_LIST_CACHE_KEY);
-    await invalidateCached(c.env as Env, assigneeProfilesCacheKey(tenantId));
+    await invalidateAgentCaches(c.env as Env, tenantId);
     return c.json({ deleted: true });
   });
 

@@ -3649,6 +3649,22 @@
     "detailTitle": "Gelernte Erinnerung",
     "detailTask": "Aufgabe",
     "detailLearned": "Gelernt",
+    "detailTeacher": "Lehrer",
+    "detailTeacherSelf": "Selbst gelernt",
+    "detailTeacherUnknown": "Frontier-Modell",
+    "detailNoAnswer": "Aus dieser Aufgabe wurde nichts gelernt – der Lehrer lieferte keine Antwort.",
+    "faultBadge": "Nicht destilliert",
+    "faultTitle": "Lehrer lieferte keine Antwort",
+    "faultBody": "Der Lehrer hat diese Aufgabe nicht beantwortet ({reason}), daher wurde nichts daraus gelernt.",
+    "faultBodyWithModel": "{model} hat diese Aufgabe nicht beantwortet ({reason}), daher wurde nichts daraus gelernt.",
+    "faultHint": "Prüfe das angeheftete Lehrermodell und dein Frontier-Guthaben und lehre die Aufgabe erneut.",
+    "faultNotPinned": "kein Lehrer angeheftet",
+    "faultBudget": "Frontier-Token-Budget aufgebraucht",
+    "faultTooShort": "Aufgabe zu kurz zum Lehren",
+    "faultGateway": "das Modell-Gateway meldete einen Fehler",
+    "faultEmpty": "der Lehrer lieferte eine leere Antwort",
+    "faultException": "der Lehreraufruf schlug fehl",
+    "faultUnknown": "Grund nicht erfasst",
     "detailKind": "Typ",
     "detailVersion": "Version",
     "detailWeight": "Gewicht",
@@ -7717,6 +7733,29 @@
         "pastePrompt": "Kopieren Sie nach der Freigabe den auf der xAI-Seite angezeigten Code und fügen Sie ihn hier ein.",
         "pastePlaceholder": "xAI-Anmeldecode einfügen…"
       }
+    },
+    "diagnostic": {
+      "currentStatus": "Aktueller Status: {status}",
+      "checking": "wird geprüft…",
+      "test": "Verbindung testen",
+      "testing": "Wird getestet…",
+      "verified": "Verbindung bestätigt.",
+      "verifiedWith": "Verbindung mit {model} bestätigt.",
+      "usage": "Letzte 30 Tage: {requests} Anfragen · {tokens} Token",
+      "lastUsed": " · Zuletzt verwendet {when}",
+      "failedFallback": "Verbindungstest fehlgeschlagen: {status}.",
+      "failedGeneric": "Verbindungstest fehlgeschlagen",
+      "failedTitle": "{label}-Verbindung fehlgeschlagen",
+      "state": {
+        "ready": "bereit",
+        "not_connected": "nicht verbunden",
+        "revoked": "widerrufen",
+        "expired": "abgelaufen",
+        "undecryptable": "Anmeldedaten unlesbar",
+        "unavailable": "nicht verfügbar"
+      },
+      "tokensUsed": "Verbrauchte KI-Token",
+      "periodLabel": "Letzte {period}"
     }
   },
   "modelSelect": {
