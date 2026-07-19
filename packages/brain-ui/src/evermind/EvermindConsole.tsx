@@ -25,6 +25,7 @@ import {
   type EvermindValidateResult,
 } from './types';
 import { evermindLearnedStatus } from './learnedStatus';
+import { nativeOptionStyle } from '../optionStyle';
 
 export interface EvermindConsoleProps {
   adapter: EvermindConsoleAdapter;
@@ -637,14 +638,8 @@ const select: React.CSSProperties = {
   padding: '7px 9px', fontSize: '0.8rem', borderRadius: 8,
   border: `1px solid ${C.border}`, background: C.surface2, color: C.text, boxSizing: 'border-box',
 };
-/* Native <option> popup is drawn by the OS and IGNORES the translucent surface tokens the
-   <select> uses — options must carry their OWN opaque bg/fg or theme text lands on a white
-   OS popup (light-on-white, unreadable). Cascade ends in the Canvas/CanvasText system-color
-   pair, which is always a legible opaque duo and follows OS light/dark. */
-const optionStyle: React.CSSProperties = {
-  background: 'var(--bf-ev-surface-solid, var(--bg-surface, var(--vscode-dropdown-background, Canvas)))',
-  color: 'var(--bf-ev-text, var(--text-primary, var(--vscode-dropdown-foreground, CanvasText)))',
-};
+/* Every native <option> carries its own opaque bg/fg — see nativeOptionStyle. */
+const optionStyle = nativeOptionStyle;
 
 function primaryBtn(disabled: boolean): React.CSSProperties {
   return {

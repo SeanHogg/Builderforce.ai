@@ -4,6 +4,84 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-19 — Unreadable native dropdown popups + "Create Agent" not filling its roster role (frontend 2026.7.71 · api 2026.7.99 · brain-ui 2026.7.31 · VSIX 2026.7.83)
+
+**Ask.** Onboarding step 6 (roster): the assignee dropdown rendered in the wrong theme, and "Create Agent" on a gap role did not produce an agent designated for that role. Follow-up: fix *all* remaining raw selects.
+
+**Root cause (theme).** A native `<option>` popup is painted by the OS/webview and does NOT inherit the `<select>`'s background — it only picks up `color`. A themed select therefore draws light theme text onto a default light popup: unreadable. The repo already had the right answer, `frontend/src/components/Select.tsx` (a drop-in replacement rendering its own portaled themed popup, with optgroup support, keyboard nav and type-ahead), but a prior migration had missed 29 files.
+
+**Root cause ("Create Agent").** `KanbanRosterCard.onCreateAgent` created the agent with `skills: [role.roleKey]` and reloaded. The roster computes coverage from **explicit role assignments**, not from an agent's free-form `skills` array, so the row stayed a gap.
+
+**Fix.**
+- **Frontend sweep — every raw `<select>` migrated to `Select`.** 27 files / ~50 controls: KanbanTemplatesContent, TalentView, LensSnapshotsPanel, PublishToMarketplaceModal, KnowledgeDocClient, app/insights, AlertsClient, RolesView, DeckDownloadButton, ModelExportPanel, IdeProjectDetailsModal, MarketplacePageClient, ide/dashboard, freelancer/profile, WorkforceMetricsContent, MemberTimeChart, AccountabilityTab, ObjectiveCard, MeetingRoom, FinopsLens, RepoContextPicker, BenchmarkPanel, KnowledgeClient, freelancer/timecard, app/compile, plus KanbanRosterCard + RoleAssigneePicker. Zero raw `<select>` remain in `frontend/src` (only two explanatory comments).
+- **Roster gap actually closes.** `onCreateAgent` now chains `kanbanApi.assignRole({ roleKey, assigneeKind: 'agent', assigneeRef: created.id, … , projectId })` onto the create and refreshes the picker's candidate pool.
+- **Assignable-workforce cache invalidated on agent writes.** `assignableWorkforceCacheKey` exported from `api/src/application/kanban/assignableWorkforce.ts`; new `invalidateAgentCaches(env, tenantId)` in `workforceRoutes.ts` replaces three duplicated invalidation pairs across agent create/update/delete. Without it a brand-new agent was invisible to the picker for up to the 60s TTL.
+- **Non-Next hosts, where `Select` is unavailable.** `packages/brain-ui/src/optionStyle.ts` (new) holds the canonical opaque `background`/`color` pair, ending in the `Canvas`/`CanvasText` system colours; `EvermindConsole` now imports it instead of defining its own copy, and all 10 options in `ChatTicketsPanel` carry it. The VS Code webview gets one blanket `select option { … }` rule in `clients/vscode/webview/src/index.css` keyed to `--vscode-dropdown-*`.
+
+**Localization.** Two files needed strings routed through next-intl to satisfy the localize guard: `WorkforceMetricsContent` (15 strings under `workforce.performance`) and `FinopsLens` (`finops.rd.optionalPh`). Real translations added to all five catalogs.
+
+**Verified.** `tsgo --noEmit` clean on frontend + api; `tsc --noEmit` clean on brain-ui; all five i18n catalogs parse with the new keys present. The packaged VSIX carries the new CSS rule. The 13 `vitest` failures in the frontend are pre-existing — confirmed by re-running them against the unmodified sources — and are logged in the roadmap.
+
+---
+
+## ✅ RESOLVED 2026-07-19 — Chat diagnostics carried no account/plan/quota context (brain-embedded 2026.7.36 · VSIX 2026.7.83 · frontend 2026.7.71)
+
+**Ask.** A new user signs up (free plan, no credit card), installs the VSIX, and starts chatting. Their tier, remaining tokens and entitlement context must all be in the chat Diagnostics.
+
+**Why it mattered.** From inside the panel, a free/card-less tenant is indistinguishable from a broken install: the model looks weak (no premium entitlement), turns stop mid-answer (token cap 429), and nothing on screen says why. The diagnostics report answered "what STATE was this chat in?" for *wiring* (project / Evermind / learn gate) but said nothing about *who the user is to the platform* — so exactly the reports a new user files were the ones the tool couldn't explain.
+
+**Design — one serializer, one funding rule, one plan fetch.**
+- `ChatDiagnosticsAccount` + `ChatDiagnosticsMeter` added to the shared pure serializer (`brain-embedded/src/chatDiagnostics.ts`). Both surfaces gather their own way and call the ONE renderer, so web and VS Code reports stay identical.
+- New `classifyModelFunding(model, surface)` → `auto | plan | byo:<vendor> | premium`. The VSIX header's localized funding sentence and the report's machine key now come from the SAME decision — previously the classification was inlined in `App.tsx` only.
+- The report now states: plan + billing status (with an explicit "(no payment method on file)"), premium entitlement, model + funding purse + plan-pool size + connected BYO providers, per-meter used/limit/%/remaining for the whole period, and the client build → gateway.
+- **Signals** (the actionable half) gained the account causes: free+no-card *stated as expected, not a fault*; `past_due`; token allowance ≥80% and exhausted (naming the `plan_token_limit_exceeded` 429 so "it stops mid-answer" self-explains); a premium model picked without premium entitlement; and no BYO connected on free.
+- Meter rendering is unit-aware — bytes scale to KB/MB/GB, and an unlimited meter reads "unlimited" instead of leaking the `-1` sentinel.
+
+**Wiring.** VSIX `copyTranscript` and web `captureExecution` both fold the account block in. The VSIX reads plan via the shared read-through `fetchPlanSnapshot` (60s TTL, coalesced in-flight) that the header `PlanBadge` already uses, so the chip and the report can never disagree and the copy usually costs no extra request. `extensionVersion` added to the webview `init` payload (a stale VSIX is a routine cause of "already fixed" reports).
+
+**Also fixed in this pass.** `BrainInbound.path` was missing for the `open.web` case (typecheck failure). The `app.copyChat` tooltip's l10n key had been renamed without re-translation, so it fell back to English in all 4 non-English locales — re-keyed and translated, along with 10 other plan/memory strings missing from the bundles. All 5 l10n bundles now cover every string.
+
+**Tests.** `brain-embedded/src/chatDiagnostics.test.ts` (15) — the serializer had none. Covers the new-free-signup case end-to-end, "not gathered" vs "genuinely empty", unlimited/byte meters, each account Signal firing and *not* misfiring, and the funding classifier's BYO-over-plan precedence.
+
+---
+
+## ✅ RESOLVED 2026-07-19 — Account-type (Build vs Hired) choice sent no next-steps email (api 2026.7.100)
+
+**Ask.** Email the user once they pick their account type, highlighting what to do next.
+
+**Design — role-aware welcome, so nobody gets two near-identical mails.** The two signup shapes learn the role at different moments: a password / marketplace signup picks it on the register form, while an OAuth signup has no role until the onboarding gate captures it. Rather than always sending a second mail, `sendWelcomeEmail` now takes an **optional** `accountType`:
+- **Role known at signup** (password, marketplace) → the welcome carries the role-specific next steps directly, and no follow-up is sent.
+- **Role unknown** (OAuth) → the welcome is role-agnostic, and `sendAccountTypeSelectedEmail` delivers the next steps when the choice lands.
+
+**Fix.**
+- `NEXT_STEPS: Record<AccountType, …>` in `EmailService.ts` — the onboarding copy authored **once per role**, shared by both templates via `nextStepsBlock()`, so the two mails can never drift. Builder: create a project → hire an agent → invite your team (CTA `/dashboard`). Hired: complete profile → publish it → browse open gigs (CTA `/freelancer/profile`). Every path is real — the hired set matches `FOR_HIRE_NAV_GROUPS`, the routes a gig account's restricted shell can actually reach.
+- `nextStepsBlock()` emits `{{AppUrl}}` placeholders rather than a concrete origin, so the caller's single `render()` pass keeps HTML escaping uniform.
+- New `sendAccountTypeSelectedEmail(env, to, name, appBaseUrl, accountType)` wired into `POST /api/auth/me/account-type` (`authRoutes.ts`), placed **after** the `accountTypeSelectedAt` idempotency guard — the choice is one-time, so the mail is too. Fire-and-forget. Consumer already live: `selectAccountType()` in `frontend/src/lib/auth.ts:497`.
+- Signup call sites now pass the role they know: `/web/register/verify` forwards the user's `accountType`; marketplace register passes `'standard'`.
+
+**Verification.** `src/infrastructure/email/onboardingEmails.test.ts` (renamed from `welcomeEmail.test.ts`) — 11 passing tests, including per-role subject/steps/CTA, that the builder CTA never leaks into a gig account's mail, that the OAuth welcome omits role copy, and a DRY guard asserting both templates emit identical step copy for the same role. `tsgo --noEmit` clean. No frontend change, so no new i18n surface.
+
+---
+
+## ✅ RESOLVED 2026-07-19 — Third-party (OAuth) signups received no welcome email (api 2026.7.99)
+
+**Symptom.** Users creating accounts via Google/GitHub/LinkedIn/Microsoft got no welcome email.
+
+**Root cause — broader than reported: there was no welcome email at all.** A repo-wide search for `welcome` / `sendWelcome` / `welcome_email` returned only UI copy and docs prose. `EmailService.ts` exported seven senders (magic link, verification code, admin reset, workspace invite, chat invite, LLM health alert, report) — none of them a welcome. The only "Welcome to Builderforce!" string in mail was a line *inside* the password-signup OTP body, which OAuth accounts never receive (`oauthRoutes.ts` sets `emailVerifiedAt: now()` at insert and skips the OTP gate entirely). So OAuth users got zero mail, and password users got only an OTP.
+
+**Fix.**
+- New `sendWelcomeEmail(env, to, name, appBaseUrl)` in `api/src/infrastructure/email/EmailService.ts` — same `getEmailProvider`/`render` house pattern, so it is a graceful no-op when `RESEND_API_KEY` is unset.
+- Wired into all three account-creation paths, each fire-and-forget (`void`) so a mail failure can never break sign-in:
+  - `oauthRoutes.ts` — the new-user `else` branch only (reached when there is neither an `oauthAccounts` link nor a same-email `users` row), so linking a second provider to an existing account does **not** re-send.
+  - `authRoutes.ts` `POST /web/register/verify` — inside the `if (!user.emailVerifiedAt)` branch, i.e. at first successful verification when the signup becomes a real account; the guard makes a double-submit idempotent.
+  - `marketplaceRoutes.ts` `POST /auth/register`.
+- DRY: extracted `resolveAppBaseUrl(env)` into `api/src/env.ts` — the `(APP_URL ?? default).split(',')[0].trim()` incantation was duplicated across `oauthRoutes` (×2), `adminRoutes`, and `tenantRoutes`; all four now call the shared resolver, which also strips a trailing slash.
+- Realigned `version.ts` (was drifted at 2026.7.94) with `package.json` at 2026.7.99.
+
+**Verification.** `src/infrastructure/email/welcomeEmail.test.ts` — 5 passing tests covering the rendered subject/recipient/dashboard link, the name-less fallback to the address, the unconfigured-provider no-op, and both `resolveAppBaseUrl` branches. `tsgo --noEmit` clean. Live send is unverified in this environment (no `RESEND_API_KEY`).
+
+---
+
 ## ✅ RESOLVED 2026-07-18 — Teacher mode "isn't working": a failed frontier teacher silently echoed the task back as its own answer (api 2026.7.96 · brain-ui 2026.7.30 · frontend 2026.7.68 · VSIX 2026.7.82)
 
 **Symptom.** "Teach a Task" with a teacher pinned produced a "Learned memory" whose **LEARNED** body was character-identical to the **TASK** — the model appearing to echo the question back instead of learning a frontier answer.

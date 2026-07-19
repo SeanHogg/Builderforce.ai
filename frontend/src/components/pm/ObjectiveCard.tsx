@@ -185,7 +185,7 @@ export function ObjectiveCard({ o, busy, run, portfolios, initiatives, projects,
             ))}
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-            <select style={{ ...inputStyle, minWidth: 220 }} value={linkDraft} onChange={(e) => setLinkDraft(e.target.value)}>
+            <Select style={{ ...inputStyle, minWidth: 220 }} value={linkDraft} onChange={(e) => setLinkDraft(e.target.value)}>
               <option value="">{t('okr.pickItem')}</option>
               <optgroup label={t('okr.linkKind.initiative')}>
                 {initiatives.map((i) => <option key={i.id} value={`initiative:${i.id}`}>{i.name}</option>)}
@@ -196,7 +196,7 @@ export function ObjectiveCard({ o, busy, run, portfolios, initiatives, projects,
               <optgroup label={t('okr.linkKind.task')}>
                 {looseTasks.map((n) => <option key={n.key} value={`task:${n.id}`}>{n.title}</option>)}
               </optgroup>
-            </select>
+            </Select>
             <button type="button" style={ghostBtn} disabled={busy || !linkDraft} onClick={addLink}>{t('okr.addLink')}</button>
           </div>
         </div>

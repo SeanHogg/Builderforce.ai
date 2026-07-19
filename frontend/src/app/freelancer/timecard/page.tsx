@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
+import { Select } from '@/components/Select';
 import {
   listMyEngagements, listMyTimecards, resolveTimecard, submitTimecard, getTodayActivity,
   listTimecardEntries, addTimecardEntry, updateTimecardEntry, deleteTimecardEntry, logMeeting,
@@ -176,10 +177,10 @@ export default function FreelancerTimecardPage() {
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{t('meeting.title')}</div>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>{t('meeting.subtitle')}</p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <select style={{ ...inputSm, minWidth: 160 }} value={meeting.engagementId} onChange={(e) => setMeeting((m) => ({ ...m, engagementId: e.target.value }))}>
+            <Select style={{ ...inputSm, minWidth: 160 }} value={meeting.engagementId} onChange={(e) => setMeeting((m) => ({ ...m, engagementId: e.target.value }))}>
               <option value="">{t('meeting.selectWorkspace')}</option>
               {engagements.map((e) => <option key={e.id} value={e.id}>{e.tenantName ?? t('gigs.workspace')}</option>)}
-            </select>
+            </Select>
             <input style={{ ...inputSm, width: 110 }} type="number" min={1} placeholder={t('meeting.minutes')} value={meeting.minutes} onChange={(e) => setMeeting((m) => ({ ...m, minutes: e.target.value }))} />
             <input style={{ ...inputSm, flex: 1, minWidth: 140 }} placeholder={t('meeting.note')} value={meeting.note} onChange={(e) => setMeeting((m) => ({ ...m, note: e.target.value }))} />
             <button type="button" onClick={submitMeeting} disabled={busy === 'meeting' || !meeting.engagementId || !meeting.minutes}

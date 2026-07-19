@@ -1,4 +1,6 @@
 import * as react from 'react';
+import { ChatErrorAction } from './chatError.js';
+export { BrainRequestError, ChatErrorActionKind, brainRequestError, chatErrorAction } from './chatError.js';
 
 /**
  * Shared data shapes for the brain core. These define the contract the host
@@ -1219,6 +1221,13 @@ interface UseBrainConversation {
     reloadMessages: () => void;
     sending: boolean;
     error: string;
+    /**
+     * What the user can DO about {@link error}: reconnect an expired session, upgrade
+     * a plan, or add a card. Decided ONCE from the gateway's structured error body
+     * (see `chatErrorAction`), so an error banner renders the fix without
+     * pattern-matching the message text. Null when only dismissing applies.
+     */
+    errorAction: ChatErrorAction | null;
     /** Live assistant delta buffer (rendered as a trailing bubble while streaming). */
     streamingText: string;
     copiedMessageId: number | null;
@@ -1401,6 +1410,15 @@ interface BrainRunSnapshot {
     running: boolean;
     streamingText: string;
     error: string;
+    /**
+     * What the user can DO about {@link error}, when the failure was actionable —
+     * an expired session (reconnect), a plan that doesn't cover the request
+     * (upgrade), or billing that needs a card (validate_card). Derived ONCE here
+     * from the thrown error's structured gateway fields via {@link chatErrorAction},
+     * so a mounted view renders the right button without re-parsing error prose.
+     * Null when nothing but dismissing applies.
+     */
+    errorAction: ChatErrorAction | null;
     pendingConfirm: {
         name: string;
         args: unknown;
@@ -1765,6 +1783,76 @@ interface ChatDiagnosticsEvermind {
     /** ISO timestamp of the last merge, or null if never — the panel's "Last learned". */
     lastLearnedAt?: string | null;
 }
+/** One metered resource, mirroring the `/api/consumption` meter snapshot shape. */
+interface ChatDiagnosticsMeter {
+    /** 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'cloud_runs' */
+    key: string;
+    /** 'tokens' | 'bytes' | 'events' | 'fetches' | 'runs' */
+    unit: string;
+    used: number;
+    /** Monthly allowance; -1 = unlimited. */
+    limit: number;
+    unlimited: boolean;
+    /** Remaining this month; -1 when unlimited. */
+    remaining: number;
+    /** 0–100; 0 when unlimited. */
+    percentUsed: number;
+}
+/**
+ * WHO the user is to the platform and WHAT they are allowed to spend — the half of
+ * "why is this chat behaving like that?" that identity + Evermind state can't answer.
+ *
+ * The motivating case is a brand-new signup: free plan, no card, a small token
+ * allowance and no premium/frontier entitlement. From the outside that looks
+ * indistinguishable from a broken install ("it picked a weak model", "it stopped
+ * answering") — so the report states the plan, the billing status, the month-to-date
+ * meters, and the model entitlement explicitly, and the Signals section names the
+ * consequence rather than leaving the reader to infer it.
+ */
+interface ChatDiagnosticsAccount {
+    /** Effective plan key ('free' | 'pro' | …) as the API resolves it. */
+    plan?: string | null;
+    /** Billing status ('none' = no payment method on file, 'trialing', 'active', …). */
+    billingStatus?: string | null;
+    /** Current metering period — when the allowances reset. */
+    periodStart?: string | null;
+    resetsAt?: string | null;
+    /** Month-to-date usage vs allowance for every metered resource. */
+    meters?: ChatDiagnosticsMeter[];
+    /** The model in force for this chat (absent ⇒ the gateway routes per turn). */
+    model?: string | null;
+    /** Which purse funds `model`: 'byo:<vendor>' | 'plan' | 'premium' | 'auto'. */
+    modelFunding?: string | null;
+    /** Whether the plan entitles the tenant to premium/frontier models. */
+    canUsePremiumModels?: boolean;
+    /** How many models the plan pool currently offers. */
+    planModelCount?: number;
+    /** Connected bring-your-own provider keys (empty ⇒ every turn is plan-funded). */
+    byoProviders?: string[];
+    /** Client build + gateway it is talking to, so a report pins the exact surface. */
+    extensionVersion?: string | null;
+    baseUrl?: string | null;
+}
+/**
+ * WHICH purse funds a model, as a machine key: `auto` (no pin — the gateway routes per
+ * turn), `byo:<vendor>` (the tenant's own connected account), `plan` (in the plan pool,
+ * included), or `premium` (metered at cost + per-request fee).
+ *
+ * ONE decision, two consumers: the chat header renders a localized sentence from it and
+ * the diagnostics report records it. Kept here (not in a UI file) so the sentence a user
+ * READS and the key a support report SHOWS can never disagree.
+ */
+declare function classifyModelFunding(model: string | null | undefined, surface: {
+    data?: Array<{
+        id?: string;
+    }>;
+    byo?: {
+        models?: Array<{
+            id?: string;
+            vendor?: string;
+        }>;
+    };
+} | null | undefined): string;
 /** Everything the diagnostics block needs — already gathered by the host (pure in). */
 interface ChatDiagnosticsData {
     surface?: string;
@@ -1798,6 +1886,8 @@ interface ChatDiagnosticsData {
         linkType?: string;
         status?: string;
     }>;
+    /** Plan, quota and model entitlement for the signed-in tenant (see the interface). */
+    account?: ChatDiagnosticsAccount | null;
 }
 /**
  * Render the diagnostics block as Markdown lines (no trailing blank line). Every field
@@ -1806,4 +1896,4 @@ interface ChatDiagnosticsData {
  */
 declare function formatChatDiagnostics(d: ChatDiagnosticsData): string[];
 
-export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatInputAttachment, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolResultInfo, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, effortProfile, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, reasoningForRun, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, setLastResolvedModel, startRun, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, ChatErrorAction, type ChatInputAttachment, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolResultInfo, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, effortProfile, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, reasoningForRun, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, setLastResolvedModel, startRun, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };

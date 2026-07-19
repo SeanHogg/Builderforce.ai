@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
+import { Select } from '@/components/Select';
 import { runEvermindBenchmark } from '@/lib/evermind-benchmark';
 import {
   listEvermindModels,
@@ -207,7 +208,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
           {noModels ? (
             <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>{t('noModels')}</div>
           ) : (
-            <select
+            <Select
               id="evermind-model-picker"
               value={selectedSlug}
               onChange={(e) => setSelectedSlug(e.target.value)}
@@ -223,7 +224,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
                   {m.name}
                 </option>
               ))}
-            </select>
+            </Select>
           )}
         </div>
       )}

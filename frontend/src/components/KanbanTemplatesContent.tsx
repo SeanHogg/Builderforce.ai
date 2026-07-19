@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { kanbanApi } from '@/lib/builderforceApi';
+import { Select } from '@/components/Select';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import { usePermission } from '@/lib/rbac';
 import { ROLE_DISCIPLINES, useRoles, type UseRoles } from '@/lib/useRoles';
@@ -204,9 +205,9 @@ function RolesTab({ roles, canManage, rolesCrud }: {
       {canManage && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
           <input style={{ ...input, flex: '1 1 160px' }} placeholder={t('roleNamePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} />
-          <select style={input} value={discipline} onChange={(e) => setDiscipline(e.target.value as Discipline)}>
+          <Select style={input} value={discipline} onChange={(e) => setDiscipline(e.target.value as Discipline)}>
             {ROLE_DISCIPLINES.map((d) => <option key={d} value={d}>{d}</option>)}
-          </select>
+          </Select>
           <button type="button" style={btn(true)} disabled={creating} onClick={add}>{t('addRole')}</button>
         </div>
       )}
@@ -268,38 +269,38 @@ function TemplateEditor({ template, roles, onClose, onSaved }: {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
               <input style={{ ...input, flex: '1 1 140px', fontWeight: 600 }} value={lane.name} onChange={(e) => updateLane(li, { name: e.target.value })} />
               <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('gate')}</label>
-              <select style={input} value={lane.gate} onChange={(e) => updateLane(li, { gate: e.target.value as TemplateLane['gate'] })}>
+              <Select style={input} value={lane.gate} onChange={(e) => updateLane(li, { gate: e.target.value as TemplateLane['gate'] })}>
                 <option value="auto">{t('gateAuto')}</option>
                 <option value="human">{t('gateHuman')}</option>
-              </select>
+              </Select>
               <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('requirementGate')}</label>
-              <select style={input} value={lane.requirementGate} onChange={(e) => updateLane(li, { requirementGate: e.target.value as RequirementGate })}>
+              <Select style={input} value={lane.requirementGate} onChange={(e) => updateLane(li, { requirementGate: e.target.value as RequirementGate })}>
                 <option value="off">{t('gateOff')}</option>
                 <option value="soft">{t('gateSoft')}</option>
                 <option value="hard">{t('gateHard')}</option>
-              </select>
+              </Select>
             </div>
             <div style={{ display: 'grid', gap: 6 }}>
               {lane.requirements.map((req, ri) => (
                 <div key={ri} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
-                  <select style={input} value={req.kind} onChange={(e) => updateReq(li, ri, { kind: e.target.value as RequirementKind })}>
+                  <Select style={input} value={req.kind} onChange={(e) => updateReq(li, ri, { kind: e.target.value as RequirementKind })}>
                     <option value="role">{t('kindRole')}</option>
                     <option value="review">{t('kindReview')}</option>
                     <option value="diagnostic">{t('kindDiagnostic')}</option>
-                  </select>
+                  </Select>
                   {req.kind === 'diagnostic' ? (
                     <input style={{ ...input, flex: '1 1 140px' }} placeholder={t('diagnosticIdPlaceholder')} value={req.ref} onChange={(e) => updateReq(li, ri, { ref: e.target.value })} />
                   ) : (
-                    <select style={input} value={req.ref} onChange={(e) => updateReq(li, ri, { ref: e.target.value })}>
+                    <Select style={input} value={req.ref} onChange={(e) => updateReq(li, ri, { ref: e.target.value })}>
                       {roles.map((r) => <option key={r.key} value={r.key}>{r.name}</option>)}
-                    </select>
+                    </Select>
                   )}
                   {req.kind !== 'diagnostic' && (
-                    <select style={input} value={req.responsibility ?? 'reviewer'} onChange={(e) => updateReq(li, ri, { responsibility: e.target.value as LaneRequirement['responsibility'] })}>
+                    <Select style={input} value={req.responsibility ?? 'reviewer'} onChange={(e) => updateReq(li, ri, { responsibility: e.target.value as LaneRequirement['responsibility'] })}>
                       <option value="owner">{t('respOwner')}</option>
                       <option value="reviewer">{t('respReviewer')}</option>
                       <option value="contributor">{t('respContributor')}</option>
-                    </select>
+                    </Select>
                   )}
                   <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                     <input type="checkbox" checked={req.isRequired} onChange={(e) => updateReq(li, ri, { isRequired: e.target.checked })} />

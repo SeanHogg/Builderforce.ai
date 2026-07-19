@@ -25,6 +25,7 @@ __export(src_exports, {
   BrainActionsProvider: () => BrainActionsProvider,
   BrainContextProvider: () => BrainContextProvider,
   BrainProvider: () => BrainProvider,
+  BrainRequestError: () => BrainRequestError,
   CODE_CHANGE_TOOLS: () => CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX: () => CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META: () => CONSOLIDATION_META,
@@ -37,11 +38,14 @@ __export(src_exports, {
   accountUsedInTrace: () => accountUsedInTrace,
   activeMentionToken: () => activeMentionToken,
   attachEvermindLearn: () => attachEvermindLearn,
+  brainRequestError: () => brainRequestError,
   buildBrainTriageReport: () => buildBrainTriageReport,
   byoReasonHint: () => byoReasonHint,
   byoUnresolvedInTrace: () => byoUnresolvedInTrace,
   byoUnresolvedSummary: () => byoUnresolvedSummary,
+  chatErrorAction: () => chatErrorAction,
   chatWorkLinkingDirective: () => chatWorkLinkingDirective,
+  classifyModelFunding: () => classifyModelFunding,
   clearRunError: () => clearRunError,
   codeChangeFile: () => codeChangeFile,
   computeBrainDiagnostics: () => computeBrainDiagnostics,
@@ -241,11 +245,69 @@ function extractXmlToolCalls(raw) {
   return { text: f.cleanText(), toolCalls: f.toolCalls() };
 }
 
+// src/chatError.ts
+var BrainRequestError = class extends Error {
+  status;
+  code;
+  reason;
+  unlock;
+  requiredPlan;
+  feature;
+  constructor(message, init) {
+    super(message);
+    this.name = "BrainRequestError";
+    this.status = init.status;
+    this.code = init.code;
+    this.reason = init.reason;
+    this.unlock = init.unlock;
+    this.requiredPlan = init.requiredPlan;
+    this.feature = init.feature;
+  }
+};
+function str(v) {
+  return typeof v === "string" && v.length > 0 ? v : void 0;
+}
+function brainRequestError(status, body, statusText) {
+  const b = body ?? {};
+  const message = str(b.error) || str(b.message) || statusText || `Request failed (${status})`;
+  return new BrainRequestError(message, {
+    status,
+    code: str(b.code),
+    reason: str(b.reason),
+    unlock: str(b.unlock),
+    requiredPlan: str(b.requiredPlan),
+    feature: str(b.feature)
+  });
+}
+var AUTH_PROSE = /invalid or expired token|unauthor/i;
+var CARD_PROSE = /validated card|add a card|card on file/i;
+var UPGRADE_PROSE = /requires? a paid plan|upgrade to (pro|teams)|plan (token )?limit|not included in your plan/i;
+function chatErrorAction(err) {
+  const message = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  if (err instanceof BrainRequestError) {
+    const base = { requiredPlan: err.requiredPlan, feature: err.feature };
+    if (err.status === 401) return { kind: "auth", ...base };
+    if (err.unlock === "validate_card" || err.reason === "card_required") {
+      return { kind: "validate_card", ...base };
+    }
+    if (err.unlock === "upgrade" || err.reason === "plan_required" || err.status === 402) {
+      return { kind: "upgrade", ...base };
+    }
+    if (err.status === 429 && /plan_.*limit/.test(err.code ?? "")) {
+      return { kind: "upgrade", ...base };
+    }
+  }
+  if (!message) return null;
+  if (AUTH_PROSE.test(message)) return { kind: "auth" };
+  if (CARD_PROSE.test(message)) return { kind: "validate_card" };
+  if (UPGRADE_PROSE.test(message)) return { kind: "upgrade" };
+  return null;
+}
+
 // src/streamChatCompletion.ts
 async function defaultMapError(res) {
   const body = await res.json().catch(() => ({}));
-  const msg = typeof body.error === "string" && body.error || typeof body.message === "string" && body.message || res.statusText || `Request failed (${res.status})`;
-  return new Error(msg);
+  return brainRequestError(res.status, body, res.statusText);
 }
 async function streamChatCompletion(opts, handlers = {}) {
   const { transport } = opts;
@@ -253,7 +315,6 @@ async function streamChatCompletion(opts, handlers = {}) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const body = {
-    model: opts.model ?? transport.defaultModel ?? "openai/gpt-4o-mini",
     messages: opts.messages,
     temperature: opts.temperature ?? 0.3,
     max_tokens: opts.maxTokens ?? 4096,
@@ -262,6 +323,8 @@ async function streamChatCompletion(opts, handlers = {}) {
     // Providers that ignore it simply omit usage — the parse below is tolerant.
     stream_options: { include_usage: true }
   };
+  const model = opts.model ?? transport.defaultModel;
+  if (model) body.model = model;
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? "auto";
@@ -1188,8 +1251,8 @@ function detectUnbackedTicketClaim(events, messages) {
   return messages.some((m) => m.role === "assistant" && typeof m.content === "string" && TICKET_CLAIM.test(m.content));
 }
 function cap(s, n = 2e3) {
-  const str = typeof s === "string" ? s : JSON.stringify(s ?? "");
-  return str.length > n ? str.slice(0, n) + `\u2026 (+${str.length - n} chars)` : str;
+  const str2 = typeof s === "string" ? s : JSON.stringify(s ?? "");
+  return str2.length > n ? str2.slice(0, n) + `\u2026 (+${str2.length - n} chars)` : str2;
 }
 function isEvermindModel(model) {
   return /(^|\/)evermind\b|^project_evermind:|^tenant_model:/i.test(model);
@@ -1619,6 +1682,7 @@ var EMPTY_SNAPSHOT = {
   running: false,
   streamingText: "",
   error: "",
+  errorAction: null,
   pendingConfirm: null,
   messagesEpoch: 0,
   appended: [],
@@ -1634,6 +1698,7 @@ function makeCell() {
     running: false,
     streamingText: "",
     error: "",
+    errorAction: null,
     pendingConfirm: null,
     confirmResolver: null,
     appended: [],
@@ -1674,6 +1739,7 @@ function emit(c) {
     running: c.running,
     streamingText: c.streamingText,
     error: c.error,
+    errorAction: c.errorAction,
     pendingConfirm: c.pendingConfirm,
     messagesEpoch: c.messagesEpoch,
     appended: c.appended,
@@ -1901,6 +1967,7 @@ function clearRunError(chatId) {
   const c = cells.get(chatId);
   if (!c || !c.error) return;
   c.error = "";
+  c.errorAction = null;
   emit(c);
 }
 function resolveRunConfirm(chatId, ok) {
@@ -1917,6 +1984,7 @@ async function startRun(chatId, req) {
   if (c.running) return;
   c.running = true;
   c.error = "";
+  c.errorAction = null;
   c.streamingText = "";
   c.byoUnresolved = [];
   c.providerCap = [];
@@ -1930,7 +1998,10 @@ async function startRun(chatId, req) {
   try {
     await runLoop(chatId, c, req);
   } catch (e) {
-    if (!c.abort?.signal.aborted) c.error = e instanceof Error ? e.message : "Reply failed";
+    if (!c.abort?.signal.aborted) {
+      c.error = e instanceof Error ? e.message : "Reply failed";
+      c.errorAction = chatErrorAction(e);
+    }
   } finally {
     const aborted = c.abort?.signal.aborted ?? false;
     c.running = false;
@@ -2644,6 +2715,10 @@ ${refs}`;
     reloadMessages,
     sending: localSending || snapshot.running,
     error: localError || snapshot.error,
+    /** What the user can DO about `error` (reconnect / upgrade / add a card), when
+     *  the failure was actionable. Only meaningful for a RUN error — a local error
+     *  (e.g. a failed rename) has no gateway verdict behind it. */
+    errorAction: localError ? null : snapshot.errorAction,
     streamingText: snapshot.streamingText,
     copiedMessageId,
     feedbackMap,
@@ -2742,9 +2817,44 @@ function takePendingPrompt() {
 }
 
 // src/chatDiagnostics.ts
+function classifyModelFunding(model, surface) {
+  if (!model) return "auto";
+  const byo = (surface?.byo?.models ?? []).find((m) => m.id === model);
+  if (byo?.vendor) return `byo:${byo.vendor}`;
+  if ((surface?.data ?? []).some((m) => m.id === model)) return "plan";
+  return "premium";
+}
 function fmtProject(id, name) {
   if (id == null) return "none";
   return name ? `${name} (#${id})` : `#${id}`;
+}
+var METER_LABEL = {
+  ai_tokens: "AI tokens",
+  ingestion: "Data ingested",
+  error_events: "Error events",
+  outbound_fetches: "Web fetches",
+  cloud_runs: "Cloud runs"
+};
+function fmtMeterValue(value, unit) {
+  if (value < 0) return "\u221E";
+  if (unit !== "bytes") return value.toLocaleString("en-US");
+  if (value < 1024) return `${value} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let v = value / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v >= 10 ? Math.round(v) : Math.round(v * 10) / 10} ${units[i]}`;
+}
+function fmtMeter(m) {
+  const label = METER_LABEL[m.key] ?? m.key;
+  if (m.unlimited) return `${label}: ${fmtMeterValue(m.used, m.unit)} used (unlimited)`;
+  return `${label}: ${fmtMeterValue(m.used, m.unit)} / ${fmtMeterValue(m.limit, m.unit)} (${m.percentUsed}%) \xB7 ${fmtMeterValue(m.remaining, m.unit)} left`;
+}
+function tokenMeter(a) {
+  return (a?.meters ?? []).find((m) => m.key === "ai_tokens");
 }
 function diagnosticsSignals(d) {
   const out = [];
@@ -2774,6 +2884,41 @@ function diagnosticsSignals(d) {
   if ((d.agents?.length ?? 0) === 0) {
     out.push("\u2139\uFE0F No agents are invited into this chat (chats.list_agents is empty), so dispatched agents post nothing back here.");
   }
+  const acct = d.account;
+  const tokens = tokenMeter(acct);
+  if (acct) {
+    const free = acct.plan === "free";
+    const noCard = acct.billingStatus === "none" || acct.billingStatus == null;
+    if (free && noCard) {
+      out.push(
+        "\u2139\uFE0F Free plan with NO payment method on file. Expect the smaller monthly token allowance, no premium/frontier models, and turns funded by the shared free pool \u2014 none of this is a fault. Adding a card (or connecting your own provider account) lifts all three."
+      );
+    } else if (free) {
+      out.push("\u2139\uFE0F Free plan \u2014 premium/frontier models are not entitled and the monthly token allowance is the free tier's.");
+    }
+    if (acct.billingStatus === "past_due") {
+      out.push("\u26A0\uFE0F Billing status is past_due \u2014 plan entitlements may be suspended until payment succeeds, which reads as sudden model/quota downgrade.");
+    }
+    if (tokens && !tokens.unlimited) {
+      if (tokens.remaining <= 0) {
+        out.push(
+          `\u26A0\uFE0F AI token allowance is EXHAUSTED (${tokens.used.toLocaleString("en-US")} / ${tokens.limit.toLocaleString("en-US")} this period). The gateway returns 429 \`plan_token_limit_exceeded\`, so turns fail or stop mid-answer until ${acct.resetsAt ?? "the period resets"}.`
+        );
+      } else if (tokens.percentUsed >= 80) {
+        out.push(
+          `\u26A0\uFE0F AI token allowance is ${tokens.percentUsed}% used (${tokens.remaining.toLocaleString("en-US")} left, resets ${acct.resetsAt ?? "at period end"}). Long turns may be cut off by the cap before the model finishes.`
+        );
+      }
+    }
+    if (acct.modelFunding === "premium" && acct.canUsePremiumModels === false) {
+      out.push(
+        `\u26A0\uFE0F Model "${acct.model}" is a premium/metered model but this plan is NOT entitled to premium models \u2014 the gateway rejects it (402) or falls back to the plan pool, which is why answers look weaker than the picked model implies.`
+      );
+    }
+    if ((acct.byoProviders?.length ?? 0) === 0 && free) {
+      out.push("\u2139\uFE0F No bring-your-own provider accounts connected, so every turn spends the plan allowance above. Connecting your own Claude/OpenAI account makes turns $0 against the plan.");
+    }
+  }
   return out;
 }
 function formatChatDiagnostics(d) {
@@ -2785,6 +2930,27 @@ function formatChatDiagnostics(d) {
     lines.push(`- Panel's selected project: #${d.selectedProjectId}`);
   }
   lines.push(`- Tenant: ${d.tenantId != null ? `#${d.tenantId}` : "unknown"} \xB7 User: ${d.userId ?? "unknown"}`);
+  const acct = d.account;
+  if (acct) {
+    lines.push(
+      `- Plan: ${acct.plan ?? "unknown"} \xB7 billing ${acct.billingStatus ?? "none"}${acct.billingStatus === "none" || acct.billingStatus == null ? " (no payment method on file)" : ""}${acct.canUsePremiumModels != null ? ` \xB7 premium models ${acct.canUsePremiumModels ? "entitled" : "NOT entitled"}` : ""}`
+    );
+    lines.push(
+      `- Model: ${acct.model ?? "auto (gateway routes per turn)"}${acct.modelFunding ? ` \xB7 funded by ${acct.modelFunding}` : ""}${acct.planModelCount != null ? ` \xB7 ${acct.planModelCount} models in plan pool` : ""} \xB7 BYO accounts: ${acct.byoProviders?.length ? acct.byoProviders.join(", ") : "none"}`
+    );
+    const meters = acct.meters ?? [];
+    if (meters.length) {
+      lines.push(`- Usage this period${acct.periodStart ? ` (since ${acct.periodStart}` : ""}${acct.resetsAt ? `${acct.periodStart ? ", " : " ("}resets ${acct.resetsAt})` : acct.periodStart ? ")" : ""}:`);
+      for (const m of meters) lines.push(`  - ${fmtMeter(m)}`);
+    } else {
+      lines.push("- Usage this period: not available (consumption snapshot unavailable)");
+    }
+    if (acct.extensionVersion || acct.baseUrl) {
+      lines.push(`- Client: ${acct.extensionVersion ? `v${acct.extensionVersion}` : "unknown version"}${acct.baseUrl ? ` \u2192 ${acct.baseUrl}` : ""}`);
+    }
+  } else {
+    lines.push("- Plan / usage: not gathered (account snapshot unavailable \u2014 signed out, or the consumption endpoint failed)");
+  }
   const ev = d.evermind;
   if (ev) {
     lines.push(
@@ -2825,6 +2991,7 @@ function formatChatDiagnostics(d) {
   BrainActionsProvider,
   BrainContextProvider,
   BrainProvider,
+  BrainRequestError,
   CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
@@ -2837,11 +3004,14 @@ function formatChatDiagnostics(d) {
   accountUsedInTrace,
   activeMentionToken,
   attachEvermindLearn,
+  brainRequestError,
   buildBrainTriageReport,
   byoReasonHint,
   byoUnresolvedInTrace,
   byoUnresolvedSummary,
+  chatErrorAction,
   chatWorkLinkingDirective,
+  classifyModelFunding,
   clearRunError,
   codeChangeFile,
   computeBrainDiagnostics,

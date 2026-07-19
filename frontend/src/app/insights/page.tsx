@@ -19,6 +19,7 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
+import { Select } from '@/components/Select';
 import { DaysWindowSelect } from '@/components/insights/LensShell';
 import { ReorderableWidgetGrid } from '@/components/widgets/ReorderableWidgetGrid';
 import { WidgetCard } from '@/components/widgets/WidgetCard';
@@ -228,22 +229,22 @@ export default function InsightsHomePage() {
         <section>
           <RoleGate capability="dashboards.manage" variant="block">
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center' }}>
-              <select style={inputStyle} value={pickWidget} onChange={(e) => setPickWidget(e.target.value)}>
+              <Select style={inputStyle} value={pickWidget} onChange={(e) => setPickWidget(e.target.value)}>
                 <option value="">{tw('addTitle')}…</option>
                 {widgetGroups.map((g) => (
                   <optgroup key={g.group} label={tw(`group.${g.group}`)}>
                     {g.widgets.map((w) => <option key={w.id} value={w.id}>{tw(`title.${w.titleKey}`)}</option>)}
                   </optgroup>
                 ))}
-              </select>
+              </Select>
               <button style={btnStyle} onClick={() => void addRegistryWidget()} disabled={!pickWidget}>{tw('addToDashboard')}</button>
               <span style={{ width: 1, height: 24, background: 'var(--border-subtle)' }} />
-              <select style={inputStyle} value={pickMetric} onChange={(e) => setPickMetric(e.target.value)}>
+              <Select style={inputStyle} value={pickMetric} onChange={(e) => setPickMetric(e.target.value)}>
                 {metrics.map((m) => <option key={m.key} value={m.key}>{m.label} ({m.unit || 'count'})</option>)}
-              </select>
-              <select style={inputStyle} value={pickViz} onChange={(e) => setPickViz(e.target.value as WidgetViz)}>
+              </Select>
+              <Select style={inputStyle} value={pickViz} onChange={(e) => setPickViz(e.target.value as WidgetViz)}>
                 {VIZ_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
-              </select>
+              </Select>
               <button style={btnStyle} onClick={() => void addMetricWidget()}>{td('widget.add')}</button>
               <span style={{ flex: 1 }} />
               <button style={{ ...btnStyle, color: 'var(--danger, #d33)' }} onClick={() => void deleteDashboard(active.id)}>{td('delete.button')}</button>

@@ -39,7 +39,7 @@
   "now": "now",
   "Rename chat": "Rename chat",
   "New chat name": "New chat name",
-  "Copy chat transcript (for triage)": "Copy chat transcript (for triage)",
+  "Copy chat diagnostics (plan + usage + identity + Evermind state + transcript)": "Copy chat diagnostics (plan + usage + identity + Evermind state + transcript)",
   "Consolidate": "Consolidate",
   "Summarize this chat into a compact context the rest of the conversation builds on": "Summarize this chat into a compact context the rest of the conversation builds on",
   "Consolidating…": "Consolidating…",
@@ -151,5 +151,17 @@
   "Routed per turn: your connected accounts first, then your plan.": "Routed per turn: your connected accounts first, then your plan.",
   "Billed to your own {provider} account — no plan credit used.": "Billed to your own {provider} account — no plan credit used.",
   "Included in your plan.": "Included in your plan.",
-  "Premium — metered at cost + 1¢ per request.": "Premium — metered at cost + 1¢ per request."
+  "Premium — metered at cost + 1¢ per request.": "Premium — metered at cost + 1¢ per request.",
+  "You are on the Free plan — chats run on the included BuilderForce models. Click to see plans and upgrade.": "You are on the Free plan — chats run on the included BuilderForce models. Click to see plans and upgrade.",
+  "Your workspace is on the {plan} plan. Click to manage your plan.": "Your workspace is on the {plan} plan. Click to manage your plan.",
+  "{count} tokens left": "{count} tokens left",
+  "no tokens left": "no tokens left",
+  "Upgrade": "Upgrade",
+  "Upgrade to {plan}": "Upgrade to {plan}",
+  "Add a card": "Add a card",
+  "Memory": "Memory",
+  "Memory on — this chat recalls and learns from the project Evermind": "Memory on — this chat recalls and learns from the project Evermind",
+  "Memory off — this chat is a scratch space (no recall, no learning)": "Memory off — this chat is a scratch space (no recall, no learning)",
+  "Chat diagnostics copied to clipboard.": "Chat diagnostics copied to clipboard.",
+  "Upgrade to {0}": "Upgrade to {0}"
 }

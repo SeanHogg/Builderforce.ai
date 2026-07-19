@@ -236,7 +236,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
           ok,
           summary: summary ?? {
             projectId, skipped: !ok, scored: 0, ranked: 0, assigned: 0,
-            prsConducted: 0, prsMerged: 0, dispatched: 0, audited: 0, flagged: 0,
+            prsConducted: 0, prsMerged: 0, dispatched: 0, audited: 0, flagged: 0, remediated: 0,
           },
         });
       }

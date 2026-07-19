@@ -21,6 +21,7 @@
  */
 
 import { XmlToolCallFilter, extractXmlToolCalls } from './xmlToolCalls';
+import { brainRequestError } from './chatError';
 import type { ReasoningIntent } from './effort';
 
 /** Injected auth + endpoint config. Built once by BrainProvider from BrainConfig.transport. */
@@ -223,15 +224,17 @@ interface DeltaToolCall {
   function?: { name?: string; arguments?: string };
 }
 
-/** Minimal default error mapper used when the transport doesn't supply one. */
+/**
+ * Default error mapper used when the transport doesn't supply one.
+ *
+ * Keeps the gateway's STRUCTURED entitlement fields (`code`/`reason`/`unlock`/
+ * `requiredPlan`) alongside the human sentence — a 402 "needs a validated card"
+ * has to reach the UI as something the user can act on, not just prose. See
+ * {@link chatErrorAction}.
+ */
 async function defaultMapError(res: Response): Promise<Error> {
-  const body = (await res.json().catch(() => ({}))) as { error?: unknown; message?: unknown };
-  const msg =
-    (typeof body.error === 'string' && body.error) ||
-    (typeof body.message === 'string' && body.message) ||
-    res.statusText ||
-    `Request failed (${res.status})`;
-  return new Error(msg);
+  const body = await res.json().catch(() => ({}));
+  return brainRequestError(res.status, body, res.statusText);
 }
 
 /**
@@ -248,7 +251,6 @@ export async function streamChatCompletion(
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const body: Record<string, unknown> = {
-    model: opts.model ?? transport.defaultModel ?? 'openai/gpt-4o-mini',
     messages: opts.messages,
     temperature: opts.temperature ?? 0.3,
     max_tokens: opts.maxTokens ?? 4096,
@@ -257,6 +259,17 @@ export async function streamChatCompletion(
     // Providers that ignore it simply omit usage — the parse below is tolerant.
     stream_options: { include_usage: true },
   };
+  // MODEL IS OPTIONAL — omitted means "gateway, choose for me".
+  //
+  // This used to fall back to a hardcoded `openai/gpt-4o-mini`, which is a PAID
+  // OpenRouter model: an unpinned free-plan user was silently pinned to the
+  // premium tier and every turn died on a 402 ("…require a validated card on
+  // file") — a plan they never chose, refusing a model they never picked. With
+  // the key absent the gateway routes the request through the plan's own pool
+  // (free tenants → the free BuilderForce/coder models), which is what an
+  // unpinned chat has always meant on every other surface.
+  const model = opts.model ?? transport.defaultModel;
+  if (model) body.model = model;
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? 'auto';
