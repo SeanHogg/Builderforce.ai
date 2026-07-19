@@ -10057,5 +10057,36 @@
     "errorLoad": "Impossible de charger les planifications.",
     "errorSave": "Impossible d’enregistrer la planification.",
     "errorDelete": "Impossible de supprimer la planification."
+  },
+  "permissionDebugger": {
+    "title": "Débogueur de permissions",
+    "copyAll": "Tout copier",
+    "copyAllHint": "Tout copier au format JSON",
+    "exportCsv": "Exporter en CSV",
+    "exportCsvHint": "Exporter au format CSV",
+    "close": "Fermer",
+    "role": "Rôle :",
+    "activeCount": "Actives : {granted} / {total} permissions",
+    "deniedCount": "{count} refusées",
+    "softGatedCount": "{count} en restriction souple",
+    "empty": "Aucune permission dans cette vue.",
+    "tab": {
+      "page": "Page",
+      "user": "Utilisateur",
+      "role": "Rôle",
+      "missing": "Manquantes"
+    },
+    "col": {
+      "permission": "Permission",
+      "status": "Statut",
+      "source": "Source",
+      "count": "Nombre",
+      "apiEndpoint": "Point de terminaison API"
+    },
+    "status": {
+      "granted": "ACCORDÉE",
+      "denied": "REFUSÉE",
+      "soft-gate": "RESTRICTION SOUPLE"
+    }
   }
 }

@@ -10059,5 +10059,36 @@
     "errorLoad": "Could not load the schedules.",
     "errorSave": "Could not save the schedule.",
     "errorDelete": "Could not delete the schedule."
+  },
+  "permissionDebugger": {
+    "title": "Permission Debugger",
+    "copyAll": "Copy All",
+    "copyAllHint": "Copy all as JSON",
+    "exportCsv": "Export CSV",
+    "exportCsvHint": "Export as CSV",
+    "close": "Close",
+    "role": "Role:",
+    "activeCount": "Active: {granted} / {total} permissions",
+    "deniedCount": "{count} denied",
+    "softGatedCount": "{count} soft-gated",
+    "empty": "No permissions in this view.",
+    "tab": {
+      "page": "Page",
+      "user": "User",
+      "role": "Role",
+      "missing": "Missing"
+    },
+    "col": {
+      "permission": "Permission",
+      "status": "Status",
+      "source": "Source",
+      "count": "Count",
+      "apiEndpoint": "API Endpoint"
+    },
+    "status": {
+      "granted": "GRANTED",
+      "denied": "DENIED",
+      "soft-gate": "SOFT-GATE"
+    }
   }
 }

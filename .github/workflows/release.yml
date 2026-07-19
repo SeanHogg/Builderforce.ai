@@ -28,14 +28,25 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: pnpm
+          cache-dependency-path: api/pnpm-lock.yaml
 
+      # pnpm --frozen-lockfile, NOT `npm install` — deploy must build the exact
+      # tree CI gated. Every type-check/test job in ci.yml installs from
+      # api/pnpm-lock.yaml, so resolving here with npm (which re-resolves against
+      # a package-lock.json no gate reads) meant the worker shipped to production
+      # could carry dependency versions nothing had ever type-checked or tested.
       - name: Install API dependencies
         working-directory: api
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       # Drift guard — same file-based checks CI runs, but here they GATE the deploy.
       # CI and this Deploy both trigger on push:main and run concurrently, so a
@@ -90,27 +101,33 @@ jobs:
           cache-dependency-path: frontend/pnpm-lock.yaml
 
       # Frontend's `link:` deps don't auto-build the linked packages' dist/.
-      # Each linked package's `prepare` script runs `npm run build` on install,
-      # so a plain `npm install` here is sufficient to produce dist/.
+      # Each linked package's `prepare` script runs its build on install, so
+      # installing here is sufficient to produce dist/.
+      #
+      # All four use pnpm --frozen-lockfile so the artifacts bundled into the
+      # deployed frontend are built from the SAME dependency tree ci.yml's
+      # type-check/test matrix gated (it installs each of these from its own
+      # pnpm-lock.yaml). `npm install` re-resolved instead, so a linked package
+      # could ship built against versions no gate had exercised.
       - name: Install + build SDK
         working-directory: sdk
-        run: npm install --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
 
       - name: Install + build Studio engine
         working-directory: studio
-        run: npm install --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
 
       # Must follow the engine build — studio-embedded file:-depends on it.
       - name: Install + build Studio embedded
         working-directory: studio-embedded
-        run: npm install --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
 
       # brain-embedded's committed dist/ can drift or be deleted; its `prepare`
       # script (tsup) rebuilds dist/ on install so the frontend `link:` dep
       # (@seanhogg/builderforce-brain-embedded) always resolves.
       - name: Install + build Brain embedded
         working-directory: brain-embedded
-        run: npm install --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
 
       # Must follow brain-embedded — brain-ui link:-depends on it for its DTS.
       # Uses pnpm (not npm): brain-ui has a `link:` dep npm can't parse, and its
@@ -232,9 +249,14 @@ jobs:
         with:
           node-version: 20
 
+      # docs-site is the one deployed package with no pnpm-lock.yaml and no CI
+      # gate, so npm stays its resolver — but `npm ci` (lockfile-exact) rather
+      # than `npm install` (re-resolves and rewrites the lock), matching the
+      # frozen-lockfile idiom used everywhere else here. Falls back the same way
+      # the pnpm steps do so a lock/package.json drift can't block a docs deploy.
       - name: Install dependencies
         working-directory: docs-site
-        run: npm install
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
 
       - name: Build Astro Starlight (base=/docs)
         working-directory: docs-site
