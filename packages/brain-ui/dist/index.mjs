@@ -1033,6 +1033,13 @@ var nativeOptionStyle = {
   color: "var(--bf-ev-text, var(--text-primary, var(--vscode-dropdown-foreground, CanvasText)))"
 };
 
+// src/chatTickets/runGate.ts
+function resolveRunGate(adapter) {
+  const probe = adapter.canRunTicket?.();
+  if (!probe) return { allowed: true };
+  return { allowed: probe.allowed, reason: probe.reason };
+}
+
 // src/chatTickets/types.ts
 var TICKET_KINDS = ["task", "epic", "gap", "objective", "initiative", "portfolio", "roadmap", "spec"];
 var RUNNABLE_KINDS = ["task", "epic", "gap"];
@@ -1155,6 +1162,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     setLineageKey(key);
     setLineage(await adapter.listTicketChats(tk.kind, tk.ref).catch(() => []));
   };
+  const runGate = resolveRunGate(adapter);
   const runTicket = async (tk, agentRef) => {
     setBusy(true);
     try {
@@ -1219,7 +1227,18 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         ] }),
         /* @__PURE__ */ jsxs8("div", { style: { display: "flex", gap: 2 }, children: [
           onOpenTicket && tk.exists && /* @__PURE__ */ jsx8("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S.icon, children: "\u2197" }),
-          RUNNABLE.has(tk.kind) && tk.exists && /* @__PURE__ */ jsx8("button", { type: "button", title: labels.run, onClick: () => setRunKey(runKey === key ? null : key), style: S.icon, children: "\u25B6" }),
+          RUNNABLE.has(tk.kind) && tk.exists && /* @__PURE__ */ jsx8(
+            "button",
+            {
+              type: "button",
+              disabled: !runGate.allowed,
+              "aria-disabled": !runGate.allowed,
+              title: runGate.allowed ? labels.run : runGate.reason ?? labels.run,
+              onClick: () => setRunKey(runKey === key ? null : key),
+              style: runGate.allowed ? S.icon : { ...S.icon, opacity: 0.45, cursor: "not-allowed" },
+              children: "\u25B6"
+            }
+          ),
           /* @__PURE__ */ jsx8("button", { type: "button", title: labels.lineage, onClick: () => void openLineage(tk), style: S.icon, children: "\u2443" }),
           /* @__PURE__ */ jsx8("button", { type: "button", title: labels.unlink, disabled: busy, onClick: () => void unlink(tk), style: S.icon, children: "\u2715" })
         ] }),

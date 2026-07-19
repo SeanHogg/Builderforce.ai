@@ -46,19 +46,22 @@ export function useGithubActionsReadiness(projectId?: number | null): GithubActi
   const effectiveProjectId = projectId ?? scope?.currentProjectId ?? null;
   const [status, setStatus] = useState<GithubActionsStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  // Bumped by refresh() to re-run the fetch effect. Keeping the request inside an
+  // effect (rather than firing it from the callback) is what lets a project switch
+  // or an unmount cancel an in-flight read instead of writing into a dead tree.
+  const [nonce, setNonce] = useState(0);
+  const refresh = useCallback(() => setNonce((n) => n + 1), []);
 
-  const refresh = useCallback(() => {
+  useEffect(() => {
     if (effectiveProjectId == null) { setStatus(null); return; }
-    setLoading(true);
     let cancelled = false;
+    setLoading(true);
     reposApi.githubActionsStatus(effectiveProjectId)
       .then((s) => { if (!cancelled) setStatus(s); })
       .catch(() => { if (!cancelled) setStatus(null); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [effectiveProjectId]);
-
-  useEffect(() => { refresh(); }, [refresh]);
+  }, [effectiveProjectId, nonce]);
 
   return { status, loading, refresh };
 }
@@ -91,8 +94,10 @@ export function GithubActionsSurfaceNotice({ surface }: { surface: string }) {
       role="status"
       style={{
         marginTop: 8, padding: '10px 12px', borderRadius: 8,
-        border: '1px solid var(--warning-border, var(--border))',
-        background: 'var(--warning-bg, var(--bg-elevated))',
+        // Theme tokens only — --warning/--warning-bg are redefined per theme, so
+        // this reads correctly in both light and dark.
+        border: '1px solid var(--warning)',
+        background: 'var(--warning-bg)',
         color: 'var(--text-strong)', fontSize: 12, lineHeight: 1.5,
       }}
     >

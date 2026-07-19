@@ -507,6 +507,26 @@ interface ChatTicketsAdapter {
         started: boolean;
         agentName: string;
     }>;
+    /**
+     * Whether this host currently permits DISPATCHING a run, and if not, why.
+     *
+     * Run dispatch is role-gated in the web app (`runtime.execute`) but this package
+     * is surface-agnostic and also renders in the VS Code webview, where there is no
+     * tenant-role context at all. So the capability is asked of the HOST rather than
+     * computed here — it is the one thing the panel genuinely cannot know.
+     *
+     * OPTIONAL on purpose: a host that omits it (VS Code) is treated as permitted,
+     * which preserves today's behaviour rather than silently disabling the button in
+     * a surface that has no way to answer.
+     *
+     * `reason` is a host-LOCALIZED sentence rendered as the disabled control's
+     * tooltip. Product rule: a gated control is disabled and explained, never hidden
+     * — and never a button that looks live and throws on click.
+     */
+    canRunTicket?(): {
+        allowed: boolean;
+        reason?: string;
+    };
     /** Pending question/feedback requests for work linked to this chat. */
     listQuestions(chatId: number): Promise<ChatQuestionVM[]>;
     /** Deliver an answer and resume the waiting run. */

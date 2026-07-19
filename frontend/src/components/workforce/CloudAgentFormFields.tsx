@@ -8,6 +8,7 @@ import type { AgentRuntimeSupport, AgentRuntimeSurface } from '@/lib/api';
 import { ModelSelect } from '@/components/llm/ModelSelect';
 import { PremiumModelUnlock } from '@/components/llm/PremiumModelUnlock';
 import PsychometricEditor from '@/components/PsychometricEditor';
+import { GithubActionsSurfaceNotice } from '@/components/repos/githubActionsSurface';
 import type { PsychometricProfile } from '@/lib/psychometric';
 
 /**
@@ -140,6 +141,11 @@ export function CloudAgentRuntimeFields({ form, onChange }: FieldGroupProps) {
           ))}
         </Select>
         <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('surfaceHelp')}</p>
+        {/* Warns when "GitHub Actions" is picked for a project whose repo has no
+            agent workflow — otherwise dispatch silently degrades to the durable
+            executor and only says so in the run timeline afterwards. Resolves its
+            own readiness (no canX prop to compute or get stale). */}
+        <GithubActionsSurfaceNotice surface={form.runtimeSurface} />
       </div>
       <div>
         <label style={labelStyle}>{t('baseModel')}</label>

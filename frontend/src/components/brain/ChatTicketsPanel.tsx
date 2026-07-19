@@ -34,14 +34,13 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
   const tc = useTranslations('common');
   const router = useRouter();
   // "Tag to execute" DISPATCHES a run, so it needs the same DEVELOPER+ gate as
-  // every other run control. The button itself lives in the shared
-  // @seanhogg/builderforce-brain-ui package, which is surface-agnostic (it also
-  // renders in the VS Code webview, where there is no tenant-role context) and
-  // exposes no gating prop — so we can't wrap it in <RoleGate> from here. The
-  // honest signal instead rides the adapter: the panel already catches a thrown
-  // Error from runTicket and flashes its message, so a viewer gets the same
-  // "Requires Developer role" explanation rather than a surprise 403. Nothing is
-  // hidden — the Run affordance still renders.
+  // every other run control. The button lives in the shared surface-agnostic
+  // @seanhogg/builderforce-brain-ui package (it also renders in the VS Code
+  // webview, which has no tenant-role context), so it can't be wrapped in
+  // <RoleGate> from here. Instead the package asks the HOST via the adapter's
+  // `canRunTicket` probe below, which disables and explains the control exactly
+  // like every other gated affordance — rather than the click-time refusal this
+  // used to be. Nothing is hidden.
   const { allowed: canDispatchRun } = usePermission('runtime.execute');
 
   // Open a linked work item in its own view. Routes to the surface the item lives on
