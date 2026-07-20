@@ -4,9 +4,9 @@
   "description": "BuilderForceAgents voice-call plugin",
   "type": "module",
   "dependencies": {
-    "@sinclair/typebox": "0.34.48",
-    "ws": "^8.19.0",
-    "zod": "^4.3.6"
+    "@sinclair/typebox": "0.34.52",
+    "ws": "^8.21.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@seanhogg/builderforce-agents": "workspace:*"
