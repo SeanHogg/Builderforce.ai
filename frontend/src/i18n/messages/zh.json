@@ -5991,7 +5991,8 @@
         "no_board": "未配置看板",
         "no_lane": "泳道未配置",
         "terminal_lane": "已完成 — 无需运行",
-        "not_executable": "系统任务 — 不由智能体运行"
+        "not_executable": "系统任务 — 不由智能体运行",
+        "pending_approval": "外部请求——等待人工批准"
       }
     },
     "businessValue": {

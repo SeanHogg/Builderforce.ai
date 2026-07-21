@@ -5991,7 +5991,8 @@
         "no_board": "Sin tablero configurado",
         "no_lane": "Carril no configurado",
         "terminal_lane": "Hecho — no requiere ejecución",
-        "not_executable": "Tarea del sistema — no la ejecuta un agente"
+        "not_executable": "Tarea del sistema — no la ejecuta un agente",
+        "pending_approval": "Solicitud externa: a la espera de aprobación"
       }
     },
     "businessValue": {

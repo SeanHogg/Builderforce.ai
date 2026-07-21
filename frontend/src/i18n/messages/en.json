@@ -5993,7 +5993,8 @@
         "no_board": "No board configured",
         "no_lane": "Lane not configured",
         "terminal_lane": "Done — no run needed",
-        "not_executable": "System task — not run by an agent"
+        "not_executable": "System task — not run by an agent",
+        "pending_approval": "External request — awaiting human approval"
       }
     },
     "businessValue": {

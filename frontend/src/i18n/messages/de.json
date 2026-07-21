@@ -5991,7 +5991,8 @@
         "no_board": "Kein Board konfiguriert",
         "no_lane": "Spur nicht konfiguriert",
         "terminal_lane": "Fertig — kein Lauf nötig",
-        "not_executable": "Systemaufgabe – wird nicht von einem Agenten ausgeführt"
+        "not_executable": "Systemaufgabe – wird nicht von einem Agenten ausgeführt",
+        "pending_approval": "Externe Anfrage – wartet auf Genehmigung"
       }
     },
     "businessValue": {
