@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-07-20 — ✅ RESOLVED: Product Feedback collection pillar (dogfooding) (api 2026.7.116 · frontend 2026.7.87 · new `@seanhogg/builderforce-feedback` 2026.7.19)
+
+The human-input twin of the Quality error-collector pillar. Non-superadmin users can raise feedback / feature requests, and any application can embed a snippet that gathers them — all filed as **human-gated external requests** that no agent may touch until approved.
+
+**Data (mig 0354).** `feedback_collectors` (ONE per project — unique `(tenant_id, project_id)` — one `bff_*` ingest key = one embeddable snippet; `auto_create_task`, `daily_limit`, `allowed_origins`) + `feedback_submissions` (the raw request, its `fingerprint` for duplicate collapse, and its link to the opened `task_id`). Drizzle mirrors added; schema-drift/migration/source checks pass.
+
+**The gate.** `feedbackSpec.ts` owns two `tasks.source` markers: `feedback` (unapproved → inert) and `feedback_approved` (a human accepted it → ordinary executable work). `evaluateTaskAutoRun` short-circuits on `feedback` with a new `pending_approval` reason **before** any board/lane/agent resolution and returns a null `candidate`, so it blocks every dispatch path including manual Run-now — approving in triage IS the human's go. The opened ticket is deliberately owner-less so the laneAutoRun owner-fallback can't re-enable it either.
+
+**Engine + reads.** `feedbackEngine.submitFeedback` is the one write path (rolling-24h cap → duplicate collapse → record → open gated ticket), shared by the public snippet and the in-app panel. `reviewFeedbackSubmission` flips the marker on approve / archives on decline. `feedbackQueries.ts` is ONE cached loader (version-token per project/tenant) behind BOTH the tenant/project triage queue and the superadmin cross-tenant roll-up (`tenantId: null`).
+
+**Routes.** Public `/api/feedback-ingest` (`/config` + `/submit`, `bff_` key, per-collector origin policy; CORS now allows any origin on the public ingest paths — snippets live on customer domains). Tenant `/api/feedback` (collectors CRUD + in-app `/submissions` + triage `/submissions/:id/review`). Superadmin `/api/admin/feedback` (+ `/:id/review`), reusing the same loader/engine.
+
+**Snippet.** New `feedback-sdk/` package (`@seanhogg/builderforce-feedback`) — a dependency-free shadow-DOM slide-out widget (light/dark, i18n-able labels, `init/open/close/destroy`), 14 unit tests. Mirrors `browser-sdk` (quality).
+
+**Frontend.** Global right-edge `FeedbackTab` (dogfooding the widget) mounted beside `FloatingBrain`, decides its own visibility from auth + project scope; `SlideOutPanel` form. Config UI + shared `FeedbackTriage` (one component, both surfaces) under **Quality ▸ Feedback** and **/admin ▸ Logs ▸ Feedback**. Fully localized across all five catalogs. Shared task-key allocation extracted to `application/task/taskKeys.ts` (de-duplicated from ManagerService). 30 API + 14 SDK tests green; api + frontend typecheck clean.
+
+---
+
 ## 2026-07-19 — ✅ RESOLVED: Residual burndown — provider parity, CI correlation, Actions reconcile, deploy-resolver drift (api 2026.7.115 · frontend 2026.7.86 · brain-ui 2026.7.34)
 
 A pass dedicated to closing the open residuals rather than shipping a new feature. Every item below was an entry in the Consolidated Gap Register and is now deleted from it.

@@ -5991,7 +5991,8 @@
         "no_board": "Aucun tableau configuré",
         "no_lane": "Voie non configurée",
         "terminal_lane": "Terminé — aucune exécution",
-        "not_executable": "Tâche système — non exécutée par un agent"
+        "not_executable": "Tâche système — non exécutée par un agent",
+        "pending_approval": "Demande externe — en attente d’approbation"
       }
     },
     "businessValue": {

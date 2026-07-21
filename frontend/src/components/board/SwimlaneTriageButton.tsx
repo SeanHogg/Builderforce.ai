@@ -36,6 +36,7 @@ const REASON_TONE: Record<AutoRunReason, 'ok' | 'warn' | 'muted' | 'info'> = {
   no_lane: 'muted',
   terminal_lane: 'muted',
   not_executable: 'muted',
+  pending_approval: 'warn',
 };
 
 const TONE_COLOR: Record<'ok' | 'warn' | 'muted' | 'info', string> = {
