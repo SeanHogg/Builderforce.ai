@@ -1,55 +1,56 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #402
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+## Product Requirements Document: Chat Titling
 
-## Problem & Goal
+### Problem
+Users frequently struggle to identify, recall, and manage individual chat conversations due to the absence of descriptive titles. This leads to a disorganized user experience, reduced efficiency, and difficulty in retrieving past interactions. Unnamed chats clutter the interface, making navigation cumbersome.
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+### Goal
+Implement a robust system that ensures every surviving chat conversation is automatically assigned, or can be manually given, a descriptive and meaningful title. This will significantly enhance chat organization, searchability, and overall user experience.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+### Target Users / ICP Roles
+*   **All Platform Users:** Anyone who initiates or participates in chat conversations. This includes, but is not limited to, general users, power users, and enterprise clients.
 
-## Target users / ICP roles
+### Scope
+This PRD covers the automatic generation of titles for new chats, the manual editing of titles for any chat, and the consistent display and persistence of these titles across the application.
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+### Functional Requirements
 
-## Scope
+**FR1: Automatic Title Generation for New Chats**
+*   **FR1.1:** When a user initiates a new chat by sending the first message, a descriptive title shall be automatically generated.
+*   **FR1.2:** The auto-generated title shall be based on the initial context and content of the conversation.
+*   **FR1.3:** The title shall be concise, ideally between 3 and 10 words.
+*   **FR1.4:** Title generation shall occur within 5 seconds of the first message being sent.
+*   **FR1.5:** In cases where a clear topic cannot be discerned from the initial messages, a sensible default title (e.g., "New Chat – [Date YYYY-MM-DD]") shall be provided.
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+**FR2: Manual Title Editing**
+*   **FR2.1:** Users shall be able to edit the title of any chat (both automatically generated and existing) at any time.
+*   **FR2.2:** The title editing interface shall be easily accessible from both the chat list view and the active chat header.
+*   **FR2.3:** Title edits shall be saved immediately upon user confirmation (e.g., pressing Enter, clicking outside the input field).
+*   **FR2.4:** The title input field shall support a maximum of 100 characters.
 
-## Functional Requirements
+**FR3: Title Display**
+*   **FR3.1:** The chat title shall be prominently displayed in the chat list view, replacing any previous generic or absent title.
+*   **FR3.2:** The chat title shall be prominently displayed in the header of the active chat window.
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+**FR4: Title Persistence**
+*   **FR4.1:** All chat titles, whether automatically generated or manually edited, shall persist across user sessions, device logins, and application restarts.
 
-## Acceptance Criteria
+### Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+*   A newly initiated chat (after the first message is sent) displays an automatically generated title in both the chat list and chat header.
+*   The automatically generated title is contextually relevant to the initial messages.
+*   A user can successfully change the title of any chat through the provided editing mechanism.
+*   Manual title changes are reflected immediately in both the chat list and the active chat header.
+*   Upon refreshing the page, logging out and back in, or switching devices, all chat titles remain as last set (either automatically or manually).
+*   No active chat in a user's history displays a blank, "Untitled," or generic date-based title (unless it was explicitly auto-generated due to lack of context as per FR1.5).
 
-## Out of scope
+### Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+*   Batch editing of multiple chat titles simultaneously.
+*   AI-driven re-titling or dynamic title updates as a conversation evolves (beyond the initial generation).
+*   System-level enforcement of title quality beyond the initial automatic generation and user's manual input.
+*   Suggesting alternative titles during manual editing.
+*   Localized title generation for languages other than the primary supported language (initially).
+*   A dedicated bulk migration task to title *all* existing untitled chats from before this feature's release. This PRD focuses on ensuring new chats get titles and providing the mechanism for users to title *any* chat.
