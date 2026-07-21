@@ -62,7 +62,7 @@ jobs:
       - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       # Trusted Publishing requires npm >= 11.5.1 (Node 20 ships npm 10.x).
       # Pin to npm@11 — npm@latest is now 12.x which requires Node >= 22 and

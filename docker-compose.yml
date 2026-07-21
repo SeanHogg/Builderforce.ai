@@ -35,7 +35,7 @@ services:
   # Each runs `npm install` once then `tsup --watch` for the stack's lifetime.
   # ---------------------------------------------------------------------------
   sdk-watch:
-    image: node:20-bookworm-slim
+    image: node:22-bookworm-slim
     working_dir: /sdk
     command:
       - sh
@@ -59,7 +59,7 @@ services:
   # then watches both — engine in the background, embedded in the foreground.
   # A single container avoids two services racing on the studio-dist volume.
   studio-watch:
-    image: node:20-bookworm-slim
+    image: node:22-bookworm-slim
     working_dir: /studio
     command:
       - sh
