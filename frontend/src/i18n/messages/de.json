@@ -377,7 +377,8 @@
       "boards": "Boards",
       "monitors": "Monitore",
       "reporting": "Berichte",
-      "rfp": "RFP"
+      "rfp": "RFP",
+      "feedback": "Feedback"
     }
   },
   "alerts": {
@@ -7266,7 +7267,8 @@
       "errors": "Fehler",
       "audit": "Prüfprotokoll",
       "apiKeys": "API-Schlüssel",
-      "token": "Superadmin-Token"
+      "token": "Superadmin-Token",
+      "feedback": "Feedback"
     },
     "common": {
       "loading": "Wird geladen…",
@@ -10146,5 +10148,100 @@
     "notReadyTitle": "GitHub Actions ist für dieses Projekt noch nicht eingerichtet",
     "notReadyBody": "Im Standard-Repository dieses Projekts fehlt der Builderforce-Agenten-Workflow, daher weichen Läufe auf den dauerhaften Cloud-Executor aus. Öffnen Sie die Einstellungen unter Quellcodeverwaltung und wählen Sie beim Repository „Agentenläufe aktivieren“.",
     "noGithubRepoBody": "Diesem Projekt ist kein GitHub-Repository zugeordnet, es gibt also keinen Ort für GitHub Actions. Läufe weichen auf den dauerhaften Cloud-Executor aus. Verknüpfen Sie unter Quellcodeverwaltung ein GitHub-Repository."
+  },
+  "feedback": {
+    "page": {
+      "title": "Feedback",
+      "subtitle": "Sammle Funktionswünsche, Fehler und Ideen – und prüfe sie, bevor Arbeit beginnt."
+    },
+    "tab": {
+      "label": "Feedback",
+      "tooltip": "Sende uns Feedback"
+    },
+    "kind": {
+      "feature": "Funktionswunsch",
+      "bug": "Fehlerbericht",
+      "idea": "Idee",
+      "other": "Etwas anderes"
+    },
+    "status": {
+      "new": "Neu",
+      "approved": "Genehmigt",
+      "declined": "Abgelehnt"
+    },
+    "form": {
+      "title": "Sende uns Feedback",
+      "intro": "Sag uns, was das Produkt besser machen würde. Funktionswünsche, Fehler, halbfertige Ideen – alles ist willkommen.",
+      "destination": "Geht zur Prüfung ins Backlog von {project}.",
+      "kind": "Typ",
+      "summary": "Zusammenfassung",
+      "summaryPlaceholder": "Eine Zeile – was möchtest du?",
+      "details": "Details",
+      "detailsPlaceholder": "Was versuchst du zu tun, und was steht dir im Weg?",
+      "gateNote": "Deine Anfrage wird zur Prüfung durch eine Person erfasst – es wird nichts automatisch gebaut.",
+      "submit": "Feedback senden",
+      "submitting": "Senden…",
+      "close": "Schließen",
+      "another": "Weiteres senden",
+      "successTitle": "Danke",
+      "successBody": "Deine Anfrage wurde zur Prüfung durch das Team erfasst.",
+      "errorRequired": "Bitte beschreibe dein Feedback vor dem Senden.",
+      "errorGeneric": "Beim Senden deines Feedbacks ist etwas schiefgelaufen. Bitte versuche es erneut."
+    },
+    "setup": {
+      "intro": "Ein Collector pro Projekt – ein einziges einbettbares Snippet, das Funktionswünsche, Fehler und Ideen aus jeder Anwendung im Backlog dieses Projekts sammelt.",
+      "pickProject": "Wähle ein Projekt, um seinen Feedback-Collector zu konfigurieren.",
+      "enable": "Feedback-Sammlung aktivieren",
+      "enableAction": "Aktivieren",
+      "namePlaceholder": "Collector-Name",
+      "creating": "Wird erstellt…",
+      "created": "Collector erstellt",
+      "dismiss": "Verwerfen",
+      "keyOnce": "Kopiere deinen Ingest-Schlüssel jetzt – er wird nur einmal angezeigt und nie gespeichert.",
+      "ingestKey": "Ingest-Schlüssel",
+      "curlSnippet": "Mit curl testen",
+      "snippet": "Einbettungs-Snippet",
+      "endpoint": "Übermittlungs-Endpunkt",
+      "snippetNote": "Füge dies in eine beliebige Anwendung ein, um einen Feedback-Tab hinzuzufügen.",
+      "copy": "Kopieren",
+      "enabled": "Aktiviert",
+      "paused": "Pausiert",
+      "pause": "Pausieren",
+      "resume": "Fortsetzen",
+      "delete": "Löschen",
+      "confirmDelete": "Diesen Feedback-Collector löschen? Das Snippet nimmt dann keine Einsendungen mehr an.",
+      "lastSubmission": "Letzte Einsendung",
+      "options": "Optionen",
+      "autoCreateTask": "Pro Einsendung ein Backlog-Ticket öffnen",
+      "autoCreateTaskHint": "Ausgeschaltet werden Einsendungen weiterhin erfasst und können geprüft werden, aber es wird keine Karte auf dem Board angelegt.",
+      "dailyLimit": "Tägliches Einsendelimit",
+      "dailyLimitHint": "Einsendungen, die dieses Snippet je gleitendem 24-Stunden-Fenster annimmt (Missbrauchsgrenze).",
+      "allowedOrigins": "Erlaubte Ursprünge",
+      "allowedOriginsHint": "Kommagetrennte Liste von Seiten, die senden dürfen, oder * für alle.",
+      "loading": "Wird geladen…",
+      "loadFailed": "Feedback-Collector konnte nicht geladen werden.",
+      "createFailed": "Collector konnte nicht erstellt werden.",
+      "saveFailed": "Änderungen konnten nicht gespeichert werden."
+    },
+    "triage": {
+      "intro": "Prüfe jede Anfrage und genehmige sie, um Arbeit zuzulassen, oder lehne sie ab. Nichts läuft, bis du genehmigst.",
+      "filter": "Anzeigen",
+      "statusAll": "Alle",
+      "loading": "Wird geladen…",
+      "loadFailed": "Einsendungen konnten nicht geladen werden.",
+      "reviewFailed": "Deine Entscheidung konnte nicht gespeichert werden.",
+      "empty": "Hier gibt es noch kein Feedback.",
+      "approve": "Genehmigen",
+      "decline": "Ablehnen",
+      "working": "Wird bearbeitet…",
+      "confirmDecline": "Diese Anfrage ablehnen? Ihr Ticket wird vom Board archiviert.",
+      "gatedNote": "Externe Anfrage – wartet auf deine Genehmigung. Kein Agent nimmt sie an, bis du sie genehmigst.",
+      "showMore": "Mehr anzeigen",
+      "showLess": "Weniger anzeigen"
+    },
+    "admin": {
+      "title": "Produkt-Feedback",
+      "subtitle": "Funktionswünsche, Fehler und Ideen aus den Feedback-Collectorn jedes Arbeitsbereichs."
+    }
   }
 }
