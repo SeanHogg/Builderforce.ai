@@ -1,0 +1,61 @@
+{
+  "name": "@seanhogg/builderforce-feedback",
+  "version": "2026.7.19",
+  "description": "Embeddable product-feedback widget for Builderforce.ai — a slide-out panel that collects feature requests, bug reports and ideas from your users and files them as human-gated backlog tickets.",
+  "license": "MIT",
+  "author": "Sean Hogg",
+  "homepage": "https://github.com/SeanHogg/Builderforce.ai/tree/main/feedback-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/SeanHogg/Builderforce.ai/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SeanHogg/Builderforce.ai.git",
+    "directory": "feedback-sdk"
+  },
+  "keywords": [
+    "builderforce",
+    "feedback",
+    "feature-requests",
+    "product",
+    "widget",
+    "browser",
+    "typescript"
+  ],
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "browser": "dist/index.global.js",
+  "unpkg": "dist/index.global.js",
+  "jsdelivr": "dist/index.global.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.2",
+    "tsup": "^8.5.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.0.3"
+  }
+}

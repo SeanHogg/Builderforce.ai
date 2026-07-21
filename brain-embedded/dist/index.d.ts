@@ -1921,6 +1921,15 @@ interface ChatDiagnosticsData {
         error?: string | null;
         loading?: boolean;
     } | null;
+    /**
+     * Which BUILD produced this capture. Without it a dump taken minutes before a
+     * deploy is indistinguishable from one taken after, so a fixed bug reads as
+     * unfixed — which is exactly what happened while debugging chat #71.
+     */
+    versions?: {
+        ui?: string | null;
+        api?: string | null;
+    } | null;
 }
 /** How close a metered allowance is to stopping turns. */
 type AllowanceState = 'ok' | 'warn' | 'exhausted';

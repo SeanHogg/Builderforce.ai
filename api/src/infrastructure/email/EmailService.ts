@@ -4,7 +4,18 @@
  * Uses direct fetch() for Cloudflare Worker compatibility — no npm wrapper.
  * getEmailProvider() returns null when RESEND_API_KEY is absent so callers
  * degrade gracefully instead of throwing.
+ *
+ * LOCALIZATION: every template here is rendered from the shared server-side
+ * catalog in ./emailMessages — no template holds its own copy, in any language.
+ * Each sender takes a trailing `locale` and defaults it to English, so a caller
+ * that has not yet been threaded through the resolver keeps today's behaviour
+ * exactly. The locale itself is never decided here: callers get it from
+ * `application/email/sendEmail`, which is the single seam that also decides
+ * whether a send is transactional or lifecycle.
  */
+
+import { emailCopy, type EmailCopy, type NextStepsCopy } from './emailMessages';
+import { DEFAULT_EMAIL_LOCALE, type EmailLocale } from './emailLocale';
 
 // ---------------------------------------------------------------------------
 // Interfaces
@@ -90,12 +101,45 @@ function render(template: string, vars: Record<string, string>): string {
   );
 }
 
+/**
+ * Substitute placeholders into a CATALOG string without escaping.
+ *
+ * Catalog copy intentionally contains markup (`<strong>`), so it cannot go through
+ * `render()`'s escaping pass — that would print the tags. Values passed here are
+ * therefore escaped INDIVIDUALLY by the caller, or are server-controlled counts.
+ * Recipient-supplied values (names, workspace titles) must always be left as
+ * `{{Placeholder}}` for the outer `render()` call to escape instead of being
+ * interpolated here.
+ */
+function fill(copy: string, vars: Record<string, string | number> = {}): string {
+  return Object.entries(vars).reduce(
+    (acc, [key, val]) => acc.replaceAll(`{{${key}}}`, String(val)),
+    copy,
+  );
+}
+
+/** Wraps every paragraph of body copy identically so templates stay declarative. */
+function p(copy: string, style?: string): string {
+  return `\n      <p${style ? ` style="${style}"` : ''}>${copy}</p>`;
+}
+
+/** The muted small print used for "you can ignore this" notes across templates. */
+const MUTED = 'font-size:13px; color:#64748b;';
+
+/** A centred call-to-action button. */
+function cta(href: string, label: string): string {
+  return `
+      <p style="text-align:center; margin: 28px 0;">
+        <a href="${href}" class="button">${label}</a>
+      </p>`;
+}
+
 // ---------------------------------------------------------------------------
-// Templates
+// Chrome
 // ---------------------------------------------------------------------------
 
 const HEADER = `<!DOCTYPE html>
-<html><head>
+<html lang="{{Lang}}"><head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{Subject}}</title>
@@ -120,25 +164,60 @@ const HEADER = `<!DOCTYPE html>
     </div>
     <div class="content">`;
 
-const FOOTER = `
+/**
+ * The footer. `unsubscribeUrl` is supplied ONLY for lifecycle mail (see
+ * `application/email/sendEmail`) — a transactional mail must not show an opt-out,
+ * so the argument being absent is what enforces that, not a per-template decision.
+ */
+function footer(copy: EmailCopy, unsubscribeUrl?: string): string {
+  const optOut = unsubscribeUrl
+    ? `
+      <p>${copy.common.unsubscribeLine}
+         <a href="${unsubscribeUrl}" style="color:#64748b">${copy.common.unsubscribeLabel}</a>.</p>`
+    : '';
+  return `
     </div>
     <div class="footer">
-      <p>&copy; {{Year}} Builderforce. All rights reserved.</p>
+      <p>${copy.common.footerRights}</p>${optOut}
     </div>
   </div>
 </body></html>`;
+}
 
-const MAGIC_LINK_BODY = `
-      <p>Hi {{RecipientName}},</p>
-      <p>Click the button below to sign in to your Builderforce account.
-         This link expires in <strong>15 minutes</strong> and can only be used once.</p>
-      <p style="text-align:center; margin: 28px 0;">
-        <a href="{{MagicUrl}}" class="button">Sign in to Builderforce</a>
-      </p>
-      <p style="font-size:13px; color:#64748b;">
-        If you did not request this, you can safely ignore this email —
-        the link will expire on its own.
-      </p>`;
+/** The greeting — named when we know who they are, anonymous when we do not. */
+function greeting(copy: EmailCopy, named: boolean): string {
+  return p(named ? copy.common.greeting : copy.common.greetingAnonymous);
+}
+
+/**
+ * Assemble + send one message. Every sender funnels through here so the chrome,
+ * the `{{Subject}}` / `{{Year}}` / `{{Lang}}` substitution and the provider no-op
+ * are written exactly once.
+ */
+async function deliver(
+  env: EmailEnv,
+  args: {
+    to: string;
+    subject: string;
+    body: string;
+    locale: EmailLocale;
+    copy: EmailCopy;
+    vars?: Record<string, string>;
+    unsubscribeUrl?: string;
+  },
+): Promise<void> {
+  const provider = getEmailProvider(env);
+  if (!provider) return;
+
+  const html = render(HEADER + args.body + footer(args.copy, args.unsubscribeUrl), {
+    Subject: args.subject,
+    Lang: args.locale,
+    Year: String(new Date().getFullYear()),
+    ...args.vars,
+  });
+
+  await provider.send({ to: args.to, subject: args.subject, html });
+}
 
 // ---------------------------------------------------------------------------
 // Public send functions
@@ -153,42 +232,32 @@ export function appendAnonId(url: string, anonId?: string | null): string {
   return `${url}${url.includes('?') ? '&' : '?'}aid=${encodeURIComponent(anonId)}`;
 }
 
+/** TRANSACTIONAL — the user just asked to sign in. No opt-out. */
 export async function sendMagicLinkEmail(
   env: EmailEnv,
   to: string,
   name: string,
   magicUrl: string,
   anonId?: string | null,
+  locale: EmailLocale = DEFAULT_EMAIL_LOCALE,
 ): Promise<void> {
-  const provider = getEmailProvider(env);
-  if (!provider) return;
+  const copy = emailCopy(locale);
+  const body = greeting(copy, true)
+    + p(copy.magicLink.intro)
+    + cta('{{MagicUrl}}', copy.magicLink.cta)
+    + p(copy.magicLink.ignoreNote, MUTED);
 
-  const html = render(HEADER + MAGIC_LINK_BODY + FOOTER, {
-    Subject: 'Your Builderforce sign-in link',
-    RecipientName: name || to,
-    MagicUrl: appendAnonId(magicUrl, anonId),
-    Year: String(new Date().getFullYear()),
+  await deliver(env, {
+    to,
+    subject: copy.magicLink.subject,
+    body,
+    locale,
+    copy,
+    vars: { RecipientName: name || to, MagicUrl: appendAnonId(magicUrl, anonId) },
   });
-
-  await provider.send({ to, subject: 'Your Builderforce sign-in link', html });
 }
 
-const VERIFICATION_CODE_BODY = `
-      <p>Hi {{RecipientName}},</p>
-      <p>Welcome to Builderforce! Enter this code to confirm your email address
-         and activate your account:</p>
-      <p style="text-align:center; margin: 28px 0;">
-        <span style="display:inline-block; font-family: 'Courier New', monospace;
-                     font-size: 34px; font-weight: 700; letter-spacing: 10px;
-                     color: #0f172a; background: #f1f5f9; border: 1px solid #e2e8f0;
-                     border-radius: 10px; padding: 16px 28px;">{{Code}}</span>
-      </p>
-      <p>This code expires in <strong>15 minutes</strong>.</p>
-      <p style="font-size:13px; color:#64748b;">
-        If you did not create a Builderforce account, you can safely ignore this
-        email — no account will be activated without this code.
-      </p>`;
-
+/** TRANSACTIONAL — the user just requested the code. No opt-out. */
 export async function sendVerificationCodeEmail(
   env: EmailEnv,
   to: string,
@@ -199,94 +268,76 @@ export async function sendVerificationCodeEmail(
   // link, so there is no URL to attach `aid` to today — kept for a future link-based
   // verify flow and so callers can pass it uniformly.
   _anonId?: string | null,
+  locale: EmailLocale = DEFAULT_EMAIL_LOCALE,
 ): Promise<void> {
-  const provider = getEmailProvider(env);
-  if (!provider) return;
+  const copy = emailCopy(locale);
+  const subject = fill(copy.verificationCode.subject, { Code: code });
 
-  const subject = `Your Builderforce verification code: ${code}`;
-  const html = render(HEADER + VERIFICATION_CODE_BODY + FOOTER, {
-    Subject: subject,
-    RecipientName: name || to,
-    Code: code,
-    Year: String(new Date().getFullYear()),
+  const body = greeting(copy, true)
+    + p(copy.verificationCode.intro)
+    + `
+      <p style="text-align:center; margin: 28px 0;">
+        <span style="display:inline-block; font-family: 'Courier New', monospace;
+                     font-size: 34px; font-weight: 700; letter-spacing: 10px;
+                     color: #0f172a; background: #f1f5f9; border: 1px solid #e2e8f0;
+                     border-radius: 10px; padding: 16px 28px;">{{Code}}</span>
+      </p>`
+    + p(copy.verificationCode.expiry)
+    + p(copy.verificationCode.ignoreNote, MUTED);
+
+  await deliver(env, {
+    to,
+    subject,
+    body,
+    locale,
+    copy,
+    vars: { RecipientName: name || to, Code: code },
   });
-
-  await provider.send({ to, subject, html });
 }
 
 /** The two account shapes a user can hold — mirrors `users.account_type`. */
 export type AccountType = 'standard' | 'freelancer';
 
 /**
- * The onboarding next-steps copy, authored ONCE per account type and shared by
- * both the welcome email (when the role is known at signup) and the
- * account-type-selected email (when it is picked later). Never re-inline this
- * copy in a second template — the two emails must not drift apart.
+ * Renders the shared next-steps list + CTA for an account type. The COPY lives in
+ * the catalog (`emailMessages.nextSteps`), authored once per account type and read
+ * by both the welcome email (when the role is known at signup) and the
+ * account-type-selected email (when it is picked later) — in every locale. Never
+ * re-inline this copy in a second template: the two emails must not drift apart,
+ * and now they cannot drift per-language either.
+ *
+ * Emits `{{AppUrl}}` rather than a concrete origin so the caller's `render()` pass
+ * does the substitution (and the HTML escaping) uniformly.
  *
  * Every `path` here is a real, reachable route: the builder set matches the
  * standard app shell, the freelancer set matches FOR_HIRE_NAV_GROUPS (the
- * restricted shell a gig account is actually allowed to reach).
+ * restricted shell a gig account is actually allowed to reach). Paths are NOT
+ * localized — they are routes, not copy — which is why they live here and not in
+ * the catalog.
  */
-const NEXT_STEPS: Record<AccountType, {
-  headline: string;
-  steps: { label: string; detail: string }[];
-  ctaLabel: string;
-  ctaPath: string;
-}> = {
-  standard: {
-    headline: 'Builderforce gives you an AI workforce that plans, codes, reviews and ships '
-      + 'alongside your team. Three things worth doing first:',
-    steps: [
-      { label: 'Create a project', detail: 'and connect the repository you want worked on.' },
-      { label: 'Hire an agent', detail: 'from the workforce, then assign it a ticket on your board.' },
-      { label: 'Invite your team', detail: 'so everyone shares the same board, agents and context.' },
-    ],
-    ctaLabel: 'Open your dashboard',
-    ctaPath: '/dashboard',
-  },
-  freelancer: {
-    headline: 'Your account is set up for finding work. Teams search this talent pool by '
-      + 'skill and availability, so three things get you in front of them:',
-    steps: [
-      { label: 'Complete your profile', detail: 'skills, rate and availability — it is what teams match on.' },
-      { label: 'Publish it', detail: 'an unpublished profile is private and will not appear in search.' },
-      { label: 'Browse open gigs', detail: 'and put yourself forward for the ones that fit.' },
-    ],
-    ctaLabel: 'Complete your profile',
-    ctaPath: '/freelancer/profile',
-  },
+const NEXT_STEPS_PATH: Record<AccountType, string> = {
+  standard: '/dashboard',
+  freelancer: '/freelancer/profile',
 };
 
-/**
- * Renders the shared next-steps list + CTA for an account type. Emits `{{AppUrl}}`
- * placeholders rather than a concrete origin so the caller's `render()` pass does
- * the substitution (and the HTML escaping) uniformly.
- */
-function nextStepsBlock(accountType: AccountType): string {
-  const plan = NEXT_STEPS[accountType];
+function nextStepsBlock(plan: NextStepsCopy, accountType: AccountType): string {
   const items = plan.steps
     .map((s) => `        <li style="margin-bottom: 8px;"><strong>${s.label}</strong> — ${s.detail}</li>`)
     .join('\n');
 
-  return `
-      <p>${plan.headline}</p>
+  return p(plan.headline)
+    + `
       <ul style="margin: 0 0 16px; padding-left: 20px;">
 ${items}
-      </ul>
-      <p style="text-align:center; margin: 28px 0;">
-        <a href="{{AppUrl}}${plan.ctaPath}" class="button">${plan.ctaLabel}</a>
-      </p>`;
+      </ul>`
+    + cta(`{{AppUrl}}${NEXT_STEPS_PATH[accountType]}`, plan.ctaLabel);
 }
 
-const SUPPORT_LINE = `
-      <p style="font-size:13px; color:#64748b;">
-        Need a hand getting started? Just reply to this email — a human reads it.
-      </p>`;
-
 /**
- * Sent exactly once, when a user account is first created — from every signup
- * path (OAuth/social, verified password signup, marketplace). Linking a new
- * provider to an existing account is NOT a signup and must not trigger it.
+ * TRANSACTIONAL — sent exactly once, when a user account is first created, from
+ * every signup path (OAuth/social, verified password signup, marketplace). Linking
+ * a new provider to an existing account is NOT a signup and must not trigger it.
+ * The recipient just created the account, so no opt-out applies.
  *
  * `accountType` is optional because the two signup shapes differ: a password /
  * marketplace signup picks its role on the register form, so the welcome can
@@ -301,42 +352,37 @@ export async function sendWelcomeEmail(
   name: string,
   appBaseUrl: string,
   accountType?: AccountType,
+  locale: EmailLocale = DEFAULT_EMAIL_LOCALE,
 ): Promise<void> {
-  const provider = getEmailProvider(env);
-  if (!provider) return;
+  const copy = emailCopy(locale);
 
-  const body = accountType
-    ? nextStepsBlock(accountType)
-    : `
-      <p>Builderforce gives you an AI workforce that plans, codes, reviews and ships
-         alongside your team — or connects you to teams hiring for that work.</p>
-      <p>Pick how you want to use it when you sign in, and we will point you at the
-         right first steps.</p>
-      <p style="text-align:center; margin: 28px 0;">
-        <a href="{{AppUrl}}/dashboard" class="button">Get started</a>
-      </p>`;
+  const roleBody = accountType
+    ? nextStepsBlock(copy.nextSteps[accountType], accountType)
+    : p(copy.welcome.roleUnknownBody)
+      + p(copy.welcome.roleUnknownPrompt)
+      + cta('{{AppUrl}}/dashboard', copy.welcome.roleUnknownCta);
 
-  const subject = 'Welcome to Builderforce';
-  const html = render(
-    HEADER + `
-      <p>Hi {{RecipientName}},</p>
-      <p>Welcome to Builderforce — your account is live.</p>` + body + SUPPORT_LINE + FOOTER,
-    {
-      Subject: subject,
-      RecipientName: name || to,
-      AppUrl: appBaseUrl,
-      Year: String(new Date().getFullYear()),
-    },
-  );
+  const body = greeting(copy, true)
+    + p(copy.welcome.intro)
+    + roleBody
+    + p(copy.common.supportLine, MUTED);
 
-  await provider.send({ to, subject, html });
+  await deliver(env, {
+    to,
+    subject: copy.welcome.subject,
+    body,
+    locale,
+    copy,
+    vars: { RecipientName: name || to, AppUrl: appBaseUrl },
+  });
 }
 
 /**
- * Sent when a user makes the one-time Build-vs-Hired choice (the onboarding gate
- * for OAuth / magic-link accounts, which had no role at signup). Carries the
- * next steps for the role they picked. Not sent for a password signup — that
- * role is known at register time and its welcome already carried these steps.
+ * TRANSACTIONAL — sent when a user makes the one-time Build-vs-Hired choice (the
+ * onboarding gate for OAuth / magic-link accounts, which had no role at signup).
+ * Carries the next steps for the role they picked, and is a direct response to
+ * their action. Not sent for a password signup — that role is known at register
+ * time and its welcome already carried these steps.
  */
 export async function sendAccountTypeSelectedEmail(
   env: EmailEnv,
@@ -344,150 +390,138 @@ export async function sendAccountTypeSelectedEmail(
   name: string,
   appBaseUrl: string,
   accountType: AccountType,
+  locale: EmailLocale = DEFAULT_EMAIL_LOCALE,
 ): Promise<void> {
-  const provider = getEmailProvider(env);
-  if (!provider) return;
+  const copy = emailCopy(locale);
+  const isFreelancer = accountType === 'freelancer';
 
-  const subject = accountType === 'freelancer'
-    ? "You're set up to find work on Builderforce"
-    : 'Your Builderforce workspace is ready';
+  const subject = isFreelancer
+    ? copy.accountTypeSelected.subjectFreelancer
+    : copy.accountTypeSelected.subjectStandard;
 
-  const intro = accountType === 'freelancer'
-    ? 'Your account is set up as a <strong>Hired</strong> profile — for finding work.'
-    : 'Your account is set up to <strong>Build</strong> — projects, boards and an AI workforce.';
+  const body = greeting(copy, true)
+    + p(isFreelancer ? copy.accountTypeSelected.introFreelancer : copy.accountTypeSelected.introStandard)
+    + nextStepsBlock(copy.nextSteps[accountType], accountType)
+    + p(copy.common.supportLine, MUTED);
 
-  const html = render(
-    HEADER + `
-      <p>Hi {{RecipientName}},</p>
-      <p>${intro}</p>` + nextStepsBlock(accountType) + SUPPORT_LINE + FOOTER,
-    {
-      Subject: subject,
-      RecipientName: name || to,
-      AppUrl: appBaseUrl,
-      Year: String(new Date().getFullYear()),
-    },
-  );
-
-  await provider.send({ to, subject, html });
+  await deliver(env, {
+    to,
+    subject,
+    body,
+    locale,
+    copy,
+    vars: { RecipientName: name || to, AppUrl: appBaseUrl },
+  });
 }
 
-const ADMIN_RESET_BODY = `
-      <p>Hi,</p>
-      <p>An administrator has reset access for your Builderforce account (<strong>{{Email}}</strong>).</p>
-      <p>Click the button below to sign in. Once in, you can update your password from
-         <strong>Settings → Account</strong>. This link expires in <strong>24 hours</strong>.</p>
-      <p style="text-align:center; margin: 28px 0;">
-        <a href="{{MagicUrl}}" class="button">Sign in to Builderforce</a>
-      </p>
-      <p style="font-size:13px; color:#64748b;">
-        If you did not expect this, contact your administrator or reach out to support.
-      </p>`;
-
+/** TRANSACTIONAL — account access. Suppressing this would lock the user out. */
 export async function sendAdminPasswordResetEmail(
   env: EmailEnv,
   to: string,
   magicUrl: string,
+  locale: EmailLocale = DEFAULT_EMAIL_LOCALE,
 ): Promise<void> {
-  const provider = getEmailProvider(env);
-  if (!provider) return;
+  const copy = emailCopy(locale);
+  const body = greeting(copy, false)
+    + p(copy.adminReset.body)
+    + p(copy.adminReset.instructions)
+    + cta('{{MagicUrl}}', copy.adminReset.cta)
+    + p(copy.adminReset.note, MUTED);
 
-  const html = render(HEADER + ADMIN_RESET_BODY + FOOTER, {
-    Subject: 'Your Builderforce account access has been reset',
-    Email: to,
-    MagicUrl: magicUrl,
-    Year: String(new Date().getFullYear()),
+  await deliver(env, {
+    to,
+    subject: copy.adminReset.subject,
+    body,
+    locale,
+    copy,
+    vars: { Email: to, MagicUrl: magicUrl },
   });
-
-  await provider.send({ to, subject: 'Your Builderforce account access has been reset', html });
 }
 
-const WORKSPACE_INVITE_BODY = `
-      <p>Hi,</p>
-      <p><strong>{{InviterName}}</strong> invited you to join the
-         <strong>{{WorkspaceName}}</strong> workspace on Builderforce as a
-         <strong>{{Role}}</strong>.</p>
-      <p>Builderforce.ai is your AI agent workforce — build, train and govern AI
-         agents that ship code, run workflows and connect your systems.</p>
-      <p style="text-align:center; margin: 28px 0;">
-        <a href="{{SignupUrl}}" class="button">Accept your invitation</a>
-      </p>
-      <p style="font-size:13px; color:#64748b;">
-        Sign up with this email address ({{Email}}) and you will join
-        {{WorkspaceName}} automatically. If you were not expecting this, you can
-        ignore this email.
-      </p>`;
-
 /**
- * Cold-invite email: tells someone with no Builderforce account that they were
- * invited to a workspace and links them to sign up with the invited address (so
- * the pending invitation auto-converts on first login). Best-effort — no-ops
- * when RESEND_API_KEY is unset, like the other senders.
+ * TRANSACTIONAL — cold-invite email: tells someone with no Builderforce account
+ * that a HUMAN invited them to a workspace, and links them to sign up with the
+ * invited address (so the pending invitation auto-converts on first login). A
+ * person-to-person invitation is a relationship message, not marketing.
+ * Best-effort — no-ops when RESEND_API_KEY is unset, like the other senders.
  */
 export async function sendWorkspaceInviteEmail(
   env: EmailEnv,
   to: string,
-  opts: { workspaceName: string; inviterName: string; signupUrl: string; role: string },
+  opts: {
+    workspaceName: string;
+    inviterName: string;
+    signupUrl: string;
+    role: string;
+    locale?: EmailLocale;
+  },
 ): Promise<void> {
-  const provider = getEmailProvider(env);
-  if (!provider) return;
+  const locale = opts.locale ?? DEFAULT_EMAIL_LOCALE;
+  const copy = emailCopy(locale);
 
-  const subject = `${opts.inviterName} invited you to ${opts.workspaceName} on Builderforce`;
-  const html = render(HEADER + WORKSPACE_INVITE_BODY + FOOTER, {
-    Subject: subject,
-    InviterName: opts.inviterName,
-    WorkspaceName: opts.workspaceName,
-    Role: opts.role,
-    SignupUrl: opts.signupUrl,
-    Email: to,
-    Year: String(new Date().getFullYear()),
+  const body = greeting(copy, false)
+    + p(copy.workspaceInvite.body)
+    + p(copy.workspaceInvite.pitch)
+    + cta('{{SignupUrl}}', copy.workspaceInvite.cta)
+    + p(copy.workspaceInvite.note, MUTED);
+
+  await deliver(env, {
+    to,
+    subject: render(copy.workspaceInvite.subject, {
+      InviterName: opts.inviterName,
+      WorkspaceName: opts.workspaceName,
+    }),
+    body,
+    locale,
+    copy,
+    vars: {
+      InviterName: opts.inviterName,
+      WorkspaceName: opts.workspaceName,
+      Role: opts.role,
+      SignupUrl: opts.signupUrl,
+      Email: to,
+    },
   });
-
-  await provider.send({ to, subject, html });
 }
 
-const CHAT_INVITE_BODY = `
-      <p>Hi,</p>
-      <p><strong>{{InviterName}}</strong> invited you to collaborate on the chat
-         <strong>{{ChatTitle}}</strong> in Builderforce.</p>
-      <p>Open Builderforce to join the conversation, share ideas and work together
-         with the team and its AI agents.</p>
-      <p style="text-align:center; margin: 28px 0;">
-        <a href="{{ChatUrl}}" class="button">Open the chat</a>
-      </p>
-      <p style="font-size:13px; color:#64748b;">
-        Sign in with this email address ({{Email}}) to join. If you were not
-        expecting this, you can ignore this email.
-      </p>`;
-
 /**
- * Chat-invite email: tells someone they were invited to collaborate on a Brain
- * chat. Best-effort — no-ops when RESEND_API_KEY is unset, like the other senders.
+ * TRANSACTIONAL — chat-invite email: a human invited this person to collaborate on
+ * a Brain chat. Best-effort — no-ops when RESEND_API_KEY is unset.
  */
 export async function sendChatInviteEmail(
   env: EmailEnv,
   to: string,
-  opts: { chatTitle: string; inviterName: string; chatUrl: string },
+  opts: { chatTitle: string; inviterName: string; chatUrl: string; locale?: EmailLocale },
 ): Promise<void> {
-  const provider = getEmailProvider(env);
-  if (!provider) return;
+  const locale = opts.locale ?? DEFAULT_EMAIL_LOCALE;
+  const copy = emailCopy(locale);
 
-  const subject = `${opts.inviterName} invited you to a chat on Builderforce`;
-  const html = render(HEADER + CHAT_INVITE_BODY + FOOTER, {
-    Subject: subject,
-    InviterName: opts.inviterName,
-    ChatTitle: opts.chatTitle,
-    ChatUrl: opts.chatUrl,
-    Email: to,
-    Year: String(new Date().getFullYear()),
+  const body = greeting(copy, false)
+    + p(copy.chatInvite.body)
+    + p(copy.chatInvite.pitch)
+    + cta('{{ChatUrl}}', copy.chatInvite.cta)
+    + p(copy.chatInvite.note, MUTED);
+
+  await deliver(env, {
+    to,
+    subject: render(copy.chatInvite.subject, { InviterName: opts.inviterName }),
+    body,
+    locale,
+    copy,
+    vars: {
+      InviterName: opts.inviterName,
+      ChatTitle: opts.chatTitle,
+      ChatUrl: opts.chatUrl,
+      Email: to,
+    },
   });
-
-  await provider.send({ to, subject, html });
 }
 
 // ---------------------------------------------------------------------------
 // LLM vendor health alert — sent by the scheduled() cron when one or more
-// vendors' status differs from the previous run. Plain string template (no
-// HTML escaping issues since input is server-controlled vendor/model ids).
+// vendors' status differs from the previous run. TRANSACTIONAL: an operational
+// alert to a configured on-call address, not a message the recipient can opt out
+// of without also opting out of being on call.
 // ---------------------------------------------------------------------------
 
 export interface LlmHealthChangeRow {
@@ -505,56 +539,62 @@ export async function sendLlmHealthAlertEmail(
   to: string,
   changes: LlmHealthChangeRow[],
   timestampIso: string,
+  locale: EmailLocale = DEFAULT_EMAIL_LOCALE,
 ): Promise<void> {
-  const provider = getEmailProvider(env);
-  if (!provider) return;
+  const copy = emailCopy(locale);
 
   const rows = changes.map((c) => {
     const transition = `${c.previousStatus ?? 'n/a'} → ${c.currentStatus}`;
     const failed = c.failedModels.length > 0
-      ? `<br><span style="font-size:12px;color:#64748b">failed models: ${c.failedModels.map(escapeHtml).join(', ')}</span>`
+      ? `<br><span style="font-size:12px;color:#64748b">${copy.llmHealth.failedModels} `
+        + `${c.failedModels.map(escapeHtml).join(', ')}</span>`
       : '';
+    const okOf = fill(copy.llmHealth.okOfProbed, { Ok: c.okCount, Probed: c.probedCount });
     return `
       <tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0"><strong>${escapeHtml(c.vendor)}</strong></td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">${escapeHtml(transition)}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">${c.okCount} / ${c.probedCount} ok${failed}</td>
+        <td style="${TD}"><strong>${escapeHtml(c.vendor)}</strong></td>
+        <td style="${TD}">${escapeHtml(transition)}</td>
+        <td style="${TD}">${escapeHtml(okOf)}${failed}</td>
       </tr>`;
   }).join('');
 
-  const body = `
-      <p>The daily LLM vendor health probe detected status changes for ${changes.length} vendor${changes.length === 1 ? '' : 's'}.</p>
-      <p style="font-size:12px;color:#64748b">Run at ${escapeHtml(timestampIso)}</p>
+  const headers = [copy.llmHealth.columnVendor, copy.llmHealth.columnStatus, copy.llmHealth.columnModels]
+    .map((h) => `<th style="text-align:left;padding:8px 12px;border-bottom:1px solid #e2e8f0">${escapeHtml(h)}</th>`)
+    .join('');
+
+  const body = p(fill(copy.llmHealth.intro, { Count: changes.length }))
+    + p(escapeHtml(fill(copy.llmHealth.runAt, { Timestamp: timestampIso })), 'font-size:12px;color:#64748b')
+    + `
       <table style="border-collapse:collapse;width:100%;margin-top:12px">
         <thead>
-          <tr style="background:#f8fafc">
-            <th style="text-align:left;padding:8px 12px;border-bottom:1px solid #e2e8f0">Vendor</th>
-            <th style="text-align:left;padding:8px 12px;border-bottom:1px solid #e2e8f0">Status</th>
-            <th style="text-align:left;padding:8px 12px;border-bottom:1px solid #e2e8f0">Models</th>
-          </tr>
+          <tr style="background:#f8fafc">${headers}</tr>
         </thead>
         <tbody>${rows}</tbody>
-      </table>
-      <p style="font-size:13px;color:#64748b;margin-top:20px">
-        Review the per-model breakdown at <a href="https://builderforce.ai/admin?tab=usage">/admin?tab=usage</a>.
-      </p>`;
+      </table>`
+    + p(
+      `${copy.llmHealth.reviewLine} <a href="https://builderforce.ai/admin?tab=usage">/admin?tab=usage</a>.`,
+      'font-size:13px;color:#64748b;margin-top:20px',
+    );
 
+  // The subject stays machine-shaped (vendor=status) on purpose: it is an ops
+  // alert that gets grepped, routed and deduped by tooling, so it must not vary
+  // by the recipient's language.
   const subject = `[Builderforce] LLM vendor health changed — ${changes.map((c) => `${c.vendor}=${c.currentStatus}`).join(', ')}`;
-  const html = render(HEADER + body + FOOTER, {
-    Subject: subject,
-    Year: String(new Date().getFullYear()),
-  });
 
-  await provider.send({ to, subject, html });
+  await deliver(env, { to, subject, body, locale, copy });
 }
 
 // ---------------------------------------------------------------------------
 // Scheduled report digest — sent by the report-schedule dispatcher (runDueReports)
-// for each due report_schedules row. Renders the report's summary/kpis object as
-// a key/value table; values are server-generated but escaped defensively.
+// for each due report_schedules row. TRANSACTIONAL: the recipient (or their admin)
+// configured this schedule; it stops by deleting the schedule, not by unsubscribing.
+// Renders the report's summary/kpis object as a key/value table; values are
+// server-generated but escaped defensively.
 // ---------------------------------------------------------------------------
 
-/** camelCase / snake_case key → spaced Title-ish label for the digest table. */
+/** camelCase / snake_case key → spaced Title-ish label for the digest table.
+ *  Used ONLY for data-derived summary keys, which cannot be pre-translated —
+ *  see the note in emailMessages.ts. */
 function humanizeKey(key: string): string {
   const spaced = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/_/g, ' ');
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
@@ -607,30 +647,37 @@ function renderBullets(title: string, items: unknown): string {
 /**
  * Type-specific rich sections appended below the summary. Each known report_type
  * renders its arrays as tables/lists; unknown types add nothing (backward-compat —
- * they still get the summary kv table from the caller).
+ * they still get the summary kv table from the caller). Section titles and column
+ * headers come from the catalog, so a German recipient gets German headers over
+ * the same (untranslatable) data.
  */
-function renderReportSections(report: Record<string, unknown>): string {
+function renderReportSections(report: Record<string, unknown>, copy: EmailCopy): string {
   const arr = (k: string) => (Array.isArray(report[k]) ? (report[k] as Array<Record<string, unknown>>) : []);
+  const r = copy.report;
+  const col = r.columns;
   switch (report.reportType) {
     case 'project_status':
-      return renderObjectTable('Projects', arr('projects'), [
-        ['name', 'Project'], ['verdict', 'Status'], ['deployments', 'Deploys'],
-        ['changeFailureRatePct', 'CFR %'], ['leadTimeHours', 'Lead (h)'], ['reworkRatePct', 'Rework %'], ['stuckCount', 'Stuck'],
+      return renderObjectTable(r.sectionProjects, arr('projects'), [
+        ['name', col.project], ['verdict', col.status], ['deployments', col.deploys],
+        ['changeFailureRatePct', col.changeFailureRate], ['leadTimeHours', col.leadTime],
+        ['reworkRatePct', col.rework], ['stuckCount', col.stuck],
       ]);
     case 'portfolio_rollup':
-      return renderObjectTable('Portfolios', arr('portfolios'), [
-        ['name', 'Portfolio'], ['status', 'Status'], ['completedTasks', 'Done'], ['openTasks', 'Open'],
-        ['agentLlmCostUsd', 'AI $'], ['okrProgressPct', 'OKR %'], ['blockedInitiatives', 'Blocked'],
+      return renderObjectTable(r.sectionPortfolios, arr('portfolios'), [
+        ['name', col.portfolio], ['status', col.status], ['completedTasks', col.done], ['openTasks', col.open],
+        ['agentLlmCostUsd', col.aiSpend], ['okrProgressPct', col.okrProgress], ['blockedInitiatives', col.blocked],
       ]);
     case 'completed_by_assignee':
-      return renderObjectTable('By assignee', arr('assignees'), [
-        ['assigneeName', 'Assignee'], ['assigneeKind', 'Kind'], ['completed', 'Completed'],
+      return renderObjectTable(r.sectionAssignees, arr('assignees'), [
+        ['assigneeName', col.assignee], ['assigneeKind', col.kind], ['completed', col.completed],
       ]);
     case 'standup':
-      return renderObjectTable('Recent PRs', arr('recentPrs'), [['title', 'Title'], ['repo', 'Repo']])
-        + renderBullets('Insights', report.insights);
+      return renderObjectTable(r.sectionRecentPrs, arr('recentPrs'), [['title', col.title], ['repo', col.repo]])
+        + renderBullets(r.sectionInsights, report.insights);
     case 'code_review':
-      return renderObjectTable('Stale PRs', arr('stalePrList'), [['title', 'Title'], ['repo', 'Repo'], ['ageHours', 'Age (h)']]);
+      return renderObjectTable(r.sectionStalePrs, arr('stalePrList'), [
+        ['title', col.title], ['repo', col.repo], ['ageHours', col.age],
+      ]);
     default:
       return '';
   }
@@ -641,26 +688,22 @@ export async function sendReportEmail(
   to: string,
   subject: string,
   report: Record<string, unknown>,
+  locale: EmailLocale = DEFAULT_EMAIL_LOCALE,
 ): Promise<void> {
-  const provider = getEmailProvider(env);
-  if (!provider) return;
+  const copy = emailCopy(locale);
 
   const kv = (report.summary ?? report.kpis ?? {}) as Record<string, unknown>;
   const summaryTable = renderKvTable(kv);
-  const sections = renderReportSections(report);
+  const sections = renderReportSections(report, copy);
 
-  const body = `
-      <p>Your scheduled <strong>${escapeHtml(humanizeKey(String(report.reportType ?? 'report')))}</strong> report is ready.</p>
-      ${summaryTable || (sections ? '' : '<p style="color:#64748b">No data for this period.</p>')}
-      ${sections}
+  const reportType = escapeHtml(humanizeKey(String(report.reportType ?? 'report')));
+  const body = p(fill(copy.report.intro, { ReportType: reportType }))
+    + (summaryTable || (sections ? '' : p(copy.report.noData, 'color:#64748b')))
+    + sections
+    + `
       <p style="text-align:center; margin: 24px 0 8px;">
-        <a href="https://builderforce.ai/pmo" class="button">Open in Builderforce</a>
+        <a href="https://builderforce.ai/pmo" class="button">${copy.report.cta}</a>
       </p>`;
 
-  const html = render(HEADER + body + FOOTER, {
-    Subject: subject,
-    Year: String(new Date().getFullYear()),
-  });
-
-  await provider.send({ to, subject, html });
+  await deliver(env, { to, subject, body, locale, copy });
 }

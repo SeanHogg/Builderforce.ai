@@ -17,6 +17,8 @@ import { ChatTicketService } from '../../application/brain/ChatTicketService';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached, ticketSearchVersionKey } from '../../infrastructure/cache/readThroughCache';
 import { notify } from '../../application/notifications/notify';
 import { sendChatInviteEmail } from '../../infrastructure/email/EmailService';
+import { sendTransactionalEmail } from '../../application/email/sendEmail';
+import { headerHints } from '../../application/email/emailLocaleResolver';
 import { isKeyOwnedByTenant } from '../../domain/shared/r2Keys';
 import type { Env, HonoEnv } from '../../env';
 import type { BrainService, BrainTraceEventInput } from '../../application/brain/BrainService';
@@ -443,7 +445,17 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
               ref: String(id),
             });
           } else {
-            await sendChatInviteEmail(c.env as Env, result.email, { chatTitle: result.chatTitle, inviterName, chatUrl });
+            // Same locale rule as the workspace invite: the invitee's own stored
+            // locale when they have an account, otherwise the inviter's request locale.
+            await sendTransactionalEmail(
+              c.env as Env,
+              db,
+              result.email,
+              ({ locale }) => sendChatInviteEmail(c.env as Env, result.email, {
+                chatTitle: result.chatTitle, inviterName, chatUrl, locale,
+              }),
+              { headers: headerHints(c.req) },
+            );
           }
         } catch { /* delivery is best-effort */ }
       })());

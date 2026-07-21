@@ -220,6 +220,30 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
     // the BACKING storage project — the id the Evermind panel + routes operate on.
     // Best-effort inside applyEvermindRecipe: creation succeeds even if seeding does not.
     // `llm` is the retired combined modality — treat it as evermind for legacy callers.
+    //
+    // DECISION — every OTHER modality (video, voice, designer, finetune, mobile)
+    // deliberately gets NO row of its own and INHERITS its container project's
+    // Evermind. This is the intended model, not an oversight, and the alternative
+    // (provision one per build) was rejected for three reasons:
+    //
+    //  1. The read path already inherits, on purpose. `resolveEffectiveEvermindProjectId`
+    //     falls back to the container so a build's console shows the container's TRAINED
+    //     model. Provisioning per-build would replace that with a freshly-generated,
+    //     empty v1 — a visible capability REGRESSION for every existing build.
+    //  2. Learning is already container-scoped. `resolveEvermindTargets` fans a
+    //     contribution across the container plus its builds as ONE learning unit;
+    //     per-build models would shard a tenant's corpus across N cold Everminds that
+    //     each learn a fraction of it.
+    //  3. It would cost an R2 artifact + row per build for modalities that have no
+    //     distinct corpus to learn from — a video or designer build shares its
+    //     container's domain knowledge; that is the whole point of grouping it there.
+    //
+    // A build that genuinely needs its own model is still fully supported: seeding one
+    // (`POST /evermind/seed-from-model`) creates the row, and the resolver's
+    // own-head-wins precedence means it immediately stops inheriting. What is dropped
+    // is the misleading affordance — the console no longer offers seed/management controls on
+    // an INHERITING build, where every such write silently updated zero rows. See
+    // `contributionsCore`'s `inherited` projection and `EvermindConsole`.
     if (modality === 'evermind' || modality === 'llm') {
       await applyEvermindRecipe(c.env as Env, db, tenantId, storage.id, {
         recipe: toEvermindRecipeId(body.evermindRecipe),

@@ -1187,7 +1187,41 @@
     },
     "accountTab": "Cuenta",
     "sessionsTab": "Sesiones",
-    "subnavLabel": "Secciones de configuración"
+    "subnavLabel": "Secciones de configuración",
+    "emailTab": "Correo",
+    "emailPrefs": {
+      "title": "Preferencias de correo",
+      "whatWeSend": "Qué enviamos",
+      "error": "No se han podido actualizar tus preferencias de correo. Inténtalo de nuevo.",
+      "language": "Idioma del correo",
+      "languageAuto": "Detección automática",
+      "languageHelp": "El idioma en el que te escribimos. Independiente del idioma de la aplicación de arriba.",
+      "languageTitle": "Idioma",
+      "languageDetail": "Te escribimos en este idioma. Si está en detección automática usamos el idioma con el que te registraste y, si no, el inglés.",
+      "optionalTitle": "Correo opcional",
+      "optionalHelp": "Desactiva lo que prefieras no recibir.",
+      "optionalDetail": "Estos son los correos que decidimos enviar. Puedes desactivar cada uno, y todos incluyen un enlace para darse de baja.",
+      "productUpdates": "Novedades del producto",
+      "productUpdatesHelp": "Nuevas funciones y cambios destacados.",
+      "onboardingTips": "Consejos y guías",
+      "onboardingTipsHelp": "Sugerencias ocasionales para sacar más partido a Builderforce.",
+      "digests": "Resúmenes y boletines",
+      "digestsHelp": "Recopilaciones periódicas de la actividad de tus proyectos.",
+      "alwaysOnTitle": "Siempre se envían",
+      "alwaysOnBody": "Estos correos forman parte de tu cuenta. Nunca se suprimen, aunque te des de baja de todo lo demás.",
+      "alwaysOn": {
+        "signIn": "Enlaces de acceso y enlaces mágicos",
+        "verification": "Códigos de verificación de correo",
+        "invites": "Invitaciones a espacios de trabajo y chats",
+        "security": "Avisos de seguridad y de acceso a la cuenta"
+      },
+      "transactionalNote": "Los correos de cuenta y seguridad siempre se envían: forman parte del funcionamiento de tu cuenta, por eso no aparecen arriba.",
+      "unsubscribedTitle": "Te has dado de baja",
+      "unsubscribedBody": "No estás recibiendo ningún correo opcional. Los mensajes de cuenta y seguridad se siguen enviando.",
+      "resubscribeCta": "Volver a suscribirme",
+      "resubscribeTitle": "Volver a suscribirte al correo opcional",
+      "resubscribeConfirm": "Volverás a recibir correo opcional según las categorías que tengas activadas. ¿Continuar?"
+    }
   },
   "pmo": {
     "title": "Portafolio (PMO)",
@@ -6235,7 +6269,8 @@
     "validateMethod": "{method, select, embedding {Recuperación semántica} other {Recuperación léxica (alternativa)}}",
     "evalDelta": "{pct}% vs. anterior",
     "evalFlat": "sin cambios",
-    "evalTooltip": "Comprobación de regresión en v{version}: pérdida reservada {base} → {next} en {size, plural, one {# tarea previa} other {# tareas previas}}."
+    "evalTooltip": "Comprobación de regresión en v{version}: pérdida reservada {base} → {next} en {size, plural, one {# tarea previa} other {# tareas previas}}.",
+    "inheritedHint": "Esta compilación comparte el Evermind de su proyecto principal, así que todo lo que ha aprendido está disponible aquí. El entrenamiento y los ajustes se gestionan en el proyecto principal."
   },
   "topbar": {
     "cart": "Carrito de compras",
@@ -7944,6 +7979,11 @@
       },
       "tokensUsed": "Tokens de IA usados",
       "periodLabel": "Últimos {period}"
+    },
+    "authAlert": {
+      "title": "No se está usando",
+      "notEntitled": "Esta cuenta inició sesión correctamente, pero el proveedor rechazó la solicitud ({status}) porque el plan no la cubre. Vuelve a conectar una cuenta cuyo plan la incluya, o mejora el plan.",
+      "rejected": "El proveedor rechazó esta credencial ({status}). Es probable que haya caducado, se haya revocado o se haya rotado en otro lugar: vuelve a conectar la cuenta."
     }
   },
   "modelSelect": {
@@ -9397,7 +9437,20 @@
     "workspaceSuffix": ", espacio de trabajo",
     "setAsDefault": "Establecer como repositorio predeterminado del proyecto",
     "saveChanges": "Guardar cambios",
-    "addRepository": "Añadir repositorio"
+    "addRepository": "Añadir repositorio",
+    "enableAgentRuns": "Activar ejecuciones de agentes",
+    "agentRunsEnabled": "Ejecuciones activadas",
+    "enablingAgentRuns": "Activando…",
+    "enableAgentRunsTitle": "Confirma el flujo de trabajo del agente de Builderforce en este repositorio para que los agentes se ejecuten en tus propios runners de GitHub Actions",
+    "reenableAgentRunsTitle": "Ya está activado: vuelve a ejecutarlo para sobrescribir el archivo del flujo de trabajo con la última versión",
+    "confirmReenableActions": "Esto reescribe .github/workflows/builderforce-agent.yml en la rama predeterminada y descarta los cambios que hayas hecho en él. ¿Continuar?",
+    "actionsEnabled": "Flujo de trabajo del agente confirmado en {path}",
+    "actionsEnableFailed": "No se pudo confirmar el flujo de trabajo del agente",
+    "backfillAlerts": "Importar alertas",
+    "backfillingAlerts": "Importando…",
+    "backfillAlertsTitle": "Importa todas las alertas abiertas de análisis de código y de Dependabot de este repositorio como hallazgos de seguridad. Es seguro repetirlo.",
+    "alertsBackfilled": "Se importaron {count} {count, plural, one {hallazgo} other {hallazgos}} de seguridad ({deduped} ya registrados)",
+    "alertsBackfillFailed": "No se pudieron importar las alertas de seguridad"
   },
   "workflowsContent": {
     "noRunsYet": "Sin ejecuciones aún",
@@ -10088,5 +10141,10 @@
       "denied": "DENEGADO",
       "soft-gate": "RESTRICCIÓN PARCIAL"
     }
+  },
+  "githubActionsSurface": {
+    "notReadyTitle": "GitHub Actions aún no está configurado en este proyecto",
+    "notReadyBody": "Falta el flujo de trabajo del agente de Builderforce en el repositorio predeterminado de este proyecto, por lo que las ejecuciones recurrirán al ejecutor duradero en la nube. Abre la configuración de Control de código fuente y elige «Activar ejecuciones de agentes» en el repositorio.",
+    "noGithubRepoBody": "Este proyecto no tiene ningún repositorio de GitHub vinculado, así que no hay dónde ejecutar GitHub Actions. Las ejecuciones recurrirán al ejecutor duradero en la nube. Vincula un repositorio de GitHub en la configuración de Control de código fuente."
   }
 }

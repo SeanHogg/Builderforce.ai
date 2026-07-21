@@ -30,8 +30,15 @@ describe('buildCreatePrRequest — per-provider create endpoints [1278]', () => 
       source: { branch: { name: 'feature' } }, destination: { branch: { name: 'main' } },
     });
   });
-  it('Bitbucket Server (custom host) throws → unsupported', () => {
-    expect(() => buildCreatePrRequest({ ...base, provider: 'bitbucket', host: 'bb.acme.com' })).toThrow();
+  it('Bitbucket Server (custom host): POST the 1.0 pull-requests with fully-qualified refs', () => {
+    const r = buildCreatePrRequest({ ...base, provider: 'bitbucket', host: 'bb.acme.com' });
+    expect(r.url).toBe('https://bb.acme.com/rest/api/1.0/projects/acme/repos/app/pull-requests');
+    expect(r.body).toEqual({
+      title: 'My PR',
+      description: 'desc',
+      fromRef: { id: 'refs/heads/feature', repository: { slug: 'app', project: { key: 'acme' } } },
+      toRef: { id: 'refs/heads/main', repository: { slug: 'app', project: { key: 'acme' } } },
+    });
   });
 });
 
@@ -46,6 +53,12 @@ describe('createPullRequest', () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ id: 7, links: { html: { href: 'https://bitbucket.org/acme/app/pull-requests/7' } } })));
     const r = await createPullRequest({ ...base, provider: 'bitbucket' });
     expect(r).toEqual({ ok: true, number: 7, url: 'https://bitbucket.org/acme/app/pull-requests/7' });
+  });
+
+  it('parses a Bitbucket SERVER PR response (id + links.self[0].href)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ id: 7, links: { self: [{ href: 'https://bb.acme.com/projects/acme/repos/app/pull-requests/7' }] } })));
+    const r = await createPullRequest({ ...base, provider: 'bitbucket', host: 'bb.acme.com' });
+    expect(r).toEqual({ ok: true, number: 7, url: 'https://bb.acme.com/projects/acme/repos/app/pull-requests/7' });
   });
 
   it('returns unsupported for an unknown provider without calling fetch', async () => {
@@ -76,8 +89,13 @@ describe('buildFindOpenPrUrl — per-provider open-PR lookup [1278]', () => {
     expect(buildFindOpenPrUrl('gitlab', 'https://gitlab.com/api/v4', base))
       .toBe('https://gitlab.com/api/v4/projects/acme%2Fapp/merge_requests?state=opened&source_branch=feature&target_branch=main');
   });
-  it('Bitbucket: pullrequests?q=source.branch.name + state OPEN', () => {
+  it('Bitbucket Cloud: pullrequests?q=source.branch.name + state OPEN', () => {
     expect(buildFindOpenPrUrl('bitbucket', 'https://api.bitbucket.org/2.0', base))
       .toContain('/repositories/acme/app/pullrequests?q=');
+  });
+  it('Bitbucket Server: pull-requests filtered by the OUTGOING ref', () => {
+    expect(buildFindOpenPrUrl('bitbucket', 'https://bb.acme.com/rest/api/1.0', base))
+      .toBe('https://bb.acme.com/rest/api/1.0/projects/acme/repos/app/pull-requests'
+        + '?state=OPEN&direction=OUTGOING&at=refs%2Fheads%2Ffeature');
   });
 });

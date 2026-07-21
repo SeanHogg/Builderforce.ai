@@ -71,7 +71,8 @@ async function headCore(env: Env, db: Db, tenantId: number, projectId: number): 
   // An IDE build without its own Evermind inherits its container project's.
   const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
   const head = await getProjectEvermindHead(env, db, tenantId, effectiveId);
-  return json({ version: head.version, ref: head.ref, mode: head.mode, name: head.name, contributions: head.contributions, inferenceEnabled: head.inferenceEnabled, teacherModel: head.teacherModel, lastLearnedAt: head.lastLearnedAt, seeded: head.version > 0, quarantinedAt: head.quarantinedAt, quarantineReason: head.quarantineReason });
+  const inherited = effectiveId !== projectId;
+  return json({ version: head.version, ref: head.ref, mode: head.mode, name: head.name, contributions: head.contributions, inferenceEnabled: head.inferenceEnabled, teacherModel: head.teacherModel, lastLearnedAt: head.lastLearnedAt, seeded: head.version > 0, quarantinedAt: head.quarantinedAt, quarantineReason: head.quarantineReason, inherited, ...(inherited ? { inheritedFromProjectId: effectiveId } : {}) });
 }
 
 /**
@@ -102,7 +103,26 @@ async function contributionsCore(env: Env, db: Db, tenantId: number, projectId: 
   // Same inheritance as headCore — the console must not report "Not set up" for an
   // IDE build whose container project has a live Evermind.
   const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
-  return json(await getProjectEvermindContributions(env, db, tenantId, effectiveId));
+  const payload = await getProjectEvermindContributions(env, db, tenantId, effectiveId);
+  // Tell the console WHOSE Evermind it is looking at.
+  //
+  // Inheritance is the intended model for non-`evermind` builds (see the decision
+  // note on `ideProjectRoutes`' create handler), but until now it was invisible: the
+  // console read the CONTAINER's head — so `seeded: true`, stats rendered — while
+  // every mutation on that panel (seed-from-model, mode, inference, teacher, teach,
+  // flush) posts to the RAW project id, which has no `project_evermind` row. Those
+  // writes updated zero rows and returned OK, so the panel offered management
+  // controls that silently did nothing.
+  //
+  // Surfacing `inherited` lets the console render read-only and point at the owner
+  // instead. This is a projection, not a change to the cached payload — the cache
+  // key is the effective project's version token and must stay that way.
+  const inherited = effectiveId !== projectId;
+  return json({
+    ...payload,
+    inherited,
+    ...(inherited ? { inheritedFromProjectId: effectiveId } : {}),
+  });
 }
 
 /**

@@ -44,7 +44,7 @@ import { pullPendingSteering, releasePendingSteers } from './executionSteering';
 import { notifyExecutionSubscribers } from './executionEvents';
 import { notifyApprovalRequested } from '../approval/approvalNotifier';
 import {
-  CLOUD_AGENT_TOOLS, CONTAINER_AGENT_TOOLS, CLOUD_SURFACE_CAPS, cloudToolRegistry,
+  CONTAINER_AGENT_TOOLS, cloudSurfaceCaps, cloudAgentToolsFor, cloudToolRegistry,
   MAX_CLOUD_TOOL_STEPS, MAX_PLACEHOLDER_FINISH_BLOCKS,
   CONTAINER_MAX_STEPS, assertsUnrunVerification, hasNoCodeDeliverable, policyGateCallKey, type RawToolCall,
 } from './cloudAgentTools';
@@ -52,8 +52,9 @@ import {
   CURRENT_ENGINE_ID, evaluatePolicyGate, filterByGlob, applyStringEdit,
   appraiseTask, buildLimbicBlock, compileLimbicState, neutralState,
   applyDelta, appraiseAmygdala, homeostasis,
-  type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type ToolControl, type LimbicState, type LimbicEvent, type PolicyGate, type AgentExecParams,
+  type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type ToolControl, type LimbicState, type LimbicEvent, type PolicyGate, type AgentExecParams, type Capability,
 } from '@builderforce/agent-tools';
+import { resolveWebSearchCredential, type ResolvedWebSearchCredential } from './webSearchCredential';
 import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel } from './cloudDispatch';
 import { classifyTaskAction } from '../llm/classifyTask';
 import { deriveAllocationCategory } from '../llm/allocationCategories';
@@ -1400,6 +1401,13 @@ function buildCloudProvider(args: {
   repoMiss: string;
   /** Live set of paths written this run (mutated by write/delete). */
   writtenPaths: Set<string>;
+  /** The run's capability set — {@link CLOUD_SURFACE_CAPS} plus whatever the TENANT
+   *  unlocked (today: `web.search`). Must be the same set the advertised tool schemas
+   *  were derived from. */
+  capabilities: ReadonlySet<Capability>;
+  /** Resolved BYO web-search backing, or null when this tenant has no key. Null must
+   *  coincide with `capabilities` lacking `web.search`. */
+  webSearch: ResolvedWebSearchCredential | null;
 }): CapabilityProvider {
   const { env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths } = args;
   // Read/list against the ticket branch only once it exists (created on the first
@@ -1410,7 +1418,7 @@ function buildCloudProvider(args: {
   const noRepo = (suffix = ''): string => `no repo bound to this task (${repoMiss})${suffix}`;
 
   return {
-    capabilities: CLOUD_SURFACE_CAPS,
+    capabilities: args.capabilities,
     repoRead: {
       async listFiles(sub, glob) {
         if (!repoCtx) return { ok: false, error: noRepo() };
@@ -1520,10 +1528,16 @@ function buildCloudProvider(args: {
     // store (recalled by every surface); else the tenant-wide `agent_memory` twin.
     memory: buildCloudMemoryCapability({ db, env, tenantId, projectId }),
     // Read a public URL (docs / an API spec / a linked issue) so the agent isn't
-    // limited to what the repo already contains. Fetch-only: no search vendor is
-    // wired, so CLOUD_SURFACE_CAPS omits `web.search` and `web_search` is never
-    // advertised. The SSRF egress policy + byte cap + timeout live in cloudWeb.
-    web: buildCloudWebCapability({ env }),
+    // limited to what the repo already contains — and, when the TENANT has a BYO
+    // search key, discover that URL in the first place. Search is metered per query,
+    // so its backing (and therefore `web.search`, and therefore the `web_search`
+    // schema) is present only when a usable key resolved; otherwise this is
+    // fetch-only exactly as before. SSRF egress policy + byte cap + timeout + the
+    // read-through cache all live in cloudWeb.
+    web: buildCloudWebCapability({
+      env,
+      search: args.webSearch ? { vendor: args.webSearch.vendor, apiKey: args.webSearch.apiKey, meter: { db, tenantId } } : null,
+    }),
   };
 }
 
@@ -1573,7 +1587,15 @@ export async function runCloudToolLoop(
   // alongside the repo/file tools and dispatched in-process below. The prompt
   // guidance that makes the agent USE them lives in prepareCloudRun so every
   // surface (Worker/DO durable + the container) gets it once (DRY).
-  const cloudTools = [...CLOUD_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas()];
+  // Self-gating web search. Resolved ONCE per run (not per step): `web.search` is a
+  // TENANT capability, not a surface one — it needs a BYO search-vendor key, because
+  // search bills per query and the platform funds none. A resolved key adds
+  // `web.search` to BOTH the capability set the provider reports and the schemas sent
+  // to the model, from the same value, so the two can never drift. No key → the base
+  // set, and the run is byte-identical to fetch-only behaviour.
+  const webSearchCred = await resolveWebSearchCredential(env, db, tenantId);
+  const surfaceCaps = cloudSurfaceCaps({ webSearch: webSearchCred !== null });
+  const cloudTools = [...cloudAgentToolsFor(surfaceCaps), ...cloudAgentPlatformToolSchemas()];
   const effectiveSystemPrompt = tenantModel?.directives
     ? `${tenantModel.directives}\n\n${systemPrompt}`
     : systemPrompt;
@@ -1730,6 +1752,7 @@ export async function runCloudToolLoop(
   // bookkeeping and the base→branch read switch stay correct as the run progresses.
   const provider = buildCloudProvider({
     env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths,
+    capabilities: surfaceCaps, webSearch: webSearchCred,
   });
   const toolCtx: ToolContext = { caps: provider, signal: abortController.signal };
 

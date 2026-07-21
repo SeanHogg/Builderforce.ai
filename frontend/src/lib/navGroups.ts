@@ -150,6 +150,7 @@ export const NAV_GROUPS: NavGroup[] = [
     tabs: [
       { id: '', labelKey: 'tab.errors', icon: '🐞' },
       { id: 'collectors', labelKey: 'tab.collectors', icon: '🔌' },
+      { id: 'feedback', labelKey: 'tab.feedback', icon: '💬' },
     ],
   },
   {

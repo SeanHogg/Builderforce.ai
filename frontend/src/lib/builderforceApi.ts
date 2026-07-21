@@ -2510,12 +2510,39 @@ export type LlmProvider = 'anthropic' | 'openai' | 'google' | 'meta' | 'kimi' | 
 /** How a configured provider authenticates: a pasted API key, or a connected
  *  Claude Pro/Max subscription via OAuth. */
 export type ProviderAuthType = 'api_key' | 'oauth';
+/**
+ * A dispatch-observed rejection of a connected account — the gateway authenticated
+ * with the stored credential and the upstream refused it (401/403).
+ *
+ * This is deliberately NOT derivable from `ProviderDiagnostic.status`: that field
+ * reports whether the credential RESOLVES, and the worst case here — a ChatGPT
+ * account whose plan lapsed or that lacks Codex entitlement — resolves perfectly and
+ * still 403s on every call. Without this signal the card reads "● connected" forever
+ * while the account silently serves nothing.
+ */
+export interface ProviderAuthAlert {
+  provider: LlmProvider;
+  /** `not_entitled` — the account authenticated but the plan doesn't cover this
+   *  surface (reconnect a different account, or upgrade the plan). `rejected` — the
+   *  credential itself was refused (expired/revoked/rotated; reconnect the same one). */
+  reason: 'not_entitled' | 'rejected';
+  /** Upstream status that produced the alert (401 / 403). */
+  status: number;
+  /** The gateway vendor that was rejected — `openai-codex` (a ChatGPT subscription)
+   *  reads differently to the operator than `openai` (an API key). */
+  vendor: string;
+  /** Epoch-ms of the most recent rejection. */
+  at: number;
+}
+
 export interface ProviderKeySummary {
   provider: LlmProvider;
   authType: ProviderAuthType;
   /** Tenant-set BYO precedence — LOWER = tried first by the auto-select cloud pin;
    *  `null` = unset (falls back to catalog-tier ordering). */
   priority: number | null;
+  /** Present when this account was rejected on a recent call — see {@link ProviderAuthAlert}. */
+  authAlert?: ProviderAuthAlert;
 }
 export interface ProviderDiagnostic {
   provider: LlmProvider;
@@ -2523,6 +2550,8 @@ export interface ProviderDiagnostic {
   usable: boolean;
   status: 'ready' | 'not_connected' | 'revoked' | 'expired' | 'undecryptable' | 'unavailable';
   usage: { periodDays: number; requests: number; tokens: number; lastUsedAt: string | null };
+  /** Present when this account was rejected on a recent call — see {@link ProviderAuthAlert}. */
+  authAlert?: ProviderAuthAlert;
 }
 
 export interface ProviderConnectionTestResult {
@@ -5050,7 +5079,9 @@ export const rfpApi = {
 
 export type IntegrationProvider =
   | 'github' | 'gitlab' | 'bitbucket' | 'jira' | 'confluence' | 'freshservice' | 'freshdesk'
-  | 'servicenow' | 'linear' | 'sentry' | 'pagerduty' | 'monday' | 'asana' | 'clickup';
+  | 'servicenow' | 'linear' | 'sentry' | 'pagerduty' | 'monday' | 'asana' | 'clickup'
+  // BYO web-search vendor key — unlocks the cloud agent's `web_search` tool.
+  | 'brave_search';
 
 export interface IntegrationCredential {
   id: string;
