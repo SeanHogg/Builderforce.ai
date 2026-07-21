@@ -377,7 +377,8 @@
       "boards": "Boards",
       "monitors": "Monitors",
       "reporting": "Reporting",
-      "rfp": "RFP"
+      "rfp": "RFP",
+      "feedback": "Feedback"
     }
   },
   "alerts": {
@@ -7268,7 +7269,8 @@
       "errors": "Errors",
       "audit": "Audit Log",
       "apiKeys": "API Keys",
-      "token": "Superadmin Token"
+      "token": "Superadmin Token",
+      "feedback": "Feedback"
     },
     "common": {
       "loading": "Loading…",
@@ -10148,5 +10150,100 @@
     "notReadyTitle": "GitHub Actions is not set up for this project yet",
     "notReadyBody": "The Builderforce agent workflow is missing from this project’s default repository, so runs will fall back to the durable cloud executor. Open Source control settings and choose “Enable agent runs” on the repository.",
     "noGithubRepoBody": "This project has no GitHub repository linked, so there is nowhere to run GitHub Actions. Runs will fall back to the durable cloud executor. Link a GitHub repository under Source control settings."
+  },
+  "feedback": {
+    "page": {
+      "title": "Feedback",
+      "subtitle": "Collect feature requests, bugs and ideas — and review them before any work begins."
+    },
+    "tab": {
+      "label": "Feedback",
+      "tooltip": "Send us feedback"
+    },
+    "kind": {
+      "feature": "Feature request",
+      "bug": "Bug report",
+      "idea": "Idea",
+      "other": "Something else"
+    },
+    "status": {
+      "new": "New",
+      "approved": "Approved",
+      "declined": "Declined"
+    },
+    "form": {
+      "title": "Send us feedback",
+      "intro": "Tell us what would make this better. Feature requests, bugs, half-formed ideas — all welcome.",
+      "destination": "Goes to the {project} backlog for review.",
+      "kind": "Type",
+      "summary": "Summary",
+      "summaryPlaceholder": "One line — what do you want?",
+      "details": "Details",
+      "detailsPlaceholder": "What are you trying to do, and what is getting in the way?",
+      "gateNote": "Your request is filed for a person to review — nothing is built automatically.",
+      "submit": "Send feedback",
+      "submitting": "Sending…",
+      "close": "Close",
+      "another": "Send another",
+      "successTitle": "Thank you",
+      "successBody": "Your request has been filed for the team to review.",
+      "errorRequired": "Please describe your feedback before sending.",
+      "errorGeneric": "Something went wrong sending your feedback. Please try again."
+    },
+    "setup": {
+      "intro": "One collector per project — a single embeddable snippet that gathers feature requests, bugs and ideas from any application into this project’s backlog.",
+      "pickProject": "Select a project to configure its feedback collector.",
+      "enable": "Enable feedback collection",
+      "enableAction": "Enable",
+      "namePlaceholder": "Collector name",
+      "creating": "Creating…",
+      "created": "Collector created",
+      "dismiss": "Dismiss",
+      "keyOnce": "Copy your ingest key now — it is shown once and never stored.",
+      "ingestKey": "Ingest key",
+      "curlSnippet": "Test with curl",
+      "snippet": "Embed snippet",
+      "endpoint": "Submit endpoint",
+      "snippetNote": "Paste this into any application to add a feedback tab.",
+      "copy": "Copy",
+      "enabled": "Enabled",
+      "paused": "Paused",
+      "pause": "Pause",
+      "resume": "Resume",
+      "delete": "Delete",
+      "confirmDelete": "Delete this feedback collector? The snippet will stop accepting submissions.",
+      "lastSubmission": "Last submission",
+      "options": "Options",
+      "autoCreateTask": "Open a backlog ticket per submission",
+      "autoCreateTaskHint": "When off, submissions are still recorded and can be reviewed, but no card is added to the board.",
+      "dailyLimit": "Daily submission limit",
+      "dailyLimitHint": "Submissions accepted from this snippet per rolling 24 hours (abuse ceiling).",
+      "allowedOrigins": "Allowed origins",
+      "allowedOriginsHint": "Comma-separated list of sites that may post, or * for any.",
+      "loading": "Loading…",
+      "loadFailed": "Failed to load the feedback collector.",
+      "createFailed": "Failed to create the collector.",
+      "saveFailed": "Failed to save changes."
+    },
+    "triage": {
+      "intro": "Review each request and approve it to allow work, or decline it. Nothing runs until you approve.",
+      "filter": "Show",
+      "statusAll": "All",
+      "loading": "Loading…",
+      "loadFailed": "Failed to load submissions.",
+      "reviewFailed": "Failed to record your decision.",
+      "empty": "No feedback here yet.",
+      "approve": "Approve",
+      "decline": "Decline",
+      "working": "Working…",
+      "confirmDecline": "Decline this request? Its ticket will be archived off the board.",
+      "gatedNote": "External request — awaiting your approval. No agent will pick it up until you approve it.",
+      "showMore": "Show more",
+      "showLess": "Show less"
+    },
+    "admin": {
+      "title": "Product feedback",
+      "subtitle": "Feature requests, bugs and ideas gathered from every workspace’s feedback collectors."
+    }
   }
 }
