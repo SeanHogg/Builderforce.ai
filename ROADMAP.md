@@ -81,6 +81,14 @@
 
 ## Consolidated Gap Register
 
+### 💬 Product Feedback pillar — follow-ups (2026-07-20)
+
+> Surfaced while shipping the feedback-collection pillar (mig 0354). Core flow (collect → gate → triage → approve) is live and tested; these are deliberate scope edges.
+
+- **Feedback submissions are not metered through the consumption framework.** `error_events` are the billing ledger for the Quality pillar; feedback submissions are bounded only by the per-collector rolling-24h `daily_limit` (an abuse ceiling), with no month-to-date meter or plan quota. If feedback volume ever needs to be billed or plan-gated, it needs a `consumption` meter + ingestion gate mirroring `errorEventsLedger`. Unblocks: monetizing / plan-gating feedback intake.
+- **No Sentry/PostHog-style provider webhooks for feedback.** The Quality collector accepts provider webhooks (Canny/Upvoty/etc. would be the analogues); the feedback collector currently accepts only the native snippet + in-app panel. Unblocks: importing requests from an existing feedback tool.
+- **`FeedbackTriage.load` is memoized on `refreshKey` only (eslint-disabled exhaustive-deps).** Callers recreate `load` per render, so depending on it would loop; the current guard is correct but fragile if a caller ever needs `load` to change without `refreshKey` changing. Unblocks: a cleaner effect contract if the triage filters grow.
+
 ### 🪣 Bitbucket Server parity — the rest of the surface (2026-07-19)
 
 > Surfaced while closing the rollback residuals. Teardown, revert, PR create and PR merge now work on Bitbucket Server; the remaining callers do not.

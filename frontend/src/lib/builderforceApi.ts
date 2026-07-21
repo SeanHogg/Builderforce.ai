@@ -1460,7 +1460,8 @@ export type AutoRunReason =
   | 'already_running'
   | 'run_cap_exhausted'
   | 'cooldown_active'
-  | 'not_executable';
+  | 'not_executable'
+  | 'pending_approval';
 
 export interface AutoRunDiagnostic {
   status: string;
