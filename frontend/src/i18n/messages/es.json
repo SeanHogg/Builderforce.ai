@@ -377,7 +377,8 @@
       "boards": "Tableros",
       "monitors": "Monitores",
       "reporting": "Informes",
-      "rfp": "RFP"
+      "rfp": "RFP",
+      "feedback": "Comentarios"
     }
   },
   "alerts": {
@@ -7266,7 +7267,8 @@
       "errors": "Errores",
       "audit": "Registro de auditoría",
       "apiKeys": "Claves API",
-      "token": "Token de superadmin"
+      "token": "Token de superadmin",
+      "feedback": "Comentarios"
     },
     "common": {
       "loading": "Cargando…",
@@ -10146,5 +10148,100 @@
     "notReadyTitle": "GitHub Actions aún no está configurado en este proyecto",
     "notReadyBody": "Falta el flujo de trabajo del agente de Builderforce en el repositorio predeterminado de este proyecto, por lo que las ejecuciones recurrirán al ejecutor duradero en la nube. Abre la configuración de Control de código fuente y elige «Activar ejecuciones de agentes» en el repositorio.",
     "noGithubRepoBody": "Este proyecto no tiene ningún repositorio de GitHub vinculado, así que no hay dónde ejecutar GitHub Actions. Las ejecuciones recurrirán al ejecutor duradero en la nube. Vincula un repositorio de GitHub en la configuración de Control de código fuente."
+  },
+  "feedback": {
+    "page": {
+      "title": "Comentarios",
+      "subtitle": "Reúne solicitudes de funciones, errores e ideas, y revísalas antes de empezar cualquier trabajo."
+    },
+    "tab": {
+      "label": "Comentarios",
+      "tooltip": "Envíanos tus comentarios"
+    },
+    "kind": {
+      "feature": "Solicitud de función",
+      "bug": "Informe de error",
+      "idea": "Idea",
+      "other": "Otra cosa"
+    },
+    "status": {
+      "new": "Nuevo",
+      "approved": "Aprobado",
+      "declined": "Rechazado"
+    },
+    "form": {
+      "title": "Envíanos tus comentarios",
+      "intro": "Cuéntanos qué mejoraría esto. Solicitudes de funciones, errores, ideas a medio formar: todo es bienvenido.",
+      "destination": "Va al backlog de {project} para su revisión.",
+      "kind": "Tipo",
+      "summary": "Resumen",
+      "summaryPlaceholder": "Una línea: ¿qué quieres?",
+      "details": "Detalles",
+      "detailsPlaceholder": "¿Qué intentas hacer y qué te lo impide?",
+      "gateNote": "Tu solicitud queda registrada para que una persona la revise; no se construye nada automáticamente.",
+      "submit": "Enviar comentarios",
+      "submitting": "Enviando…",
+      "close": "Cerrar",
+      "another": "Enviar otro",
+      "successTitle": "Gracias",
+      "successBody": "Tu solicitud ha quedado registrada para que el equipo la revise.",
+      "errorRequired": "Describe tus comentarios antes de enviar.",
+      "errorGeneric": "Algo salió mal al enviar tus comentarios. Inténtalo de nuevo."
+    },
+    "setup": {
+      "intro": "Un colector por proyecto: un único fragmento incrustable que reúne solicitudes de funciones, errores e ideas de cualquier aplicación en el backlog de este proyecto.",
+      "pickProject": "Selecciona un proyecto para configurar su colector de comentarios.",
+      "enable": "Activar la recogida de comentarios",
+      "enableAction": "Activar",
+      "namePlaceholder": "Nombre del colector",
+      "creating": "Creando…",
+      "created": "Colector creado",
+      "dismiss": "Descartar",
+      "keyOnce": "Copia ahora tu clave de ingesta: se muestra una sola vez y no se almacena.",
+      "ingestKey": "Clave de ingesta",
+      "curlSnippet": "Probar con curl",
+      "snippet": "Fragmento para incrustar",
+      "endpoint": "Endpoint de envío",
+      "snippetNote": "Pega esto en cualquier aplicación para añadir una pestaña de comentarios.",
+      "copy": "Copiar",
+      "enabled": "Activado",
+      "paused": "En pausa",
+      "pause": "Pausar",
+      "resume": "Reanudar",
+      "delete": "Eliminar",
+      "confirmDelete": "¿Eliminar este colector de comentarios? El fragmento dejará de aceptar envíos.",
+      "lastSubmission": "Último envío",
+      "options": "Opciones",
+      "autoCreateTask": "Abrir un ticket del backlog por cada envío",
+      "autoCreateTaskHint": "Si se desactiva, los envíos se siguen registrando y se pueden revisar, pero no se añade ninguna tarjeta al tablero.",
+      "dailyLimit": "Límite diario de envíos",
+      "dailyLimitHint": "Envíos aceptados desde este fragmento en cada periodo móvil de 24 horas (tope antiabuso).",
+      "allowedOrigins": "Orígenes permitidos",
+      "allowedOriginsHint": "Lista de sitios separados por comas que pueden enviar, o * para cualquiera.",
+      "loading": "Cargando…",
+      "loadFailed": "No se pudo cargar el colector de comentarios.",
+      "createFailed": "No se pudo crear el colector.",
+      "saveFailed": "No se pudieron guardar los cambios."
+    },
+    "triage": {
+      "intro": "Revisa cada solicitud y apruébala para permitir el trabajo, o recházala. Nada se ejecuta hasta que apruebes.",
+      "filter": "Mostrar",
+      "statusAll": "Todos",
+      "loading": "Cargando…",
+      "loadFailed": "No se pudieron cargar los envíos.",
+      "reviewFailed": "No se pudo registrar tu decisión.",
+      "empty": "Aún no hay comentarios aquí.",
+      "approve": "Aprobar",
+      "decline": "Rechazar",
+      "working": "Trabajando…",
+      "confirmDecline": "¿Rechazar esta solicitud? Su ticket se archivará fuera del tablero.",
+      "gatedNote": "Solicitud externa: a la espera de tu aprobación. Ningún agente la tomará hasta que la apruebes.",
+      "showMore": "Ver más",
+      "showLess": "Ver menos"
+    },
+    "admin": {
+      "title": "Comentarios de producto",
+      "subtitle": "Solicitudes de funciones, errores e ideas reunidas de los colectores de comentarios de cada espacio de trabajo."
+    }
   }
 }
