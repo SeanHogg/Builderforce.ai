@@ -377,7 +377,8 @@
       "boards": "看板",
       "monitors": "监控器",
       "reporting": "报告",
-      "rfp": "RFP 响应"
+      "rfp": "RFP 响应",
+      "feedback": "反馈"
     }
   },
   "alerts": {
@@ -7266,7 +7267,8 @@
       "errors": "错误",
       "audit": "审计日志",
       "apiKeys": "API 密钥",
-      "token": "超级管理员令牌"
+      "token": "超级管理员令牌",
+      "feedback": "反馈"
     },
     "common": {
       "loading": "加载中…",
@@ -10146,5 +10148,100 @@
     "notReadyTitle": "此项目尚未配置 GitHub Actions",
     "notReadyBody": "此项目的默认仓库中缺少 Builderforce 代理工作流，因此运行将回退到持久化云执行器。请打开“源代码管理”设置，并对该仓库选择“启用代理运行”。",
     "noGithubRepoBody": "此项目未关联 GitHub 仓库，因此无处运行 GitHub Actions。运行将回退到持久化云执行器。请在“源代码管理”设置中关联一个 GitHub 仓库。"
+  },
+  "feedback": {
+    "page": {
+      "title": "反馈",
+      "subtitle": "收集功能请求、缺陷和想法，并在开展任何工作之前进行审查。"
+    },
+    "tab": {
+      "label": "反馈",
+      "tooltip": "向我们发送反馈"
+    },
+    "kind": {
+      "feature": "功能请求",
+      "bug": "缺陷报告",
+      "idea": "想法",
+      "other": "其他"
+    },
+    "status": {
+      "new": "新",
+      "approved": "已批准",
+      "declined": "已拒绝"
+    },
+    "form": {
+      "title": "向我们发送反馈",
+      "intro": "告诉我们如何做得更好。功能请求、缺陷、尚未成形的想法——都欢迎。",
+      "destination": "将进入 {project} 待办列表以供审查。",
+      "kind": "类型",
+      "summary": "摘要",
+      "summaryPlaceholder": "一句话——你想要什么？",
+      "details": "详情",
+      "detailsPlaceholder": "你想做什么，遇到了什么障碍？",
+      "gateNote": "你的请求将提交给相关人员审查——不会自动构建任何内容。",
+      "submit": "发送反馈",
+      "submitting": "发送中…",
+      "close": "关闭",
+      "another": "再发一条",
+      "successTitle": "谢谢",
+      "successBody": "你的请求已提交，团队将进行审查。",
+      "errorRequired": "请在发送前描述你的反馈。",
+      "errorGeneric": "发送反馈时出错，请重试。"
+    },
+    "setup": {
+      "intro": "每个项目一个收集器——一段可嵌入的代码片段，可将任何应用中的功能请求、缺陷和想法汇集到该项目的待办列表。",
+      "pickProject": "选择一个项目以配置其反馈收集器。",
+      "enable": "启用反馈收集",
+      "enableAction": "启用",
+      "namePlaceholder": "收集器名称",
+      "creating": "创建中…",
+      "created": "收集器已创建",
+      "dismiss": "关闭",
+      "keyOnce": "立即复制你的接入密钥——它只显示一次且不会被存储。",
+      "ingestKey": "接入密钥",
+      "curlSnippet": "用 curl 测试",
+      "snippet": "嵌入代码片段",
+      "endpoint": "提交端点",
+      "snippetNote": "将此粘贴到任何应用中即可添加反馈选项卡。",
+      "copy": "复制",
+      "enabled": "已启用",
+      "paused": "已暂停",
+      "pause": "暂停",
+      "resume": "恢复",
+      "delete": "删除",
+      "confirmDelete": "删除此反馈收集器？该代码片段将停止接受提交。",
+      "lastSubmission": "最近提交",
+      "options": "选项",
+      "autoCreateTask": "每次提交都创建一张待办卡片",
+      "autoCreateTaskHint": "关闭后，提交仍会被记录并可供审查，但不会在看板上添加卡片。",
+      "dailyLimit": "每日提交上限",
+      "dailyLimitHint": "此代码片段在滚动的 24 小时内接受的提交数量（防滥用上限）。",
+      "allowedOrigins": "允许的来源",
+      "allowedOriginsHint": "以逗号分隔的可提交站点列表，或用 * 表示任意。",
+      "loading": "加载中…",
+      "loadFailed": "加载反馈收集器失败。",
+      "createFailed": "创建收集器失败。",
+      "saveFailed": "保存更改失败。"
+    },
+    "triage": {
+      "intro": "审查每条请求，批准以允许开展工作，或拒绝。在你批准之前不会运行任何内容。",
+      "filter": "显示",
+      "statusAll": "全部",
+      "loading": "加载中…",
+      "loadFailed": "加载提交内容失败。",
+      "reviewFailed": "记录你的决定失败。",
+      "empty": "这里还没有反馈。",
+      "approve": "批准",
+      "decline": "拒绝",
+      "working": "处理中…",
+      "confirmDecline": "拒绝此请求？它的工单将从看板归档。",
+      "gatedNote": "外部请求——等待你的批准。在你批准之前，任何代理都不会接手。",
+      "showMore": "展开",
+      "showLess": "收起"
+    },
+    "admin": {
+      "title": "产品反馈",
+      "subtitle": "从每个工作区的反馈收集器汇集的功能请求、缺陷和想法。"
+    }
   }
 }

@@ -377,7 +377,8 @@
       "boards": "Tableaux",
       "monitors": "Moniteurs",
       "reporting": "Rapports",
-      "rfp": "Appels d'offres"
+      "rfp": "Appels d'offres",
+      "feedback": "Retours"
     }
   },
   "alerts": {
@@ -7266,7 +7267,8 @@
       "errors": "Erreurs",
       "audit": "Journal d’audit",
       "apiKeys": "Clés API",
-      "token": "Jeton superadmin"
+      "token": "Jeton superadmin",
+      "feedback": "Retours"
     },
     "common": {
       "loading": "Chargement…",
@@ -10146,5 +10148,100 @@
     "notReadyTitle": "GitHub Actions n’est pas encore configuré pour ce projet",
     "notReadyBody": "Le workflow d’agent Builderforce est absent du dépôt par défaut de ce projet : les exécutions basculeront donc vers l’exécuteur cloud durable. Ouvrez les paramètres Gestion de code source et choisissez « Activer les exécutions d’agents » sur le dépôt.",
     "noGithubRepoBody": "Aucun dépôt GitHub n’est lié à ce projet, il n’y a donc nulle part où exécuter GitHub Actions. Les exécutions basculeront vers l’exécuteur cloud durable. Liez un dépôt GitHub dans les paramètres Gestion de code source."
+  },
+  "feedback": {
+    "page": {
+      "title": "Retours",
+      "subtitle": "Recueillez les demandes de fonctionnalités, les bugs et les idées, et examinez-les avant tout travail."
+    },
+    "tab": {
+      "label": "Retours",
+      "tooltip": "Envoyez-nous vos retours"
+    },
+    "kind": {
+      "feature": "Demande de fonctionnalité",
+      "bug": "Rapport de bug",
+      "idea": "Idée",
+      "other": "Autre chose"
+    },
+    "status": {
+      "new": "Nouveau",
+      "approved": "Approuvé",
+      "declined": "Refusé"
+    },
+    "form": {
+      "title": "Envoyez-nous vos retours",
+      "intro": "Dites-nous ce qui améliorerait l’outil. Demandes de fonctionnalités, bugs, idées à peine ébauchées : tout est bienvenu.",
+      "destination": "Va dans le backlog de {project} pour examen.",
+      "kind": "Type",
+      "summary": "Résumé",
+      "summaryPlaceholder": "Une ligne — que voulez-vous ?",
+      "details": "Détails",
+      "detailsPlaceholder": "Qu’essayez-vous de faire et qu’est-ce qui vous en empêche ?",
+      "gateNote": "Votre demande est enregistrée pour qu’une personne l’examine — rien n’est construit automatiquement.",
+      "submit": "Envoyer",
+      "submitting": "Envoi…",
+      "close": "Fermer",
+      "another": "En envoyer un autre",
+      "successTitle": "Merci",
+      "successBody": "Votre demande a été enregistrée pour examen par l’équipe.",
+      "errorRequired": "Veuillez décrire votre retour avant l’envoi.",
+      "errorGeneric": "Une erreur s’est produite lors de l’envoi. Veuillez réessayer."
+    },
+    "setup": {
+      "intro": "Un collecteur par projet — un seul extrait intégrable qui rassemble demandes de fonctionnalités, bugs et idées de n’importe quelle application dans le backlog de ce projet.",
+      "pickProject": "Sélectionnez un projet pour configurer son collecteur de retours.",
+      "enable": "Activer la collecte de retours",
+      "enableAction": "Activer",
+      "namePlaceholder": "Nom du collecteur",
+      "creating": "Création…",
+      "created": "Collecteur créé",
+      "dismiss": "Ignorer",
+      "keyOnce": "Copiez votre clé d’ingestion maintenant — elle n’est affichée qu’une fois et n’est jamais stockée.",
+      "ingestKey": "Clé d’ingestion",
+      "curlSnippet": "Tester avec curl",
+      "snippet": "Extrait à intégrer",
+      "endpoint": "Point de terminaison d’envoi",
+      "snippetNote": "Collez ceci dans n’importe quelle application pour ajouter un onglet de retour.",
+      "copy": "Copier",
+      "enabled": "Activé",
+      "paused": "En pause",
+      "pause": "Mettre en pause",
+      "resume": "Reprendre",
+      "delete": "Supprimer",
+      "confirmDelete": "Supprimer ce collecteur de retours ? L’extrait cessera d’accepter les envois.",
+      "lastSubmission": "Dernier envoi",
+      "options": "Options",
+      "autoCreateTask": "Ouvrir un ticket de backlog par envoi",
+      "autoCreateTaskHint": "Désactivé, les envois sont tout de même enregistrés et consultables, mais aucune carte n’est ajoutée au tableau.",
+      "dailyLimit": "Limite d’envois quotidienne",
+      "dailyLimitHint": "Envois acceptés depuis cet extrait par période glissante de 24 heures (plafond anti-abus).",
+      "allowedOrigins": "Origines autorisées",
+      "allowedOriginsHint": "Liste de sites séparés par des virgules autorisés à envoyer, ou * pour toutes.",
+      "loading": "Chargement…",
+      "loadFailed": "Échec du chargement du collecteur de retours.",
+      "createFailed": "Échec de la création du collecteur.",
+      "saveFailed": "Échec de l’enregistrement des modifications."
+    },
+    "triage": {
+      "intro": "Examinez chaque demande et approuvez-la pour autoriser le travail, ou refusez-la. Rien ne s’exécute avant votre approbation.",
+      "filter": "Afficher",
+      "statusAll": "Tous",
+      "loading": "Chargement…",
+      "loadFailed": "Échec du chargement des envois.",
+      "reviewFailed": "Échec de l’enregistrement de votre décision.",
+      "empty": "Aucun retour ici pour l’instant.",
+      "approve": "Approuver",
+      "decline": "Refuser",
+      "working": "Traitement…",
+      "confirmDecline": "Refuser cette demande ? Son ticket sera archivé hors du tableau.",
+      "gatedNote": "Demande externe — en attente de votre approbation. Aucun agent ne la prendra tant que vous ne l’aurez pas approuvée.",
+      "showMore": "Voir plus",
+      "showLess": "Voir moins"
+    },
+    "admin": {
+      "title": "Retours produit",
+      "subtitle": "Demandes de fonctionnalités, bugs et idées recueillis par les collecteurs de retours de chaque espace de travail."
+    }
   }
 }
