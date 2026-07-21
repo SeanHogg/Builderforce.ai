@@ -1,0 +1,29 @@
+-- Migration: BYO web-search vendor keys — lights up the cloud agent's `web_search`.
+--
+-- The durable/Worker agent could already READ a URL (`web_fetch`, backed by
+-- application/runtime/cloudWeb.ts) but could not DISCOVER one: the shared `web_search`
+-- tool had a definition and a capability (`web.search`) with nothing behind it, so the
+-- surface deliberately never advertised it.
+--
+-- A search engine is a metered third-party API and this platform funds no key for it,
+-- so the credential is BYO PER TENANT. Rather than inventing a store for it, the key
+-- lives in `integration_credentials` — the same vault github/jira/sentry/linear already
+-- use (per-tenant PBKDF2-derived AES-GCM, `is_enabled`, one CRUD surface at
+-- /api/integrations). That table's `provider` column is the `integration_provider`
+-- enum, so a new vendor is exactly one enum value.
+--
+-- `brave_search` is the first adapter behind the vendor port in
+-- application/runtime/webSearchVendors.ts (a plain GET + one header token, own index,
+-- self-serve free tier). Adding Tavily/Exa later is another value here plus another
+-- adapter — no schema change beyond this pattern.
+--
+-- Purely ADDITIVE and idempotent: an enum value cannot break existing rows, and no
+-- tenant has a search credential yet, so on deploy every run behaves exactly as it does
+-- today (the capability is self-gating — `web.search` is advertised ONLY once a usable
+-- key resolves for that tenant).
+--
+-- NOTE: ALTER TYPE ... ADD VALUE cannot run inside a transaction block on older
+-- PostgreSQL, and the new value is not usable in the same transaction that adds it.
+-- This migration therefore does nothing else.
+
+ALTER TYPE integration_provider ADD VALUE IF NOT EXISTS 'brave_search';

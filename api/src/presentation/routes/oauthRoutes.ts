@@ -3,6 +3,9 @@ import { and, eq, sql } from 'drizzle-orm';
 import { resolveAppBaseUrl, type HonoEnv, type Env } from '../../env';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { sendMagicLinkEmail, sendWelcomeEmail } from '../../infrastructure/email/EmailService';
+import { sendTransactionalEmail } from '../../application/email/sendEmail';
+import { headerHints } from '../../application/email/emailLocaleResolver';
+import { localeFromHeaders } from '../../infrastructure/email/emailLocale';
 import {
   users,
   oauthAccounts,
@@ -438,16 +441,30 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
           // OAuth vouches for the address — the account is verified on creation, so it
           // never hits the password-signup OTP gate.
           emailVerifiedAt: sql`now()`,
+          // Best-effort locale capture. This callback is a cross-site redirect FROM
+          // the provider, so the NEXT_LOCALE cookie is not sent and only
+          // Accept-Language is usually available — a weaker signal than the password
+          // signup gets, but better than pinning the account to English. The user's
+          // first authenticated app request refines it via rememberUserLocale().
+          locale: localeFromHeaders(headerHints(c.req)),
         });
         userId = newId;
         // Brand-new account (no provider link, no same-email user) — this is the
         // only signup branch in this handler, so the welcome email belongs here.
         // Fire-and-forget: a mail failure must never block the sign-in redirect.
-        void sendWelcomeEmail(
+        void sendTransactionalEmail(
           c.env,
+          db,
           normalizedEmail,
-          providerUser.name ?? '',
-          frontendBase,
+          ({ locale }) => sendWelcomeEmail(
+            c.env,
+            normalizedEmail,
+            providerUser.name ?? '',
+            frontendBase,
+            undefined,
+            locale,
+          ),
+          { headers: headerHints(c.req) },
         );
       }
 
@@ -499,7 +516,12 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
     // Always return 200 — never reveal whether an account exists
     if (normalizedEmail) {
       const [user] = await db
-        .select({ id: users.id, displayName: users.displayName, username: users.username })
+        .select({
+          id: users.id,
+          displayName: users.displayName,
+          username: users.username,
+          locale: users.locale,
+        })
         .from(users)
         .where(eq(users.email, normalizedEmail))
         .limit(1);
@@ -525,12 +547,19 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
         const frontendBase = resolveAppBaseUrl(c.env);
         const magicUrl = `${frontendBase}/auth/magic-link?token=${encodeURIComponent(token)}`;
 
-        void sendMagicLinkEmail(
+        void sendTransactionalEmail(
           c.env,
+          db,
           normalizedEmail,
-          user.displayName ?? user.username ?? normalizedEmail,
-          magicUrl,
-          anonId,
+          ({ locale }) => sendMagicLinkEmail(
+            c.env,
+            normalizedEmail,
+            user.displayName ?? user.username ?? normalizedEmail,
+            magicUrl,
+            anonId,
+            locale,
+          ),
+          { storedLocale: user.locale, headers: headerHints(c.req) },
         );
       }
     }

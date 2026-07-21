@@ -192,9 +192,21 @@ describe('approvalRoutes — creation is authenticated + role-gated', () => {
     expect(res.status).toBe(400);
   });
 
-  it('rejects /escalate when CRON_SECRET is not configured (fails closed)', async () => {
+  /**
+   * The bulk-mutate escalate ENDPOINT is gone — expiry now runs in scheduled() as
+   * runApprovalExpirySweep. Pin its absence: re-adding a public route that expires
+   * every tenant's approvals would reintroduce the unauthenticated hole that the
+   * unset-CRON_SECRET bug created. It must not resolve as a route at all.
+   */
+  it('no longer exposes /escalate as a public bulk-mutate endpoint', async () => {
     const { app } = approvalApp();
     const res = await req(app, '/escalate');
-    expect(res.status).toBe(401);
+    // The path now falls through to GET /:id and is read as an approval id — a
+    // harmless tenant-scoped lookup. What must never come back is the old
+    // handler's `{ escalated }` shape: that endpoint expired EVERY tenant's
+    // pending approvals and was unauthenticated whenever CRON_SECRET was unset.
+    // Expiry lives in scheduled() as runApprovalExpirySweep now.
+    const body = await res.json().catch(() => ({}));
+    expect(body).not.toHaveProperty('escalated');
   });
 });

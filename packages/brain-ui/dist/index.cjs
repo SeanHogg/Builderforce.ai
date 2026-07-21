@@ -1910,6 +1910,7 @@ var DEFAULT_EVERMIND_LABELS = {
   description: "The self-learning model for this project. It adapts as this project\u2019s agents run \u2014 inspect what it has learned and steer its training below.",
   loading: "Loading\u2026",
   managerOnlyHint: "Only a project manager can change these settings.",
+  inheritedHint: "This build shares its parent project\u2019s Evermind, so everything it has learned is available here. Training and settings live on the parent project.",
   statusSeeded: (v) => `Learning \xB7 v${v}`,
   statusUnseeded: "Not set up",
   evalDelta: (pct) => `${pct}% vs prev`,
@@ -2118,6 +2119,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
   if (!loaded) return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(Section, { "aria-busy": true, children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: { margin: 0, color: C.text2, fontSize: "0.82rem" }, children: t.loading }) });
   const seeded = !!data?.seeded;
   const frozen = data?.mode === "offline-frozen";
+  const inherited = !!data?.inherited;
   const scopeName = projectName?.trim();
   const Header = /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { "aria-hidden": true, style: { fontSize: "1.05rem" }, children: "\u{1F9E0}" }),
@@ -2141,7 +2143,24 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     Header,
     /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.text2 }, children: t.description }),
     !canManage && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, fontStyle: "italic" }, children: t.managerOnlyHint }),
-    !seeded ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+    inherited && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+      "p",
+      {
+        style: { margin: 0, fontSize: "0.72rem", lineHeight: 1.5, color: C.text2, fontStyle: "italic" },
+        role: "note",
+        children: t.inheritedHint
+      }
+    ),
+    inherited ? (
+      // INHERITED — read-only. This build has no `project_evermind` row of its own;
+      // it is displaying its container project's. Every write endpoint keeps exact-id
+      // semantics, so a seed/toggle/teach issued here would post to a row that does
+      // not exist: zero rows updated, HTTP OK, nothing changes, and the panel keeps
+      // rendering the container's unchanged stats. Rendering the stats WITHOUT the
+      // controls is the honest surface — the model is genuinely shared and genuinely
+      // shown; it is just not managed from here.
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(StatRow, { t, data })
+    ) : !seeded ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
       SeedControls,
       {
         t,

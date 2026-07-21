@@ -50,10 +50,28 @@ function isEditorWebviewOrigin(origin: string): boolean {
   return origin.startsWith('vscode-webview://') || origin.startsWith('vscode-file://');
 }
 
+/**
+ * PUBLIC INGEST surfaces — the embeddable snippets (error collectors, feedback
+ * collectors). These are pasted into CUSTOMER applications on origins we cannot
+ * enumerate, which is the entire point of an embeddable snippet, so the origin
+ * allow-list can never gate them: any browser origin may post.
+ *
+ * Same reasoning as the editor-webview exception above — authorization is the
+ * per-collector ingest key carried on every request (plus the collector's own
+ * rate/quota ceilings), and CORS is not the security boundary. Before this, a
+ * customer embedding the quality snippet on their own domain got a silent
+ * preflight rejection unless the deployment set CORS_ORIGINS=*.
+ */
+const PUBLIC_INGEST_PREFIXES = ['/api/quality-ingest', '/api/feedback-ingest'];
+
+function isPublicIngestPath(path: string): boolean {
+  return PUBLIC_INGEST_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
+}
+
 function getCorsConfig(c: Context<HonoEnv>) {
   const origin = c.req.header('Origin') ?? '';
   const corsOrigins = c.env.CORS_ORIGINS ?? 'https://builderforce.ai';
-  const allowAll = corsOrigins === '*';
+  const allowAll = corsOrigins === '*' || isPublicIngestPath(new URL(c.req.url).pathname);
   const allowed = allowAll
     ? []
     : corsOrigins.split(',').map((s) => s.trim()).filter(Boolean);

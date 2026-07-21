@@ -3144,6 +3144,11 @@ function diagnosticsSignals(d) {
 function formatChatDiagnostics(d) {
   const lines = ["## Chat diagnostics"];
   if (d.surface) lines.push(`- Surface: ${d.surface}`);
+  if (d.versions && (d.versions.ui || d.versions.api)) {
+    lines.push(
+      `- Versions: UI ${d.versions.ui ?? "unknown"} \xB7 API ${d.versions.api ?? "unknown"}`
+    );
+  }
   lines.push(`- Chat: ${d.chatTitle?.trim() ? `"${d.chatTitle.trim()}"` : "Untitled"}${d.chatId != null ? ` (#${d.chatId})` : ""}${d.chatVisibility ? ` \xB7 ${d.chatVisibility}` : ""}`);
   lines.push(`- Chat's project: ${fmtProject(d.projectId, d.projectName)}`);
   if (d.selectedProjectId != null && d.selectedProjectId !== d.projectId) {
@@ -3173,8 +3178,9 @@ function formatChatDiagnostics(d) {
   }
   const tools = d.tools;
   if (tools) {
+    const advertised = Math.min(tools.count, DEFAULT_TOOL_LIMIT);
     lines.push(
-      `- Tools available to the model: ${tools.count}${tools.loading ? " (catalog still loading)" : ""}${tools.error ? ` \xB7 catalog error: ${tools.error}` : ""}`
+      `- Tools available to the model: ${tools.count} registered` + (tools.count > advertised ? ` \xB7 up to ${advertised} advertised per turn (relevance-selected)` : "") + `${tools.loading ? " (catalog still loading)" : ""}${tools.error ? ` \xB7 catalog error: ${tools.error}` : ""}`
     );
   }
   const ev = d.evermind;

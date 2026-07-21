@@ -27,6 +27,7 @@ import ImpersonationSessionsPanel from '@/components/admin/panels/ImpersonationS
 import AuditLogPanel from '@/components/admin/panels/AuditLogPanel';
 import ErrorsPanel from '@/components/admin/panels/ErrorsPanel';
 import TokenPanel from '@/components/admin/panels/TokenPanel';
+import FeedbackPanel from '@/components/admin/panels/FeedbackPanel';
 
 /**
  * Platform Admin shell — a THIN router.
@@ -61,6 +62,7 @@ const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   audit: AuditLogPanel,
   apiKeys: () => <TenantApiKeysAdminTab active />,
   token: TokenPanel,
+  feedback: FeedbackPanel,
 };
 
 export default function AdminPage() {
