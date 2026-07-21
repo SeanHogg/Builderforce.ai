@@ -7,13 +7,18 @@
  * GET    /api/approvals          List approvals for tenant (tenant JWT)
  * GET    /api/approvals/:id      Get approval detail (tenant JWT)
  * PATCH  /api/approvals/:id      Accept or reject an approval (tenant JWT, MANAGER+)
- * GET    /api/approvals/escalate  Expire timed-out pending approvals + re-notify (internal/cron)
+ *
+ * Expiring timed-out approvals is NOT a route. It used to be `GET /escalate`, guarded
+ * by a `CRON_SECRET` query param — but Cloudflare crons invoke `scheduled()`, not a
+ * URL, so nothing ever called it, and an unset secret made it an unauthenticated
+ * bulk-mutate endpoint. It now runs natively on the `*​/5` tick as
+ * `runApprovalExpirySweep` (application/approvals), so there is one cron pattern and
+ * no shared secret to leak or forget.
  *
  * AUTHORIZATION. Every route is behind an auth middleware mounted BEFORE the routes
  * (it used to be mounted after POST /, leaving creation unauthenticated-by-ordering
  * for anything the handler's own inline check missed):
- *   • /escalate         — system/cron caller, authenticated by CRON_SECRET.
- *   • everything else   — `approvalAuth`: an agentHost API key (?agentHostId=&key=)
+ *   • all routes        — `approvalAuth`: an agentHost API key (?agentHostId=&key=)
  *                         OR a tenant JWT.
  * On top of that:
  *   • POST /            — DEVELOPER+ for human callers; `task.execution` action types
@@ -104,20 +109,6 @@ function buildApprovalAuth(db: Db): MiddlewareHandler<ApprovalHonoEnv> {
   };
 }
 
-/**
- * The cron/system gate for /escalate. Previously the check was
- * `secret !== env.CRON_SECRET && env.CRON_SECRET`, which silently allowed ANY
- * caller when CRON_SECRET was unset — a deploy without the secret published an
- * unauthenticated bulk-mutate endpoint. A missing secret now fails CLOSED.
- */
-const requireCronSecret: MiddlewareHandler<ApprovalHonoEnv> = async (c, next) => {
-  const configured = c.env.CRON_SECRET;
-  if (!configured || c.req.query('secret') !== configured) {
-    return c.json({ error: 'Unauthorized' }, 401);
-  }
-  await next();
-};
-
 // Slack/email fan-out + manager-email lookup live in the shared approvalNotifier
 // so the cloud `ask_human` path notifies identically — see imports above.
 
@@ -127,54 +118,6 @@ const requireCronSecret: MiddlewareHandler<ApprovalHonoEnv> = async (c, next) =>
 
 export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Hono<ApprovalHonoEnv> {
   const router = new Hono<ApprovalHonoEnv>();
-
-  // ── GET /api/approvals/escalate ─────────────────────────────────────────
-  // Intended to be called by a Cloudflare Cron Trigger (or an admin endpoint).
-  // Finds all pending approvals whose expiresAt has passed, marks them expired,
-  // and sends a Slack/email escalation alert.
-  // Auth: CRON_SECRET query param — see requireCronSecret (fails closed if unset).
-  router.get('/escalate', requireCronSecret, async (c) => {
-    const env = c.env;
-    const now = new Date();
-    const expired = await db
-      .select()
-      .from(approvals)
-      .where(and(
-        eq(approvals.status, 'pending'),
-        lt(approvals.expiresAt, now),
-      ));
-
-    if (expired.length === 0) return c.json({ escalated: 0 });
-
-    const ids = expired.map((a) => a.id);
-    await db
-      .update(approvals)
-      .set({ status: 'expired', updatedAt: now })
-      .where(and(
-        eq(approvals.status, 'pending'),
-        lt(approvals.expiresAt, now),
-      ));
-
-    // Group by tenant for notifications
-    const byTenant = new Map<number, typeof expired>();
-    for (const a of expired) {
-      const list = byTenant.get(a.tenantId) ?? [];
-      list.push(a);
-      byTenant.set(a.tenantId, list);
-    }
-
-    if (env.SLACK_APPROVAL_WEBHOOK_URL) {
-      for (const [, list] of byTenant) {
-        const lines = list.map((a) => `• *${a.actionType}* — ${a.description}`).join('\n');
-        await sendSlackNotification(
-          env.SLACK_APPROVAL_WEBHOOK_URL,
-          `:warning: *${list.length} approval request(s) expired without review:*\n${lines}`,
-        );
-      }
-    }
-
-    return c.json({ escalated: expired.length, ids });
-  });
 
   // Auth (agentHost API key OR tenant JWT) for EVERY route below. Mounted here —
   // above the routes — because it previously sat after POST '/', so creation

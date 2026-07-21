@@ -310,8 +310,8 @@ describe('listBranchCommits — pagination', () => {
   it('treats a 404 on a LATER page as truncated evidence, not a complete short list', async () => {
     const fn = vi.fn(async (url: string) => {
       const page = Number(/[?&]page=(\d+)/.exec(url)?.[1] ?? 1);
-      if (page > 1) return { ok: false, status: 404, json: async () => null, text: async () => '' };
-      return { ok: true, status: 200, json: async () => ghPage(0, 100), text: async () => '' };
+      if (page > 1) return { ok: false, status: 404, json: async () => null, text: async (): Promise<string> => '' };
+      return { ok: true, status: 200, json: async () => ghPage(0, 100), text: async (): Promise<string> => '' };
     });
     vi.stubGlobal('fetch', fn);
     const r = await listBranchCommits({ ...target, provider: 'github', base: 'main', branch: BRANCH });

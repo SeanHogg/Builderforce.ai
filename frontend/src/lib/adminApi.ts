@@ -7,6 +7,7 @@ import { getApiBaseUrl } from './apiClient';
 import { checkUnauthorizedAndRedirect, getStoredWebToken } from './auth';
 import type { LlmModelStatus, VendorId } from './builderforceApi';
 import type { PsychometricProfile } from './psychometric';
+import type { FeedbackQueue, FeedbackStatus } from './feedbackApi';
 
 export type { LlmModelStatus, VendorId };
 
@@ -578,6 +579,28 @@ async function adminRequest<T>(
 // ---------------------------------------------------------------------------
 
 export const adminApi = {
+  /**
+   * Cross-tenant product feedback — the dogfooding inbox. Returns the SAME row
+   * shape as the tenant-side queue (`feedbackApi.queue`), so both render through
+   * one <FeedbackTriage> component.
+   */
+  async feedback(params: { tenantId?: number | null; status?: FeedbackStatus | null; limit?: number } = {}): Promise<FeedbackQueue> {
+    const q = new URLSearchParams();
+    if (params.tenantId != null) q.set('tenantId', String(params.tenantId));
+    if (params.status) q.set('status', params.status);
+    if (params.limit) q.set('limit', String(params.limit));
+    const qs = q.toString();
+    return adminRequest<FeedbackQueue>(`/api/admin/feedback${qs ? `?${qs}` : ''}`);
+  },
+
+  /** Superadmin review — runs through the same engine as tenant-side triage. */
+  async reviewFeedback(id: string, tenantId: number, decision: 'approved' | 'declined'): Promise<{ ok: true; taskId: number | null }> {
+    return adminRequest(`/api/admin/feedback/${id}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ tenantId, decision }),
+    });
+  },
+
   async users(): Promise<AdminUser[]> {
     const res = await adminRequest<{ users: AdminUser[] }>('/api/admin/users');
     return res.users;

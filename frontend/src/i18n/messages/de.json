@@ -1187,7 +1187,41 @@
     },
     "accountTab": "Konto",
     "sessionsTab": "Sitzungen",
-    "subnavLabel": "Einstellungsbereiche"
+    "subnavLabel": "Einstellungsbereiche",
+    "emailTab": "E-Mail",
+    "emailPrefs": {
+      "title": "E-Mail-Einstellungen",
+      "whatWeSend": "Was wir senden",
+      "error": "Ihre E-Mail-Einstellungen konnten nicht aktualisiert werden. Bitte versuchen Sie es erneut.",
+      "language": "E-Mail-Sprache",
+      "languageAuto": "Automatisch erkennen",
+      "languageHelp": "Die Sprache, in der wir Ihnen schreiben. Unabhängig von der App-Sprache oben.",
+      "languageTitle": "Sprache",
+      "languageDetail": "Wir schreiben Ihnen in dieser Sprache. Bei automatischer Erkennung verwenden wir die Sprache Ihrer Registrierung, ersatzweise Englisch.",
+      "optionalTitle": "Optionale E-Mails",
+      "optionalHelp": "Schalten Sie ab, was Sie nicht erhalten möchten.",
+      "optionalDetail": "Das sind die E-Mails, die wir von uns aus senden. Sie können jede einzeln abschalten, und jede enthält einen Abmeldelink.",
+      "productUpdates": "Produkt-Neuigkeiten",
+      "productUpdatesHelp": "Neue Funktionen und wichtige Änderungen.",
+      "onboardingTips": "Tipps und Anleitungen",
+      "onboardingTipsHelp": "Gelegentliche Hinweise, wie Sie mehr aus Builderforce herausholen.",
+      "digests": "Zusammenfassungen und Übersichten",
+      "digestsHelp": "Regelmäßige Übersichten der Aktivitäten in Ihren Projekten.",
+      "alwaysOnTitle": "Werden immer gesendet",
+      "alwaysOnBody": "Diese E-Mails gehören zu Ihrem Konto. Sie werden nie unterdrückt, auch wenn Sie sich von allem anderen abmelden.",
+      "alwaysOn": {
+        "signIn": "Anmeldelinks und Magic Links",
+        "verification": "E-Mail-Bestätigungscodes",
+        "invites": "Einladungen zu Arbeitsbereichen und Chats",
+        "security": "Sicherheits- und Kontozugriffshinweise"
+      },
+      "transactionalNote": "Konto- und Sicherheits-E-Mails werden immer gesendet — sie gehören zur Funktionsweise Ihres Kontos und sind deshalb oben nicht aufgeführt.",
+      "unsubscribedTitle": "Sie sind abgemeldet",
+      "unsubscribedBody": "Sie erhalten keine optionalen E-Mails. Konto- und Sicherheitsnachrichten werden weiterhin gesendet.",
+      "resubscribeCta": "Erneut anmelden",
+      "resubscribeTitle": "Optionale E-Mails wieder abonnieren",
+      "resubscribeConfirm": "Sie erhalten wieder optionale E-Mails, entsprechend den von Ihnen aktivierten Kategorien. Fortfahren?"
+    }
   },
   "pmo": {
     "title": "Portfolio (PMO)",
@@ -6235,7 +6269,8 @@
     "validateMethod": "{method, select, embedding {Semantischer Abruf} other {Lexikalischer Abruf (Fallback)}}",
     "evalDelta": "{pct}% vs. vorher",
     "evalFlat": "keine Änderung",
-    "evalTooltip": "Regressionsprüfung für v{version}: Holdout-Verlust {base} → {next} über {size, plural, one {# frühere Aufgabe} other {# frühere Aufgaben}}."
+    "evalTooltip": "Regressionsprüfung für v{version}: Holdout-Verlust {base} → {next} über {size, plural, one {# frühere Aufgabe} other {# frühere Aufgaben}}.",
+    "inheritedHint": "Dieser Build teilt sich das Evermind seines übergeordneten Projekts, daher ist hier alles verfügbar, was es gelernt hat. Training und Einstellungen werden im übergeordneten Projekt verwaltet."
   },
   "topbar": {
     "cart": "Warenkorb",
@@ -7944,6 +7979,11 @@
       },
       "tokensUsed": "Verbrauchte KI-Token",
       "periodLabel": "Letzte {period}"
+    },
+    "authAlert": {
+      "title": "Wird nicht verwendet",
+      "notEntitled": "Dieses Konto hat sich erfolgreich angemeldet, aber der Anbieter hat die Anfrage abgelehnt ({status}), weil der Tarif sie nicht abdeckt. Verbinden Sie ein Konto, dessen Tarif sie enthält, oder führen Sie ein Upgrade durch.",
+      "rejected": "Der Anbieter hat diese Zugangsdaten abgelehnt ({status}). Sie sind vermutlich abgelaufen, widerrufen oder anderswo rotiert worden — verbinden Sie das Konto erneut."
     }
   },
   "modelSelect": {
@@ -9397,7 +9437,20 @@
     "workspaceSuffix": ", Arbeitsbereich",
     "setAsDefault": "Als Standard-Repository des Projekts festlegen",
     "saveChanges": "Änderungen speichern",
-    "addRepository": "Repository hinzufügen"
+    "addRepository": "Repository hinzufügen",
+    "enableAgentRuns": "Agentenläufe aktivieren",
+    "agentRunsEnabled": "Agentenläufe aktiv",
+    "enablingAgentRuns": "Wird aktiviert…",
+    "enableAgentRunsTitle": "Den Builderforce-Agenten-Workflow in dieses Repo committen, damit Agenten auf Ihren eigenen GitHub-Actions-Runnern laufen",
+    "reenableAgentRunsTitle": "Bereits aktiv – erneut ausführen, um die Workflow-Datei mit der neuesten Version zu überschreiben",
+    "confirmReenableActions": "Dadurch wird .github/workflows/builderforce-agent.yml im Standard-Branch überschrieben und Ihre dortigen Änderungen gehen verloren. Fortfahren?",
+    "actionsEnabled": "Agenten-Workflow nach {path} committet",
+    "actionsEnableFailed": "Agenten-Workflow konnte nicht committet werden",
+    "backfillAlerts": "Warnungen nachladen",
+    "backfillingAlerts": "Wird nachgeladen…",
+    "backfillAlertsTitle": "Alle offenen Code-Scanning- und Dependabot-Warnungen dieses Repos als Sicherheitsbefunde importieren. Erneutes Ausführen ist unbedenklich.",
+    "alertsBackfilled": "{count} {count, plural, one {Sicherheitsbefund} other {Sicherheitsbefunde}} importiert ({deduped} bereits erfasst)",
+    "alertsBackfillFailed": "Sicherheitswarnungen konnten nicht importiert werden"
   },
   "workflowsContent": {
     "noRunsYet": "Noch keine Ausführungen",
@@ -10088,5 +10141,10 @@
       "denied": "VERWEIGERT",
       "soft-gate": "EINGESCHRÄNKT"
     }
+  },
+  "githubActionsSurface": {
+    "notReadyTitle": "GitHub Actions ist für dieses Projekt noch nicht eingerichtet",
+    "notReadyBody": "Im Standard-Repository dieses Projekts fehlt der Builderforce-Agenten-Workflow, daher weichen Läufe auf den dauerhaften Cloud-Executor aus. Öffnen Sie die Einstellungen unter Quellcodeverwaltung und wählen Sie beim Repository „Agentenläufe aktivieren“.",
+    "noGithubRepoBody": "Diesem Projekt ist kein GitHub-Repository zugeordnet, es gibt also keinen Ort für GitHub Actions. Läufe weichen auf den dauerhaften Cloud-Executor aus. Verknüpfen Sie unter Quellcodeverwaltung ein GitHub-Repository."
   }
 }

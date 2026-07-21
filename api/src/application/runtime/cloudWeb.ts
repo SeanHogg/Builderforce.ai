@@ -23,17 +23,21 @@
  * same doc page across steps / across ticks" costs one real egress. A FAILED fetch is
  * invalidated immediately after (a transient 502 must not be pinned for the TTL).
  *
- * NOTE: `search` is deliberately absent. This repo has no web-search vendor
- * integration and the LLM gateway exposes no search-capable path, so the cloud
- * surface does NOT advertise the `web.search` capability and `web_search` is never
- * surfaced to the model (see the Consolidated Gap Register in ROADMAP.md). Wiring a
- * vendor here is the ONLY change needed to light it up — add `search` below and
- * `'web.search'` to `CLOUD_SURFACE_CAPS`.
+ * `search` is the second half, and it is CONDITIONAL. Search is a metered third-party
+ * API with no platform-funded key, so the backing is only present when the tenant's own
+ * BYO key resolves (`webSearchCredential.ts` → `integration_credentials`). No key means
+ * no `search` method here, which means the engine omits `web.search` from the run's
+ * capability set, which means the registry never advertises `web_search` — the surface
+ * behaves exactly as it did before search existed. The agent is never handed a tool
+ * that is certain to fail. The vendor itself is behind a port (`webSearchVendors.ts`).
  */
 
-import type { WebCapability, WebFetchResult } from '@builderforce/agent-tools';
+import type { WebCapability, WebFetchResult, WebSearchResult } from '@builderforce/agent-tools';
 import type { Env } from '../../env';
+import type { Db } from '../../infrastructure/database/connection';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { enforceOutboundFetchCap, recordOutboundFetch } from '../web/outboundFetchLedger';
+import type { WebSearchVendor } from './webSearchVendors';
 
 /** Hard ceiling on bytes read off one response. Beyond this the content is truncated
  *  (and flagged) rather than the fetch failing — a truncated doc is still useful. */
@@ -216,8 +220,10 @@ function isTextualContentType(contentType: string): boolean {
 }
 
 /** Read at most {@link MAX_FETCH_BYTES} off the response body, decoding as UTF-8.
- *  Streams so an oversized body is abandoned rather than buffered whole. */
-async function readCapped(res: Response): Promise<{ text: string; truncated: boolean }> {
+ *  Streams so an oversized body is abandoned rather than buffered whole. Exported so
+ *  the search vendors (`webSearchVendors.ts`) read their JSON under the SAME cap
+ *  instead of growing a second, unbounded HTTP path. */
+export async function readCapped(res: Response): Promise<{ text: string; truncated: boolean }> {
   const body = res.body;
   if (!body) return { text: '', truncated: false };
   const reader = body.getReader();
@@ -295,28 +301,92 @@ async function fetchUncached(url: string): Promise<WebFetchResult> {
   }
 }
 
-/**
- * Build the cloud surface's `web` capability. `search` is intentionally not provided
- * (see the module header) — the capability set gates `web_search` off, so the model
- * never sees a tool this surface cannot honor.
- */
-export function buildCloudWebCapability(args: { env: Env }): WebCapability {
-  const { env } = args;
-  return {
-    async fetch(rawUrl: string): Promise<WebFetchResult> {
-      const url = (rawUrl ?? '').trim();
-      const blocked = classifyWebEgress(url);
-      if (blocked) return { ok: false, url, error: blocked };
+/** Everything the optional `search` half needs: which vendor adapter to call, the
+ *  tenant's resolved key, and (when the run has a DB) the tenant to meter the query
+ *  against. Assembled by the engine from {@link resolveWebSearchCredential}. */
+export interface CloudWebSearchBacking {
+  vendor: WebSearchVendor;
+  apiKey: string;
+  /** Consumption metering. Search bills per QUERY, so a real (uncached) query is one
+   *  outbound fetch on the tenant's meter — same unit, same ledger as the Brain's
+   *  `/fetch-url` proxy. Omitted only where no tenant DB is in scope (tests). */
+  meter?: { db: Db; tenantId: number };
+}
 
-      const key = `web-fetch:${url}`;
-      const result = await getOrSetCached<WebFetchResult>(env, key, () => fetchUncached(url), {
+/** Collapse a query to its cache identity: search engines are whitespace- and
+ *  case-insensitive, so `React Hooks ` and `react hooks` are one paid query, not two.
+ *  Pure → unit-testable. */
+export function normalizeSearchQuery(raw: string): string {
+  return (raw ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/**
+ * Build the cloud surface's `web` capability.
+ *
+ * `fetch` is unconditional. `search` is present ONLY when `args.search` is supplied —
+ * i.e. only when a usable BYO key resolved for this tenant. With no backing the
+ * returned object has no `search` method at all, so `WebCapability.search` is
+ * `undefined` and the engine's capability set (and therefore the advertised toolset)
+ * is byte-identical to the pre-search behaviour.
+ */
+export function buildCloudWebCapability(args: { env: Env; search?: CloudWebSearchBacking | null }): WebCapability {
+  const { env, search } = args;
+  if (!search) return { fetch: (rawUrl: string) => fetchCached(env, rawUrl) };
+  const { vendor, apiKey, meter } = search;
+  return {
+    fetch: (rawUrl: string) => fetchCached(env, rawUrl),
+    async search(rawQuery: string): Promise<WebSearchResult> {
+      const query = (rawQuery ?? '').trim();
+      if (!query) return { ok: false, query, error: 'query is required' };
+
+      // Cache on the NORMALIZED query but search on what the agent actually typed —
+      // the same read-through cache (L1 Map + L2 KV) and the same TTLs as web_fetch,
+      // for the same reason: a multi-step run re-asks the same question across ticks,
+      // and here each repeat is also real vendor spend.
+      const key = `web-search:${vendor.id}:${normalizeSearchQuery(query)}`;
+      const result = await getOrSetCached<WebSearchResult>(env, key, async () => {
+        // Metering lives INSIDE the loader so a cache hit is neither charged nor
+        // gated — only a query that actually hits the wire is metered.
+        if (meter) {
+          const cap = await enforceOutboundFetchCap(meter.db, meter.tenantId, env);
+          if (!cap.allowed) {
+            return {
+              ok: false,
+              query,
+              error: `monthly outbound-fetch allowance exhausted (${cap.used}/${cap.limit} on the ${cap.effectivePlan} plan) — web search is paused until it resets`,
+            };
+          }
+        }
+        const r = await vendor.search(query, apiKey);
+        if (r.ok && meter) {
+          await recordOutboundFetch(meter.db, meter.tenantId, vendor.endpoint).catch(() => { /* best-effort */ });
+        }
+        return r;
+      }, {
         kvTtlSeconds: CACHE_KV_TTL_SECONDS,
         l1TtlMs: CACHE_L1_TTL_MS,
       });
-      // Never pin a failure for the TTL — a transient 502/timeout must be retryable on
-      // the agent's very next step.
+      // A vendor blip (or a cap that resets) must be retryable on the next step, never
+      // pinned for the TTL — same rule as a failed fetch.
       if (!result.ok) await invalidateCached(env, key).catch(() => { /* best-effort */ });
       return result;
     },
   };
+}
+
+/** The cached `fetch` half, shared by both shapes of the capability above. */
+async function fetchCached(env: Env, rawUrl: string): Promise<WebFetchResult> {
+  const url = (rawUrl ?? '').trim();
+  const blocked = classifyWebEgress(url);
+  if (blocked) return { ok: false, url, error: blocked };
+
+  const key = `web-fetch:${url}`;
+  const result = await getOrSetCached<WebFetchResult>(env, key, () => fetchUncached(url), {
+    kvTtlSeconds: CACHE_KV_TTL_SECONDS,
+    l1TtlMs: CACHE_L1_TTL_MS,
+  });
+  // Never pin a failure for the TTL — a transient 502/timeout must be retryable on
+  // the agent's very next step.
+  if (!result.ok) await invalidateCached(env, key).catch(() => { /* best-effort */ });
+  return result;
 }

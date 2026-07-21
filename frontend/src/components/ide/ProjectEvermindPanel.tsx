@@ -85,6 +85,7 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     description: t('description'),
     loading: t('loading'),
     managerOnlyHint: t('managerOnlyHint'),
+    inheritedHint: t('inheritedHint'),
     statusSeeded: (v) => t('statusSeeded', { version: v }),
     statusUnseeded: t('statusUnseeded'),
     evalDelta: (pct) => t('evalDelta', { pct }),

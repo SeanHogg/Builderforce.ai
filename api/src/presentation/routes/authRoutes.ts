@@ -4,6 +4,9 @@ import { AuthService } from '../../application/auth/AuthService';
 import { DeviceAuthService } from '../../application/auth/DeviceAuthService';
 import { resolveAppBaseUrl, type HonoEnv } from '../../env';
 import { sendWelcomeEmail, sendAccountTypeSelectedEmail } from '../../infrastructure/email/EmailService';
+import { sendTransactionalEmail } from '../../application/email/sendEmail';
+import { headerHints, rememberUserLocale } from '../../application/email/emailLocaleResolver';
+import { localeFromHeaders } from '../../infrastructure/email/emailLocale';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { TenantRole, type UserId } from '../../domain/shared/types';
 import {
@@ -730,6 +733,11 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         // The register form is an explicit role choice, so mark it selected now —
         // the onboarding gate must never re-prompt a password signup.
         accountTypeSelectedAt: sql`now()`,
+        // Capture the language THIS signup is happening in (NEXT_LOCALE cookie, then
+        // Accept-Language) so the very first email — the verification code, sent a
+        // few lines below — is already in it. Null when the request gives no usable
+        // hint; the resolver then falls back per its documented chain.
+        locale: localeFromHeaders(headerHints(c.req)),
       })
       .returning();
 
@@ -752,7 +760,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     // issued until the user enters the 6-digit code we email now. This is what
     // stops fake / unowned-email signups. The client flips to the code-entry step
     // on `verificationRequired` and calls /web/register/verify to obtain a session.
-    await issueVerificationCode(db, c.env, created, { force: true, anonId });
+    await issueVerificationCode(db, c.env, created, { force: true, anonId, headers: headerHints(c.req) });
 
     return c.json({
       verificationRequired: true,
@@ -806,12 +814,21 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       // send it twice. Fire-and-forget: mail failure must not fail the session.
       // The role was chosen on the register form, so the welcome carries the
       // role-specific next steps directly — no follow-up account-type email.
-      void sendWelcomeEmail(
+      // `stored: user.locale` skips the resolver's lookup: the row is already in
+      // hand, and it was captured at register time from this same browser.
+      void sendTransactionalEmail(
         c.env,
+        db,
         user.email,
-        user.displayName ?? user.username ?? '',
-        resolveAppBaseUrl(c.env),
-        user.accountType === 'freelancer' ? 'freelancer' : 'standard',
+        ({ locale }) => sendWelcomeEmail(
+          c.env,
+          user.email,
+          user.displayName ?? user.username ?? '',
+          resolveAppBaseUrl(c.env),
+          user.accountType === 'freelancer' ? 'freelancer' : 'standard',
+          locale,
+        ),
+        { storedLocale: user.locale, headers: headerHints(c.req) },
       );
     }
 
@@ -854,7 +871,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (email) {
       const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
       if (user && !user.emailVerifiedAt && !user.isSuspended) {
-        const res = await issueVerificationCode(db, c.env, user);
+        const res = await issueVerificationCode(db, c.env, user, { headers: headerHints(c.req) });
         if (!res.sent && res.cooldownSeconds) {
           return c.json({ ok: true, cooldownSeconds: res.cooldownSeconds });
         }
@@ -893,7 +910,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     // (cooldown-guarded) and route the client into the same code-entry step instead
     // of issuing a session. Keeps a half-finished fake signup from ever logging in.
     if (!user.emailVerifiedAt) {
-      await issueVerificationCode(db, c.env, user);
+      await issueVerificationCode(db, c.env, user, { headers: headerHints(c.req) });
       return c.json({ verificationRequired: true, email: user.email }, 403);
     }
 
@@ -1065,6 +1082,15 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const [existing] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!existing) return c.json({ error: 'User not found' }, 404);
 
+    // The locale-capture point for OAuth / magic-link accounts. Their signup was a
+    // cross-site redirect where the app's locale header and NEXT_LOCALE cookie are
+    // unavailable, so `users.locale` is usually still NULL here. This is the first
+    // request that comes from the APP itself (and therefore carries
+    // X-Builderforce-Locale), and it happens before the account-type email is sent
+    // a few lines below — so that mail is already in the right language.
+    // Non-destructive: it only fills an empty locale, never overwrites a choice.
+    await rememberUserLocale(c.env, db, userId, headerHints(c.req)).catch(() => null);
+
     // Already chosen — return as-is so the client can just advance.
     if (existing.accountTypeSelectedAt) {
       return c.json({ user: toUserResponse(existing), alreadySelected: true });
@@ -1091,12 +1117,19 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     // The role-specific next steps. Only reachable past the idempotency guard
     // above, so the choice — and this email — happen exactly once per account.
     // Fire-and-forget: mail must not fail the role selection.
-    void sendAccountTypeSelectedEmail(
+    void sendTransactionalEmail(
       c.env,
+      db,
       row.email,
-      row.displayName ?? row.username ?? '',
-      resolveAppBaseUrl(c.env),
-      accountType,
+      ({ locale }) => sendAccountTypeSelectedEmail(
+        c.env,
+        row.email,
+        row.displayName ?? row.username ?? '',
+        resolveAppBaseUrl(c.env),
+        accountType,
+        locale,
+      ),
+      { storedLocale: row.locale, headers: headerHints(c.req) },
     );
 
     return c.json({ user: toUserResponse(row) });

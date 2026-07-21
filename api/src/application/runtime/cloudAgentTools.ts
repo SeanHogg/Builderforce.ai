@@ -13,7 +13,7 @@
  *   • the step budgets and the finish-honesty matcher (loop policy).
  */
 
-import { buildCoreToolRegistry, type Capability } from '@builderforce/agent-tools';
+import { buildCoreToolRegistry, type Capability, type ToolSchema } from '@builderforce/agent-tools';
 
 /** Shape of one tool call in an OpenAI-compatible completion response. */
 export interface RawToolCall { id?: string; type?: string; function?: { name?: string; arguments?: string } }
@@ -109,12 +109,13 @@ export const cloudToolRegistry = buildCoreToolRegistry();
  * → list_files, search_code, read_file, write_file, edit_file, delete_file,
  * run_checks, ask_human, memory_recall, memory_remember, web_fetch, finish.
  *
- * `web.search` is INTENTIONALLY omitted (a KNOWN gap, not an oversight): the two web
- * halves are gated separately because they need different backings, and this repo has
- * no web-search vendor integration and the LLM gateway exposes no search-capable path.
- * Advertising it would surface a `web_search` tool with nothing behind it. Tracked in
- * ROADMAP.md's Consolidated Gap Register; wiring a vendor into `buildCloudWebCapability`
- * and adding `'web.search'` here is the whole change.
+ * `web.search` is deliberately NOT in this constant, because unlike every other
+ * capability here it is not a property of the SURFACE — it is a property of the TENANT.
+ * Search is a metered third-party API with no platform-funded key, so it only works
+ * when that tenant has a BYO search credential. The per-run set therefore comes from
+ * {@link cloudSurfaceCaps}, which adds `'web.search'` only once a key has resolved;
+ * with no key the set is this constant, unchanged, and `web_search` is never
+ * advertised — an agent is never handed a tool that is certain to fail.
  */
 export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   'repo.read', 'repo.search', 'repo.write', 'repo.edit', 'repo.delete', 'static-check', 'human', 'memory', 'web',
@@ -148,7 +149,28 @@ export const CONTAINER_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capabilit
   'repo.read', 'repo.write', 'shell', 'memory',
 ]);
 
-/** Durable/Worker schema array — derived, not hand-maintained. */
+/**
+ * The capability set for ONE durable/Worker run — {@link CLOUD_SURFACE_CAPS} plus the
+ * tenant-conditional extras. Today the only extra is `web.search` (see
+ * `webSearchCredential.ts`): pass `webSearch: true` ONLY when a usable BYO search key
+ * actually resolved, so the advertised toolset and the wired backing can never
+ * disagree. Returns the shared constant unchanged in the no-extras case, so the common
+ * path allocates nothing.
+ */
+export function cloudSurfaceCaps(opts: { webSearch: boolean }): ReadonlySet<Capability> {
+  if (!opts.webSearch) return CLOUD_SURFACE_CAPS;
+  return new Set<Capability>([...CLOUD_SURFACE_CAPS, 'web.search']);
+}
+
+/** Tool schemas for an arbitrary capability set — the per-run counterpart to
+ *  {@link CLOUD_AGENT_TOOLS}, derived from the same registry. */
+export function cloudAgentToolsFor(caps: ReadonlySet<Capability>): ToolSchema[] {
+  return cloudToolRegistry.schemasForCapabilities(caps);
+}
+
+/** Durable/Worker schema array for the BASE set (no tenant extras) — derived, not
+ *  hand-maintained. Still the default; a run with search resolved uses
+ *  {@link cloudAgentToolsFor} instead. */
 export const CLOUD_AGENT_TOOLS = cloudToolRegistry.schemasForCapabilities(CLOUD_SURFACE_CAPS);
 
 /** Container schema array — derived. Kept stable for the container image's loop. */

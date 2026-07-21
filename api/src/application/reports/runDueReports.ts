@@ -14,6 +14,7 @@ import { and, eq, isNull, lte, or } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { reportSchedules } from '../../infrastructure/database/schema';
 import { sendReportEmail } from '../../infrastructure/email/EmailService';
+import { sendTransactionalEmail } from '../email/sendEmail';
 import type { Env } from '../../env';
 
 /** Bound the per-tick batch so one tenant with many schedules can't run away. */
@@ -76,7 +77,19 @@ export async function runDueReports(env: Env, generate: ScheduledReportGenerator
       if (recipients.length > 0) {
         const built = await generate(db, { reportType: s.reportType, tenantId: s.tenantId, segmentId: s.segmentId }, now);
         if (built) {
-          for (const to of recipients) await sendReportEmail(env, to, built.subject, built.report);
+          // TRANSACTIONAL: someone configured this schedule, and it stops by
+          // deleting the schedule rather than by unsubscribing. Per-recipient
+          // locale (no request exists on a cron, so the resolver uses each
+          // recipient's stored `users.locale`, then English) — one schedule can
+          // therefore fan out to readers in different languages.
+          for (const to of recipients) {
+            await sendTransactionalEmail(
+              env,
+              db,
+              to,
+              ({ locale }) => sendReportEmail(env, to, built.subject, built.report, locale),
+            );
+          }
         }
       }
     } catch (err) {
