@@ -35,7 +35,7 @@ jobs:
       - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
           cache-dependency-path: api/pnpm-lock.yaml
 
@@ -96,7 +96,7 @@ jobs:
       - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'pnpm'
           cache-dependency-path: frontend/pnpm-lock.yaml
 
@@ -247,7 +247,7 @@ jobs:
       - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       # docs-site is the one deployed package with no pnpm-lock.yaml and no CI
       # gate, so npm stays its resolver — but `npm ci` (lockfile-exact) rather

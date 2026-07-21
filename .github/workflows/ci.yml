@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       # These scripts use only node builtins (node:fs / node:path / node:url), so
       # no `npm install` is required — invoke them directly to keep the gate fast.
       - name: Schema drift guard (schema.ts vs migrations vs allowlist)
