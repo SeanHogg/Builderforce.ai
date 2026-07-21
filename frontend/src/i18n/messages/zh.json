@@ -1187,7 +1187,41 @@
     },
     "accountTab": "账户",
     "sessionsTab": "会话",
-    "subnavLabel": "设置分区"
+    "subnavLabel": "设置分区",
+    "emailTab": "邮件",
+    "emailPrefs": {
+      "title": "邮件偏好设置",
+      "whatWeSend": "我们会发送什么",
+      "error": "无法更新您的邮件偏好设置，请重试。",
+      "language": "邮件语言",
+      "languageAuto": "自动检测",
+      "languageHelp": "我们撰写邮件所使用的语言。与上方的应用界面语言相互独立。",
+      "languageTitle": "语言",
+      "languageDetail": "我们会使用该语言与您联系。若设置为自动检测，则使用您注册时所用的语言，无法确定时回退为英语。",
+      "optionalTitle": "可选邮件",
+      "optionalHelp": "关闭您不希望收到的内容。",
+      "optionalDetail": "这些是由我们主动发送的邮件。您可以逐项关闭，并且每一封都附有退订链接。",
+      "productUpdates": "产品动态",
+      "productUpdatesHelp": "新功能与重要变更。",
+      "onboardingTips": "使用技巧与指南",
+      "onboardingTipsHelp": "偶尔提供的建议，帮助您更好地使用 Builderforce。",
+      "digests": "摘要与汇总",
+      "digestsHelp": "定期汇总您各个项目中的动态。",
+      "alwaysOnTitle": "始终发送",
+      "alwaysOnBody": "这些邮件属于您账户的组成部分。即使您退订了其他所有邮件，它们仍会照常发送。",
+      "alwaysOn": {
+        "signIn": "登录链接与免密登录链接",
+        "verification": "邮箱验证码",
+        "invites": "工作区与对话邀请",
+        "security": "安全与账户访问通知"
+      },
+      "transactionalNote": "账户与安全类邮件始终会发送——它们是账户正常运作的一部分，因此未列在上方。",
+      "unsubscribedTitle": "您已退订",
+      "unsubscribedBody": "您当前不会收到任何可选邮件。账户与安全相关的通知仍会发送。",
+      "resubscribeCta": "重新订阅",
+      "resubscribeTitle": "重新订阅可选邮件",
+      "resubscribeConfirm": "您将根据已开启的类别重新开始接收可选邮件。是否继续？"
+    }
   },
   "pmo": {
     "title": "项目组合（PMO）",
@@ -6235,7 +6269,8 @@
     "validateMethod": "{method, select, embedding {语义召回} other {词法召回（回退）}}",
     "evalDelta": "相比上版 {pct}%",
     "evalFlat": "无变化",
-    "evalTooltip": "对 v{version} 的回归检查：在 {size, plural, other {# 个先前任务}} 上的留出损失 {base} → {next}。"
+    "evalTooltip": "对 v{version} 的回归检查：在 {size, plural, other {# 个先前任务}} 上的留出损失 {base} → {next}。",
+    "inheritedHint": "此构建共享其父项目的 Evermind，因此父项目学到的一切在这里都可用。训练和设置请在父项目中进行。"
   },
   "topbar": {
     "cart": "购物车",
@@ -7944,6 +7979,11 @@
       },
       "tokensUsed": "已使用的 AI 令牌",
       "periodLabel": "最近 {period}"
+    },
+    "authAlert": {
+      "title": "未被使用",
+      "notEntitled": "该账户已成功登录，但服务商拒绝了请求（{status}），因为当前套餐不包含此功能。请改用套餐包含该功能的账户重新连接，或升级套餐。",
+      "rejected": "服务商拒绝了此凭据（{status}）。它可能已过期、被吊销，或已在别处轮换——请重新连接该账户。"
     }
   },
   "modelSelect": {
@@ -9397,7 +9437,20 @@
     "workspaceSuffix": "，工作区",
     "setAsDefault": "设为项目的默认仓库",
     "saveChanges": "保存更改",
-    "addRepository": "添加仓库"
+    "addRepository": "添加仓库",
+    "enableAgentRuns": "启用代理运行",
+    "agentRunsEnabled": "代理运行已启用",
+    "enablingAgentRuns": "正在启用…",
+    "enableAgentRunsTitle": "将 Builderforce 代理工作流提交到此仓库，使代理可在您自己的 GitHub Actions 运行器上执行",
+    "reenableAgentRunsTitle": "已启用——重新运行将用最新版本覆盖该工作流文件",
+    "confirmReenableActions": "此操作将重写默认分支上的 .github/workflows/builderforce-agent.yml，并丢弃您对其所做的任何修改。是否继续？",
+    "actionsEnabled": "代理工作流已提交至 {path}",
+    "actionsEnableFailed": "无法提交代理工作流",
+    "backfillAlerts": "回填告警",
+    "backfillingAlerts": "正在回填…",
+    "backfillAlertsTitle": "将此仓库所有未处理的代码扫描和 Dependabot 告警导入为安全发现。可安全重复运行。",
+    "alertsBackfilled": "已导入 {count} 条安全发现（{deduped} 条此前已记录）",
+    "alertsBackfillFailed": "无法导入安全告警"
   },
   "workflowsContent": {
     "noRunsYet": "暂无运行",
@@ -10088,5 +10141,10 @@
       "denied": "已拒绝",
       "soft-gate": "软限制"
     }
+  },
+  "githubActionsSurface": {
+    "notReadyTitle": "此项目尚未配置 GitHub Actions",
+    "notReadyBody": "此项目的默认仓库中缺少 Builderforce 代理工作流，因此运行将回退到持久化云执行器。请打开“源代码管理”设置，并对该仓库选择“启用代理运行”。",
+    "noGithubRepoBody": "此项目未关联 GitHub 仓库，因此无处运行 GitHub Actions。运行将回退到持久化云执行器。请在“源代码管理”设置中关联一个 GitHub 仓库。"
   }
 }

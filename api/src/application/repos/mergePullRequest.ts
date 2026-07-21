@@ -9,11 +9,11 @@
  * chosen merge method (squash | merge | rebase), so the PR shows as merged and the
  * branch history reflects the operator's choice.
  *
- * GitHub, GitLab, and Bitbucket Cloud are implemented; other providers (e.g.
- * Bitbucket Server) return a typed `unsupported` result so callers degrade to
- * "open the PR on the provider". Never throws.
+ * GitHub, GitLab, Bitbucket Cloud and Bitbucket Server (self-hosted) are
+ * implemented; other providers return a typed `unsupported` result so callers
+ * degrade to "open the PR on the provider". Never throws.
  */
-import { buildGitApiBaseUrl } from './gitProxy';
+import { bitbucketServerRepoPath, buildGitApiBaseUrl, resolveGitApiFlavor } from './gitProxy';
 
 export type MergeMethod = 'squash' | 'merge' | 'rebase';
 
@@ -46,9 +46,20 @@ export function normalizeMergeMethod(v: unknown): MergeMethod {
  *  exported so the per-provider request construction is unit-testable without a
  *  live API. Endpoints per each provider's documented PR-merge API. */
 export function buildMergeRequest(input: MergePrInput): { url: string; method: 'PUT' | 'POST'; body: Record<string, unknown> } {
-  const apiBase = buildGitApiBaseUrl(input.provider, input.host);
+  const flavor = resolveGitApiFlavor(input.provider, input.host);
+  const apiBase = buildGitApiBaseUrl(input.provider, input.host, { allowBitbucketServer: true });
   const method = normalizeMergeMethod(input.method);
-  if (input.provider === 'gitlab') {
+  if (flavor === 'bitbucket-server') {
+    // Server has no per-request strategy — the merge strategy is a repository
+    // setting there — so `method` cannot be honoured and is deliberately dropped
+    // rather than sent and silently ignored. `version=-1` means "current version".
+    return {
+      url: `${apiBase}${bitbucketServerRepoPath(input.owner, input.repo)}/pull-requests/${input.number}/merge?version=-1`,
+      method: 'POST',
+      body: { ...(input.commitMessage ? { message: input.commitMessage } : {}) },
+    };
+  }
+  if (flavor === 'gitlab') {
     // PUT /projects/:id/merge_requests/:iid/merge — `:id` is the URL-encoded
     // `owner/repo` path; GitLab squashes via a boolean (no rebase-on-merge here).
     const projectId = encodeURIComponent(`${input.owner}/${input.repo}`);
@@ -61,7 +72,7 @@ export function buildMergeRequest(input: MergePrInput): { url: string; method: '
       },
     };
   }
-  if (input.provider === 'bitbucket') {
+  if (flavor === 'bitbucket-cloud') {
     // POST /repositories/:owner/:repo/pullrequests/:id/merge — strategy names
     // differ: squash→squash, merge→merge_commit, rebase→fast_forward (closest).
     const strategy = method === 'merge' ? 'merge_commit' : method === 'rebase' ? 'fast_forward' : 'squash';
@@ -94,7 +105,9 @@ function parseMergeSuccess(provider: string, body: unknown): { merged: boolean; 
     return { merged: b.state === 'merged' || !!sha, sha: sha ?? null };
   }
   if (provider === 'bitbucket') {
-    const sha = (b.merge_commit as { hash?: string } | undefined)?.hash;
+    // Cloud → `merge_commit.hash`; Server → `properties.mergeCommit.id`.
+    const sha = (b.merge_commit as { hash?: string } | undefined)?.hash
+      ?? (b.properties as { mergeCommit?: { id?: string } } | undefined)?.mergeCommit?.id;
     return { merged: b.state === 'MERGED' || !!sha, sha: sha ?? null };
   }
   return { merged: (b.merged as boolean) ?? true, sha: (b.sha as string) ?? null };
@@ -110,7 +123,7 @@ export async function mergePullRequest(input: MergePrInput): Promise<MergePrResu
   try {
     req = buildMergeRequest(input);
   } catch (e) {
-    // e.g. Bitbucket Server (self-hosted) has no mapped REST base.
+    // A provider with no mapped REST base at all.
     return { ok: false, code: 'unsupported', reason: e instanceof Error ? e.message : 'unsupported host' };
   }
 

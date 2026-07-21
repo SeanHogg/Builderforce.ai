@@ -62,8 +62,14 @@ describe('buildMergeRequest — per-provider endpoints/method/body [1278]', () =
     expect(buildMergeRequest({ ...b, provider: 'bitbucket', method: 'merge' }).body).toMatchObject({ merge_strategy: 'merge_commit' });
     expect(buildMergeRequest({ ...b, provider: 'bitbucket', method: 'rebase' }).body).toMatchObject({ merge_strategy: 'fast_forward' });
   });
-  it('Bitbucket Server (custom host) throws → route maps to 501', () => {
-    expect(() => buildMergeRequest({ ...b, provider: 'bitbucket', host: 'bb.acme.com' })).toThrow();
+  it('Bitbucket Server (custom host): POST the 1.0 pull-requests/:id/merge', () => {
+    // Server has no per-request strategy (it is a repository setting), so the
+    // method is dropped rather than sent and silently ignored.
+    expect(buildMergeRequest({ ...b, provider: 'bitbucket', host: 'bb.acme.com', method: 'squash', commitMessage: 'msg' })).toEqual({
+      method: 'POST',
+      url: 'https://bb.acme.com/rest/api/1.0/projects/acme/repos/app/pull-requests/42/merge?version=-1',
+      body: { message: 'msg' },
+    });
   });
 });
 

@@ -22,6 +22,7 @@ import { DevexPanelBrainBridge } from './insights/DevexPanelBrainBridge';
 import { CanvasPanelProvider } from './canvas/CanvasPanelProvider';
 import { CanvasPanelBrainBridge } from './canvas/CanvasPanelBrainBridge';
 import { FloatingBrain } from './brain/FloatingBrain';
+import { FeedbackTab } from './feedback/FeedbackTab';
 import ActivityTracker from './ActivityTracker';
 import { McpExtensionsBridge } from './brain/McpExtensionsBridge';
 import { PlatformActionsBridge } from './brain/PlatformActionsBridge';
@@ -252,6 +253,10 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
               {/* The Brain (launcher + capability/insight bridges) is a builder-app
                   surface — a freelancer/gig account never sees it. */}
               {showBrain && <FloatingBrain />}
+              {/* Product feedback collector — this app dogfooding the embeddable
+                  widget. Like the Brain it is a builder-app surface, and it
+                  decides its own visibility from auth + project scope. */}
+              {showBrain && <FeedbackTab />}
               {/* Make the Brain the epicenter for every action: register the platform
                   capability tools + the tenant's server-side MCP extension tools.
                   Both are auth-gated — they call the gateway with the tenant token. */}

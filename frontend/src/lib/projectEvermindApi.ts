@@ -139,6 +139,16 @@ export interface ProjectEvermindContributions {
   eval: ProjectEvermindEvalPoint | null;
   /** Current affective (limbic) state — powers the brain-map's limbic regions. */
   affect: ProjectEvermindAffect;
+  /**
+   * True when this payload describes the PARENT container project's Evermind rather
+   * than one belonging to the requested project. Non-`evermind` IDE builds (video,
+   * voice, designer, finetune) deliberately have no Evermind of their own and inherit
+   * their container's; the console renders read-only in that case, because reads
+   * inherit but writes keep exact-id semantics.
+   */
+  inherited?: boolean;
+  /** The container project whose Evermind is shown (present when `inherited`). */
+  inheritedFromProjectId?: number;
 }
 
 export async function getProjectEvermindHead(projectId: number): Promise<ProjectEvermindHead> {

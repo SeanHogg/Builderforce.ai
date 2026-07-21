@@ -32,6 +32,8 @@ import {
   users,
 } from '../../infrastructure/database/schema';
 import { sendWorkspaceInviteEmail } from '../../infrastructure/email/EmailService';
+import { sendTransactionalEmail } from '../../application/email/sendEmail';
+import { headerHints } from '../../application/email/emailLocaleResolver';
 import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
 import { provisionBuiltinAgents } from '../../application/agent/provisionBuiltinAgents';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
@@ -865,12 +867,24 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       ]);
       const frontendBase = resolveAppBaseUrl(c.env as Env);
       const signupUrl = `${frontendBase}/register?email=${encodeURIComponent(email)}`;
-      await sendWorkspaceInviteEmail(c.env as Env, email, {
-        workspaceName: tenantRow?.name ?? 'a Builderforce workspace',
-        inviterName: inviter?.displayName ?? inviter?.email ?? 'A teammate',
-        signupUrl,
-        role,
-      });
+      // Locale: the resolver first looks up the INVITEE's stored locale — an
+      // already-registered user being added to a second workspace gets their own
+      // language. Only a genuinely cold address (no `users` row, so nothing to look
+      // up) falls through to the INVITER's request locale, which is the best
+      // available guess: colleagues being invited to a workspace usually share one.
+      await sendTransactionalEmail(
+        c.env as Env,
+        db,
+        email,
+        ({ locale }) => sendWorkspaceInviteEmail(c.env as Env, email, {
+          workspaceName: tenantRow?.name ?? 'a Builderforce workspace',
+          inviterName: inviter?.displayName ?? inviter?.email ?? 'A teammate',
+          signupUrl,
+          role,
+          locale,
+        }),
+        { headers: headerHints(c.req) },
+      );
     } catch (err) {
       console.error('[invite-by-email] notification failed (invite still recorded):', err);
     }

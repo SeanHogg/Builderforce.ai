@@ -24,6 +24,7 @@ import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
 import { encryptCredentials, decryptCredentials } from '../../application/integrations/credentialCrypto';
+import { braveSearchVendor } from '../../application/runtime/webSearchVendors';
 
 /**
  * Credential providers accepted by this endpoint. Mirrors integrationProviderEnum
@@ -34,6 +35,9 @@ const CREDENTIAL_PROVIDERS = [
   'github', 'gitlab', 'bitbucket', 'jira', 'confluence',
   'freshservice', 'freshdesk', 'servicenow', 'linear', 'sentry', 'pagerduty',
   'monday', 'asana', 'clickup',
+  // BYO web-search vendor key (blob: `{ apiKey }`). Storing it here is what turns on
+  // the cloud agent's `web_search` tool for this tenant — see webSearchCredential.ts.
+  'brave_search',
 ] as const;
 type CredentialProvider = (typeof CREDENTIAL_PROVIDERS)[number];
 
@@ -60,6 +64,19 @@ async function testGitHub(creds: Record<string, unknown>): Promise<{ ok: boolean
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : 'Network error contacting GitHub' };
   }
+}
+
+/** Connectivity test for a BYO web-search key: run one real query through the SAME
+ *  vendor adapter the agent uses, so "Test" proves exactly what `web_search` will do
+ *  (right key, right endpoint, right parse) rather than a look-alike request. */
+async function testBraveSearch(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
+  const raw = creds.apiKey ?? creds.apiToken ?? creds.token;
+  const key = typeof raw === 'string' ? raw.trim() : '';
+  if (!key) return { ok: false, message: 'apiKey is required' };
+  const r = await braveSearchVendor.search('builderforce connectivity check', key);
+  return r.ok
+    ? { ok: true, message: `Connected — ${r.results?.length ?? 0} result(s). Cloud agents can now use web_search.` }
+    : { ok: false, message: r.error ?? 'Search request failed' };
 }
 
 async function testJira(
@@ -507,6 +524,9 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
         break;
       case 'clickup':
         result = await testClickUp(creds);
+        break;
+      case 'brave_search':
+        result = await testBraveSearch(creds);
         break;
       default:
         result = { ok: false, message: `Connectivity test not available for provider: ${row.provider}` };

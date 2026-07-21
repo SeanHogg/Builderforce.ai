@@ -1686,9 +1686,12 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
   // Revert a completed run: close the pull request it opened and delete the ticket
   // branch it wrote, once the shared teardown decision can PROVE nothing else
-  // touched them. Refusals (merged PR, advanced branch, foreign commits/paths,
-  // unreadable evidence, unsupported provider) come back as a 409 carrying the
-  // reason verbatim so the UI can explain exactly what blocked it.
+  // touched them. If the run's PR already MERGED there is nothing on a branch left
+  // to undo, so the revert escalates to opening a revert pull request against the
+  // base (`mode: 'revert_pr'` — a proposal, applied only when a human merges it).
+  // Refusals (advanced branch, foreign commits/paths, unreadable evidence, a
+  // conflict with newer work, a provider that cannot revert) come back as a 409
+  // carrying the reason verbatim so the UI can explain exactly what blocked it.
   //
   // MANAGER — not the DEVELOPER tier the rest of this file's dispatch routes use.
   // Starting a run is a developer's job; DESTROYING the output of one, including

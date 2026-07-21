@@ -171,6 +171,9 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
 
   const seeded = !!data?.seeded;
   const frozen = data?.mode === 'offline-frozen';
+  // This build is showing its CONTAINER's Evermind, not one of its own — see
+  // `EvermindConsoleData.inherited`. Gates the console to read-only.
+  const inherited = !!data?.inherited;
 
   // The scoped project name — rendered next to the title so the panel always says WHICH
   // project's Evermind this is (the web tab and the VS Code sidebar can be on different
@@ -206,8 +209,25 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
 
       <p style={{ margin: 0, fontSize: '0.8rem', lineHeight: 1.5, color: C.text2 }}>{t.description}</p>
       {!canManage && <p style={{ margin: 0, fontSize: '0.72rem', color: C.text2, fontStyle: 'italic' }}>{t.managerOnlyHint}</p>}
+      {inherited && (
+        <p
+          style={{ margin: 0, fontSize: '0.72rem', lineHeight: 1.5, color: C.text2, fontStyle: 'italic' }}
+          role="note"
+        >
+          {t.inheritedHint}
+        </p>
+      )}
 
-      {!seeded ? (
+      {inherited ? (
+        // INHERITED — read-only. This build has no `project_evermind` row of its own;
+        // it is displaying its container project's. Every write endpoint keeps exact-id
+        // semantics, so a seed/toggle/teach issued here would post to a row that does
+        // not exist: zero rows updated, HTTP OK, nothing changes, and the panel keeps
+        // rendering the container's unchanged stats. Rendering the stats WITHOUT the
+        // controls is the honest surface — the model is genuinely shared and genuinely
+        // shown; it is just not managed from here.
+        <StatRow t={t} data={data!} />
+      ) : !seeded ? (
         <SeedControls
           t={t} canManage={canManage} busy={busy} models={seedModels}
           selectedSlug={selectedSlug} onSelect={setSelectedSlug}

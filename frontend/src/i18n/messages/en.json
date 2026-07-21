@@ -1187,7 +1187,41 @@
     },
     "accountTab": "Account",
     "sessionsTab": "Sessions",
-    "subnavLabel": "Settings sections"
+    "subnavLabel": "Settings sections",
+    "emailTab": "Email",
+    "emailPrefs": {
+      "title": "Email preferences",
+      "whatWeSend": "What we send",
+      "error": "Could not update your email preferences. Please try again.",
+      "language": "Email language",
+      "languageAuto": "Auto-detect",
+      "languageHelp": "The language we write your emails in. Independent of the app language above.",
+      "languageTitle": "Language",
+      "languageDetail": "We write to you in this language. If it is set to auto-detect we use the language you signed up in, falling back to English.",
+      "optionalTitle": "Optional email",
+      "optionalHelp": "Turn off anything you would rather not receive.",
+      "optionalDetail": "These are the emails we choose to send. You can switch each one off, and every one of them carries an unsubscribe link.",
+      "productUpdates": "Product updates",
+      "productUpdatesHelp": "New features and notable changes.",
+      "onboardingTips": "Tips and guides",
+      "onboardingTipsHelp": "Occasional pointers on getting more out of Builderforce.",
+      "digests": "Summaries and digests",
+      "digestsHelp": "Periodic roundups of activity across your projects.",
+      "alwaysOnTitle": "Always sent",
+      "alwaysOnBody": "These emails are part of your account. They are never suppressed, even if you unsubscribe from everything else.",
+      "alwaysOn": {
+        "signIn": "Sign-in links and magic links",
+        "verification": "Email verification codes",
+        "invites": "Workspace and chat invitations",
+        "security": "Security and account-access notices"
+      },
+      "transactionalNote": "Account and security emails are always sent — they are part of how your account works, so they are not listed above.",
+      "unsubscribedTitle": "You are unsubscribed",
+      "unsubscribedBody": "You are not receiving any optional email. Account and security messages are still sent.",
+      "resubscribeCta": "Resubscribe",
+      "resubscribeTitle": "Resubscribe to optional email",
+      "resubscribeConfirm": "You will start receiving optional email again, based on the categories you have switched on. Continue?"
+    }
   },
   "pmo": {
     "title": "Portfolio (PMO)",
@@ -6237,7 +6271,8 @@
     "validateMethod": "{method, select, embedding {Semantic recall} other {Lexical recall (fallback)}}",
     "evalDelta": "{pct}% vs prev",
     "evalFlat": "no change",
-    "evalTooltip": "Regression check on v{version}: held-out loss {base} → {next} across {size, plural, one {# prior task} other {# prior tasks}}."
+    "evalTooltip": "Regression check on v{version}: held-out loss {base} → {next} across {size, plural, one {# prior task} other {# prior tasks}}.",
+    "inheritedHint": "This build shares its parent project’s Evermind, so everything it has learned is available here. Training and settings live on the parent project."
   },
   "topbar": {
     "cart": "Shopping cart",
@@ -7946,6 +7981,11 @@
       },
       "tokensUsed": "AI tokens used",
       "periodLabel": "Last {period}"
+    },
+    "authAlert": {
+      "title": "Not being used",
+      "notEntitled": "This account signed in successfully, but the provider refused the request ({status}) because the plan does not cover it. Reconnect an account whose plan includes it, or upgrade the plan.",
+      "rejected": "The provider rejected this credential ({status}). It has probably expired, been revoked, or been rotated elsewhere — reconnect the account."
     }
   },
   "modelSelect": {
@@ -9399,7 +9439,20 @@
     "workspaceSuffix": ", workspace",
     "setAsDefault": "Set as the project's default repository",
     "saveChanges": "Save changes",
-    "addRepository": "Add repository"
+    "addRepository": "Add repository",
+    "enableAgentRuns": "Enable agent runs",
+    "agentRunsEnabled": "Agent runs enabled",
+    "enablingAgentRuns": "Enabling…",
+    "enableAgentRunsTitle": "Commit the Builderforce agent workflow to this repo so agents can run on your own GitHub Actions runners",
+    "reenableAgentRunsTitle": "Already enabled — re-run to overwrite the workflow file with the latest version",
+    "confirmReenableActions": "This rewrites .github/workflows/builderforce-agent.yml on the default branch, discarding any edits you made to it. Continue?",
+    "actionsEnabled": "Agent workflow committed to {path}",
+    "actionsEnableFailed": "Could not commit the agent workflow",
+    "backfillAlerts": "Backfill alerts",
+    "backfillingAlerts": "Backfilling…",
+    "backfillAlertsTitle": "Import every open code-scanning and Dependabot alert from this repo as a security finding. Safe to re-run.",
+    "alertsBackfilled": "Imported {count} security {count, plural, one {finding} other {findings}} ({deduped} already tracked)",
+    "alertsBackfillFailed": "Could not import security alerts"
   },
   "workflowsContent": {
     "noRunsYet": "No runs yet",
@@ -10090,5 +10143,10 @@
       "denied": "DENIED",
       "soft-gate": "SOFT-GATE"
     }
+  },
+  "githubActionsSurface": {
+    "notReadyTitle": "GitHub Actions is not set up for this project yet",
+    "notReadyBody": "The Builderforce agent workflow is missing from this project’s default repository, so runs will fall back to the durable cloud executor. Open Source control settings and choose “Enable agent runs” on the repository.",
+    "noGithubRepoBody": "This project has no GitHub repository linked, so there is nowhere to run GitHub Actions. Runs will fall back to the durable cloud executor. Link a GitHub repository under Source control settings."
   }
 }

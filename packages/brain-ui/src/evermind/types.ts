@@ -83,6 +83,24 @@ export interface EvermindConsoleData {
   recent: EvermindRecentEntry[];
   /** Latest automatic regression check (▲/▼ vs the previous version), or null. */
   eval?: EvermindEvalPoint | null;
+  /**
+   * True when this Evermind belongs to the project's PARENT container, not to the
+   * project the console is scoped to.
+   *
+   * Only `evermind`-modality builds get their own `project_evermind` row; every other
+   * modality (video, voice, designer, finetune) inherits its container's — deliberately,
+   * so a build opens with the container's trained model instead of an empty one, and so
+   * learning stays pooled across the group rather than sharded per build.
+   *
+   * The console MUST render read-only when this is set. Reads inherit, but every write
+   * endpoint keeps exact-id semantics (a contribution must never silently land on the
+   * wrong project), so a seed/toggle/teach issued from an inheriting build targets a row
+   * that does not exist — it updates zero rows and returns OK. Offering those controls
+   * here would be an affordance that does nothing.
+   */
+  inherited?: boolean;
+  /** The container project whose Evermind is being displayed (present when `inherited`). */
+  inheritedFromProjectId?: number;
 }
 
 /**
@@ -159,6 +177,10 @@ export interface EvermindConsoleLabels {
   description: string;
   loading: string;
   managerOnlyHint: string;
+  /** Shown instead of the training controls when this build INHERITS its container
+   *  project's Evermind (see {@link EvermindConsoleData.inherited}) — it explains that
+   *  the model is shared and that training happens on the parent project. */
+  inheritedHint: string;
   // Status
   statusSeeded: (version: number) => string;
   statusUnseeded: string;
@@ -275,6 +297,8 @@ export const DEFAULT_EVERMIND_LABELS: EvermindConsoleLabels = {
     'The self-learning model for this project. It adapts as this project’s agents run — inspect what it has learned and steer its training below.',
   loading: 'Loading…',
   managerOnlyHint: 'Only a project manager can change these settings.',
+  inheritedHint:
+    'This build shares its parent project’s Evermind, so everything it has learned is available here. Training and settings live on the parent project.',
   statusSeeded: (v) => `Learning · v${v}`,
   statusUnseeded: 'Not set up',
   evalDelta: (pct) => `${pct}% vs prev`,

@@ -17,6 +17,8 @@ import {
 } from '../../infrastructure/email/EmailService';
 import { users } from '../../infrastructure/database/schema';
 import { eq } from 'drizzle-orm';
+import { sendTransactionalEmail } from '../email/sendEmail';
+import type { Env } from '../../env';
 import { persistProbe } from '../../presentation/routes/adminRoutes';
 import {
   probeVendor,
@@ -108,7 +110,16 @@ export async function runVendorHealthCron(env: CronEnv & { LLM_HEALTH_ALERT_RECI
   if (changes.length > 0) {
     const recipients = await resolveAlertRecipients(db, env.LLM_HEALTH_ALERT_RECIPIENTS);
     const ts = new Date().toISOString();
-    await Promise.all(recipients.map((to) => sendLlmHealthAlertEmail(env, to, changes, ts)));
+    // TRANSACTIONAL: an operational alert to a configured on-call address. Body
+    // copy is localized per recipient's stored locale (there is no request on a
+    // cron); the SUBJECT deliberately stays machine-shaped so alert routing and
+    // deduping tooling does not have to parse five languages.
+    await Promise.all(recipients.map((to) => sendTransactionalEmail(
+      env as unknown as Env,
+      db,
+      to,
+      ({ locale }) => sendLlmHealthAlertEmail(env, to, changes, ts, locale),
+    )));
     emailed = recipients.length;
   }
 

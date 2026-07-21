@@ -29,6 +29,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { ChatInput } from '@/components/ChatInput';
 import { EvermindStatusBadge } from '@/components/ide/EvermindStatusBadge';
 import { recallProjectEvermind, getProjectEvermindContributions } from '@/lib/projectEvermindApi';
+import { APP_VERSION, fetchApiVersion } from '@/lib/appVersions';
 import { getStoredTenant, getStoredUser } from '@/lib/auth';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { ChatMessageActions } from '@/components/ChatMessageActions';
@@ -898,7 +899,7 @@ export function BrainPanel({
       // per source: a failed fetch degrades to null/[] so the copy never breaks.
       const chatId = chats.activeChatId;
       const chatProjectId = chats.activeChat?.projectId ?? null;
-      const [agents, tickets, contrib, consumption] = await Promise.all([
+      const [agents, tickets, contrib, consumption, apiVersion] = await Promise.all([
         chatId != null ? brain.listChatAgents(chatId).catch(() => []) : Promise.resolve([]),
         chatId != null ? brain.listChatTickets(chatId).catch(() => []) : Promise.resolve([]),
         chatProjectId != null ? getProjectEvermindContributions(chatProjectId).catch(() => null) : Promise.resolve(null),
@@ -907,6 +908,8 @@ export function BrainPanel({
         // fetch may not block the copy. Shared cached snapshot — the same one the
         // header's <PlanBadge/> shows, so the report and the chip can't disagree.
         fetchConsumptionSnapshot(),
+        // Session-cached; shares the footer's /health read rather than adding one.
+        fetchApiVersion(),
       ]);
       const lastLearn = [...conv.messages].reverse().find((m) => m.role === 'assistant' && m.evermindLearn)?.evermindLearn ?? null;
       const tenant = getStoredTenant();
@@ -959,6 +962,9 @@ export function BrainPanel({
           const mcp = getMcpToolStatus();
           return { count: toolSpecs.length, error: mcp.error, loading: mcp.loading };
         })(),
+        // Which build produced this capture — without it, a dump taken just before
+        // a deploy is indistinguishable from one taken after.
+        versions: { ui: APP_VERSION, api: apiVersion },
       };
       const diagBlock = formatChatDiagnostics(diagnostics).join('\n');
       await navigator.clipboard.writeText(`${diagBlock}\n\n${conv.buildTriageReport(personaLabel)}`);

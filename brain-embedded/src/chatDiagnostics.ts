@@ -102,6 +102,8 @@ export function classifyModelFunding(
   return 'premium';
 }
 
+import { DEFAULT_TOOL_LIMIT } from './selectTools';
+
 /** Everything the diagnostics block needs — already gathered by the host (pure in). */
 export interface ChatDiagnosticsData {
   surface?: string;
@@ -131,6 +133,12 @@ export interface ChatDiagnosticsData {
    * exact ambiguity that made a silent MCP-catalog failure impossible to diagnose.
    */
   tools?: { count: number; error?: string | null; loading?: boolean } | null;
+  /**
+   * Which BUILD produced this capture. Without it a dump taken minutes before a
+   * deploy is indistinguishable from one taken after, so a fixed bug reads as
+   * unfixed — which is exactly what happened while debugging chat #71.
+   */
+  versions?: { ui?: string | null; api?: string | null } | null;
 }
 
 function fmtProject(id: number | null | undefined, name?: string | null): string {
@@ -296,6 +304,13 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
 export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
   const lines: string[] = ['## Chat diagnostics'];
   if (d.surface) lines.push(`- Surface: ${d.surface}`);
+  // FIRST, deliberately: every other number below is only meaningful once you know
+  // which build produced them.
+  if (d.versions && (d.versions.ui || d.versions.api)) {
+    lines.push(
+      `- Versions: UI ${d.versions.ui ?? 'unknown'} · API ${d.versions.api ?? 'unknown'}`,
+    );
+  }
   lines.push(`- Chat: ${d.chatTitle?.trim() ? `"${d.chatTitle.trim()}"` : 'Untitled'}${d.chatId != null ? ` (#${d.chatId})` : ''}${d.chatVisibility ? ` · ${d.chatVisibility}` : ''}`);
   lines.push(`- Chat's project: ${fmtProject(d.projectId, d.projectName)}`);
   if (d.selectedProjectId != null && d.selectedProjectId !== d.projectId) {
@@ -339,8 +354,15 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
   // in "I don't have that data".
   const tools = d.tools;
   if (tools) {
+    // REGISTERED vs ADVERTISED are different numbers and conflating them misreads
+    // the fix: the whole catalog stays registered, but only a relevance-selected
+    // subset is sent per turn (~300 definitions is past the point where most
+    // providers reliably emit any tool call). The per-turn figure also appears as
+    // a `tools.selected` step in the execution trace.
+    const advertised = Math.min(tools.count, DEFAULT_TOOL_LIMIT);
     lines.push(
-      `- Tools available to the model: ${tools.count}`
+      `- Tools available to the model: ${tools.count} registered`
+        + (tools.count > advertised ? ` · up to ${advertised} advertised per turn (relevance-selected)` : '')
         + `${tools.loading ? ' (catalog still loading)' : ''}`
         + `${tools.error ? ` · catalog error: ${tools.error}` : ''}`,
     );

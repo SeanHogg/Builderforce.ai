@@ -57,6 +57,11 @@ import { parseClientReasoningIntent } from './reasoningCapability';
 import { estimateTokensFromChars } from './tokenUsage';
 import type { ActionType } from './actionTypes';
 import { PROVIDER_VENDOR_MAP, type TenantVendorKeys } from './tenantProviderKeyService';
+import {
+  loadDemotedVendors,
+  recordVendorUpstreamFault,
+  recordVendorUpstreamSuccess,
+} from './vendors/vendorHealth';
 
 // ---------------------------------------------------------------------------
 // Pool composition (derived from vendor catalogs — single source of truth)
@@ -302,7 +307,7 @@ function frontierTierRank(model: string): number {
  */
 export function byoAutoSeedModels(
   byoVendors: ReadonlySet<string> | null | undefined,
-  opts: { agentic: boolean; vendorPriority?: readonly string[] },
+  opts: { agentic: boolean; vendorPriority?: readonly string[]; demotedVendors?: ReadonlySet<string> },
 ): string[] {
   if (!byoVendors || byoVendors.size === 0) return [];
   const flagships = [...byoVendors]
@@ -323,7 +328,24 @@ export function byoAutoSeedModels(
     const i = priority.indexOf(vendorForModel(m));
     return i === -1 ? priority.length : i;
   };
+  // UPSTREAM HEALTH is the OUTERMOST sort key — it outranks tenant precedence.
+  //
+  // This is not a precedence override; it is what makes precedence usable. A
+  // vendor on a 5xx streak (see `vendorHealth`) still gets called, still ahead of
+  // the plan pool, and still first when it is the ONLY connected account — but it
+  // stops LEADING while it is faulting, because leading is precisely what costs a
+  // full vendor timeout on every cascade before anything else is tried. Honouring
+  // "Meta first" literally through a Meta outage means every request pays 25s to
+  // reach the account the tenant would have picked second anyway.
+  //
+  // Distinct from the COST cooldown by design: that gate REMOVES a capped/broken
+  // vendor from the chain, this only REORDERS a healthy-but-flaky one. A demoted
+  // vendor clears on its next successful call, not on a timer.
+  const demoted = opts.demotedVendors;
+  const healthRank = (m: string): number => (demoted?.has(vendorForModel(m)) ? 1 : 0);
   return flagships.sort((a, b) => {
+    const h = healthRank(a) - healthRank(b);
+    if (h !== 0) return h;
     const p = priorityRank(a) - priorityRank(b);
     if (p !== 0) return p;
     return frontierTierRank(a) - frontierTierRank(b);
@@ -1179,7 +1201,15 @@ export class LlmProxyService {
     // failover after the connected account rather than being dropped.
     const hasCallerModel = typeof callerModel === 'string' && callerModel.length > 0;
     const callerLeads = hasCallerModel && explicitModelPreemptsByo(callerModel as string, this.connectedByoVendors);
-    const byoSeeds = callerLeads ? [] : byoAutoSeedModels(this.connectedByoVendors, { agentic: this.codingOnly, vendorPriority: this.byoVendorPriority });
+    // Demote any connected vendor on a 5xx streak out of the LEAD position (it stays
+    // in the seed — see `byoAutoSeedModels`). Only read when there is something to
+    // reorder, so the non-BYO path issues no extra lookups.
+    const demotedVendors = callerLeads ? undefined : await loadDemotedVendors(this.env, this.connectedByoVendors);
+    const byoSeeds = callerLeads ? [] : byoAutoSeedModels(this.connectedByoVendors, {
+      agentic: this.codingOnly,
+      vendorPriority: this.byoVendorPriority,
+      ...(demotedVendors?.size ? { demotedVendors } : {}),
+    });
     const seedHead: readonly string[] = callerLeads ? [callerModel as string] : byoSeeds;
     const basePool: readonly string[] = (hasCallerModel && !callerLeads && !fittedPool.includes(callerModel as string))
       ? [callerModel as string, ...fittedPool]
@@ -1694,6 +1724,12 @@ export class LlmProxyService {
     totalFailovers: FailoverEvent[],
     schemaRetries: number,
   ): ProxyResult {
+    // The vendor that served this request is demonstrably healthy — clear any 5xx
+    // streak so it reclaims its lead position in the BYO seed immediately instead of
+    // waiting out the health TTL. Fire-and-forget: this method is synchronous, and
+    // the signal is advisory (a dropped clear costs at most one extra demoted
+    // ordering window, never a wrong routing decision).
+    void this.clearVendorHealth(result.vendorUsed);
     // Restore dotted tool names that the request-side sanitizer escaped, so
     // `tool_calls[*].function.name` round-trips to the caller's namespace.
     const restoredRaw = restoreResponseToolNames(result.raw);
@@ -1924,6 +1960,9 @@ export class LlmProxyService {
             headers: result.response.headers,
           })
         : result.response;
+      // Streaming counterpart of the health clear in `successJsonResult` — headers
+      // arrived, so this vendor is serving again.
+      await this.clearVendorHealth(result.vendorUsed);
       return {
         response,
         resolvedModel: result.modelUsed,
@@ -1961,9 +2000,28 @@ export class LlmProxyService {
    */
   private async applyCooldowns(attempts: ReadonlyArray<DispatchAttempt>): Promise<void> {
     if (attempts.length === 0) return;
-    await Promise.all(
-      attempts.map((a) => recordFailure(this.env, a.vendor, a.model, a.status, a.error)),
-    );
+    await Promise.all([
+      ...attempts.map((a) => recordFailure(this.env, a.vendor, a.model, a.status, a.error)),
+      // Independent of the cooldown above: extend the 5xx streak that governs BYO
+      // SEED ORDER. `recordVendorUpstreamFault` ignores non-5xx, so handing it every
+      // attempt is safe — a 429 or an auth failure must not demote a vendor, those
+      // are the cooldown store's business. See `vendorHealth` for why the two
+      // signals are deliberately separate.
+      ...attempts.map((a) => recordVendorUpstreamFault(this.env, a.vendor, a.status)),
+    ]);
+  }
+
+  /**
+   * Clear a served vendor's 5xx streak so a recovered account reclaims its lead
+   * position on the NEXT request rather than waiting out the health TTL. Cheap: a
+   * vendor with no streak recorded exits after one cached read and writes nothing,
+   * which is the state of essentially every successful call.
+   *
+   * Only the vendor that actually SERVED the request is cleared — vendors that
+   * failed on the way to it were just recorded as faults by `applyCooldowns`.
+   */
+  private async clearVendorHealth(vendor: VendorId): Promise<void> {
+    await recordVendorUpstreamSuccess(this.env, vendor).catch(() => { /* advisory */ });
   }
 }
 

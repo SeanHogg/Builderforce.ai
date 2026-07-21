@@ -200,8 +200,40 @@ export const users = pgTable('users', {
   /** JSON PsychometricProfile (Pro) — this human's OWN personality; null = none. Same
    *  shape agents/personas use, so a person and an agent are described the same way. */
   psychometric:           text('psychometric'),
+  /** Preferred UI + EMAIL language, captured at signup from the request (NEXT_LOCALE
+   *  cookie, then Accept-Language) and editable from /settings?sub=email. NULL = never
+   *  captured — NOT the same as "chose English": the shared resolver
+   *  (application/email/emailLocaleResolver) then falls back to the request's own hints
+   *  before 'en', so a pre-existing account is not permanently pinned to English. Held
+   *  as a BCP-47 tag; narrowed to a supported EmailLocale at read time. (0351) */
+  locale:                 varchar('locale', { length: 5 }),
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),
+});
+
+/**
+ * Per-address email consent — the record every LIFECYCLE send checks and no
+ * TRANSACTIONAL send does. Keyed on EMAIL, not user id: a cold workspace/chat
+ * invite goes to an address with no `users` row, and an unsubscribe taken from
+ * that mail must survive both "no account yet" and "account later deleted"
+ * (hence `userId` is a nullable ON DELETE SET NULL convenience link, not the key).
+ *
+ * A MISSING row means "no preference expressed" and reads as all-allowed, exactly
+ * like the column defaults — so the reader never has to distinguish the two.
+ * `unsubscribedAll` is the CAN-SPAM global opt-out and overrides every category.
+ * (0352)
+ */
+export const emailPreferences = pgTable('email_preferences', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  userId:           varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  email:            varchar('email', { length: 255 }).notNull().unique(),
+  productUpdates:   boolean('product_updates').notNull().default(true),
+  onboardingTips:   boolean('onboarding_tips').notNull().default(true),
+  digests:          boolean('digests').notNull().default(true),
+  unsubscribedAll:  boolean('unsubscribed_all').notNull().default(false),
+  unsubscribedAt:   timestamp('unsubscribed_at'),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
 });
 
 export const newsletterSubscribers = pgTable('newsletter_subscribers', {
@@ -2473,6 +2505,9 @@ export const integrationProviderEnum = pgEnum('integration_provider', [
   'google_calendar',
   // 0221 — single-pane / migration connectors
   'servicenow', 'linear', 'sentry', 'pagerduty', 'monday', 'asana', 'clickup',
+  // 0353 — BYO web-search vendor keys (backs the cloud agent's `web_search` tool).
+  // Ids MUST match WEB_SEARCH_VENDOR_IDS in application/runtime/webSearchVendors.ts.
+  'brave_search',
 ]);
 
 export const integrationSyncStatusEnum = pgEnum('integration_sync_status', [
@@ -6960,3 +6995,75 @@ export const executionRollbacks = pgTable('execution_rollbacks', {
   index('idx_execution_rollbacks_tenant_status').on(t.tenantId, t.status),
   index('idx_execution_rollbacks_task').on(t.taskId),
 ]);
+
+// ---------------------------------------------------------------------------
+// Product Feedback collection (migration 0354)
+// ---------------------------------------------------------------------------
+
+/**
+ * A project's feedback collector — the human-input twin of [[errorCollectors]].
+ * ONE per project (one ingest key = one embeddable snippet), so any application
+ * carrying the snippet can gather feature requests, bug reports and ideas from
+ * its own users. `keyHash` authenticates the public snippet POST; `dailyLimit`
+ * is the abuse ceiling on an endpoint that opens TICKETS.
+ */
+export const feedbackCollectors = pgTable('feedback_collectors', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:        integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  name:             varchar('name', { length: 255 }).notNull(),
+  /** SHA-256 of the bff_* ingest key (raw key shown once at creation). */
+  keyHash:          varchar('key_hash', { length: 64 }).unique(),
+  enabled:          boolean('enabled').notNull().default(true),
+  /** Open a backlog ticket per submission (off = record + triage only). */
+  autoCreateTask:   boolean('auto_create_task').notNull().default(true),
+  /** Submissions accepted from this collector per rolling 24h. */
+  dailyLimit:       integer('daily_limit').notNull().default(100),
+  /** '*' or a comma-separated origin allow-list the snippet may post from. */
+  allowedOrigins:   text('allowed_origins').notNull().default('*'),
+  lastSubmissionAt: timestamp('last_submission_at'),
+  createdBy:        varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  // One collector per project — a project's feedback has a single front door.
+  uqProject: uniqueIndex('uq_feedback_collectors_project').on(t.tenantId, t.projectId),
+}));
+
+/**
+ * A single feedback request and its link to the backlog ticket it opened.
+ * `collectorId` is NULL for an IN-APP submission (the signed-in right-edge
+ * feedback panel), which the session authenticates and which needs no key.
+ * `fingerprint` collapses a repeat/double submit onto the existing request.
+ */
+export const feedbackSubmissions = pgTable('feedback_submissions', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:       integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  collectorId:     uuid('collector_id').references(() => feedbackCollectors.id, { onDelete: 'set null' }),
+  /** 'feature' | 'bug' | 'idea' | 'other'. */
+  kind:            varchar('kind', { length: 16 }).notNull().default('feature'),
+  title:           varchar('title', { length: 300 }).notNull(),
+  body:            text('body').notNull(),
+  /** 'new' | 'approved' | 'declined' — approval is the human gate on execution. */
+  status:          varchar('status', { length: 16 }).notNull().default('new'),
+  submitterUserId: varchar('submitter_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  submitterEmail:  varchar('submitter_email', { length: 255 }),
+  submitterName:   varchar('submitter_name', { length: 255 }),
+  pageUrl:         text('page_url'),
+  userAgent:       text('user_agent'),
+  appVersion:      varchar('app_version', { length: 64 }),
+  context:         jsonb('context'),
+  /** SHA-256 of kind+title+body — the duplicate-collapse key. */
+  fingerprint:     varchar('fingerprint', { length: 128 }).notNull(),
+  taskId:          integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  reviewedBy:      varchar('reviewed_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  reviewedAt:      timestamp('reviewed_at'),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byProject:     index('idx_feedback_submissions_project').on(t.projectId, t.createdAt),
+  byTenant:      index('idx_feedback_submissions_tenant_status').on(t.tenantId, t.status, t.createdAt),
+  byCollector:   index('idx_feedback_submissions_collector').on(t.collectorId, t.createdAt),
+  byFingerprint: index('idx_feedback_submissions_fingerprint').on(t.projectId, t.fingerprint),
+}));

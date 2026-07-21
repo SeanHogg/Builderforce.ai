@@ -19,6 +19,7 @@ import { resolveArtifacts } from '../artifact/resolveArtifacts';
 import { isAgentRefRoleCapable } from '../kanban/roleCapability';
 import { decideLaneAutoRun, withOwnerAgentFallback, type LaneAgentLike, type LaneAutoRunDecision } from './laneAutoRun';
 import { findCanonicalBoard } from './canonicalBoard';
+import { isUnapprovedFeedbackTask } from '../feedback/feedbackSpec';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { ExecutionStatus, TaskStatus } from '../../domain/shared/types';
 
@@ -46,7 +47,8 @@ export type AutoRunReason =
   | 'already_running'     // a live run already exists (or a same-lane re-entry loop guard)
   | 'run_cap_exhausted'   // the ticket's last N consecutive runs all FAILED — autonomy stops re-dispatching (a human Run-now still overrides)
   | 'cooldown_active'     // the ticket's last run failed too recently — backing off before the next autonomous attempt (a human Run-now still overrides)
-  | 'not_executable';     // a system/coordination chore (e.g. an AI Manager run task) — never dispatched to an agent
+  | 'not_executable'      // a system/coordination chore (e.g. an AI Manager run task) — never dispatched to an agent
+  | 'pending_approval';   // an EXTERNAL feedback request — a human must accept it in triage before any agent may touch it
 
 /**
  * How many consecutive FAILED runs a ticket may accumulate before autonomy stops
@@ -236,6 +238,16 @@ export async function evaluateTaskAutoRun(
   // guard covers every dispatch entry point (lane trigger, mechanical sweep, manager
   // dispatch pass, manual Run-now) since they all resolve through here.
   if (taskRow?.source === 'manager') return base({ reason: 'not_executable' });
+
+  // An EXTERNAL REQUEST gathered by a feedback collector: someone outside the
+  // delivery team asked for something. It is real work, but nobody has agreed to
+  // do it yet — so it is inert until a human accepts it in the feedback triage
+  // queue (which flips the marker to `feedback_approved` and lets it behave like
+  // ordinary work). Sitting BEFORE lane/agent resolution, and returning a null
+  // `candidate`, this blocks EVERY dispatch entry point including manual Run-now:
+  // approving the request IS the human's explicit go, so a second override here
+  // would just be a way to skip the gate by accident.
+  if (isUnapprovedFeedbackTask(taskRow?.source)) return base({ reason: 'pending_approval' });
 
   // Done / terminal status: the ticket is finalized (commit + PR), never auto-run.
   if (args.status === TaskStatus.DONE) return base({ reason: 'terminal_lane', isTerminalLane: true });

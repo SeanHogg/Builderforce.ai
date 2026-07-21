@@ -8,6 +8,7 @@
  * GET  /api/admin/tenants              — all tenants + member/agentHost counts
  * GET  /api/admin/health               — system health (DB ping, model pool, counts)
  * GET  /api/admin/errors               — recent API error log (last 200 entries)
+ * GET  /api/admin/feedback             — cross-tenant product feedback roll-up
  * POST /api/admin/impersonate          — issue a tenant JWT for any user+tenant pair
  */
 import { Hono } from 'hono';
@@ -17,6 +18,10 @@ import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
 import { buildDatabase, buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import { writeAdminAudit, type AdminAuditOpts } from '../../infrastructure/audit/adminAudit';
 import { parseJsonArray } from '../../domain/shared/json';
+import { reviewFeedbackSubmission } from '../../application/feedback/feedbackEngine';
+import {
+  listFeedbackSubmissions, countFeedbackByStatus, parseFeedbackStatus,
+} from '../../application/feedback/feedbackQueries';
 import { slugify } from '../../domain/shared/strings';
 import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
@@ -96,6 +101,7 @@ import {
 } from '../../infrastructure/auth/MfaService';
 import { magicLinkTokens } from '../../infrastructure/database/schema';
 import { sendAdminPasswordResetEmail } from '../../infrastructure/email/EmailService';
+import { sendTransactionalEmail } from '../../application/email/sendEmail';
 import { runRetentionPurge } from '../../application/maintenance/retentionPurge';
 import { API_VERSION } from '../../version';
 
@@ -2786,7 +2792,15 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     });
 
     const magicUrl = `${frontendBase}/auth/magic-link?token=${encodeURIComponent(token)}`;
-    void sendAdminPasswordResetEmail(c.env, user.email, magicUrl);
+    // The admin triggering this may not share the target's language, so the
+    // resolver's stored-locale lookup (keyed on the TARGET's address) is what
+    // matters here; the admin's request headers are only a last resort.
+    void sendTransactionalEmail(
+      c.env,
+      db,
+      user.email,
+      ({ locale }) => sendAdminPasswordResetEmail(c.env, user.email, magicUrl, locale),
+    );
 
     await writeAudit(db, 'USER_PASSWORD_RESET_FORCED', actorId, {
       targetUserId: targetId,
@@ -3079,6 +3093,55 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     });
     if (!updated) return c.json({ error: 'Key not found, revoked, or no fields to update' }, 404);
     return c.json({ key: updated });
+  });
+
+  /**
+   * Cross-tenant product feedback roll-up — the dogfooding inbox. Every external
+   * request gathered by any tenant's feedback collector, newest first. Shares the
+   * exact loader the per-tenant triage queue uses (`listFeedbackSubmissions`);
+   * passing `tenantId: null` is what widens it to every workspace.
+   */
+  router.get('/feedback', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantParam = c.req.query('tenantId');
+    const tenantId = tenantParam ? Number(tenantParam) : null;
+    if (tenantId != null && !Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
+
+    const filter = {
+      tenantId,
+      status: parseFeedbackStatus(c.req.query('status')),
+      limit: c.req.query('limit') ? Number(c.req.query('limit')) : undefined,
+      before: c.req.query('before') ?? null,
+    };
+    const [submissions, counts] = await Promise.all([
+      listFeedbackSubmissions(db, c.env, filter),
+      countFeedbackByStatus(db, c.env, { tenantId, projectId: null }),
+    ]);
+    return c.json({ submissions, counts });
+  });
+
+  /**
+   * Superadmin review of any tenant's request. The decision itself runs through
+   * the SAME engine as tenant-side triage, so approving here un-gates the ticket
+   * identically — there is no second, privileged approval path to keep in sync.
+   */
+  router.post('/feedback/:id/review', async (c) => {
+    const db = buildDatabase(c.env);
+    const body = await c.req.json<{ decision?: string; tenantId?: number }>().catch(() => null);
+    const decision = body?.decision;
+    if (decision !== 'approved' && decision !== 'declined') {
+      return c.json({ error: "decision must be 'approved' or 'declined'" }, 400);
+    }
+    if (typeof body?.tenantId !== 'number') return c.json({ error: 'tenantId is required' }, 400);
+
+    const result = await reviewFeedbackSubmission(db, c.env, {
+      tenantId: body.tenantId,
+      submissionId: c.req.param('id'),
+      decision,
+      reviewerUserId: (c.get('userId') as string | undefined) ?? null,
+    });
+    if (!result.ok) return c.json({ error: 'Submission not found' }, 404);
+    return c.json({ ok: true, taskId: result.taskId });
   });
 
   router.delete('/tenants/:tenantId/api-keys/:keyId', async (c) => {

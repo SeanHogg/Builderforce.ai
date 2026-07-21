@@ -62,6 +62,10 @@ export const PROVIDER_META: Record<IntegrationProvider, ProviderMeta> = {
   monday: { label: 'monday.com', baseUrl: false, secrets: [{ key: 'token', label: 'API token' }], board: { externalId: 'required', hint: 'Board ID (numeric)' } },
   asana: { label: 'Asana', baseUrl: false, secrets: [{ key: 'accessToken', label: 'Personal access token' }], board: { externalId: 'required', hint: 'Project GID' } },
   clickup: { label: 'ClickUp', baseUrl: false, secrets: [{ key: 'token', label: 'API token', placeholder: 'pk_…' }], board: { externalId: 'required', hint: 'List ID' } },
+  // Not a board/ticket source: this key gives CLOUD AGENTS the `web_search` tool. They
+  // can already read a URL you give them; a search key lets them find one. Search bills
+  // per query, so the key is yours — with none saved, agents stay fetch-only.
+  brave_search: { label: 'Brave Search (agent web search)', baseUrl: false, secrets: [{ key: 'apiKey', label: 'Subscription token', placeholder: 'BSA…' }] },
 };
 
 const cardStyle: React.CSSProperties = {

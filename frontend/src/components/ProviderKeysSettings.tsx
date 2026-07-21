@@ -6,7 +6,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { useToast } from '@/components/ToastProvider';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { ConsumptionMeterCard } from '@/components/UsageMeter';
-import { llmApi, providerKeysApi, type LlmUsageStats, type ProviderAuthType, type ProviderDiagnostic, type LlmProvider } from '@/lib/builderforceApi';
+import { llmApi, providerKeysApi, type LlmUsageStats, type ProviderAuthAlert, type ProviderAuthType, type ProviderDiagnostic, type LlmProvider } from '@/lib/builderforceApi';
 
 /**
  * BYO (bring-your-own-provider) credentials. A workspace owner connects their OWN
@@ -150,6 +150,51 @@ function PrecedencePanel({
           </li>
         ))}
       </ol>
+    </div>
+  );
+}
+
+/**
+ * "Reconnect this account" notice — the operator-facing end of the gateway's
+ * auth-class failover signal.
+ *
+ * Rendered whenever a connected account was REJECTED on a recent call (401/403).
+ * Nothing else on this page can show that: `● connected` only means a credential is
+ * stored, and the diagnostic status only means it decrypts — a ChatGPT plan that
+ * lapsed still satisfies both while 403ing every request. Until now the gateway
+ * cooled the vendor, failed over, and the operator was never told, so the account
+ * sat "connected" and unused indefinitely.
+ *
+ * Warning-coloured, not error: the request itself succeeded elsewhere, so this is
+ * "your account isn't being used", not "something is broken". Uses the theme's
+ * `--warning-*` triple with literal fallbacks so it reads in light AND dark, and
+ * wraps freely so it doesn't overflow a 360px viewport.
+ */
+function AuthAlertNotice({ alert, t }: { alert: ProviderAuthAlert; t: TFn }) {
+  return (
+    <div
+      role="status"
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'baseline',
+        gap: 6,
+        marginTop: 8,
+        padding: '8px 10px',
+        borderRadius: 8,
+        fontSize: 11.5,
+        lineHeight: 1.5,
+        background: 'var(--warning-bg, rgba(245,158,11,0.16))',
+        color: 'var(--warning-text, #b45309)',
+        border: '1px solid var(--warning, #d97706)',
+      }}
+    >
+      <strong style={{ fontWeight: 700 }}>{t('authAlert.title')}</strong>
+      <span style={{ minWidth: 0 }}>
+        {alert.reason === 'not_entitled'
+          ? t('authAlert.notEntitled', { status: alert.status })
+          : t('authAlert.rejected', { status: alert.status })}
+      </span>
     </div>
   );
 }
@@ -308,6 +353,10 @@ function ProviderConnectionCard({
             {testResult.message}
           </div>
         )}
+        {/* Dispatch-observed rejection — the reason this "connected" account is not
+            actually serving anything. Sits under the status strip because that is
+            where an operator already looks to answer "is this working?". */}
+        {diagnostic?.authAlert && <AuthAlertNotice alert={diagnostic.authAlert} t={t} />}
       </div>
 
       {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{t('errorPrefix', { message: error })}</div>}
@@ -396,6 +445,12 @@ export function ProviderKeysSettings({
   const [usage, setUsage] = useState<LlmUsageStats | null>(null);
   const visibleProviders = PROVIDERS.filter((p) => !search.trim() || `${p.label} ${p.id}`.toLowerCase().includes(search.trim().toLowerCase()));
 
+  // Rejected-account notices keyed by provider, from the LIST read — so an operator
+  // sees "this account isn't being used" on the grid without having to open each
+  // provider's drawer. Cleared implicitly on every refresh (a provider absent from
+  // the new map has no live alert).
+  const [alertByProvider, setAlertByProvider] = useState<Partial<Record<LlmProvider, ProviderAuthAlert>>>({});
+
   const refresh = () => {
     // Usage is an all-member read. Keep credential management available if that
     // secondary read fails, while loading both together to avoid flashing zeroes.
@@ -403,8 +458,13 @@ export function ProviderKeysSettings({
     return providerKeysApi.list()
       .then((r) => {
         const map: Partial<Record<LlmProvider, ProviderAuthType>> = {};
-        for (const d of r.details) map[d.provider] = d.authType;
+        const alerts: Partial<Record<LlmProvider, ProviderAuthAlert>> = {};
+        for (const d of r.details) {
+          map[d.provider] = d.authType;
+          if (d.authAlert) alerts[d.provider] = d.authAlert;
+        }
         setAuthByProvider(map);
+        setAlertByProvider(alerts);
         // r.details already arrives ordered by tenant precedence — connected only.
         setOrder(r.details.map((d) => d.provider));
         onPriorityChange?.(r.details.map((d) => d.provider));
@@ -454,6 +514,10 @@ export function ProviderKeysSettings({
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={sectionTitle}>{p.label}</div>
                     <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t(`provider.${p.id}.blurb`)}</div>
+                    {/* Surfaced on the grid, not only in the drawer: an account that is
+                        connected-but-rejected looks identical to a healthy one here, and
+                        an operator who never opens the drawer would never find out. */}
+                    {alertByProvider[p.id] && <AuthAlertNotice alert={alertByProvider[p.id]!} t={t} />}
                   </div>
                   {usage && (
                     <ConsumptionMeterCard

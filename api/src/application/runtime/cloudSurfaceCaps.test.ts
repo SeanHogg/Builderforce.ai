@@ -28,7 +28,10 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
     ]);
   });
 
-  it('includes web_fetch but NOT web_search — no search vendor is wired (ROADMAP gap)', () => {
+  it('includes web_fetch but NOT web_search — search is TENANT-gated, not surface-wide', () => {
+    // `web` (fetch) is a property of the surface and is always on. `web.search` needs a
+    // BYO search key, so it is added per RUN by `cloudSurfaceCaps({ webSearch: true })`
+    // and must never leak into this base constant — see cloudWebSearch.test.ts.
     expect(CLOUD_SURFACE_CAPS.has('web')).toBe(true);
     expect(CLOUD_SURFACE_CAPS.has('web.search')).toBe(false);
     expect(names(CLOUD_AGENT_TOOLS)).toContain('web_fetch');

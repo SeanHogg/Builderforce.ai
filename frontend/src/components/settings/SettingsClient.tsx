@@ -6,6 +6,7 @@
  *   - Account (default): profile, language, connected accounts, get-hired opt-in
  *   - Personality: the user's own psychometric profile
  *   - Sessions: personal account security (moved here from /security)
+ *   - Email: email language + lifecycle-mail consent (CAN-SPAM surface)
  *   - Workspace: workspace identity + jump-off links (owner tools)
  */
 
@@ -30,6 +31,7 @@ import {
 import PsychometricEditor from '@/components/PsychometricEditor';
 import PersonalitySummary from '@/components/PersonalitySummary';
 import ForHireCard from '@/components/account/ForHireCard';
+import EmailPreferencesCard from '@/components/account/EmailPreferencesCard';
 import AccountSecurityPanel from '@/components/security/AccountSecurityPanel';
 import type { PsychometricProfile } from '@/lib/psychometric';
 import { clearPersonalityBlockCache } from '@/lib/usePersonalityBlock';
@@ -159,6 +161,7 @@ export default function SettingsClient() {
     { id: '', label: t('accountTab'), icon: '👤', href: '/settings' },
     { id: 'personality', label: t('personality'), icon: '🧠', href: '/settings?sub=personality' },
     { id: 'sessions', label: t('sessionsTab'), icon: '🔒', href: '/settings?sub=sessions' },
+    { id: 'email', label: t('emailTab'), icon: '✉️', href: '/settings?sub=email' },
     ...(tenant ? [{ id: 'workspace', label: t('workspace'), icon: '🏢', href: '/settings?sub=workspace' }] : []),
   ];
 
@@ -358,9 +361,11 @@ export default function SettingsClient() {
         ? renderPersonality()
         : sub === 'sessions'
           ? <AccountSecurityPanel />
-          : sub === 'workspace'
-            ? renderWorkspace()
-            : renderAccount()}
+          : sub === 'email'
+            ? <EmailPreferencesCard />
+            : sub === 'workspace'
+              ? renderWorkspace()
+              : renderAccount()}
     </PageContainer>
   );
 }

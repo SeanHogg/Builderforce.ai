@@ -34,6 +34,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { TaskStatus, TaskPriority } from '../../domain/shared/types';
 import { notSystemTask } from '../task/taskScope';
+import { nextProjectKeySeqBase } from '../task/taskKeys';
 import { rankBacklog, type RankableTask, type TaskPriorityTier } from './prioritize';
 import {
   heuristicBusinessValue, riceBusinessValueFromFeature, normalizeFeatureName,
@@ -330,18 +331,6 @@ export async function finalizeManagerRunTask(
   } catch {
     /* best-effort */
   }
-}
-
-/** Next gap-safe key sequence base for a project (mirrors TaskRepository.maxKeySeqByProject). */
-async function nextProjectKeySeqBase(db: Db, projectId: number): Promise<number> {
-  const [seqRow] = await db
-    .select({
-      value: sql<number>`COALESCE(MAX(CASE WHEN regexp_replace(${tasks.key}, '^.*-', '') ~ '^[0-9]+$'
-        THEN CAST(regexp_replace(${tasks.key}, '^.*-', '') AS INTEGER) END), 0)`,
-    })
-    .from(tasks)
-    .where(eq(tasks.projectId, projectId));
-  return Number(seqRow?.value ?? 0) + 1;
 }
 
 // ── coaching → discrete task ─────────────────────────────────────────────────

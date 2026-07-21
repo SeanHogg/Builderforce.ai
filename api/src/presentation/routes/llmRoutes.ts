@@ -989,9 +989,20 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     let access: TenantAccess;
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
     const details = await listTenantProviderKeys(c.env, access.tenantId);
+    // Attach any "reconnect this account" alert to the LIST, not just the per-provider
+    // status drawer — an operator who never opens the drawer would otherwise never learn
+    // that a connected account has been silently rejected on every call. Bounded fan-out
+    // (one entry per CONNECTED provider, ≤8) and each lookup is read-through cached, so
+    // this stays a single cheap read in the steady state.
+    const alerts = await Promise.all(
+      details.map((d) => loadProviderAuthAlert(c.env, access.tenantId, d.provider).catch(() => null)),
+    );
     // `providers` (id array) kept for backward compatibility; `details` carries auth type
     // + tenant-set BYO precedence (ordered by `priority`, most-preferred first).
-    return c.json({ providers: details.map((d) => d.provider), details });
+    return c.json({
+      providers: details.map((d) => d.provider),
+      details: details.map((d, i) => (alerts[i] ? { ...d, authAlert: alerts[i] } : d)),
+    });
   });
 
   // Credential health plus tenant-observed usage for the provider details drawer.
@@ -1188,6 +1199,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // Single-use verifier — drop it whether or not the store succeeds.
     await kv.delete(pkceKvKey).catch(() => { /* best effort */ });
     await setTenantProviderOAuth(c.env, access.tenantId, 'anthropic', tokens, access.userId);
+    await clearProviderAuthAlert(c.env, access.tenantId, 'anthropic');
     return c.json({ ok: true, provider: 'anthropic', authType: 'oauth' });
   });
 
@@ -1219,6 +1231,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     try {
       const tokens = await exchangeOpenAICodexCode({ code: parsed.code, verifier });
       await setTenantProviderOAuth(c.env, access.tenantId, 'openai', tokens, access.userId);
+      // A fresh consent may well have landed on an entitled account — retire the
+      // "reconnect your ChatGPT account" prompt the previous 403 raised.
+      await clearProviderAuthAlert(c.env, access.tenantId, 'openai');
       await kv.delete(key).catch(() => {});
       return c.json({ ok: true, provider: 'openai', authType: 'oauth' });
     } catch (e) {
@@ -1259,6 +1274,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       const pending = JSON.parse(pendingRaw) as { verifier: string; challenge: string };
       const tokens = await exchangeXaiCode({ code: parsed.code, verifier: pending.verifier, challenge: pending.challenge });
       await setTenantProviderOAuth(c.env, access.tenantId, 'xai', tokens, access.userId);
+      await clearProviderAuthAlert(c.env, access.tenantId, 'xai');
       await kv.delete(key).catch(() => {});
       return c.json({ ok: true, provider: 'xai', authType: 'oauth' });
     } catch (e) {
@@ -1273,6 +1289,8 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const provider = c.req.param('provider');
     if (!isSupportedProvider(provider)) return c.json({ error: 'unsupported provider' }, 400);
     await deleteTenantProviderKey(c.env, access.tenantId, provider);
+    // Nothing left to reconnect — retire the alert with the credential.
+    await clearProviderAuthAlert(c.env, access.tenantId, provider);
     return c.json({ ok: true });
   });
 

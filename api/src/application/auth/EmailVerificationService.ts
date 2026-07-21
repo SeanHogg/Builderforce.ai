@@ -13,7 +13,10 @@ import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { emailVerificationCodes } from '../../infrastructure/database/schema';
 import { hashSecret } from '../../infrastructure/auth/HashService';
-import { sendVerificationCodeEmail, type EmailEnv } from '../../infrastructure/email/EmailService';
+import { sendVerificationCodeEmail } from '../../infrastructure/email/EmailService';
+import { sendTransactionalEmail } from '../email/sendEmail';
+import type { LocaleHeaderHints } from '../email/emailLocaleResolver';
+import type { Env } from '../../env';
 
 const CODE_TTL_MS = 15 * 60 * 1000; // matches the "expires in 15 minutes" email copy
 const MAX_ATTEMPTS = 5;
@@ -30,6 +33,9 @@ type VerificationUser = {
   email: string;
   displayName?: string | null;
   username?: string | null;
+  /** `users.locale` when the caller already loaded it — lets the shared resolver
+   *  skip its lookup. `undefined` means "not loaded", `null` means "unset". */
+  locale?: string | null;
 };
 
 export type IssueResult = { sent: boolean; cooldownSeconds?: number };
@@ -42,9 +48,9 @@ export type IssueResult = { sent: boolean; cooldownSeconds?: number };
  */
 export async function issueVerificationCode(
   db: Db,
-  env: EmailEnv,
+  env: Env,
   user: VerificationUser,
-  opts: { force?: boolean; anonId?: string | null } = {},
+  opts: { force?: boolean; anonId?: string | null; headers?: LocaleHeaderHints } = {},
 ): Promise<IssueResult> {
   if (!opts.force) {
     const [recent] = await db
@@ -76,7 +82,23 @@ export async function issueVerificationCode(
     expiresAt: new Date(Date.now() + CODE_TTL_MS),
   });
 
-  await sendVerificationCodeEmail(env, user.email, user.displayName ?? user.username ?? user.email, code, opts.anonId);
+  // TRANSACTIONAL — the user just asked for this code; there is nothing to opt out
+  // of. Goes through the shared seam purely so the locale is resolved the same way
+  // every other send resolves it.
+  await sendTransactionalEmail(
+    env,
+    db,
+    user.email,
+    ({ locale }) => sendVerificationCodeEmail(
+      env,
+      user.email,
+      user.displayName ?? user.username ?? user.email,
+      code,
+      opts.anonId,
+      locale,
+    ),
+    { storedLocale: user.locale, headers: opts.headers },
+  );
   return { sent: true };
 }
 

@@ -11,6 +11,7 @@ import {
 } from './auth';
 import { planLimitErrorFromResponse } from './planLimitError';
 import { dispatchApiError } from './errors/apiErrorEvent';
+import { LOCALE_HEADER, readLocaleCookie } from '@/i18n/config';
 
 export function getApiBaseUrl(): string {
   return AUTH_API_URL;
@@ -54,6 +55,11 @@ export function getAuthHeaders(extra?: Record<string, string>): Record<string, s
   const headers: Record<string, string> = { ...extra };
   if (token) headers['Authorization'] = `Bearer ${token}`;
   if (_emulationToken) headers['X-Emulation-Token'] = _emulationToken;
+  // Tell the API which language the user is actually using. The NEXT_LOCALE cookie
+  // cannot reach a different origin, so without this the server falls back to
+  // Accept-Language (the OS default) and mails people in the wrong language.
+  const locale = readLocaleCookie();
+  if (locale) headers[LOCALE_HEADER] = locale;
   return headers;
 }
 

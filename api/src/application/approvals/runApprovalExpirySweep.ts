@@ -21,7 +21,7 @@ import { and, eq, lt } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { approvals } from '../../infrastructure/database/schema';
-import { sendSlackNotification } from '../notify/slack';
+import { sendSlackNotification } from '../approval/approvalNotifier';
 
 export interface ApprovalExpiryResult {
   /** Approvals moved pending → expired this pass. */

@@ -3,7 +3,7 @@
 import { NextIntlClientProvider } from 'next-intl';
 import { useEffect, useState } from 'react';
 import enMessages from '@/i18n/messages/en.json';
-import { DEFAULT_LOCALE, LOCALE_COOKIE, isLocale, type Locale } from '@/i18n/config';
+import { DEFAULT_LOCALE, readLocaleCookie, type Locale } from '@/i18n/config';
 import { ignoreEnvironmentFallback } from '@/i18n/onError';
 
 /**
@@ -31,13 +31,6 @@ const CATALOG_LOADERS: Record<Locale, () => Promise<Record<string, unknown>>> = 
   de: () => import('@/i18n/messages/de.json').then((m) => m.default),
 };
 
-function readLocaleCookie(): Locale {
-  if (typeof document === 'undefined') return DEFAULT_LOCALE;
-  const match = document.cookie.match(new RegExp(`(?:^|; )${LOCALE_COOKIE}=([^;]+)`));
-  const value = match ? decodeURIComponent(match[1]!) : null;
-  return isLocale(value) ? value : DEFAULT_LOCALE;
-}
-
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
   // Start in the default locale so SSR + first client render match (no hydration
   // mismatch); swap to the cookie locale after mount.
@@ -45,7 +38,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const [messages, setMessages] = useState<Record<string, unknown>>(enMessages as Record<string, unknown>);
 
   useEffect(() => {
-    const target = readLocaleCookie();
+    const target = readLocaleCookie() ?? DEFAULT_LOCALE;
     if (target === DEFAULT_LOCALE) return;
     let cancelled = false;
     CATALOG_LOADERS[target]()

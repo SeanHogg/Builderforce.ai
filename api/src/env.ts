@@ -156,6 +156,16 @@ export interface Env {
    *  Set via `wrangler secret put VOYAGE_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   VOYAGE_API_KEY?: string;
 
+  /** OPTIONAL operator-wide Brave Search API key — the floor under the cloud agent's
+   *  `web_search` tool. Search is metered per query, so the platform funds NO key: the
+   *  normal path is a tenant's own BYO key in `integration_credentials`
+   *  (provider `brave_search`), which always wins over this. Set this only if you are
+   *  self-hosting and want to fund search for every tenant. When neither is configured,
+   *  `web.search` is not advertised and the agent keeps fetch-only web access — no tool
+   *  that would certainly fail is ever handed to the model.
+   *  Set via `wrangler secret put BRAVE_SEARCH_API_KEY`. */
+  BRAVE_SEARCH_API_KEY?: string;
+
   /** R2 bucket for file uploads. */
   UPLOADS?: R2Bucket;
 
@@ -347,10 +357,6 @@ export interface Env {
   /** Secret for the Bitbucket repo webhook HMAC (`X-Hub-Signature: sha256=…`).
    *  Set via: wrangler secret put BITBUCKET_WEBHOOK_SECRET */
   BITBUCKET_WEBHOOK_SECRET?: string;
-
-  /** Shared secret for internal cron endpoints (e.g. GET /api/approvals/escalate).
-   *  Set via: wrangler secret put CRON_SECRET */
-  CRON_SECRET?: string;
 
   // ---------------------------------------------------------------------------
   // DevDynamics / Phase 6 (optional — required for integrations feature)

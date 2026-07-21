@@ -94,6 +94,7 @@ import { createWorkforceRoutes }        from './presentation/routes/workforceRou
 import { createFreelancerRoutes, createEngagementRoutes } from './presentation/routes/freelancerRoutes';
 import { createActivityRoutes, createTimecardRoutes } from './presentation/routes/activityRoutes';
 import { createJobRoutes, createNotificationRoutes } from './presentation/routes/jobRoutes';
+import { createEmailPreferenceRoutes } from './presentation/routes/emailPreferenceRoutes';
 import { createFreelancerMessagingRoutes } from './presentation/routes/freelancerMessagingRoutes';
 import { createGigMarketplaceRoutes, createEngagementBoardRoutes, createDeliverableRoutes } from './presentation/routes/gigMarketplaceRoutes';
 import { createLimbicRoutes }           from './presentation/routes/limbicRoutes';
@@ -156,6 +157,8 @@ import { createBoardConnectionRoutes } from './presentation/routes/boardConnecti
 import { createMigrationRoutes } from './presentation/routes/migrationRoutes';
 import { createBoardWebhookRoutes }    from './presentation/routes/boardWebhookRoutes';
 import { createQualityRoutes }         from './presentation/routes/qualityRoutes';
+import { createFeedbackRoutes }        from './presentation/routes/feedbackRoutes';
+import { createFeedbackIngestRoutes }  from './presentation/routes/feedbackIngestRoutes';
 import { createQualityIngestRoutes }   from './presentation/routes/qualityIngestRoutes';
 import { createPrdRoutes }             from './presentation/routes/prdRoutes';
 import { createRepoRoutes }            from './presentation/routes/repoRoutes';
@@ -190,6 +193,7 @@ import { runQaExplorationSweep } from './application/qa/runQaExplorationSweep';
 import { runValidatorReviewSweep } from './application/validation/validationDispatch';
 import { runSecurityAuditSweep } from './application/security/securityDispatch';
 import { runEscalationSweep } from './application/incident/runEscalationSweep';
+import { runApprovalExpirySweep } from './application/approvals/runApprovalExpirySweep';
 import { createIncidentRoutes } from './presentation/routes/incidentRoutes';
 import { runMonitorSweep } from './application/monitoring/runMonitorSweep';
 import { createMonitoringRoutes } from './presentation/routes/monitoringRoutes';
@@ -377,6 +381,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Two-sided marketplace: job postings + proposals (bidding) and the in-app feed.
   app.route('/api/jobs', createJobRoutes());
   app.route('/api/notifications', createNotificationRoutes());
+
+  // Email language + consent. The /unsubscribe leg is intentionally PUBLIC (no
+  // session) — it is the CAN-SPAM opt-out link carried in every lifecycle mail.
+  app.route('/api/email-preferences', createEmailPreferenceRoutes(db));
   // Gig Marketplace (0293): publish a ticket as a gig, a hired freelancer's scoped
   // board access, and deliverable proposals the employer AI-evaluates.
   app.route('/api/marketplace', createGigMarketplaceRoutes(db));
@@ -446,6 +454,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Public Quality error ingest — keyed (bfq_ ingest key) or HMAC-signed webhooks;
   // no JWT. Tenant/project are resolved from the credential, never the request.
   app.route('/api/quality-ingest', createQualityIngestRoutes(db));
+
+  // Public Product Feedback ingest — keyed (bff_ ingest key); no JWT. The
+  // embeddable feedback snippet posts here from any application that carries it.
+  app.route('/api/feedback-ingest', createFeedbackIngestRoutes(db));
 
   // Anonymous landing-prompt handoff: POST / is public (pre-auth); /claim applies
   // web-auth per-route so it can associate the row to the now-known user.
@@ -593,6 +605,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/migrations',        createMigrationRoutes(db));
   // Product Quality / error observability (tenant JWT) — error groups + fix dispatch.
   app.route('/api/quality',           createQualityRoutes(db, taskService, runtimeService));
+  app.route('/api/feedback',          createFeedbackRoutes(db));
   app.route('/api/prd',               createPrdRoutes(db));
   app.route('/api/repos',             createRepoRoutes(db));
   app.route('/api/agent-runtime',     createAgentRuntimeRoutes(db));
@@ -754,9 +767,27 @@ export default {
           .then((r) => { if (r.failed > 0) console.log(`[cron:gh-actions-reconcile] checked=${r.checked} failed=${r.failed} stillQueued=${r.stillQueued}`); })
           .catch((err) => { console.error('[cron:gh-actions-reconcile] failed', err); }),
       );
+      // Approval expiry — move pending approvals past their deadline to `expired`
+      // and alert. Replaces the never-called GET /api/approvals/escalate endpoint
+      // (Cloudflare crons invoke scheduled(), not a URL). Frequent tick so an
+      // unanswered agent `ask_human` question escalates promptly after its 24h
+      // expiry, well before the 72h paused-run reaper frees the ticket.
+      ctx.waitUntil(
+        runApprovalExpirySweep(env, buildDatabase(env))
+          .then((r) => {
+            if (r.escalated > 0) {
+              console.log(`[cron:approval-expiry] escalated=${r.escalated} tenants=${r.tenants}`);
+            }
+          })
+          .catch((err) => {
+            console.error('[cron:approval-expiry] failed', err);
+          }),
+      );
       // Incident escalation sweep — for every still-open (unacknowledged) incident,
       // fire the next escalation tier whose timer has elapsed (Teams/Slack/email).
-      // Frequent tick so time-based escalation has sub-daily granularity.
+      // Frequent tick so time-based escalation has sub-daily granularity. Distinct
+      // from the approval expiry above: that expires stale approvals, this pages
+      // on-call for live incidents.
       ctx.waitUntil(
         runEscalationSweep(env)
           .then((r) => { if (r.escalated > 0) console.log(`[cron:escalation] open=${r.openIncidents} escalated=${r.escalated}`); })

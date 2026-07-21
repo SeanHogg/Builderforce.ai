@@ -38,8 +38,9 @@ export async function verifySecret(value: string, storedHash: string): Promise<b
  *   - `bfai` — Developer API key for the public read-only API (`developer_api_keys.key_hash`)
  *   - `whsec` — Outbound-webhook signing secret (`webhook_subscriptions.secret`)
  *   - `bfq` — Quality error-ingest key, per source (`error_sources.key_hash`)
+ *   - `bff` — Product Feedback ingest key, per project collector (`feedback_collectors.key_hash`)
  */
-export function generateApiKey(prefix: 'bfa' | 'clk' | 'clu' | 'bfk' | 'bfai' | 'whsec' | 'bfq'): string {
+export function generateApiKey(prefix: 'bfa' | 'clk' | 'clu' | 'bfk' | 'bfai' | 'whsec' | 'bfq' | 'bff'): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   const hex   = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
   return `${prefix}_${hex}`;

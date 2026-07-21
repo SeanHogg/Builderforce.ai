@@ -1187,7 +1187,41 @@
     },
     "accountTab": "Compte",
     "sessionsTab": "Sessions",
-    "subnavLabel": "Sections des paramètres"
+    "subnavLabel": "Sections des paramètres",
+    "emailTab": "E-mail",
+    "emailPrefs": {
+      "title": "Préférences d’e-mail",
+      "whatWeSend": "Ce que nous envoyons",
+      "error": "Impossible de mettre à jour vos préférences d’e-mail. Veuillez réessayer.",
+      "language": "Langue des e-mails",
+      "languageAuto": "Détection automatique",
+      "languageHelp": "La langue dans laquelle nous vous écrivons. Indépendante de la langue de l’application ci-dessus.",
+      "languageTitle": "Langue",
+      "languageDetail": "Nous vous écrivons dans cette langue. En détection automatique, nous utilisons la langue de votre inscription, à défaut l’anglais.",
+      "optionalTitle": "E-mails facultatifs",
+      "optionalHelp": "Désactivez ce que vous préférez ne pas recevoir.",
+      "optionalDetail": "Ce sont les e-mails que nous choisissons d’envoyer. Vous pouvez les désactiver un par un, et chacun contient un lien de désabonnement.",
+      "productUpdates": "Nouveautés produit",
+      "productUpdatesHelp": "Nouvelles fonctionnalités et changements notables.",
+      "onboardingTips": "Conseils et guides",
+      "onboardingTipsHelp": "Quelques conseils de temps en temps pour tirer plus de Builderforce.",
+      "digests": "Résumés et récapitulatifs",
+      "digestsHelp": "Récapitulatifs réguliers de l’activité de vos projets.",
+      "alwaysOnTitle": "Toujours envoyés",
+      "alwaysOnBody": "Ces e-mails font partie de votre compte. Ils ne sont jamais supprimés, même si vous vous désabonnez de tout le reste.",
+      "alwaysOn": {
+        "signIn": "Liens de connexion et liens magiques",
+        "verification": "Codes de vérification d’e-mail",
+        "invites": "Invitations aux espaces de travail et aux conversations",
+        "security": "Avis de sécurité et d’accès au compte"
+      },
+      "transactionalNote": "Les e-mails de compte et de sécurité sont toujours envoyés — ils font partie du fonctionnement de votre compte et ne figurent donc pas ci-dessus.",
+      "unsubscribedTitle": "Vous êtes désabonné",
+      "unsubscribedBody": "Vous ne recevez aucun e-mail facultatif. Les messages de compte et de sécurité continuent d’être envoyés.",
+      "resubscribeCta": "Se réabonner",
+      "resubscribeTitle": "Se réabonner aux e-mails facultatifs",
+      "resubscribeConfirm": "Vous recevrez de nouveau les e-mails facultatifs, selon les catégories que vous avez activées. Continuer ?"
+    }
   },
   "pmo": {
     "title": "Portefeuille (PMO)",
@@ -6235,7 +6269,8 @@
     "validateMethod": "{method, select, embedding {Rappel sémantique} other {Rappel lexical (repli)}}",
     "evalDelta": "{pct}% vs préc.",
     "evalFlat": "aucun changement",
-    "evalTooltip": "Contrôle de régression sur v{version} : perte réservée {base} → {next} sur {size, plural, one {# tâche antérieure} other {# tâches antérieures}}."
+    "evalTooltip": "Contrôle de régression sur v{version} : perte réservée {base} → {next} sur {size, plural, one {# tâche antérieure} other {# tâches antérieures}}.",
+    "inheritedHint": "Cette build partage l’Evermind de son projet parent : tout ce qu’il a appris est donc disponible ici. L’entraînement et les réglages se gèrent sur le projet parent."
   },
   "topbar": {
     "cart": "Panier",
@@ -7944,6 +7979,11 @@
       },
       "tokensUsed": "Jetons IA utilisés",
       "periodLabel": "Derniers {period}"
+    },
+    "authAlert": {
+      "title": "Non utilisé",
+      "notEntitled": "Ce compte s’est bien connecté, mais le fournisseur a refusé la requête ({status}) car l’offre ne la couvre pas. Reconnectez un compte dont l’offre l’inclut, ou passez à une offre supérieure.",
+      "rejected": "Le fournisseur a rejeté cet identifiant ({status}). Il a probablement expiré, été révoqué ou renouvelé ailleurs — reconnectez le compte."
     }
   },
   "modelSelect": {
@@ -9397,7 +9437,20 @@
     "workspaceSuffix": ", espace de travail",
     "setAsDefault": "Définir comme dépôt par défaut du projet",
     "saveChanges": "Enregistrer les modifications",
-    "addRepository": "Ajouter un dépôt"
+    "addRepository": "Ajouter un dépôt",
+    "enableAgentRuns": "Activer les exécutions d’agents",
+    "agentRunsEnabled": "Exécutions activées",
+    "enablingAgentRuns": "Activation…",
+    "enableAgentRunsTitle": "Valider le workflow d’agent Builderforce dans ce dépôt afin que les agents s’exécutent sur vos propres runners GitHub Actions",
+    "reenableAgentRunsTitle": "Déjà activé — relancez pour écraser le fichier de workflow avec la dernière version",
+    "confirmReenableActions": "Cette action réécrit .github/workflows/builderforce-agent.yml sur la branche par défaut et supprime les modifications que vous y avez apportées. Continuer ?",
+    "actionsEnabled": "Workflow d’agent validé dans {path}",
+    "actionsEnableFailed": "Impossible de valider le workflow d’agent",
+    "backfillAlerts": "Importer les alertes",
+    "backfillingAlerts": "Importation…",
+    "backfillAlertsTitle": "Importer toutes les alertes ouvertes d’analyse de code et Dependabot de ce dépôt comme constats de sécurité. Réexécution sans risque.",
+    "alertsBackfilled": "{count} {count, plural, one {constat} other {constats}} de sécurité importés ({deduped} déjà suivis)",
+    "alertsBackfillFailed": "Impossible d’importer les alertes de sécurité"
   },
   "workflowsContent": {
     "noRunsYet": "Aucune exécution",
@@ -10088,5 +10141,10 @@
       "denied": "REFUSÉE",
       "soft-gate": "RESTRICTION SOUPLE"
     }
+  },
+  "githubActionsSurface": {
+    "notReadyTitle": "GitHub Actions n’est pas encore configuré pour ce projet",
+    "notReadyBody": "Le workflow d’agent Builderforce est absent du dépôt par défaut de ce projet : les exécutions basculeront donc vers l’exécuteur cloud durable. Ouvrez les paramètres Gestion de code source et choisissez « Activer les exécutions d’agents » sur le dépôt.",
+    "noGithubRepoBody": "Aucun dépôt GitHub n’est lié à ce projet, il n’y a donc nulle part où exécuter GitHub Actions. Les exécutions basculeront vers l’exécuteur cloud durable. Liez un dépôt GitHub dans les paramètres Gestion de code source."
   }
 }
