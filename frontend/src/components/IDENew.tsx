@@ -91,6 +91,10 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   const [activeFile, setActiveFile] = useState<string | undefined>();
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
   const [centerView, setCenterView] = useState<CenterView>('preview');
+  // For the combined Web + Mobile type: which preview to render in the code-preview
+  // centre — full-width web, or the phone bezel. (Pure `device` modalities are
+  // always the bezel and don't show this toggle.)
+  const [previewDevice, setPreviewDevice] = useState<'web' | 'mobile'>('web');
   const [rightTab, setRightTab] = useState<RightTab>(() => getModality(project.modality).rightTabs[0]);
   const [previewUrl, setPreviewUrl] = useState<string | undefined>();
   const [terminalWriter, setTerminalWriter] = useState<((data: string) => void) | undefined>();
@@ -1096,7 +1100,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
 
       {/* Mobile: scan-to-open-on-a-real-phone. Mounted only where the device
           simulator is, since it hands off that modality's published build. */}
-      {modalityDef.center === 'device' && Number.isFinite(projectIdNum) && (
+      {(modalityDef.center === 'device' || modalityDef.enableMobilePreview) && Number.isFinite(projectIdNum) && (
         <MobileDevicePanel
           open={devicePanelOpen}
           onClose={() => setDevicePanelOpen(false)}
@@ -1174,7 +1178,31 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
           </div>
         )}
         {/* Center panel — content depends on the active modality, chrome stays consistent */}
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', position: 'relative' }}>
+          {/* Center Brain chat affordance — modalities that DON'T dock the agent
+              in the left panel (Video / Evermind / Fine-tune) otherwise only have
+              the corner launcher, so surface a prominent brain button in the middle
+              of the Builder that opens the AI chat scoped to this project. */}
+          {!hasDockedBrain && (
+            <button
+              type="button"
+              onClick={() => { setBrainContext({ projectId: projectIdNum, modality }); setBrainOpen(true); }}
+              title={t('askAi')}
+              aria-label={t('askAi')}
+              style={{
+                position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 20,
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 18px', borderRadius: 9999, cursor: 'pointer',
+                border: '1px solid var(--border-subtle)',
+                background: 'linear-gradient(135deg, var(--coral-bright, #f4726e), var(--coral-dark, #d94f4a))',
+                color: '#fff', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem',
+                boxShadow: '0 8px 26px rgba(0,0,0,0.28)',
+              }}
+            >
+              <span aria-hidden style={{ fontSize: '1.2rem', lineHeight: 1 }}>🧠</span>
+              {t('askAi')}
+            </button>
+          )}
           {modalityDef.center === 'video' ? (
             <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
               <StudioPanel
@@ -1264,6 +1292,32 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                 )}
               </button>
             ))}
+            {/* Web ⇄ Mobile preview target — only the combined Web + Mobile type,
+                and only while previewing. Lets one project render as both a
+                full-width website and a phone-bezel handset app. */}
+            {modalityDef.enableMobilePreview && centerView === 'preview' && (
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+                {(['web', 'mobile'] as const).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setPreviewDevice(d)}
+                    aria-pressed={previewDevice === d}
+                    title={d === 'web' ? t('previewWeb') : t('previewMobile')}
+                    style={{
+                      padding: '4px 12px', fontSize: '0.75rem', fontWeight: 600, borderRadius: 6,
+                      cursor: 'pointer', border: '1px solid var(--border-subtle)',
+                      background: previewDevice === d ? 'var(--bg-elevated)' : 'transparent',
+                      color: previewDevice === d ? 'var(--text-primary)' : 'var(--text-muted)',
+                      display: 'flex', alignItems: 'center', gap: 5,
+                    }}
+                  >
+                    <span aria-hidden>{d === 'web' ? '🌐' : '📱'}</span>
+                    {d === 'web' ? t('previewWeb') : t('previewMobile')}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Main content area */}
@@ -1272,8 +1326,10 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             <div style={{ position: 'absolute', inset: 0, visibility: centerView === 'preview' ? 'visible' : 'hidden', pointerEvents: centerView === 'preview' ? 'auto' : 'none', display: 'flex', flexDirection: 'column' }}>
               <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
                 {/* Mobile previews inside a device bezel at the handset's real
-                    viewport size; every other code modality fills the pane. */}
-                {modalityDef.center === 'device' ? (
+                    viewport size; every other code modality fills the pane. The
+                    combined Web + Mobile type switches between the two via the
+                    Web/Mobile toggle above. */}
+                {modalityDef.center === 'device' || (modalityDef.enableMobilePreview && previewDevice === 'mobile') ? (
                   <DevicePreview url={previewUrl} onOpenDevicePanel={() => setDevicePanelOpen(true)} />
                 ) : (
                   <PreviewFrame url={previewUrl} />

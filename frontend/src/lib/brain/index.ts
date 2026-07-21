@@ -61,6 +61,7 @@ export type {
 } from '@seanhogg/builderforce-brain-embedded';
 
 // App-specific brain pieces (not part of the portable package).
+export { useOpenProjectChat } from './openProjectChat';
 export { brainConfig } from './runtime';
 export { guestBrainConfig } from './guestRuntime';
 export {

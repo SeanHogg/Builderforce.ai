@@ -283,7 +283,7 @@
       "dashboard": "仪表板",
       "brainstorm": "头脑风暴",
       "projects": "项目",
-      "ide": "IDE",
+      "ide": "Builder",
       "workflows": "工作流",
       "workforce": "人才 / 团队",
       "insights": "洞察",
@@ -461,7 +461,7 @@
   "projectCard": {
     "details": "详情",
     "taskBoard": "任务看板",
-    "openIde": "在 IDE 中打开",
+    "openIde": "在 Builder 中打开",
     "deleteProject": "删除项目",
     "agentLabel": "智能体：",
     "tasks": "{count, plural, other {# 个任务}}",
@@ -481,7 +481,26 @@
     "healthNoDataAria": "项目健康度 — 暂无交付数据",
     "doneAria": "已完成 {pct}% — {total} 个任务中已完成 {completed} 个",
     "donePct": "完成 {pct}%",
-    "health360": "项目 360"
+    "health360": "项目 360",
+    "originBuilder": "Builder",
+    "originImported": "已导入",
+    "originBuilderTitle": "在 Builder 中创建",
+    "originImportedTitle": "从仓库导入",
+    "openChat": "打开项目聊天",
+    "configTitle": "完成配置",
+    "configDone": "已配置",
+    "configTodo": "待办",
+    "configAria": "配置完成 {pct}%",
+    "config_vision": "愿景",
+    "config_goals": "目标",
+    "config_deadline": "截止日期",
+    "config_owner": "负责人",
+    "config_tasks": "任务",
+    "config_architecture": "架构",
+    "configPct": "已配置 {pct}%",
+    "configMissingList": "尚需配置：{items}",
+    "brainstormGoals": "头脑风暴目标",
+    "brainstormGoalsPrompt": "帮我为项目“{name}”头脑风暴出清晰的目标。先询问它的范围和成功标准，然后提出 3–5 个可转化为目标的具体目标。"
   },
   "projectInspection": {
     "title": "检查",
@@ -667,8 +686,8 @@
     "modalityProject": "{label} 项目",
     "modality": {
       "designer": {
-        "label": "设计器",
-        "tagline": "通过预览、代码和实时开发服务器生成并构建应用。",
+        "label": "网站",
+        "tagline": "通过预览、代码和实时开发服务器生成并构建网站或网页应用。",
         "runLabel": "运行"
       },
       "video": {
@@ -695,6 +714,11 @@
         "label": "移动端",
         "tagline": "构建手机应用并在设备模拟器中预览，然后扫码在自己的手机上打开。",
         "runLabel": "运行"
+      },
+      "webmobile": {
+        "label": "网页 + 移动端",
+        "tagline": "用一套代码同时构建网页应用和移动应用——并排预览两者。",
+        "runLabel": "运行"
       }
     },
     "all": "全部",
@@ -704,10 +728,10 @@
     "noProjectsFilter": "没有符合此筛选条件的项目。请在上方新建一个。",
     "noProjectsYet": "暂无项目。请在上方选择一种类型来创建第一个项目。",
     "deleteFailed": "删除项目失败",
-    "title": "IDE",
-    "subtitle": "新建一个 IDE 项目或打开现有项目。",
-    "newIdeProject": "新建 IDE 项目",
-    "yourIdeProjects": "你的 IDE 项目",
+    "title": "Builder",
+    "subtitle": "新建一个 Builder 项目或打开现有项目。",
+    "newIdeProject": "新建 Builder 项目",
+    "yourIdeProjects": "你的 Builder 项目",
     "comingSoon": "即将推出",
     "soon": "即将",
     "newModalityProject": "新建{label}项目",
@@ -724,16 +748,16 @@
     "projectNamePlaceholder": "我的精彩项目",
     "parentOptional": "归入某个项目（可选）",
     "parentProject": "上级项目",
-    "parentProjectHint": "将此 IDE 项目归入某个项目，或保持未分组。",
-    "ideProjectSettings": "IDE 项目设置",
+    "parentProjectHint": "将此 Builder 项目归入某个项目，或保持未分组。",
+    "ideProjectSettings": "Builder 项目设置",
     "openProjectsAria": "打开项目",
     "editNameHint": "编辑项目名称（失焦或按回车保存）",
-    "projectDetailsTitle": "IDE 项目详情",
+    "projectDetailsTitle": "Builder 项目详情",
     "projectSettingsAria": "项目设置",
     "settingsRepoTitle": "设置与代码库",
     "blockOnFailHint": "开启后，当上次检查失败时将阻止运行",
     "runChecksHint": "在浏览器中运行类型检查、代码检查和构建以验证代码",
-    "detailedConfigHint": "该项目的记忆、模型、推理、个性和语音在 IDE 的面板中配置。在此可重命名并设置其父项目。",
+    "detailedConfigHint": "该项目的记忆、模型、推理、个性和语音在 Builder 的面板中配置。在此可重命名并设置其父项目。",
     "createOpen": "创建并打开",
     "creating": "正在创建…",
     "cancel": "取消",
@@ -815,7 +839,7 @@
     },
     "deploy": {
       "title": "从 GitHub 部署",
-      "description": "让 GitHub Actions 在每次推送时构建此项目并部署到这里——无需保持 IDE 打开。",
+      "description": "让 GitHub Actions 在每次推送时构建此项目并部署到这里——无需保持 Builder 打开。",
       "checking": "正在检查已连接的代码仓库…",
       "needsRepo": "请先在“设置 → 代码仓库”中为此项目连接一个 GitHub 仓库。",
       "needsGitHub": "此项目连接的不是 GitHub 仓库。GitHub Actions 部署需要 GitHub 仓库。",
@@ -827,7 +851,10 @@
       "enabledOn": "已在 {branch} 分支添加 {path}。下次推送到该分支时将构建并部署。",
       "viewRuns": "在 GitHub 上查看工作流运行记录",
       "viewWorkflow": "显示工作流文件"
-    }
+    },
+    "askAi": "问 AI",
+    "previewWeb": "网页",
+    "previewMobile": "移动端"
   },
   "tools": {
     "outOf5": "满分 5.0",
@@ -2230,7 +2257,7 @@
     "statusPublished": "已发布",
     "statusDraft": "草稿",
     "loadingCapabilities": "正在加载能力…",
-    "capabilitiesHint": "在此处分配的技能和角色将随此智能体运行到任何环境——IDE、工作流、本地或云端——不受任何项目限制。",
+    "capabilitiesHint": "在此处分配的技能和角色将随此智能体运行到任何环境——Builder、工作流、本地或云端——不受任何项目限制。",
     "pricingIntro": "设定价格即可将 <strong>{name}</strong> 发布到市场。填 0 表示免费上架。",
     "pricingModel": "定价模式",
     "pricingFlatFee": "统一收费",
@@ -2406,8 +2433,8 @@
     "brainHint": "使用 Brain 为此项目生成 PRD 和可执行的任务操作。",
     "integrationKeys": "项目集成密钥",
     "workspaceTitle": "工作区",
-    "workspaceDesc": "此项目的工作区和文件系统。打开 IDE 以编辑文件。",
-    "openInIde": "在 IDE 中打开",
+    "workspaceDesc": "此项目的工作区和文件系统。打开 Builder 以编辑文件。",
+    "openInIde": "在 Builder 中打开",
     "dueDateLabel": "截止日期",
     "dueDateHint": "设置项目截止日期。留空则使用最晚的任务截止日期。",
     "deadline": "截止时间",
@@ -3096,7 +3123,7 @@
       "daysAgo": "{n} 天前"
     },
     "heading": "我们要构建什么？",
-    "subheading": "先在 <brainstorm>头脑风暴</brainstorm> 中构思，然后作为项目执行并在 IDE 中构建——或通过 <tasks>任务</tasks> 和 <workforce>人才团队</workforce> 代理分配工作。",
+    "subheading": "先在 <brainstorm>头脑风暴</brainstorm> 中构思，然后作为项目执行并在 Builder 中构建——或通过 <tasks>任务</tasks> 和 <workforce>人才团队</workforce> 代理分配工作。",
     "promptPlaceholder": "用 Material UI 组件构建一个预算跟踪器……",
     "brainStorm": "头脑风暴",
     "agentsConnected": "{count, plural, other {已连接 # 个代理}}",
@@ -3118,7 +3145,7 @@
     "tabs": {
       "projects": "项目",
       "workforce": "人才 / 团队",
-      "ide": "IDE",
+      "ide": "Builder",
       "ideas": "想法 / 头脑风暴",
       "quality": "质量",
       "knowledge": "知识库"
@@ -3158,7 +3185,7 @@
       "agentsHeading": "代理（{count}）",
       "noPeople": "没有成员在线。",
       "noAgents": "没有代理在线。",
-      "inIde": "在 IDE 中",
+      "inIde": "在 Builder 中",
       "activeSession": "活动会话",
       "manage": "管理团队",
       "agent": {
@@ -3300,7 +3327,7 @@
       "wfPerformance": "团队 · 绩效",
       "marketplace": "市场",
       "tools": "工具",
-      "ide": "IDE",
+      "ide": "Builder",
       "alerts": "告警",
       "logs": "日志",
       "quality": "质量",
@@ -3390,7 +3417,7 @@
       "catalogMarketplaceTopEval": "评分最高的代理",
       "catalogToolsByCategory": "按类别划分的工具",
       "ideByModality": "按模态划分的构建",
-      "ideRecency": "IDE 构建",
+      "ideRecency": "Builder 构建",
       "obsAlertFires": "每日告警触发",
       "obsAlertRuleHealth": "告警规则健康度",
       "obsLogVolume": "事件量",
@@ -3507,8 +3534,8 @@
     },
     "ide": {
       "builds": "个构建",
-      "buildsSub": "IDE 构建",
-      "noProjects": "暂无 IDE 构建"
+      "buildsSub": "Builder 构建",
+      "noProjects": "暂无 Builder 构建"
     },
     "obs": {
       "noFirings": "暂无触发",
@@ -3965,8 +3992,9 @@
     "viewWorkflows": "查看工作流",
     "workflows": "工作流",
     "workflowsWithCount": "工作流（{count}）",
-    "openIde": "在 IDE 中打开",
-    "delete": "删除"
+    "openIde": "在 Builder 中打开",
+    "delete": "删除",
+    "openChat": "打开项目聊天"
   },
   "diagnosticsStrip": {
     "title": "诊断",
@@ -5785,7 +5813,7 @@
     },
     "approveAll": "全部批准",
     "newChat": "+ 新建",
-    "messagePlaceholder": "给 Brain 发消息…",
+    "messagePlaceholder": "你想完成什么？",
     "searchChats": "搜索对话…",
     "confirmActionAria": "确认操作",
     "wantsTo": "Brain 想要<b>{action}</b>。批准后即可执行。",
@@ -5818,7 +5846,7 @@
     "addToProject": "添加到项目…",
     "createNewProject": "+ 创建新项目",
     "brainTitle": "Brain",
-    "emptyHint": "开始一个新会话，或选择一个已有会话。",
+    "emptyHint": "告诉我你想完成什么，我来帮你实现。",
     "startNewChat": "开始新会话",
     "capabilities": {
       "makingLabel": "创作",
@@ -5918,7 +5946,7 @@
     "assignChatToProjectAria": "将会话分配到项目",
     "addProject": "+ 项目",
     "workflowsArrow": "工作流 →",
-    "openInIde": "在 IDE 中打开 →",
+    "openInIde": "在 Builder 中打开 →",
     "brainModality": "Brain — {modality}",
     "brainAs": "以 {name} 身份运行的 Brain",
     "chatHistory": "会话历史",
@@ -5932,7 +5960,10 @@
       "upgrade": "升级",
       "connectAccount": "连接你自己的账户",
       "dismiss": "关闭"
-    }
+    },
+    "queuedCount": "已排队 {count} 条消息",
+    "onboardMe": "帮我快速上手",
+    "onboardMePrompt": "我是新用户——帮我快速上手。询问我想构建什么，说明用量和费用的运作方式，根据我的时间安排推荐免费版还是专业版，并在我有现成的 AI 账户时帮我连接。"
   },
   "chatMessage": {
     "copy": "复制",
@@ -9422,8 +9453,8 @@
     "noKey": "无密钥",
     "test": "测试",
     "testing": "正在测试…",
-    "importTitle": "将此仓库的文件导入 IDE 工作区，以便您在浏览器中编辑和运行它们",
-    "importToIde": "导入到 IDE",
+    "importTitle": "将此仓库的文件导入 Builder 工作区，以便您在浏览器中编辑和运行它们",
+    "importToIde": "导入到 Builder",
     "importing": "正在导入…",
     "copyConfigTitle": "复制此仓库的配置（不含密钥），用于诊断失败的测试",
     "copied": "已复制！",
@@ -10244,5 +10275,46 @@
       "title": "产品反馈",
       "subtitle": "从每个工作区的反馈收集器汇集的功能请求、缺陷和想法。"
     }
+  },
+  "onboardingPill": {
+    "title": "账户设置进度",
+    "ariaLabel": "账户设置完成 {pct}%",
+    "label": "设置 {pct}%",
+    "panelTitle": "完成账户设置",
+    "progressLabel": "设置进度",
+    "percentDone": "已完成 {pct}%",
+    "intro": "完成这些步骤以充分利用你的工作区。进度会自动保存。",
+    "statusDone": "已完成",
+    "statusTodo": "待办",
+    "continueSetup": "继续设置",
+    "reviewSetup": "查看设置"
+  },
+  "globalError": {
+    "collapse": "收起",
+    "expandDetails": "展开详情",
+    "report": "上报到项目",
+    "copyTicket": "复制支持工单",
+    "dismiss": "关闭"
+  },
+  "reportError": {
+    "title": "上报错误",
+    "intro": "将错误提交到某个项目。它会与自动采集的错误一起出现在该项目的质量列表中。",
+    "projectLabel": "项目",
+    "projectPlaceholder": "选择一个项目…",
+    "titleLabel": "标题",
+    "titlePlaceholder": "简要摘要（可选）",
+    "messageLabel": "发生了什么？",
+    "messagePlaceholder": "描述错误、你当时的操作，以及有助于复现的任何信息。",
+    "levelLabel": "严重程度",
+    "level_fatal": "致命",
+    "level_error": "错误",
+    "level_warning": "警告",
+    "level_info": "信息",
+    "noProjects": "你还没有项目——请先创建一个项目再上报错误。",
+    "reported": "错误已上报到项目。",
+    "failed": "无法上报该错误。",
+    "cancel": "取消",
+    "submit": "上报错误",
+    "submitting": "上报中…"
   }
 }
