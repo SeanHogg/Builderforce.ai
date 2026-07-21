@@ -11,7 +11,7 @@
 import { lt } from 'drizzle-orm';
 import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { llmTraces, llmFailoverLog, llmHealthProbes, qaJourneyEvents, errorEvents } from '../../infrastructure/database/schema';
+import { llmTraces, llmFailoverLog, llmHealthProbes, qaJourneyEvents, errorEvents, managerActions, toolAuditEvents } from '../../infrastructure/database/schema';
 
 /** Days of history kept per table before older rows are purged. */
 const RETENTION_DAYS = {
@@ -23,6 +23,16 @@ const RETENTION_DAYS = {
   // only the raw stream is swept. 90d is safely > the consumption meter's
   // month-to-date window, so error-event billing is never affected by the purge.
   errorEvents: 90,
+  // The manager-decision FEED (cron + "Run manager now" telemetry) — the platform's
+  // highest-write table (~46k rows in <30d, all from the every-5-min manager sweep).
+  // It had NO retention and its on-disk size ballooned to ~593 MB, mostly page bloat
+  // (reclaim needs a one-time VACUUM FULL — retention alone won't shrink recent rows).
+  // 30d caps the live-row count for a drill-in feed that nobody reads month-old rows
+  // from; the KV cron gate further cuts its write rate on idle ticks.
+  managerActions: 30,
+  // Agent tool-audit timeline (~117 MB, also previously unbounded). Same 90d window
+  // as the other agent/telemetry event streams.
+  toolAuditEvents: 90,
 } as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -42,6 +52,8 @@ export async function runRetentionPurge(env: Env, now: number = Date.now()): Pro
     { name: 'llm_health_probes', run: () => transactionalDb.delete(llmHealthProbes).where(lt(llmHealthProbes.createdAt, cutoff(now, RETENTION_DAYS.llmHealthProbes))) },
     { name: 'qa_journey_events', run: () => db.delete(qaJourneyEvents).where(lt(qaJourneyEvents.ts, cutoff(now, RETENTION_DAYS.qaJourneyEvents))) },
     { name: 'error_events',      run: () => db.delete(errorEvents).where(lt(errorEvents.createdAt, cutoff(now, RETENTION_DAYS.errorEvents))) },
+    { name: 'manager_actions',   run: () => db.delete(managerActions).where(lt(managerActions.createdAt, cutoff(now, RETENTION_DAYS.managerActions))) },
+    { name: 'tool_audit_events', run: () => db.delete(toolAuditEvents).where(lt(toolAuditEvents.createdAt, cutoff(now, RETENTION_DAYS.toolAuditEvents))) },
   ];
   for (const t of targets) {
     try {

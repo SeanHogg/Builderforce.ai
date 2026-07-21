@@ -11,7 +11,11 @@
 import type { NormalizedErrorEvent } from './errorSpec';
 
 export interface CollectorRef {
-  id: string;
+  /** Collector row id, or NULL for a collector-less in-app source (e.g. a user's
+   *  manual "Report error" — mirrors feedbackSubmissions.collectorId being null
+   *  for in-app submissions). error_groups.collector_id is nullable, so a manual
+   *  report groups under the project with no collector attached. */
+  id: string | null;
   tenantId: number;
   /** NULL = tenant-level collector (use mapping rules). */
   projectId: number | null;

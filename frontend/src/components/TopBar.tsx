@@ -14,6 +14,7 @@ import ShoppingCart from './ShoppingCart';
 import NotificationBell from './NotificationBell';
 import { ManagerStatusIndicator } from './ManagerStatusIndicator';
 import { TenantProjectSwitcher } from './TenantProjectSwitcher';
+import { OnboardingProgressPill } from './OnboardingProgressPill';
 
 const PREVIEW_ROLES: PreviewRole[] = ['owner', 'manager', 'developer', 'viewer'];
 
@@ -130,6 +131,10 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
       </div>
       <div className="topbar-right">
         <TenantProjectSwitcher />
+
+        {/* New-account setup progress — self-gates to nothing once onboarding is
+            complete/dismissed or for non-owner members. */}
+        {isAuthenticated && <OnboardingProgressPill />}
 
         {/* Role preview — superadmin only, not during emulation */}
         {isAuthenticated && user?.isSuperadmin && !emulation && (

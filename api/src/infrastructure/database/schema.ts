@@ -2508,6 +2508,9 @@ export const integrationProviderEnum = pgEnum('integration_provider', [
   // 0353 — BYO web-search vendor keys (backs the cloud agent's `web_search` tool).
   // Ids MUST match WEB_SEARCH_VENDOR_IDS in application/runtime/webSearchVendors.ts.
   'brave_search',
+  // 0355 — Google connectors (OAuth offline credentials). Gmail backs the email
+  // workflow node; Google Drive can back a project's file storage.
+  'gmail', 'google_drive',
 ]);
 
 export const integrationSyncStatusEnum = pgEnum('integration_sync_status', [

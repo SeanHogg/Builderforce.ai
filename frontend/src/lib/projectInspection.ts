@@ -79,13 +79,54 @@ function gradeFor(score: number): Grade {
 /** A project's description counts as a real "vision" once it's more than a stub. */
 const VISION_MIN_CHARS = 30;
 
+/** The core "is this project set up" signals — the SINGLE source used by both the
+ *  full inspection AND the card's configuration-completeness donut, so the two can
+ *  never disagree on what counts as configured. */
+export type ProjectConfigItem = 'vision' | 'goals' | 'deadline' | 'owner' | 'tasks' | 'architecture';
+
+/** Display order of the configuration checklist (also the donut/legend order). */
+export const PROJECT_CONFIG_ITEMS: ProjectConfigItem[] = ['vision', 'goals', 'deadline', 'owner', 'tasks', 'architecture'];
+
+/** Which configuration signals a project currently satisfies. Pure, derived from
+ *  the `/api/projects` list fields only (no per-card fetch). */
+export function projectConfigSignals(project: Project): Record<ProjectConfigItem, boolean> {
+  return {
+    vision: (project.description ?? '').trim().length >= VISION_MIN_CHARS,
+    goals: (project.linkedGoalCount ?? 0) > 0 || project.initiativeId != null,
+    deadline: project.projectDueDate != null && project.projectDueDate !== '',
+    owner: project.assignedAgentHost != null,
+    tasks: (project.taskCount ?? 0) > 0,
+    architecture: project.hasArchitecturePrd === true,
+  };
+}
+
+export interface ProjectConfig {
+  /** Satisfied config items. */
+  done: ProjectConfigItem[];
+  /** Config items still to set up. */
+  missing: ProjectConfigItem[];
+  total: number;
+  /** 0–100 configuration completeness. */
+  pct: number;
+}
+
+/** Configuration-completeness of a project — how much of its setup is done.
+ *  Distinct from task progress (that's {@link computeProjectHealth}). */
+export function computeProjectConfig(project: Project): ProjectConfig {
+  const sig = projectConfigSignals(project);
+  const done = PROJECT_CONFIG_ITEMS.filter((k) => sig[k]);
+  const missing = PROJECT_CONFIG_ITEMS.filter((k) => !sig[k]);
+  return { done, missing, total: PROJECT_CONFIG_ITEMS.length, pct: Math.round((done.length / PROJECT_CONFIG_ITEMS.length) * 100) };
+}
+
 export function computeProjectInspection(project: Project): ProjectInspection {
   const health = computeProjectHealth(project);
 
-  const hasVision = (project.description ?? '').trim().length >= VISION_MIN_CHARS;
-  const hasGoals = (project.linkedGoalCount ?? 0) > 0 || project.initiativeId != null;
-  const hasDeadline = project.projectDueDate != null && project.projectDueDate !== '';
-  const hasArchitecture = project.hasArchitecturePrd === true;
+  const sig = projectConfigSignals(project);
+  const hasVision = sig.vision;
+  const hasGoals = sig.goals;
+  const hasDeadline = sig.deadline;
+  const hasArchitecture = sig.architecture;
 
   const taskCount = project.taskCount ?? 0;
   const hasTasks = taskCount > 0;

@@ -7,6 +7,8 @@ import type { Project } from '@/lib/types';
 import type { ProjectDiagnosticSummary } from '@/lib/tools';
 import { ProjectOriginBadge } from './ProjectOriginBadge';
 import { ProjectHealthBadge } from './ProjectHealth';
+import { ProjectConfigBadge } from './ProjectConfigProgress';
+import { useOpenProjectChat } from '@/lib/brain';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { RunDiagnosticsButton } from './RunDiagnosticsButton';
@@ -63,6 +65,7 @@ export function ProjectTable({
 }: ProjectTableProps) {
   const t = useTranslations('projectTable');
   const router = useRouter();
+  const openProjectChat = useOpenProjectChat();
   const [confirmProject, setConfirmProject] = useState<Project | null>(null);
   const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
 
@@ -89,7 +92,10 @@ export function ProjectTable({
                 </span>
               </td>
               <td style={cellStyle}>
-                <ProjectHealthBadge project={project} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <ProjectHealthBadge project={project} />
+                  <ProjectConfigBadge project={project} />
+                </div>
               </td>
               <td style={cellStyle}>
                 {(() => {
@@ -167,6 +173,17 @@ export function ProjectTable({
                     style={iconButtonStyle}
                   >
                     <span style={{ fontSize: 16 }} aria-hidden>🔀</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openProjectChat(typeof project.id === 'number' ? project.id : Number(project.id))}
+                    aria-label={t('openChat')}
+                    title={t('openChat')}
+                    style={iconButtonStyle}
+                  >
+                    <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
                   </button>
                   <button
                     type="button"

@@ -283,7 +283,7 @@
       "dashboard": "Dashboard",
       "brainstorm": "Brain Storm",
       "projects": "Projects",
-      "ide": "IDE",
+      "ide": "Builder",
       "workflows": "Workflows",
       "workforce": "Talent / Workforce",
       "insights": "Insights",
@@ -461,7 +461,7 @@
   "projectCard": {
     "details": "Details",
     "taskBoard": "Task board",
-    "openIde": "Open in IDE",
+    "openIde": "Open in Builder",
     "deleteProject": "Delete project",
     "agentLabel": "Agent:",
     "tasks": "{count, plural, one {# task} other {# tasks}}",
@@ -481,7 +481,26 @@
     "healthNoDataAria": "Project health — no delivery data yet",
     "doneAria": "{pct}% done — {completed} of {total} tasks complete",
     "donePct": "{pct}% done",
-    "health360": "Project 360"
+    "health360": "Project 360",
+    "originBuilder": "Builder",
+    "originImported": "Imported",
+    "originBuilderTitle": "Started in the Builder",
+    "originImportedTitle": "Imported from a repository",
+    "openChat": "Open project chat",
+    "configTitle": "Finish setup",
+    "configDone": "Configured",
+    "configTodo": "To do",
+    "configAria": "Configuration {pct}% complete",
+    "config_vision": "Vision",
+    "config_goals": "Goals",
+    "config_deadline": "Deadline",
+    "config_owner": "Owner",
+    "config_tasks": "Tasks",
+    "config_architecture": "Architecture",
+    "configPct": "{pct}% set up",
+    "configMissingList": "Still to set up: {items}",
+    "brainstormGoals": "Brainstorm goals",
+    "brainstormGoalsPrompt": "Help me brainstorm clear goals for the project \"{name}\". Ask me about its scope and success criteria, then propose 3–5 concrete goals I can turn into objectives."
   },
   "projectInspection": {
     "title": "Inspection",
@@ -667,8 +686,8 @@
     "modalityProject": "{label} project",
     "modality": {
       "designer": {
-        "label": "Designer",
-        "tagline": "Generate and build apps with Preview, Code, and a live dev server.",
+        "label": "Website",
+        "tagline": "Generate and build a website or web app with Preview, Code, and a live dev server.",
         "runLabel": "Run"
       },
       "video": {
@@ -695,6 +714,11 @@
         "label": "Mobile",
         "tagline": "Build a phone app and preview it in a device simulator, then scan to open it on your own handset.",
         "runLabel": "Run"
+      },
+      "webmobile": {
+        "label": "Web + Mobile",
+        "tagline": "Build a web application and a mobile app together from one codebase — preview both side by side.",
+        "runLabel": "Run"
       }
     },
     "all": "All",
@@ -704,10 +728,10 @@
     "noProjectsFilter": "No projects match this filter. Create a new one above.",
     "noProjectsYet": "No projects yet. Pick a type above to create your first one.",
     "deleteFailed": "Failed to delete project",
-    "title": "IDE",
-    "subtitle": "Start a new IDE project or open an existing one.",
-    "newIdeProject": "New IDE project",
-    "yourIdeProjects": "Your IDE projects",
+    "title": "Builder",
+    "subtitle": "Start a new Builder project or open an existing one.",
+    "newIdeProject": "New Builder project",
+    "yourIdeProjects": "Your Builder projects",
     "comingSoon": "coming soon",
     "soon": "soon",
     "newModalityProject": "New {label} project",
@@ -724,16 +748,16 @@
     "projectNamePlaceholder": "My Awesome Project",
     "parentOptional": "Group under a Project (optional)",
     "parentProject": "Parent Project",
-    "parentProjectHint": "Group this IDE project under a Project, or leave it ungrouped.",
-    "ideProjectSettings": "IDE project settings",
+    "parentProjectHint": "Group this Builder project under a Project, or leave it ungrouped.",
+    "ideProjectSettings": "Builder project settings",
     "openProjectsAria": "Open projects",
     "editNameHint": "Edit project name (saves on blur or Enter)",
-    "projectDetailsTitle": "IDE project details",
+    "projectDetailsTitle": "Builder project details",
     "projectSettingsAria": "Project settings",
     "settingsRepoTitle": "Settings & repository",
     "blockOnFailHint": "When on, Run is blocked while the last checks are failing",
     "runChecksHint": "Run type-check, lint and build in the browser to validate the code",
-    "detailedConfigHint": "Memory, model, inference, personality and voice for this project are configured in the IDE's panels. This is where you rename it and set its parent Project.",
+    "detailedConfigHint": "Memory, model, inference, personality and voice for this project are configured in the Builder's panels. This is where you rename it and set its parent Project.",
     "createOpen": "Create & open",
     "creating": "Creating…",
     "cancel": "Cancel",
@@ -815,7 +839,7 @@
     },
     "deploy": {
       "title": "Deploy from GitHub",
-      "description": "Let GitHub Actions build this project on every push and deploy it here — no need to keep the IDE open.",
+      "description": "Let GitHub Actions build this project on every push and deploy it here — no need to keep the Builder open.",
       "checking": "Checking the connected repository…",
       "needsRepo": "Connect a GitHub repository to this project first, from Settings → Repository.",
       "needsGitHub": "This project is connected to a non-GitHub repository. GitHub Actions deploys need a GitHub repo.",
@@ -827,7 +851,10 @@
       "enabledOn": "Added {path} on {branch}. The next push to that branch builds and deploys.",
       "viewRuns": "View workflow runs on GitHub",
       "viewWorkflow": "Show the workflow file"
-    }
+    },
+    "askAi": "Ask AI",
+    "previewWeb": "Web",
+    "previewMobile": "Mobile"
   },
   "tools": {
     "outOf5": "out of 5.0",
@@ -2230,7 +2257,7 @@
     "statusPublished": "PUBLISHED",
     "statusDraft": "DRAFT",
     "loadingCapabilities": "Loading capabilities…",
-    "capabilitiesHint": "Skills and personas assigned here travel with this agent everywhere it runs — IDE, Workflow, on-prem or cloud — independent of any project.",
+    "capabilitiesHint": "Skills and personas assigned here travel with this agent everywhere it runs — Builder, Workflow, on-prem or cloud — independent of any project.",
     "pricingIntro": "Set a price to publish <strong>{name}</strong> to the marketplace. Use 0 to list it for free.",
     "pricingModel": "Pricing model",
     "pricingFlatFee": "Flat fee",
@@ -2406,8 +2433,8 @@
     "brainHint": "Use Brain to generate PRDs and executable task actions for this project.",
     "integrationKeys": "Project integration keys",
     "workspaceTitle": "Workspace",
-    "workspaceDesc": "Workspace and file system for this project. Open the IDE to edit files.",
-    "openInIde": "Open in IDE",
+    "workspaceDesc": "Workspace and file system for this project. Open the Builder to edit files.",
+    "openInIde": "Open in Builder",
     "dueDateLabel": "Due date",
     "dueDateHint": "Set a project deadline. Leave empty to use the latest task due date.",
     "deadline": "Deadline",
@@ -3096,7 +3123,7 @@
       "daysAgo": "{n}d ago"
     },
     "heading": "What should we build?",
-    "subheading": "Start in <brainstorm>Brain Storm</brainstorm> to ideate, then execute as a project and build in the IDE—or assign work via <tasks>Tasks</tasks> and <workforce>Workforce</workforce> agents.",
+    "subheading": "Start in <brainstorm>Brain Storm</brainstorm> to ideate, then execute as a project and build in the Builder—or assign work via <tasks>Tasks</tasks> and <workforce>Workforce</workforce> agents.",
     "promptPlaceholder": "Build a budget tracker with Material UI components…",
     "brainStorm": "Brain Storm",
     "agentsConnected": "{count, plural, one {# agent connected} other {# agents connected}}",
@@ -3118,7 +3145,7 @@
     "tabs": {
       "projects": "Projects",
       "workforce": "Talent / Workforce",
-      "ide": "IDE",
+      "ide": "Builder",
       "ideas": "Ideas / Brainstorm",
       "quality": "Quality",
       "knowledge": "Knowledge"
@@ -3158,7 +3185,7 @@
       "agentsHeading": "Agents ({count})",
       "noPeople": "No people online.",
       "noAgents": "No agents online.",
-      "inIde": "In the IDE",
+      "inIde": "In the Builder",
       "activeSession": "Active session",
       "manage": "Manage workforce",
       "agent": {
@@ -3300,7 +3327,7 @@
       "wfPerformance": "Workforce · Performance",
       "marketplace": "Marketplace",
       "tools": "Tools",
-      "ide": "IDE",
+      "ide": "Builder",
       "alerts": "Alerts",
       "logs": "Logs",
       "quality": "Quality",
@@ -3390,7 +3417,7 @@
       "catalogMarketplaceTopEval": "Best-evaluated agent",
       "catalogToolsByCategory": "Tools by category",
       "ideByModality": "Builds by modality",
-      "ideRecency": "IDE builds",
+      "ideRecency": "Builder builds",
       "obsAlertFires": "Alert firings / day",
       "obsAlertRuleHealth": "Alert rule health",
       "obsLogVolume": "Event volume",
@@ -3507,8 +3534,8 @@
     },
     "ide": {
       "builds": "builds",
-      "buildsSub": "IDE builds",
-      "noProjects": "No IDE builds yet"
+      "buildsSub": "Builder builds",
+      "noProjects": "No Builder builds yet"
     },
     "obs": {
       "noFirings": "No firings yet",
@@ -3965,8 +3992,9 @@
     "viewWorkflows": "View workflows",
     "workflows": "Workflows",
     "workflowsWithCount": "Workflows ({count})",
-    "openIde": "Open in IDE",
-    "delete": "Delete"
+    "openIde": "Open in Builder",
+    "delete": "Delete",
+    "openChat": "Open project chat"
   },
   "diagnosticsStrip": {
     "title": "Diagnostics",
@@ -5785,7 +5813,7 @@
     },
     "approveAll": "Approve all",
     "newChat": "+ New",
-    "messagePlaceholder": "Message Brain…",
+    "messagePlaceholder": "What would you like to accomplish?",
     "searchChats": "Search chats…",
     "confirmActionAria": "Confirm action",
     "wantsTo": "Brain wants to <b>{action}</b>. Approve to run it.",
@@ -5820,7 +5848,7 @@
     "addToProject": "Add to project…",
     "createNewProject": "+ Create new project",
     "brainTitle": "Brain",
-    "emptyHint": "Start a new chat or pick one to begin.",
+    "emptyHint": "Tell me what you'd like to accomplish, and I'll help you get it done.",
     "startNewChat": "Start new chat",
     "capabilities": {
       "makingLabel": "Making",
@@ -5920,7 +5948,7 @@
     "assignChatToProjectAria": "Assign chat to project",
     "addProject": "+ Project",
     "workflowsArrow": "Workflows →",
-    "openInIde": "Open in IDE →",
+    "openInIde": "Open in Builder →",
     "brainModality": "Brain — {modality}",
     "brainAs": "Brain as {name}",
     "chatHistory": "Chat history",
@@ -5934,7 +5962,10 @@
       "upgrade": "Upgrade",
       "connectAccount": "Connect your own account",
       "dismiss": "Dismiss"
-    }
+    },
+    "queuedCount": "{count, plural, one {# message queued} other {# messages queued}}",
+    "onboardMe": "Help me get started",
+    "onboardMePrompt": "I'm new here — help me get started. Ask me about what I want to build, explain how usage and costs work, recommend whether the Free or Pro plan fits my timeframe, and help me connect my existing AI account if I have one."
   },
   "chatMessage": {
     "copy": "Copy",
@@ -9424,8 +9455,8 @@
     "noKey": "no key",
     "test": "Test",
     "testing": "Testing…",
-    "importTitle": "Import this repo's files into the IDE workspace so you can edit and run them in the browser",
-    "importToIde": "Import to IDE",
+    "importTitle": "Import this repo's files into the Builder workspace so you can edit and run them in the browser",
+    "importToIde": "Import to Builder",
     "importing": "Importing…",
     "copyConfigTitle": "Copy this repo's configuration (no secrets) for diagnosing a failed Test",
     "copied": "Copied!",
@@ -10246,5 +10277,46 @@
       "title": "Product feedback",
       "subtitle": "Feature requests, bugs and ideas gathered from every workspace’s feedback collectors."
     }
+  },
+  "onboardingPill": {
+    "title": "Account setup progress",
+    "ariaLabel": "Account setup {pct}% complete",
+    "label": "Setup {pct}%",
+    "panelTitle": "Finish account setup",
+    "progressLabel": "Setup progress",
+    "percentDone": "{pct}% done",
+    "intro": "Complete these steps to get the most out of your workspace. Your progress is saved as you go.",
+    "statusDone": "Done",
+    "statusTodo": "To do",
+    "continueSetup": "Continue setup",
+    "reviewSetup": "Review setup"
+  },
+  "globalError": {
+    "collapse": "Collapse",
+    "expandDetails": "Expand details",
+    "report": "Report to a project",
+    "copyTicket": "Copy support ticket",
+    "dismiss": "Dismiss"
+  },
+  "reportError": {
+    "title": "Report an error",
+    "intro": "File an error into a project. It appears in that project's Quality feed alongside automatically-collected errors.",
+    "projectLabel": "Project",
+    "projectPlaceholder": "Choose a project…",
+    "titleLabel": "Title",
+    "titlePlaceholder": "Short summary (optional)",
+    "messageLabel": "What happened?",
+    "messagePlaceholder": "Describe the error, what you were doing, and anything that helps reproduce it.",
+    "levelLabel": "Severity",
+    "level_fatal": "Fatal",
+    "level_error": "Error",
+    "level_warning": "Warning",
+    "level_info": "Info",
+    "noProjects": "You have no projects yet — create one first to report an error to it.",
+    "reported": "Error reported to the project.",
+    "failed": "Could not report the error.",
+    "cancel": "Cancel",
+    "submit": "Report error",
+    "submitting": "Reporting…"
   }
 }

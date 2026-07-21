@@ -8,6 +8,7 @@ import MarketingShell from './MarketingShell';
 import OnboardingGate from './OnboardingGate';
 import RouteMarketing from './RouteMarketing';
 import { BrainActionsProvider, BrainContextProvider, BrainProvider, brainConfig, guestBrainConfig } from '@/lib/brain';
+import { ReportErrorProvider } from './ReportErrorProvider';
 import { GuestBrainstormPage } from './brain/GuestBrainstormPage';
 import { PinsProvider } from '@/lib/widgets/PinsProvider';
 import { AiInsightPanelProvider } from './insights/AiInsightPanelProvider';
@@ -244,6 +245,7 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
           <CanvasPanelProvider>
           <BrainActionsProvider>
             <BrainContextProvider>
+              <ReportErrorProvider>
               {content}
               <MarketingConversionTracker />
               <FreelancerRouteGuard />
@@ -275,6 +277,7 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
               {/* Canvas slide-out tool: `show_canvas` lets the Brain generate a
                   visual board (notes/timers) and the user save it to Knowledge. */}
               {showBrain && <CanvasPanelBrainBridge />}
+              </ReportErrorProvider>
             </BrainContextProvider>
           </BrainActionsProvider>
           </CanvasPanelProvider>

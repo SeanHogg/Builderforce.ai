@@ -182,6 +182,7 @@ import { runAlertSweep } from './application/alerts/runAlertSweep';
 import { runDueTriggers } from './application/workflow/runDueTriggers';
 import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
+import { evaluateCronGate, openCronTick } from './application/runtime/cronWorkSignal';
 import { reconcileGithubActionsRuns } from './application/runtime/githubActionsReconcile';
 import { runAutonomousExecutionSweep } from './application/runtime/autonomousExecutionSweep';
 import { createTickDispatchBudget } from './application/runtime/tickDispatchBudget';
@@ -688,7 +689,8 @@ export default {
         }),
       );
       // Daily retention purge of unbounded diagnostic/telemetry log tables
-      // (llm_traces, llm_failover_log, llm_health_probes, qa_journey_events).
+      // (llm_traces, llm_failover_log, llm_health_probes, qa_journey_events,
+      // error_events, manager_actions, tool_audit_events — see PURGE_TARGETS).
       ctx.waitUntil(
         runRetentionPurge(env).catch((err) => {
           console.error('[cron:retention] failed', err);
@@ -741,6 +743,20 @@ export default {
     // cron string is supplied, e.g. a manual `wrangler` invocation.) The daily and
     // weekly ticks are handled above, so exclude them here.
     if (event.cron !== '0 9 * * *' && event.cron !== '0 8 * * 1') {
+      // KV work-gate — the single change that lets Neon compute autosuspend.
+      // Reads KV ONLY (no Postgres): SKIP the whole DB fan-out below on an idle
+      // platform so the endpoint scales to zero, RUN it when a write signalled
+      // pending work (dispatch within 5 min) or the floor interval elapsed
+      // (safety net for a missed signal). Fails open. See cronWorkSignal.ts.
+      const tickNowMs = Date.now();
+      const gate = await evaluateCronGate(env, tickNowMs);
+      if (!gate.run) {
+        // Nothing pending and the floor is not due — leave Postgres asleep.
+        return;
+      }
+      // Consume the signal + stamp the floor BEFORE firing sweeps, so a paced
+      // backlog re-signalled mid-tick survives to keep the next tick hot.
+      await openCronTick(env, tickNowMs, gate.floorDue);
       ctx.waitUntil(
         runDueTriggers(env)
           .then(() => processPendingCloudWorkflows(env))

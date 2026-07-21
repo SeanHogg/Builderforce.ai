@@ -859,18 +859,49 @@ export function BrainPanel({
     }
   }, [newProjectName, chats, creatingProject]);
 
+  // Messages the user typed while a run was still streaming. Held here and
+  // flushed one at a time as each run completes, so the composer NEVER blocks
+  // typing while the AI is thinking — you can keep composing and stack turns.
+  const [queuedMessages, setQueuedMessages] = useState<string[]>([]);
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text) return;
     setInput('');
     // Audited engagement signal: interacting with the AI agent is billable activity.
     trackActivity('agent_message', { weight: 2 });
+    // A run is already streaming — queue this turn and let the flush effect send
+    // it once the current run finishes, instead of disabling the composer.
+    if (conv.sending) {
+      setQueuedMessages((q) => [...q, text]);
+      return;
+    }
     // Restore the text if the send fails before it's persisted (e.g. an expired
     // session) so the user's message is never silently lost. `addressedTo` routes
     // the turn: a participant is talked to (no BRAIN run); null runs the BRAIN.
     const ok = await conv.send(text, { addressedTo: recipient });
     if (!ok) setInput((cur) => cur || text);
   }, [input, conv, recipient]);
+
+  // Flush one queued message per completed run (on the sending→idle edge). Sends
+  // exactly one queued turn each time the current run finishes.
+  const prevSendingRef = useRef(conv.sending);
+  useEffect(() => {
+    const was = prevSendingRef.current;
+    prevSendingRef.current = conv.sending;
+    if (was && !conv.sending && queuedMessages.length > 0) {
+      const [next, ...rest] = queuedMessages;
+      setQueuedMessages(rest);
+      void conv.send(next, { addressedTo: recipient });
+    }
+  }, [conv.sending, queuedMessages, conv, recipient]);
+
+  // Discard any queued turns when the active chat changes — queued text belongs
+  // to the chat it was typed in, never the one switched to.
+  const activeChatKey = chats.activeChat?.id ?? null;
+  useEffect(() => {
+    setQueuedMessages([]);
+  }, [activeChatKey]);
 
   // Capture execution: copy the Brain run's LLM/tool/error trace + transcript to
   // the clipboard — the Brain twin of the Observability/Logs "Copy triage info"
@@ -1174,9 +1205,20 @@ export function BrainPanel({
           <div style={{ fontSize: 40 }}>🧠</div>
           <div style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-primary)' }}>{tBrain('brainTitle')}</div>
           <div style={{ fontSize: 13 }}>{tBrain('emptyHint')}</div>
-          <button type="button" onClick={() => chats.create()} style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer' }}>
-            {tBrain('startNewChat')}
-          </button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button type="button" onClick={() => chats.create()} style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer' }}>
+              {tBrain('startNewChat')}
+            </button>
+            {/* Onboarding entry point — starts a chat seeded so the Brain guides a
+                new user (scope, costs, plan recommendation, connecting an AI account). */}
+            <button
+              type="button"
+              onClick={() => { chats.create(); setInput(tBrain('onboardMePrompt')); setComposerFocusToken((n) => n + 1); }}
+              style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'transparent', color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 10, cursor: 'pointer' }}
+            >
+              ✨ {tBrain('onboardMe')}
+            </button>
+          </div>
           {/* …or start from what you want to make. Picking one opens a chat
               already in that mode. */}
           <BrainCapabilityPicker
@@ -1339,7 +1381,9 @@ export function BrainPanel({
               onChange={setInput}
               onSubmit={handleSend}
               placeholder={recipient ? tBrain('messageParticipant', { name: recipient.name }) : tBrain('messagePlaceholder')}
-              disabled={conv.sending}
+              // Stay editable while a run streams so the user can keep typing and
+              // queue follow-up turns (flushed one at a time as runs complete).
+              disabled={false}
               running={conv.sending}
               onStop={conv.stop}
               stopLabel={tTimeline('stop')}
@@ -1365,6 +1409,12 @@ export function BrainPanel({
               focusToken={composerFocusToken}
             />
             {conv.uploading && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{tBrain('uploading')}</div>}
+            {queuedMessages.length > 0 && (
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span aria-hidden>⏳</span>
+                {tBrain('queuedCount', { count: queuedMessages.length })}
+              </div>
+            )}
           </div>
         </>
       )}
@@ -1432,7 +1482,22 @@ export function BrainPanel({
           <PlanBadge />
           {captureButton}
           <button type="button" onClick={() => chats.create()} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{tBrain('newChat')}</button>
-          <Link href="/brainstorm" title={tBrain('openFullBrainStorm')} style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>{tBrain('expand')}</Link>
+          {/* Expand → full Brain Storm page. Carry the ACTIVE chat id (and the
+              project it's scoped to) so the page opens the SAME conversation
+              instead of a blank one — otherwise expanding a docked chat (e.g. the
+              Designer/Website Builder chat) looked like it "deleted" the chat. */}
+          <Link
+            href={(() => {
+              const qs = new URLSearchParams();
+              if (chats.activeChatId != null) qs.set('chat', String(chats.activeChatId));
+              const proj = pinnedProjectId ?? ctxProjectId ?? null;
+              if (proj != null) qs.set('project', String(proj));
+              const s = qs.toString();
+              return s ? `/brainstorm?${s}` : '/brainstorm';
+            })()}
+            title={tBrain('openFullBrainStorm')}
+            style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}
+          >{tBrain('expand')}</Link>
           {onClose && (
             <button type="button" onClick={onClose} aria-label={tBrain('closeBrain')} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}>×</button>
           )}

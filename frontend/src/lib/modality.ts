@@ -18,7 +18,7 @@
  * branching scattered across components.
  */
 
-export type ProjectModality = 'designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice';
+export type ProjectModality = 'designer' | 'mobile' | 'webmobile' | 'video' | 'evermind' | 'finetune' | 'voice';
 
 /** Legacy modality id (the combined LLM Studio) → its replacement. */
 const LEGACY_MODALITY_ALIASES: Record<string, ProjectModality> = { llm: 'evermind' };
@@ -70,6 +70,13 @@ export interface ModalityDef {
   dockBrain: boolean;
   /** Which Publish panel the right rail's Publish tab renders. */
   publishPanel: PublishPanel;
+  /**
+   * For a `code-preview` centre, also offer a phone-bezel preview toggle + the
+   * scan-to-phone panel. Set on the combined Web + Mobile type so one project
+   * builds and previews as BOTH a responsive web app and a handset app from a
+   * single (react-native-web) codebase. `mobile`'s device centre already implies
+   * this; here it augments the web preview rather than replacing it. */
+  enableMobilePreview?: boolean;
 }
 
 /** Labels for the right-panel tabs — single source so the IDE doesn't inline them. */
@@ -95,11 +102,11 @@ const STRATEGY_OKR_NOTE =
 const BASE_MODALITIES: ModalityDef[] = [
   {
     id: 'designer',
-    label: 'Designer',
-    icon: '🎨',
-    tagline: 'Generate and build apps with Preview, Code, and a live dev server.',
+    label: 'Website',
+    icon: '🌐',
+    tagline: 'Generate and build a website or web app with Preview, Code, and a live dev server.',
     brainSystemPrompt: [
-      'You are an expert AI coding assistant built into Builderforce.ai, a browser-based IDE. Help users generate and build apps.',
+      'You are an expert AI coding assistant built into Builderforce.ai, a browser-based Builder. Help users generate and build websites and web apps.',
       'Use markdown for your response: headings, lists, bold, and fenced code blocks.',
       'When suggesting new or existing files, use a code block with the file path as the language tag so the user can create the file in one click. Examples: ```package.json (then JSON content), ```src/index.js (then JS content), ```.gitignore (then content).',
       'When you write code for the currently open file, use a normal code block (e.g. ```javascript) so the user can apply it.',
@@ -132,6 +139,27 @@ const BASE_MODALITIES: ModalityDef[] = [
     center: 'device',
     dockBrain: true,
     publishPanel: 'site',
+  },
+  {
+    id: 'webmobile',
+    label: 'Web + Mobile',
+    icon: '🖥️',
+    tagline: 'Build a web application and a mobile app together from one codebase — preview both side by side.',
+    brainSystemPrompt: [
+      "You are an expert full-stack app developer built into Builderforce.ai's browser Builder. The user is building ONE app that ships as BOTH a responsive web application AND a mobile app, from a single codebase.",
+      'The project is a React app rendered through react-native-web, so the SAME source runs full-width as a website AND inside a phone-sized device simulator, and stays portable to Expo for native iOS/Android. Import components (View, Text, Pressable, ScrollView, StyleSheet, FlatList) from "react-native" — never use HTML elements like div, span or button, and never use CSS files or className.',
+      'Style with StyleSheet.create and flexbox, and make layouts RESPONSIVE: use flex, percentage widths and useWindowDimensions to adapt between a wide desktop viewport and a narrow phone one. Keep tap targets at least 44 points and respect safe areas — there is no hover on mobile.',
+      'When suggesting new or existing files, use a code block with the file path as the language tag so the user can create the file in one click. Examples: ```App.js (then the component), ```src/screens/Home.js.',
+      'When you write code for the currently open file, use a normal code block (e.g. ```javascript) so the user can apply it.',
+    ].join('\n'),
+    rightTabs: ['files', 'agent', 'publish', 'state'],
+    showRunButton: true,
+    runLabel: 'Run',
+    showChecks: true,
+    center: 'code-preview',
+    dockBrain: true,
+    publishPanel: 'site',
+    enableMobilePreview: true,
   },
   {
     id: 'video',

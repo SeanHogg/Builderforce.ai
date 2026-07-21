@@ -667,7 +667,11 @@ export function ChatInput({
             <MicIcon />
           </button>
         )}
-        {running && onStop ? (
+        {running && onStop && !canSubmit ? (
+          // Streaming with an empty composer → the button interrupts the run.
+          // When the composer HAS submittable text (e.g. the queue-while-thinking
+          // path where the host keeps the input editable), the Send button below
+          // renders instead so the typed turn can be queued.
           <button
             type="button"
             onClick={onStop}

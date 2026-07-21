@@ -25,6 +25,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
 import { encryptCredentials, decryptCredentials } from '../../application/integrations/credentialCrypto';
 import { braveSearchVendor } from '../../application/runtime/webSearchVendors';
+import { testGmail, testGoogleDrive } from '../../application/integrations/googleOAuth';
 
 /**
  * Credential providers accepted by this endpoint. Mirrors integrationProviderEnum
@@ -38,6 +39,10 @@ const CREDENTIAL_PROVIDERS = [
   // BYO web-search vendor key (blob: `{ apiKey }`). Storing it here is what turns on
   // the cloud agent's `web_search` tool for this tenant — see webSearchCredential.ts.
   'brave_search',
+  // Google connectors — OAuth offline creds (blob: `{ clientId, clientSecret,
+  // refreshToken, ... }`). Gmail backs the email workflow node; Drive can back a
+  // project's file storage.
+  'gmail', 'google_drive',
 ] as const;
 type CredentialProvider = (typeof CREDENTIAL_PROVIDERS)[number];
 
@@ -527,6 +532,12 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
         break;
       case 'brave_search':
         result = await testBraveSearch(creds);
+        break;
+      case 'gmail':
+        result = await testGmail(creds);
+        break;
+      case 'google_drive':
+        result = await testGoogleDrive(creds);
         break;
       default:
         result = { ok: false, message: `Connectivity test not available for provider: ${row.provider}` };

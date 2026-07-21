@@ -174,6 +174,20 @@ export const NODE_KINDS: NodeKindMeta[] = [
     ],
   },
   {
+    kind: 'gmail',
+    label: 'Send Gmail',
+    icon: '✉️',
+    group: 'Integrations',
+    accent: '#ea4335',
+    blurb: 'Send an email through your connected Gmail account.',
+    defaultConfig: { to: '', subject: '', body: '{{input}}' },
+    fields: [
+      { key: 'to', label: 'To', type: 'text', placeholder: 'recipient@example.com — supports {{input}}' },
+      { key: 'subject', label: 'Subject', type: 'text', placeholder: 'Email subject — supports {{input}}' },
+      { key: 'body', label: 'Body', type: 'textarea', placeholder: 'Email body — {{input}} inserts the upstream output' },
+    ],
+  },
+  {
     kind: 'train',
     label: 'Train',
     icon: '🎓',
