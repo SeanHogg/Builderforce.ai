@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   API_ERROR_EVENT,
   type ApiErrorEvent,
 } from '@/lib/errors/apiErrorEvent';
+import { requestReportError } from '@/lib/reportError';
 
 /* ------------------------------------------------------------------ */
 /*  Inline SVG icons (no lucide-react dependency)                     */
@@ -32,6 +34,12 @@ const IconAlert = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
     <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+);
+
+const IconFlag = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" />
   </svg>
 );
 
@@ -178,6 +186,7 @@ function Toast({
   onToggleExpand: (id: string) => void;
   onCopy: (entry: ToastEntry) => void;
 }) {
+  const t = useTranslations('globalError');
   const { id, event: ev, expanded, copied } = entry;
 
   return (
@@ -225,14 +234,27 @@ function Toast({
         {/* Action buttons */}
         <button
           onClick={() => onToggleExpand(id)}
-          title={expanded ? 'Collapse' : 'Expand details'}
+          title={expanded ? t('collapse') : t('expandDetails')}
           style={iconBtnStyle}
         >
           {expanded ? <IconChevronUp /> : <IconChevronDown />}
         </button>
+        {/* Report this error into a project's Quality feed. */}
+        <button
+          onClick={() => requestReportError({
+            title: `${ev.status}${ev.code ? ` ${ev.code}` : ''}`.trim(),
+            message: ev.message,
+            url: ev.url,
+          })}
+          title={t('report')}
+          aria-label={t('report')}
+          style={iconBtnStyle}
+        >
+          <IconFlag />
+        </button>
         <button
           onClick={() => onCopy(entry)}
-          title="Copy support ticket"
+          title={t('copyTicket')}
           style={{
             ...iconBtnStyle,
             color: copied
@@ -244,7 +266,7 @@ function Toast({
         </button>
         <button
           onClick={() => onDismiss(id)}
-          title="Dismiss"
+          title={t('dismiss')}
           style={iconBtnStyle}
         >
           <IconX />

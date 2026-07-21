@@ -169,9 +169,11 @@ export default defineConfig({
 };
 
 /**
- * The run-only fallback files for a modality. Mobile projects need the React
- * Native scaffold; every other modality that runs code uses the vanilla one.
+ * The run-only fallback files for a modality. Mobile — and the combined
+ * Web + Mobile — projects need the React Native (react-native-web) scaffold so
+ * ONE source renders as both a responsive website and a handset app; every other
+ * modality that runs code uses the vanilla one.
  */
 export function defaultsForModality(modality: string): Record<string, string> {
-  return modality === 'mobile' ? MOBILE_DEFAULTS : VANILLA_DEFAULTS;
+  return modality === 'mobile' || modality === 'webmobile' ? MOBILE_DEFAULTS : VANILLA_DEFAULTS;
 }

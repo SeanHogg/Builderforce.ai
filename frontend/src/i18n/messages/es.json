@@ -283,7 +283,7 @@
       "dashboard": "Panel",
       "brainstorm": "Lluvia de ideas",
       "projects": "Proyectos",
-      "ide": "IDE",
+      "ide": "Builder",
       "workflows": "Flujos",
       "workforce": "Talento / Plantilla",
       "insights": "Análisis",
@@ -461,7 +461,7 @@
   "projectCard": {
     "details": "Detalles",
     "taskBoard": "Tablero de tareas",
-    "openIde": "Abrir en el IDE",
+    "openIde": "Abrir en el Builder",
     "deleteProject": "Eliminar proyecto",
     "agentLabel": "Agente:",
     "tasks": "{count, plural, one {# tarea} other {# tareas}}",
@@ -481,7 +481,26 @@
     "healthNoDataAria": "Salud del proyecto — aún sin datos de entrega",
     "doneAria": "{pct}% completado — {completed} de {total} tareas completadas",
     "donePct": "{pct}% completado",
-    "health360": "Proyecto 360"
+    "health360": "Proyecto 360",
+    "originBuilder": "Builder",
+    "originImported": "Importado",
+    "originBuilderTitle": "Creado en el Builder",
+    "originImportedTitle": "Importado desde un repositorio",
+    "openChat": "Abrir chat del proyecto",
+    "configTitle": "Completar configuración",
+    "configDone": "Configurado",
+    "configTodo": "Pendiente",
+    "configAria": "Configuración {pct}% completa",
+    "config_vision": "Visión",
+    "config_goals": "Objetivos",
+    "config_deadline": "Fecha límite",
+    "config_owner": "Responsable",
+    "config_tasks": "Tareas",
+    "config_architecture": "Arquitectura",
+    "configPct": "{pct}% configurado",
+    "configMissingList": "Falta configurar: {items}",
+    "brainstormGoals": "Idear objetivos",
+    "brainstormGoalsPrompt": "Ayúdame a idear objetivos claros para el proyecto «{name}». Pregúntame por su alcance y criterios de éxito, y luego propón de 3 a 5 objetivos concretos que pueda convertir en objetivos."
   },
   "projectInspection": {
     "title": "Inspección",
@@ -667,8 +686,8 @@
     "modalityProject": "Proyecto {label}",
     "modality": {
       "designer": {
-        "label": "Diseñador",
-        "tagline": "Genera y crea aplicaciones con Vista previa, Código y un servidor de desarrollo en vivo.",
+        "label": "Sitio web",
+        "tagline": "Genera y crea un sitio web o una app web con Vista previa, Código y un servidor de desarrollo en vivo.",
         "runLabel": "Ejecutar"
       },
       "video": {
@@ -695,6 +714,11 @@
         "label": "Móvil",
         "tagline": "Crea una app para el móvil y previsualízala en un simulador de dispositivo; después escanea para abrirla en tu propio teléfono.",
         "runLabel": "Ejecutar"
+      },
+      "webmobile": {
+        "label": "Web + Móvil",
+        "tagline": "Crea una aplicación web y una app móvil juntas desde una sola base de código: previsualiza ambas en paralelo.",
+        "runLabel": "Ejecutar"
       }
     },
     "all": "Todos",
@@ -704,10 +728,10 @@
     "noProjectsFilter": "Ningún proyecto coincide con este filtro. Crea uno nuevo arriba.",
     "noProjectsYet": "Aún no hay proyectos. Elige un tipo arriba para crear el primero.",
     "deleteFailed": "No se pudo eliminar el proyecto",
-    "title": "IDE",
-    "subtitle": "Crea un nuevo proyecto de IDE o abre uno existente.",
-    "newIdeProject": "Nuevo proyecto de IDE",
-    "yourIdeProjects": "Tus proyectos de IDE",
+    "title": "Builder",
+    "subtitle": "Crea un nuevo proyecto de Builder o abre uno existente.",
+    "newIdeProject": "Nuevo proyecto de Builder",
+    "yourIdeProjects": "Tus proyectos de Builder",
     "comingSoon": "próximamente",
     "soon": "pronto",
     "newModalityProject": "Nuevo proyecto {label}",
@@ -724,16 +748,16 @@
     "projectNamePlaceholder": "Mi proyecto increíble",
     "parentOptional": "Agrupar bajo un proyecto (opcional)",
     "parentProject": "Proyecto principal",
-    "parentProjectHint": "Agrupa este proyecto de IDE bajo un proyecto, o déjalo sin agrupar.",
-    "ideProjectSettings": "Ajustes del proyecto de IDE",
+    "parentProjectHint": "Agrupa este proyecto de Builder bajo un proyecto, o déjalo sin agrupar.",
+    "ideProjectSettings": "Ajustes del proyecto de Builder",
     "openProjectsAria": "Abrir proyectos",
     "editNameHint": "Editar el nombre del proyecto (se guarda al perder el foco o con Enter)",
-    "projectDetailsTitle": "Detalles del proyecto de IDE",
+    "projectDetailsTitle": "Detalles del proyecto de Builder",
     "projectSettingsAria": "Ajustes del proyecto",
     "settingsRepoTitle": "Ajustes y repositorio",
     "blockOnFailHint": "Cuando está activado, se bloquea Ejecutar si las últimas comprobaciones fallan",
     "runChecksHint": "Ejecuta comprobación de tipos, linting y compilación en el navegador para validar el código",
-    "detailedConfigHint": "La memoria, el modelo, la inferencia, la personalidad y la voz de este proyecto se configuran en los paneles del IDE. Aquí puedes cambiarle el nombre y establecer su Proyecto padre.",
+    "detailedConfigHint": "La memoria, el modelo, la inferencia, la personalidad y la voz de este proyecto se configuran en los paneles del Builder. Aquí puedes cambiarle el nombre y establecer su Proyecto padre.",
     "createOpen": "Crear y abrir",
     "creating": "Creando…",
     "cancel": "Cancelar",
@@ -815,7 +839,7 @@
     },
     "deploy": {
       "title": "Desplegar desde GitHub",
-      "description": "Deja que GitHub Actions compile este proyecto en cada push y lo despliegue aquí, sin necesidad de mantener el IDE abierto.",
+      "description": "Deja que GitHub Actions compile este proyecto en cada push y lo despliegue aquí, sin necesidad de mantener el Builder abierto.",
       "checking": "Comprobando el repositorio conectado…",
       "needsRepo": "Conecta primero un repositorio de GitHub a este proyecto, desde Ajustes → Repositorio.",
       "needsGitHub": "Este proyecto está conectado a un repositorio que no es de GitHub. Los despliegues con GitHub Actions requieren un repo de GitHub.",
@@ -827,7 +851,10 @@
       "enabledOn": "Se ha añadido {path} en {branch}. El próximo push a esa rama compilará y desplegará.",
       "viewRuns": "Ver las ejecuciones del flujo de trabajo en GitHub",
       "viewWorkflow": "Mostrar el archivo del flujo de trabajo"
-    }
+    },
+    "askAi": "Preguntar a la IA",
+    "previewWeb": "Web",
+    "previewMobile": "Móvil"
   },
   "tools": {
     "outOf5": "de 5,0",
@@ -2230,7 +2257,7 @@
     "statusPublished": "PUBLICADO",
     "statusDraft": "BORRADOR",
     "loadingCapabilities": "Cargando capacidades…",
-    "capabilitiesHint": "Las habilidades y los perfiles asignados aquí acompañan a este agente allá donde se ejecute — IDE, Flujo de trabajo, on-premise o nube — independientemente de cualquier proyecto.",
+    "capabilitiesHint": "Las habilidades y los perfiles asignados aquí acompañan a este agente allá donde se ejecute — Builder, Flujo de trabajo, on-premise o nube — independientemente de cualquier proyecto.",
     "pricingIntro": "Establece un precio para publicar <strong>{name}</strong> en el mercado. Usa 0 para publicarlo gratis.",
     "pricingModel": "Modelo de precios",
     "pricingFlatFee": "Tarifa plana",
@@ -2406,8 +2433,8 @@
     "brainHint": "Usa Brain para generar PRD y acciones de tareas ejecutables para este proyecto.",
     "integrationKeys": "Claves de integración del proyecto",
     "workspaceTitle": "Espacio de trabajo",
-    "workspaceDesc": "Espacio de trabajo y sistema de archivos de este proyecto. Abre el IDE para editar archivos.",
-    "openInIde": "Abrir en el IDE",
+    "workspaceDesc": "Espacio de trabajo y sistema de archivos de este proyecto. Abre el Builder para editar archivos.",
+    "openInIde": "Abrir en el Builder",
     "dueDateLabel": "Fecha límite",
     "dueDateHint": "Establece una fecha límite del proyecto. Déjalo vacío para usar la última fecha de vencimiento de las tareas.",
     "deadline": "Fecha límite",
@@ -3096,7 +3123,7 @@
       "daysAgo": "hace {n} d"
     },
     "heading": "¿Qué vamos a construir?",
-    "subheading": "Empieza en <brainstorm>Lluvia de ideas</brainstorm> para idear, luego ejecútalo como proyecto y constrúyelo en el IDE, o asigna trabajo mediante agentes de <tasks>Tareas</tasks> y <workforce>Talento</workforce>.",
+    "subheading": "Empieza en <brainstorm>Lluvia de ideas</brainstorm> para idear, luego ejecútalo como proyecto y constrúyelo en el Builder, o asigna trabajo mediante agentes de <tasks>Tareas</tasks> y <workforce>Talento</workforce>.",
     "promptPlaceholder": "Crea un control de presupuesto con componentes de Material UI…",
     "brainStorm": "Lluvia de ideas",
     "agentsConnected": "{count, plural, one {# agente conectado} other {# agentes conectados}}",
@@ -3118,7 +3145,7 @@
     "tabs": {
       "projects": "Proyectos",
       "workforce": "Talento / Equipo",
-      "ide": "IDE",
+      "ide": "Builder",
       "ideas": "Ideas / Lluvia de ideas",
       "quality": "Calidad",
       "knowledge": "Conocimiento"
@@ -3158,7 +3185,7 @@
       "agentsHeading": "Agentes ({count})",
       "noPeople": "No hay personas en línea.",
       "noAgents": "No hay agentes en línea.",
-      "inIde": "En el IDE",
+      "inIde": "En el Builder",
       "activeSession": "Sesión activa",
       "manage": "Gestionar equipo",
       "agent": {
@@ -3300,7 +3327,7 @@
       "wfPerformance": "Personal · Rendimiento",
       "marketplace": "Mercado",
       "tools": "Herramientas",
-      "ide": "IDE",
+      "ide": "Builder",
       "alerts": "Alertas",
       "logs": "Registros",
       "quality": "Calidad",
@@ -3390,7 +3417,7 @@
       "catalogMarketplaceTopEval": "Agente mejor evaluado",
       "catalogToolsByCategory": "Herramientas por categoría",
       "ideByModality": "Proyectos por modalidad",
-      "ideRecency": "Proyectos del IDE",
+      "ideRecency": "Proyectos del Builder",
       "obsAlertFires": "Disparos de alerta / día",
       "obsAlertRuleHealth": "Salud de reglas de alerta",
       "obsLogVolume": "Volumen de eventos",
@@ -3507,8 +3534,8 @@
     },
     "ide": {
       "builds": "proyectos",
-      "buildsSub": "proyectos del IDE",
-      "noProjects": "Sin proyectos del IDE aún"
+      "buildsSub": "proyectos del Builder",
+      "noProjects": "Sin proyectos del Builder aún"
     },
     "obs": {
       "noFirings": "Sin disparos aún",
@@ -3965,8 +3992,9 @@
     "viewWorkflows": "Ver flujos de trabajo",
     "workflows": "Flujos de trabajo",
     "workflowsWithCount": "Flujos de trabajo ({count})",
-    "openIde": "Abrir en el IDE",
-    "delete": "Eliminar"
+    "openIde": "Abrir en el Builder",
+    "delete": "Eliminar",
+    "openChat": "Abrir chat del proyecto"
   },
   "diagnosticsStrip": {
     "title": "Diagnósticos",
@@ -5785,7 +5813,7 @@
     },
     "approveAll": "Aprobar todo",
     "newChat": "+ Nuevo",
-    "messagePlaceholder": "Enviar mensaje a Brain…",
+    "messagePlaceholder": "¿Qué te gustaría lograr?",
     "searchChats": "Buscar chats…",
     "confirmActionAria": "Confirmar acción",
     "wantsTo": "Brain quiere <b>{action}</b>. Apruébalo para ejecutarlo.",
@@ -5818,7 +5846,7 @@
     "addToProject": "Añadir al proyecto…",
     "createNewProject": "+ Crear nuevo proyecto",
     "brainTitle": "Brain",
-    "emptyHint": "Inicia un nuevo chat o elige uno para empezar.",
+    "emptyHint": "Dime qué te gustaría lograr y te ayudaré a conseguirlo.",
     "startNewChat": "Iniciar nuevo chat",
     "capabilities": {
       "makingLabel": "Creando",
@@ -5918,7 +5946,7 @@
     "assignChatToProjectAria": "Asignar chat al proyecto",
     "addProject": "+ Proyecto",
     "workflowsArrow": "Flujos de trabajo →",
-    "openInIde": "Abrir en el IDE →",
+    "openInIde": "Abrir en el Builder →",
     "brainModality": "Brain — {modality}",
     "brainAs": "Brain como {name}",
     "chatHistory": "Historial de chats",
@@ -5932,7 +5960,10 @@
       "upgrade": "Mejorar plan",
       "connectAccount": "Conecta tu propia cuenta",
       "dismiss": "Descartar"
-    }
+    },
+    "queuedCount": "{count, plural, one {# mensaje en cola} other {# mensajes en cola}}",
+    "onboardMe": "Ayúdame a empezar",
+    "onboardMePrompt": "Soy nuevo aquí: ayúdame a empezar. Pregúntame qué quiero construir, explícame cómo funcionan el uso y los costes, recomiéndame si el plan Free o Pro se ajusta a mi plazo y ayúdame a conectar mi cuenta de IA existente si tengo una."
   },
   "chatMessage": {
     "copy": "Copiar",
@@ -9422,8 +9453,8 @@
     "noKey": "sin clave",
     "test": "Probar",
     "testing": "Probando…",
-    "importTitle": "Importa los archivos de este repositorio al espacio de trabajo del IDE para editarlos y ejecutarlos en el navegador",
-    "importToIde": "Importar al IDE",
+    "importTitle": "Importa los archivos de este repositorio al espacio de trabajo del Builder para editarlos y ejecutarlos en el navegador",
+    "importToIde": "Importar al Builder",
     "importing": "Importando…",
     "copyConfigTitle": "Copia la configuración de este repositorio (sin secretos) para diagnosticar una prueba fallida",
     "copied": "¡Copiado!",
@@ -10244,5 +10275,46 @@
       "title": "Comentarios de producto",
       "subtitle": "Solicitudes de funciones, errores e ideas reunidas de los colectores de comentarios de cada espacio de trabajo."
     }
+  },
+  "onboardingPill": {
+    "title": "Progreso de configuración de la cuenta",
+    "ariaLabel": "Configuración de la cuenta {pct}% completa",
+    "label": "Config. {pct}%",
+    "panelTitle": "Terminar la configuración de la cuenta",
+    "progressLabel": "Progreso de configuración",
+    "percentDone": "{pct}% completado",
+    "intro": "Completa estos pasos para aprovechar al máximo tu espacio de trabajo. Tu progreso se guarda a medida que avanzas.",
+    "statusDone": "Hecho",
+    "statusTodo": "Pendiente",
+    "continueSetup": "Continuar configuración",
+    "reviewSetup": "Revisar configuración"
+  },
+  "globalError": {
+    "collapse": "Contraer",
+    "expandDetails": "Ver detalles",
+    "report": "Reportar a un proyecto",
+    "copyTicket": "Copiar ticket de soporte",
+    "dismiss": "Descartar"
+  },
+  "reportError": {
+    "title": "Reportar un error",
+    "intro": "Registra un error en un proyecto. Aparecerá en el feed de Calidad de ese proyecto junto a los errores recopilados automáticamente.",
+    "projectLabel": "Proyecto",
+    "projectPlaceholder": "Elige un proyecto…",
+    "titleLabel": "Título",
+    "titlePlaceholder": "Resumen breve (opcional)",
+    "messageLabel": "¿Qué ha pasado?",
+    "messagePlaceholder": "Describe el error, qué estabas haciendo y cualquier cosa que ayude a reproducirlo.",
+    "levelLabel": "Gravedad",
+    "level_fatal": "Fatal",
+    "level_error": "Error",
+    "level_warning": "Advertencia",
+    "level_info": "Información",
+    "noProjects": "Aún no tienes proyectos: crea uno primero para reportarle un error.",
+    "reported": "Error reportado al proyecto.",
+    "failed": "No se pudo reportar el error.",
+    "cancel": "Cancelar",
+    "submit": "Reportar error",
+    "submitting": "Reportando…"
   }
 }
