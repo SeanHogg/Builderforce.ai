@@ -313,6 +313,53 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
     return c.json({ ok: true, ...result });
   });
 
+  // Manual "Report an error" — a signed-in user files an error straight into a
+  // project's Quality feed from the global Report-error modal. Routes through the
+  // SAME ingest engine (cap gate, fingerprint grouping, cache bump) as every other
+  // source, with a collector-less (id: null) project-scoped ref.
+  router.post('/report', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as number | undefined;
+    const body = (await c.req.json().catch(() => ({}))) as {
+      projectId?: number | string; title?: string; message?: string; url?: string; level?: string;
+    };
+    const projectId = Number(body.projectId);
+    const message = (body.message ?? '').trim();
+    if (!Number.isFinite(projectId) || message === '') {
+      return c.json({ error: 'projectId and message are required' }, 400);
+    }
+    // The project must belong to the caller's tenant — never let a report land in
+    // another tenant's Quality feed.
+    const [proj] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
+      .limit(1);
+    if (!proj) return c.json({ error: 'Project not found' }, 404);
+
+    const title = (body.title ?? '').trim();
+    const level: NormalizedErrorEvent['level'] =
+      body.level === 'warning' || body.level === 'info' || body.level === 'fatal' ? body.level : 'error';
+    const summary = title || message.slice(0, 120);
+    const event: NormalizedErrorEvent = {
+      // Group by title/summary so repeated reports of the same issue coalesce.
+      fingerprint: `manual-report:${projectId}:${summary.toLowerCase()}`,
+      type: 'UserReportedError',
+      message: title ? `${title} — ${message}` : message,
+      level,
+      timestamp: new Date().toISOString(),
+      environment: 'user-report',
+      source: 'manual',
+      ...(body.url ? { url: String(body.url) } : {}),
+      context: { manual: true, reportedByUserId: userId ?? null },
+    };
+    const collector: CollectorRef = { id: null, tenantId, projectId, defaultProjectId: null };
+    const result = await ingestErrorEvents(db, c.env as Env, collector, [event]);
+    if (result.capExceeded) return c.json({ error: 'Monthly error event limit reached', ...result }, 429);
+    if (result.accepted !== 1) return c.json({ error: 'Could not record the report', ...result }, 422);
+    return c.json({ ok: true, ...result });
+  });
+
   // Integrations attached to this collector (no secrets returned).
   router.get('/collectors/:id/integrations', async (c) => {
     const tenantId = c.get('tenantId') as number;

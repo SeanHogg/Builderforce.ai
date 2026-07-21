@@ -36,6 +36,7 @@ import { evaluateExecutionApprovalGate } from '../runtime/executionApprovalGate'
 import { evaluateTaskAutoRun } from './evaluateAutoRun';
 import { enforceLaneRequirements } from './laneRequirementGate';
 import { TicketAuditService } from '../audit/ticketAuditService';
+import { signalPendingWork } from '../runtime/cronWorkSignal';
 
 /**
  * Board "autonomous trigger" — the SERVER-SIDE source of truth. When a ticket
@@ -160,6 +161,13 @@ export async function maybeAutoRunOnLaneEntry(
       }).catch(() => { /* best-effort telemetry — never block the trigger */ });
     }
     if (!evaln.canRunNow) return false;
+
+    // This ticket SHOULD run. Signal the KV work-gate so the next frequent cron
+    // tick runs the backstop fan-out (dispatch within 5 min) even if the live
+    // kickoff below is dropped by an evicted isolate — the exact stranded-run
+    // case autonomousExecutionSweep exists to rescue. Best-effort KV put; the
+    // 30-min floor sweep backstops a lost signal. See cronWorkSignal.ts.
+    await signalPendingWork(env);
 
     // Hand the lane's agent + model to the single surface-aware dispatcher (the
     // `cloudAgentRef` payload key is the existing dispatch contract — the V2 agent

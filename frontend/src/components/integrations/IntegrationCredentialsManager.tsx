@@ -66,6 +66,21 @@ export const PROVIDER_META: Record<IntegrationProvider, ProviderMeta> = {
   // can already read a URL you give them; a search key lets them find one. Search bills
   // per query, so the key is yours — with none saved, agents stay fetch-only.
   brave_search: { label: 'Brave Search (agent web search)', baseUrl: false, secrets: [{ key: 'apiKey', label: 'Subscription token', placeholder: 'BSA…' }] },
+  // Google connectors — OAuth offline credentials (client id/secret + a refresh
+  // token from Google's OAuth playground or your own consent flow). Gmail backs
+  // the email workflow node; Drive can back a project's file storage.
+  gmail: { label: 'Gmail', baseUrl: false, secrets: [
+    { key: 'clientId', label: 'OAuth client ID', type: 'text', placeholder: '…apps.googleusercontent.com' },
+    { key: 'clientSecret', label: 'OAuth client secret' },
+    { key: 'refreshToken', label: 'OAuth refresh token' },
+    { key: 'fromEmail', label: 'Send-as email', type: 'text', placeholder: 'you@gmail.com' },
+  ] },
+  google_drive: { label: 'Google Drive', baseUrl: false, secrets: [
+    { key: 'clientId', label: 'OAuth client ID', type: 'text', placeholder: '…apps.googleusercontent.com' },
+    { key: 'clientSecret', label: 'OAuth client secret' },
+    { key: 'refreshToken', label: 'OAuth refresh token' },
+    { key: 'rootFolderId', label: 'Root folder ID (optional)', type: 'text', placeholder: 'blank = Drive root' },
+  ] },
 };
 
 const cardStyle: React.CSSProperties = {

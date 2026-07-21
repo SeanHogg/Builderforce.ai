@@ -7,7 +7,8 @@
  * its tasks reach a terminal state.
  *
  * Node-kind coverage on cloud:
- *   - trigger / llm / transform / filter / branch / output  → executed natively.
+ *   - trigger / llm / transform / filter / branch / output / gmail → executed natively.
+ *     gmail sends through the tenant's connected Gmail integration (googleOAuth).
  *     llm runs via the gateway; the ETL kinds (transform/filter/branch) are
  *     evaluated by the sandbox-safe expression engine in `domain/workflowExpr`
  *     (an empty expression is a pass-through, so legacy workflows are unaffected).
@@ -28,6 +29,8 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { workflows, workflowTasks } from '../../infrastructure/database/schema';
 import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
+import { loadGoogleCredential } from '../integrations/googleCredential';
+import { sendGmail } from '../integrations/googleOAuth';
 import { tenantProxyForPlan, byoAwareModel } from '../llm/tenantProxy';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { contextFromInput, evaluateBool, renderTransform } from '../../domain/workflowExpr';
@@ -147,6 +150,21 @@ async function executeCloudNode(env: CloudExecutorEnv, node: NodeInput, inputTex
     }
     case 'output':
       return { output: inputText };
+
+    case 'gmail': {
+      // Send an email through the tenant's connected Gmail integration. Fields
+      // support {{input}} so an upstream node's output can drive the recipient,
+      // subject or body. Needs the tenant context to load the (encrypted) creds.
+      if (!usageCtx) throw new Error('The Gmail node needs a tenant context to load your connected account');
+      const creds = await loadGoogleCredential(env as unknown as Env, usageCtx.db, usageCtx.tenantId, 'gmail');
+      if (!creds) throw new Error('Connect a Gmail integration under Settings ▸ Integrations to use the Gmail node');
+      const cfg = node.config;
+      const to = renderTemplate(typeof cfg.to === 'string' ? cfg.to : '', inputText).trim();
+      const subject = renderTemplate(typeof cfg.subject === 'string' ? cfg.subject : '', inputText);
+      const body = renderTemplate(typeof cfg.body === 'string' ? cfg.body : '{{input}}', inputText);
+      const sent = await sendGmail(creds, { to, subject, body });
+      return { output: JSON.stringify({ sent: true, id: sent.id, to }) };
+    }
 
     default:
       throw new Error(

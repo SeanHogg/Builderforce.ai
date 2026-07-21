@@ -988,7 +988,7 @@ export type EvermindBuildKind =
 
 export type WorkflowNodeKind =
   | 'trigger' | 'agent' | 'llm' | 'mcp' | 'memory' | 'knowledge' | 'train'
-  | 'transform' | 'filter' | 'branch' | 'output'
+  | 'transform' | 'filter' | 'branch' | 'output' | 'gmail'
   | EvermindBuildKind;
 
 export interface WorkflowDefNode {
@@ -5082,7 +5082,10 @@ export type IntegrationProvider =
   | 'github' | 'gitlab' | 'bitbucket' | 'jira' | 'confluence' | 'freshservice' | 'freshdesk'
   | 'servicenow' | 'linear' | 'sentry' | 'pagerduty' | 'monday' | 'asana' | 'clickup'
   // BYO web-search vendor key — unlocks the cloud agent's `web_search` tool.
-  | 'brave_search';
+  | 'brave_search'
+  // Google connectors (OAuth offline credentials): Gmail powers the email
+  // workflow node; Google Drive can back a project's file storage.
+  | 'gmail' | 'google_drive';
 
 export interface IntegrationCredential {
   id: string;
