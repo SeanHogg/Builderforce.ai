@@ -8,14 +8,40 @@ import {
 import { createContext, useContext, useMemo } from "react";
 
 // src/xmlToolCalls.ts
-var OPEN = "<tool_call>";
-var CLOSE = "</tool_call>";
+var DIALECTS = [
+  { prefix: "<tool_call>", open: /<tool_call>/, close: "</tool_call>", namedInOpenTag: false },
+  { prefix: "<function_call>", open: /<function_call>/, close: "</function_call>", namedInOpenTag: false },
+  { prefix: "<tool_use>", open: /<tool_use>/, close: "</tool_use>", namedInOpenTag: false },
+  { prefix: "<invoke", open: /<invoke\s+name\s*=\s*"([^"]*)"\s*>/, close: "</invoke>", namedInOpenTag: true },
+  { prefix: "<function=", open: /<function\s*=\s*([^>]+)>/, close: "</function>", namedInOpenTag: true }
+];
 function partialTailPrefix(buf, tag) {
   const max = Math.min(buf.length, tag.length - 1);
   for (let L = max; L > 0; L--) {
     if (buf.slice(buf.length - L) === tag.slice(0, L)) return L;
   }
   return 0;
+}
+function holdLength(buf) {
+  let hold = 0;
+  for (const d of DIALECTS) {
+    hold = Math.max(hold, partialTailPrefix(buf, d.prefix));
+    if (d.namedInOpenTag) {
+      const idx = buf.lastIndexOf(d.prefix);
+      if (idx >= 0 && !buf.slice(idx).includes(">")) hold = Math.max(hold, buf.length - idx);
+    }
+  }
+  return Math.min(hold, buf.length);
+}
+function findOpen(buf) {
+  let best = null;
+  for (const dialect of DIALECTS) {
+    const m = dialect.open.exec(buf);
+    if (!m) continue;
+    if (best && m.index >= best.index) continue;
+    best = { dialect, index: m.index, length: m[0].length, ...m[1] ? { name: m[1].trim() } : {} };
+  }
+  return best;
 }
 function coerceArg(raw) {
   const v = raw.trim();
@@ -26,21 +52,45 @@ function coerceArg(raw) {
     return v;
   }
 }
+var ARG_KEY_VALUE = /<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/g;
+var PARAMETER_TAG = /<parameter\s+name\s*=\s*"([^"]*)"\s*>([\s\S]*?)<\/parameter>/g;
+function argsFromTags(body) {
+  const args = {};
+  let found = false;
+  for (const re of [ARG_KEY_VALUE, PARAMETER_TAG]) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(body)) !== null) {
+      const key = m[1].trim();
+      if (!key) continue;
+      args[key] = coerceArg(m[2]);
+      found = true;
+    }
+  }
+  return found ? args : null;
+}
+function parseNamedBody(name, body, seq) {
+  if (!name) return null;
+  const tagged = argsFromTags(body);
+  if (tagged) return { id: `xmltc_${seq}`, name, args: JSON.stringify(tagged) };
+  const jsonStart = body.indexOf("{");
+  if (jsonStart >= 0) {
+    try {
+      const obj = JSON.parse(body.slice(jsonStart));
+      return { id: `xmltc_${seq}`, name, args: JSON.stringify(obj ?? {}) };
+    } catch {
+    }
+  }
+  return { id: `xmltc_${seq}`, name, args: "{}" };
+}
 function parseInner(inner, seq) {
   const trimmed = inner.trim();
   if (!trimmed) return null;
-  const firstArg = trimmed.indexOf("<arg_key>");
+  const firstArg = trimmed.search(/<arg_key>|<parameter\s/);
   if (firstArg >= 0) {
     const name = trimmed.slice(0, firstArg).trim();
     if (!name) return null;
-    const args = {};
-    const re = /<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/g;
-    let m;
-    while ((m = re.exec(trimmed)) !== null) {
-      const key = m[1].trim();
-      if (key) args[key] = coerceArg(m[2]);
-    }
-    return { id: `xmltc_${seq}`, name, args: JSON.stringify(args) };
+    return { id: `xmltc_${seq}`, name, args: JSON.stringify(argsFromTags(trimmed) ?? {}) };
   }
   const jsonStart = trimmed.indexOf("{");
   if (jsonStart >= 0) {
@@ -51,7 +101,7 @@ function parseInner(inner, seq) {
         return { id: `xmltc_${seq}`, name: maybeName, args: JSON.stringify(obj ?? {}) };
       }
       if (obj && typeof obj === "object" && typeof obj.name === "string") {
-        const a = obj.arguments ?? obj.parameters ?? {};
+        const a = obj.arguments ?? obj.parameters ?? obj.input ?? {};
         const argsStr = typeof a === "string" ? a : JSON.stringify(a ?? {});
         return { id: `xmltc_${seq}`, name: obj.name, args: argsStr };
       }
@@ -64,41 +114,48 @@ function parseInner(inner, seq) {
 }
 var XmlToolCallFilter = class {
   buf = "";
-  inside = false;
+  inside = null;
+  insideName;
   innerBuf = "";
   clean = "";
   calls = [];
   seq = 0;
+  /** Close the call currently being accumulated and record it. */
+  commit() {
+    const parsed = this.inside?.namedInOpenTag ? parseNamedBody(this.insideName ?? "", this.innerBuf, this.seq++) : parseInner(this.innerBuf, this.seq++);
+    if (parsed) this.calls.push(parsed);
+    this.innerBuf = "";
+    this.inside = null;
+    this.insideName = void 0;
+  }
   /** Feed a content delta; returns clean (markup-free) text to emit now. */
   push(delta) {
     this.buf += delta;
     let emit2 = "";
     for (; ; ) {
       if (!this.inside) {
-        const open = this.buf.indexOf(OPEN);
-        if (open >= 0) {
-          emit2 += this.buf.slice(0, open);
-          this.buf = this.buf.slice(open + OPEN.length);
-          this.inside = true;
+        const open = findOpen(this.buf);
+        if (open) {
+          emit2 += this.buf.slice(0, open.index);
+          this.buf = this.buf.slice(open.index + open.length);
+          this.inside = open.dialect;
+          this.insideName = open.name;
           this.innerBuf = "";
           continue;
         }
-        const hold2 = partialTailPrefix(this.buf, OPEN);
+        const hold2 = holdLength(this.buf);
         emit2 += this.buf.slice(0, this.buf.length - hold2);
         this.buf = hold2 ? this.buf.slice(this.buf.length - hold2) : "";
         break;
       }
-      const close = this.buf.indexOf(CLOSE);
+      const close = this.buf.indexOf(this.inside.close);
       if (close >= 0) {
         this.innerBuf += this.buf.slice(0, close);
-        this.buf = this.buf.slice(close + CLOSE.length);
-        this.inside = false;
-        const parsed = parseInner(this.innerBuf, this.seq++);
-        if (parsed) this.calls.push(parsed);
-        this.innerBuf = "";
+        this.buf = this.buf.slice(close + this.inside.close.length);
+        this.commit();
         continue;
       }
-      const hold = partialTailPrefix(this.buf, CLOSE);
+      const hold = partialTailPrefix(this.buf, this.inside.close);
       this.innerBuf += this.buf.slice(0, this.buf.length - hold);
       this.buf = hold ? this.buf.slice(this.buf.length - hold) : "";
       break;
@@ -111,14 +168,12 @@ var XmlToolCallFilter = class {
     let emit2 = "";
     if (this.inside) {
       this.innerBuf += this.buf;
-      const parsed = parseInner(this.innerBuf, this.seq++);
-      if (parsed) this.calls.push(parsed);
+      this.commit();
     } else {
       emit2 = this.buf;
     }
     this.buf = "";
     this.innerBuf = "";
-    this.inside = false;
     this.clean += emit2;
     return emit2;
   }
@@ -293,7 +348,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), usage };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
 }
 function assemble(acc) {
   return [...acc.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => ({ id: v.id, name: v.name, args: v.args })).filter((c) => c.name.length > 0);
@@ -1100,7 +1155,13 @@ function parseStepMessage(metadata) {
         args: m.args,
         result: m.result,
         isError: m.isError,
-        durationMs: m.durationMs
+        durationMs: m.durationMs,
+        resultBytes: m.resultBytes,
+        truncated: m.truncated,
+        usage: m.usage,
+        finishReason: m.finishReason,
+        textChars: m.textChars,
+        ttftMs: m.ttftMs
       },
       tsIso: typeof m.ts === "string" ? m.ts : void 0
     };
@@ -1111,7 +1172,7 @@ function parseStepMessage(metadata) {
 function traceWithPersistedSteps(messages, trace) {
   const seen = /* @__PURE__ */ new Set();
   for (const ev of trace) {
-    if (ev.category !== "llm" && ev.category !== "message") seen.add(stepSig(ev.category, ev.label, ev.ts));
+    if (ev.category !== "message") seen.add(stepSig(ev.category, ev.label, ev.ts));
   }
   const fromMessages = [];
   for (const message of messages) {
@@ -1121,14 +1182,21 @@ function traceWithPersistedSteps(messages, trace) {
     const sig = stepSig(parsed.step.category, parsed.step.label, parsed.tsIso);
     if (seen.has(sig)) continue;
     seen.add(sig);
+    const s = parsed.step;
     fromMessages.push({
       ts: parsed.tsIso ?? message.createdAt ?? "",
-      category: parsed.step.category,
-      label: parsed.step.label,
-      args: parsed.step.args,
-      result: parsed.step.result,
-      ...parsed.step.isError ? { isError: true } : {},
-      ...parsed.step.durationMs != null ? { durationMs: parsed.step.durationMs } : {}
+      category: s.category,
+      label: s.label,
+      args: s.args,
+      result: s.result,
+      ...s.isError ? { isError: true } : {},
+      ...s.durationMs != null ? { durationMs: s.durationMs } : {},
+      ...s.ttftMs != null ? { ttftMs: s.ttftMs } : {},
+      ...s.resultBytes != null ? { resultBytes: s.resultBytes } : {},
+      ...s.truncated ? { truncated: true } : {},
+      ...s.usage ? { usage: s.usage } : {},
+      ...s.finishReason !== void 0 ? { finishReason: s.finishReason } : {},
+      ...s.textChars != null ? { textChars: s.textChars } : {}
     });
   }
   if (fromMessages.length === 0) return trace;
@@ -1817,6 +1885,13 @@ function persistStep(chatId, persistence, ev) {
     result,
     isError: ev.isError ?? false,
     ...ev.durationMs != null ? { durationMs: ev.durationMs } : {},
+    // Diagnostics scalars — tiny, and the whole point of keeping the row.
+    ...ev.resultBytes != null ? { resultBytes: ev.resultBytes } : {},
+    ...ev.truncated ? { truncated: true } : {},
+    ...ev.usage ? { usage: ev.usage } : {},
+    ...ev.finishReason != null ? { finishReason: ev.finishReason } : {},
+    ...ev.textChars != null ? { textChars: ev.textChars } : {},
+    ...ev.ttftMs != null ? { ttftMs: ev.ttftMs } : {},
     ts: ev.ts
   });
   void persistence.sendMessages(chatId, [{ role: "tool", content: "", metadata }]).catch(() => {
@@ -2326,7 +2401,7 @@ ${chatWorkLinkingDirective(chatId)}`;
         result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) \u2014 a smaller context window can truncate long transcripts.`
       });
     }
-    pushTrace(c, {
+    pushDurableStep(c, chatId, persistence, {
       ts: nowIso(),
       category: "llm",
       label: "llm.complete",

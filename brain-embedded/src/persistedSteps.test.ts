@@ -4,7 +4,7 @@ import { computeBrainDiagnostics, type BrainTraceEvent } from './brainTriage';
 import type { BrainMessage } from './types';
 
 let seq = 0;
-function stepRow(over: Partial<{ category: string; label: string; ts: string; result: unknown; isError: boolean }> = {}): BrainMessage {
+function stepRow(over: Partial<{ category: string; label: string; ts: string; result: unknown; isError: boolean; resultBytes: number; truncated: boolean }> = {}): BrainMessage {
   seq += 1;
   return {
     id: seq,
@@ -19,6 +19,8 @@ function stepRow(over: Partial<{ category: string; label: string; ts: string; re
       args: { id: 322 },
       result: over.result ?? { ok: true },
       isError: over.isError ?? false,
+      ...(over.resultBytes != null ? { resultBytes: over.resultBytes } : {}),
+      ...(over.truncated ? { truncated: true } : {}),
       ts: over.ts ?? '2026-07-12T13:37:00.000Z',
     }),
   };
@@ -89,6 +91,30 @@ describe('traceWithPersistedSteps', () => {
   });
 });
 
+/** A persisted `llm` turn row, as `persistStep` now writes one. */
+function llmRow(over: Partial<{ ts: string; prompt: number; completion: number; finishReason: string; textChars: number }> = {}): BrainMessage {
+  seq += 1;
+  const ts = over.ts ?? '2026-07-12T13:36:30.000Z';
+  return {
+    id: seq,
+    role: 'tool',
+    content: '',
+    seq,
+    createdAt: ts,
+    metadata: JSON.stringify({
+      kind: 'step',
+      category: 'llm',
+      label: 'llm.complete',
+      args: { model: 'xai-oauth/grok-4.3', step: 0, toolCalls: 2 },
+      result: '2 tool call(s)',
+      usage: { prompt: over.prompt ?? 41_233, completion: over.completion ?? 620 },
+      finishReason: over.finishReason ?? 'tool_calls',
+      textChars: over.textChars ?? 120,
+      ts,
+    }),
+  };
+}
+
 describe('computeBrainDiagnostics over a reopened chat', () => {
   it('counts the tool calls a reload left only in the messages', () => {
     const messages = [
@@ -104,6 +130,35 @@ describe('computeBrainDiagnostics over a reopened chat', () => {
     const merged = computeBrainDiagnostics(traceWithPersistedSteps(messages, [llmEvent]));
     expect(merged.toolCalls).toBe(3);
     expect(merged.toolResultBytes).toBeGreaterThan(0);
+  });
+
+  it('recovers turns and token usage from persisted llm rows', () => {
+    const messages = [turn('user', 'go'), llmRow(), llmRow({ ts: '2026-07-12T13:38:00.000Z', prompt: 58_000, completion: 90 })];
+
+    // Nothing in memory — the exact "copied after a reload" case.
+    const d = computeBrainDiagnostics(traceWithPersistedSteps(messages, []));
+    expect(d.turns).toBe(2);
+    expect(d.tokensMeasured).toBe(true);
+    expect(d.promptTokenPeak).toBe(58_000);
+    expect(d.completionTokenTotal).toBe(710);
+    expect(d.lastPromptTokens).toBe(58_000);
+  });
+
+  it('recovers the pre-trim payload size and truncation flag of a capped step', () => {
+    const messages = [stepRow({ resultBytes: 48_000, truncated: true })];
+    const d = computeBrainDiagnostics(traceWithPersistedSteps(messages, []));
+
+    expect(d.toolResultBytes).toBe(48_000);
+    expect(d.truncatedToolResults).toBe(1);
+    expect(d.largestToolResult?.bytes).toBe(48_000);
+    // With the real numbers restored the verdict can finally be reached.
+    expect(d.likelyCause).toBe('context-exhaustion');
+  });
+
+  it('does not double-count an llm turn present live AND persisted', () => {
+    const ts = '2026-07-12T13:36:30.000Z';
+    const live: BrainTraceEvent = { ts, category: 'llm', label: 'llm.complete', usage: { prompt: 100 } };
+    expect(computeBrainDiagnostics(traceWithPersistedSteps([llmRow({ ts })], [live])).turns).toBe(1);
   });
 });
 

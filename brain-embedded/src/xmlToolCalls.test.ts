@@ -76,3 +76,75 @@ describe('XmlToolCallFilter', () => {
     expect(JSON.parse(toolCalls[0].args)).toEqual({ id: 9 });
   });
 });
+
+describe('XmlToolCallFilter — additional inline dialects', () => {
+  it('lifts a <function_call> JSON call and strips the markup', () => {
+    const raw = 'Working on it.<function_call>{"name":"delete_task","arguments":{"id":75}}</function_call>';
+    const { text, toolCalls } = extractXmlToolCalls(raw);
+    expect(text).toBe('Working on it.');
+    expect(toolCalls[0].name).toBe('delete_task');
+    expect(JSON.parse(toolCalls[0].args)).toEqual({ id: 75 });
+  });
+
+  it('lifts a <tool_use> name-then-JSON call', () => {
+    const { text, toolCalls } = extractXmlToolCalls('<tool_use>delete_task {"id":75}</tool_use>done');
+    expect(text).toBe('done');
+    expect(toolCalls[0].name).toBe('delete_task');
+    expect(JSON.parse(toolCalls[0].args)).toEqual({ id: 75 });
+  });
+
+  it('lifts an <invoke name="…"> call with <parameter> arguments', () => {
+    const raw = '<invoke name="builtin_tasks_update"><parameter name="id">322</parameter><parameter name="status">in_progress</parameter></invoke>';
+    const { text, toolCalls } = extractXmlToolCalls(raw);
+    expect(text).toBe('');
+    expect(toolCalls[0].name).toBe('builtin_tasks_update');
+    expect(JSON.parse(toolCalls[0].args)).toEqual({ id: 322, status: 'in_progress' });
+  });
+
+  it('lifts the Llama-style <function=name>{…}</function> call', () => {
+    const { toolCalls } = extractXmlToolCalls('<function=delete_task>{"id":75}</function>');
+    expect(toolCalls[0].name).toBe('delete_task');
+    expect(JSON.parse(toolCalls[0].args)).toEqual({ id: 75 });
+  });
+
+  it('accepts <parameter> arguments inside a <tool_call> body too', () => {
+    const raw = '<tool_call>delete_task<parameter name="id">75</parameter></tool_call>';
+    const { toolCalls } = extractXmlToolCalls(raw);
+    expect(toolCalls[0].name).toBe('delete_task');
+    expect(JSON.parse(toolCalls[0].args)).toEqual({ id: 75 });
+  });
+
+  it('handles an <invoke> open tag split across stream chunks', () => {
+    const f = new XmlToolCallFilter();
+    let out = '';
+    for (const chunk of ['Calling ', '<invoke na', 'me="delete_task"><para', 'meter name="id">9</parameter></invoke>', ' now']) {
+      out += f.push(chunk);
+    }
+    out += f.flush();
+    expect(out).toBe('Calling  now');
+    expect(f.toolCalls()).toHaveLength(1);
+    expect(f.toolCalls()[0].name).toBe('delete_task');
+    expect(JSON.parse(f.toolCalls()[0].args)).toEqual({ id: 9 });
+  });
+
+  it('lifts several calls of DIFFERENT dialects from one stream', () => {
+    const raw = '<tool_call>a</tool_call>mid<function=b>{"x":1}</function><invoke name="c"></invoke>';
+    const { text, toolCalls } = extractXmlToolCalls(raw);
+    expect(text).toBe('mid');
+    expect(toolCalls.map((c) => c.name)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('leaves ordinary prose containing angle brackets alone', () => {
+    const raw = 'Use <div> for layout and compare a < b; invoked functions are fine.';
+    const { text, toolCalls } = extractXmlToolCalls(raw);
+    expect(text).toBe(raw);
+    expect(toolCalls).toEqual([]);
+  });
+
+  it('does NOT swallow a fenced json block (legitimate content)', () => {
+    const raw = 'Here is the payload:\n```json\n{"name":"delete_task","arguments":{"id":75}}\n```';
+    const { text, toolCalls } = extractXmlToolCalls(raw);
+    expect(text).toBe(raw);
+    expect(toolCalls).toEqual([]);
+  });
+});
