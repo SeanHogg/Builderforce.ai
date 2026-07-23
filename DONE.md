@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-07-23 — ✅ RESOLVED: Brain diagnostics coverage + verdict honesty (brain-embedded · brain-ui · vscode)
+
+Follow-up to the triage fixes below, from a re-copied transcript of the same chat (#58). The step-recovery fix worked — the block went from `Tool calls: 0 · Tool results: 0 B` to `Tool calls: 44 · Tool results: 66.4 KB` on the very same conversation — but it exposed two ways the block still read as broken.
+
+- **`Turns: 2 · Tool calls: 44` looked like corrupt data.** Tool steps have always been persisted; `llm` turns only became durable in the change below. So a chat that predates it recovers its whole tool chain from history while its turn/token figures cover only the current session — and the two were printed side by side as if they were one run's totals. `traceWithPersistedSteps` now marks reconstructed events `recovered: true`, `computeBrainDiagnostics` derives `turnCoveragePartial` from it (tool steps recovered, no turn recovered), and the renderer labels the affected lines `Turns (this session):` / `Tokens (this session):` plus an explicit `Coverage:` note telling the reader to send a new turn for a fully-measured run.
+- **A clean run was reported as `Inconclusive`.** The verdict had three values and used `inconclusive` as the catch-all for both "there IS a failure but the signals don't separate context-exhaustion from model-degradation" and "nothing went wrong at all" — so a run with 0 errors, no truncation and a 9 K prompt peak read as an unsolved problem. Added a distinct `healthy` verdict ("No failure signal — nothing here needs triaging"), gated on `didWork` so an empty run is never called healthy; `inconclusive` now means only what its name says.
+- Files: `brain-embedded/src/{brainTriage,persistedSteps}.ts` + `persistedSteps.test.ts` (6 new cases). brain-embedded 2026.7.45 · brain-ui 2026.7.37 · VSIX 2026.7.96 (`clients/vscode/builderforce-ai-2026.7.96.vsix`).
+
+---
+
 ## 2026-07-23 — ✅ RESOLVED: VSIX Brain triage — silent task corruption, invisible autonomy, blind diagnostics (api · brain-embedded · brain-ui · vscode)
 
 Triaged from a pasted VS Code Brain transcript (chat #58, project #11) that reported "tool calling and agent execution isn't executing" alongside a Diagnostics block reading `Turns: 3 · Tool calls: 0`, `Tokens: not reported by the gateway`, `Likely cause: Inconclusive` — under a transcript that visibly contained ~20 successful tool calls. Four distinct defects, each reproduced in the transcript itself.

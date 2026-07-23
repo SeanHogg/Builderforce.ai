@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseStepMessage, stepSig, traceWithPersistedSteps } from './persistedSteps';
-import { computeBrainDiagnostics, type BrainTraceEvent } from './brainTriage';
+import { computeBrainDiagnostics, formatBrainDiagnostics, type BrainTraceEvent } from './brainTriage';
 import type { BrainMessage } from './types';
 
 let seq = 0;
@@ -167,5 +167,67 @@ describe('stepSig', () => {
     expect(stepSig('tool', 'a', '2026-01-01')).toBe(stepSig('tool', 'a', '2026-01-01'));
     expect(stepSig('tool', 'a', '2026-01-01')).not.toBe(stepSig('tool', 'a', '2026-01-02'));
     expect(stepSig('tool', 'a', undefined)).not.toBe(stepSig('recall', 'a', undefined));
+  });
+});
+
+describe('coverage honesty — the "Turns: 2 · Tool calls: 44" case', () => {
+  it('flags partial turn coverage when tool steps are recovered but no turn is', () => {
+    // A chat whose tool chain predates durable turn records: 3 recovered tool
+    // steps from history, 1 live turn from this session.
+    const messages = [
+      turn('user', 'Review all the tasks with a successful PR build'),
+      stepRow({ label: 'builtin_repos_list_pull_requests' }),
+      stepRow({ label: 'builtin_tasks_list' }),
+      stepRow({ label: 'builtin_tasks_update' }),
+    ];
+    const d = computeBrainDiagnostics(traceWithPersistedSteps(messages, [llmEvent]));
+
+    expect(d.turnCoveragePartial).toBe(true);
+    expect(d.turns).toBe(1);
+    expect(d.toolCalls).toBe(3);
+
+    const rendered = formatBrainDiagnostics(d).join('\n');
+    expect(rendered).toContain('Turns (this session): 1');
+    expect(rendered).toContain('Coverage:');
+  });
+
+  it('does NOT flag coverage when the turns were recovered alongside the tools', () => {
+    const messages = [llmRow(), stepRow(), stepRow({ label: 'builtin_tasks_list' })];
+    const d = computeBrainDiagnostics(traceWithPersistedSteps(messages, []));
+
+    expect(d.turnCoveragePartial).toBe(false);
+    expect(formatBrainDiagnostics(d).join('\n')).not.toContain('Coverage:');
+  });
+
+  it('does NOT flag coverage for an entirely live run', () => {
+    const live: BrainTraceEvent[] = [
+      llmEvent,
+      { ts: '2026-07-12T13:37:00.000Z', category: 'tool', label: 'builtin_tasks_list', result: { ok: true } },
+    ];
+    expect(computeBrainDiagnostics(traceWithPersistedSteps([], live)).turnCoveragePartial).toBe(false);
+  });
+
+  it('calls a clean run HEALTHY instead of inconclusive', () => {
+    // The exact shape of the pasted run: 44 tool calls, 0 errors, low tokens,
+    // nothing truncated. There is no failure to attribute.
+    const live: BrainTraceEvent[] = [
+      { ...llmEvent, usage: { prompt: 9_226, completion: 1_364 }, finishReason: 'tool_calls' },
+      { ts: '2026-07-12T13:37:00.000Z', category: 'tool', label: 'builtin_tasks_list', result: { ok: true }, resultBytes: 3_900 },
+    ];
+    const d = computeBrainDiagnostics(live);
+
+    expect(d.likelyCause).toBe('healthy');
+    expect(formatBrainDiagnostics(d)[1]).toContain('No failure signal');
+  });
+
+  it('still says inconclusive when something DID fail but the signals do not separate A from B', () => {
+    const live: BrainTraceEvent[] = [
+      { ts: '2026-07-12T13:36:00.000Z', category: 'llm', label: 'llm.complete', textChars: 0, finishReason: 'stop', usage: { prompt: 500 } },
+    ];
+    expect(computeBrainDiagnostics(live).likelyCause).toBe('inconclusive');
+  });
+
+  it('does not call an empty run healthy — doing nothing is not evidence of health', () => {
+    expect(computeBrainDiagnostics([]).likelyCause).toBe('inconclusive');
   });
 });

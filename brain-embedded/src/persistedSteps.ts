@@ -117,6 +117,7 @@ export function traceWithPersistedSteps(messages: BrainMessage[], trace: BrainTr
     const s = parsed.step;
     fromMessages.push({
       ts: parsed.tsIso ?? message.createdAt ?? '',
+      recovered: true,
       category: s.category as BrainTraceEvent['category'],
       label: s.label,
       args: s.args,
