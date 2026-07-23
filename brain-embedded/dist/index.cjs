@@ -1918,12 +1918,16 @@ function provenanceMetadata(result) {
   const account = a === "own" || a === "shared" || a === "shared_byo_unused" ? a : void 0;
   return withProvenanceMetadata({ model, ...account ? { account } : {} });
 }
+var ANNOUNCE_SUBJECT = "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
+var ANNOUNCE_FILLER = "(?:\\s+(?:now|then|first|next|quickly|briefly|just|also|actually|go ahead and|try to|attempt to))*";
+var ANNOUNCE_VERB = "(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|see|walk|trace|map)";
+var ANNOUNCE_GERUND = "(?:searching|fetching|retrieving|querying|loading|checking|looking|scanning|reading|listing|gathering|pulling|examining|inspecting|reviewing|analy[sz]ing)";
 var ANNOUNCED_ACTION = new RegExp(
   [
     "calling (the|this|that|a|it|them|these) [\\w\\s-]*?(tool|function|api|now)",
-    "(i will|i'll|let me|going to|about to|now) (call|use|invoke|run|query|fetch|retrieve|look ?up|pull|check|get)\\b",
+    `${ANNOUNCE_SUBJECT}${ANNOUNCE_FILLER}\\s+${ANNOUNCE_VERB}\\b`,
     "(one|just a) (moment|second|sec)\\b",
-    "(fetching|retrieving|querying|loading|checking) (it|that|this|the data|now)\\b",
+    `${ANNOUNCE_GERUND} (it|that|this|these|those|the [\\w-]+|now|for)\\b`,
     "stand ?by\\b"
   ].join("|"),
   "i"
@@ -1935,6 +1939,7 @@ function announcesUntakenAction(text) {
   return ANNOUNCED_ACTION.test(tail);
 }
 var MAX_TOOL_ITERATIONS = 25;
+var MAX_ANNOUNCEMENT_RECOVERIES = 3;
 var HISTORY_WINDOW = 80;
 var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files"]);
 var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isReadOnlyPlatformTool(name);
@@ -2492,7 +2497,7 @@ ${extra}`;
 
 ${chatWorkLinkingDirective(chatId)}`;
   const readDedupe = /* @__PURE__ */ new Set();
-  let usedAnnouncementRecovery = false;
+  let announcementRecoveries = 0;
   const emitEvermindLearnReconcile = (assistantMsg, finalText) => {
     const learn = assistantMsg?.evermindLearn;
     if (learn?.learned) {
@@ -2702,8 +2707,9 @@ ${chatWorkLinkingDirective(chatId)}`;
       }
       continue;
     }
-    if (runTool && (toolSpecs?.length ?? 0) > 0 && !usedAnnouncementRecovery && announcesUntakenAction(result.text)) {
-      usedAnnouncementRecovery = true;
+    if (runTool && (toolSpecs?.length ?? 0) > 0 && announcementRecoveries < MAX_ANNOUNCEMENT_RECOVERIES && announcesUntakenAction(result.text)) {
+      announcementRecoveries += 1;
+      const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
       const narration = result.text.trim();
       if (narration) {
         const meta = provenanceMetadata(result);
@@ -2713,14 +2719,14 @@ ${chatWorkLinkingDirective(chatId)}`;
       convo.push({ role: "assistant", content: result.text });
       convo.push({
         role: "user",
-        content: "You said you would call a tool but did not actually call one \u2014 your last turn made zero tool calls. Make the call NOW in this turn, then answer using its result. If no tool can give you that data, say plainly which data you are missing and answer with what you already have. Do not announce another call."
+        content: "You said you would call a tool but did not actually call one \u2014 your last turn made zero tool calls. Make the call NOW in this turn, then answer using its result. If no tool can give you that data, say plainly which data you are missing and answer with what you already have. Do not announce another call." + (lastChance ? " This is your last chance to act: you have now stated an intention without acting several times in a row. Either emit a tool call in this turn, or give your complete final answer from what you already know \u2014 an answer that only describes what you are about to do will be shown to the user as-is." : "")
       });
       pushTrace(c, {
         ts: nowIso(),
         category: "message",
         label: "loop.recover_announced_tool_call",
-        args: { step: iter },
-        result: "Model announced a tool call without making one \u2014 re-prompted once."
+        args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES },
+        result: `Model announced a tool call without making one \u2014 re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
       });
       c.streamingText = "";
       emit(c);
