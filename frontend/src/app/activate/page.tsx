@@ -2,12 +2,13 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { AUTH_API_URL, getStoredWebToken } from '@/lib/auth';
 
 type Mode = 'device' | 'key';
 type Phase =
   | 'loading'
-  | 'need-login'
+  | 'redirecting' // no session — bouncing to /login and back
   | 'confirm' // device: awaiting approve/deny
   | 'working'
   | 'approved' // device approved
@@ -18,6 +19,7 @@ type Phase =
 function ActivateInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const t = useTranslations('activate');
   const code = (searchParams.get('code') ?? '').trim();
   const mode: Mode = code ? 'device' : 'key';
 
@@ -26,23 +28,31 @@ function ActivateInner() {
   const [key, setKey] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // Signed-out visitors are sent straight to sign-in and returned here afterwards.
+  // `next` is the param /login honours (a `redirect` param is ignored, which used to
+  // drop the user on /dashboard and abandon the editor activation).
   useEffect(() => {
     const token = getStoredWebToken();
     if (!token) {
-      setPhase('need-login');
+      setPhase('redirecting');
+      const back = mode === 'device' ? `/activate?code=${encodeURIComponent(code)}` : '/activate';
+      router.replace(`/login?next=${encodeURIComponent(back)}`);
       return;
     }
     setPhase(mode === 'device' ? 'confirm' : 'loading');
-  }, [mode]);
+  }, [mode, code, router]);
 
-  function goLogin() {
-    const back = mode === 'device' ? `/activate?code=${code}` : '/activate';
-    router.push(`/login?redirect=${encodeURIComponent(back)}`);
+  function humanError(errCode: string | undefined, status: number, decision?: 'approve' | 'deny'): string {
+    if (errCode === 'no_tenant') return t('errorNoTenant');
+    if (errCode === 'already_resolved') return t('errorAlreadyResolved');
+    if (decision === 'approve') return t('errorApprove', { status });
+    if (decision === 'deny') return t('errorDeny', { status });
+    return t('errorCreateKey', { status });
   }
 
   async function decide(decision: 'approve' | 'deny') {
     const token = getStoredWebToken();
-    if (!token) return setPhase('need-login');
+    if (!token) return setPhase('redirecting');
     setPhase('working');
     try {
       const res = await fetch(`${AUTH_API_URL}/api/auth/device/approve`, {
@@ -58,14 +68,14 @@ function ActivateInner() {
       }
       setPhase(decision === 'approve' ? 'approved' : 'denied');
     } catch {
-      setError('Network error. Please try again.');
+      setError(t('errorNetwork'));
       setPhase('error');
     }
   }
 
   async function createKey() {
     const token = getStoredWebToken();
-    if (!token) return setPhase('need-login');
+    if (!token) return setPhase('redirecting');
     setPhase('working');
     try {
       const res = await fetch(`${AUTH_API_URL}/api/auth/editor-key`, {
@@ -81,14 +91,14 @@ function ActivateInner() {
       }
       const b = (await res.json()) as { access_key?: string };
       if (!b.access_key) {
-        setError('No key returned. Please try again.');
+        setError(t('errorNoKey'));
         setPhase('error');
         return;
       }
       setKey(b.access_key);
       setPhase('key-ready');
     } catch {
-      setError('Network error. Please try again.');
+      setError(t('errorNetwork'));
       setPhase('error');
     }
   }
@@ -112,46 +122,34 @@ function ActivateInner() {
   return (
     <main style={styles.wrap}>
       <div style={styles.card}>
-        <h1 style={styles.h1}>Connect your editor</h1>
+        <h1 style={styles.h1}>{t('title')}</h1>
 
-        {phase === 'loading' && <p style={styles.muted}>Loading…</p>}
-        {phase === 'working' && <p style={styles.muted}>Working…</p>}
-
-        {phase === 'need-login' && (
-          <>
-            <p style={styles.muted}>Sign in to connect your editor.</p>
-            <button style={styles.primary} onClick={goLogin}>Sign in</button>
-          </>
-        )}
+        {phase === 'loading' && <p style={styles.muted}>{t('loading')}</p>}
+        {phase === 'working' && <p style={styles.muted}>{t('working')}</p>}
+        {phase === 'redirecting' && <p style={styles.muted}>{t('redirecting')}</p>}
 
         {phase === 'confirm' && (
           <>
-            <p style={styles.muted}>
-              Your editor is requesting access. Confirm this code matches what VS Code shows:
-            </p>
+            <p style={styles.muted}>{t('confirmIntro')}</p>
             <div style={styles.code}>{code}</div>
             <div style={styles.row}>
-              <button style={styles.primary} onClick={() => decide('approve')}>Approve</button>
-              <button style={styles.secondary} onClick={() => decide('deny')}>Deny</button>
+              <button style={styles.primary} onClick={() => decide('approve')}>{t('approve')}</button>
+              <button style={styles.secondary} onClick={() => decide('deny')}>{t('deny')}</button>
             </div>
           </>
         )}
 
-        {phase === 'approved' && (
-          <p style={styles.ok}>✓ Approved. Return to VS Code — it will finish signing in automatically.</p>
-        )}
-        {phase === 'denied' && <p style={styles.muted}>Request denied. You can close this tab.</p>}
+        {phase === 'approved' && <p style={styles.ok}>{t('approved')}</p>}
+        {phase === 'denied' && <p style={styles.muted}>{t('denied')}</p>}
 
         {phase === 'key-ready' && (
           <>
-            <p style={styles.muted}>
-              Here is your editor key. Copy it and paste it into VS Code:
-            </p>
+            <p style={styles.muted}>{t('keyIntro')}</p>
             <div style={styles.keyBox}>
               <code style={styles.keyText}>{key}</code>
             </div>
-            <button style={styles.primary} onClick={copyKey}>{copied ? '✓ Copied' : 'Copy key'}</button>
-            <p style={styles.fine}>Keep this key secret. You can revoke it anytime in Settings → API Keys.</p>
+            <button style={styles.primary} onClick={copyKey}>{copied ? t('copied') : t('copyKey')}</button>
+            <p style={styles.fine}>{t('keyFine')}</p>
           </>
         )}
 
@@ -159,7 +157,7 @@ function ActivateInner() {
           <>
             <p style={styles.err}>{error}</p>
             {mode === 'key' && (
-              <button style={styles.secondary} onClick={() => setPhase('loading')}>Try again</button>
+              <button style={styles.secondary} onClick={() => setPhase('loading')}>{t('tryAgain')}</button>
             )}
           </>
         )}
@@ -168,24 +166,20 @@ function ActivateInner() {
   );
 }
 
-function humanError(code: string | undefined, status: number, decision?: 'approve' | 'deny'): string {
-  if (code === 'no_tenant') return 'Your account has no workspace yet. Create one, then try again.';
-  if (code === 'already_resolved') return 'This code was already used or has expired. Re-run sign-in from your editor.';
-  if (decision) return `Could not ${decision} the device (${status}).`;
-  return `Could not create a key (${status}).`;
+function ActivateFallback() {
+  const t = useTranslations('activate');
+  return (
+    <main style={styles.wrap}>
+      <div style={styles.card}>
+        <p style={styles.muted}>{t('loading')}</p>
+      </div>
+    </main>
+  );
 }
 
 export default function ActivatePage() {
   return (
-    <Suspense
-      fallback={
-        <main style={styles.wrap}>
-          <div style={styles.card}>
-            <p style={styles.muted}>Loading…</p>
-          </div>
-        </main>
-      }
-    >
+    <Suspense fallback={<ActivateFallback />}>
       <ActivateInner />
     </Suspense>
   );
@@ -193,16 +187,16 @@ export default function ActivatePage() {
 
 const styles: Record<string, React.CSSProperties> = {
   wrap: { minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  card: { maxWidth: 460, width: '100%', padding: 28, borderRadius: 12, border: '1px solid var(--border-subtle, #2a2f3a)', background: 'var(--bg-surface, #11151f)' },
-  h1: { margin: '0 0 12px', fontSize: 22 },
+  card: { maxWidth: 460, width: '100%', padding: 'clamp(20px, 5vw, 28px)', borderRadius: 12, border: '1px solid var(--border-subtle, #2a2f3a)', background: 'var(--bg-surface, #11151f)' },
+  h1: { margin: '0 0 12px', fontSize: 22, color: 'var(--text-primary, #f0f4ff)' },
   muted: { color: 'var(--text-secondary, #9aa4b2)', lineHeight: 1.5, margin: '0 0 16px' },
-  code: { fontFamily: 'monospace', fontSize: 28, letterSpacing: 2, textAlign: 'center', padding: '12px 0', margin: '0 0 20px', color: 'var(--text-primary, #f0f4ff)' },
+  code: { fontFamily: 'monospace', fontSize: 'clamp(20px, 6vw, 28px)', letterSpacing: 2, textAlign: 'center', padding: '12px 0', margin: '0 0 20px', color: 'var(--text-primary, #f0f4ff)', overflowWrap: 'anywhere' },
   keyBox: { padding: '12px 14px', margin: '0 0 14px', borderRadius: 8, background: 'var(--bg-deep, #0b1220)', border: '1px solid var(--border-subtle, #2a2f3a)', overflowWrap: 'anywhere' },
   keyText: { fontFamily: 'monospace', fontSize: 13, color: 'var(--text-primary, #f0f4ff)' },
-  row: { display: 'flex', gap: 12 },
-  primary: { padding: '10px 16px', borderRadius: 8, border: 'none', background: 'var(--accent, #ff6a3d)', color: '#fff', fontWeight: 600, cursor: 'pointer' },
-  secondary: { padding: '10px 16px', borderRadius: 8, border: '1px solid var(--border-subtle, #2a2f3a)', background: 'transparent', color: 'var(--text-primary, #f0f4ff)', cursor: 'pointer' },
+  row: { display: 'flex', gap: 12, flexWrap: 'wrap' },
+  primary: { padding: '10px 16px', minHeight: 44, borderRadius: 8, border: 'none', background: 'var(--accent, #ff6a3d)', color: '#fff', fontWeight: 600, cursor: 'pointer' },
+  secondary: { padding: '10px 16px', minHeight: 44, borderRadius: 8, border: '1px solid var(--border-subtle, #2a2f3a)', background: 'transparent', color: 'var(--text-primary, #f0f4ff)', cursor: 'pointer' },
   ok: { color: 'var(--text-primary, #f0f4ff)', lineHeight: 1.5 },
-  err: { color: '#f87171', lineHeight: 1.5, margin: '0 0 14px' },
+  err: { color: 'var(--error-text, #f87171)', lineHeight: 1.5, margin: '0 0 14px' },
   fine: { color: 'var(--text-muted, #6b7280)', fontSize: 12, margin: '14px 0 0', lineHeight: 1.5 },
 };

@@ -10329,5 +10329,28 @@
     "cancel": "Cancelar",
     "submit": "Reportar error",
     "submitting": "Reportando…"
+  },
+  "activate": {
+    "title": "Conecta tu editor",
+    "loading": "Cargando…",
+    "working": "Procesando…",
+    "redirecting": "Te llevamos al inicio de sesión…",
+    "confirmIntro": "Tu editor solicita acceso. Confirma que este código coincide con el que muestra VS Code:",
+    "approve": "Aprobar",
+    "deny": "Denegar",
+    "approved": "✓ Aprobado. Vuelve a VS Code: terminará de iniciar sesión automáticamente.",
+    "denied": "Solicitud denegada. Puedes cerrar esta pestaña.",
+    "keyIntro": "Esta es tu clave de editor. Cópiala y pégala en VS Code:",
+    "copyKey": "Copiar clave",
+    "copied": "✓ Copiada",
+    "keyFine": "Mantén esta clave en secreto. Puedes revocarla cuando quieras en Ajustes → Claves de API.",
+    "tryAgain": "Reintentar",
+    "errorNoTenant": "Tu cuenta aún no tiene espacio de trabajo. Crea uno e inténtalo de nuevo.",
+    "errorAlreadyResolved": "Este código ya se usó o ha caducado. Vuelve a iniciar sesión desde tu editor.",
+    "errorApprove": "No se pudo aprobar el dispositivo ({status}).",
+    "errorDeny": "No se pudo denegar el dispositivo ({status}).",
+    "errorCreateKey": "No se pudo crear la clave ({status}).",
+    "errorNetwork": "Error de red. Inténtalo de nuevo.",
+    "errorNoKey": "No se devolvió ninguna clave. Inténtalo de nuevo."
   }
 }

@@ -10329,5 +10329,28 @@
     "cancel": "Abbrechen",
     "submit": "Fehler melden",
     "submitting": "Wird gemeldet…"
+  },
+  "activate": {
+    "title": "Editor verbinden",
+    "loading": "Wird geladen…",
+    "working": "Wird bearbeitet…",
+    "redirecting": "Weiterleitung zur Anmeldung…",
+    "confirmIntro": "Dein Editor fordert Zugriff an. Prüfe, ob dieser Code mit dem in VS Code angezeigten übereinstimmt:",
+    "approve": "Genehmigen",
+    "deny": "Ablehnen",
+    "approved": "✓ Genehmigt. Kehre zu VS Code zurück – die Anmeldung wird automatisch abgeschlossen.",
+    "denied": "Anfrage abgelehnt. Du kannst diesen Tab schließen.",
+    "keyIntro": "Hier ist dein Editor-Schlüssel. Kopiere ihn und füge ihn in VS Code ein:",
+    "copyKey": "Schlüssel kopieren",
+    "copied": "✓ Kopiert",
+    "keyFine": "Halte diesen Schlüssel geheim. Du kannst ihn jederzeit unter Einstellungen → API-Schlüssel widerrufen.",
+    "tryAgain": "Erneut versuchen",
+    "errorNoTenant": "Dein Konto hat noch keinen Workspace. Erstelle einen und versuche es erneut.",
+    "errorAlreadyResolved": "Dieser Code wurde bereits verwendet oder ist abgelaufen. Starte die Anmeldung im Editor neu.",
+    "errorApprove": "Gerät konnte nicht genehmigt werden ({status}).",
+    "errorDeny": "Gerät konnte nicht abgelehnt werden ({status}).",
+    "errorCreateKey": "Schlüssel konnte nicht erstellt werden ({status}).",
+    "errorNetwork": "Netzwerkfehler. Bitte versuche es erneut.",
+    "errorNoKey": "Kein Schlüssel zurückgegeben. Bitte versuche es erneut."
   }
 }

@@ -273,7 +273,7 @@ function PendingQuestionBanner({
 }
 
 // src/timelineModel.ts
-import { isStepMessage } from "@seanhogg/builderforce-brain-embedded";
+import { isStepMessage, parseStepMessage, stepSig } from "@seanhogg/builderforce-brain-embedded";
 var LEARN_SKIP_REASONS = ["not-attached", "not-seeded", "frozen"];
 function isLearnSkipReason(v) {
   return typeof v === "string" && LEARN_SKIP_REASONS.includes(v);
@@ -316,9 +316,6 @@ function buildTimeline(input) {
   if (streaming) nodes.push(streaming);
   return nodes;
 }
-function stepSig(category, label, tsIso) {
-  return `${category}|${label}|${tsIso ?? ""}`;
-}
 function stepNode(step, ts, key) {
   switch (step.category) {
     case "tool":
@@ -341,19 +338,6 @@ function stepNode(step, ts, key) {
     }
     default:
       return null;
-  }
-}
-function parseStepMessage(metadata) {
-  if (!metadata) return null;
-  try {
-    const m = JSON.parse(metadata);
-    if (m.kind !== "step" || typeof m.category !== "string") return null;
-    return {
-      step: { category: m.category, label: typeof m.label === "string" ? m.label : m.category, args: m.args, result: m.result, isError: m.isError, durationMs: m.durationMs },
-      tsIso: typeof m.ts === "string" ? m.ts : void 0
-    };
-  } catch {
-    return null;
   }
 }
 function buildSettledTimeline(messages, trace) {

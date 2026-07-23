@@ -444,10 +444,14 @@ export async function streamChatCompletion(
     }
   }
 
+  // Stream ended without an explicit `[DONE]` frame (the provider closed the body).
+  // Same result shape as the `[DONE]` path above — `providerCap` was missing here,
+  // so a BYO usage cap hit on such a stream never reached the "manage your keys"
+  // banner.
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), usage };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
 }
 
 function assemble(acc: Map<number, { id: string; name: string; args: string }>): AssembledToolCall[] {
