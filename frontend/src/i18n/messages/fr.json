@@ -10329,5 +10329,28 @@
     "cancel": "Annuler",
     "submit": "Signaler l'erreur",
     "submitting": "Envoi…"
+  },
+  "activate": {
+    "title": "Connectez votre éditeur",
+    "loading": "Chargement…",
+    "working": "Traitement…",
+    "redirecting": "Redirection vers la connexion…",
+    "confirmIntro": "Votre éditeur demande un accès. Vérifiez que ce code correspond à celui affiché dans VS Code :",
+    "approve": "Approuver",
+    "deny": "Refuser",
+    "approved": "✓ Approuvé. Retournez dans VS Code : la connexion se terminera automatiquement.",
+    "denied": "Demande refusée. Vous pouvez fermer cet onglet.",
+    "keyIntro": "Voici votre clé d’éditeur. Copiez-la et collez-la dans VS Code :",
+    "copyKey": "Copier la clé",
+    "copied": "✓ Copiée",
+    "keyFine": "Gardez cette clé secrète. Vous pouvez la révoquer à tout moment dans Paramètres → Clés API.",
+    "tryAgain": "Réessayer",
+    "errorNoTenant": "Votre compte n’a pas encore d’espace de travail. Créez-en un, puis réessayez.",
+    "errorAlreadyResolved": "Ce code a déjà été utilisé ou a expiré. Relancez la connexion depuis votre éditeur.",
+    "errorApprove": "Impossible d’approuver l’appareil ({status}).",
+    "errorDeny": "Impossible de refuser l’appareil ({status}).",
+    "errorCreateKey": "Impossible de créer une clé ({status}).",
+    "errorNetwork": "Erreur réseau. Veuillez réessayer.",
+    "errorNoKey": "Aucune clé renvoyée. Veuillez réessayer."
   }
 }

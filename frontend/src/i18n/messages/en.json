@@ -10331,5 +10331,28 @@
     "cancel": "Cancel",
     "submit": "Report error",
     "submitting": "Reporting…"
+  },
+  "activate": {
+    "title": "Connect your editor",
+    "loading": "Loading…",
+    "working": "Working…",
+    "redirecting": "Taking you to sign in…",
+    "confirmIntro": "Your editor is requesting access. Confirm this code matches what VS Code shows:",
+    "approve": "Approve",
+    "deny": "Deny",
+    "approved": "✓ Approved. Return to VS Code — it will finish signing in automatically.",
+    "denied": "Request denied. You can close this tab.",
+    "keyIntro": "Here is your editor key. Copy it and paste it into VS Code:",
+    "copyKey": "Copy key",
+    "copied": "✓ Copied",
+    "keyFine": "Keep this key secret. You can revoke it anytime in Settings → API Keys.",
+    "tryAgain": "Try again",
+    "errorNoTenant": "Your account has no workspace yet. Create one, then try again.",
+    "errorAlreadyResolved": "This code was already used or has expired. Re-run sign-in from your editor.",
+    "errorApprove": "Could not approve the device ({status}).",
+    "errorDeny": "Could not deny the device ({status}).",
+    "errorCreateKey": "Could not create a key ({status}).",
+    "errorNetwork": "Network error. Please try again.",
+    "errorNoKey": "No key returned. Please try again."
   }
 }
