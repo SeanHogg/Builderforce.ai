@@ -25,12 +25,52 @@ describe('announcesUntakenAction', () => {
     for (const s of stalls) expect(announcesUntakenAction(s), s).toBe(true);
   });
 
+  /**
+   * Regression: the verb list used to be call/use/invoke/run/query/fetch/retrieve/
+   * look up/pull/check/get, so EVERY line below scored false and the run loop
+   * accepted the announcement as a final answer — the reported "the agent says it
+   * will search and then just stops".
+   */
+  it('matches the stall verbs the narrow list missed', () => {
+    const stalls = [
+      "I'll search the codebase for the handler.",
+      'Let me search for where that is wired.',
+      "I'll review the tasks with successful PR builds. Let me start by looking at the pull requests.",
+      'Let me look at a few more file-change sets.',
+      'Let me find the coder and tester agents in the roster.',
+      'Let me verify these 8 are the doc-only ones.',
+      'Let me do that now.',
+      'Let me first understand the pattern by examining a couple of these PRs. Let me examine them.',
+      "I'll take a look at the migrations.",
+      "Let's dig into the execution history.",
+      "I'll go ahead and list the open pull requests.",
+      'Searching for the failing spec now.',
+    ];
+    for (const s of stalls) expect(announcesUntakenAction(s), s).toBe(true);
+  });
+
   it('does NOT match a complete answer that merely mentions checking something', () => {
     const answers = [
       'Let me know if you want a different chart type.',
       'The build failed because the token expired. Check the gateway logs for the 401.',
       'You can call the tasks API yourself with the ingest key.',
       'I do not have the task status data for project 11.',
+    ];
+    for (const a of answers) expect(announcesUntakenAction(a), a).toBe(false);
+  });
+
+  /**
+   * The broadened verb list leans on the SUBJECT to discriminate: a first-person
+   * commitment is a stall, the same verb aimed at the user is a finished answer.
+   * These pin that boundary.
+   */
+  it('does NOT match an action the USER is being told to take', () => {
+    const answers = [
+      'Search the audit log for the revoked token to confirm the window.',
+      'You should review PR #302 before merging — it only changes PRD.md.',
+      'To reproduce, run the migration and then look at the 0297 table.',
+      'The next step is to find the orphaned tickets and reassign them.',
+      'Let me know once the coder agent finishes and I can verify the diff.',
     ];
     for (const a of answers) expect(announcesUntakenAction(a), a).toBe(false);
   });
