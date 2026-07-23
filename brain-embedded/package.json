@@ -73,6 +73,7 @@
     "react-dom": "^18.3.1",
     "tsup": "^8.5.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.0.3"
+    "vitest": "^4.0.3",
+    "@builderforce/agent-stall": "link:../packages/agent-stall"
   }
 }

@@ -1,4 +1,4 @@
-import * as react from 'react';
+import * as react_jsx_runtime from 'react/jsx-runtime';
 import { ChatErrorAction } from './chatError.cjs';
 export { BrainRequestError, ChatErrorActionKind, brainRequestError, chatErrorAction } from './chatError.cjs';
 
@@ -527,7 +527,7 @@ interface BrainRuntime {
 declare function BrainProvider({ config, children, }: {
     config: BrainConfig;
     children: React.ReactNode;
-}): react.JSX.Element;
+}): react_jsx_runtime.JSX.Element;
 /** Consume the resolved brain runtime. Throws if no BrainProvider is mounted. */
 declare function useBrainConfig(): BrainRuntime;
 
@@ -680,7 +680,7 @@ interface BrainActionsContextValue {
 }
 declare function BrainActionsProvider({ children }: {
     children: React.ReactNode;
-}): react.JSX.Element;
+}): react_jsx_runtime.JSX.Element;
 /** Consume the registry (used by the Brain panel/conversation hook). */
 declare function useBrainActions(): BrainActionsContextValue;
 /**
@@ -776,7 +776,7 @@ interface BrainContextValue extends BrainPageContext {
 }
 declare function BrainContextProvider({ children }: {
     children: React.ReactNode;
-}): react.JSX.Element;
+}): react_jsx_runtime.JSX.Element;
 /** Read/update the ambient Brain context. Throws if no provider is mounted. */
 declare function useBrainContext(): BrainContextValue;
 /**

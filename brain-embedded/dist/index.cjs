@@ -1910,14 +1910,7 @@ function chatWorkLinkingDirective(chatId) {
 \u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.`;
 }
 
-// src/brainRunStore.ts
-function provenanceMetadata(result) {
-  const model = result.resolvedModel;
-  if (!model) return void 0;
-  const a = result.account;
-  const account = a === "own" || a === "shared" || a === "shared_byo_unused" ? a : void 0;
-  return withProvenanceMetadata({ model, ...account ? { account } : {} });
-}
+// ../packages/agent-stall/src/index.ts
 var ANNOUNCE_SUBJECT = "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
 var ANNOUNCE_FILLER = "(?:\\s+(?:now|then|first|next|quickly|briefly|just|also|actually|go ahead and|try to|attempt to))*";
 var ANNOUNCE_VERB = "(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|see|walk|trace|map)";
@@ -1932,14 +1925,29 @@ var ANNOUNCED_ACTION = new RegExp(
   ].join("|"),
   "i"
 );
+var TAIL_CHARS = 240;
 function announcesUntakenAction(text) {
   const t = text.trim();
   if (!t) return false;
-  const tail = t.slice(-240);
-  return ANNOUNCED_ACTION.test(tail);
+  return ANNOUNCED_ACTION.test(t.slice(-TAIL_CHARS));
+}
+var MAX_ANNOUNCEMENT_RECOVERIES = 3;
+function stallRecoveryNudge(lastChance) {
+  return "You said you would call a tool but did not actually call one \u2014 your last turn made zero tool calls. Make the call NOW in this turn, then answer using its result. If no tool can give you that data, say plainly which data you are missing and answer with what you already have. Do not announce another call." + (lastChance ? " This is your last chance to act: you have now stated an intention without acting several times in a row. Either emit a tool call in this turn, or give your complete final answer from what you already know \u2014 an answer that only describes what you are about to do will be shown to the user as-is." : "");
+}
+function shouldRecoverStalledTurn(input) {
+  return input.toolCallCount === 0 && input.availableToolCount > 0 && input.recoveriesUsed < MAX_ANNOUNCEMENT_RECOVERIES && announcesUntakenAction(input.text);
+}
+
+// src/brainRunStore.ts
+function provenanceMetadata(result) {
+  const model = result.resolvedModel;
+  if (!model) return void 0;
+  const a = result.account;
+  const account = a === "own" || a === "shared" || a === "shared_byo_unused" ? a : void 0;
+  return withProvenanceMetadata({ model, ...account ? { account } : {} });
 }
 var MAX_TOOL_ITERATIONS = 25;
-var MAX_ANNOUNCEMENT_RECOVERIES = 3;
 var HISTORY_WINDOW = 80;
 var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files"]);
 var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isReadOnlyPlatformTool(name);
@@ -2707,7 +2715,12 @@ ${chatWorkLinkingDirective(chatId)}`;
       }
       continue;
     }
-    if (runTool && (toolSpecs?.length ?? 0) > 0 && announcementRecoveries < MAX_ANNOUNCEMENT_RECOVERIES && announcesUntakenAction(result.text)) {
+    if (runTool && shouldRecoverStalledTurn({
+      text: result.text,
+      toolCallCount: result.toolCalls.length,
+      availableToolCount: toolSpecs?.length ?? 0,
+      recoveriesUsed: announcementRecoveries
+    })) {
       announcementRecoveries += 1;
       const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
       const narration = result.text.trim();
@@ -2717,10 +2730,7 @@ ${chatWorkLinkingDirective(chatId)}`;
         recordAppended(c, narrationMsg);
       }
       convo.push({ role: "assistant", content: result.text });
-      convo.push({
-        role: "user",
-        content: "You said you would call a tool but did not actually call one \u2014 your last turn made zero tool calls. Make the call NOW in this turn, then answer using its result. If no tool can give you that data, say plainly which data you are missing and answer with what you already have. Do not announce another call." + (lastChance ? " This is your last chance to act: you have now stated an intention without acting several times in a row. Either emit a tool call in this turn, or give your complete final answer from what you already know \u2014 an answer that only describes what you are about to do will be shown to the user as-is." : "")
-      });
+      convo.push({ role: "user", content: stallRecoveryNudge(lastChance) });
       pushTrace(c, {
         ts: nowIso(),
         category: "message",

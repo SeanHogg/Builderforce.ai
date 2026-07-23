@@ -2,7 +2,12 @@
   "compilerOptions": {
     "allowImportingTsExtensions": true,
     "allowSyntheticDefaultImports": true,
-    "declaration": true,
+    // NOT `declaration` here: this config is `noEmit`, and declaration+outDir made TS
+    // infer a rootDir of `agent-runtime/`, so every cross-package source import
+    // (`@builderforce/agent-tools`, `@builderforce/tui`, `@builderforce/agent-stall`)
+    // raised TS6059 "not under rootDir" on a typecheck that emits nothing. The real
+    // declaration build is `tsconfig.plugin-sdk.dts.json`, which sets its own
+    // `declaration`/`rootDir`/`outDir` and is unaffected.
     "esModuleInterop": true,
     "experimentalDecorators": true,
     "forceConsistentCasingInFileNames": true,
@@ -12,6 +17,7 @@
     "noEmit": true,
     "noEmitOnError": true,
     "outDir": "dist",
+    "rootDir": "..",
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "strict": true,
@@ -23,6 +29,7 @@
       "@seanhogg/builderforce-agents/plugin-sdk/account-id": ["./src/plugin-sdk/account-id.ts"],
       "@builderforce/agent-tools": ["../packages/agent-tools/src/index.ts"],
       "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"],
+      "@builderforce/agent-stall": ["../packages/agent-stall/src/index.ts"],
       "@builderforce/tui": ["../packages/tui/src/index.ts"],
       "@builderforce/tui/*": ["../packages/tui/src/*"]
     }
