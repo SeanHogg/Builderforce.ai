@@ -60,6 +60,13 @@ export interface BrainTraceEvent {
   resultBytes?: number;
   /** `tool` steps: true when the result sent to the model was truncated. */
   truncated?: boolean;
+  /**
+   * True when this event was RECONSTRUCTED from a durable step row rather than
+   * recorded live this session (see `persistedSteps.traceWithPersistedSteps`).
+   * Diagnostics uses it to tell a fully-observed run from a partially-recovered
+   * one, so mismatched coverage is labelled instead of silently averaged in.
+   */
+  recovered?: boolean;
 }
 
 /**
@@ -331,8 +338,21 @@ export interface BrainDiagnostics {
   downgradeEvents: number;
   /** Turns that ended on `length` or produced empty text. */
   emptyOrLengthFinishes: number;
-  /** Best-effort verdict — the header a triager reads first. */
-  likelyCause: 'context-exhaustion' | 'model-degradation' | 'inconclusive';
+  /**
+   * True when tool steps were RECOVERED from durable history but no `llm` turn
+   * covers them — i.e. the chat predates durable turn records (or was reopened),
+   * so the turn/token figures describe only this session while the tool figures
+   * describe the whole conversation. Reported so the two aren't read as one run's
+   * totals: "Turns: 2 · Tool calls: 44" is nonsense unless the mismatch is named.
+   */
+  turnCoveragePartial: boolean;
+  /**
+   * Best-effort verdict — the header a triager reads first. `healthy` is distinct
+   * from `inconclusive`: the former means there is no failure to explain, the
+   * latter that there IS one but the signals don't separate A from B. Collapsing
+   * both into "inconclusive" made a clean run read as an unsolved problem.
+   */
+  likelyCause: 'context-exhaustion' | 'model-degradation' | 'inconclusive' | 'healthy';
 }
 
 /** Byte length of a JSON-serialized value (UTF-16 length is a fine proxy here). */
@@ -395,6 +415,14 @@ export function computeBrainDiagnostics(events: BrainTraceEvent[], requestedMode
   const modelsUsed = modelsUsedInTrace(events);
   const evermindUsed = modelsUsed.filter(isEvermindModel);
 
+  // Coverage check. Tool steps are persisted durably; `llm` turns only became so
+  // later — so a chat from before that (or one reopened mid-run) recovers its tool
+  // chain from history with no turns to match. Reporting both as one run's totals
+  // is how "Turns: 2 · Tool calls: 44" happens.
+  const recoveredToolEvents = toolEvents.filter((e) => e.recovered).length;
+  const recoveredTurns = llm.filter((e) => e.recovered).length;
+  const turnCoveragePartial = recoveredToolEvents > 0 && recoveredTurns === 0;
+
   // Verdict. Context-exhaustion signals: big prompt tokens, truncated tool
   // results, or a model downgrade/length-finish. Degradation signals: an
   // Evermind model answered, tokens stayed low, and a turn was empty/failed.
@@ -404,10 +432,18 @@ export function computeBrainDiagnostics(events: BrainTraceEvent[], requestedMode
   const degradationSignal =
     evermindUsed.length > 0 && emptyOrLengthFinishes > 0 &&
     (!tokensMeasured || promptTokenPeak < 24_000) && truncatedToolResults === 0;
+  // Nothing went wrong: no errors, no aborted loop, no truncated/empty turn, and
+  // no context pressure. There is no failure to attribute — say so rather than
+  // implying an unresolved one. (A run that did NOTHING is not evidence of health,
+  // so require it to have actually produced work.)
+  const didWork = toolEvents.length > 0 || completionTokenTotal > 0 || llm.length > 0;
+  const healthy =
+    errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal && didWork;
   const likelyCause: BrainDiagnostics['likelyCause'] =
     contextSignal && !degradationSignal ? 'context-exhaustion'
       : degradationSignal && !contextSignal ? 'model-degradation'
-        : 'inconclusive';
+        : healthy ? 'healthy'
+          : 'inconclusive';
 
   return {
     turns: llm.length,
@@ -425,6 +461,7 @@ export function computeBrainDiagnostics(events: BrainTraceEvent[], requestedMode
     evermindUsed,
     downgradeEvents,
     emptyOrLengthFinishes,
+    turnCoveragePartial,
     likelyCause,
   };
 }
@@ -445,16 +482,27 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
       ? 'Likely CONTEXT EXHAUSTION (case A) — the transcript outgrew the model window.'
       : d.likelyCause === 'model-degradation'
         ? 'Likely MODEL DEGRADATION (case B) — an Evermind/SSM turn returned empty while tokens stayed low.'
-        : 'Inconclusive — not enough signal to separate context exhaustion from model degradation.';
+        : d.likelyCause === 'healthy'
+          ? 'No failure signal — no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging.'
+          : 'Inconclusive — not enough signal to separate context exhaustion from model degradation.';
 
   const lines: string[] = ['--- Diagnostics ---', `Likely cause: ${verdict}`];
-  lines.push(`Turns: ${d.turns} · Tool calls: ${d.toolCalls} · Errors: ${d.errors}${d.loopExhausted ? ' · LOOP EXHAUSTED' : ''}`);
+  // When the turn/token figures cover only THIS session while the tool figures
+  // cover the whole conversation, say so on the line itself — read together
+  // without it, "Turns: 2 · Tool calls: 44" looks like corrupt data.
+  const scope = d.turnCoveragePartial ? ' (this session)' : '';
+  lines.push(`Turns${scope}: ${d.turns} · Tool calls: ${d.toolCalls} · Errors: ${d.errors}${d.loopExhausted ? ' · LOOP EXHAUSTED' : ''}`);
   if (d.tokensMeasured) {
     lines.push(
-      `Tokens: prompt peak ${d.promptTokenPeak.toLocaleString()} · last-turn prompt ${d.lastPromptTokens.toLocaleString()} · completion total ${d.completionTokenTotal.toLocaleString()}`,
+      `Tokens${scope}: prompt peak ${d.promptTokenPeak.toLocaleString()} · last-turn prompt ${d.lastPromptTokens.toLocaleString()} · completion total ${d.completionTokenTotal.toLocaleString()}`,
     );
   } else {
     lines.push('Tokens: not reported by the gateway for this run.');
+  }
+  if (d.turnCoveragePartial) {
+    lines.push(
+      'Coverage: tool steps were recovered from this chat\'s durable history, but its earlier TURNS predate durable turn records — so the turn and token counts above describe only the current session, not the whole conversation. Send a new turn to capture a fully-measured run.',
+    );
   }
   lines.push(
     `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` · largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ''}${d.truncatedToolResults ? ` · ${d.truncatedToolResults} truncated before the model saw them` : ''}`,

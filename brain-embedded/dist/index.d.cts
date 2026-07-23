@@ -997,6 +997,13 @@ interface BrainTraceEvent {
     resultBytes?: number;
     /** `tool` steps: true when the result sent to the model was truncated. */
     truncated?: boolean;
+    /**
+     * True when this event was RECONSTRUCTED from a durable step row rather than
+     * recorded live this session (see `persistedSteps.traceWithPersistedSteps`).
+     * Diagnostics uses it to tell a fully-observed run from a partially-recovered
+     * one, so mismatched coverage is labelled instead of silently averaged in.
+     */
+    recovered?: boolean;
 }
 /**
  * Did a tool result represent a failure?
@@ -1116,8 +1123,21 @@ interface BrainDiagnostics {
     downgradeEvents: number;
     /** Turns that ended on `length` or produced empty text. */
     emptyOrLengthFinishes: number;
-    /** Best-effort verdict — the header a triager reads first. */
-    likelyCause: 'context-exhaustion' | 'model-degradation' | 'inconclusive';
+    /**
+     * True when tool steps were RECOVERED from durable history but no `llm` turn
+     * covers them — i.e. the chat predates durable turn records (or was reopened),
+     * so the turn/token figures describe only this session while the tool figures
+     * describe the whole conversation. Reported so the two aren't read as one run's
+     * totals: "Turns: 2 · Tool calls: 44" is nonsense unless the mismatch is named.
+     */
+    turnCoveragePartial: boolean;
+    /**
+     * Best-effort verdict — the header a triager reads first. `healthy` is distinct
+     * from `inconclusive`: the former means there is no failure to explain, the
+     * latter that there IS one but the signals don't separate A from B. Collapsing
+     * both into "inconclusive" made a clean run read as an unsolved problem.
+     */
+    likelyCause: 'context-exhaustion' | 'model-degradation' | 'inconclusive' | 'healthy';
 }
 /**
  * Derive {@link BrainDiagnostics} from a recorded trace. Pure — no clock, no I/O
