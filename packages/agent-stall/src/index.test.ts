@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { announcesUntakenAction } from './brainRunStore';
+import {
+  announcesUntakenAction,
+  shouldRecoverStalledTurn,
+  stallRecoveryNudge,
+  MAX_ANNOUNCEMENT_RECOVERIES,
+} from './index';
 
 /**
- * Guards the heuristic behind the run loop's one-shot recovery. A false positive
- * costs one extra model turn; a false negative just restores the old behaviour —
- * so these tests pin the bias toward matching LITTLE.
+ * Guards the heuristic behind every agent loop's stall recovery. A false positive
+ * costs one extra model turn; a false negative strands the user holding a promise.
  */
 describe('announcesUntakenAction', () => {
   it('matches the reply that prompted this — a promise instead of a call', () => {
@@ -84,5 +88,59 @@ describe('announcesUntakenAction', () => {
   it('has no opinion on empty text', () => {
     expect(announcesUntakenAction('')).toBe(false);
     expect(announcesUntakenAction('   ')).toBe(false);
+  });
+});
+
+/**
+ * The gate itself lives here rather than in each loop, so the Brain run loop and the
+ * on-prem/cloud agent loop cannot drift on WHEN a stall is recoverable.
+ */
+describe('shouldRecoverStalledTurn', () => {
+  const stall = {
+    text: "I'll search the codebase for the handler.",
+    toolCallCount: 0,
+    availableToolCount: 12,
+    recoveriesUsed: 0,
+  };
+
+  it('recovers an announcement made with tools available and budget left', () => {
+    expect(shouldRecoverStalledTurn(stall)).toBe(true);
+  });
+
+  it('never fires when the turn actually called a tool', () => {
+    expect(shouldRecoverStalledTurn({ ...stall, toolCallCount: 1 })).toBe(false);
+  });
+
+  it('never fires when the turn had no tools to call', () => {
+    expect(shouldRecoverStalledTurn({ ...stall, availableToolCount: 0 })).toBe(false);
+  });
+
+  it('stops once the per-run budget is spent', () => {
+    for (let used = 0; used < MAX_ANNOUNCEMENT_RECOVERIES; used++) {
+      expect(shouldRecoverStalledTurn({ ...stall, recoveriesUsed: used }), `used=${used}`).toBe(true);
+    }
+    expect(shouldRecoverStalledTurn({ ...stall, recoveriesUsed: MAX_ANNOUNCEMENT_RECOVERIES })).toBe(false);
+  });
+
+  it('lets a genuine final answer through untouched', () => {
+    expect(shouldRecoverStalledTurn({ ...stall, text: 'The build failed because the token expired.' })).toBe(false);
+  });
+
+  it('allows more than one recovery — the stall repeats', () => {
+    expect(MAX_ANNOUNCEMENT_RECOVERIES).toBeGreaterThan(1);
+  });
+});
+
+describe('stallRecoveryNudge', () => {
+  it('always demands the call be made in this turn', () => {
+    for (const last of [false, true]) {
+      expect(stallRecoveryNudge(last)).toContain('made zero tool calls');
+      expect(stallRecoveryNudge(last)).toContain('Do not announce another call.');
+    }
+  });
+
+  it('escalates only on the final attempt', () => {
+    expect(stallRecoveryNudge(false)).not.toContain('last chance');
+    expect(stallRecoveryNudge(true)).toContain('last chance');
   });
 });
