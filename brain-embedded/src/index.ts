@@ -126,6 +126,12 @@ export {
 } from './brainTriage';
 export type { BrainTraceEvent, BuildBrainTriageOptions, BrainDiagnostics, ByoUnresolvedEntry } from './brainTriage';
 
+// Durable tool/memory STEP rows — the reader for what the run loop persisted, so a
+// reopened chat's timeline AND its triage diagnostics both see the steps the live
+// in-memory trace no longer holds.
+export { stepSig, parseStepMessage, traceWithPersistedSteps } from './persistedSteps';
+export type { PersistedStep } from './persistedSteps';
+
 // Chat ⇄ work linking — the directive that ties identified work / code changes to
 // the current chat, plus the predicates behind the "a code change is always tied to
 // a ticket" backstop (reused by non-React hosts driving the run loop directly).

@@ -1084,6 +1084,57 @@ function resolveRecipient(choice, mention) {
   return choice ?? mention;
 }
 
+// src/persistedSteps.ts
+function stepSig(category, label, tsIso) {
+  return `${category}|${label}|${tsIso ?? ""}`;
+}
+function parseStepMessage(metadata) {
+  if (!metadata) return null;
+  try {
+    const m = JSON.parse(metadata);
+    if (m.kind !== "step" || typeof m.category !== "string") return null;
+    return {
+      step: {
+        category: m.category,
+        label: typeof m.label === "string" ? m.label : m.category,
+        args: m.args,
+        result: m.result,
+        isError: m.isError,
+        durationMs: m.durationMs
+      },
+      tsIso: typeof m.ts === "string" ? m.ts : void 0
+    };
+  } catch {
+    return null;
+  }
+}
+function traceWithPersistedSteps(messages, trace) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const ev of trace) {
+    if (ev.category !== "llm" && ev.category !== "message") seen.add(stepSig(ev.category, ev.label, ev.ts));
+  }
+  const fromMessages = [];
+  for (const message of messages) {
+    if (!isStepMessage(message)) continue;
+    const parsed = parseStepMessage(message.metadata);
+    if (!parsed) continue;
+    const sig = stepSig(parsed.step.category, parsed.step.label, parsed.tsIso);
+    if (seen.has(sig)) continue;
+    seen.add(sig);
+    fromMessages.push({
+      ts: parsed.tsIso ?? message.createdAt ?? "",
+      category: parsed.step.category,
+      label: parsed.step.label,
+      args: parsed.step.args,
+      result: parsed.step.result,
+      ...parsed.step.isError ? { isError: true } : {},
+      ...parsed.step.durationMs != null ? { durationMs: parsed.step.durationMs } : {}
+    });
+  }
+  if (fromMessages.length === 0) return trace;
+  return [...trace, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
+}
+
 // src/brainTriage.ts
 function isFailedToolResult(result) {
   if (result == null) return false;
@@ -1286,7 +1337,8 @@ function formatBrainDiagnostics(d) {
   return lines;
 }
 function buildBrainTriageReport(opts) {
-  const { capturedAt, events, messages = [], chatId, chatTitle, agentLabel, configuredModel, surface, error } = opts;
+  const { capturedAt, messages = [], chatId, chatTitle, agentLabel, configuredModel, surface, error } = opts;
+  const events = traceWithPersistedSteps(messages, opts.events);
   const errors = events.filter((e) => e.isError || e.category === "error");
   const lines = [];
   lines.push("=== BuilderForce Brain Triage ===");
@@ -2179,6 +2231,42 @@ ${extra}`;
 ${chatWorkLinkingDirective(chatId)}`;
   const readDedupe = /* @__PURE__ */ new Set();
   let usedAnnouncementRecovery = false;
+  const emitEvermindLearnReconcile = (assistantMsg, finalText) => {
+    const learn = assistantMsg?.evermindLearn;
+    if (learn?.learned) {
+      pushDurableStep(c, chatId, persistence, {
+        ts: nowIso(),
+        category: "learn",
+        label: "evermind.learn",
+        // `targets` carries the per-Evermind breakdown (a project can fan out to many)
+        // so the timeline can name each by id; the renderer falls back to `version` alone.
+        result: { version: learn.version, queued: true, ...learn.targets ? { targets: learn.targets } : {} }
+      });
+      const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
+      if (reconciled > 0) {
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: "reconcile",
+          label: "evermind.reconcile",
+          result: { count: reconciled, version: learn.version }
+        });
+      }
+    } else if (learn && learn.reason && learn.reason !== "too-short") {
+      pushDurableStep(c, chatId, persistence, {
+        ts: nowIso(),
+        category: "learn",
+        label: "evermind.learn",
+        result: { version: learn.version, skipped: true, reason: learn.reason, ...learn.targets ? { targets: learn.targets } : {} }
+      });
+    }
+    if (evermind?.cacheAnswer) {
+      const q = latestUserText(convo);
+      if (q) {
+        void Promise.resolve(evermind.cacheAnswer(q, finalText)).catch(() => {
+        });
+      }
+    }
+  };
   for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
     if (c.abort?.signal.aborted) return;
     c.streamingText = "";
@@ -2383,40 +2471,7 @@ ${chatWorkLinkingDirective(chatId)}`;
     c.streamingText = "";
     recordAppended(c, assistantMsg);
     emit(c);
-    const learn = assistantMsg?.evermindLearn;
-    if (learn?.learned) {
-      pushDurableStep(c, chatId, persistence, {
-        ts: nowIso(),
-        category: "learn",
-        label: "evermind.learn",
-        // `targets` carries the per-Evermind breakdown (a project can fan out to many)
-        // so the timeline can name each by id; the renderer falls back to `version` alone.
-        result: { version: learn.version, queued: true, ...learn.targets ? { targets: learn.targets } : {} }
-      });
-      const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
-      if (reconciled > 0) {
-        pushDurableStep(c, chatId, persistence, {
-          ts: nowIso(),
-          category: "reconcile",
-          label: "evermind.reconcile",
-          result: { count: reconciled, version: learn.version }
-        });
-      }
-    } else if (learn && learn.reason && learn.reason !== "too-short") {
-      pushDurableStep(c, chatId, persistence, {
-        ts: nowIso(),
-        category: "learn",
-        label: "evermind.learn",
-        result: { version: learn.version, skipped: true, reason: learn.reason, ...learn.targets ? { targets: learn.targets } : {} }
-      });
-    }
-    if (evermind?.cacheAnswer) {
-      const q = latestUserText(convo);
-      if (q) {
-        void Promise.resolve(evermind.cacheAnswer(q, finalText)).catch(() => {
-        });
-      }
-    }
+    emitEvermindLearnReconcile(assistantMsg, finalText);
     onActivity?.(chatId);
     return;
   }
@@ -2464,6 +2519,7 @@ ${chatWorkLinkingDirective(chatId)}`;
         c.streamingText = "";
         recordAppended(c, assistantMsg);
         emit(c);
+        emitEvermindLearnReconcile(assistantMsg, closingText);
         onActivity?.(chatId);
         return;
       }
@@ -3111,6 +3167,7 @@ export {
   parseDirectedRecipient,
   parseMessageAuthor,
   parseMessageProvenance,
+  parseStepMessage,
   prepareImageDataUrl,
   reasoningForRun,
   resolveRecipient,
@@ -3122,12 +3179,14 @@ export {
   setLastResolvedModel,
   setMcpToolStatus,
   startRun,
+  stepSig,
   stopRun,
   streamChatCompletion,
   subscribeRun,
   subscribeRunStore,
   subscribeToChatMessages,
   takePendingPrompt,
+  traceWithPersistedSteps,
   useBrainActions,
   useBrainChats,
   useBrainConfig,

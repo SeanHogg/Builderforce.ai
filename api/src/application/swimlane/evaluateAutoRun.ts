@@ -51,6 +51,32 @@ export type AutoRunReason =
   | 'pending_approval';   // an EXTERNAL feedback request — a human must accept it in triage before any agent may touch it
 
 /**
+ * One English sentence per {@link AutoRunReason} — what a NON-UI caller should be
+ * told about why the ticket is or isn't working right now.
+ *
+ * The board's triage chip renders localized copy from the `board.triage` catalog;
+ * this is the machine-caller counterpart, used by the MCP task tools so an agent
+ * that just assigned a ticket learns whether the assignment actually started a run.
+ * Without it the Brain reassigned seven tickets to a coder, every dispatch was
+ * declined for a real reason, and the tool results said only "here is the updated
+ * row" — so the user was told work had started when nothing had.
+ */
+export const AUTO_RUN_REASON_TEXT: Record<AutoRunReason, string> = {
+  will_run: 'A run was dispatched for this ticket.',
+  no_board: 'No run: the project has no board, so there is no lane to resolve against.',
+  no_lane: 'No run: no swimlane on the board matches this ticket\'s status key.',
+  terminal_lane: 'No run: the ticket is in a terminal (Done) lane, which never auto-runs.',
+  human_gate: 'No run: this lane is human-gated — a person must approve it or use Run now.',
+  no_agent: 'No run: the lane has no staffed agent and the ticket owner is not eligible to execute this stage. Staff the lane, or dispatch explicitly with Run now.',
+  capability_mismatch: 'No run: every candidate agent lacks the capabilities this lane requires.',
+  already_running: 'No new run: this ticket already has a live execution.',
+  run_cap_exhausted: 'No run: the ticket\'s last consecutive runs all failed, so autonomy has stopped re-dispatching it. A human Run now overrides.',
+  cooldown_active: 'No run yet: the ticket is in its post-failure back-off window before the next autonomous attempt.',
+  not_executable: 'No run: this is a system/coordination chore, never dispatched to an agent.',
+  pending_approval: 'No run: this is an external feedback request awaiting human acceptance in triage.',
+};
+
+/**
  * How many consecutive FAILED runs a ticket may accumulate before autonomy stops
  * auto-re-dispatching it. The reported failure mode: a single ticket auto-ran 30+
  * times, every run failing (e.g. no reachable coding model → `coding_model_degraded`

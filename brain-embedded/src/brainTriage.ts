@@ -10,6 +10,7 @@
  */
 
 import type { BrainMessage } from './types';
+import { traceWithPersistedSteps } from './persistedSteps';
 
 /** One step of the Brain agent loop, recorded as it runs. */
 export interface BrainTraceEvent {
@@ -490,7 +491,12 @@ export interface BuildBrainTriageOptions {
  * header → errors-first → full event log → derived log lines → transcript.
  */
 export function buildBrainTriageReport(opts: BuildBrainTriageOptions): string {
-  const { capturedAt, events, messages = [], chatId, chatTitle, agentLabel, configuredModel, surface, error } = opts;
+  const { capturedAt, messages = [], chatId, chatTitle, agentLabel, configuredModel, surface, error } = opts;
+  // The caller's `events` are the LIVE trace, which only covers the current
+  // session — a reopened or resumed chat holds none of the earlier run's steps in
+  // memory, only their durable `role:'tool'` rows. Merging them back in is what
+  // stops the report claiming `Tool calls: 0` for a run that made twenty.
+  const events = traceWithPersistedSteps(messages, opts.events);
   const errors = events.filter((e) => e.isError || e.category === 'error');
   const lines: string[] = [];
 

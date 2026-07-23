@@ -44,6 +44,7 @@ import { createMigrationStore } from '../migration/migrationStore';
 import { buildMigrationProviderFactory } from '../migration/buildProviderFactory';
 import { BOARD_PROVIDERS, DISCOVERY_PROVIDER_IDS } from '../boardsync/providerCatalog';
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
+import { evaluateTaskAutoRun, AUTO_RUN_REASON_TEXT, type AutoRunReason } from '../swimlane/evaluateAutoRun';
 import { invalidateProjectsList } from '../../presentation/routes/projectRoutes';
 import { recordActivity, resolveHumanActor, SYSTEM_ACTOR } from '../activity/activityLog';
 import { pmoVersionKey } from '../../presentation/routes/pmoRoutes';
@@ -562,7 +563,7 @@ const CATALOG: BuiltinTool[] = [
   } },
   {
     tool: 'tasks.create', mutates: true,
-    description: 'Create an ACCOUNTABLE ticket on a project board. The assignee is the ticket Coordinator/Manager (not necessarily its producer): pass exactly one of assignedUserId, assignedAgentRef, or assignedAgentHostId. If omitted, the project Delivery Manager is assigned, falling back to the requesting human. Creation also derives the board process-template participation manifest. AFTER creation, scope the required workforce with kanban.assess_resource for every role implied by the work, inspect kanban.accountability, and use kanban.materialize_work_items to create one child task per resource. Set taskType="epic" for a planning Epic, "gap" for missing follow-up work, or parentTaskId to nest under an Epic. An Epic is not an OKR. Idempotent by project + normalized title; reconciliation also repairs missing coordination/manifest data on the existing ticket.',
+    description: 'Create an ACCOUNTABLE ticket on a project board. The assignee is the ticket Coordinator/Manager (not necessarily its producer): pass exactly one of assignedUserId, assignedAgentRef, or assignedAgentHostId. If omitted, the project Delivery Manager is assigned, falling back to the requesting human. Creation also derives the board process-template participation manifest. AFTER creation, scope the required workforce with kanban.assess_resource for every role implied by the work, inspect kanban.accountability, and use kanban.materialize_work_items to create one child task per resource. Set taskType="epic" for a planning Epic, "gap" for missing follow-up work, or parentTaskId to nest under an Epic. An Epic is not an OKR. Idempotent by project + normalized title; reconciliation also repairs missing coordination/manifest data on the existing ticket. The result carries `autoRun: { dispatched, reason, detail }` when the created ticket landed in a lane that could start work — `dispatched:false` means no agent picked it up, so relay `detail` rather than implying work started.',
     parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, dueDate: S, taskType: { type: 'string', enum: ['task', 'epic', 'gap'] }, parentTaskId: N, assignedUserId: S, assignedAgentRef: S, assignedAgentHostId: N }, ['projectId', 'title']),
     run: async (ctx, a) => {
       const title = str(a.title).trim(); if (!title) throw new Error('title is required');
@@ -614,13 +615,13 @@ const CATALOG: BuiltinTool[] = [
       if (ctx.env) await new TicketParticipantsService(ctx.db).deriveManifest(ctx.env, ctx.tenantId, Number(created.id));
       // A ticket created straight into a staffed lane auto-runs, same as the board's
       // POST path (a create lands in the Backlog lane — fires only if that lane is staffed).
-      await fireLaneAutoRun(ctx, created);
-      return created.toPlain();
+      const autoRun = await fireLaneAutoRun(ctx, created);
+      return { ...(created.toPlain() as object), ...(autoRun ? { autoRun } : {}) };
     },
   },
   {
     tool: 'tasks.update', mutates: true,
-    description: 'Update a task (title, description, status/lane, priority, dueDate, archived). Reclassify with taskType, re-parent under an Epic with parentTaskId (null to detach), or (re)assign via exactly one of assignedUserId/assignedAgentRef/assignedAgentHostId (null unassigns).',
+    description: 'Update a task (title, description, status/lane, priority, dueDate, archived). Reclassify with taskType, re-parent under an Epic with parentTaskId (null to detach), or (re)assign via exactly one of assignedUserId/assignedAgentRef/assignedAgentHostId (null unassigns). Omitted fields are left untouched. When a lane move or a (re)assignment could start work, the result carries `autoRun: { dispatched, reason, detail, agentRef, runNowCandidate? }` — the autonomy verdict. ALWAYS read it: `dispatched:false` means NO agent started, so report `detail` to the user instead of claiming work has begun.',
     parameters: obj({ id: N, title: S, description: S, status: S, priority: S, dueDate: S, archived: B, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: { type: ['number', 'null'] }, assignedUserId: { type: ['string', 'null'] }, assignedAgentRef: { type: ['string', 'null'] }, assignedAgentHostId: { type: ['number', 'null'] } }, ['id']),
     run: async (ctx, a) => {
       // tenant-scope guard (service.updateTask doesn't check) + capture the prior
@@ -645,13 +646,20 @@ const CATALOG: BuiltinTool[] = [
       });
       // The ticket may have just entered a new lane — run that lane's configured
       // agent (AS the lane agent; the ticket's own assignee is left untouched).
-      await fireLaneAutoRun(ctx, updated, previousStatus);
+      const laneOutcome = await fireLaneAutoRun(ctx, updated, previousStatus);
       // Assignment → work handoff: reassigning the ticket to a NEW cloud agent is itself
       // a "go" — start that owner's run AND bring it into the ticket's linked chats (the
       // MCP path used to do neither, so a dev agent assigned by the Brain never picked up
       // the ticket or joined the conversation).
-      await fireAgentAssignmentHandoff(ctx, updated, previousAgentRef);
-      return updated.toPlain();
+      const assignOutcome = await fireAgentAssignmentHandoff(ctx, updated, previousAgentRef);
+      // REPORT the autonomy verdict. Both triggers are best-effort and backgrounded, so
+      // the result used to say nothing about whether work actually started — a caller
+      // that moved seven tickets to a coder was told each write succeeded while every
+      // dispatch was declined. Prefer whichever trigger dispatched; else the first
+      // decision made (the lane move is evaluated before the reassignment).
+      const autoRun = [laneOutcome, assignOutcome].find((o) => o?.dispatched)
+        ?? laneOutcome ?? assignOutcome;
+      return { ...(updated.toPlain() as object), ...(autoRun ? { autoRun } : {}) };
     },
   },
   { tool: 'tasks.delete', mutates: true, description: 'Delete a task.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { await getTenantTask(ctx, num(a.id)); await ctx.tasks.deleteTask(num(a.id)); return { deleted: num(a.id) }; } },
@@ -2457,23 +2465,76 @@ async function getTenantTask(ctx: BuiltinCtx, id: number) {
  * `executionCtx` when present (so the run survives the tool returning), else awaited.
  * A no-env context (the service-stub unit tests) simply skips the trigger.
  */
-async function fireLaneAutoRun(ctx: BuiltinCtx, task: Task, previousStatus?: string): Promise<void> {
-  const env = ctx.env;
-  if (!env) return; // dispatch needs the worker env (credentials + runtime bindings)
-  const plain = task.toPlain();
-  // Only a genuine lane CHANGE triggers a run — a no-status-change update (title,
-  // priority, reassignment) must not re-fire the lane's agent. A create has no
-  // previousStatus, so it always evaluates the lane it was created into.
-  if (previousStatus !== undefined && plain.status === previousStatus) return;
-  const run = maybeAutoRunOnLaneEntry(env, ctx.db, buildRuntimeService(env, ctx.db), {
+/**
+ * What the autonomy trigger decided for this write — returned to the MCP caller so
+ * an agent knows whether its assignment/lane move actually started work.
+ */
+export interface McpAutoRunOutcome {
+  /** True when autonomy dispatched (or is dispatching) a run for this ticket. */
+  dispatched: boolean;
+  reason: AutoRunReason;
+  /** Human sentence for the reason — what to relay to the user verbatim. */
+  detail: string;
+  /** The agent the run was dispatched as (null when nothing ran). */
+  agentRef: string | null;
+  /** The agent a manual Run now WOULD use, when autonomy declined. */
+  runNowCandidate?: string;
+}
+
+/**
+ * The shared "evaluate, report, then dispatch" step behind both task triggers.
+ *
+ * The dispatch itself stays backgrounded (it can outlive the tool result), so the
+ * caller can never learn its outcome from the returned promise. But the DECISION is
+ * the cheap read-only {@link evaluateTaskAutoRun} — the same evaluator the trigger,
+ * the board triage chip and Run-now all share — so running it inline gives the tool
+ * result a truthful verdict without waiting on the run.
+ */
+async function evaluateAndDispatch(
+  ctx: BuiltinCtx,
+  env: Env,
+  plain: { id: number; projectId: number; status: string },
+  submittedBy: string,
+): Promise<McpAutoRunOutcome> {
+  const runtimeService = buildRuntimeService(env, ctx.db);
+  const evaln = await evaluateTaskAutoRun(ctx.db, runtimeService, {
     tenantId: ctx.tenantId,
     projectId: plain.projectId,
     taskId: plain.id,
     status: plain.status,
-    submittedBy: ctx.userId ?? 'system:lane-auto',
+  });
+  // Always run the full trigger: beyond dispatching, it applies the lane requirement
+  // gate (which can itself dispatch a reviewer round-trip) and emits the
+  // `auto_run_skipped` / `auto_run_error` Observability events. Short-circuiting on
+  // the evaluation above would silently drop both.
+  const run = maybeAutoRunOnLaneEntry(env, ctx.db, runtimeService, {
+    tenantId: ctx.tenantId,
+    projectId: plain.projectId,
+    taskId: plain.id,
+    status: plain.status,
+    submittedBy,
   });
   if (ctx.executionCtx) ctx.executionCtx.waitUntil(run);
   else await run;
+
+  return {
+    dispatched: evaln.canRunNow,
+    reason: evaln.reason,
+    detail: AUTO_RUN_REASON_TEXT[evaln.reason],
+    agentRef: evaln.canRunNow ? evaln.decision.agentRef ?? evaln.assignedAgentRef : null,
+    ...(!evaln.canRunNow && evaln.candidate ? { runNowCandidate: evaln.candidate.agentRef } : {}),
+  };
+}
+
+async function fireLaneAutoRun(ctx: BuiltinCtx, task: Task, previousStatus?: string): Promise<McpAutoRunOutcome | null> {
+  const env = ctx.env;
+  if (!env) return null; // dispatch needs the worker env (credentials + runtime bindings)
+  const plain = task.toPlain();
+  // Only a genuine lane CHANGE triggers a run — a no-status-change update (title,
+  // priority, reassignment) must not re-fire the lane's agent. A create has no
+  // previousStatus, so it always evaluates the lane it was created into.
+  if (previousStatus !== undefined && plain.status === previousStatus) return null;
+  return evaluateAndDispatch(ctx, env, plain, ctx.userId ?? 'system:lane-auto');
 }
 
 /** Kind used on chat↔ticket links for a task-tier row (epic | gap | task). */
@@ -2494,22 +2555,19 @@ function taskLinkKind(task: Task): string {
  * create) treats any owner as newly assigned. Best-effort + backgrounded on the request's
  * executionCtx so it survives the tool returning; a no-env context simply skips it.
  */
-async function fireAgentAssignmentHandoff(ctx: BuiltinCtx, task: Task, previousAgentRef?: string | null): Promise<void> {
+async function fireAgentAssignmentHandoff(ctx: BuiltinCtx, task: Task, previousAgentRef?: string | null): Promise<McpAutoRunOutcome | null> {
   const env = ctx.env;
-  if (!env) return;
+  if (!env) return null;
   const plain = task.toPlain() as { id: number; projectId: number; status: string; assignedAgentRef?: string | null };
   const newRef = plain.assignedAgentRef ?? null;
-  if (!newRef || newRef === (previousAgentRef ?? null)) return;
-  const run = maybeAutoRunOnLaneEntry(env, ctx.db, buildRuntimeService(env, ctx.db), {
-    tenantId: ctx.tenantId, projectId: plain.projectId, taskId: plain.id, status: plain.status,
-    submittedBy: ctx.userId ?? 'system:agent-assign',
-  });
+  if (!newRef || newRef === (previousAgentRef ?? null)) return null;
   const joinChats = new ChatTicketService(ctx.db, env)
     .onTicketAgentAssigned(ctx.tenantId, taskLinkKind(task), String(plain.id), newRef)
     .catch(() => {});
-  const work = Promise.all([run, joinChats]);
-  if (ctx.executionCtx) ctx.executionCtx.waitUntil(work);
-  else await work;
+  if (ctx.executionCtx) ctx.executionCtx.waitUntil(joinChats);
+  const outcome = await evaluateAndDispatch(ctx, env, plain, ctx.userId ?? 'system:agent-assign');
+  if (!ctx.executionCtx) await joinChats;
+  return outcome;
 }
 
 /** Flat, gateway-safe advertised name: `builtin_projects_list` (no dots). */

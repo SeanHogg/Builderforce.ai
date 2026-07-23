@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-07-23 — ✅ RESOLVED: `/activate` dead-ended signed-out visitors (frontend)
+
+`https://builderforce.ai/activate?code=XXXX-XXXX` (the VS Code device-authorization link, minted by `DeviceAuthService`) showed logged-out visitors the generic "This is part of Builderforce.ai" marketing teaser instead of sending them to sign in — the activation page never mounted, so its own sign-in handling never ran and the editor sign-in flow dead-ended.
+
+- **Root cause:** `classifyShell()` treats the app shell as the default (deny-list model), and `/activate` was in none of the lists → `'app'` → signed-out ⇒ `RouteMarketing` teaser. Fixed by adding `/activate` to `FOOTER_ONLY_PATHS` alongside `/login` + `/register` (standalone auth-flow screens that own their auth handling and must mount signed-out).
+- **Second bug on the same path:** the page built `/login?redirect=…`, but `LoginPageClient` only honours `?next=`. Even after signing in the user landed on `/dashboard` and the activation was abandoned. Now `/login?next=/activate?code=…`, and the signed-out branch `router.replace()`s automatically instead of rendering a manual "Sign in" button.
+- **Refactor:** the pure route classifier + its three route lists moved out of `components/ConditionalAppShell.tsx` into `lib/shellRouting.ts` (testable without the app provider tree); `ConditionalAppShell.test.ts` → `lib/shellRouting.test.ts` with a `/activate` regression case.
+- **Also:** `app/activate/page.tsx` fully localized (new `activate` namespace × en/zh/es/fr/de), theme-token colors, and mobile-friendly (fluid card padding/code size, wrapping button row, 44px tap targets).
+- Files: `frontend/src/lib/shellRouting.ts` (new), `frontend/src/lib/shellRouting.test.ts` (new), `frontend/src/components/ConditionalAppShell.tsx`, `frontend/src/app/activate/page.tsx`, `frontend/src/i18n/messages/{en,zh,es,fr,de}.json`.
+- **Also cleared:** "Frontend build broken: `BrainPanel` reads `providerCap`" — `frontend` `tsgo --noEmit` now reports 0 errors; the roadmap entry was stale and has been removed.
+
+---
+
 ## 2026-07-22 — ✅ RESOLVED: Cloud Agent Runtime & PR Loop — group-#1 close-out (api)
 
 A pass to close roadmap group #1. Split three ways: (A) items already shipped but stale in the roadmap, verified against live code and removed from it; (B) genuine code-fixable gaps implemented this pass; (C) the flag-gated container-preview infra scaffold. The genuinely deploy/live-blocked mega-features (50-gap validation E2E, `cloud-container` Paid-account deploy, multi-repo spanning, live multi-provider validation) stay in the roadmap, sharpened.
