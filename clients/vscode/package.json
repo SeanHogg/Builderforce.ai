@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.7.92",
+  "version": "2026.7.94",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -55,37 +55,53 @@
     "views": {
       "builderforce": [
         {
+          "id": "builderforce.welcome",
+          "name": "%view.welcome%",
+          "when": "!builderforce.signedIn"
+        },
+        {
           "id": "builderforce.sessions",
-          "name": "%view.sessions%"
+          "name": "%view.sessions%",
+          "when": "builderforce.signedIn"
         },
         {
           "id": "builderforce.project",
-          "name": "%view.project%"
+          "name": "%view.project%",
+          "when": "builderforce.signedIn"
         },
         {
           "id": "builderforce.inbox",
-          "name": "%view.inbox%"
+          "name": "%view.inbox%",
+          "when": "builderforce.signedIn"
         },
         {
           "id": "builderforce.insights",
-          "name": "%view.insights%"
+          "name": "%view.insights%",
+          "when": "builderforce.signedIn"
         },
         {
           "id": "builderforce.evermind",
           "type": "webview",
-          "name": "%view.evermind%"
+          "name": "%view.evermind%",
+          "when": "builderforce.signedIn"
         },
         {
           "id": "builderforce.diagnostics",
-          "name": "%view.diagnostics%"
+          "name": "%view.diagnostics%",
+          "when": "builderforce.signedIn"
         },
         {
           "id": "builderforce.meetings",
-          "name": "%view.meetings%"
+          "name": "%view.meetings%",
+          "when": "builderforce.signedIn"
         }
       ]
     },
     "viewsWelcome": [
+      {
+        "view": "builderforce.welcome",
+        "contents": "%welcome.signIn%"
+      },
       {
         "view": "builderforce.sessions",
         "contents": "%welcome.sessions%"

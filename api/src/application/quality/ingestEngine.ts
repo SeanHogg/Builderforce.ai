@@ -154,7 +154,11 @@ export async function ingestErrorEvents(
       // the meter/trend, never the dashboard's group view. Best-effort.
     }
     await bumpGroupUserCounts(db, userPairs, now);
-    await db.update(errorCollectors).set({ lastEventAt: now }).where(eq(errorCollectors.id, collector.id)).catch(() => {});
+    // A collector-less source (id: null — e.g. a manual "Report error") has no
+    // collector row whose last-event timestamp to touch.
+    if (collector.id != null) {
+      await db.update(errorCollectors).set({ lastEventAt: now }).where(eq(errorCollectors.id, collector.id)).catch(() => {});
+    }
     for (const projectId of touchedProjects) await bumpCacheVersion(env, qualityGroupsVersionKey(projectId));
     await bumpCacheVersion(env, qualityGroupsTenantVersionKey(collector.tenantId));
   }

@@ -101,6 +101,30 @@ export interface EvermindConsoleData {
   inherited?: boolean;
   /** The container project whose Evermind is being displayed (present when `inherited`). */
   inheritedFromProjectId?: number;
+  /**
+   * ISO timestamp this Evermind auto-quarantined after a streak of incoherent serves
+   * (null/absent = healthy). While quarantined it serves nothing and cannot be
+   * re-enabled until it passes the coherence probe again — the console renders a badge
+   * + reason so "why did it turn itself off / why can't I turn it on" is never a mystery.
+   */
+  quarantinedAt?: string | null;
+  /** The probe-failure reason behind {@link quarantinedAt} (present when quarantined). */
+  quarantineReason?: string | null;
+}
+
+/**
+ * One Evermind a project targets — its own head, or the head of an IDE build grouped
+ * under it. Shape mirrors the api `targetsCore` endpoint. Ordered `[self, …builds]`,
+ * so index 0 is the project itself. Learning fans out to every live target; inference
+ * stays single-pick. Read-only in the console.
+ */
+export interface EvermindTarget {
+  projectId: number;
+  version: number;
+  name: string;
+  mode: EvermindMode;
+  inferenceEnabled: boolean;
+  seeded: boolean;
 }
 
 /**
@@ -169,6 +193,12 @@ export interface EvermindConsoleAdapter {
    * the user cancels the file picker.
    */
   importMemory?(): Promise<MemoryImportReport | null>;
+  /**
+   * OPTIONAL — list every Evermind under this project (self + the IDE builds grouped
+   * under it). When present, the console renders the read-only "Everminds under this
+   * project" list; a host that omits it simply hides the section. Ordered `[self, …builds]`.
+   */
+  loadTargets?(): Promise<EvermindTarget[]>;
 }
 
 /** Every visible string. Parametric ones are functions the host localizes. */
@@ -184,6 +214,21 @@ export interface EvermindConsoleLabels {
   // Status
   statusSeeded: (version: number) => string;
   statusUnseeded: string;
+  // Quarantine (auto-disabled after incoherent serves)
+  quarantinedBadge: string;
+  quarantinedHint: (reason: string) => string;
+  // Targets ("Everminds under this project")
+  targetsTitle: string;
+  targetsHint: string;
+  targetsEmpty: string;
+  targetSelfBadge: string;
+  targetBuildBadge: string;
+  targetSeeded: (version: number) => string;
+  targetUnseeded: string;
+  targetInferenceOn: string;
+  targetConnected: string;
+  targetFrozen: string;
+  targetProjectId: (id: number) => string;
   // Regression check (▲/▼ vs previous version)
   evalDelta: (pct: string) => string;
   evalFlat: string;
@@ -301,6 +346,20 @@ export const DEFAULT_EVERMIND_LABELS: EvermindConsoleLabels = {
     'This build shares its parent project’s Evermind, so everything it has learned is available here. Training and settings live on the parent project.',
   statusSeeded: (v) => `Learning · v${v}`,
   statusUnseeded: 'Not set up',
+  quarantinedBadge: 'Quarantined',
+  quarantinedHint: (reason) =>
+    `This Evermind auto-disabled after producing incoherent output (${reason}). Retrain it past the coherence bar to re-enable inference.`,
+  targetsTitle: 'Everminds under this project',
+  targetsHint: 'Every Evermind this project contributes learning to.',
+  targetsEmpty: 'No Everminds resolved for this project yet.',
+  targetSelfBadge: 'This project',
+  targetBuildBadge: 'IDE build',
+  targetSeeded: (version) => `v${version}`,
+  targetUnseeded: 'not seeded',
+  targetInferenceOn: 'inference',
+  targetConnected: 'connected',
+  targetFrozen: 'frozen',
+  targetProjectId: (id) => `project #${id}`,
   evalDelta: (pct) => `${pct}% vs prev`,
   evalFlat: 'no change',
   evalTooltip: (version, base, next, size) => `Regression check on v${version}: held-out loss ${base} → ${next} across ${size} prior task(s).`,

@@ -81,6 +81,7 @@ export type {
   EvermindMode,
   EvermindRecentEntry,
   EvermindSeedModel,
+  EvermindTarget,
   EvermindTeacherOptions,
 } from './evermind/types';
 

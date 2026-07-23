@@ -1913,6 +1913,19 @@ var DEFAULT_EVERMIND_LABELS = {
   inheritedHint: "This build shares its parent project\u2019s Evermind, so everything it has learned is available here. Training and settings live on the parent project.",
   statusSeeded: (v) => `Learning \xB7 v${v}`,
   statusUnseeded: "Not set up",
+  quarantinedBadge: "Quarantined",
+  quarantinedHint: (reason) => `This Evermind auto-disabled after producing incoherent output (${reason}). Retrain it past the coherence bar to re-enable inference.`,
+  targetsTitle: "Everminds under this project",
+  targetsHint: "Every Evermind this project contributes learning to.",
+  targetsEmpty: "No Everminds resolved for this project yet.",
+  targetSelfBadge: "This project",
+  targetBuildBadge: "IDE build",
+  targetSeeded: (version) => `v${version}`,
+  targetUnseeded: "not seeded",
+  targetInferenceOn: "inference",
+  targetConnected: "connected",
+  targetFrozen: "frozen",
+  targetProjectId: (id) => `project #${id}`,
   evalDelta: (pct) => `${pct}% vs prev`,
   evalFlat: "no change",
   evalTooltip: (version, base, next, size) => `Regression check on v${version}: held-out loss ${base} \u2192 ${next} across ${size} prior task(s).`,
@@ -2023,6 +2036,7 @@ var C = {
 function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate }) {
   const t = (0, import_react7.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
   const [data, setData] = (0, import_react7.useState)(null);
+  const [targets, setTargets] = (0, import_react7.useState)(null);
   const [seedModels, setSeedModels] = (0, import_react7.useState)([]);
   const [teacherOpts, setTeacherOpts] = (0, import_react7.useState)(null);
   const [selectedSlug, setSelectedSlug] = (0, import_react7.useState)("");
@@ -2036,6 +2050,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
   const [loaded, setLoaded] = (0, import_react7.useState)(false);
   const [loadFailed, setLoadFailed] = (0, import_react7.useState)(false);
   const reload = (0, import_react7.useCallback)(async () => {
+    const targetsP = adapter.loadTargets?.().catch(() => null);
     try {
       const d = await adapter.loadData();
       setData(d);
@@ -2045,6 +2060,10 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setLoadFailed(true);
     } finally {
       setLoaded(true);
+    }
+    if (targetsP) {
+      const tg = await targetsP;
+      if (tg) setTargets(tg);
     }
   }, [adapter]);
   (0, import_react7.useEffect)(() => {
@@ -2120,6 +2139,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
   const seeded = !!data?.seeded;
   const frozen = data?.mode === "offline-frozen";
   const inherited = !!data?.inherited;
+  const quarantined = !!data?.quarantinedAt;
+  const quarantineReason = data?.quarantineReason?.trim() || "";
   const scopeName = projectName?.trim();
   const Header = /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { "aria-hidden": true, style: { fontSize: "1.05rem" }, children: "\u{1F9E0}" }),
@@ -2130,6 +2151,10 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     ] }),
     !loadFailed && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: pill(seeded), children: seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded }),
     !loadFailed && seeded && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(RegressionChip, { t, evalPoint: data?.eval ?? null }),
+    !loadFailed && quarantined && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { style: quarantinePill, title: t.quarantinedHint(quarantineReason), children: [
+      "\u26A0 ",
+      t.quarantinedBadge
+    ] }),
     showHeaderRefresh && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", onClick: () => void reload(), disabled: busy, style: ghostBtn, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
   ] });
   if (loadFailed) {
@@ -2151,6 +2176,24 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         children: t.inheritedHint
       }
     ),
+    quarantined && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+      "p",
+      {
+        style: {
+          margin: 0,
+          fontSize: "0.74rem",
+          lineHeight: 1.5,
+          borderRadius: 6,
+          padding: "6px 8px",
+          color: "var(--bf-warn-text, #92400e)",
+          background: "var(--bf-warn-bg, #fef3c7)",
+          border: "1px solid var(--bf-warn-border, #f59e0b)"
+        },
+        role: "alert",
+        children: t.quarantinedHint(quarantineReason)
+      }
+    ),
+    targets && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(TargetsList, { t, targets }),
     inherited ? (
       // INHERITED — read-only. This build has no `project_evermind` row of its own;
       // it is displaying its container project's. Every write endpoint keeps exact-id
@@ -2479,6 +2522,29 @@ function ValidateResults({ t, result, onClear }) {
     }) })
   ] });
 }
+function TargetsList({ t, targets }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: fieldTitle, children: t.targetsTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: fieldHint, children: t.targetsHint }),
+    targets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: italic, children: t.targetsEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: targets.map((tg, i) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+      "li",
+      {
+        style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: tag(false), children: i === 0 ? t.targetSelfBadge : t.targetBuildBadge }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { fontSize: "0.78rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: tg.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.targetProjectId(tg.projectId) }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: targetChip, children: tg.seeded ? t.targetSeeded(tg.version) : t.targetUnseeded }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: targetChip, children: tg.mode === "connected" ? t.targetConnected : t.targetFrozen }),
+            tg.inferenceEnabled && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { ...targetChip, color: C.accent, borderColor: C.accent }, children: t.targetInferenceOn })
+          ] })
+        ]
+      },
+      tg.projectId
+    )) })
+  ] });
+}
 function RecentList({ t, entries }) {
   return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: fieldTitle, children: t.inspectTitle }),
@@ -2518,6 +2584,26 @@ var faultTag = {
   color: "var(--bf-warn-text, #92400e)",
   background: "var(--bf-warn-bg, #fef3c7)",
   border: "1px solid var(--bf-warn-border, #f59e0b)"
+};
+var quarantinePill = {
+  fontSize: 11,
+  fontWeight: 700,
+  padding: "2px 8px",
+  borderRadius: 999,
+  color: "var(--bf-warn-text, #92400e)",
+  background: "var(--bf-warn-bg, #fef3c7)",
+  border: "1px solid var(--bf-warn-border, #f59e0b)",
+  whiteSpace: "nowrap"
+};
+var targetChip = {
+  fontSize: "0.64rem",
+  fontWeight: 600,
+  padding: "1px 7px",
+  borderRadius: 999,
+  border: `1px solid ${C.border}`,
+  background: C.surface,
+  color: C.text2,
+  whiteSpace: "nowrap"
 };
 var italic = { margin: 0, fontSize: "0.78rem", color: C.text2, fontStyle: "italic" };
 var fieldLabel = { fontSize: "0.78rem", fontWeight: 600, color: C.text2 };

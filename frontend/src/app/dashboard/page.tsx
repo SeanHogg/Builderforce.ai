@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import type { Project, Tenant } from '@/lib/types';
+import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
@@ -39,7 +39,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const t = useTranslations('dashboard');
-  const { isAuthenticated, hasTenant, webToken, tenantToken, tenant, selectTenant } = useAuth();
+  const { isAuthenticated, hasTenant, webToken, tenantToken, tenant } = useAuth();
   const { currentProjectId } = useProjectScope();
   const tenantId = tenant?.id != null ? Number(tenant.id) : undefined;
 
@@ -69,26 +69,19 @@ export default function DashboardPage() {
   // dashboard (useOnboardingPrompt); the stepper picks its own account-type track.
   const {
     show: showOnboarding,
-    checked: onboardingChecked,
     progress: onboardingProgress,
     complete: handleOnboardingComplete,
     dismiss: handleOnboardingDismiss,
   } = useOnboardingPrompt();
 
-  // Auth guard — allow staying on dashboard if not yet onboarded (no tenant yet)
+  // Auth guard. A brand-new builder's Default workspace is auto-provisioned by the
+  // onboarding gate before this page renders, so reaching here without a tenant means
+  // the picker is the right destination (multi-workspace, or provisioning fell back).
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace('/login?next=/dashboard');
     }
-    // No redirect to /tenants here — the onboarding stepper handles workspace creation
   }, [isAuthenticated, router]);
-
-  const handleOnboardingWorkspaceCreated = useCallback(
-    async (newTenant: Tenant) => {
-      await selectTenant(newTenant);
-    },
-    [selectTenant]
-  );
 
   useEffect(() => {
     if (!isAuthenticated || !hasTenant) return;
@@ -157,23 +150,8 @@ export default function DashboardPage() {
 
   if (!isAuthenticated) return null;
 
-  // If we don't have a tenant AND we're still checking or showing onboarding, render the stepper overlay only
-  if (!hasTenant && (showOnboarding || !onboardingChecked)) {
-    return showOnboarding ? (
-      <OnboardingStepper
-        webToken={webToken!}
-        tenantToken={tenantToken}
-        tenant={tenant}
-        existingProjectsCount={projects.length}
-        initialProgress={onboardingProgress}
-        onWorkspaceCreated={handleOnboardingWorkspaceCreated}
-        onComplete={handleOnboardingComplete}
-        onDismiss={handleOnboardingDismiss}
-      />
-    ) : null;
-  }
-
-  // If no tenant and onboarding was dismissed/complete, send to tenant picker
+  // No tenant → the picker (a brand-new builder's Default workspace is provisioned
+  // upstream by the onboarding gate, so this is the multi-workspace / fallback path).
   if (!hasTenant) {
     router.replace('/tenants?next=/dashboard');
     return null;
@@ -186,9 +164,7 @@ export default function DashboardPage() {
           webToken={webToken}
           tenantToken={tenantToken}
           tenant={tenant}
-          existingProjectsCount={projects.length}
           initialProgress={onboardingProgress}
-          onWorkspaceCreated={handleOnboardingWorkspaceCreated}
           onComplete={handleOnboardingComplete}
           onDismiss={handleOnboardingDismiss}
         />

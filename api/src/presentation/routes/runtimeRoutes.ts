@@ -14,6 +14,9 @@ import {
   isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, buildFollowUpPayload, withDefaultModel, withExecutor,
 } from '../../application/runtime/cloudDispatch';
 import { mintContainerRunToken, verifyContainerRunToken } from '../../application/runtime/containerRunToken';
+import { synthesizeRunFailedEvent } from '../../application/runtime/toolAuditReadRepair';
+import { mintPreviewToken, PREVIEW_TOKEN_TTL_SECONDS } from '../../application/runtime/previewToken';
+import { PREVIEW_HOST } from '../../application/runtime/previewIngress';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { enqueueExecutionMessage, listExecutionMessages, releasePendingSteers } from '../../application/runtime/executionSteering';
@@ -1573,38 +1576,36 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       .orderBy(desc(toolAuditEvents.ts))
       .limit(limit);
 
-    // Read-path repair: a run that FAILED before the failure-telemetry emit
-    // existed (or via any path that missed it) has its reason only on
-    // executions.error_message, so the Logs/Timeline (telemetry-only views) never
-    // show it — the timeline just stops at the last successful tool call. When
-    // scoped to one execution, synthesize the terminal `run.failed` event from the
-    // execution row if it failed and no persisted failure event is present. Self-
-    // healing and idempotent (mirrors RuntimeService.reapIfOrphaned's read repair);
-    // one indexed PK lookup, only on the per-execution path.
-    if (executionId != null && !events.some((e) => e.toolName === 'run.failed')) {
-      const [exec] = await db
-        .select({ status: executions.status, errorMessage: executions.errorMessage, completedAt: executions.completedAt, updatedAt: executions.updatedAt })
-        .from(executions)
-        .where(and(eq(executions.id, executionId), eq(executions.tenantId, tenantId)))
-        .limit(1);
-      if (exec?.status === 'failed') {
-        events.unshift({
-          id: -executionId,
-          runId: null,
-          sessionKey: `exec:${executionId}`,
-          toolCallId: null,
-          toolName: 'run.failed',
-          category: 'error',
-          args: null,
-          result: exec.errorMessage ?? 'Run failed',
-          durationMs: null,
-          executionId,
-          ts: exec.completedAt ?? exec.updatedAt,
-        });
-      }
+    // Read-path repair (shared with the host tool-audit read): when scoped to one
+    // execution, surface a terminal `run.failed` synthesized from the execution row
+    // for a run that failed without emitting the telemetry event. Events are newest-
+    // first here, so the failure prepends.
+    if (executionId != null) {
+      const synthetic = await synthesizeRunFailedEvent(db, tenantId, executionId, events);
+      if (synthetic) events.unshift(synthetic);
     }
 
     return c.json({ events });
+  });
+
+  // Live container-preview URL for a run (Replit-parity phase 2, flag-gated). Mints a
+  // signed, time-limited URL that proxies to a dev server the run started inside its
+  // container (see application/runtime/previewIngress). 404 unless PREVIEW_INGRESS_ENABLED
+  // is set, so the endpoint is inert until an operator turns the feature on. Tenant-
+  // scoped via loadOwnedExecution so a guessed id can't mint another tenant's preview.
+  router.get('/executions/:id/preview-url', async (c) => {
+    if (c.env.PREVIEW_INGRESS_ENABLED !== 'true') {
+      return c.json({ error: 'Live preview is not enabled.' }, 404);
+    }
+    const id = Number(c.req.param('id'));
+    const owned = await loadOwnedExecution(c, runtimeService, id);
+    if (!owned) return c.json({ error: 'Execution not found' }, 404);
+
+    const token = await mintPreviewToken(c.env.JWT_SECRET, id, Date.now() / 1000);
+    return c.json({
+      url: `https://${PREVIEW_HOST}/${token}/`,
+      expiresInSeconds: PREVIEW_TOKEN_TTL_SECONDS,
+    });
   });
 
   // P0-2: WebSocket streaming endpoint for a single execution.
