@@ -149,6 +149,34 @@ export interface ProjectEvermindContributions {
   inherited?: boolean;
   /** The container project whose Evermind is shown (present when `inherited`). */
   inheritedFromProjectId?: number;
+  /** ISO timestamp this head auto-quarantined after a streak of incoherent serves
+   *  (null when healthy) — drives the console's quarantine badge + reason. */
+  quarantinedAt?: string | null;
+  /** The probe-failure reason behind `quarantinedAt` (null when healthy). */
+  quarantineReason?: string | null;
+}
+
+/** One Evermind a project targets (self or an IDE build under it). Mirrors api `targetsCore`. */
+export interface ProjectEvermindTarget {
+  projectId: number;
+  ref: string | null;
+  version: number;
+  name: string;
+  mode: ProjectEvermindMode;
+  inferenceEnabled: boolean;
+  seeded: boolean;
+}
+
+/**
+ * List every Evermind this project targets — its own head plus the heads of the IDE
+ * builds grouped under it. Read-only; drives the console's "Everminds under this
+ * project" list. Ordered [self, …builds].
+ */
+export async function listProjectEvermindTargets(projectId: number): Promise<ProjectEvermindTarget[]> {
+  const res = await apiRequest<{ targets: ProjectEvermindTarget[] }>(
+    `/api/projects/${projectId}/evermind/targets`,
+  );
+  return res.targets ?? [];
 }
 
 export async function getProjectEvermindHead(projectId: number): Promise<ProjectEvermindHead> {

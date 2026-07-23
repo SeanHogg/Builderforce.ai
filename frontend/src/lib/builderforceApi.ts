@@ -801,15 +801,18 @@ export const agentHosts = {
     return `${base}/api/agent-hosts/${agentHostId}/ws?token=${encodeURIComponent(token || '')}`;
   },
 
-  /** Tool audit events for timeline/observability. */
+  /** Tool audit events for timeline/observability. Pass executionId to scope to a
+   *  single run (parity with cloudAgents.toolAuditEvents) so a host run's Logs/Timeline
+   *  isolates one execution and surfaces its terminal run.failed. */
   toolAuditEvents: (
     agentHostId: number,
-    params?: { runId?: string; sessionKey?: string; limit?: number }
+    params?: { runId?: string; sessionKey?: string; limit?: number; executionId?: number }
   ) => {
     const q = new URLSearchParams();
     if (params?.runId) q.set('runId', params.runId);
     if (params?.sessionKey) q.set('sessionKey', params.sessionKey);
     if (params?.limit != null) q.set('limit', String(params.limit));
+    if (params?.executionId != null) q.set('executionId', String(params.executionId));
     const query = q.toString();
     return request<{ events: ToolAuditEvent[] }>(
       `/api/agent-hosts/${agentHostId}/tool-audit${query ? `?${query}` : ''}`

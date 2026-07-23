@@ -21,6 +21,7 @@ import {
   type EvermindEvalPoint,
   type EvermindRecentEntry,
   type EvermindSeedModel,
+  type EvermindTarget,
   type EvermindTeacherOptions,
   type EvermindValidateResult,
 } from './types';
@@ -73,6 +74,10 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
   const t = useMemo<EvermindConsoleLabels>(() => ({ ...DEFAULT_EVERMIND_LABELS, ...(labels ?? {}) }), [labels]);
 
   const [data, setData] = useState<EvermindConsoleData | null>(null);
+  // The set of Everminds under this project (self + IDE builds). Null until the first
+  // fetch resolves (or forever, when the host supplies no `loadTargets`) so the section
+  // never flashes empty. Folded into the SAME refresh path as `loadData` — no 2nd timer.
+  const [targets, setTargets] = useState<EvermindTarget[] | null>(null);
   const [seedModels, setSeedModels] = useState<EvermindSeedModel[]>([]);
   const [teacherOpts, setTeacherOpts] = useState<EvermindTeacherOptions | null>(null);
   const [selectedSlug, setSelectedSlug] = useState('');
@@ -90,6 +95,10 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
   const [loadFailed, setLoadFailed] = useState(false);
 
   const reload = useCallback(async () => {
+    // Kick off the targets fetch alongside loadData so the list rides the SAME refresh
+    // path (mount / poll / refreshSignal) without a second timer and without adding
+    // latency to the primary head load. A targets failure is non-fatal — keep the last.
+    const targetsP = adapter.loadTargets?.().catch(() => null);
     try {
       const d = await adapter.loadData();
       setData(d);
@@ -100,6 +109,7 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
     } finally {
       setLoaded(true);
     }
+    if (targetsP) { const tg = await targetsP; if (tg) setTargets(tg); }
   }, [adapter]);
 
   // Initial load + adapter change (project switch re-provisions the adapter host-side).
@@ -174,6 +184,10 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
   // This build is showing its CONTAINER's Evermind, not one of its own — see
   // `EvermindConsoleData.inherited`. Gates the console to read-only.
   const inherited = !!data?.inherited;
+  // Auto-quarantined after a streak of incoherent serves: it can't be re-enabled until
+  // it passes the coherence probe again. Surface a badge + reason so the disable is legible.
+  const quarantined = !!data?.quarantinedAt;
+  const quarantineReason = data?.quarantineReason?.trim() || '';
 
   // The scoped project name — rendered next to the title so the panel always says WHICH
   // project's Evermind this is (the web tab and the VS Code sidebar can be on different
@@ -186,6 +200,9 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
       {scopeName && <span style={{ fontSize: '0.8rem', color: C.text2 }} title={scopeName}>· {scopeName}</span>}
       {!loadFailed && <span style={pill(seeded)}>{seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded}</span>}
       {!loadFailed && seeded && <RegressionChip t={t} evalPoint={data?.eval ?? null} />}
+      {!loadFailed && quarantined && (
+        <span style={quarantinePill} title={t.quarantinedHint(quarantineReason)}>⚠ {t.quarantinedBadge}</span>
+      )}
       {showHeaderRefresh && (
         <button type="button" onClick={() => void reload()} disabled={busy} style={ghostBtn} title={t.refresh} aria-label={t.refresh}>↻</button>
       )}
@@ -217,6 +234,22 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
           {t.inheritedHint}
         </p>
       )}
+      {quarantined && (
+        <p
+          style={{
+            margin: 0, fontSize: '0.74rem', lineHeight: 1.5, borderRadius: 6, padding: '6px 8px',
+            color: 'var(--bf-warn-text, #92400e)', background: 'var(--bf-warn-bg, #fef3c7)',
+            border: '1px solid var(--bf-warn-border, #f59e0b)',
+          }}
+          role="alert"
+        >
+          {t.quarantinedHint(quarantineReason)}
+        </p>
+      )}
+
+      {/* Read-only "Everminds under this project" list — self + IDE builds. Self-gating:
+          renders nothing until the host's optional loadTargets resolves. */}
+      {targets && <TargetsList t={t} targets={targets} />}
 
       {inherited ? (
         // INHERITED — read-only. This build has no `project_evermind` row of its own;
@@ -575,6 +608,39 @@ function ValidateResults({ t, result, onClear }: { t: EvermindConsoleLabels; res
   );
 }
 
+/** Read-only list of every Evermind under this project (self + IDE builds). The list
+ *  is ordered `[self, …builds]` server-side, so index 0 is the project itself. Renders
+ *  even for a single target — the value is the explicit count + per-target state. */
+function TargetsList({ t, targets }: { t: EvermindConsoleLabels; targets: EvermindTarget[] }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+      <div style={fieldTitle}>{t.targetsTitle}</div>
+      <div style={fieldHint}>{t.targetsHint}</div>
+      {targets.length === 0 ? (
+        <p style={italic}>{t.targetsEmpty}</p>
+      ) : (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {targets.map((tg, i) => (
+            <li
+              key={tg.projectId}
+              style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}
+            >
+              <span style={tag(false)}>{i === 0 ? t.targetSelfBadge : t.targetBuildBadge}</span>
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: C.text, wordBreak: 'break-word', minWidth: 0 }}>{tg.name}</span>
+              <span style={{ fontSize: '0.68rem', color: C.text2 }}>{t.targetProjectId(tg.projectId)}</span>
+              <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={targetChip}>{tg.seeded ? t.targetSeeded(tg.version) : t.targetUnseeded}</span>
+                <span style={targetChip}>{tg.mode === 'connected' ? t.targetConnected : t.targetFrozen}</span>
+                {tg.inferenceEnabled && <span style={{ ...targetChip, color: C.accent, borderColor: C.accent }}>{t.targetInferenceOn}</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function RecentList({ t, entries }: { t: EvermindConsoleLabels; entries: EvermindRecentEntry[] }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
@@ -646,6 +712,22 @@ const faultTag: React.CSSProperties = {
   color: 'var(--bf-warn-text, #92400e)',
   background: 'var(--bf-warn-bg, #fef3c7)',
   border: '1px solid var(--bf-warn-border, #f59e0b)',
+};
+
+/** The header quarantine badge — the same `--bf-warn-*` cascade as the fault tag, in
+ *  the rounded-pill shape the other header chips use. */
+const quarantinePill: React.CSSProperties = {
+  fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+  color: 'var(--bf-warn-text, #92400e)',
+  background: 'var(--bf-warn-bg, #fef3c7)',
+  border: '1px solid var(--bf-warn-border, #f59e0b)',
+  whiteSpace: 'nowrap',
+};
+
+/** A small state chip in a targets-list row (version / mode / inference). */
+const targetChip: React.CSSProperties = {
+  fontSize: '0.64rem', fontWeight: 600, padding: '1px 7px', borderRadius: 999,
+  border: `1px solid ${C.border}`, background: C.surface, color: C.text2, whiteSpace: 'nowrap',
 };
 
 /* ── Style atoms ──────────────────────────────────────────────────────────── */

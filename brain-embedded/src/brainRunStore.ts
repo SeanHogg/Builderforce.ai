@@ -1270,6 +1270,58 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // model that keeps narrating instead of acting cannot spin the loop.
   let usedAnnouncementRecovery = false;
 
+  // Evermind learning + reconciliation provenance for a completed turn. Extracted so
+  // BOTH the normal final-answer branch AND the tool-budget-exhausted forced-final
+  // synthesis branch emit identical memory provenance — a forced-final answer still
+  // persists server-side (its `assistantMsg` carries the truthful `evermindLearn`), so
+  // it must show the same `learn`/`reconcile` steps + answer-cache write as any other.
+  // The server reports the TRUTHFUL learn outcome on the persisted assistant message
+  // (`evermindLearn`) — the same `learnFromBrainTurn` gate it actually applies — so the
+  // `learn` step shows exactly when the server contributed. The `reconcile` step stays
+  // client-side: which of the RECALLED memories this answer restated (write-through).
+  const emitEvermindLearnReconcile = (assistantMsg: BrainMessage | undefined, finalText: string): void => {
+    const learn = assistantMsg?.evermindLearn;
+    if (learn?.learned) {
+      pushDurableStep(c, chatId, persistence, {
+        ts: nowIso(),
+        category: 'learn',
+        label: 'evermind.learn',
+        // `targets` carries the per-Evermind breakdown (a project can fan out to many)
+        // so the timeline can name each by id; the renderer falls back to `version` alone.
+        result: { version: learn.version, queued: true, ...(learn.targets ? { targets: learn.targets } : {}) },
+      });
+      const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
+      if (reconciled > 0) {
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: 'reconcile',
+          label: 'evermind.reconcile',
+          result: { count: reconciled, version: learn.version },
+        });
+      }
+    } else if (learn && learn.reason && learn.reason !== 'too-short') {
+      // The turn did NOT feed the Evermind, for a project-level reason the user can act
+      // on (chat not attached to a project / not seeded / frozen). Surface it as an
+      // EXPLAINED muted step so "Connected, yet nothing learned" is never a silent
+      // mystery again. `too-short` is mundane (a one-line turn) and intentionally not surfaced.
+      pushDurableStep(c, chatId, persistence, {
+        ts: nowIso(),
+        category: 'learn',
+        label: 'evermind.learn',
+        result: { version: learn.version, skipped: true, reason: learn.reason, ...(learn.targets ? { targets: learn.targets } : {}) },
+      });
+    }
+
+    // Remember this (question → answer) so an exact repeat short-circuits next time
+    // (see the memory-first block at loop start) — the write half of the cache. Only
+    // caches genuine model answers; the server guards length + skips trivial ones.
+    // Best-effort, fire-and-forget — never delays or fails the reply.
+    if (evermind?.cacheAnswer) {
+      const q = latestUserText(convo);
+      if (q) { void Promise.resolve(evermind.cacheAnswer(q, finalText)).catch(() => { /* best-effort */ }); }
+    }
+  };
+
   for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
     // User hit Stop between turns (or after a tool call) — unwind cleanly.
     if (c.abort?.signal.aborted) return;
@@ -1541,55 +1593,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     recordAppended(c, assistantMsg);
     emit(c);
 
-    // Evermind learning + reconciliation steps. The server reports the TRUTHFUL learn
-    // outcome for this turn on the persisted assistant message (`evermindLearn`) — the
-    // same `learnFromBrainTurn` gate it actually applies — so the `learn` step shows
-    // exactly when the server contributed. This replaces the old client-side heuristic
-    // (which both false-positived, and false-negatived for a connected-but-EMPTY Evermind
-    // where recall seeded nothing yet the first contribution still lands). The
-    // `reconcile` step stays client-side: which of the RECALLED memories this answer
-    // restated (write-through — the turn updates those learnings).
-    const learn = assistantMsg?.evermindLearn;
-    if (learn?.learned) {
-      pushDurableStep(c, chatId, persistence, {
-        ts: nowIso(),
-        category: 'learn',
-        label: 'evermind.learn',
-        // `targets` carries the per-Evermind breakdown (a project can fan out to many)
-        // so the timeline can name each by id; the renderer falls back to `version` alone.
-        result: { version: learn.version, queued: true, ...(learn.targets ? { targets: learn.targets } : {}) },
-      });
-      const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
-      if (reconciled > 0) {
-        pushDurableStep(c, chatId, persistence, {
-          ts: nowIso(),
-          category: 'reconcile',
-          label: 'evermind.reconcile',
-          result: { count: reconciled, version: learn.version },
-        });
-      }
-    } else if (learn && learn.reason && learn.reason !== 'too-short') {
-      // The turn did NOT feed the Evermind, for a project-level reason the user can act
-      // on (chat not attached to a project / not seeded / frozen). Surface it as an
-      // EXPLAINED muted step so "Connected, yet nothing learned" is never a silent
-      // mystery again — the same defect that sent the last debugging session in circles.
-      // `too-short` is mundane (a one-line turn) and intentionally not surfaced.
-      pushDurableStep(c, chatId, persistence, {
-        ts: nowIso(),
-        category: 'learn',
-        label: 'evermind.learn',
-        result: { version: learn.version, skipped: true, reason: learn.reason, ...(learn.targets ? { targets: learn.targets } : {}) },
-      });
-    }
-
-    // Remember this (question → answer) so an exact repeat short-circuits next time
-    // (see the memory-first block at loop start) — the write half of the cache. Only
-    // caches genuine model answers; the server guards length + skips trivial ones.
-    // Best-effort, fire-and-forget — never delays or fails the reply.
-    if (evermind?.cacheAnswer) {
-      const q = latestUserText(convo);
-      if (q) { void Promise.resolve(evermind.cacheAnswer(q, finalText)).catch(() => { /* best-effort */ }); }
-    }
+    emitEvermindLearnReconcile(assistantMsg, finalText);
 
     onActivity?.(chatId);
     return;
@@ -1644,6 +1648,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         c.streamingText = '';
         recordAppended(c, assistantMsg);
         emit(c);
+        // A forced-final answer still contributed server-side — emit the same memory
+        // provenance (learn/reconcile steps + answer cache) as the normal branch.
+        emitEvermindLearnReconcile(assistantMsg, closingText);
         onActivity?.(chatId);
         return;
       }
