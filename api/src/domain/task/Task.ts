@@ -205,6 +205,21 @@ export class Task {
   // Behaviour
   // ------------------------------------------------------------------
 
+  /**
+   * Apply a PARTIAL edit. `undefined` means "not provided — leave it alone";
+   * `null` is the authoritative clear (detach the parent, unassign, un-schedule).
+   *
+   * The undefined-stripping is load-bearing, not defensive hygiene. Callers build
+   * their patch as an object LITERAL with a key per updatable field
+   * (`parentTaskId: dto.parentTaskId !== undefined ? … : undefined`), so an absent
+   * field still arrives as a present key holding `undefined` — and a plain spread
+   * overwrites with it. `TaskRepository.update` then writes the assignee/parent/
+   * sprint columns AUTHORITATIVELY (`plain.x ?? null`) so `null` can actually clear
+   * them, which turned that `undefined` into a real `NULL`. Net effect: every
+   * partial update silently de-nested the ticket from its Epic and dropped its
+   * human assignee — e.g. a Brain `tasks.update` that only set status + agent ref
+   * wiped `parentTaskId` (#679), and a board PATCH did the same on every drag.
+   */
   update(
     updates: Partial<
       Pick<
@@ -216,7 +231,10 @@ export class Task {
       >
     >,
   ): Task {
-    return new Task({ ...this.props, ...updates, updatedAt: new Date() });
+    const provided = Object.fromEntries(
+      Object.entries(updates).filter(([, v]) => v !== undefined),
+    ) as typeof updates;
+    return new Task({ ...this.props, ...provided, updatedAt: new Date() });
   }
 
   /**

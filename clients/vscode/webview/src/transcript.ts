@@ -14,6 +14,7 @@ import {
   formatBrainDiagnostics,
   formatBrainProvenance,
   formatChatDiagnostics,
+  traceWithPersistedSteps,
 } from '@seanhogg/builderforce-brain-embedded';
 import type { BrainMessage, BrainTraceEvent, ChatDiagnosticsData } from '@seanhogg/builderforce-brain-embedded';
 
@@ -65,6 +66,12 @@ function fenced(label: string, payload: string, lines: string[]): void {
 /** Serialize the live conversation into a Markdown transcript. */
 export function buildTranscript(input: TranscriptInput): string {
   const nodes = buildTimeline({ messages: input.messages, trace: input.trace, streamingText: '', isRunning: false });
+  // The live `trace` only covers the CURRENT session — a reopened or resumed chat
+  // has none of the earlier run's steps in memory, only their durable `role:'tool'`
+  // rows. The timeline already reconstructs those; the diagnostics block used the
+  // bare trace and so reported `Tool calls: 0` under a transcript listing twenty of
+  // them. Both now read the same merged event list.
+  const events = traceWithPersistedSteps(input.messages, input.trace);
   const lines: string[] = ['# BuilderForce chat transcript'];
 
   // Chat + project provenance — a pasted transcript should say WHICH conversation
@@ -89,14 +96,14 @@ export function buildTranscript(input: TranscriptInput): string {
   // expired Claude subscription that silently fell back to the shared pool — the
   // "should have used Opus" context). SHARED formatter, so this copy and the web
   // triage report stay identical.
-  lines.push(...formatBrainProvenance(input.trace, { configuredModel: input.model, surface: 'VS Code (VSIX)' }));
+  lines.push(...formatBrainProvenance(events, { configuredModel: input.model, surface: 'VS Code (VSIX)' }));
   lines.push('');
 
   // Diagnostics block — the A-vs-B verdict (context exhaustion vs model
   // degradation) plus the token/tool-payload/downgrade numbers behind it. Same
   // shared builder the web triage report uses, so both copy surfaces agree.
-  if (input.trace.length) {
-    lines.push(...formatBrainDiagnostics(computeBrainDiagnostics(input.trace, input.model)), '');
+  if (events.length) {
+    lines.push(...formatBrainDiagnostics(computeBrainDiagnostics(events, input.model)), '');
   }
 
   for (const node of nodes) {

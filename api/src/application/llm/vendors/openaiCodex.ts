@@ -1,5 +1,6 @@
 import { parseSseDataFrames } from '../sseFrames';
 import { AUTH_STATUSES, VendorFatalError, VendorRetryableError, pickUsage, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
+import { pseudoStreamFromCall } from './pseudoStream';
 
 const ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses';
 
@@ -226,11 +227,10 @@ export const openAiCodexModule: VendorModule = {
   tierFor(): AiModelTier { return 'ULTRA'; },
   apiKeyFrom(env: VendorEnv): string | null { return env.OPENAI_CODEX_AUTH ?? null; },
   call: callResponses,
+  // The Codex backend's own SSE is Responses-shaped, not OpenAI-chat-shaped, so the
+  // completed call is replayed through the SHARED pseudo-stream adapter (which
+  // carries `usage` and `model` — the hand-rolled version here dropped both).
   async callStream(params: VendorCallParams): Promise<VendorStreamResult> {
-    const result = await callResponses(params);
-    const raw = result.raw as { id: string; choices: Array<{ message: { content: string; tool_calls?: unknown[] }; finish_reason: string }> };
-    const choice = raw.choices[0];
-    const chunk = { id: raw.id, object: 'chat.completion.chunk', choices: [{ index: 0, delta: { role: 'assistant', content: choice?.message.content ?? '', ...(choice?.message.tool_calls ? { tool_calls: choice.message.tool_calls } : {}) }, finish_reason: choice?.finish_reason ?? 'stop' }] };
-    return { response: new Response(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`, { headers: { 'content-type': 'text/event-stream' } }) };
+    return pseudoStreamFromCall(await callResponses(params), params);
   },
 };

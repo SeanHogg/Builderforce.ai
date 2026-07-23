@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyShell } from './ConditionalAppShell';
+import { classifyShell } from './shellRouting';
 
 describe('classifyShell — app-shell deny-list model [1557]', () => {
   it('renders full-screen routes with no chrome', () => {
@@ -11,6 +11,14 @@ describe('classifyShell — app-shell deny-list model [1557]', () => {
   it('renders auth screens footer-only', () => {
     expect(classifyShell('/login')).toBe('footer');
     expect(classifyShell('/register')).toBe('footer');
+  });
+
+  it('mounts /activate itself instead of the marketing teaser', () => {
+    // Regression: /activate used to fall through to the app shell, so a signed-out
+    // visitor following the VS Code device link (/activate?code=XXXX-XXXX) saw the
+    // generic "This is part of Builderforce.ai" gate — the page never mounted, so
+    // its own sign-in redirect never fired and the device flow dead-ended.
+    expect(classifyShell('/activate')).toBe('footer');
   });
 
   it('renders marketing/public routes in the public shell', () => {
@@ -29,6 +37,10 @@ describe('classifyShell — app-shell deny-list model [1557]', () => {
     // logged-out visitors + crawlers (robots-Allowed + in sitemap), not a teaser.
     expect(classifyShell('/integrations')).toBe('public');
     expect(classifyShell('/integrations/github')).toBe('public');
+  });
+
+  it('does not treat a prefix collision as public', () => {
+    expect(classifyShell('/modelsomething')).toBe('app');
   });
 
   it('renders known authenticated routes in the app shell', () => {

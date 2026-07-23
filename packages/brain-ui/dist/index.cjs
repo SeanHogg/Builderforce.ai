@@ -392,9 +392,6 @@ function buildTimeline(input) {
   if (streaming) nodes.push(streaming);
   return nodes;
 }
-function stepSig(category, label, tsIso) {
-  return `${category}|${label}|${tsIso ?? ""}`;
-}
 function stepNode(step, ts, key) {
   switch (step.category) {
     case "tool":
@@ -419,24 +416,11 @@ function stepNode(step, ts, key) {
       return null;
   }
 }
-function parseStepMessage(metadata) {
-  if (!metadata) return null;
-  try {
-    const m = JSON.parse(metadata);
-    if (m.kind !== "step" || typeof m.category !== "string") return null;
-    return {
-      step: { category: m.category, label: typeof m.label === "string" ? m.label : m.category, args: m.args, result: m.result, isError: m.isError, durationMs: m.durationMs },
-      tsIso: typeof m.ts === "string" ? m.ts : void 0
-    };
-  } catch {
-    return null;
-  }
-}
 function buildSettledTimeline(messages, trace) {
   const nodes = [];
   const traceStepSigs = /* @__PURE__ */ new Set();
   for (const ev of trace) {
-    if (ev.category !== "llm" && ev.category !== "message") traceStepSigs.add(stepSig(ev.category, ev.label, ev.ts));
+    if (ev.category !== "llm" && ev.category !== "message") traceStepSigs.add((0, import_builderforce_brain_embedded.stepSig)(ev.category, ev.label, ev.ts));
   }
   messages.forEach((message, i) => {
     const ts = parseTs(message.createdAt, i);
@@ -454,9 +438,9 @@ function buildSettledTimeline(messages, trace) {
         images
       });
     } else if ((0, import_builderforce_brain_embedded.isStepMessage)(message)) {
-      const parsed = parseStepMessage(message.metadata);
+      const parsed = (0, import_builderforce_brain_embedded.parseStepMessage)(message.metadata);
       if (!parsed) return;
-      if (traceStepSigs.has(stepSig(parsed.step.category, parsed.step.label, parsed.tsIso))) return;
+      if (traceStepSigs.has((0, import_builderforce_brain_embedded.stepSig)(parsed.step.category, parsed.step.label, parsed.tsIso))) return;
       const node = stepNode(parsed.step, parseTs(parsed.tsIso, ts), `msg-${message.id}`);
       if (node) nodes.push(node);
     } else {

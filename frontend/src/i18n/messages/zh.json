@@ -10329,5 +10329,28 @@
     "cancel": "取消",
     "submit": "上报错误",
     "submitting": "上报中…"
+  },
+  "activate": {
+    "title": "连接你的编辑器",
+    "loading": "加载中…",
+    "working": "处理中…",
+    "redirecting": "正在跳转到登录…",
+    "confirmIntro": "你的编辑器正在请求访问权限。请确认此代码与 VS Code 中显示的一致：",
+    "approve": "批准",
+    "deny": "拒绝",
+    "approved": "✓ 已批准。请返回 VS Code，它会自动完成登录。",
+    "denied": "请求已拒绝。你可以关闭此标签页。",
+    "keyIntro": "这是你的编辑器密钥。请复制并粘贴到 VS Code 中：",
+    "copyKey": "复制密钥",
+    "copied": "✓ 已复制",
+    "keyFine": "请妥善保管此密钥。你可以随时在“设置 → API 密钥”中撤销它。",
+    "tryAgain": "重试",
+    "errorNoTenant": "你的账户还没有工作区。请先创建一个，然后重试。",
+    "errorAlreadyResolved": "此代码已被使用或已过期。请在编辑器中重新发起登录。",
+    "errorApprove": "无法批准该设备（{status}）。",
+    "errorDeny": "无法拒绝该设备（{status}）。",
+    "errorCreateKey": "无法创建密钥（{status}）。",
+    "errorNetwork": "网络错误。请重试。",
+    "errorNoKey": "未返回密钥。请重试。"
   }
 }

@@ -1,4 +1,5 @@
 import { VendorFatalError, VendorRetryableError, pickUsage, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
+import { pseudoStreamFromCall } from './pseudoStream';
 
 const ENDPOINT = 'https://api.x.ai/v1/responses';
 
@@ -43,11 +44,11 @@ export const xaiOAuthModule: VendorModule = {
   tierFor(): AiModelTier { return 'ULTRA'; },
   apiKeyFrom(env: VendorEnv): string | null { return env.XAI_OAUTH_TOKEN ?? null; },
   call,
+  // Responses API has no OpenAI-shaped SSE of its own, so the completed call is
+  // replayed through the SHARED pseudo-stream adapter (which carries `usage` and
+  // `model` — this vendor's hand-rolled version dropped both, so every Grok turn
+  // reported no tokens to the client).
   async callStream(params: VendorCallParams): Promise<VendorStreamResult> {
-    const result = await call(params);
-    const raw = result.raw as { id: string; choices: Array<{ message: { content: string; tool_calls?: unknown[] }; finish_reason: string }> };
-    const choice = raw.choices[0];
-    const chunk = { id: raw.id, object: 'chat.completion.chunk', choices: [{ index: 0, delta: { role: 'assistant', content: choice?.message.content ?? '', ...(choice?.message.tool_calls ? { tool_calls: choice.message.tool_calls } : {}) }, finish_reason: choice?.finish_reason ?? 'stop' }] };
-    return { response: new Response(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`, { headers: { 'content-type': 'text/event-stream' } }) };
+    return pseudoStreamFromCall(await call(params), params);
   },
 };
