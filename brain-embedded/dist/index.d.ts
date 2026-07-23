@@ -1559,6 +1559,22 @@ interface PersistedStep {
     result?: unknown;
     isError?: boolean;
     durationMs?: number;
+    /** `tool` steps: pre-trim byte size of the full result (the stored copy is capped). */
+    resultBytes?: number;
+    /** `tool` steps: the result the model saw was truncated. */
+    truncated?: boolean;
+    /** `llm` steps: token usage the gateway reported for the turn. */
+    usage?: {
+        prompt?: number;
+        completion?: number;
+        total?: number;
+    };
+    /** `llm` steps: OpenAI finish_reason. */
+    finishReason?: string | null;
+    /** `llm` steps: length of the assistant text the turn produced. */
+    textChars?: number;
+    /** `llm` steps: time-to-first-token. */
+    ttftMs?: number;
 }
 /**
  * Identity of a step across the live trace and its durable copy: same category +
@@ -1584,11 +1600,11 @@ declare function parseStepMessage(metadata: string | null): {
  * Feed this — not the bare `trace` — to `computeBrainDiagnostics` so a reloaded or
  * resumed chat reports the tool calls it actually made.
  *
- * Two asymmetries this cannot repair, both bounded by what `persistStep` writes:
- * `llm` turn events are not persisted at all (so token counts and turn totals stay
- * session-scoped), and a persisted result is capped at `STEP_RESULT_CAP` (so a
- * recovered step's byte size is a floor, not the pre-trim original). The tool COUNT
- * — the number that was reading a flat zero — is exact.
+ * `persistStep` stores the diagnostics scalars alongside each step — the pre-trim
+ * `resultBytes` + `truncated` flag on a tool step, and `usage` / `finishReason` /
+ * `textChars` on an `llm` turn — so a recovered run reports the same tool counts,
+ * payload sizes, token peaks and finish reasons a live one does. Only the step
+ * RESULT payload is lossy (capped at `STEP_RESULT_CAP` in the stored copy).
  */
 declare function traceWithPersistedSteps(messages: BrainMessage[], trace: BrainTraceEvent[]): BrainTraceEvent[];
 

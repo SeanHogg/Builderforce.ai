@@ -77,11 +77,56 @@ export default defineConfig({
 };
 
 /**
+ * The mobile scaffold's Vite config.
+ *
+ * Two things make a React Native app run in the browser preview:
+ *
+ *  1. `react-native` aliases to `react-native-web`, so the SAME source renders
+ *     here and still compiles for iOS/Android under Expo.
+ *  2. The `jsx-in-js` plugin. React Native convention puts JSX in `.js` files,
+ *     but Vite only treats `.jsx` as JSX — its esbuild pass EXCLUDES `.js` by
+ *     default, and neither `optimizeDeps` (which only covers dependency
+ *     pre-bundling) nor `@vitejs/plugin-react` picks it up. Without this,
+ *     `App.js` and `index.js` fail to parse: the dev server logs "Failed to
+ *     parse source for import analysis" and serves a blank preview, and `vite
+ *     build` dies with "RollupError: Unexpected token". Transforming `.js`
+ *     through esbuild's JSX loader per file (rather than forcing a global
+ *     `esbuild.loader`) keeps `.jsx`/`.ts`/`.tsx` on Vite's own defaults, so a
+ *     TypeScript file added later still compiles.
+ */
+const MOBILE_VITE_CONFIG = `import { defineConfig, transformWithEsbuild } from 'vite';
+import react from '@vitejs/plugin-react';
+
+// React Native puts JSX in .js files, but Vite only treats .jsx as JSX. Run .js
+// sources through esbuild's JSX loader so App.js and friends compile in dev AND
+// in \`vite build\`; .jsx/.ts/.tsx keep Vite's own defaults.
+const jsxInJs = {
+  name: 'jsx-in-js',
+  async transform(code, id) {
+    const [file] = id.split('?');
+    if (!file.endsWith('.js') || file.includes('node_modules')) return null;
+    return transformWithEsbuild(code, file, { loader: 'jsx', jsx: 'automatic' });
+  },
+};
+
+// react-native-web lets the same React Native source render in the browser
+// preview. Keep this alias in place so the app stays portable to Expo.
+export default defineConfig({
+  plugins: [jsxInJs, react()],
+  resolve: {
+    alias: { 'react-native': 'react-native-web' },
+    extensions: ['.web.js', '.web.jsx', '.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'],
+  },
+  define: { global: 'window', __DEV__: 'true' },
+  optimizeDeps: { esbuildOptions: { loader: { '.js': 'jsx' } } },
+});`;
+
+/**
  * Default files for new Mobile projects — a React Native app rendered through
  * react-native-web so it runs in the IDE's browser preview while staying
  * portable to Expo. Must match MOBILE_DEFAULTS in the frontend's
  * `lib/vanillaDefaults.ts` so a seeded project runs identically to the run-only
- * fallback.
+ * fallback — `vanillaDefaults.parity.test.ts` fails the build if they drift.
  */
 export const MOBILE_TEMPLATE: Record<string, string> = {
   'package.json': JSON.stringify({
@@ -178,20 +223,7 @@ const styles = StyleSheet.create({
   buttonPressed: { opacity: 0.75 },
   buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
 });`,
-  'vite.config.js': `import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
-// react-native-web lets the same React Native source render in the browser
-// preview. Keep this alias in place so the app stays portable to Expo.
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: { 'react-native': 'react-native-web' },
-    extensions: ['.web.js', '.web.jsx', '.js', '.jsx', '.json'],
-  },
-  define: { global: 'window', __DEV__: 'true' },
-  optimizeDeps: { esbuildOptions: { loader: { '.js': 'jsx' } } },
-});`,
+  'vite.config.js': MOBILE_VITE_CONFIG,
 };
 
 /** The project fields the seeding decision needs. A `Project` domain instance
@@ -216,10 +248,18 @@ export const TEMPLATES: Record<string, Record<string, string>> = {
   mobile: MOBILE_TEMPLATE,
 };
 
-/** Modalities that run code in the WebContainer, mapped to their starter. */
+/**
+ * Modalities that run code in the WebContainer, mapped to their starter.
+ *
+ * `webmobile` (Web + Mobile) ships ONE react-native-web codebase that renders
+ * full-width as a site and inside the phone simulator, so it takes the mobile
+ * scaffold — the same call the frontend's `defaultsForModality` makes. Leaving
+ * it out is what left "Web + Mobile" projects with no files at all.
+ */
 const TEMPLATE_BY_MODALITY: Record<string, string> = {
   designer: 'vanilla',
   mobile: 'mobile',
+  webmobile: 'mobile',
 };
 
 /**
@@ -231,9 +271,17 @@ const TEMPLATE_BY_MODALITY: Record<string, string> = {
  * modalities (video/evermind/finetune/voice) get nothing because they never run
  * the Vite app. Repo-connected projects are always skipped — their files live in
  * git, not R2.
+ *
+ * An UNRECOGNISED `template` falls through to the modality instead of returning
+ * null. A stale id (from a retired starter set, or one an older create path
+ * wrote) used to mean "seed nothing", which left the workspace permanently empty
+ * — and, because this same function gates the lazy self-heal on file-list, no
+ * later open could repair it either. Every code-running modality now always
+ * resolves to a scaffold.
  */
 export function templateForProject(project: SeedableProject): Record<string, string> | null {
-  if (project.template) return TEMPLATES[project.template] ?? null;
+  const explicit = project.template ? TEMPLATES[project.template] : undefined;
+  if (explicit) return explicit;
   const hasRepo = !!(project.sourceControlRepoFullName || project.githubRepoUrl);
   if (hasRepo) return null;
   const key = TEMPLATE_BY_MODALITY[project.modality ?? 'designer'];

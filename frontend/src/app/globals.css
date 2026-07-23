@@ -117,6 +117,14 @@
      matching the VS Code composer's activated state across every modality. */
   --chat-input-active-border: var(--accent);
   --chat-input-active-ring: 0 0 0 1px var(--accent);
+  /* Composer control metrics — ONE source for every button, pill and gap in the
+     chat toolbars, so the docked Brain (a ~310px column in the IDE) doesn't read
+     as a wall of oversized circles. Coarse pointers get the touch-friendly size
+     back below; never hardcode these sizes at a call site. */
+  --chat-ctl-size: 32px;
+  --chat-ctl-gap: 6px;
+  --chat-ctl-pad-y: 6px;
+  --chat-ctl-pad-x: 8px;
 
   /* Semantic: error / success (contrast-safe in both themes) */
   --error: #f87171;
@@ -230,6 +238,17 @@ html[data-theme='light'] {
   --warning-text: #b45309;
   --warning-bg: rgba(245, 158, 11, 0.14);
   --text-on-accent: #fff;
+}
+
+/* Touch: restore comfortable tap targets on coarse pointers. The compact metrics
+   above are for mouse/trackpad density; a finger still gets ≥44px. */
+@media (pointer: coarse) {
+  :root {
+    --chat-ctl-size: 44px;
+    --chat-ctl-gap: 8px;
+    --chat-ctl-pad-y: 8px;
+    --chat-ctl-pad-x: 10px;
+  }
 }
 
 /* Form controls: readable text in light and dark mode (IDE dropdowns, inputs).

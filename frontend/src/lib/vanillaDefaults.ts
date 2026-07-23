@@ -56,6 +56,51 @@ export default defineConfig({
 };
 
 /**
+ * The mobile scaffold's Vite config.
+ *
+ * Two things make a React Native app run in the browser preview:
+ *
+ *  1. `react-native` aliases to `react-native-web`, so the SAME source renders
+ *     here and still compiles for iOS/Android under Expo.
+ *  2. The `jsx-in-js` plugin. React Native convention puts JSX in `.js` files,
+ *     but Vite only treats `.jsx` as JSX — its esbuild pass EXCLUDES `.js` by
+ *     default, and neither `optimizeDeps` (which only covers dependency
+ *     pre-bundling) nor `@vitejs/plugin-react` picks it up. Without this,
+ *     `App.js` and `index.js` fail to parse: the dev server logs "Failed to
+ *     parse source for import analysis" and serves a blank preview, and `vite
+ *     build` dies with "RollupError: Unexpected token". Transforming `.js`
+ *     through esbuild's JSX loader per file (rather than forcing a global
+ *     `esbuild.loader`) keeps `.jsx`/`.ts`/`.tsx` on Vite's own defaults, so a
+ *     TypeScript file added later still compiles.
+ */
+const MOBILE_VITE_CONFIG = `import { defineConfig, transformWithEsbuild } from 'vite';
+import react from '@vitejs/plugin-react';
+
+// React Native puts JSX in .js files, but Vite only treats .jsx as JSX. Run .js
+// sources through esbuild's JSX loader so App.js and friends compile in dev AND
+// in \`vite build\`; .jsx/.ts/.tsx keep Vite's own defaults.
+const jsxInJs = {
+  name: 'jsx-in-js',
+  async transform(code, id) {
+    const [file] = id.split('?');
+    if (!file.endsWith('.js') || file.includes('node_modules')) return null;
+    return transformWithEsbuild(code, file, { loader: 'jsx', jsx: 'automatic' });
+  },
+};
+
+// react-native-web lets the same React Native source render in the browser
+// preview. Keep this alias in place so the app stays portable to Expo.
+export default defineConfig({
+  plugins: [jsxInJs, react()],
+  resolve: {
+    alias: { 'react-native': 'react-native-web' },
+    extensions: ['.web.js', '.web.jsx', '.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'],
+  },
+  define: { global: 'window', __DEV__: 'true' },
+  optimizeDeps: { esbuildOptions: { loader: { '.js': 'jsx' } } },
+});`;
+
+/**
  * Mobile scaffold — a React Native app rendered through react-native-web.
  *
  * The IDE's preview is a browser iframe, so a Mobile project has to be runnable
@@ -63,6 +108,10 @@ export default defineConfig({
  * divs) is what keeps it a real mobile app that ports to Expo unchanged. Vite
  * aliases `react-native` to `react-native-web`, so the SAME source that renders
  * in the device simulator here compiles for iOS and Android there.
+ *
+ * Must stay byte-identical to MOBILE_TEMPLATE in the api's
+ * `application/project/projectTemplate.ts` — the two runtimes can't share a
+ * module, so `vanillaDefaults.parity.test.ts` fails the build if they drift.
  */
 export const MOBILE_DEFAULTS: Record<string, string> = {
   'package.json': JSON.stringify({
@@ -152,20 +201,7 @@ const styles = StyleSheet.create({
   buttonPressed: { opacity: 0.75 },
   buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
 });`,
-  'vite.config.js': `import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
-// react-native-web lets the same React Native source render in the browser
-// preview. Keep this alias in place so the app stays portable to Expo.
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: { 'react-native': 'react-native-web' },
-    extensions: ['.web.js', '.web.jsx', '.js', '.jsx', '.json'],
-  },
-  define: { global: 'window', __DEV__: 'true' },
-  optimizeDeps: { esbuildOptions: { loader: { '.js': 'jsx' } } },
-});`,
+  'vite.config.js': MOBILE_VITE_CONFIG,
 };
 
 /**

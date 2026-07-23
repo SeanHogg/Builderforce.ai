@@ -264,7 +264,25 @@ export function BrainPanel({
   // Brain agent/persona switcher: the user can run the Brain as the default
   // assistant, as a built-in modality persona, or as one of the agents assigned
   // to the Brain (scope='brain' in the canonical agent-assignment model).
-  const [personaSel, setPersonaSel] = useState<string>('default');
+  //
+  // Docked in an IDE project, the persona STARTS as that project's modality: the
+  // modality prompt was already the one in force there (see personaSystemPrompt
+  // below), so leaving the picker on "Default Brain" only misreported which
+  // persona was answering — open a Mobile project and the chat looked generic
+  // even though it was the mobile coder. `modality` is the resolved id, so an
+  // unknown/legacy value can't select a persona that isn't in the registry.
+  const dockedPersona = !isPage && pinnedProjectId != null ? `modality:${modality}` : 'default';
+  const [personaSel, setPersonaSel] = useState<string>(dockedPersona);
+  // Follow the project/modality the drawer is pinned to until the user picks a
+  // persona themselves — after that their choice sticks for the session.
+  const personaPicked = useRef(false);
+  useEffect(() => {
+    if (!personaPicked.current) setPersonaSel(dockedPersona);
+  }, [dockedPersona]);
+  const choosePersona = useCallback((value: string) => {
+    personaPicked.current = true;
+    setPersonaSel(value);
+  }, []);
   const [brainAgents, setBrainAgents] = useState<AgentAssignment[]>([]);
   const [agentPool, setAgentPool] = useState<PoolAgent[]>([]);
   useEffect(() => {
@@ -1281,13 +1299,17 @@ export function BrainPanel({
               renderAssistantActions={renderTimelineAssistantActions}
             />
           </div>
-          <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : '12px 16px', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }}>
+          {/* Composer chrome uses the shared --chat-ctl-* metrics (globals.css) so the
+              toolbar, the input box and the docked panel breathe the same amount —
+              docked, this is a ~310px column, where the old fixed 12/16px padding and
+              8px stack gaps ate most of the width. */}
+          <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : 'var(--chat-ctl-pad-y, 6px) var(--chat-ctl-pad-x, 8px)', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }}>
             {pendingConfirm && <ToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} onApproveAll={approveAll} />}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--chat-ctl-gap, 6px)', marginBottom: 'var(--chat-ctl-pad-y, 6px)', flexWrap: 'wrap' }}>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{tBrain('actingAs')}</span>
               <Select
                 value={personaSel}
-                onChange={(e) => setPersonaSel(e.target.value)}
+                onChange={(e) => choosePersona(e.target.value)}
                 aria-label={tBrain('personaAria')}
                 style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
               >

@@ -24,8 +24,24 @@ describe('templateForProject', () => {
     expect(templateForProject({ ...base, template: 'mobile', modality: 'designer' })).toBe(MOBILE_TEMPLATE);
   });
 
-  it('returns null for an explicit template that does not exist', () => {
-    expect(templateForProject({ ...base, template: 'nope' })).toBeNull();
+  // A stale/unknown template id used to mean "seed nothing", which left the
+  // workspace permanently empty — and since this same function gates the lazy
+  // self-heal on file-list, no later open could repair it either. It must fall
+  // through to the modality instead.
+  it('falls back to the modality when the explicit template is unknown', () => {
+    expect(templateForProject({ ...base, template: 'nope' })).toBe(VANILLA_TEMPLATE);
+    expect(templateForProject({ ...base, template: 'nope', modality: 'mobile' })).toBe(MOBILE_TEMPLATE);
+  });
+
+  it('still seeds nothing for a modality that never runs the Vite app', () => {
+    expect(templateForProject({ ...base, template: 'nope', modality: 'video' })).toBeNull();
+  });
+
+  // Web + Mobile is one react-native-web codebase rendered both full-width and
+  // in the phone simulator, so it takes the mobile scaffold. Missing from the
+  // registry, it seeded nothing at all.
+  it('gives a Web + Mobile project the React Native scaffold', () => {
+    expect(templateForProject({ ...base, modality: 'webmobile' })).toBe(MOBILE_TEMPLATE);
   });
 
   it('seeds a default designer project with no repo and no template', () => {

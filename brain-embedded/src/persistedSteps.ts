@@ -27,6 +27,19 @@ export interface PersistedStep {
   result?: unknown;
   isError?: boolean;
   durationMs?: number;
+  // --- Diagnostics scalars, persisted verbatim by `persistStep` ---
+  /** `tool` steps: pre-trim byte size of the full result (the stored copy is capped). */
+  resultBytes?: number;
+  /** `tool` steps: the result the model saw was truncated. */
+  truncated?: boolean;
+  /** `llm` steps: token usage the gateway reported for the turn. */
+  usage?: { prompt?: number; completion?: number; total?: number };
+  /** `llm` steps: OpenAI finish_reason. */
+  finishReason?: string | null;
+  /** `llm` steps: length of the assistant text the turn produced. */
+  textChars?: number;
+  /** `llm` steps: time-to-first-token. */
+  ttftMs?: number;
 }
 
 /**
@@ -46,10 +59,7 @@ export function stepSig(category: string, label: string, tsIso: string | undefin
 export function parseStepMessage(metadata: string | null): { step: PersistedStep; tsIso?: string } | null {
   if (!metadata) return null;
   try {
-    const m = JSON.parse(metadata) as {
-      kind?: string; category?: string; label?: string;
-      args?: unknown; result?: unknown; isError?: boolean; durationMs?: number; ts?: string;
-    };
+    const m = JSON.parse(metadata) as Partial<PersistedStep> & { kind?: string; ts?: string };
     if (m.kind !== 'step' || typeof m.category !== 'string') return null;
     return {
       step: {
@@ -59,6 +69,12 @@ export function parseStepMessage(metadata: string | null): { step: PersistedStep
         result: m.result,
         isError: m.isError,
         durationMs: m.durationMs,
+        resultBytes: m.resultBytes,
+        truncated: m.truncated,
+        usage: m.usage,
+        finishReason: m.finishReason,
+        textChars: m.textChars,
+        ttftMs: m.ttftMs,
       },
       tsIso: typeof m.ts === 'string' ? m.ts : undefined,
     };
@@ -76,16 +92,18 @@ export function parseStepMessage(metadata: string | null): { step: PersistedStep
  * Feed this — not the bare `trace` — to `computeBrainDiagnostics` so a reloaded or
  * resumed chat reports the tool calls it actually made.
  *
- * Two asymmetries this cannot repair, both bounded by what `persistStep` writes:
- * `llm` turn events are not persisted at all (so token counts and turn totals stay
- * session-scoped), and a persisted result is capped at `STEP_RESULT_CAP` (so a
- * recovered step's byte size is a floor, not the pre-trim original). The tool COUNT
- * — the number that was reading a flat zero — is exact.
+ * `persistStep` stores the diagnostics scalars alongside each step — the pre-trim
+ * `resultBytes` + `truncated` flag on a tool step, and `usage` / `finishReason` /
+ * `textChars` on an `llm` turn — so a recovered run reports the same tool counts,
+ * payload sizes, token peaks and finish reasons a live one does. Only the step
+ * RESULT payload is lossy (capped at `STEP_RESULT_CAP` in the stored copy).
  */
 export function traceWithPersistedSteps(messages: BrainMessage[], trace: BrainTraceEvent[]): BrainTraceEvent[] {
+  // `message` is the only category never persisted (the durable assistant turn
+  // already carries that text), so everything else can have a durable twin.
   const seen = new Set<string>();
   for (const ev of trace) {
-    if (ev.category !== 'llm' && ev.category !== 'message') seen.add(stepSig(ev.category, ev.label, ev.ts));
+    if (ev.category !== 'message') seen.add(stepSig(ev.category, ev.label, ev.ts));
   }
 
   const fromMessages: BrainTraceEvent[] = [];
@@ -96,14 +114,21 @@ export function traceWithPersistedSteps(messages: BrainMessage[], trace: BrainTr
     const sig = stepSig(parsed.step.category, parsed.step.label, parsed.tsIso);
     if (seen.has(sig)) continue;
     seen.add(sig);
+    const s = parsed.step;
     fromMessages.push({
       ts: parsed.tsIso ?? message.createdAt ?? '',
-      category: parsed.step.category as BrainTraceEvent['category'],
-      label: parsed.step.label,
-      args: parsed.step.args,
-      result: parsed.step.result,
-      ...(parsed.step.isError ? { isError: true } : {}),
-      ...(parsed.step.durationMs != null ? { durationMs: parsed.step.durationMs } : {}),
+      category: s.category as BrainTraceEvent['category'],
+      label: s.label,
+      args: s.args,
+      result: s.result,
+      ...(s.isError ? { isError: true } : {}),
+      ...(s.durationMs != null ? { durationMs: s.durationMs } : {}),
+      ...(s.ttftMs != null ? { ttftMs: s.ttftMs } : {}),
+      ...(s.resultBytes != null ? { resultBytes: s.resultBytes } : {}),
+      ...(s.truncated ? { truncated: true } : {}),
+      ...(s.usage ? { usage: s.usage } : {}),
+      ...(s.finishReason !== undefined ? { finishReason: s.finishReason } : {}),
+      ...(s.textChars != null ? { textChars: s.textChars } : {}),
     });
   }
 

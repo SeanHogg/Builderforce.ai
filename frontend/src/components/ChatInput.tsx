@@ -95,11 +95,14 @@ export interface ChatInputProps {
   focusToken?: number | string;
 }
 
-/* Theme-aware: uses --chat-input-* from globals.css (light and dark) */
+/* Theme-aware: uses --chat-input-* from globals.css (light and dark).
+   Sizing comes from the shared --chat-ctl-* metrics so every control in the
+   composer (and the toolbars around it) stays one size, and coarse pointers get
+   the touch-friendly variant without a second set of numbers here. */
 const iconButtonStyle = (disabled?: boolean): React.CSSProperties => ({
-  width: 40,
-  height: 40,
-  minWidth: 40,
+  width: 'var(--chat-ctl-size, 32px)',
+  height: 'var(--chat-ctl-size, 32px)',
+  minWidth: 'var(--chat-ctl-size, 32px)',
   flexShrink: 0,
   display: 'flex',
   alignItems: 'center',
@@ -118,7 +121,7 @@ const inputStyle: React.CSSProperties = {
   color: 'var(--chat-input-text)',
   fontSize: '0.9375rem',
   borderRadius: 0,
-  padding: '10px 12px',
+  padding: '6px 4px',
   outline: 'none',
   border: 'none',
   fontFamily: 'var(--font-body)',
@@ -127,9 +130,9 @@ const inputStyle: React.CSSProperties = {
 };
 
 const sendButtonStyle = (disabled: boolean): React.CSSProperties => ({
-  width: 40,
-  height: 40,
-  minWidth: 40,
+  width: 'var(--chat-ctl-size, 32px)',
+  height: 'var(--chat-ctl-size, 32px)',
+  minWidth: 'var(--chat-ctl-size, 32px)',
   flexShrink: 0,
   display: 'flex',
   alignItems: 'center',
@@ -494,7 +497,7 @@ export function ChatInput({
   }, []);
 
   return (
-    <form onSubmit={handleSubmit} className={className} style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+    <form onSubmit={handleSubmit} className={className} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--chat-ctl-gap, 6px)', width: '100%' }}>
       {pendingAttachments.length > 0 && onRemoveAttachment && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {pendingAttachments.map((a) => (
@@ -532,10 +535,10 @@ export function ChatInput({
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'flex-end',
-          gap: 10,
-          rowGap: 8,
+          gap: 'var(--chat-ctl-gap, 6px)',
+          rowGap: 'var(--chat-ctl-pad-y, 6px)',
           width: '100%',
-          padding: '8px 10px 8px 12px',
+          padding: 'var(--chat-ctl-pad-y, 6px) var(--chat-ctl-pad-x, 8px)',
           borderRadius: 18,
           border: `1px solid ${active ? 'var(--chat-input-active-border)' : 'var(--chat-input-border)'}`,
           background: 'var(--chat-input-bg)',
@@ -617,10 +620,10 @@ export function ChatInput({
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 5,
+              gap: 4,
               flexShrink: 0,
-              height: 40,
-              padding: '0 12px',
+              height: 'var(--chat-ctl-size, 32px)',
+              padding: '0 10px',
               borderRadius: 9999,
               fontSize: 12,
               cursor: disabled ? 'not-allowed' : 'pointer',

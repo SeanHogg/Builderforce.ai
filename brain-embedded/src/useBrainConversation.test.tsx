@@ -53,7 +53,12 @@ beforeEach(() => {
   mockStream.mockReset();
   vi.mocked(persistence.getMessages).mockReset().mockResolvedValue([]);
   vi.mocked(persistence.subscribeMessages!).mockReset().mockImplementation(() => () => {});
-  vi.mocked(persistence.sendMessages).mockClear();
+  // Reset, not just clear: a test that installs a persistent `mockImplementation`
+  // (the learn-signal cases) would otherwise leak it into every test after it.
+  vi.mocked(persistence.sendMessages).mockReset().mockImplementation(
+    async (_chatId: number, msgs: Array<{ role: string; content: string; metadata?: string }>) =>
+      msgs.map((m) => ({ id: ++seq, role: m.role, content: m.content, metadata: m.metadata ?? null, seq, createdAt: '' })),
+  );
   // The run engine is a module-level singleton keyed by chatId; reset it so a
   // chat's session-lived transcript doesn't leak between tests reusing chatId 1.
   resetBrainRunStore();
@@ -102,8 +107,10 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     await act(async () => { await hook.current.send('hi'); });
 
     expect(mockStream).toHaveBeenCalledTimes(1);
-    // user + assistant persisted
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(2);
+    // user + the durable `llm` turn step + assistant persisted. Each LLM turn now
+    // persists a compact diagnostics row (usage/finishReason — no transcript text)
+    // so a chat copied after a reload can still report its turns and tokens.
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(3);
     await waitFor(() => {
       expect(hook.current.messages.map((m) => m.content)).toEqual(['hi', 'hello there']);
     });
@@ -133,10 +140,10 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     expect(toolMsg?.tool_call_id).toBe('c1');
     expect(toolMsg?.content).toContain('"ok":true');
 
-    // user + the durable tool STEP + final assistant persist. The tool step is now
-    // persisted (role:'tool') so it survives a reload, but it is NOT added to the live
-    // message list (recordAppended) and is excluded from the model seed.
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(3);
+    // user + 2 durable `llm` turn steps + the durable tool STEP + final assistant
+    // persist. Step rows (role:'tool') survive a reload but are NOT added to the live
+    // message list (recordAppended) and are excluded from the model seed.
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(5);
     await waitFor(() => {
       expect(hook.current.messages.map((m) => m.content)).toEqual(['go', 'done']);
     });
@@ -200,7 +207,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
       ]);
     });
     // user + 2 narrations + 2 durable tool steps + final answer.
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(6);
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(9);
   });
 
   it('persists nothing extra for a pure tool-call turn with no text', async () => {
@@ -218,7 +225,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
 
     // Empty narration ⇒ NO narration bubble; user + the durable tool step + final
     // assistant persist (the empty-text turn still records its tool step durably).
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(3);
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(5);
     await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toEqual(['go', 'done']));
   });
 
@@ -243,7 +250,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     expect(runTool).toHaveBeenCalledTimes(25);
     // user + 25 durable tool steps persist; no final assistant text (the forced
     // closing turn was empty too, so no answer bubble).
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(26);
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(51);
     await waitFor(() => expect(hook.current.error).toMatch(/kept calling tools/i));
   });
 
@@ -269,7 +276,7 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     expect(runTool).toHaveBeenCalledTimes(25);
     expect(hook.current.error).toBeFalsy();
     // user + 25 durable tool steps + the forced final answer persist.
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(27);
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(52);
     await waitFor(() =>
       expect(hook.current.messages.map((m) => m.content)).toEqual(['loop', 'Here is what I found so far, and what I could not finish.']),
     );
@@ -356,15 +363,16 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     // The server reports it contributed THIS turn to the project's Evermind — even
     // with NO client-side recall (the connected-but-empty case the old heuristic
     // false-negatived). The learn step must come from the server signal, not a guess.
-    const withLearn = (learn: { learned: boolean; version: number } | null) =>
+    // Keyed on ROLE, not call order: durable `llm`/tool STEP rows are persisted
+    // between the user and assistant writes, so a `mockImplementationOnce` chain
+    // would attach the signal to whichever call happened to land second.
+    vi.mocked(persistence.sendMessages).mockImplementation(
       async (_c: number, msgs: Array<{ role: string; content: string; metadata?: string }>) =>
         msgs.map((m) => ({
           id: ++seq, role: m.role, content: m.content, metadata: m.metadata ?? null, seq, createdAt: '',
-          ...(learn && m.role === 'assistant' ? { evermindLearn: learn } : {}),
-        }));
-    vi.mocked(persistence.sendMessages)
-      .mockImplementationOnce(withLearn(null))                          // user turn
-      .mockImplementationOnce(withLearn({ learned: true, version: 2 })); // assistant turn carries the signal
+          ...(m.role === 'assistant' ? { evermindLearn: { learned: true, version: 2 } } : {}),
+        })),
+    );
     mockStream.mockResolvedValueOnce(result({ text: 'a substantive answer that clears the teach floor with room to spare' }));
 
     const { result: hook } = renderHook(
@@ -387,7 +395,9 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
         id: ++seq, role: m.role, content: m.content, metadata: m.metadata ?? null, seq, createdAt: '',
         ...(m.role === 'assistant' ? { evermindLearn: { learned: false, version: 0 } } : {}),
       }));
-    vi.mocked(persistence.sendMessages).mockImplementationOnce(noLearn).mockImplementationOnce(noLearn);
+    // Role-keyed (not call-order): durable step rows are persisted between the user
+    // and assistant writes, so a `mockImplementationOnce` chain would miss the turn.
+    vi.mocked(persistence.sendMessages).mockImplementation(noLearn);
     mockStream.mockResolvedValueOnce(result({ text: 'a plain answer on a non-project or unseeded chat' }));
 
     const { result: hook } = renderHook(

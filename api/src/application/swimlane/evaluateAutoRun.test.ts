@@ -4,6 +4,8 @@ import {
   parseRequiredCapabilities,
   trailingFailureStreak,
   MAX_CONSECUTIVE_AUTORUN_FAILURES,
+  pickManifestProducer,
+  type ManifestSlot,
 } from './evaluateAutoRun';
 
 describe('classifyResolvedAutoRun', () => {
@@ -85,5 +87,53 @@ describe('parseRequiredCapabilities', () => {
     expect(parseRequiredCapabilities('')).toEqual([]);
     expect(parseRequiredCapabilities('{"a":1}')).toEqual([]);
     expect(parseRequiredCapabilities('not json')).toEqual([]);
+  });
+});
+
+describe('pickManifestProducer — the per-stage executor on a lifecycle-managed board', () => {
+  const slot = (over: Partial<ManifestSlot> = {}): ManifestSlot => ({
+    assigneeRef: 'john-coder',
+    responsibility: 'owner',
+    state: 'pending',
+    ...over,
+  });
+
+  it('picks an agent-resolved owner slot that still owes work', () => {
+    expect(pickManifestProducer([slot()])).toBe('john-coder');
+  });
+
+  it('accepts a contributor as a producer', () => {
+    expect(pickManifestProducer([slot({ responsibility: 'contributor', assigneeRef: 'bob-dev' })])).toBe('bob-dev');
+  });
+
+  it('never picks a reviewer — a reviewer is not the stage producer', () => {
+    expect(pickManifestProducer([slot({ responsibility: 'reviewer' })])).toBeNull();
+  });
+
+  it('skips slots whose work is already finished, waived or skipped', () => {
+    for (const state of ['completed', 'waived', 'skipped']) {
+      expect(pickManifestProducer([slot({ state })])).toBeNull();
+    }
+  });
+
+  it('re-dispatches a slot that had changes requested', () => {
+    expect(pickManifestProducer([slot({ state: 'changes_requested' })])).toBe('john-coder');
+  });
+
+  it('ignores an unresolved slot (no assignee yet)', () => {
+    expect(pickManifestProducer([slot({ assigneeRef: null })])).toBeNull();
+  });
+
+  it('prefers the first open producer when several slots exist', () => {
+    const rows = [
+      slot({ responsibility: 'reviewer', assigneeRef: 'validator-t1' }),
+      slot({ state: 'completed', assigneeRef: 'kevin-pm' }),
+      slot({ assigneeRef: 'john-coder' }),
+    ];
+    expect(pickManifestProducer(rows)).toBe('john-coder');
+  });
+
+  it('is null for an empty manifest — which correctly reads as no_agent', () => {
+    expect(pickManifestProducer([])).toBeNull();
   });
 });

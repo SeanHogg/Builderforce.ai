@@ -512,11 +512,18 @@ function pushTrace(c: RunCell, ev: BrainTraceEvent): void {
 const STEP_RESULT_CAP = 4_000;
 
 /**
- * Persist a tool / memory step DURABLY so it survives a reload — the in-memory
- * `trace` alone vanishes on remount, which is why tool + memory steps used to
- * disappear from a reopened chat. Stored as a `role:'tool'` message whose metadata
- * carries the step payload (`{ kind:'step', ... }`); the timeline reconstructs the
- * node from it (see timelineModel.buildSettledTimeline).
+ * Persist a step DURABLY so it survives a reload — the in-memory `trace` alone
+ * vanishes on remount, which is why steps used to disappear from a reopened chat.
+ * Stored as a `role:'tool'` message whose metadata carries the step payload
+ * (`{ kind:'step', ... }`); the timeline reconstructs the node from it (see
+ * timelineModel.buildSettledTimeline) and the triage diagnostics reconstruct the
+ * trace event from it (see persistedSteps.traceWithPersistedSteps).
+ *
+ * The DIAGNOSTICS scalars ride along verbatim: the pre-trim `resultBytes` and the
+ * `truncated` flag on a tool step (so the "which tool flooded the window" signal
+ * isn't lost to the 4 KB result cap below), and `usage` / `finishReason` /
+ * `textChars` on an `llm` turn. Without them a reloaded chat's diagnostics could
+ * only report a byte floor and no tokens at all.
  *
  * Deliberately NOT recorded into the live message list (no recordAppended): the live
  * view already shows the step from `trace`, and the seed builders exclude `role:'tool'`
@@ -539,6 +546,13 @@ function persistStep(chatId: number, persistence: BrainRunPersistence, ev: Brain
     result,
     isError: ev.isError ?? false,
     ...(ev.durationMs != null ? { durationMs: ev.durationMs } : {}),
+    // Diagnostics scalars — tiny, and the whole point of keeping the row.
+    ...(ev.resultBytes != null ? { resultBytes: ev.resultBytes } : {}),
+    ...(ev.truncated ? { truncated: true } : {}),
+    ...(ev.usage ? { usage: ev.usage } : {}),
+    ...(ev.finishReason != null ? { finishReason: ev.finishReason } : {}),
+    ...(ev.textChars != null ? { textChars: ev.textChars } : {}),
+    ...(ev.ttftMs != null ? { ttftMs: ev.ttftMs } : {}),
     ts: ev.ts,
   });
   void persistence.sendMessages(chatId, [{ role: 'tool', content: '', metadata }]).catch(() => {
@@ -1400,7 +1414,12 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) — a smaller context window can truncate long transcripts.`,
       });
     }
-    pushTrace(c, {
+    // DURABLE, not just live: an `llm` turn carries the token usage, finish reason
+    // and resolved model the A-vs-B triage runs on. Kept in memory only, a chat
+    // copied after a reload reported `Turns: 0` / "Tokens: not reported" and could
+    // never separate context exhaustion from model degradation. The payload is a
+    // handful of scalars — no transcript text — so the row stays small.
+    pushDurableStep(c, chatId, persistence, {
       ts: nowIso(),
       category: 'llm',
       label: 'llm.complete',
