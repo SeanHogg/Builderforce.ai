@@ -273,10 +273,17 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
 
   /**
    * Assemble the path→content map to mount into the WebContainer: the project's
-   * current contents (fetching any not yet loaded into state) plus run-only
-   * defaults for missing/empty required scaffold files. Returns null if a present
+   * current contents (fetching any not yet loaded into state) plus the starter
+   * scaffold for any missing/empty required file. Returns null if a present
    * package.json is invalid JSON. Shared by Run, Check and the publish build so
    * the gather/defaults/validate logic lives in exactly one place.
+   *
+   * A scaffold file that has to be substituted is also SAVED back to the project.
+   * These used to be run-only, which meant a workspace the server never seeded
+   * ran fine but opened blank in the editor — every file 0 bytes, nothing to edit,
+   * and the substitution repeated on every Run forever. Writing them makes the
+   * repair stick and is safe by the same rule the server seeds by: only a path
+   * with NO content is ever written, so real work is never overwritten.
    */
   const assembleMountContents = useCallback(async (
     onLog?: (s: string) => void,
@@ -309,11 +316,30 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
     }
 
     const mount: Record<string, string> = { ...allContents };
+    const restored: Record<string, string> = {};
     for (const [path, content] of Object.entries(defaultsForModality(modality))) {
       if (!mount[path] || mount[path].trim() === '') {
-        onLog?.(`  \x1b[33m⚠\x1b[0m ${path} is empty, using default for this run only\r\n`);
+        onLog?.(`  \x1b[33m⚠\x1b[0m ${path} was empty — restored from the starter template\r\n`);
         mount[path] = content;
+        restored[path] = content;
       }
+    }
+    if (Object.keys(restored).length > 0) {
+      setFileContents(prev => ({ ...prev, ...restored }));
+      setFiles(prev => {
+        const have = new Set(prev.map(f => f.path));
+        const add = Object.keys(restored)
+          .filter(p => !have.has(p))
+          .map(path => ({ path, content: restored[path], type: 'file' as const }));
+        return add.length > 0 ? [...prev, ...add] : prev;
+      });
+      // Best-effort: a save failure (offline, 503) must never block the run —
+      // the mount already has the content either way.
+      await Promise.all(
+        Object.entries(restored).map(([path, content]) =>
+          saveFile(project.id, path, content).catch((e) => console.error(`Failed to restore ${path}:`, e)),
+        ),
+      );
     }
     if (mount['package.json']) {
       try {

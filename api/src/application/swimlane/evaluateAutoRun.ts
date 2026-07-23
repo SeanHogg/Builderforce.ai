@@ -13,7 +13,7 @@
  * precisely the condition the trigger evaluates.
  */
 import { and, asc, eq } from 'drizzle-orm';
-import { boards, swimlanes, swimlaneAgentAssignments, swimlaneRequirements, tasks } from '../../infrastructure/database/schema';
+import { boards, swimlanes, swimlaneAgentAssignments, swimlaneRequirements, tasks, ticketParticipants } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveArtifacts } from '../artifact/resolveArtifacts';
 import { isAgentRefRoleCapable } from '../kanban/roleCapability';
@@ -153,6 +153,63 @@ export function autoRunCooldownRemainingMs(execs: ReadonlyArray<ExecTiming>, now
   if (!Number.isFinite(elapsed)) return 0;
   const remaining = autoRunCooldownMs(streak) - elapsed;
   return remaining > 0 ? remaining : 0;
+}
+
+/** Manifest slot states that still owe work — a completed/waived/skipped producer
+ *  must not be re-dispatched for the same stage. */
+const OPEN_PARTICIPANT_STATES = new Set(['pending', 'assigned', 'in_progress', 'changes_requested']);
+
+/** A ticket-participation manifest slot, as far as producer selection cares. */
+export interface ManifestSlot {
+  assigneeRef: string | null;
+  responsibility: string;
+  state: string;
+}
+
+/**
+ * Pick the PRODUCER slot from a stage's manifest rows: an owner/contributor
+ * responsibility, resolved to an agent, still owing work. Pure — unit-tested
+ * directly, with the query kept in {@link manifestProducerRef}.
+ */
+export function pickManifestProducer(rows: ReadonlyArray<ManifestSlot>): string | null {
+  const producer = rows.find((r) =>
+    (r.responsibility === 'owner' || r.responsibility === 'contributor')
+    && !!r.assigneeRef
+    && OPEN_PARTICIPANT_STATES.has(r.state));
+  return producer?.assigneeRef ?? null;
+}
+
+/**
+ * The AGENT that the ticket's participation manifest names as the producer of THIS
+ * stage — a required owner/contributor slot for the lane, resolved to a cloud agent
+ * and not yet completed.
+ *
+ * On a lifecycle-managed board the Assignee is the Coordinator, never the per-stage
+ * executor (PRD §5.5), so the manifest is the only thing that knows who should
+ * actually do the work in this lane. Reading it here is what lets an unstaffed lane
+ * dispatch the right producer instead of stalling at `no_agent`.
+ *
+ * `stageKey` is the swimlane key (see `TicketParticipantsService.deriveManifest`),
+ * so the lane's status key matches it directly. Null when the manifest has no open
+ * agent-resolved producer for the stage — which correctly reads as `no_agent`.
+ */
+async function manifestProducerRef(db: Db, tenantId: number, taskId: number, stageKey: string): Promise<string | null> {
+  const rows = await db
+    .select({
+      assigneeRef: ticketParticipants.assigneeRef,
+      responsibility: ticketParticipants.responsibility,
+      state: ticketParticipants.state,
+    })
+    .from(ticketParticipants)
+    .where(and(
+      eq(ticketParticipants.tenantId, tenantId),
+      eq(ticketParticipants.taskId, taskId),
+      eq(ticketParticipants.stageKey, stageKey),
+      eq(ticketParticipants.required, true),
+      eq(ticketParticipants.assigneeKind, 'agent'),
+    ));
+
+  return pickManifestProducer(rows);
 }
 
 export interface AutoRunEvaluation {
@@ -321,22 +378,23 @@ export async function evaluateTaskAutoRun(
   // suppressing the fallback surfaces the lane as `no_agent` so the Coordinator/manager
   // resolves the right producer instead of the wrong owner burning failing runs.
   let ownerFallbackRef: string | null = assignedAgentRef;
-  if (assignedAgentRef) {
-    if (board.lifecycleManaged) {
-      // Lifecycle-managed board (PRD §5.5): the Assignee IS the Coordinator and is
-      // NEVER the default per-stage executor — the per-stage producer is resolved by
-      // role capability (the lane gate / manifest), so drop the owner→executor fallback.
+  if (board.lifecycleManaged) {
+    // Lifecycle-managed board (PRD §5.5): the Assignee IS the Coordinator and is
+    // NEVER the default per-stage executor. The per-stage PRODUCER is the ticket's
+    // own participation manifest slot for this stage — so read it, rather than
+    // dropping the fallback outright. The old `null` meant an unstaffed lane simply
+    // stalled at `no_agent` forever: assigning a coder to a ticket did nothing, and
+    // nothing ever resolved the producer the manifest had already named.
+    ownerFallbackRef = await manifestProducerRef(db, args.tenantId, args.taskId, args.status);
+  } else if (assignedAgentRef) {
+    const reqRows = await db
+      .select({ ref: swimlaneRequirements.ref, responsibility: swimlaneRequirements.responsibility, position: swimlaneRequirements.position })
+      .from(swimlaneRequirements)
+      .where(and(eq(swimlaneRequirements.swimlaneId, lane.id), eq(swimlaneRequirements.kind, 'role'), eq(swimlaneRequirements.isRequired, true)))
+      .orderBy(asc(swimlaneRequirements.position));
+    const producer = reqRows.find((r) => r.responsibility == null || r.responsibility === 'owner' || r.responsibility === 'contributor');
+    if (producer && !(await isAgentRefRoleCapable(db, args.tenantId, assignedAgentRef, producer.ref))) {
       ownerFallbackRef = null;
-    } else {
-      const reqRows = await db
-        .select({ ref: swimlaneRequirements.ref, responsibility: swimlaneRequirements.responsibility, position: swimlaneRequirements.position })
-        .from(swimlaneRequirements)
-        .where(and(eq(swimlaneRequirements.swimlaneId, lane.id), eq(swimlaneRequirements.kind, 'role'), eq(swimlaneRequirements.isRequired, true)))
-        .orderBy(asc(swimlaneRequirements.position));
-      const producer = reqRows.find((r) => r.responsibility == null || r.responsibility === 'owner' || r.responsibility === 'contributor');
-      if (producer && !(await isAgentRefRoleCapable(db, args.tenantId, assignedAgentRef, producer.ref))) {
-        ownerFallbackRef = null;
-      }
     }
   }
 

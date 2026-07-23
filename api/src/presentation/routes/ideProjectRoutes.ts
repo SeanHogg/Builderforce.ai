@@ -25,9 +25,12 @@ import { applyEvermindRecipe, toEvermindRecipeId } from '../../application/llm/e
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** The IDE modalities an IDE project can be. `llm` is the retired combined modality,
- *  accepted for backward compatibility (the frontend aliases it to `evermind`). */
-const MODALITIES = new Set(['designer', 'mobile', 'video', 'evermind', 'finetune', 'voice', 'llm']);
+/** The IDE modalities an IDE project can be — must stay in step with the frontend's
+ *  `lib/modality.ts` registry, since an id missing here is silently downgraded to
+ *  `designer` (which is how `webmobile` projects lost their Mobile identity).
+ *  `llm` is the retired combined modality, accepted for backward compatibility
+ *  (the frontend aliases it to `evermind`). */
+const MODALITIES = new Set(['designer', 'mobile', 'webmobile', 'video', 'evermind', 'finetune', 'voice', 'llm']);
 
 const listCacheKey = (tenantId: number) => `ide-projects:list:${tenantId}`;
 
