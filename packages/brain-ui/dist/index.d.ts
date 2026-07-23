@@ -924,6 +924,29 @@ interface EvermindConsoleData {
     inherited?: boolean;
     /** The container project whose Evermind is being displayed (present when `inherited`). */
     inheritedFromProjectId?: number;
+    /**
+     * ISO timestamp this Evermind auto-quarantined after a streak of incoherent serves
+     * (null/absent = healthy). While quarantined it serves nothing and cannot be
+     * re-enabled until it passes the coherence probe again — the console renders a badge
+     * + reason so "why did it turn itself off / why can't I turn it on" is never a mystery.
+     */
+    quarantinedAt?: string | null;
+    /** The probe-failure reason behind {@link quarantinedAt} (present when quarantined). */
+    quarantineReason?: string | null;
+}
+/**
+ * One Evermind a project targets — its own head, or the head of an IDE build grouped
+ * under it. Shape mirrors the api `targetsCore` endpoint. Ordered `[self, …builds]`,
+ * so index 0 is the project itself. Learning fans out to every live target; inference
+ * stays single-pick. Read-only in the console.
+ */
+interface EvermindTarget {
+    projectId: number;
+    version: number;
+    name: string;
+    mode: EvermindMode;
+    inferenceEnabled: boolean;
+    seeded: boolean;
 }
 /**
  * The outcome of importing a local builderforce-memory snapshot into this Evermind:
@@ -991,6 +1014,12 @@ interface EvermindConsoleAdapter {
      * the user cancels the file picker.
      */
     importMemory?(): Promise<MemoryImportReport | null>;
+    /**
+     * OPTIONAL — list every Evermind under this project (self + the IDE builds grouped
+     * under it). When present, the console renders the read-only "Everminds under this
+     * project" list; a host that omits it simply hides the section. Ordered `[self, …builds]`.
+     */
+    loadTargets?(): Promise<EvermindTarget[]>;
 }
 /** Every visible string. Parametric ones are functions the host localizes. */
 interface EvermindConsoleLabels {
@@ -1004,6 +1033,19 @@ interface EvermindConsoleLabels {
     inheritedHint: string;
     statusSeeded: (version: number) => string;
     statusUnseeded: string;
+    quarantinedBadge: string;
+    quarantinedHint: (reason: string) => string;
+    targetsTitle: string;
+    targetsHint: string;
+    targetsEmpty: string;
+    targetSelfBadge: string;
+    targetBuildBadge: string;
+    targetSeeded: (version: number) => string;
+    targetUnseeded: string;
+    targetInferenceOn: string;
+    targetConnected: string;
+    targetFrozen: string;
+    targetProjectId: (id: number) => string;
     evalDelta: (pct: string) => string;
     evalFlat: string;
     evalTooltip: (version: number, base: string, next: string, size: number) => string;
@@ -1437,4 +1479,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, ConsolidateForkControl, type ConsolidateForkControlProps, type ConsolidateForkLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_CONSOLIDATE_FORK_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindLearnedStatus, type EvermindMode, type EvermindRecentEntry, type EvermindSeedModel, type EvermindTeacherOptions, type EvermindTeacherSkipReason, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, selectPendingAskUser, serializeAskUser, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, ConsolidateForkControl, type ConsolidateForkControlProps, type ConsolidateForkLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_CONSOLIDATE_FORK_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindLearnedStatus, type EvermindMode, type EvermindRecentEntry, type EvermindSeedModel, type EvermindTarget, type EvermindTeacherOptions, type EvermindTeacherSkipReason, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, selectPendingAskUser, serializeAskUser, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };

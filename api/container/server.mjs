@@ -16,13 +16,47 @@
  *
  * Plain Node ESM (no build step) — node:22 ships global fetch + the APIs used here.
  */
-import { createServer } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
+import { connect as netConnect } from 'node:net';
 import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { join, dirname, relative, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 
 const PORT = Number(process.env.PORT || 8080);
+// Live-preview passthrough: when a run starts a dev server on PREVIEW_PORT, the
+// Worker's preview ingress proxies `preview.builderforce.ai/<token>/*` here as
+// `/__preview__/*`, which we reverse-proxy (HTTP + WebSocket/HMR) to that dev server.
+// 0/unset ⇒ no preview (503), so the passthrough is inert until a run opts in.
+const PREVIEW_PORT = Number(process.env.PREVIEW_PORT || 0);
+const PREVIEW_PREFIX = '/__preview__';
+/** Strip the `/__preview__` prefix so the dev server sees its own root paths. */
+function stripPreviewPrefix(url) {
+  const rest = url.slice(PREVIEW_PREFIX.length);
+  return rest.startsWith('/') ? rest : `/${rest}`;
+}
+function isPreviewUrl(url) {
+  return url === PREVIEW_PREFIX || url.startsWith(`${PREVIEW_PREFIX}/`);
+}
+/** Reverse-proxy a preview HTTP request to the run's dev server on PREVIEW_PORT. */
+function proxyPreviewHttp(req, res) {
+  if (!PREVIEW_PORT) {
+    res.writeHead(503, { 'Content-Type': 'text/plain' });
+    res.end('No dev server is running for this preview.');
+    return;
+  }
+  const path = stripPreviewPrefix(req.url) || '/';
+  const upstream = httpRequest(
+    { host: '127.0.0.1', port: PREVIEW_PORT, method: req.method, path,
+      headers: { ...req.headers, host: `127.0.0.1:${PREVIEW_PORT}` } },
+    (up) => { res.writeHead(up.statusCode || 502, up.headers); up.pipe(res); },
+  );
+  upstream.on('error', () => {
+    if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'text/plain' });
+    res.end('Preview dev server unreachable.');
+  });
+  req.pipe(upstream);
+}
 const MAX_LIST_ENTRIES = 500;
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000; // a build/test step may legitimately take minutes
 // Liveness heartbeat cadence. The Worker reaps a cloud run whose last activity is
@@ -398,6 +432,7 @@ const server = createServer((req, res) => {
     res.end(JSON.stringify({ ok: true }));
     return;
   }
+  if (isPreviewUrl(req.url)) { proxyPreviewHttp(req, res); return; }
   if (req.method === 'POST' && req.url === '/run') {
     let raw = '';
     req.on('data', (c) => { raw += c; });
@@ -416,6 +451,25 @@ const server = createServer((req, res) => {
     return;
   }
   res.writeHead(404); res.end('not found');
+});
+
+// Proxy WebSocket upgrades (Vite/Metro HMR) for `/__preview__/*` to the dev server by
+// re-issuing the handshake over a raw TCP socket and piping both directions.
+server.on('upgrade', (req, socket, head) => {
+  if (!isPreviewUrl(req.url) || !PREVIEW_PORT) { socket.destroy(); return; }
+  const path = stripPreviewPrefix(req.url) || '/';
+  const upstream = netConnect(PREVIEW_PORT, '127.0.0.1', () => {
+    const headers = { ...req.headers, host: `127.0.0.1:${PREVIEW_PORT}` };
+    const headerLines = Object.entries(headers)
+      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+      .join('\r\n');
+    upstream.write(`${req.method} ${path} HTTP/1.1\r\n${headerLines}\r\n\r\n`);
+    if (head && head.length) upstream.write(head);
+    socket.pipe(upstream);
+    upstream.pipe(socket);
+  });
+  upstream.on('error', () => socket.destroy());
+  socket.on('error', () => upstream.destroy());
 });
 
 server.listen(PORT, () => console.log(`[builderforce-agent-container] listening on :${PORT}`));

@@ -127,6 +127,7 @@ import { createPromptLibraryRoutes } from './presentation/routes/promptLibraryRo
 import { createBrainRoutes }       from './presentation/routes/brainRoutes';
 import { createBrainFilesRoutes }  from './presentation/routes/brainFilesRoutes';
 import { createSitesRoutes, tryServeHostedSite } from './presentation/routes/sitesRoutes';
+import { maybeHandlePreviewIngress } from './application/runtime/previewIngress';
 import { createIdeRoutes }         from './presentation/routes/ideRoutes';
 import { createCompileRoutes }     from './presentation/routes/compileRoutes';
 import { createIdeProjectRoutes }  from './presentation/routes/ideProjectRoutes';
@@ -288,6 +289,16 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   const app = new Hono<HonoEnv>();
 
   app.use('*', corsMiddleware);
+
+  // Live container-preview ingress (Replit-parity phase 2, flag-gated). A request on
+  // `preview.builderforce.ai` is proxied (HTTP + WebSocket) through the run's container
+  // DO to a dev server it started. Inert (404) unless PREVIEW_INGRESS_ENABLED is set —
+  // runs BEFORE site-hosting so the reserved `preview` label reaches the proxy, not R2.
+  app.use('*', async (c, next) => {
+    const res = await maybeHandlePreviewIngress(c.env, c.req.raw);
+    if (res) return res;
+    return next();
+  });
 
   // Published-site hosting: a request whose Host is a `<sub>.builderforce.ai`
   // hosting subdomain (delivered by the worker's wildcard route) is served

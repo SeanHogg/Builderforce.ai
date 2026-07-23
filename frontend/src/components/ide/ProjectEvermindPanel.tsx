@@ -15,6 +15,7 @@ import { listEvermindModels } from '@/lib/studioModelsApi';
 import { useLlmModels } from '@/lib/useLlmModels';
 import {
   getProjectEvermindContributions,
+  listProjectEvermindTargets,
   seedProjectEvermindFromModel,
   setProjectEvermindInference,
   setProjectEvermindMode,
@@ -78,6 +79,7 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     teach: async (text, prompt) => { await teachProjectEvermindFromText(projectId, text, prompt); },
     flush: async () => { const r = await flushProjectEvermind(projectId); return { merged: r.merged, version: r.version }; },
     validate: (prompt) => validateProjectEvermind(projectId, prompt),
+    loadTargets: () => listProjectEvermindTargets(projectId),
   }), [projectId, teacherModels, canUseFrontierModels]);
 
   const labels = useMemo<Partial<EvermindConsoleLabels>>(() => ({
@@ -88,6 +90,19 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     inheritedHint: t('inheritedHint'),
     statusSeeded: (v) => t('statusSeeded', { version: v }),
     statusUnseeded: t('statusUnseeded'),
+    quarantinedBadge: t('quarantinedBadge'),
+    quarantinedHint: (reason) => t('quarantinedHint', { reason }),
+    targetsTitle: t('targetsTitle'),
+    targetsHint: t('targetsHint'),
+    targetsEmpty: t('targetsEmpty'),
+    targetSelfBadge: t('targetSelfBadge'),
+    targetBuildBadge: t('targetBuildBadge'),
+    targetSeeded: (version) => t('targetSeeded', { version }),
+    targetUnseeded: t('targetUnseeded'),
+    targetInferenceOn: t('targetInferenceOn'),
+    targetConnected: t('targetConnected'),
+    targetFrozen: t('targetFrozen'),
+    targetProjectId: (id) => t('targetProjectId', { id }),
     evalDelta: (pct) => t('evalDelta', { pct }),
     evalFlat: t('evalFlat'),
     evalTooltip: (version, base, next, size) => t('evalTooltip', { version, base, next, size }),

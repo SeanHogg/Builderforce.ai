@@ -9,6 +9,7 @@
  */
 import { Hono, type Context } from 'hono';
 import { eq, and, isNull, desc, inArray, gte } from 'drizzle-orm';
+import { synthesizeRunFailedEvent } from '../../application/runtime/toolAuditReadRepair';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   agentHosts,
@@ -1699,31 +1700,47 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const runId    = c.req.query('runId');
     const sessKey  = c.req.query('sessionKey');
     const limit    = Math.min(Number(c.req.query('limit') ?? 200), 500);
+    // Optional per-execution scope: a V2/host run stamps `execution_id` on every
+    // tool-audit row, so scoping to it isolates ONE run's Logs/Timeline instead of
+    // showing every event the host ever emitted (parity with the cloud read).
+    const execRaw = Number(c.req.query('executionId'));
+    const executionId = Number.isFinite(execRaw) && execRaw > 0 ? execRaw : null;
 
     const conditions = [
       eq(toolAuditEvents.agentHostId,    agentHostId),
       eq(toolAuditEvents.tenantId,  tenantId),
-      ...(runId   ? [eq(toolAuditEvents.runId,       runId)]   : []),
-      ...(sessKey ? [eq(toolAuditEvents.sessionKey,  sessKey)] : []),
+      ...(runId       ? [eq(toolAuditEvents.runId,       runId)]       : []),
+      ...(sessKey     ? [eq(toolAuditEvents.sessionKey,  sessKey)]     : []),
+      ...(executionId ? [eq(toolAuditEvents.executionId, executionId)] : []),
     ];
 
     const rows = await db
       .select({
-        id:         toolAuditEvents.id,
-        runId:      toolAuditEvents.runId,
-        sessionKey: toolAuditEvents.sessionKey,
-        toolCallId: toolAuditEvents.toolCallId,
-        toolName:   toolAuditEvents.toolName,
-        category:   toolAuditEvents.category,
-        args:       toolAuditEvents.args,
-        result:     toolAuditEvents.result,
-        durationMs: toolAuditEvents.durationMs,
-        ts:         toolAuditEvents.ts,
+        id:          toolAuditEvents.id,
+        runId:       toolAuditEvents.runId,
+        sessionKey:  toolAuditEvents.sessionKey,
+        toolCallId:  toolAuditEvents.toolCallId,
+        toolName:    toolAuditEvents.toolName,
+        category:    toolAuditEvents.category,
+        args:        toolAuditEvents.args,
+        result:      toolAuditEvents.result,
+        durationMs:  toolAuditEvents.durationMs,
+        executionId: toolAuditEvents.executionId,
+        ts:          toolAuditEvents.ts,
       })
       .from(toolAuditEvents)
       .where(and(...conditions))
       .orderBy(toolAuditEvents.ts)
       .limit(limit);
+
+    // Read-path repair (shared with the cloud tool-audit read): surface a terminal
+    // `run.failed` for an execution that failed without emitting the telemetry event,
+    // so a DISCONNECTED host's Log/Timeline tab shows the failure. Events are oldest-
+    // first here, so the terminal failure appends.
+    if (executionId != null) {
+      const synthetic = await synthesizeRunFailedEvent(db, tenantId, executionId, rows);
+      if (synthetic) rows.push(synthetic);
+    }
 
     return c.json({ events: rows });
   });

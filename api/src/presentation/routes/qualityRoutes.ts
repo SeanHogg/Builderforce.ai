@@ -319,7 +319,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
   // source, with a collector-less (id: null) project-scoped ref.
   router.post('/report', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const userId = c.get('userId') as number | undefined;
+    const userId = c.get('userId') as string | undefined;
     const body = (await c.req.json().catch(() => ({}))) as {
       projectId?: number | string; title?: string; message?: string; url?: string; level?: string;
     };

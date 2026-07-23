@@ -32,6 +32,8 @@ import {
 import { mergeCheckpointDiffs } from '../../application/llm/evermindMerge';
 import { buildEvermindTrainingText, resolveEvermindTeacherModel } from '../../application/llm/evermindTeacher';
 import type { EffectiveTeacher, TeacherSkipReason } from '../../application/llm/evermindTeacher';
+import { ingestErrorEvents } from '../../application/quality/ingestEngine';
+import type { NormalizedErrorEvent } from '../../application/quality/errorSpec';
 import { embedTokens, cosineVec, packVec, unpackVec, EMBED_MAX_TOKENS } from '../../application/llm/evermindEmbed';
 import { meanEvalLoss, type EvalExample } from '../../application/llm/evermindEval';
 import type { Env } from '../../env';
@@ -530,6 +532,11 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     let lossSum = 0;
     let lossN = 0;
     let seqTotal = 0;
+    // Teacher-distillation faults accumulated this alarm. Beyond the greppable
+    // console.warn, each is ingested into the Quality/error-observability pillar
+    // (error_groups) so a tenant whose pinned teacher is 4xx-ing every merge raises
+    // a real alert on /quality instead of failing silently. [[quality-error-observability-pillar]]
+    const faultEvents: NormalizedErrorEvent[] = [];
     try {
       const store = this.env.UPLOADS;
       if (!store) return { merged: 0, newVersion: null }; // no R2 → can't merge; leave everything pending for a later alarm
@@ -629,6 +636,26 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
               `[evermind] teacher distillation failed tenant=${tenantId} project=${projectId} ` +
               `model=${training.attemptedTeacherModel} reason=${training.skipReason} detail=${training.skipDetail ?? 'none'}`,
             );
+            // Group ALL faults for the same (project, teacher, reason) into ONE
+            // error_groups row whose count climbs — a stable fingerprint keyed on those,
+            // never the per-entry id, so a repeatedly-failing teacher is one climbing
+            // alert rather than a flood of singletons.
+            faultEvents.push({
+              fingerprint: `evermind-teacher-fault:${projectId}:${training.attemptedTeacherModel}:${training.skipReason ?? 'unknown'}`,
+              type: 'EvermindTeacherDistillationFault',
+              message:
+                `Teacher distillation failed for pinned model ${training.attemptedTeacherModel}: ` +
+                `${training.skipReason ?? 'unknown'}${training.skipDetail ? ` — ${training.skipDetail}` : ''}`,
+              level: 'error',
+              timestamp: new Date().toISOString(),
+              source: 'evermind-teacher',
+              tags: {
+                service: 'evermind',
+                teacherModel: training.attemptedTeacherModel,
+                ...(training.skipReason ? { skipReason: String(training.skipReason) } : {}),
+              },
+              context: { tenantId, projectId, entryId: e.id },
+            });
           }
         } else {
           processedIds.push(e.id); // unusable (e.g. text but base isn't an evermind-lm)
@@ -715,6 +742,15 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       }
       return { merged: mergedMeta.length, newVersion: nextVersion };
     } finally {
+      // Surface any teacher-distillation faults from this alarm to the Quality pillar,
+      // on EVERY exit path (including "nothing merged" and a throw). Collector-less
+      // in-app source (`id: null`) — error_groups.collector_id is nullable — routed
+      // straight to this project. Best-effort: a broken teacher must never wedge drain.
+      if (faultEvents.length > 0) {
+        try {
+          await ingestErrorEvents(this.db, this.env, { id: null, tenantId, projectId, defaultProjectId: projectId }, faultEvents);
+        } catch { /* best-effort: the console.warn above is the fallback record */ }
+      }
       // Clear only what we consumed; anything that arrived mid-merge OR was deferred
       // past the per-alarm fit cap stays queued, and we re-arm to fold it in next.
       await this.dropProcessed(processedIds);

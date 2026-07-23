@@ -953,6 +953,11 @@ export interface ProjectEvermindContributions {
   eval: ProjectEvermindEvalPoint | null;
   /** Current affective (limbic) state — powers the brain-map's limbic regions. */
   affect: ProjectEvermindAffect;
+  /** ISO timestamp this head auto-quarantined after a streak of incoherent serves
+   *  (null when healthy) — the console renders a badge + reason off it. */
+  quarantinedAt: string | null;
+  /** The probe-failure reason behind `quarantinedAt` (null when healthy). */
+  quarantineReason: string | null;
 }
 
 /**
@@ -989,6 +994,8 @@ export async function getProjectEvermindContributions(
         training: activity.training,
         eval: activity.eval,
         affect: computeProjectAffect(activity.recent, restProfile),
+        quarantinedAt: head.quarantinedAt,
+        quarantineReason: head.quarantineReason,
       };
     },
     { kvTtlSeconds: 10 },
