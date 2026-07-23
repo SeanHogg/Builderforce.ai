@@ -3,8 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Tenant } from '@/lib/types';
-import { createTenant, completeOnboarding, saveOnboardingProgress, type OnboardingProgress } from '@/lib/auth';
-import { createProject } from '@/lib/api';
+import { completeOnboarding, saveOnboardingProgress, type OnboardingProgress } from '@/lib/auth';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { InstallBuilderForceAgents } from './InstallBuilderForceAgents';
 import { InviteTeamMembers } from './InviteTeamMembers';
@@ -28,35 +27,23 @@ interface OnboardingStepperProps {
   webToken: string;
   tenantToken?: string | null;
   tenant?: Tenant | null;
-  existingProjectsCount?: number;
   /** Persisted step progress (from `useOnboardingPrompt`) — resumes the wizard
    *  where the user left off. Ignored when it belongs to the other track. */
   initialProgress?: OnboardingProgress | null;
-  /** Builder track only — a hired account never creates a workspace. */
-  onWorkspaceCreated?: (tenant: Tenant) => Promise<void>;
   onComplete: () => void;
   onDismiss: () => void;
 }
 
-// Intent options — the emoji stays literal, the label is resolved through the
-// `onboarding.intent.*` i18n namespace at render time (all 5 locales).
-const INTENT_OPTIONS: { value: string; emoji: string }[] = [
-  { value: 'build', emoji: '🔨' },
-  { value: 'custom-agent', emoji: '🤖' },
-  { value: 'monetize', emoji: '💰' },
-  { value: 'automate', emoji: '⚡' },
-  { value: 'learn', emoji: '📚' },
-];
-
-type BuilderStepId = 'workspace' | 'project' | 'ticketing' | 'repos' | 'audit' | 'roster' | 'install' | 'invite';
+type BuilderStepId = 'ticketing' | 'repos' | 'audit' | 'roster' | 'install' | 'invite';
 type HiredStepId = 'talentProfile' | 'resume' | 'publish' | 'findWork';
 type StepId = BuilderStepId | HiredStepId;
 
-// Step order per ACCOUNT TYPE. A builder ('standard') sets up a workspace, a
-// project and an agent roster; a hired account ('freelancer') has none of those
-// — its first five minutes are about becoming hireable. Labels are resolved
-// through the `onboarding.steps.*` i18n namespace (single source; all 5 locales).
-const BUILDER_STEP_IDS: StepId[] = ['workspace', 'project', 'ticketing', 'repos', 'audit', 'roster', 'install', 'invite'];
+// Step order per ACCOUNT TYPE. A builder ('standard') connects tickets/repos, runs
+// audits and hires an agent roster — its workspace and first project are already
+// provisioned ("Default", renameable) so those two steps no longer exist. A hired
+// ('freelancer') account has none of those; its first five minutes are about
+// becoming hireable. Labels resolve through the `onboarding.steps.*` i18n namespace.
+const BUILDER_STEP_IDS: StepId[] = ['ticketing', 'repos', 'audit', 'roster', 'install', 'invite'];
 const HIRED_STEP_IDS: StepId[] = ['talentProfile', 'resume', 'publish', 'findWork'];
 
 /** The ONE place the onboarding track is chosen, so no caller re-derives it. */
@@ -72,9 +59,7 @@ export function OnboardingStepper({
   webToken,
   tenantToken = null,
   tenant = null,
-  existingProjectsCount = 0,
   initialProgress = null,
-  onWorkspaceCreated,
   onComplete,
   onDismiss,
 }: OnboardingStepperProps) {
@@ -83,15 +68,10 @@ export function OnboardingStepper({
   // the optional hook is defensive so the stepper stays usable outside that shell.
   const projectScope = useOptionalProjectScope();
   // The account type decides the whole track — a hired account never sees the
-  // workspace/project/repo steps, so none of the workspace gating applies to it.
+  // repo/roster steps, and a builder's workspace + first project are already
+  // provisioned before this wizard ever shows.
   const isHired = useIsFreelancer();
   const stepIds = stepsForAccountType(isHired);
-  const workspaceAlreadyExists = !!tenant;
-  // The project count falls back to the globally-scoped list (already loaded by
-  // ProjectScopeProvider — no extra fetch) so a caller that doesn't pass it still
-  // gets the right "you already have projects" state.
-  const projectCount = existingProjectsCount || (projectScope?.projects.length ?? 0);
-  const projectAlreadyExists = workspaceAlreadyExists && projectCount > 0;
 
   // Completion is tracked by STEP ID, not index — ids are stable across the two
   // tracks and any reordering, which is also what gets persisted (migration 0343).
@@ -101,34 +81,14 @@ export function OnboardingStepper({
   const initialCompleted = new Set<StepId>(
     (resumable?.completed ?? []).filter((id): id is StepId => (stepIds as string[]).includes(id)),
   );
-  if (!isHired && workspaceAlreadyExists) initialCompleted.add('workspace');
-  if (!isHired && projectAlreadyExists) initialCompleted.add('project');
 
-  // Resume where the user left off; otherwise skip past whatever already exists.
+  // Resume where the user left off; otherwise start at the first step.
   const resumedIndex = resumable?.activeStep ? stepIds.indexOf(resumable.activeStep as StepId) : -1;
-  const initialActiveStep =
-    resumedIndex >= 0 ? resumedIndex : isHired ? 0 : projectAlreadyExists ? 2 : workspaceAlreadyExists ? 1 : 0;
+  const initialActiveStep = resumedIndex >= 0 ? resumedIndex : 0;
 
   const [activeStep, setActiveStep] = useState<number>(initialActiveStep);
   const [completedSteps, setCompletedSteps] = useState<Set<StepId>>(initialCompleted);
   const currentStepId = stepIds[activeStep];
-
-  // Step 1 – Workspace
-  const [workspaceName, setWorkspaceName] = useState('');
-  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-  const [workspaceLoading, setWorkspaceLoading] = useState(false);
-
-  // Step 2 – Project
-  const [projectName, setProjectName] = useState('');
-  const [projectDesc, setProjectDesc] = useState('');
-  const [selectedIntent, setSelectedIntent] = useState<string[]>([]);
-  const [projectError, setProjectError] = useState<string | null>(null);
-  const [projectLoading, setProjectLoading] = useState(false);
-  const [projectCreated, setProjectCreated] = useState(false);
-  const [createdProjectId, setCreatedProjectId] = useState<number | null>(null);
-
-  // Current workspace (may be passed in or created during step 1)
-  const [currentTenant, setCurrentTenant] = useState<Tenant | null>(tenant);
 
   // Record progress server-side on every step transition so closing the wizard
   // mid-way resumes here instead of restarting at step 1. Fire-and-forget: the
@@ -153,63 +113,9 @@ export function OnboardingStepper({
     persistProgress(next, nextActive ?? stepId);
   };
 
-  // A builder must create a workspace before escaping the wizard; a hired
-  // account has nothing mandatory, so it can close at any point.
-  const canClose = isHired || completedSteps.has('workspace') || workspaceAlreadyExists;
-
-  // ── Step 1: Create Workspace ─────────────────────────────────────────────
-
-  const handleCreateWorkspace = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!workspaceName.trim()) return;
-      setWorkspaceError(null);
-      setWorkspaceLoading(true);
-      try {
-        const newTenant = await createTenant(webToken, workspaceName.trim());
-        await onWorkspaceCreated?.(newTenant);
-        setCurrentTenant(newTenant);
-        markComplete('workspace', 'project');
-        setActiveStep(1);
-      } catch (err) {
-        setWorkspaceError(err instanceof Error ? err.message : t('workspaceCreateFailed'));
-      } finally {
-        setWorkspaceLoading(false);
-      }
-    },
-    [webToken, workspaceName, onWorkspaceCreated]
-  );
-
-  // ── Step 2: Create Project ───────────────────────────────────────────────
-
-  const handleCreateProject = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!projectName.trim()) return;
-      setProjectError(null);
-      setProjectLoading(true);
-      try {
-        const created = await createProject({ name: projectName.trim(), description: projectDesc.trim() || undefined });
-        setCreatedProjectId(created?.id ?? null);
-        setProjectCreated(true);
-        // Make the brand-new project the active global scope, so the user lands
-        // in it when the wizard closes instead of the all-projects view.
-        if (created?.id) projectScope?.adoptProject(created);
-        markComplete('project');
-      } catch (err) {
-        setProjectError(err instanceof Error ? err.message : t('projectCreateFailed'));
-      } finally {
-        setProjectLoading(false);
-      }
-    },
-    [projectName, projectDesc, projectScope]
-  );
-
-  const toggleIntent = (value: string) => {
-    setSelectedIntent((prev) =>
-      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
-    );
-  };
+  // The workspace + first project are already provisioned before this wizard
+  // shows, so nothing here is mandatory — it can be closed at any point.
+  const canClose = true;
 
   // ── Step navigation ──────────────────────────────────────────────────────
 
@@ -223,7 +129,7 @@ export function OnboardingStepper({
   const handleFinish = async () => {
     markComplete(currentStepId);
     try {
-      await completeOnboarding(webToken, selectedIntent.length > 0 ? selectedIntent : undefined);
+      await completeOnboarding(webToken);
     } catch {
       // Non-fatal — user has completed onboarding visually regardless
     }
@@ -232,7 +138,7 @@ export function OnboardingStepper({
 
   const handleDismiss = async () => {
     try {
-      await completeOnboarding(webToken, selectedIntent.length > 0 ? selectedIntent : undefined);
+      await completeOnboarding(webToken);
     } catch {
       // Non-fatal
     }
@@ -242,12 +148,11 @@ export function OnboardingStepper({
   // ── Render ───────────────────────────────────────────────────────────────
 
   // The ticketing / repos / audit / roster steps all act on ONE project. Prefer
-  // the project created in this wizard, then the globally-scoped project, then
-  // the first project in the workspace — otherwise a returning owner who already
-  // has projects would hit the "create a project first" placeholder on four
-  // consecutive steps and never reach those adoption hooks.
+  // the globally-scoped project, then the first project in the workspace (the
+  // auto-provisioned "Default" always qualifies) — so these steps reach their
+  // adoption hooks instead of a "create a project first" placeholder.
   const activeProjectId =
-    createdProjectId ?? projectScope?.currentProjectId ?? projectScope?.projects[0]?.id ?? null;
+    projectScope?.currentProjectId ?? projectScope?.projects[0]?.id ?? null;
 
   return (
     <div
@@ -401,220 +306,6 @@ export function OnboardingStepper({
 
         {/* Step content */}
         <div style={{ padding: '24px', flex: 1 }}>
-          {/* ── Step 1: Workspace ── */}
-          {currentStepId === 'workspace' && (
-            <div>
-              {workspaceAlreadyExists ? (
-                <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                  <div style={{ fontSize: 48, marginBottom: 12 }}>🏢</div>
-                  <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)' }}>
-                    {currentTenant?.name}
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-                    {t('workspaceReady')}
-                  </div>
-                </div>
-              ) : (
-                <form onSubmit={handleCreateWorkspace}>
-                  <label
-                    style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}
-                  >
-                    {t('workspaceName')}
-                  </label>
-                  <input
-                    type="text"
-                    placeholder={t('workspaceNamePlaceholder')}
-                    value={workspaceName}
-                    onChange={(e) => setWorkspaceName(e.target.value)}
-                    disabled={workspaceLoading}
-                    autoFocus
-                    style={{
-                      width: '100%',
-                      boxSizing: 'border-box',
-                      padding: '10px 14px',
-                      fontSize: 15,
-                      background: 'var(--bg-base)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
-                      color: 'var(--text-primary)',
-                      outline: 'none',
-                      marginBottom: 8,
-                    }}
-                  />
-                  {workspaceError && (
-                    <p style={{ color: 'var(--error-text, #e74c3c)', fontSize: 13, marginBottom: 8 }}>
-                      {workspaceError}
-                    </p>
-                  )}
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 0, marginBottom: 20 }}>
-                    {t('workspaceNameHint')}
-                  </p>
-                  <button
-                    type="submit"
-                    disabled={workspaceLoading || !workspaceName.trim()}
-                    style={{
-                      padding: '10px 24px',
-                      fontSize: 14,
-                      fontWeight: 600,
-                      background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 10,
-                      cursor: workspaceLoading || !workspaceName.trim() ? 'not-allowed' : 'pointer',
-                      opacity: workspaceLoading || !workspaceName.trim() ? 0.6 : 1,
-                    }}
-                  >
-                    {workspaceLoading ? t('creating') : t('createWorkspace')}
-                  </button>
-                </form>
-              )}
-            </div>
-          )}
-
-          {/* ── Step 2: Project ── */}
-          {currentStepId === 'project' && (
-            <div>
-              {projectAlreadyExists ? (
-                <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                  <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
-                  <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)' }}>
-                    {t('projectsReady', { count: projectCount })}
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-                    {t('projectsExist')}
-                  </div>
-                </div>
-              ) : projectCreated ? (
-                <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                  <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
-                  <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)' }}>
-                    {t('projectCreated', { name: projectName })}
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-                    {t('projectReady')}
-                  </div>
-                </div>
-              ) : (
-                <form onSubmit={handleCreateProject}>
-                  <div style={{ marginBottom: 16 }}>
-                    <label
-                      style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}
-                    >
-                      {t('projectName')} <span style={{ color: 'var(--coral-bright)' }}>*</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder={t('projectNamePlaceholder')}
-                      value={projectName}
-                      onChange={(e) => setProjectName(e.target.value)}
-                      disabled={projectLoading}
-                      autoFocus
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        padding: '10px 14px',
-                        fontSize: 15,
-                        background: 'var(--bg-base)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 8,
-                        color: 'var(--text-primary)',
-                        outline: 'none',
-                      }}
-                    />
-                  </div>
-
-                  <div style={{ marginBottom: 20 }}>
-                    <label
-                      style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}
-                    >
-                      {t('description')} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>{t('optional')}</span>
-                    </label>
-                    <textarea
-                      placeholder={t('descriptionPlaceholder')}
-                      value={projectDesc}
-                      onChange={(e) => setProjectDesc(e.target.value)}
-                      disabled={projectLoading}
-                      rows={2}
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        padding: '10px 14px',
-                        fontSize: 14,
-                        background: 'var(--bg-base)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 8,
-                        color: 'var(--text-primary)',
-                        outline: 'none',
-                        resize: 'vertical',
-                        fontFamily: 'inherit',
-                      }}
-                    />
-                  </div>
-
-                  <div style={{ marginBottom: 20 }}>
-                    <label
-                      style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10 }}
-                    >
-                      {t('intentQuestion')}{' '}
-                      <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>{t('intentHint')}</span>
-                    </label>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      {INTENT_OPTIONS.map((opt) => {
-                        const selected = selectedIntent.includes(opt.value);
-                        return (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            onClick={() => toggleIntent(opt.value)}
-                            style={{
-                              padding: '7px 14px',
-                              fontSize: 13,
-                              fontWeight: selected ? 600 : 400,
-                              background: selected
-                                ? 'rgba(244,114,110,0.15)'
-                                : 'var(--bg-elevated)',
-                              color: selected ? 'var(--coral-bright)' : 'var(--text-secondary)',
-                              border: `1px solid ${selected ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
-                              borderRadius: 20,
-                              cursor: 'pointer',
-                              transition: 'all 0.15s',
-                            }}
-                          >
-                            {opt.emoji} {t(`intent.${opt.value}`)}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {projectError && (
-                    <p style={{ color: 'var(--error-text, #e74c3c)', fontSize: 13, marginBottom: 8 }}>
-                      {projectError}
-                    </p>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={projectLoading || !projectName.trim()}
-                    style={{
-                      padding: '10px 24px',
-                      fontSize: 14,
-                      fontWeight: 600,
-                      background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 10,
-                      cursor: projectLoading || !projectName.trim() ? 'not-allowed' : 'pointer',
-                      opacity: projectLoading || !projectName.trim() ? 0.6 : 1,
-                    }}
-                  >
-                    {projectLoading ? t('creating') : t('createProject')}
-                  </button>
-                </form>
-              )}
-            </div>
-          )}
-
           {/* ── Step: Connect ticketing ── */}
           {currentStepId === 'ticketing' && (
             activeProjectId != null ? (
@@ -670,8 +361,8 @@ export function OnboardingStepper({
           )}
 
           {/* ── Step 4: Invite ── */}
-          {currentStepId === 'invite' && currentTenant && tenantToken && (
-            <InviteTeamMembers tenantId={currentTenant.id} tenantToken={tenantToken} />
+          {currentStepId === 'invite' && tenant && tenantToken && (
+            <InviteTeamMembers tenantId={tenant.id} tenantToken={tenantToken} />
           )}
 
           {/* ── Hired track: profile → résumé → publish → find work ── */}
@@ -715,10 +406,9 @@ export function OnboardingStepper({
 
           {activeStep < stepIds.length - 1 ? (
             (() => {
-              // Only the builder track has mandatory steps (workspace, project).
-              const nextDisabled =
-                (currentStepId === 'workspace' && !completedSteps.has('workspace') && !workspaceAlreadyExists) ||
-                (currentStepId === 'project' && !projectCreated && !completedSteps.has('project'));
+              // Every step is optional now — the workspace and first project are
+              // already provisioned, so nothing blocks advancing.
+              const nextDisabled = false;
               return (
                 <button
                   type="button"

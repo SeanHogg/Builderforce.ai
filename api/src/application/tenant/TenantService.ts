@@ -7,7 +7,7 @@ import {
   TenantBillingStatus,
   asTenantId,
 } from '../../domain/shared/types';
-import { NotFoundError, ConflictError, ValidationError } from '../../domain/shared/errors';
+import { NotFoundError, ValidationError } from '../../domain/shared/errors';
 import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
 import type { PaymentProvider, WebhookEvent } from '../../infrastructure/payment/PaymentProvider';
 
@@ -86,14 +86,23 @@ export class TenantService {
   }
 
   async createTenant(dto: CreateTenantDto): Promise<Tenant> {
-    const slug = dto.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    const existing = await this.tenants.findBySlug(slug);
-    if (existing) {
-      throw new ConflictError(`A tenant with name '${dto.name}' already exists`);
-    }
-
-    const tenant = Tenant.create(dto.name, dto.ownerUserId);
+    // Slugs are globally unique, but workspace NAMES are not meant to be — two
+    // unrelated orgs (and, crucially, every new user's auto-provisioned "Default")
+    // can share a display name. Resolve a free slug by suffixing instead of
+    // rejecting the create, mirroring how project keys auto-disambiguate.
+    const slug = await this.resolveUniqueSlug(dto.name);
+    const tenant = Tenant.create(dto.name, dto.ownerUserId, slug);
     return this.tenants.save(tenant);
+  }
+
+  /** Lowest free slug for a display name: `default`, then `default-2`, `default-3`… */
+  private async resolveUniqueSlug(name: string): Promise<string> {
+    const base = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'workspace';
+    let slug = base;
+    for (let i = 2; await this.tenants.findBySlug(slug); i++) {
+      slug = `${base}-${i}`;
+    }
+    return slug;
   }
 
   async renameTenant(

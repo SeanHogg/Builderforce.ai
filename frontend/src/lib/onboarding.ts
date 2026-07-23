@@ -13,9 +13,10 @@
  * the Gap Register so this gate can be added once verification ships.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { AUTH_API_URL, checkUnauthorizedAndRedirect, getMe, getMyTenants, type OnboardingProgress } from './auth';
+import { AUTH_API_URL, checkUnauthorizedAndRedirect, createTenant, getMe, getMyTenants, type OnboardingProgress } from './auth';
+import { createProject, fetchProjects } from './api';
 
 export interface ActiveTermsDoc {
   documentType: 'terms';
@@ -159,13 +160,20 @@ export function useOnboardingState(): OnboardingState {
   const [terms, setTerms] = useState<ActiveTermsDoc | null>(null);
   const [needsTerms, setNeedsTerms] = useState<boolean | null>(null);
   const [needsRole, setNeedsRole] = useState<boolean | null>(null);
+  const [accountType, setAccountType] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(!!webToken);
+  // Auto-provisioning the zero-setup "Default" workspace + project for a brand-new
+  // builder. Kept in `loading` so the gate holds the skeleton (never flashes the
+  // tenant picker) while it runs. The ref makes it fire at most once per mount.
+  const [provisioning, setProvisioning] = useState(false);
+  const provisionAttempted = useRef(false);
 
   const load = useCallback(async () => {
     if (!webToken) {
       setTerms(null);
       setNeedsTerms(null);
       setNeedsRole(null);
+      setAccountType(null);
       setLoading(false);
       return;
     }
@@ -179,6 +187,8 @@ export function useOnboardingState(): OnboardingState {
       setTerms(status.terms);
       setNeedsTerms(status.needsAcceptance);
       setNeedsRole(!me.accountTypeSelected);
+      // Drives zero-setup provisioning — only a builder ('standard') gets a workspace.
+      setAccountType(me.accountType ?? 'standard');
     } finally {
       setLoading(false);
     }
@@ -188,8 +198,50 @@ export function useOnboardingState(): OnboardingState {
     void load();
   }, [load]);
 
+  // Zero-setup onboarding: a brand-new builder should land straight in a usable
+  // workspace instead of hand-typing a workspace name and a project name. Once
+  // terms + role are cleared and no workspace is selected yet, provision a
+  // "Default" workspace + "Default" project (both renameable later) and select it.
+  // Guardrails:
+  //   • builders only — a hired ('freelancer') account has no workspace.
+  //   • ZERO existing workspaces only — a returning / multi-workspace user still
+  //     flows through the normal picker (auto-selects a lone workspace elsewhere).
+  //   • best-effort — any failure falls through to the manual pending-tenant path
+  //     (the /tenants picker), so this can never trap a user.
+  useEffect(() => {
+    if (!webToken || tenantToken) return;
+    if (needsTerms !== false || needsRole !== false) return;
+    if (accountType !== 'standard') return;
+    if (provisioning || provisionAttempted.current) return;
+    provisionAttempted.current = true;
+    setProvisioning(true);
+    void (async () => {
+      try {
+        const tenants = await getMyTenants(webToken);
+        if (tenants.length > 0) return; // existing users keep the normal picker flow
+        const tenant = await createTenant(webToken, 'Default');
+        await selectTenant(tenant); // mints the tenant JWT (persisted synchronously)
+        // Give the new workspace a Default project so the app is immediately usable
+        // (createProject also seeds its board + Evermind). Guarded so a returning
+        // path that somehow already has projects never gets a duplicate.
+        const projects = await fetchProjects().catch(() => []);
+        if (projects.length === 0) {
+          await createProject({ name: 'Default' }).catch(() => {});
+        }
+      } catch {
+        /* fall through to the manual /tenants picker (pending-tenant phase) */
+      } finally {
+        setProvisioning(false);
+      }
+    })();
+  }, [webToken, tenantToken, needsTerms, needsRole, accountType, provisioning, selectTenant]);
+
   const selectRole = useCallback(async (accountType: 'standard' | 'freelancer') => {
     await selectAccountType(accountType);
+    // Keep the local copy in lockstep — the auto-provision effect keys off it, and
+    // load() won't re-run to refresh it. Without this, a fresh account that just
+    // picked Hired would still look 'standard' and wrongly get a Default workspace.
+    setAccountType(accountType);
     setNeedsRole(false);
   }, [selectAccountType]);
 
@@ -232,7 +284,9 @@ export function useOnboardingState(): OnboardingState {
 
   return {
     phase,
-    loading,
+    // Hold the gate's skeleton while the Default workspace/project provision, so
+    // the tenant picker never flashes for a brand-new builder.
+    loading: loading || provisioning,
     terms,
     acceptTerms,
     selectRole,

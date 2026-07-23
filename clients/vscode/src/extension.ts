@@ -70,8 +70,34 @@ async function refreshWorkspaceHeader(context: vscode.ExtensionContext): Promise
   }
 }
 
+/**
+ * Mirror the signed-in state into the `builderforce.signedIn` context key so the
+ * sidebar can hide every feature view behind a single login panel when logged out
+ * (the views' `when` clauses read this key). Signed-in truth is "has an editor key
+ * in SecretStorage" — the same check every surface already makes ad hoc.
+ */
+async function syncSignedInContext(context: vscode.ExtensionContext): Promise<void> {
+  const signedIn = !!(await context.secrets.get(SECRET_KEY));
+  await vscode.commands.executeCommand("setContext", "builderforce.signedIn", signedIn);
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   initProjectState(context.workspaceState);
+  // Gate the sidebar on auth before anything else registers: until this resolves the
+  // key is falsy, so the login (Welcome) panel shows and the feature views stay hidden.
+  void syncSignedInContext(context);
+  // Empty provider so the Welcome view can render its viewsWelcome sign-in panel.
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider("builderforce.welcome", {
+      getChildren: () => [],
+      getTreeItem: () => new vscode.TreeItem(""),
+    } satisfies vscode.TreeDataProvider<never>),
+    // Keep the key fresh when auth changes out-of-band (e.g. the device-code flow
+    // completing, or a sign-out in another window).
+    vscode.authentication.onDidChangeSessions((e) => {
+      if (e.provider.id === BuilderForceAuthProvider.id) void syncSignedInContext(context);
+    }),
+  );
   const tree = new SessionsTreeProvider(context.secrets);
   const projects = new ProjectsTreeProvider(context);
   const inbox = new InboxTreeProvider(context.secrets);
@@ -918,6 +944,7 @@ async function signIn(context: vscode.ExtensionContext): Promise<void> {
     return;
   }
   vscode.window.showInformationMessage("BuilderForce: signed in.");
+  void syncSignedInContext(context); // reveal the feature views
   bfApi.clearJwt();
   clearPlatformToolsCache();
   BrainWebview.refresh();
@@ -937,6 +964,7 @@ async function signOut(
   auth: BuilderForceAuthProvider,
 ): Promise<void> {
   await auth.removeSession();
+  void syncSignedInContext(context); // collapse back to the login-only Welcome panel
   bfApi.clearJwt();
   clearPlatformToolsCache();
   clearPersonalityBlockCache();

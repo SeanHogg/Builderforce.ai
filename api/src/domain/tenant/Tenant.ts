@@ -58,10 +58,16 @@ export class Tenant {
   static create(
     name: string,
     ownerUserId: string,
+    slugOverride?: string,
   ): Tenant {
     if (!name.trim()) throw new ValidationError('Tenant name is required');
 
-    const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    // Slug is globally unique. Callers that must guarantee uniqueness (e.g. the
+    // auto-provisioned "Default" workspace, whose display name collides across
+    // every new user) pass a pre-resolved slug; otherwise derive it from the name.
+    const slug = slugOverride?.trim()
+      ? slugOverride.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      : name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const now = new Date();
     // Every new workspace starts on a 14-day Pro trial: plan=Pro + status=trialing
     // + trial_ends_at = now + 14d. effectivePlan() yields Pro limits until it lapses,

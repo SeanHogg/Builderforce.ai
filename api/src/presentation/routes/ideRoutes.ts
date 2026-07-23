@@ -25,8 +25,10 @@ import { PUBLIC_LIST_CACHE_KEY } from './workforceRoutes';
 import {
   ideProxy,
   readProxyChoice,
+  newTraceId,
   type ChatCompletionRequest,
 } from '../../application/llm/LlmProxyService';
+import { logTrace } from '../../application/llm/traceLogger';
 import { evaluateFinetuneOutputs } from '../../application/finetune/evaluateFinetune';
 import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import {
@@ -437,14 +439,29 @@ export function createIdeRoutes(): Hono<HonoEnv> {
           const { proxy: service } = await tenantProxyForPlan(c.env, c.get('tenantId') as number);
           const systemPrompt = `You are an expert AI trainer. Generate instruction-tuning examples. Return ONLY a valid JSON array of objects: {"instruction":"...","input":"...","output":"..."}. No other text.`;
           const userPrompt = `Generate ${exampleCount} diverse examples for: ${body.capabilityPrompt}. Return ONLY the JSON array.`;
-          const result = await service.complete({
+          const datasetTraceId = newTraceId();
+          const datasetReqBody = {
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt },
             ],
             stream: false,
             max_tokens: 4096,
-          } as ChatCompletionRequest);
+          } as ChatCompletionRequest;
+          const result = await service.complete(datasetReqBody, undefined, datasetTraceId);
+          // Diagnostic trace for dataset generation (surface `dataset-gen`) so training-
+          // data synthesis is attributable in the superadmin trace view alongside chat.
+          logTrace(c.env, c.executionCtx, {
+            traceId: datasetTraceId, surface: 'dataset-gen',
+            tenantId: c.get('tenantId') ?? null,
+            userId: c.get('userId') ?? null,
+            result, streamed: false,
+            requestIp: c.req.header('cf-connecting-ip') ?? null,
+            origin: c.req.header('Origin') ?? null,
+            userAgent: c.req.header('User-Agent') ?? null,
+            requestBody: datasetReqBody as unknown as Record<string, unknown>,
+            responseBody: null, errorMessage: null,
+          });
           const json = await result.response.json() as { choices?: Array<{ message?: { content?: string } }> };
           const content = json.choices?.[0]?.message?.content ?? '';
           const examples = parseDatasetResponse(content);
@@ -819,9 +836,26 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const { proxy: service } = await tenantProxyForPlan(c.env, c.get('tenantId') as number);
     let status = 'ok';
     let errorMessage: string | null = null;
+    const traceId = newTraceId();
     try {
-      const result = await service.complete({ messages, stream: body.stream !== false });
+      const streamed = body.stream !== false;
+      const result = await service.complete({ messages, stream: streamed }, undefined, traceId);
       const latencyMs = Date.now() - startMs;
+      // Diagnostic trace for workforce/hired-agent inference (surface `agent`) so these
+      // runs are as observable in the superadmin trace view as gateway/IDE-chat traffic
+      // — the `agent_inference_logs` row above is the product metric, this is the raw
+      // model/vendor/attempt telemetry keyed to the same traceId.
+      logTrace(c.env, c.executionCtx, {
+        traceId, surface: 'agent',
+        tenantId: c.get('tenantId') ?? null,
+        userId: c.get('userId') ?? null,
+        result, streamed,
+        requestIp: c.req.header('cf-connecting-ip') ?? null,
+        origin: c.req.header('Origin') ?? null,
+        userAgent: c.req.header('User-Agent') ?? null,
+        requestBody: { agentId, messages, stream: streamed } as unknown as Record<string, unknown>,
+        responseBody: null, errorMessage: null,
+      });
       await getSql(c)`
         INSERT INTO agent_inference_logs (id, agent_id, model_ref, latency_ms, status, inference_mode, created_at)
         VALUES (${logId}, ${agentId}, ${'builderforce/workforce-' + agentId}, ${latencyMs}, ${status}, ${inferenceMode}, NOW())

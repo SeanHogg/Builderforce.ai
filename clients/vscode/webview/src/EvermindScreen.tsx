@@ -19,6 +19,7 @@ import {
   DEFAULT_EVERMIND_LABELS,
   type EvermindConsoleAdapter,
   type EvermindConsoleLabels,
+  type EvermindTarget,
 } from '@seanhogg/builderforce-brain-ui';
 import { authedFetch } from './authedFetch';
 import { fetchIsPaidPlan } from './accountPlan';
@@ -62,6 +63,8 @@ function evLabels(labels: LabelBundle): Partial<EvermindConsoleLabels> {
     'flushCta', 'flushing', 'flushedNone', 'inspectTitle', 'inspectEmpty', 'kindText',
     'kindDelta', 'deltaEntry', 'refresh', 'errorGeneric',
     'importTitle', 'importHint', 'importCta', 'importing', 'importNothing',
+    'quarantinedBadge', 'targetsTitle', 'targetsHint', 'targetsEmpty', 'targetSelfBadge',
+    'targetBuildBadge', 'targetUnseeded', 'targetInferenceOn', 'targetConnected', 'targetFrozen',
   ];
   for (const k of keys) {
     const v = s(k);
@@ -75,6 +78,12 @@ function evLabels(labels: LabelBundle): Partial<EvermindConsoleLabels> {
   const importDone = s('importDone');
   if (importDone) out.importDone = (absorbed, version, compacted, savedKb) =>
     importDone.replace('{absorbed}', String(absorbed)).replace('{version}', String(version)).replace('{compacted}', String(compacted)).replace('{savedKb}', savedKb);
+  const quarantinedHint = s('quarantinedHint');
+  if (quarantinedHint) out.quarantinedHint = (reason) => quarantinedHint.replace('{reason}', reason);
+  const targetSeeded = s('targetSeeded');
+  if (targetSeeded) out.targetSeeded = (version) => targetSeeded.replace('{version}', String(version));
+  const targetProjectId = s('targetProjectId');
+  if (targetProjectId) out.targetProjectId = (id) => targetProjectId.replace('{id}', String(id));
   return out;
 }
 
@@ -142,6 +151,8 @@ export function EvermindScreen({ init }: { init: InitData }) {
       teach: (text, prompt) => req(`${base}/learn-text`, { method: 'POST', body: JSON.stringify({ text, ...(prompt ? { prompt } : {}) }) }).then(() => undefined),
       flush: () => req<{ merged?: number; version?: number }>(`${base}/flush`, { method: 'POST' }).then((r) => ({ merged: r.merged ?? 0, version: r.version ?? 0 })),
       validate: (prompt) => req(`${base}/validate`, { method: 'POST', body: JSON.stringify({ prompt }) }),
+      // Read-only list of every Evermind under this project (self + IDE builds).
+      loadTargets: () => req<{ targets?: EvermindTarget[] }>(`${base}/targets`).then((r) => r.targets ?? []),
       // Import: host reads the snapshot (fs) → gateway absorbs the entries → host compacts
       // the absorbed ones to stubs. The three steps split by capability (fs on the host,
       // authed fetch in the webview), so no single layer needs powers it lacks.

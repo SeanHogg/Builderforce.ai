@@ -48,6 +48,8 @@ async function resolveCollectorByKey(db: Db, key: string): Promise<CollectorRef 
 /** Mapping rules (priority asc) — only a tenant-level collector needs them. */
 async function loadRulesIfTenant(db: Db, collector: CollectorRef): Promise<MappingRule[]> {
   if (collector.projectId != null) return [];
+  // A collector-less source (id: null) has no collector to load mapping rules for.
+  if (collector.id == null) return [];
   return db
     .select({
       matchField: errorMappingRules.matchField, matchOp: errorMappingRules.matchOp,

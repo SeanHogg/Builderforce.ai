@@ -263,6 +263,15 @@ export interface Env {
    *  a `[[containers]]` block in wrangler.toml; binding name `AGENT_CONTAINER`. */
   AGENT_CONTAINER?: DurableObjectNamespace;
 
+  /** Live container-preview ingress (Replit-parity phase 2). When set to `'true'`
+   *  the Worker proxies `preview.builderforce.ai/<token>/*` HTTP + WebSocket traffic
+   *  through {@link AGENT_CONTAINER} to a dev server the run started inside its
+   *  container (the `/__preview__` passthrough in `container/server.mjs`). Default
+   *  unset ⇒ the ingress is inert (404), so the feature is fully off until an operator
+   *  enables it on a Containers-Paid account. Requires a proxied `preview` DNS record.
+   *  Toggle via `wrangler secret put PREVIEW_INGRESS_ENABLED`. */
+  PREVIEW_INGRESS_ENABLED?: string;
+
   /** Cloudflare Container runtime for the Agentic Tester (browser exploration) —
    *  the Playwright runner image (qa-e2e/Dockerfile). The scheduled QA sweep
    *  dispatches `POST /run` to it per queued exploration. One instance per
