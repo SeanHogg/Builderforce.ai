@@ -43,6 +43,7 @@ import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
 import { selectToolsForTurn } from './selectTools';
 import { setLastResolvedModel } from './lastResolvedModel';
 import { chatWorkLinkingDirective, isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, isReadOnlyPlatformTool } from './chatWorkLinking';
+import { shouldRecoverStalledTurn, stallRecoveryNudge, MAX_ANNOUNCEMENT_RECOVERIES } from '@builderforce/agent-stall';
 import {
   formatEvermindMemoryBlock,
   countReconciledMemories,
@@ -72,58 +73,9 @@ function provenanceMetadata(result: StreamChatResult): string | undefined {
   return withProvenanceMetadata({ model, ...(account ? { account } : {}) });
 }
 
-/**
- * Does this reply PROMISE a tool call rather than make one?
- *
- * Observed on a live chart request: `"I need the task status breakdown for project
- * 11 before charting. Calling the tool now."` — `finish: stop`, zero tool calls.
- * The user is left holding an announcement. The loop uses this to re-prompt.
- *
- * The discriminator is the SUBJECT, not the verb: a first-person commitment to act
- * ("I'll …", "Let me …") is a stall, while the same verb aimed at the user ("You can
- * call the API", "Check the gateway logs") is a finished answer. So the subject
- * prefix is mandatory and the verb list is free to be broad — an earlier, narrow
- * list (call/use/invoke/run/query/fetch/retrieve/look up/pull/check/get) missed the
- * phrasings models actually stall with: "I'll SEARCH the codebase", "Let me LOOK AT
- * the PRs", "Let me FIND the agents", "Let me DO that now", "Let me START by
- * examining …" — none matched, so the recovery below never fired for them.
- *
- * Still bounded to the last stretch of the reply, so a mid-answer "let me check
- * that" inside a complete answer is not a stall. A false positive costs one extra
- * model turn; a false negative strands the user holding a promise — so the bias
- * runs the other way from the verb list's, toward catching the stall.
- */
-/** First-person commitment to act. Required — this is what separates a stall from an
- *  answer that merely mentions an action the USER could take. */
-// `let(?:'?s| me| us)` — no space before the contraction, so "Let's dig in" matches
-// alongside "Let me dig in"; the leading \b keeps "outlets"/"tablets" out.
-const ANNOUNCE_SUBJECT = "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
-/** Optional hedges/adverbs models slip between the subject and the verb. */
-const ANNOUNCE_FILLER = '(?:\\s+(?:now|then|first|next|quickly|briefly|just|also|actually|go ahead and|try to|attempt to))*';
-/** Broad on purpose — see the note above. Excludes "know" so "Let me know if …" (a
- *  complete answer inviting follow-up) stays out. */
-const ANNOUNCE_VERB = '(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|see|walk|trace|map)';
-/** Bare gerund sign-offs ("Searching now.", "Pulling the data.") — no subject at all. */
-const ANNOUNCE_GERUND = '(?:searching|fetching|retrieving|querying|loading|checking|looking|scanning|reading|listing|gathering|pulling|examining|inspecting|reviewing|analy[sz]ing)';
-
-const ANNOUNCED_ACTION = new RegExp(
-  [
-    'calling (the|this|that|a|it|them|these) [\\w\\s-]*?(tool|function|api|now)',
-    `${ANNOUNCE_SUBJECT}${ANNOUNCE_FILLER}\\s+${ANNOUNCE_VERB}\\b`,
-    '(one|just a) (moment|second|sec)\\b',
-    `${ANNOUNCE_GERUND} (it|that|this|these|those|the [\\w-]+|now|for)\\b`,
-    'stand ?by\\b',
-  ].join('|'),
-  'i',
-);
-
-export function announcesUntakenAction(text: string): boolean {
-  const t = text.trim();
-  if (!t) return false;
-  // Only the tail matters — that is where a turn signs off with a promise.
-  const tail = t.slice(-240);
-  return ANNOUNCED_ACTION.test(tail);
-}
+// Announced-but-untaken tool call detection lives in `@builderforce/agent-stall` —
+// the on-prem/cloud agent loop hits the identical failure and shares the heuristic,
+// the per-run budget and the re-prompt wording from there.
 
 /**
  * Max agent-loop iterations before we stop chaining tool calls (runaway guard).
@@ -133,11 +85,6 @@ export function announcesUntakenAction(text: string): boolean {
  * complete instead of dying with "kept calling tools without finishing".
  */
 const MAX_TOOL_ITERATIONS = 25;
-/** How many times ONE run may re-prompt a model that announced a tool call and then
- *  ended the turn without making one. Each costs a model turn (and one of the
- *  {@link MAX_TOOL_ITERATIONS} slots), so it stays small — but >1, because the stall
- *  repeats: the models that promise "I'll search…" tend to promise it twice. */
-const MAX_ANNOUNCEMENT_RECOVERIES = 3;
 /** How much history we send to the model (message-count ceiling). */
 const HISTORY_WINDOW = 80;
 
@@ -1602,9 +1549,12 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     // so a model that keeps narrating can't spin.
     if (
       runTool
-      && (toolSpecs?.length ?? 0) > 0
-      && announcementRecoveries < MAX_ANNOUNCEMENT_RECOVERIES
-      && announcesUntakenAction(result.text)
+      && shouldRecoverStalledTurn({
+        text: result.text,
+        toolCallCount: result.toolCalls.length,
+        availableToolCount: toolSpecs?.length ?? 0,
+        recoveriesUsed: announcementRecoveries,
+      })
     ) {
       announcementRecoveries += 1;
       const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
@@ -1617,14 +1567,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         recordAppended(c, narrationMsg);
       }
       convo.push({ role: 'assistant', content: result.text });
-      convo.push({
-        role: 'user',
-        content:
-          'You said you would call a tool but did not actually call one — your last turn made zero tool calls. Make the call NOW in this turn, then answer using its result. If no tool can give you that data, say plainly which data you are missing and answer with what you already have. Do not announce another call.'
-          + (lastChance
-            ? ' This is your last chance to act: you have now stated an intention without acting several times in a row. Either emit a tool call in this turn, or give your complete final answer from what you already know — an answer that only describes what you are about to do will be shown to the user as-is.'
-            : ''),
-      });
+      convo.push({ role: 'user', content: stallRecoveryNudge(lastChance) });
       pushTrace(c, {
         ts: nowIso(),
         category: 'message',

@@ -27,6 +27,7 @@ import { vendorForModel } from '../llm/vendors';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from '../llm/builtinMcpService';
+import { shouldRecoverStalledTurn, stallRecoveryNudge, MAX_ANNOUNCEMENT_RECOVERIES } from '@builderforce/agent-stall';
 import {
   BRAIN_ORIGIN, TEAM_ORIGIN, ACCESSIBLE_ORIGINS,
   resolveChatAccess, syncPendingMemberships as syncPendingMembershipsShared,
@@ -921,6 +922,9 @@ export class BrainService {
     let text = '';
     let toolCallCount = 0;
     let iterations = 0;
+    // Budget for the announced-but-untaken tool call recovery below (shared with the
+    // Brain run loop and the agent runtime via `@builderforce/agent-stall`).
+    let announcementRecoveries = 0;
     let lastModel = pinnedModel ?? '';
     let lastFinish = '';
     // Auto-compact the running transcript BEFORE each paid turn so a tool-heavy reply
@@ -952,6 +956,27 @@ export class BrainService {
       lastFinish = finishReason || lastFinish;
 
       if (toolCalls.length === 0) {
+        // The model ANNOUNCED an action and then ended the turn without taking it
+        // ("I'll search the codebase…" → finish: stop, 0 tool calls). Breaking here
+        // returns the promise to the user as the answer. Re-prompt instead, bounded
+        // per reply by the shared budget. Same gate + wording as the Brain run loop
+        // and the on-prem/cloud agent loop (`@builderforce/agent-stall`).
+        if (
+          shouldRecoverStalledTurn({
+            text: content,
+            toolCallCount: 0,
+            availableToolCount: tools.length,
+            recoveriesUsed: announcementRecoveries,
+          })
+        ) {
+          announcementRecoveries += 1;
+          convo.push({ role: 'assistant', content });
+          convo.push({
+            role: 'user',
+            content: stallRecoveryNudge(announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES),
+          });
+          continue;
+        }
         text = content;
         break;
       }
