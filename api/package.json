@@ -25,7 +25,7 @@
     "@seanhogg/builderforce-quality": "^2026.7.5",
     "@seanhogg/hired-video-sdk": "^0.3.0",
     "@seanhogg/builderforce-memory-engine": "^2026.7.11",
-    "drizzle-orm": "^0.36.4",
+    "drizzle-orm": "^0.45.2",
     "fflate": "^0.8.2",
     "hono": "^4.6.17",
     "pptxgenjs": "^3.12.0",
