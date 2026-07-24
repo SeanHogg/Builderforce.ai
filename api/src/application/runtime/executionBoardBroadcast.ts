@@ -16,12 +16,14 @@
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { tasks } from '../../infrastructure/database/schema';
+import { projects, tasks } from '../../infrastructure/database/schema';
 import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
 import type { ExecutionBoardSink, ExecutionSubscriberEvent } from './executionEvents';
 
-/** Per-isolate taskId→projectId memo so repeated events for a run skip the lookup. */
-const projectIdByTask = new Map<number, number>();
+/** Per-isolate taskId→{projectId, tenantId} memo so repeated events for a run skip
+ *  the lookup. The tenant is needed because the project live room is tenant-scoped
+ *  (`project:<tenantId>:<id>`) — publish must match the subscribe side. */
+const projectRefByTask = new Map<number, { projectId: number; tenantId: number }>();
 
 function taskIdOf(event: ExecutionSubscriberEvent): number | null {
   if (event.type !== 'status_change' && event.type !== 'done') return null;
@@ -36,18 +38,19 @@ export function makeExecutionBoardSink(env: Env, db: Db): ExecutionBoardSink {
     // Fire-and-forget: notifyExecutionSubscribers is synchronous and must not block.
     void (async () => {
       try {
-        let projectId = projectIdByTask.get(taskId);
-        if (projectId == null) {
+        let ref = projectRefByTask.get(taskId);
+        if (ref == null) {
           const [row] = await db
-            .select({ projectId: tasks.projectId })
+            .select({ projectId: tasks.projectId, tenantId: projects.tenantId })
             .from(tasks)
+            .innerJoin(projects, eq(tasks.projectId, projects.id))
             .where(eq(tasks.id, taskId))
             .limit(1);
           if (!row) return;
-          projectId = row.projectId;
-          projectIdByTask.set(taskId, projectId);
+          ref = { projectId: row.projectId, tenantId: row.tenantId };
+          projectRefByTask.set(taskId, ref);
         }
-        await broadcastProjectChanged(env.SESSION_ROOM, projectId);
+        await broadcastProjectChanged(env.SESSION_ROOM, ref.tenantId, ref.projectId);
       } catch {
         /* best-effort; the board still reconciles via its fallback poll */
       }

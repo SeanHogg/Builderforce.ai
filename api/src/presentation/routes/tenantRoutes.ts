@@ -37,6 +37,8 @@ import { headerHints } from '../../application/email/emailLocaleResolver';
 import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
 import { provisionBuiltinAgents } from '../../application/agent/provisionBuiltinAgents';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
+import { tenantHasSuperadminMember } from '../../application/llm/tenantTokenAvailability';
+import { getTeamSpendOverview, invalidateTeamSpendCaches, usdToMillicents } from '../../application/consumption/memberSpend';
 
 /** Best-effort audit emit for a membership mutation (invite / add), attributed to
  *  the acting manager. Off the response path; never throws. */
@@ -230,9 +232,16 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   // All routes below require a tenant-scoped JWT
   router.use('*', authMiddleware);
 
-  // GET /api/tenants
+  // GET /api/tenants — membership-scoped: returns only the workspaces the caller
+  // belongs to (billing PII + roster live on toPlain, so an unscoped list would
+  // leak every tenant's data). A superadmin-operated tenant keeps the full,
+  // unscoped view via the same check the token/run caps use.
   router.get('/', async (c) => {
-    const tenants = await tenantService.listTenants();
+    const userId = c.get('userId') as string;
+    const isSuperadmin = await tenantHasSuperadminMember(db, c.get('tenantId') as number, c.env as Env);
+    const tenants = isSuperadmin
+      ? await tenantService.listTenants()
+      : await tenantService.listTenantsForUserFull(userId);
     return c.json({ tenants: tenants.map(t => t.toPlain()) });
   });
 
@@ -775,7 +784,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const body = await c.req.json<{ newUserId: string; role: TenantRole }>();
     const actorUserId = c.get('userId') as string;
 
-    const guard = buildPlanLimitsGuard(db);
+    const guard = buildPlanLimitsGuard(db, c.env as Env);
     const limitErr = await guard.checkSeatLimit(id);
     if (limitErr) return c.json(limitErr, 402);
 
@@ -805,7 +814,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     // Seat limit guards both paths: a pending invite is a promise of a seat, so
     // refuse to queue one the plan can't honour. (It is not yet counted as a
     // filled seat — see the Consolidated Gap Register.)
-    const guard = buildPlanLimitsGuard(db);
+    const guard = buildPlanLimitsGuard(db, c.env as Env);
     const limitErr = await guard.checkSeatLimit(id);
     if (limitErr) return c.json(limitErr, 402);
 
@@ -967,6 +976,77 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     // The role rides in the member's next JWT mint; clear the cached membership now.
     await invalidateJwtMembershipCache(c.env as Env, id, targetUserId).catch(() => {});
     return c.json(tenant.toPlain());
+  });
+
+  // ── Per-seat AI spend limits (Teams) ──────────────────────────────────────
+  // Owner-configured monthly $ ceiling on each seat's non-BYO AI spend (metered at
+  // the OpenRouter rate). Reads are MANAGER+ (spend visibility); writes are OWNER
+  // only (they own the budget). The enforcement + resolution rule lives ONCE in
+  // application/consumption/memberSpend.ts — these routes are the config surface.
+  const MAX_SPEND_CAP_USD = 100_000;
+
+  // GET /api/tenants/:id/spend-limits — overview: default cap + every seat's cap & spend.
+  router.get('/:id/spend-limits', requireRole(TenantRole.MANAGER), async (c) => {
+    const id = Number(c.req.param('id'));
+    if (id !== (c.get('tenantId') as number)) return c.json({ error: 'Forbidden' }, 403);
+    const overview = await getTeamSpendOverview(db, c.env as Env, id);
+    return c.json(overview);
+  });
+
+  // PATCH /api/tenants/:id/spend-limits — set the team-wide DEFAULT per-seat cap.
+  //   body { amountUsd: number | null } — null clears the default (seats uncapped
+  //   unless individually set); a number >= 0 applies to every seat with no override.
+  router.patch('/:id/spend-limits', requireRole(TenantRole.OWNER), async (c) => {
+    const id = Number(c.req.param('id'));
+    if (id !== (c.get('tenantId') as number)) return c.json({ error: 'Forbidden' }, 403);
+    const body = await c.req.json<{ amountUsd?: number | null }>().catch(() => ({} as { amountUsd?: number | null }));
+    const amount = body.amountUsd;
+    let millicents: number | null;
+    if (amount == null) {
+      millicents = null;
+    } else if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0 || amount > MAX_SPEND_CAP_USD) {
+      return c.json({ error: `amountUsd must be null or a number between 0 and ${MAX_SPEND_CAP_USD}` }, 400);
+    } else {
+      millicents = usdToMillicents(amount);
+    }
+    await db.update(tenants).set({ memberDefaultSpendCapMillicents: millicents }).where(eq(tenants.id, id));
+    await invalidateTeamSpendCaches(c.env as Env, id);
+    return c.json(await getTeamSpendOverview(db, c.env as Env, id));
+  });
+
+  // PATCH /api/tenants/:id/members/:userId/spend-limit — set ONE seat's cap.
+  //   body { mode: 'inherit' | 'unlimited' | 'custom', amountUsd?: number }
+  //     inherit   → null (use the team default)
+  //     unlimited → -1   (exempt this seat from the default)
+  //     custom    → amountUsd >= 0 (0 = no paid spend allowed)
+  router.patch('/:id/members/:userId/spend-limit', requireRole(TenantRole.OWNER), async (c) => {
+    const id = Number(c.req.param('id'));
+    if (id !== (c.get('tenantId') as number)) return c.json({ error: 'Forbidden' }, 403);
+    const targetUserId = c.req.param('userId');
+    type SeatLimitBody = { mode?: 'inherit' | 'unlimited' | 'custom'; amountUsd?: number };
+    const body = await c.req.json<SeatLimitBody>().catch(() => ({} as SeatLimitBody));
+    let millicents: number | null;
+    if (body.mode === 'inherit') {
+      millicents = null;
+    } else if (body.mode === 'unlimited') {
+      millicents = -1;
+    } else if (body.mode === 'custom') {
+      const amount = body.amountUsd;
+      if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0 || amount > MAX_SPEND_CAP_USD) {
+        return c.json({ error: `amountUsd must be a number between 0 and ${MAX_SPEND_CAP_USD}` }, 400);
+      }
+      millicents = usdToMillicents(amount);
+    } else {
+      return c.json({ error: "mode must be one of: 'inherit', 'unlimited', 'custom'" }, 400);
+    }
+    const updated = await db
+      .update(tenantMembers)
+      .set({ monthlySpendCapMillicents: millicents })
+      .where(and(eq(tenantMembers.tenantId, id), eq(tenantMembers.userId, targetUserId), eq(tenantMembers.isActive, true)))
+      .returning({ id: tenantMembers.id });
+    if (updated.length === 0) return c.json({ error: 'Member not found in this workspace' }, 404);
+    await invalidateTeamSpendCaches(c.env as Env, id, targetUserId);
+    return c.json(await getTeamSpendOverview(db, c.env as Env, id));
   });
 
   // GET /api/tenants/:id/security/users

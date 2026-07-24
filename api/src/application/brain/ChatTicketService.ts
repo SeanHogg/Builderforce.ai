@@ -47,9 +47,18 @@ export type TicketKind = (typeof TICKET_KINDS)[number];
 export type LinkType = 'linked' | 'created';
 
 /** Lifecycle phases a run can narrate into its linked chats. `started`/`completed`/`failed`
- *  come from `RuntimeService.update`; `paused` (ask_human) and `cancelled` are posted from the
- *  two sites that write the execution row directly and bypass `update`. */
-export type RunMilestonePhase = 'started' | 'completed' | 'failed' | 'paused' | 'cancelled';
+ *  come from `RuntimeService.update`; `paused` (ask_human), `resumed` (the answer arriving),
+ *  and `cancelled` are posted from the sites that write the execution row directly and bypass
+ *  `update`; `failed` is ALSO posted by the orphan/stale reapers so a run that dies silently
+ *  still reports its death to the humans driving the linked chats. */
+export type RunMilestonePhase = 'started' | 'completed' | 'failed' | 'paused' | 'resumed' | 'cancelled';
+
+/** Chat-ticket kind for a task row's `task_type` — epics and gaps keep their own kind,
+ *  everything else addresses as 'task'. Shared by every run-milestone producer
+ *  (RuntimeService, the stale-execution reaper) so `chat_ticket_links` lookups agree. */
+export function ticketKindForTaskType(taskType?: string | null): 'epic' | 'gap' | 'task' {
+  return taskType === 'epic' || taskType === 'gap' ? taskType : 'task';
+}
 
 export interface TicketHealth {
   kind: TicketKind;
@@ -733,7 +742,7 @@ export class ChatTicketService {
   /** Human line for a run milestone. */
   private static runMilestoneText(
     name: string, kind: string, ref: string,
-    input: { phase: RunMilestonePhase; toStatus?: string | null; resultText?: string | null; errorMessage?: string | null },
+    input: { phase: RunMilestonePhase; toStatus?: string | null; resultText?: string | null; errorMessage?: string | null; questionText?: string | null },
   ): string {
     if (input.phase === 'started') return `▶️ **${name}** started working on ${kind} #${ref}.`;
     if (input.phase === 'completed') {
@@ -741,9 +750,15 @@ export class ChatTicketService {
       const note = ChatTicketService.firstLine(input.resultText);
       return `✅ **${name}** finished ${kind} #${ref}${lane}.${note ? ` ${note}` : ''}`;
     }
-    // Paused (ask_human) and cancelled bypass RuntimeService.update, so these are posted
-    // from the two direct-write sites — full-lifecycle narration, not just start/finish/fail.
-    if (input.phase === 'paused') return `🙋 **${name}** paused on ${kind} #${ref} — waiting on a human answer to continue.`;
+    // Paused (ask_human), resumed, and cancelled bypass RuntimeService.update, so these are
+    // posted from the direct-write sites — full-lifecycle narration, not just start/finish/fail.
+    if (input.phase === 'paused') {
+      const q = ChatTicketService.firstLine(input.questionText);
+      return q
+        ? `🙋 **${name}** paused on ${kind} #${ref} — needs a human answer: ${q}`
+        : `🙋 **${name}** paused on ${kind} #${ref} — waiting on a human answer to continue.`;
+    }
+    if (input.phase === 'resumed') return `▶️ **${name}** resumed work on ${kind} #${ref} — a human answered its question.`;
     if (input.phase === 'cancelled') return `⏹️ **${name}**'s run on ${kind} #${ref} was cancelled.`;
     const why = ChatTicketService.firstLine(input.errorMessage);
     return `⚠️ **${name}**'s run on ${kind} #${ref} failed.${why ? ` ${why}` : ''}`;
@@ -764,6 +779,13 @@ export class ChatTicketService {
       kind: string; ref: string; agentRef?: string | null;
       phase: RunMilestonePhase; executionId: number;
       toStatus?: string | null; resultText?: string | null; errorMessage?: string | null; agentName?: string;
+      /** The `ask_human` question a `paused` milestone narrates, so the human sees WHAT
+       *  the agent is blocked on in the chat itself (not just that it is blocked). */
+      questionText?: string | null;
+      /** Disambiguates REPEATABLE phases (`paused`/`resumed` can occur once per
+       *  question cycle) inside the per-execution+phase idempotency key — pass the
+       *  approval id so each Q&A cycle narrates exactly once. Single-shot phases omit it. */
+      eventNonce?: string | null;
     },
   ): Promise<void> {
     try {
@@ -774,7 +796,7 @@ export class ChatTicketService {
       if (chats.length === 0) return;
       const name = input.agentName
         ?? (input.agentRef ? await this.agentDisplayName(tenantId, input.agentRef) : 'The agent');
-      const key = `${executionId}:${phase}`;
+      const key = `${executionId}:${phase}${input.eventNonce ? `:${input.eventNonce}` : ''}`;
       const text = ChatTicketService.runMilestoneText(name, kind, ref, input);
       await Promise.all(chats.map((c) => this.postSystemMessage(tenantId, c.chatId, text, {
           runMilestone: key, ticketKind: kind, ticketRef: ref, phase, executionId, agentRef: input.agentRef ?? null,

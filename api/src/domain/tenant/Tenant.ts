@@ -144,6 +144,11 @@ export class Tenant {
     if (!this.canManageMembers(actorUserId)) {
       throw new ForbiddenError('Only owners and managers can add members');
     }
+    // Granting OWNER is owner-only — mirrors changeMemberRole so a MANAGER can't
+    // escalate a new member (or themselves via a re-add) to OWNER.
+    if (role === TenantRole.OWNER && this.getMember(actorUserId)?.role !== TenantRole.OWNER) {
+      throw new ForbiddenError('Only an owner can assign the owner role');
+    }
     if (this.getMember(newUserId)) {
       throw new ValidationError(`User '${newUserId}' is already a member`);
     }

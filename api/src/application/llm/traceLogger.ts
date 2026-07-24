@@ -19,6 +19,7 @@
 import { eq } from 'drizzle-orm';
 import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import { llmTraces } from '../../infrastructure/database/schema';
+import { redactSecrets } from '../../infrastructure/security/redactSecrets';
 import type { ProxyResult } from './LlmProxyService';
 import type { HonoEnv } from '../../env';
 
@@ -36,6 +37,22 @@ function jsonOrNull(v: unknown): string | null {
   if (v == null) return null;
   try {
     return cap(typeof v === 'string' ? v : JSON.stringify(v));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Like {@link jsonOrNull} but scrubs secret-shaped substrings (API keys, bearer
+ * tokens, private keys) before persisting. Used for the free-form request/response
+ * bodies, which can echo a caller's auth headers or a key pasted into a prompt.
+ * Redaction runs on the full serialized text BEFORE the 100KB cap so a secret near
+ * the tail is still masked when the row is truncated.
+ */
+function redactedJsonOrNull(v: unknown): string | null {
+  if (v == null) return null;
+  try {
+    return cap(redactSecrets(typeof v === 'string' ? v : JSON.stringify(v)));
   } catch {
     return null;
   }
@@ -137,8 +154,11 @@ export function logTrace(env: Env, ctx: ExecutionContext, input: TraceInput): vo
     requestShape:      jsonOrNull(requestShapeOf(input.requestBody)),
     candidateChain:    jsonOrNull(r.candidateChain ?? null),
     attempts:          jsonOrNull(r.attempts ?? []),
-    requestBody:       jsonOrNull(input.requestBody?.messages ?? input.requestBody ?? null),
-    responseBody:      jsonOrNull(input.responseBody ?? null),
+    // Redacted: these bodies can carry a caller's Authorization header or a key
+    // pasted into a prompt. Retention/TTL is enforced separately — `llm_traces`
+    // is purged after 30 days by runRetentionPurge() (maintenance/retentionPurge.ts).
+    requestBody:       redactedJsonOrNull(input.requestBody?.messages ?? input.requestBody ?? null),
+    responseBody:      redactedJsonOrNull(input.responseBody ?? null),
     callerMetadata:    jsonOrNull(input.callerMetadata ?? null),
   };
   ctx.waitUntil(

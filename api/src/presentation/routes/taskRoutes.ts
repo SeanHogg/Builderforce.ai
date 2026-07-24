@@ -478,7 +478,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // A new task changes the project's task counts/dates → bust the projects-list cache.
     await invalidateProjectsList(c.env as Env, c.get('tenantId')).catch(() => {});
     // Push the new card to everyone watching this project's live board.
-    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, created.projectId));
+    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, c.get('tenantId'), created.projectId));
 
     // Autonomous trigger: a ticket CREATED straight into a lane with a configured
     // cloud agent (e.g. the brain drops a task into an agent-owned lane) must
@@ -552,7 +552,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // client viewing this project so cards/lane chips update without a reload. The
     // auto-run queued below (lane entry) lands its own execution-lifecycle push, so
     // the freshly-assigned agent appears pending the moment its run row is created.
-    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, task.toPlain().projectId));
+    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, c.get('tenantId'), task.toPlain().projectId));
 
     // Any status write can change which tasks fall in the completed-by-assignee
     // window (moved into OR out of a done-class lane), so bust that rollup's
@@ -659,8 +659,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // The task count shifts between two projects → bust the projects-list cache.
     await invalidateProjectsList(c.env as Env, c.get('tenantId')).catch(() => {});
     // The card leaves one project's board and joins another's — push both.
-    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, before?.projectId));
-    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, body.projectId));
+    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, c.get('tenantId'), before?.projectId));
+    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, c.get('tenantId'), body.projectId));
 
     emitTaskActivity(c, 'task.moved', {
       taskId: id, projectId: body.projectId, title: task.toPlain().title,
@@ -681,7 +681,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // Deleting a task changes the project's task counts → bust the projects-list cache.
     await invalidateProjectsList(c.env as Env, c.get('tenantId')).catch(() => {});
     // Drop the card from every client viewing this project's live board.
-    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, before?.projectId));
+    c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, c.get('tenantId'), before?.projectId));
     emitTaskActivity(c, 'task.deleted', {
       taskId: id, projectId: before.projectId, title: before.title,
       summary: `Deleted task #${id}`,
@@ -707,7 +707,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
         { db, tasks: taskService, env: c.env as Env },
         { tenantId: c.get('tenantId'), segmentId: c.get('segmentId') as string, sourceKind: 'epic', sourceId: String(id), target },
       );
-      c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, before.projectId));
+      c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, c.get('tenantId'), before.projectId));
       return c.json(result);
     } catch (e) {
       if (e instanceof ConvertError) return c.json({ error: e.message }, 400);

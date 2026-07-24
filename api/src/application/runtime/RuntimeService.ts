@@ -1,4 +1,5 @@
 import { isValidatorReviewPayload } from '../validation/validatorReviewMarker';
+import { isIncidentTriagePayload } from '../incident/incidentTriageMarker';
 import { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
 import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { IAgentRepository } from '../../domain/agent/IAgentRepository';
@@ -16,7 +17,7 @@ import {
 } from './orphanReasons';
 import { parseExecutor, parseActAsRole, parseCloudAgentRef } from './cloudDispatch';
 import type { PolicyGate } from '@builderforce/agent-tools';
-import type { RunMilestonePhase } from '../brain/ChatTicketService';
+import { ticketKindForTaskType, type RunMilestonePhase } from '../brain/ChatTicketService';
 
 export interface SubmitTaskDto {
   taskId:      number;
@@ -141,6 +142,11 @@ export class RuntimeService {
       agentRef: string | null; executionId: number;
       phase: RunMilestonePhase;
       toStatus?: string | null; resultText?: string | null; errorMessage?: string | null;
+      /** The `ask_human` question (paused phase) so the chat shows WHAT the agent needs. */
+      questionText?: string | null;
+      /** Uniquifies repeatable phases (paused/resumed once per question cycle) in the
+       *  idempotency key — the approval id at the ask_human/answer sites. */
+      eventNonce?: string | null;
     }) => Promise<void>,
     /**
      * Optional attribution sink invoked when a run reaches a TERMINAL status — so the
@@ -208,24 +214,48 @@ export class RuntimeService {
   }
 
   /**
-   * Post a `paused` | `cancelled` lifecycle milestone for an execution whose row is
-   * written DIRECTLY (the ask_human pause in `cloudAgentEngine` and {@link cancel}),
-   * bypassing {@link update}'s milestone emission. Resolves the ticket + project the
-   * same way `update` does, then fans out via {@link onRunMilestone}. Best-effort —
-   * never throws (chat narration must never break the run's terminal write).
+   * Post a lifecycle milestone for an execution whose row is written DIRECTLY —
+   * bypassing {@link update}'s milestone emission: the ask_human pause + resume in
+   * `CloudRunnerDO`, {@link cancel}, and the orphan reap ({@link reapIfOrphaned}).
+   * Resolves the ticket + project the same way `update` does, then fans out via
+   * {@link onRunMilestone}. Best-effort — never throws (chat narration must never
+   * break the run's terminal write).
    */
-  async postLifecycleMilestone(execution: Execution, phase: 'paused' | 'cancelled'): Promise<void> {
+  async postLifecycleMilestone(
+    execution: Execution,
+    phase: 'paused' | 'resumed' | 'cancelled' | 'failed',
+    opts?: { errorMessage?: string | null; questionText?: string | null; eventNonce?: string | null },
+  ): Promise<void> {
     try {
       const task = await this.tasks.findById(asTaskId(execution.taskId));
       if (!task) return;
       const plain = task.toPlain() as { projectId?: number; taskType?: string };
-      const taskType = plain.taskType === 'epic' || plain.taskType === 'gap' ? plain.taskType : 'task';
       await this.onRunMilestone?.({
         tenantId: execution.tenantId, taskId: Number(execution.taskId),
-        projectId: plain.projectId ?? 0, taskType,
+        projectId: plain.projectId ?? 0, taskType: ticketKindForTaskType(plain.taskType),
         agentRef: execution.cloudAgentRef, executionId: Number(execution.id), phase,
+        errorMessage: opts?.errorMessage ?? null,
+        questionText: opts?.questionText ?? null,
+        eventNonce: opts?.eventNonce ?? null,
       });
     } catch { /* best-effort: never block the direct write */ }
+  }
+
+  /**
+   * {@link postLifecycleMilestone} addressed by execution id — for direct-write
+   * sites that hold only the id (the durable runner's pause/resume endpoints).
+   * Loads the row WITHOUT the orphan-reap read path (narrating must never trigger
+   * a repair write). Best-effort — never throws.
+   */
+  async postLifecycleMilestoneById(
+    executionId: number,
+    phase: 'paused' | 'resumed' | 'cancelled' | 'failed',
+    opts?: { errorMessage?: string | null; questionText?: string | null; eventNonce?: string | null },
+  ): Promise<void> {
+    try {
+      const e = await this.executions.findById(asExecutionId(executionId));
+      if (e) await this.postLifecycleMilestone(e, phase, opts);
+    } catch { /* best-effort */ }
   }
 
   async submit(dto: SubmitTaskDto): Promise<Execution> {
@@ -399,6 +429,10 @@ export class RuntimeService {
       }));
       // Surface the orphan failure on the Logs/Timeline (telemetry-only views).
       await this.onTerminalFailure?.(saved);
+      // …and into the ticket's linked Brain chats: a human driving the conversation
+      // must hear that the run died, not just watch the board stop moving. Idempotent
+      // (run:{id}:failed), so racing the cron reaper's own narration is harmless.
+      await this.postLifecycleMilestone(saved, 'failed', { errorMessage: this.orphanReason(e) });
       return saved;
     } catch {
       return e; // best-effort — never block a read on the repair
@@ -474,7 +508,13 @@ export class RuntimeService {
         // in_review and re-triggers a review (the completion loop). Record the terminal
         // signal for metrics but leave the ticket exactly where it is.
         const isReviewRun = isValidatorReviewPayload(execution.payload);
-        const managedResult = !isReviewRun && (dto.status === ExecutionStatus.RUNNING || terminal)
+        // An incident-triage run works the bridged INCIDENT ticket (classify/page/notes,
+        // no code) and likewise must not move its lane — the lane mirrors the incident's
+        // own status (IncidentService.updateIncident), not the run's completion.
+        const isIncidentTriageRun = isIncidentTriagePayload(execution.payload);
+        // Both classes run against an already-open ticket and hold its lane.
+        const holdsLane = isReviewRun || isIncidentTriageRun;
+        const managedResult = !holdsLane && (dto.status === ExecutionStatus.RUNNING || terminal)
           ? await this.onManagedRunStatus?.({
               tenantId, taskId: Number(execution.taskId), projectId, executionId: Number(saved.id),
               status: dto.status === ExecutionStatus.RUNNING ? 'running' : dto.status === ExecutionStatus.COMPLETED ? 'completed' : 'failed',
@@ -485,11 +525,11 @@ export class RuntimeService {
         const coordinatorOwnsTransition = managedResult?.managed === true;
         if (coordinatorOwnsTransition) toStatus = managedResult.toStatus;
 
-        if (!coordinatorOwnsTransition && !isReviewRun && dto.status === ExecutionStatus.RUNNING && fromStatus !== TaskStatus.IN_PROGRESS) {
+        if (!coordinatorOwnsTransition && !holdsLane && dto.status === ExecutionStatus.RUNNING && fromStatus !== TaskStatus.IN_PROGRESS) {
           toStatus = TaskStatus.IN_PROGRESS;
           await this.tasks.update(task.update({ status: TaskStatus.IN_PROGRESS }));
         }
-        if (!coordinatorOwnsTransition && !isReviewRun && dto.status === ExecutionStatus.COMPLETED) {
+        if (!coordinatorOwnsTransition && !holdsLane && dto.status === ExecutionStatus.COMPLETED) {
           const resultText = dto.result ?? '';
           // Default advance is the board's NEXT swimlane by configured order — so a
           // custom board (renamed / re-ordered lanes) flows correctly instead of
@@ -527,7 +567,7 @@ export class RuntimeService {
         // A Done lane finalizes (PR/commit) instead of staffing a fresh agent, and
         // the RUNNING→in_progress move is the lane the CURRENT run already owns, so
         // both are excluded here (the trigger also dedupes/no-ops defensively).
-        if (!coordinatorOwnsTransition && !isReviewRun && dto.status === ExecutionStatus.COMPLETED && toStatus !== fromStatus && toStatus !== TaskStatus.DONE) {
+        if (!coordinatorOwnsTransition && !holdsLane && dto.status === ExecutionStatus.COMPLETED && toStatus !== fromStatus && toStatus !== TaskStatus.DONE) {
           await this.onLaneEntry?.({
             tenantId, taskId: Number(execution.taskId), projectId, status: toStatus,
             originLaneKey: parseLaneKey(execution.payload),
@@ -540,15 +580,18 @@ export class RuntimeService {
         // milestone failure can't block the lane sync/chaining above; the hook is itself
         // best-effort + per-execution+phase idempotent.
         if (!isReviewRun) {
-          const taskType = (task.toPlain() as { taskType?: string }).taskType ?? 'task';
-          const phase = dto.status === ExecutionStatus.RUNNING
-            ? (toStatus === TaskStatus.IN_PROGRESS && fromStatus !== TaskStatus.IN_PROGRESS ? 'started' as const : null)
+          const taskType = (task.toPlain() as { taskType?: string }).taskType;
+          // `started` fires on EVERY RUNNING transition, not only when the lane flips to
+          // in_progress — a re-run on a ticket already in progress and a Coordinator-managed
+          // lane both start silently otherwise. The per-execution+phase idempotency key
+          // (run:{id}:started) collapses repeats (heartbeat re-marks, resume) to one post.
+          const phase = dto.status === ExecutionStatus.RUNNING ? 'started' as const
             : dto.status === ExecutionStatus.COMPLETED ? 'completed' as const
             : dto.status === ExecutionStatus.FAILED ? 'failed' as const : null;
           if (phase) {
             await this.onRunMilestone?.({
               tenantId, taskId: Number(execution.taskId), projectId,
-              taskType: taskType === 'epic' || taskType === 'gap' ? taskType : 'task',
+              taskType: ticketKindForTaskType(taskType),
               agentRef: execution.cloudAgentRef, executionId: Number(saved.id), phase,
               toStatus, resultText: dto.result ?? null, errorMessage: dto.errorMessage ?? null,
             });

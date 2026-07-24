@@ -953,10 +953,32 @@ async function signIn(context: vscode.ExtensionContext): Promise<void> {
   void vscode.commands.executeCommand("builderforce.refreshInbox");
   void heartbeat(context);
   void vscode.commands.executeCommand("builderforce.refreshProjects");
+  // Land the user on a ready board instead of "Select or create a project…":
+  // zero-setup onboarding provisions a Default project, so auto-select it.
+  void autoSelectDefaultProject(context);
   void maybeScan(context, false);
   void insights?.start();
   void diagnostics?.refresh();
   meetings?.refresh();
+}
+
+/** After sign-in, if no project is selected yet, select the workspace's sole/first
+ *  project so the user lands on a ready board instead of the "Select or create a
+ *  project…" placeholder. Zero-setup onboarding provisions a Default project on the
+ *  web, so a fresh builder has exactly one to land on. Best-effort and silent on any
+ *  failure — the manual "Select or create a project…" affordance always remains. */
+async function autoSelectDefaultProject(context: vscode.ExtensionContext): Promise<void> {
+  if (getSelectedProject()) return; // a returning user keeps their persisted selection
+  try {
+    const list = await bfApi.listProjects(context.secrets);
+    const first = list[0];
+    if (!first) return; // no projects yet — leave the create affordance
+    setSelectedProject({ id: first.id, name: first.name });
+    bfApi.invalidateTasks(first.id);
+    void vscode.commands.executeCommand("builderforce.refreshProjects");
+  } catch {
+    /* best-effort — leave the manual picker affordance in place */
+  }
 }
 
 async function signOut(

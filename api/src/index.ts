@@ -81,6 +81,7 @@ import { ToolService } from './application/tools/ToolService';
 import { AuditRunner } from './application/tools/AuditRunner';
 import { createMarketingRoutes } from './presentation/routes/marketingRoutes';
 import { createGuestRoutes } from './presentation/routes/guestRoutes';
+import { createDemoRoutes } from './presentation/routes/demoRoutes';
 import { GuestChatService } from './application/guest/GuestChatService';
 import { MarketingService } from './application/marketing/MarketingService';
 import { createAgentHostRoutes }        from './presentation/routes/agentHostRoutes';
@@ -95,6 +96,8 @@ import { createFreelancerRoutes, createEngagementRoutes } from './presentation/r
 import { createActivityRoutes, createTimecardRoutes } from './presentation/routes/activityRoutes';
 import { createJobRoutes, createNotificationRoutes } from './presentation/routes/jobRoutes';
 import { createEmailPreferenceRoutes } from './presentation/routes/emailPreferenceRoutes';
+import { createReleaseNoteRoutes } from './presentation/routes/releaseNoteRoutes';
+import { runWeeklyReleaseDigest } from './application/email/releaseDigest';
 import { createFreelancerMessagingRoutes } from './presentation/routes/freelancerMessagingRoutes';
 import { createGigMarketplaceRoutes, createEngagementBoardRoutes, createDeliverableRoutes } from './presentation/routes/gigMarketplaceRoutes';
 import { createLimbicRoutes }           from './presentation/routes/limbicRoutes';
@@ -193,6 +196,8 @@ import { runBoardSyncSweep } from './application/boardsync/runBoardSyncSweep';
 import { runParkedWorkflowSweep } from './application/swimlane/resumeParkedWorkflows';
 import { runQaExplorationSweep } from './application/qa/runQaExplorationSweep';
 import { runValidatorReviewSweep } from './application/validation/validationDispatch';
+import { demoAccountsEnabled, reseedDemoTenants } from './application/demo/demoSeedService';
+import { runWebScanSweep } from './application/security/webSecurityScan';
 import { runSecurityAuditSweep } from './application/security/securityDispatch';
 import { runEscalationSweep } from './application/incident/runEscalationSweep';
 import { runApprovalExpirySweep } from './application/approvals/runApprovalExpirySweep';
@@ -313,6 +318,14 @@ export function buildApp(env: Env): Hono<HonoEnv> {
 
   // Rate limiting applied after auth middleware resolves tenantId
   app.use('/api/*', rateLimitMiddleware as Parameters<typeof app.use>[1]);
+  // The metered LLM gateway (`/llm/*`) and the public `/v1/*` surface (seam +
+  // semantic cache) carry per-tenant billable traffic just like `/api/*`, so they
+  // get the same per-tenant sliding-window limit. Mounted BEFORE their routers
+  // (app.route('/llm'|'/v1', …) below) so every gateway path is throttled. The
+  // middleware resolves the tenant from the machine-key/JWT bearer and falls
+  // through for anonymous callers, so intentionally-public paths stay unlimited.
+  app.use('/llm/*', rateLimitMiddleware as Parameters<typeof app.use>[1]);
+  app.use('/v1/*',  rateLimitMiddleware as Parameters<typeof app.use>[1]);
   // Emulation token interception — runs before authMiddleware in each router.
   // When X-Emulation-Token is present, validates the emulation JWT, enforces
   // read-only mode, and sets userId/tenantId/role from the emulation identity.
@@ -397,6 +410,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Email language + consent. The /unsubscribe leg is intentionally PUBLIC (no
   // session) — it is the CAN-SPAM opt-out link carried in every lifecycle mail.
   app.route('/api/email-preferences', createEmailPreferenceRoutes(db));
+  // Platform release notes — public published changelog (footer "What's new"
+  // panel) + superadmin authoring + manual weekly-digest trigger.
+  app.route('/api/release-notes', createReleaseNoteRoutes(db));
   // Gig Marketplace (0293): publish a ticket as a gig, a hired freelancer's scoped
   // board access, and deliverable proposals the employer AI-evaluates.
   app.route('/api/marketplace', createGigMarketplaceRoutes(db));
@@ -418,6 +434,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/rfp', createRfpRoutes(db, toolService, auditRunner));
   app.route('/api/marketing', createMarketingRoutes(marketingService));
   app.route('/api/guest', createGuestRoutes(guestChatService));
+  // Sales-cycle demo accounts — public one-click persona demo sessions, funnel
+  // telemetry, book-a-demo leads, and the (guarded) deploy-hook reseed.
+  app.route('/api/demo', createDemoRoutes());
 
   // Signed vision attachments — public, but each object is gated by a short-lived
   // HMAC (?exp&sig minted at /api/brain/uploads/sign). Lets an upstream LLM
@@ -686,6 +705,7 @@ export default {
    * Cloudflare scheduled() handler — fires on cron triggers declared in
    * api/wrangler.toml `[triggers] crons`:
    *   - `0 9 * * *`  daily LLM vendor health probe (change-detected, email-quiet).
+   *   - `0 16 * * 5` weekly release-notes marketing digest (consent-gated).
    *   - every-5-min tick: workflow-trigger sweep — fire due schedule + rss
    *     triggers, then advance any pending cloud-runtime workflows.
    *
@@ -734,6 +754,17 @@ export default {
             console.error('[cron:validator] failed', err);
           }),
       );
+      // Nightly demo-account reseed — backstop for the deploy-hook reseed so a
+      // visitor-mutated demo tenant never stays dirty longer than a day.
+      if (demoAccountsEnabled(env)) {
+        ctx.waitUntil(
+          reseedDemoTenants(env)
+            .then((r) => console.log(`[cron:demo-reseed] personas=${r.personas.length}`))
+            .catch((err) => {
+              console.error('[cron:demo-reseed] failed', err);
+            }),
+        );
+      }
     }
     // Weekly Security-agent SOC 2 audit sweep — for every tenant that has a Security
     // agent and no audit in flight, dispatch one audit against its most-recently-active
@@ -749,11 +780,39 @@ export default {
             console.error('[cron:security] failed', err);
           }),
       );
+      // Re-scan every project with a configured website target so posture drift is
+      // caught without anyone clicking Run (findings dedupe + resolved auto-close).
+      ctx.waitUntil(
+        runWebScanSweep(env)
+          .then((r) => {
+            if (r.scanned > 0 || r.skippedOverCap > 0) {
+              console.log(`[cron:webscan] projectsWithTarget=${r.projectsWithTarget} scanned=${r.scanned} findingsFiled=${r.findingsFiled} skippedOverCap=${r.skippedOverCap}`);
+            }
+          })
+          .catch((err) => {
+            console.error('[cron:webscan] failed', err);
+          }),
+      );
+    }
+    // Weekly release-notes marketing digest (Fri 16:00 UTC) — mail every published
+    // release note not yet emailed to consenting users (product_updates lifecycle
+    // category, per-recipient consent + unsubscribe handled by sendLifecycleEmail),
+    // then stamp the notes `emailed_at`. A week with nothing new sends nothing.
+    if (event.cron === '0 16 * * 5') {
+      ctx.waitUntil(
+        runWeeklyReleaseDigest(env)
+          .then((r) => {
+            if (r.notes > 0) console.log(`[cron:release-digest] notes=${r.notes} sent=${r.sent} suppressed=${r.suppressed} failed=${r.failed}`);
+          })
+          .catch((err) => {
+            console.error('[cron:release-digest] failed', err);
+          }),
+      );
     }
     // Trigger sweep + cloud executor run on the frequent tick. (Also run when no
     // cron string is supplied, e.g. a manual `wrangler` invocation.) The daily and
     // weekly ticks are handled above, so exclude them here.
-    if (event.cron !== '0 9 * * *' && event.cron !== '0 8 * * 1') {
+    if (event.cron !== '0 9 * * *' && event.cron !== '0 8 * * 1' && event.cron !== '0 16 * * 5') {
       // KV work-gate — the single change that lets Neon compute autosuspend.
       // Reads KV ONLY (no Postgres): SKIP the whole DB fan-out below on an idle
       // platform so the endpoint scales to zero, RUN it when a write signalled

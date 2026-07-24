@@ -109,6 +109,39 @@ export interface AdminGuestSession {
   isPaid: boolean;
 }
 
+// Sales-cycle demo accounts (migration 0360).
+export interface AdminDemoFunnelRow {
+  persona: string | null;
+  kind: string;
+  count: number;
+  visitors: number;
+}
+export interface AdminDemoRecentEvent {
+  persona: string | null;
+  kind: string;
+  path: string | null;
+  visitorId: string;
+  occurredAt: string;
+}
+export interface AdminDemoFunnel {
+  byKind: AdminDemoFunnelRow[];
+  recent: AdminDemoRecentEvent[];
+}
+export type SalesLeadStatus = 'new' | 'contacted' | 'qualified' | 'closed';
+export interface AdminSalesLead {
+  id: string;
+  name: string;
+  email: string;
+  company: string | null;
+  interest: string | null;
+  message: string | null;
+  source: string | null;
+  locale: string | null;
+  visitorId: string | null;
+  status: SalesLeadStatus;
+  createdAt: string;
+}
+
 export interface AdminSystemTable {
   name: string;
   totalBytes: number;
@@ -339,6 +372,36 @@ export interface AdminNewsletterTemplate {
   isActive: boolean;
   createdAt: string | null;
   updatedAt: string | null;
+}
+
+export type AdminReleaseNoteCategory = 'new' | 'improvement' | 'fix';
+
+export interface AdminReleaseNote {
+  id: string;
+  version: string;
+  title: string;
+  body: string | null;
+  category: string;
+  publishedAt: string | null;
+  emailedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminReleaseNoteInput {
+  version: string;
+  title: string;
+  body?: string | null;
+  category?: AdminReleaseNoteCategory;
+  publish?: boolean;
+}
+
+export interface ReleaseDigestResult {
+  notes: number;
+  recipients: number;
+  sent: number;
+  suppressed: number;
+  failed: number;
 }
 
 export interface AdminNewsletterEvent {
@@ -611,6 +674,19 @@ export const adminApi = {
     return res.sessions;
   },
 
+  // Demo-account conversion funnel + book-a-demo pipeline (migration 0360).
+  async demoFunnel(): Promise<AdminDemoFunnel> {
+    return adminRequest<AdminDemoFunnel>('/api/admin/demo/funnel');
+  },
+  async salesLeads(status?: SalesLeadStatus): Promise<AdminSalesLead[]> {
+    const qs = status ? `?status=${status}` : '';
+    const res = await adminRequest<{ leads: AdminSalesLead[] }>(`/api/admin/sales-leads${qs}`);
+    return res.leads;
+  },
+  async updateSalesLead(id: string, status: SalesLeadStatus): Promise<void> {
+    await adminRequest(`/api/admin/sales-leads/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+  },
+
   async tenants(): Promise<AdminTenant[]> {
     const res = await adminRequest<{ tenants: AdminTenant[] }>('/api/admin/tenants');
     return res.tenants ?? [];
@@ -869,6 +945,25 @@ export const adminApi = {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  },
+
+  // Release notes — the platform changelog marketed to users (footer "What's new"
+  // panel + weekly digest). Authoring is superadmin-only; the public GET is separate.
+  async releaseNotes(): Promise<AdminReleaseNote[]> {
+    const res = await adminRequest<{ releaseNotes: AdminReleaseNote[] }>('/api/release-notes/admin');
+    return res.releaseNotes;
+  },
+  async createReleaseNote(data: AdminReleaseNoteInput): Promise<{ releaseNote: AdminReleaseNote }> {
+    return adminRequest('/api/release-notes', { method: 'POST', body: JSON.stringify(data) });
+  },
+  async updateReleaseNote(id: string, data: Partial<AdminReleaseNoteInput>): Promise<{ releaseNote: AdminReleaseNote }> {
+    return adminRequest(`/api/release-notes/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+  },
+  async deleteReleaseNote(id: string): Promise<{ ok: boolean }> {
+    return adminRequest(`/api/release-notes/${id}`, { method: 'DELETE' });
+  },
+  async sendReleaseDigest(): Promise<{ result: ReleaseDigestResult }> {
+    return adminRequest('/api/release-notes/send-digest', { method: 'POST' });
   },
 
   // Privacy

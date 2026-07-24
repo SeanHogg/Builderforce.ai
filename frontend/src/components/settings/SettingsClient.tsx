@@ -33,6 +33,7 @@ import PersonalitySummary from '@/components/PersonalitySummary';
 import ForHireCard from '@/components/account/ForHireCard';
 import EmailPreferencesCard from '@/components/account/EmailPreferencesCard';
 import AccountSecurityPanel from '@/components/security/AccountSecurityPanel';
+import TeamSpendLimits from '@/components/settings/TeamSpendLimits';
 import type { PsychometricProfile } from '@/lib/psychometric';
 import { clearPersonalityBlockCache } from '@/lib/usePersonalityBlock';
 
@@ -162,7 +163,10 @@ export default function SettingsClient() {
     { id: 'personality', label: t('personality'), icon: '🧠', href: '/settings?sub=personality' },
     { id: 'sessions', label: t('sessionsTab'), icon: '🔒', href: '/settings?sub=sessions' },
     { id: 'email', label: t('emailTab'), icon: '✉️', href: '/settings?sub=email' },
-    ...(tenant ? [{ id: 'workspace', label: t('workspace'), icon: '🏢', href: '/settings?sub=workspace' }] : []),
+    ...(tenant ? [
+      { id: 'workspace', label: t('workspace'), icon: '🏢', href: '/settings?sub=workspace' },
+      { id: 'spend', label: t('spendLimits'), icon: '💳', href: '/settings?sub=spend' },
+    ] : []),
   ];
 
   const renderAccount = () => (
@@ -365,7 +369,9 @@ export default function SettingsClient() {
             ? <EmailPreferencesCard />
             : sub === 'workspace'
               ? renderWorkspace()
-              : renderAccount()}
+              : sub === 'spend'
+                ? <TeamSpendLimits />
+                : renderAccount()}
     </PageContainer>
   );
 }

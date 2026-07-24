@@ -595,6 +595,9 @@ function MonitorPanel({
   const [intervalSeconds, setIntervalSeconds] = useState('300');
   const [url, setUrl] = useState('');
   const [expectedStatus, setExpectedStatus] = useState('200');
+  const [httpMethod, setHttpMethod] = useState('GET');
+  const [httpHeadersText, setHttpHeadersText] = useState(''); // "Header: value" per line
+  const [httpBodyMatch, setHttpBodyMatch] = useState('');
   const [metric, setMetric] = useState<MonitorMetric>('token_spend_usd');
   const [comparator, setComparator] = useState<MonitorComparator>('gt');
   const [threshold, setThreshold] = useState('');
@@ -623,6 +626,11 @@ function MonitorPanel({
         if (c.intervalSeconds != null) setIntervalSeconds(String(c.intervalSeconds));
         if (c.url != null) setUrl(String(c.url));
         if (c.expectedStatus != null) setExpectedStatus(String(c.expectedStatus));
+        if (c.method != null) setHttpMethod(String(c.method).toUpperCase());
+        if (c.headers && typeof c.headers === 'object') {
+          setHttpHeadersText(Object.entries(c.headers as Record<string, string>).map(([k, v]) => `${k}: ${v}`).join('\n'));
+        }
+        if (c.bodyMatch != null) setHttpBodyMatch(String(c.bodyMatch));
         if (c.metric != null) setMetric(c.metric as MonitorMetric);
         if (c.comparator != null) setComparator(c.comparator as MonitorComparator);
         if (c.threshold != null) setThreshold(String(c.threshold));
@@ -639,8 +647,24 @@ function MonitorPanel({
     switch (monitorType) {
       case 'heartbeat':
         return { intervalSeconds: Number(intervalSeconds) || 300 };
-      case 'http_check':
-        return { url, ...(expectedStatus.trim() ? { expectedStatus: Number(expectedStatus) } : {}) };
+      case 'http_check': {
+        // "Header: value" lines → object; blank/malformed lines are ignored.
+        const headers: Record<string, string> = {};
+        for (const line of httpHeadersText.split('\n')) {
+          const idx = line.indexOf(':');
+          if (idx <= 0) continue;
+          const key = line.slice(0, idx).trim();
+          const value = line.slice(idx + 1).trim();
+          if (key) headers[key] = value;
+        }
+        return {
+          url,
+          ...(expectedStatus.trim() ? { expectedStatus: Number(expectedStatus) } : {}),
+          ...(httpMethod && httpMethod !== 'GET' ? { method: httpMethod } : {}),
+          ...(Object.keys(headers).length ? { headers } : {}),
+          ...(httpBodyMatch.trim() ? { bodyMatch: httpBodyMatch.trim() } : {}),
+        };
+      }
       case 'metric_threshold':
         return { metric, comparator, threshold: Number(threshold) || 0, windowDays: Number(windowDays) || 7 };
       default:
@@ -736,12 +760,28 @@ function MonitorPanel({
               </Field>
             )}
             {monitorType === 'http_check' && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
-                <Field label={t('fieldUrl')}>
-                  <input className="input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" />
+              <div style={{ display: 'grid', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+                  <Field label={t('fieldUrl')}>
+                    <input className="input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" />
+                  </Field>
+                  <Field label={t('fieldMethod')}>
+                    <Select className="input" value={httpMethod} onChange={(e) => setHttpMethod(e.target.value)}>
+                      {['GET', 'HEAD', 'POST', 'PUT'].map((mm) => <option key={mm} value={mm}>{mm}</option>)}
+                    </Select>
+                  </Field>
+                  <Field label={t('fieldExpectedStatus')}>
+                    <input className="input" type="number" value={expectedStatus} onChange={(e) => setExpectedStatus(e.target.value)} />
+                  </Field>
+                </div>
+                <Field label={t('fieldHeaders')}>
+                  <textarea className="input" style={{ minHeight: 60 }} value={httpHeadersText}
+                    onChange={(e) => setHttpHeadersText(e.target.value)} placeholder={t('headersPlaceholder')} />
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{t('headersHint')}</div>
                 </Field>
-                <Field label={t('fieldExpectedStatus')}>
-                  <input className="input" type="number" value={expectedStatus} onChange={(e) => setExpectedStatus(e.target.value)} />
+                <Field label={t('fieldBodyMatch')}>
+                  <input className="input" value={httpBodyMatch} onChange={(e) => setHttpBodyMatch(e.target.value)} placeholder={t('bodyMatchPlaceholder')} />
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{t('bodyMatchHint')}</div>
                 </Field>
               </div>
             )}

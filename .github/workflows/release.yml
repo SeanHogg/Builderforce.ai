@@ -76,6 +76,24 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: npm run deploy:worker
 
+      # Refresh the sales-demo persona tenants so any visitor-made changes are
+      # wiped on every deploy. Skips quietly when the secret isn't configured
+      # (set the same value as `wrangler secret put DEMO_RESEED_SECRET`);
+      # non-fatal so a reseed hiccup never fails the deploy — the nightly cron
+      # backstop reseeds anyway.
+      - name: Refresh demo accounts
+        env:
+          DEMO_RESEED_SECRET: ${{ secrets.DEMO_RESEED_SECRET }}
+        run: |
+          if [ -z "$DEMO_RESEED_SECRET" ]; then
+            echo "DEMO_RESEED_SECRET not set — skipping demo reseed."
+            exit 0
+          fi
+          curl -fsS -X POST "https://api.builderforce.ai/api/demo/reseed" \
+            -H "x-demo-reseed-secret: $DEMO_RESEED_SECRET" \
+            --max-time 300 \
+            || echo "::warning::Demo account reseed failed (nightly cron will retry)."
+
   build-and-deploy:
     runs-on: ubuntu-latest
     # Dogfood: the frontend consumes the PUBLISHED @seanhogg/builderforce-quality

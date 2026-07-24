@@ -1249,7 +1249,33 @@
       "resubscribeCta": "Resubscribe",
       "resubscribeTitle": "Resubscribe to optional email",
       "resubscribeConfirm": "You will start receiving optional email again, based on the categories you have switched on. Continue?"
-    }
+    },
+    "spendLimits": "Spend limits",
+    "spendTitle": "Team AI spend limits",
+    "spendDescription": "Set a monthly AI spend cap for each seat. Seats without their own model key run on Builderforce at the OpenRouter rate — a cap pauses their paid usage once reached, and you and they are notified as they approach it.",
+    "spendTeamsOnlyTitle": "A Teams plan feature",
+    "spendTeamsOnly": "Per-seat spend limits are available on the Teams plan. Upgrade to set a monthly AI budget for each member.",
+    "spendDefaultTitle": "Default per-seat budget",
+    "spendDefaultDescription": "Applied to every seat that doesn’t have its own limit. Leave blank for no default.",
+    "spendDefaultLabel": "Default monthly budget in US dollars",
+    "spendNoDefaultPlaceholder": "No limit",
+    "spendPerSeatMonth": "per seat / month",
+    "spendDefaultHint": "Amounts are in US dollars. Usage covered by a member’s own model key (BYO) is never counted.",
+    "spendSeatsTitle": "Seats",
+    "spendResetsOn": "Spend resets on {date}.",
+    "spendNoSeats": "No active members yet.",
+    "spendOfCap": "{spent} of {cap}",
+    "spendUnlimitedUsage": "{spent} · no limit",
+    "spendModeLabel": "Budget mode",
+    "spendModeInherit": "Use default",
+    "spendModeUnlimited": "No limit",
+    "spendModeCustom": "Custom",
+    "spendAmountPlaceholder": "Amount",
+    "spendAmountLabel": "Monthly budget in US dollars",
+    "spendSave": "Save",
+    "spendSaving": "Saving…",
+    "spendSaved": "Saved",
+    "spendSaveFailed": "Could not save"
   },
   "pmo": {
     "title": "Portfolio (PMO)",
@@ -3126,6 +3152,8 @@
     "subheading": "Start in <brainstorm>Brain Storm</brainstorm> to ideate, then execute as a project and build in the Builder—or assign work via <tasks>Tasks</tasks> and <workforce>Workforce</workforce> agents.",
     "promptPlaceholder": "Build a budget tracker with Material UI components…",
     "brainStorm": "Brain Storm",
+    "build": "Build",
+    "building": "Starting…",
     "agentsConnected": "{count, plural, one {# agent connected} other {# agents connected}}",
     "noAgents": "No agents connected —",
     "setUpInWorkforce": "set up in Workforce",
@@ -3955,7 +3983,30 @@
     "agentsTab": "Agents",
     "auditTab": "SOC 2",
     "subnavLabel": "Security sections",
-    "policiesTab": "Policies"
+    "policiesTab": "Policies",
+    "webTab": "Website Scan",
+    "webTitle": "Website security scan",
+    "webSubtitle": "Point at your live site and get security findings now. Each issue is filed as a ticket your team can fix.",
+    "webUrlLabel": "Website URL",
+    "webUrlPlaceholder": "https://your-site.com",
+    "webSave": "Save",
+    "webRunNow": "Run scan",
+    "webRunning": "Scanning…",
+    "webScore": "Posture score",
+    "webScoreDelta": "{delta} vs last scan",
+    "webBaselineFirst": "First scan — this is your baseline.",
+    "webNewFindings": "{count} new",
+    "webResolved": "{count} resolved",
+    "webFindingsFiled": "{count} filed as tickets",
+    "webNoIssues": "No issues found — your site passed every check.",
+    "webHistory": "Scan history",
+    "webNoHistory": "No scans yet. Run your first scan above.",
+    "webRecommendation": "Recommendation",
+    "sev_critical": "Critical",
+    "sev_high": "High",
+    "sev_medium": "Medium",
+    "sev_low": "Low",
+    "sev_info": "Info"
   },
   "catalogInsights": {
     "total": {
@@ -5381,6 +5432,8 @@
     "priceFree": "$0",
     "priceProMonthly": "${price}/mo",
     "priceTeamsMonthly": "${price}/seat/mo",
+    "teamsVolumeNote": "{min}-seat minimum",
+    "teamsSeatMinimum": "{min}-seat minimum — Teams is volume-priced for the whole org.",
     "teamsCostNoteYear": "${perSeat}/seat/yr — billed as ${total}/yr",
     "teamsCostNoteMonth": "${perSeat}/seat/mo — billed as ${total}/mo",
     "managedAddon": "Add-on: <b>Managed AgentHost</b> — ${price}/mo per hosted AgentHost. We run your BuilderForce Agents instance for you — no Docker, no DevOps.",
@@ -7315,7 +7368,8 @@
       "audit": "Audit Log",
       "apiKeys": "API Keys",
       "token": "Superadmin Token",
-      "feedback": "Feedback"
+      "feedback": "Feedback",
+      "releaseNotes": "Release notes"
     },
     "common": {
       "loading": "Loading…",
@@ -7929,6 +7983,31 @@
       "requestBody": "Request body",
       "responseBody": "Response body",
       "callerMetadata": "Caller metadata"
+    },
+    "releaseNotes": {
+      "digestTitle": "Weekly product-update email",
+      "unsentCount": "{count, plural, =0 {No unsent notes — the next digest will be empty} one {# published note not yet emailed} other {# published notes not yet emailed}}",
+      "digestSent": "Sent {notes} notes to {sent} people ({suppressed} opted out).",
+      "sendDigest": "Send digest now",
+      "sendDigestConfirm": "Email every published, not-yet-sent release note to all consenting users now?",
+      "editNote": "Edit release note",
+      "newNote": "New release note",
+      "phVersion": "Version (e.g. 2026.7.93)",
+      "phTitle": "Title — the benefit, in plain language",
+      "phBody": "What it does for the user. Blank lines separate paragraphs.",
+      "savePublish": "Save & publish",
+      "saveDraft": "Save draft",
+      "allNotes": "All notes ({count})",
+      "thTitle": "Title",
+      "thVersion": "Version",
+      "thCategory": "Category",
+      "thStatus": "Status",
+      "thEmailed": "Emailed",
+      "published": "Published",
+      "draft": "Draft",
+      "publish": "Publish",
+      "unpublish": "Unpublish",
+      "deleteConfirm": "Delete the release note “{title}”? This cannot be undone."
     }
   },
   "providerKeys": {
@@ -8368,7 +8447,15 @@
       "runningAll": "Running audits…",
       "run": "Run selected audits",
       "viewReports": "View reports",
-      "notifyHint": "We'll notify you when each report is ready. You can leave this page — the audits keep running."
+      "notifyHint": "We'll notify you when each report is ready. You can leave this page — the audits keep running.",
+      "webHeading": "Scan your live website",
+      "webIntro": "Have a site already? Enter its URL for an instant security scan — findings become tickets you can fix.",
+      "webPlaceholder": "https://your-site.com",
+      "webButton": "Scan website",
+      "webScanning": "Scanning…",
+      "webResult": "Score {score}/100 — {count} issue(s) filed as tickets",
+      "webView": "View results",
+      "webError": "Scan failed. Check the URL and try again."
     },
     "closeOnboarding": "Close onboarding",
     "workspaceReady": "Workspace ready",
@@ -8780,7 +8867,8 @@
     "commonQuestions": "Common Questions",
     "pillLora": "🧠 LoRA Training",
     "pillRegistry": "🤖 Agent Registry",
-    "pillEval": "🔬 AI Evaluation"
+    "pillEval": "🔬 AI Evaluation",
+    "emailPlaceholder": "you@example.com"
   },
   "gigs": {
     "publish": {
@@ -9782,6 +9870,13 @@
     "fieldIntervalSeconds": "Interval (seconds)",
     "fieldUrl": "URL",
     "fieldExpectedStatus": "Expected status",
+    "fieldMethod": "Method",
+    "fieldHeaders": "Request headers",
+    "headersPlaceholder": "Authorization: Bearer …",
+    "headersHint": "One \"Header: value\" per line — sent with the health check.",
+    "fieldBodyMatch": "Body must contain",
+    "bodyMatchPlaceholder": "\"status\":\"ok\"",
+    "bodyMatchHint": "Optional: breach if the response body doesn't contain this text.",
     "fieldMetric": "Metric",
     "fieldComparator": "Comparator",
     "fieldThreshold": "Threshold",
@@ -10402,5 +10497,39 @@
       }
     },
     "usageNote": "You are welcome to share these materials as-is when writing about or presenting Builderforce.ai. The Builderforce.ai name and logo remain trademarks; please do not alter the slides or imply endorsement."
+  },
+  "authCallback": {
+    "title": "Sign-in failed",
+    "backToLogin": "Back to login",
+    "signingIn": "Signing you in…",
+    "errorMissingParams": "Authentication failed: missing parameters.",
+    "errorInvalidState": "Authentication failed: invalid or expired state. Please try again.",
+    "errorAuthFailed": "Authentication failed with the provider. Please try again.",
+    "errorNoEmail": "Your provider account has no verified email address.",
+    "errorAccountNotFound": "Account not found or has been disabled.",
+    "errorAccountSuspended": "Your account has been suspended. Please contact support.",
+    "errorProviderUnavailable": "This sign-in provider is not currently available.",
+    "errorAlreadyLinkedOther": "This provider account is already connected to a different Builderforce account.",
+    "errorUnexpected": "An unexpected error occurred. Please try again.",
+    "errorNoCode": "No sign-in code received. Please try again.",
+    "errorProfile": "Failed to load your account profile. Please try signing in again."
+  },
+  "footer": {
+    "builtBy": "Built by",
+    "navLabel": "Footer",
+    "termsOfUse": "Terms of Use",
+    "privacyPolicy": "Privacy Policy",
+    "whatsNewHint": "See what's new"
+  },
+  "whatsNew": {
+    "title": "What's new",
+    "loading": "Loading…",
+    "error": "Couldn't load release notes. Please try again later.",
+    "empty": "No updates yet — check back soon.",
+    "categories": {
+      "new": "New",
+      "improvement": "Improved",
+      "fix": "Fixed"
+    }
   }
 }
