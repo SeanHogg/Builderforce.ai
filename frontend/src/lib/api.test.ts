@@ -229,9 +229,34 @@ describe('fetchFileContent', () => {
     expect(content).toBe('console.log("hi")');
   });
 
-  it('throws on non-ok response', async () => {
+  // 404 = the object was never written (the API distinguishes missing from
+  // empty) — it must surface as its own error, never be silently read as ''.
+  it('throws a file-not-found error on 404 (missing ≠ empty)', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(404));
-    await expect(fetchFileContent('proj-1', 'missing.js')).rejects.toThrow('Failed to fetch file content');
+    await expect(fetchFileContent('proj-1', 'missing.js')).rejects.toThrow('File not found: missing.js');
+  });
+
+  it('throws on other non-ok responses', async () => {
+    fetchSpy.mockResolvedValueOnce(mockError(500));
+    await expect(fetchFileContent('proj-1', 'f.js')).rejects.toThrow('Failed to fetch file content');
+  });
+
+  it('returns a REAL empty file as empty string (200)', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response('', { status: 200 }));
+    await expect(fetchFileContent('proj-1', 'blank.md')).resolves.toBe('');
+  });
+
+  it('percent-encodes special characters per segment but keeps / separators', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response('x', { status: 200 }));
+    await fetchFileContent('proj-1', 'src/my file #1&2.js');
+    const url = fetchSpy.mock.calls[0][0] as string;
+    expect(url).toMatch(/\/files\/src\/my%20file%20%231%262\.js$/);
+  });
+
+  it('preserves unicode content byte-for-byte', async () => {
+    const body = "const label = 'héllo 🚀 中文';\r\nexport default label;";
+    fetchSpy.mockResolvedValueOnce(new Response(body, { status: 200 }));
+    await expect(fetchFileContent('proj-1', 'App.js')).resolves.toBe(body);
   });
 });
 
@@ -255,6 +280,31 @@ describe('saveFile', () => {
   it('throws on non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(500));
     await expect(saveFile('proj-1', 'f.js', '')).rejects.toThrow('Request failed');
+  });
+
+  // The server rejects cross-wired content (422 with a reason). The client must
+  // surface that reason, not swallow it into a generic failure.
+  it("surfaces the server's 422 content-contract rejection reason", async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'vite.config.js looks like JSON data, not JS source' }), { status: 422 })
+    );
+    await expect(saveFile('proj-1', 'vite.config.js', '{"name":"x"}'))
+      .rejects.toThrow('vite.config.js looks like JSON data, not JS source');
+  });
+
+  it('sends unicode + CRLF content through the body untouched', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    const body = "const s = 'héllo 🚀';\r\nexport default s;";
+    await saveFile('proj-1', 'App.js', body);
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(init.body).toBe(body);
+  });
+
+  it('percent-encodes the path per segment on save (round-trips with fetch)', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    await saveFile('proj-1', 'src/my file #1&2.js', 'x');
+    const [url] = fetchSpy.mock.calls[0] as [string];
+    expect(url).toMatch(/\/files\/src\/my%20file%20%231%262\.js$/);
   });
 });
 
