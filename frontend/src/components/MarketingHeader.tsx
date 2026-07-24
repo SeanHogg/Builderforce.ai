@@ -39,8 +39,8 @@ const RESOURCE_LINKS: SimpleLink[] = [
 
 // Flat links that sit directly in the bar (no dropdown).
 const FLAT_LINKS: SimpleLink[] = [
-  // Guided 5-scenario walkthrough deck — the "see it work end-to-end" entry point.
-  { href: '/marketing', labelKey: 'demo' },
+  // The guided demo deck + live persona demos live at /demo — reached from the
+  // footer's "Get started" column, not the top bar (kept lean).
   // Talent (freelancers) + Workforce (AI agents/skills/personas) are one merged
   // marketplace surface now — a single nav entry, no separate /talent link.
   { href: '/marketplace', labelKey: 'talentWorkforce' },

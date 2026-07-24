@@ -41,8 +41,8 @@ export function DemoShowcase() {
   };
 
   return (
-    <section className="lp-section demo-showcase" id="demos">
-      <div className="lp-features">
+    <section className="demo-showcase" id="demos">
+      <div className="demo-showcase-inner">
         <h2 className="section-title">
           <span className="agentHost-accent">⟩</span> {t('heading')}
         </h2>
@@ -85,6 +85,7 @@ export function DemoShowcase() {
 }
 
 const styles = `
+  .demo-showcase-inner { max-width: 1200px; margin: 0 auto; padding: 40px 24px 72px; }
   .demo-showcase-lead {
     max-width: 720px; margin: 8px auto 0; text-align: center;
     font-size: 16px; line-height: 1.6; color: var(--text-secondary, #aab3c5);

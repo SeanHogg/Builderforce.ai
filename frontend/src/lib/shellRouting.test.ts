@@ -40,7 +40,7 @@ describe('classifyShell — app-shell deny-list model [1557]', () => {
     // Media kit (downloadable sales deck) must be reachable logged-out.
     expect(classifyShell('/media')).toBe('public');
     // Guided demo deck (the 5-scenario walkthrough) is a public marketing route.
-    expect(classifyShell('/marketing')).toBe('public');
+    expect(classifyShell('/demo')).toBe('public');
   });
 
   it('does not treat a prefix collision as public', () => {
