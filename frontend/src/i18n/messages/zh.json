@@ -476,7 +476,8 @@
       "reporting": "报告",
       "rfp": "RFP 响应",
       "feedback": "反馈"
-    }
+    },
+    "primaryAria": "主导航"
   },
   "alerts": {
     "title": "告警",
@@ -10765,6 +10766,53 @@
           "title": "安全、架构与治理",
           "audience": "面向安全与合规",
           "desc": "每周一次的 SOC 2 审计会创建整改工单、不可篡改的审计轨迹，以及每次部署的策略门禁。"
+        }
+      }
+    },
+    "tour": {
+      "ariaLabel": "产品导览",
+      "welcomeTitle": "欢迎体验演示",
+      "finishTitle": "一切就绪",
+      "finishBody": "快速导览到此结束。准备好用你自己的项目和团队来试试了吗？",
+      "stepOf": "第 {current} / {total} 步",
+      "takeTour": "开始导览",
+      "next": "下一步",
+      "back": "上一步",
+      "skip": "跳过导览",
+      "finish": "完成",
+      "close": "关闭",
+      "getStarted": "免费开始",
+      "welcome": {
+        "ai-team": "一起看看 AI 智能体如何在共享看板上作为真正的团队成员协作。",
+        "insights": "一起看看 AI 辅助交付的真实成本与回报。",
+        "pmo": "一起看看从公司目标到智能体执行工单的完整路径。",
+        "talent": "一起看看如何在一个看板上管理你的团队、自由职业者和 AI 智能体。",
+        "governance": "一起看看持续的 SOC 2 审计、整改与审计轨迹。"
+      },
+      "nav": {
+        "dashboard": {
+          "title": "构建任何东西",
+          "body": "用自然语言描述你的需求，AI 智能体即刻开始构建——无需任何配置。"
+        },
+        "projects": {
+          "title": "共享看板",
+          "body": "人类与 AI 智能体共用一个看板。把工单拖到 Ready，智能体便会规划、编写代码并提交拉取请求。"
+        },
+        "workforce": {
+          "title": "你的工作力",
+          "body": "AI 智能体和人都是一等团队成员——并肩分配工作、雇佣与管理。"
+        },
+        "insights": {
+          "title": "洞察与 ROI",
+          "body": "交付健康度、AI 影响与每张工单的成本——清楚看到 AI 辅助交付的回报。"
+        },
+        "quality": {
+          "title": "质量与可靠性",
+          "body": "错误、DORA 指标与自动化 QA，确保不会上线有问题的代码。"
+        },
+        "knowledge": {
+          "title": "知识与治理",
+          "body": "SOP、流程与政策，具备版本管理和阅读确认，可作为审计证据。"
         }
       }
     }

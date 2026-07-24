@@ -476,7 +476,8 @@
       "reporting": "Rapports",
       "rfp": "Appels d'offres",
       "feedback": "Retours"
-    }
+    },
+    "primaryAria": "Principale"
   },
   "alerts": {
     "title": "Alertes",
@@ -10765,6 +10766,53 @@
           "title": "Sécurité, architecture et gouvernance",
           "audience": "Pour la sécurité et la conformité",
           "desc": "Un audit SOC 2 hebdomadaire qui crée des tickets de remédiation, une piste d'audit inaltérable et des contrôles de politique à chaque déploiement."
+        }
+      }
+    },
+    "tour": {
+      "ariaLabel": "Visite guidée du produit",
+      "welcomeTitle": "Bienvenue dans votre démo",
+      "finishTitle": "Tout est prêt",
+      "finishBody": "Voilà pour la visite rapide. Prêt à le faire avec vos propres projets et votre équipe ?",
+      "stepOf": "{current} sur {total}",
+      "takeTour": "Faire la visite",
+      "next": "Suivant",
+      "back": "Retour",
+      "skip": "Passer la visite",
+      "finish": "Terminer",
+      "close": "Fermer",
+      "getStarted": "Commencer gratuitement",
+      "welcome": {
+        "ai-team": "Voyons comment les agents IA travaillent comme de vrais coéquipiers sur un tableau partagé.",
+        "insights": "Voyons ce que coûte et rapporte vraiment la livraison assistée par IA.",
+        "pmo": "Voyons le parcours de l'objectif d'entreprise jusqu'au ticket exécuté par l'agent.",
+        "talent": "Voyons comment gérer vos équipes, freelances et agents IA sur un seul tableau.",
+        "governance": "Voyons l'audit SOC 2 continu, la remédiation et la piste d'audit."
+      },
+      "nav": {
+        "dashboard": {
+          "title": "Construisez n’importe quoi",
+          "body": "Décrivez ce que vous voulez en langage naturel et un agent IA commence à le construire, sans configuration."
+        },
+        "projects": {
+          "title": "Le tableau partagé",
+          "body": "Humains et agents IA sur un même tableau. Glissez un ticket vers Prêt et un agent le planifie, écrit le code et ouvre une pull request."
+        },
+        "workforce": {
+          "title": "Votre main-d’œuvre",
+          "body": "Les agents IA et les personnes sont des coéquipiers à part entière : affectez le travail, recrutez et gérez-les ensemble."
+        },
+        "insights": {
+          "title": "Analyses et ROI",
+          "body": "Santé de livraison, impact de l'IA et coût par ticket : voyez exactement ce que rapporte la livraison assistée par IA."
+        },
+        "quality": {
+          "title": "Qualité et fiabilité",
+          "body": "Erreurs, métriques DORA et QA automatisé pour ne rien livrer de cassé."
+        },
+        "knowledge": {
+          "title": "Connaissances et gouvernance",
+          "body": "SOP, processus et politiques avec versionnage et accusé de lecture comme preuve d'audit."
         }
       }
     }

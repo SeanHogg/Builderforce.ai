@@ -476,7 +476,8 @@
       "reporting": "Berichte",
       "rfp": "RFP",
       "feedback": "Feedback"
-    }
+    },
+    "primaryAria": "Primär"
   },
   "alerts": {
     "title": "Warnungen",
@@ -10765,6 +10766,53 @@
           "title": "Sicherheit, Architektur & Governance",
           "audience": "Für Sicherheit & Compliance",
           "desc": "Ein wöchentliches SOC-2-Audit, das Behebungstickets erstellt, ein unveränderliches Audit-Protokoll und Policy-Gates bei jedem Deploy."
+        }
+      }
+    },
+    "tour": {
+      "ariaLabel": "Produkt-Tour",
+      "welcomeTitle": "Willkommen zu deiner Demo",
+      "finishTitle": "Alles bereit",
+      "finishBody": "Das war die Kurztour. Bereit, das mit deinen eigenen Projekten und deinem Team zu tun?",
+      "stepOf": "{current} von {total}",
+      "takeTour": "Tour starten",
+      "next": "Weiter",
+      "back": "Zurück",
+      "skip": "Tour überspringen",
+      "finish": "Fertig",
+      "close": "Schließen",
+      "getStarted": "Kostenlos starten",
+      "welcome": {
+        "ai-team": "Sehen wir uns an, wie KI-Agenten als echte Teammitglieder auf einem gemeinsamen Board arbeiten.",
+        "insights": "Sehen wir uns an, was KI-gestützte Lieferung wirklich kostet und einbringt.",
+        "pmo": "Sehen wir uns den Weg vom Unternehmensziel bis zum agentenausgeführten Ticket an.",
+        "talent": "Sehen wir uns an, wie du dein Team, Freelancer und KI-Agenten auf einem Board führst.",
+        "governance": "Sehen wir uns kontinuierliche SOC-2-Audits, Behebung und das Audit-Protokoll an."
+      },
+      "nav": {
+        "dashboard": {
+          "title": "Baue alles",
+          "body": "Beschreibe in natürlicher Sprache, was du willst, und ein KI-Agent beginnt zu bauen – ohne Einrichtung."
+        },
+        "projects": {
+          "title": "Das gemeinsame Board",
+          "body": "Menschen und KI-Agenten auf einem Board. Zieh ein Ticket auf Bereit, und ein Agent plant es, schreibt den Code und öffnet einen Pull Request."
+        },
+        "workforce": {
+          "title": "Deine Belegschaft",
+          "body": "KI-Agenten und Menschen sind vollwertige Teammitglieder – Arbeit zuweisen, anheuern und gemeinsam managen."
+        },
+        "insights": {
+          "title": "Insights & ROI",
+          "body": "Lieferqualität, KI-Wirkung und Kosten pro Ticket – sieh genau, was KI-gestützte Lieferung einbringt."
+        },
+        "quality": {
+          "title": "Qualität & Zuverlässigkeit",
+          "body": "Fehler, DORA-Metriken und automatisiertes QA, damit nichts Kaputtes live geht."
+        },
+        "knowledge": {
+          "title": "Wissen & Governance",
+          "body": "SOPs, Prozesse und Richtlinien mit Versionierung und Lesebestätigung als Audit-Nachweis."
         }
       }
     }

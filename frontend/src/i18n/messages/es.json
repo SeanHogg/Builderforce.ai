@@ -476,7 +476,8 @@
       "reporting": "Informes",
       "rfp": "RFP",
       "feedback": "Comentarios"
-    }
+    },
+    "primaryAria": "Principal"
   },
   "alerts": {
     "title": "Alertas",
@@ -10765,6 +10766,53 @@
           "title": "Seguridad, arquitectura y gobernanza",
           "audience": "Para seguridad y cumplimiento",
           "desc": "Una auditoría SOC 2 semanal que crea tickets de remediación, un registro de auditoría inmutable y controles de política en cada despliegue."
+        }
+      }
+    },
+    "tour": {
+      "ariaLabel": "Tour del producto",
+      "welcomeTitle": "Bienvenido a tu demo",
+      "finishTitle": "Todo listo",
+      "finishBody": "Ese es el tour rápido. ¿Listo para hacerlo con tus propios proyectos y equipo?",
+      "stepOf": "{current} de {total}",
+      "takeTour": "Hacer el tour",
+      "next": "Siguiente",
+      "back": "Atrás",
+      "skip": "Omitir tour",
+      "finish": "Finalizar",
+      "close": "Cerrar",
+      "getStarted": "Empezar gratis",
+      "welcome": {
+        "ai-team": "Veamos cómo los agentes de IA trabajan como verdaderos compañeros en un tablero compartido.",
+        "insights": "Veamos cuánto cuesta y qué aporta realmente la entrega asistida por IA.",
+        "pmo": "Veamos el camino desde el objetivo de la empresa hasta el ticket ejecutado por el agente.",
+        "talent": "Veamos cómo gestionar a tu gente, freelancers y agentes de IA en un solo tablero.",
+        "governance": "Veamos la auditoría SOC 2 continua, la remediación y el registro de auditoría."
+      },
+      "nav": {
+        "dashboard": {
+          "title": "Construye lo que sea",
+          "body": "Describe lo que quieres en lenguaje natural y un agente de IA empieza a construirlo, sin configuración."
+        },
+        "projects": {
+          "title": "El tablero compartido",
+          "body": "Personas y agentes de IA en un mismo tablero. Arrastra un ticket a Listo y un agente lo planifica, escribe el código y abre un pull request."
+        },
+        "workforce": {
+          "title": "Tu fuerza de trabajo",
+          "body": "Los agentes de IA y las personas son compañeros de primer nivel: asigna trabajo, contrata y gestiónalos juntos."
+        },
+        "insights": {
+          "title": "Insights y ROI",
+          "body": "Salud de entrega, impacto de la IA y coste por ticket: ve exactamente lo que aporta la entrega asistida por IA."
+        },
+        "quality": {
+          "title": "Calidad y fiabilidad",
+          "body": "Errores, métricas DORA y QA automatizado para que nada se publique roto."
+        },
+        "knowledge": {
+          "title": "Conocimiento y gobernanza",
+          "body": "SOP, procesos y políticas con versionado y acuse de lectura como evidencia de auditoría."
         }
       }
     }
