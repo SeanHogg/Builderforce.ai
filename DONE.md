@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-07-24 — ✅ RESOLVED: Gap-register batch 3 — MCP task-cache · AI-Impact donut & comparison joins · demo-tenant admin rollups (api)
+
+Four safe, self-contained code-only fixes (no migration/infra), all `tsgo --noEmit` clean + `aiImpactInsights.test.ts` 12/12 green.
+
+- **MCP `tasks.*` writes now invalidate the board tree + projects-list caches (Group 12).** They already bumped the ticket-search token but not `task-tree-version:project:<id>` / the projects-list, so an agent's MCP task write left those on their KV TTL. `callBuiltinTool` now mirrors the HTTP task routes' `bumpTreeVersion` + `invalidateProjectsList` for any `tasks.*` mutation (best-effort, off the result via `waitUntil`; projectId read from the tool result).
+- **Model-share donut matches its own table (Group 3).** `summarizeModelShareTrend` computed `currentSharePct` from the LAST week only, so a model used early in a 30-day window fell to 0% and the donut (which drops 0%-share slices) hid it while the table still listed it. `currentSharePct` is now the FULL-window share; the trend arrow (`deltaPct`) stays week-over-week (first→last). Also widened the model set to every window model (a mid-window-only model was previously missed).
+- **`summarizeComparison` model join is slug-drift-proof (Group 3).** It joined `run_model_outcomes.resolved_model` against a `llm_usage_log.model`-keyed token map by raw string, so `claude-sonnet-4-5` vs `anthropic/claude-sonnet-4-5` silently yielded `tokens = 0`. Added a shared `canonModelKey` (strip vendor prefix + lowercase) applied symmetrically to the map build AND the lookup.
+- **Demo tenants no longer inflate admin "paid" rollups (Group 14).** The 5 seeded persona demo tenants (mig 0360) are `plan='pro'` + `billing_status='active'`, so the admin tenant list + marketing-funnel `isPaid` counted them as real paying workspaces. Both `isPaid` predicates in `adminRoutes.ts` now require `AND t.is_demo = false` (`is_demo` is `NOT NULL default false`, so the filter is exact). The separate question of demo agents in the PUBLIC marketplace stays open in the roadmap (product decision).
+
+**Validation:** `tsgo --noEmit` clean for every edited file (`builtinMcpService.ts`, `aiImpactInsights.ts`, `adminRoutes.ts`); the only api typecheck errors remain the pre-existing unrelated `demoSeedService.ts` WIP. Not done (left in roadmap, verification-heavy/low-value): stale `nav.tab.*`/`onboarding.intent.*` i18n key removal (words recur in live namespaces — needs careful per-key tracing), the `runRollback.test.ts` seam test, and the README stale-artifact doc cleanup.
+
+---
+
 ## 2026-07-24 — ✅ RESOLVED: LLM fine-tuning best-practice gaps (Meta llama-cookbook review) — PEFT toolkit on Evermind + SFT/DPO dataset pipeline + fine-tune-vs-base eval gate (builderforce-memory 2026.7.14 · api 2026.7.133)
 
 Reviewed the engine against the standard fine-tuning playbook and closed all 7 identified gaps end-to-end, each test-verified.

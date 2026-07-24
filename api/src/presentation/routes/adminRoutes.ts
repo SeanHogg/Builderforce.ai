@@ -1220,7 +1220,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         ms.first_seen_at     AS "firstSeenAt",
         ms.last_seen_at      AS "lastSeenAt",
         u.email              AS "convertedEmail",
-        COALESCE(BOOL_OR(t.plan = 'pro' AND t.billing_status = 'active'), false) AS "isPaid"
+        COALESCE(BOOL_OR(t.plan = 'pro' AND t.billing_status = 'active' AND t.is_demo = false), false) AS "isPaid"
       FROM marketing_sessions ms
       LEFT JOIN users u ON u.id = ms.converted_user_id
       LEFT JOIN tenant_members tm ON tm.user_id = u.id AND tm.is_active = true
@@ -1320,7 +1320,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         t.paid_overflow_daily_cap AS "paidOverflowDailyCap",
         t.image_credits_daily_limit AS "imageCreditsDailyLimit",
         t.premium_override AS "premiumOverride",
-        CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' THEN true ELSE false END AS "isPaid",
+        CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' AND t.is_demo = false THEN true ELSE false END AS "isPaid",
         CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' THEN 'pro' ELSE 'free' END AS "effectivePlan",
         t.created_at AS "createdAt",
         COUNT(DISTINCT tm.user_id)::int  AS "memberCount",
