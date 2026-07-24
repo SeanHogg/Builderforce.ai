@@ -4,10 +4,18 @@
  * into `package.json` while it was the active tab, breaking Run with
  * `Invalid package.json: Unexpected token …` [1315].
  *
- * Scope is deliberately narrow: only structural, machine-checkable formats
- * (JSON / JSONL) are validated, where a parse failure is unambiguous. We do NOT
- * attempt fuzzy "this looks like CSS not JS" language-mismatch heuristics —
- * those carry false-positive risk that would block legitimate writes.
+ * Scope is deliberately narrow: only structural, machine-checkable formats are
+ * validated, where a failure is unambiguous. We do NOT attempt fuzzy "this looks
+ * like CSS not JS" language-mismatch heuristics — those carry false-positive
+ * risk that would block legitimate writes. The two checks that ARE unambiguous:
+ *   - a `.json` / `.jsonl` file must parse as JSON;
+ *   - the INVERSE — a JS/TS source file must NOT be a top-level JSON object/array.
+ *     Real ES-module source (`import …`, `export default …`) never parses as
+ *     JSON, so a `.js` body that IS strict JSON is the mirror of the [1315] bug:
+ *     `package.json`'s content cross-wired into `vite.config.js`, which made Vite
+ *     fail with `Expected ";" but found ":"`. A bare string/number/bool is left
+ *     alone (those are valid JS expression statements), so only the object/array
+ *     shape — which can't be valid top-level JS — is rejected.
  *
  * Empty / whitespace-only content is always allowed (creating a blank file).
  */
@@ -37,6 +45,9 @@ export function coerceFileContent(content: unknown): string {
   return String(content);
 }
 
+/** JS/TS source extensions that must never contain a raw JSON object/array. */
+const JS_TS_EXTS = new Set(['js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs']);
+
 function extensionOf(path: string): string {
   const base = path.split(/[\\/]/).pop() ?? '';
   const dot = base.lastIndexOf('.');
@@ -57,6 +68,22 @@ export function validateFileContentForPath(path: string, content: string): FileC
       JSON.parse(text);
     } catch (e) {
       return { ok: false, reason: `${path} must be valid JSON — refusing to write malformed content (${(e as Error).message}).` };
+    }
+  }
+
+  // Inverse guard: a JS/TS source file whose entire body is a JSON object/array
+  // is corrupt — it's another file's data (almost always package.json) written
+  // to a source path. Real source never round-trips through JSON.parse as an
+  // object, so this can't reject legitimate code; a bare JSON scalar is skipped
+  // because `"x"` / `42` / `true` are valid JS expression statements.
+  if (JS_TS_EXTS.has(ext)) {
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed !== null && typeof parsed === 'object') {
+        return { ok: false, reason: `${path} looks like JSON data, not ${ext.toUpperCase()} source — refusing to write another file's content here.` };
+      }
+    } catch {
+      /* not JSON → real source → fine */
     }
   }
 

@@ -318,8 +318,21 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
     const mount: Record<string, string> = { ...allContents };
     const restored: Record<string, string> = {};
     for (const [path, content] of Object.entries(defaultsForModality(modality))) {
-      if (!mount[path] || mount[path].trim() === '') {
-        onLog?.(`  \x1b[33m⚠\x1b[0m ${path} was empty — restored from the starter template\r\n`);
+      const current = mount[path];
+      const isEmpty = !current || current.trim() === '';
+      // Also restore a scaffold file whose on-disk content is structurally wrong
+      // for its path — e.g. package.json's JSON cross-wired into vite.config.js,
+      // which crashed Vite with `Expected ";" but found ":"`. Without this, a
+      // corrupt (but non-empty) scaffold file sailed past the empty-only check
+      // straight into the dev server. Same guard the editor writes through, so a
+      // legitimate file is never clobbered.
+      const isCorrupt = !isEmpty && !validateFileContentForPath(path, current).ok;
+      if (isEmpty || isCorrupt) {
+        onLog?.(
+          isCorrupt
+            ? `  \x1b[33m⚠\x1b[0m ${path} was corrupt — restored from the starter template\r\n`
+            : `  \x1b[33m⚠\x1b[0m ${path} was empty — restored from the starter template\r\n`,
+        );
         mount[path] = content;
         restored[path] = content;
       }
