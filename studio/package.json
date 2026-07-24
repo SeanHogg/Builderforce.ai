@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-studio",
-  "version": "2026.7.19",
+  "version": "2026.7.20",
   "description": "Headless client-side AI video-generation engine for the browser. Runs LCM / SD-Turbo diffusion on WebGPU or WebNN (onnxruntime-web), CLIP tokenization via @huggingface/transformers, Mamba SSM temporal coherence, and WebCodecs MP4 muxing. No React. For a ready-made <StudioPanel>, see @seanhogg/builderforce-studio-embedded.",
   "license": "MIT",
   "author": "Sean Hogg",
