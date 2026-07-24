@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { defaultsForModality } from '@/lib/vanillaDefaults';
+import { repairScaffold } from '@/lib/scaffoldRepair';
 import { FileExplorer } from './FileExplorer';
 import { CodePane } from './CodePane';
 import { Terminal } from './Terminal';
@@ -315,41 +315,32 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
       }
     }
 
-    const mount: Record<string, string> = { ...allContents };
-    const restored: Record<string, string> = {};
-    for (const [path, content] of Object.entries(defaultsForModality(modality))) {
-      const current = mount[path];
-      const isEmpty = !current || current.trim() === '';
-      // Also restore a scaffold file whose on-disk content is structurally wrong
-      // for its path — e.g. package.json's JSON cross-wired into vite.config.js,
-      // which crashed Vite with `Expected ";" but found ":"`. Without this, a
-      // corrupt (but non-empty) scaffold file sailed past the empty-only check
-      // straight into the dev server. Same guard the editor writes through, so a
-      // legitimate file is never clobbered.
-      const isCorrupt = !isEmpty && !validateFileContentForPath(path, current).ok;
-      if (isEmpty || isCorrupt) {
+    // Repair the scaffold: fill empty files AND replace structurally cross-wired
+    // ones (another file's content written to this path — package.json's JSON in
+    // vite.config.js, source text in index.html, …). Shared pure helper so Run,
+    // Check and the publish build agree and the logic is unit-tested.
+    const { repaired: mount, restored } = repairScaffold(allContents, modality);
+    if (restored.length > 0) {
+      for (const { path, reason } of restored) {
         onLog?.(
-          isCorrupt
+          reason === 'corrupt'
             ? `  \x1b[33m⚠\x1b[0m ${path} was corrupt — restored from the starter template\r\n`
             : `  \x1b[33m⚠\x1b[0m ${path} was empty — restored from the starter template\r\n`,
         );
-        mount[path] = content;
-        restored[path] = content;
       }
-    }
-    if (Object.keys(restored).length > 0) {
-      setFileContents(prev => ({ ...prev, ...restored }));
+      const restoredMap = Object.fromEntries(restored.map(({ path }) => [path, mount[path]!]));
+      setFileContents(prev => ({ ...prev, ...restoredMap }));
       setFiles(prev => {
         const have = new Set(prev.map(f => f.path));
-        const add = Object.keys(restored)
+        const add = Object.keys(restoredMap)
           .filter(p => !have.has(p))
-          .map(path => ({ path, content: restored[path], type: 'file' as const }));
+          .map(path => ({ path, content: restoredMap[path]!, type: 'file' as const }));
         return add.length > 0 ? [...prev, ...add] : prev;
       });
       // Best-effort: a save failure (offline, 503) must never block the run —
       // the mount already has the content either way.
       await Promise.all(
-        Object.entries(restored).map(([path, content]) =>
+        Object.entries(restoredMap).map(([path, content]) =>
           saveFile(project.id, path, content).catch((e) => console.error(`Failed to restore ${path}:`, e)),
         ),
       );

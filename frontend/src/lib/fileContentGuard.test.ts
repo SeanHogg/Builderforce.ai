@@ -51,6 +51,30 @@ describe('validateFileContentForPath', () => {
     expect(validateFileContentForPath('s.ts', '"hello"').ok).toBe(true);
   });
 
+  // The reported preview bug: vite.config.js's source got written into index.html,
+  // so the browser served raw JS as the page.
+  it('rejects non-markup (JS/config source) written into an .html file', () => {
+    const viteConfig = "import { defineConfig } from 'vite';\nexport default defineConfig({});";
+    const r = validateFileContentForPath('index.html', viteConfig);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toMatch(/HTML markup/);
+    // JSON in an .html file is equally wrong.
+    expect(validateFileContentForPath('index.html', '{"name":"x"}').ok).toBe(false);
+  });
+
+  it('accepts real HTML (doctype, comment, or bare tag) in an .html file', () => {
+    expect(validateFileContentForPath('index.html', '<!DOCTYPE html><html></html>').ok).toBe(true);
+    expect(validateFileContentForPath('index.html', '\n  <!-- hi -->\n<html></html>').ok).toBe(true);
+    expect(validateFileContentForPath('page.htm', '<div id="root"></div>').ok).toBe(true);
+  });
+
+  it('rejects an HTML document written into a .js/.jsx file (inverse cross-wire)', () => {
+    expect(validateFileContentForPath('index.js', '<!DOCTYPE html>\n<html></html>').ok).toBe(false);
+    expect(validateFileContentForPath('App.jsx', '<html lang="en"></html>').ok).toBe(false);
+    // A lone `<` that is real JSX/comparison is NOT an HTML document → allowed.
+    expect(validateFileContentForPath('App.jsx', 'const ok = a < b;').ok).toBe(true);
+  });
+
   // The real scaffolds must all pass their own guard, in BOTH directions — the
   // JS configs/sources aren't flagged as JSON, and package.json stays valid JSON.
   it.each([
