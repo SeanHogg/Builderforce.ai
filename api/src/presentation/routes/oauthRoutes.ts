@@ -373,6 +373,13 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
       return c.redirect(`${frontendBase}/login?error=no_email`);
     }
 
+    // Resolve the account (link existing / create new) and issue the web JWT.
+    // Wrapped so any DB fault redirects to a friendly login error instead of
+    // leaking a raw Postgres error as JSON (which also exposes schema
+    // internals). The overflow that motivated this guard — avatar_url >
+    // varchar(500) — is fixed in mig 0356; the catch keeps future DB faults
+    // from surfacing raw.
+    try {
     // 1. Check if this provider account is already linked
     const [existingOAuth] = await db
       .select({ id: oauthAccounts.id, userId: oauthAccounts.userId })
@@ -501,6 +508,9 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
     return c.redirect(
       `${frontendBase}/auth/callback?token=${encodeURIComponent(jwt)}&redirect=${encodeURIComponent(stateData.redirect)}`,
     );
+    } catch {
+      return c.redirect(`${frontendBase}/login?error=auth_failed`);
+    }
   });
 
   // -------------------------------------------------------------------------

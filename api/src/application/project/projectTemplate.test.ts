@@ -3,9 +3,11 @@ import {
   VANILLA_TEMPLATE,
   MOBILE_TEMPLATE,
   templateForProject,
+  scaffoldForProject,
   templateLooksUnseeded,
   templateNeedsBackfill,
   ensureProjectTemplate,
+  ensureRunnableScaffold,
   type SeedableProject,
   type TemplateObject,
 } from './projectTemplate';
@@ -227,5 +229,59 @@ describe('ensureProjectTemplate', () => {
     };
     await ensureProjectTemplate(wrapped as unknown as R2Bucket, base, []);
     expect(listCalls).toBe(0); // preListed [] provided → no internal list
+  });
+});
+
+describe('scaffoldForProject (ignores repo-link)', () => {
+  it('returns the modality scaffold even for a repo-connected project', () => {
+    // This is the difference from templateForProject: a repo-linked mobile project
+    // still HAS a runnable scaffold; whether to seed it is the caller's call.
+    expect(scaffoldForProject({ ...base, modality: 'mobile', githubRepoUrl: 'https://github.com/acme/app' }))
+      .toBe(MOBILE_TEMPLATE);
+  });
+
+  it('is null for a modality with no scaffold', () => {
+    expect(scaffoldForProject({ ...base, modality: 'video' })).toBeNull();
+  });
+});
+
+describe('ensureRunnableScaffold (heals a bare/empty backing repo)', () => {
+  const prefix = 'ide/projects/1/';
+  const repoLinked: SeedableProject = { ...base, modality: 'mobile', githubRepoUrl: 'https://github.com/acme/app' };
+
+  // THE WIPE: a project bound to an auto-created repo that only has a README
+  // imports that near-empty tree, and because seeding is skipped for repo-linked
+  // projects it is left with nothing runnable. ensureRunnableScaffold must fill it.
+  it('seeds the scaffold into a repo-linked project that came up README-only', async () => {
+    const r2 = fakeStorage({ [prefix + 'README.md']: '# my-mobile-app' });
+    const written = await ensureRunnableScaffold(r2 as unknown as R2Bucket, repoLinked);
+    expect(written).toBe(Object.keys(MOBILE_TEMPLATE).length);
+    expect(r2.store.get(prefix + 'App.js')).toContain("from 'react-native'");
+    expect(r2.store.get(prefix + 'README.md')).toBe('# my-mobile-app'); // untouched
+  });
+
+  it('seeds a totally empty repo-linked workspace', async () => {
+    const r2 = fakeStorage();
+    const written = await ensureRunnableScaffold(r2 as unknown as R2Bucket, repoLinked);
+    expect(written).toBe(Object.keys(MOBILE_TEMPLATE).length);
+  });
+
+  // A genuine imported repo brings its own package.json — never inject a scaffold
+  // over real code.
+  it('does NOTHING when the workspace already has a real package.json', async () => {
+    const r2 = fakeStorage({
+      [prefix + 'package.json']: '{ "name": "real-nextjs-app" }',
+      [prefix + 'next.config.js']: 'module.exports = {}',
+    });
+    const written = await ensureRunnableScaffold(r2 as unknown as R2Bucket, repoLinked);
+    expect(written).toBe(0);
+    expect(r2.store.get(prefix + 'package.json')).toBe('{ "name": "real-nextjs-app" }');
+    expect(r2.store.has(prefix + 'App.js')).toBe(false);
+  });
+
+  it('is a no-op for a modality with no scaffold (video/voice/etc)', async () => {
+    const r2 = fakeStorage();
+    const written = await ensureRunnableScaffold(r2 as unknown as R2Bucket, { ...base, modality: 'video', githubRepoUrl: 'https://github.com/acme/x' });
+    expect(written).toBe(0);
   });
 });

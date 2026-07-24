@@ -34,6 +34,7 @@ import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import {
   IDE_PREFIX,
   ensureProjectTemplate,
+  ensureRunnableScaffold,
   templateLooksUnseeded,
   templateNeedsBackfill,
   type SeedableProject,
@@ -151,25 +152,40 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     // placeholder) slip through, so those files opened BLANK in the editor. The
     // check is a cheap in-memory scan of the already-listed objects, so healthy
     // workspaces still pay nothing (no project lookup, no writes).
+    const hasRealPackageJson = (objs: { path: string; size: number }[]) =>
+      objs.some((o) => o.path === 'package.json' && o.size > 0);
+
     if (templateNeedsBackfill(rel)) {
-      // Prefer importing a linked repo's files (open an existing repo-mapped project
-      // in the IDE like VS Code) — but only for a brand-new/fully-empty workspace,
-      // so we never clobber a repo project's real files. Otherwise template-seed
-      // the missing/empty vanilla files (never overwriting ones that have content).
       const tenantId = c.get('tenantId') as number;
+      const relist = async () => { objects = (await bucket.list({ prefix })).objects ?? []; };
+      // getRepoStatus is cached (~30s), so a healthy repo-backed project pays only
+      // this — no Neon read — on the hot file-list path.
       const repoStatus = await getRepoStatus(c.env as Env, tenantId, projectId).catch(() => ({ linked: false as const }));
+
       if (repoStatus.linked && repoStatus.repoId) {
+        // Prefer importing a linked repo's files (open an existing repo-mapped
+        // project like VS Code) — but only for a brand-new/fully-empty workspace,
+        // so we never clobber a repo project's real files.
         if (templateLooksUnseeded(rel)) {
           const imported = await importRepoToWorkspace(c.env as Env, tenantId, projectId, repoStatus.repoId).catch(() => null);
-          if (imported?.ok && imported.imported > 0) {
-            objects = (await bucket.list({ prefix })).objects ?? [];
-          }
+          if (imported?.ok && imported.imported > 0) await relist();
+        }
+        // Guarantee runnability. A repo-linked project whose backing repo was
+        // effectively empty (auto-created README-only, or a first push that found
+        // R2 empty and bailed) would otherwise import a near-empty tree and —
+        // because seeding is skipped for repo-linked projects — be left with
+        // nothing runnable. THIS is the wipe. Only touch it when there's STILL no
+        // real package.json, so a genuine imported repo skips the Neon read too.
+        const rel2 = objects.map((o) => ({ path: o.key!.replace(prefix, ''), size: o.size }));
+        if (!hasRealPackageJson(rel2)) {
+          const project = await fetchSeedableProject(c.env, projectId);
+          if (project && (await ensureRunnableScaffold(bucket, project, rel2)) > 0) await relist();
         }
       } else {
+        // Non-repo project: seed the modality scaffold's missing/empty files
+        // (also heals the partial-empty "blank editor" case).
         const project = await fetchSeedableProject(c.env, projectId);
-        if (project && (await ensureProjectTemplate(bucket, project, rel)) > 0) {
-          objects = (await bucket.list({ prefix })).objects ?? [];
-        }
+        if (project && (await ensureProjectTemplate(bucket, project, rel)) > 0) await relist();
       }
     }
 

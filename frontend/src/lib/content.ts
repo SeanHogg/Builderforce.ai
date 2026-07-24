@@ -18,7 +18,7 @@ export const BRAND = {
   ogImageWidth: 1200,
   ogImageHeight: 630,
   /** ISO 8601 — update on each content deploy */
-  dateModified: '2026-07-05T00:00:00Z',
+  dateModified: '2026-07-23T00:00:00Z',
 } as const;
 
 /* ════════════════════ STATS ════════════════════ */
@@ -143,6 +143,24 @@ export const FEATURES: Feature[] = [
     title: 'A Learning Brain for Every Project',
     shortDesc: 'Every project gets its own self-updating model that learns from your team\'s work.',
     longDesc: 'Each project is provisioned with its own Evermind on day one — a self-updating model that learns from every run across all four studios: design, voice, LLM, and video. Corrections stick across sessions through a shared write-through fact store, so the brain that helped yesterday is smarter today. Inference stays off until you opt in, and the model is editable right in the LLM Studio.',
+  },
+  {
+    icon: '🎬',
+    title: 'Evermind Generative Media',
+    shortDesc: 'Generate images and video from your own on-device model — not just text.',
+    longDesc: 'Evermind is more than a text model. The same self-updating engine generates images and video end-to-end — a trainable codec and acoustic stack running on WebGPU, with the API serving the rendered media. Build a generation pipeline visually in the Workflow Builder, keep the weights and outputs yours, and produce media without a per-frame cloud bill or a third-party model dependency.',
+  },
+  {
+    icon: '🐙',
+    title: 'Native GitHub App — Checks, Actions & CI Gates',
+    shortDesc: 'Agents work through a real GitHub App: Checks write-back, Actions runs, and CI-gated merges.',
+    longDesc: 'Connect a first-class GitHub App and agents operate through the same controls your engineers do. Work is offloaded to GitHub with App-authenticated access, agent verdicts write back as native Checks, security alerts ingest onto the board, and a build-and-deploy pipeline runs real Actions — so a merge is gated on green CI, and a red PR-branch build auto-opens a fix. Observability that ends in a pull request, not a dashboard.',
+  },
+  {
+    icon: '📨',
+    title: 'Embeddable Product Feedback',
+    shortDesc: 'Drop a snippet on any app to collect feedback — filed as human-gated work no agent can touch.',
+    longDesc: 'The human-input twin of error observability. Embed a dependency-free, shadow-DOM feedback widget on any product surface and every submission lands on your board as a human-gated request — deduplicated by fingerprint, rate-limited per collector, and inert until a person approves it, so no agent acts on raw user input without a sign-off. Approve in triage and it becomes ordinary executable work a cloud agent can pick up.',
   },
   {
     icon: '🧑‍🏭',
