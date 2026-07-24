@@ -9,8 +9,10 @@
  *   POST /             — superadmin: create (draft or published).
  *   PUT  /:id          — superadmin: edit / publish / unpublish.
  *   DELETE /:id        — superadmin: remove.
- *   POST /send-digest  — superadmin: run the weekly digest NOW (same code path
- *                        as the Friday cron) — for testing and off-cycle sends.
+ *   POST /send-digest  — superadmin: email ALL published, not-yet-sent notes NOW
+ *                        (same code path as the Friday cron) — off-cycle bulk send.
+ *   POST /:id/send     — superadmin: email ONE published note NOW (manual trigger).
+ *                        Marks it emailed, so it drops out of the weekly digest.
  *
  * Authoring is superadmin-only because these are Builderforce's own platform
  * announcements, not tenant content — see application/product/releaseNotes.ts.
@@ -29,7 +31,7 @@ import {
   updateReleaseNote,
   deleteReleaseNote,
 } from '../../application/product/releaseNotes';
-import { runWeeklyReleaseDigest } from '../../application/email/releaseDigest';
+import { runReleaseDigest } from '../../application/email/releaseDigest';
 
 export function createReleaseNoteRoutes(db: Db) {
   const router = new Hono<HonoEnv>();
@@ -111,10 +113,22 @@ export function createReleaseNoteRoutes(db: Db) {
   });
 
   // -------------------------------------------------------------------------
-  // POST /send-digest — run the weekly digest immediately (cron code path).
+  // POST /send-digest — email ALL unsent published notes now (cron code path).
   // -------------------------------------------------------------------------
   router.post('/send-digest', superAdminMiddleware, async (c) => {
-    const result = await runWeeklyReleaseDigest(c.env as Env, db);
+    const result = await runReleaseDigest(c.env as Env, db);
+    return c.json({ result });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /:id/send — email ONE published note now, then flag it emailed so it is
+  // excluded from the weekly digest. The manual per-note trigger.
+  // -------------------------------------------------------------------------
+  router.post('/:id/send', superAdminMiddleware, async (c) => {
+    const result = await runReleaseDigest(c.env as Env, db, { noteIds: [c.req.param('id')] });
+    // 0 notes → the id was not a published note (draft or missing). Surface it
+    // rather than reporting a successful send of nothing.
+    if (result.notes === 0) return c.json({ error: 'Release note not found or not published' }, 404);
     return c.json({ result });
   });
 

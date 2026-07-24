@@ -5,14 +5,15 @@
  * This file maps HTTP request/response to service calls.
  */
 import { Hono } from 'hono';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { neon } from '@neondatabase/serverless';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
 import { signUpload } from '../../infrastructure/auth/uploadSign';
 import { fetchWebDocument } from '../../application/web/webFetch';
 import { recordOutboundFetch, enforceOutboundFetchCap } from '../../application/web/outboundFetchLedger';
-import { agentHosts, users } from '../../infrastructure/database/schema';
+import { agentHosts, users, chatTicketLinks } from '../../infrastructure/database/schema';
+import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached, ticketSearchVersionKey } from '../../infrastructure/cache/readThroughCache';
 import { notify } from '../../application/notifications/notify';
@@ -166,6 +167,23 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     return c.json({ messages: result });
   });
 
+  // POST /chats/:id/read — advance the caller's unread high-water mark. Body
+  // `{ seq? }`; seq omitted marks everything read. Fired when a chat is opened
+  // (mounted) on EITHER surface, so an execution milestone landing in a chat the
+  // user is not viewing shows an unread badge until they read it — and reading it
+  // on one surface clears it on the other (one unified conversation).
+  router.post('/chats/:id/read', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+    const body = await c.req.json<{ seq?: number }>().catch(() => ({} as { seq?: number }));
+    const result = await brainService.markRead(
+      id, c.get('tenantId') as number, c.get('userId') as string,
+      typeof body.seq === 'number' ? body.seq : undefined,
+    );
+    if ('error' in result) return c.json({ error: result.error }, 404);
+    return c.json(result);
+  });
+
   // POST /chats/:id/messages
   router.post('/chats/:id/messages', async (c) => {
     const id = parseId(c.req.param('id'));
@@ -182,6 +200,28 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     if ('error' in result) {
       const status = result.error === 'Chat not found' ? 404 : 400;
       return c.json({ error: result.error }, status);
+    }
+
+    // A human posting into a chat that's linked to a ticket IS a comment on that
+    // ticket — surface it on the unified activity/audit log (verb `comment.added`),
+    // fanned to each linked ticket. Off the response path; best-effort.
+    const userText = (body.messages ?? []).filter((m) => m.role === 'user' && typeof m.content === 'string' && m.content.trim());
+    if (userText.length > 0) {
+      c.executionCtx.waitUntil((async () => {
+        const links = await db.select({ kind: chatTicketLinks.ticketKind, ref: chatTicketLinks.ticketRef })
+          .from(chatTicketLinks)
+          .where(and(eq(chatTicketLinks.chatId, id), eq(chatTicketLinks.tenantId, tenantId)))
+          .catch(() => [] as Array<{ kind: string; ref: string }>);
+        if (!links.length) return;
+        const actor = await resolveActorFromContext(c.env as Env, db, c);
+        const summary = userText[userText.length - 1]!.content.replace(/\s+/g, ' ').trim().slice(0, 200);
+        for (const l of links) {
+          await recordActivity(c.env as Env, db, {
+            tenantId, actor, verb: 'comment.added',
+            targetType: l.kind, targetId: l.ref, summary, metadata: { chatId: id },
+          }).catch(() => {});
+        }
+      })());
     }
 
     // Notify any HUMAN addressed in these turns (directed @human message) so an

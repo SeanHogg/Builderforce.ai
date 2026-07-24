@@ -15,7 +15,7 @@ import { sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { boards, swimlanes, tasks, taskStatusTransitions } from '../../infrastructure/database/schema';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, invalidateCached, projectScoreCacheKey, tenantRollupCacheKey } from '../../infrastructure/cache/readThroughCache';
 import { bumpWorkforceMetricsVersion } from '../metrics/workforceMetrics';
 import { releaseWorkItemWebhook } from '../seams/workItemWebhook';
 import { TaskStatus } from '../../domain/shared/types';
@@ -118,6 +118,15 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
 
   // Invalidate the workforce scorecard / DORA caches for this tenant.
   await bumpWorkforceMetricsVersion(env, tenantId).catch(() => {});
+
+  // A status transition (a manual PATCH, an agent advance, OR a PR-merge completion via
+  // completeTaskOnMerge) can flip a remediation ticket's badge — so drop the diagnostics
+  // project-score + tenant-rollup caches that carry it, instead of letting the badge lag
+  // the transition by the read-through TTL. Over-invalidation is cheap (300s recompute).
+  await Promise.all([
+    invalidateCached(env, projectScoreCacheKey(tenantId, projectId)).catch(() => {}),
+    invalidateCached(env, tenantRollupCacheKey(tenantId)).catch(() => {}),
+  ]);
 
   // A work item FIRST reaching a released/done lane fans out `workitem.released`
   // to any segment webhook subscriptions (the Investor board / Changelog feed,

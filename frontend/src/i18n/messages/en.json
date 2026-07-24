@@ -1,4 +1,101 @@
 {
+  "marketingDeck": {
+    "seo": {
+      "title": "The Ultimate Demo — Builderforce",
+      "description": "Follow five moves to watch one idea become a running, deployed, tested app operated by a team of humans and AI agents.",
+      "ogTitle": "The Ultimate Demo — build, deploy and scale in minutes"
+    },
+    "ui": {
+      "start": "Start the demo",
+      "next": "Next",
+      "prev": "Back",
+      "restart": "Start over",
+      "progress": "{current} / {total}",
+      "progressLabel": "Demo progress",
+      "seeLabel": "What you'll see",
+      "ctaPrimary": "Start building",
+      "ctaSecondary": "Book a demo"
+    },
+    "slides": [
+      {
+        "kind": "intro",
+        "eyebrow": "The ultimate demo",
+        "title": "Build, deploy and scale — in one sitting.",
+        "tagline": "Five moves take a single idea all the way to a running product operated by a team of humans and AI agents. Follow along."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "01",
+        "eyebrow": "Sign in",
+        "title": "Zero setup. You're already in.",
+        "tagline": "No forms, no configuration — just an account.",
+        "steps": [
+          "Create an account or log in",
+          "Land straight in your Default workspace",
+          "A Default project is already waiting for you"
+        ],
+        "see": "You're in a working workspace in seconds — on the web or in VS Code."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "02",
+        "eyebrow": "Describe it",
+        "title": "Say what you want. Watch it build.",
+        "tagline": "Type your idea into the \"What should we build?\" prompt.",
+        "steps": [
+          "Type a plain-language description of your app",
+          "Land in the Builder with your prompt carried across",
+          "The AI scaffolds a complete, running app for you"
+        ],
+        "see": "A live preview lights up with a working app — from a single sentence."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "03",
+        "eyebrow": "Deploy & test",
+        "title": "One click live. Tested automatically.",
+        "tagline": "Publish, then let the agent put it through its paces.",
+        "steps": [
+          "Hit Publish — your app goes live at a URL in seconds",
+          "The Agentic Tester targets the deployed app automatically",
+          "Findings come back as fix-ready tickets"
+        ],
+        "see": "Deployed and quality-checked without ever leaving the Builder."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "04",
+        "eyebrow": "Scale the team",
+        "title": "Invite people. Hire agents. One team.",
+        "tagline": "Humans and AI agents work the same board.",
+        "steps": [
+          "Invite a teammate into your workspace",
+          "Add an AI agent to your workforce",
+          "Assign work to a person or an agent — same picker"
+        ],
+        "see": "A blended human + agent team, collaborating on one shared board."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "05",
+        "eyebrow": "Lead the workforce",
+        "title": "A lean team. An augmented workforce.",
+        "tagline": "A few developers direct a fleet of agents.",
+        "steps": [
+          "Staff swimlanes with the right agents",
+          "Drag a ticket into a lane to auto-run an agent",
+          "Steer live runs and answer their questions as they work"
+        ],
+        "see": "A handful of developers orchestrate a workforce of agents doing the heavy lifting."
+      },
+      {
+        "kind": "outro",
+        "eyebrow": "That's the WOW",
+        "title": "Idea to product to team — in minutes.",
+        "tagline": "You just watched one prompt become a deployed, tested app, run by a team of humans and AI agents. Now it's your turn."
+      }
+    ]
+  },
   "contentManager": {
     "migrate": {
       "moving": "Moving your content into Knowledge…",
@@ -5372,7 +5469,8 @@
         "question": "Can I buy or sell a Kanban board template?",
         "answer": "Yes. Package a delivery process — lanes, required roles, review gates, and a recommended roster — as a Kanban template and publish it to the marketplace to sell or share. Any team can install a proven template into a project in one click and inherit a governed, role-gated workflow instead of building one from scratch."
       }
-    ]
+    ],
+    "newsletterPlaceholder": "your@email.com"
   },
   "pricing": {
     "seo": {
@@ -7369,7 +7467,9 @@
       "apiKeys": "API Keys",
       "token": "Superadmin Token",
       "feedback": "Feedback",
-      "releaseNotes": "Release notes"
+      "releaseNotes": "Release notes",
+      "demoFunnel": "Demo funnel",
+      "salesLeads": "Sales leads"
     },
     "common": {
       "loading": "Loading…",
@@ -8007,7 +8107,68 @@
       "draft": "Draft",
       "publish": "Publish",
       "unpublish": "Unpublish",
-      "deleteConfirm": "Delete the release note “{title}”? This cannot be undone."
+      "deleteConfirm": "Delete the release note “{title}”? This cannot be undone.",
+      "sendNote": "Send now",
+      "resendNote": "Resend",
+      "sendNoteHint": "Email this note to all consenting users now — it will be excluded from the weekly digest.",
+      "resendNoteHint": "This note was already emailed. Send it again to all consenting users.",
+      "sendNoteConfirm": "Email the release note “{title}” to all consenting users now? It will then be excluded from the weekly digest.",
+      "resendNoteConfirm": "This note was already sent. Email “{title}” again to all consenting users now?"
+    },
+    "demoFunnel": {
+      "title": "Demo conversion funnel",
+      "subtitle": "Anonymous demo-account engagement by persona (last 30 days).",
+      "persona": "Persona",
+      "total": "Total",
+      "convRate": "{rate}% sign-up",
+      "recentTitle": "Recent events",
+      "empty": "No demo activity yet.",
+      "when": "When",
+      "event": "Event",
+      "path": "Path",
+      "personas": {
+        "ai-team": "AI Software Team",
+        "insights": "Engineering ROI & Insights",
+        "pmo": "PMO Command Center",
+        "talent": "Talent & Marketplace",
+        "governance": "Security, Architecture & Governance"
+      },
+      "stages": {
+        "demo_start": "Started",
+        "page_view": "Page views",
+        "convert_prompt_shown": "Prompt shown",
+        "convert_clicked": "Sign-up clicked",
+        "book_demo_opened": "Booked opened",
+        "lead_submitted": "Lead submitted",
+        "exit_prompt_shown": "Exit shown",
+        "demo_exit": "Exited"
+      }
+    },
+    "salesLeads": {
+      "title": "Sales leads",
+      "subtitle": "Book-a-demo and exit-intent leads from the marketing site.",
+      "count": "{count} leads",
+      "filterAll": "All statuses",
+      "contact": "Contact",
+      "interest": "Interest",
+      "source": "Source",
+      "received": "Received",
+      "statusHeader": "Status",
+      "empty": "No leads yet.",
+      "mailSubject": "Your Builderforce demo",
+      "status": {
+        "new": "New",
+        "contacted": "Contacted",
+        "qualified": "Qualified",
+        "closed": "Closed"
+      },
+      "personas": {
+        "ai-team": "AI Software Team",
+        "insights": "Engineering ROI & Insights",
+        "pmo": "PMO Command Center",
+        "talent": "Talent & Marketplace",
+        "governance": "Security, Architecture & Governance"
+      }
     }
   },
   "providerKeys": {
@@ -8365,7 +8526,8 @@
     "running": "Running",
     "awaiting": "Needs answer",
     "needsYou": "{count} awaiting your answer",
-    "runningCount": "{count} running"
+    "runningCount": "{count} running",
+    "unread": "{count, plural, =1 {1 unread message} other {# unread messages}}"
   },
   "onboarding": {
     "welcome": "Welcome to Builderforce",
@@ -10456,6 +10618,7 @@
     "home": "Home",
     "product": "Product",
     "resources": "Resources",
+    "demo": "Demo",
     "talentWorkforce": "Talent / Workforce",
     "agents": "Agents",
     "models": "Models",
@@ -10530,6 +10693,102 @@
       "new": "New",
       "improvement": "Improved",
       "fix": "Fixed"
+    }
+  },
+  "demo": {
+    "personas": {
+      "ai-team": "AI Software Team",
+      "insights": "Engineering ROI & Insights",
+      "pmo": "PMO Command Center",
+      "talent": "Talent & Marketplace",
+      "governance": "Security, Architecture & Governance"
+    },
+    "bannerAria": "Demo session controls",
+    "badge": "Live demo",
+    "bannerText": "You're exploring a live demo — {name}",
+    "bookOrJoin": "Join or book a demo",
+    "createAccount": "Create account",
+    "exit": "Exit demo",
+    "convertTitle": "Make this your workspace",
+    "convertLead": "You just explored the {persona} demo with sample data. Create a free account to do this with your own projects — or talk to our team.",
+    "benefit1": "Bring your own repos, tickets, and team",
+    "benefit2": "AI agents that ship real pull requests",
+    "benefit3": "Free to start — no credit card",
+    "createAccountFree": "Create a free account",
+    "talkToSales": "Talk to sales",
+    "bookLead": "Prefer a guided walkthrough? Book a demo.",
+    "exitTitle": "Before you go",
+    "exitLead": "Want to keep exploring with your own data, or have us walk you through it?",
+    "exitBookLead": "Book a demo with our team",
+    "showcase": {
+      "heading": "Try a live demo — no signup",
+      "lead": "Pick the story that fits you and jump straight into a fully-seeded workspace. It’s the real product, pre-loaded with sample data.",
+      "launch": "Launch demo",
+      "launching": "Launching…",
+      "error": "Could not start the demo. Please try again.",
+      "note": "Demos are shared, reset regularly, and require no account. Changes you make are temporary.",
+      "personas": {
+        "ai-team": {
+          "title": "AI Software Team",
+          "audience": "For engineering teams",
+          "desc": "A live sprint board where AI agents and humans share the work — watch an agent pick up a ticket, plan it, and open a pull request."
+        },
+        "insights": {
+          "title": "Engineering ROI & Insights",
+          "audience": "For VPs & CTOs",
+          "desc": "Delivery health, AI impact, and cost per ticket — the numbers that show what AI-assisted delivery actually returns."
+        },
+        "pmo": {
+          "title": "PMO Command Center",
+          "audience": "For program & delivery leaders",
+          "desc": "One dated hierarchy from company objective down to the agent-executed ticket: portfolio, OKRs, Gantt, and ceremonies."
+        },
+        "talent": {
+          "title": "Talent & Marketplace",
+          "audience": "For agencies & freelancers",
+          "desc": "A mixed roster of your people, hired freelancers, and AI agents on one board — hire either through the same flow."
+        },
+        "governance": {
+          "title": "Security, Architecture & Governance",
+          "audience": "For security & compliance",
+          "desc": "A weekly SOC 2 audit that files remediation tickets, an immutable audit trail, and policy gates on every deploy."
+        }
+      }
+    }
+  },
+  "bookDemo": {
+    "badge": "Talk to us",
+    "pageTitle": "Book a demo",
+    "pageLead": "See Builderforce on your own use case with our team — or jump into a self-serve live demo right now.",
+    "formHeading": "Schedule with sales",
+    "formSub": "Tell us a little about you and we’ll reach out to set up a walkthrough.",
+    "selfServeHeading": "Or try it yourself now",
+    "selfServeSub": "No signup, no waiting — explore a fully-seeded demo workspace.",
+    "selfServe1": "Real product, real sample data",
+    "selfServe2": "Five stories for five kinds of buyer",
+    "selfServe3": "Convert to your own account any time",
+    "selfServeCta": "Browse live demos",
+    "nameLabel": "Name",
+    "namePlaceholder": "Your name",
+    "emailLabel": "Work email",
+    "emailPlaceholder": "you@company.com",
+    "companyLabel": "Company",
+    "companyPlaceholder": "Company name",
+    "interestLabel": "I'm interested in",
+    "interestAny": "Not sure yet",
+    "messageLabel": "Anything we should know?",
+    "messagePlaceholder": "Your goals, team size, timeline…",
+    "submit": "Request a demo",
+    "submitting": "Sending…",
+    "error": "Something went wrong. Please try again.",
+    "successTitle": "Thanks — we’ll be in touch",
+    "successBody": "Our team will reach out shortly to schedule your walkthrough.",
+    "personas": {
+      "ai-team": "AI Software Team",
+      "insights": "Engineering ROI & Insights",
+      "pmo": "PMO Command Center",
+      "talent": "Talent & Marketplace",
+      "governance": "Security, Architecture & Governance"
     }
   }
 }

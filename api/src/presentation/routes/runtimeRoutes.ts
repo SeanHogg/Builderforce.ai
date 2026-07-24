@@ -30,6 +30,7 @@ import { enforceCloudRunCap } from '../../application/runtime/cloudRunLedger';
 import { evaluateExecutionApprovalGate } from '../../application/runtime/executionApprovalGate';
 import { revertRun } from '../../application/runtime/runRollback';
 import { resolveActorFromContext } from '../../application/activity/activityLog';
+import { unreadCountsForUser } from '../../application/brain/chatReadState';
 import { ExecutionStatus, TenantRole } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import { millicentsToUsd } from '../../domain/shared/money';
@@ -1277,6 +1278,17 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const tasksOut: Record<number, Item> = {};
     for (const [taskId, item] of taskState) tasksOut[taskId] = item;
 
+    // 4b) Unread Brain chats for the caller — new messages (execution milestones,
+    // a teammate/agent turn) in a chat the user has read before but isn't viewing.
+    // Bounded, indexed grouped read via the shared read-state rule; global (not
+    // project-scoped) because unread is inherently cross-project. Only for a real
+    // user JWT (an agentHost runtime token has no userId, so it just sees {}).
+    const userId = c.get('userId') as string | undefined;
+    const chatUnread = userId
+      ? await unreadCountsForUser(db, tenantId, userId).catch(() => ({} as Record<number, number>))
+      : {};
+    const unreadTotal = Object.values(chatUnread).reduce((a, b) => a + b, 0);
+
     // 5) AI Manager cadence — the freshest `last managed` stamp across the manager's
     // scope, so a human on ANY screen sees an ambient "Manager active" pulse when a
     // pass just ran (cron or manual). A manager can be scoped to one project OR the
@@ -1298,9 +1310,11 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     return c.json({
       tasks: tasksOut,
       chats: chatState,
+      chatUnread,
       counts: {
         running: [...taskState.values()].filter((i) => i.state === 'running').length,
         awaiting: [...taskState.values()].filter((i) => i.state === 'awaiting_input').length,
+        unread: unreadTotal,
       },
       manager: { lastRunAt: lastRunAt ? lastRunAt.toISOString() : null, recentlyActive },
     });
