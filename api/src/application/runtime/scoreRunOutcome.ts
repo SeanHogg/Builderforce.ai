@@ -19,6 +19,7 @@ import type { Env } from '../../env';
 import { approvals, executions, llmUsageLog, pullRequests, tasks, toolAuditEvents, runModelOutcomes } from '../../infrastructure/database/schema';
 import { normalizeActionType } from '../llm/actionTypes';
 import { applyOutcomeToRoutingTable } from '../llm/routingTable';
+import { bumpOutcomesVersion } from '../../infrastructure/cache/readThroughCache';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
 import { lexicalEval } from '../eval/semanticEval';
 
@@ -195,6 +196,9 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
         costMc,
         merged: !!o.merged,
       });
+      // A new labeled outcome means the tenant's SFT/DPO datasets + variant-eval
+      // views are stale — orphan them (best-effort, same fold gate as routing).
+      await bumpOutcomesVersion(env, tenantId);
     }
   } catch {
     // Never let outcome reporting fail the caller.
@@ -431,6 +435,8 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
         costMc,
         merged: pr.merged,
       });
+      // Orphan the tenant's SFT/DPO datasets + variant-eval views (see client path).
+      await bumpOutcomesVersion(env, exec.tenantId);
     }
   } catch {
     // Never let scoring fail a run.
