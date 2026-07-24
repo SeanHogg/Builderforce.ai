@@ -9,10 +9,10 @@
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "cli-truncate": "^6.0.0",
-    "ink": "^7.0.6",
-    "react": "^19.2.7",
-    "string-width": "^8.2.1"
+    "cli-truncate": "^6.1.1",
+    "ink": "^7.1.1",
+    "react": "^19.2.8",
+    "string-width": "^8.2.2"
   },
   "devDependencies": {
     "@types/react": "^19.2.17"
