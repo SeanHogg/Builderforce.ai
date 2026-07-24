@@ -159,7 +159,10 @@ export const users = pgTable('users', {
   apiKeyHash:    varchar('api_key_hash', { length: 64 }),
   username:      varchar('username', { length: 100 }).unique(),
   displayName:   varchar('display_name', { length: 255 }),
-  avatarUrl:     varchar('avatar_url', { length: 500 }),
+  // text, not varchar(500): OAuth provider `picture` URLs (Google signed
+  // lh3.googleusercontent.com links) and mirrored freelancer avatars are
+  // unbounded and overflowed 500 chars on signup (mig 0356).
+  avatarUrl:     text('avatar_url'),
   bio:           text('bio'),
   passwordHash:  varchar('password_hash', { length: 255 }),
   /** When the user proved they own this email address — set by OTP verification on
@@ -2577,7 +2580,7 @@ export const contributors = pgTable('contributors', {
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   displayName:   varchar('display_name', { length: 255 }).notNull(),
   email:         varchar('email', { length: 255 }),
-  avatarUrl:     varchar('avatar_url', { length: 500 }),
+  avatarUrl:     text('avatar_url'), // unbounded external URL (GitHub/Jira/R2); widened mig 0356
   jobTitle:      varchar('job_title', { length: 255 }),
   /** Role classification: 'developer' | 'manager' | 'qa' | 'devops' | 'other' */
   roleType:      varchar('role_type', { length: 50 }).notNull().default('developer'),
@@ -2618,7 +2621,7 @@ export const contributorIdentities = pgTable('contributor_identities', {
   externalId:    varchar('external_id', { length: 255 }).notNull(), // GitHub login, Jira account ID, etc.
   externalEmail: varchar('external_email', { length: 255 }),
   displayName:   varchar('display_name', { length: 255 }),
-  avatarUrl:     varchar('avatar_url', { length: 500 }),
+  avatarUrl:     text('avatar_url'), // unbounded external provider URL; widened mig 0356
   createdAt:     timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   unique('uq_identity_provider_external').on(t.tenantId, t.provider, t.externalId),
@@ -2769,7 +2772,7 @@ export const teams = pgTable('teams', {
   description: text('description'),
   /** A team can give itself an avatar (0294) — shown on the team card + as the face
    *  of its team chat. An /api/brain/upload R2 URL or any image URL. */
-  avatarUrl:   varchar('avatar_url', { length: 500 }),
+  avatarUrl:   text('avatar_url'), // unbounded image URL (R2 upload w/ query params); widened mig 0356
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
