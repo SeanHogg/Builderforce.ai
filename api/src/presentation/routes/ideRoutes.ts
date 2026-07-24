@@ -39,6 +39,12 @@ import {
   templateNeedsBackfill,
   type SeedableProject,
 } from '../../application/project/projectTemplate';
+import {
+  listWorkspaceFiles,
+  readWorkspaceFile,
+  writeWorkspaceFile,
+  deleteWorkspaceFile,
+} from '../../application/ide/workspaceStore';
 import { HOSTING_APEX } from '../../application/ide/siteHosting';
 import { publishStaticSite, assetsFromFormData } from '../../application/ide/publishStaticSite';
 
@@ -130,34 +136,27 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     return !!job && projectInTenant(c, Number(job.project_id));
   };
 
-  // ---------- Project files (R2) — projectId accepts integer or public UUID ----------
+  // ---------- Project files (R2) — projectId accepts integer or public UUID ----
+  // All object access goes through application/ide/workspaceStore — the single
+  // tested contract for keys, path validation, missing-vs-empty, and the
+  // structural content guard. Routes only do auth/lookup + HTTP mapping.
   router.get('/projects/:projectId/files', async (c) => {
     const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
     if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
-    const prefix = `${IDE_PREFIX}projects/${String(projectId)}/`;
-    let objects = (await bucket.list({ prefix })).objects ?? [];
+    let rel = await listWorkspaceFiles(bucket, projectId);
 
     // Lazy self-heal: projects created before template seeding (or via the
     // scaffold/upsert paths that historically didn't seed) open with their
-    // template files missing or empty. Seed the vanilla starter so it opens
-    // runnable. The cheap in-memory `templateNeedsBackfill` gate runs first, so
-    // healthy projects never incur the project lookup or any writes — only a
-    // freshly-, un-, or PARTIALLY-seeded project does.
-    const rel = objects.map(o => ({ path: o.key!.replace(prefix, ''), size: o.size }));
-    // Heal when ANY required scaffold file is missing or empty — not only when
-    // the whole workspace is unseeded. The all-empty gate let partial-empty
-    // projects (e.g. package.json has content but src/main.jsx is a 0-byte
-    // placeholder) slip through, so those files opened BLANK in the editor. The
-    // check is a cheap in-memory scan of the already-listed objects, so healthy
-    // workspaces still pay nothing (no project lookup, no writes).
+    // template files missing or empty. The cheap in-memory `templateNeedsBackfill`
+    // gate runs first, so healthy projects never incur the project lookup or any
+    // writes — only a freshly-, un-, or PARTIALLY-seeded project does.
     const hasRealPackageJson = (objs: { path: string; size: number }[]) =>
       objs.some((o) => o.path === 'package.json' && o.size > 0);
 
     if (templateNeedsBackfill(rel)) {
       const tenantId = c.get('tenantId') as number;
-      const relist = async () => { objects = (await bucket.list({ prefix })).objects ?? []; };
       // getRepoStatus is cached (~30s), so a healthy repo-backed project pays only
       // this — no Neon read — on the hot file-list path.
       const repoStatus = await getRepoStatus(c.env as Env, tenantId, projectId).catch(() => ({ linked: false as const }));
@@ -168,7 +167,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         // so we never clobber a repo project's real files.
         if (templateLooksUnseeded(rel)) {
           const imported = await importRepoToWorkspace(c.env as Env, tenantId, projectId, repoStatus.repoId).catch(() => null);
-          if (imported?.ok && imported.imported > 0) await relist();
+          if (imported?.ok && imported.imported > 0) rel = await listWorkspaceFiles(bucket, projectId);
         }
         // Guarantee runnability. A repo-linked project whose backing repo was
         // effectively empty (auto-created README-only, or a first push that found
@@ -176,25 +175,23 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         // because seeding is skipped for repo-linked projects — be left with
         // nothing runnable. THIS is the wipe. Only touch it when there's STILL no
         // real package.json, so a genuine imported repo skips the Neon read too.
-        const rel2 = objects.map((o) => ({ path: o.key!.replace(prefix, ''), size: o.size }));
-        if (!hasRealPackageJson(rel2)) {
+        if (!hasRealPackageJson(rel)) {
           const project = await fetchSeedableProject(c.env, projectId);
-          if (project && (await ensureRunnableScaffold(bucket, project, rel2)) > 0) await relist();
+          if (project && (await ensureRunnableScaffold(bucket, project, rel)) > 0) {
+            rel = await listWorkspaceFiles(bucket, projectId);
+          }
         }
       } else {
         // Non-repo project: seed the modality scaffold's missing/empty files
         // (also heals the partial-empty "blank editor" case).
         const project = await fetchSeedableProject(c.env, projectId);
-        if (project && (await ensureProjectTemplate(bucket, project, rel)) > 0) await relist();
+        if (project && (await ensureProjectTemplate(bucket, project, rel)) > 0) {
+          rel = await listWorkspaceFiles(bucket, projectId);
+        }
       }
     }
 
-    const fileEntries = objects.map(obj => ({
-      path: obj.key!.replace(prefix, ''),
-      type: 'file' as const,
-      content: '',
-    }));
-    return c.json(fileEntries);
+    return c.json(rel.map((f) => ({ path: f.path, type: 'file' as const, content: '' })));
   });
 
   router.get('/projects/:projectId/files/*', async (c) => {
@@ -203,10 +200,12 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
     if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
-    const key = `${IDE_PREFIX}projects/${String(projectId)}/${path}`;
-    const obj = await bucket.get(key);
-    if (!obj) return c.text('', 200);
-    return c.text(await obj.text());
+    const content = await readWorkspaceFile(bucket, projectId, path);
+    // Missing is 404, NOT an empty 200 — a blank body for a file that was never
+    // written let callers cache '' as if it were real content, which is how
+    // silent-empty states propagated into saves.
+    if (content === null) return c.json({ error: 'File not found' }, 404);
+    return c.text(content);
   });
 
   router.put('/projects/:projectId/files/*', async (c) => {
@@ -215,8 +214,11 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
     if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
-    const key = `${IDE_PREFIX}projects/${String(projectId)}/${path}`;
-    await bucket.put(key, await c.req.text());
+    // The store enforces the path + structural-content contracts, so no caller
+    // (editor, agent, script) can persist a traversal path or another file's
+    // content (JSON into .js, source into .html) — 400/422 with the reason.
+    const result = await writeWorkspaceFile(bucket, projectId, path, await c.req.text());
+    if (!result.ok) return c.json({ error: result.reason }, result.status);
     return c.json({ success: true });
   });
 
@@ -226,8 +228,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
     if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
-    const key = `${IDE_PREFIX}projects/${String(projectId)}/${path}`;
-    await bucket.delete(key);
+    await deleteWorkspaceFile(bucket, projectId, path);
     return c.json({ success: true });
   });
 
