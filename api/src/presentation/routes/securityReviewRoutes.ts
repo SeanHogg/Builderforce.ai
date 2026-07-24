@@ -20,6 +20,13 @@ import { SecurityReviewService } from '../../application/security/SecurityReview
 import { SecurityTicketAccessService, type SecurityAudiences } from '../../application/security/SecurityTicketAccessService';
 import { SecurityAuditService } from '../../application/security/SecurityAuditService';
 import { dispatchSecurityAudit } from '../../application/security/securityDispatch';
+import {
+  runWebScan,
+  resolveScanProject,
+  getProjectScanTarget,
+  setProjectScanTarget,
+} from '../../application/security/webSecurityScan';
+import { ScanTargetError } from '../../application/security/WebSecurityScanner';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -70,10 +77,11 @@ export function createSecurityReviewRoutes(db: Db): Hono<HonoEnv> {
     return c.json(cfg);
   });
 
-  // GET /audits — recent audit runs, newest first (manager+).
+  // GET /audits — recent codebase (SOC 2) audit runs, newest first (manager+).
+  // Scoped to scanKind='codebase' so web (URL) scans render on their own surface.
   router.get('/audits', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const audits = await new SecurityAuditService(db).listAudits(tenantId);
+    const audits = await new SecurityAuditService(db).listAudits(tenantId, { scanKind: 'codebase' });
     return c.json({ audits });
   });
 
@@ -102,6 +110,74 @@ export function createSecurityReviewRoutes(db: Db): Hono<HonoEnv> {
       return c.json({ error: 'Could not start an audit — no Security agent or no repo-linked project.' }, 409);
     }
     return c.json({ auditId }, 202);
+  });
+
+  // ── Web (external URL) security scan ──────────────────────────────────────
+  //
+  // "Point at your live website → real findings now → they become board work."
+  // A deterministic in-request HTTP scan (WebSecurityScanner) whose findings flow
+  // through the SAME audit ledger + SECURITY-ticket pipeline as the SOC 2 agent.
+
+  // GET /web-scan/config — the resolved project + its configured target URL (manager+).
+  router.get('/web-scan/config', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const qp = c.req.query('projectId');
+    const projectId = await resolveScanProject(db, tenantId, qp ? Number(qp) : undefined);
+    if (projectId == null) return c.json({ projectId: null, targetUrl: null });
+    const targetUrl = await getProjectScanTarget(db, tenantId, projectId);
+    return c.json({ projectId, targetUrl });
+  });
+
+  // PUT /web-scan/config — set the website this project scans (manager+).
+  router.put('/web-scan/config', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const body = await c.req.json<{ url?: string | null; projectId?: number }>().catch(() => ({} as { url?: string | null; projectId?: number }));
+    const projectId = await resolveScanProject(db, tenantId, typeof body.projectId === 'number' ? body.projectId : undefined);
+    if (projectId == null) return c.json({ error: 'No project to configure — create a project first.' }, 409);
+    try {
+      const targetUrl = await setProjectScanTarget(db, tenantId, projectId, body.url ?? null);
+      return c.json({ projectId, targetUrl });
+    } catch (e) {
+      if (e instanceof ScanTargetError) return c.json({ error: e.message }, 400);
+      throw e;
+    }
+  });
+
+  // POST /web-scan/run — scan a URL now (body `url` overrides the configured target),
+  // file findings, and return them + the baseline delta (manager+).
+  router.post('/web-scan/run', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string | undefined;
+    const body = await c.req.json<{ url?: string; projectId?: number }>().catch(() => ({} as { url?: string; projectId?: number }));
+    const projectId = await resolveScanProject(db, tenantId, typeof body.projectId === 'number' ? body.projectId : undefined);
+    if (projectId == null) return c.json({ error: 'No project to file findings into — create a project first.' }, 409);
+
+    // Explicit url wins; otherwise use (and persist as) the project's configured target.
+    const targetUrl = body.url?.trim() || (await getProjectScanTarget(db, tenantId, projectId));
+    if (!targetUrl) return c.json({ error: 'No website configured to scan. Set a target URL first.' }, 400);
+
+    const result = await runWebScan(db, tenantId, {
+      targetUrl,
+      projectId,
+      trigger: 'manual',
+      agentRef: userId ? `user:${userId}` : 'web-scanner',
+    });
+    if (!result.ok) {
+      const status = result.code === 'no_project' ? 409 : 400;
+      return c.json({ error: result.reason, code: result.code }, status);
+    }
+    // Persist the just-scanned URL as the project's target when it came in via `url`.
+    if (body.url?.trim()) await setProjectScanTarget(db, tenantId, projectId, result.targetUrl).catch(() => {});
+    return c.json(result, 201);
+  });
+
+  // GET /web-scan — recent web scan runs, newest first (manager+).
+  // Not cached: this must reflect a just-completed scan immediately (freshness beats
+  // caching a low-frequency, manager-only list that changes on every scan).
+  router.get('/web-scan', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const scans = await new SecurityAuditService(db).listAudits(tenantId, { scanKind: 'web' });
+    return c.json({ scans });
   });
 
   return router;

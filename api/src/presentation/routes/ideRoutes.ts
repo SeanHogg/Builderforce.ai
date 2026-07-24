@@ -510,6 +510,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const raw = c.req.query('projectId');
     if (!raw) return c.json({ error: 'projectId query parameter is required' }, 400);
     const projectId = parseProjectIdInt(raw);
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const rows = await getSql(c)`
       SELECT * FROM ide_training_jobs WHERE project_id = ${projectId} ORDER BY created_at DESC
     `;
@@ -724,6 +725,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       package_version?: string;
     }>();
     const projectId = typeof body.project_id === 'number' ? body.project_id : parseProjectIdInt(String(body.project_id));
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const id = generateId();
     const skillsJson = JSON.stringify(body.skills ?? []);
     const hasLora = !!body.r2_artifact_key;
@@ -903,8 +905,8 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   // supersedes the agent's prior knowledge set. Body: { text?, documents?[] }.
   router.post('/agents/:id/ingest', async (c) => {
     const agentId = c.req.param('id');
-    const [agent] = await getSql(c)`SELECT id FROM ide_agents WHERE id = ${agentId}`;
-    if (!agent) return c.json({ error: 'Agent not found' }, 404);
+    const [agent] = await getSql(c)`SELECT project_id FROM ide_agents WHERE id = ${agentId} LIMIT 1`;
+    if (!agent || !(await projectInTenant(c, Number(agent.project_id)))) return c.json({ error: 'Agent not found' }, 404);
     const body = await c.req.json<{ text?: string; documents?: Array<{ name?: string; text?: string }> }>();
     const docs = [
       ...(body.text?.trim() ? [{ text: body.text }] : []),

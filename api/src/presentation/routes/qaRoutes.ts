@@ -40,6 +40,7 @@ import { Hono } from 'hono';
 import { and, asc, desc, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
+  projects,
   qaCredentials,
   qaExplorations,
   qaFindings,
@@ -696,7 +697,11 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
    * project has no staffed fix lane, or no finding clears the threshold.
    */
   async function autoRouteFindings(env: Env, tenantId: number, projectId: number, candidates: QaFindingLike[]): Promise<void> {
-    const [policy] = await db.select().from(qaRoutingSettings).where(eq(qaRoutingSettings.projectId, projectId)).limit(1);
+    // Scope the policy lookup by tenant: qaRoutingSettings.projectId is UNIQUE and
+    // projects.id is an enumerable serial, so loading by projectId alone would honor
+    // a foreign tenant's routing row for an id that happens to collide.
+    const [policy] = await db.select().from(qaRoutingSettings)
+      .where(and(eq(qaRoutingSettings.tenantId, tenantId), eq(qaRoutingSettings.projectId, projectId))).limit(1);
     if (!policy || !policy.enabled) return;
 
     const laneKey = await findingRouter.resolveAutoFixLaneKey(projectId, policy.targetLaneKey);
@@ -775,9 +780,12 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       return c.json({ error: 'Project has no active QA target (root URL). Add one first.' }, 400);
     }
 
-    const zones = await new QaHeatmapService(db, c.env as Env).rankZones(tenantId, { sinceDays, limit: heatBudget * 3 });
+    let zones = await new QaHeatmapService(db, c.env as Env).rankZones(tenantId, { sinceDays, limit: heatBudget * 3 });
     if (zones.length === 0) {
-      return c.json({ error: 'No heatmap data yet — capture usage in the app before running the agentic tester.' }, 400);
+      // No interaction history yet (e.g. a just-deployed app with no captured
+      // usage) — fall back to a crawl from the site root so the tester still runs
+      // instead of hard-failing. Once real usage is captured, the heatmap takes over.
+      zones = [{ route: '/', selector: null, kind: 'pageview', label: null, heat: 0, score: 0 }];
     }
     const plan = buildExplorationPlan(zones, heatBudget);
 
@@ -1129,6 +1137,14 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       ? body.minSeverity : ROUTING_DEFAULTS.minSeverity;
     const targetLaneKey = body.targetLaneKey ? String(body.targetLaneKey).slice(0, 120) : null;
     const maxPerBatch = Math.min(Math.max(1, Math.trunc(body.maxPerBatch ?? ROUTING_DEFAULTS.maxPerBatch)), 50);
+
+    // Ownership gate: projects.id is an enumerable serial and qaRoutingSettings.projectId
+    // is UNIQUE (global conflict target), so without this check tenant A could upsert
+    // over tenant B's routing row by supplying B's projectId in the URL.
+    const [ownedProject] = await db.select({ id: projects.id }).from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).limit(1);
+    if (!ownedProject) return c.json({ error: 'Project not found' }, 404);
+
     const now = new Date();
     const [row] = await db
       .insert(qaRoutingSettings)

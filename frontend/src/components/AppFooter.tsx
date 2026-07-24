@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useLegalDocs } from './legal/useLegalDocs';
 import LegalDocModal, { type LegalModalType } from './legal/LegalDocModal';
+import WhatsNewPanel from './WhatsNewPanel';
 import { FOOTER_COLUMNS, BRAND, STATS } from '@/lib/content';
 
 /**
@@ -23,7 +26,16 @@ import { FOOTER_COLUMNS, BRAND, STATS } from '@/lib/content';
  */
 export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | 'full' }) {
   const { appVersion, apiVersion, legal, termsVersion, privacyVersion } = useLegalDocs();
+  const t = useTranslations('footer');
+  const searchParams = useSearchParams();
   const [modalType, setModalType] = useState<LegalModalType | null>(null);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+
+  // Deep link from the weekly release-digest email CTA (`?whatsnew=1`) opens the
+  // panel straight away, so a reader lands on exactly what the mail announced.
+  useEffect(() => {
+    if (searchParams?.get('whatsnew') === '1') setWhatsNewOpen(true);
+  }, [searchParams]);
 
   return (
     <>
@@ -43,7 +55,7 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
               </Link>
               <p className="global-footer-summary">{STATS.quotable.humanInLoopAgentic}</p>
               <p className="global-footer-credit">
-                Built by{' '}
+                {t('builtBy')}{' '}
                 <a href={BRAND.founder.url} target="_blank" rel="noopener">
                   {BRAND.founder.name}
                 </a>{' '}
@@ -51,7 +63,7 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
               </p>
             </div>
 
-            <nav className="global-footer-cols" aria-label="Footer">
+            <nav className="global-footer-cols" aria-label={t('navLabel')}>
               {FOOTER_COLUMNS.map((col) => (
                 <div key={col.title} className="global-footer-col">
                   <h3>{col.title}</h3>
@@ -69,29 +81,35 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
         )}
 
         <div className="global-footer-inner">
-          <span>
+          <button
+            type="button"
+            onClick={() => setWhatsNewOpen(true)}
+            className="global-footer-link"
+            title={t('whatsNewHint')}
+          >
             UI {appVersion} · API {apiVersion ?? '…'}
-          </span>
+          </button>
           <div className="global-footer-links">
             <button
               type="button"
               onClick={() => setModalType('terms')}
               className="global-footer-link"
             >
-              Terms of Use{termsVersion ? ` (v${termsVersion})` : ''}
+              {t('termsOfUse')}{termsVersion ? ` (v${termsVersion})` : ''}
             </button>
             <button
               type="button"
               onClick={() => setModalType('privacy')}
               className="global-footer-link"
             >
-              Privacy Policy{privacyVersion ? ` (v${privacyVersion})` : ''}
+              {t('privacyPolicy')}{privacyVersion ? ` (v${privacyVersion})` : ''}
             </button>
           </div>
         </div>
       </footer>
 
       <LegalDocModal type={modalType} legal={legal} onClose={() => setModalType(null)} />
+      <WhatsNewPanel open={whatsNewOpen} onClose={() => setWhatsNewOpen(false)} />
     </>
   );
 }

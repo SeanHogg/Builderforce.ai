@@ -1,6 +1,17 @@
 import { hashSecret } from './HashService';
+import { deriveTenantAesKey } from '../../application/integrations/credentialCrypto';
 
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+/**
+ * Ciphertext version marker for the HARDENED sealing scheme. A stored blob that
+ * begins with `v2:` was sealed with PBKDF2 (100k, per-tenant salt) under a dedicated
+ * encryption secret (see {@link deriveTenantAesKey}); anything WITHOUT this prefix is a
+ * pre-versioning legacy blob sealed with a single unsalted SHA-256 of the caller's key
+ * material (the old {@link deriveAesKey}). The legacy container is `b64(iv).b64(cipher)`,
+ * and base64 never contains a `:`, so this prefix is an unambiguous discriminator.
+ */
+const V2_PREFIX = 'v2:';
 
 function b64(data: Uint8Array): string {
   return btoa(String.fromCharCode(...data));
@@ -168,23 +179,90 @@ export function normalizeRecoveryCode(code: string): string {
   return `${sanitized.slice(0, 4)}-${sanitized.slice(4, 8)}`;
 }
 
-export async function encryptSecretForStorage(secret: string, keyMaterial: string): Promise<string> {
-  const key = await deriveAesKey(keyMaterial);
+/**
+ * Options that opt a call into the HARDENED (v2) sealing scheme and thread the
+ * secrets/tenant binding it needs. Omit entirely for the legacy 2-arg behavior
+ * (kept byte-for-byte identical so un-migrated call sites are untouched).
+ */
+export interface SecretStorageOptions {
+  /**
+   * Tenant id folded into the PBKDF2 salt so a tenant's ciphertext can never be
+   * unsealed with another tenant's derived key (fixes ciphertext portability).
+   * Presence of `tenantId` (or `upgrade`) is what makes a WRITE emit a `v2:` blob.
+   */
+  tenantId?: number;
+  /**
+   * Force the v2 scheme with NO per-tenant binding (global-salt, dedicated-secret)
+   * for stores that have no natural tenant scope but still want off-JWT_SECRET keys.
+   */
+  upgrade?: boolean;
+  /**
+   * Key material for reading PRE-v2 (legacy) rows when those rows were sealed under a
+   * DIFFERENT secret than the `keyMaterial` now used for v2 writes — e.g. tenant LLM
+   * provider keys historically sealed with JWT_SECRET but now written under the
+   * dedicated CREDENTIAL_ENCRYPTION_SECRET. When omitted, `keyMaterial` itself is the
+   * legacy fallback (correct for callers whose secret hasn't changed).
+   */
+  legacySecret?: string;
+}
+
+/**
+ * Seal a secret for at-rest storage.
+ *
+ * • With `opts.tenantId` (or `opts.upgrade`): the HARDENED v2 scheme — PBKDF2 (100k)
+ *   with a per-tenant salt, under the caller-supplied dedicated `keyMaterial`. Output
+ *   is `v2:<b64(iv)>.<b64(cipher)>`. Reusing {@link deriveTenantAesKey} means there is
+ *   no third crypto scheme — it is the same KDF as credentialCrypto.
+ * • Without `opts` (legacy 2-arg calls): the original single unsalted SHA-256 scheme,
+ *   output `<b64(iv)>.<b64(cipher)>` — UNCHANGED, so callers not yet migrated keep
+ *   producing (and, via the dual-read below, reading) the exact same format.
+ */
+export async function encryptSecretForStorage(
+  secret: string,
+  keyMaterial: string,
+  opts?: SecretStorageOptions,
+): Promise<string> {
+  const useV2 = !!opts && (opts.tenantId != null || opts.upgrade === true);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const plain = new TextEncoder().encode(secret);
+  const key = useV2 ? await deriveTenantAesKey(keyMaterial, opts!.tenantId) : await deriveAesKey(keyMaterial);
   const cipher = new Uint8Array(
     await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plain),
   );
-  return `${b64(iv)}.${b64(cipher)}`;
+  const blob = `${b64(iv)}.${b64(cipher)}`;
+  return useV2 ? `${V2_PREFIX}${blob}` : blob;
 }
 
-export async function decryptSecretFromStorage(payload: string, keyMaterial: string): Promise<string> {
-  const [ivB64, cipherB64] = payload.split('.');
+/**
+ * Unseal an at-rest secret — VERSIONED DUAL-READ.
+ *
+ * This is the backward-compatibility hinge: existing rows were sealed with the old
+ * single-SHA scheme and MUST keep opening while new writes upgrade in place (a lazy,
+ * non-destructive migration — rows re-seal as v2 only on their next WRITE, never via a
+ * bulk SQL re-encrypt, which is impossible since we can't decrypt in SQL).
+ *
+ *   • `v2:` prefix → hardened path: PBKDF2 + per-tenant salt via {@link deriveTenantAesKey}
+ *     under the dedicated `keyMaterial` (+ `opts.tenantId` for the per-tenant binding).
+ *   • no prefix    → legacy path: single unsalted SHA-256 of `opts.legacySecret ?? keyMaterial`.
+ *     The fallback to `keyMaterial` means callers whose secret never changed still open
+ *     their old rows; callers that moved to a dedicated secret pass the old JWT_SECRET as
+ *     `legacySecret` so their pre-migration rows keep decrypting.
+ */
+export async function decryptSecretFromStorage(
+  payload: string,
+  keyMaterial: string,
+  opts?: SecretStorageOptions,
+): Promise<string> {
+  const isV2 = payload.startsWith(V2_PREFIX);
+  const body = isV2 ? payload.slice(V2_PREFIX.length) : payload;
+  const [ivB64, cipherB64] = body.split('.');
   if (!ivB64 || !cipherB64) throw new Error('Malformed encrypted payload');
 
   const iv = fromB64(ivB64);
   const cipher = fromB64(cipherB64);
-  const key = await deriveAesKey(keyMaterial);
+  const key = isV2
+    ? await deriveTenantAesKey(keyMaterial, opts?.tenantId)
+    : await deriveAesKey(opts?.legacySecret ?? keyMaterial);
   const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipher);
   return new TextDecoder().decode(plain);
 }

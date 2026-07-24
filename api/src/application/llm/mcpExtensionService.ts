@@ -20,7 +20,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { tenantMcpExtensions } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { assertSafeUrl } from '../../infrastructure/net/ssrfGuard';
+import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
 import {
   encryptSecretForStorage,
   decryptSecretFromStorage,
@@ -81,6 +81,22 @@ export function assertSafeServerUrl(serverUrl: string): void {
     const msg = e instanceof Error ? e.message : String(e);
     throw new Error(msg.replace(/^URL/, 'serverUrl'));
   }
+}
+
+/**
+ * Re-validate a tenant's MCP server URL immediately BEFORE a runtime fetch.
+ *
+ * Registration-time validation ({@link assertSafeServerUrl}) only checks the
+ * literal URL — a hostname that was public then can be re-pointed at a private
+ * IP later (DNS rebinding), and the gateway would fetch it with the tenant's
+ * decrypted Bearer secret. This re-runs the literal guard AND resolves the
+ * hostname over DoH, rejecting a name that now maps to a private address. Callers
+ * MUST also set `redirect: 'manual'` so a 302 can't bounce the authed request to
+ * an internal target after this check passes.
+ */
+async function assertServerUrlLiveSafe(serverUrl: string): Promise<void> {
+  const u = assertSafeUrl(serverUrl, { allowHttp: false });
+  await resolveAndAssertPublic(u.hostname);
 }
 
 function toView(row: typeof tenantMcpExtensions.$inferSelect): McpExtensionView {
@@ -202,11 +218,13 @@ export async function listToolsForTenant(
     await Promise.all(
       rows.map(async (row) => {
         try {
+          // DNS-rebinding re-check just before the authed fetch (see helper doc).
+          await assertServerUrlLiveSafe(row.serverUrl);
           const headers: Record<string, string> = { Accept: 'application/json' };
           if (row.secretEnc) {
             headers.Authorization = `Bearer ${await decryptSecretFromStorage(row.secretEnc, keyMaterial)}`;
           }
-          const res = await fetchImpl(`${row.serverUrl.replace(/\/$/, '')}/tools`, { headers });
+          const res = await fetchImpl(`${row.serverUrl.replace(/\/$/, '')}/tools`, { headers, redirect: 'manual' });
           if (!res.ok) return;
           const body = (await res.json()) as { tools?: Array<{ name?: string; description?: string; parameters?: Record<string, unknown> }> };
           for (const t of body.tools ?? []) {
@@ -247,6 +265,8 @@ export async function callMcpTool(
     .limit(1);
   if (!row || !row.enabled) throw new Error('Unknown or disabled MCP extension');
 
+  // DNS-rebinding re-check just before the authed fetch (see helper doc).
+  await assertServerUrlLiveSafe(row.serverUrl);
   const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' };
   if (row.secretEnc) {
     headers.Authorization = `Bearer ${await decryptSecretFromStorage(row.secretEnc, args.keyMaterial)}`;
@@ -254,6 +274,7 @@ export async function callMcpTool(
   const res = await fetchImpl(`${row.serverUrl.replace(/\/$/, '')}/call`, {
     method: 'POST',
     headers,
+    redirect: 'manual',
     body: JSON.stringify({ tool: args.tool, arguments: args.arguments ?? {} }),
   });
   if (!res.ok) {

@@ -382,7 +382,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
 
   // POST /:id/approve — employer approves a submitted timecard (tenant JWT). This
   // ISSUES an invoice (pending) for the billable amount and notifies the worker.
-  router.post('/:id/approve', authMiddleware, async (c) => {
+  router.post('/:id/approve', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const id = c.req.param('id');
@@ -404,7 +404,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   });
 
   // POST /:id/reject — employer rejects, returning it to draft with a reason.
-  router.post('/:id/reject', authMiddleware, async (c) => {
+  router.post('/:id/reject', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     let reason: string | null = null;
@@ -441,7 +441,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
 
   // POST /invoices/:invId/pay — employer settles an invoice. Uses the payout
   // provider when configured; otherwise the caller falls back to /mark-paid.
-  router.post('/invoices/:invId/pay', authMiddleware, async (c) => {
+  router.post('/invoices/:invId/pay', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const invId = c.req.param('invId');
     const [inv] = await sql(c.env)`SELECT * FROM freelancer_invoices WHERE id = ${invId} AND tenant_id = ${tenantId} AND status = 'pending'`;
@@ -454,7 +454,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   });
 
   // POST /invoices/:invId/mark-paid — employer records a manual/off-platform payment.
-  router.post('/invoices/:invId/mark-paid', authMiddleware, async (c) => {
+  router.post('/invoices/:invId/mark-paid', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const invId = c.req.param('invId');
     const [inv] = await sql(c.env)`SELECT id FROM freelancer_invoices WHERE id = ${invId} AND tenant_id = ${tenantId} AND status = 'pending'`;

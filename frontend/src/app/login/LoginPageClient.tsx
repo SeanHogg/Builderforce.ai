@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { getStoredWebToken, resolveAndSelectTenant, requestMagicLink } from '@/lib/auth';
+import { safeRedirectPath } from '@/lib/safeRedirect';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 import JsonLd from '@/components/JsonLd';
 import OAuthButtons from '@/components/OAuthButtons';
@@ -33,7 +34,8 @@ export default function LoginPageClient() {
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
 
   const finishAndRedirect = async () => {
-    const next = searchParams.get('next') || '/dashboard';
+    // Open-redirect guard (M5): only same-origin relative paths are honoured.
+    const next = safeRedirectPath(searchParams.get('next'));
     const token = getStoredWebToken();
     if (!token) { router.push('/tenants'); return; }
     const selected = await resolveAndSelectTenant(token);
@@ -48,7 +50,7 @@ export default function LoginPageClient() {
   // Do NOT redirect during form submission — handleSubmit does tenant resolution and redirect.
   useEffect(() => {
     if (!isAuthenticated || isLoading) return;
-    const next = searchParams.get('next') || '/dashboard';
+    const next = safeRedirectPath(searchParams.get('next'));
     if (hasTenant) {
       router.replace(next);
       return;
@@ -84,7 +86,7 @@ export default function LoginPageClient() {
     setError(null);
     setMagicLinkLoading(true);
     try {
-      const next = searchParams.get('next') || '/dashboard';
+      const next = safeRedirectPath(searchParams.get('next'));
       await requestMagicLink(email, next);
       setMagicLinkSent(true);
     } catch (err) {
@@ -221,7 +223,7 @@ export default function LoginPageClient() {
                   autoFocus
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  placeholder="you@example.com"
+                  placeholder={t('emailPlaceholder')}
                   style={inputStyle}
                   required
                   onFocus={focusIn}

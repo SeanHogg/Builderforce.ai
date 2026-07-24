@@ -14,6 +14,7 @@
 import { Hono } from 'hono';
 import { and, desc, eq, gt, ilike, inArray, isNull, sql } from 'drizzle-orm';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
+import { credentialSecret } from '../../application/integrations/credentialCrypto';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
 import { buildDatabase, buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import { writeAdminAudit, type AdminAuditOpts } from '../../infrastructure/audit/adminAudit';
@@ -201,7 +202,7 @@ async function assertTenantMember(db: Db, tenantId: number, userId: string): Pro
 
 async function assertMfa(
   db: Db,
-  envSecret: string,
+  env: Env,
   user: typeof users.$inferSelect,
   code?: string,
   recoveryCode?: string,
@@ -209,7 +210,9 @@ async function assertMfa(
   if (!user.mfaEnabled || !user.mfaSecretEnc) return false;
 
   if (code) {
-    const secret = await decryptSecretFromStorage(user.mfaSecretEnc, envSecret);
+    // M2: read under the dedicated credential secret, with JWT_SECRET as the legacy
+    // fallback so MFA rows sealed before the migration still decrypt (versioned dual-read).
+    const secret = await decryptSecretFromStorage(user.mfaSecretEnc, credentialSecret(env), { legacySecret: env.JWT_SECRET });
     const validTotp = await verifyTotpCode(secret, code);
     if (validTotp) return true;
   }
@@ -933,7 +936,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (user.mfaEnabled) return c.json({ error: 'MFA is already enabled' }, 409);
 
     const secret = generateTotpSecret();
-    const encrypted = await encryptSecretForStorage(secret, c.env.JWT_SECRET);
+    const encrypted = await encryptSecretForStorage(secret, credentialSecret(c.env), { upgrade: true });
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     await db
@@ -990,11 +993,11 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'MFA setup session expired. Start setup again.' }, 400);
     }
 
-    const secret = await decryptSecretFromStorage(user.mfaTempSecretEnc, c.env.JWT_SECRET);
+    const secret = await decryptSecretFromStorage(user.mfaTempSecretEnc, credentialSecret(c.env), { legacySecret: c.env.JWT_SECRET });
     const valid = await verifyTotpCode(secret, body.code);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
-    const encryptedSecret = await encryptSecretForStorage(secret, c.env.JWT_SECRET);
+    const encryptedSecret = await encryptSecretForStorage(secret, credentialSecret(c.env), { upgrade: true });
     const recoveryCodes = generateRecoveryCodes(10);
 
     await replaceRecoveryCodes(db, user.id, recoveryCodes);
@@ -1037,7 +1040,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (!user) return c.json({ error: 'User not found' }, 404);
     if (!user.mfaEnabled) return c.json({ enabled: false });
 
-    const valid = await assertMfa(db, c.env.JWT_SECRET, user, body.code, body.recoveryCode);
+    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
     await db.delete(userMfaRecoveryCodes).where(eq(userMfaRecoveryCodes.userId, user.id));
@@ -1078,7 +1081,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (!user) return c.json({ error: 'User not found' }, 404);
     if (!user.mfaEnabled) return c.json({ error: 'MFA is not enabled' }, 400);
 
-    const valid = await assertMfa(db, c.env.JWT_SECRET, user, body.code, body.recoveryCode);
+    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
     const recoveryCodes = generateRecoveryCodes(10);
@@ -1228,6 +1231,71 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     `);
 
     return c.json({ sessions: rows.rows });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/demo/funnel
+  // Demo-account conversion funnel (migration 0360): per-persona event rollup
+  // over the trailing 30 days + the most recent raw events. Cached 60s — the
+  // stream is append-only and the panel re-polls.
+  // -------------------------------------------------------------------------
+  router.get('/demo/funnel', async (c) => {
+    const funnel = await getOrSetCached(c.env, 'admin:demo:funnel', async () => {
+      const db = buildDatabase(c.env);
+      const byKind = await db.execute(sql`
+        SELECT
+          persona,
+          kind,
+          COUNT(*)::int                    AS "count",
+          COUNT(DISTINCT visitor_id)::int  AS "visitors"
+        FROM demo_events
+        WHERE occurred_at > now() - interval '30 days'
+        GROUP BY persona, kind
+        ORDER BY persona, kind
+      `);
+      const recent = await db.execute(sql`
+        SELECT persona, kind, path, visitor_id AS "visitorId", occurred_at AS "occurredAt"
+        FROM demo_events
+        ORDER BY occurred_at DESC
+        LIMIT 100
+      `);
+      return { byKind: byKind.rows, recent: recent.rows };
+    }, { kvTtlSeconds: 60 });
+    return c.json(funnel);
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/sales-leads  ·  PATCH /api/admin/sales-leads/:id
+  // Book-a-demo pipeline: list newest-first, update status as sales works them.
+  // -------------------------------------------------------------------------
+  router.get('/sales-leads', async (c) => {
+    const db = buildDatabase(c.env);
+    const status = (c.req.query('status') ?? '').trim();
+    const rows = await db.execute(sql`
+      SELECT id, name, email, company, interest, message, source, locale,
+             visitor_id AS "visitorId", status, created_at AS "createdAt"
+      FROM sales_leads
+      ${status ? sql`WHERE status = ${status}` : sql``}
+      ORDER BY created_at DESC
+      LIMIT 500
+    `);
+    return c.json({ leads: rows.rows });
+  });
+
+  router.patch('/sales-leads/:id', async (c) => {
+    const id = c.req.param('id');
+    const body = await c.req.json<{ status?: string }>().catch(() => ({} as { status?: string }));
+    const allowed = ['new', 'contacted', 'qualified', 'closed'];
+    if (!body.status || !allowed.includes(body.status)) {
+      return c.json({ error: `status must be one of ${allowed.join(', ')}` }, 400);
+    }
+    const db = buildDatabase(c.env);
+    const rows = await db.execute(sql`
+      UPDATE sales_leads SET status = ${body.status} WHERE id = ${id}
+      RETURNING id, status
+    `);
+    if (rows.rows.length === 0) return c.json({ error: 'Lead not found' }, 404);
+    return c.json({ lead: rows.rows[0] });
   });
 
   // -------------------------------------------------------------------------

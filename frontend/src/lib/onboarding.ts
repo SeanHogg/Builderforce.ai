@@ -226,7 +226,22 @@ export function useOnboardingState(): OnboardingState {
         // path that somehow already has projects never gets a duplicate.
         const projects = await fetchProjects().catch(() => []);
         if (projects.length === 0) {
-          await createProject({ name: 'Default' }).catch(() => {});
+          // Best-effort with a couple of retries: a transient failure here would
+          // otherwise strand the fresh workspace with no project. (The dashboard's
+          // build prompt can also create one, so this is never a hard dead-end —
+          // but we try hard to land the user fully ready.)
+          let created = false;
+          for (let attempt = 0; attempt < 3 && !created; attempt++) {
+            try {
+              await createProject({ name: 'Default' });
+              created = true;
+            } catch {
+              if (attempt === 2) {
+                // Don't swallow silently — leave a diagnosable signal rather than a mystery empty workspace.
+                console.warn('[onboarding] default project provisioning failed after retries');
+              }
+            }
+          }
         }
       } catch {
         /* fall through to the manual /tenants picker (pending-tenant phase) */

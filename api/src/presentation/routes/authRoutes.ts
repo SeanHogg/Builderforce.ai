@@ -2,7 +2,8 @@ import { Hono, type Context } from 'hono';
 import { and, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { AuthService } from '../../application/auth/AuthService';
 import { DeviceAuthService } from '../../application/auth/DeviceAuthService';
-import { resolveAppBaseUrl, type HonoEnv } from '../../env';
+import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
+import { credentialSecret } from '../../application/integrations/credentialCrypto';
 import { sendWelcomeEmail, sendAccountTypeSelectedEmail } from '../../infrastructure/email/EmailService';
 import { sendTransactionalEmail } from '../../application/email/sendEmail';
 import { headerHints, rememberUserLocale } from '../../application/email/emailLocaleResolver';
@@ -237,7 +238,7 @@ async function persistToken(
 
 async function assertMfa(
   db: Db,
-  envSecret: string,
+  env: Env,
   user: typeof users.$inferSelect,
   code?: string,
   recoveryCode?: string,
@@ -245,7 +246,9 @@ async function assertMfa(
   if (!user.mfaEnabled || !user.mfaSecretEnc) return false;
 
   if (code) {
-    const secret = await decryptSecretFromStorage(user.mfaSecretEnc, envSecret);
+    // M2: read under the dedicated credential secret, JWT_SECRET as legacy fallback
+    // (versioned dual-read) so pre-migration MFA rows still decrypt.
+    const secret = await decryptSecretFromStorage(user.mfaSecretEnc, credentialSecret(env), { legacySecret: env.JWT_SECRET });
     const validTotp = await verifyTotpCode(secret, code);
     if (validTotp) return true;
   }
@@ -1002,7 +1005,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       return c.json({ error: 'MFA is not enabled for this account' }, 400);
     }
 
-    const valid = await assertMfa(db, c.env.JWT_SECRET, user, body.code, body.recoveryCode);
+    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
     const superadmin = canUseSuperAdmin(user);
@@ -1315,7 +1318,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (user.mfaEnabled) return c.json({ error: 'MFA is already enabled' }, 409);
 
     const secret = generateTotpSecret();
-    const encrypted = await encryptSecretForStorage(secret, c.env.JWT_SECRET);
+    const encrypted = await encryptSecretForStorage(secret, credentialSecret(c.env), { upgrade: true });
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     await db
@@ -1363,11 +1366,11 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       return c.json({ error: 'MFA setup session expired. Start setup again.' }, 400);
     }
 
-    const secret = await decryptSecretFromStorage(user.mfaTempSecretEnc, c.env.JWT_SECRET);
+    const secret = await decryptSecretFromStorage(user.mfaTempSecretEnc, credentialSecret(c.env), { legacySecret: c.env.JWT_SECRET });
     const valid = await verifyTotpCode(secret, body.code);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
-    const encryptedSecret = await encryptSecretForStorage(secret, c.env.JWT_SECRET);
+    const encryptedSecret = await encryptSecretForStorage(secret, credentialSecret(c.env), { upgrade: true });
     const recoveryCodes = generateRecoveryCodes(10);
 
     await replaceRecoveryCodes(db, user.id, recoveryCodes);
@@ -1406,7 +1409,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (!user) return c.json({ error: 'User not found' }, 404);
     if (!user.mfaEnabled) return c.json({ enabled: false });
 
-    const valid = await assertMfa(db, c.env.JWT_SECRET, user, body.code, body.recoveryCode);
+    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
     await db.delete(userMfaRecoveryCodes).where(eq(userMfaRecoveryCodes.userId, user.id));
@@ -1443,7 +1446,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (!user) return c.json({ error: 'User not found' }, 404);
     if (!user.mfaEnabled) return c.json({ error: 'MFA is not enabled' }, 400);
 
-    const valid = await assertMfa(db, c.env.JWT_SECRET, user, body.code, body.recoveryCode);
+    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
     const recoveryCodes = generateRecoveryCodes(10);

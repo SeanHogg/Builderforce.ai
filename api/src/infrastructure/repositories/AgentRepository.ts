@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { IAgentRepository } from '../../domain/agent/IAgentRepository';
 import { Agent, AgentProps } from '../../domain/agent/Agent';
 import { AgentId, TenantId, AgentType, asAgentId, asTenantId } from '../../domain/shared/types';
@@ -12,6 +12,13 @@ export class AgentRepository implements IAgentRepository {
     const [row] = await this.db
       .select().from(agentsTable)
       .where(eq(agentsTable.id, id)).limit(1);
+    return row ? toDomain(row) : null;
+  }
+
+  async findByIdAndTenant(id: AgentId, tenantId: TenantId): Promise<Agent | null> {
+    const [row] = await this.db
+      .select().from(agentsTable)
+      .where(and(eq(agentsTable.id, id), eq(agentsTable.tenantId, tenantId))).limit(1);
     return row ? toDomain(row) : null;
   }
 

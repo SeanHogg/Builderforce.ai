@@ -91,6 +91,14 @@ export class CloudRunnerDO implements DurableObject {
       if (!cursor) return new Response(JSON.stringify({ ok: false, reason: 'no paused run' }), { status: 409, headers: { 'Content-Type': 'application/json' } });
       await markCloudExecutionRunning(this.runtimeService, cursor.executionId);
       await this.state.storage.setAlarm(Date.now());
+      // Narrate the resume into the ticket's linked Brain chats — this is the ONLY
+      // authoritative "actually resumed" point (a wake with no cursor 409s above).
+      // The approval id (threaded from the answer) uniquifies the idempotency key so
+      // each ask_human Q&A cycle narrates exactly one resumed line.
+      const body = (await request.json().catch(() => null)) as { approvalId?: string } | null;
+      await this.runtimeService.postLifecycleMilestoneById(cursor.executionId, 'resumed', {
+        eventNonce: typeof body?.approvalId === 'string' ? body.approvalId : null,
+      });
       return new Response(JSON.stringify({ ok: true }), { status: 202, headers: { 'Content-Type': 'application/json' } });
     }
     return new Response('not found', { status: 404 });
@@ -193,6 +201,14 @@ export class CloudRunnerDO implements DurableObject {
           .set({ status: 'paused', updatedAt: new Date() })
           .where(eq(executions.id, cursor.executionId))
           .catch(() => { /* best-effort */ });
+        // Narrate the pause — WITH the question — into the ticket's linked Brain
+        // chats, so the human driving the conversation sees what the agent needs
+        // (Slack/email via approvalNotifier are the only other channels). Keyed by
+        // approval id: repeat pauses each narrate once; a retried tick dedupes.
+        await this.runtimeService.postLifecycleMilestoneById(cursor.executionId, 'paused', {
+          questionText: result.awaitingInput.question,
+          eventNonce: result.awaitingInput.approvalId,
+        });
         return;
       }
 

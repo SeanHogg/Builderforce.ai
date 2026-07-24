@@ -19,17 +19,20 @@ function fakeRoom() {
   return { ns, fetches };
 }
 
-/** Db stub whose task lookup returns a fixed projectId, counting calls. */
-function fakeDb(projectId: number) {
+/** Db stub whose task→project lookup (join to projects for the tenant scope)
+ *  returns a fixed {projectId, tenantId}, counting calls. */
+function fakeDb(projectId: number, tenantId = 1) {
   let calls = 0;
   const db = {
     select: () => ({
       from: () => ({
-        where: () => ({
-          limit: () => {
-            calls += 1;
-            return Promise.resolve([{ projectId }]);
-          },
+        innerJoin: () => ({
+          where: () => ({
+            limit: () => {
+              calls += 1;
+              return Promise.resolve([{ projectId, tenantId }]);
+            },
+          }),
         }),
       }),
     }),
@@ -53,7 +56,8 @@ describe('makeExecutionBoardSink', () => {
 
     sink(statusEvent(7));
     await vi.waitFor(() => expect(fetches.length).toBe(1));
-    expect(fetches[0]?.room).toBe('project:42');
+    // Tenant-scoped room — publish must match the subscribe side (projectRoomName).
+    expect(fetches[0]?.room).toBe('project:1:42');
   });
 
   it('memoizes taskId→projectId so repeat events skip the DB lookup', async () => {
@@ -65,7 +69,7 @@ describe('makeExecutionBoardSink', () => {
     await vi.waitFor(() => expect(fetches.length).toBe(1)); // first populates the memo
     sink(statusEvent(123));
     await vi.waitFor(() => expect(fetches.length).toBe(2));
-    expect(fetches.every((f) => f.room === 'project:99')).toBe(true);
+    expect(fetches.every((f) => f.room === 'project:1:99')).toBe(true);
     expect(lookups()).toBe(1); // second event served from the memo
   });
 

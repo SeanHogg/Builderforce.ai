@@ -9,7 +9,7 @@
  * model's context window.
  */
 
-import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
+import { assertSafeUrl, resolveAndAssertPublic, BlockedUrlError } from '../../infrastructure/net/ssrfGuard';
 
 /** Max decoded text returned to the model (chars). A roadmap/docs page fits
  *  comfortably; anything larger is truncated with a marker. */
@@ -19,6 +19,14 @@ const MAX_TEXT_CHARS = 60_000;
 const MAX_BYTES = 5 * 1024 * 1024;
 /** Abort a slow origin so a hung request can't wedge the worker. */
 const FETCH_TIMEOUT_MS = 15_000;
+/** Max redirect hops to follow manually. Each hop is re-validated through the
+ *  SSRF guard, so an initially-public origin can't 302 us to a private target. */
+const MAX_REDIRECTS = 5;
+
+/** HTTP status codes that carry a `Location` we must re-validate before following. */
+function isRedirectStatus(status: number): boolean {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
 
 export interface WebFetchResult {
   /** The URL actually fetched (after github-blob → raw rewrite + redirects). */
@@ -103,40 +111,77 @@ function collapse(s: string): string {
  * (SSRF) URL; returns a {@link WebFetchResult} with the upstream status for
  * non-2xx so the model can tell the user the page was unreachable.
  */
-export async function fetchWebDocument(rawUrl: string): Promise<WebFetchResult> {
-  const requestedUrl = rawUrl;
-  const target = normalizeFetchUrl(rawUrl);
-  // SSRF guard (allows http + https). Throws on internal/loopback/metadata hosts.
-  const parsed = assertSafeUrl(target, { allowHttp: true });
-  // DNS-rebinding guard (best-effort, defence-in-depth): resolve the hostname over
-  // DoH and reject if it maps to a private IP. Fails OPEN on a DoH lookup failure —
-  // assertSafeUrl above already blocks literal private IPs, so this only closes the
-  // residual "public name → private IP" rebinding case when the lookup succeeds.
-  await resolveAndAssertPublic(parsed.hostname);
+/**
+ * Fetch `startUrl`, following redirects MANUALLY so the SSRF guard re-runs on
+ * every hop. `redirect: 'follow'` would let a permitted public origin 302 us to
+ * `169.254.169.254`/localhost with the guard never re-checking; instead we take
+ * one hop at a time, re-validating each `Location` through {@link assertSafeUrl}
+ * + {@link resolveAndAssertPublic} BEFORE the next fetch. Bounded at
+ * {@link MAX_REDIRECTS} hops. Throws on a blocked hop; returns the final response
+ * plus the URL actually fetched.
+ */
+async function fetchFollowingRedirects(
+  startUrl: string,
+  signal: AbortSignal,
+): Promise<{ res: Response; finalUrl: string }> {
+  let current = startUrl;
+  for (let hop = 0; ; hop++) {
+    // SSRF guard (http + https). Throws on internal/loopback/metadata hosts, then
+    // best-effort DNS-rebinding check (resolves the name and rejects private IPs).
+    const parsed = assertSafeUrl(current, { allowHttp: true });
+    await resolveAndAssertPublic(parsed.hostname);
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  let res: Response;
-  try {
-    res = await fetch(target, {
+    const res = await fetch(current, {
       method: 'GET',
-      redirect: 'follow',
-      signal: controller.signal,
+      redirect: 'manual',
+      signal,
       headers: {
         // A real UA + text Accept — some origins 403 an empty UA.
         'User-Agent': 'BuilderforceBrain/1.0 (+https://builderforce.ai)',
         'Accept': 'text/html,text/plain,text/markdown,application/json;q=0.9,*/*;q=0.5',
       },
     });
+
+    if (!isRedirectStatus(res.status)) {
+      return { res, finalUrl: current };
+    }
+    const location = res.headers.get('location');
+    if (!location) {
+      // Redirect status but no Location — nothing to follow; hand it back as-is.
+      return { res, finalUrl: current };
+    }
+    if (hop >= MAX_REDIRECTS) {
+      throw new Error(`Too many redirects fetching ${startUrl} (>${MAX_REDIRECTS}).`);
+    }
+    // Discard the redirect body and resolve the next hop (Location may be relative).
+    await res.body?.cancel().catch(() => {});
+    current = new URL(location, current).toString();
+  }
+}
+
+export async function fetchWebDocument(rawUrl: string): Promise<WebFetchResult> {
+  const requestedUrl = rawUrl;
+  const target = normalizeFetchUrl(rawUrl);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let res: Response;
+  let finalUrl: string;
+  try {
+    ({ res, finalUrl } = await fetchFollowingRedirects(target, controller.signal));
   } catch (e) {
     clearTimeout(timer);
+    // A BlockedUrlError / SSRF assertion is a security decision, not a transport
+    // failure — re-throw it verbatim so the caller sees why the URL was refused.
+    if (e instanceof BlockedUrlError || (e instanceof Error && /public host|valid absolute URL|http:\/\/ or https/.test(e.message))) {
+      throw e;
+    }
     const reason = e instanceof Error && e.name === 'AbortError' ? 'timed out' : 'failed';
     throw new Error(`Could not reach ${target} (request ${reason}).`);
   }
   clearTimeout(timer);
 
   const contentType = (res.headers.get('content-type') ?? '').toLowerCase();
-  const finalUrl = res.url || target;
 
   if (!res.ok) {
     return {

@@ -1,60 +1,77 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
+import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { AUTH_API_URL, persistSession, resolveAndSelectTenant } from '@/lib/auth';
+import { safeRedirectPath } from '@/lib/safeRedirect';
 import type { AuthUser } from '@/lib/types';
 
-const ERROR_MESSAGES: Record<string, string> = {
-  missing_params: 'Authentication failed: missing parameters.',
-  invalid_state: 'Authentication failed: invalid or expired state. Please try again.',
-  auth_failed: 'Authentication failed with the provider. Please try again.',
-  no_email: 'Your provider account has no verified email address.',
-  account_not_found: 'Account not found or has been disabled.',
-  provider_unavailable: 'This sign-in provider is not currently available.',
-  already_linked_other: 'This provider account is already connected to a different Builderforce account.',
+/** Maps the server's `?error=` code to a translation key in the `authCallback` namespace. */
+const ERROR_KEYS: Record<string, string> = {
+  missing_params: 'errorMissingParams',
+  invalid_state: 'errorInvalidState',
+  auth_failed: 'errorAuthFailed',
+  no_email: 'errorNoEmail',
+  account_not_found: 'errorAccountNotFound',
+  account_suspended: 'errorAccountSuspended',
+  provider_unavailable: 'errorProviderUnavailable',
+  already_linked_other: 'errorAlreadyLinkedOther',
 };
 
 export default function OAuthCallbackPage() {
+  const t = useTranslations('authCallback');
   const searchParams = useSearchParams();
-  const router = useRouter();
 
   const errorParam = searchParams.get('error');
-  const token = searchParams.get('token');
+  // M6: the OAuth callback now delivers a short-lived, single-purpose exchange
+  // `code` (never the 24h session JWT). The code is swapped via POST for the
+  // real token, so the session JWT is never placed in a URL.
+  const code = searchParams.get('code');
 
   // Derive initial error from URL params so no synchronous setState inside effects
   const [error, setError] = useState<string | null>(() => {
-    if (errorParam) return ERROR_MESSAGES[errorParam] ?? 'An unexpected error occurred. Please try again.';
-    if (!token) return 'No token received from provider.';
+    if (errorParam) return t(ERROR_KEYS[errorParam] ?? 'errorUnexpected');
+    if (!code) return t('errorNoCode');
     return null;
   });
 
   useEffect(() => {
-    if (error || !token) return;
-    const redirect = searchParams.get('redirect') || '/dashboard';
+    if (error || !code) return;
 
-    // Fetch the user profile using the new token, then persist session
-    fetch(`${AUTH_API_URL}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
+    // Defense-in-depth: strip the single-use code from the URL immediately so it
+    // can't leak to analytics (GTM captures page_location), the Referer header,
+    // or the browser history entry.
+    if (typeof window !== 'undefined') {
+      window.history.replaceState({}, '', '/auth/callback');
+    }
+
+    // Exchange the code for the real session token via POST — the token stays out
+    // of the URL entirely (M6). The exchange also returns the (server-validated)
+    // redirect target.
+    fetch(`${AUTH_API_URL}/api/auth/oauth/exchange`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
     })
       .then((res) => {
-        if (!res.ok) throw new Error('Failed to load profile');
-        return res.json() as Promise<{ user?: AuthUser } | AuthUser>;
+        if (!res.ok) throw new Error('exchange_failed');
+        return res.json() as Promise<{ token?: string; user?: AuthUser; redirect?: string }>;
       })
       .then(async (data) => {
-        // /api/auth/me wraps the profile in { user }; tolerate a flat shape too.
-        const user = ((data as { user?: AuthUser }).user ?? data) as AuthUser;
-        persistSession(token, user);
-        await resolveAndSelectTenant(token);
+        if (!data.token || !data.user) throw new Error('exchange_failed');
+        persistSession(data.token, data.user);
+        await resolveAndSelectTenant(data.token);
         // The onboarding gate (OnboardingGate) forces the Build-vs-Hired role
         // choice for accounts that never picked one, so no special-casing here.
-        window.location.href = redirect;
+        // safeRedirectPath is defence-in-depth — the server already validated it.
+        window.location.href = safeRedirectPath(data.redirect);
       })
       .catch(() => {
-        setError('Failed to load your account profile. Please try signing in again.');
+        setError(t('errorProfile'));
       });
-  }, [searchParams, router, error, token]);
+  }, [code, error, t]);
 
   if (error) {
     return (
@@ -96,7 +113,7 @@ export default function OAuthCallbackPage() {
               marginBottom: 12,
             }}
           >
-            Sign-in failed
+            {t('title')}
           </h2>
           <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: 24 }}>
             {error}
@@ -115,7 +132,7 @@ export default function OAuthCallbackPage() {
               textDecoration: 'none',
             }}
           >
-            Back to login
+            {t('backToLogin')}
           </a>
         </div>
       </div>
@@ -145,7 +162,7 @@ export default function OAuthCallbackPage() {
             marginBottom: 16,
           }}
         />
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Signing you in…</p>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{t('signingIn')}</p>
       </div>
     </div>
   );

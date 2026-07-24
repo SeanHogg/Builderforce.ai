@@ -30,9 +30,7 @@
  *   fetch or auth headers.
  * - Mapping is pure and separated from IO so it is unit-testable without a DB.
  */
-import { and, eq, ne } from 'drizzle-orm';
-import { tasks } from '../../infrastructure/database/schema';
-import { TaskStatus } from '../../domain/shared/types';
+import { openTaskMarkers } from './findingMarkers';
 import { SecurityAuditService, type FindingSeverity } from './SecurityAuditService';
 import { githubRequest, repoPath, resolveRepoAuth, type GitHubCoords } from '../repos/githubClient';
 import { resolveRepoLink } from '../contributors/activityIngest';
@@ -166,28 +164,9 @@ export function alertMarker(source: AlertSource, repoFullName: string, number: n
   return `[gh:${source}:${repoFullName.toLowerCase()}#${number}]`;
 }
 
-/** Every alert marker currently carried by an OPEN task in a project. */
+/** Every GitHub-alert marker currently carried by an OPEN task in a project. */
 export async function openAlertMarkers(db: Db, projectId: number): Promise<Set<string>> {
-  try {
-    const rows = await db
-      .select({ title: tasks.title })
-      .from(tasks)
-      .where(and(
-        eq(tasks.projectId, projectId),
-        eq(tasks.archived, false),
-        ne(tasks.status, TaskStatus.DONE),
-      ));
-    const out = new Set<string>();
-    for (const r of rows) {
-      const m = /\[gh:(?:code-scanning|dependabot):[^\]]+\]/.exec(r.title ?? '');
-      if (m) out.add(m[0].toLowerCase());
-    }
-    return out;
-  } catch {
-    // Best-effort, exactly like AuditRunner.openTaskTitles: a failed read falls
-    // back to always-file rather than silently dropping real findings.
-    return new Set();
-  }
+  return openTaskMarkers(db, projectId, /\[gh:(?:code-scanning|dependabot):[^\]]+\]/);
 }
 
 // ── Payload → finding ────────────────────────────────────────────────────────

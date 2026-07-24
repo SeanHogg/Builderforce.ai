@@ -1249,7 +1249,33 @@
       "resubscribeCta": "Se réabonner",
       "resubscribeTitle": "Se réabonner aux e-mails facultatifs",
       "resubscribeConfirm": "Vous recevrez de nouveau les e-mails facultatifs, selon les catégories que vous avez activées. Continuer ?"
-    }
+    },
+    "spendLimits": "Limites de dépenses",
+    "spendTitle": "Limites de dépenses IA de l’équipe",
+    "spendDescription": "Définissez un plafond mensuel de dépenses IA pour chaque siège. Les sièges sans clé de modèle propre s’exécutent sur Builderforce au tarif OpenRouter : une fois le plafond atteint, leur usage payant est suspendu, et vous comme l’intéressé êtes prévenus à l’approche.",
+    "spendTeamsOnlyTitle": "Fonctionnalité du forfait Teams",
+    "spendTeamsOnly": "Les limites de dépenses par siège sont disponibles dans le forfait Teams. Passez à ce forfait pour fixer un budget IA mensuel par membre.",
+    "spendDefaultTitle": "Budget par siège par défaut",
+    "spendDefaultDescription": "Appliqué à chaque siège sans limite propre. Laissez vide pour aucun budget par défaut.",
+    "spendDefaultLabel": "Budget mensuel par défaut en dollars",
+    "spendNoDefaultPlaceholder": "Aucune limite",
+    "spendPerSeatMonth": "par siège / mois",
+    "spendDefaultHint": "Les montants sont en dollars. L’usage couvert par la clé de modèle propre (BYO) d’un membre n’est jamais comptabilisé.",
+    "spendSeatsTitle": "Sièges",
+    "spendResetsOn": "Les dépenses sont réinitialisées le {date}.",
+    "spendNoSeats": "Aucun membre actif pour l’instant.",
+    "spendOfCap": "{spent} sur {cap}",
+    "spendUnlimitedUsage": "{spent} · sans limite",
+    "spendModeLabel": "Mode de budget",
+    "spendModeInherit": "Utiliser le défaut",
+    "spendModeUnlimited": "Sans limite",
+    "spendModeCustom": "Personnalisé",
+    "spendAmountPlaceholder": "Montant",
+    "spendAmountLabel": "Budget mensuel en dollars",
+    "spendSave": "Enregistrer",
+    "spendSaving": "Enregistrement…",
+    "spendSaved": "Enregistré",
+    "spendSaveFailed": "Échec de l’enregistrement"
   },
   "pmo": {
     "title": "Portefeuille (PMO)",
@@ -3126,6 +3152,8 @@
     "subheading": "Commencez par le <brainstorm>Brainstorming</brainstorm> pour concevoir, puis exécutez en tant que projet et développez dans l’Builder — ou attribuez le travail via les agents <tasks>Tâches</tasks> et <workforce>Talents</workforce>.",
     "promptPlaceholder": "Créez un suivi de budget avec des composants Material UI…",
     "brainStorm": "Brainstorming",
+    "build": "Créer",
+    "building": "Démarrage…",
     "agentsConnected": "{count, plural, one {# agent connecté} other {# agents connectés}}",
     "noAgents": "Aucun agent connecté —",
     "setUpInWorkforce": "configurer dans Talents",
@@ -3955,7 +3983,30 @@
     "agentsTab": "Agents",
     "auditTab": "SOC 2",
     "subnavLabel": "Sections de sécurité",
-    "policiesTab": "Politiques"
+    "policiesTab": "Politiques",
+    "webTab": "Analyse du site",
+    "webTitle": "Analyse de sécurité du site web",
+    "webSubtitle": "Pointez vers votre site en ligne et obtenez des résultats de sécurité immédiatement. Chaque problème est enregistré comme un ticket que votre équipe peut corriger.",
+    "webUrlLabel": "URL du site web",
+    "webUrlPlaceholder": "https://votre-site.com",
+    "webSave": "Enregistrer",
+    "webRunNow": "Lancer l'analyse",
+    "webRunning": "Analyse en cours…",
+    "webScore": "Score de sécurité",
+    "webScoreDelta": "{delta} par rapport à la dernière analyse",
+    "webBaselineFirst": "Première analyse — c'est votre référence.",
+    "webNewFindings": "{count} nouveaux",
+    "webResolved": "{count} résolus",
+    "webFindingsFiled": "{count} enregistrés comme tickets",
+    "webNoIssues": "Aucun problème détecté — votre site a réussi toutes les vérifications.",
+    "webHistory": "Historique des analyses",
+    "webNoHistory": "Aucune analyse pour le moment. Lancez votre première analyse ci-dessus.",
+    "webRecommendation": "Recommandation",
+    "sev_critical": "Critique",
+    "sev_high": "Élevé",
+    "sev_medium": "Moyen",
+    "sev_low": "Faible",
+    "sev_info": "Info"
   },
   "catalogInsights": {
     "total": {
@@ -5381,6 +5432,8 @@
     "priceFree": "0 $",
     "priceProMonthly": "{price} $/mois",
     "priceTeamsMonthly": "{price} $/poste/mois",
+    "teamsVolumeNote": "Min. {min} postes",
+    "teamsSeatMinimum": "Minimum de {min} postes — Teams applique une tarification de volume pour toute l'organisation.",
     "teamsCostNoteYear": "{perSeat} $/poste/an — facturé {total} $/an",
     "teamsCostNoteMonth": "{perSeat} $/poste/mois — facturé {total} $/mois",
     "managedAddon": "Module complémentaire : <b>AgentHost géré</b> — {price} $/mois par AgentHost hébergé. Nous exécutons votre instance BuilderForce Agents pour vous — sans Docker, sans DevOps.",
@@ -7313,7 +7366,8 @@
       "audit": "Journal d’audit",
       "apiKeys": "Clés API",
       "token": "Jeton superadmin",
-      "feedback": "Retours"
+      "feedback": "Retours",
+      "releaseNotes": "Nouveautés"
     },
     "common": {
       "loading": "Chargement…",
@@ -7927,6 +7981,31 @@
       "requestBody": "Corps de la requête",
       "responseBody": "Corps de la réponse",
       "callerMetadata": "Métadonnées de l'appelant"
+    },
+    "releaseNotes": {
+      "digestTitle": "E-mail hebdomadaire des nouveautés",
+      "unsentCount": "{count, plural, =0 {Aucune note à envoyer} one {# note publiée pas encore envoyée} other {# notes publiées pas encore envoyées}}",
+      "digestSent": "{notes} nouveautés envoyées à {sent} personnes ({suppressed} désabonnées).",
+      "sendDigest": "Envoyer maintenant",
+      "sendDigestConfirm": "Envoyer par e-mail dès maintenant toutes les nouveautés publiées et non encore envoyées aux utilisateurs consentants ?",
+      "editNote": "Modifier la nouveauté",
+      "newNote": "Nouvelle nouveauté",
+      "phVersion": "Version (p. ex. 2026.7.93)",
+      "phTitle": "Titre — le bénéfice, en langage clair",
+      "phBody": "Ce que cela apporte à l’utilisateur. Les lignes vides séparent les paragraphes.",
+      "savePublish": "Enregistrer et publier",
+      "saveDraft": "Enregistrer le brouillon",
+      "allNotes": "Toutes les nouveautés ({count})",
+      "thTitle": "Titre",
+      "thVersion": "Version",
+      "thCategory": "Catégorie",
+      "thStatus": "Statut",
+      "thEmailed": "Envoyé",
+      "published": "Publié",
+      "draft": "Brouillon",
+      "publish": "Publier",
+      "unpublish": "Dépublier",
+      "deleteConfirm": "Supprimer la nouveauté « {title} » ? Cette action est irréversible."
     }
   },
   "providerKeys": {
@@ -8366,7 +8445,15 @@
       "runningAll": "Audits en cours…",
       "run": "Lancer les audits sélectionnés",
       "viewReports": "Voir les rapports",
-      "notifyHint": "Nous vous préviendrons dès que chaque rapport sera prêt. Vous pouvez quitter cette page — les audits continuent."
+      "notifyHint": "Nous vous préviendrons dès que chaque rapport sera prêt. Vous pouvez quitter cette page — les audits continuent.",
+      "webHeading": "Analysez votre site en ligne",
+      "webIntro": "Vous avez déjà un site ? Saisissez son URL pour une analyse de sécurité instantanée — les résultats deviennent des tickets à corriger.",
+      "webPlaceholder": "https://votre-site.com",
+      "webButton": "Analyser le site",
+      "webScanning": "Analyse en cours…",
+      "webResult": "Score {score}/100 — {count} enregistrés comme tickets",
+      "webView": "Voir les résultats",
+      "webError": "Échec de l'analyse. Vérifiez l'URL et réessayez."
     },
     "closeOnboarding": "Fermer l’intégration",
     "workspaceReady": "Espace de travail prêt",
@@ -8778,7 +8865,8 @@
     "commonQuestions": "Questions fréquentes",
     "pillLora": "🧠 Entraînement LoRA",
     "pillRegistry": "🤖 Registre d’agents",
-    "pillEval": "🔬 Évaluation IA"
+    "pillEval": "🔬 Évaluation IA",
+    "emailPlaceholder": "vous@exemple.com"
   },
   "gigs": {
     "publish": {
@@ -9780,6 +9868,13 @@
     "fieldIntervalSeconds": "Intervalle (secondes)",
     "fieldUrl": "URL",
     "fieldExpectedStatus": "Statut attendu",
+    "fieldMethod": "Méthode",
+    "fieldHeaders": "En-têtes de la requête",
+    "headersPlaceholder": "Authorization: Bearer …",
+    "headersHint": "Un « En-tête : valeur » par ligne — envoyé avec la vérification d'état.",
+    "fieldBodyMatch": "Le corps doit contenir",
+    "bodyMatchPlaceholder": "\"status\":\"ok\"",
+    "bodyMatchHint": "Facultatif : panne si le corps de la réponse ne contient pas ce texte.",
     "fieldMetric": "Métrique",
     "fieldComparator": "Comparateur",
     "fieldThreshold": "Seuil",
@@ -10400,5 +10495,39 @@
       }
     },
     "usageNote": "Vous pouvez partager ces supports tels quels lorsque vous écrivez sur Builderforce.ai ou le présentez. Le nom et le logo Builderforce.ai restent des marques déposées ; merci de ne pas modifier les diapositives ni de suggérer une approbation officielle."
+  },
+  "authCallback": {
+    "title": "Échec de la connexion",
+    "backToLogin": "Retour à la connexion",
+    "signingIn": "Connexion en cours…",
+    "errorMissingParams": "Échec de l’authentification : paramètres manquants.",
+    "errorInvalidState": "Échec de l’authentification : état invalide ou expiré. Veuillez réessayer.",
+    "errorAuthFailed": "L’authentification auprès du fournisseur a échoué. Veuillez réessayer.",
+    "errorNoEmail": "Votre compte fournisseur n’a pas d’adresse e-mail vérifiée.",
+    "errorAccountNotFound": "Compte introuvable ou désactivé.",
+    "errorAccountSuspended": "Votre compte a été suspendu. Veuillez contacter l’assistance.",
+    "errorProviderUnavailable": "Ce fournisseur de connexion n’est pas disponible actuellement.",
+    "errorAlreadyLinkedOther": "Ce compte fournisseur est déjà connecté à un autre compte Builderforce.",
+    "errorUnexpected": "Une erreur inattendue s’est produite. Veuillez réessayer.",
+    "errorNoCode": "Aucun code de connexion reçu. Veuillez réessayer.",
+    "errorProfile": "Impossible de charger le profil de votre compte. Veuillez vous reconnecter."
+  },
+  "footer": {
+    "builtBy": "Conçu par",
+    "navLabel": "Pied de page",
+    "termsOfUse": "Conditions d’utilisation",
+    "privacyPolicy": "Politique de confidentialité",
+    "whatsNewHint": "Découvrir les nouveautés"
+  },
+  "whatsNew": {
+    "title": "Nouveautés",
+    "loading": "Chargement…",
+    "error": "Impossible de charger les nouveautés. Réessayez plus tard.",
+    "empty": "Aucune nouveauté pour l’instant — revenez bientôt.",
+    "categories": {
+      "new": "Nouveau",
+      "improvement": "Amélioré",
+      "fix": "Corrigé"
+    }
   }
 }

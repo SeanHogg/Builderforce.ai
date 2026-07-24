@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
-import { fetchProjects } from '@/lib/api';
+import { fetchProjects, createIdeProject } from '@/lib/api';
+import { persistLastProjectId } from '@/lib/auth';
 import { useAuth } from '@/lib/AuthContext';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { useOnboardingPrompt } from '@/lib/onboarding';
@@ -31,6 +32,14 @@ import { agentHosts, tasksApi, approvalsApi, type AgentHost } from '@/lib/builde
 const DASHBOARD_TABS = ['projects', 'workforce', 'ide', 'ideas', 'quality', 'knowledge'] as const;
 type DashboardTab = (typeof DASHBOARD_TABS)[number];
 
+/** Derive a short, human project name from the build prompt's first line. */
+function deriveProjectName(promptText: string): string {
+  const firstLine = (promptText.split('\n')[0] ?? '').trim();
+  const cleaned = firstLine.replace(/^(please\s+)?(build|create|make|design|generate)\s+(me\s+)?(a|an|the)?\s*/i, '').trim();
+  const name = (cleaned || firstLine).slice(0, 48).trim();
+  return name || 'New app';
+}
+
 /**
  * Dashboard (home) — BuilderForceAgentsLink-style: "What should we build?" chat input,
  * projects preview (View all → /projects), and Workforce section with agent list.
@@ -47,6 +56,7 @@ export default function DashboardPage() {
   const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
   const [loading, setLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
+  const [building, setBuilding] = useState(false);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [approvalDates, setApprovalDates] = useState<string[]>([]);
   const [taskStats, setTaskStats] = useState<{ total: number; inProgress: number; done: number } | null>(null);
@@ -119,15 +129,27 @@ export default function DashboardPage() {
     return () => { alive = false; };
   }, [isAuthenticated, hasTenant, currentProjectId]);
 
-  // The dashboard prompt opens Brain Storm and auto-executes there: Brain creates
-  // a chat on demand and streams a reply, then the user can promote it to a
-  // project / IDE. (Direct dispatch to an agent host stays on /tasks + /workforce.)
-  const handlePromptSubmit = () => {
+  // The dashboard prompt STARTS A BUILD: spin up a fresh Website (designer) IDE
+  // project and open it with the prompt seeded, so the Brain scaffolds a running
+  // app right away (live Preview + one-click Publish) — the single-prompt→app
+  // moment. Falls back to Brain Storm if the project can't be created, so the
+  // prompt is never lost. (Direct dispatch to an agent host stays on /tasks.)
+  const handlePromptSubmit = useCallback(async () => {
     const p = prompt.trim();
-    if (!p) return;
-    setPrompt('');
-    router.push(`/brainstorm?prompt=${encodeURIComponent(p)}`);
-  };
+    if (!p || building) return;
+    setBuilding(true);
+    try {
+      const created = await createIdeProject({ name: deriveProjectName(p), modality: 'designer' });
+      persistLastProjectId(String(created.storageProjectId));
+      setPrompt('');
+      router.push(`/ide/${created.storageProjectPublicId}?prompt=${encodeURIComponent(p)}`);
+    } catch {
+      // Couldn't create a project — don't lose the intent; continue in Brain Storm.
+      router.push(`/brainstorm?prompt=${encodeURIComponent(p)}`);
+    } finally {
+      setBuilding(false);
+    }
+  }, [prompt, building, router]);
 
   const connectedAgentHosts = agentHostList.filter((c) => c.online);
   // Live "who's online / what's working" across humans AND agents — powers the
@@ -187,8 +209,9 @@ export default function DashboardPage() {
               value={prompt}
               onChange={setPrompt}
               onSubmit={handlePromptSubmit}
+              disabled={building}
               placeholder={t('promptPlaceholder')}
-              submitLabel={t('brainStorm')}
+              submitLabel={building ? t('building') : t('build')}
               rows={1}
               submitOnEnter={false}
               showBrainIcon={true}

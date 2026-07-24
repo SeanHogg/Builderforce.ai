@@ -36,6 +36,9 @@ interface MonitorConfig {
   intervalSeconds?: number;   // heartbeat staleness window
   url?: string;               // http_check target
   expectedStatus?: number;    // http_check expected status (default: any 2xx)
+  method?: string;            // http_check request method (default GET)
+  headers?: Record<string, string>; // http_check request headers (e.g. an auth header)
+  bodyMatch?: string;         // http_check: substring the response body must contain to be healthy
   metric?: string;            // metric_threshold: an AlertMetric
   comparator?: string;        // gt|lt|gte|lte
   threshold?: number;
@@ -43,6 +46,19 @@ interface MonitorConfig {
 }
 
 type MonitorRow = typeof monitors.$inferSelect;
+
+/**
+ * A monitor as safely returned to a client: the signal webhook secret is stripped,
+ * because a board/monitor read is MEMBER+ and the secret would let any member forge
+ * signals. Whether a secret EXISTS is surfaced as a boolean; the full secret-bearing
+ * signalUrl is minted only on the manager-gated GET /monitors/:id (via resolveSignalToken).
+ */
+export type PublicMonitor = Omit<MonitorRow, 'webhookSecret'> & { hasSignalSecret: boolean };
+
+function toPublicMonitor(m: MonitorRow): PublicMonitor {
+  const { webhookSecret, ...rest } = m;
+  return { ...rest, hasSignalSecret: !!webhookSecret };
+}
 
 /** A short per-monitor secret token for the signal webhook. */
 function newSecret(): string {
@@ -82,7 +98,7 @@ export class MonitoringService {
     if (!board) return null;
     const mons = await this.db.select().from(monitors)
       .where(eq(monitors.boardId, boardId)).orderBy(desc(monitors.createdAt));
-    return { board, monitors: mons };
+    return { board, monitors: mons.map(toPublicMonitor) };
   }
 
   async updateBoard(tenantId: number, boardId: string, patch: { name?: string; projectId?: number | null; imageKey?: string | null; imageWidth?: number | null; imageHeight?: number | null }): Promise<void> {
@@ -153,7 +169,18 @@ export class MonitoringService {
     if (!monitor) return null;
     const events = await this.db.select().from(monitorEvents)
       .where(eq(monitorEvents.monitorId, monitorId)).orderBy(desc(monitorEvents.createdAt)).limit(100);
-    return { monitor, events };
+    return { monitor: toPublicMonitor(monitor), events };
+  }
+
+  /**
+   * The signal webhook secret for a tenant-scoped monitor — used ONLY by the
+   * manager-gated GET /monitors/:id to mint the signalUrl. Kept out of getMonitor so
+   * the secret can never ride a MEMBER+ read.
+   */
+  async resolveSignalToken(tenantId: number, monitorId: string): Promise<string | null> {
+    const [row] = await this.db.select({ webhookSecret: monitors.webhookSecret }).from(monitors)
+      .where(and(eq(monitors.id, monitorId), eq(monitors.tenantId, tenantId))).limit(1);
+    return row?.webhookSecret ?? null;
   }
 
   private async addEvent(tenantId: number, monitorId: string, e: { kind: string; status?: string | null; message?: string | null; incidentId?: string | null }): Promise<void> {
@@ -176,9 +203,19 @@ export class MonitoringService {
       case 'http_check': {
         if (!cfg.url) return 'unknown';
         try {
-          const res = await fetch(cfg.url, { method: 'GET', redirect: 'follow' });
+          const method = (cfg.method ?? 'GET').toUpperCase();
+          const headers = cfg.headers && Object.keys(cfg.headers).length ? cfg.headers : undefined;
+          const res = await fetch(cfg.url, { method, redirect: 'follow', ...(headers ? { headers } : {}) });
           const okStatus = cfg.expectedStatus != null ? res.status === cfg.expectedStatus : res.ok;
-          return okStatus ? 'ok' : 'breach';
+          if (!okStatus) return 'breach';
+          // Optional content assertion: the response body must contain a marker
+          // (e.g. a health endpoint that returns 200 but reports "degraded").
+          const wanted = cfg.bodyMatch?.trim();
+          if (wanted) {
+            const text = await res.text().catch(() => '');
+            return text.includes(wanted) ? 'ok' : 'breach';
+          }
+          return 'ok';
         } catch { return 'breach'; }
       }
       case 'metric_threshold': {

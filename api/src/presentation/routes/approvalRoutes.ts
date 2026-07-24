@@ -326,6 +326,7 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
         executionId: existing.executionId,
         tenantId,
         answer: responseText,
+        approvalId: id,
       });
     }
 

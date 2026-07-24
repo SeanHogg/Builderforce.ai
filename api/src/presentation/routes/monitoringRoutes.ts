@@ -17,7 +17,7 @@
  *   GET                    /report                         incident + monitor rollup (MEMBER+)
  */
 import { Hono } from 'hono';
-import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { authMiddleware, requireRole, isManager } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { monitoringVersionKey, incidentVersionKey } from '../../application/insights/versionKeys';
@@ -94,10 +94,18 @@ export function createMonitoringRoutes(db: Db): Hono<HonoEnv> {
   });
   router.get('/monitors/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const data = await new MonitoringService(db).getMonitor(tenantId, c.req.param('id'));
+    const svc = new MonitoringService(db);
+    const data = await svc.getMonitor(tenantId, c.req.param('id'));
     if (!data) return c.json({ error: 'Monitor not found' }, 404);
-    // Surface the signal webhook URL (external tools POST here) for configuration.
-    const signalUrl = data.monitor.webhookSecret ? `${c.env.APP_URL ?? ''}/api/monitor-webhooks/${data.monitor.id}?token=${data.monitor.webhookSecret}` : null;
+    // The signal URL embeds the monitor's webhook secret (external tools POST there),
+    // so mint it ONLY for a MANAGER+; a plain member still gets the monitor + event
+    // history, just without the forge-able secret. The getMonitor read itself never
+    // carries the raw secret.
+    let signalUrl: string | null = null;
+    if (isManager(c)) {
+      const token = await svc.resolveSignalToken(tenantId, c.req.param('id'));
+      signalUrl = token ? `${c.env.APP_URL ?? ''}/api/monitor-webhooks/${data.monitor.id}?token=${token}` : null;
+    }
     return c.json({ ...data, signalUrl });
   });
   router.patch('/monitors/:id', requireRole(TenantRole.MANAGER), async (c) => {

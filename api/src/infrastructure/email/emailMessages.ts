@@ -148,6 +148,24 @@ export interface EmailCopy {
       age: string;
     };
   };
+  /**
+   * Weekly "what's new" digest (LIFECYCLE — product_updates category). Like the
+   * report digest, only the CHROME is translated: the release-note titles/bodies
+   * are operator-authored marketing data and go out as written.
+   */
+  releaseDigest: {
+    subject: string;
+    /** `{{Count}}` is substituted by fill() (server-controlled). */
+    intro: string;
+    cta: string;
+    outro: string;
+    /** Badge labels, keyed by `release_notes.category`. */
+    categories: {
+      new: string;
+      improvement: string;
+      fix: string;
+    };
+  };
 }
 
 const en: EmailCopy = {
@@ -283,6 +301,18 @@ const en: EmailCopy = {
       age: 'Age (h)',
     },
   },
+  releaseDigest: {
+    subject: "What's new in Builderforce this week",
+    intro: 'Here is what shipped since your last update — {{Count}} things your team can use today.',
+    cta: "See what's new",
+    outro: 'You are receiving product updates because you have a Builderforce account. '
+      + 'Manage which emails you get in Settings → Email.',
+    categories: {
+      new: 'New',
+      improvement: 'Improved',
+      fix: 'Fixed',
+    },
+  },
 };
 
 const zh: EmailCopy = {
@@ -407,6 +437,17 @@ const zh: EmailCopy = {
       title: '标题',
       repo: '仓库',
       age: '存在时长（小时）',
+    },
+  },
+  releaseDigest: {
+    subject: 'Builderforce 本周新功能',
+    intro: '以下是自上次更新以来发布的内容——{{Count}} 项您的团队今天就能使用的新功能。',
+    cta: '查看新功能',
+    outro: '您收到产品更新邮件是因为您拥有 Builderforce 账户。可在“设置 → 邮件”中管理您接收的邮件。',
+    categories: {
+      new: '新功能',
+      improvement: '改进',
+      fix: '修复',
     },
   },
 };
@@ -544,6 +585,18 @@ const es: EmailCopy = {
       title: 'Título',
       repo: 'Repositorio',
       age: 'Antigüedad (h)',
+    },
+  },
+  releaseDigest: {
+    subject: 'Novedades de Builderforce esta semana',
+    intro: 'Esto es lo que hemos lanzado desde tu última actualización: {{Count}} novedades que tu equipo puede usar hoy.',
+    cta: 'Ver las novedades',
+    outro: 'Recibes actualizaciones de producto porque tienes una cuenta de Builderforce. '
+      + 'Gestiona qué correos recibes en Configuración → Correo.',
+    categories: {
+      new: 'Nuevo',
+      improvement: 'Mejorado',
+      fix: 'Corregido',
     },
   },
 };
@@ -685,6 +738,18 @@ const fr: EmailCopy = {
       age: 'Ancienneté (h)',
     },
   },
+  releaseDigest: {
+    subject: 'Les nouveautés Builderforce de la semaine',
+    intro: 'Voici ce qui a été livré depuis votre dernière mise à jour : {{Count}} nouveautés que votre équipe peut utiliser dès aujourd’hui.',
+    cta: 'Découvrir les nouveautés',
+    outro: 'Vous recevez les actualités produit car vous avez un compte Builderforce. '
+      + 'Gérez vos e-mails dans Paramètres → E-mail.',
+    categories: {
+      new: 'Nouveau',
+      improvement: 'Amélioré',
+      fix: 'Corrigé',
+    },
+  },
 };
 
 const de: EmailCopy = {
@@ -824,6 +889,18 @@ const de: EmailCopy = {
       title: 'Titel',
       repo: 'Repository',
       age: 'Alter (Std.)',
+    },
+  },
+  releaseDigest: {
+    subject: 'Neu bei Builderforce diese Woche',
+    intro: 'Das ist seit Ihrem letzten Update erschienen — {{Count}} Neuerungen, die Ihr Team heute nutzen kann.',
+    cta: 'Neuerungen ansehen',
+    outro: 'Sie erhalten Produkt-Updates, weil Sie ein Builderforce-Konto haben. '
+      + 'Verwalten Sie Ihre E-Mails unter Einstellungen → E-Mail.',
+    categories: {
+      new: 'Neu',
+      improvement: 'Verbessert',
+      fix: 'Behoben',
     },
   },
 };

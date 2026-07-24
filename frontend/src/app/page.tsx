@@ -13,6 +13,7 @@ import { BLOG_POSTS } from '@/lib/blogData';
 import { ArticleCardGrid } from '@/components/blog/ArticleCard';
 import QuickStart from '@/components/QuickStart';
 import BrainBackdrop from '@/components/BrainBackdrop';
+import { DemoShowcase } from '@/components/demo/DemoShowcase';
 
 // Visible copy is sourced from the `home`, `features`, `compare` and `evermind`
 // catalog namespaces (localized in all 5 locales). `content.ts` (EVERMIND,
@@ -708,6 +709,9 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* ── Live demo accounts (try before signup) ── */}
+        <DemoShowcase />
+
         {/* ── Features ── */}
         <section className="lp-features" id="features">
           <h2 className="section-title">
@@ -770,7 +774,7 @@ export default function LandingPage() {
             <form onSubmit={handleNewsletterSubmit} style={{display:'flex',gap:'6px',flexWrap:'wrap',justifyContent:'center'}}>
               <input
                 type="email"
-                placeholder="your@email.com"
+                placeholder={t('home.newsletterPlaceholder')}
                 required
                 value={nlEmail}
                 onChange={e=>setNlEmail(e.target.value)}

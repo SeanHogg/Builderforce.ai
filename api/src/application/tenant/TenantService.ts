@@ -36,7 +36,12 @@ export class TenantService {
       perSeatMonthly: 20,
       perSeatYearly: 192,   // $16/seat/mo billed yearly — 20% off
       yearlySavingsPercent: 20,
-      minimumSeats: 1,
+      // Teams is priced BELOW Pro per seat ($20 vs $29) as org-wide volume
+      // pricing — the discount is earned by committing to a seat block, not by
+      // being a strictly-cheaper superset of Pro (which would read as a pricing
+      // typo). The minimum makes that volume commitment explicit everywhere the
+      // price is shown, and the checkout below enforces it server-side.
+      minimumSeats: 5,
     },
     managedAgentHost: {
       perAgentHostMonthly: 49,
@@ -45,6 +50,16 @@ export class TenantService {
 
   async listTenants(): Promise<Tenant[]> {
     return this.tenants.findAll();
+  }
+
+  /**
+   * Full Tenant aggregates for the workspaces this user is a member of. Backs the
+   * membership-scoped GET /api/tenants so a caller can never enumerate another
+   * tenant's billing PII / roster by hitting the unscoped list. Reuses the same
+   * repository query that powers the tenant picker (listTenantsForUser).
+   */
+  async listTenantsForUserFull(userId: string): Promise<Tenant[]> {
+    return this.tenants.findByUserId(userId);
   }
 
   async listTenantsForUser(userId: string): Promise<Array<{
@@ -205,14 +220,20 @@ export class TenantService {
     },
   ): Promise<{ checkoutUrl: string; sessionId: string }> {
     const targetPlan = input.targetPlan ?? TenantPlan.PRO;
+    const minimumSeats = TenantService.PRICING.teams.minimumSeats;
 
     if (targetPlan === TenantPlan.TEAMS) {
-      const seats = input.seats ?? 1;
-      if (seats < 1) throw new ValidationError('Teams plan requires at least 1 seat');
+      const requestedSeats = input.seats ?? minimumSeats;
+      if (requestedSeats < minimumSeats) {
+        throw new ValidationError(`Teams plan requires at least ${minimumSeats} seats`);
+      }
     }
 
     const tenant = await this.getTenant(tenantId);
-    const seats = input.seats ?? 1;
+    // Teams enforces the volume-pricing minimum; Pro is single-seat.
+    const seats = targetPlan === TenantPlan.TEAMS
+      ? Math.max(input.seats ?? minimumSeats, minimumSeats)
+      : (input.seats ?? 1);
 
     const result = await this.payment.createCheckoutSession({
       tenantId,

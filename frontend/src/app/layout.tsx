@@ -18,6 +18,7 @@ import { PermissionDebuggerProvider } from '@/lib/PermissionDebuggerContext';
 import ThemeProvider from './ThemeProvider';
 import { ConfirmProvider } from '@/components/ConfirmProvider';
 import { ToastProvider } from '@/components/ToastProvider';
+import { DemoModeProvider } from '@/components/demo/DemoModeProvider';
 import ConditionalAppShell from '@/components/ConditionalAppShell';
 import { PwaUpdateBanner } from '@/components/PwaUpdateBanner';
 import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
@@ -191,7 +192,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                       <PermissionDebuggerProvider>
                         <ConfirmProvider>
                           <ToastProvider>
-                            <ConditionalAppShell>{children}</ConditionalAppShell>
+                            <DemoModeProvider>
+                              <ConditionalAppShell>{children}</ConditionalAppShell>
+                            </DemoModeProvider>
                           </ToastProvider>
                         </ConfirmProvider>
                       </PermissionDebuggerProvider>

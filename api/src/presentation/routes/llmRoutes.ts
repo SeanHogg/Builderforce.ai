@@ -111,7 +111,7 @@ import {
   pipeOpenAiSseToAnthropic,
   type AnthropicMessagesRequest,
 } from '../../application/llm/anthropicMessagesBridge';
-import { resolveKeyCached, jwtMembershipHash } from '../../infrastructure/auth/keyResolutionCache';
+import { resolveKeyCached, jwtMembershipHash, type ResolvedKey } from '../../infrastructure/auth/keyResolutionCache';
 import type { FailoverEvent } from '../../application/llm/LlmProxyService';
 import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
 import { hashSecret } from '../../infrastructure/auth/HashService';
@@ -126,8 +126,10 @@ import {
   utcDayStart,
   secondsUntilNextUtcMonth,
   sumTenantTextTokens,
+  estimateTokensFromChars,
 } from '../../application/llm/tokenUsage';
 import { getTenantTokenAvailability, tokenGateUpgradeHint } from '../../application/llm/tenantTokenAvailability';
+import { getMemberSpendAvailability, maybeEmitSpendNotification, millicentsToUsd } from '../../application/consumption/memberSpend';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -214,15 +216,32 @@ function logUsage(
 /**
  * Which modality produced a gateway call, for the usage row's `surface` (drives
  * the BYO metering exemption — own-machine on-prem/VSIX BYO is free, cloud is
- * charged). A client may hint via `X-Builderforce-Surface`; otherwise an
- * agentHost-authenticated call is on-prem by definition, and everything else is
- * treated as web. (Cloud runs never come through this HTTP path — they record via
+ * charged). A client may hint via `X-Builderforce-Surface`, but the header is
+ * NEVER trusted to grant an own-machine (on_prem/vsix) surface unless the auth
+ * path corroborates it: only an agentHost-key–authenticated call (`bfa_*`/`clk_*`,
+ * i.e. `access.agentHostId != null`) is on the user's own machine by definition.
+ * A web JWT or `bfk_*` tenant key may NOT self-declare on_prem/vsix — otherwise a
+ * BYO caller could set the header and dodge the plan cap (the exemption in
+ * tokenUsage.notFreeByoRow keys off surface∈{on_prem,vsix}). Such callers are
+ * clamped to 'web' (still billable). Funded (byo=false) calls are billable
+ * regardless of surface, so this only tightens the BYO exemption.
+ * (Cloud runs never come through this HTTP path — they record via
  * recordCloudUsage with surface 'cloud'.) */
 const KNOWN_SURFACES: readonly UsageSurface[] = ['web', 'vsix', 'on_prem', 'cloud', 'sdk'];
 function resolveUsageSurface(c: Context<HonoEnv>, access: TenantAccess): UsageSurface {
   const hinted = (c.req.header('x-builderforce-surface') ?? '').toLowerCase();
-  if ((KNOWN_SURFACES as readonly string[]).includes(hinted)) return hinted as UsageSurface;
-  return access.agentHostId != null ? 'on_prem' : 'web';
+  const isKnown = (KNOWN_SURFACES as readonly string[]).includes(hinted);
+  // An agentHost credential authenticated → the call genuinely originates on the
+  // user's own machine, so honor the client hint (on_prem/vsix/…) or default to
+  // on_prem.
+  if (access.agentHostId != null) {
+    return isKnown ? (hinted as UsageSurface) : 'on_prem';
+  }
+  // Web JWT / bfk_* machine key: the auth path does NOT corroborate an own-machine
+  // surface, so an own-machine hint is ignored (clamped to 'web'). Non-exempt
+  // hints (web/cloud/sdk) are still honored for accurate attribution.
+  if (isKnown && hinted !== 'on_prem' && hinted !== 'vsix') return hinted as UsageSurface;
+  return 'web';
 }
 
 /** Convert a catalog entry into the canonical route that uses the tenant's key.
@@ -507,6 +526,45 @@ async function enforceTokenCaps(
     };
   }
 
+  // Per-seat monthly SPEND cap (Teams, owner-configured). A tenant that doesn't
+  // BYO a key runs paid models on our OpenRouter account, metered at the OpenRouter
+  // rate into `llm_usage_log.cost_usd_millicents` (BYO rows are 0). Once a seat's
+  // month-to-date spend reaches its cap, pause NEW paid spend for that seat. Skipped
+  // for non-Teams plans, seats with no cap, superadmin operators, and machine
+  // credentials with no user (all handled inside getMemberSpendAvailability — the ONE
+  // definition of the rule, shared with the owner overview + notifications). Fail-open
+  // on any error so a scan blip never blocks a run.
+  if (access.userId) {
+    let spend: Awaited<ReturnType<typeof getMemberSpendAvailability>> | null = null;
+    try {
+      spend = await getMemberSpendAvailability(db, c.env, access.tenantId, access.userId, {
+        effectivePlan: access.effectivePlan,
+        actingUserId: access.userId,
+        actingIsSuperadmin: access.isSuperadmin,
+      });
+    } catch { spend = null; }
+    if (spend && spend.seatControlsEnabled && spend.capMillicents != null) {
+      // Ping the seat + owners as they cross 50/80/100% — off the hot path.
+      const notifyPromise = maybeEmitSpendNotification(db, c.env as Env, access.tenantId, access.userId, spend);
+      try { c.executionCtx.waitUntil(notifyPromise); } catch { void notifyPromise.catch(() => {}); }
+      if (!spend.hasBudget) {
+        const capUsd = millicentsToUsd(spend.capMillicents).toFixed(2);
+        const retryAfter = secondsUntilNextUtcMonth();
+        return {
+          blocked: c.json({
+            error: `Monthly AI spend cap reached for this seat ($${capUsd}). New paid model usage is paused until the cap resets or your workspace owner raises it. Connect your own model key to keep going at your own rate.`,
+            code: 'member_spend_cap_exceeded',
+            plan: access.effectivePlan,
+            spendCapUsd: Number(capUsd),
+            spentUsd: Number(millicentsToUsd(spend.spentMillicents).toFixed(2)),
+            terminal: true,
+            retryAfter,
+          }, 429, { 'Retry-After': String(retryAfter) }),
+        };
+      }
+    }
+  }
+
   return { usageToday, planDailyLimit, usageMonth, planMonthlyLimit };
 }
 
@@ -589,6 +647,98 @@ async function enforceImageCreditCap(
   }
 }
 
+/**
+ * DB loader for an agentHost (`bfa_*` / legacy `clk_*`) key → its cached auth
+ * envelope. Extracted so the full auth path ({@link requireTenantAccess}) and the
+ * pre-auth rate-limit resolver ({@link resolveBearerTenantId}) share the EXACT
+ * loader, and therefore write a byte-identical value under the shared
+ * `auth:clk:<hash>` cache key — a divergent minimal loader would poison the cache
+ * with a payload missing fields the full path needs.
+ */
+async function loadAgentHostKeyByHash(env: HonoEnv['Bindings'], keyHash: string): Promise<ResolvedKey> {
+  const db = buildDatabase(env);
+  const [r] = await db
+    .select({
+      id:               agentHosts.id,
+      tenantId:         agentHosts.tenantId,
+      status:           agentHosts.status,
+      tokenDailyLimit:  agentHosts.tokenDailyLimit,
+    })
+    .from(agentHosts)
+    .where(eq(agentHosts.apiKeyHash, keyHash))
+    .limit(1);
+  if (!r || r.status !== 'active') return { ok: false, reason: 'Invalid or inactive agentHost API key' };
+  return {
+    ok: true,
+    payload: { id: r.id, tenantId: r.tenantId, tokenDailyLimit: r.tokenDailyLimit ?? null },
+  };
+}
+
+/**
+ * DB loader for a tenant API key (`bfk_*`) → its cached auth envelope. Shared by
+ * {@link requireTenantAccess} and {@link resolveBearerTenantId} for the same
+ * cache-shape reason as {@link loadAgentHostKeyByHash}.
+ */
+async function loadTenantApiKeyByHash(env: HonoEnv['Bindings'], keyHash: string): Promise<ResolvedKey> {
+  const db = buildDatabase(env);
+  const [r] = await db
+    .select({
+      id:              tenantApiKeys.id,
+      tenantId:        tenantApiKeys.tenantId,
+      revokedAt:       tenantApiKeys.revokedAt,
+      allowedOrigins:  tenantApiKeys.allowedOrigins,
+      scopes:          tenantApiKeys.scopes,
+      // A key minted by a superadmin (e.g. the IDE editor key) inherits the
+      // superadmin's unlimited budget — mirrors the JWT path's users.isSuperadmin.
+      creatorIsSuperadmin: users.isSuperadmin,
+    })
+    .from(tenantApiKeys)
+    .leftJoin(users, eq(users.id, tenantApiKeys.createdByUserId))
+    .where(eq(tenantApiKeys.keyHash, keyHash))
+    .limit(1);
+  if (!r || r.revokedAt) return { ok: false, reason: 'Invalid or revoked tenant API key' };
+  // Pre-parse allowedOrigins + scopes so a cache hit doesn't have to.
+  let allowlist: string[] | null = null;
+  if (r.allowedOrigins) {
+    try {
+      const parsed = JSON.parse(r.allowedOrigins);
+      if (Array.isArray(parsed)) allowlist = parsed.filter((s) => typeof s === 'string');
+    } catch { /* malformed → server-only */ }
+  }
+  return { ok: true, payload: { id: r.id, tenantId: r.tenantId, allowedOrigins: allowlist, scopes: deserializeScopes(r.scopes), isSuperadmin: r.creatorIsSuperadmin === true } };
+}
+
+/**
+ * Resolve JUST the tenant id from a request's Bearer credential, for pre-auth
+ * gating (the rate-limit middleware runs before the route's own
+ * {@link requireTenantAccess}). Reuses the SAME `resolveKeyCached` cache + the
+ * SAME loaders as the full auth path, so no parallel resolver and no divergent
+ * cache value. Machine keys (`bfa_*`/`clk_*`/`bfk_*`) and web/service JWTs all
+ * resolve to a tenant id; anonymous or unresolvable callers return null and fall
+ * through un-throttled (public ingest paths rely on this). Never throws.
+ */
+export async function resolveBearerTenantId(c: Context<HonoEnv>): Promise<number | null> {
+  const authHeader = c.req.header('Authorization') ?? '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : (c.req.query('token') ?? '');
+  if (!token) return null;
+  try {
+    if (token.startsWith('bfa_') || token.startsWith('clk_')) {
+      const keyHash = await hashSecret(token);
+      const resolved = await resolveKeyCached(c.env, 'clk', keyHash, () => loadAgentHostKeyByHash(c.env, keyHash));
+      return resolved.ok ? Number((resolved.payload as { tenantId: number }).tenantId) : null;
+    }
+    if (token.startsWith('bfk_')) {
+      const keyHash = await hashSecret(token);
+      const resolved = await resolveKeyCached(c.env, 'bfk', keyHash, () => loadTenantApiKeyByHash(c.env, keyHash));
+      return resolved.ok ? Number((resolved.payload as { tenantId: number }).tenantId) : null;
+    }
+    const payload = await verifyJwt(token, c.env.JWT_SECRET);
+    return typeof payload.tid === 'number' ? payload.tid : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAccess> {
   const authHeader = c.req.header('Authorization') ?? '';
   if (!authHeader.startsWith('Bearer ')) {
@@ -603,24 +753,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
   if (token.startsWith('bfa_') || token.startsWith('clk_')) {
     const keyHash = await hashSecret(token);
 
-    const resolved = await resolveKeyCached(c.env, 'clk', keyHash, async () => {
-      const db = buildDatabase(c.env);
-      const [r] = await db
-        .select({
-          id:               agentHosts.id,
-          tenantId:         agentHosts.tenantId,
-          status:           agentHosts.status,
-          tokenDailyLimit:  agentHosts.tokenDailyLimit,
-        })
-        .from(agentHosts)
-        .where(eq(agentHosts.apiKeyHash, keyHash))
-        .limit(1);
-      if (!r || r.status !== 'active') return { ok: false, reason: 'Invalid or inactive agentHost API key' };
-      return {
-        ok: true,
-        payload: { id: r.id, tenantId: r.tenantId, tokenDailyLimit: r.tokenDailyLimit ?? null },
-      };
-    });
+    const resolved = await resolveKeyCached(c.env, 'clk', keyHash, () => loadAgentHostKeyByHash(c.env, keyHash));
 
     if (!resolved.ok) throw new Error(resolved.reason);
     const agentHost = resolved.payload as { id: number; tenantId: number; tokenDailyLimit: number | null };
@@ -646,34 +779,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
     // KV-cached lookup: ~1ms hit, ~30-80ms miss. Cache entry covers everything
     // the auth path needs (id, tenantId, allowedOrigins, revoked flag) so a hit
     // requires zero DB calls. Falls through to DB when AUTH_CACHE_KV is unbound.
-    const resolved = await resolveKeyCached(c.env, 'bfk', keyHash, async () => {
-      const db = buildDatabase(c.env);
-      const [r] = await db
-        .select({
-          id:              tenantApiKeys.id,
-          tenantId:        tenantApiKeys.tenantId,
-          revokedAt:       tenantApiKeys.revokedAt,
-          allowedOrigins:  tenantApiKeys.allowedOrigins,
-          scopes:          tenantApiKeys.scopes,
-          // A key minted by a superadmin (e.g. the IDE editor key) inherits the
-          // superadmin's unlimited budget — mirrors the JWT path's users.isSuperadmin.
-          creatorIsSuperadmin: users.isSuperadmin,
-        })
-        .from(tenantApiKeys)
-        .leftJoin(users, eq(users.id, tenantApiKeys.createdByUserId))
-        .where(eq(tenantApiKeys.keyHash, keyHash))
-        .limit(1);
-      if (!r || r.revokedAt) return { ok: false, reason: 'Invalid or revoked tenant API key' };
-      // Pre-parse allowedOrigins + scopes so a cache hit doesn't have to.
-      let allowlist: string[] | null = null;
-      if (r.allowedOrigins) {
-        try {
-          const parsed = JSON.parse(r.allowedOrigins);
-          if (Array.isArray(parsed)) allowlist = parsed.filter((s) => typeof s === 'string');
-        } catch { /* malformed → server-only */ }
-      }
-      return { ok: true, payload: { id: r.id, tenantId: r.tenantId, allowedOrigins: allowlist, scopes: deserializeScopes(r.scopes), isSuperadmin: r.creatorIsSuperadmin === true } };
-    });
+    const resolved = await resolveKeyCached(c.env, 'bfk', keyHash, () => loadTenantApiKeyByHash(c.env, keyHash));
 
     if (!resolved.ok) throw new Error(resolved.reason);
     const { id: keyId, tenantId: keyTenantId, allowedOrigins: allowlist, scopes: keyScopes, isSuperadmin: keyIsSuperadmin } =
@@ -2705,6 +2811,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return c.json({ error: '`input` must be a string or array of strings' }, 400);
     }
 
+    // Plan/daily/monthly token cap — gate BEFORE the funded vendor call so a
+    // cap-exhausted (or per-agentHost-limited) tenant can't loop the operator's
+    // OpenRouter/Voyage key for free. Same shared gate the chat/messages handlers
+    // use; returns a 429 Response when blocked.
+    const capResult = await enforceTokenCaps(c, access);
+    if ('blocked' in capResult) return capResult.blocked;
+
     // Strip gateway-only fields before forwarding to the vendor.
     const { metadata, model, input, ...extraBody } = body;
     const envelope = (raw: Record<string, unknown>) => ({
@@ -2729,6 +2842,34 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         ? { ...(result.raw as Record<string, unknown>) }
         : { object: result.object, data: result.data, model: result.model, ...(result.usage ? { usage: result.usage } : {}) };
       out._vendor = result.vendorUsed;
+
+      // Meter the funded embeddings call so it counts on the token budget and
+      // lands in llm_usage_log (was silently free — a cap-exhausted tenant could
+      // loop it invisibly). Prefer the vendor-reported token usage; when the
+      // vendor omits it, fall back to the shared ~4-char/token estimate and mark
+      // the row `tokensEstimated` so it's distinguishable from a metered count.
+      const inputChars = Array.isArray(input)
+        ? input.reduce((n, s) => n + (typeof s === 'string' ? s.length : 0), 0)
+        : (typeof input === 'string' ? input.length : 0);
+      const vendorPrompt = result.usage?.prompt_tokens;
+      const vendorTotal = result.usage?.total_tokens;
+      const tokensEstimated = vendorPrompt == null && vendorTotal == null;
+      const promptTokens = vendorPrompt ?? estimateTokensFromChars(inputChars);
+      const totalTokens = vendorTotal ?? promptTokens;
+      logUsage(c.env, c.executionCtx, {
+        tenantId: access.tenantId, userId: access.userId,
+        llmProduct: productNameForPlan(access.effectivePlan, access.premiumOverride),
+        model: result.model, streamed: false,
+        // Embeddings have no completion tokens.
+        usage: { promptTokens, completionTokens: 0, totalTokens },
+        useCase: 'embedding',
+        metadata: { vendor: result.vendorUsed, ...(tokensEstimated ? { tokensEstimated: true } : {}) },
+        tenantApiKeyId: access.tenantApiKeyId,
+        attribution: { agentHostId: access.agentHostId },
+        // Funded (operator key) — byo defaults false, so the row is always billable.
+        surface: resolveUsageSurface(c, access),
+      });
+
       return c.json(envelope(out), 200);
     } catch (err) {
       // 400 bad payload — failover won't help, surface as-is.

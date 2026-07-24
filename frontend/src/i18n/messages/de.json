@@ -1249,7 +1249,33 @@
       "resubscribeCta": "Erneut anmelden",
       "resubscribeTitle": "Optionale E-Mails wieder abonnieren",
       "resubscribeConfirm": "Sie erhalten wieder optionale E-Mails, entsprechend den von Ihnen aktivierten Kategorien. Fortfahren?"
-    }
+    },
+    "spendLimits": "Ausgabenlimits",
+    "spendTitle": "KI-Ausgabenlimits des Teams",
+    "spendDescription": "Lege für jeden Platz ein monatliches KI-Ausgabenlimit fest. Plätze ohne eigenen Modell-Schlüssel laufen bei Builderforce zum OpenRouter-Tarif – bei Erreichen des Limits wird die kostenpflichtige Nutzung pausiert, und du sowie das Mitglied werdet bei Annäherung benachrichtigt.",
+    "spendTeamsOnlyTitle": "Teams-Tarif-Funktion",
+    "spendTeamsOnly": "Ausgabenlimits pro Platz sind im Teams-Tarif verfügbar. Führe ein Upgrade durch, um ein monatliches KI-Budget je Mitglied festzulegen.",
+    "spendDefaultTitle": "Standard-Budget pro Platz",
+    "spendDefaultDescription": "Gilt für jeden Platz ohne eigenes Limit. Leer lassen für kein Standard-Budget.",
+    "spendDefaultLabel": "Monatliches Standard-Budget in US-Dollar",
+    "spendNoDefaultPlaceholder": "Kein Limit",
+    "spendPerSeatMonth": "pro Platz / Monat",
+    "spendDefaultHint": "Beträge in US-Dollar. Nutzung über den eigenen Modell-Schlüssel (BYO) eines Mitglieds wird nie gezählt.",
+    "spendSeatsTitle": "Plätze",
+    "spendResetsOn": "Ausgaben werden am {date} zurückgesetzt.",
+    "spendNoSeats": "Noch keine aktiven Mitglieder.",
+    "spendOfCap": "{spent} von {cap}",
+    "spendUnlimitedUsage": "{spent} · kein Limit",
+    "spendModeLabel": "Budget-Modus",
+    "spendModeInherit": "Standard verwenden",
+    "spendModeUnlimited": "Kein Limit",
+    "spendModeCustom": "Benutzerdefiniert",
+    "spendAmountPlaceholder": "Betrag",
+    "spendAmountLabel": "Monatliches Budget in US-Dollar",
+    "spendSave": "Speichern",
+    "spendSaving": "Speichern…",
+    "spendSaved": "Gespeichert",
+    "spendSaveFailed": "Speichern fehlgeschlagen"
   },
   "pmo": {
     "title": "Portfolio (PMO)",
@@ -3126,6 +3152,8 @@
     "subheading": "Beginne im <brainstorm>Brainstorming</brainstorm>, um Ideen zu entwickeln, führe es dann als Projekt aus und baue es in der Builder – oder weise Arbeit über <tasks>Aufgaben</tasks> und <workforce>Talent</workforce>-Agenten zu.",
     "promptPlaceholder": "Baue einen Budget-Tracker mit Material-UI-Komponenten…",
     "brainStorm": "Brainstorming",
+    "build": "Erstellen",
+    "building": "Wird gestartet…",
     "agentsConnected": "{count, plural, one {# Agent verbunden} other {# Agenten verbunden}}",
     "noAgents": "Keine Agenten verbunden —",
     "setUpInWorkforce": "in Talent einrichten",
@@ -3955,7 +3983,30 @@
     "agentsTab": "Agenten",
     "auditTab": "SOC 2",
     "subnavLabel": "Sicherheitsbereiche",
-    "policiesTab": "Richtlinien"
+    "policiesTab": "Richtlinien",
+    "webTab": "Website-Scan",
+    "webTitle": "Website-Sicherheitsscan",
+    "webSubtitle": "Richten Sie den Scan auf Ihre Live-Website und erhalten Sie sofort Sicherheitsbefunde. Jedes Problem wird als Ticket erfasst, das Ihr Team beheben kann.",
+    "webUrlLabel": "Website-URL",
+    "webUrlPlaceholder": "https://ihre-website.de",
+    "webSave": "Speichern",
+    "webRunNow": "Scan starten",
+    "webRunning": "Scan läuft…",
+    "webScore": "Sicherheitsbewertung",
+    "webScoreDelta": "{delta} gegenüber letztem Scan",
+    "webBaselineFirst": "Erster Scan – dies ist Ihre Ausgangsbasis.",
+    "webNewFindings": "{count} neu",
+    "webResolved": "{count} behoben",
+    "webFindingsFiled": "{count} als Tickets erfasst",
+    "webNoIssues": "Keine Probleme gefunden – Ihre Website hat alle Prüfungen bestanden.",
+    "webHistory": "Scan-Verlauf",
+    "webNoHistory": "Noch keine Scans. Starten Sie oben Ihren ersten Scan.",
+    "webRecommendation": "Empfehlung",
+    "sev_critical": "Kritisch",
+    "sev_high": "Hoch",
+    "sev_medium": "Mittel",
+    "sev_low": "Niedrig",
+    "sev_info": "Info"
   },
   "catalogInsights": {
     "total": {
@@ -5381,6 +5432,8 @@
     "priceFree": "$0",
     "priceProMonthly": "${price}/Mon.",
     "priceTeamsMonthly": "${price}/Platz/Mon.",
+    "teamsVolumeNote": "Min. {min} Plätze",
+    "teamsSeatMinimum": "Mindestens {min} Plätze – Teams nutzt Mengenpreise für die gesamte Organisation.",
     "teamsCostNoteYear": "${perSeat}/Platz/J. — abgerechnet als ${total}/J.",
     "teamsCostNoteMonth": "${perSeat}/Platz/Mon. — abgerechnet als ${total}/Mon.",
     "managedAddon": "Add-on: <b>Verwalteter AgentHost</b> — ${price}/Mon. pro gehostetem AgentHost. Wir betreiben Ihre BuilderForce Agents-Instanz für Sie — kein Docker, kein DevOps.",
@@ -7313,7 +7366,8 @@
       "audit": "Prüfprotokoll",
       "apiKeys": "API-Schlüssel",
       "token": "Superadmin-Token",
-      "feedback": "Feedback"
+      "feedback": "Feedback",
+      "releaseNotes": "Neuerungen"
     },
     "common": {
       "loading": "Wird geladen…",
@@ -7927,6 +7981,31 @@
       "requestBody": "Anfragetext",
       "responseBody": "Antworttext",
       "callerMetadata": "Aufrufer-Metadaten"
+    },
+    "releaseNotes": {
+      "digestTitle": "Wöchentliche Produkt-Update-E-Mail",
+      "unsentCount": "{count, plural, =0 {Keine ungesendeten Notizen} one {# veröffentlichte Notiz noch nicht gesendet} other {# veröffentlichte Notizen noch nicht gesendet}}",
+      "digestSent": "{notes} Neuerungen an {sent} Personen gesendet ({suppressed} abgemeldet).",
+      "sendDigest": "Jetzt senden",
+      "sendDigestConfirm": "Jetzt alle veröffentlichten, noch nicht gesendeten Neuerungen per E-Mail an alle einwilligenden Nutzer senden?",
+      "editNote": "Neuerung bearbeiten",
+      "newNote": "Neue Neuerung",
+      "phVersion": "Version (z. B. 2026.7.93)",
+      "phTitle": "Titel – der Nutzen, in klarer Sprache",
+      "phBody": "Was es dem Nutzer bringt. Leerzeilen trennen Absätze.",
+      "savePublish": "Speichern & veröffentlichen",
+      "saveDraft": "Entwurf speichern",
+      "allNotes": "Alle Neuerungen ({count})",
+      "thTitle": "Titel",
+      "thVersion": "Version",
+      "thCategory": "Kategorie",
+      "thStatus": "Status",
+      "thEmailed": "Gesendet",
+      "published": "Veröffentlicht",
+      "draft": "Entwurf",
+      "publish": "Veröffentlichen",
+      "unpublish": "Zurückziehen",
+      "deleteConfirm": "Die Neuerung „{title}“ löschen? Dies kann nicht rückgängig gemacht werden."
     }
   },
   "providerKeys": {
@@ -8366,7 +8445,15 @@
       "runningAll": "Audits laufen…",
       "run": "Ausgewählte Audits ausführen",
       "viewReports": "Berichte ansehen",
-      "notifyHint": "Wir benachrichtigen dich, sobald jeder Bericht fertig ist. Du kannst diese Seite verlassen — die Audits laufen weiter."
+      "notifyHint": "Wir benachrichtigen dich, sobald jeder Bericht fertig ist. Du kannst diese Seite verlassen — die Audits laufen weiter.",
+      "webHeading": "Scannen Sie Ihre Live-Website",
+      "webIntro": "Haben Sie bereits eine Website? Geben Sie die URL für einen sofortigen Sicherheitsscan ein — Befunde werden zu behebbaren Tickets.",
+      "webPlaceholder": "https://ihre-website.de",
+      "webButton": "Website scannen",
+      "webScanning": "Scan läuft…",
+      "webResult": "Bewertung {score}/100 — {count} als Tickets erfasst",
+      "webView": "Ergebnisse ansehen",
+      "webError": "Scan fehlgeschlagen. Prüfen Sie die URL und versuchen Sie es erneut."
     },
     "closeOnboarding": "Onboarding schließen",
     "workspaceReady": "Arbeitsbereich bereit",
@@ -8778,7 +8865,8 @@
     "commonQuestions": "Häufige Fragen",
     "pillLora": "🧠 LoRA-Training",
     "pillRegistry": "🤖 Agenten-Registry",
-    "pillEval": "🔬 KI-Bewertung"
+    "pillEval": "🔬 KI-Bewertung",
+    "emailPlaceholder": "du@beispiel.com"
   },
   "gigs": {
     "publish": {
@@ -9780,6 +9868,13 @@
     "fieldIntervalSeconds": "Intervall (Sekunden)",
     "fieldUrl": "URL",
     "fieldExpectedStatus": "Erwarteter Status",
+    "fieldMethod": "Methode",
+    "fieldHeaders": "Anfrage-Header",
+    "headersPlaceholder": "Authorization: Bearer …",
+    "headersHint": "Ein „Header: Wert“ pro Zeile – wird mit der Zustandsprüfung gesendet.",
+    "fieldBodyMatch": "Body muss enthalten",
+    "bodyMatchPlaceholder": "\"status\":\"ok\"",
+    "bodyMatchHint": "Optional: Störung, wenn der Antwort-Body diesen Text nicht enthält.",
     "fieldMetric": "Kennzahl",
     "fieldComparator": "Vergleichsoperator",
     "fieldThreshold": "Schwellenwert",
@@ -10400,5 +10495,39 @@
       }
     },
     "usageNote": "Sie dürfen diese Materialien unverändert teilen, wenn Sie über Builderforce.ai schreiben oder es präsentieren. Name und Logo von Builderforce.ai bleiben Marken; bitte verändern Sie die Folien nicht und erwecken Sie keinen Eindruck einer offiziellen Unterstützung."
+  },
+  "authCallback": {
+    "title": "Anmeldung fehlgeschlagen",
+    "backToLogin": "Zurück zur Anmeldung",
+    "signingIn": "Sie werden angemeldet…",
+    "errorMissingParams": "Authentifizierung fehlgeschlagen: fehlende Parameter.",
+    "errorInvalidState": "Authentifizierung fehlgeschlagen: ungültiger oder abgelaufener Status. Bitte versuchen Sie es erneut.",
+    "errorAuthFailed": "Die Authentifizierung beim Anbieter ist fehlgeschlagen. Bitte versuchen Sie es erneut.",
+    "errorNoEmail": "Ihr Anbieterkonto hat keine verifizierte E-Mail-Adresse.",
+    "errorAccountNotFound": "Konto nicht gefunden oder deaktiviert.",
+    "errorAccountSuspended": "Ihr Konto wurde gesperrt. Bitte wenden Sie sich an den Support.",
+    "errorProviderUnavailable": "Dieser Anmeldeanbieter ist derzeit nicht verfügbar.",
+    "errorAlreadyLinkedOther": "Dieses Anbieterkonto ist bereits mit einem anderen Builderforce-Konto verknüpft.",
+    "errorUnexpected": "Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
+    "errorNoCode": "Kein Anmeldecode empfangen. Bitte versuchen Sie es erneut.",
+    "errorProfile": "Das Profil Ihres Kontos konnte nicht geladen werden. Bitte melden Sie sich erneut an."
+  },
+  "footer": {
+    "builtBy": "Entwickelt von",
+    "navLabel": "Fußzeile",
+    "termsOfUse": "Nutzungsbedingungen",
+    "privacyPolicy": "Datenschutzerklärung",
+    "whatsNewHint": "Neuerungen ansehen"
+  },
+  "whatsNew": {
+    "title": "Neuerungen",
+    "loading": "Wird geladen…",
+    "error": "Neuerungen konnten nicht geladen werden. Bitte später erneut versuchen.",
+    "empty": "Noch keine Neuerungen – schauen Sie bald wieder vorbei.",
+    "categories": {
+      "new": "Neu",
+      "improvement": "Verbessert",
+      "fix": "Behoben"
+    }
   }
 }

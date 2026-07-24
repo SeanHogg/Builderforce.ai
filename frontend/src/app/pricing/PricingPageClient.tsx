@@ -140,7 +140,7 @@ export default function PricingPageClient() {
   const [upgradeTarget, setUpgradeTarget] = useState<'pro' | 'teams' | null>(null);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [billingEmail, setBillingEmail] = useState('');
-  const [seats, setSeats] = useState(3);
+  const [seats, setSeats] = useState(5); // ≥ Teams volume minimum (server: PRICING.teams.minimumSeats)
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const [downgrading, setDowngrading] = useState(false);
@@ -190,6 +190,16 @@ export default function PricingPageClient() {
   const proYearly   = sub?.pricing.pro.yearly ?? 290;
   const teamMonthly = sub?.pricing.teams.perSeatMonthly ?? 20;
   const teamYearly  = sub?.pricing.teams.perSeatYearly ?? 192;
+  // Teams is volume-priced below Pro per seat, earned by a seat-block minimum.
+  // Surfacing the minimum is what keeps the lower per-seat price from reading as
+  // a typo; the seat input and checkout both clamp to it.
+  const teamMinSeats = sub?.pricing.teams.minimumSeats ?? 5;
+
+  // Keep the seat count at or above the volume minimum whenever it's known —
+  // covers both the initial load and a plan-pricing refresh.
+  useEffect(() => {
+    setSeats((s) => (s < teamMinSeats ? teamMinSeats : s));
+  }, [teamMinSeats]);
 
   const upgradePrice = upgradeTarget === 'teams'
     ? (billingCycle === 'yearly' ? teamYearly * seats : teamMonthly * seats)
@@ -407,11 +417,12 @@ export default function PricingPageClient() {
                   <div>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelSeats')}</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <input type="number" min={1} value={seats}
-                        onChange={(e) => setSeats(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      <input type="number" min={teamMinSeats} value={seats}
+                        onChange={(e) => setSeats(Math.max(teamMinSeats, parseInt(e.target.value, 10) || teamMinSeats))}
                         style={{ width: 80, padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8 }} />
                       {teamsCostNote && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{teamsCostNote}</span>}
                     </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>{t('teamsSeatMinimum', { min: teamMinSeats })}</div>
                   </div>
                 )}
 
@@ -465,6 +476,7 @@ export default function PricingPageClient() {
                     </th>
                     <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: '#60a5fa', borderBottom: '1px solid var(--border-subtle)', minWidth: 110 }}>
                       Teams<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{t('priceTeamsMonthly', { price: teamMonthly })}</span>
+                      <br /><span style={{ fontWeight: 400, fontSize: 10, color: 'var(--text-muted)' }}>{t('teamsVolumeNote', { min: teamMinSeats })}</span>
                       <div style={{ marginTop: 8 }}><PlanCta plan="teams" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} /></div>
                     </th>
                   </tr>

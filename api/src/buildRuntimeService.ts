@@ -71,6 +71,7 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
       kind: info.taskType, ref: String(info.taskId), agentRef: info.agentRef,
       phase: info.phase, executionId: info.executionId,
       toStatus: info.toStatus, resultText: info.resultText, errorMessage: info.errorMessage,
+      questionText: info.questionText, eventNonce: info.eventNonce,
     }).catch(() => {}),
     // Coordinated Role Participation attribution: a terminal run records that the role
     // it ran AS participated on the ticket's manifest (linked to the execution), and —

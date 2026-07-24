@@ -1,10 +1,19 @@
 import { Hono } from 'hono';
+import { validateWorkspacePath } from '../lib/workspacePath';
 
 interface Env {
   STORAGE: R2Bucket;
 }
 
 const files = new Hono<{ Bindings: Env }>();
+
+// SECURITY NOTE (L7): this router mounts at /api/projects/:projectId/files with
+// NO authentication upstream (worker/src/index.ts applies only permissive CORS)
+// and no per-tenant ownership check on projectId. The path validation below stops
+// key traversal/injection, but access control is still MISSING — any caller who
+// knows a projectId can read/write/delete its files. Adding an auth check here
+// (shared bearer/JWT, matching the api gateway) is an ops follow-up that needs a
+// worker secret binding; flagged in the remediation report.
 
 files.get('/', async (c) => {
   try {
@@ -25,6 +34,8 @@ files.get('/*', async (c) => {
   try {
     const projectId = c.req.param('projectId');
     const filePath = c.req.param('*') || '';
+    const valid = validateWorkspacePath(filePath);
+    if (!valid.ok) return c.json({ error: valid.reason }, 400);
     const key = `${projectId}/${filePath}`;
     const obj = await c.env.STORAGE.get(key);
     // Missing is 404, matching the api's workspaceStore semantics — an empty 200
@@ -41,6 +52,8 @@ files.put('/*', async (c) => {
   try {
     const projectId = c.req.param('projectId');
     const filePath = c.req.param('*') || '';
+    const valid = validateWorkspacePath(filePath);
+    if (!valid.ok) return c.json({ error: valid.reason }, 400);
     const key = `${projectId}/${filePath}`;
     const content = await c.req.text();
     await c.env.STORAGE.put(key, content);
@@ -54,6 +67,8 @@ files.delete('/*', async (c) => {
   try {
     const projectId = c.req.param('projectId');
     const filePath = c.req.param('*') || '';
+    const valid = validateWorkspacePath(filePath);
+    if (!valid.ok) return c.json({ error: valid.reason }, 400);
     const key = `${projectId}/${filePath}`;
     await c.env.STORAGE.delete(key);
     return c.json({ success: true });

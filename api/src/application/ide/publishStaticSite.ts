@@ -138,13 +138,33 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
       updated_at = NOW()`;
   await invalidateSite(env, subdomain);
 
+  const url = `https://${subdomain}.${HOSTING_APEX}`;
+
+  // Wire deploy → test: a published site is a testable target. Keep the project's
+  // default QA target pointed at the live URL (create it the first time, refresh
+  // it on every republish) so the Agentic Tester can run against a just-deployed
+  // app with no manual "add a target" step. Best-effort — a failure here must
+  // never fail the publish itself.
+  try {
+    await sql`
+      UPDATE qa_targets SET base_url = ${url}, status = 'active', updated_at = NOW()
+      WHERE project_id = ${projectId} AND is_default = true`;
+    await sql`
+      INSERT INTO qa_targets (tenant_id, project_id, name, base_url, is_default, status)
+      SELECT ${tenantId}, ${projectId}, 'Production', ${url}, true, 'active'
+      WHERE NOT EXISTS (
+        SELECT 1 FROM qa_targets WHERE project_id = ${projectId} AND is_default = true)`;
+  } catch {
+    /* target auto-provisioning is best-effort; publish still succeeded */
+  }
+
   return {
     ok: true,
     subdomain,
     versionToken,
     assetCount: assets.length,
     totalBytes,
-    url: `https://${subdomain}.${HOSTING_APEX}`,
+    url,
     pathUrl: `/api/sites/${subdomain}/`,
   };
 }
