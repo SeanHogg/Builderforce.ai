@@ -19,7 +19,7 @@ jobs:
         with:
           # Full history so the guard can diff the PR head against origin/main.
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Check track manifest valid + generated table in sync
