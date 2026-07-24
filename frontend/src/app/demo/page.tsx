@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import MarketingDeck from '@/components/marketing/MarketingDeck';
+import { DemoShowcase } from '@/components/demo/DemoShowcase';
 import { pageMetadata } from '@/lib/seo';
 import { BRAND } from '@/lib/content';
 
@@ -13,7 +14,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return pageMetadata({
     title: t('title'),
     description: t('description'),
-    path: '/marketing',
+    path: '/demo',
     ogTitle: t('ogTitle'),
   });
 }
@@ -29,12 +30,14 @@ interface DeckSlide {
 }
 
 /**
- * /marketing — the guided "ultimate demo" deck. A thin server page (edge, SEO,
- * JSON-LD) around the client-side {@link MarketingDeck} that does the paging.
- * The crawler-facing HowTo schema is derived from the SAME localized slides the
- * deck renders, so the structured data never drifts from the on-screen copy.
+ * /demo — the guided "ultimate demo" deck. A thin server page (edge, SEO,
+ * JSON-LD) around the client-side {@link MarketingDeck} that does the paging,
+ * followed by {@link DemoShowcase} so a visitor can jump straight into a live,
+ * signed-in persona demo workspace from the same page. The crawler-facing HowTo
+ * schema is derived from the SAME localized slides the deck renders, so the
+ * structured data never drifts from the on-screen copy.
  */
-export default async function MarketingPage() {
+export default async function DemoPage() {
   const t = await getTranslations('marketingDeck');
   const slides = t.raw('slides') as DeckSlide[];
 
@@ -58,6 +61,7 @@ export default async function MarketingPage() {
     <>
       <JsonLd data={howTo} />
       <MarketingDeck />
+      <DemoShowcase />
       <RelatedArticles surface="product" />
     </>
   );

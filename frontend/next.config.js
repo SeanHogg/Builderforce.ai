@@ -57,6 +57,8 @@ const nextConfig = {
     return [
       { source: '/coderclaw', destination: '/agents', permanent: true },
       { source: '/coderclaw/:path*', destination: '/agents/:path*', permanent: true },
+      // The guided demo deck moved from /marketing to /demo.
+      { source: '/marketing', destination: '/demo', permanent: true },
     ]
   },
   async rewrites() {

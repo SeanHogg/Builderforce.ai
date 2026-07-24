@@ -53,6 +53,17 @@ export function hasWebGPUSupport(): boolean {
   return typeof navigator !== 'undefined' && 'gpu' in navigator;
 }
 
+/** Options for {@link probeDevice}. */
+export interface ProbeOptions {
+  /**
+   * Called when an acquired WebGPU device is lost (driver reset, tab suspension,
+   * GPU crash). The single hook for context-loss recovery: a consumer typically
+   * re-runs `probeDevice` and rebuilds its pipelines. Not fired on an explicit
+   * `device.destroy()` (reason === 'destroyed').
+   */
+  onDeviceLost?: (info: GPUDeviceLostInfo) => void;
+}
+
 /**
  * Probe in priority order. Pass an explicit `target` to force one path
  * (useful for tests and for the StudioPanel's "force CPU" advanced toggle).
@@ -60,7 +71,10 @@ export function hasWebGPUSupport(): boolean {
  * Returns null when nothing is reachable. The package's downstream code
  * checks this and renders / throws an unsupported state.
  */
-export async function probeDevice(target: DeviceTarget = 'auto'): Promise<ProbedDevice | null> {
+export async function probeDevice(
+  target: DeviceTarget = 'auto',
+  opts: ProbeOptions = {},
+): Promise<ProbedDevice | null> {
   const order: ActiveDevice[] =
     target === 'auto'
       ? ['webnn', 'webgpu', 'cpu']
@@ -71,15 +85,28 @@ export async function probeDevice(target: DeviceTarget = 'auto'): Promise<Probed
           : ['webnn'];
 
   for (const candidate of order) {
-    const probed = await probeOne(candidate);
+    const probed = await probeOne(candidate, opts);
     if (probed) return probed;
   }
   return null;
 }
 
-async function probeOne(kind: ActiveDevice): Promise<ProbedDevice | null> {
+/**
+ * Attach a `GPUDevice.lost` handler. Exported so consumers that acquire a device
+ * some other way (or want to re-arm after re-probing) share ONE loss-handling
+ * decision instead of re-implementing the `reason === 'destroyed'` filter.
+ */
+export function watchDeviceLoss(device: GPUDevice, onLost: (info: GPUDeviceLostInfo) => void): void {
+  void device.lost.then((info) => {
+    // A deliberate device.destroy() also resolves `lost`; that's not a fault.
+    if (info.reason === 'destroyed') return;
+    onLost(info);
+  });
+}
+
+async function probeOne(kind: ActiveDevice, opts: ProbeOptions): Promise<ProbedDevice | null> {
   if (kind === 'webnn') return probeWebNN();
-  if (kind === 'webgpu') return probeWebGPU();
+  if (kind === 'webgpu') return probeWebGPU(opts);
   return probeCpu();
 }
 
@@ -106,7 +133,7 @@ async function probeWebNN(): Promise<ProbedDevice | null> {
   return null;
 }
 
-async function probeWebGPU(): Promise<ProbedDevice | null> {
+async function probeWebGPU(opts: ProbeOptions): Promise<ProbedDevice | null> {
   if (!hasWebGPUSupport()) return null;
   const nav = navigator as Navigator & GpuWithRequestAdapter;
   if (!nav.gpu) return null;
@@ -123,6 +150,14 @@ async function probeWebGPU(): Promise<ProbedDevice | null> {
           2_147_483_648
         ),
       },
+    });
+
+    // Context-loss recovery: surface a lost device to the consumer (which
+    // re-probes + rebuilds). Without this the studio silently breaks after a
+    // GPU reset. Default handler warns so a loss is never wholly silent.
+    watchDeviceLoss(device, (info) => {
+      console.warn('[device-router] WebGPU device lost:', info.message || info.reason);
+      opts.onDeviceLost?.(info);
     });
 
     const info = (adapter as GPUAdapter & { info?: GPUAdapterInfo }).info;

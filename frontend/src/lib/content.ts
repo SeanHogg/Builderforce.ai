@@ -1465,6 +1465,7 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
   {
     title: 'Get started',
     links: [
+      { href: '/demo', label: 'Live Demo' },
       { href: '/login', label: 'Sign In' },
       { href: '/register', label: 'Get Started' },
     ],
