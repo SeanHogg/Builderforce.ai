@@ -7,7 +7,8 @@
  * Scope is deliberately narrow: only structural, machine-checkable formats are
  * validated, where a failure is unambiguous. We do NOT attempt fuzzy "this looks
  * like CSS not JS" language-mismatch heuristics — those carry false-positive
- * risk that would block legitimate writes. The two checks that ARE unambiguous:
+ * risk that would block legitimate writes. The checks that ARE unambiguous, each
+ * a real cross-wiring seen in a corrupt Designer workspace:
  *   - a `.json` / `.jsonl` file must parse as JSON;
  *   - the INVERSE — a JS/TS source file must NOT be a top-level JSON object/array.
  *     Real ES-module source (`import …`, `export default …`) never parses as
@@ -15,7 +16,12 @@
  *     `package.json`'s content cross-wired into `vite.config.js`, which made Vite
  *     fail with `Expected ";" but found ":"`. A bare string/number/bool is left
  *     alone (those are valid JS expression statements), so only the object/array
- *     shape — which can't be valid top-level JS — is rejected.
+ *     shape — which can't be valid top-level JS — is rejected;
+ *   - an `.html` file must begin with markup (`<`). When `index.html` gets another
+ *     file's JS/config source written into it, the browser serves that source as
+ *     plain text — the preview renders the raw `vite.config.js` instead of the app;
+ *   - the INVERSE — a JS/TS source file must NOT begin with an HTML document
+ *     (`<!doctype html>` / `<html>`), the same cross-wire the other direction.
  *
  * Empty / whitespace-only content is always allowed (creating a blank file).
  */
@@ -71,12 +77,24 @@ export function validateFileContentForPath(path: string, content: string): FileC
     }
   }
 
-  // Inverse guard: a JS/TS source file whose entire body is a JSON object/array
-  // is corrupt — it's another file's data (almost always package.json) written
-  // to a source path. Real source never round-trips through JSON.parse as an
-  // object, so this can't reject legitimate code; a bare JSON scalar is skipped
-  // because `"x"` / `42` / `true` are valid JS expression statements.
+  // An HTML document must start with markup. Anything else (JS/config source, JSON)
+  // means another file's content was written here — the browser then serves it as
+  // literal text and the preview shows raw source instead of the app.
+  if (ext === 'html' || ext === 'htm') {
+    if (trimmed[0] !== '<') {
+      return { ok: false, reason: `${path} must be HTML markup (starting with '<') — refusing to write another file's content here.` };
+    }
+  }
+
+  // Inverse guards for a JS/TS source file: it must be neither JSON data nor an
+  // HTML document. Real ES-module source never round-trips through JSON.parse as
+  // an object and never begins with an HTML doctype, so neither check can reject
+  // legitimate code; a bare JSON scalar (`"x"` / `42` / `true`) is a valid JS
+  // expression statement and is left alone.
   if (JS_TS_EXTS.has(ext)) {
+    if (/^<!doctype html/i.test(trimmed) || /^<html[\s>]/i.test(trimmed)) {
+      return { ok: false, reason: `${path} is an HTML document, not ${ext.toUpperCase()} source — refusing to write another file's content here.` };
+    }
     try {
       const parsed = JSON.parse(text);
       if (parsed !== null && typeof parsed === 'object') {
