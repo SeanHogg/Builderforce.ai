@@ -263,29 +263,43 @@ const TEMPLATE_BY_MODALITY: Record<string, string> = {
 };
 
 /**
- * The starter template this project should be seeded with, or null when it
- * should be left alone.
+ * The scaffold for a project's MODALITY (or explicit template), ignoring whether
+ * a repo is linked. This is the "what should a runnable Mobile/Designer project
+ * contain" answer; the repo-link decision belongs to the callers below.
+ */
+export function scaffoldForProject(project: SeedableProject): Record<string, string> | null {
+  const explicit = project.template ? TEMPLATES[project.template] : undefined;
+  if (explicit) return explicit;
+  const key = TEMPLATE_BY_MODALITY[project.modality ?? 'designer'];
+  return (key && TEMPLATES[key]) || null;
+}
+
+/**
+ * The starter template this project should be seeded with on creation, or null
+ * when it should be left alone.
  *
  * An explicit `template` wins. Otherwise the modality decides: Designer gets the
  * vanilla Vite app, Mobile gets the React Native scaffold, and the generative
  * modalities (video/evermind/finetune/voice) get nothing because they never run
- * the Vite app. Repo-connected projects are always skipped — their files live in
- * git, not R2.
+ * the Vite app.
+ *
+ * Repo-connected projects are skipped HERE — a project the user pointed at an
+ * existing repo shouldn't have a Vite scaffold sprayed over it on creation. This
+ * is NOT the same as "never seed": {@link ensureRunnableScaffold} still fills a
+ * repo-linked project's missing scaffold when its workspace comes up empty (e.g.
+ * a freshly auto-created backing repo that only has a README), so a project is
+ * never left unrunnable — that gap is exactly what wiped Mobile workspaces.
  *
  * An UNRECOGNISED `template` falls through to the modality instead of returning
  * null. A stale id (from a retired starter set, or one an older create path
- * wrote) used to mean "seed nothing", which left the workspace permanently empty
- * — and, because this same function gates the lazy self-heal on file-list, no
- * later open could repair it either. Every code-running modality now always
- * resolves to a scaffold.
+ * wrote) used to mean "seed nothing", which left the workspace permanently empty.
  */
 export function templateForProject(project: SeedableProject): Record<string, string> | null {
   const explicit = project.template ? TEMPLATES[project.template] : undefined;
   if (explicit) return explicit;
   const hasRepo = !!(project.sourceControlRepoFullName || project.githubRepoUrl);
   if (hasRepo) return null;
-  const key = TEMPLATE_BY_MODALITY[project.modality ?? 'designer'];
-  return (key && TEMPLATES[key]) || null;
+  return scaffoldForProject(project);
 }
 
 /** Files belonging to any known template, used by the project-less gates below. */
@@ -367,5 +381,39 @@ export async function ensureProjectTemplate(
   // not only when the whole workspace is unseeded. This heals partial-empty
   // projects (the blank-editor bug) while `writeMissingTemplateFiles` still
   // never clobbers a file that already has content.
+  return writeMissingTemplateFiles(storage, project.id, template, existing);
+}
+
+/**
+ * Guarantee the project is RUNNABLE — seed the modality scaffold's missing/empty
+ * files EVEN when a repo is linked. Unlike {@link ensureProjectTemplate} (which
+ * deliberately leaves repo-linked projects to git), this exists for the one case
+ * that wiped workspaces: a project bound to an effectively-empty backing repo
+ * (auto-created with just a README, or a first push that found R2 empty and
+ * bailed). It only fires when the workspace has NO real `package.json`, so a
+ * genuine imported repo — which brings its own package.json — is never touched,
+ * and `writeMissingTemplateFiles` never overwrites a file that has content.
+ *
+ * Returns files written (0 when the workspace already has a real package.json or
+ * the modality has no scaffold).
+ */
+export async function ensureRunnableScaffold(
+  storage: R2Bucket | undefined,
+  project: SeedableProject,
+  preListed?: TemplateObject[],
+): Promise<number> {
+  const template = storage ? scaffoldForProject(project) : null;
+  if (!storage || !template) return 0;
+  let existing = preListed;
+  if (!existing) {
+    const prefix = `${IDE_PREFIX}projects/${project.id}/`;
+    const listed = await storage.list({ prefix });
+    existing = (listed.objects ?? []).map((o) => ({ path: o.key.replace(prefix, ''), size: o.size }));
+  }
+  // A real, non-empty package.json means real code lives here (seeded scaffold OR
+  // an imported repo) — leave it alone. Only a workspace WITHOUT one is the
+  // "bare/empty backing repo" case this heals.
+  const hasRealPackageJson = existing.some((o) => o.path === 'package.json' && o.size > 0);
+  if (hasRealPackageJson) return 0;
   return writeMissingTemplateFiles(storage, project.id, template, existing);
 }
