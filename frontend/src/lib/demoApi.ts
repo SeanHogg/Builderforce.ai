@@ -24,6 +24,7 @@ export const DEMO_PERSONAS: DemoPersona[] = ['ai-team', 'insights', 'pmo', 'tale
 
 const DEMO_MODE_KEY = 'bf_demo_mode';
 const EXIT_PROMPTED_KEY = 'bf_demo_exit_prompted';
+const TOUR_SEEN_KEY = 'bf_demo_tour_seen';
 
 export interface DemoSessionState {
   persona: DemoPersona;
@@ -38,16 +39,6 @@ interface DemoSessionResponse {
   tenantToken: string;
   user: AuthUser & { username?: string; displayName?: string; avatarUrl?: string | null };
   tenant: { id: number; name: string; slug: string; role: string; plan: string };
-}
-
-/** True when the current visit is inside a demo session. */
-export function isDemoMode(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    return sessionStorage.getItem(DEMO_MODE_KEY) != null;
-  } catch {
-    return false;
-  }
 }
 
 export function getDemoState(): DemoSessionState | null {
@@ -72,6 +63,7 @@ export function clearDemoMode(): void {
   try {
     sessionStorage.removeItem(DEMO_MODE_KEY);
     sessionStorage.removeItem(EXIT_PROMPTED_KEY);
+    sessionStorage.removeItem(TOUR_SEEN_KEY);
   } catch {
     /* ignore */
   }
@@ -82,6 +74,23 @@ export function hasExitPrompted(): boolean {
     return sessionStorage.getItem(EXIT_PROMPTED_KEY) === '1';
   } catch {
     return false;
+  }
+}
+
+/** Whether the product tour has already run (or been dismissed) this session. */
+export function hasTourSeen(): boolean {
+  try {
+    return sessionStorage.getItem(TOUR_SEEN_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function markTourSeen(): void {
+  try {
+    sessionStorage.setItem(TOUR_SEEN_KEY, '1');
+  } catch {
+    /* ignore */
   }
 }
 
