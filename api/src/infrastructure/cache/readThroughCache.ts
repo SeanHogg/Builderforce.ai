@@ -193,6 +193,23 @@ export async function bumpTicketSearchVersion(env: Env, tenantId: number): Promi
   await bumpCacheVersion(env, ticketSearchVersionKey(tenantId)).catch(() => {});
 }
 
+/** Version key for tenant-scoped derivations of the run-outcome ledger
+ *  (`run_model_outcomes`): the SFT/DPO training-dataset export and the
+ *  fine-tune-vs-base variant-eval comparison. Both fold this token into their
+ *  cache keys; the run scorer bumps it (via {@link bumpOutcomesVersion}) whenever
+ *  a new labeled outcome lands, so a fresh run re-materializes the derived views.
+ *  The keyspace (per filter/window/variant) is unbounded, so a version token is
+ *  the right invalidation, not key enumeration. */
+export function outcomesVersionKey(tenantId: number): string {
+  return `outcomes-version:tenant:${tenantId}`;
+}
+
+/** Orphan every cached dataset/variant-eval view for a tenant. Call from the run
+ *  scorer alongside the learned-routing fold. Best-effort (never throws). */
+export async function bumpOutcomesVersion(env: Env, tenantId: number): Promise<void> {
+  await bumpCacheVersion(env, outcomesVersionKey(tenantId)).catch(() => {});
+}
+
 /** Invalidate both cache layers for `key`. Call from every mutation that
  *  changes the cached data so the next read re-loads. */
 export async function invalidateCached(env: Env, key: string): Promise<void> {
