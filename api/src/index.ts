@@ -148,6 +148,7 @@ import { createCostForecastRoutes }    from './presentation/routes/costForecastR
 import { createDashboardRoutes }       from './presentation/routes/dashboardRoutes';
 import { createConsumptionRoutes }     from './presentation/routes/consumptionRoutes';
 import { createEvalRoutes }            from './presentation/routes/evalRoutes';
+import { createDatasetRoutes }         from './presentation/routes/datasetRoutes';
 import { createTeamMemoryRoutes }      from './presentation/routes/teamMemoryRoutes';
 import { createPublicApiRoutes }       from './presentation/routes/publicApiRoutes';
 import { createStudioRoutes }          from './presentation/routes/studioWeightRoutes';
@@ -610,6 +611,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/dashboard',       createDashboardRoutes(db));
   app.route('/api/consumption',     createConsumptionRoutes(db));
   app.route('/api/eval',            createEvalRoutes(db));
+  app.route('/api/dataset',         createDatasetRoutes(db));
   app.route('/api/brain',     createBrainRoutes(brainService, db));
   // Order matters: the team-memory mesh lives at the static /api/teams/memory and
   // MUST be registered before the Workforce Teams CRUD, whose GET /:id would

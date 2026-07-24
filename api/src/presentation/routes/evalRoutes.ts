@@ -21,6 +21,7 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import { evaluateResponse, type EvalJudge } from '../../application/eval/semanticEval';
 import { gatewayJudge } from '../../application/eval/gatewayJudge';
 import { detectGroupDrift, type ScoredSample } from '../../application/eval/driftMonitor';
+import { evaluateVariant } from '../../application/eval/variantEval';
 import { resolveTenantPlan } from './llmRoutes';
 import { runModelOutcomes } from '../../infrastructure/database/schema';
 import type { Env, HonoEnv } from '../../env';
@@ -68,6 +69,23 @@ export function createEvalRoutes(db: Db): Hono<HonoEnv> {
       { kvTtlSeconds: 300, l1TtlMs: 60_000 },
     );
     return c.json(report);
+  });
+
+  // ── GET /api/eval/variant-compare ─────────────────────────────────────────
+  // Fine-tune-vs-base A/B: compares two models' outcome scores for an action
+  // type and returns the comparison + the promote/hold decision. The gate the
+  // Evermind auto-routing promotion needs. Cached on the outcomes version token.
+  router.get('/variant-compare', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const baseModel = c.req.query('base');
+    const candidateModel = c.req.query('candidate');
+    if (!baseModel || !candidateModel) {
+      return c.json({ error: 'base and candidate model query params are required' }, 400);
+    }
+    const actionType = c.req.query('actionType') || undefined;
+    const windowDays = Number(c.req.query('windowDays')) || 60;
+    const result = await evaluateVariant(c.env as Env, db, { tenantId, baseModel, candidateModel, actionType, windowDays });
+    return c.json(result);
   });
 
   return router;

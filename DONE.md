@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-07-24 — ✅ RESOLVED: LLM fine-tuning best-practice gaps (Meta llama-cookbook review) — PEFT toolkit on Evermind + SFT/DPO dataset pipeline + fine-tune-vs-base eval gate (builderforce-memory 2026.7.14 · api 2026.7.133)
+
+Reviewed the engine against the standard fine-tuning playbook and closed all 7 identified gaps end-to-end, each test-verified.
+
+**Evermind engine — efficient-training toolkit on the CPU reference path (builderforce-memory/packages/memory-engine, 266/266 tests green):**
+- **LoRA** (`src/training/lora.ts`) — `LoRAAdapter` (exact low-rank ΔW=(α/r)·B·A, gradient finite-difference-checked) + `EvermindLMLoRA` wiring it to the tied embedding with the base frozen. Adapter serialises to a KB-scale swappable artifact (`serializeAdapter`/`loadAdapter`); `footprint()` proves the low-rank saving.
+- **QLoRA** — same adapter over an int8/fp16-quantized frozen base (`quantizeBase`); int8 base verified ~¼ the fp32 bytes while the adapter still trains.
+- **Mixed precision** (`src/training/mixed_precision.ts`) — `DynamicLossScaler` (overflow-skip + backoff/grow) with fp16 grad simulation over fp32 master weights; wired into `EvermindLMTrainer` (`mixedPrecision` opt). Test proves a gradient that underflows in fp16 survives once scaled.
+- **Activation checkpointing** — refactored `EvermindLM` forward/backward into shared per-layer helpers (`_forwardLayer`/`_backwardLayer`/`_headBackward` — also removed the duplicated backward) + `lossAndBackwardCheckpointed` that recomputes layer activations for *bit-identical* gradients at one-layer peak memory.
+- **Gradient accumulation** — `EvermindLMTrainer`/`EvermindLMLoRA` `accumSteps` (average over micro-batches before a step); verified equal to one step on the mean.
+- **Optimizer-state sharding (ZeRO-1 analog)** — `AdamW` `shard:{index,count}` owns/allocates only its slice of the moments; two shards over one model equal one full step at half the state each. New exports surfaced through `lm/index.ts` + package `index.ts`.
+
+**Product — adapt-on-your-own-data + eval gate (api):**
+- **SFT/DPO dataset pipeline** (`application/dataset/trainingDataset.ts`, route `presentation/routes/datasetRoutes.ts` → `GET /api/dataset/sft|dpo`, `?format=jsonl`). Reuses the run-outcome reward signal (`run_model_outcomes.score`/`merged`/`ci_green`/`human_rejected`) as a TRAINING label: joins `run_model_outcomes → llm_usage_log → llm_traces` for verbatim (prompt, completion), emits positive-outcome SFT examples and same-prompt chosen/rejected DPO pairs. Defensive vendor-agnostic text extraction. Cached read-through folded on a new tenant `outcomes` version token.
+- **Fine-tune-vs-base eval harness** (`application/eval/variantEval.ts`, route `GET /api/eval/variant-compare`). Welch's t-test over two variants' outcome scores + `passesPromotionGate` (significance × margin × sample size) — the go/no-go gate the Evermind auto-routing promotion needs. Reuses driftMonitor's `mean`/`stdev`.
+- **Live invalidation** — `bumpOutcomesVersion` added to `readThroughCache.ts` and called at BOTH `scoreRunOutcome` fan-out sites (client + cloud), beside the existing routing fold, so a new labeled run re-materializes datasets + eval views.
+
+**Validation:** `tsgo --noEmit` clean across api; new tests `trainingDataset.test.ts` + `variantEval.test.ts` (21 passing) + engine `peft.test.ts` (11 passing, plus the 10 existing LM tests confirming the forward/backward refactor is exactly equivalent). No migration (reuses existing tables). **Residual (in roadmap):** WGSL/WebGPU kernel parity for the new PEFT toolkit is still blocked on the P0 real-backprop gap + a live GPU — the CPU path (Node on-prem + tests) is complete.
+
+---
+
 ## 2026-07-24 — ✅ RESOLVED: Incident deep-link — monitor/reporting rows jump straight to the incident (frontend)
 
 The monitor editor's "View incident" button and every reporting-row link pointed at `/incidents` (the list). `IncidentsPageClient` now reads a `?incident=<id>` deep-link and opens that incident's detail panel directly; `MonitoringSections` links to `/incidents?incident=<currentIncidentId|inc.id>`. No new strings (reuses existing keys). `tsgo --noEmit` clean.
