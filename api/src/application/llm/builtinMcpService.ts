@@ -327,6 +327,46 @@ function listEnvelope<T>(key: string, all: T[], limit: number): Record<string, u
   return { [key]: page, total: all.length, returned: page.length, truncated: all.length > page.length };
 }
 
+// Strategy-tier + library list projections — same "identity/status + a description
+// snippet, drop the heavy body" rule as the compactors above, so listing 200+ of them
+// stays inside the Brain's context budget. Full detail is one `*.get` away.
+const WORKFLOW_LIST_FIELDS = ['id', 'projectId', 'workflowDefinitionId', 'workflowType', 'status', 'runtime', 'createdAt', 'completedAt', 'updatedAt'] as const;
+const PORTFOLIO_LIST_FIELDS = ['id', 'name', 'status', 'ownerUserId', 'targetDate', 'costClass', 'updatedAt'] as const;
+const INITIATIVE_LIST_FIELDS = ['id', 'portfolioId', 'name', 'status', 'ownerUserId', 'startDate', 'targetDate', 'costClass', 'updatedAt'] as const;
+const OBJECTIVE_LIST_FIELDS = ['id', 'portfolioId', 'initiativeId', 'projectId', 'title', 'status', 'period', 'startDate', 'endDate', 'ownerUserId', 'updatedAt'] as const;
+const KEY_RESULT_LIST_FIELDS = ['id', 'objectiveId', 'title', 'metricType', 'currentValue', 'targetValue', 'unit', 'status'] as const;
+const PROMPT_LIST_FIELDS = ['id', 'slug', 'title', 'category', 'visibility', 'authorName', 'currentVersion', 'usageCount', 'starCount', 'isFeatured', 'updatedAt'] as const;
+
+/** Project `fields` off a plain row, and (when `descFrom` is set) attach a bounded
+ *  description snippet from that column. The shared body of the six compactors below. */
+function compactRow(plain: Record<string, unknown>, fields: readonly string[], descFrom?: string): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of fields) if (plain[f] !== undefined) out[f] = plain[f];
+  if (descFrom) { const s = snippet(plain[descFrom]); if (s) out.descriptionSnippet = s; }
+  return out;
+}
+
+/** Roll a per-model status array (from LlmProxyService.status()) into vendor counts +
+ *  only the actionable (unavailable / cooling-down) models by name. The full ~40-entry
+ *  array is what bloats a diagnostic tool result in the run trace — it stays behind
+ *  `verbose:true`. */
+function summarizeModelStatuses(arr: Array<Record<string, unknown>>): Record<string, unknown> {
+  const byVendor: Record<string, { total: number; available: number; keyBound: number }> = {};
+  let available = 0, keyBound = 0;
+  for (const m of arr) {
+    const v = String(m.vendor ?? 'unknown');
+    const b = (byVendor[v] ??= { total: 0, available: 0, keyBound: 0 });
+    b.total++;
+    if (m.available) { b.available++; available++; }
+    if (m.keyBound) { b.keyBound++; keyBound++; }
+  }
+  return {
+    total: arr.length, available, keyBound, byVendor,
+    cooldowns: arr.filter((m) => m.available !== true || m.cooldownUntil != null)
+      .map((m) => ({ model: m.model, vendor: m.vendor, cooldownUntil: m.cooldownUntil ?? null })),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Catalog
 // ---------------------------------------------------------------------------
