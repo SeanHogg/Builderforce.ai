@@ -2860,6 +2860,18 @@ export async function callBuiltinTool(
       const bump = bumpTicketSearchVersion(args.env, args.tenantId);
       if (args.executionCtx?.waitUntil) args.executionCtx.waitUntil(bump); else await bump.catch(() => {});
     }
+    // A tasks.* write also changes the board task-tree + projects-list reads, which the
+    // HTTP task routes invalidate (bumpTreeVersion + invalidateProjectsList). Mirror that
+    // here so an MCP task write doesn't leave those caches on their KV TTL. The tree key
+    // matches taskRoutes' `bumpTreeVersion` (kept in sync by string). Best-effort.
+    if (args.tool.startsWith('tasks.')) {
+      const projectId = typeof (result as { projectId?: unknown } | null)?.projectId === 'number'
+        ? (result as { projectId: number }).projectId : null;
+      const jobs: Promise<unknown>[] = [invalidateProjectsList(args.env, args.tenantId).catch(() => {})];
+      if (projectId != null) jobs.push(bumpCacheVersion(args.env, `task-tree-version:project:${projectId}`).catch(() => {}));
+      const all = Promise.all(jobs);
+      if (args.executionCtx?.waitUntil) args.executionCtx.waitUntil(all); else await all;
+    }
   }
   return result;
 }

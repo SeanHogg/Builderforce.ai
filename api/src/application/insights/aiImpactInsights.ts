@@ -219,10 +219,14 @@ export function summarizeModelShareTrend(usage: UsageRow[], windowStart: number,
   const lastWeek = weeks - 1;
   const firstTotals = new Map<string, number>();
   const lastTotals = new Map<string, number>();
+  const windowTotals = new Map<string, number>();
   let firstTotal = 0;
   let lastTotal = 0;
+  let windowTotal = 0;
   for (const r of usage) {
     const idx = weekIndex(r.createdAt.getTime(), windowStart);
+    windowTotals.set(r.model, (windowTotals.get(r.model) ?? 0) + 1);
+    windowTotal += 1;
     if (idx === 0) {
       firstTotals.set(r.model, (firstTotals.get(r.model) ?? 0) + 1);
       firstTotal += 1;
@@ -232,14 +236,18 @@ export function summarizeModelShareTrend(usage: UsageRow[], windowStart: number,
       lastTotal += 1;
     }
   }
-  const models = new Set<string>([...firstTotals.keys(), ...lastTotals.keys()]);
+  const models = new Set<string>([...windowTotals.keys()]);
   const trend: ModelShareTrend[] = [];
   for (const model of models) {
     const firstShare = firstTotal ? ((firstTotals.get(model) ?? 0) / firstTotal) * 100 : 0;
     const lastShare = lastTotal ? ((lastTotals.get(model) ?? 0) / lastTotal) * 100 : 0;
+    // Share over the FULL window (not just the last week) so a model used early in the
+    // window still shows on the donut (which drops 0%-share slices) and the donut agrees
+    // with its own table; the trend ARROW stays week-over-week (first → last).
+    const windowShare = windowTotal ? ((windowTotals.get(model) ?? 0) / windowTotal) * 100 : 0;
     trend.push({
       model,
-      currentSharePct: lastShare,
+      currentSharePct: windowShare,
       deltaPct: lastShare - firstShare,
     });
   }
@@ -321,6 +329,15 @@ export function summarizeProviderConsumption(usage: UsageRow[]): ProviderConsump
  * Pure: head-to-head comparison matrix over outcome rows, grouped by the model
  * the run resolved onto. Sorted by run count (most-evidenced first).
  */
+/** Canonical model key for joining `run_model_outcomes.resolved_model` against
+ *  `llm_usage_log.model`: drop any vendor prefix (`anthropic/claude-sonnet-4-5` →
+ *  `claude-sonnet-4-5`) and lowercase, so slug drift between the two tables doesn't
+ *  silently yield tokens = 0. Both the map build and the lookup use it, symmetrically. */
+export function canonModelKey(m: string): string {
+  const base = m.includes('/') ? m.slice(m.lastIndexOf('/') + 1) : m;
+  return base.toLowerCase();
+}
+
 export function summarizeComparison(outcomes: ImpactOutcomeRow[], tokensByModel: Map<string, number>): ComparisonRow[] {
   const groups = new Map<string, ImpactOutcomeRow[]>();
   for (const r of outcomes) {
@@ -341,7 +358,7 @@ export function summarizeComparison(outcomes: ImpactOutcomeRow[], tokensByModel:
       ciGreenRatePct: runs ? (rs.filter((r) => r.ciGreen).length / runs) * 100 : 0,
       avgSteps: runs ? rs.reduce((a, r) => a + r.steps, 0) / runs : 0,
       costPerMergedPrUsd: merged ? costUsd / merged : null,
-      tokens: tokensByModel.get(model) ?? 0,
+      tokens: tokensByModel.get(canonModelKey(model)) ?? 0,
     });
   }
   return rows.sort((a, b) => b.runs - a.runs);
@@ -391,7 +408,8 @@ export function summarizeAiImpact(
 ): AiImpactInsights {
   const tokensByModel = new Map<string, number>();
   for (const r of usage) {
-    tokensByModel.set(r.model, (tokensByModel.get(r.model) ?? 0) + r.totalTokens);
+    const key = canonModelKey(r.model);
+    tokensByModel.set(key, (tokensByModel.get(key) ?? 0) + r.totalTokens);
   }
 
   const cur = scoreComponents(outcomes);
