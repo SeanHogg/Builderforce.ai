@@ -193,7 +193,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   }, [scope, t]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }} data-tour="demo-board">
       {/* New Project panel */}
       <SlideOutPanel open={showForm} onClose={() => setShowForm(false)} title={t('newProjectTitle')} width="min(480px, 96vw)">
         <form onSubmit={handleCreate} style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
