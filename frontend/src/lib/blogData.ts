@@ -57,6 +57,7 @@ import incidentManagement from '@/content/blog/incident-management-on-call-and-w
 import roleAccountability from '@/content/blog/role-gated-accountability-proof-of-participation.md';
 import rfpResponse from '@/content/blog/automated-rfp-response-from-your-codebase.md';
 import memoryFirst from '@/content/blog/memory-first-inference-skip-the-llm.md';
+import localFirstWebgpu from '@/content/blog/local-first-ai-webgpu-in-the-browser.md';
 
 export interface BlogPost {
   slug: string;

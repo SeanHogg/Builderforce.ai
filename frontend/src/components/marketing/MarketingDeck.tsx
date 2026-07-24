@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * MarketingDeck — the guided "ultimate demo" walkthrough at /marketing.
+ * MarketingDeck — the guided "ultimate demo" walkthrough at /demo.
  *
  * A paged slide deck a presenter (or a self-serve visitor) follows to see one
  * idea go from sign-in → a running app → deployed + tested → a human+agent team
