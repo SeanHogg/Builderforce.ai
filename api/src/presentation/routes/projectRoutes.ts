@@ -88,7 +88,17 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   // is a dumb fan-out relay (no domain data flows through it), and the authed REST
   // routes stay the source of truth. The browser passes its JWT as `?token=` since
   // it can't set WS headers (authMiddleware already accepts the query param).
-  router.get('/:id/stream', (c) => relayToRoom(c, c.env?.SESSION_ROOM, projectRoomName(c.req.param('id'))));
+  // The room is tenant-scoped (`project:<tenantId>:<id>`), so before wiring the
+  // stream we resolve the project THROUGH the caller's tenant — getProject throws
+  // (404) when the id isn't in this tenant, which stops tenant B subscribing to
+  // tenant A's change-events. We key the room off the resolved integer id so it
+  // matches the publish side (broadcastProjectChanged always uses the integer id)
+  // even when the caller addressed the project by its public UUID.
+  router.get('/:id/stream', async (c) => {
+    const tenantId = c.get('tenantId');
+    const project = await projectService.getProject(c.req.param('id'), tenantId);
+    return relayToRoom(c, c.env?.SESSION_ROOM, projectRoomName(tenantId, project.id));
+  });
 
   const normalizeName = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
 
@@ -645,7 +655,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
 
-    const guard = buildPlanLimitsGuard(db);
+    const guard = buildPlanLimitsGuard(db, c.env as Env);
     const limitErr = await guard.checkProjectLimit(tenantId);
     if (limitErr) return c.json(limitErr, 402);
 

@@ -56,6 +56,10 @@ export const CAPABILITIES = {
   'workspace.delete':     'owner',
   'apiKeys.manage':       'owner',
   'billing.manage':       'manager',
+  // Per-seat AI spend caps (Teams). Owner-only: it governs how much of the
+  // workspace's money each seat may spend. Mirrors requireRole(OWNER) on
+  // PATCH /api/tenants/:id/spend-limits (+ the per-seat variant).
+  'billing.spendLimits':  'owner',
   'integrations.manage':  'manager',
 
   // Workforce

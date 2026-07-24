@@ -84,10 +84,32 @@ export async function invalidateHireCaches(env: Env, tenantId: number, opts: { p
  * NEVER appears on a public route — only this one aggregate quality number.
  */
 function mapPublicAgentRow(row: Record<string, unknown>): Record<string, unknown> {
-  const mapped = mapAgentRow(row) as Record<string, unknown>;
-  const raw = mapped.eval_score;
+  const raw = row.eval_score;
   const score = typeof raw === 'number' ? raw : raw == null ? null : Number(raw);
-  return { ...mapped, evalScore: score != null && Number.isFinite(score) ? score : null };
+  // EXPLICIT allowlist — never spread the raw row onto a world-readable route.
+  // Excludes tenant_id, project_id, role_keys (internal config/dispatch) and
+  // psychometric (unpublished persona internals). Only marketplace-facing fields ship.
+  return {
+    id: row.id,
+    name: row.name,
+    title: row.title,
+    bio: row.bio,
+    skills: parseJsonArray(row.skills),
+    base_model: row.base_model,
+    builtin_kind: row.builtin_kind ?? null,
+    status: row.status,
+    hire_count: row.hire_count,
+    runtime_support: row.runtime_support,
+    preferred_runtime: row.preferred_runtime ?? null,
+    runtime_surface: row.runtime_surface ?? null,
+    price_cents: row.price_cents,
+    pricing_model: row.pricing_model,
+    price_unit: row.price_unit ?? null,
+    published: row.published,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    evalScore: score != null && Number.isFinite(score) ? score : null,
+  };
 }
 
 /** Cache key for an agent's owner-only performance + feedback rollup (gap [1247]).
@@ -575,7 +597,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       () => sql(c.env)`
         SELECT *
         FROM ide_agents
-        WHERE status = 'active'
+        WHERE status = 'active' AND published = true
         ORDER BY hire_count DESC, created_at DESC
         LIMIT 200
       ` as unknown as Promise<Record<string, unknown>[]>,
@@ -589,7 +611,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const [row] = await sql(c.env)`
       SELECT *
       FROM ide_agents
-      WHERE id = ${c.req.param('id')} AND status = 'active'
+      WHERE id = ${c.req.param('id')} AND status = 'active' AND published = true
     `;
     if (!row) return c.json({ error: 'Agent not found' }, 404);
     return c.json(mapPublicAgentRow(row));

@@ -49,7 +49,7 @@ import { executeGitProxy } from '../../application/repos/gitProxy';
 import { agentDispatches } from '../../infrastructure/database/schema';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { normalizeRequestKind } from '../../domain/approval/requestKind';
-import type { HonoEnv } from '../../env';
+import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import type { AgentHostService } from '../../application/agentHost/AgentHostService';
@@ -346,7 +346,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       return c.json({ error: 'name is required' }, 400);
     }
 
-    const guard = buildPlanLimitsGuard(db);
+    const guard = buildPlanLimitsGuard(db, c.env as Env);
     const limitErr = await guard.checkAgentHostLimit(tenantId);
     if (limitErr) return c.json(limitErr, 402);
 

@@ -18,6 +18,9 @@ import TenantsPanel from '@/components/admin/panels/TenantsPanel';
 import SecurityPanel from '@/components/admin/panels/SecurityPanel';
 import LegalPanel from '@/components/admin/panels/LegalPanel';
 import NewsletterPanel from '@/components/admin/panels/NewsletterPanel';
+import ReleaseNotesPanel from '@/components/admin/panels/ReleaseNotesPanel';
+import DemoFunnelPanel from '@/components/admin/panels/DemoFunnelPanel';
+import SalesLeadsPanel from '@/components/admin/panels/SalesLeadsPanel';
 import PrivacyPanel from '@/components/admin/panels/PrivacyPanel';
 import PersonasPanel from '@/components/admin/panels/PersonasPanel';
 import GovernancePanel from '@/components/admin/panels/GovernancePanel';
@@ -58,6 +61,9 @@ const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   privacy: PrivacyPanel,
   billing: BillingPanel,
   newsletter: NewsletterPanel,
+  releaseNotes: ReleaseNotesPanel,
+  demoFunnel: DemoFunnelPanel,
+  salesLeads: SalesLeadsPanel,
   errors: ErrorsPanel,
   audit: AuditLogPanel,
   apiKeys: () => <TenantApiKeysAdminTab active />,

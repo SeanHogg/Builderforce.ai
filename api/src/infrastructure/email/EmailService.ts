@@ -707,3 +707,76 @@ export async function sendReportEmail(
 
   await deliver(env, { to, subject, body, locale, copy });
 }
+
+// ---------------------------------------------------------------------------
+// Weekly release digest — sent by the Friday cron (runWeeklyReleaseDigest) with
+// every published-and-not-yet-emailed release note. LIFECYCLE (product_updates):
+// the caller goes through sendLifecycleEmail, which checked consent and supplies
+// the unsubscribeUrl this template is obliged to render.
+// ---------------------------------------------------------------------------
+
+/** One announcement in the digest — mirrors the `release_notes` wire shape. */
+export interface ReleaseDigestItem {
+  version: string;
+  title: string;
+  body: string | null;
+  /** 'new' | 'improvement' | 'fix'; unknown values fall back to 'improvement'. */
+  category: string;
+}
+
+/** Badge colors per category — inline (email clients ignore <style> classes). */
+const DIGEST_BADGE: Record<'new' | 'improvement' | 'fix', string> = {
+  new: 'background:#eef2ff;color:#4338ca;',
+  improvement: 'background:#ecfdf5;color:#047857;',
+  fix: 'background:#fffbeb;color:#b45309;',
+};
+
+export async function sendReleaseDigestEmail(
+  env: EmailEnv,
+  to: string,
+  name: string | null,
+  items: ReleaseDigestItem[],
+  appBaseUrl: string,
+  unsubscribeUrl: string,
+  locale: EmailLocale = DEFAULT_EMAIL_LOCALE,
+): Promise<void> {
+  const copy = emailCopy(locale);
+
+  // Titles/bodies are operator-authored marketing data (same untranslated-data
+  // boundary as the report digest) — escaped here, never re-escaped by render().
+  const sections = items.map((item) => {
+    const category = (item.category in DIGEST_BADGE ? item.category : 'improvement') as keyof typeof DIGEST_BADGE;
+    const badge = `<span style="display:inline-block;font-size:11px;font-weight:700;letter-spacing:0.4px;`
+      + `text-transform:uppercase;border-radius:9999px;padding:2px 10px;${DIGEST_BADGE[category]}">`
+      + `${copy.releaseDigest.categories[category]}</span>`;
+    const paragraphs = (item.body ?? '')
+      .split(/\n{2,}/)
+      .map((para) => para.trim())
+      .filter(Boolean)
+      .map((para) => `<p style="margin:0 0 10px;color:#334155">${escapeHtml(para)}</p>`)
+      .join('');
+    return `
+      <div style="margin:0 0 22px;padding:0 0 18px;border-bottom:1px solid #e2e8f0">
+        <p style="margin:0 0 6px">${badge}
+          <span style="font-size:12px;color:#94a3b8;margin-left:6px">v${escapeHtml(item.version)}</span></p>
+        <p style="margin:0 0 8px;font-size:17px;font-weight:700;color:#0f172a">${escapeHtml(item.title)}</p>
+        ${paragraphs}
+      </div>`;
+  }).join('');
+
+  const body = greeting(copy, Boolean(name))
+    + p(fill(copy.releaseDigest.intro, { Count: items.length }))
+    + sections
+    + cta(`{{AppUrl}}/?whatsnew=1`, copy.releaseDigest.cta)
+    + p(copy.releaseDigest.outro, MUTED);
+
+  await deliver(env, {
+    to,
+    subject: copy.releaseDigest.subject,
+    body,
+    locale,
+    copy,
+    vars: { RecipientName: name || to, AppUrl: appBaseUrl },
+    unsubscribeUrl,
+  });
+}

@@ -24,7 +24,7 @@ import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { tenants } from '../../infrastructure/database/schema';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { verifyJwt } from '../../infrastructure/auth/JwtService';
+import { resolveBearerTenantId } from '../routes/llmRoutes';
 
 /** Requests-per-minute limits by plan. */
 const RPM_LIMITS: Record<TenantPlan, number> = {
@@ -47,21 +47,20 @@ export const rateLimitMiddleware: MiddlewareHandler<RateLimitHonoEnv> = async (c
     return next();
   }
 
-  // tenantId may already be in context (if authMiddleware ran first), or extract from JWT
+  // tenantId may already be in context (if authMiddleware ran first), else resolve
+  // it from the request's Bearer credential. Resolution reuses the gateway's OWN
+  // key resolver (`resolveBearerTenantId` → `resolveKeyCached`), so machine keys
+  // (`bfk_*`/`bfa_*`/`clk_*`) get a per-tenant limit too — previously any non-JWT
+  // bearer skipped the limiter entirely, leaving the metered LLM gateway
+  // unthrottled. Cache-backed (KV): a hit is ~1ms and shares the same cache entry
+  // the route's own auth then reuses, so this adds no extra DB round-trip on the
+  // hot path. Truly anonymous callers (no bearer / unresolvable) return null and
+  // fall through un-throttled — public ingest paths depend on that.
   let tenantId = (c.get as (k: string) => unknown)('tenantId') as number | undefined;
   if (!tenantId) {
-    // Try to extract from Authorization header (best-effort, no DB lookup needed)
-    const header = c.req.header('Authorization') ?? '';
-    const token = header.startsWith('Bearer ') ? header.slice(7) : c.req.query('token');
-    if (!token) return next(); // unauthenticated — don't rate-limit
-    try {
-      const payload = await verifyJwt(token, env.JWT_SECRET);
-      if (typeof payload.tid === 'number') {
-        tenantId = payload.tid;
-      }
-    } catch {
-      return next(); // invalid token — let authMiddleware handle it
-    }
+    const resolved = await resolveBearerTenantId(c);
+    if (resolved == null) return next(); // anonymous / unresolved — don't rate-limit
+    tenantId = resolved;
   }
   if (!tenantId) return next();
 

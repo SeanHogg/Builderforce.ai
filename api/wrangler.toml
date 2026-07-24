@@ -192,8 +192,12 @@ new_sqlite_classes = ["ProjectEvermindCoordinatorDO"]
 #   "0 8 * * 1" weekly (Mon 08:00 UTC): Security-agent SOC 2 audit sweep — one audit
 #                 per tenant that has a Security agent (heavier than the daily passes,
 #                 so weekly). No-op for tenants without a Security agent.
+#   "0 16 * * 5" weekly (Fri 16:00 UTC): release-notes marketing digest — email every
+#                 published-and-not-yet-emailed release note to consenting users
+#                 (product_updates lifecycle category), then flag the notes sent.
+#                 No-op on weeks with nothing new. See application/email/releaseDigest.ts.
 [triggers]
-crons = ["0 9 * * *", "0 8 * * 1", "*/5 * * * *"]
+crons = ["0 9 * * *", "0 8 * * 1", "0 16 * * 5", "*/5 * * * *"]
 
 # Inbound-email workflow trigger (the `inbound-email` trigger type) is delivered to
 # the email() handler in src/index.ts. It requires Cloudflare Email Routing to be

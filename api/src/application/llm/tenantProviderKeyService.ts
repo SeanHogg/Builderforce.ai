@@ -12,14 +12,23 @@
  *               personal credential — never resold/shared across tenants.
  *
  * Nothing plaintext leaves this module's setters/getters: secrets are encrypted
- * at rest with AES-GCM using `JWT_SECRET` (reusing the MFA storage helpers), the
- * same scheme as tenant MCP secrets. Backed by the raw-SQL `tenant_llm_provider_keys`
- * table (migrations 0088 + 0198), queried via neon.
+ * at rest with AES-GCM via the MFA storage helpers. As of the credential-crypto
+ * hardening, NEW writes use the versioned v2 scheme — PBKDF2 (100k) with a PER-TENANT
+ * salt, keyed off a DEDICATED secret (`CREDENTIAL_ENCRYPTION_SECRET`, falling back to
+ * `INTEGRATION_ENCRYPTION_SECRET` then `JWT_SECRET`) rather than reusing `JWT_SECRET`.
+ * Per-tenant derivation means one tenant's ciphertext can't be unsealed with another
+ * tenant's key; the dedicated secret means a JWT leak no longer decrypts credentials.
+ * Rows written under the OLD scheme (single unsalted SHA-256 of `JWT_SECRET`) still
+ * decrypt via the helpers' versioned dual-read and upgrade in place on their next write —
+ * so `env.JWT_SECRET` is threaded as the `legacySecret` fallback on every read.
+ * Backed by the raw-SQL `tenant_llm_provider_keys` table (migrations 0088 + 0198),
+ * queried via neon.
  */
 
 import { neon } from '@neondatabase/serverless';
 import type { HonoEnv } from '../../env';
 import { encryptSecretForStorage, decryptSecretFromStorage } from '../../infrastructure/auth/MfaService';
+import { credentialSecret } from '../integrations/credentialCrypto';
 import { refreshAnthropicToken, OAUTH_SAFETY_MARGIN_MS, type AnthropicOAuthTokens } from './anthropicOAuth';
 import { refreshOpenAICodexToken, type OpenAICodexOAuthTokens } from './openaiCodexOAuth';
 import { refreshXaiToken, type XaiOAuthTokens } from './xaiOAuth';
@@ -97,7 +106,7 @@ export async function setTenantProviderKey(
   plaintextKey: string,
   userId: string | null,
 ): Promise<void> {
-  const keyEnc = await encryptSecretForStorage(plaintextKey, env.JWT_SECRET);
+  const keyEnc = await encryptSecretForStorage(plaintextKey, credentialSecret(env), { tenantId });
   const sql = neon(env.NEON_DATABASE_URL);
   await sql`
     INSERT INTO tenant_llm_provider_keys (tenant_id, provider, key_enc, auth_type, created_by_user_id)
@@ -115,7 +124,7 @@ export async function setTenantProviderOAuth(
   tokens: AnthropicOAuthTokens | OpenAICodexOAuthTokens | XaiOAuthTokens,
   userId: string | null,
 ): Promise<void> {
-  const keyEnc = await encryptSecretForStorage(JSON.stringify(tokens), env.JWT_SECRET);
+  const keyEnc = await encryptSecretForStorage(JSON.stringify(tokens), credentialSecret(env), { tenantId });
   const sql = neon(env.NEON_DATABASE_URL);
   await sql`
     INSERT INTO tenant_llm_provider_keys (tenant_id, provider, key_enc, auth_type, created_by_user_id)
@@ -136,7 +145,7 @@ export async function resolveOpenAICodexResolution(env: Env, tenantId: number): 
   if (!row?.key_enc || (row.auth_type ?? 'api_key') !== 'oauth') return { auth: null };
   let tokens: OpenAICodexOAuthTokens;
   try {
-    tokens = JSON.parse(await decryptSecretFromStorage(row.key_enc, env.JWT_SECRET)) as OpenAICodexOAuthTokens;
+    tokens = JSON.parse(await decryptSecretFromStorage(row.key_enc, credentialSecret(env), { tenantId, legacySecret: env.JWT_SECRET })) as OpenAICodexOAuthTokens;
   } catch { return { auth: null, reason: 'undecryptable' }; }
   if (!tokens.access || !tokens.refresh || !tokens.accountId) return { auth: null, reason: 'undecryptable' };
   if (Date.now() < tokens.expires) return { auth: { accessToken: tokens.access, accountId: tokens.accountId } };
@@ -158,7 +167,7 @@ export async function resolveXaiOAuthResolution(env: Env, tenantId: number): Pro
   const row = await loadProviderRow(env, tenantId, 'xai');
   if (!row?.key_enc || (row.auth_type ?? 'api_key') !== 'oauth') return { token: null };
   let tokens: XaiOAuthTokens;
-  try { tokens = JSON.parse(await decryptSecretFromStorage(row.key_enc, env.JWT_SECRET)) as XaiOAuthTokens; }
+  try { tokens = JSON.parse(await decryptSecretFromStorage(row.key_enc, credentialSecret(env), { tenantId, legacySecret: env.JWT_SECRET })) as XaiOAuthTokens; }
   catch { return { token: null, reason: 'undecryptable' }; }
   if (!tokens.access || !tokens.refresh) return { token: null, reason: 'undecryptable' };
   if (Date.now() < tokens.expires) return { token: tokens.access };
@@ -239,7 +248,7 @@ export async function resolveAnthropicResolution(
 
   let decrypted: string;
   try {
-    decrypted = await decryptSecretFromStorage(row.key_enc, env.JWT_SECRET);
+    decrypted = await decryptSecretFromStorage(row.key_enc, credentialSecret(env), { tenantId, legacySecret: env.JWT_SECRET });
   } catch {
     return { auth: null, reason: 'undecryptable' };
   }
@@ -327,7 +336,7 @@ export async function resolveTenantVendorKeys(env: Env, tenantId: number): Promi
     if (!row.provider || !isSupportedProvider(row.provider)) continue;
     if ((row.auth_type ?? 'api_key') !== 'api_key' || !row.key_enc) continue;
     try {
-      out[row.provider] = await decryptSecretFromStorage(row.key_enc, env.JWT_SECRET);
+      out[row.provider] = await decryptSecretFromStorage(row.key_enc, credentialSecret(env), { tenantId, legacySecret: env.JWT_SECRET });
     } catch { /* skip an undecryptable row — never fail the batch */ }
   }
   return out;

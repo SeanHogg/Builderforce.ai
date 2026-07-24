@@ -49,6 +49,10 @@ export interface StartAuditInput {
   agentRef?: string | null;
   trigger?: 'cron' | 'manual';
   anchorTaskId?: number | null;
+  /** 'codebase' (SOC 2 agent audit) | 'web' (external URL scan). Default 'codebase'. */
+  scanKind?: 'codebase' | 'web';
+  /** The scanned website URL — set on 'web' runs (migration 0357). */
+  targetUrl?: string | null;
 }
 
 export interface RecordFindingInput {
@@ -100,6 +104,8 @@ export class SecurityAuditService {
       agentRef: input.agentRef ?? undefined,
       status: 'running',
       triggerSource: input.trigger ?? 'cron',
+      scanKind: input.scanKind ?? 'codebase',
+      targetUrl: input.targetUrl ?? undefined,
     }).returning({ id: securityAudits.id });
     return row!.id;
   }
@@ -177,7 +183,7 @@ export class SecurityAuditService {
   async finishAudit(
     tenantId: number,
     auditId: number,
-    input: { summary?: string | null; status?: 'complete' | 'failed' } = {},
+    input: { summary?: string | null; status?: 'complete' | 'failed'; score?: number | null } = {},
   ): Promise<void> {
     const [audit] = await this.db
       .select({ id: securityAudits.id })
@@ -201,6 +207,7 @@ export class SecurityAuditService {
     await this.db.update(securityAudits).set({
       status: input.status ?? 'complete',
       summary: input.summary ?? undefined,
+      score: input.score ?? undefined,
       findingsCount: findings.length,
       countsBySeverity: bySeverity,
       countsByTsc: byTsc,
@@ -208,14 +215,46 @@ export class SecurityAuditService {
     }).where(eq(securityAudits.id, auditId));
   }
 
-  /** Audit runs for a tenant, newest first (the audit panel). */
-  async listAudits(tenantId: number, limit = 20) {
+  /**
+   * Audit runs for a tenant, newest first (the audit panel). `scanKind` filters to
+   * codebase (SOC 2) vs web (URL scan) runs; omit for all.
+   */
+  async listAudits(tenantId: number, opts: { limit?: number; scanKind?: 'codebase' | 'web' } = {}) {
+    const where = opts.scanKind
+      ? and(eq(securityAudits.tenantId, tenantId), eq(securityAudits.scanKind, opts.scanKind))
+      : eq(securityAudits.tenantId, tenantId);
     return this.db
       .select()
       .from(securityAudits)
-      .where(eq(securityAudits.tenantId, tenantId))
+      .where(where)
       .orderBy(desc(securityAudits.startedAt))
-      .limit(limit);
+      .limit(opts.limit ?? 20);
+  }
+
+  /**
+   * The most recent COMPLETED web scan of the same target before a given run — the
+   * baseline the current scan's score/findings are compared against (drift).
+   */
+  async previousWebScan(tenantId: number, targetUrl: string, beforeAuditId: number) {
+    const [row] = await this.db
+      .select({
+        id: securityAudits.id,
+        score: securityAudits.score,
+        findingsCount: securityAudits.findingsCount,
+        countsBySeverity: securityAudits.countsBySeverity,
+        startedAt: securityAudits.startedAt,
+      })
+      .from(securityAudits)
+      .where(and(
+        eq(securityAudits.tenantId, tenantId),
+        eq(securityAudits.scanKind, 'web'),
+        eq(securityAudits.targetUrl, targetUrl),
+        eq(securityAudits.status, 'complete'),
+        sql`${securityAudits.id} < ${beforeAuditId}`,
+      ))
+      .orderBy(desc(securityAudits.id))
+      .limit(1);
+    return row ?? null;
   }
 
   /** One audit run + its finding tickets (the audit result detail view). */

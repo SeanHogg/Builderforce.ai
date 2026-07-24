@@ -25,6 +25,8 @@
 
 import { neon } from '@neondatabase/serverless';
 import type { Env } from '../../env';
+import { buildDatabase } from '../../infrastructure/database/connection';
+import { ChatTicketService, ticketKindForTaskType } from '../brain/ChatTicketService';
 import { cloudOrphanReason, cloudSilenceCeilingMs, PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON } from './orphanReasons';
 import { markReaperRequeued, parseExecutor } from './cloudDispatch';
 import { isSelfHealEligible, buildDurableStartBody, dispatchDurableStart } from './cloudSelfHeal';
@@ -80,7 +82,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
      WHERE status = 'running'
        AND agent_host_id IS NOT NULL
        AND COALESCE(started_at, created_at) < ${runningCutoff}
-    RETURNING id, tenant_id, agent_host_id, payload, error_message
+    RETURNING id, tenant_id, agent_host_id, payload, error_message, task_id
   `) as ReapedRow[];
 
   // Hung CLOUD runs: the serverless background task was stopped at the ~30s wall
@@ -144,7 +146,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
              completed_at = now(),
              updated_at = now()
        WHERE id = ${row.id} AND status = 'running'
-      RETURNING id, tenant_id, agent_host_id, payload, error_message
+      RETURNING id, tenant_id, agent_host_id, payload, error_message, task_id
     `) as ReapedRow[];
     if (failed) cloudRunning.push(failed);
   }
@@ -158,7 +160,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
            updated_at = now()
      WHERE status IN ('pending', 'submitted')
        AND created_at < ${queuedCutoff}
-    RETURNING id, tenant_id, agent_host_id, payload, error_message
+    RETURNING id, tenant_id, agent_host_id, payload, error_message, task_id
   `) as ReapedRow[];
 
   // Abandoned agent QUESTION: a run parked on `ask_human` that nobody answered
@@ -175,7 +177,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
            updated_at = now()
      WHERE status = 'paused'
        AND COALESCE(updated_at, started_at, created_at) < ${pausedCutoff}
-    RETURNING id, tenant_id, agent_host_id, payload, error_message
+    RETURNING id, tenant_id, agent_host_id, payload, error_message, task_id
   `) as ReapedRow[];
 
   // Mirror each reaped failure onto the Observability Logs/Timeline (derived only
@@ -201,6 +203,14 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
       /* telemetry is best-effort — never break the reap sweep on it */
     }
   }));
+
+  // …and narrate each reaped failure into the ticket's linked Brain chats. The
+  // raw-SQL sweeps above bypass RuntimeService.update, so without this a run that
+  // dies silently (hung host, evicted cloud isolate, dropped queue, abandoned
+  // ask_human) NEVER reaches the human driving the conversation — the chat shows
+  // "started working on…" and then nothing, forever. Idempotent per execution
+  // (run:{id}:failed), so racing the read-path reaper's narration is harmless.
+  await narrateReapedRuns(env, sql, reaped.map(({ row }) => row));
 
   // Same family of "reap a stuck state on the frequent tick": surface any ticket
   // parked on a run_workflow whose spawned workflow never settled past the
@@ -228,6 +238,38 @@ interface ReapedRow {
   agent_host_id: number | null;
   payload: string | null;
   error_message: string | null;
+  /** The ticket the run served — the chat-narration fan-out key (chat_ticket_links). */
+  task_id: number | null;
+}
+
+/**
+ * Post a `failed` run-milestone into every Brain chat linked to each reaped run's
+ * ticket ({@link ChatTicketService.postRunMilestone} — insert + DO `changed`
+ * broadcast, so a mounted web/VSIX Brain re-reads and shows it live). One batched
+ * `tasks` read resolves the chat-ticket kind (task|epic|gap); per-execution+phase
+ * idempotent; best-effort — narration must never break the reap sweep.
+ */
+async function narrateReapedRuns(env: Env, sql: SqlTag, rows: ReapedRow[]): Promise<void> {
+  const withTask = rows.filter((r) => r.task_id != null);
+  if (withTask.length === 0) return;
+  try {
+    const taskIds = [...new Set(withTask.map((r) => Number(r.task_id)))];
+    const kinds = (await sql`
+      SELECT id, task_type FROM tasks WHERE id = ANY(${taskIds})
+    `) as Array<{ id: number; task_type: string | null }>;
+    const kindByTask = new Map(kinds.map((k) => [Number(k.id), ticketKindForTaskType(k.task_type)]));
+    const chatTickets = new ChatTicketService(buildDatabase(env), env);
+    await Promise.all(withTask.map((r) => chatTickets.postRunMilestone(r.tenant_id, {
+      kind: kindByTask.get(Number(r.task_id)) ?? 'task',
+      ref: String(r.task_id),
+      agentRef: cloudRefFromPayload(r.payload),
+      phase: 'failed',
+      executionId: r.id,
+      errorMessage: r.error_message,
+    })));
+  } catch {
+    /* narration is best-effort — never break the reap sweep on it */
+  }
 }
 
 /** A stale cloud run + the task context the durable executor needs to resume it. */

@@ -239,6 +239,29 @@ export const emailPreferences = pgTable('email_preferences', {
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),
 });
 
+/**
+ * PLATFORM release notes — Builderforce's own changelog, marketed to every user.
+ * Deliberately NOT tenant-scoped (contrast `changelog_entries`, which is each
+ * tenant's changelog for THEIR product): one global list feeds the footer
+ * "What's new" panel and the weekly product-updates digest email.
+ *
+ * `publishedAt` NULL = draft (invisible everywhere). `emailedAt` is the "sent"
+ * flag the weekly digest sets — NULL + published = "will be in the next digest".
+ * (0358)
+ */
+export const releaseNotes = pgTable('release_notes', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  version:     varchar('version', { length: 50 }).notNull(),
+  title:       varchar('title', { length: 255 }).notNull(),
+  body:        text('body'),
+  /** 'new' | 'improvement' | 'fix' — drives the badge in the panel + email. */
+  category:    varchar('category', { length: 20 }).notNull().default('improvement'),
+  publishedAt: timestamp('published_at'),
+  emailedAt:   timestamp('emailed_at'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
 export const newsletterSubscribers = pgTable('newsletter_subscribers', {
   id:                  serial('id').primaryKey(),
   userId:              varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
@@ -778,10 +801,24 @@ export const tenants = pgTable('tenants', {
    *  independently of `tokenDailyLimit` so image and text budgets don't starve
    *  each other (migration 0131). See `resolveImageCreditsDailyLimit`. */
   imageCreditsDailyLimit: integer('image_credits_daily_limit'),
+  /** Team-wide DEFAULT per-seat monthly AI spend cap in millicents (1/100000 USD)
+   *  — migration 0359. Owner-configured (Teams plan). NULL → no default (seats
+   *  uncapped unless individually set); >= 0 → applied to every seat with no
+   *  explicit `tenant_members.monthly_spend_cap_millicents`. Enforced against the
+   *  OpenRouter-rate cost recorded on `llm_usage_log.cost_usd_millicents` (BYO = 0).
+   *  See application/consumption/memberSpend.ts. */
+  memberDefaultSpendCapMillicents: bigint('member_default_spend_cap_millicents', { mode: 'number' }),
   // Segment tier / identity federation (migration 0054).
   kind:                   tenantKindEnum('kind').notNull().default('direct'),
   idpIssuer:              varchar('idp_issuer', { length: 500 }),
   isolationMode:          tenantIsolationModeEnum('isolation_mode').notNull().default('single'),
+  /** Sales-cycle demo workspace (migration 0360): seeded persona tenant entered
+   *  from the marketing shell without signup, wiped + reseeded on every deploy
+   *  (and nightly). demoPersona is the stable persona key ('ai-team' | 'insights'
+   *  | 'pmo' | 'talent' | 'governance'); a partial unique index guarantees at
+   *  most one tenant per persona. See application/demo/demoSeedService.ts. */
+  isDemo:                 boolean('is_demo').notNull().default(false),
+  demoPersona:            varchar('demo_persona', { length: 32 }),
   settings:               text('settings'),   // JSON-as-text (jsonb avoided per existing convention)
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),
@@ -821,6 +858,16 @@ export const tenantMembers = pgTable('tenant_members', {
   role:      tenantRoleEnum('role').notNull().default('developer'),
   isActive:  boolean('is_active').notNull().default(true),
   joinedAt:  timestamp('joined_at').notNull().defaultNow(),
+  /** Per-seat monthly AI spend cap in millicents (1/100000 USD) — migration 0359.
+   *  NULL → inherit `tenants.member_default_spend_cap_millicents`; -1 → unlimited
+   *  (override a team default); >= 0 → explicit cap (0 = no paid spend). Resolved by
+   *  resolveMemberSpendCapMillicents; enforced at the gateway spend gate for Teams. */
+  monthlySpendCapMillicents: bigint('monthly_spend_cap_millicents', { mode: 'number' }),
+  /** 'YYYY-MM' the spend-notify level applies to (resets each month). Migration 0359. */
+  spendNotifyPeriod:  varchar('spend_notify_period', { length: 7 }),
+  /** Highest % threshold (0/50/80/100) already notified this period — dedupes the
+   *  budget/spend notifications so a seat's owner is pinged once per threshold. */
+  spendNotifyLevel:   smallint('spend_notify_level').notNull().default(0),
 });
 
 /**
@@ -918,6 +965,9 @@ export const projects = pgTable('projects', {
   // list endpoint then falls back to the derived max-task-due-date so the
   // calendar/Gantt still plot a deadline when tasks carry due dates.
   dueDate:         timestamp('due_date'),
+  /** The external website this project is configured to security-scan (migration
+   *  0357). Set once, re-scanned on demand; NULL = no target configured yet. */
+  securityTargetUrl: varchar('security_target_url', { length: 2048 }),
   createdAt:       timestamp('created_at').notNull().defaultNow(),
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 });
@@ -1160,6 +1210,12 @@ export const securityAudits = pgTable('security_audits', {
   agentRef:         varchar('agent_ref', { length: 64 }),
   status:           varchar('status', { length: 16 }).notNull().default('running'), // 'running'|'complete'|'failed'
   triggerSource:    varchar('trigger_source', { length: 16 }).notNull().default('cron'), // 'cron'|'manual'
+  /** 'codebase' (SOC 2 agent audit of the repo) | 'web' (external URL scan). Migration 0357. */
+  scanKind:         varchar('scan_kind', { length: 16 }).notNull().default('codebase'),
+  /** The scanned website URL — set on 'web' runs only. */
+  targetUrl:        varchar('target_url', { length: 2048 }),
+  /** Posture score 0..100 — set on 'web' runs only. */
+  score:            integer('score'),
   summary:          text('summary'),
   findingsCount:    integer('findings_count').notNull().default(0),
   countsBySeverity: jsonb('counts_by_severity'),
@@ -5546,6 +5602,48 @@ export const allocationGoals = pgTable('allocation_goals', {
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
+
+/**
+ * Anonymous demo-funnel telemetry (migration 0360). The signed-in activity
+ * tracker never fires for marketing-shell visitors, so the demo experience
+ * writes its own append-only stream keyed by the same visitorId as
+ * marketing_sessions: demo_start → page views → convert prompt shown/clicked →
+ * lead/newsletter/exit. The admin funnel panel aggregates this by persona.
+ */
+export const demoEvents = pgTable('demo_events', {
+  id:         bigserial('id', { mode: 'number' }).primaryKey(),
+  visitorId:  varchar('visitor_id', { length: 64 }).notNull(),
+  persona:    varchar('persona', { length: 32 }),
+  kind:       varchar('kind', { length: 64 }).notNull(),
+  path:       varchar('path', { length: 300 }),
+  metadata:   jsonb('metadata'),
+  occurredAt: timestamp('occurred_at').notNull().defaultNow(),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byPersonaTime: index('idx_demo_events_persona_time').on(t.persona, t.occurredAt),
+  byVisitor: index('idx_demo_events_visitor').on(t.visitorId, t.occurredAt),
+}));
+
+/**
+ * "Book a demo with sales" capture (migration 0360) — written by the public
+ * /book-demo page and the demo exit-intent/convert prompts. Platform-global
+ * (no tenant): these are prospects, not customers.
+ */
+export const salesLeads = pgTable('sales_leads', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  name:      varchar('name', { length: 200 }).notNull(),
+  email:     varchar('email', { length: 320 }).notNull(),
+  company:   varchar('company', { length: 200 }),
+  interest:  varchar('interest', { length: 64 }),
+  message:   text('message'),
+  source:    varchar('source', { length: 64 }),
+  locale:    varchar('locale', { length: 5 }),
+  visitorId: varchar('visitor_id', { length: 64 }),
+  status:    varchar('status', { length: 16 }).notNull().default('new'), // new | contacted | qualified | closed
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byCreated: index('idx_sales_leads_created').on(t.createdAt),
+}));
 
 // ---------------------------------------------------------------------------
 // Knowledge Management — SOPs, processes & documents (migration 0227)
