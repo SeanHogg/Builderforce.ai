@@ -1,40 +1,42 @@
 # BuilderForce.ai — Sales & Product Deck
 
-Consultant-grade sales / informational deck for customers and investors. 20 slides, 16:9, 2560×1440. **Light / print-optimized** theme — tinted paper, white focal cards with shadows, saturated blue icon tiles and takeaway bands as the retention anchors. Official BuilderForce.ai mark + wordmark.
+Consultant-grade, **visual-first** sales deck. 23 slides, 16:9, 2560×1440. Light print theme: tinted paper, white focal cards, saturated blue tiles, solid-blue takeaway bands, deep-navy contrasting footer, Evermind brain-dot + arc background motif on every slide. Product illustrations are pulled from the marketing blog art (`frontend/public/blog/*.svg`, rasterized via Edge headless).
 
 ## Files
 - `Builderforce-Pitch-Deck.pdf` — full deck, print/email ready
 - `Builderforce-Pitch-Deck.pptx` — PowerPoint (one full-bleed image per slide)
-- `slides/slide-01.png … slide-19.png` — individual slides as PNG marketing media
+- `slides/slide-01…23.png` — individual slides as PNG marketing media
 
 ## Slide order
-1. Cover — "The innovation platform for the agentic era"
-2. Problem — AI writes the code, nobody governs the work
-3. Why Now — four converging forces
+1. Cover — Evermind brain + neuroscience legend
+2. Problem — icon-led, one line per pain
+3. Why Now — four forces
 4. Market — TAM / SAM / SOM
-5. Solution — the system of record
-6. How It Works — compile a need → AgentSpec → deploy
-7. Full capability map — Build & Train · Orchestrate · Extend · Govern & Operate
-8. Agentic delivery in the cloud — ticket → PR, human in the loop
-9. Moat — Evermind, the self-updating model
-10. Works with your stack — BYO keys, 30+ providers, Claude subscription OAuth
-11. Agentic Workforce — humans + agents on one board
-12. Governance & human-in-the-loop
-13. Competitive landscape (magic-quadrant)
-14. Why we win (capability matrix vs the field)
-15. Business model & pricing
-16. Traction & product depth
-17. Go-to-market
-18. Roadmap & milestones
-19. Team — Sean Hogg, founder track record
-20. Get started (CTA)
-
-## Notes
-- Market-size figures are labelled as illustrative industry estimates, not company financials.
-- ARR figures on the roadmap slide are the company's own internal targets.
-- Content is sourced from `frontend/src/lib/content.ts`, `DONE.md`, `ROADMAP.md`, and the founder résumé.
-- Colors are driven by the brand blue (`#4d9eff` → `#1e40af`), matching the site `--accent` and the logo gradient.
+5. Solution — *Transformation, delivered on one platform* (`system-of-record` art)
+6. How It Works — compile spine (`compile-primitive-spine` art)
+7. Platform — four capability pillars
+8. Autonomous Workflows — *A Kanban board that drives itself* (`autonomous-swimlanes` art)
+9. Autonomous Planning — portfolio→task costed spine (`planning-spine` art)
+10. Evermind moat — frozen vs Evermind (`aw-frozen-vs-evermind` art)
+11. Works With Your Stack — BYO keys / frontier models (`fleet-routing` art)
+12. Agentic Workforce (`aw-workforce` art)
+13. Real-Time Collaboration (`collab-four-surfaces` art)
+14. Ratings & Scales — maturity result + five-level ladder
+15. Governance & Human-in-the-Loop (`approval-gates` art)
+16. Competitive quadrant
+17. Capability matrix
+18. Business model & pricing
+19. Traction & product depth
+20. Go-to-market
+21. Roadmap & milestones
+22. Team — Sean Hogg
+23. Get started (CTA)
 
 ## Regenerating
-Source generator: `scratchpad/deck.py` (Pillow). Brand mark is the official
-lockup (`1000008435.png`) trimmed to `lockup.png`. Re-run to rebuild all three formats.
+`scratchpad/deck.py` (Pillow). Blog SVGs are rasterized once into `scratchpad/blogimg/` with Edge headless:
+`msedge --headless --screenshot=<out.png> --window-size=1600,900 file:///<blog>.svg`
+Brand mark: `mark.png` (keyed from `c:\code\agentic\1000008436.png`).
+
+## Notes
+- Market figures are labelled illustrative estimates; roadmap ARR figures are internal targets.
+- Content sources: `frontend/src/lib/content.ts`, DONE.md/ROADMAP.md, founder résumé, blog illustration library.
