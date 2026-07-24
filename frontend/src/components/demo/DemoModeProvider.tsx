@@ -23,12 +23,14 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { BookDemoForm } from './BookDemoForm';
+import { DemoTour } from './DemoTour';
 import {
-  isDemoMode,
   getDemoState,
   clearDemoMode,
   hasExitPrompted,
   markExitPrompted,
+  hasTourSeen,
+  markTourSeen,
   queueDemoEvent,
   flushDemoEvents,
   trackDemoEvent,
@@ -51,10 +53,26 @@ export function DemoModeProvider({ children }: { children: React.ReactNode }) {
   const [tenantName, setTenantName] = useState('');
   const [prompt, setPrompt] = useState<Prompt>('none');
   const [showLeadForm, setShowLeadForm] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
 
   const viewsRef = useRef(0);
   const convertShownRef = useRef(false);
   const startedRef = useRef(0);
+  // Read synchronously inside event callbacks so the auto convert/exit prompts
+  // stay suppressed while the guided tour owns the screen.
+  const tourOpenRef = useRef(false);
+
+  const openTour = useCallback(() => {
+    if (!persona) return;
+    tourOpenRef.current = true;
+    setTourOpen(true);
+  }, [persona]);
+
+  const closeTour = useCallback(() => {
+    tourOpenRef.current = false;
+    setTourOpen(false);
+    markTourSeen();
+  }, []);
 
   // Detect demo mode on mount (sessionStorage is client-only).
   useEffect(() => {
@@ -76,8 +94,17 @@ export function DemoModeProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('pagehide', onHide);
   }, [active]);
 
+  // Auto-start the product tour shortly after landing (once per demo session).
+  // Mark it seen the moment it fires so a mid-tour reload doesn't relaunch it —
+  // the banner's "Take the tour" button remains available to replay it.
+  useEffect(() => {
+    if (!active || !persona || hasTourSeen()) return;
+    const timer = setTimeout(() => { markTourSeen(); openTour(); }, 1400);
+    return () => clearTimeout(timer);
+  }, [active, persona, openTour]);
+
   const openConvert = useCallback(() => {
-    if (convertShownRef.current) return;
+    if (convertShownRef.current || tourOpenRef.current) return;
     convertShownRef.current = true;
     setPrompt('convert');
     trackDemoEvent({ kind: 'convert_prompt_shown', persona, path: pathname });
@@ -104,7 +131,7 @@ export function DemoModeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!active) return;
     const trigger = () => {
-      if (hasExitPrompted() || convertShownRef.current) return;
+      if (hasExitPrompted() || convertShownRef.current || tourOpenRef.current) return;
       markExitPrompted();
       setPrompt('exit');
       trackDemoEvent({ kind: 'exit_prompt_shown', persona, path: pathname });
@@ -151,12 +178,24 @@ export function DemoModeProvider({ children }: { children: React.ReactNode }) {
           <span className="demo-badge">{t('badge')}</span>
           <span className="demo-banner-text">{t('bannerText', { name: tenantName })}</span>
           <div className="demo-banner-actions">
+            <button className="demo-btn demo-btn-ghost" onClick={openTour}>{t('tour.takeTour')}</button>
             <button className="demo-btn demo-btn-ghost" onClick={() => setPrompt('convert')}>{t('bookOrJoin')}</button>
             <button className="demo-btn demo-btn-primary" onClick={() => goRegister('banner')}>{t('createAccount')}</button>
             <button className="demo-btn demo-btn-exit" onClick={exitDemo} aria-label={t('exit')}>✕</button>
           </div>
         </div>
       </div>
+
+      {/* Persona-aware product tour — auto-starts once per session, re-openable
+          from the banner. Suppresses the auto convert/exit prompts while open. */}
+      {persona && (
+        <DemoTour
+          persona={persona}
+          open={tourOpen}
+          onClose={closeTour}
+          onRequestConvert={() => setPrompt('convert')}
+        />
+      )}
 
       {/* Convert prompt. */}
       <SlideOutPanel open={prompt === 'convert'} onClose={closePrompt} title={t('convertTitle')} width="min(480px, 96vw)">

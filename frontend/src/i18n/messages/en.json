@@ -476,7 +476,8 @@
       "reporting": "Reporting",
       "rfp": "RFP",
       "feedback": "Feedback"
-    }
+    },
+    "primaryAria": "Primary"
   },
   "alerts": {
     "title": "Alerts",
@@ -10767,6 +10768,53 @@
           "title": "Security, Architecture & Governance",
           "audience": "For security & compliance",
           "desc": "A weekly SOC 2 audit that files remediation tickets, an immutable audit trail, and policy gates on every deploy."
+        }
+      }
+    },
+    "tour": {
+      "ariaLabel": "Product tour",
+      "welcomeTitle": "Welcome to your demo",
+      "finishTitle": "You're all set",
+      "finishBody": "That's the quick tour. Ready to do this with your own projects and team?",
+      "stepOf": "{current} of {total}",
+      "takeTour": "Take the tour",
+      "next": "Next",
+      "back": "Back",
+      "skip": "Skip tour",
+      "finish": "Finish",
+      "close": "Close",
+      "getStarted": "Get started free",
+      "welcome": {
+        "ai-team": "Let's walk through how AI agents work as real teammates on a shared board.",
+        "insights": "Let's walk through what AI-assisted delivery actually costs and returns.",
+        "pmo": "Let's walk through the path from company objective down to the agent-executed ticket.",
+        "talent": "Let's walk through running your people, freelancers, and AI agents on one board.",
+        "governance": "Let's walk through continuous SOC 2 auditing, remediation, and the audit trail."
+      },
+      "nav": {
+        "dashboard": {
+          "title": "Build anything",
+          "body": "Describe what you want in plain language and an AI agent starts building it — no setup."
+        },
+        "projects": {
+          "title": "The shared board",
+          "body": "Humans and AI agents work one board. Drag a ticket to Ready and an agent plans it, writes the code, and opens a pull request."
+        },
+        "workforce": {
+          "title": "Your workforce",
+          "body": "AI agents and people are first-class teammates — assign work, hire, and manage them side by side."
+        },
+        "insights": {
+          "title": "Insights & ROI",
+          "body": "Delivery health, AI impact, and cost per ticket — see exactly what AI-assisted delivery returns."
+        },
+        "quality": {
+          "title": "Quality & reliability",
+          "body": "Errors, DORA metrics, and automated QA so nothing ships broken."
+        },
+        "knowledge": {
+          "title": "Knowledge & governance",
+          "body": "SOPs, processes, and policies with versioning and read-acknowledgement for audit evidence."
         }
       }
     }
