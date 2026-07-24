@@ -1426,48 +1426,54 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
 
 /* ════════════════════ NAV LINKS ════════════════════ */
 
-export interface NavLink {
+/** A footer link: a stable route + the i18n key (under the `footer` namespace)
+ *  that AppFooter resolves to the visible label. Brand names (e.g. "Evermind
+ *  LLM", "BuilderForce Agents") still map to a key so the catalog stays the
+ *  single source, even where the translation is the brand token itself. */
+export interface FooterLink {
   href: string;
-  label: string;
+  labelKey: string;
 }
 
 export interface FooterColumn {
-  title: string;
-  links: NavLink[];
+  /** i18n key under the `footer` namespace for the column heading. */
+  titleKey: string;
+  links: FooterLink[];
 }
 
 /**
  * Grouped footer navigation, rendered as columns on desktop and collapsed to
  * stacked sections on mobile. `Home` is reached via the footer brand mark, so it
- * is intentionally omitted from the columns.
+ * is intentionally omitted from the columns. Labels/titles are i18n keys (see
+ * the `footer` namespace) resolved in AppFooter — never hardcoded strings.
  */
 export const FOOTER_COLUMNS: FooterColumn[] = [
   {
-    title: 'Product',
+    titleKey: 'colProduct',
     links: [
-      { href: '/product', label: 'Product' },
-      { href: '/compare', label: 'Compare' },
-      { href: '/pricing', label: 'Pricing' },
-      { href: '/media', label: 'Media Kit' },
+      { href: '/product', labelKey: 'linkProduct' },
+      { href: '/compare', labelKey: 'linkCompare' },
+      { href: '/pricing', labelKey: 'linkPricing' },
+      { href: '/media', labelKey: 'linkMediaKit' },
     ],
   },
   {
-    title: 'Platform',
+    titleKey: 'colPlatform',
     links: [
-      { href: '/evermind', label: 'Evermind LLM' },
-      { href: '/marketplace', label: 'Workforce Registry' },
-      { href: '/agents', label: 'BuilderForce Agents' },
-      { href: '/tools', label: 'Diagnostics & Tools' },
-      { href: '/soc2', label: 'SOC 2 & System Audits' },
-      { href: '/blog', label: 'Blog' },
+      { href: '/evermind', labelKey: 'linkEvermind' },
+      { href: '/marketplace', labelKey: 'linkWorkforceRegistry' },
+      { href: '/agents', labelKey: 'linkAgents' },
+      { href: '/tools', labelKey: 'linkDiagnostics' },
+      { href: '/soc2', labelKey: 'linkSoc2' },
+      { href: '/blog', labelKey: 'linkBlog' },
     ],
   },
   {
-    title: 'Get started',
+    titleKey: 'colGetStarted',
     links: [
-      { href: '/demo', label: 'Live Demo' },
-      { href: '/login', label: 'Sign In' },
-      { href: '/register', label: 'Get Started' },
+      { href: '/demo', labelKey: 'linkLiveDemo' },
+      { href: '/login', labelKey: 'linkSignIn' },
+      { href: '/register', labelKey: 'linkGetStarted' },
     ],
   },
 ];
@@ -1724,6 +1730,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     'evermind-self-updating-model',
     'inside-evermind-architecture',
     'memory-first-inference-skip-the-llm',
+    'local-first-ai-webgpu-in-the-browser',
     'transitioning-to-an-agentic-workforce',
     'agent-tech-stack-all-seven-layers',
     'semantic-response-cache',
@@ -1750,7 +1757,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   // teaser (RouteMarketing). Keyed by the route path minus its leading slash.
   brainstorm: ['product-ideation-with-builderforce', 'specs-and-planning-with-ai', 'getting-started-with-ai-agents'],
   ide: ['vs-code-command-center-for-your-agentic-workforce', 'in-browser-ide-and-collaboration', 'product-ideation-with-builderforce'],
-  training: ['webgpu-lora-explained', 'inside-evermind-architecture', 'evermind-self-updating-model', 'ai-dataset-generation-best-practices'],
+  training: ['webgpu-lora-explained', 'local-first-ai-webgpu-in-the-browser', 'inside-evermind-architecture', 'evermind-self-updating-model', 'ai-dataset-generation-best-practices'],
   workflows: ['define-a-need-the-agentic-system-solves-it', 'multi-agent-orchestration', 'autonomous-swimlane-execution'],
   projects: ['planning-spine-cost-bearing-delivery', 'role-gated-accountability-proof-of-participation', 'autonomous-swimlane-execution', 'task-execution-and-observability'],
   workforce: ['real-time-collaboration-humans-and-agents', 'multi-party-team-chat-humans-and-agents', 'fleet-management-and-agent-routing'],

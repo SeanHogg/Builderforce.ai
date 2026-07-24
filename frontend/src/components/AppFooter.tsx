@@ -97,12 +97,12 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
 
             <nav className="global-footer-cols" aria-label={t('navLabel')}>
               {FOOTER_COLUMNS.map((col) => (
-                <div key={col.title} className="global-footer-col">
-                  <h3>{col.title}</h3>
+                <div key={col.titleKey} className="global-footer-col">
+                  <h3>{t(col.titleKey)}</h3>
                   <ul>
                     {col.links.map((l) => (
                       <li key={l.href}>
-                        <Link href={l.href}>{l.label}</Link>
+                        <Link href={l.href}>{t(l.labelKey)}</Link>
                       </li>
                     ))}
                   </ul>
