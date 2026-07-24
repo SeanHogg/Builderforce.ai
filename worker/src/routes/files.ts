@@ -27,7 +27,9 @@ files.get('/*', async (c) => {
     const filePath = c.req.param('*') || '';
     const key = `${projectId}/${filePath}`;
     const obj = await c.env.STORAGE.get(key);
-    if (!obj) return c.text('', 200);
+    // Missing is 404, matching the api's workspaceStore semantics — an empty 200
+    // for a never-written object let callers cache '' as if it were real content.
+    if (!obj) return c.json({ error: 'File not found' }, 404);
     const content = await obj.text();
     return c.text(content);
   } catch (e) {
