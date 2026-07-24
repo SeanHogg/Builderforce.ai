@@ -1,6 +1,6 @@
 # BuilderForce.ai — Sales & Product Deck
 
-Consultant-grade sales / informational deck for customers and investors. 19 slides, 16:9, 2560×1440. Blue brand palette, official BuilderForce.ai lockup.
+Consultant-grade sales / informational deck for customers and investors. 20 slides, 16:9, 2560×1440. **Light / print-optimized** theme — tinted paper, white focal cards with shadows, saturated blue icon tiles and takeaway bands as the retention anchors. Official BuilderForce.ai mark + wordmark.
 
 ## Files
 - `Builderforce-Pitch-Deck.pdf` — full deck, print/email ready
@@ -17,16 +17,17 @@ Consultant-grade sales / informational deck for customers and investors. 19 slid
 7. Full capability map — Build & Train · Orchestrate · Extend · Govern & Operate
 8. Agentic delivery in the cloud — ticket → PR, human in the loop
 9. Moat — Evermind, the self-updating model
-10. Agentic Workforce — humans + agents on one board
-11. Governance & human-in-the-loop
-12. Competitive landscape (magic-quadrant)
-13. Why we win (capability matrix vs the field)
-14. Business model & pricing
-15. Traction & product depth
-16. Go-to-market
-17. Roadmap & milestones
-18. Team — Sean Hogg, founder track record
-19. Get started (CTA)
+10. Works with your stack — BYO keys, 30+ providers, Claude subscription OAuth
+11. Agentic Workforce — humans + agents on one board
+12. Governance & human-in-the-loop
+13. Competitive landscape (magic-quadrant)
+14. Why we win (capability matrix vs the field)
+15. Business model & pricing
+16. Traction & product depth
+17. Go-to-market
+18. Roadmap & milestones
+19. Team — Sean Hogg, founder track record
+20. Get started (CTA)
 
 ## Notes
 - Market-size figures are labelled as illustrative industry estimates, not company financials.
