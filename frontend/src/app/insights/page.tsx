@@ -184,7 +184,7 @@ export default function InsightsHomePage() {
       </div>
 
       {/* ── Ask a question (plain-English → safe metric) ── */}
-      <section style={{ marginBottom: 22, padding: 16, border: '1px solid var(--border-subtle)', borderRadius: 12 }}>
+      <section style={{ marginBottom: 22, padding: 16, border: '1px solid var(--border-subtle)', borderRadius: 12 }} data-tour="demo-insights">
         <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>{td('ask.heading')}</h2>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <input

@@ -223,7 +223,7 @@ function Library({ projectId, t }: { projectId: number | null; t: ReturnType<typ
   }, []);
 
   return (
-    <section>
+    <section data-tour="demo-knowledge">
       <h2 style={{ fontSize: 16, margin: '0 0 12px' }}>{t('allKnowledge')}</h2>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>

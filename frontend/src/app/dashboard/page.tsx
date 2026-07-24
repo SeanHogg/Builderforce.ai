@@ -204,7 +204,7 @@ export default function DashboardPage() {
               workforce: (chunks) => <Link href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>{chunks}</Link>,
             })}
           </p>
-          <div style={{ maxWidth: 760, margin: '0 auto' }}>
+          <div style={{ maxWidth: 760, margin: '0 auto' }} data-tour="demo-build">
             <ChatInput
               value={prompt}
               onChange={setPrompt}
