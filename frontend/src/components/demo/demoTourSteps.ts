@@ -27,6 +27,23 @@ export const TOUR_ROUTES: Record<TourAnchor, string> = {
 };
 
 /**
+ * The PRIMARY on-page `data-tour` target the spotlight should ring — the actual
+ * feature content (the build prompt, the board, the roster, …), not the nav item.
+ * These keys are a separate namespace from the nav-item `data-tour` ids so the two
+ * never collide. DemoTour rings this section first and falls back to the nav item
+ * (`TourAnchor` id) only if the section isn't on screen (e.g. an unusual layout),
+ * then to a centered card — so the tour always has a target.
+ */
+export const TOUR_SECTION: Record<TourAnchor, string> = {
+  dashboard: 'demo-build',
+  projects: 'demo-board',
+  workforce: 'demo-roster',
+  insights: 'demo-insights',
+  quality: 'demo-quality',
+  knowledge: 'demo-knowledge',
+};
+
+/**
  * The ordered feature walk per persona — chosen so each tour tells that buyer's
  * story with the highest-value surfaces first.
  */

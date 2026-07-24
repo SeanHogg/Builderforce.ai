@@ -401,7 +401,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
 
   return (
    <WorkforceMetricsProvider>
-    <section>
+    <section data-tour="demo-roster">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-strong)', margin: 0 }}>{tWf('workforceTitle')}</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

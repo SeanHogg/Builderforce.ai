@@ -19,7 +19,7 @@ import { createPortal } from 'react-dom';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { trackDemoEvent, type DemoPersona } from '@/lib/demoApi';
-import { buildTourSteps, TOUR_ROUTES, type TourStep } from './demoTourSteps';
+import { buildTourSteps, TOUR_ROUTES, TOUR_SECTION, type TourAnchor, type TourStep } from './demoTourSteps';
 
 interface DemoTourProps {
   persona: DemoPersona;
@@ -36,10 +36,28 @@ const CARD_W = 360;
 const CARD_MARGIN = 14;
 const POLL_MS = 1600;
 
-/** Find the first VISIBLE element for a data-tour id (sidebar or bottom-nav). */
-function findAnchor(id: string): HTMLElement | null {
+/** Find the first VISIBLE element for a data-tour id. */
+function findByTour(id: string): HTMLElement | null {
   const els = Array.from(document.querySelectorAll<HTMLElement>(`[data-tour="${id}"]`));
   return els.find((el) => el.offsetParent !== null && el.getBoundingClientRect().width > 0) ?? null;
+}
+
+/** Resolve a step's spotlight target: the on-page feature SECTION first, then the
+ *  nav item, so the ring lands on real content whenever it's present. */
+function findTarget(anchor: TourAnchor): HTMLElement | null {
+  return findByTour(TOUR_SECTION[anchor]) ?? findByTour(anchor);
+}
+
+/** Pad a target rect and clamp it inside the viewport so the ring stays on screen. */
+function clampToViewport(r: Rect): Rect {
+  const pad = 6;
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+  const top = Math.max(8, r.top - pad);
+  const left = Math.max(8, r.left - pad);
+  const right = Math.min(vw - 8, r.left + r.width + pad);
+  const bottom = Math.min(vh - 8, r.top + r.height + pad);
+  return { top, left, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
 }
 
 /** Placement of the coach-mark card relative to the spotlight rect (null = centered). */
@@ -94,14 +112,19 @@ export function DemoTour({ persona, open, onClose, onRequestConvert }: DemoTourP
     if (pollRef.current != null) { cancelAnimationFrame(pollRef.current); pollRef.current = null; }
   };
 
-  const measure = useCallback((id: string) => {
-    const el = findAnchor(id);
-    if (el) {
-      const r = el.getBoundingClientRect();
-      setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
-      return true;
+  const measure = useCallback((anchor: TourAnchor, scroll = false) => {
+    const el = findTarget(anchor);
+    if (!el) return false;
+    if (scroll) {
+      const r0 = el.getBoundingClientRect();
+      // Only scroll when the target is substantially off-screen (avoid a jump when it's already visible).
+      if (r0.top < 0 || r0.bottom > window.innerHeight) {
+        el.scrollIntoView({ block: 'center', inline: 'nearest' });
+      }
     }
-    return false;
+    const r = el.getBoundingClientRect();
+    setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+    return true;
   }, []);
 
   // On each step: navigate if needed, then poll for the anchor (centered fallback).
@@ -116,7 +139,7 @@ export function DemoTour({ persona, open, onClose, onRequestConvert }: DemoTourP
 
     const started = performance.now();
     const tick = () => {
-      if (measure(step.anchor)) { pollRef.current = null; return; }
+      if (measure(step.anchor, true)) { pollRef.current = null; return; }
       if (performance.now() - started < POLL_MS) {
         pollRef.current = requestAnimationFrame(tick);
       } else {
@@ -170,7 +193,10 @@ export function DemoTour({ persona, open, onClose, onRequestConvert }: DemoTourP
   if (!mounted || !open || !step) return null;
 
   const isAnchor = step.kind === 'anchor';
-  const place = placeCard(isAnchor ? rect : null);
+  // Clamp the spotlight to the viewport so the ring stays fully on screen even
+  // when the target section is taller/wider than the viewport (already padded).
+  const spot: Rect | null = isAnchor && rect ? clampToViewport(rect) : null;
+  const place = placeCard(spot);
   const centered = place.centered;
 
   const title = step.kind === 'welcome' ? t('welcomeTitle')
@@ -187,13 +213,13 @@ export function DemoTour({ persona, open, onClose, onRequestConvert }: DemoTourP
   return createPortal(
     <div className="demo-tour" role="dialog" aria-modal="true" aria-label={t('ariaLabel')}>
       {/* Click blocker (transparent for anchor steps; the hole's shadow dims). */}
-      <div className={`demo-tour-blocker${isAnchor && rect ? '' : ' dim'}`} />
+      <div className={`demo-tour-blocker${spot ? '' : ' dim'}`} />
 
       {/* Spotlight hole (anchor steps with a found target). */}
-      {isAnchor && rect && (
+      {spot && (
         <div
           className="demo-tour-hole"
-          style={{ top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12 }}
+          style={{ top: spot.top, left: spot.left, width: spot.width, height: spot.height }}
         />
       )}
 

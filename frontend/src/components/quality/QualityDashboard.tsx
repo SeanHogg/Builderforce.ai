@@ -72,7 +72,7 @@ export function QualityDashboard() {
   const fmt = (iso: string) => new Date(iso).toLocaleString();
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }} data-tour="demo-quality">
       {/* The plan meter is tenant-aggregate; analytics below follow project scope. */}
       <ErrorConsumptionCard />
 
