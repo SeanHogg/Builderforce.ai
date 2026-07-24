@@ -162,6 +162,19 @@ export async function listUnsentPublishedReleaseNotes(db: Db): Promise<ReleaseNo
   return rows.map(toWire);
 }
 
+/** Specific PUBLISHED notes by id, oldest-published first — the manual per-note
+ *  send path. Drafts are filtered out (you cannot email an unpublished note);
+ *  already-emailed notes ARE returned, so a superadmin can deliberately re-send. */
+export async function listPublishedReleaseNotesByIds(db: Db, ids: string[]): Promise<ReleaseNote[]> {
+  if (ids.length === 0) return [];
+  const rows = await db
+    .select()
+    .from(releaseNotes)
+    .where(and(inArray(releaseNotes.id, ids), isNotNull(releaseNotes.publishedAt)))
+    .orderBy(releaseNotes.publishedAt);
+  return rows.map(toWire);
+}
+
 /** Stamp the "sent" flag AFTER a digest run has attempted delivery, so a crashed
  *  run re-sends next week (at-least-once) rather than silently dropping notes. */
 export async function markReleaseNotesEmailed(env: Env, db: Db, ids: string[]): Promise<void> {

@@ -32,6 +32,7 @@ import {
   BRAIN_ORIGIN, TEAM_ORIGIN, ACCESSIBLE_ORIGINS,
   resolveChatAccess, syncPendingMemberships as syncPendingMembershipsShared,
 } from './chatAccess';
+import { markChatRead } from './chatReadState';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -667,6 +668,16 @@ export class BrainService {
       .limit(Math.min(limit, 500));
 
     return msgs;
+  }
+
+  /** Advance the caller's read high-water mark for a chat (unread-badge state).
+   *  Access-checked, then delegates to the shared {@link markChatRead} rule.
+   *  `seq` omitted → mark everything read. Returns the seq actually stored. */
+  async markRead(chatId: number, tenantId: number, userId: string, seq?: number | null) {
+    const chat = await this.canAccessChat(chatId, tenantId, userId);
+    if (!chat) return { error: 'Chat not found' as const };
+    const lastReadSeq = await markChatRead(this.db, tenantId, userId, chatId, seq);
+    return { lastReadSeq };
   }
 
   async appendMessages(

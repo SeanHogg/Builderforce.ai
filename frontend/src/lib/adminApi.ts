@@ -965,6 +965,10 @@ export const adminApi = {
   async sendReleaseDigest(): Promise<{ result: ReleaseDigestResult }> {
     return adminRequest('/api/release-notes/send-digest', { method: 'POST' });
   },
+  /** Manually email ONE published note now; it then drops out of the weekly digest. */
+  async sendReleaseNote(id: string): Promise<{ result: ReleaseDigestResult }> {
+    return adminRequest(`/api/release-notes/${id}/send`, { method: 'POST' });
+  },
 
   // Privacy
   async privacyRequests(params?: {

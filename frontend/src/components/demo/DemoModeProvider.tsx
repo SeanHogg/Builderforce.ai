@@ -121,7 +121,7 @@ export function DemoModeProvider({ children }: { children: React.ReactNode }) {
     setShowLeadForm(false);
   }, []);
 
-  const goRegister = useCallback((from: Prompt) => {
+  const goRegister = useCallback((from: 'banner' | 'convert' | 'exit') => {
     trackDemoEvent({ kind: 'convert_clicked', persona, path: pathname, metadata: { from } });
     flushDemoEvents();
     clearDemoMode();
