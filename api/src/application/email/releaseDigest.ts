@@ -1,18 +1,23 @@
 /**
- * Weekly release digest — the automated marketing email for new features.
+ * Release digest — the marketing email for new features. ONE runner backs three
+ * triggers, differing only in WHICH notes it carries:
  *
- * Fired by the Friday cron (`0 16 * * 5`, see index.ts scheduled()) and by the
- * superadmin "send now" admin action. One run:
+ *   - the Friday cron (`0 16 * * 5`) and the "send all unsent now" admin button
+ *     → every PUBLISHED note not yet emailed (`opts.noteIds` omitted);
+ *   - the per-note "Send now" admin action → exactly that note (`opts.noteIds`),
+ *     which lets a superadmin push a single announcement off-cycle.
  *
- *   1. Collect every PUBLISHED release note not yet emailed (the "sent" flag is
- *      `release_notes.emailed_at`). Nothing new → the whole run is a no-op, so a
- *      quiet week sends no mail rather than an empty one.
+ * Whatever the trigger, one run:
+ *
+ *   1. Resolve the note set. Empty → a no-op (a quiet week sends no mail).
  *   2. Mail each verified, non-suspended account through `sendLifecycleEmail`
  *      (product_updates category) — consent is checked per recipient and every
  *      mail carries a working unsubscribe link; opted-out users are counted as
  *      suppressed, never mailed.
  *   3. Stamp the notes emailed AFTER the delivery pass, so a run that dies
- *      mid-way re-sends next week (at-least-once) instead of losing notes.
+ *      mid-way re-sends (at-least-once) instead of losing notes — AND so a note
+ *      sent here is excluded from the next weekly digest (the "sent" flag is
+ *      `release_notes.emailed_at`, which the weekly query filters on).
  *
  * Recipients are mailed in small parallel batches: the per-recipient consent
  * read is cached (email-prefs read-through), so the dominant cost is the Resend
@@ -28,6 +33,7 @@ import { sendReleaseDigestEmail, type ReleaseDigestItem } from '../../infrastruc
 import { sendLifecycleEmail } from './sendEmail';
 import {
   listUnsentPublishedReleaseNotes,
+  listPublishedReleaseNotesByIds,
   markReleaseNotesEmailed,
 } from '../product/releaseNotes';
 
@@ -42,10 +48,22 @@ export interface ReleaseDigestRunResult {
   failed: number;
 }
 
-export async function runWeeklyReleaseDigest(env: Env, dbOverride?: Db): Promise<ReleaseDigestRunResult> {
+export interface ReleaseDigestOptions {
+  /** Restrict the send to these published notes (manual per-note trigger). Omit
+   *  for the full "every unsent published note" digest (cron + send-all). */
+  noteIds?: string[];
+}
+
+export async function runReleaseDigest(
+  env: Env,
+  dbOverride?: Db,
+  opts: ReleaseDigestOptions = {},
+): Promise<ReleaseDigestRunResult> {
   const db = dbOverride ?? buildDatabase(env);
 
-  const notes = await listUnsentPublishedReleaseNotes(db);
+  const notes = opts.noteIds
+    ? await listPublishedReleaseNotesByIds(db, opts.noteIds)
+    : await listUnsentPublishedReleaseNotes(db);
   if (notes.length === 0) {
     return { notes: 0, recipients: 0, sent: 0, suppressed: 0, failed: 0 };
   }

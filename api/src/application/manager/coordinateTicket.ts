@@ -15,7 +15,7 @@ import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { boards, swimlanes, tasks } from '../../infrastructure/database/schema';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
-import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
+import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 
 export interface CoordinateResult {

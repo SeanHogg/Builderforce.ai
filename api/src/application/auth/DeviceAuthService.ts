@@ -122,7 +122,10 @@ export class DeviceAuthService {
 
     const minted = await this.mintEditorKey({ userId: opts.userId, tenantId: opts.tenantId });
     if (!minted.ok) return { ok: false, error: minted.error };
-    const enc = await encryptSecretForStorage(minted.key, opts.envSecret);
+    // M2: seal the issued gateway key under the dedicated credential secret (caller
+    // passes credentialSecret(env) as envSecret), per-tenant-bound (v2). Legacy rows
+    // still decrypt in poll() via the JWT_SECRET fallback.
+    const enc = await encryptSecretForStorage(minted.key, opts.envSecret, { tenantId: minted.tenantId });
 
     await this.db
       .update(deviceAuthorizations)
@@ -150,8 +153,10 @@ export class DeviceAuthService {
       );
   }
 
-  /** Poll for the minted key; delivers it exactly once, then nulls it. */
-  async poll(deviceCode: string, envSecret: string): Promise<DevicePollResult> {
+  /** Poll for the minted key; delivers it exactly once, then nulls it.
+   *  `envSecret` is the dedicated credential secret; `legacySecret` (JWT_SECRET)
+   *  lets pre-migration rows still decrypt (versioned dual-read). */
+  async poll(deviceCode: string, envSecret: string, legacySecret?: string): Promise<DevicePollResult> {
     const hash = await hashSecret(deviceCode);
     const [row] = await this.db
       .select()
@@ -172,7 +177,7 @@ export class DeviceAuthService {
       .where(eq(deviceAuthorizations.id, row.id));
 
     if (row.status === 'approved' && row.issuedKeyEnc && row.tenantId != null) {
-      const accessKey = await decryptSecretFromStorage(row.issuedKeyEnc, envSecret);
+      const accessKey = await decryptSecretFromStorage(row.issuedKeyEnc, envSecret, { tenantId: row.tenantId, legacySecret });
       await this.db
         .update(deviceAuthorizations)
         .set({ status: 'claimed', issuedKeyEnc: null })

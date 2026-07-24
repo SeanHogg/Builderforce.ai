@@ -7,6 +7,12 @@ compatibility_flags = ["nodejs_compat"]
 # [vars]
 # NEON_DATABASE_URL = "postgresql://user:password@host.neon.tech/dbname?sslmode=require"
 
+# SECURITY (H9): session-token secret gating the data routes (projects/files/
+# datasets/training/agents). MUST equal the api's JWT_SECRET so worker-verified
+# Bearer tokens match api-issued ones. Set via:
+#   wrangler secret put JWT_SECRET   (run in worker/, use the SAME value as api/)
+# Without it the data routes fail closed (503). See src/lib/auth.ts.
+
 # ---------------------------------------------------------------------------
 # Gateway configuration
 # ---------------------------------------------------------------------------

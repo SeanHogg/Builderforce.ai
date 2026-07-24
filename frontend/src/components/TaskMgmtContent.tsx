@@ -369,7 +369,7 @@ export function TaskMgmtContent({
     if (!opts?.background) setLoading(true);
     setError(null);
     try {
-      const [tasksData, agentHostsData, runTargets, membersData, projectWf] = await Promise.all([
+      const [tasksData, agentHostsData, runTargets, membersData, projectWf, assignable] = await Promise.all([
         tasksApi.list(projectId),
         agentHosts.list().catch(() => []),
         // Cloud agents assignable to a ticket (active, cloud-capable ide_agents).
@@ -382,6 +382,10 @@ export function TaskMgmtContent({
         // picker to their members. Falls back to the full roster when no team is
         // assigned (scopedToTeams=false) or in the all-projects view (no projectId).
         projectId != null ? getProjectWorkforce(projectId).catch(() => null) : Promise.resolve(null),
+        // The unified assignable workforce — its `hires` are active freelance-marketplace
+        // engagements (cross-tenant humans) that `tasksApi.assignees()` (tenant members)
+        // doesn't return, so a hired freelancer can be assigned a ticket on the board.
+        kanbanApi.assignable().catch(() => ({ agents: [], humans: [], hires: [] as Array<{ ref: string; name: string }> })),
       ]);
       setTasks(tasksData);
       // When a project has teams assigned, the assignable workforce is exactly
@@ -393,7 +397,12 @@ export function TaskMgmtContent({
         : null;
       setAgentHostsList(teamSet ? agentHostsData.filter((h) => teamSet.has(`host_agent:${h.id}`)) : agentHostsData);
       setCloudAgentsList(teamSet ? runTargets.cloudAgents.filter((a) => teamSet.has(`cloud_agent:${a.ref}`)) : runTargets.cloudAgents);
-      setMembersList(teamSet ? membersData.filter((m) => teamSet.has(`human:${m.id}`)) : membersData);
+      // Team members (team-scoped when the board is), then union in freelance hires —
+      // explicit project engagements that should be assignable regardless of team
+      // scoping — deduped by id. A hire's ref is a users.id, so `u:<id>` decodes right.
+      const scopedMembers = teamSet ? membersData.filter((m) => teamSet.has(`human:${m.id}`)) : membersData;
+      const hireMembers = assignable.hires.map((h) => ({ id: h.ref, name: h.name }));
+      setMembersList([...scopedMembers, ...hireMembers.filter((h) => !scopedMembers.some((m) => m.id === h.id))]);
       // Always resolve the full project list (unless the parent supplied one or
       // the global scope already holds it): it backs both the project filter and
       // the "Move to board" destinations, needed even in the scoped view. When a

@@ -1,4 +1,101 @@
 {
+  "marketingDeck": {
+    "seo": {
+      "title": "终极演示 — Builderforce",
+      "description": "跟随五个步骤，见证一个想法如何变成一个正在运行、已部署并经过测试的应用，由人类与 AI 智能体组成的团队来运营。",
+      "ogTitle": "终极演示：几分钟内构建、部署并扩展"
+    },
+    "ui": {
+      "start": "开始演示",
+      "next": "下一步",
+      "prev": "上一步",
+      "restart": "重新开始",
+      "progress": "{current} / {total}",
+      "progressLabel": "演示进度",
+      "seeLabel": "你将看到",
+      "ctaPrimary": "开始构建",
+      "ctaSecondary": "预约演示"
+    },
+    "slides": [
+      {
+        "kind": "intro",
+        "eyebrow": "终极演示",
+        "title": "构建、部署、扩展——一气呵成。",
+        "tagline": "五个步骤，把一个想法一路带到正在运行的产品，由人类与 AI 智能体组成的团队运营。跟着做吧。"
+      },
+      {
+        "kind": "scenario",
+        "chapter": "01",
+        "eyebrow": "登录",
+        "title": "零配置，你已经进来了。",
+        "tagline": "没有表单，没有设置——只需一个账户。",
+        "steps": [
+          "创建账户或登录",
+          "直接进入你的默认工作区",
+          "一个默认项目已经在等着你"
+        ],
+        "see": "几秒钟内就进入一个可用的工作区——无论在网页端还是 VS Code 中。"
+      },
+      {
+        "kind": "scenario",
+        "chapter": "02",
+        "eyebrow": "描述它",
+        "title": "说出你想要的，看着它被构建出来。",
+        "tagline": "在「我们要构建什么？」中输入你的想法。",
+        "steps": [
+          "用自然语言描述你的应用",
+          "进入 Builder，你的提示已一并带入",
+          "AI 为你搭建一个完整、可运行的应用"
+        ],
+        "see": "实时预览随即亮起一个可用的应用——仅凭一句话。"
+      },
+      {
+        "kind": "scenario",
+        "chapter": "03",
+        "eyebrow": "部署与测试",
+        "title": "一键上线，自动测试。",
+        "tagline": "发布，然后让智能体为它做全面检验。",
+        "steps": [
+          "点击发布——你的应用几秒内就在一个网址上线",
+          "智能测试器自动以已部署的应用为目标",
+          "检查结果以可直接修复的工单返回"
+        ],
+        "see": "无需离开 Builder，即完成部署与质量检查。"
+      },
+      {
+        "kind": "scenario",
+        "chapter": "04",
+        "eyebrow": "扩展团队",
+        "title": "邀请成员，雇佣智能体，同一个团队。",
+        "tagline": "人类与 AI 智能体在同一个看板上协作。",
+        "steps": [
+          "邀请一位同事加入你的工作区",
+          "为你的团队添加一个 AI 智能体",
+          "把工作分配给某个人或某个智能体——同一个选择器"
+        ],
+        "see": "一个由人类与智能体组成的混合团队，在同一个共享看板上协作。"
+      },
+      {
+        "kind": "scenario",
+        "chapter": "05",
+        "eyebrow": "领导团队",
+        "title": "精简的团队，增强的劳动力。",
+        "tagline": "少数几名开发者指挥一支智能体舰队。",
+        "steps": [
+          "为各泳道配置合适的智能体",
+          "把工单拖入泳道即可自动运行一个智能体",
+          "实时引导运行，并在它们工作时回答其提问"
+        ],
+        "see": "少数几名开发者编排着一支承担繁重工作的智能体队伍。"
+      },
+      {
+        "kind": "outro",
+        "eyebrow": "这就是惊艳时刻",
+        "title": "从想法到产品再到团队——只需几分钟。",
+        "tagline": "你刚刚见证了一句提示如何变成一个已部署、已测试的应用，由人类与 AI 智能体组成的团队运营。现在轮到你了。"
+      }
+    ]
+  },
   "contentManager": {
     "migrate": {
       "moving": "正在将您的内容迁移到知识库…",
@@ -5372,7 +5469,8 @@
         "question": "我能购买或出售看板模板吗？",
         "answer": "可以。将一套交付流程——泳道、必需角色、审阅关卡和推荐名单——打包为看板模板并发布到市场出售或共享。任何团队都可以一键将经过验证的模板安装到项目中，继承一套受治理、按角色放行的工作流，而无需从零构建。"
       }
-    ]
+    ],
+    "newsletterPlaceholder": "your@email.com"
   },
   "pricing": {
     "seo": {
@@ -7367,7 +7465,9 @@
       "apiKeys": "API 密钥",
       "token": "超级管理员令牌",
       "feedback": "反馈",
-      "releaseNotes": "更新日志"
+      "releaseNotes": "更新日志",
+      "demoFunnel": "演示漏斗",
+      "salesLeads": "销售线索"
     },
     "common": {
       "loading": "加载中…",
@@ -8005,7 +8105,68 @@
       "draft": "草稿",
       "publish": "发布",
       "unpublish": "取消发布",
-      "deleteConfirm": "确定删除更新日志“{title}”吗？此操作无法撤销。"
+      "deleteConfirm": "确定删除更新日志“{title}”吗？此操作无法撤销。",
+      "sendNote": "立即发送",
+      "resendNote": "重新发送",
+      "sendNoteHint": "立即将此更新发送给所有已同意接收的用户——之后将不会包含在每周汇总中。",
+      "resendNoteHint": "此更新已发送过。再次发送给所有已同意接收的用户。",
+      "sendNoteConfirm": "现在就将更新日志“{title}”发送给所有已同意接收的用户吗？之后它将不会包含在每周汇总中。",
+      "resendNoteConfirm": "此更新已发送过。现在再次将“{title}”发送给所有已同意接收的用户吗？"
+    },
+    "demoFunnel": {
+      "title": "演示转化漏斗",
+      "subtitle": "按角色划分的匿名演示账户互动（最近 30 天）。",
+      "persona": "角色",
+      "total": "合计",
+      "convRate": "{rate}% 注册",
+      "recentTitle": "最近事件",
+      "empty": "暂无演示活动。",
+      "when": "时间",
+      "event": "事件",
+      "path": "路径",
+      "personas": {
+        "ai-team": "AI 软件团队",
+        "insights": "工程 ROI 与洞察",
+        "pmo": "PMO 指挥中心",
+        "talent": "人才与市场",
+        "governance": "安全、架构与治理"
+      },
+      "stages": {
+        "demo_start": "已开始",
+        "page_view": "页面浏览",
+        "convert_prompt_shown": "已显示提示",
+        "convert_clicked": "点击注册",
+        "book_demo_opened": "打开预约",
+        "lead_submitted": "已提交线索",
+        "exit_prompt_shown": "显示退出",
+        "demo_exit": "已退出"
+      }
+    },
+    "salesLeads": {
+      "title": "销售线索",
+      "subtitle": "来自营销网站的预约演示与退出意向线索。",
+      "count": "{count} 条线索",
+      "filterAll": "所有状态",
+      "contact": "联系人",
+      "interest": "兴趣",
+      "source": "来源",
+      "received": "接收时间",
+      "statusHeader": "状态",
+      "empty": "暂无线索。",
+      "mailSubject": "您的 Builderforce 演示",
+      "status": {
+        "new": "新",
+        "contacted": "已联系",
+        "qualified": "已认定",
+        "closed": "已关闭"
+      },
+      "personas": {
+        "ai-team": "AI 软件团队",
+        "insights": "工程 ROI 与洞察",
+        "pmo": "PMO 指挥中心",
+        "talent": "人才与市场",
+        "governance": "安全、架构与治理"
+      }
     }
   },
   "providerKeys": {
@@ -8363,7 +8524,8 @@
     "running": "运行中",
     "awaiting": "待回答",
     "needsYou": "{count} 项待您回答",
-    "runningCount": "{count} 项运行中"
+    "runningCount": "{count} 项运行中",
+    "unread": "{count} 条未读消息"
   },
   "onboarding": {
     "welcome": "欢迎使用 Builderforce",
@@ -10454,6 +10616,7 @@
     "home": "首页",
     "product": "产品",
     "resources": "资源",
+    "demo": "演示",
     "talentWorkforce": "人才 / 智能劳动力",
     "agents": "智能体",
     "models": "模型",
@@ -10528,6 +10691,102 @@
       "new": "新功能",
       "improvement": "改进",
       "fix": "修复"
+    }
+  },
+  "demo": {
+    "personas": {
+      "ai-team": "AI 软件团队",
+      "insights": "工程 ROI 与洞察",
+      "pmo": "PMO 指挥中心",
+      "talent": "人才与市场",
+      "governance": "安全、架构与治理"
+    },
+    "bannerAria": "演示会话控制",
+    "badge": "实时演示",
+    "bannerText": "您正在体验实时演示——{name}",
+    "bookOrJoin": "加入或预约演示",
+    "createAccount": "创建账户",
+    "exit": "退出演示",
+    "convertTitle": "把它变成你的工作区",
+    "convertLead": "您刚刚用示例数据体验了{persona}演示。创建免费账户即可用自己的项目来做同样的事——或与我们的团队联系。",
+    "benefit1": "接入你自己的代码库、工单和团队",
+    "benefit2": "AI 智能体提交真实的拉取请求",
+    "benefit3": "免费开始——无需信用卡",
+    "createAccountFree": "创建免费账户",
+    "talkToSales": "联系销售",
+    "bookLead": "想要引导式讲解？预约演示。",
+    "exitTitle": "在您离开之前",
+    "exitLead": "想用自己的数据继续探索，或让我们为您讲解一遍？",
+    "exitBookLead": "与我们的团队预约演示",
+    "showcase": {
+      "heading": "试用实时演示——无需注册",
+      "lead": "选择适合你的场景，直接进入预置数据的工作区。这是真实产品，已加载示例数据。",
+      "launch": "启动演示",
+      "launching": "正在启动……",
+      "error": "无法启动演示，请重试。",
+      "note": "演示为共享环境，会定期重置，无需账户。您所做的更改是临时的。",
+      "personas": {
+        "ai-team": {
+          "title": "AI 软件团队",
+          "audience": "面向工程团队",
+          "desc": "AI 智能体与人类共享工作的实时冲刺看板——观看智能体领取工单、进行规划并提交拉取请求。"
+        },
+        "insights": {
+          "title": "工程 ROI 与洞察",
+          "audience": "面向副总裁与 CTO",
+          "desc": "交付健康度、AI 影响和每张工单成本——展示 AI 辅助交付真正回报的数据。"
+        },
+        "pmo": {
+          "title": "PMO 指挥中心",
+          "audience": "面向项目与交付负责人",
+          "desc": "从公司目标到智能体执行工单的一套带日期的层级结构：组合、OKR、甘特图和敏捷仪式。"
+        },
+        "talent": {
+          "title": "人才与市场",
+          "audience": "面向代理机构与自由职业者",
+          "desc": "在一个看板上混合编排你的团队、雇佣的自由职业者和 AI 智能体——通过同一流程雇佣任一方。"
+        },
+        "governance": {
+          "title": "安全、架构与治理",
+          "audience": "面向安全与合规",
+          "desc": "每周一次的 SOC 2 审计会创建整改工单、不可篡改的审计轨迹，以及每次部署的策略门禁。"
+        }
+      }
+    }
+  },
+  "bookDemo": {
+    "badge": "联系我们",
+    "pageTitle": "预约演示",
+    "pageLead": "与我们的团队一起在您自己的用例上体验 Builderforce——或立即进入自助式实时演示。",
+    "formHeading": "与销售预约",
+    "formSub": "简单介绍一下您自己，我们会联系您安排讲解。",
+    "selfServeHeading": "或者现在自己试用",
+    "selfServeSub": "无需注册、无需等待——探索预置数据的演示工作区。",
+    "selfServe1": "真实产品，真实示例数据",
+    "selfServe2": "面向五类买家的五个场景",
+    "selfServe3": "随时转为您自己的账户",
+    "selfServeCta": "浏览实时演示",
+    "nameLabel": "姓名",
+    "namePlaceholder": "您的姓名",
+    "emailLabel": "工作邮箱",
+    "emailPlaceholder": "you@company.com",
+    "companyLabel": "公司",
+    "companyPlaceholder": "公司名称",
+    "interestLabel": "我感兴趣的是",
+    "interestAny": "尚不确定",
+    "messageLabel": "有什么需要我们了解的吗？",
+    "messagePlaceholder": "您的目标、团队规模、时间安排……",
+    "submit": "申请演示",
+    "submitting": "正在发送……",
+    "error": "出了点问题，请重试。",
+    "successTitle": "谢谢——我们会与您联系",
+    "successBody": "我们的团队将很快与您联系，安排讲解。",
+    "personas": {
+      "ai-team": "AI 软件团队",
+      "insights": "工程 ROI 与洞察",
+      "pmo": "PMO 指挥中心",
+      "talent": "人才与市场",
+      "governance": "安全、架构与治理"
     }
   }
 }

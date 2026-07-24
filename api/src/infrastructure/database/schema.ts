@@ -2401,6 +2401,27 @@ export const chatMembers = pgTable('chat_members', {
 ]);
 
 // ---------------------------------------------------------------------------
+// Chat read state (0361) — per-user read high-water mark for a Brain chat, so the
+// web can show an "unread" badge when execution milestones (or a teammate/agent
+// message) land in a chat the user is not viewing. Keyed by (chat_id, user_id) so
+// it covers BOTH the chat owner (no chat_members row) and shared participants.
+// last_read_seq is compared against brain_chat_messages.seq (= the message PK):
+// unread when max(seq) > last_read_seq. A row exists only once the user has OPENED
+// the chat — so unread accrues only on conversations the user has actually read.
+// ---------------------------------------------------------------------------
+
+export const chatReadState = pgTable('chat_read_state', {
+  chatId:      integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
+  userId:      varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  lastReadSeq: integer('last_read_seq').notNull().default(0),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.chatId, t.userId] }),
+  index('idx_chat_read_state_user').on(t.tenantId, t.userId),
+]);
+
+// ---------------------------------------------------------------------------
 // Chat <-> ticket links (0266) — a many-to-many, lineage-aware edge between a
 // Brain chat and a work item of ANY tier (portfolio | objective | initiative |
 // epic | task). MANY chats can reference one ticket; ONE chat can reference MANY

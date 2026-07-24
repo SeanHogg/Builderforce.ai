@@ -1,4 +1,101 @@
 {
+  "marketingDeck": {
+    "seo": {
+      "title": "Die ultimative Demo — Builderforce",
+      "description": "Folge fünf Schritten und sieh, wie aus einer Idee eine laufende, bereitgestellte und getestete App wird, betrieben von einem Team aus Menschen und KI-Agenten.",
+      "ogTitle": "Die ultimative Demo: in Minuten bauen, bereitstellen und skalieren"
+    },
+    "ui": {
+      "start": "Demo starten",
+      "next": "Weiter",
+      "prev": "Zurück",
+      "restart": "Neu starten",
+      "progress": "{current} / {total}",
+      "progressLabel": "Demo-Fortschritt",
+      "seeLabel": "Das wirst du sehen",
+      "ctaPrimary": "Jetzt loslegen",
+      "ctaSecondary": "Demo buchen"
+    },
+    "slides": [
+      {
+        "kind": "intro",
+        "eyebrow": "Die ultimative Demo",
+        "title": "Bauen, bereitstellen und skalieren – in einem Rutsch.",
+        "tagline": "Fünf Schritte führen eine einzige Idee bis zu einem laufenden Produkt, betrieben von einem Team aus Menschen und KI-Agenten. Mach mit."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "01",
+        "eyebrow": "Anmelden",
+        "title": "Kein Setup. Du bist schon drin.",
+        "tagline": "Keine Formulare, keine Konfiguration – nur ein Konto.",
+        "steps": [
+          "Konto erstellen oder anmelden",
+          "Direkt im Standard-Workspace landen",
+          "Ein Standardprojekt wartet bereits auf dich"
+        ],
+        "see": "In Sekunden in einem einsatzbereiten Workspace – im Web oder in VS Code."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "02",
+        "eyebrow": "Beschreibe es",
+        "title": "Sag, was du willst. Sieh zu, wie es entsteht.",
+        "tagline": "Gib deine Idee in „Was sollen wir bauen?“ ein.",
+        "steps": [
+          "Beschreibe deine App in normaler Sprache",
+          "Lande im Builder – dein Prompt kommt mit",
+          "Die KI erstellt dir eine vollständige, lauffähige App"
+        ],
+        "see": "Eine Live-Vorschau erwacht mit einer funktionierenden App – aus einem einzigen Satz."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "03",
+        "eyebrow": "Bereitstellen & testen",
+        "title": "Mit einem Klick live. Automatisch getestet.",
+        "tagline": "Veröffentliche und lass den Agenten sie auf Herz und Nieren prüfen.",
+        "steps": [
+          "Auf Veröffentlichen klicken – deine App ist in Sekunden unter einer URL live",
+          "Der agentische Tester zielt automatisch auf die bereitgestellte App",
+          "Die Ergebnisse kommen als sofort behebbare Tickets zurück"
+        ],
+        "see": "Bereitgestellt und qualitätsgeprüft, ohne den Builder je zu verlassen."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "04",
+        "eyebrow": "Team vergrößern",
+        "title": "Menschen einladen. Agenten anheuern. Ein Team.",
+        "tagline": "Menschen und KI-Agenten arbeiten am selben Board.",
+        "steps": [
+          "Lade einen Kollegen in deinen Workspace ein",
+          "Füge einen KI-Agenten zu deiner Belegschaft hinzu",
+          "Weise Arbeit einer Person oder einem Agenten zu – gleiche Auswahl"
+        ],
+        "see": "Ein gemischtes Team aus Menschen und Agenten, das an einem gemeinsamen Board zusammenarbeitet."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "05",
+        "eyebrow": "Die Belegschaft führen",
+        "title": "Ein schlankes Team. Eine erweiterte Belegschaft.",
+        "tagline": "Wenige Entwickler dirigieren eine Flotte von Agenten.",
+        "steps": [
+          "Besetze Swimlanes mit den passenden Agenten",
+          "Zieh ein Ticket in eine Lane, um einen Agenten automatisch zu starten",
+          "Steuere laufende Runs und beantworte ihre Fragen während der Arbeit"
+        ],
+        "see": "Eine Handvoll Entwickler orchestriert eine Belegschaft von Agenten, die die Hauptarbeit erledigen."
+      },
+      {
+        "kind": "outro",
+        "eyebrow": "Das ist der WOW-Effekt",
+        "title": "Von der Idee zum Produkt zum Team – in Minuten.",
+        "tagline": "Du hast gerade gesehen, wie ein Prompt zu einer bereitgestellten, getesteten App wird, betrieben von einem Team aus Menschen und KI-Agenten. Jetzt bist du dran."
+      }
+    ]
+  },
   "contentManager": {
     "migrate": {
       "moving": "Deine Inhalte werden nach Wissen verschoben…",
@@ -5372,7 +5469,8 @@
         "question": "Kann ich eine Kanban-Board-Vorlage kaufen oder verkaufen?",
         "answer": "Ja. Verpacken Sie einen Lieferprozess — Lanes, erforderliche Rollen, Prüf-Gates und ein empfohlenes Aufgebot — als Kanban-Vorlage und veröffentlichen Sie sie auf dem Marktplatz zum Verkauf oder Teilen. Jedes Team kann eine bewährte Vorlage mit einem Klick in ein Projekt installieren und einen gesteuerten, rollengeschützten Workflow erben, statt einen von Grund auf zu bauen."
       }
-    ]
+    ],
+    "newsletterPlaceholder": "du@email.com"
   },
   "pricing": {
     "seo": {
@@ -7367,7 +7465,9 @@
       "apiKeys": "API-Schlüssel",
       "token": "Superadmin-Token",
       "feedback": "Feedback",
-      "releaseNotes": "Neuerungen"
+      "releaseNotes": "Neuerungen",
+      "demoFunnel": "Demo-Funnel",
+      "salesLeads": "Sales-Leads"
     },
     "common": {
       "loading": "Wird geladen…",
@@ -8005,7 +8105,68 @@
       "draft": "Entwurf",
       "publish": "Veröffentlichen",
       "unpublish": "Zurückziehen",
-      "deleteConfirm": "Die Neuerung „{title}“ löschen? Dies kann nicht rückgängig gemacht werden."
+      "deleteConfirm": "Die Neuerung „{title}“ löschen? Dies kann nicht rückgängig gemacht werden.",
+      "sendNote": "Jetzt senden",
+      "resendNote": "Erneut senden",
+      "sendNoteHint": "Diese Neuerung jetzt per E-Mail an alle einwilligenden Nutzer senden – sie wird aus der wöchentlichen Zusammenfassung ausgeschlossen.",
+      "resendNoteHint": "Diese Neuerung wurde bereits gesendet. Erneut an alle einwilligenden Nutzer senden.",
+      "sendNoteConfirm": "Die Neuerung „{title}“ jetzt per E-Mail an alle einwilligenden Nutzer senden? Sie wird danach aus der wöchentlichen Zusammenfassung ausgeschlossen.",
+      "resendNoteConfirm": "Diese Neuerung wurde bereits gesendet. „{title}“ jetzt erneut an alle einwilligenden Nutzer senden?"
+    },
+    "demoFunnel": {
+      "title": "Demo-Conversion-Funnel",
+      "subtitle": "Anonyme Demo-Konto-Interaktion nach Persona (letzte 30 Tage).",
+      "persona": "Persona",
+      "total": "Gesamt",
+      "convRate": "{rate}% Registrierung",
+      "recentTitle": "Letzte Ereignisse",
+      "empty": "Noch keine Demo-Aktivität.",
+      "when": "Wann",
+      "event": "Ereignis",
+      "path": "Pfad",
+      "personas": {
+        "ai-team": "KI-Softwareteam",
+        "insights": "Engineering-ROI & Insights",
+        "pmo": "PMO-Kommandozentrale",
+        "talent": "Talente & Marktplatz",
+        "governance": "Sicherheit, Architektur & Governance"
+      },
+      "stages": {
+        "demo_start": "Gestartet",
+        "page_view": "Seitenaufrufe",
+        "convert_prompt_shown": "Hinweis gezeigt",
+        "convert_clicked": "Registrierung geklickt",
+        "book_demo_opened": "Buchung geöffnet",
+        "lead_submitted": "Lead gesendet",
+        "exit_prompt_shown": "Exit gezeigt",
+        "demo_exit": "Verlassen"
+      }
+    },
+    "salesLeads": {
+      "title": "Sales-Leads",
+      "subtitle": "Demo-Buchungs- und Exit-Intent-Leads von der Marketing-Website.",
+      "count": "{count} Leads",
+      "filterAll": "Alle Status",
+      "contact": "Kontakt",
+      "interest": "Interesse",
+      "source": "Quelle",
+      "received": "Erhalten",
+      "statusHeader": "Status",
+      "empty": "Noch keine Leads.",
+      "mailSubject": "Deine Builderforce-Demo",
+      "status": {
+        "new": "Neu",
+        "contacted": "Kontaktiert",
+        "qualified": "Qualifiziert",
+        "closed": "Geschlossen"
+      },
+      "personas": {
+        "ai-team": "KI-Softwareteam",
+        "insights": "Engineering-ROI & Insights",
+        "pmo": "PMO-Kommandozentrale",
+        "talent": "Talente & Marktplatz",
+        "governance": "Sicherheit, Architektur & Governance"
+      }
     }
   },
   "providerKeys": {
@@ -8363,7 +8524,8 @@
     "running": "Läuft",
     "awaiting": "Antwort nötig",
     "needsYou": "{count} warten auf Ihre Antwort",
-    "runningCount": "{count} laufen"
+    "runningCount": "{count} laufen",
+    "unread": "{count, plural, =1 {1 ungelesene Nachricht} other {# ungelesene Nachrichten}}"
   },
   "onboarding": {
     "welcome": "Willkommen bei Builderforce",
@@ -10454,6 +10616,7 @@
     "home": "Start",
     "product": "Produkt",
     "resources": "Ressourcen",
+    "demo": "Demo",
     "talentWorkforce": "Talente / Workforce",
     "agents": "Agenten",
     "models": "Modelle",
@@ -10528,6 +10691,102 @@
       "new": "Neu",
       "improvement": "Verbessert",
       "fix": "Behoben"
+    }
+  },
+  "demo": {
+    "personas": {
+      "ai-team": "KI-Softwareteam",
+      "insights": "Engineering-ROI & Insights",
+      "pmo": "PMO-Kommandozentrale",
+      "talent": "Talente & Marktplatz",
+      "governance": "Sicherheit, Architektur & Governance"
+    },
+    "bannerAria": "Steuerung der Demo-Sitzung",
+    "badge": "Live-Demo",
+    "bannerText": "Du erkundest eine Live-Demo — {name}",
+    "bookOrJoin": "Beitreten oder Demo buchen",
+    "createAccount": "Konto erstellen",
+    "exit": "Demo verlassen",
+    "convertTitle": "Mach es zu deinem Workspace",
+    "convertLead": "Du hast gerade die {persona}-Demo mit Beispieldaten erkundet. Erstelle ein kostenloses Konto, um das mit deinen eigenen Projekten zu tun – oder sprich mit unserem Team.",
+    "benefit1": "Bring deine Repos, Tickets und dein Team mit",
+    "benefit2": "KI-Agenten, die echte Pull Requests öffnen",
+    "benefit3": "Kostenlos starten – keine Kreditkarte",
+    "createAccountFree": "Kostenloses Konto erstellen",
+    "talkToSales": "Mit dem Vertrieb sprechen",
+    "bookLead": "Lieber eine geführte Tour? Buche eine Demo.",
+    "exitTitle": "Bevor du gehst",
+    "exitLead": "Möchtest du mit eigenen Daten weiter erkunden oder dir alles zeigen lassen?",
+    "exitBookLead": "Buche eine Demo mit unserem Team",
+    "showcase": {
+      "heading": "Probiere eine Live-Demo – ohne Anmeldung",
+      "lead": "Wähle die Story, die zu dir passt, und steige direkt in einen vorbefüllten Workspace ein. Es ist das echte Produkt mit Beispieldaten.",
+      "launch": "Demo starten",
+      "launching": "Wird gestartet…",
+      "error": "Demo konnte nicht gestartet werden. Bitte erneut versuchen.",
+      "note": "Demos sind geteilt, werden regelmäßig zurückgesetzt und benötigen kein Konto. Deine Änderungen sind temporär.",
+      "personas": {
+        "ai-team": {
+          "title": "KI-Softwareteam",
+          "audience": "Für Engineering-Teams",
+          "desc": "Ein Live-Sprint-Board, auf dem KI-Agenten und Menschen die Arbeit teilen – sieh zu, wie ein Agent ein Ticket übernimmt, plant und einen Pull Request öffnet."
+        },
+        "insights": {
+          "title": "Engineering-ROI & Insights",
+          "audience": "Für VPs & CTOs",
+          "desc": "Lieferqualität, KI-Wirkung und Kosten pro Ticket – die Zahlen, die zeigen, was KI-gestützte Lieferung wirklich einbringt."
+        },
+        "pmo": {
+          "title": "PMO-Kommandozentrale",
+          "audience": "Für Programm- und Lieferverantwortliche",
+          "desc": "Eine datierte Hierarchie vom Unternehmensziel bis zum agentenausgeführten Ticket: Portfolio, OKRs, Gantt und Zeremonien."
+        },
+        "talent": {
+          "title": "Talente & Marktplatz",
+          "audience": "Für Agenturen & Freelancer",
+          "desc": "Eine gemischte Besetzung aus deinem Team, angeheuerten Freelancern und KI-Agenten auf einem Board – beide über denselben Ablauf anheuern."
+        },
+        "governance": {
+          "title": "Sicherheit, Architektur & Governance",
+          "audience": "Für Sicherheit & Compliance",
+          "desc": "Ein wöchentliches SOC-2-Audit, das Behebungstickets erstellt, ein unveränderliches Audit-Protokoll und Policy-Gates bei jedem Deploy."
+        }
+      }
+    }
+  },
+  "bookDemo": {
+    "badge": "Sprich mit uns",
+    "pageTitle": "Demo buchen",
+    "pageLead": "Erlebe Builderforce mit unserem Team an deinem eigenen Anwendungsfall – oder starte jetzt eine Self-Service-Live-Demo.",
+    "formHeading": "Termin mit dem Vertrieb",
+    "formSub": "Erzähl uns kurz etwas über dich, und wir melden uns, um eine Tour zu vereinbaren.",
+    "selfServeHeading": "Oder probiere es jetzt selbst",
+    "selfServeSub": "Keine Anmeldung, kein Warten – erkunde einen vorbefüllten Demo-Workspace.",
+    "selfServe1": "Echtes Produkt, echte Beispieldaten",
+    "selfServe2": "Fünf Storys für fünf Käufertypen",
+    "selfServe3": "Jederzeit in dein eigenes Konto umwandeln",
+    "selfServeCta": "Live-Demos ansehen",
+    "nameLabel": "Name",
+    "namePlaceholder": "Dein Name",
+    "emailLabel": "Arbeits-E-Mail",
+    "emailPlaceholder": "du@unternehmen.com",
+    "companyLabel": "Unternehmen",
+    "companyPlaceholder": "Firmenname",
+    "interestLabel": "Ich interessiere mich für",
+    "interestAny": "Noch unsicher",
+    "messageLabel": "Sollten wir etwas wissen?",
+    "messagePlaceholder": "Deine Ziele, Teamgröße, Zeitrahmen…",
+    "submit": "Demo anfragen",
+    "submitting": "Wird gesendet…",
+    "error": "Etwas ist schiefgelaufen. Bitte erneut versuchen.",
+    "successTitle": "Danke – wir melden uns",
+    "successBody": "Unser Team meldet sich in Kürze, um deine Tour zu planen.",
+    "personas": {
+      "ai-team": "KI-Softwareteam",
+      "insights": "Engineering-ROI & Insights",
+      "pmo": "PMO-Kommandozentrale",
+      "talent": "Talente & Marktplatz",
+      "governance": "Sicherheit, Architektur & Governance"
     }
   }
 }

@@ -22,6 +22,8 @@ import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
 import { evaluateTaskAutoRun, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
 import { maybeAutoRunOnLaneEntry } from '../../application/swimlane/laneEntryTrigger';
+import { findCanonicalBoard } from '../../application/swimlane/canonicalBoard';
+import { coordinateTicket } from '../../application/manager/coordinateTicket';
 import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
 import { SecurityTicketAccessService } from '../../application/security/SecurityTicketAccessService';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';
@@ -162,15 +164,22 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // funnel through here so neither can drift; the agent-advance path (a fourth
   // status-writer) reuses the same `maybeAutoRunOnLaneEntry` from the runtime layer.
   const fireLaneAutoRun = (c: Context<HonoEnv>, info: { projectId: number; taskId: number; status: string }): void => {
-    c.executionCtx.waitUntil(
-      maybeAutoRunOnLaneEntry(c.env as Env, db, runtimeService, {
-        tenantId:    c.get('tenantId'),
-        projectId:   info.projectId,
-        taskId:      info.taskId,
-        status:      info.status,
-        submittedBy: (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:lane-auto',
-      }),
-    );
+    c.executionCtx.waitUntil((async () => {
+      const tenantId = c.get('tenantId');
+      const submittedBy = (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:lane-auto';
+      // On a lifecycle-managed board the coordinator owns lane transitions — a manual
+      // drag must drive the coordinated multi-role state machine (rewind to the earliest
+      // unmet required stage, run the right producer, enforce review gates), NOT a
+      // one-off producer. A simple board keeps the direct lane trigger.
+      const board = await findCanonicalBoard(db, info.projectId, tenantId).catch(() => null);
+      if (board?.lifecycleManaged) {
+        await coordinateTicket(c.env as Env, db, runtimeService, { tenantId, taskId: info.taskId }).catch(() => {});
+        return;
+      }
+      await maybeAutoRunOnLaneEntry(c.env as Env, db, runtimeService, {
+        tenantId, projectId: info.projectId, taskId: info.taskId, status: info.status, submittedBy,
+      });
+    })());
   };
 
   // Emit a ticket mutation onto the unified activity/audit stream, attributed to

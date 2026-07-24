@@ -859,7 +859,7 @@ function MonitorPanel({
             )}
 
             {currentIncidentId && (
-              <a href={`/incidents`} className="btn btn-secondary" style={{ textAlign: 'center' }}>{t('viewIncident')}</a>
+              <a href={`/incidents?incident=${currentIncidentId}`} className="btn btn-secondary" style={{ textAlign: 'center' }}>{t('viewIncident')}</a>
             )}
 
             {!isNew && (
@@ -967,7 +967,7 @@ function ReportingSection({ t }: { t: T }) {
           : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {incidents.recent.map((inc) => (
-                <a key={inc.id} href="/incidents" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', textDecoration: 'none' }}>
+                <a key={inc.id} href={`/incidents?incident=${inc.id}`} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', textDecoration: 'none' }}>
                   <span className={SEVERITY_BADGE[inc.severity]}>{t(`severity.${inc.severity}`)}</span>
                   <span style={{ fontWeight: 600, color: 'var(--text-primary)', flex: 1, minWidth: 0 }}>{inc.title}</span>
                   <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{inc.affectedSystem || t('uncategorized')}</span>

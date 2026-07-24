@@ -144,6 +144,10 @@
   --surface: var(--bg-elevated);
   --surface-2: var(--surface-interactive);
   --text-on-accent: #fff;
+  /* Unread-message badge (distinct indigo, so it reads apart from the coral/amber
+     run-state dots). Matches the NotificationBell badge for a consistent "unread"
+     hue across the app. Same value in dark; legible on white text in both. */
+  --badge-unread: #6366f1;
 
   /* Shared Brain UI (@seanhogg/builderforce-brain-ui) theme bridge. The
      <BrainTimeline> transcript reads `--bf-*`; we map them to the app's
@@ -238,6 +242,7 @@ html[data-theme='light'] {
   --warning-text: #b45309;
   --warning-bg: rgba(245, 158, 11, 0.14);
   --text-on-accent: #fff;
+  --badge-unread: #6366f1;
 }
 
 /* Touch: restore comfortable tap targets on coarse pointers. The compact metrics

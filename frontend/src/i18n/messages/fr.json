@@ -1,4 +1,101 @@
 {
+  "marketingDeck": {
+    "seo": {
+      "title": "La démo ultime — Builderforce",
+      "description": "Suivez cinq étapes pour voir une idée devenir une application fonctionnelle, déployée et testée, pilotée par une équipe d'humains et d'agents IA.",
+      "ogTitle": "La démo ultime : créez, déployez et passez à l'échelle en quelques minutes"
+    },
+    "ui": {
+      "start": "Lancer la démo",
+      "next": "Suivant",
+      "prev": "Retour",
+      "restart": "Recommencer",
+      "progress": "{current} / {total}",
+      "progressLabel": "Progression de la démo",
+      "seeLabel": "Ce que vous verrez",
+      "ctaPrimary": "Commencer à créer",
+      "ctaSecondary": "Réserver une démo"
+    },
+    "slides": [
+      {
+        "kind": "intro",
+        "eyebrow": "La démo ultime",
+        "title": "Créez, déployez et passez à l'échelle, d'un seul coup.",
+        "tagline": "Cinq étapes mènent une seule idée jusqu'à un produit fonctionnel piloté par une équipe d'humains et d'agents IA. Suivez le guide."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "01",
+        "eyebrow": "Connexion",
+        "title": "Aucune configuration. Vous êtes déjà prêt.",
+        "tagline": "Pas de formulaire, pas de réglages : juste un compte.",
+        "steps": [
+          "Créez un compte ou connectez-vous",
+          "Arrivez directement dans votre espace de travail par défaut",
+          "Un projet par défaut vous attend déjà"
+        ],
+        "see": "Vous êtes dans un espace de travail opérationnel en quelques secondes, sur le web ou dans VS Code."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "02",
+        "eyebrow": "Décrivez-le",
+        "title": "Dites ce que vous voulez. Regardez-le se construire.",
+        "tagline": "Saisissez votre idée dans « Que construisons-nous ? ».",
+        "steps": [
+          "Saisissez une description en langage naturel de votre app",
+          "Arrivez dans le Builder avec votre prompt déjà transmis",
+          "L'IA génère pour vous une application complète et fonctionnelle"
+        ],
+        "see": "Un aperçu en direct s'illumine avec une app fonctionnelle, à partir d'une seule phrase."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "03",
+        "eyebrow": "Déployez et testez",
+        "title": "En ligne en un clic. Testé automatiquement.",
+        "tagline": "Publiez, puis laissez l'agent la mettre à l'épreuve.",
+        "steps": [
+          "Cliquez sur Publier : votre app est en ligne à une URL en quelques secondes",
+          "Le Testeur agentique cible automatiquement l'app déployée",
+          "Les résultats reviennent sous forme de tickets prêts à corriger"
+        ],
+        "see": "Déployée et contrôlée qualité sans jamais quitter le Builder."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "04",
+        "eyebrow": "Agrandissez l'équipe",
+        "title": "Invitez des personnes. Recrutez des agents. Une seule équipe.",
+        "tagline": "Humains et agents IA travaillent sur le même tableau.",
+        "steps": [
+          "Invitez un collègue dans votre espace de travail",
+          "Ajoutez un agent IA à vos effectifs",
+          "Attribuez le travail à une personne ou à un agent, avec le même sélecteur"
+        ],
+        "see": "Une équipe mixte humains + agents, qui collabore sur un tableau partagé."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "05",
+        "eyebrow": "Dirigez les effectifs",
+        "title": "Une équipe réduite. Des effectifs augmentés.",
+        "tagline": "Quelques développeurs dirigent une flotte d'agents.",
+        "steps": [
+          "Affectez les bons agents à chaque couloir",
+          "Glissez un ticket dans un couloir pour lancer un agent automatiquement",
+          "Pilotez les exécutions en direct et répondez à leurs questions au fil de l'eau"
+        ],
+        "see": "Une poignée de développeurs orchestre des effectifs d'agents qui font le gros du travail."
+      },
+      {
+        "kind": "outro",
+        "eyebrow": "C'est ça, l'effet WOW",
+        "title": "De l'idée au produit à l'équipe, en quelques minutes.",
+        "tagline": "Vous venez de voir un prompt devenir une app déployée et testée, pilotée par une équipe d'humains et d'agents IA. À vous de jouer."
+      }
+    ]
+  },
   "contentManager": {
     "migrate": {
       "moving": "Transfert de votre contenu vers Connaissances…",
@@ -5372,7 +5469,8 @@
         "question": "Puis-je acheter ou vendre un modèle de tableau Kanban ?",
         "answer": "Oui. Empaquetez un processus de livraison — couloirs, rôles requis, contrôles de relecture et répertoire recommandé — sous forme de modèle Kanban et publiez-le sur le marché pour le vendre ou le partager. N’importe quelle équipe peut installer un modèle éprouvé dans un projet en un clic et hériter d’un flux gouverné et régi par les rôles au lieu d’en construire un de zéro."
       }
-    ]
+    ],
+    "newsletterPlaceholder": "vous@email.com"
   },
   "pricing": {
     "seo": {
@@ -7367,7 +7465,9 @@
       "apiKeys": "Clés API",
       "token": "Jeton superadmin",
       "feedback": "Retours",
-      "releaseNotes": "Nouveautés"
+      "releaseNotes": "Nouveautés",
+      "demoFunnel": "Entonnoir démo",
+      "salesLeads": "Leads commerciaux"
     },
     "common": {
       "loading": "Chargement…",
@@ -8005,7 +8105,68 @@
       "draft": "Brouillon",
       "publish": "Publier",
       "unpublish": "Dépublier",
-      "deleteConfirm": "Supprimer la nouveauté « {title} » ? Cette action est irréversible."
+      "deleteConfirm": "Supprimer la nouveauté « {title} » ? Cette action est irréversible.",
+      "sendNote": "Envoyer maintenant",
+      "resendNote": "Renvoyer",
+      "sendNoteHint": "Envoyer cette nouveauté par e-mail à tous les utilisateurs consentants maintenant — elle sera exclue du récapitulatif hebdomadaire.",
+      "resendNoteHint": "Cette nouveauté a déjà été envoyée. Renvoyez-la à tous les utilisateurs consentants.",
+      "sendNoteConfirm": "Envoyer la nouveauté « {title} » par e-mail à tous les utilisateurs consentants maintenant ? Elle sera ensuite exclue du récapitulatif hebdomadaire.",
+      "resendNoteConfirm": "Cette nouveauté a déjà été envoyée. Renvoyer « {title} » à tous les utilisateurs consentants maintenant ?"
+    },
+    "demoFunnel": {
+      "title": "Entonnoir de conversion des démos",
+      "subtitle": "Engagement anonyme des comptes démo par persona (30 derniers jours).",
+      "persona": "Persona",
+      "total": "Total",
+      "convRate": "{rate}% inscription",
+      "recentTitle": "Événements récents",
+      "empty": "Aucune activité de démo pour le moment.",
+      "when": "Quand",
+      "event": "Événement",
+      "path": "Chemin",
+      "personas": {
+        "ai-team": "Équipe logicielle IA",
+        "insights": "ROI et analyses d'ingénierie",
+        "pmo": "Centre de commande PMO",
+        "talent": "Talents et marketplace",
+        "governance": "Sécurité, architecture et gouvernance"
+      },
+      "stages": {
+        "demo_start": "Démarré",
+        "page_view": "Pages vues",
+        "convert_prompt_shown": "Invite affichée",
+        "convert_clicked": "Inscription cliquée",
+        "book_demo_opened": "Réservation ouverte",
+        "lead_submitted": "Lead envoyé",
+        "exit_prompt_shown": "Sortie affichée",
+        "demo_exit": "Quitté"
+      }
+    },
+    "salesLeads": {
+      "title": "Leads commerciaux",
+      "subtitle": "Leads de réservation de démo et d’intention de sortie du site marketing.",
+      "count": "{count} leads",
+      "filterAll": "Tous les statuts",
+      "contact": "Contact",
+      "interest": "Intérêt",
+      "source": "Source",
+      "received": "Reçu",
+      "statusHeader": "Statut",
+      "empty": "Aucun lead pour le moment.",
+      "mailSubject": "Votre démo Builderforce",
+      "status": {
+        "new": "Nouveau",
+        "contacted": "Contacté",
+        "qualified": "Qualifié",
+        "closed": "Fermé"
+      },
+      "personas": {
+        "ai-team": "Équipe logicielle IA",
+        "insights": "ROI et analyses d'ingénierie",
+        "pmo": "Centre de commande PMO",
+        "talent": "Talents et marketplace",
+        "governance": "Sécurité, architecture et gouvernance"
+      }
     }
   },
   "providerKeys": {
@@ -8363,7 +8524,8 @@
     "running": "En cours",
     "awaiting": "Réponse requise",
     "needsYou": "{count} en attente de votre réponse",
-    "runningCount": "{count} en cours"
+    "runningCount": "{count} en cours",
+    "unread": "{count, plural, =1 {1 message non lu} other {# messages non lus}}"
   },
   "onboarding": {
     "welcome": "Bienvenue sur Builderforce",
@@ -10454,6 +10616,7 @@
     "home": "Accueil",
     "product": "Produit",
     "resources": "Ressources",
+    "demo": "Démo",
     "talentWorkforce": "Talents / Main-d’œuvre",
     "agents": "Agents",
     "models": "Modèles",
@@ -10528,6 +10691,102 @@
       "new": "Nouveau",
       "improvement": "Amélioré",
       "fix": "Corrigé"
+    }
+  },
+  "demo": {
+    "personas": {
+      "ai-team": "Équipe logicielle IA",
+      "insights": "ROI et analyses d'ingénierie",
+      "pmo": "Centre de commande PMO",
+      "talent": "Talents et marketplace",
+      "governance": "Sécurité, architecture et gouvernance"
+    },
+    "bannerAria": "Commandes de la session démo",
+    "badge": "Démo en direct",
+    "bannerText": "Vous explorez une démo en direct — {name}",
+    "bookOrJoin": "Rejoindre ou réserver une démo",
+    "createAccount": "Créer un compte",
+    "exit": "Quitter la démo",
+    "convertTitle": "Faites-en votre espace de travail",
+    "convertLead": "Vous venez d'explorer la démo {persona} avec des données d'exemple. Créez un compte gratuit pour le faire avec vos propres projets, ou parlez à notre équipe.",
+    "benefit1": "Apportez vos dépôts, tickets et équipe",
+    "benefit2": "Des agents IA qui ouvrent de vraies pull requests",
+    "benefit3": "Gratuit pour commencer, sans carte",
+    "createAccountFree": "Créer un compte gratuit",
+    "talkToSales": "Parler aux ventes",
+    "bookLead": "Vous préférez une visite guidée ? Réservez une démo.",
+    "exitTitle": "Avant de partir",
+    "exitLead": "Envie de continuer avec vos propres données, ou que nous vous fassions une visite guidée ?",
+    "exitBookLead": "Réservez une démo avec notre équipe",
+    "showcase": {
+      "heading": "Essayez une démo en direct, sans inscription",
+      "lead": "Choisissez le scénario qui vous correspond et entrez directement dans un espace de travail prérempli. C'est le vrai produit, avec des données d'exemple.",
+      "launch": "Lancer la démo",
+      "launching": "Lancement…",
+      "error": "Impossible de démarrer la démo. Réessayez.",
+      "note": "Les démos sont partagées, réinitialisées régulièrement et ne nécessitent aucun compte. Vos modifications sont temporaires.",
+      "personas": {
+        "ai-team": {
+          "title": "Équipe logicielle IA",
+          "audience": "Pour les équipes d'ingénierie",
+          "desc": "Un tableau de sprint en direct où agents IA et humains se partagent le travail : voyez un agent prendre un ticket, le planifier et ouvrir une pull request."
+        },
+        "insights": {
+          "title": "ROI et analyses d'ingénierie",
+          "audience": "Pour les VP et CTO",
+          "desc": "Santé de livraison, impact de l'IA et coût par ticket : les chiffres qui montrent ce que rapporte vraiment la livraison assistée par IA."
+        },
+        "pmo": {
+          "title": "Centre de commande PMO",
+          "audience": "Pour les responsables de programme et de livraison",
+          "desc": "Une hiérarchie datée, de l'objectif d'entreprise jusqu'au ticket exécuté par l'agent : portefeuille, OKR, Gantt et cérémonies."
+        },
+        "talent": {
+          "title": "Talents et marketplace",
+          "audience": "Pour les agences et freelances",
+          "desc": "Un effectif mixte de vos équipes, de freelances recrutés et d'agents IA sur un même tableau : recrutez l'un ou l'autre via le même flux."
+        },
+        "governance": {
+          "title": "Sécurité, architecture et gouvernance",
+          "audience": "Pour la sécurité et la conformité",
+          "desc": "Un audit SOC 2 hebdomadaire qui crée des tickets de remédiation, une piste d'audit inaltérable et des contrôles de politique à chaque déploiement."
+        }
+      }
+    }
+  },
+  "bookDemo": {
+    "badge": "Contactez-nous",
+    "pageTitle": "Réserver une démo",
+    "pageLead": "Découvrez Builderforce sur votre propre cas d’usage avec notre équipe, ou lancez dès maintenant une démo en libre-service.",
+    "formHeading": "Planifier avec les ventes",
+    "formSub": "Parlez-nous un peu de vous et nous vous contacterons pour organiser une visite guidée.",
+    "selfServeHeading": "Ou essayez-le vous-même",
+    "selfServeSub": "Sans inscription ni attente : explorez un espace de démo prérempli.",
+    "selfServe1": "Vrai produit, vraies données d’exemple",
+    "selfServe2": "Cinq scénarios pour cinq types d’acheteur",
+    "selfServe3": "Convertissez en votre compte à tout moment",
+    "selfServeCta": "Voir les démos en direct",
+    "nameLabel": "Nom",
+    "namePlaceholder": "Votre nom",
+    "emailLabel": "E-mail professionnel",
+    "emailPlaceholder": "vous@entreprise.com",
+    "companyLabel": "Entreprise",
+    "companyPlaceholder": "Nom de l’entreprise",
+    "interestLabel": "Je suis intéressé par",
+    "interestAny": "Je ne sais pas encore",
+    "messageLabel": "Quelque chose à nous signaler ?",
+    "messagePlaceholder": "Vos objectifs, la taille de l’équipe, le calendrier…",
+    "submit": "Demander une démo",
+    "submitting": "Envoi…",
+    "error": "Une erreur est survenue. Réessayez.",
+    "successTitle": "Merci, nous vous recontacterons",
+    "successBody": "Notre équipe vous contactera sous peu pour planifier votre visite guidée.",
+    "personas": {
+      "ai-team": "Équipe logicielle IA",
+      "insights": "ROI et analyses d'ingénierie",
+      "pmo": "Centre de commande PMO",
+      "talent": "Talents et marketplace",
+      "governance": "Sécurité, architecture et gouvernance"
     }
   }
 }

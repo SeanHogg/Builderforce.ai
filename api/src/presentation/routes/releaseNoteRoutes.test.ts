@@ -18,7 +18,7 @@ vi.mock('../../application/product/releaseNotes', async (orig) => ({
   ...svc,
 }));
 
-const digest = vi.hoisted(() => ({ runWeeklyReleaseDigest: vi.fn() }));
+const digest = vi.hoisted(() => ({ runReleaseDigest: vi.fn() }));
 vi.mock('../../application/email/releaseDigest', () => digest);
 
 import { createReleaseNoteRoutes } from './releaseNoteRoutes';
@@ -79,10 +79,25 @@ describe('releaseNoteRoutes', () => {
     expect(res.status).toBe(404);
   });
 
-  it('POST /send-digest runs the digest and returns its result', async () => {
-    digest.runWeeklyReleaseDigest.mockResolvedValue({ notes: 2, recipients: 5, sent: 4, suppressed: 1, failed: 0 });
+  it('POST /send-digest runs the full digest and returns its result', async () => {
+    digest.runReleaseDigest.mockResolvedValue({ notes: 2, recipients: 5, sent: 4, suppressed: 1, failed: 0 });
     const res = await createReleaseNoteRoutes(db).request('/send-digest', { method: 'POST' });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ result: { notes: 2, recipients: 5, sent: 4, suppressed: 1, failed: 0 } });
+    // No note-id restriction → the full unsent-published digest.
+    expect(digest.runReleaseDigest).toHaveBeenCalledWith(undefined, db);
+  });
+
+  it('POST /:id/send emails just that note and scopes the run to its id', async () => {
+    digest.runReleaseDigest.mockResolvedValue({ notes: 1, recipients: 5, sent: 5, suppressed: 0, failed: 0 });
+    const res = await createReleaseNoteRoutes(db).request('/n1/send', { method: 'POST' });
+    expect(res.status).toBe(200);
+    expect(digest.runReleaseDigest).toHaveBeenCalledWith(undefined, db, { noteIds: ['n1'] });
+  });
+
+  it('POST /:id/send 404s when the id is not a published note (0 sent)', async () => {
+    digest.runReleaseDigest.mockResolvedValue({ notes: 0, recipients: 0, sent: 0, suppressed: 0, failed: 0 });
+    const res = await createReleaseNoteRoutes(db).request('/draft-1/send', { method: 'POST' });
+    expect(res.status).toBe(404);
   });
 });

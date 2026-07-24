@@ -1,7 +1,7 @@
 import { and, eq, desc, isNotNull, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, invalidateCached, projectScoreCacheKey, tenantRollupCacheKey } from '../../infrastructure/cache/readThroughCache';
 import { toolRuns, projects, tasks } from '../../infrastructure/database/schema';
 import { deriveRemediation, type RemediationSummary, type RemediationTaskRow } from './remediationStatus';
 import { TOOLS, getTool } from './toolDefinitions';
@@ -106,8 +106,10 @@ const runsKey = (tenantId: number, toolId: string, projectId?: number | null) =>
   `tools:runs:tenant:${tenantId}:${toolId}:project:${projectId ?? 'none'}`;
 const dataKey = (tenantId: number, toolId: string, days: number, projectId?: number | null) =>
   `tools:data:tenant:${tenantId}:${toolId}:days:${days}:project:${projectId ?? 'none'}`;
-const projectScoreKey = (tenantId: number, projectId: number) => `tools:projectscore:tenant:${tenantId}:project:${projectId}`;
-const rollupKey = (tenantId: number) => `tools:rollup:tenant:${tenantId}`;
+// Diagnostics score/rollup cache keys — shared in readThroughCache so a task PR/status
+// transition invalidates the SAME keys (keeps the remediation badge from lagging).
+const projectScoreKey = projectScoreCacheKey;
+const rollupKey = tenantRollupCacheKey;
 
 /** Mean of the non-null scores, rounded to one decimal, or null if none. */
 function meanScore(scores: Array<number | null | undefined>): number | null {

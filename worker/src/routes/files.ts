@@ -1,19 +1,18 @@
 import { Hono } from 'hono';
 import { validateWorkspacePath } from '../lib/workspacePath';
+import { requireAuth, type WorkerAuthBindings } from '../lib/auth';
 
-interface Env {
+interface Env extends WorkerAuthBindings {
   STORAGE: R2Bucket;
 }
 
 const files = new Hono<{ Bindings: Env }>();
 
-// SECURITY NOTE (L7): this router mounts at /api/projects/:projectId/files with
-// NO authentication upstream (worker/src/index.ts applies only permissive CORS)
-// and no per-tenant ownership check on projectId. The path validation below stops
-// key traversal/injection, but access control is still MISSING — any caller who
-// knows a projectId can read/write/delete its files. Adding an auth check here
-// (shared bearer/JWT, matching the api gateway) is an ops follow-up that needs a
-// worker secret binding; flagged in the remediation report.
+// SECURITY (H9/L7): require a valid Bearer session token before any R2 file access.
+// Path validation (below) stops key traversal; this gate stops anonymous access —
+// together they close the "any caller who knows a projectId can read/write/delete
+// its files" hole. Needs JWT_SECRET bound in the worker (see lib/auth.ts).
+files.use('*', requireAuth);
 
 files.get('/', async (c) => {
   try {

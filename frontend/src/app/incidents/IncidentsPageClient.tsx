@@ -161,6 +161,11 @@ function IncidentsSection({ t, tc, canManage }: SectionProps) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Deep-link: /incidents?incident=<id> opens that incident's detail panel directly, so
+  // a monitor breach / reporting row can jump straight to its incident (not just the list).
+  const deepLinkIncidentId = useSearchParams().get('incident');
+  useEffect(() => { if (deepLinkIncidentId) setSelectedId(deepLinkIncidentId); }, [deepLinkIncidentId]);
+
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>

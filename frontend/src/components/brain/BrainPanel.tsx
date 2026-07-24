@@ -35,6 +35,7 @@ import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { ChatMessageActions } from '@/components/ChatMessageActions';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
 import { AttentionDot } from '@/components/AttentionDot';
+import { UnreadBadge } from '@/components/UnreadBadge';
 import { useAttention } from '@/lib/useAttention';
 import { RepoContextPicker, type RepoFileSource } from '@/components/brain/RepoContextPicker';
 import { BrainCapabilityPicker } from '@/components/brain/BrainCapabilityPicker';
@@ -1154,6 +1155,10 @@ export function BrainPanel({
               )}
               {formatTime(chat.updatedAt)}
               <AttentionDot state={attn.chats[chat.id]?.state} />
+              {/* Unread badge — new messages (execution milestones, teammate/agent
+                  turns) in a chat you're not viewing. The OPEN chat is read, so it
+                  never shows one. */}
+              <UnreadBadge count={active ? 0 : attn.chatUnread[chat.id]} />
             </div>
             {active && renamingId !== chat.id && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }} onClick={(e) => e.stopPropagation()}>

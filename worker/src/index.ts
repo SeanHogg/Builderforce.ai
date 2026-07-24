@@ -15,6 +15,10 @@ interface Env {
   /** Gateway base URL for worker -> api.builderforce.ai /llm calls. */
   BUILDERFORCE_API_BASE_URL?: string;
   COLLABORATION_ROOM: DurableObjectNamespace;
+  /** SECURITY (H9): shared HS256 session-token secret — MUST equal the api's
+   *  JWT_SECRET. Set via `wrangler secret put JWT_SECRET` in worker/. The data
+   *  routes fail closed (503) without it. See lib/auth.ts. */
+  JWT_SECRET?: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();

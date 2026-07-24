@@ -1,12 +1,17 @@
 import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
+import { requireAuth, type WorkerAuthBindings } from '../lib/auth';
 
-interface Env {
+interface Env extends WorkerAuthBindings {
   NEON_DATABASE_URL: string;
   STORAGE: R2Bucket;
 }
 
 const projects = new Hono<{ Bindings: Env }>();
+
+// SECURITY (H9): the worker project routes read/create/update/delete rows over the
+// open internet; require a valid Bearer session token (matches the api gateway).
+projects.use('*', requireAuth);
 
 export function generateId(): string {
   return crypto.randomUUID();

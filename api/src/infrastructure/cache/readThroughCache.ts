@@ -167,6 +167,16 @@ export function trackerCacheKey(ns: string, tenantId: number, segmentId: string,
   return `tracker:${ns}:t:${tenantId}:s:${segmentId}:p:${projectId ?? 'all'}`;
 }
 
+/** Cache keys for the diagnostics project-score + tenant-rollup reads (which carry the
+ *  remediation-badge state). Shared here so EVERY writer that changes badge inputs — a
+ *  diagnostic run (`ToolService.persist`) AND a task status/PR transition
+ *  (`taskLifecycle.recordStatusTransition`) — invalidates the SAME keys, so the badge
+ *  never lags a PR merge / lane move by the read-through TTL. */
+export const projectScoreCacheKey = (tenantId: number, projectId: number): string =>
+  `tools:projectscore:tenant:${tenantId}:project:${projectId}`;
+export const tenantRollupCacheKey = (tenantId: number): string =>
+  `tools:rollup:tenant:${tenantId}`;
+
 /** Version key for the chat↔ticket link-picker typeahead (`/api/brain/tickets/search`).
  *  Tenant-scoped: every ticket-bearing write (task/epic/gap, objective/initiative/
  *  portfolio, roadmap, spec) bumps it so the next search re-loads. The search keyspace

@@ -2705,6 +2705,19 @@ function useBrainConversation(options) {
     if (chatId == null || !persistence.subscribeMessages) return;
     return persistence.subscribeMessages(chatId, reloadMessages);
   }, [persistence, chatId, reloadMessages]);
+  const lastMarkedRef = useRef4(null);
+  useEffect5(() => {
+    if (chatId == null || !persistence.markChatRead || messages.length === 0) return;
+    let maxSeq = 0;
+    for (const m of messages) if (m.seq > maxSeq) maxSeq = m.seq;
+    if (maxSeq <= 0) return;
+    const prev = lastMarkedRef.current;
+    if (prev && prev.chatId === chatId && prev.seq >= maxSeq) return;
+    lastMarkedRef.current = { chatId, seq: maxSeq };
+    void persistence.markChatRead(chatId, maxSeq).catch(() => {
+      if (lastMarkedRef.current?.chatId === chatId) lastMarkedRef.current = prev;
+    });
+  }, [persistence, chatId, messages]);
   useEffect5(() => {
     const appended = snapshot.appended;
     if (appended.length === 0) return;

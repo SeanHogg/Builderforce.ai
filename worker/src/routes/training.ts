@@ -3,13 +3,17 @@ import { neon } from '@neondatabase/serverless';
 import { evaluateModelOutputs, saveModelArtifact } from '../services/training';
 import type { TrainingEnv } from '../services/training';
 import { requestGatewayCompletion, requireGatewayAuthToken } from '../services/gateway';
+import { requireAuth, type WorkerAuthBindings } from '../lib/auth';
 
-interface Env extends TrainingEnv {
+interface Env extends TrainingEnv, WorkerAuthBindings {
   NEON_DATABASE_URL: string;
   BUILDERFORCE_API_BASE_URL?: string;
 }
 
 const training = new Hono<{ Bindings: Env }>();
+
+// SECURITY (H9): require a valid Bearer session token for all training routes.
+training.use('*', requireAuth);
 
 function generateId(): string {
   return crypto.randomUUID();

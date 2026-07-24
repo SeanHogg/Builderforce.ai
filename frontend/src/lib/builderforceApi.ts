@@ -447,6 +447,14 @@ export const brain = {
   subscribeMessages: (chatId: number, onChanged: () => void) =>
     subscribeToChatMessages(AUTH_API_URL, getStoredTenantToken, chatId, onChanged),
 
+  /** Advance the caller's unread high-water mark for a chat (clears its unread
+   *  badge). `seq` omitted marks everything read. Best-effort on the client. */
+  markChatRead: (chatId: number, seq?: number) =>
+    request<{ lastReadSeq: number }>(`/api/brain/chats/${chatId}/read`, {
+      method: 'POST',
+      body: JSON.stringify(seq != null ? { seq } : {}),
+    }),
+
   sendMessages: (chatId: number, messages: Array<{ role: string; content: string; metadata?: string }>) =>
     request<{ messages: BrainMessage[]; evermindLearn?: { learned: boolean; version: number } }>(`/api/brain/chats/${chatId}/messages`, {
       method: 'POST',
@@ -2018,7 +2026,11 @@ export interface AttentionResponse {
   tasks: Record<number, AttentionItem>;
   /** Keyed by Brain chat id (a chat inherits the state of its linked task). */
   chats: Record<number, AttentionItem & { taskId?: number }>;
-  counts: { running: number; awaiting: number };
+  /** Unread message COUNT keyed by Brain chat id — new messages (an execution
+   *  milestone, a teammate/agent turn) in a chat the user has read before but is
+   *  not currently viewing. Only chats with ≥1 unread appear. */
+  chatUnread: Record<number, number>;
+  counts: { running: number; awaiting: number; unread: number };
   /** AI Manager cadence (present on every response). */
   manager: AttentionManager;
 }

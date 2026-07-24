@@ -125,6 +125,28 @@ export default function ReleaseNotesPanel() {
     }
   };
 
+  const sendOne = async (note: AdminReleaseNote) => {
+    if (!(await confirm({
+      message: note.emailedAt
+        ? t('releaseNotes.resendNoteConfirm', { title: note.title })
+        : t('releaseNotes.sendNoteConfirm', { title: note.title }),
+      confirmLabel: t('releaseNotes.sendNote'),
+      destructive: false,
+    }))) return;
+    setBusy(true);
+    setError('');
+    setDigestResult(null);
+    try {
+      const { result } = await adminApi.sendReleaseNote(note.id);
+      setDigestResult(result);
+      await reload();
+    } catch (e) {
+      setError(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const sendDigest = async () => {
     if (!(await confirm({
       message: t('releaseNotes.sendDigestConfirm'),
@@ -257,6 +279,17 @@ export default function ReleaseNotesPanel() {
                   </td>
                   <td className="text-muted">{note.emailedAt ? fmtDateTime(note.emailedAt) : '—'}</td>
                   <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+                    {note.publishedAt && (
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        disabled={busy}
+                        onClick={() => sendOne(note)}
+                        title={note.emailedAt ? t('releaseNotes.resendNoteHint') : t('releaseNotes.sendNoteHint')}
+                      >
+                        {note.emailedAt ? t('releaseNotes.resendNote') : t('releaseNotes.sendNote')}
+                      </button>
+                    )}
                     <button type="button" className="btn-ghost" disabled={busy} onClick={() => startEdit(note)}>
                       {t('common.edit')}
                     </button>
