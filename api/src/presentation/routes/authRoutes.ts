@@ -571,7 +571,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       userCode,
       userId,
       tenantId: body.tenantId,
-      envSecret: c.env.JWT_SECRET,
+      envSecret: credentialSecret(c.env),
     });
     if (!res.ok) return c.json({ error: res.error }, res.error === 'no_tenant' ? 409 : 400);
     return c.json({ ok: true, decision: 'approve' });
@@ -593,7 +593,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
   router.post('/device/token', async (c) => {
     const body = await c.req.json<{ device_code?: string }>();
     if (!body.device_code) return c.json({ error: 'device_code is required' }, 400);
-    const res = await deviceAuth.poll(body.device_code, c.env.JWT_SECRET);
+    const res = await deviceAuth.poll(body.device_code, credentialSecret(c.env), c.env.JWT_SECRET);
     switch (res.state) {
       case 'approved':
         return c.json({ access_key: res.accessKey, tenant_id: res.tenantId, token_type: 'bearer' }, 200);

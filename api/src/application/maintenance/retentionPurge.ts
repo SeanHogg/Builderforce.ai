@@ -11,7 +11,7 @@
 import { lt } from 'drizzle-orm';
 import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { llmTraces, llmFailoverLog, llmHealthProbes, qaJourneyEvents, errorEvents, managerActions, toolAuditEvents } from '../../infrastructure/database/schema';
+import { llmTraces, llmFailoverLog, llmHealthProbes, qaJourneyEvents, errorEvents, managerActions, toolAuditEvents, demoEvents } from '../../infrastructure/database/schema';
 
 /** Days of history kept per table before older rows are purged. */
 const RETENTION_DAYS = {
@@ -33,6 +33,10 @@ const RETENTION_DAYS = {
   // Agent tool-audit timeline (~117 MB, also previously unbounded). Same 90d window
   // as the other agent/telemetry event streams.
   toolAuditEvents: 90,
+  // Anonymous demo-funnel telemetry (migration 0360). Append-only, one row per demo
+  // visitor interaction — swept on the same 90d window as the other event streams;
+  // the admin funnel panel only looks back 30d.
+  demoEvents: 90,
 } as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -54,6 +58,7 @@ export async function runRetentionPurge(env: Env, now: number = Date.now()): Pro
     { name: 'error_events',      run: () => db.delete(errorEvents).where(lt(errorEvents.createdAt, cutoff(now, RETENTION_DAYS.errorEvents))) },
     { name: 'manager_actions',   run: () => db.delete(managerActions).where(lt(managerActions.createdAt, cutoff(now, RETENTION_DAYS.managerActions))) },
     { name: 'tool_audit_events', run: () => db.delete(toolAuditEvents).where(lt(toolAuditEvents.createdAt, cutoff(now, RETENTION_DAYS.toolAuditEvents))) },
+    { name: 'demo_events',       run: () => db.delete(demoEvents).where(lt(demoEvents.createdAt, cutoff(now, RETENTION_DAYS.demoEvents))) },
   ];
   for (const t of targets) {
     try {

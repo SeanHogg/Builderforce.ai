@@ -23,6 +23,7 @@ const persistence = {
     msgs.map((m) => ({ id: ++seq, role: m.role, content: m.content, metadata: m.metadata ?? null, seq, createdAt: '' })),
   ),
   setMessageFeedback: vi.fn(async () => ({ ok: true })),
+  markChatRead: vi.fn(async () => ({ lastReadSeq: 0 })),
   upload: vi.fn(),
   uploadUrl: (key: string) => `https://x/${key}`,
 } as unknown as BrainPersistenceAdapter;
@@ -53,6 +54,7 @@ beforeEach(() => {
   mockStream.mockReset();
   vi.mocked(persistence.getMessages).mockReset().mockResolvedValue([]);
   vi.mocked(persistence.subscribeMessages!).mockReset().mockImplementation(() => () => {});
+  vi.mocked(persistence.markChatRead!).mockReset().mockResolvedValue({ lastReadSeq: 0 });
   // Reset, not just clear: a test that installs a persistent `mockImplementation`
   // (the learn-signal cases) would otherwise leak it into every test after it.
   vi.mocked(persistence.sendMessages).mockReset().mockImplementation(
@@ -92,6 +94,56 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toContain(
       '▶️ **John Coder** started working on task #712.',
     ));
+    unmount();
+  });
+
+  it('marks the OPEN chat read up to its newest seq (clears the unread badge on view)', async () => {
+    vi.mocked(persistence.getMessages).mockResolvedValue([
+      { id: 5, role: 'assistant', content: 'a', metadata: null, seq: 5, createdAt: '' },
+      { id: 9, role: 'assistant', content: '✅ finished', metadata: null, seq: 9, createdAt: '' },
+    ]);
+    const { unmount } = renderHook(
+      () => useBrainConversation({ chatId: 41, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+    await waitFor(() => expect(persistence.markChatRead).toHaveBeenCalledWith(41, 9));
+    unmount();
+  });
+
+  it('advances the read mark forward when a later milestone arrives, but never rewinds', async () => {
+    let notifyChanged: (() => void) | undefined;
+    vi.mocked(persistence.subscribeMessages!).mockImplementation((_chatId, onChanged) => {
+      notifyChanged = onChanged;
+      return () => {};
+    });
+    const server = [{ id: 3, role: 'assistant', content: 'a', metadata: null, seq: 3, createdAt: '' }];
+    vi.mocked(persistence.getMessages).mockImplementation(async () => [...server]);
+    const { unmount } = renderHook(
+      () => useBrainConversation({ chatId: 41, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+    await waitFor(() => expect(persistence.markChatRead).toHaveBeenLastCalledWith(41, 3));
+
+    // A new milestone lands (seq 7) → the mark advances to 7.
+    server.push({ id: 7, role: 'assistant', content: '✅', metadata: null, seq: 7, createdAt: '' });
+    act(() => notifyChanged?.());
+    await waitFor(() => expect(persistence.markChatRead).toHaveBeenLastCalledWith(41, 7));
+
+    // A redundant reload with no newer message must NOT re-mark (monotonic guard).
+    const callsAt7 = vi.mocked(persistence.markChatRead!).mock.calls.length;
+    act(() => notifyChanged?.());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(vi.mocked(persistence.markChatRead!).mock.calls.length).toBe(callsAt7);
+    unmount();
+  });
+
+  it('does not mark read when there is no open chat', async () => {
+    const { unmount } = renderHook(
+      () => useBrainConversation({ chatId: null, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    expect(persistence.markChatRead).not.toHaveBeenCalled();
     unmount();
   });
 

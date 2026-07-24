@@ -371,12 +371,40 @@ export async function evaluateTaskAutoRun(
   );
   const staffedAgentRefs = laneAgents.map((a) => a.agentRef).filter((r): r is string => !!r);
 
-  // Owner-fallback guardrail — the #467 fix. If this lane has a required PRODUCER role
-  // (a role requirement with owner/contributor responsibility), the ticket owner may
-  // be used as the auto-run fallback ONLY when it is actually capable of that role.
-  // A Product Manager owner must never auto-run an Implementation stage as the coder;
-  // suppressing the fallback surfaces the lane as `no_agent` so the Coordinator/manager
-  // resolves the right producer instead of the wrong owner burning failing runs.
+  // The lane's required PRODUCER role (a role requirement with owner/contributor
+  // responsibility), if any — used to role-gate BOTH the owner fallback AND the
+  // explicitly-staffed lane agents (#467). On a lifecycle-managed board the producer
+  // is a manifest-named ref rather than a role key, so this role gate applies to
+  // simple boards only (the managed path resolves the producer from the manifest).
+  let producerRoleKey: string | null = null;
+  if (!board.lifecycleManaged) {
+    const reqRows = await db
+      .select({ ref: swimlaneRequirements.ref, responsibility: swimlaneRequirements.responsibility, position: swimlaneRequirements.position })
+      .from(swimlaneRequirements)
+      .where(and(eq(swimlaneRequirements.swimlaneId, lane.id), eq(swimlaneRequirements.kind, 'role'), eq(swimlaneRequirements.isRequired, true)))
+      .orderBy(asc(swimlaneRequirements.position));
+    const producer = reqRows.find((r) => r.responsibility == null || r.responsibility === 'owner' || r.responsibility === 'contributor');
+    producerRoleKey = producer?.ref ?? null;
+  }
+
+  // Role-gate explicitly-staffed lane agents, the SAME guardrail as the owner fallback
+  // below (#467). A lane staffed with a wrong-role agent (e.g. a designer pinned to an
+  // Implementation lane) must not auto-run just because it matches the capability tags;
+  // filter it out so the lane surfaces `no_agent` and the manager resolves the right
+  // producer instead of burning failing runs. `staffedAgentRefs` keeps the full set for
+  // skip-telemetry so a filtered-out staffing is still visible.
+  let qualifiedLaneAgents = laneAgents;
+  if (producerRoleKey) {
+    const roleCapable = await Promise.all(laneAgents.map((a) =>
+      a.agentRef ? isAgentRefRoleCapable(db, args.tenantId, a.agentRef, producerRoleKey) : Promise.resolve(true)));
+    qualifiedLaneAgents = laneAgents.filter((_, i) => roleCapable[i]);
+  }
+
+  // Owner-fallback guardrail — the #467 fix. If this lane has a required PRODUCER role,
+  // the ticket owner may be used as the auto-run fallback ONLY when it is actually
+  // capable of that role. A Product Manager owner must never auto-run an Implementation
+  // stage as the coder; suppressing the fallback surfaces the lane as `no_agent` so the
+  // Coordinator/manager resolves the right producer instead of burning failing runs.
   let ownerFallbackRef: string | null = assignedAgentRef;
   if (board.lifecycleManaged) {
     // Lifecycle-managed board (PRD §5.5): the Assignee IS the Coordinator and is
@@ -386,19 +414,13 @@ export async function evaluateTaskAutoRun(
     // stalled at `no_agent` forever: assigning a coder to a ticket did nothing, and
     // nothing ever resolved the producer the manifest had already named.
     ownerFallbackRef = await manifestProducerRef(db, args.tenantId, args.taskId, args.status);
-  } else if (assignedAgentRef) {
-    const reqRows = await db
-      .select({ ref: swimlaneRequirements.ref, responsibility: swimlaneRequirements.responsibility, position: swimlaneRequirements.position })
-      .from(swimlaneRequirements)
-      .where(and(eq(swimlaneRequirements.swimlaneId, lane.id), eq(swimlaneRequirements.kind, 'role'), eq(swimlaneRequirements.isRequired, true)))
-      .orderBy(asc(swimlaneRequirements.position));
-    const producer = reqRows.find((r) => r.responsibility == null || r.responsibility === 'owner' || r.responsibility === 'contributor');
-    if (producer && !(await isAgentRefRoleCapable(db, args.tenantId, assignedAgentRef, producer.ref))) {
+  } else if (assignedAgentRef && producerRoleKey) {
+    if (!(await isAgentRefRoleCapable(db, args.tenantId, assignedAgentRef, producerRoleKey))) {
       ownerFallbackRef = null;
     }
   }
 
-  const agents = withOwnerAgentFallback(laneAgents, { agentRef: ownerFallbackRef });
+  const agents = withOwnerAgentFallback(qualifiedLaneAgents, { agentRef: ownerFallbackRef });
   const decision = decideLaneAutoRun(agents, gate);
   // The agent a manual Run-now would use: the same pick, but gate-blind (a human
   // click overrides a 'human' gate). decideLaneAutoRun(_, 'auto') never returns a

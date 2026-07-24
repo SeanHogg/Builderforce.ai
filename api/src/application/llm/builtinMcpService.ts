@@ -61,6 +61,7 @@ import { IncidentService, type IncidentSeverity, type IncidentStatus } from '../
 import { OnCallService } from '../incident/OnCallService';
 import { EscalationService } from '../incident/EscalationService';
 import { recallSops } from '../knowledge/recallSops';
+import { publishKnowledgeDoc } from '../knowledge/publishKnowledgeDoc';
 import { SecurityTicketAccessService } from '../security/SecurityTicketAccessService';
 import { recallProjectFacts, upsertProjectFact } from './projectFacts';
 import type { Task } from '../../domain/task/Task';
@@ -939,9 +940,32 @@ const CATALOG: BuiltinTool[] = [
       return recallSops(ctx.db, ctx.tenantId, str(a.query), a.topK != null ? num(a.topK) : 5, docTypes);
     },
   },
+  {
+    tool: 'knowledge.create', mutates: true,
+    description: 'Author + PUBLISH a standalone Knowledge article (SOP / process / doc / known-error) so it is first-class, versioned, searchable, and read-acknowledgeable. Use this to write a runbook, standard-operating-procedure, or known-error entry directly — NOT for incident RCAs (use incidents.postmortem, which back-links the incident). Params: title + content required; docType (sop|process|doc|known_error, default doc); optional summary, projectId, tags[].',
+    parameters: obj({ title: S, content: S, docType: S, summary: S, projectId: N, tags: { type: 'array', items: S } }, ['title', 'content']),
+    run: async (ctx, a) => {
+      const title = str(a.title).trim();
+      const content = str(a.content).trim();
+      if (!title) throw new Error('title is required');
+      if (!content) throw new Error('content is required');
+      // postmortem is deliberately excluded here — it must ride incidents.postmortem so
+      // it back-links the incident and files the action items.
+      const allowed = ['sop', 'process', 'doc', 'known_error'];
+      const docType = a.docType != null && allowed.includes(str(a.docType)) ? str(a.docType) : 'doc';
+      if (a.projectId != null) await ctx.projects.getProject(num(a.projectId), ctx.tenantId); // tenant-ownership guard
+      const segmentId = await resolveSegment(ctx.db, ctx.tenantId).catch(() => null);
+      const tags = Array.isArray(a.tags) ? (a.tags as unknown[]).map((t) => str(t)).filter(Boolean) : undefined;
+      const { id } = await publishKnowledgeDoc(ctx.db, ctx.env, {
+        tenantId: ctx.tenantId, segmentId, projectId: a.projectId != null ? num(a.projectId) : null,
+        docType, title, content, summary: a.summary != null ? str(a.summary) : null, tags, createdBy: ctx.userId ?? null,
+      });
+      return { id, docType, title };
+    },
+  },
 
   // ---- Workflows (read) — tenant-scoped direct queries [1296] ----
-  { tool: 'workflows.list', mutates: false, description: 'List workflows in the workspace.', parameters: obj({}), run: (ctx) => ctx.db.select().from(workflows).where(eq(workflows.tenantId, ctx.tenantId)).orderBy(desc(workflows.updatedAt)).limit(200) },
+  { tool: 'workflows.list', mutates: false, description: 'List workflow runs (compact: id/type/status/runtime + timestamps + a description snippet), capped by limit (default 50, max 200).', parameters: obj({ limit: N }), run: async (ctx, a) => { const rows = await ctx.db.select().from(workflows).where(eq(workflows.tenantId, ctx.tenantId)).orderBy(desc(workflows.updatedAt)).limit(LIST_MAX_LIMIT); return listEnvelope('workflows', rows.map((r) => compactRow(r as unknown as Record<string, unknown>, WORKFLOW_LIST_FIELDS, 'description')), clampLimit(a.limit)); } },
   { tool: 'workflows.get', mutates: false, description: 'Get one workflow by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => (await ctx.db.select().from(workflows).where(and(eq(workflows.id, str(a.id)), eq(workflows.tenantId, ctx.tenantId))).limit(1))[0] ?? null },
 
   // ---- Specs / PRDs (read) ----
@@ -1080,7 +1104,7 @@ const CATALOG: BuiltinTool[] = [
   // key_results.create, then link the delivering epics/initiatives via
   // objectives.add_link. This is the single server-side source both the web Brain
   // and the VS Code chat consume.
-  { tool: 'portfolios.list', mutates: false, description: 'List portfolios (top of the strategy hierarchy).', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(portfolios).where(and(eq(portfolios.tenantId, ctx.tenantId), eq(portfolios.segmentId, seg))).orderBy(desc(portfolios.updatedAt)).limit(200); } },
+  { tool: 'portfolios.list', mutates: false, description: 'List portfolios (top of the strategy hierarchy; compact: id/name/status/owner/targetDate + snippet), capped by limit (default 50, max 200).', parameters: obj({ limit: N }), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.select().from(portfolios).where(and(eq(portfolios.tenantId, ctx.tenantId), eq(portfolios.segmentId, seg))).orderBy(desc(portfolios.updatedAt)).limit(LIST_MAX_LIMIT); return listEnvelope('portfolios', rows.map((r) => compactRow(r as unknown as Record<string, unknown>, PORTFOLIO_LIST_FIELDS, 'description')), clampLimit(a.limit)); } },
   {
     tool: 'portfolios.create', mutates: true,
     description: 'Create a portfolio (a strategic grouping that initiatives and OKRs attach to).',
@@ -1112,7 +1136,7 @@ const CATALOG: BuiltinTool[] = [
   },
   { tool: 'portfolios.delete', mutates: true, description: 'Delete a portfolio.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(portfolios).where(and(eq(portfolios.id, str(a.id)), eq(portfolios.tenantId, ctx.tenantId), eq(portfolios.segmentId, seg))).returning({ id: portfolios.id }); await bumpPmo(ctx); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
 
-  { tool: 'initiatives.list', mutates: false, description: 'List initiatives (programs of work under a portfolio).', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(initiatives).where(and(eq(initiatives.tenantId, ctx.tenantId), eq(initiatives.segmentId, seg))).orderBy(desc(initiatives.updatedAt)).limit(200); } },
+  { tool: 'initiatives.list', mutates: false, description: 'List initiatives (programs of work under a portfolio; compact: id/portfolioId/name/status/owner/dates + snippet), capped by limit (default 50, max 200).', parameters: obj({ limit: N }), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.select().from(initiatives).where(and(eq(initiatives.tenantId, ctx.tenantId), eq(initiatives.segmentId, seg))).orderBy(desc(initiatives.updatedAt)).limit(LIST_MAX_LIMIT); return listEnvelope('initiatives', rows.map((r) => compactRow(r as unknown as Record<string, unknown>, INITIATIVE_LIST_FIELDS, 'description')), clampLimit(a.limit)); } },
   {
     tool: 'initiatives.create', mutates: true,
     description: 'Create an initiative under a portfolio (pass portfolioId).',
@@ -1146,7 +1170,7 @@ const CATALOG: BuiltinTool[] = [
   },
   { tool: 'initiatives.delete', mutates: true, description: 'Delete an initiative.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(initiatives).where(and(eq(initiatives.id, str(a.id)), eq(initiatives.tenantId, ctx.tenantId), eq(initiatives.segmentId, seg))).returning({ id: initiatives.id }); await bumpPmo(ctx); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
 
-  { tool: 'objectives.list', mutates: false, description: 'List OKR objectives — the strategic goals on the Portfolio ▸ OKRs tab, NOT board Epics.', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(objectives).where(and(eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).orderBy(desc(objectives.updatedAt)).limit(200); } },
+  { tool: 'objectives.list', mutates: false, description: 'List OKR objectives — the strategic goals on the Portfolio ▸ OKRs tab, NOT board Epics (compact: id/title/status/period/owner + snippet), capped by limit (default 50, max 200).', parameters: obj({ limit: N }), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.select().from(objectives).where(and(eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).orderBy(desc(objectives.updatedAt)).limit(LIST_MAX_LIMIT); return listEnvelope('objectives', rows.map((r) => compactRow(r as unknown as Record<string, unknown>, OBJECTIVE_LIST_FIELDS, 'description')), clampLimit(a.limit)); } },
   {
     tool: 'objectives.create', mutates: true,
     description: 'Create an OKR Objective — a strategic, qualitative goal (e.g. "Unlock recurring revenue"). This populates the Portfolio ▸ OKRs tab. Do NOT model OKRs as board Epics. SCOPE the objective by passing exactly one of projectId (a goal FOR a specific project — this is what satisfies that project\'s "Direction" / "goal or OKR linked" health check), initiativeId, or portfolioId (omit all three for a workspace/org-level objective). Then add measurable targets with key_results.create and link the delivering epics/initiatives with objectives.add_link. status: active|achieved|missed|archived; period is an optional label like "2026-Q2". Idempotent: an objective with the same title already in this workspace is returned ({ deduped: true, … }) instead of duplicated.',
@@ -1253,7 +1277,7 @@ const CATALOG: BuiltinTool[] = [
     },
   },
 
-  { tool: 'key_results.list', mutates: false, description: 'List key results (the measurable targets under OKR objectives).', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(keyResults).where(and(eq(keyResults.tenantId, ctx.tenantId), eq(keyResults.segmentId, seg))).orderBy(desc(keyResults.updatedAt)).limit(500); } },
+  { tool: 'key_results.list', mutates: false, description: 'List key results (the measurable targets under OKR objectives; compact: id/objectiveId/title/metric/current/target/unit/status), capped by limit (default 50, max 200).', parameters: obj({ limit: N }), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.select().from(keyResults).where(and(eq(keyResults.tenantId, ctx.tenantId), eq(keyResults.segmentId, seg))).orderBy(desc(keyResults.updatedAt)).limit(LIST_MAX_LIMIT); return listEnvelope('key_results', rows.map((r) => compactRow(r as unknown as Record<string, unknown>, KEY_RESULT_LIST_FIELDS)), clampLimit(a.limit)); } },
   {
     tool: 'key_results.create', mutates: true,
     description: 'Create a measurable Key Result under an Objective (objectiveId). A KR moves startValue→targetValue; progress rolls up into the objective and the OKR dashboard. metricType: number|percent|currency|boolean; status: on_track|at_risk|off_track|done. Give each objective 2–5. Idempotent: a KR with the same title already under that objective is returned ({ deduped: true, … }) instead of duplicated.',
@@ -1304,7 +1328,7 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'key_results.delete', mutates: true, description: 'Delete a key result.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(keyResults).where(and(eq(keyResults.id, str(a.id)), eq(keyResults.tenantId, ctx.tenantId), eq(keyResults.segmentId, seg))).returning({ id: keyResults.id }); await bumpPmo(ctx); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
 
   // ---- Prompt library (read) ----
-  { tool: 'prompts.list', mutates: false, description: 'List prompt-library entries in the workspace.', parameters: obj({}), run: (ctx) => ctx.db.select().from(promptLibraryEntries).where(eq(promptLibraryEntries.tenantId, ctx.tenantId)).orderBy(desc(promptLibraryEntries.updatedAt)).limit(200) },
+  { tool: 'prompts.list', mutates: false, description: 'List prompt-library entries (compact: id/slug/title/category/visibility/author/version/usage + snippet; the prompt body lives in versions), capped by limit (default 50, max 200).', parameters: obj({ limit: N }), run: async (ctx, a) => { const rows = await ctx.db.select().from(promptLibraryEntries).where(eq(promptLibraryEntries.tenantId, ctx.tenantId)).orderBy(desc(promptLibraryEntries.updatedAt)).limit(LIST_MAX_LIMIT); return listEnvelope('prompts', rows.map((r) => compactRow(r as unknown as Record<string, unknown>, PROMPT_LIST_FIELDS, 'description')), clampLimit(a.limit)); } },
 
   // ---- Approval rules (CRUD — simple single-table domain, segment_id auto-filled by the 0056 trigger) ----
   { tool: 'approvals.list', mutates: false, description: 'List the workspace approval rules.', parameters: obj({}), run: (ctx) => ctx.db.select().from(approvalRules).where(eq(approvalRules.tenantId, ctx.tenantId)).limit(200) },
@@ -2392,8 +2416,8 @@ const CATALOG: BuiltinTool[] = [
 
   // ---- LLM proxy: usage / health / models ----
   { tool: 'llm.usage', mutates: false, description: 'Token usage stats for the workspace.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/llm/v1/usage') },
-  { tool: 'llm.health', mutates: false, description: 'Model availability + per-model cooldowns.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/llm/v1/health') },
-  { tool: 'llm.models', mutates: false, description: 'Available models for the workspace plan.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/llm/v1/models') },
+  { tool: 'llm.health', mutates: false, description: 'Model availability rollup (counts by vendor + keyBound/available, plus any models on cooldown). Pass verbose:true for the full per-model free/pro arrays.', parameters: obj({ verbose: B }), run: async (ctx, a) => { const full = await replayRoute(ctx, 'GET', '/llm/v1/health') as Record<string, unknown>; if (a.verbose === true) return full; return { status: full.status, service: full.service, timestamp: full.timestamp, pool: full.pool, proPool: full.proPool, imagePool: full.imagePool, imageProPool: full.imageProPool, free: summarizeModelStatuses((full.free as Array<Record<string, unknown>>) ?? []), pro: summarizeModelStatuses((full.pro as Array<Record<string, unknown>>) ?? []) }; } },
+  { tool: 'llm.models', mutates: false, description: 'Models available for the workspace plan: plan flags + a vendor/availability rollup of the pool. Pass verbose:true for the full per-model data array.', parameters: obj({ verbose: B }), run: async (ctx, a) => { const full = await replayRoute(ctx, 'GET', '/llm/v1/models') as Record<string, unknown>; if (a.verbose === true) return full; const { data, ...rest } = full; return { ...rest, dataSummary: summarizeModelStatuses((data as Array<Record<string, unknown>>) ?? []) }; } },
 
   // ---- Dashboard token/cost usage ----
   { tool: 'dashboard.usage', mutates: false, description: 'Token + cost usage split by source (cloud/on-prem/web), and by user/team/repo/project.', parameters: obj({ window: { type: 'string', enum: ['today', 'week', 'month'] } }), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/dashboard/usage?window=${encodeURIComponent(a.window != null ? str(a.window) : 'week')}`) },
@@ -2718,8 +2742,9 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   'incidents.open', 'incidents.classify', 'incidents.update', 'incidents.add_note',
   'incidents.list', 'incidents.get', 'incidents.postmortem', 'oncall.page', 'oncall.list',
   // Knowledge recall — any agent can search the KB (SOPs, processes, prior RCAs /
-  // known-errors) so it learns from documented practice + past incidents mid-run.
-  'knowledge.search',
+  // known-errors) so it learns from documented practice + past incidents mid-run —
+  // and author a standalone SOP / runbook / known-error article directly.
+  'knowledge.search', 'knowledge.create',
   // Gig Marketplace: a Product-Manager/Designer agent may publish work, run the hiring
   // funnel, evaluate proposals with AI, and schedule review/interview meetings.
   'marketplace.publish_ticket', 'marketplace.unpublish_ticket',

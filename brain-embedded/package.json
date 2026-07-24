@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-brain-embedded",
-  "version": "2026.7.47",
+  "version": "2026.7.48",
   "description": "Embeddable AI assistant ('Brain') for React — headless streaming chat core with an MCP-style action registry. Drop a BrainProvider into any React app, register tools the assistant can call, and stream tool-capable chat completions through the Builderforce gateway. Auth, persistence, and system prompts are injected, so the same core powers builderforce.ai and external embeds.",
   "license": "MIT",
   "author": "Sean Hogg",

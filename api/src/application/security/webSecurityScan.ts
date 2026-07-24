@@ -22,15 +22,37 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
 /**
+ * PURE decision: given the open tickets in a project, which ones should this re-scan
+ * auto-close? A ticket is resolved when it carries a web marker for THIS origin that
+ * the current scan no longer raises. Scoped to one origin's `[web:*]` markers so it
+ * never touches SOC 2 / GitHub / manual tickets. Separated from IO so it is fully
+ * unit-testable without a DB (mirrors the scanner's pure/IO split).
+ */
+export function selectResolvedTicketIds(
+  openTickets: Array<{ id: number; title: string | null }>,
+  origin: string,
+  currentMarkers: Set<string>,
+): number[] {
+  const originLc = origin.toLowerCase();
+  const out: number[] = [];
+  for (const r of openTickets) {
+    const m = /\[web:[a-z0-9-]+:([^\]]+)\]/i.exec(r.title ?? '');
+    if (!m) continue;
+    if ((m[1] ?? '').toLowerCase() !== originLc) continue; // only this site's findings
+    if (currentMarkers.has(m[0].toLowerCase())) continue;   // still raised → keep open
+    out.push(r.id);
+  }
+  return out;
+}
+
+/**
  * Auto-close SECURITY tickets from a prior scan of the SAME origin whose finding the
  * current scan no longer raises. Safe precisely because this scanner is deterministic:
  * a check that fired before and doesn't now is objectively resolved (unlike an
- * external alert feed's silence, which is ambiguous — see githubAlerts). Scoped to
- * one origin's web markers so it never touches SOC 2 / GitHub / manual tickets.
- * Returns the number closed.
+ * external alert feed's silence, which is ambiguous — see githubAlerts). Returns the
+ * number closed.
  */
 async function autoCloseResolved(db: Db, projectId: number, origin: string, currentMarkers: Set<string>): Promise<number> {
-  const originLc = origin.toLowerCase();
   const rows = await db
     .select({ id: tasks.id, title: tasks.title })
     .from(tasks)
@@ -39,14 +61,7 @@ async function autoCloseResolved(db: Db, projectId: number, origin: string, curr
       eq(tasks.archived, false),
       ne(tasks.status, TaskStatus.DONE),
     ));
-  const toClose: number[] = [];
-  for (const r of rows) {
-    const m = /\[web:[a-z0-9-]+:([^\]]+)\]/i.exec(r.title ?? '');
-    if (!m) continue;
-    if ((m[1] ?? '').toLowerCase() !== originLc) continue; // only this site's findings
-    if (currentMarkers.has(m[0].toLowerCase())) continue;   // still raised → keep open
-    toClose.push(r.id);
-  }
+  const toClose = selectResolvedTicketIds(rows, origin, currentMarkers);
   if (toClose.length === 0) return 0;
   await db.update(tasks)
     .set({ status: TaskStatus.DONE, updatedAt: new Date() })

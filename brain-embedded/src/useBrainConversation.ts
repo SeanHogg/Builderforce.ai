@@ -273,6 +273,27 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     return persistence.subscribeMessages(chatId, reloadMessages);
   }, [persistence, chatId, reloadMessages]);
 
+  // Mark the OPEN chat read up to its newest message, so the unread badge a
+  // background chat shows (an execution milestone / teammate turn that landed while
+  // you were elsewhere) clears the moment you view it — on BOTH surfaces, since it
+  // marks the same server chat. Fires whenever the mounted chat's high-water seq
+  // advances (initial load, each `changed` push, an in-run append). Only ever moves
+  // forward (ref guard) so it doesn't spam the endpoint on every re-render.
+  const lastMarkedRef = useRef<{ chatId: number; seq: number } | null>(null);
+  useEffect(() => {
+    if (chatId == null || !persistence.markChatRead || messages.length === 0) return;
+    let maxSeq = 0;
+    for (const m of messages) if (m.seq > maxSeq) maxSeq = m.seq;
+    if (maxSeq <= 0) return;
+    const prev = lastMarkedRef.current;
+    if (prev && prev.chatId === chatId && prev.seq >= maxSeq) return;
+    lastMarkedRef.current = { chatId, seq: maxSeq };
+    void persistence.markChatRead(chatId, maxSeq).catch(() => {
+      // Best-effort: a failed mark just means the badge clears on the next open.
+      if (lastMarkedRef.current?.chatId === chatId) lastMarkedRef.current = prev;
+    });
+  }, [persistence, chatId, messages]);
+
   // A run (possibly started in another, now-unmounted Brain instance) persisted
   // assistant messages — splice them in without a refetch. The store delivers
   // the FULL run-appended list (narration turns + final answer), not just the

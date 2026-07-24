@@ -97,7 +97,7 @@ import { createActivityRoutes, createTimecardRoutes } from './presentation/route
 import { createJobRoutes, createNotificationRoutes } from './presentation/routes/jobRoutes';
 import { createEmailPreferenceRoutes } from './presentation/routes/emailPreferenceRoutes';
 import { createReleaseNoteRoutes } from './presentation/routes/releaseNoteRoutes';
-import { runWeeklyReleaseDigest } from './application/email/releaseDigest';
+import { runReleaseDigest } from './application/email/releaseDigest';
 import { createFreelancerMessagingRoutes } from './presentation/routes/freelancerMessagingRoutes';
 import { createGigMarketplaceRoutes, createEngagementBoardRoutes, createDeliverableRoutes } from './presentation/routes/gigMarketplaceRoutes';
 import { createLimbicRoutes }           from './presentation/routes/limbicRoutes';
@@ -800,7 +800,7 @@ export default {
     // then stamp the notes `emailed_at`. A week with nothing new sends nothing.
     if (event.cron === '0 16 * * 5') {
       ctx.waitUntil(
-        runWeeklyReleaseDigest(env)
+        runReleaseDigest(env)
           .then((r) => {
             if (r.notes > 0) console.log(`[cron:release-digest] notes=${r.notes} sent=${r.sent} suppressed=${r.suppressed} failed=${r.failed}`);
           })

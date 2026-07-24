@@ -33,6 +33,10 @@ export function createPersistence(
     getMessages: (id, limit) =>
       req<{ messages: BrainMessage[] }>(`/api/brain/chats/${id}/messages${limit != null ? `?limit=${limit}` : ''}`).then((r) => r.messages),
     subscribeMessages: (id, onChanged) => subscribeToChatMessages(baseUrl, getToken, id, onChanged),
+    // Reading a chat here clears its unread badge on the web too — one unified
+    // server conversation. Best-effort; the run loop never blocks on it.
+    markChatRead: (id, seq) =>
+      req(`/api/brain/chats/${id}/read`, { method: 'POST', body: JSON.stringify(seq != null ? { seq } : {}) }),
     sendMessages: (id, msgs) =>
       req<{ messages: BrainMessage[]; evermindLearn?: EvermindLearnOutcome }>(`/api/brain/chats/${id}/messages`, {
         method: 'POST',
