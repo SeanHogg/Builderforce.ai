@@ -10352,5 +10352,53 @@
     "errorCreateKey": "No se pudo crear la clave ({status}).",
     "errorNetwork": "Error de red. Inténtalo de nuevo.",
     "errorNoKey": "No se devolvió ninguna clave. Inténtalo de nuevo."
+  },
+  "marketingNav": {
+    "beta": "BETA",
+    "primaryNav": "Principal",
+    "home": "Inicio",
+    "product": "Producto",
+    "resources": "Recursos",
+    "talentWorkforce": "Talento / Fuerza laboral",
+    "agents": "Agentes",
+    "models": "Modelos",
+    "pricing": "Precios",
+    "blog": "Blog",
+    "diagnosticsTools": "Diagnósticos y herramientas",
+    "soc2Audits": "SOC 2 y auditorías de sistemas",
+    "promptLibrary": "Biblioteca de prompts",
+    "compare": "Comparar",
+    "integrations": "Integraciones",
+    "mediaKit": "Kit de medios",
+    "signIn": "Iniciar sesión",
+    "getStarted": "Comenzar →",
+    "toggleMenu": "Alternar menú"
+  },
+  "media": {
+    "seo": {
+      "title": "Kit de medios — Presentación de ventas y material de marketing",
+      "description": "Descarga la presentación de ventas de Builderforce.ai en PDF listo para imprimir o PowerPoint, además de cada diapositiva como PNG.",
+      "ogTitle": "Kit de medios de Builderforce.ai"
+    },
+    "eyebrow": "Kit de medios",
+    "title": "La presentación de Builderforce.ai — lista para compartir.",
+    "intro": "Descarga la presentación del producto y la plataforma en el formato que necesites: un PDF listo para imprimir, un PowerPoint editable o cada diapositiva como PNG para usar en tus propios documentos y publicaciones.",
+    "deckAlt": "Diapositiva de portada de la presentación de Builderforce.ai",
+    "download": "Descargar",
+    "assets": {
+      "pdf": {
+        "name": "Presentación de ventas (PDF)",
+        "desc": "La visión completa del producto y la plataforma en 26 diapositivas — lista para imprimir y enviar."
+      },
+      "pptx": {
+        "name": "Presentación de ventas (PowerPoint)",
+        "desc": "La misma presentación en PPTX para presentar o integrar en tus propios materiales."
+      },
+      "slides": {
+        "name": "Todas las diapositivas (PNG)",
+        "desc": "Cada diapositiva en PNG de 2560×1440 — comparte diapositivas individuales como material de marketing."
+      }
+    },
+    "usageNote": "Puedes compartir estos materiales tal cual al escribir o presentar sobre Builderforce.ai. El nombre y el logotipo de Builderforce.ai siguen siendo marcas registradas; no alteres las diapositivas ni sugieras un respaldo oficial."
   }
 }

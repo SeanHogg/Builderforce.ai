@@ -37,6 +37,8 @@ describe('classifyShell — app-shell deny-list model [1557]', () => {
     // logged-out visitors + crawlers (robots-Allowed + in sitemap), not a teaser.
     expect(classifyShell('/integrations')).toBe('public');
     expect(classifyShell('/integrations/github')).toBe('public');
+    // Media kit (downloadable sales deck) must be reachable logged-out.
+    expect(classifyShell('/media')).toBe('public');
   });
 
   it('does not treat a prefix collision as public', () => {

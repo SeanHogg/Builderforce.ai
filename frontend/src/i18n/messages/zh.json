@@ -10352,5 +10352,53 @@
     "errorCreateKey": "无法创建密钥（{status}）。",
     "errorNetwork": "网络错误。请重试。",
     "errorNoKey": "未返回密钥。请重试。"
+  },
+  "marketingNav": {
+    "beta": "BETA",
+    "primaryNav": "主导航",
+    "home": "首页",
+    "product": "产品",
+    "resources": "资源",
+    "talentWorkforce": "人才 / 智能劳动力",
+    "agents": "智能体",
+    "models": "模型",
+    "pricing": "定价",
+    "blog": "博客",
+    "diagnosticsTools": "诊断与工具",
+    "soc2Audits": "SOC 2 与系统审计",
+    "promptLibrary": "提示词库",
+    "compare": "对比",
+    "integrations": "集成",
+    "mediaKit": "媒体资料包",
+    "signIn": "登录",
+    "getStarted": "立即开始 →",
+    "toggleMenu": "切换菜单"
+  },
+  "media": {
+    "seo": {
+      "title": "媒体资料包 — 销售演示文稿与营销素材",
+      "description": "下载 Builderforce.ai 销售演示文稿（可打印 PDF 或 PowerPoint），以及每页幻灯片的 PNG 营销素材。",
+      "ogTitle": "Builderforce.ai 媒体资料包"
+    },
+    "eyebrow": "媒体资料包",
+    "title": "Builderforce.ai 演示文稿 — 随时分享。",
+    "intro": "按需下载产品与平台演示文稿 — 可打印的 PDF、可编辑的 PowerPoint，或将每页幻灯片作为 PNG 插入您自己的文档与文章。",
+    "deckAlt": "Builderforce.ai 产品演示文稿封面",
+    "download": "下载",
+    "assets": {
+      "pdf": {
+        "name": "销售演示文稿（PDF）",
+        "desc": "完整 26 页产品与平台概览 — 适合打印与邮件发送。"
+      },
+      "pptx": {
+        "name": "销售演示文稿（PowerPoint）",
+        "desc": "同一份演示文稿的 PPTX 版本，便于演示或嵌入您自己的材料。"
+      },
+      "slides": {
+        "name": "全部幻灯片（PNG）",
+        "desc": "每页幻灯片均为 2560×1440 PNG — 可单独作为营销素材分享。"
+      }
+    },
+    "usageNote": "在撰写或介绍 Builderforce.ai 时，欢迎按原样分享这些材料。Builderforce.ai 名称与标识仍为注册商标；请勿修改幻灯片或暗示官方背书。"
   }
 }

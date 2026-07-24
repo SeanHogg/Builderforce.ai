@@ -10354,5 +10354,53 @@
     "errorCreateKey": "Could not create a key ({status}).",
     "errorNetwork": "Network error. Please try again.",
     "errorNoKey": "No key returned. Please try again."
+  },
+  "marketingNav": {
+    "beta": "BETA",
+    "primaryNav": "Primary",
+    "home": "Home",
+    "product": "Product",
+    "resources": "Resources",
+    "talentWorkforce": "Talent / Workforce",
+    "agents": "Agents",
+    "models": "Models",
+    "pricing": "Pricing",
+    "blog": "Blog",
+    "diagnosticsTools": "Diagnostics & Tools",
+    "soc2Audits": "SOC 2 & System Audits",
+    "promptLibrary": "Prompt Library",
+    "compare": "Compare",
+    "integrations": "Integrations",
+    "mediaKit": "Media Kit",
+    "signIn": "Sign In",
+    "getStarted": "Get Started →",
+    "toggleMenu": "Toggle menu"
+  },
+  "media": {
+    "seo": {
+      "title": "Media Kit — Sales Deck & Marketing Media",
+      "description": "Download the Builderforce.ai sales deck as a print-ready PDF or PowerPoint, plus every slide as PNG marketing media.",
+      "ogTitle": "Builderforce.ai Media Kit"
+    },
+    "eyebrow": "Media kit",
+    "title": "The Builderforce.ai deck — ready to share.",
+    "intro": "Download the product & platform deck in the format you need — a print-ready PDF, an editable PowerPoint, or every slide as a PNG you can drop into your own docs and posts.",
+    "deckAlt": "Cover slide of the Builderforce.ai product deck",
+    "download": "Download",
+    "assets": {
+      "pdf": {
+        "name": "Sales deck (PDF)",
+        "desc": "The full 26-slide product & platform overview — print- and email-ready."
+      },
+      "pptx": {
+        "name": "Sales deck (PowerPoint)",
+        "desc": "The same deck as a PPTX for presenting or embedding in your own materials."
+      },
+      "slides": {
+        "name": "All slides (PNG)",
+        "desc": "Every slide as a 2560×1440 PNG — share individual slides as marketing media."
+      }
+    },
+    "usageNote": "You are welcome to share these materials as-is when writing about or presenting Builderforce.ai. The Builderforce.ai name and logo remain trademarks; please do not alter the slides or imply endorsement."
   }
 }

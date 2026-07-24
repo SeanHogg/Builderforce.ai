@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 import { PRODUCT_SECTIONS } from '@/lib/content';
 import { isNavItemActive } from '@/lib/nav';
@@ -16,33 +17,37 @@ import { useMobileNav } from '@/lib/useMobileNav';
  *
  * Desktop: brand · inline links with hover/focus mega-menus · auth CTAs.
  * Mobile: brand · hamburger → full-screen drawer with the same links stacked.
+ *
+ * All labels route through the `marketingNav.*` catalog namespace.
  */
 
 interface SimpleLink {
   href: string;
-  label: string;
+  /** Key under the `marketingNav` namespace. */
+  labelKey: string;
 }
 
 const RESOURCE_LINKS: SimpleLink[] = [
-  { href: '/blog', label: 'Blog' },
-  { href: '/tools', label: 'Diagnostics & Tools' },
-  { href: '/soc2', label: 'SOC 2 & System Audits' },
-  { href: '/prompts', label: 'Prompt Library' },
-  { href: '/compare', label: 'Compare' },
-  { href: '/integrations', label: 'Integrations' },
+  { href: '/blog', labelKey: 'blog' },
+  { href: '/tools', labelKey: 'diagnosticsTools' },
+  { href: '/soc2', labelKey: 'soc2Audits' },
+  { href: '/prompts', labelKey: 'promptLibrary' },
+  { href: '/compare', labelKey: 'compare' },
+  { href: '/integrations', labelKey: 'integrations' },
+  { href: '/media', labelKey: 'mediaKit' },
 ];
 
 // Flat links that sit directly in the bar (no dropdown).
 const FLAT_LINKS: SimpleLink[] = [
   // Talent (freelancers) + Workforce (AI agents/skills/personas) are one merged
   // marketplace surface now — a single nav entry, no separate /talent link.
-  { href: '/marketplace', label: 'Talent / Workforce' },
-  { href: '/agents', label: 'Agents' },
+  { href: '/marketplace', labelKey: 'talentWorkforce' },
+  { href: '/agents', labelKey: 'agents' },
   // Evermind intentionally NOT a top-level flat link — it lives under the Product
   // mega-menu and in the footer; keeping it out of the bar reduces nav clutter.
   // Models is a prefilled filter into the one marketplace, same as Talent / Workforce.
-  { href: '/marketplace?category=models', label: 'Models' },
-  { href: '/pricing', label: 'Pricing' },
+  { href: '/marketplace?category=models', labelKey: 'models' },
+  { href: '/pricing', labelKey: 'pricing' },
 ];
 
 // One active-link matcher shared with the Sidebar — no drift between surfaces.
@@ -74,6 +79,7 @@ function ProductMenu({ onNavigate }: { onNavigate?: () => void }) {
 export default function MarketingHeader() {
   const pathname = usePathname() || '';
   const { open, openNav, closeNav } = useMobileNav();
+  const t = useTranslations('marketingNav');
 
   return (
     <header className="mh">
@@ -89,16 +95,16 @@ export default function MarketingHeader() {
             className="mh-brand-logo"
           />
           <span className="mh-brand-name">Builderforce.ai</span>
-          <span className="mh-brand-badge">BETA</span>
+          <span className="mh-brand-badge">{t('beta')}</span>
         </Link>
 
         {/* Desktop nav */}
-        <nav className="mh-nav" aria-label="Primary">
-          <Link href="/" className={`mh-link${isActive(pathname, '/') ? ' active' : ''}`}>Home</Link>
+        <nav className="mh-nav" aria-label={t('primaryNav')}>
+          <Link href="/" className={`mh-link${isActive(pathname, '/') ? ' active' : ''}`}>{t('home')}</Link>
 
           <div className="mh-item has-menu">
             <button type="button" className={`mh-link mh-trigger${pathname.startsWith('/product') ? ' active' : ''}`} aria-haspopup="true">
-              Product
+              {t('product')}
               <svg className="mh-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
             </button>
             <div className="mh-panel mh-panel-wide">
@@ -108,19 +114,19 @@ export default function MarketingHeader() {
 
           <div className="mh-item has-menu">
             <button type="button" className="mh-link mh-trigger" aria-haspopup="true">
-              Resources
+              {t('resources')}
               <svg className="mh-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
             </button>
             <div className="mh-panel">
               {RESOURCE_LINKS.map((l) => (
-                <Link key={l.href} href={l.href} className="mh-panel-link">{l.label}</Link>
+                <Link key={l.href} href={l.href} className="mh-panel-link">{t(l.labelKey)}</Link>
               ))}
             </div>
           </div>
 
           {FLAT_LINKS.map((l) => (
             <Link key={l.href} href={l.href} className={`mh-link${isActive(pathname, l.href) ? ' active' : ''}`}>
-              {l.label}
+              {t(l.labelKey)}
             </Link>
           ))}
         </nav>
@@ -128,9 +134,9 @@ export default function MarketingHeader() {
         {/* Right side: theme + auth CTAs (desktop), hamburger (mobile) */}
         <div className="mh-right">
           <ThemeToggleButton />
-          <Link href="/login" className="mh-signin">Sign In</Link>
-          <Link href="/register" className="mh-cta">Get Started →</Link>
-          <button type="button" className="mh-hamburger" onClick={open ? closeNav : openNav} aria-label="Toggle menu" aria-expanded={open}>
+          <Link href="/login" className="mh-signin">{t('signIn')}</Link>
+          <Link href="/register" className="mh-cta">{t('getStarted')}</Link>
+          <button type="button" className="mh-hamburger" onClick={open ? closeNav : openNav} aria-label={t('toggleMenu')} aria-expanded={open}>
             {open ? (
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
             ) : (
@@ -142,10 +148,10 @@ export default function MarketingHeader() {
 
       {/* Mobile drawer */}
       <div className={`mh-drawer${open ? ' open' : ''}`}>
-        <Link href="/" className={`mh-drawer-link${isActive(pathname, '/') ? ' active' : ''}`} onClick={closeNav}>Home</Link>
+        <Link href="/" className={`mh-drawer-link${isActive(pathname, '/') ? ' active' : ''}`} onClick={closeNav}>{t('home')}</Link>
 
         <div className="mh-drawer-group">
-          <div className="mh-drawer-group-label">Product</div>
+          <div className="mh-drawer-group-label">{t('product')}</div>
           {PRODUCT_SECTIONS.map((section) => (
             <Link key={section.id} href={`/product#${section.id}`} className="mh-drawer-link mh-drawer-sub" onClick={closeNav}>
               <span aria-hidden="true">{section.icon}</span> {section.title}
@@ -155,20 +161,20 @@ export default function MarketingHeader() {
 
         {FLAT_LINKS.map((l) => (
           <Link key={l.href} href={l.href} className={`mh-drawer-link${isActive(pathname, l.href) ? ' active' : ''}`} onClick={closeNav}>
-            {l.label}
+            {t(l.labelKey)}
           </Link>
         ))}
 
         <div className="mh-drawer-group">
-          <div className="mh-drawer-group-label">Resources</div>
+          <div className="mh-drawer-group-label">{t('resources')}</div>
           {RESOURCE_LINKS.map((l) => (
-            <Link key={l.href} href={l.href} className="mh-drawer-link mh-drawer-sub" onClick={closeNav}>{l.label}</Link>
+            <Link key={l.href} href={l.href} className="mh-drawer-link mh-drawer-sub" onClick={closeNav}>{t(l.labelKey)}</Link>
           ))}
         </div>
 
         <div className="mh-drawer-cta">
-          <Link href="/login" className="mh-signin" onClick={closeNav}>Sign In</Link>
-          <Link href="/register" className="mh-cta" onClick={closeNav}>Get Started →</Link>
+          <Link href="/login" className="mh-signin" onClick={closeNav}>{t('signIn')}</Link>
+          <Link href="/register" className="mh-cta" onClick={closeNav}>{t('getStarted')}</Link>
         </div>
       </div>
       {open && <div className="mh-drawer-backdrop" onClick={closeNav} aria-hidden="true" />}

@@ -26,7 +26,7 @@ const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/'];
  * authed page gets correct chrome without being added to a list [1557]. Keep
  * this list current as marketing/public routes are added.
  */
-const PUBLIC_SHELL_PREFIXES = ['/product', '/blog', '/agents', '/pricing', '/compare', '/marketplace', '/talent', '/prompts', '/models', '/integrations', '/diagnostics', '/tools', '/evermind', '/soc2'];
+const PUBLIC_SHELL_PREFIXES = ['/product', '/blog', '/agents', '/pricing', '/compare', '/marketplace', '/talent', '/prompts', '/models', '/integrations', '/diagnostics', '/tools', '/evermind', '/soc2', '/media'];
 
 export type ShellKind = 'none' | 'footer' | 'public' | 'app';
 
