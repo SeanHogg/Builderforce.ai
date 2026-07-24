@@ -28,7 +28,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10
 
@@ -107,7 +107,7 @@ jobs:
       # action-setup at frontend/package.json to read its `packageManager` pin.
       # Do not also set `version:` here — action-setup@v4 errors if both exist.
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           package_json_file: frontend/package.json
 
