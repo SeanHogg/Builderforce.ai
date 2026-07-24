@@ -37,6 +37,37 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
     if (searchParams?.get('whatsnew') === '1') setWhatsNewOpen(true);
   }, [searchParams]);
 
+  // Version + legal strip. Rendered under the copyright credit in the marketing
+  // (`full`) footer; rendered as its own bottom row in the slim (`legal`) footer.
+  const versionStrip = (
+    <div className="global-footer-inner">
+      <button
+        type="button"
+        onClick={() => setWhatsNewOpen(true)}
+        className="global-footer-link"
+        title={t('whatsNewHint')}
+      >
+        UI {appVersion} · API {apiVersion ?? '…'}
+      </button>
+      <div className="global-footer-links">
+        <button
+          type="button"
+          onClick={() => setModalType('terms')}
+          className="global-footer-link"
+        >
+          {t('termsOfUse')}{termsVersion ? ` (v${termsVersion})` : ''}
+        </button>
+        <button
+          type="button"
+          onClick={() => setModalType('privacy')}
+          className="global-footer-link"
+        >
+          {t('privacyPolicy')}{privacyVersion ? ` (v${privacyVersion})` : ''}
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <>
       <footer className="global-footer">
@@ -61,6 +92,7 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
                 </a>{' '}
                 · {BRAND.name} © {BRAND.year}
               </p>
+              {versionStrip}
             </div>
 
             <nav className="global-footer-cols" aria-label={t('navLabel')}>
@@ -80,32 +112,7 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
           </div>
         )}
 
-        <div className="global-footer-inner">
-          <button
-            type="button"
-            onClick={() => setWhatsNewOpen(true)}
-            className="global-footer-link"
-            title={t('whatsNewHint')}
-          >
-            UI {appVersion} · API {apiVersion ?? '…'}
-          </button>
-          <div className="global-footer-links">
-            <button
-              type="button"
-              onClick={() => setModalType('terms')}
-              className="global-footer-link"
-            >
-              {t('termsOfUse')}{termsVersion ? ` (v${termsVersion})` : ''}
-            </button>
-            <button
-              type="button"
-              onClick={() => setModalType('privacy')}
-              className="global-footer-link"
-            >
-              {t('privacyPolicy')}{privacyVersion ? ` (v${privacyVersion})` : ''}
-            </button>
-          </div>
-        </div>
+        {variant === 'legal' && versionStrip}
       </footer>
 
       <LegalDocModal type={modalType} legal={legal} onClose={() => setModalType(null)} />

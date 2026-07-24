@@ -1050,6 +1050,17 @@ html[data-theme='light'] .nebula {
   text-decoration: underline;
 }
 
+/* When the version + legal strip sits under the copyright credit inside the
+   marketing brand block, left-align it and drop the standalone-row framing
+   (centered max-width + flex-end + min-height) so it reads as one stacked group. */
+.global-footer-brand .global-footer-inner {
+  max-width: none;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  justify-content: flex-start;
+}
+
 /* Link columns. */
 .global-footer-cols {
   display: grid;
@@ -1121,6 +1132,15 @@ html[data-theme='light'] .nebula {
   .global-footer-links {
     flex-wrap: wrap;
     justify-content: center;
+  }
+  /* Nested under the copyright credit, keep it left-aligned to match the credit
+     above it instead of centering like the standalone bottom strip. */
+  .global-footer-brand .global-footer-inner {
+    align-items: flex-start;
+    text-align: left;
+  }
+  .global-footer-brand .global-footer-links {
+    justify-content: flex-start;
   }
 }
 
