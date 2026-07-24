@@ -29,8 +29,15 @@ export async function broadcastRoom(
  * project-scoped change — task create/update/move/delete AND execution lifecycle
  * — so all of a project's views (board, kanban, calendar, list) and any open
  * task drawer re-fetch the instant a teammate OR an agent mutates the project.
+ *
+ * Tenant-qualified: the project id alone is an enumerable integer, so without the
+ * tenant prefix tenant B could subscribe to tenant A's project change-events.
+ * Mirrors {@link brainChatRoomName}. BOTH the subscribe side (project stream
+ * route) and every publish side (below) must build the room the same way or the
+ * live stream silently breaks.
  */
-export const projectRoomName = (projectId: number | string): string => `project:${projectId}`;
+export const projectRoomName = (tenantId: number | string, projectId: number | string): string =>
+  `project:${tenantId}:${projectId}`;
 
 /** Tenant-qualified room for one Brain chat. Tenant qualification prevents an id
  * collision from ever crossing tenant boundaries inside the shared relay. */
@@ -46,11 +53,13 @@ export async function broadcastBrainChatChanged(
   return broadcastRoom(ns, brainChatRoomName(tenantId, chatId));
 }
 
-/** Push a `{type:"changed"}` signal to a project's live board room (see {@link projectRoomName}). */
+/** Push a `{type:"changed"}` signal to a project's live board room (see {@link projectRoomName}).
+ *  `tenantId` MUST match the tenant the subscribe side scoped the room with. */
 export async function broadcastProjectChanged(
   ns: DurableObjectNamespace | undefined,
+  tenantId: number | string | null | undefined,
   projectId: number | string | null | undefined,
 ): Promise<void> {
-  if (projectId == null) return;
-  return broadcastRoom(ns, projectRoomName(projectId));
+  if (tenantId == null || projectId == null) return;
+  return broadcastRoom(ns, projectRoomName(tenantId, projectId));
 }

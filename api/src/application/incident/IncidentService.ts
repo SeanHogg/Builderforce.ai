@@ -31,7 +31,7 @@ import { TicketParticipantsService, type AccountabilityReport } from '../kanban/
 import { TaskService } from '../task/TaskService';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
-import { TaskType, TaskPriority } from '../../domain/shared/types';
+import { TaskType, TaskPriority, TaskStatus } from '../../domain/shared/types';
 import { publishKnowledgeDoc } from '../knowledge/publishKnowledgeDoc';
 import { recordIncidentLearning } from './incidentLearning';
 import { fireEventTriggers } from '../workflow/eventTriggers';
@@ -48,6 +48,18 @@ const SEVERITY_PRIORITY: Record<IncidentSeverity, TaskPriority> = {
   sev2: TaskPriority.HIGH,
   sev3: TaskPriority.MEDIUM,
   sev4: TaskPriority.LOW,
+};
+
+/**
+ * Map an incident's lifecycle status to the bridged board task's LANE, so the kanban
+ * column and the incident record never drift. The triage run itself holds the lane
+ * (RuntimeService), so this is the single writer of the incident ticket's lane.
+ */
+const INCIDENT_STATUS_TO_LANE: Record<IncidentStatus, TaskStatus> = {
+  open: TaskStatus.IN_PROGRESS,          // actively being triaged
+  acknowledged: TaskStatus.IN_PROGRESS,  // acknowledged, investigation underway
+  mitigated: TaskStatus.IN_REVIEW,       // mitigated, pending verification / RCA
+  resolved: TaskStatus.DONE,             // closed out
 };
 
 /** Map an ITSM ticket priority word to an incident severity. */
@@ -336,7 +348,12 @@ export class IncidentService {
     if (inc.boardTaskId != null && (patch.status || patch.severity)) {
       const tset: Record<string, unknown> = { updatedAt: new Date() };
       if (patch.severity) { tset.incidentSeverity = patch.severity; tset.priority = SEVERITY_PRIORITY[patch.severity]; }
-      if (patch.status) tset.incidentStatus = patch.status === 'open' ? 'triage' : patch.status === 'acknowledged' ? 'investigating' : patch.status;
+      if (patch.status) {
+        tset.incidentStatus = patch.status === 'open' ? 'triage' : patch.status === 'acknowledged' ? 'investigating' : patch.status;
+        // Mirror the incident status onto the board LANE so the kanban column tracks the
+        // incident (the triage run no longer moves the lane itself — see RuntimeService).
+        tset.status = INCIDENT_STATUS_TO_LANE[patch.status];
+      }
       await this.db.update(tasksTable).set(tset).where(eq(tasksTable.id, inc.boardTaskId));
     }
 

@@ -1249,7 +1249,33 @@
       "resubscribeCta": "重新订阅",
       "resubscribeTitle": "重新订阅可选邮件",
       "resubscribeConfirm": "您将根据已开启的类别重新开始接收可选邮件。是否继续？"
-    }
+    },
+    "spendLimits": "支出限额",
+    "spendTitle": "团队 AI 支出限额",
+    "spendDescription": "为每个席位设置每月 AI 支出上限。没有自带模型密钥的席位将按 OpenRouter 费率在 Builderforce 上运行——达到上限后其付费用量将暂停，接近上限时会通知您和该成员。",
+    "spendTeamsOnlyTitle": "Teams 套餐功能",
+    "spendTeamsOnly": "按席位支出限额为 Teams 套餐功能。升级即可为每位成员设置每月 AI 预算。",
+    "spendDefaultTitle": "默认席位预算",
+    "spendDefaultDescription": "适用于没有单独限额的所有席位。留空表示无默认值。",
+    "spendDefaultLabel": "默认每月预算（美元）",
+    "spendNoDefaultPlaceholder": "无限额",
+    "spendPerSeatMonth": "每席位／每月",
+    "spendDefaultHint": "金额以美元计。由成员自带模型密钥（BYO）承担的用量不计入。",
+    "spendSeatsTitle": "席位",
+    "spendResetsOn": "支出将于 {date} 重置。",
+    "spendNoSeats": "暂无活跃成员。",
+    "spendOfCap": "{spent} / {cap}",
+    "spendUnlimitedUsage": "{spent} · 无限额",
+    "spendModeLabel": "预算模式",
+    "spendModeInherit": "使用默认",
+    "spendModeUnlimited": "无限额",
+    "spendModeCustom": "自定义",
+    "spendAmountPlaceholder": "金额",
+    "spendAmountLabel": "每月预算（美元）",
+    "spendSave": "保存",
+    "spendSaving": "保存中…",
+    "spendSaved": "已保存",
+    "spendSaveFailed": "无法保存"
   },
   "pmo": {
     "title": "项目组合（PMO）",
@@ -3126,6 +3152,8 @@
     "subheading": "先在 <brainstorm>头脑风暴</brainstorm> 中构思，然后作为项目执行并在 Builder 中构建——或通过 <tasks>任务</tasks> 和 <workforce>人才团队</workforce> 代理分配工作。",
     "promptPlaceholder": "用 Material UI 组件构建一个预算跟踪器……",
     "brainStorm": "头脑风暴",
+    "build": "构建",
+    "building": "正在启动…",
     "agentsConnected": "{count, plural, other {已连接 # 个代理}}",
     "noAgents": "未连接代理 —",
     "setUpInWorkforce": "在人才团队中设置",
@@ -3955,7 +3983,30 @@
     "agentsTab": "智能体",
     "auditTab": "SOC 2",
     "subnavLabel": "安全分区",
-    "policiesTab": "策略"
+    "policiesTab": "策略",
+    "webTab": "网站扫描",
+    "webTitle": "网站安全扫描",
+    "webSubtitle": "指向您的在线网站，立即获取安全问题。每个问题都会创建为工单，供团队修复。",
+    "webUrlLabel": "网站网址",
+    "webUrlPlaceholder": "https://your-site.com",
+    "webSave": "保存",
+    "webRunNow": "运行扫描",
+    "webRunning": "扫描中…",
+    "webScore": "安全评分",
+    "webScoreDelta": "较上次扫描 {delta}",
+    "webBaselineFirst": "首次扫描——这是您的基线。",
+    "webNewFindings": "{count} 个新增",
+    "webResolved": "{count} 个已解决",
+    "webFindingsFiled": "已创建 {count} 个工单",
+    "webNoIssues": "未发现问题——您的网站通过了所有检查。",
+    "webHistory": "扫描历史",
+    "webNoHistory": "暂无扫描。请在上方运行首次扫描。",
+    "webRecommendation": "建议",
+    "sev_critical": "严重",
+    "sev_high": "高",
+    "sev_medium": "中",
+    "sev_low": "低",
+    "sev_info": "信息"
   },
   "catalogInsights": {
     "total": {
@@ -5381,6 +5432,8 @@
     "priceFree": "$0",
     "priceProMonthly": "${price}/月",
     "priceTeamsMonthly": "${price}/席位/月",
+    "teamsVolumeNote": "至少 {min} 个席位",
+    "teamsSeatMinimum": "至少 {min} 个席位 — Teams 面向整个组织采用批量定价。",
     "teamsCostNoteYear": "${perSeat}/席位/年 — 按 ${total}/年 计费",
     "teamsCostNoteMonth": "${perSeat}/席位/月 — 按 ${total}/月 计费",
     "managedAddon": "附加组件：<b>托管 AgentHost</b> — 每个托管 AgentHost ${price}/月。我们为您运行 BuilderForce Agents 实例 — 无需 Docker，无需 DevOps。",
@@ -7313,7 +7366,8 @@
       "audit": "审计日志",
       "apiKeys": "API 密钥",
       "token": "超级管理员令牌",
-      "feedback": "反馈"
+      "feedback": "反馈",
+      "releaseNotes": "更新日志"
     },
     "common": {
       "loading": "加载中…",
@@ -7927,6 +7981,31 @@
       "requestBody": "请求体",
       "responseBody": "响应体",
       "callerMetadata": "调用方元数据"
+    },
+    "releaseNotes": {
+      "digestTitle": "每周产品更新邮件",
+      "unsentCount": "{count, plural, other {# 条已发布但尚未发送邮件的更新}}",
+      "digestSent": "已向 {sent} 位用户发送 {notes} 条更新（{suppressed} 位已退订）。",
+      "sendDigest": "立即发送",
+      "sendDigestConfirm": "现在就向所有已同意接收的用户发送每一条已发布但尚未发送的更新日志吗？",
+      "editNote": "编辑更新日志",
+      "newNote": "新建更新日志",
+      "phVersion": "版本（例如 2026.7.93）",
+      "phTitle": "标题——用通俗的语言说明带来的价值",
+      "phBody": "它为用户带来什么。空行分隔段落。",
+      "savePublish": "保存并发布",
+      "saveDraft": "保存草稿",
+      "allNotes": "全部更新（{count}）",
+      "thTitle": "标题",
+      "thVersion": "版本",
+      "thCategory": "类别",
+      "thStatus": "状态",
+      "thEmailed": "已发送邮件",
+      "published": "已发布",
+      "draft": "草稿",
+      "publish": "发布",
+      "unpublish": "取消发布",
+      "deleteConfirm": "确定删除更新日志“{title}”吗？此操作无法撤销。"
     }
   },
   "providerKeys": {
@@ -8366,7 +8445,15 @@
       "runningAll": "正在运行审计…",
       "run": "运行所选审计",
       "viewReports": "查看报告",
-      "notifyHint": "每份报告准备就绪时我们会通知你。你可以离开此页面 — 审计会继续运行。"
+      "notifyHint": "每份报告准备就绪时我们会通知你。你可以离开此页面 — 审计会继续运行。",
+      "webHeading": "扫描您的在线网站",
+      "webIntro": "已有网站？输入网址即可立即进行安全扫描——发现的问题会转为可修复的工单。",
+      "webPlaceholder": "https://your-site.com",
+      "webButton": "扫描网站",
+      "webScanning": "扫描中…",
+      "webResult": "评分 {score}/100 — 已创建 {count} 个工单",
+      "webView": "查看结果",
+      "webError": "扫描失败。请检查网址后重试。"
     },
     "closeOnboarding": "关闭引导",
     "workspaceReady": "工作区已就绪",
@@ -8778,7 +8865,8 @@
     "commonQuestions": "常见问题",
     "pillLora": "🧠 LoRA 训练",
     "pillRegistry": "🤖 智能体注册库",
-    "pillEval": "🔬 AI 评估"
+    "pillEval": "🔬 AI 评估",
+    "emailPlaceholder": "you@example.com"
   },
   "gigs": {
     "publish": {
@@ -9780,6 +9868,13 @@
     "fieldIntervalSeconds": "间隔（秒）",
     "fieldUrl": "URL",
     "fieldExpectedStatus": "预期状态码",
+    "fieldMethod": "方法",
+    "fieldHeaders": "请求标头",
+    "headersPlaceholder": "Authorization: Bearer …",
+    "headersHint": "每行一个“标头: 值”——随健康检查一起发送。",
+    "fieldBodyMatch": "响应体须包含",
+    "bodyMatchPlaceholder": "\"status\":\"ok\"",
+    "bodyMatchHint": "可选：如果响应体不包含此文本，则判定为故障。",
     "fieldMetric": "指标",
     "fieldComparator": "比较符",
     "fieldThreshold": "阈值",
@@ -10400,5 +10495,39 @@
       }
     },
     "usageNote": "在撰写或介绍 Builderforce.ai 时，欢迎按原样分享这些材料。Builderforce.ai 名称与标识仍为注册商标；请勿修改幻灯片或暗示官方背书。"
+  },
+  "authCallback": {
+    "title": "登录失败",
+    "backToLogin": "返回登录",
+    "signingIn": "正在为您登录…",
+    "errorMissingParams": "身份验证失败：缺少参数。",
+    "errorInvalidState": "身份验证失败：状态无效或已过期。请重试。",
+    "errorAuthFailed": "与提供商的身份验证失败。请重试。",
+    "errorNoEmail": "您的提供商账户没有经过验证的电子邮件地址。",
+    "errorAccountNotFound": "账户未找到或已被禁用。",
+    "errorAccountSuspended": "您的账户已被暂停。请联系支持团队。",
+    "errorProviderUnavailable": "此登录提供商当前不可用。",
+    "errorAlreadyLinkedOther": "此提供商账户已关联到另一个 Builderforce 账户。",
+    "errorUnexpected": "发生了意外错误。请重试。",
+    "errorNoCode": "未收到登录代码。请重试。",
+    "errorProfile": "无法加载您的账户资料。请重新登录。"
+  },
+  "footer": {
+    "builtBy": "开发者",
+    "navLabel": "页脚",
+    "termsOfUse": "使用条款",
+    "privacyPolicy": "隐私政策",
+    "whatsNewHint": "查看新功能"
+  },
+  "whatsNew": {
+    "title": "新功能",
+    "loading": "加载中…",
+    "error": "无法加载更新日志，请稍后重试。",
+    "empty": "暂无更新，敬请期待。",
+    "categories": {
+      "new": "新功能",
+      "improvement": "改进",
+      "fix": "修复"
+    }
   }
 }

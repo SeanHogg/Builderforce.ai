@@ -3103,6 +3103,52 @@ export interface SecurityAuditFinding {
   tsc: string | null;
 }
 
+/** One external website security-scan run (a security_audits row, scanKind='web'). */
+export interface WebScanRun {
+  id: number;
+  status: 'running' | 'complete' | 'failed';
+  targetUrl: string | null;
+  score: number | null;
+  summary: string | null;
+  findingsCount: number;
+  countsBySeverity: Record<string, number> | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+/** A single finding from the deterministic web scan (before it becomes a ticket). */
+export interface WebScanFinding {
+  checkId: string;
+  title: string;
+  detail: string;
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  recommendation: string;
+  tsc: string;
+  marker: string;
+}
+
+export interface WebScanBaseline {
+  previousScore: number | null;
+  previousFindings: number | null;
+  scoreDelta: number | null;
+  newFindings: number;
+  resolvedFindings: number;
+}
+
+export interface WebScanRunResult {
+  ok: true;
+  auditId: number;
+  projectId: number;
+  targetUrl: string;
+  finalUrl: string;
+  score: number;
+  recorded: number;
+  deduped: number;
+  taskIds: number[];
+  findings: WebScanFinding[];
+  baseline: WebScanBaseline;
+}
+
 export const securityAgentApi = {
   getAccess: (): Promise<SecurityAccessConfig> =>
     request<SecurityAccessConfig>('/api/security/access'),
@@ -3120,6 +3166,25 @@ export const securityAgentApi = {
     request<{ auditId: number }>('/api/security/audits/run', {
       method: 'POST',
       body: JSON.stringify(projectId != null ? { projectId } : {}),
+    }),
+
+  // ── Web (external URL) security scan ──────────────────────────────────────
+  getWebScanConfig: (): Promise<{ projectId: number | null; targetUrl: string | null }> =>
+    request<{ projectId: number | null; targetUrl: string | null }>('/api/security/web-scan/config'),
+
+  setWebScanTarget: (url: string | null): Promise<{ projectId: number; targetUrl: string | null }> =>
+    request<{ projectId: number; targetUrl: string | null }>('/api/security/web-scan/config', {
+      method: 'PUT',
+      body: JSON.stringify({ url }),
+    }),
+
+  listWebScans: (): Promise<WebScanRun[]> =>
+    request<{ scans: WebScanRun[] }>('/api/security/web-scan').then((r) => r.scans ?? []),
+
+  runWebScan: (url?: string): Promise<WebScanRunResult> =>
+    request<WebScanRunResult>('/api/security/web-scan/run', {
+      method: 'POST',
+      body: JSON.stringify(url ? { url } : {}),
     }),
 };
 

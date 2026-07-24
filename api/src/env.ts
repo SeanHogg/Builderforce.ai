@@ -19,6 +19,15 @@ export interface Env {
    *  string "false" to hard-disable anonymous gateway traffic; any other value
    *  (or unset) leaves it ON. Toggle via `wrangler secret put GUEST_BRAIN_ENABLED`. */
   GUEST_BRAIN_ENABLED?: string;
+  /** Kill switch for the sales-cycle demo accounts (seeded persona tenants entered
+   *  from the marketing shell — migration 0360). Set to the string "false" to
+   *  disable `POST /api/demo/session` and the nightly reseed; any other value (or
+   *  unset) leaves it ON. Toggle via `wrangler secret put DEMO_ACCOUNTS_ENABLED`. */
+  DEMO_ACCOUNTS_ENABLED?: string;
+  /** Shared secret the deploy workflow sends (header `x-demo-reseed-secret`) to
+   *  trigger `POST /api/demo/reseed` after each deploy. Unset = only a superadmin
+   *  web token can reseed. Set via `wrangler secret put DEMO_RESEED_SECRET`. */
+  DEMO_RESEED_SECRET?: string;
   /** Quality ingest key (bfq_…) for DOGFOODING — the API ships its OWN unhandled
    *  500s to the Product Quality pillar via the public /api/quality-ingest endpoint
    *  (the same SDK path any customer uses). Unbound → self-reporting is skipped.
@@ -374,6 +383,18 @@ export interface Env {
   /** Passphrase used to derive the AES-256-GCM key for integration credential encryption.
    *  Set via: wrangler secret put INTEGRATION_ENCRYPTION_SECRET */
   INTEGRATION_ENCRYPTION_SECRET?: string;
+
+  /** Dedicated passphrase for sealing SENSITIVE at-rest credentials — tenant BYO LLM
+   *  provider keys + Claude/OpenAI/xAI subscription OAuth token blobs
+   *  (`tenant_llm_provider_keys.key_enc`) and (as a follow-up) MFA secrets. Kept SEPARATE
+   *  from `JWT_SECRET` on purpose: reusing the JWT signing key as the encryption key meant
+   *  one leak both forged sessions AND decrypted every credential, and blocked JWT rotation.
+   *  New writes derive an AES-256 key via PBKDF2 (100k) with a per-tenant salt under this
+   *  secret (v2 scheme). Falls back to INTEGRATION_ENCRYPTION_SECRET, then JWT_SECRET, so an
+   *  operator who hasn't set it yet keeps working — but SET IT to actually separate the keys.
+   *  Legacy rows sealed under JWT_SECRET still decrypt (versioned dual-read).
+   *  Set via: wrangler secret put CREDENTIAL_ENCRYPTION_SECRET */
+  CREDENTIAL_ENCRYPTION_SECRET?: string;
 
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;

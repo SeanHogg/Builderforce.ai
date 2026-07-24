@@ -11,7 +11,7 @@
  * `builderforce-local` engine — PRD 11 §5.5(a).)
  */
 
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { buildCodeMap, buildDependencyGraph } from "../code-map.js";
@@ -35,11 +35,18 @@ export interface GitHistoryOpts {
 export function runGitHistory(projectRoot: string, opts: GitHistoryOpts): Record<string, unknown> {
   const { path: targetPath, limit = 50, author } = opts;
   try {
-    let cmd = `git -C "${projectRoot}" log --format=%H%x00%an%x00%ae%x00%at%x00%s --name-only -n ${limit}`;
-    if (author) cmd += ` --author="${author}"`;
-    if (targetPath) cmd += ` -- "${targetPath}"`;
+    // SECURITY (C1): build an argv array and run WITHOUT a shell (execFileSync), so
+    // `author`/`path`/`projectRoot` — which are LLM/agent-chosen and therefore
+    // prompt-injection reachable — can never break out into shell command
+    // substitution. The previous `execSync` string-interpolation was RCE: double
+    // quotes do not stop `$(…)`. Mirrors the safe execFileSync usage in
+    // cbSearchKeyword/ssExtractSnippet below. `limit` is coerced to a bounded int.
+    const safeLimit = Math.min(Math.max(1, Math.floor(Number(limit) || 50)), 1000);
+    const args = ["-C", projectRoot, "log", "--format=%H%x00%an%x00%ae%x00%at%x00%s", "--name-only", "-n", String(safeLimit)];
+    if (author) args.push(`--author=${author}`);
+    if (targetPath) args.push("--", targetPath);
 
-    const output = execSync(cmd, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
+    const output = execFileSync("git", args, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
     const commits: Array<{ sha: string; author: string; date: Date; message: string; filesChanged: string[] }> = [];
     const blocks = output.split("\n\n").filter((b) => b.trim());
     for (const block of blocks) {

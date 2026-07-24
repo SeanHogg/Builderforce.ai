@@ -103,6 +103,52 @@ const nextConfig = {
           { key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' },
         ],
       },
+      {
+        // Baseline security hardening (L2): clickjacking protection + a pragmatic
+        // CSP. Deliberately EXCLUDES /embed — those routes are framed cross-origin
+        // by host apps (BurnRateOS, the VS Code webview) and set their OWN
+        // `frame-ancestors` CSP in middleware.ts; adding X-Frame-Options:SAMEORIGIN
+        // or frame-ancestors 'self' here would break that framing. /embed keeps the
+        // COOP/COEP rule above but is left out of this one so middleware stays
+        // authoritative for its framing. api/ and webcontainer/connect are excluded
+        // as before.
+        source: '/((?!api/|webcontainer/connect|embed).*)',
+        headers: [
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          {
+            // Pragmatic (non-nonce) CSP: strict enough to block frame-based
+            // clickjacking, base-tag hijacking and plugin/object injection, while
+            // permissive enough for what the app genuinely loads —
+            //   • GTM/GA (script + connect + noscript frame)
+            //   • Fontshare @import CSS (api.fontshare.com) + its font files (cdn.fontshare.com)
+            //   • WASM + blob workers (onnxruntime-web, Monaco, transformers.js, WebContainer)
+            //   • the in-browser IDE preview frames (*.webcontainer-api.io / *.staticblitz.com)
+            //   • WebRTC/relay sockets (wss:) for meetings, execution steering, live rooms
+            // 'unsafe-inline' is required because the app styles via inline
+            // style={} and injects inline <script> (theme anti-FOUC, GTM loader);
+            // a nonce CSP is impractical across the statically-prerendered shell.
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "base-uri 'self'",
+              "object-src 'none'",
+              "frame-ancestors 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://www.googletagmanager.com https://www.google-analytics.com https://ssl.google-analytics.com",
+              "style-src 'self' 'unsafe-inline' https://api.fontshare.com",
+              "font-src 'self' data: https://cdn.fontshare.com https://api.fontshare.com",
+              "img-src 'self' data: blob: https:",
+              "media-src 'self' blob: data: https:",
+              "worker-src 'self' blob:",
+              "child-src 'self' blob:",
+              "frame-src 'self' blob: https://www.googletagmanager.com https://*.webcontainer-api.io https://*.staticblitz.com",
+              "connect-src 'self' https: wss:",
+              "manifest-src 'self'",
+            ].join('; '),
+          },
+        ],
+      },
     ]
   },
 }
