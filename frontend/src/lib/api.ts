@@ -227,6 +227,10 @@ export async function fetchFileContent(
   const hadToken = !!authHeaders.Authorization;
   const res = await fetch(url, { headers: authHeaders as HeadersInit });
   checkUnauthorizedAndRedirect(res, hadToken);
+  // 404 = the object was never written (the API distinguishes missing from
+  // empty). Surface it as its own error so callers don't cache '' for a file
+  // that doesn't exist — the silent-empty that used to propagate into saves.
+  if (res.status === 404) throw new Error(`File not found: ${filePath}`);
   if (!res.ok) throw new Error('Failed to fetch file content');
   return res.text();
 }
