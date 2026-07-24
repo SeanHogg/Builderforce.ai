@@ -5,11 +5,11 @@
   "description": "BuilderForceAgents LanceDB-backed long-term memory plugin with auto-recall/capture",
   "type": "module",
   "dependencies": {
-    "@lancedb/lancedb": "^0.26.2",
-    "@seanhogg/builderforce-memory": "^2026.7.11",
-    "@sinclair/typebox": "0.34.48",
-    "openai": "^6.22.0",
-    "@seanhogg/builderforce-memory-engine": "^2026.7.11"
+    "@lancedb/lancedb": "^0.31.0",
+    "@seanhogg/builderforce-memory": "^2026.7.12",
+    "@sinclair/typebox": "0.34.52",
+    "openai": "^6.49.0",
+    "@seanhogg/builderforce-memory-engine": "^2026.7.12"
   },
   "devDependencies": {
     "@seanhogg/builderforce-agents": "workspace:*"

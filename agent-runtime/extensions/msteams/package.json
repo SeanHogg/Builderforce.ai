@@ -4,9 +4,9 @@
   "description": "BuilderForceAgents Microsoft Teams channel plugin",
   "type": "module",
   "dependencies": {
-    "@microsoft/agents-hosting": "^1.2.3",
-    "@microsoft/agents-hosting-express": "^1.2.3",
-    "@microsoft/agents-hosting-extensions-teams": "^1.2.3",
+    "@microsoft/agents-hosting": "^1.7.1",
+    "@microsoft/agents-hosting-express": "^1.7.1",
+    "@microsoft/agents-hosting-extensions-teams": "^1.7.1",
     "express": "^5.2.1"
   },
   "devDependencies": {
