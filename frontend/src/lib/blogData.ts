@@ -169,6 +169,7 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('role-gated-accountability-proof-of-participation', roleAccountability),
   buildPost('automated-rfp-response-from-your-codebase', rfpResponse),
   buildPost('memory-first-inference-skip-the-llm', memoryFirst),
+  buildPost('local-first-ai-webgpu-in-the-browser', localFirstWebgpu),
 ].sort((a, b) => (a.date < b.date ? 1 : -1));
 
 export function getPostBySlug(slug: string): BlogPost | undefined {
