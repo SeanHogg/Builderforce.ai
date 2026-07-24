@@ -483,9 +483,10 @@ export const PRICING_PLANS: PricingPlan[] = [
     price: '$20',
     priceNumeric: 20,
     period: '/seat/month',
-    description: 'Enterprise-grade controls with shared approval inbox and per-seat billing.',
+    description: 'Org-wide volume pricing (5-seat minimum) with shared approval inbox and per-seat controls.',
     features: [
       'Everything in Pro',
+      '5-seat minimum (org-wide volume pricing)',
       'Unlimited AgentHosts',
       '5M tokens/day',
       'Shared team approval inbox',
@@ -588,7 +589,7 @@ export const COMPETITIVE_COMPARISON: CompetitiveCategory[] = [
     title: 'Ownership & Deployment',
     blurb: 'Where the platform runs and who controls it determines cost, data residency, and lock-in.',
     rows: [
-      { feature: 'Price', values: { builderforce: 'Free (MIT)', copilot: '$19/user/mo', cursor: '$20/user/mo', claudeCode: 'Usage-based', devin: '$500/mo', openhands: 'Free (MIT)', aider: 'Free (MIT)', continueDev: 'Free (MIT)' } },
+      { feature: 'Price', note: 'Self-hosted runtime is MIT (free); the hosted Cloud platform is a Free/Pro/Teams SaaS.', values: { builderforce: 'Free (MIT) self-hosted · Cloud from $0', copilot: '$19/user/mo', cursor: '$20/user/mo', claudeCode: 'Usage-based', devin: '$500/mo', openhands: 'Free (MIT)', aider: 'Free (MIT)', continueDev: 'Free (MIT)' } },
       { feature: 'Self-hosted / open source', note: 'MIT, fully self-hosted', values: { builderforce: '✅', copilot: '❌ MS cloud', cursor: '❌ Vendor cloud', claudeCode: '❌ Anthropic cloud', devin: '❌ Cloud only', openhands: '✅', aider: '✅', continueDev: '✅' } },
       { feature: 'Air-gapped / private deployment', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '✅', aider: '✅', continueDev: '✅' } },
       { feature: 'RBAC + audit trails', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '⚠️ Basic', openhands: '❌', aider: '❌', continueDev: '❌' } },
@@ -1447,6 +1448,7 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
       { href: '/product', label: 'Product' },
       { href: '/compare', label: 'Compare' },
       { href: '/pricing', label: 'Pricing' },
+      { href: '/media', label: 'Media Kit' },
     ],
   },
   {
