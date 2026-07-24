@@ -10352,5 +10352,53 @@
     "errorCreateKey": "Impossible de créer une clé ({status}).",
     "errorNetwork": "Erreur réseau. Veuillez réessayer.",
     "errorNoKey": "Aucune clé renvoyée. Veuillez réessayer."
+  },
+  "marketingNav": {
+    "beta": "BÊTA",
+    "primaryNav": "Principale",
+    "home": "Accueil",
+    "product": "Produit",
+    "resources": "Ressources",
+    "talentWorkforce": "Talents / Main-d’œuvre",
+    "agents": "Agents",
+    "models": "Modèles",
+    "pricing": "Tarifs",
+    "blog": "Blog",
+    "diagnosticsTools": "Diagnostics et outils",
+    "soc2Audits": "SOC 2 et audits système",
+    "promptLibrary": "Bibliothèque de prompts",
+    "compare": "Comparer",
+    "integrations": "Intégrations",
+    "mediaKit": "Kit média",
+    "signIn": "Se connecter",
+    "getStarted": "Commencer →",
+    "toggleMenu": "Basculer le menu"
+  },
+  "media": {
+    "seo": {
+      "title": "Kit média — Présentation commerciale et supports marketing",
+      "description": "Téléchargez la présentation commerciale de Builderforce.ai en PDF prêt à imprimer ou PowerPoint, ainsi que chaque diapositive en PNG.",
+      "ogTitle": "Kit média Builderforce.ai"
+    },
+    "eyebrow": "Kit média",
+    "title": "La présentation Builderforce.ai — prête à partager.",
+    "intro": "Téléchargez la présentation du produit et de la plateforme au format qui vous convient : PDF prêt à imprimer, PowerPoint modifiable, ou chaque diapositive en PNG à insérer dans vos propres documents et publications.",
+    "deckAlt": "Diapositive de couverture de la présentation Builderforce.ai",
+    "download": "Télécharger",
+    "assets": {
+      "pdf": {
+        "name": "Présentation commerciale (PDF)",
+        "desc": "La vue d’ensemble complète du produit et de la plateforme en 26 diapositives — prête à imprimer et à envoyer."
+      },
+      "pptx": {
+        "name": "Présentation commerciale (PowerPoint)",
+        "desc": "La même présentation au format PPTX, à présenter ou à intégrer dans vos propres supports."
+      },
+      "slides": {
+        "name": "Toutes les diapositives (PNG)",
+        "desc": "Chaque diapositive en PNG 2560×1440 — partagez des diapositives individuelles comme supports marketing."
+      }
+    },
+    "usageNote": "Vous pouvez partager ces supports tels quels lorsque vous écrivez sur Builderforce.ai ou le présentez. Le nom et le logo Builderforce.ai restent des marques déposées ; merci de ne pas modifier les diapositives ni de suggérer une approbation officielle."
   }
 }
