@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.58.2",
-    "@types/node": "^22.0.0",
+    "@types/node": "^22.20.1",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "@typescript/native-preview": "7.0.0-dev.20260627.2"
