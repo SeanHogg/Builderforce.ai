@@ -502,6 +502,8 @@
 
 ## 14 · 🖥️ Frontend, i18n, Theme & Marketing/SEO
 
+- **Pricing-table credibility: Teams ($20/seat) undercuts Pro ($29/seat) while including "Everything in Pro" + more** — `frontend/src/lib/content.ts` `PRICING_PLANS`, surfaced on `/pricing` and the sales deck. Every sharp buyer reads this as a typo or a trick; needs a product decision (Teams seat-minimum stated explicitly, or reprice) — fixing it unblocks a trustworthy pricing page AND the deck's business-model slide. Also reconcile with the compare-matrix claim "Builderforce = Free (MIT)" (open-source claim vs paid tiers needs one consistent story: what exactly is free/open vs paid).
+
 ### Frontend / Admin
 
 - **P3 — Onboarding no longer captures a builder's "intent" (scope-cut).** Zero-setup onboarding auto-provisions a "Default" workspace + "Default" project and removed the manual workspace/project steps from `OnboardingStepper.tsx`; the build/custom-agent/monetize/automate/learn intent multi-select lived in the old project step, so `users.userIntent` is no longer recorded for new builders (`completeOnboarding` is now called without intent). Fixing it (re-add intent as an optional lightweight first step, or an in-app prompt) restores intent-based personalization/analytics. The stale `onboarding.intent.*` + `steps.workspace/project.*` i18n keys are now unused.
