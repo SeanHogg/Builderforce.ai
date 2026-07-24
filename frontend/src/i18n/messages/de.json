@@ -10352,5 +10352,53 @@
     "errorCreateKey": "Schlüssel konnte nicht erstellt werden ({status}).",
     "errorNetwork": "Netzwerkfehler. Bitte versuche es erneut.",
     "errorNoKey": "Kein Schlüssel zurückgegeben. Bitte versuche es erneut."
+  },
+  "marketingNav": {
+    "beta": "BETA",
+    "primaryNav": "Hauptnavigation",
+    "home": "Start",
+    "product": "Produkt",
+    "resources": "Ressourcen",
+    "talentWorkforce": "Talente / Workforce",
+    "agents": "Agenten",
+    "models": "Modelle",
+    "pricing": "Preise",
+    "blog": "Blog",
+    "diagnosticsTools": "Diagnosen & Tools",
+    "soc2Audits": "SOC 2 & System-Audits",
+    "promptLibrary": "Prompt-Bibliothek",
+    "compare": "Vergleich",
+    "integrations": "Integrationen",
+    "mediaKit": "Medien-Kit",
+    "signIn": "Anmelden",
+    "getStarted": "Loslegen →",
+    "toggleMenu": "Menü umschalten"
+  },
+  "media": {
+    "seo": {
+      "title": "Medien-Kit — Vertriebspräsentation & Marketingmaterial",
+      "description": "Laden Sie die Builderforce.ai-Vertriebspräsentation als druckfertiges PDF oder PowerPoint herunter — plus jede Folie als PNG-Marketingmaterial.",
+      "ogTitle": "Builderforce.ai Medien-Kit"
+    },
+    "eyebrow": "Medien-Kit",
+    "title": "Das Builderforce.ai-Deck — bereit zum Teilen.",
+    "intro": "Laden Sie die Produkt- und Plattformpräsentation im passenden Format herunter — als druckfertiges PDF, editierbares PowerPoint oder jede Folie als PNG für Ihre eigenen Dokumente und Beiträge.",
+    "deckAlt": "Titelfolie der Builderforce.ai-Produktpräsentation",
+    "download": "Herunterladen",
+    "assets": {
+      "pdf": {
+        "name": "Vertriebspräsentation (PDF)",
+        "desc": "Der vollständige Produkt- und Plattformüberblick auf 26 Folien — druck- und versandfertig."
+      },
+      "pptx": {
+        "name": "Vertriebspräsentation (PowerPoint)",
+        "desc": "Dasselbe Deck als PPTX — zum Präsentieren oder Einbetten in eigene Unterlagen."
+      },
+      "slides": {
+        "name": "Alle Folien (PNG)",
+        "desc": "Jede Folie als 2560×1440-PNG — einzelne Folien als Marketingmaterial teilen."
+      }
+    },
+    "usageNote": "Sie dürfen diese Materialien unverändert teilen, wenn Sie über Builderforce.ai schreiben oder es präsentieren. Name und Logo von Builderforce.ai bleiben Marken; bitte verändern Sie die Folien nicht und erwecken Sie keinen Eindruck einer offiziellen Unterstützung."
   }
 }
