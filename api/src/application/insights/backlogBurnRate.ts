@@ -344,7 +344,7 @@ export function estimateBacklogBurnRate(input: EstimateInput): EstimateResult {
     const degen = degeneratedResult(backlogSize, blockedEffort, inProgressEffortPct, inProgressWarning,
       velocitySource, velocityPeriods, velocityUnitsPerHour, velocityTimeUnit,
       agentVelocity, agentEstimatedHours, humanVelocity, humanEstimatedHours,
-      assumptions, flaggedInsights, requestedAt);
+      dualTrackWallClockHours, assumptions, flaggedInsights, requestedAt);
     return degen;
   }
 
