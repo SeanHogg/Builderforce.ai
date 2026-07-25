@@ -17,6 +17,7 @@ import { boards, swimlanes, tasks } from '../../infrastructure/database/schema';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
 import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
+import { blocksCompletion } from '../kanban/participantStates';
 
 export interface CoordinateResult {
   ok: boolean;
@@ -38,16 +39,15 @@ export function decideCoordinatedAdvance(
   lanes: Array<{ key: string; isTerminal: boolean }>,
   fromStatus: string,
 ): { nextStatus: string | null; outstanding: string[] } {
-  const done = new Set(['completed', 'waived', 'skipped']);
   const stageOutstanding = manifest
-    .filter((p) => p.required && p.stageKey === fromStatus && !done.has(p.state))
+    .filter((p) => p.stageKey === fromStatus && blocksCompletion(p))
     .map((p) => p.roleName);
   if (stageOutstanding.length) return { nextStatus: null, outstanding: stageOutstanding };
   const current = lanes.findIndex((l) => l.key === fromStatus);
   const next = current >= 0 ? lanes[current + 1] : null;
   if (!next) return { nextStatus: null, outstanding: [] };
   if (next.isTerminal) {
-    const allOutstanding = manifest.filter((p) => p.required && !done.has(p.state)).map((p) => p.roleName);
+    const allOutstanding = manifest.filter(blocksCompletion).map((p) => p.roleName);
     if (allOutstanding.length) return { nextStatus: null, outstanding: allOutstanding };
   }
   return { nextStatus: next.key, outstanding: [] };
@@ -108,8 +108,7 @@ export async function coordinateTicket(
   const participants = new TicketParticipantsService(db);
   // Ensure the manifest exists + is in step before we sequence the next role.
   const manifest = await participants.listParticipants(env, args.tenantId, args.taskId).catch(() => []);
-  const done = new Set(['completed', 'waived', 'skipped']);
-  const requiredOutstanding = manifest.filter((p) => p.required && !done.has(p.state)).length;
+  const requiredOutstanding = manifest.filter(blocksCompletion).length;
 
   // Applying coordinated governance to an already-active legacy ticket can reveal
   // earlier BA/Design stages that never happened. Rewind to the earliest unmet
@@ -122,7 +121,7 @@ export async function coordinateTicket(
     const position = new Map(lanes.map((lane) => [lane.key, lane.position]));
     const currentPosition = position.get(task.status);
     const earliest = manifest
-      .filter((p) => p.required && p.stageKey && !done.has(p.state) && position.has(p.stageKey))
+      .filter((p) => p.stageKey && blocksCompletion(p) && position.has(p.stageKey))
       .sort((a, b) => position.get(a.stageKey!)! - position.get(b.stageKey!)!)[0];
     if (earliest?.stageKey && currentPosition != null && position.get(earliest.stageKey)! < currentPosition) {
       const moved = await db.update(tasks).set({ status: earliest.stageKey, updatedAt: new Date() })
