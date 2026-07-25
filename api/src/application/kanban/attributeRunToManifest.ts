@@ -9,9 +9,10 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { boards, pullRequests, swimlaneRequirements, swimlanes } from '../../infrastructure/database/schema';
+import { pullRequests, swimlaneRequirements, swimlanes, tasks } from '../../infrastructure/database/schema';
 import { TicketParticipantsService } from './ticketParticipants';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
+import { producerRoleForActionType } from './roleCapability';
 
 export interface RunFinalizedInfo {
   tenantId: number;
@@ -40,6 +41,27 @@ async function producerRoleOfLane(db: Db, projectId: number, laneKey: string): P
   return producer?.ref ?? null;
 }
 
+/**
+ * Last-resort producer role, derived from the ticket's own `action_type`.
+ *
+ * WHY THIS FALLBACK EXISTS — it is the fix for a total, silent failure of the whole
+ * accountability loop. Role resolution used to come ONLY from `swimlane_requirements`,
+ * and in practice almost no board has those rows configured (measured: 1 of 11 boards).
+ * With no role resolved, `attributeRunToManifest` returned early, so no completed run
+ * was ever attributed, no manifest slot ever left `assigned`, and `ticket_role_signoffs`
+ * stayed EMPTY across the entire tenant — 487 required slots, 0 satisfied. Every
+ * sign-off-based gate downstream was therefore unsatisfiable by construction.
+ *
+ * `producerRoleForActionType` already maps the work's technical shape to the role that
+ * does it (sql/frontend_ui/backend_api/refactor/bugfix → developer, tests → qa-tester,
+ * docs → tech-writer, devops_ci → devops), so a ticket earns producer credit from the
+ * work it actually is, with no board configuration required.
+ */
+async function producerRoleFromActionType(db: Db, taskId: number): Promise<string | null> {
+  const [row] = await db.select({ actionType: tasks.actionType }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+  return producerRoleForActionType(row?.actionType) ?? null;
+}
+
 /** Latest non-draft PR URL for a task (the producer completion evidence), or null. */
 async function taskPrEvidence(db: Db, tenantId: number, taskId: number): Promise<string | null> {
   const [pr] = await db
@@ -56,7 +78,13 @@ export async function attributeRunToManifest(env: Env, db: Db, info: RunFinalize
   try {
     // A failed run attributes nothing (no participation credit for a failed attempt).
     if (info.status !== 'completed') return;
-    const roleKey = info.actAsRole ?? (info.laneServed ? await producerRoleOfLane(db, info.projectId, info.laneServed) : null);
+    // Resolve the role three ways, most-specific first: the role the run explicitly ran
+    // AS, then the lane's declared producer requirement, then the ticket's action_type.
+    // The third tier is what makes this work on a board with no requirements configured
+    // — without it this function silently no-opped for essentially every ticket.
+    const roleKey = info.actAsRole
+      ?? (info.laneServed ? await producerRoleOfLane(db, info.projectId, info.laneServed) : null)
+      ?? await producerRoleFromActionType(db, info.taskId);
     if (!roleKey) return;
     const prUrl = await taskPrEvidence(db, info.tenantId, info.taskId);
     const participants = new TicketParticipantsService(db);
