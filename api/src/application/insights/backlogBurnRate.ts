@@ -153,6 +153,12 @@ export interface EstimateResult {
   agentEstimatedHours: number | null;
   humanVelocity: number | null;
   humanEstimatedHours: number | null;
+  /**
+   * Wall-clock hours to finish the backlog when agent + human work in parallel.
+   * (`agentEstimatedHours + humanEstimatedHours` is the total labour-hours, and
+   * equals `expectedHours`; this is the elapsed time to completion instead.)
+   */
+  dualTrackWallClockHours: number | null;
 
   // ── Core estimates (hours) ──
   pessimisticHours: number;
