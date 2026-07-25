@@ -1048,15 +1048,19 @@ declare function detectUnbackedWriteClaim(events: BrainTraceEvent[], messages: B
 declare function detectUnbackedTicketClaim(events: BrainTraceEvent[], messages: BrainMessage[]): boolean;
 /**
  * The "it doesn't execute, it just dies" signature: an assistant turn that NARRATES a
- * tool call — naming an advertised tool id, or announcing it in prose — while the run
+ * tool call — announcing it in prose, or writing the bare call as text — while the run
  * recorded ZERO tool steps.
  *
- * This is a provider/model fault, not a user one: the agent loop only runs structured
+ * This is a model fault, not a user one: the agent loop only runs structured
  * `toolCalls` (plus the inline dialects `xmlToolCalls` lifts), so a model that writes
- * its intent as plain text stalls forever — each turn re-announces the same call, the
- * data never arrives, and the run ends with nothing done. Without this detector the
- * triage block scores such a run "healthy" (no errors, no truncation, no context
- * pressure), which is exactly backwards.
+ * its intent as plain text achieves nothing. Without this detector the triage block
+ * scores such a run "healthy" (no errors, no truncation, no context pressure), which
+ * is exactly backwards.
+ *
+ * Deliberately reuses `announcesUntakenAction` — the SAME detector the run loop gates
+ * its stall recovery on. Diagnostics that disagreed with the loop about what counts as
+ * a stall would be worse than none: a report could call a run healthy while the loop
+ * had spent three recovery turns on it.
  *
  * Pure over the merged trace + visible messages, so both copy surfaces flag it
  * identically.
