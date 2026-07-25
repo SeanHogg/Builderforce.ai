@@ -126,6 +126,7 @@ export class ProjectService {
       governance: dto.governance ?? null,
       modality: dto.modality ?? 'designer',
       origin: dto.origin ?? null,
+      dueDate: dto.dueDate ?? null,
     });
 
     return this.projects.save(project);
