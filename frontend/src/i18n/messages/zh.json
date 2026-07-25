@@ -1064,7 +1064,10 @@
     "requiresRoleHint": "{role, select, viewer {需要观察者角色} developer {需要开发者角色} manager {需要管理者角色} owner {需要所有者角色} other {需要 {role} 角色}}",
     "requiresDeveloperRole": "需要开发者角色",
     "closePanel": "关闭面板",
-    "panel": "面板"
+    "panel": "面板",
+    "copy": "复制",
+    "copied": "已复制",
+    "copyFailed": "复制失败"
   },
   "prdCreate": {
     "title": "新建 PRD",
@@ -1376,7 +1379,13 @@
     "spendSave": "保存",
     "spendSaving": "保存中…",
     "spendSaved": "已保存",
-    "spendSaveFailed": "无法保存"
+    "spendSaveFailed": "无法保存",
+    "managerDefaults": "AI 经理",
+    "managerDefaultsTitle": "工作区 AI 经理默认设置",
+    "managerDefaultsSubtitle": "AI 经理在本工作区所有项目中的默认行为。各项目可在自己的“经理”标签页中进一步调整，但绝不能自行获得你在此处保留的权限。",
+    "managerDefaultsError": "无法加载工作区 AI 经理默认设置。",
+    "managerDefaultsProjectHint": "若只想更改某一个项目：",
+    "managerDefaultsProjectLink": "打开该项目的经理设置"
   },
   "pmo": {
     "title": "项目组合（PMO）",
@@ -6716,8 +6725,35 @@
         "queue": {
           "label": "交给人工",
           "help": "绝不自动合并——保留每个请求供人工审查和合并。"
-        }
-      }
+        },
+        "needsAuthority": "只有在允许经理合并之后，时机设置才会生效；目前合并仍需真人处理。"
+      },
+      "allowAutoMerge": {
+        "label": "允许经理合并拉取请求",
+        "help": "这是“是否可以合并”的授权，与下面的合并时机是两回事。关闭时，经理仍会完成全部准备和检查工作，但把合并交给真人。"
+      },
+      "requireSignoff": {
+        "label": "完成前需要签核",
+        "help": "只有在每位必需的审查人都已签核后，才完成工单并合并其拉取请求。没有任何人被要求审查的工单永远不满足条件。"
+      },
+      "tri": {
+        "on": "开启",
+        "off": "关闭",
+        "inherit": "使用默认值",
+        "builtinIs": "内置默认值：{value}",
+        "workspaceIs": "工作区默认值：{value}"
+      },
+      "effective": {
+        "title": "当前实际生效",
+        "help": "综合各级设置后经理实际会做的事。涉及权限时，以最严格的设置为准。",
+        "managingOn": "正在管理待办列表",
+        "managingOff": "管理已暂停",
+        "mergeGranted": "可以合并拉取请求",
+        "mergeWithheld": "合并需等待真人处理",
+        "signoffRequired": "完成前必须签核",
+        "signoffOptional": "无需签核"
+      },
+      "workspaceDefaultsHint": "凡是保持“使用默认值”的项，都会遵循“设置 → AI 经理”中的工作区默认值。"
     },
     "backlog": {
       "title": "已排序的待办列表",
@@ -7580,7 +7616,9 @@
       "executions": "运行记录",
       "tool_audit_events": "自动运行决策审计",
       "aria": "来源：{label}"
-    }
+    },
+    "copyDiagnostics": "复制诊断信息",
+    "copyDiagnosticsAria": "复制此工单的完整生命周期诊断信息，包含所有事件、运行 ID 和门控原因"
   },
   "taskChanges": {
     "allChanges": "所有变更",

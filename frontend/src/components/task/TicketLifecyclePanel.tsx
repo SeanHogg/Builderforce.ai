@@ -11,6 +11,9 @@ import {
   type TicketLifecycle,
 } from '@/lib/builderforceApi';
 import { taskStatusLabel } from '@/lib/taskStatus';
+import { CopyButton } from '@/components/CopyButton';
+import { buildLifecycleDiagnosticsReport } from '@/lib/lifecycleDiagnostics';
+import { APP_VERSION } from '@/lib/appVersions';
 
 /**
  * TicketLifecyclePanel — the per-ticket AUTONOMY PROOF.
@@ -198,6 +201,24 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
       title={data ? `${data.key} · ${t('title')}` : t('title')}
     >
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* One-paste handover: the whole ledger + verdict + ids + build versions. A
+            screenshot shows the verdict but loses the execution ids, lane keys, gate
+            reasons and source tables that make a stall reproducible. Built on click
+            (not per render) — it serialises the entire payload. */}
+        {data && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <CopyButton
+              label={t('copyDiagnostics')}
+              ariaLabel={t('copyDiagnosticsAria')}
+              getText={() => buildLifecycleDiagnosticsReport(data, {
+                uiVersion: APP_VERSION,
+                capturedAt: new Date().toISOString(),
+                sourceUrl: typeof window === 'undefined' ? null : window.location.href,
+              })}
+            />
+          </div>
+        )}
+
         {loading && !data && (
           <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('loading')}</div>
         )}

@@ -1064,7 +1064,10 @@
     "requiresRoleHint": "{role, select, viewer {Erfordert die Rolle „Betrachter“} developer {Erfordert die Rolle „Entwickler“} manager {Erfordert die Rolle „Manager“} owner {Erfordert die Rolle „Eigentümer“} other {Erfordert die Rolle „{role}“}}",
     "requiresDeveloperRole": "Erfordert die Rolle „Entwickler“",
     "closePanel": "Panel schließen",
-    "panel": "Panel"
+    "panel": "Panel",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "copyFailed": "Kopieren fehlgeschlagen"
   },
   "prdCreate": {
     "title": "Neues PRD",
@@ -1376,7 +1379,13 @@
     "spendSave": "Speichern",
     "spendSaving": "Speichern…",
     "spendSaved": "Gespeichert",
-    "spendSaveFailed": "Speichern fehlgeschlagen"
+    "spendSaveFailed": "Speichern fehlgeschlagen",
+    "managerDefaults": "KI-Manager",
+    "managerDefaultsTitle": "KI-Manager-Standards des Arbeitsbereichs",
+    "managerDefaultsSubtitle": "Wie sich der KI-Manager in allen Projekten dieses Arbeitsbereichs verhält. Ein Projekt kann das auf seinem eigenen Manager-Tab verfeinern – sich aber nie selbst eine Berechtigung erteilen, die Sie hier zurückhalten.",
+    "managerDefaultsError": "Die KI-Manager-Standards des Arbeitsbereichs konnten nicht geladen werden.",
+    "managerDefaultsProjectHint": "Nur ein einzelnes Projekt ändern:",
+    "managerDefaultsProjectLink": "dessen Manager-Einstellungen öffnen"
   },
   "pmo": {
     "title": "Portfolio (PMO)",
@@ -6716,8 +6725,35 @@
         "queue": {
           "label": "Einem Menschen überlassen",
           "help": "Niemals automatisch zusammenführen – hält jeden Pull Request für eine menschliche Prüfung und Zusammenführung zurück."
-        }
-      }
+        },
+        "needsAuthority": "Der Zeitpunkt spielt erst eine Rolle, wenn der Manager mergen darf – derzeit warten Merges auf einen Menschen."
+      },
+      "allowAutoMerge": {
+        "label": "Dem Manager das Mergen von Pull Requests erlauben",
+        "help": "Das ist die Berechtigung zum Mergen – unabhängig vom Zeitpunkt weiter unten. Ist sie aus, bereitet der Manager weiterhin alles vor und prüft es, überlässt den Merge aber einem Menschen."
+      },
+      "requireSignoff": {
+        "label": "Freigabe vor dem Abschluss verlangen",
+        "help": "Ein Ticket erst abschließen und seinen Pull Request erst mergen, wenn alle erforderlichen Prüfenden freigegeben haben. Ein Ticket, das niemand prüfen sollte, erfüllt die Bedingung nie."
+      },
+      "tri": {
+        "on": "Ein",
+        "off": "Aus",
+        "inherit": "Standard verwenden",
+        "builtinIs": "Integrierter Standard: {value}",
+        "workspaceIs": "Arbeitsbereich-Standard: {value}"
+      },
+      "effective": {
+        "title": "Aktuell wirksam",
+        "help": "Was der Manager tatsächlich tut, wenn alle Ebenen dieser Einstellungen zusammengeführt sind. Bei Berechtigungen gilt die strengste Antwort.",
+        "managingOn": "Backlog wird verwaltet",
+        "managingOff": "Verwaltung pausiert",
+        "mergeGranted": "Darf Pull Requests mergen",
+        "mergeWithheld": "Merges warten auf einen Menschen",
+        "signoffRequired": "Freigabe zum Abschließen erforderlich",
+        "signoffOptional": "Keine Freigabe erforderlich"
+      },
+      "workspaceDefaultsHint": "Alles, was auf „Standard verwenden“ bleibt, folgt den Arbeitsbereich-Standards unter Einstellungen → KI-Manager."
     },
     "backlog": {
       "title": "Geordnetes Backlog",
@@ -7580,7 +7616,9 @@
       "executions": "Lauf-Datensätze",
       "tool_audit_events": "Audit der Auto-Lauf-Entscheidungen",
       "aria": "Quelle: {label}"
-    }
+    },
+    "copyDiagnostics": "Diagnose kopieren",
+    "copyDiagnosticsAria": "Die vollständige Lebenszyklus-Diagnose dieses Tickets kopieren, mit allen Ereignissen, Ausführungs-IDs und Gate-Gründen"
   },
   "taskChanges": {
     "allChanges": "Alle Änderungen",

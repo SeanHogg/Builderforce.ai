@@ -1064,7 +1064,10 @@
     "requiresRoleHint": "{role, select, viewer {Nécessite le rôle Observateur} developer {Nécessite le rôle Développeur} manager {Nécessite le rôle Gestionnaire} owner {Nécessite le rôle Propriétaire} other {Nécessite le rôle {role}}}",
     "requiresDeveloperRole": "Nécessite le rôle Développeur",
     "closePanel": "Fermer le panneau",
-    "panel": "Panneau"
+    "panel": "Panneau",
+    "copy": "Copier",
+    "copied": "Copié",
+    "copyFailed": "Échec de la copie"
   },
   "prdCreate": {
     "title": "Nouveau PRD",
@@ -1376,7 +1379,13 @@
     "spendSave": "Enregistrer",
     "spendSaving": "Enregistrement…",
     "spendSaved": "Enregistré",
-    "spendSaveFailed": "Échec de l’enregistrement"
+    "spendSaveFailed": "Échec de l’enregistrement",
+    "managerDefaults": "Manager IA",
+    "managerDefaultsTitle": "Valeurs par défaut du Manager IA",
+    "managerDefaultsSubtitle": "Le comportement du Manager IA dans tous les projets de cet espace de travail. Un projet peut les affiner depuis son propre onglet Manager, mais ne peut jamais s’accorder une autorisation que vous refusez ici.",
+    "managerDefaultsError": "Impossible de charger les valeurs par défaut du Manager IA.",
+    "managerDefaultsProjectHint": "Pour ne modifier qu’un seul projet :",
+    "managerDefaultsProjectLink": "ouvrir ses réglages Manager"
   },
   "pmo": {
     "title": "Portefeuille (PMO)",
@@ -6716,8 +6725,35 @@
         "queue": {
           "label": "Laisser à un humain",
           "help": "Ne jamais fusionner automatiquement — réserve chaque pull request à une relecture et une fusion humaines."
-        }
-      }
+        },
+        "needsAuthority": "Le moment ne compte que si le manager est autorisé à fusionner ; pour l’instant, les fusions attendent une personne."
+      },
+      "allowAutoMerge": {
+        "label": "Autoriser le manager à fusionner les pull requests",
+        "help": "Il s’agit de l’autorisation de fusionner, distincte du moment choisi ci-dessous. Désactivée, le manager prépare et vérifie tout, puis laisse la fusion à une personne."
+      },
+      "requireSignoff": {
+        "label": "Exiger une validation avant de terminer",
+        "help": "Ne terminer un ticket et fusionner sa pull request qu’une fois que chaque relecteur requis a validé. Un ticket que personne n’était chargé de relire ne remplit jamais la condition."
+      },
+      "tri": {
+        "on": "Activé",
+        "off": "Désactivé",
+        "inherit": "Utiliser la valeur par défaut",
+        "builtinIs": "Valeur par défaut intégrée : {value}",
+        "workspaceIs": "Valeur par défaut de l’espace de travail : {value}"
+      },
+      "effective": {
+        "title": "Ce qui s’applique actuellement",
+        "help": "Ce que le manager fera réellement une fois tous les niveaux de ces réglages combinés. Pour les autorisations, la réponse la plus restrictive l’emporte.",
+        "managingOn": "Backlog géré",
+        "managingOff": "Gestion en pause",
+        "mergeGranted": "Peut fusionner les pull requests",
+        "mergeWithheld": "Les fusions attendent une personne",
+        "signoffRequired": "Validation requise pour terminer",
+        "signoffOptional": "Aucune validation requise"
+      },
+      "workspaceDefaultsHint": "Tout ce qui reste sur « Utiliser la valeur par défaut » suit les valeurs par défaut de votre espace de travail dans Paramètres → Manager IA."
     },
     "backlog": {
       "title": "Backlog classé",
@@ -7580,7 +7616,9 @@
       "executions": "Enregistrements d’exécution",
       "tool_audit_events": "Audit des décisions d’exécution auto",
       "aria": "Source : {label}"
-    }
+    },
+    "copyDiagnostics": "Copier le diagnostic",
+    "copyDiagnosticsAria": "Copier le diagnostic complet du cycle de vie de ce ticket, avec chaque évènement, identifiant d'exécution et motif de blocage"
   },
   "taskChanges": {
     "allChanges": "Toutes les modifications",

@@ -1754,7 +1754,10 @@ export type PrMergePolicy = 'immediate' | 'on_green' | 'queue';
 export type ManagerActionType =
   | 'prioritize' | 'assign' | 'score_value' | 'dispatch' | 'sync_pr' | 'merge_pr' | 'flag'
   /** Staffed a flagged ticket's missing role owner/reviewer (the fix for a flag). */
-  | 'coordinate';
+  | 'coordinate'
+  /** A PR was ready but the effective policy withholds merge authority (0363) — the
+   *  manager stopped and said so instead of skipping silently. */
+  | 'merge_blocked';
 
 /** Persisted manager configuration for a project (null until first configured). */
 export interface ManagerConfig {
@@ -1765,6 +1768,13 @@ export interface ManagerConfig {
   autoAssign: boolean;
   autoBusinessValue: boolean;
   autoPrioritize: boolean;
+  /** Autonomous completion/merge requires unanimous role sign-off (0362). */
+  requireSignoffToComplete: boolean;
+  /** Whether the manager may merge this project's PRs unattended (0363) — SEPARATE from
+   *  `prMergePolicy`, which only says HOW a permitted merge happens. `null` = inherit the
+   *  workspace default (see `ManagerTenantDefaults`). */
+  allowAutoMerge: boolean | null;
+  managerType: ManagerTypeId;
   lastRunAt: string | null;
 }
 
@@ -1784,7 +1794,13 @@ export interface ManagerTypeOption {
   description: string;
 }
 
-/** Effective policy (config merged with defaults + resolved manager kind). */
+/**
+ * The EFFECTIVE policy — the resolved answer, computed SERVER-SIDE by the one shared
+ * three-tier fold (hardcoded default ← workspace defaults ← project row). Never re-derive
+ * it on the client: precedence is not uniformly "nearest tier wins" (the authority gates
+ * resolve most-restrictive-wins), and a second implementation of that rule is a second
+ * chance to disagree with the manager about what it may actually do.
+ */
 export interface ManagerPolicy {
   enabled: boolean;
   managerRef: string | null;
@@ -1795,6 +1811,33 @@ export interface ManagerPolicy {
   autoPrioritize: boolean;
   /** The manager's domain type / role. */
   managerType: ManagerTypeId;
+  /** Autonomous completion/merge is gated on unanimous role sign-off (0362). */
+  requireSignoffToComplete: boolean;
+  /** Whether the manager may merge unattended at all (0363) — the resolved grant. */
+  allowAutoMerge: boolean;
+}
+
+/**
+ * The WORKSPACE tier (migration 0363) — the autonomy defaults every project inherits
+ * unless its own config row says otherwise. Every field is nullable and `null` means
+ * "this workspace expresses no opinion, use the built-in default", which is exactly what
+ * the settings UI renders as the "Not set / inherit" choice.
+ */
+export interface ManagerTenantDefaults {
+  enabled: boolean | null;
+  prMergePolicy: PrMergePolicy | null;
+  autoAssign: boolean | null;
+  autoBusinessValue: boolean | null;
+  autoPrioritize: boolean | null;
+  requireSignoffToComplete: boolean | null;
+  allowAutoMerge: boolean | null;
+}
+
+/** GET/PATCH /api/manager/defaults — the stored workspace opinions plus the policy a
+ *  project with no config row of its own resolves to (server-computed). */
+export interface ManagerDefaultsResponse {
+  defaults: ManagerTenantDefaults | null;
+  policy: ManagerPolicy;
 }
 
 /** One standing coaching directive that steers the manager (project-scoped, or
@@ -1890,6 +1933,9 @@ export interface ManagerOverview {
   managerTypes: ManagerTypeOption[];
   /** Standing coaching directives that steer this project's passes (incl. tenant-wide). */
   directives: ManagerDirective[];
+  /** The raw workspace tier, shipped so the project form can label a control "inherited
+   *  from the workspace" without re-implementing the precedence rules. */
+  tenantDefaults: ManagerTenantDefaults | null;
 }
 
 /** Editable subset accepted by PUT /api/manager/:projectId. */
@@ -1902,7 +1948,14 @@ export type ManagerConfigPatch = Partial<{
   autoBusinessValue: boolean;
   autoPrioritize: boolean;
   managerType: ManagerTypeId;
+  requireSignoffToComplete: boolean;
+  /** Tri-state: true/false = an explicit project decision, `null` = inherit the workspace
+   *  default. Omitting the key leaves whatever is stored alone. */
+  allowAutoMerge: boolean | null;
 }>;
+
+/** Editable subset accepted by PATCH /api/manager/defaults. `null` clears an opinion. */
+export type ManagerDefaultsPatch = Partial<ManagerTenantDefaults>;
 
 export const managerApi = {
   /** Full manager overview for a project (config, effective policy, stats, backlog, activity). */
@@ -1913,6 +1966,18 @@ export const managerApi = {
   update: (projectId: number, patch: ManagerConfigPatch): Promise<{ config: ManagerConfig; policy: ManagerPolicy }> =>
     request<{ config: ManagerConfig; policy: ManagerPolicy }>(`/api/manager/${projectId}`, {
       method: 'PUT',
+      body: JSON.stringify(patch),
+    }),
+
+  /** The workspace-wide autonomy defaults every project inherits (0363). */
+  defaults: (): Promise<ManagerDefaultsResponse> =>
+    request<ManagerDefaultsResponse>('/api/manager/defaults'),
+
+  /** Set the workspace-wide defaults (manager-role only). Send `null` for a field to
+   *  clear that workspace opinion and fall back to the built-in default. */
+  updateDefaults: (patch: ManagerDefaultsPatch): Promise<ManagerDefaultsResponse> =>
+    request<ManagerDefaultsResponse>('/api/manager/defaults', {
+      method: 'PATCH',
       body: JSON.stringify(patch),
     }),
 

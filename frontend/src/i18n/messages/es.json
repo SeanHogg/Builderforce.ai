@@ -1064,7 +1064,10 @@
     "requiresRoleHint": "{role, select, viewer {Requiere el rol de Observador} developer {Requiere el rol de Desarrollador} manager {Requiere el rol de Gerente} owner {Requiere el rol de Propietario} other {Requiere el rol {role}}}",
     "requiresDeveloperRole": "Requiere el rol de Desarrollador",
     "closePanel": "Cerrar el panel",
-    "panel": "Panel"
+    "panel": "Panel",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "copyFailed": "Error al copiar"
   },
   "prdCreate": {
     "title": "Nuevo PRD",
@@ -1376,7 +1379,13 @@
     "spendSave": "Guardar",
     "spendSaving": "Guardando…",
     "spendSaved": "Guardado",
-    "spendSaveFailed": "No se pudo guardar"
+    "spendSaveFailed": "No se pudo guardar",
+    "managerDefaults": "Manager IA",
+    "managerDefaultsTitle": "Valores predeterminados del Manager IA",
+    "managerDefaultsSubtitle": "Cómo se comporta el Manager IA en todos los proyectos de este espacio de trabajo. Un proyecto puede ajustarlos en su propia pestaña Manager, pero nunca puede concederse un permiso que tú retengas aquí.",
+    "managerDefaultsError": "No se pudieron cargar los valores predeterminados del Manager IA.",
+    "managerDefaultsProjectHint": "Para cambiar solo un proyecto:",
+    "managerDefaultsProjectLink": "abre sus ajustes de Manager"
   },
   "pmo": {
     "title": "Portafolio (PMO)",
@@ -6716,8 +6725,35 @@
         "queue": {
           "label": "Dejar para una persona",
           "help": "Nunca fusionar automáticamente: reserva cada pull request para que alguien lo revise y fusione."
-        }
-      }
+        },
+        "needsAuthority": "El momento solo importa cuando el manager tiene permiso para fusionar; ahora mismo las fusiones esperan a una persona."
+      },
+      "allowAutoMerge": {
+        "label": "Permitir que el manager fusione pull requests",
+        "help": "Este es el permiso para fusionar, algo distinto del momento que elijas más abajo. Si está desactivado, el manager sigue preparándolo y comprobándolo todo, pero deja la fusión en manos de una persona."
+      },
+      "requireSignoff": {
+        "label": "Exigir aprobación antes de finalizar",
+        "help": "Finalizar un ticket y fusionar su pull request solo cuando todas las personas revisoras obligatorias hayan dado su aprobación. Un ticket que nadie tenía que revisar nunca cumple la condición."
+      },
+      "tri": {
+        "on": "Activado",
+        "off": "Desactivado",
+        "inherit": "Usar el predeterminado",
+        "builtinIs": "Predeterminado del sistema: {value}",
+        "workspaceIs": "Predeterminado del espacio de trabajo: {value}"
+      },
+      "effective": {
+        "title": "Lo que se aplica ahora mismo",
+        "help": "Lo que el manager hará realmente al combinar todos los niveles de estos ajustes. En los permisos gana la respuesta más restrictiva.",
+        "managingOn": "Gestionando el backlog",
+        "managingOff": "Gestión en pausa",
+        "mergeGranted": "Puede fusionar pull requests",
+        "mergeWithheld": "Las fusiones esperan a una persona",
+        "signoffRequired": "Se exige aprobación para finalizar",
+        "signoffOptional": "No se exige aprobación"
+      },
+      "workspaceDefaultsHint": "Todo lo que quede en «Usar el predeterminado» seguirá los valores de tu espacio de trabajo en Configuración → Manager IA."
     },
     "backlog": {
       "title": "Backlog ordenado",
@@ -7580,7 +7616,9 @@
       "executions": "Registros de ejecución",
       "tool_audit_events": "Auditoría de decisiones de auto-ejecución",
       "aria": "Origen: {label}"
-    }
+    },
+    "copyDiagnostics": "Copiar diagnóstico",
+    "copyDiagnosticsAria": "Copiar el diagnóstico completo del ciclo de vida de este tique, con cada evento, id de ejecución y motivo de bloqueo"
   },
   "taskChanges": {
     "allChanges": "Todos los cambios",

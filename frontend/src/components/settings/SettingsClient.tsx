@@ -8,6 +8,8 @@
  *   - Sessions: personal account security (moved here from /security)
  *   - Email: email language + lifecycle-mail consent (CAN-SPAM surface)
  *   - Workspace: workspace identity + jump-off links (owner tools)
+ *   - Manager: workspace-wide AI Manager autonomy defaults (0363)
+ *   - Spend: per-seat AI spend limits (Teams)
  */
 
 import { useState, useEffect } from 'react';
@@ -34,6 +36,7 @@ import ForHireCard from '@/components/account/ForHireCard';
 import EmailPreferencesCard from '@/components/account/EmailPreferencesCard';
 import AccountSecurityPanel from '@/components/security/AccountSecurityPanel';
 import TeamSpendLimits from '@/components/settings/TeamSpendLimits';
+import ManagerDefaults from '@/components/settings/ManagerDefaults';
 import type { PsychometricProfile } from '@/lib/psychometric';
 import { clearPersonalityBlockCache } from '@/lib/usePersonalityBlock';
 
@@ -165,6 +168,9 @@ export default function SettingsClient() {
     { id: 'email', label: t('emailTab'), icon: '✉️', href: '/settings?sub=email' },
     ...(tenant ? [
       { id: 'workspace', label: t('workspace'), icon: '🏢', href: '/settings?sub=workspace' },
+      // Workspace-scoped like the two around it: the AI Manager autonomy defaults every
+      // project inherits (0363). Role-gated inside the panel, not hidden from the bar.
+      { id: 'manager', label: t('managerDefaults'), icon: '🧭', href: '/settings?sub=manager' },
       { id: 'spend', label: t('spendLimits'), icon: '💳', href: '/settings?sub=spend' },
     ] : []),
   ];
@@ -369,9 +375,11 @@ export default function SettingsClient() {
             ? <EmailPreferencesCard />
             : sub === 'workspace'
               ? renderWorkspace()
-              : sub === 'spend'
-                ? <TeamSpendLimits />
-                : renderAccount()}
+              : sub === 'manager'
+                ? <ManagerDefaults />
+                : sub === 'spend'
+                  ? <TeamSpendLimits />
+                  : renderAccount()}
     </PageContainer>
   );
 }

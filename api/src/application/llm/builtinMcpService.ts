@@ -2398,6 +2398,56 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'kanban.coordinate', mutates: true, description: 'Run the ticket Coordinator now: ensure its template manifest exists and dispatch the next required role-capable participant. The ticket assignee coordinates; producers do the scoped work.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/coordinate`, {}) },
   { tool: 'kanban.materialize_work_items', mutates: true, description: 'Create one assigned child task per required participant in the ticket manifest. Call after resource assessment so delivery scope rolls up to the parent ticket and every required resource has explicit work.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/participants/materialize`, {}) },
 
+  // ---- AUTONOMY DIAGNOSTICS (read-only) ----
+  //
+  // These exist so the system can DIAGNOSE ITSELF. The wiring audit found real, total
+  // failures — an empty sign-off ledger, a 40,580-to-10 branch-sync livelock, run
+  // attribution silently no-opping — that were invisible on the throughput charts and
+  // went unnoticed until inspected by hand. Exposing them only over HTTP meant the very
+  // agents capable of fixing the wiring (the VS Code agent, a Brain chat, the AI Manager)
+  // could not see it. So they are MCP tools: an agent asked "why is nothing completing?"
+  // can now read the failing invariant, its measured numbers and its remedy, and act.
+  //
+  // Deliberately `mutates: false` — diagnosis must never be able to change the thing it
+  // measures. The remedies are separate, already-audited tools (kanban.signoff,
+  // kanban.assess_resource, tasks.update, …).
+  //
+  // WHY THESE TWO CALL THE APPLICATION LAYER DIRECTLY instead of `replayRoute`: the HTTP
+  // lenses are MANAGER-gated for human UI exposure, and an unattended agent carries no
+  // MANAGER role by construction — replaying would 403 exactly the caller this is for.
+  // The reads are tenant-scoped and side-effect-free, so calling the cached application
+  // function keeps RBAC meaningful for humans without making self-diagnosis impossible.
+  {
+    tool: 'autonomy.wiring_audit', mutates: false,
+    description: 'DIAGNOSE THE AUTONOMY MACHINERY for this workspace: "can work actually complete on its own?", as opposed to "did it". Asserts mechanism invariants and returns each as pass/fail/unknown with the numbers it judged on and a concrete remedy — is the sign-off loop closed (has ANY role ever signed off), are required slots satisfiable, do PR merges converge (a huge sync-to-merge ratio is a livelock), do completed runs advance the participation manifest, does every gating lane have a resolvable approver, do in-review tickets have the deliverable their type implies, does autonomy reach a terminal lane, is there exactly one board per project, were autonomous merges verified by a green build. `canCompleteAutonomously: false` means at least one CRITICAL invariant is violated, so work CANNOT finish unattended regardless of how healthy throughput looks. Start here when tickets are stuck, when nothing reaches Done, or before trusting any autonomy metric. `unknown` means the check could not be evaluated — it is NOT a pass.',
+    parameters: obj({}, []),
+    run: async (ctx) => {
+      if (!ctx.env) throw new Error('the wiring audit needs the platform environment');
+      const { getAutonomyWiringAudit } = await import('../activity/autonomyWiringAudit');
+      return getAutonomyWiringAudit(ctx.env, ctx.db, { tenantId: ctx.tenantId });
+    },
+  },
+  {
+    tool: 'autonomy.summary', mutates: false,
+    description: 'AUTONOMY OUTCOMES for the workspace over a window (default 30 days), bucketed by WHO opened each ticket (agent / human / system / manager_card / unknown): how many were created, ever got a run dispatched, were moved a lane by autonomy, reached a terminal lane, and reached it with ZERO human lane moves (fullyAutonomous). Also returns the stall-gate ranking — which gate (no_agent, human_gate, run_cap_exhausted, cooldown_active, …) is holding the most tickets — plus the autonomous-vs-human lane-hop split. Retroactive: it reads history already recorded, so it reports on past tickets too. Pair it with autonomy.wiring_audit — this says WHETHER autonomy worked, that says WHETHER IT CAN.',
+    parameters: obj({ days: N, projectId: N }, []),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('the autonomy summary needs the platform environment');
+      const { getAutonomySummary } = await import('../activity/ticketLifecycleLedger');
+      return getAutonomySummary(ctx.env, ctx.db, {
+        tenantId: ctx.tenantId,
+        projectId: a.projectId != null ? num(a.projectId) : null,
+        windowDays: a.days != null ? num(a.days) : undefined,
+      });
+    },
+  },
+  {
+    tool: 'tickets.lifecycle', mutates: false,
+    description: 'THE CHAIN OF CUSTODY for ONE ticket: every lifecycle event in order — created, auto-run decision (dispatched or the exact gate that declined it), run started/completed/failed, each lane move with who moved it — where every event names the source table it was read from, so it is evidence rather than narration. Plus a verdict: autonomous vs human lane hops, runs dispatched/completed/failed, whether it reached a terminal lane, whether it is stalled and the LIVE gate holding it right now. Use this to answer "why is THIS ticket stuck?" and to tell an agent-driven ticket from a human-driven one.',
+    parameters: obj({ taskId: N }, ['taskId']),
+    run: (ctx, a) => replayRoute(ctx, 'GET', `/api/tasks/${num(a.taskId)}/lifecycle`),
+  },
+
   // ---- Workflow DEFINITIONS: write/run/import + computed reads not backed by a plain table op ----
   { tool: 'workflows.create', mutates: true, description: 'Create a workflow definition.', parameters: obj({ name: S, description: S, projectId: N }, ['name']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/workflow-definitions', { name: str(a.name), description: a.description != null ? str(a.description) : undefined, projectId: a.projectId != null ? num(a.projectId) : undefined }) },
   { tool: 'workflows.update', mutates: true, description: 'Update a workflow definition (name/description/project).', parameters: obj({ id: S, name: S, description: S, projectId: N }, ['id']), run: (ctx, a) => { const body: Json = {}; if (a.name != null) body.name = str(a.name); if (a.description != null) body.description = str(a.description); if (a.projectId != null) body.projectId = num(a.projectId); return replayRoute(ctx, 'PATCH', `/api/workflow-definitions/${encodeURIComponent(str(a.id))}`, body); } },
@@ -2732,6 +2782,13 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // unattended Coordinator can SEE the tools in the catalog but not invoke them.
   'kanban.participants', 'kanban.accountability', 'kanban.assess_resource',
   'kanban.coordinate', 'kanban.materialize_work_items',
+  // Autonomy self-diagnosis — the wiring audit ("can work complete at all?"), the
+  // outcome funnel, and a single ticket's chain of custody. All read-only. An agent
+  // asked to fix a stuck board needs to SEE the broken invariant; without these on the
+  // allowlist it could only guess, which is how a livelock and an empty sign-off ledger
+  // survived for weeks. Diagnosis is deliberately separate from the remedies, which are
+  // the already-audited mutating tools above.
+  'autonomy.wiring_audit', 'autonomy.summary', 'tickets.lifecycle',
   // Security agent: file SOC 2 findings mid-run. NOT security.configure_access —
   // deciding who can see security tickets is an admin action, never an unattended
   // agent reconfiguring its own findings' visibility.

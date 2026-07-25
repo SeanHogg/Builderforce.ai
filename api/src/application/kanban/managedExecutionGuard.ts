@@ -3,6 +3,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { swimlaneRequirements, swimlanes, tasks } from '../../infrastructure/database/schema';
 import { parseActAsRole, parseCloudAgentRef } from '../runtime/cloudDispatch';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
+import { resolveLaneApprovers } from '../swimlane/laneApprover';
 import { isAgentRefRoleCapable } from './roleCapability';
 import { requirementApplies } from './types';
 
@@ -28,9 +29,22 @@ export async function authorizeManagedTaskExecution(
   if (!lane) return { allowed: false, managed: true, reason: `No coordinated stage exists for status '${task.status}'.` };
   const requirements = await db.select({ kind: swimlaneRequirements.kind, ref: swimlaneRequirements.ref, responsibility: swimlaneRequirements.responsibility, ticketType: swimlaneRequirements.ticketType, condition: swimlaneRequirements.condition })
     .from(swimlaneRequirements).where(and(eq(swimlaneRequirements.swimlaneId, lane.id), eq(swimlaneRequirements.isRequired, true)));
-  const roleRequiredHere = requirements.some((r) =>
-    (r.kind === 'role' || r.kind === 'review') && r.ref === roleKey
+  // Role/review requirements that actually APPLY to this ticket — the same set the lane
+  // gate uses to pick its tier, so the guard and the gate can never disagree about which
+  // roles a stage authorizes.
+  const applicable = requirements.filter((r) =>
+    (r.kind === 'role' || r.kind === 'review')
     && requirementApplies({ ticketType: r.ticketType, condition: r.condition }, task));
+  let roleRequiredHere = applicable.some((r) => r.ref === roleKey);
+  if (!roleRequiredHere && applicable.length === 0) {
+    // A stage with NO applicable requirement rows used to reject EVERY dispatch, so a
+    // managed board configured by STAFFING rather than by a template could never run
+    // anything at all. The lane's staffed-agent approver is exactly the second tier the
+    // lane gate now dispatches (ONE shared resolver — `swimlane/laneApprover.ts`), so a
+    // role it resolves is Coordinator-issued by construction and authorized here too.
+    const decision = await resolveLaneApprovers(db, { tenantId, swimlaneId: lane.id, requirementRoleKeys: [] }).catch(() => null);
+    roleRequiredHere = decision?.approvers.some((a) => a.roleKey === roleKey) === true;
+  }
   if (!roleRequiredHere) return { allowed: false, managed: true, reason: `Role '${roleKey}' is not required in stage '${task.status}'.` };
   if (!(await isAgentRefRoleCapable(db, tenantId, agentRef, roleKey))) {
     return { allowed: false, managed: true, reason: `Agent '${agentRef}' is not capable of acting as role '${roleKey}'.` };

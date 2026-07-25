@@ -198,13 +198,32 @@ describe('resolveTieredManagerPolicy', () => {
 
   it('resolves each field independently — one tier setting X does not pull in its Y', () => {
     const eff = resolveTieredManagerPolicy({
-      tenant: tenantRow({ prMergePolicy: 'on_green' }),
-      project: projectRow({ autoBusinessValue: false }),
+      tenant: tenantRow({ prMergePolicy: 'on_green', allowAutoMerge: true }),
+      // A sparse project tier: an opinion about ONE field, silent (null) about the rest.
+      project: { autoBusinessValue: false },
     });
-    expect(eff.prMergePolicy).toBe('on_green');   // workspace
     expect(eff.autoBusinessValue).toBe(false);    // project
-    expect(eff.autoAssign).toBe(true);            // project row's NOT NULL default
+    expect(eff.prMergePolicy).toBe('on_green');   // workspace
+    expect(eff.allowAutoMerge).toBe(true);        // workspace
+    expect(eff.autoAssign).toBe(true);            // hardcoded default
     expect(eff.managerType).toBe('general');      // hardcoded default
+  });
+
+  it('a FULL project row shadows the workspace tuning knobs — the reason authority gates differ', () => {
+    // project_manager_configs was created (0265) with these columns NOT NULL DEFAULT, so
+    // a stored row always "has an opinion" about every one of them, even ones the operator
+    // never touched. Last-tier-wins is therefore near-total for the tuning knobs…
+    const eff = resolveTieredManagerPolicy({
+      tenant: tenantRow({ prMergePolicy: 'queue', autoAssign: false, enabled: false, allowAutoMerge: false }),
+      project: projectRow(),
+    });
+    expect(eff.prMergePolicy).toBe('immediate');  // the project row's column default wins
+    expect(eff.autoAssign).toBe(true);            // ditto
+
+    // …which is exactly why the three authority gates are NOT last-tier-wins: if they
+    // were, every pre-existing project row would silently void a workspace decision.
+    expect(eff.enabled).toBe(false);
+    expect(eff.allowAutoMerge).toBe(false);
   });
 
   it('carries the designation + derived kind from the project tier', () => {

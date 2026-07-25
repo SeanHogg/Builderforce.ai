@@ -53,6 +53,7 @@ import { RoleAssignmentService, type AssigneeKind } from '../kanban/roleAssignme
 import { recommendTopAssignee } from '../metrics/assigneeRecommender';
 import { producerRoleForActionType } from '../kanban/roleCapability';
 import { resolveSignoffGate, type SignoffGateResult } from '../kanban/signoffGate';
+import { buildSignoffRequestPayload } from '../kanban/signoffRequest';
 import { decideTicketReadiness } from './evaluateTicketReadiness';
 import { dispatchCloudRunForTask as dispatchCloudRunForTaskRef } from '../../presentation/routes/runtimeRoutes';
 import { mergeRecordedPullRequest, updateRecordedPullRequestBranch } from '../repos/mergeRecordedPr';
@@ -1030,19 +1031,21 @@ async function driveOutstandingSignoffs(
   const candidate = args.signoff.outstanding.find((o) => o.assigneeKind === 'agent' && !!o.assigneeRef);
   if (!candidate?.assigneeRef) return [];
   try {
-    const payload = JSON.stringify({
+    // ONE shared sign-off request contract with the lane requirement gate + the
+    // lane-agent approval path (`kanban/signoffRequest.ts`). It also supplies the
+    // `laneKey` this hand-written instruction omitted — without it the agent's verdict
+    // is recorded against no lane and never satisfies the lane-scoped manifest slot the
+    // gate is waiting on. `candidate.stageKey` is the slot's OWN stage, which is the
+    // lane the verdict has to match; the ticket's current status is only a fallback for
+    // a stage-less slot.
+    const payload = buildSignoffRequestPayload({
       cloudAgentRef: candidate.assigneeRef,
-      laneKey: args.task.status,
-      reviewRole: candidate.roleKey,
-      reviewInstruction:
-        `You are the ${candidate.roleName} accountable for ticket #${args.task.id} ("${args.task.title}") at lane '${args.task.status}'. `
-        + `Review the delivered work against the ticket description, the PRD and its acceptance criteria`
-        + `${args.task.githubPrUrl ? ` (pull request: ${args.task.githubPrUrl})` : ''}. `
-        + `Then RECORD YOUR VERDICT — this is required, the ticket cannot complete without it: `
-        + `POST /api/kanban/tasks/${args.task.id}/signoff with roleKey='${candidate.roleKey}', `
-        + `verdict 'approved' if the work meets the criteria, or 'changes_requested' with the specific fixes needed. `
-        + `Always pass \`contribution\` linking the evidence you actually inspected (prUrl, diffFiles, executionId) — `
-        + `an approval with no linked contribution is itself an audit finding.`,
+      taskId: args.task.id,
+      taskTitle: args.task.title,
+      roleKey: candidate.roleKey,
+      roleName: candidate.roleName,
+      laneKey: candidate.stageKey ?? args.task.status,
+      prUrl: args.task.githubPrUrl,
     });
     const deferred: Promise<unknown>[] = [];
     await dispatchCloudRunForTaskRef(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
