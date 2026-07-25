@@ -9,6 +9,7 @@
  * straight into a bug report.
  */
 
+import { announcesUntakenAction } from '@builderforce/agent-stall';
 import type { BrainMessage } from './types';
 import { traceWithPersistedSteps } from './persistedSteps';
 
@@ -151,41 +152,20 @@ export function detectUnbackedTicketClaim(events: BrainTraceEvent[], messages: B
 }
 
 /**
- * An advertised tool identifier written LITERALLY into prose. Nothing else in normal
- * assistant text looks like `builtin_chats_list_tickets` or `mcp__server__tool` — the
- * model only types these when it is trying (and failing) to make a call.
- */
-const TOOL_IDENT = /\b(?:builtin_[a-z0-9]+(?:_[a-z0-9]+)+|mcp__[a-z0-9_]+)\b/i;
-
-/**
- * Prose that ANNOUNCES a tool/function call rather than emitting one — "I'll call the
- * tool…", "Calling the required function now", "run tool X". Deliberately requires an
- * action verb bound to the words tool/function, so ordinary talk ABOUT tooling
- * ("the export tool in settings") doesn't trip it.
- */
-const TOOL_ANNOUNCE = new RegExp(
-  [
-    // "I'll call the tool…", "I will now invoke the function…", "let me run the tool…"
-    "\\b(?:i(?:'ll| will| am going to| ?'m going to)?|let me)\\s+(?:now\\s+)?(?:call|invoke|run|execute)\\b[^.!?\\n]{0,40}\\b(?:tool|function)\\b",
-    // "Calling the required function now", "invoking the tool"
-    '\\b(?:calling|invoking|executing)\\b[^.!?\\n]{0,40}\\b(?:tool|function)\\b',
-    // The bare imperative a model writes when it means to emit a call: "run tool X".
-    '\\b(?:call|run|invoke|execute)\\s+(?:the\\s+)?(?:tool|function)\\b',
-  ].join('|'),
-  'i',
-);
-
-/**
  * The "it doesn't execute, it just dies" signature: an assistant turn that NARRATES a
- * tool call — naming an advertised tool id, or announcing it in prose — while the run
+ * tool call — announcing it in prose, or writing the bare call as text — while the run
  * recorded ZERO tool steps.
  *
- * This is a provider/model fault, not a user one: the agent loop only runs structured
+ * This is a model fault, not a user one: the agent loop only runs structured
  * `toolCalls` (plus the inline dialects `xmlToolCalls` lifts), so a model that writes
- * its intent as plain text stalls forever — each turn re-announces the same call, the
- * data never arrives, and the run ends with nothing done. Without this detector the
- * triage block scores such a run "healthy" (no errors, no truncation, no context
- * pressure), which is exactly backwards.
+ * its intent as plain text achieves nothing. Without this detector the triage block
+ * scores such a run "healthy" (no errors, no truncation, no context pressure), which
+ * is exactly backwards.
+ *
+ * Deliberately reuses `announcesUntakenAction` — the SAME detector the run loop gates
+ * its stall recovery on. Diagnostics that disagreed with the loop about what counts as
+ * a stall would be worse than none: a report could call a run healthy while the loop
+ * had spent three recovery turns on it.
  *
  * Pure over the merged trace + visible messages, so both copy surfaces flag it
  * identically.
@@ -193,10 +173,7 @@ const TOOL_ANNOUNCE = new RegExp(
 export function detectAnnouncedButUnmadeToolCall(events: BrainTraceEvent[], messages: BrainMessage[]): boolean {
   if (events.some((e) => e.category === 'tool')) return false;
   return messages.some(
-    (m) =>
-      m.role === 'assistant' &&
-      typeof m.content === 'string' &&
-      (TOOL_IDENT.test(m.content) || TOOL_ANNOUNCE.test(m.content)),
+    (m) => m.role === 'assistant' && typeof m.content === 'string' && announcesUntakenAction(m.content),
   );
 }
 
