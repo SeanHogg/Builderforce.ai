@@ -30,8 +30,9 @@ import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import {
   tasks, boards, swimlanes, swimlaneAgentAssignments, pullRequests,
-  projectManagerConfigs, managerActions, projects, featureScores,
+  projectManagerConfigs, tenantManagerDefaults, managerActions, projects, featureScores,
 } from '../../infrastructure/database/schema';
+import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { TaskStatus, TaskPriority } from '../../domain/shared/types';
 import { notSystemTask } from '../task/taskScope';
 import { nextProjectKeySeqBase } from '../task/taskKeys';
@@ -42,8 +43,8 @@ import {
 } from './businessValue';
 import { scoreBusinessValueAI } from './businessValueAI';
 import {
-  resolveEffectiveManagerPolicy, resolveManagerAssignee,
-  type EffectiveManagerPolicy, type ManagerConfigRow,
+  resolveTieredManagerPolicy, resolveManagerAssignee, normalizePrMergePolicy,
+  type EffectiveManagerPolicy, type ManagerConfigRow, type TenantManagerDefaultsRow,
 } from './managerPolicy';
 import { resolveManagerIdentity } from './managerIdentity';
 import { resolveManagerTypeById, normalizeManagerType } from './managerTypes';
@@ -83,6 +84,12 @@ const MAX_AUDITS_PER_RUN = 40;
 /** Coordinator ticks per pass — each can rewind a lane + start a run, so pace them. */
 const MAX_REMEDIATIONS_PER_RUN = 10;
 
+/** `manager_actions.action_type` for "PR is ready but merge authority is withheld"
+ *  (0363). Its own type — not 'flag' — so the surface can say "waiting on a human to
+ *  merge" and the dedupe query can find prior reports for a PR in one indexed lookup.
+ *  Must fit `action_type varchar(24)`. */
+const MERGE_BLOCKED_ACTION = 'merge_blocked';
+
 export interface ManagerRunSummary {
   projectId: number;
   skipped: boolean;
@@ -121,6 +128,7 @@ export async function getManagerConfigRow(
       autoPrioritize: projectManagerConfigs.autoPrioritize,
       managerType: projectManagerConfigs.managerType,
       requireSignoffToComplete: projectManagerConfigs.requireSignoffToComplete,
+      allowAutoMerge: projectManagerConfigs.allowAutoMerge,
       lastRunAt: projectManagerConfigs.lastRunAt,
     })
     .from(projectManagerConfigs)
@@ -129,11 +137,114 @@ export async function getManagerConfigRow(
   return row ?? null;
 }
 
-/** The effective (row-over-default) policy for a project. */
+// ── workspace (tenant) tier ─────────────────────────────────────────────────
+
+/** KV key for a tenant's workspace manager defaults (invalidated on every write). */
+const tenantDefaultsCacheKey = (tenantId: number) => `manager-defaults:tenant:${tenantId}`;
+
+/**
+ * Load a tenant's workspace manager defaults (null when the workspace has never stated a
+ * posture → the hardcoded defaults apply). Read through the shared cache when an `env` is
+ * available: this row is read once per project on EVERY manager sweep tick, so an uncached
+ * read multiplies one unchanging row by the project count every five minutes.
+ */
+export async function getTenantManagerDefaults(
+  db: Db, tenantId: number, env?: Env,
+): Promise<TenantManagerDefaultsRow | null> {
+  const load = async (): Promise<TenantManagerDefaultsRow | null> => {
+    const [row] = await db
+      .select({
+        enabled: tenantManagerDefaults.enabled,
+        prMergePolicy: tenantManagerDefaults.prMergePolicy,
+        autoAssign: tenantManagerDefaults.autoAssign,
+        autoBusinessValue: tenantManagerDefaults.autoBusinessValue,
+        autoPrioritize: tenantManagerDefaults.autoPrioritize,
+        requireSignoffToComplete: tenantManagerDefaults.requireSignoffToComplete,
+        allowAutoMerge: tenantManagerDefaults.allowAutoMerge,
+      })
+      .from(tenantManagerDefaults)
+      .where(eq(tenantManagerDefaults.tenantId, tenantId))
+      .limit(1);
+    return row ?? null;
+  };
+  if (!env) return load();
+  // `null` is a legitimate cached value here (most workspaces never set defaults), and
+  // getOrSetCached treats a cached null as a miss — so cache a discriminated wrapper.
+  const cached = await getOrSetCached<{ row: TenantManagerDefaultsRow | null }>(
+    env, tenantDefaultsCacheKey(tenantId), async () => ({ row: await load() }), { kvTtlSeconds: 600 },
+  );
+  return cached.row;
+}
+
+/** Editable subset of the workspace defaults. `null` clears a field back to "no opinion". */
+export type TenantManagerDefaultsPatch = Partial<TenantManagerDefaultsRow>;
+
+/**
+ * Upsert a tenant's workspace manager defaults and invalidate the cached read. Only the
+ * keys present in `patch` are written, so a caller can express one opinion without
+ * accidentally pinning the others (which is the whole point of the nullable columns).
+ */
+export async function upsertTenantManagerDefaults(
+  db: Db,
+  tenantId: number,
+  patch: TenantManagerDefaultsPatch,
+  opts?: { updatedBy?: string | null; env?: Env },
+): Promise<TenantManagerDefaultsRow | null> {
+  const now = new Date();
+  const normalized: TenantManagerDefaultsPatch = {
+    ...patch,
+    // An explicit garbage policy string must not be persisted; an explicit null (clear
+    // the opinion) must survive.
+    ...(patch.prMergePolicy !== undefined
+      ? { prMergePolicy: patch.prMergePolicy === null ? null : normalizePrMergePolicy(patch.prMergePolicy) }
+      : {}),
+  };
+  await db
+    .insert(tenantManagerDefaults)
+    .values({
+      tenantId,
+      enabled: normalized.enabled ?? null,
+      prMergePolicy: normalized.prMergePolicy ?? null,
+      autoAssign: normalized.autoAssign ?? null,
+      autoBusinessValue: normalized.autoBusinessValue ?? null,
+      autoPrioritize: normalized.autoPrioritize ?? null,
+      requireSignoffToComplete: normalized.requireSignoffToComplete ?? null,
+      allowAutoMerge: normalized.allowAutoMerge ?? null,
+      updatedBy: opts?.updatedBy ?? null,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: tenantManagerDefaults.tenantId,
+      set: {
+        ...(normalized.enabled !== undefined ? { enabled: normalized.enabled } : {}),
+        ...(normalized.prMergePolicy !== undefined ? { prMergePolicy: normalized.prMergePolicy } : {}),
+        ...(normalized.autoAssign !== undefined ? { autoAssign: normalized.autoAssign } : {}),
+        ...(normalized.autoBusinessValue !== undefined ? { autoBusinessValue: normalized.autoBusinessValue } : {}),
+        ...(normalized.autoPrioritize !== undefined ? { autoPrioritize: normalized.autoPrioritize } : {}),
+        ...(normalized.requireSignoffToComplete !== undefined ? { requireSignoffToComplete: normalized.requireSignoffToComplete } : {}),
+        ...(normalized.allowAutoMerge !== undefined ? { allowAutoMerge: normalized.allowAutoMerge } : {}),
+        ...(opts?.updatedBy !== undefined ? { updatedBy: opts.updatedBy } : {}),
+        updatedAt: now,
+      },
+    });
+  if (opts?.env) await invalidateCached(opts.env, tenantDefaultsCacheKey(tenantId));
+  return getTenantManagerDefaults(db, tenantId);
+}
+
+/**
+ * The EFFECTIVE policy for a project — the full three-tier fold
+ * (hardcoded default ← workspace defaults ← project row), resolved by the one shared
+ * pure function. `env` is optional so unit/legacy callers still work; when supplied the
+ * workspace row is served from the read-through cache.
+ */
 export async function getEffectiveManagerPolicy(
-  db: Db, tenantId: number, projectId: number,
+  db: Db, tenantId: number, projectId: number, env?: Env,
 ): Promise<EffectiveManagerPolicy> {
-  return resolveEffectiveManagerPolicy(await getManagerConfigRow(db, tenantId, projectId));
+  const [tenant, project] = await Promise.all([
+    getTenantManagerDefaults(db, tenantId, env),
+    getManagerConfigRow(db, tenantId, projectId),
+  ]);
+  return resolveTieredManagerPolicy({ tenant, project });
 }
 
 /** Upsert a project's manager config (the designation + policy). */
@@ -141,7 +252,7 @@ export async function upsertManagerConfig(
   db: Db,
   tenantId: number,
   projectId: number,
-  patch: Partial<Pick<ManagerConfigRow, 'managerRef' | 'enabled' | 'prMergePolicy' | 'autoAssign' | 'autoBusinessValue' | 'autoPrioritize' | 'managerType' | 'requireSignoffToComplete'>>,
+  patch: Partial<Pick<ManagerConfigRow, 'managerRef' | 'enabled' | 'prMergePolicy' | 'autoAssign' | 'autoBusinessValue' | 'autoPrioritize' | 'managerType' | 'requireSignoffToComplete' | 'allowAutoMerge'>>,
 ): Promise<ManagerConfigRow> {
   const now = new Date();
   await db
@@ -158,6 +269,10 @@ export async function upsertManagerConfig(
       // Default TRUE on insert: a newly-configured project must not silently gain
       // unreviewed auto-merge authority just because the caller omitted the field.
       requireSignoffToComplete: patch.requireSignoffToComplete ?? true,
+      // Default NULL on insert = "inherit the workspace tier" (0363). Writing `false`
+      // here would pin a brand-new project against a workspace-wide grant it should have
+      // received; writing `true` would grant authority nobody asked for.
+      allowAutoMerge: patch.allowAutoMerge ?? null,
       updatedAt: now,
     })
     .onConflictDoUpdate({
@@ -171,6 +286,7 @@ export async function upsertManagerConfig(
         ...(patch.autoPrioritize !== undefined ? { autoPrioritize: patch.autoPrioritize } : {}),
         ...(patch.managerType !== undefined ? { managerType: normalizeManagerType(patch.managerType) } : {}),
         ...(patch.requireSignoffToComplete !== undefined ? { requireSignoffToComplete: patch.requireSignoffToComplete } : {}),
+        ...(patch.allowAutoMerge !== undefined ? { allowAutoMerge: patch.allowAutoMerge } : {}),
         updatedAt: now,
       },
     });
@@ -372,7 +488,7 @@ export async function createManagerCoachingTask(
       .limit(1);
     if (!project) return null;
 
-    const policy = await getEffectiveManagerPolicy(db, tenantId, projectId);
+    const policy = await getEffectiveManagerPolicy(db, tenantId, projectId, env);
     const assignee = resolveManagerAssignee(policy.managerRef);
     const baseSeq = await nextProjectKeySeqBase(db, projectId);
     const title = (directive.split('\n', 1)[0] ?? directive).trim().slice(0, 120) || 'Manager task';
@@ -605,7 +721,7 @@ export async function runManagerForProject(
     audited: 0, flagged: 0, remediated: 0, remediationDeferred: 0,
   };
 
-  const policy = await getEffectiveManagerPolicy(db, tenantId, projectId);
+  const policy = await getEffectiveManagerPolicy(db, tenantId, projectId, env);
   if (!policy.enabled) return { ...summary, skipped: true, reason: 'disabled' };
 
   // Resolve the designated manager AS an identity — a named cloud agent scores the
@@ -1105,6 +1221,30 @@ async function coordinatePullRequests(
     ? await runtimeService.listActiveByTasks(openPrs.flatMap((pr) => pr.taskId == null ? [] : [pr.taskId])).catch(() => [])
     : [];
   const activePrTaskIds = new Set<number>(activePrRuns.map((e) => e.taskId as unknown as number));
+
+  // MERGE AUTHORITY (0363) is withheld by default, so "this PR is ready but I may not
+  // merge it" is a STATE that persists across passes, not an event. Journalling it every
+  // five minutes for every open PR would bury the feed and inflate a table that is
+  // already a storage concern, so — same reasoning as the 0344 flag dedupe — load the
+  // PRs already reported and write once per PR. One extra SELECT, and zero writes on the
+  // steady-state pass where nothing changed.
+  const alreadyReportedBlocked = new Set<number>();
+  if (!policy.allowAutoMerge) {
+    const blockedTaskIds = openPrs.flatMap((pr) => (pr.taskId == null ? [] : [pr.taskId]));
+    if (blockedTaskIds.length) {
+      const prior = await db
+        .select({ taskId: managerActions.taskId })
+        .from(managerActions)
+        .where(and(
+          eq(managerActions.tenantId, tenantId),
+          eq(managerActions.actionType, MERGE_BLOCKED_ACTION),
+          inArray(managerActions.taskId, blockedTaskIds),
+        ))
+        .catch(() => []);
+      for (const row of prior) if (row.taskId != null) alreadyReportedBlocked.add(row.taskId);
+    }
+  }
+
   for (const pr of openPrs) {
     try {
       // A previous conflict-resolution run owns this branch until it finishes.
@@ -1181,6 +1321,33 @@ async function coordinatePullRequests(
           continue;
         }
       }
+      // MERGE AUTHORITY (0363) — the last gate, and a different question from every check
+      // above it. Those ask "is this change ready?"; this asks "may the manager act on
+      // that answer unattended?". It used to be inferred from `prMergePolicy !== 'queue'`,
+      // conflating HOW a merge happens with WHETHER one is permitted, and the inferred
+      // answer for a default-configured project was yes. It is now granted explicitly at
+      // the workspace or project tier, defaults to withheld, and — because a withheld
+      // grant on a ready PR is a decision — it is journalled rather than skipped, so the
+      // surface shows "waiting on a human to merge" instead of a PR that quietly never
+      // moves. Both this and the sign-off gate above must pass.
+      if (!policy.allowAutoMerge) {
+        if (pr.taskId == null || !alreadyReportedBlocked.has(pr.taskId)) {
+          await recordManagerAction(db, {
+            tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: MERGE_BLOCKED_ACTION,
+            summary: `PR #${pr.number ?? '?'} is ready to merge, but autonomous merge authority is not granted — a human needs to approve & merge it.`,
+            detail: {
+              gate: 'allow_auto_merge',
+              allowAutoMerge: false,
+              prMergePolicy: policy.prMergePolicy,
+              requireSignoffToComplete: policy.requireSignoffToComplete,
+              grantAt: 'workspace manager defaults, or this project’s manager policy',
+            },
+          });
+          if (pr.taskId != null) alreadyReportedBlocked.add(pr.taskId);
+        }
+        continue;
+      }
+
       const result = await mergeRecordedPullRequest(db, env, {
         tenantId, prId: pr.id, method: 'squash', mergedBy: `manager:${policy.managerRef ?? 'system'}`,
       });
