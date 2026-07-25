@@ -255,8 +255,10 @@ export async function runStallTriage(
   for (const { task, idleMs } of batch) {
     try {
       // 3. DIAGNOSE — ask the canonical evaluators, never re-derive their verdicts.
+      // `env` serves the evaluator's workspace-token lookup through the read-through
+      // cache — this loop runs per ticket, so an uncached tenant read here is an N+1.
       const autoRun = await evaluateTaskAutoRun(db, runtimeService, {
-        tenantId, projectId, taskId: task.id, status: task.status,
+        tenantId, projectId, taskId: task.id, status: task.status, env,
       });
 
       const prRow = signals.prByTask.get(task.id) ?? null;
@@ -446,7 +448,7 @@ async function applyRemedy(
       // between recovery and a livelock.
       if (!args.mayStartRun) return nothing;
       const evaluation = await evaluateTaskAutoRun(db, runtimeService, {
-        tenantId, projectId, taskId: task.id, status: task.status,
+        tenantId, projectId, taskId: task.id, status: task.status, env,
       });
       if (!evaluation.candidate || evaluation.liveExecution) return nothing;
       const payload: { cloudAgentRef: string; model?: string; laneKey: string } = {

@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   announcesUntakenAction,
   shouldRecoverStalledTurn,
+  isExhaustedStall,
   stallRecoveryNudge,
+  stallExhaustedNotice,
   MAX_ANNOUNCEMENT_RECOVERIES,
 } from './index';
 
@@ -89,6 +91,35 @@ describe('announcesUntakenAction', () => {
     expect(announcesUntakenAction('')).toBe(false);
     expect(announcesUntakenAction('   ')).toBe(false);
   });
+
+  /**
+   * Regression, measured on VS Code chat #85 (`xai-oauth/grok-4.3`). The subject-led
+   * patterns caught turns 1-2 and recovered them; then the model dropped the narration
+   * and wrote the bare call, which has NO first-person subject — so it scored as a
+   * complete answer, the loop returned it as the reply, and the run ended having done
+   * nothing. That is the reported "it doesn't execute, it just dies".
+   */
+  it('matches a bare PSEUDO-CALL with no first-person subject', () => {
+    const pseudoCalls = [
+      'run tool builtin_chats_list_tickets with chatId is 85',
+      'call builtin_chats_list_tickets with chatId is 85',
+      'invoke the function mcp__github__list_prs with owner and repo',
+      'builtin_tasks_create({"title":"x"})',
+      'call the tool builtin_projects_list',
+      'mcp__brain__search with query "backlog"',
+    ];
+    for (const s of pseudoCalls) expect(announcesUntakenAction(s), s).toBe(true);
+  });
+
+  it('does NOT match an answer that merely NAMES a tool without invoking it', () => {
+    const answers = [
+      'The builtin_tasks_create tool creates a task on the board.',
+      'builtin_chats_link_ticket: links an existing ticket to this chat.',
+      'Two tools cover that: builtin_tasks_create and builtin_tasks_update.',
+      'I could not find a builtin_reports_export tool in the catalog.',
+    ];
+    for (const a of answers) expect(announcesUntakenAction(a), a).toBe(false);
+  });
 });
 
 /**
@@ -128,6 +159,58 @@ describe('shouldRecoverStalledTurn', () => {
 
   it('allows more than one recovery — the stall repeats', () => {
     expect(MAX_ANNOUNCEMENT_RECOVERIES).toBeGreaterThan(1);
+  });
+});
+
+/**
+ * The other half of "it just dies": when every recovery is spent and the model is
+ * STILL only describing calls, a loop that returns normally shows the promise as the
+ * answer and reads as a success. This gate is what lets each loop say so out loud.
+ */
+describe('isExhaustedStall', () => {
+  const stall = {
+    text: 'run tool builtin_chats_list_tickets with chatId is 85',
+    toolCallCount: 0,
+    availableToolCount: 43,
+    recoveriesUsed: MAX_ANNOUNCEMENT_RECOVERIES,
+  };
+
+  it('fires only once the recovery budget is spent', () => {
+    expect(isExhaustedStall(stall)).toBe(true);
+    expect(isExhaustedStall({ ...stall, recoveriesUsed: MAX_ANNOUNCEMENT_RECOVERIES - 1 })).toBe(false);
+  });
+
+  it('is the exact complement of shouldRecoverStalledTurn — never both, never neither', () => {
+    // Any turn that IS a stall is either recoverable or exhausted; a non-stall is
+    // neither. Drift between the two would silently drop or double-report a run.
+    for (const used of [0, 1, MAX_ANNOUNCEMENT_RECOVERIES, MAX_ANNOUNCEMENT_RECOVERIES + 5]) {
+      const input = { ...stall, recoveriesUsed: used };
+      expect(shouldRecoverStalledTurn(input) && isExhaustedStall(input), `used=${used}`).toBe(false);
+      expect(shouldRecoverStalledTurn(input) || isExhaustedStall(input), `used=${used}`).toBe(true);
+    }
+  });
+
+  it('never fires on a genuine answer, or when the turn actually acted', () => {
+    expect(isExhaustedStall({ ...stall, text: 'The build failed because the token expired.' })).toBe(false);
+    expect(isExhaustedStall({ ...stall, toolCallCount: 1 })).toBe(false);
+    expect(isExhaustedStall({ ...stall, availableToolCount: 0 })).toBe(false);
+  });
+});
+
+describe('stallExhaustedNotice', () => {
+  it('names the model, because switching model is the only remedy that works', () => {
+    expect(stallExhaustedNotice('xai-oauth/grok-4.3')).toContain('xai-oauth/grok-4.3');
+    expect(stallExhaustedNotice('xai-oauth/grok-4.3')).toContain('pick a different model');
+  });
+
+  it('reads sensibly when the loop never resolved a model', () => {
+    for (const m of [undefined, null, '', 'default']) {
+      expect(stallExhaustedNotice(m)).toContain('The model described tool calls');
+    }
+  });
+
+  it('says nothing ran, so the text above is not mistaken for work done', () => {
+    expect(stallExhaustedNotice('m')).toContain('nothing was actually run');
   });
 });
 
