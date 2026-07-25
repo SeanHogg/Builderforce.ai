@@ -1811,6 +1811,8 @@ export type PrMergePolicy = 'immediate' | 'on_green' | 'queue';
 /** The action types the manager records on each run (drives the activity feed). */
 export type ManagerActionType =
   | 'prioritize' | 'assign' | 'score_value' | 'dispatch' | 'sync_pr' | 'merge_pr' | 'flag'
+  /** Placed previously-undated tickets on the timeline (0364). */
+  | 'schedule'
   /** Staffed a flagged ticket's missing role owner/reviewer (the fix for a flag). */
   | 'coordinate'
   /** A PR was ready but the effective policy withholds merge authority (0363) — the
@@ -1826,6 +1828,9 @@ export interface ManagerConfig {
   autoAssign: boolean;
   autoBusinessValue: boolean;
   autoPrioritize: boolean;
+  /** May the manager place UNDATED tickets on the timeline (0364)? Ranking says what
+   *  comes first; this says WHEN. Only ever fills tickets carrying neither date. */
+  autoSchedule: boolean;
   /** Autonomous completion/merge requires unanimous role sign-off (0362). */
   requireSignoffToComplete: boolean;
   /** Whether the manager may merge this project's PRs unattended (0363) — SEPARATE from
@@ -1872,6 +1877,8 @@ export interface ManagerPolicy {
   autoAssign: boolean;
   autoBusinessValue: boolean;
   autoPrioritize: boolean;
+  /** May the manager place UNDATED tickets on the timeline (0364) — the resolved grant. */
+  autoSchedule: boolean;
   /** The manager's domain type / role. */
   managerType: ManagerTypeId;
   /** Autonomous completion/merge is gated on unanimous role sign-off (0362). */
@@ -1902,6 +1909,7 @@ export interface ManagerTenantDefaults {
   autoAssign: boolean | null;
   autoBusinessValue: boolean | null;
   autoPrioritize: boolean | null;
+  autoSchedule: boolean | null;
   requireSignoffToComplete: boolean | null;
   allowAutoMerge: boolean | null;
   /** Ceremony autonomy (0365) — same tier, same fold, same null-means-inherit rule. */
@@ -1939,6 +1947,8 @@ export interface ManagerStats {
   total: number;
   unscored: number;
   unranked: number;
+  /** Tickets with NEITHER a start nor a due date — invisible on every dated surface. */
+  undated: number;
   unowned: number;
   openPullRequests: number;
   /** Tickets whose required role/reviewer coverage is unmet (the manager staffs these). */
@@ -2029,6 +2039,7 @@ export type ManagerConfigPatch = Partial<{
   autoAssign: boolean;
   autoBusinessValue: boolean;
   autoPrioritize: boolean;
+  autoSchedule: boolean;
   managerType: ManagerTypeId;
   requireSignoffToComplete: boolean;
   /** Tri-state: true/false = an explicit project decision, `null` = inherit the workspace
@@ -4651,6 +4662,8 @@ export interface CeremonyRollup {
   totals: {
     sessions: number;
     completed: number;
+    /** Concluded without being conducted — nobody attended (0365). */
+    abandoned: number;
     active: number;
     completionRate: number;
     projects: number;

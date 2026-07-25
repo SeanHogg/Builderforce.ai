@@ -2669,7 +2669,9 @@
       "task": "任务",
       "roadmap": "路线图"
     },
-    "exportCsv": "导出 CSV"
+    "exportCsv": "导出 CSV",
+    "milestoneTip": "里程碑 — 仅设置了一个日期",
+    "derivedTip": "日期根据其中的项目推算得出"
   },
   "reconcile": {
     "loading": "正在加载工作项…",
@@ -6686,7 +6688,8 @@
       "unranked": "待排序",
       "unowned": "无负责人",
       "openPullRequests": "开放的 PR",
-      "flagged": "覆盖缺口"
+      "flagged": "覆盖缺口",
+      "undated": "无日期"
     },
     "chart": {
       "title": "按优先级分组的待办",
@@ -6799,6 +6802,10 @@
         "help": "单场仪式最多可转交的工单数量上限，避免一次站会悄悄重新分配整个迭代。",
         "unit": "个工单",
         "inherited": "正在使用继承值：{value}"
+      },
+      "autoSchedule": {
+        "label": "为工作安排时间表",
+        "help": "按排序结果为没有日期的工单设置开始与截止日期，并遵循任务之间的阻塞关系。绝不会修改你自己设定的日期。"
       }
     },
     "backlog": {
@@ -6822,7 +6829,9 @@
       "sync_pr": "PR 已更新",
       "merge_pr": "已合并 PR",
       "flag": "已标记",
-      "coordinate": "已配置角色"
+      "coordinate": "已配置角色",
+      "schedule": "已排期",
+      "merge_blocked": "合并被阻止"
     },
     "runTasks": {
       "title": "经理任务",

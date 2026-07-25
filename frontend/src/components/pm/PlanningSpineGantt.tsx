@@ -118,11 +118,42 @@ export function PlanningSpineGantt() {
     return { start: startOfDay(new Date(min.getTime() - 3 * DAY_MS)), end: startOfDay(new Date(max.getTime() + 3 * DAY_MS)) };
   }, [data]);
 
-  /** Row index per node key — the y-coordinate source for the dependency arrows. */
-  const rowIndex = useMemo(
-    () => new Map(visible.map((n, i) => [n.key, i])),
-    [visible],
-  );
+  /**
+   * Dependency arrows between VISIBLE, dated rows. Both endpoints must be on screen
+   * and drawable — an edge into a collapsed or undated node has no anchor to point
+   * at, so it is skipped rather than drawn to the wrong place.
+   */
+  const arrows = useMemo(() => {
+    if (!range) return [];
+    const rowOf = new Map(visible.map((n, i) => [n.key, i]));
+    const out: Array<{ key: string; d: string }> = [];
+    for (const node of visible) {
+      const to = nodeWindow(node);
+      const toRow = rowOf.get(node.key);
+      if (toRow === undefined || !to.start) continue;
+      for (const predKey of node.dependsOn ?? []) {
+        const fromRow = rowOf.get(predKey);
+        const pred = visible.find((n) => n.key === predKey);
+        if (fromRow === undefined || !pred) continue;
+        const from = nodeWindow(pred);
+        if (!from.end) continue;
+        const x1 = NAME_COL + (daysBetween(range.start, from.end) + 1) * PX_PER_DAY;
+        const y1 = fromRow * ROW_H + ROW_H / 2;
+        const x2 = NAME_COL + daysBetween(range.start, to.start) * PX_PER_DAY;
+        const y2 = toRow * ROW_H + ROW_H / 2;
+        // Elbow: out of the predecessor, across, then into the successor. A small
+        // horizontal stub keeps the arrowhead off the bar edge even when the two
+        // bars butt up against each other.
+        const stub = Math.max(6, Math.min(14, Math.abs(x2 - x1) / 2));
+        const midX = x2 - stub;
+        out.push({
+          key: `${predKey}->${node.key}`,
+          d: `M ${x1} ${y1} H ${Math.max(midX, x1 + stub)} V ${y2} H ${x2}`,
+        });
+      }
+    }
+    return out;
+  }, [visible, range]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
