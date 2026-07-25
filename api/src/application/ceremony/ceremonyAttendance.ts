@@ -26,6 +26,9 @@ import type { EffectiveManagerPolicy } from '../manager/managerPolicy';
 /** The resolved verdict stored on `ceremony_participants.attendance` (0365). */
 export type AttendanceVerdict = 'unknown' | 'present' | 'absent' | 'excused';
 
+/** Where a verdict came from — `ceremony_participants.attendance_source` (0366). */
+export type AttendanceSource = 'derived' | 'pto' | 'manual';
+
 /** The participant fields attendance resolution reads. */
 export interface AttendanceInput {
   memberKind: string;
@@ -37,10 +40,20 @@ export interface AttendanceInput {
   joinedAt: Date | null;
   /** Accrued speaking time. A backstop signal — see below. */
   durationMs: number;
+  /** The verdict already stored on the row, and where it came from (0366). Only
+   *  `'manual'` is meaningful as an input: it means a human asserted this and it must
+   *  not be recomputed. Absent for a row read before the migration. */
+  storedVerdict?: AttendanceVerdict;
+  storedSource?: AttendanceSource;
+  /** True when approved leave (`member_profiles.pto`) covered the ceremony (0366). */
+  onPto?: boolean;
 }
 
 export interface AttendanceResult extends AttendanceInput {
   verdict: AttendanceVerdict;
+  /** How {@link verdict} was arrived at — persisted so a later re-conclude can refresh
+   *  an inferred verdict without discarding a human's correction. */
+  source: AttendanceSource;
 }
 
 /**
@@ -54,22 +67,32 @@ export function isHumanSeat(memberKind: string): boolean {
 }
 
 /**
- * Resolve one participant's attendance verdict.
+ * Resolve one participant's attendance verdict, in strict precedence order.
  *
- * `joinedAt` is the primary signal (set by the attendance heartbeat the moment someone
- * is observed in the live room). `durationMs > 0` is a BACKSTOP for sessions that were
- * facilitated through the turn controls without the heartbeat ever landing — an
- * accrued speaking turn is proof of presence, and treating that person as absent would
- * be the single worst failure mode this function has, because it is the one that
- * wrongly takes work away.
- *
- * Agents are always 'present': they are seated by construction and cannot fail to show.
+ *   1. AGENTS are always 'present' — seated by construction, cannot fail to show.
+ *   2. A MANUAL verdict is returned untouched. A human looked at this and asserted it;
+ *      no derived signal outranks that, and this is what makes the correction durable
+ *      across a re-conclude or a heartbeat that lands late.
+ *   3. OBSERVED ⇒ 'present'. `joinedAt` is the primary signal (the heartbeat, or a
+ *      write-through from joining the meeting's video room). `durationMs > 0` is a
+ *      BACKSTOP for a session facilitated purely through the turn controls — an accrued
+ *      speaking turn is proof of presence, and reporting that person absent would be the
+ *      single worst failure mode here, because it is the one that wrongly takes work away.
+ *      Deliberately ahead of PTO: someone who joined anyway WAS at the ceremony,
+ *      whatever their calendar said.
+ *   4. ON APPROVED LEAVE ⇒ 'excused'. Planned absence is not a no-show, and since
+ *      `absentHumans` is what the reassignment rules read, this is what stops a holiday
+ *      from contributing to someone's tickets being handed to an agent.
+ *   5. EXPECTED and never seen ⇒ 'absent'. An optional seat is 'excused' instead.
  */
-export function resolveAttendanceVerdict(p: AttendanceInput): AttendanceVerdict {
-  if (!isHumanSeat(p.memberKind)) return 'present';
-  if (p.joinedAt != null || p.durationMs > 0) return 'present';
-  // Never observed. Only an EXPECTED seat counts as a no-show; an optional one is excused.
-  return p.required ? 'absent' : 'excused';
+export function resolveAttendanceVerdict(p: AttendanceInput): { verdict: AttendanceVerdict; source: AttendanceSource } {
+  if (!isHumanSeat(p.memberKind)) return { verdict: 'present', source: 'derived' };
+  if (p.storedSource === 'manual' && p.storedVerdict && p.storedVerdict !== 'unknown') {
+    return { verdict: p.storedVerdict, source: 'manual' };
+  }
+  if (p.joinedAt != null || p.durationMs > 0) return { verdict: 'present', source: 'derived' };
+  if (p.onPto) return { verdict: 'excused', source: 'pto' };
+  return { verdict: p.required ? 'absent' : 'excused', source: 'derived' };
 }
 
 export interface AttendanceSummary {
@@ -86,7 +109,7 @@ export interface AttendanceSummary {
 
 /** Resolve the whole roster at once and derive the session's attendance counters. */
 export function resolveAttendance(participants: AttendanceInput[]): AttendanceSummary {
-  const resolved: AttendanceResult[] = participants.map((p) => ({ ...p, verdict: resolveAttendanceVerdict(p) }));
+  const resolved: AttendanceResult[] = participants.map((p) => ({ ...p, ...resolveAttendanceVerdict(p) }));
   const humans = resolved.filter((p) => isHumanSeat(p.memberKind));
   const present = humans.filter((p) => p.verdict === 'present');
   return {

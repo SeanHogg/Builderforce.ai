@@ -38,10 +38,14 @@ import type { EffectiveManagerPolicy } from '../manager/managerPolicy';
 import { recordActivity, SYSTEM_ACTOR, type ActorIdentity } from '../activity/activityLog';
 import {
   isHumanSeat, resolveAttendance, selectReassignments,
-  type AttendanceSummary, type Reassignment, type ReassignmentPlan, type ReassignmentTarget,
+  type AttendanceSource, type AttendanceSummary, type AttendanceVerdict,
+  type ReassignmentPlan, type ReassignmentTarget,
 } from './ceremonyAttendance';
 import { notifyReassignedAway } from './ceremonyNotifier';
 import { dispatchCeremonyCompletion } from './dispatchCeremonyCompletion';
+import { endCeremonyMeeting } from './ceremonyMeeting';
+import { readMemberProfiles } from '../member/memberProfiles';
+import { isOnPtoAt, parsePtoBlocks } from '../member/ptoWindows';
 
 /** Statuses whose tickets can still change hands. Terminal work has nothing to hand over. */
 const REASSIGNABLE_STATUSES: string[] = [
@@ -135,6 +139,36 @@ async function applyReassignments(
   return applied;
 }
 
+/**
+ * Which human seats were on approved leave at `at`, keyed by member ref (0366).
+ *
+ * One cached read of the tenant's profiles serves the whole roster — the alternative
+ * (a profile lookup per participant) is an N+1 on a path that already runs per ceremony
+ * per project. Best-effort: if profiles cannot be read, nobody is marked on leave, which
+ * degrades to the pre-0366 behaviour rather than excusing everyone.
+ */
+async function loadPtoAt(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  roster: Array<{ memberKind: string; memberRef: string }>,
+  at: Date,
+): Promise<Map<string, boolean>> {
+  const out = new Map<string, boolean>();
+  const humanRefs = new Set(roster.filter((p) => isHumanSeat(p.memberKind)).map((p) => p.memberRef));
+  if (humanRefs.size === 0) return out;
+  try {
+    const profiles = await readMemberProfiles(env, db, tenantId);
+    for (const profile of profiles) {
+      if (profile.memberKind !== 'human' || !humanRefs.has(profile.memberRef)) continue;
+      out.set(profile.memberRef, isOnPtoAt(parsePtoBlocks(profile.pto), at));
+    }
+  } catch (err) {
+    console.error(`[ceremony:conclude] PTO lookup failed tenant=${tenantId}`, err);
+  }
+  return out;
+}
+
 /** Human-owned, non-terminal tickets on this project — the reassignment candidate pool. */
 async function loadReassignableTasks(db: Db, projectId: number, ownerIds: string[]) {
   if (ownerIds.length === 0) return [];
@@ -200,7 +234,15 @@ export async function concludeCeremonySession(
     }
   }
 
-  // 2. Resolve attendance — one verdict per seat, written once, here.
+  // 2. Resolve attendance — one verdict per seat, written here.
+  //
+  // Approved leave (0366) is loaded first: `member_profiles.pto` had been write-only
+  // since 0116 (the calendar sync fills it, nothing ever read it back), and this is its
+  // first consumer. It matters because `absentHumans` is what the reassignment rules
+  // read, so without it a holiday counts toward having your tickets handed to an agent.
+  // ONE cached profiles read for the whole tenant — not per participant.
+  const onPtoByRef = await loadPtoAt(env, db, session.tenantId, roster, now);
+
   const attendance = resolveAttendance(roster.map((p) => ({
     memberKind: p.memberKind,
     memberRef: p.memberRef,
@@ -208,14 +250,24 @@ export async function concludeCeremonySession(
     required: p.required,
     joinedAt: p.joinedAt,
     durationMs: p.durationMs,
+    // A manual verdict is fed back in so the resolver returns it untouched — a human's
+    // correction must survive a re-conclude, which is the whole reason the column exists.
+    storedVerdict: p.attendance as AttendanceVerdict,
+    storedSource: p.attendanceSource as AttendanceSource,
+    onPto: onPtoByRef.get(p.memberRef) ?? false,
   })));
+
   for (const p of roster) {
-    const verdict = attendance.participants.find(
+    const resolved = attendance.participants.find(
       (a) => a.memberKind === p.memberKind && a.memberRef === p.memberRef,
-    )?.verdict ?? 'unknown';
+    );
+    if (!resolved) continue;
+    // Never rewrite a manual row — not even with the same value, so `attendance_set_by`
+    // and `attendance_set_at` keep pointing at the person who actually decided it.
+    if (resolved.source === 'manual') continue;
     await db
       .update(ceremonyParticipants)
-      .set({ attendance: verdict, updatedAt: now })
+      .set({ attendance: resolved.verdict, attendanceSource: resolved.source, updatedAt: now })
       .where(eq(ceremonyParticipants.id, p.id));
   }
 
@@ -295,6 +347,13 @@ export async function concludeCeremonySession(
       updatedAt: now,
     })
     .where(eq(ceremonySessions.id, session.id));
+
+  // Close the companion meeting (0366). Without this the shell sits status='live'
+  // forever and every "upcoming meetings" list — which filters on exactly that status —
+  // keeps showing yesterday's standup as still running.
+  await endCeremonyMeeting(db, session.meetingId, now).catch((err) => {
+    console.error(`[ceremony:conclude] could not end companion meeting session=${session.id}`, err);
+  });
 
   // The close itself is journalled last so the history detail reads in causal order.
   const [project] = await db

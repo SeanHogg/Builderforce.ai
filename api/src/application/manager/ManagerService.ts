@@ -116,6 +116,16 @@ export interface ManagerRunSummary {
   remediated: number;
   /** Flagged tickets left for the next pass because the per-pass cap was hit. */
   remediationDeferred: number;
+  /** Tickets diagnosed as STALLED this pass (see `stallTriage`). */
+  stalled: number;
+  /** Stalled tickets the manager applied its own remedy to. */
+  unstuck: number;
+  /** Stalled tickets handed to a human — the manager's remedy is not working. */
+  escalated: number;
+  /** Previously-stalled tickets that started moving again, closing their register row. */
+  stallsResolved: number;
+  /** Orphaned "backlog management pass" cards this pass closed (see {@link reapStaleManagerRunTasks}). */
+  staleRunTasksClosed: number;
 }
 
 // ── config store ────────────────────────────────────────────────────────────
@@ -404,6 +414,63 @@ export async function listManagerActions(
  * no dispatcher ever picks it up. Best-effort: a miss returns null and the pass still
  * runs (just without a board card).
  */
+/**
+ * The statuses a manager run task can be sitting in while it still looks "open" on
+ * the board. Shared by the reaper and the pre-create reconcile so both agree.
+ */
+const OPEN_RUN_TASK_STATUSES: string[] = [
+  TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY, TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW,
+];
+
+/**
+ * A manager pass runs inside a Worker invocation and cannot legitimately take
+ * anywhere near this long — the platform's own execution wall is far below it. So an
+ * open run task older than this did not "take a while", it DIED: the Worker was
+ * evicted between minting the visibility card and the finally block that closes it.
+ */
+export const STALE_RUN_TASK_MS = 30 * 60_000;
+
+/**
+ * Close manager run tasks that are still open but can no longer be running.
+ *
+ * WHY THIS IS ITS OWN FUNCTION, CALLED FROM THE PASS
+ * This reconcile used to live only inside {@link createManagerRunTask} — meaning it ran
+ * only when a human clicked "Run manager now". Cron passes never mint a run task, so
+ * they never reaped one either. A pass whose Worker died therefore left an
+ * "In progress" card on the Manager surface until the next MANUAL run, however long
+ * that took: an observed card sat in progress for SEVEN DAYS while cron passes ran
+ * successfully every five minutes the whole time.
+ *
+ * `olderThanMs = 0` closes every open card (what the pre-create reconcile wants —
+ * a new pass supersedes any older one regardless of age). A positive value closes
+ * only cards too old to still be live, which is what the pass itself wants: it must
+ * never reap the card representing the pass currently running.
+ */
+export async function reapStaleManagerRunTasks(
+  db: Db,
+  args: { projectId: number; olderThanMs: number },
+): Promise<number> {
+  try {
+    const now = new Date();
+    const rows = await db.update(tasks).set({
+      status: TaskStatus.BLOCKED,
+      description: 'Closed before a newer backlog management pass started; the prior background run did not report completion.',
+      lastWorkedAt: now,
+      updatedAt: now,
+    }).where(and(
+      eq(tasks.projectId, args.projectId),
+      eq(tasks.source, 'manager'),
+      inArray(tasks.status, OPEN_RUN_TASK_STATUSES),
+      ...(args.olderThanMs > 0
+        ? [sql`${tasks.updatedAt} < ${new Date(now.getTime() - args.olderThanMs)}`]
+        : []),
+    )).returning({ id: tasks.id });
+    return rows.length;
+  } catch {
+    return 0; // reconciling a visibility card must never fail a pass
+  }
+}
+
 export async function createManagerRunTask(
   db: Db,
   args: { tenantId: number; projectId: number; policy: EffectiveManagerPolicy },
@@ -412,18 +479,10 @@ export async function createManagerRunTask(
   try {
     // A Worker can be evicted after starting a pass but before its finally block
     // closes the visibility card. Reconcile those orphaned/open cards first so the
-    // Manager surface never accumulates multiple active passes.
+    // Manager surface never accumulates multiple active passes. A NEW pass supersedes
+    // any older one, so this closes them all regardless of age.
     const now = new Date();
-    await db.update(tasks).set({
-      status: TaskStatus.BLOCKED,
-      description: 'Closed before a newer backlog management pass started; the prior background run did not report completion.',
-      lastWorkedAt: now,
-      updatedAt: now,
-    }).where(and(
-      eq(tasks.projectId, projectId),
-      eq(tasks.source, 'manager'),
-      inArray(tasks.status, [TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY, TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW]),
-    ));
+    await reapStaleManagerRunTasks(db, { projectId, olderThanMs: 0 });
 
     const [project] = await db
       .select({ key: projects.key })
@@ -767,10 +826,21 @@ export async function runManagerForProject(
   const summary: ManagerRunSummary = {
     projectId, skipped: false, scored: 0, ranked: 0, scheduled: 0, assigned: 0, prsConducted: 0, prsMerged: 0, dispatched: 0,
     audited: 0, flagged: 0, remediated: 0, remediationDeferred: 0,
+    stalled: 0, unstuck: 0, escalated: 0, stallsResolved: 0, staleRunTasksClosed: 0,
   };
 
   const policy = await getEffectiveManagerPolicy(db, tenantId, projectId, env);
   if (!policy.enabled) return { ...summary, skipped: true, reason: 'disabled' };
+
+  // 0. REAP — close orphaned "backlog management pass" cards from passes whose Worker
+  // died. This runs on EVERY pass (cron included), not just when a human clicks Run:
+  // the reconcile used to live only in `createManagerRunTask`, so a dead pass's card
+  // stayed "In progress" until the next MANUAL run — observed at seven days while cron
+  // ran fine every five minutes throughout. Age-bounded so it can never reap the card
+  // belonging to the pass running right now.
+  summary.staleRunTasksClosed = await reapStaleManagerRunTasks(db, {
+    projectId, olderThanMs: STALE_RUN_TASK_MS,
+  });
 
   // Resolve the designated manager AS an identity — a named cloud agent scores the
   // backlog with its own persona (and is credited in the feed). System/human managers

@@ -1424,6 +1424,42 @@ export const managerActions = pgTable('manager_actions', {
   byRunTask: index('idx_manager_actions_run_task').on(t.runTaskId),
 }));
 
+/**
+ * The AI Manager's STUCK-TICKET REGISTER (0367) — one open row per stalled ticket.
+ *
+ * `manager_actions` above records what the manager DID; this records what it is stuck
+ * ON, and — the part that matters — whether its own fix is working. `attempts` counts
+ * consecutive applications of `remedy` that did NOT move the ticket (measured by
+ * comparing the live status against `observedStatus`), and at the ceiling the remedy
+ * converts to `escalate_human`. That ceiling is the generalised fix for the merge
+ * livelock this table's migration documents: a remedy nobody checks is a retry storm.
+ */
+export const managerStallWatch = pgTable('manager_stall_watch', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  taskId:         integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  /** {@link ../../application/manager/stallTriage.StallCause}. */
+  cause:          varchar('cause', { length: 32 }).notNull(),
+  /** {@link ../../application/manager/stallTriage.StallRemedy}. */
+  remedy:         varchar('remedy', { length: 32 }).notNull(),
+  detail:         text('detail').notNull(),
+  /** The ticket's status when the remedy was last applied — how "did it work?" is answered. */
+  observedStatus: varchar('observed_status', { length: 32 }).notNull(),
+  attempts:       integer('attempts').notNull().default(0),
+  idleMs:         bigint('idle_ms', { mode: 'number' }).notNull().default(0),
+  firstSeenAt:    timestamp('first_seen_at').notNull().defaultNow(),
+  lastSeenAt:     timestamp('last_seen_at').notNull().defaultNow(),
+  lastAttemptAt:  timestamp('last_attempt_at'),
+  escalatedAt:    timestamp('escalated_at'),
+  resolvedAt:     timestamp('resolved_at'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byOpen: index('idx_manager_stall_watch_open').on(t.tenantId, t.projectId, t.resolvedAt, t.idleMs),
+  byEscalated: index('idx_manager_stall_watch_escalated').on(t.tenantId, t.escalatedAt),
+}));
+
 // ---------------------------------------------------------------------------
 // Workforce member profiles + lifecycle metrics (migrations 0116–0118)
 // ---------------------------------------------------------------------------
@@ -3823,6 +3859,10 @@ export const ceremonySessions = pgTable('ceremony_sessions', {
   dispatchedCount: integer('dispatched_count').notNull().default(0),
   /** When the "your ceremony is live, come join" fan-out ran; guards re-notification. */
   notifiedAt:     timestamp('notified_at'),
+  /** The calendar/video meeting this ceremony is held in (0366). The ceremony owns
+   *  ATTENDANCE; the meeting owns the calendar entry and the media room, so joining the
+   *  call writes through to this session's presence rather than keeping a rival record. */
+  meetingId:      uuid('meeting_id'),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
   updatedAt:      timestamp('updated_at').notNull().defaultNow(),
 });
@@ -3847,6 +3887,17 @@ export const ceremonyParticipants = pgTable('ceremony_participants', {
    *  'present' | 'absent' (required, never observed) | 'excused' (optional, never
    *  observed). Absence is a fact, not a fault — see ceremonyAttendance.ts. */
   attendance:  varchar('attendance', { length: 12 }).notNull().default('unknown'),
+  /** Provenance of that verdict (0366): 'derived' (inferred from presence/speaking —
+   *  recomputable) | 'pto' (approved leave covered the ceremony → excused) | 'manual'
+   *  (a manager asserted it; NEVER recomputed). This column is what lets a re-conclude
+   *  refresh inferred verdicts without silently discarding a human's correction. */
+  attendanceSource: varchar('attendance_source', { length: 12 }).notNull().default('derived'),
+  /** Why, in the corrector's own words ("dialled in from the airport"). */
+  attendanceNote:   varchar('attendance_note', { length: 280 }),
+  /** Who corrected it and when — an absence feeds the rules that can move someone's
+   *  work, so changing one is attributable. Null for derived/pto verdicts. */
+  attendanceSetBy:  varchar('attendance_set_by', { length: 64 }),
+  attendanceSetAt:  timestamp('attendance_set_at'),
   /** When this member was invited to join the live session (guards re-notification). */
   notifiedAt:  timestamp('notified_at'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),

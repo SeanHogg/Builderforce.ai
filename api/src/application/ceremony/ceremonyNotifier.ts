@@ -28,10 +28,41 @@ import { ceremonyParticipants, ceremonySessions } from '../../infrastructure/dat
 import { notify } from '../notifications/notify';
 import { sendSlackNotification } from '../approval/approvalNotifier';
 import { isHumanSeat } from './ceremonyAttendance';
+import { readMemberProfiles } from '../member/memberProfiles';
+import { isOnPtoAt, parsePtoBlocks } from '../member/ptoWindows';
 
 /** Deep link to the live round table for a project. */
 export function ceremonyLink(env: Env, projectId: number): string {
   return `${resolveAppBaseUrl(env)}/projects?tab=ceremonies&project=${projectId}`;
+}
+
+/**
+ * The human refs among `seats` who are on approved leave at `at`.
+ *
+ * Shares the cached tenant-profiles read and the same PTO primitives the conclude path
+ * uses, so "on leave" means one thing across the invite and the attendance verdict.
+ * Best-effort: an unreadable profile set invites everyone, which is the pre-0366
+ * behaviour rather than a silently suppressed invite.
+ */
+async function ptoRefs(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  seats: Array<{ memberKind: string; memberRef: string }>,
+  at: Date,
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  const humanRefs = new Set(seats.filter((s) => isHumanSeat(s.memberKind)).map((s) => s.memberRef));
+  if (humanRefs.size === 0) return out;
+  try {
+    for (const profile of await readMemberProfiles(env, db, tenantId)) {
+      if (profile.memberKind !== 'human' || !humanRefs.has(profile.memberRef)) continue;
+      if (isOnPtoAt(parsePtoBlocks(profile.pto), at)) out.add(profile.memberRef);
+    }
+  } catch (err) {
+    console.error(`[ceremony:notify] PTO lookup failed tenant=${tenantId}`, err);
+  }
+  return out;
 }
 
 export interface CeremonyInviteResult {
@@ -84,7 +115,12 @@ export async function notifyCeremonyOpened(
     .from(ceremonyParticipants)
     .where(and(eq(ceremonyParticipants.sessionId, args.sessionId), isNull(ceremonyParticipants.notifiedAt)));
 
-  const humans = seats.filter((s) => isHumanSeat(s.memberKind) && s.memberRef);
+  // Nobody on approved leave gets pinged (0366). They are already going to resolve to
+  // 'excused' rather than 'absent', so notifying them would be the product asking someone
+  // on holiday to attend a meeting it has itself decided they are excused from. Their
+  // participant row is left un-stamped, so an invite goes out if leave is later removed.
+  const onLeave = await ptoRefs(env, db, args.tenantId, seats, now);
+  const humans = seats.filter((s) => isHumanSeat(s.memberKind) && s.memberRef && !onLeave.has(s.memberRef));
   const link = ceremonyLink(env, args.projectId);
   const where = args.projectName ? ` on ${args.projectName}` : '';
   const label = args.kind === 'planning' ? 'Planning' : 'Standup';
