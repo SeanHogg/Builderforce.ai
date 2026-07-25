@@ -48,11 +48,13 @@ describe('buildAgentManifestText', () => {
   });
 });
 
+// Copy is localized (workforce namespace); the global next-intl mock renders the KEY,
+// so assertions target keys rather than English.
 describe('AgentManifestSection', () => {
   it('shows the empty note and a Copy manifest button when nothing is assigned', () => {
     const { getByText, getByRole } = render(<AgentManifestSection agent={agent()} manifest={manifest()} />);
-    expect(getByText('No skills or personas assigned')).toBeTruthy();
-    expect(getByRole('button', { name: 'Copy manifest' })).toBeTruthy();
+    expect(getByText('workforce.manifest.emptyNote')).toBeTruthy();
+    expect(getByRole('button', { name: 'workforce.manifest.copyManifest' })).toBeTruthy();
   });
 
   it('renders chips for assigned personas/skills', () => {
@@ -64,15 +66,15 @@ describe('AgentManifestSection', () => {
     );
     expect(getByText('Code Creator')).toBeTruthy();
     expect(getByText('GitHub')).toBeTruthy();
-    expect(queryByText('No skills or personas assigned')).toBeNull();
+    expect(queryByText('workforce.manifest.emptyNote')).toBeNull();
   });
 });
 
 describe('AgentManifestInline (list view)', () => {
   it('shows "None assigned" + a Copy button when empty', () => {
     const { getByText, getByRole } = render(<AgentManifestInline agent={agent()} manifest={manifest()} />);
-    expect(getByText('None assigned')).toBeTruthy();
-    expect(getByRole('button', { name: 'Copy' })).toBeTruthy();
+    expect(getByText('workforce.manifest.noneAssigned')).toBeTruthy();
+    expect(getByRole('button', { name: 'common.copy' })).toBeTruthy();
   });
 
   it('caps the chip strip and shows a +N overflow', () => {

@@ -2,8 +2,13 @@ import { describe, it, expect } from 'vitest';
 import {
   classifyTicketAutonomy,
   classifyTicketOrigin,
+  groupRunFailures,
+  summarizeDispatchers,
+  toGateSnapshot,
+  type FailedRunRow,
   type TicketAutonomySignals,
 } from './ticketLifecycleLedger';
+import type { AutoRunEvaluation } from '../swimlane/evaluateAutoRun';
 
 /**
  * These two classifiers ARE the definition of "did this ticket run autonomously".
@@ -194,5 +199,124 @@ describe('classifyTicketOrigin', () => {
     // about who created it — only 'manager' is special.
     expect(classifyTicketOrigin('human', 'jira')).toBe('human');
     expect(classifyTicketOrigin('cloud_agent', 'linear')).toBe('agent');
+  });
+});
+
+/**
+ * The three ANALYSIS blocks. Their job is to make a 268-failure ticket readable
+ * without the reader deriving anything by hand, so what is pinned here is exactly
+ * that: identical causes collapse, distinct causes do NOT, and the dispatcher that
+ * drove the storm is named.
+ */
+describe('groupRunFailures', () => {
+  /** The real shape of a run-cap storm: same sentence, moving counter. */
+  const capStorm: FailedRunRow[] = Array.from({ length: 5 }, (_, i) => ({
+    id: 100 + i,
+    errorMessage: `Monthly cloud-run allowance reached (${30 + i}/25 on the free plan). Upgrade at builderforce.ai/pricing.`,
+    submittedBy: 'system:coordinator',
+    at: new Date(Date.UTC(2026, 6, 11, 14, i * 5)).toISOString(),
+  }));
+
+  it('collapses one cause with a MOVING COUNTER into a single group', () => {
+    // 30/25, 31/25, 32/25 … are one bug. Grouping on the raw string would report five.
+    const groups = groupRunFailures(capStorm);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.runs).toBe(5);
+    expect(groups[0]?.signature).toContain('<n>/<n>');
+  });
+
+  it('keeps a verbatim sample so collapsing never loses the exact text', () => {
+    expect(groupRunFailures(capStorm)[0]?.sample).toContain('(34/25 on the free plan)');
+  });
+
+  it('reports the retry CADENCE — the fact that proves it is a loop', () => {
+    expect(groupRunFailures(capStorm)[0]?.medianIntervalMs).toBe(300_000);
+  });
+
+  it('names the dispatcher and the newest execution ids', () => {
+    const g = groupRunFailures(capStorm)[0];
+    expect(g?.dispatchers).toEqual(['system:coordinator']);
+    expect(g?.exampleExecutionIds).toEqual([104, 103, 102, 101, 100]);
+    expect(g?.firstAt).toBe('2026-07-11T14:00:00.000Z');
+    expect(g?.lastAt).toBe('2026-07-11T14:20:00.000Z');
+  });
+
+  it('does NOT merge genuinely different causes, and ranks the dominant one first', () => {
+    const groups = groupRunFailures([
+      ...capStorm,
+      { id: 200, errorMessage: 'No durable executor was available.', submittedBy: 'system:lane-auto', at: '2026-07-11T15:00:00.000Z' },
+    ]);
+    expect(groups).toHaveLength(2);
+    expect(groups[0]?.runs).toBe(5);
+    expect(groups[1]?.medianIntervalMs).toBeNull();
+  });
+
+  it('treats a failure with NO message as its own cause rather than dropping it', () => {
+    // A run that died without saying why is a finding, not a blank to be swallowed.
+    const groups = groupRunFailures([{ id: 1, errorMessage: null, submittedBy: null, at: '2026-07-11T15:00:00.000Z' }]);
+    expect(groups[0]?.signature).toBe('(no error message recorded)');
+    expect(groups[0]?.dispatchers).toEqual([]);
+  });
+
+  it('returns nothing for a ticket that never failed', () => {
+    expect(groupRunFailures([])).toEqual([]);
+  });
+});
+
+describe('summarizeDispatchers', () => {
+  it('attributes runs to the subsystem that started them, busiest first', () => {
+    const rows = summarizeDispatchers([
+      { status: 'failed', submittedBy: 'system:coordinator', at: '2026-07-11T14:00:00.000Z' },
+      { status: 'failed', submittedBy: 'system:coordinator', at: '2026-07-11T14:05:00.000Z' },
+      { status: 'completed', submittedBy: 'system:lane-auto', at: '2026-06-30T06:32:00.000Z' },
+    ]);
+    expect(rows[0]).toMatchObject({
+      submittedBy: 'system:coordinator', runs: 2, failed: 2, completed: 0,
+      firstAt: '2026-07-11T14:00:00.000Z', lastAt: '2026-07-11T14:05:00.000Z',
+    });
+    expect(rows[1]).toMatchObject({ submittedBy: 'system:lane-auto', runs: 1, completed: 1 });
+  });
+
+  it('buckets an unattributed run explicitly instead of hiding it', () => {
+    expect(summarizeDispatchers([{ status: 'failed', submittedBy: '  ', at: '2026-07-11T14:00:00.000Z' }])[0])
+      .toMatchObject({ submittedBy: '(not recorded)', runs: 1 });
+  });
+});
+
+describe('toGateSnapshot', () => {
+  const evaluation: AutoRunEvaluation = {
+    status: 'in_review',
+    assignedAgentRef: 'owner-1',
+    laneResolved: true,
+    isTerminalLane: false,
+    laneGate: 'human',
+    staffedAgentRefs: ['a1'],
+    decision: { autoRun: false, capabilityMismatches: [{ agentRef: 'a1', missing: ['coding-agent'] }] },
+    candidate: { agentRef: 'a1', model: 'claude-opus-5' },
+    liveExecution: null,
+    canRunNow: false,
+    reason: 'human_gate',
+    cooldownRemainingMs: 0,
+    consecutiveFailures: 134,
+    failureBreakerAt: 3,
+  };
+
+  it('carries the EVIDENCE behind the reason, not just the reason', () => {
+    const g = toGateSnapshot(evaluation);
+    expect(g).toMatchObject({
+      reason: 'human_gate',
+      laneGate: 'human',
+      candidateAgentRef: 'a1',
+      staffedAgentRefs: ['a1'],
+      consecutiveFailures: 134,
+      failureBreakerAt: 3,
+    });
+    // The plain sentence travels with the code so a non-UI consumer needs no catalog.
+    expect(g.reasonText).toContain('human-gated');
+    expect(g.capabilityMismatches).toEqual([{ agentRef: 'a1', missing: ['coding-agent'] }]);
+  });
+
+  it('defaults an absent mismatch list to empty rather than undefined', () => {
+    expect(toGateSnapshot({ ...evaluation, decision: { autoRun: true } }).capabilityMismatches).toEqual([]);
   });
 });

@@ -31,8 +31,14 @@ const tenantRow = (o: Partial<TenantManagerDefaultsRow> = {}): TenantManagerDefa
   autoAssign: null,
   autoBusinessValue: null,
   autoPrioritize: null,
+  autoSchedule: null,
   requireSignoffToComplete: null,
   allowAutoMerge: null,
+  // Ceremony autonomy (0364) — same tier, same fold, no opinion by default.
+  allowUnattendedCeremonies: null,
+  allowAgentReassignment: null,
+  agentReassignIdleHours: null,
+  agentReassignMaxPerSession: null,
   ...o,
 });
 

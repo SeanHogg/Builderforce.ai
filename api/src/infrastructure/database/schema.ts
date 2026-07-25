@@ -1056,6 +1056,12 @@ export const tasks = pgTable('tasks', {
   costClassVerified: boolean('cost_class_verified').notNull().default(false),
   startDate:         timestamp('start_date'),
   dueDate:           timestamp('due_date'),
+  /** For an EPIC (0364): which reasoning step produced its children — 'llm' (a real
+   *  BA-style assessment), 'heuristic' (the degraded markdown-checklist fallback the
+   *  LLM decomposer drops to on any failure) or 'manual' (a caller-supplied plan).
+   *  Null on anything never decomposed. Makes "why does this Epic look like shredded
+   *  markdown?" answerable from the row instead of unanswerable. */
+  decompositionSource: varchar('decomposition_source', { length: 16 }),
   persona:           varchar('persona', { length: 50 }),
   /** Origin board provider label for tickets synced from an external board. */
   source:            varchar('source', { length: 24 }),
@@ -1278,6 +1284,11 @@ export const projectManagerConfigs = pgTable('project_manager_configs', {
   autoAssign:        boolean('auto_assign').notNull().default(true),
   autoBusinessValue: boolean('auto_business_value').notNull().default(true),
   autoPrioritize:    boolean('auto_prioritize').notNull().default(true),
+  /** May the manager place unscheduled tickets on the timeline (0364)? Ranking says
+   *  what to do FIRST; scheduling says WHEN — before this existed nothing wrote a date,
+   *  so the manager's own urgency term scored an always-null column. Only fills tickets
+   *  with NEITHER date; a human-set date is never overwritten. */
+  autoSchedule:      boolean('auto_schedule').notNull().default(true),
   /** The manager's DOMAIN focus/persona (see managerTypes.ts): a built-in ('general' |
    *  'delivery' | 'qa' | 'service_desk' | 'devops') or a `role:<key>` custom-role type
    *  (up to a 60-char role key). Shapes what it values + prioritizes. */
@@ -1294,6 +1305,13 @@ export const projectManagerConfigs = pgTable('project_manager_configs', {
    *  project that has never expressed an opinion is not pinned to one by a column
    *  default. Both this and requireSignoffToComplete must pass before a merge. */
   allowAutoMerge:    boolean('allow_auto_merge'),
+  /** CEREMONY AUTONOMY for this project (0364). All four are nullable — null = "inherit
+   *  the workspace tier". They live here rather than in a ceremony-specific table because
+   *  "what may the manager do unattended" is one question with one fold. */
+  allowUnattendedCeremonies:  boolean('allow_unattended_ceremonies'),
+  allowAgentReassignment:     boolean('allow_agent_reassignment'),
+  agentReassignIdleHours:     integer('agent_reassign_idle_hours'),
+  agentReassignMaxPerSession: integer('agent_reassign_max_per_session'),
   lastRunAt:         timestamp('last_run_at'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
@@ -1330,12 +1348,23 @@ export const tenantManagerDefaults = pgTable('tenant_manager_defaults', {
   autoAssign:        boolean('auto_assign'),
   autoBusinessValue: boolean('auto_business_value'),
   autoPrioritize:    boolean('auto_prioritize'),
+  /** Workspace default for manager scheduling (0364). A plain override, not a
+   *  ceiling — a project row wins. NULL = no workspace opinion. */
+  autoSchedule:      boolean('auto_schedule'),
   /** Workspace sign-off FLOOR: true = no project may complete/merge without unanimous
    *  role sign-off (see 0362 + signoffGate.ts). */
   requireSignoffToComplete: boolean('require_signoff_to_complete'),
   /** Workspace grant of autonomous merge authority — a CEILING. false = no project may
    *  merge unattended; true = projects may unless their own row says false. */
   allowAutoMerge:    boolean('allow_auto_merge'),
+  /** Workspace CEREMONY AUTONOMY (0364). Both booleans are CEILINGS, like allowAutoMerge:
+   *  conducting business without the people it concerns, and moving someone's work off
+   *  their plate, are handed over on purpose or not at all. The two numbers are guardrails
+   *  folded most-restrictive-wins (largest idle threshold, smallest cap). */
+  allowUnattendedCeremonies:  boolean('allow_unattended_ceremonies'),
+  allowAgentReassignment:     boolean('allow_agent_reassignment'),
+  agentReassignIdleHours:     integer('agent_reassign_idle_hours'),
+  agentReassignMaxPerSession: integer('agent_reassign_max_per_session'),
   /** Who last changed the workspace autonomy posture — the governance question is
    *  "who granted the manager merge rights?", so the answer is stored. */
   updatedBy:         varchar('updated_by', { length: 36 }),
@@ -3768,7 +3797,10 @@ export const ceremonySessions = pgTable('ceremony_sessions', {
   segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   kind:           varchar('kind', { length: 16 }).notNull(),                       // 'standup' | 'planning'
-  status:         varchar('status', { length: 16 }).notNull().default('active'),   // 'active' | 'completed'
+  /** 'active' | 'completed' | 'abandoned' (0364). Abandoned = concluded without being
+   *  conducted (nobody came and unattended ceremonies are not granted); it still frees
+   *  the partial unique index so the next scheduled ceremony can open. */
+  status:         varchar('status', { length: 16 }).notNull().default('active'),
   facilitatorId:  varchar('facilitator_id', { length: 64 }),
   turnMode:       varchar('turn_mode', { length: 16 }).notNull().default('facilitator'),
   turnSeconds:    integer('turn_seconds').notNull().default(90),
@@ -3778,6 +3810,19 @@ export const ceremonySessions = pgTable('ceremony_sessions', {
   endedAt:        timestamp('ended_at'),
   /** Set when the frequent cron sweep auto-opened this session from a schedule (0349). */
   scheduleId:     uuid('schedule_id'),
+  /** Who closed it (0364): 'human' | 'manager' | 'system'. */
+  concludedBy:    varchar('concluded_by', { length: 16 }),
+  /** Why it closed (0364): 'facilitator' | 'unattended' | 'no_humans' | 'expired'.
+   *  Kept separate from `status` so "completed" never has to mean four things. */
+  closeReason:    varchar('close_reason', { length: 24 }),
+  /** Denormalised outcome counters (0364) — the history LIST renders from these alone,
+   *  so showing 20 past standups costs one query rather than 20 participant fan-outs. */
+  humansExpected: integer('humans_expected').notNull().default(0),
+  humansPresent:  integer('humans_present').notNull().default(0),
+  reassignedCount: integer('reassigned_count').notNull().default(0),
+  dispatchedCount: integer('dispatched_count').notNull().default(0),
+  /** When the "your ceremony is live, come join" fan-out ran; guards re-notification. */
+  notifiedAt:     timestamp('notified_at'),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
   updatedAt:      timestamp('updated_at').notNull().defaultNow(),
 });
@@ -3792,6 +3837,18 @@ export const ceremonyParticipants = pgTable('ceremony_participants', {
   memberName:  varchar('member_name', { length: 255 }).notNull(),
   turnOrder:   integer('turn_order').notNull().default(0),
   durationMs:  integer('duration_ms').notNull().default(0),
+  /** Was this seat EXPECTED (0364)? A roster seat is required; someone who walked into
+   *  a live ceremony is not, so an ad-hoc joiner can never be counted a no-show. */
+  required:    boolean('required').notNull().default(true),
+  /** First / last moment this member was observed in the room (attendance heartbeat). */
+  joinedAt:    timestamp('joined_at'),
+  leftAt:      timestamp('left_at'),
+  /** Resolved verdict written ONCE at conclude (0364): 'unknown' (still open) |
+   *  'present' | 'absent' (required, never observed) | 'excused' (optional, never
+   *  observed). Absence is a fact, not a fault — see ceremonyAttendance.ts. */
+  attendance:  varchar('attendance', { length: 12 }).notNull().default('unknown'),
+  /** When this member was invited to join the live session (guards re-notification). */
+  notifiedAt:  timestamp('notified_at'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });

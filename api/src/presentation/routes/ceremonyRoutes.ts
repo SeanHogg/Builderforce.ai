@@ -27,7 +27,7 @@
  * over the room so peers re-fetch (no server-side room coupling).
  */
 import { Hono } from 'hono';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, lt, ne } from 'drizzle-orm';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { requireRole } from '../middleware/authMiddleware';
@@ -36,7 +36,11 @@ import { scope } from './segmentTrackerRoutes';
 import { ceremonySessions, ceremonyParticipants, ceremonySchedules, boards } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { computeCeremonyRollup } from '../../application/insights/ceremonyRollup';
-import { dispatchCeremonyCompletion } from '../../application/ceremony/runDueCeremonies';
+import {
+  concludeCeremonySession, recordCeremonyPresence, CEREMONY_TARGET_TYPE,
+} from '../../application/ceremony/concludeCeremony';
+import { getActivityLog, resolveActorFromContext } from '../../application/activity/activityLog';
+import { getEffectiveManagerPolicy } from '../../application/manager/ManagerService';
 import { isValidCron, nextCronTime } from '../../domain/workflowSchedule';
 import { relayToRoom } from './realtimeRelay';
 
@@ -186,7 +190,45 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
     return c.json(await hydrate(tenantId, segmentId, id));
   });
 
-  // POST /sessions/:id/complete — end the session, accruing the final turn.
+  // POST /sessions/:id/attendance — "I am in the room right now".
+  //
+  // MEMBER-level on purpose, unlike every other session mutation: recording your own
+  // presence is not an act of facilitation, and gating it on MANAGER would mean only
+  // managers were ever marked present — turning the attendance record into a record of
+  // who holds a role. The heartbeat can only ever write the CALLER's own identity;
+  // there is no body field for whose presence to record.
+  r.post('/sessions/:id/attendance', async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const id = c.req.param('id');
+    const userId = c.get('userId');
+    if (!userId) return c.json({ error: 'Not authenticated' }, 401);
+
+    const [session] = await db.select().from(ceremonySessions).where(and(
+      eq(ceremonySessions.id, id), eq(ceremonySessions.tenantId, tenantId), eq(ceremonySessions.segmentId, segmentId),
+    ));
+    if (!session) return c.json({ error: 'Not found' }, 404);
+    // A concluded session's attendance is settled; a late beat must not reopen it.
+    if (session.status !== 'active') return c.json({ recorded: false, reason: 'session_closed' });
+
+    const actor = await resolveActorFromContext(c.env as Env, db, c);
+    await recordCeremonyPresence(db, {
+      tenantId,
+      segmentId,
+      sessionId: id,
+      memberKind: 'human',
+      memberRef: userId,
+      memberName: actor.name,
+    });
+    return c.json({ recorded: true });
+  });
+
+  // POST /sessions/:id/complete — end the session.
+  //
+  // Delegates ENTIRELY to concludeCeremonySession, the one path a ceremony ends by
+  // (the cron reaper uses the same one). Attendance resolution, the unattended-ceremony
+  // gate, agent reassignment, the schedule's autoDispatch opt-out and the bounded
+  // dispatch all live there, so a session a human closed and one the manager closed
+  // differ only in what is recorded about who closed it — never in what happened.
   r.post('/sessions/:id/complete', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const id = c.req.param('id');
@@ -194,38 +236,89 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(ceremonySessions.id, id), eq(ceremonySessions.tenantId, tenantId), eq(ceremonySessions.segmentId, segmentId)));
     if (!session) return c.json({ error: 'Not found' }, 404);
 
-    const now = new Date();
-    if (session.currentTurn != null && session.turnStartedAt) {
-      await accrueTurn(id, session.currentTurn, now.getTime() - session.turnStartedAt.getTime());
-    }
-    await db.update(ceremonySessions)
-      .set({ status: 'completed', endedAt: now, currentTurn: null, turnStartedAt: null, updatedAt: now })
-      .where(eq(ceremonySessions.id, id));
-
-    // Auto-dispatch the project's agent-owned work now that the ceremony is over.
-    // This used to run in the browser (CeremonyStage.completeSession), which made a
-    // core automation depend on a tab staying open and swallowed every failure. It
-    // now runs here, through the canonical lane-entry gate, bounded per ceremony.
-    //
-    // A session opened BY a schedule honours that schedule's autoDispatch flag; an
-    // ad-hoc session always dispatches, preserving the behaviour of the client loop
-    // this replaced (there is no schedule to opt out on).
-    let shouldDispatch = true;
-    if (session.scheduleId) {
-      const [sched] = await db.select({ autoDispatch: ceremonySchedules.autoDispatch })
-        .from(ceremonySchedules)
-        .where(and(eq(ceremonySchedules.id, session.scheduleId), eq(ceremonySchedules.tenantId, tenantId)));
-      shouldDispatch = sched?.autoDispatch ?? true;
-    }
-    if (shouldDispatch) {
-      // Registered on executionCtx so the response isn't held on agent kickoff.
-      const dispatch = dispatchCeremonyCompletion(c.env as Env, db, {
-        tenantId, projectId: session.projectId, sessionId: id,
-      }).catch((err) => { console.error('[ceremony:complete] dispatch failed', err); });
-      if (c.executionCtx) c.executionCtx.waitUntil(dispatch); else await dispatch;
-    }
+    await concludeCeremonySession(c.env as Env, db, session, {
+      concludedBy: 'human',
+      actor: await resolveActorFromContext(c.env as Env, db, c),
+    });
 
     return c.json(await hydrate(tenantId, segmentId, id));
+  });
+
+  // GET /sessions/history?projectId=&kind=&limit=&before= — the ceremonies that HAVE run.
+  //
+  // The gap this closes: GET /sessions only ever returned the ACTIVE session, so a
+  // completed ceremony was written to the database and then unreadable except in the
+  // tenant-wide rollup's aggregates. "When did we last run a standup, and who missed
+  // it?" had no answer anywhere in the product.
+  //
+  // Renders entirely from the denormalised counters on the session row (0365) — no
+  // per-session participant fan-out — so a page of 20 is one query. Keyset-paginated on
+  // startedAt, matching the activity timeline's cursor shape.
+  r.get('/sessions/history', async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const projectId = Number(c.req.query('projectId'));
+    if (!projectId) return c.json({ error: 'projectId is required' }, 400);
+    const kind = c.req.query('kind');
+    const limit = Math.min(50, Math.max(1, Number(c.req.query('limit')) || 20));
+    const before = c.req.query('before');
+    const beforeDate = before ? new Date(before) : null;
+
+    const rows = await db.select({
+      id: ceremonySessions.id,
+      kind: ceremonySessions.kind,
+      status: ceremonySessions.status,
+      facilitatorId: ceremonySessions.facilitatorId,
+      startedAt: ceremonySessions.startedAt,
+      endedAt: ceremonySessions.endedAt,
+      scheduleId: ceremonySessions.scheduleId,
+      concludedBy: ceremonySessions.concludedBy,
+      closeReason: ceremonySessions.closeReason,
+      humansExpected: ceremonySessions.humansExpected,
+      humansPresent: ceremonySessions.humansPresent,
+      reassignedCount: ceremonySessions.reassignedCount,
+      dispatchedCount: ceremonySessions.dispatchedCount,
+    })
+      .from(ceremonySessions)
+      .where(and(
+        eq(ceremonySessions.tenantId, tenantId),
+        eq(ceremonySessions.segmentId, segmentId),
+        eq(ceremonySessions.projectId, projectId),
+        // History is what has ALREADY run; the live session has its own endpoint.
+        ne(ceremonySessions.status, 'active'),
+        ...(kind && CEREMONY_KINDS.has(kind) ? [eq(ceremonySessions.kind, kind)] : []),
+        ...(beforeDate && !Number.isNaN(beforeDate.getTime()) ? [lt(ceremonySessions.startedAt, beforeDate)] : []),
+      ))
+      .orderBy(desc(ceremonySessions.startedAt))
+      .limit(limit + 1);
+
+    const hasMore = rows.length > limit;
+    const sessions = rows.slice(0, limit);
+    const last = sessions[sessions.length - 1];
+    return c.json({
+      sessions,
+      nextCursor: hasMore && last ? last.startedAt.toISOString() : null,
+    });
+  });
+
+  // GET /sessions/:id — one session in full: the roster WITH attendance verdicts, plus
+  // the journal of what the ceremony did (reassignments, the close itself), read from
+  // `activity_log` — the one canonical audit store, not a ceremony-specific event table.
+  //
+  // Registered AFTER '/sessions/history' so the literal segment is never swallowed by
+  // this param route.
+  r.get('/sessions/:id', async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const id = c.req.param('id');
+    const detail = await hydrate(tenantId, segmentId, id);
+    if (!detail) return c.json({ error: 'Not found' }, 404);
+
+    const journal = await getActivityLog(c.env as Env, db, tenantId, {
+      targetType: CEREMONY_TARGET_TYPE,
+      targetId: id,
+      limit: 100,
+    }).catch(() => ({ events: [], nextCursor: null }));
+
+    return c.json({ ...detail, journal: journal.events });
   });
 
   // ── Schedules ──────────────────────────────────────────────────────────────

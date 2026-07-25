@@ -115,6 +115,7 @@ function makeTask(id: number, archived: boolean): Task {
     githubPrUrl: null,
     githubPrNumber: null,
     startDate: null,
+    decompositionSource: null,
     dueDate: null,
     persona: null,
     archived,

@@ -14,6 +14,8 @@ const state = {
   inserts: [] as Array<{ values: unknown }>,
   /** The `where` predicate objects passed to the top-level due query. */
   selectCount: 0,
+  /** When set, the invite fan-out's `notified_at` claim throws (best-effort guard). */
+  failNotify: false,
 };
 
 function nextResult(): unknown[] {
@@ -44,7 +46,13 @@ const fakeDb = {
   },
   update: () => {
     const b = builder(() => []);
-    b.set = (patch: Record<string, unknown>) => { state.updates.push({ patch }); return b; };
+    b.set = (patch: Record<string, unknown>) => {
+      // Discriminated on the patch so ONLY the invite claim fails — the watermark update
+      // must still be observable, which is the point of the test that uses this.
+      if (state.failNotify && patch.notifiedAt !== undefined) throw new Error('notify boom');
+      state.updates.push({ patch });
+      return b;
+    };
     return b;
   },
 };
@@ -83,11 +91,23 @@ const schedule = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+/**
+ * The WATERMARK updates only.
+ *
+ * The sweep issues two kinds of update per opened ceremony: the schedule watermark
+ * (`lastStatus` / `nextRunAt`) and the invite fan-out's `notified_at` claim (0365).
+ * These assertions are about the watermark — "re-armed exactly once, whatever happened" —
+ * so they discriminate on `lastStatus` rather than counting every write, which would
+ * otherwise turn any new best-effort write into a false failure here.
+ */
+const watermarks = () => state.updates.filter((u) => u.patch.lastStatus !== undefined);
+
 beforeEach(() => {
   state.results = [];
   state.updates = [];
   state.inserts = [];
   state.selectCount = 0;
+  state.failNotify = false;
 });
 
 // ── Re-arm ─────────────────────────────────────────────────────────────────────
@@ -192,14 +212,43 @@ describe('runDueCeremonies', () => {
     const sessionInsert = state.inserts[0]?.values as Record<string, unknown>;
     expect(sessionInsert.scheduleId).toBe('s1');
     expect(sessionInsert.status).toBe('active');
+
+    // A scheduled roster is EXPECTED to attend (0365) — that is what makes a later
+    // no-show meaningful rather than just "this seat was never filled".
+    expect(participantInsert.every((p) => p.required === true)).toBe(true);
+  });
+
+  it('claims the invite fan-out on the session, so a later tick cannot re-notify', async () => {
+    state.results = [[schedule()], [], [], [{ id: 'sess-1' }]];
+    await runDueCeremonies({} as never);
+
+    // The conditional `notified_at` UPDATE is the claim: two racing sweep ticks both
+    // attempt it, and only the one that flips the row from null goes on to invite anyone.
+    const claim = state.updates.find((u) => u.patch.notifiedAt !== undefined);
+    expect(claim).toBeDefined();
+    expect(claim!.patch.notifiedAt).toBeInstanceOf(Date);
+  });
+
+  it('still opens the ceremony — and still re-arms — when the invite fan-out throws', async () => {
+    // Invites are best-effort. A session whose invites failed is still a valid session
+    // someone can join, whereas a sweep that aborted on a notification error would leave
+    // the schedule un-re-armed and firing on every subsequent tick.
+    state.failNotify = true;
+    state.results = [[schedule()], [], [], [{ id: 'sess-1' }]];
+    const r = await runDueCeremonies({} as never);
+
+    expect(r.opened).toBe(1);
+    expect(r.errors).toBe(0);
+    expect(watermarks()).toHaveLength(1);
+    expect(watermarks()[0]!.patch.lastStatus).toBe('opened');
   });
 
   it('re-arms next_run_at and stamps the watermark after opening', async () => {
     state.results = [[schedule()], [], [], [{ id: 'sess-1' }]];
     await runDueCeremonies({} as never);
 
-    expect(state.updates).toHaveLength(1);
-    const patch = state.updates[0]!.patch;
+    expect(watermarks()).toHaveLength(1);
+    const patch = watermarks()[0]!.patch;
     expect(patch.lastStatus).toBe('opened');
     expect(patch.lastSessionId).toBe('sess-1');
     expect(patch.lastRunAt).toBeInstanceOf(Date);
@@ -214,11 +263,11 @@ describe('runDueCeremonies', () => {
     expect(r.opened).toBe(0);
     expect(r.skipped).toBe(1);
     expect(state.inserts).toHaveLength(0);
-    expect(state.updates).toHaveLength(1);
-    expect(state.updates[0]!.patch.lastStatus).toBe('already_active');
-    expect(state.updates[0]!.patch.nextRunAt).toBeInstanceOf(Date);
+    expect(watermarks()).toHaveLength(1);
+    expect(watermarks()[0]!.patch.lastStatus).toBe('already_active');
+    expect(watermarks()[0]!.patch.nextRunAt).toBeInstanceOf(Date);
     // No session opened -> the last-session pointer is left untouched.
-    expect(state.updates[0]!.patch.lastSessionId).toBeUndefined();
+    expect(watermarks()[0]!.patch.lastSessionId).toBeUndefined();
   });
 
   it('skips a roster-scoped schedule with an empty roster, and still paces it out', async () => {
@@ -227,8 +276,8 @@ describe('runDueCeremonies', () => {
 
     expect(r.opened).toBe(0);
     expect(r.skipped).toBe(1);
-    expect(state.updates[0]!.patch.lastStatus).toBe('no_participants');
-    expect(state.updates[0]!.patch.nextRunAt).toBeInstanceOf(Date);
+    expect(watermarks()[0]!.patch.lastStatus).toBe('no_participants');
+    expect(watermarks()[0]!.patch.nextRunAt).toBeInstanceOf(Date);
   });
 
   it('advances the watermark even when the row throws, so a bad schedule paces out', async () => {
@@ -238,8 +287,8 @@ describe('runDueCeremonies', () => {
     const r = await runDueCeremonies({} as never);
 
     expect(r.opened).toBe(0);
-    expect(state.updates).toHaveLength(1);
-    expect(state.updates[0]!.patch.nextRunAt).toBeInstanceOf(Date);
+    expect(watermarks()).toHaveLength(1);
+    expect(watermarks()[0]!.patch.nextRunAt).toBeInstanceOf(Date);
   });
 
   it('is a no-op on an idle tick (one query, no writes)', async () => {
@@ -248,7 +297,7 @@ describe('runDueCeremonies', () => {
 
     expect(r).toEqual({ due: 0, opened: 0, skipped: 0, errors: 0 });
     expect(state.selectCount).toBe(1);
-    expect(state.updates).toHaveLength(0);
+    expect(watermarks()).toHaveLength(0);
     expect(state.inserts).toHaveLength(0);
   });
 
@@ -264,6 +313,6 @@ describe('runDueCeremonies', () => {
     expect(r.opened).toBe(1);
     expect(r.skipped).toBe(1);
     // BOTH rows re-armed, regardless of outcome.
-    expect(state.updates).toHaveLength(2);
+    expect(watermarks()).toHaveLength(2);
   });
 });

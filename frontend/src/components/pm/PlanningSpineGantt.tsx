@@ -30,6 +30,27 @@ function daysBetween(a: Date, b: Date): number {
   return Math.round((startOfDay(b).getTime() - startOfDay(a).getTime()) / DAY_MS);
 }
 
+interface NodeWindow {
+  start: Date | null;
+  end: Date | null;
+  /** Exactly one date is known — draw a point in time, not a span. */
+  milestone: boolean;
+}
+
+/**
+ * Resolve a node's drawable window. The fallback is SYMMETRIC on purpose: the old
+ * code let `end` fall back to `start` but never the reverse, so anything carrying
+ * only a due date (which was every ticket an agent could create — the MCP surface
+ * exposed no start date at all) failed the "has both" test and rendered as "no
+ * dates" despite being scheduled. A single known date is a milestone, not nothing.
+ */
+function nodeWindow(node: SpineNode): NodeWindow {
+  const start = parseDate(node.startDate);
+  const end = parseDate(node.endDate);
+  if (!start && !end) return { start: null, end: null, milestone: false };
+  return { start: start ?? end, end: end ?? start, milestone: !start || !end };
+}
+
 function monthSegments(start: Date, end: Date): Array<{ label: string; days: number }> {
   const segments: Array<{ label: string; days: number }> = [];
   let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
@@ -89,14 +110,19 @@ export function PlanningSpineGantt() {
   const range = useMemo(() => {
     let min: Date | null = null, max: Date | null = null;
     for (const n of data?.nodes ?? []) {
-      const s = parseDate(n.startDate); const e = parseDate(n.endDate) ?? s;
-      const lo = s ?? e; const hi = e ?? s;
+      const { start: lo, end: hi } = nodeWindow(n);
       if (lo && (!min || lo < min)) min = lo;
       if (hi && (!max || hi > max)) max = hi;
     }
     if (!min || !max) return null;
     return { start: startOfDay(new Date(min.getTime() - 3 * DAY_MS)), end: startOfDay(new Date(max.getTime() + 3 * DAY_MS)) };
   }, [data]);
+
+  /** Row index per node key — the y-coordinate source for the dependency arrows. */
+  const rowIndex = useMemo(
+    () => new Map(visible.map((n, i) => [n.key, i])),
+    [visible],
+  );
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -159,9 +185,36 @@ export function PlanningSpineGantt() {
               {todayInRange && (
                 <div aria-hidden style={{ position: 'absolute', top: 0, bottom: 0, left: NAME_COL + todayOffset * PX_PER_DAY, width: 2, background: 'var(--coral-bright)', opacity: 0.5, zIndex: 1 }} />
               )}
+              {/* Dependency arrows — predecessor's end to successor's start. The graph
+                  existed in `task_dependencies` all along; nothing ever drew it, so a
+                  plan's sequence was invisible on the one surface built to show it. */}
+              {arrows.length > 0 && (
+                <svg
+                  aria-hidden
+                  width={NAME_COL + timelineWidth}
+                  height={visible.length * ROW_H}
+                  style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 3, overflow: 'visible' }}
+                >
+                  <defs>
+                    <marker id="spine-dep-arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                      <path d="M0,0 L6,3 L0,6 z" fill="var(--text-muted)" />
+                    </marker>
+                  </defs>
+                  {arrows.map((a) => (
+                    <path
+                      key={a.key}
+                      d={a.d}
+                      fill="none"
+                      stroke="var(--text-muted)"
+                      strokeWidth={1.25}
+                      opacity={0.65}
+                      markerEnd="url(#spine-dep-arrow)"
+                    />
+                  ))}
+                </svg>
+              )}
               {visible.map((node) => {
-                const start = parseDate(node.startDate);
-                const end = parseDate(node.endDate) ?? start;
+                const { start, end, milestone } = nodeWindow(node);
                 const hasBar = range != null && start != null && end != null;
                 const offset = hasBar ? daysBetween(range!.start, start!) : 0;
                 const duration = hasBar ? Math.max(1, daysBetween(start!, end!) + 1) : 0;
@@ -193,8 +246,30 @@ export function PlanningSpineGantt() {
                     <div style={{ position: 'relative', width: timelineWidth }}>
                       {hasBar ? (
                         <div
-                          title={`${formatShort(start!)} → ${formatShort(end!)} · ${cls ? t(cls) : t('unclassified')} · ${formatUsd(node.cost.totalUsd)}`}
-                          style={{ position: 'absolute', top: (ROW_H - 16) / 2, left: offset * PX_PER_DAY, width: duration * PX_PER_DAY, height: 16, background: barColor, opacity: node.kind === 'task' ? 0.75 : 0.92, borderRadius: 5, zIndex: 2, border: cls ? 'none' : '1px dashed var(--border-strong, var(--text-muted))' }}
+                          title={
+                            `${milestone ? formatShort(start!) : `${formatShort(start!)} → ${formatShort(end!)}`}` +
+                            `${milestone ? ` · ${t('milestoneTip')}` : ''}` +
+                            `${node.datesDerived ? ` · ${t('derivedTip')}` : ''}` +
+                            ` · ${cls ? t(cls) : t('unclassified')} · ${formatUsd(node.cost.totalUsd)}`
+                          }
+                          style={{
+                            position: 'absolute', top: (ROW_H - 16) / 2,
+                            left: offset * PX_PER_DAY,
+                            // A milestone is a point in time, so it gets a fixed marker
+                            // width instead of a one-day sliver that reads as a bar.
+                            width: milestone ? 12 : duration * PX_PER_DAY,
+                            height: milestone ? 12 : 16,
+                            background: node.datesDerived ? 'transparent' : barColor,
+                            // Derived (inferred from children) reads as an outline, so a
+                            // rolled-up window is never mistaken for a committed one.
+                            border: node.datesDerived
+                              ? `1px dashed ${cls ? barColor : 'var(--text-muted)'}`
+                              : cls ? 'none' : '1px dashed var(--border-strong, var(--text-muted))',
+                            opacity: node.kind === 'task' ? 0.75 : 0.92,
+                            borderRadius: milestone ? 3 : 5,
+                            transform: milestone ? 'rotate(45deg)' : undefined,
+                            zIndex: 2,
+                          }}
                         />
                       ) : (
                         <div style={{ position: 'absolute', top: (ROW_H - 14) / 2, left: 6, fontSize: '0.68rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>{t('undated')}</div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { CeremonySession, CeremonyParticipant } from '@/lib/builderforceApi';
 import { formatDuration } from '@/lib/duration';
 
@@ -38,6 +39,7 @@ export function StandupControls({
   onNext: (nextTurn: number) => void;
   onComplete: () => void;
 }) {
+  const t = useTranslations('ceremony');
   const [, setTick] = useState(0);
   const autoFiredFor = useRef<string>('');
 
@@ -51,8 +53,8 @@ export function StandupControls({
   if (!session || session.status !== 'active') {
     return (
       <button type="button" style={btn('primary')} disabled={busy || !isFacilitator} onClick={onStart}
-        title={isFacilitator ? 'Start the standup' : 'Only the facilitator can start'}>
-        Start standup
+        title={isFacilitator ? t('startSessionHint') : t('startSessionFacilitatorOnly')}>
+        {t('startSession')}
       </button>
     );
   }

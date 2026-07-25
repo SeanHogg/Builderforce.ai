@@ -72,6 +72,7 @@ import type { BrainChat, BrainMessage, BrainChatTraceRow } from '@/lib/builderfo
 import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo, type TicketKind } from '@/lib/builderforceApi';
 import { fetchConsumptionSnapshot } from '@/lib/useConsumption';
 import { useLlmModels } from '@/lib/useLlmModels';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { PlanBadge } from '@/components/PlanBadge';
 import { BrainErrorBanner } from './BrainErrorBanner';
 import { dispatchBrainDataChanged } from '@/lib/brain/brainDataEvent';
@@ -925,7 +926,9 @@ export function BrainPanel({
   // Capture execution: copy the Brain run's LLM/tool/error trace + transcript to
   // the clipboard — the Brain twin of the Observability/Logs "Copy triage info"
   // button, so a misbehaving run can be dropped straight into a bug report.
-  const [captureState, setCaptureState] = useState<'idle' | 'copied' | 'error'>('idle');
+  // Was a local 'idle' | 'copied' | 'error' + a 2000ms reset — the same states the
+  // shared hook owns, so it replaces the local copy verbatim.
+  const capture = useCopyToClipboard();
   // The shared (module-cached) model surface: the diagnostics report needs the plan
   // pool + vendor-tagged BYO models to attribute WHO funds the active model.
   const llmModels = useLlmModels();
@@ -940,7 +943,10 @@ export function BrainPanel({
     return tBrain('brainDefault');
   }, [personaSel, brainAgents, agentName, tBrain, modalityCopy]);
   const captureExecution = useCallback(async () => {
-    try {
+    // The write, the idle→copied/error→idle feedback and its 2000ms reset all live in the
+    // shared hook. Thunk form: the payload is built on click, and a build that throws
+    // lands on `error` exactly as the old try/catch around it did.
+    await capture.copy(async () => {
       // Prepend a Chat diagnostics block (identity + Evermind wiring state + Signals) so a
       // pasted report answers "what STATE was this chat in?" — the CHAT's own project (what
       // the learn gate keys on) vs the page's project, tenant/user, the Evermind head
@@ -1017,13 +1023,9 @@ export function BrainPanel({
         versions: { ui: APP_VERSION, api: apiVersion },
       };
       const diagBlock = formatChatDiagnostics(diagnostics).join('\n');
-      await navigator.clipboard.writeText(`${diagBlock}\n\n${conv.buildTriageReport(personaLabel)}`);
-      setCaptureState('copied');
-    } catch {
-      setCaptureState('error');
-    }
-    setTimeout(() => setCaptureState('idle'), 2000);
-  }, [conv, personaLabel, personaModel, llmModels, toolSpecs, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
+      return `${diagBlock}\n\n${conv.buildTriageReport(personaLabel)}`;
+    });
+  }, [capture, conv, personaLabel, personaModel, llmModels, toolSpecs, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
 
   // Shared chrome for the "capture execution" icon button (page + docked headers).
   const captureButton = (
@@ -1045,9 +1047,9 @@ export function BrainPanel({
         fontSize: 13,
         lineHeight: 1,
         background: 'var(--bg-elevated)',
-        color: captureState === 'error'
+        color: capture.state === 'error'
           ? 'var(--red, #ef4444)'
-          : captureState === 'copied'
+          : capture.state === 'copied'
             ? 'var(--green, #22c55e)'
             : 'var(--text-secondary)',
         border: '1px solid var(--border-subtle)',
@@ -1056,7 +1058,7 @@ export function BrainPanel({
         opacity: conv.hasTrace ? 1 : 0.5,
       }}
     >
-      {captureState === 'copied' ? '✓' : captureState === 'error' ? '✕' : '⧉'}
+      {capture.state === 'copied' ? '✓' : capture.state === 'error' ? '✕' : '⧉'}
     </button>
   );
 

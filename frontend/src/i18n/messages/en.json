@@ -555,7 +555,8 @@
     "selectProject": "Select a project to start a ceremony.",
     "viewLive": "Live round-table",
     "viewSchedules": "Schedules",
-    "viewSwitchLabel": "Ceremony view"
+    "viewSwitchLabel": "Ceremony view",
+    "viewHistory": "History"
   },
   "projectCard": {
     "details": "Details",
@@ -2888,7 +2889,24 @@
     "errUnhireFailed": "Unhire failed",
     "errRemoveMember": "Failed to remove member",
     "errChangeRole": "Failed to change role",
-    "errRevokeInvite": "Failed to revoke invitation"
+    "errRevokeInvite": "Failed to revoke invitation",
+    "copiedExclaim": "Copied!",
+    "manifest": {
+      "assignedConfig": "Assigned configuration",
+      "copyManifest": "Copy manifest",
+      "emptyNote": "No skills or personas assigned",
+      "noneAssigned": "None assigned",
+      "personas": "Personas",
+      "skills": "Skills",
+      "content": "Content"
+    },
+    "quickstart": {
+      "title": "Connect a new agent",
+      "intro": "Pre-configured for <b>{name}</b>. Run this on any machine — the agent installs and registers straight into this workgroup.",
+      "osUnix": "macOS / Linux",
+      "osWindows": "Windows",
+      "noToken": "No workspace token in this session — the agent will prompt you to pick a workgroup on first run."
+    }
   },
   "knowledge": {
     "headingSops": "Standard Operating Procedures",
@@ -6753,9 +6771,37 @@
         "mergeGranted": "May merge pull requests",
         "mergeWithheld": "Merges wait for a person",
         "signoffRequired": "Sign-off required to finish",
-        "signoffOptional": "No sign-off required"
+        "signoffOptional": "No sign-off required",
+        "ceremoniesUnattended": "May run ceremonies unattended",
+        "ceremoniesNeedPeople": "Ceremonies need a person",
+        "reassignGranted": "May reassign work idle {hours}h+",
+        "reassignWithheld": "Absent owners keep their work"
       },
-      "workspaceDefaultsHint": "Anything left on “Use default” follows your workspace defaults in Settings → AI Manager."
+      "workspaceDefaultsHint": "Anything left on “Use default” follows your workspace defaults in Settings → AI Manager.",
+      "ceremonies": {
+        "sectionTitle": "Ceremonies",
+        "sectionHelp": "What the manager may do when it runs a standup or planning session and the people it concerns are not there."
+      },
+      "allowUnattendedCeremonies": {
+        "label": "Run ceremonies without people",
+        "help": "Lets the manager conduct a scheduled standup nobody joined. Off: the session is still recorded, showing that nobody attended, but nothing is decided on the team’s behalf."
+      },
+      "allowAgentReassignment": {
+        "label": "Hand stale work to agents",
+        "help": "Lets a ceremony move a ticket from someone who missed it onto an agent. Missing a ceremony is never enough on its own — the ticket must also have sat untouched for the period below."
+      },
+      "agentReassignIdleHours": {
+        "label": "Only after the ticket is idle for",
+        "help": "How long a ticket must sit untouched before an absent owner’s claim on it lapses. Long enough that a normal absence never reaches it.",
+        "unit": "hours",
+        "inherited": "Using the inherited value: {value} hours"
+      },
+      "agentReassignMaxPerSession": {
+        "label": "At most, per ceremony",
+        "help": "Hard limit on how many tickets one ceremony may hand over, so a single standup can never quietly re-home a whole sprint.",
+        "unit": "tickets",
+        "inherited": "Using the inherited value: {value}"
+      }
     },
     "backlog": {
       "title": "Ranked backlog",
@@ -7577,7 +7623,20 @@
     },
     "stall": {
       "title": "Why it is sitting there",
-      "unrecorded": "No gate was recorded — nothing has tried to run this ticket yet."
+      "unrecorded": "No gate was recorded — nothing has tried to run this ticket yet.",
+      "laneGate": "Lane gate",
+      "gate": {
+        "auto": "Automatic",
+        "human": "Human approval required"
+      },
+      "staffed": "Agents staffed on the lane",
+      "noneStaffed": "None",
+      "candidate": "“Run now” would dispatch",
+      "noCandidate": "Nothing can run it",
+      "streak": "Consecutive failed runs",
+      "streakValue": "{count} (autonomy halts at {limit})",
+      "cooldown": "Cooldown remaining",
+      "capabilityMismatch": "Capability mismatch"
     },
     "stats": {
       "title": "Hops & runs",
@@ -7598,7 +7657,8 @@
       "laneMove": "{from} → {to}",
       "laneEntered": "Entered {to}",
       "backward": "Redo",
-      "run": "Run #{id}"
+      "run": "Run #{id}",
+      "dispatchedBy": "Dispatched by {who}"
     },
     "kind": {
       "created": "Created",
@@ -7620,7 +7680,22 @@
       "aria": "Source: {label}"
     },
     "copyDiagnostics": "Copy diagnostics",
-    "copyDiagnosticsAria": "Copy the full lifecycle diagnostics for this ticket, including every event, run id and gate reason"
+    "copyDiagnosticsAria": "Copy the full lifecycle diagnostics for this ticket, including every event, run id and gate reason",
+    "failures": {
+      "title": "Failure analysis",
+      "help": "Failed runs grouped by cause. One cause repeating on a regular interval is a retry loop, not a series of unrelated failures.",
+      "runs": "{count, plural, one {# run failed this way} other {# runs failed this way}}",
+      "cadence": "every ~{interval}",
+      "cadenceOnce": "happened once",
+      "window": "First {first} · last {last}",
+      "dispatchedBy": "dispatched by {who}",
+      "runIds": "Runs: {ids}"
+    },
+    "dispatchers": {
+      "title": "Who dispatched the runs",
+      "help": "The subsystem that started each run. Anything other than the lane trigger reached the dispatcher without passing its consecutive-failure breaker.",
+      "counts": "{runs} runs · {completed} completed · {failed} failed"
+    }
   },
   "taskChanges": {
     "allChanges": "All changes",
@@ -9068,7 +9143,10 @@
     "errorCreateSprint": "Create sprint failed",
     "errorStart": "Could not start session",
     "errorAdvance": "Could not advance turn",
-    "errorComplete": "Could not complete session"
+    "errorComplete": "Could not complete session",
+    "startSession": "Start standup",
+    "startSessionHint": "Start the standup",
+    "startSessionFacilitatorOnly": "Only the facilitator can start"
   },
   "meetings": {
     "title": "Meetings",
@@ -11054,5 +11132,108 @@
       "talent": "Talent & Marketplace",
       "governance": "Security, Architecture & Governance"
     }
+  },
+  "ceremonyHistory": {
+    "loading": "Loading…",
+    "errorLoad": "Could not load ceremony history.",
+    "filterAll": "All",
+    "filterStandup": "Standups",
+    "filterPlanning": "Planning",
+    "count": "{count} recorded",
+    "emptyTitle": "No ceremonies have run yet",
+    "emptyHelp": "Once a standup or planning session finishes, it appears here with who attended and what changed.",
+    "loadMore": "Load older",
+    "durationMinutes": "{minutes} min",
+    "attended": "{present} of {expected} attended",
+    "missed": "{count} missed it",
+    "reassigned": "{count} reassigned",
+    "dispatched": "{count} agent runs started",
+    "detailTitle": "{kind} · {when}",
+    "whoWasHere": "Who was here",
+    "whatHappened": "What happened",
+    "noParticipants": "Nobody was seated at this ceremony.",
+    "noJournal": "Nothing was recorded for this ceremony.",
+    "seatHuman": "Person",
+    "seatAgent": "Agent",
+    "seatAdHoc": "joined ad-hoc",
+    "spoke": "spoke {seconds}s",
+    "kind": {
+      "standup": "Standup",
+      "planning": "Planning"
+    },
+    "closeReason": {
+      "facilitator": "Closed by a person",
+      "unattended": "Run by the manager",
+      "no_humans": "Nobody attended",
+      "expired": "Timed out"
+    },
+    "concludedBy": {
+      "manager": "Manager conducted",
+      "system": "Closed automatically"
+    },
+    "attendance": {
+      "unknown": "Unknown",
+      "present": "Present",
+      "absent": "Missed it",
+      "excused": "Optional"
+    }
+  },
+  "observability": {
+    "agents": "Agents",
+    "agentsHint": "Click an agent to view its diagnostics. Select more than one to compare.",
+    "selectAll": "Select all",
+    "clear": "Clear",
+    "loadingAgents": "Loading agents…",
+    "agentFallback": "Agent",
+    "agentNumbered": "Agent {id}",
+    "cloudAgentFallback": "Cloud agent",
+    "scopedFromPanel": "{name} (scoped from panel)",
+    "noAgents": "No agents yet. Register a self-hosted agent in <link>Workforce</link> or create a cloud agent — both appear here once they run.",
+    "online": "ONLINE",
+    "offline": "OFFLINE",
+    "viewLabel": "View:",
+    "logView": "Log view",
+    "timelineView": "Timeline view",
+    "conn": {
+      "connecting": "connecting",
+      "connected": "connected",
+      "offline": "offline",
+      "disconnected": "disconnected"
+    },
+    "refreshing": "Refreshing…",
+    "refreshCloud": "Refresh cloud",
+    "autoScroll": "Auto-scroll",
+    "copyTriage": "Copy triage info",
+    "copyReport": "Copy report (+diffs)",
+    "copyTriageTitle": "Copy a full triage report (agents, telemetry, errors, logs) to the clipboard",
+    "copyReportTitle": "Copy a full report — materials/PRD, the code changes (diffs), telemetry, errors, and logs — to the clipboard",
+    "cloudNote": "Cloud agents run server-side via the gateway (no live relay stream); their log lines are derived from execution telemetry. Use “Refresh cloud” for the latest.",
+    "registerThenSelect": "Register or create an agent first, then select it above.",
+    "selectForLogs": "Select one or more agents above to view diagnostics.",
+    "waitingForLogs": "Waiting for log output…",
+    "timeline": "Timeline",
+    "categoryFilterPlaceholder": "Category filter (e.g. llm, thinking)",
+    "refresh": "Refresh",
+    "viewGantt": "Gantt",
+    "viewList": "List",
+    "loadingTimeline": "Loading timeline…",
+    "noTimelineEvents": "No timeline events",
+    "noTimelineHint": "Tool-call audit events and workflow tasks appear here once the agents run.",
+    "registerFirst": "Register or create an agent first.",
+    "goToWorkforce": "Go to Workforce →",
+    "selectForTimeline": "Select one or more agents above to view the execution timeline.",
+    "errLoadAgents": "Failed to load agents",
+    "errLoadDiagnostics": "Failed to load diagnostics"
+  },
+  "embedInstall": {
+    "heading": "Install in your host app",
+    "intro": "A host developer installs the package and renders one component per page, passing your signed SSO/tenant JWT. The token is handed to the iframe over <code>postMessage</code> — never in a URL.",
+    "stepInstall": "1 · Install",
+    "stepMount": "2 · Mount a surface",
+    "mountableViews": "Mountable views ({count})",
+    "noCapabilities": "No capabilities enabled — turn on Product / Agile / Security above to expose views.",
+    "copyInstall": "Copy install",
+    "copySnippet": "Copy snippet",
+    "copiedFlash": "✓ Copied"
   }
 }

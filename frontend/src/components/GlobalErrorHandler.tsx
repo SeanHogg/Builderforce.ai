@@ -7,6 +7,7 @@ import {
   type ApiErrorEvent,
 } from '@/lib/errors/apiErrorEvent';
 import { requestReportError } from '@/lib/reportError';
+import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 
 /* ------------------------------------------------------------------ */
 /*  Inline SVG icons (no lucide-react dependency)                     */
@@ -126,19 +127,18 @@ export function GlobalErrorHandler() {
       .filter(Boolean)
       .join('\n');
 
-    try {
-      await navigator.clipboard.writeText(ticket);
+    // The plain shared write, not the hook: `copied` is per-toast state living inside the
+    // toasts array, which the hook's single state could not represent. A refused
+    // clipboard resolves false and leaves the toast unflagged, as the old catch did.
+    if (!await copyTextToClipboard(ticket)) return;
+    setToasts((prev) =>
+      prev.map((t) => (t.id === entry.id ? { ...t, copied: true } : t)),
+    );
+    setTimeout(() => {
       setToasts((prev) =>
-        prev.map((t) => (t.id === entry.id ? { ...t, copied: true } : t)),
+        prev.map((t) => (t.id === entry.id ? { ...t, copied: false } : t)),
       );
-      setTimeout(() => {
-        setToasts((prev) =>
-          prev.map((t) => (t.id === entry.id ? { ...t, copied: false } : t)),
-        );
-      }, 2000);
-    } catch {
-      /* clipboard not available */
-    }
+    }, 2000);
   }, []);
 
   if (toasts.length === 0) return null;

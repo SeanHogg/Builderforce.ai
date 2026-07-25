@@ -30,19 +30,32 @@
  * in a ceremony is representational — agents are seeded as `ceremony_participants`
  * rows so they hold a turn in the round table — and any actual agent *execution*
  * happens later, on session completion, through the existing token-gated
- * `maybeAutoRunOnLaneEntry` path (see dispatchCeremonyCompletion below), which is
- * additionally bounded per session. The cron branches share no budget, so this
- * sweep is also bounded by SWEEP_LIMIT rows per tick.
+ * `maybeAutoRunOnLaneEntry` path (see application/ceremony/dispatchCeremonyCompletion),
+ * which is additionally bounded per session. The cron branches share no budget, so this
+ * sweep is also bounded by SWEEP_LIMIT rows per tick. The reaper below adds no LLM work
+ * either: "the manager conducts the standup" is attendance resolution + the existing
+ * gated dispatch, not a generated summary.
+ *
+ * TWO HALVES (0365). Opening a ceremony was only ever half a cadence:
+ *
+ *   • {@link runDueCeremonies} — opens due sessions, and now INVITES their humans. A
+ *     scheduled ceremony used to open in silence, so the only way to learn yours had
+ *     started was to already be watching the tab you are not watching when you are about
+ *     to miss it.
+ *   • {@link runCeremonyReaper} — CLOSES sessions nobody closed. Without it a scheduled
+ *     ceremony could never end: `uq_ceremony_session_active(project_id, kind)` permits one
+ *     live session per board+kind, so the first standup left open silently blocked every
+ *     future standup on that board while the schedule recorded 'already_active' daily.
  */
 
-import { and, asc, eq, isNotNull, lte, ne, or } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, lt, lte } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import {
   ceremonySchedules,
   ceremonySessions,
   ceremonyParticipants,
   boards,
-  tasks,
+  projects,
 } from '../../infrastructure/database/schema';
 import { nextCronTime } from '../../domain/workflowSchedule';
 import {
@@ -52,8 +65,9 @@ import {
   type MemberScorecard,
 } from '../metrics/workforceMetrics';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
-import { buildRuntimeService } from '../../buildRuntimeService';
+import { getEffectiveManagerPolicy } from '../manager/ManagerService';
+import { concludeCeremonySession } from './concludeCeremony';
+import { notifyCeremonyOpened } from './ceremonyNotifier';
 import type { Env } from '../../env';
 
 /** Max schedules processed per sweep — bounds work per cron tick. */
@@ -62,8 +76,18 @@ const SWEEP_LIMIT = 25;
 /** Window (days) used when deriving a roster from member metrics. */
 const ROSTER_METRICS_DAYS = 30;
 
-/** Hard ceiling on agent runs kicked off by one completed ceremony. */
-export const MAX_DISPATCH_PER_CEREMONY = 20;
+/**
+ * How long a session may stay open before the reaper concludes it.
+ *
+ * Generously long on purpose: this is a WEDGE-BREAKER, not a meeting timer. A standup
+ * that genuinely runs 40 minutes must not be cut off mid-turn, but a session left open
+ * overnight has to be closed before it blocks tomorrow's — and four hours is comfortably
+ * past any real ceremony while still clearing the way well before the next daily cadence.
+ */
+export const MAX_SESSION_HOURS = 4;
+
+/** Max sessions the reaper concludes per tick — bounds work like SWEEP_LIMIT does. */
+const REAP_LIMIT = 25;
 
 /** A seat at the round table. Shape matches ceremony_participants. */
 export interface CeremonyRosterEntry {
@@ -221,9 +245,32 @@ async function openScheduledCeremony(
       memberRef: p.ref,
       memberName: p.name,
       turnOrder: i,
+      // A scheduled roster is EXPECTED to attend — that is what makes a no-show
+      // meaningful. Ad-hoc joiners are seated with required=false at heartbeat time.
+      required: true,
       updatedAt: now,
     })),
   );
+
+  // Invite the humans. Best-effort and deliberately AFTER the roster insert: a session
+  // whose invites failed is still a valid session someone can join, whereas an invite
+  // pointing at a session that failed to seat anyone would be a link to an empty room.
+  try {
+    const [project] = await db
+      .select({ name: projects.name })
+      .from(projects)
+      .where(eq(projects.id, s.projectId))
+      .limit(1);
+    await notifyCeremonyOpened(env, db, {
+      tenantId: s.tenantId,
+      projectId: s.projectId,
+      projectName: project?.name ?? null,
+      sessionId: session.id,
+      kind: s.kind,
+    });
+  } catch (err) {
+    console.error(`[cron:ceremonies] invite fan-out failed session=${session.id}`, err);
+  }
 
   return { sessionId: session.id, status: 'opened' };
 }
@@ -292,64 +339,69 @@ export async function runDueCeremonies(env: Env): Promise<CeremonySweepResult> {
   return result;
 }
 
+export interface CeremonyReapResult {
+  /** Sessions found past MAX_SESSION_HOURS. */
+  due: number;
+  /** Conducted and closed — the manager ran the ceremony. */
+  completed: number;
+  /** Closed WITHOUT being conducted (nobody came, unattended not granted). */
+  abandoned: number;
+  errors: number;
+}
+
 /**
- * Server-side "dispatch agent work when a ceremony completes".
+ * Close ceremonies nobody closed — the other half of the cadence.
  *
- * This used to live in the browser (CeremonyStage.completeSession looped over the
- * client's loaded task list and POSTed raw executions, fire-and-forget). That made
- * a core automation depend on a tab staying open, silently swallowed failures, and
- * only saw the tasks the client happened to have fetched.
+ * Every conclusion goes through the SAME `concludeCeremonySession` a human's Complete
+ * click uses, so a reaped session and a facilitated one differ only in the recorded
+ * `concluded_by` / `close_reason`, never in what actually happened. In particular the
+ * policy gate is not re-implemented here: whether an empty room may be conducted at all
+ * is decided in one place, by the manager policy fold.
  *
- * Now it runs from POST /sessions/:id/complete. Rather than submitting executions
- * directly, each candidate goes through the canonical `maybeAutoRunOnLaneEntry`
- * gate — which already applies the terminal/board/lane/gate resolution, the
- * capability guardrail, the re-run cooldown, the token gate and the live-run
- * idempotency check. That last one subsumes the client's hand-rolled
- * `latestExecByTask` dedupe entirely.
- *
- * BOUNDED: at most MAX_DISPATCH_PER_CEREMONY runs per completed ceremony.
+ * Idempotent and race-safe: `concludeCeremonySession` returns null for a session that is
+ * no longer active, so a reap that collides with a human clicking Complete is a no-op
+ * rather than a double-close.
  */
-export async function dispatchCeremonyCompletion(
-  env: Env,
-  db: Db,
-  args: { tenantId: number; projectId: number; sessionId: string },
-): Promise<{ candidates: number; dispatched: number }> {
-  const runtimeService = buildRuntimeService(env, db);
+export async function runCeremonyReaper(env: Env, db: Db, now = new Date()): Promise<CeremonyReapResult> {
+  const cutoff = new Date(now.getTime() - MAX_SESSION_HOURS * 3_600_000);
 
-  // Agent-OWNED, non-done tickets on this project — the same population the client
-  // loop targeted ("humans keep their assignments; agents start running"). Filtering
-  // in SQL keeps the number of gate evaluations (each of which reads) bounded.
-  const candidates = await db
-    .select({ id: tasks.id, status: tasks.status })
-    .from(tasks)
-    .where(
-      // `tasks` has no tenant_id — it is tenant-scoped through its project, and the
-      // caller has already verified this session (hence projectId) belongs to the tenant.
-      and(
-        eq(tasks.projectId, args.projectId),
-        ne(tasks.status, 'done'),
-        or(isNotNull(tasks.assignedAgentHostId), isNotNull(tasks.assignedAgentRef)),
-      ),
-    )
-    .orderBy(asc(tasks.id))
-    .limit(MAX_DISPATCH_PER_CEREMONY * 2);
+  const stale = await db
+    .select()
+    .from(ceremonySessions)
+    .where(and(eq(ceremonySessions.status, 'active'), lt(ceremonySessions.startedAt, cutoff)))
+    .orderBy(asc(ceremonySessions.startedAt))
+    .limit(REAP_LIMIT);
 
-  let dispatched = 0;
-  for (const t of candidates) {
-    if (dispatched >= MAX_DISPATCH_PER_CEREMONY) break;
+  const result: CeremonyReapResult = { due: stale.length, completed: 0, abandoned: 0, errors: 0 };
+
+  // One policy read per (tenant, project) rather than per session — a tenant reaping
+  // several boards at once would otherwise re-read the same workspace defaults each time.
+  const policyCache = new Map<string, Awaited<ReturnType<typeof getEffectiveManagerPolicy>>>();
+
+  for (const session of stale) {
     try {
-      const started = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
-        tenantId: args.tenantId,
-        projectId: args.projectId,
-        taskId: t.id,
-        status: t.status,
-        submittedBy: `system:ceremony:${args.sessionId}`,
+      const key = `${session.tenantId}:${session.projectId}`;
+      let policy = policyCache.get(key);
+      if (!policy) {
+        policy = await getEffectiveManagerPolicy(db, session.tenantId, session.projectId, env);
+        policyCache.set(key, policy);
+      }
+
+      const outcome = await concludeCeremonySession(env, db, session, {
+        // The manager conducts when it may; otherwise this is the system tidying up a
+        // session that expired. `concludedBy` records which of the two it was.
+        concludedBy: policy.allowUnattendedCeremonies ? 'manager' : 'system',
+        reasonHint: 'expired',
+        policy,
       });
-      if (started) dispatched += 1;
+      if (!outcome) continue;
+      if (outcome.status === 'completed') result.completed += 1;
+      else result.abandoned += 1;
     } catch (err) {
-      console.error(`[ceremony:complete] dispatch failed task=${t.id}`, err);
+      result.errors += 1;
+      console.error(`[cron:ceremonies] reap failed session=${session.id}`, err);
     }
   }
 
-  return { candidates: candidates.length, dispatched };
+  return result;
 }

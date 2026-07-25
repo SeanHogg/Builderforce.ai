@@ -5,13 +5,19 @@ import { useTranslations } from 'next-intl';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { CeremonyStage, type CeremonyMode } from '@/components/ceremony/CeremonyStage';
 import { CeremonySchedulesPanel } from '@/components/ceremony/CeremonySchedulesPanel';
+import { CeremonyHistoryPanel } from '@/components/ceremony/CeremonyHistoryPanel';
 
 /**
- * The Ceremonies surface, scoped to a project. Two views:
+ * The Ceremonies surface, scoped to a project. Three views:
  *
  *  - "live"      — the standup / planning round-table (CeremonyStage). Extracted
  *                  from the old standalone /ceremonies page so it can render as
  *                  the "Ceremonies" tab of Projects (its conceptual home).
+ *  - "history"   — the ceremonies that have already run (migration 0365): when,
+ *                  who attended, who was missing, what changed hands. Sessions were
+ *                  being recorded and then were unreadable — the live view only ever
+ *                  showed the ACTIVE session — so a ceremony the manager conducted
+ *                  unattended would have happened unobservably.
  *  - "schedules" — the cadence layer (migration 0349): recurring standups /
  *                  plannings the cron sweep opens by itself, roster pre-seeded.
  *                  Reads are member-level; writes are MANAGER+.
@@ -22,7 +28,14 @@ import { CeremonySchedulesPanel } from '@/components/ceremony/CeremonySchedulesP
  * live in the Projects page that hosts it.
  */
 
-type CeremonyView = 'live' | 'schedules';
+type CeremonyView = 'live' | 'history' | 'schedules';
+
+/** Tab label key per view — keeps the tablist a single map, not a nested ternary. */
+const VIEW_LABEL: Record<CeremonyView, string> = {
+  live: 'viewLive',
+  history: 'viewHistory',
+  schedules: 'viewSchedules',
+};
 
 export function CeremoniesContent() {
   const t = useTranslations('ceremonies');
@@ -47,7 +60,7 @@ export function CeremoniesContent() {
         aria-label={t('viewSwitchLabel')}
         style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}
       >
-        {(['live', 'schedules'] as const).map((v) => {
+        {(['live', 'history', 'schedules'] as const).map((v) => {
           const active = view === v;
           return (
             <button
@@ -68,18 +81,20 @@ export function CeremoniesContent() {
                 border: `1px solid ${active ? 'var(--border)' : 'transparent'}`,
               }}
             >
-              {t(v === 'live' ? 'viewLive' : 'viewSchedules')}
+              {t(VIEW_LABEL[v])}
             </button>
           );
         })}
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, ...(view === 'schedules' ? { overflowY: 'auto' } : {}) }}>
-        {view === 'live' ? (
+      {/* Only the live round table manages its own height; the two scrolling panels get
+          the overflow container so long lists scroll inside the tab, not the page. */}
+      <div style={{ flex: 1, minHeight: 0, ...(view === 'live' ? {} : { overflowY: 'auto' }) }}>
+        {view === 'live' && (
           <CeremonyStage projectId={currentProjectId} mode={mode} onModeChange={setMode} />
-        ) : (
-          <CeremonySchedulesPanel projectId={currentProjectId} />
         )}
+        {view === 'history' && <CeremonyHistoryPanel projectId={currentProjectId} />}
+        {view === 'schedules' && <CeremonySchedulesPanel projectId={currentProjectId} />}
       </div>
     </div>
   );

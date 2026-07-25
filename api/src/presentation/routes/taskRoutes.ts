@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import { TaskService, type UpdateTaskDto } from '../../application/task/TaskService';
 import { TaskPriority, AgentType, TaskStatus, TaskType } from '../../domain/shared/types';
+import { ConflictError } from '../../domain/shared/errors';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
@@ -372,13 +373,11 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const evaln = await evaluateTaskAutoRun(db, runtimeService, {
       tenantId, projectId: row.projectId, taskId: id, status: row.status,
     }).catch(() => null);
-    const lifecycle = await buildTicketLifecycle(db, {
-      tenantId,
-      taskId: id,
-      ...(evaln ? { isTerminalLane: evaln.isTerminalLane } : {}),
-      // 'will_run' is not a stall reason — only a refusal explains a stalled ticket.
-      liveReason: evaln && !evaln.canRunNow ? evaln.reason : null,
-    });
+    // The WHOLE evaluation goes in, not just its reason: the ledger turns it into the
+    // gate snapshot (lane gate, staffing, candidate agent, breaker streak, cooldown)
+    // so a stall report carries the evidence behind the reason rather than the bare
+    // word. It also derives terminality and the live stall reason from it.
+    const lifecycle = await buildTicketLifecycle(db, { tenantId, taskId: id, live: evaln });
     if (!lifecycle) return c.json({ error: 'Task not found' }, 404);
     return c.json(lifecycle);
   });
@@ -486,16 +485,34 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
         assignedUserId?: string | null;
         assignedAgentHostId?: number | null;
         assignedAgentRef?: string | null;
+        /** Working-day size — drives the child's scheduled window. */
+        estimateDays?: number | null;
+        /** Index of the EARLIER sibling that must finish first (finish-to-start). */
+        dependsOnIndex?: number | null;
       }>;
+      /** Reconcile an already-decomposed Epic instead of being rejected as a duplicate. */
+      replace?: boolean;
     }>();
     if (!Array.isArray(body.children) || body.children.length === 0) {
       return c.json({ error: 'children is required and must be non-empty' }, 400);
     }
-    const epic = await taskService.decomposeEpic(id, body.children);
+    // Re-decomposing used to blind-append, so a second call duplicated the whole child
+    // set (visible as paired rows on the planning spine). The service now refuses
+    // unless `replace` asks it to reconcile by title.
+    let epic;
+    try {
+      epic = await taskService.decomposeEpic(id, body.children, { replace: !!body.replace, source: 'manual' });
+    } catch (err) {
+      if (err instanceof ConflictError) return c.json({ error: err.message }, 409);
+      throw err;
+    }
     const children = (await taskService.getEpicTree(id)).children;
     await bumpTreeVersion(c.env as Env, epic.toPlain().projectId);
     // New child tasks change the project's task counts → bust the projects-list cache.
     await invalidateProjectsList(c.env as Env, c.get('tenantId')).catch(() => {});
+    // Fan-out writes precedence edges, so the project's dependency read-through cache
+    // is stale the moment this returns.
+    await bumpCacheVersion(c.env as Env, `task-deps-version:project:${epic.toPlain().projectId}`).catch(() => {});
     return c.json({ epic: epic.toPlain(), children: children.map(t => t.toPlain()) }, 201);
   });
 

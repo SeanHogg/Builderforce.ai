@@ -27,6 +27,7 @@ import { addManagerDirective } from '../manager/managerDirectives';
 import { createManagerCoachingTask, getEffectiveManagerPolicy } from '../manager/ManagerService';
 import { resolveManagerAssignee } from '../manager/managerPolicy';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
+import { DEP_TYPES } from '../task/taskDependencies';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
@@ -604,8 +605,8 @@ const CATALOG: BuiltinTool[] = [
   } },
   {
     tool: 'tasks.create', mutates: true,
-    description: 'Create an ACCOUNTABLE ticket on a project board. The assignee is the ticket Coordinator/Manager (not necessarily its producer): pass exactly one of assignedUserId, assignedAgentRef, or assignedAgentHostId. If omitted, the project Delivery Manager is assigned, falling back to the requesting human. Creation also derives the board process-template participation manifest. AFTER creation, scope the required workforce with kanban.assess_resource for every role implied by the work, inspect kanban.accountability, and use kanban.materialize_work_items to create one child task per resource. Set taskType="epic" for a planning Epic, "gap" for missing follow-up work, or parentTaskId to nest under an Epic. An Epic is not an OKR. Idempotent by project + normalized title; reconciliation also repairs missing coordination/manifest data on the existing ticket. The result carries `autoRun: { dispatched, reason, detail }` when the created ticket landed in a lane that could start work — `dispatched:false` means no agent picked it up, so relay `detail` rather than implying work started.',
-    parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, dueDate: S, taskType: { type: 'string', enum: ['task', 'epic', 'gap'] }, parentTaskId: N, assignedUserId: S, assignedAgentRef: S, assignedAgentHostId: N }, ['projectId', 'title']),
+    description: 'Create an ACCOUNTABLE ticket on a project board. The assignee is the ticket Coordinator/Manager (not necessarily its producer): pass exactly one of assignedUserId, assignedAgentRef, or assignedAgentHostId. If omitted, the project Delivery Manager is assigned, falling back to the requesting human. Creation also derives the board process-template participation manifest. AFTER creation, scope the required workforce with kanban.assess_resource for every role implied by the work, inspect kanban.accountability, and use kanban.materialize_work_items to create one child task per resource. Set taskType="epic" for a planning Epic, "gap" for missing follow-up work, or parentTaskId to nest under an Epic. An Epic is not an OKR. PLAN IT IN TIME: pass startDate AND dueDate (ISO dates) whenever the work has a known window — a ticket with neither is invisible on the planning spine, the Gantt and the calendar until the AI Manager back-fills one, and sequence between tickets belongs in tasks.add_dependency, not in prose. Idempotent by project + normalized title; reconciliation also repairs missing coordination/manifest data on the existing ticket. The result carries `autoRun: { dispatched, reason, detail }` when the created ticket landed in a lane that could start work — `dispatched:false` means no agent picked it up, so relay `detail` rather than implying work started.',
+    parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, startDate: S, dueDate: S, taskType: { type: 'string', enum: ['task', 'epic', 'gap'] }, parentTaskId: N, assignedUserId: S, assignedAgentRef: S, assignedAgentHostId: N }, ['projectId', 'title']),
     run: async (ctx, a) => {
       const title = str(a.title).trim(); if (!title) throw new Error('title is required');
       const projectId = num(a.projectId);
@@ -648,6 +649,7 @@ const CATALOG: BuiltinTool[] = [
         title,
         description: a.description != null ? str(a.description) : null,
         priority: a.priority != null ? (str(a.priority) as TaskPriority) : undefined,
+        startDate: a.startDate != null ? str(a.startDate) : null,
         dueDate: a.dueDate != null ? str(a.dueDate) : null,
         taskType: a.taskType != null ? (str(a.taskType) as TaskType) : undefined,
         parentTaskId: a.parentTaskId != null ? num(a.parentTaskId) : undefined,
@@ -662,8 +664,8 @@ const CATALOG: BuiltinTool[] = [
   },
   {
     tool: 'tasks.update', mutates: true,
-    description: 'Update a task (title, description, status/lane, priority, dueDate, archived). Reclassify with taskType, re-parent under an Epic with parentTaskId (null to detach), or (re)assign via exactly one of assignedUserId/assignedAgentRef/assignedAgentHostId (null unassigns). Omitted fields are left untouched. When a lane move or a (re)assignment could start work, the result carries `autoRun: { dispatched, reason, detail, agentRef, runNowCandidate? }` — the autonomy verdict. ALWAYS read it: `dispatched:false` means NO agent started, so report `detail` to the user instead of claiming work has begun.',
-    parameters: obj({ id: N, title: S, description: S, status: S, priority: S, dueDate: S, archived: B, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: { type: ['number', 'null'] }, assignedUserId: { type: ['string', 'null'] }, assignedAgentRef: { type: ['string', 'null'] }, assignedAgentHostId: { type: ['number', 'null'] } }, ['id']),
+    description: 'Update a task (title, description, status/lane, priority, startDate, dueDate, archived). startDate/dueDate are ISO dates that place the ticket on the planning spine, Gantt and calendar; pass null to UN-schedule. Reclassify with taskType, re-parent under an Epic with parentTaskId (null to detach), or (re)assign via exactly one of assignedUserId/assignedAgentRef/assignedAgentHostId (null unassigns). Omitted fields are left untouched. When a lane move or a (re)assignment could start work, the result carries `autoRun: { dispatched, reason, detail, agentRef, runNowCandidate? }` — the autonomy verdict. ALWAYS read it: `dispatched:false` means NO agent started, so report `detail` to the user instead of claiming work has begun.',
+    parameters: obj({ id: N, title: S, description: S, status: S, priority: S, startDate: { type: ['string', 'null'] }, dueDate: { type: ['string', 'null'] }, archived: B, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: { type: ['number', 'null'] }, assignedUserId: { type: ['string', 'null'] }, assignedAgentRef: { type: ['string', 'null'] }, assignedAgentHostId: { type: ['number', 'null'] } }, ['id']),
     run: async (ctx, a) => {
       // tenant-scope guard (service.updateTask doesn't check) + capture the prior
       // lane AND owner so the autonomous triggers fire only on a genuine lane change /
@@ -677,7 +679,9 @@ const CATALOG: BuiltinTool[] = [
         description: a.description != null ? str(a.description) : undefined,
         status: a.status != null ? str(a.status) : undefined,
         priority: a.priority != null ? (str(a.priority) as TaskPriority) : undefined,
-        dueDate: a.dueDate != null ? str(a.dueDate) : undefined,
+        // null is the authoritative UN-schedule (clears the column), undefined leaves it.
+        startDate: a.startDate !== undefined ? (a.startDate === null ? null : str(a.startDate)) : undefined,
+        dueDate: a.dueDate !== undefined ? (a.dueDate === null ? null : str(a.dueDate)) : undefined,
         archived: typeof a.archived === 'boolean' ? a.archived : undefined,
         taskType: a.taskType != null ? (str(a.taskType) as TaskType) : undefined,
         parentTaskId: a.parentTaskId !== undefined ? (a.parentTaskId === null ? null : num(a.parentTaskId)) : undefined,
@@ -2354,6 +2358,33 @@ const CATALOG: BuiltinTool[] = [
   // roster server-side: tenant members + the tenant's cloud agents (ide_agents), each with
   // its real ref. This is what stops an agent inventing a fake assignee ref — every ref it
   // hands to tasks.create/tasks.update comes from here.
+  // ── task precedence (the SEQUENCE half of a plan) ─────────────────────────
+  // `task_dependencies` (0121) has had a validating write path since it shipped, but
+  // no tool exposed it — so an agent could describe an order in prose and never record
+  // it, and the planning spine had a hierarchy with no sequence in it. These three
+  // close that: they replay the same REST routes a human's dependency editor uses, so
+  // the DAG/cycle/cross-project guards apply identically to an agent.
+  {
+    tool: 'tasks.dependencies', mutates: false,
+    description: 'List every precedence edge in a project as { dependencies:[{id,predecessorTaskId,successorTaskId,depType}] }. An edge means predecessor MUST FINISH before successor starts — this is what the planning spine and Gantt draw as sequence. Read it before adding edges so you do not duplicate one.',
+    parameters: obj({ projectId: N }, ['projectId']),
+    run: (ctx, a) => replayRoute(ctx, 'GET', `/api/tasks/dependencies?project=${num(a.projectId)}`),
+  },
+  {
+    tool: 'tasks.add_dependency', mutates: true,
+    description: 'Record that one ticket must finish before another can start: predecessorTaskId BLOCKS taskId. This is how a plan\'s ORDER becomes data — without an edge, "do B after A" exists only in prose and no surface can show or enforce it. Both tickets must be in the SAME project. Rejected (400) if it would create a cycle, so the graph stays a DAG. depType defaults to finish_to_start; the others mirror standard PM scheduling relations.',
+    parameters: obj({ taskId: N, predecessorTaskId: N, depType: { type: 'string', enum: [...DEP_TYPES] } }, ['taskId', 'predecessorTaskId']),
+    run: (ctx, a) => replayRoute(ctx, 'POST', `/api/tasks/${num(a.taskId)}/dependencies`, {
+      predecessorTaskId: num(a.predecessorTaskId),
+      ...(a.depType != null ? { depType: str(a.depType) } : {}),
+    }),
+  },
+  {
+    tool: 'tasks.remove_dependency', mutates: true,
+    description: 'Remove one precedence edge by its id (from tasks.dependencies). Use when the sequence was wrong or the work was re-planned — never to work around a cycle rejection, which means the intended order is contradictory.',
+    parameters: obj({ id: N }, ['id']),
+    run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/tasks/dependencies/${num(a.id)}`),
+  },
   {
     tool: 'tasks.assignees', mutates: false,
     description: 'List the FULL team a task can be assigned to — humans AND cloud agents in ONE roster. Returns { humans:[{ref,name}], agents:[{ref,name,role,builtinKind,status,scope,assignedToProject}] }. An agent "ref" is its ide_agents id: set it as `assignedAgentRef` on tasks.create/tasks.update to hand work to that agent (use a human ref as the task\'s assigneeId for a person). Pass projectId to mark which agents are staffed to that project (assignedToProject=true) and prefer those. NEVER invent an assignee/agent ref — only use refs returned by this tool.',
@@ -2753,6 +2784,9 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   'projects.list', 'projects.get', 'projects.create', 'projects.update', 'projects.check_key',
   // Tasks — read + write + move + assignees (no delete). "create other tasks for gaps".
   'tasks.list', 'tasks.get', 'tasks.create', 'tasks.update', 'tasks.move', 'tasks.assignees',
+  // Sequencing is half of planning — a PM agent that can date work but not order it
+  // can only ever produce a flat plan.
+  'tasks.dependencies', 'tasks.add_dependency', 'tasks.remove_dependency',
   // Workforce roster — the tenant's own cloud agents (any publish state), so an agent
   // handing work off knows the REAL agents that exist and their ids (never invents a ref).
   'cloud_agents.list_mine',

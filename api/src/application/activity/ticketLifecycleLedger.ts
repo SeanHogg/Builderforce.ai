@@ -49,7 +49,8 @@ import {
 } from '../../infrastructure/database/schema';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { ExecutionStatus, TaskStatus } from '../../domain/shared/types';
-import { AUTO_RUN_REASON_TEXT, type AutoRunReason } from '../swimlane/evaluateAutoRun';
+import { AUTO_RUN_REASON_TEXT, type AutoRunEvaluation, type AutoRunReason } from '../swimlane/evaluateAutoRun';
+import { normalizeErrorMessage } from '../quality/errorSpec';
 import { activityLogVersionKey } from './activityLog';
 
 // ── Wire vocabulary ─────────────────────────────────────────────────────────
@@ -101,6 +102,18 @@ export interface LifecycleEvent {
   executionId?: number | null;
   agentRef?: string | null;
   detail?: string | null;
+  /**
+   * `executions.submitted_by` — WHICH DISPATCHER started this run.
+   *
+   * The single most load-bearing field in a stall report, and the one the ledger
+   * used to drop. Every dispatch path stamps its own value (`system:lane-auto`,
+   * `system:auto-exec`, `system:coordinator`, `manager:signoff-request:…`,
+   * `…:lane-approver:<role>`, `user:<id>`), so it is the difference between "the
+   * lane trigger is retrying" and "some other subsystem is dispatching past the
+   * lane trigger's circuit breaker". Without it, a reader looking at 134 identical
+   * failures cannot tell WHO to go and stop.
+   */
+  dispatchedBy?: string | null;
   /** Which table this row came from — so the timeline reads as evidence. */
   source: LifecycleEventSource;
 }
@@ -263,6 +276,197 @@ function decisionKind(toolName: string): LifecycleEventKind {
   }
 }
 
+// ── Analysis blocks: the answer, not the raw rows ───────────────────────────
+//
+// WHY THESE EXIST. The ledger's first version emitted only `events` + `verdict`,
+// and a real stalled ticket produced 752 events of which 268 were byte-identical
+// run failures. Pasted anywhere with a size limit, the tail — the most RECENT
+// events, i.e. the current state — was the part that got cut. The reader was left
+// re-deriving, by hand, three facts the server already had: what the failures
+// actually were, who kept dispatching them, and what the gate says right now.
+//
+// So the ledger now ships those three as computed blocks. They are derived from
+// rows it ALREADY reads (no extra query), and each is a pure function over those
+// rows so the derivation is unit-tested rather than trusted.
+
+/** A run of executions that all failed the SAME way — the retry-storm rollup. */
+export interface LifecycleFailureGroup {
+  /**
+   * The grouping key: the error message with its volatile parts stripped by the
+   * shared {@link normalizeErrorMessage} (the Quality pillar's own fingerprint
+   * basis), so `(30/25 on the free plan)` and `(31/25 …)` are ONE cause, not two.
+   */
+  signature: string;
+  /** One verbatim message, so collapsing never loses the exact text. */
+  sample: string;
+  runs: number;
+  firstAt: string;
+  lastAt: string;
+  /** Newest-first, capped — enough to pull logs without listing 134 ids. */
+  exampleExecutionIds: number[];
+  /** Distinct `submitted_by` values that produced these failures. */
+  dispatchers: string[];
+  /**
+   * Median gap between consecutive failures in this group, ms — null for a single
+   * run. A tight, regular interval across many runs is the signature of an
+   * automated retry loop rather than a handful of unlucky attempts, which is a
+   * different bug with a different fix.
+   */
+  medianIntervalMs: number | null;
+}
+
+/** What one dispatcher did to this ticket. Names the subsystem to go and stop. */
+export interface LifecycleDispatcher {
+  /** `executions.submitted_by` verbatim. */
+  submittedBy: string;
+  runs: number;
+  completed: number;
+  failed: number;
+  firstAt: string;
+  lastAt: string;
+}
+
+/**
+ * The LIVE gate evaluation, folded into the ledger so "why is it stuck right now"
+ * arrives with its evidence attached instead of as a bare one-word reason.
+ *
+ * Every field is already computed by `evaluateTaskAutoRun` on the same request; the
+ * route used to keep `reason` and discard the rest, which is precisely why a report
+ * could say `human_gate` while giving the reader no way to see that the lane was
+ * ALSO unstaffed, or that the breaker streak was 60 runs deep.
+ */
+export interface LifecycleGateSnapshot {
+  canRunNow: boolean;
+  reason: AutoRunReason;
+  reasonText: string;
+  /** The lane's `gate` column — 'human' means a person must approve or Run now. */
+  laneGate: 'auto' | 'human' | null;
+  laneResolved: boolean;
+  isTerminalLane: boolean;
+  /** `tasks.assigned_agent_ref` — the ticket's owner agent. */
+  assignedAgentRef: string | null;
+  /** Agents staffed on the lane (before capability/role filtering). */
+  staffedAgentRefs: string[];
+  /** Who a manual "Run now" would dispatch as — null when nothing can run it. */
+  candidateAgentRef: string | null;
+  liveExecution: { id: number; status: string } | null;
+  capabilityMismatches: Array<{ agentRef: string; missing: string[] }>;
+  /** Trailing consecutive failed runs, and the threshold that halts autonomy. */
+  consecutiveFailures: number;
+  failureBreakerAt: number;
+  cooldownRemainingMs: number;
+}
+
+/** Cap on the execution ids listed per failure group — an id list is a pointer,
+ *  not the evidence, so a few beat all 134. */
+const MAX_GROUP_EXAMPLE_IDS = 5;
+
+/** One failed execution, as far as the rollup cares. */
+export interface FailedRunRow {
+  id: number;
+  errorMessage: string | null;
+  submittedBy: string | null;
+  at: string;
+}
+
+/** Median of a numeric list (even lengths take the lower-middle mean). Pure. */
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const s = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 === 1 ? (s[mid] as number) : Math.round((((s[mid - 1] as number) + (s[mid] as number)) / 2));
+}
+
+/**
+ * Group failed runs by CAUSE, newest cause first. PURE — unit-tested directly.
+ *
+ * The ordering is by run count (then recency) because the point of the block is to
+ * put the dominant failure first: on a stalled ticket one cause is usually
+ * responsible for nearly every run, and reading it should not require scanning.
+ */
+export function groupRunFailures(rows: readonly FailedRunRow[]): LifecycleFailureGroup[] {
+  const byCause = new Map<string, { rows: FailedRunRow[] }>();
+  for (const r of rows) {
+    // A failure with no message still groups — as the distinct cause "no message
+    // recorded", which is itself a finding (a run died without saying why).
+    const signature = r.errorMessage ? normalizeErrorMessage(r.errorMessage) : '(no error message recorded)';
+    const bucket = byCause.get(signature) ?? { rows: [] };
+    bucket.rows.push(r);
+    byCause.set(signature, bucket);
+  }
+
+  return [...byCause.entries()]
+    .map(([signature, { rows: group }]) => {
+      const ordered = [...group].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+      const times = ordered.map((r) => Date.parse(r.at)).filter((n) => Number.isFinite(n));
+      const gaps = times.slice(1).map((t, i) => t - (times[i] as number));
+      const newestFirst = [...ordered].reverse();
+      return {
+        signature,
+        sample: newestFirst.find((r) => !!r.errorMessage)?.errorMessage ?? signature,
+        runs: ordered.length,
+        firstAt: (ordered[0] as FailedRunRow).at,
+        lastAt: (newestFirst[0] as FailedRunRow).at,
+        exampleExecutionIds: newestFirst.slice(0, MAX_GROUP_EXAMPLE_IDS).map((r) => r.id),
+        dispatchers: [...new Set(ordered.flatMap((r) => (r.submittedBy ? [r.submittedBy] : [])))],
+        medianIntervalMs: median(gaps),
+      };
+    })
+    .sort((a, b) => b.runs - a.runs || (a.lastAt < b.lastAt ? 1 : -1));
+}
+
+/** One execution, as far as dispatcher attribution cares. */
+export interface DispatchedRunRow {
+  status: string;
+  submittedBy: string | null;
+  at: string;
+}
+
+/**
+ * Who dispatched this ticket's runs, busiest first. PURE.
+ *
+ * A ticket whose runs all carry ONE `submitted_by` that is not `system:lane-auto`
+ * is being driven by a path that never consulted the lane trigger — so the lane
+ * trigger's circuit breaker and cooldown never applied to it. That inference is
+ * the whole reason the column is surfaced.
+ */
+export function summarizeDispatchers(rows: readonly DispatchedRunRow[]): LifecycleDispatcher[] {
+  const by = new Map<string, LifecycleDispatcher>();
+  for (const r of rows) {
+    const submittedBy = r.submittedBy?.trim() || '(not recorded)';
+    const cur = by.get(submittedBy) ?? {
+      submittedBy, runs: 0, completed: 0, failed: 0, firstAt: r.at, lastAt: r.at,
+    };
+    cur.runs += 1;
+    if (r.status === ExecutionStatus.COMPLETED) cur.completed += 1;
+    if (r.status === ExecutionStatus.FAILED) cur.failed += 1;
+    if (r.at < cur.firstAt) cur.firstAt = r.at;
+    if (r.at > cur.lastAt) cur.lastAt = r.at;
+    by.set(submittedBy, cur);
+  }
+  return [...by.values()].sort((a, b) => b.runs - a.runs || a.submittedBy.localeCompare(b.submittedBy));
+}
+
+/** Project a live {@link AutoRunEvaluation} onto the wire snapshot. PURE. */
+export function toGateSnapshot(e: AutoRunEvaluation): LifecycleGateSnapshot {
+  return {
+    canRunNow: e.canRunNow,
+    reason: e.reason,
+    reasonText: AUTO_RUN_REASON_TEXT[e.reason] ?? e.reason,
+    laneGate: e.laneGate,
+    laneResolved: e.laneResolved,
+    isTerminalLane: e.isTerminalLane,
+    assignedAgentRef: e.assignedAgentRef,
+    staffedAgentRefs: e.staffedAgentRefs,
+    candidateAgentRef: e.candidate?.agentRef ?? null,
+    liveExecution: e.liveExecution,
+    capabilityMismatches: e.decision.capabilityMismatches ?? [],
+    consecutiveFailures: e.consecutiveFailures,
+    failureBreakerAt: e.failureBreakerAt,
+    cooldownRemainingMs: e.cooldownRemainingMs,
+  };
+}
+
 // ── Per-ticket ledger ───────────────────────────────────────────────────────
 
 export interface TicketLifecycle {
@@ -273,20 +477,31 @@ export interface TicketLifecycle {
   createdAt: string;
   events: LifecycleEvent[];
   verdict: TicketAutonomyVerdict;
+  /** Failed runs collapsed by cause, dominant cause first. */
+  failures: LifecycleFailureGroup[];
+  /** Which subsystem dispatched the runs, busiest first. */
+  dispatchers: LifecycleDispatcher[];
+  /** The live gate evaluation, when the caller supplied one. */
+  gate: LifecycleGateSnapshot | null;
 }
 
 /**
  * Build one ticket's full lifecycle ledger. Five bounded reads (no N+1), merged and
  * ordered by timestamp.
  *
- * `liveReason` lets the caller inject a fresh {@link evaluateTaskAutoRun} verdict so
- * the "why is it stuck RIGHT NOW" answer reflects current configuration rather than a
- * possibly-stale recorded skip. The route supplies it; a batch caller may omit it.
+ * `live` is a fresh `evaluateTaskAutoRun` result. It supplies BOTH the authoritative
+ * stall reason (a recorded skip may be stale — the lane may have been staffed since)
+ * and the {@link LifecycleGateSnapshot} that shows the reader the facts behind that
+ * reason. The route supplies it; a batch caller may omit it.
  */
 export async function buildTicketLifecycle(
   db: Db,
-  args: { tenantId: number; taskId: number; isTerminalLane?: boolean; liveReason?: AutoRunReason | null },
+  args: { tenantId: number; taskId: number; live?: AutoRunEvaluation | null },
 ): Promise<TicketLifecycle | null> {
+  // The live evaluation already resolved the lane and re-derived the gate, so it —
+  // not a second query — decides terminality, and 'will_run' is never a stall reason.
+  const gate = args.live ? toGateSnapshot(args.live) : null;
+  const liveReason = gate ? (gate.canRunNow ? null : gate.reason) : undefined;
   const [task] = await db
     .select({
       id: tasks.id,
@@ -336,6 +551,8 @@ export async function buildTicketLifecycle(
         id: executions.id,
         status: executions.status,
         cloudAgentRef: executions.cloudAgentRef,
+        // WHICH dispatcher started the run. Already on the row; never read until now.
+        submittedBy: executions.submittedBy,
         errorMessage: executions.errorMessage,
         createdAt: executions.createdAt,
         startedAt: executions.startedAt,
@@ -396,32 +613,42 @@ export async function buildTicketLifecycle(
     });
   }
 
-  // 3. Runs.
+  // 3. Runs — plus the two rollups that make a retry storm readable at a glance.
   let runsCompleted = 0;
   let runsFailed = 0;
   let hasLiveRun = false;
+  const failedRows: FailedRunRow[] = [];
+  const dispatchedRows: DispatchedRunRow[] = [];
   for (const r of execRows) {
     if (r.status === ExecutionStatus.COMPLETED) runsCompleted += 1;
     if (r.status === ExecutionStatus.FAILED) runsFailed += 1;
     if (LIVE_EXEC_STATUSES.has(r.status)) hasLiveRun = true;
+    const dispatchedAt = ((r.startedAt ?? r.createdAt) as Date).toISOString();
+    dispatchedRows.push({ status: r.status, submittedBy: r.submittedBy, at: dispatchedAt });
     events.push({
-      at: ((r.startedAt ?? r.createdAt) as Date).toISOString(),
+      at: dispatchedAt,
       kind: 'run_dispatched',
       actorKind: 'system',
       actorName: r.cloudAgentRef,
       executionId: Number(r.id),
       agentRef: r.cloudAgentRef,
+      dispatchedBy: r.submittedBy,
       detail: `Run #${r.id} (${r.status})`,
       source: 'executions',
     });
     if (r.completedAt && (r.status === ExecutionStatus.COMPLETED || r.status === ExecutionStatus.FAILED)) {
+      const endedAt = (r.completedAt as Date).toISOString();
+      if (r.status === ExecutionStatus.FAILED) {
+        failedRows.push({ id: Number(r.id), errorMessage: r.errorMessage, submittedBy: r.submittedBy, at: endedAt });
+      }
       events.push({
-        at: (r.completedAt as Date).toISOString(),
+        at: endedAt,
         kind: r.status === ExecutionStatus.COMPLETED ? 'run_completed' : 'run_failed',
         actorKind: 'system',
         actorName: r.cloudAgentRef,
         executionId: Number(r.id),
         agentRef: r.cloudAgentRef,
+        dispatchedBy: r.submittedBy,
         detail: r.status === ExecutionStatus.FAILED ? r.errorMessage : null,
         source: 'executions',
       });
@@ -457,7 +684,7 @@ export async function buildTicketLifecycle(
   const verdict = classifyTicketAutonomy({
     origin: classifyTicketOrigin(createdActorType, task.source),
     currentStatus: task.status,
-    isTerminal: args.isTerminalLane === true || task.completedAt != null,
+    isTerminal: gate?.isTerminalLane === true || task.completedAt != null,
     autonomousHops,
     humanHops,
     backwardHops,
@@ -466,7 +693,7 @@ export async function buildTicketLifecycle(
     runsFailed,
     hasLiveRun,
     lastSkipReason,
-    ...(args.liveReason !== undefined ? { liveReason: args.liveReason } : {}),
+    ...(liveReason !== undefined ? { liveReason } : {}),
   });
 
   return {
@@ -477,6 +704,9 @@ export async function buildTicketLifecycle(
     createdAt: (task.createdAt as Date).toISOString(),
     events,
     verdict,
+    failures: groupRunFailures(failedRows),
+    dispatchers: summarizeDispatchers(dispatchedRows),
+    gate,
   };
 }
 

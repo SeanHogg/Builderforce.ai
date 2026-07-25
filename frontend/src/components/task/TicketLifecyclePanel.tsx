@@ -13,6 +13,7 @@ import {
 import { taskStatusLabel } from '@/lib/taskStatus';
 import { CopyButton } from '@/components/CopyButton';
 import { buildLifecycleDiagnosticsReport } from '@/lib/lifecycleDiagnostics';
+import { formatDuration } from '@/lib/duration';
 import { APP_VERSION } from '@/lib/appVersions';
 
 /**
@@ -181,6 +182,43 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
   const verdict = data?.verdict ?? null;
   const banner = verdict ? verdictBanner(verdict) : null;
 
+  /**
+   * The EVIDENCE behind the stall reason, as `[label, value, alarming]` rows.
+   *
+   * Only facts that are actually informative are rendered: a lane with no staffing says
+   * so, a clean failure streak is omitted entirely rather than shown as a reassuring
+   * zero next to a gate that IS holding the ticket. The streak is flagged `alarming`
+   * once it has passed the server's own breaker threshold — that combination (a deep
+   * streak that autonomy should already have halted) is the signature of runs arriving
+   * from a dispatcher that never consulted the lane trigger.
+   */
+  const gateFacts = useMemo((): Array<[string, string, boolean]> => {
+    const g = data?.gate;
+    if (!g) return [];
+    const rows: Array<[string, string, boolean]> = [];
+    if (g.laneGate) rows.push([t('stall.laneGate'), t(`stall.gate.${g.laneGate}` as never), g.laneGate === 'human']);
+    rows.push([
+      t('stall.staffed'),
+      g.staffedAgentRefs.length > 0 ? g.staffedAgentRefs.join(', ') : t('stall.noneStaffed'),
+      g.staffedAgentRefs.length === 0,
+    ]);
+    rows.push([t('stall.candidate'), g.candidateAgentRef ?? t('stall.noCandidate'), !g.candidateAgentRef]);
+    if (g.consecutiveFailures > 0) {
+      rows.push([
+        t('stall.streak'),
+        t('stall.streakValue', { count: g.consecutiveFailures, limit: g.failureBreakerAt }),
+        g.consecutiveFailures >= g.failureBreakerAt,
+      ]);
+    }
+    if (g.cooldownRemainingMs > 0) {
+      rows.push([t('stall.cooldown'), formatDuration(g.cooldownRemainingMs), false]);
+    }
+    for (const m of g.capabilityMismatches) {
+      rows.push([t('stall.capabilityMismatch'), `${m.agentRef} — ${m.missing.join(', ')}`, true]);
+    }
+    return rows;
+  }, [data?.gate, t]);
+
   const tiles: Array<{ key: string; value: number; tone: Tone; hint?: string }> = verdict
     ? [
       { key: 'autonomousHops', value: verdict.autonomousHops, tone: 'agent', hint: t('stats.autonomousHopsHint') },
@@ -285,7 +323,10 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
               </div>
             )}
 
-            {/* The actionable "why is it sitting there" — the gate holding the ticket. */}
+            {/* The actionable "why is it sitting there" — the gate holding the ticket,
+                WITH the facts behind it. The reason alone ("human_gate") is not
+                actionable: the lane's gate setting, its staffing, who Run-now would
+                dispatch and how deep the failure streak is are what a fix changes. */}
             {verdict.stalled && (
               <div
                 style={{ ...cardStyle, background: tint('warn', 12), borderColor: tint('warn', 38) }}
@@ -297,7 +338,95 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                 <div style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>
                   {reasonLabel(verdict.stallReason) ?? verdict.stallText ?? t('stall.unrecorded')}
                 </div>
+                {gateFacts.length > 0 && (
+                  <dl style={{ margin: '10px 0 0', display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+                    {gateFacts.map(([label, value, alarming]) => (
+                      <div key={label} style={{ minWidth: 0 }}>
+                        <dt style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{label}</dt>
+                        <dd style={{
+                          margin: 0, fontSize: 12, fontWeight: 600, overflowWrap: 'anywhere',
+                          color: alarming ? TONE_COLOR.danger : 'var(--text-primary)',
+                        }}>
+                          {value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
               </div>
+            )}
+
+            {/* FAILURE ANALYSIS — the finding, not the rows it came from. A ticket with
+                one cause repeating on a fixed interval is a retry loop; showing 134
+                identical timeline entries hides that behind scrolling. */}
+            {data.failures.length > 0 && (
+              <section>
+                <h4 style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {t('failures.title')}
+                </h4>
+                <p style={{ margin: '0 0 8px', fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  {t('failures.help')}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {data.failures.map((f) => (
+                    <div key={f.signature} style={{ ...cardStyle, borderColor: tint('danger', 30), background: tint('danger', 8) }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: TONE_COLOR.danger }}>
+                          {t('failures.runs', { count: f.runs })}
+                        </span>
+                        <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>
+                          {f.medianIntervalMs == null
+                            ? t('failures.cadenceOnce')
+                            : t('failures.cadence', { interval: formatDuration(f.medianIntervalMs) })}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--text-primary)', marginTop: 5, overflowWrap: 'anywhere' }}>
+                        {f.sample}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, overflowWrap: 'anywhere' }}>
+                        {t('failures.window', { first: at(f.firstAt), last: at(f.lastAt) })}
+                        {f.dispatchers.length > 0 && ` · ${t('failures.dispatchedBy', { who: f.dispatchers.join(', ') })}`}
+                      </div>
+                      <div style={{ fontSize: 10.5, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: 3, overflowWrap: 'anywhere' }}>
+                        {t('failures.runIds', { ids: f.exampleExecutionIds.map((id) => `#${id}`).join(', ') })}
+                        {f.runs > f.exampleExecutionIds.length ? ' …' : ''}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* DISPATCHERS — which subsystem started the runs. Anything other than the
+                lane trigger reached the dispatcher without passing its circuit breaker,
+                so a storm here names the code to go and fix. */}
+            {data.dispatchers.length > 0 && (
+              <section>
+                <h4 style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {t('dispatchers.title')}
+                </h4>
+                <p style={{ margin: '0 0 8px', fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  {t('dispatchers.help')}
+                </p>
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {data.dispatchers.map((d) => (
+                    <li
+                      key={d.submittedBy}
+                      style={{
+                        ...cardStyle, padding: '8px 10px', display: 'flex', gap: 8,
+                        alignItems: 'baseline', flexWrap: 'wrap',
+                      }}
+                    >
+                      <span style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>
+                        {d.submittedBy}
+                      </span>
+                      <span style={{ marginLeft: 'auto', fontSize: 11.5, color: d.failed > 0 ? TONE_COLOR.danger : 'var(--text-secondary)' }}>
+                        {t('dispatchers.counts', { runs: d.runs, completed: d.completed, failed: d.failed })}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             )}
 
             {/* Provenance facts: who opened it, where it sits, when it started. */}
@@ -456,6 +585,21 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                                 maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                               }}>
                                 {e.agentRef}
+                              </span>
+                            )}
+                            {/* WHICH dispatcher started this run — on a stalled ticket
+                                this chip is usually the answer to "who keeps doing this". */}
+                            {e.dispatchedBy && (
+                              <span
+                                title={t('timeline.dispatchedBy', { who: e.dispatchedBy })}
+                                style={{
+                                  fontSize: 10, fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: 999,
+                                  color: 'var(--text-muted)', background: 'var(--bg-hover)',
+                                  border: '1px solid var(--border-subtle)',
+                                  maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                }}
+                              >
+                                ▶ {e.dispatchedBy}
                               </span>
                             )}
                           </div>

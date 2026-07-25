@@ -143,7 +143,8 @@ export default function UsagePanel() {
     if (!llmUsage) return;
     setUsageAiLoading(true);
     setUsageAiError('');
-    setUsageAiCopied(false);
+    // No copy-state reset here any more: the shared hook clears its own `copied` flag
+    // on a timer, so re-running the analysis no longer has to do it by hand.
     try {
       // Pull the real catalog so the AI can't invent model ids and we can
       // verify "already at position 0" claims. Each entry now carries `vendor`

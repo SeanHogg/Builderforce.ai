@@ -15,6 +15,7 @@ import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { QrCode } from './QrCode';
 import { fetchSite, type SiteInfo } from '@/lib/api';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 interface MobileDevicePanelProps {
   open: boolean;
@@ -28,7 +29,9 @@ export function MobileDevicePanel({ open, onClose, projectId, onGoToPublish }: M
   const t = useTranslations('ide');
   const [site, setSite] = useState<SiteInfo | null>(null);
   const [loading, setLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
+  // 2000ms confirmation (the hook's default); the hook also owns the reset timer that
+  // used to need its own effect below.
+  const { copied, copy } = useCopyToClipboard();
 
   // Re-read on each open so a publish made while the panel was closed shows up.
   useEffect(() => {
@@ -42,21 +45,12 @@ export function MobileDevicePanel({ open, onClose, projectId, onGoToPublish }: M
     return () => { cancelled = true; };
   }, [open, projectId]);
 
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(timer);
-  }, [copied]);
-
-  const copyUrl = useCallback(async () => {
+  const copyUrl = useCallback(() => {
     if (!site?.url) return;
-    try {
-      await navigator.clipboard.writeText(site.url);
-      setCopied(true);
-    } catch {
-      // Clipboard access can be denied; the URL is shown as text either way.
-    }
-  }, [site]);
+    // Clipboard access can be denied; the URL is shown as text either way, so a
+    // failure stays silent exactly as before.
+    void copy(site.url);
+  }, [site, copy]);
 
   return (
     <SlideOutPanel open={open} onClose={onClose} title={t('device.panelTitle')} width="min(420px, 96vw)">

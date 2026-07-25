@@ -110,6 +110,10 @@ function ManagerDefaultsInner() {
     autoAssign: stored?.autoAssign ?? null,
     autoBusinessValue: stored?.autoBusinessValue ?? null,
     autoPrioritize: stored?.autoPrioritize ?? null,
+    allowUnattendedCeremonies: stored?.allowUnattendedCeremonies ?? null,
+    allowAgentReassignment: stored?.allowAgentReassignment ?? null,
+    agentReassignIdleHours: stored?.agentReassignIdleHours ?? null,
+    agentReassignMaxPerSession: stored?.agentReassignMaxPerSession ?? null,
   };
 
   return (
@@ -128,6 +132,7 @@ function ManagerDefaultsInner() {
         tier="workspace"
         value={value}
         effective={data.policy}
+        inherited={data.builtinPolicy}
         disabled={saving || !allowed}
         onChange={(patch) => void save(patch)}
       />

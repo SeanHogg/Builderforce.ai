@@ -555,7 +555,8 @@
     "selectProject": "Sélectionnez un projet pour démarrer une cérémonie.",
     "viewLive": "Table ronde en direct",
     "viewSchedules": "Planifications",
-    "viewSwitchLabel": "Vue de cérémonie"
+    "viewSwitchLabel": "Vue de cérémonie",
+    "viewHistory": "Historique"
   },
   "projectCard": {
     "details": "Détails",
@@ -2888,7 +2889,24 @@
     "errUnhireFailed": "Échec de la résiliation",
     "errRemoveMember": "Échec de la suppression du membre",
     "errChangeRole": "Échec du changement de rôle",
-    "errRevokeInvite": "Échec de la révocation de l'invitation"
+    "errRevokeInvite": "Échec de la révocation de l'invitation",
+    "copiedExclaim": "Copié !",
+    "manifest": {
+      "assignedConfig": "Configuration attribuée",
+      "copyManifest": "Copier le manifeste",
+      "emptyNote": "Aucune compétence ni persona attribuée",
+      "noneAssigned": "Aucune attribution",
+      "personas": "Personas",
+      "skills": "Compétences",
+      "content": "Contenu"
+    },
+    "quickstart": {
+      "title": "Connecter un nouvel agent",
+      "intro": "Préconfiguré pour <b>{name}</b>. Exécutez ceci sur n’importe quelle machine — l’agent s’installe et s’enregistre directement dans ce groupe de travail.",
+      "osUnix": "macOS / Linux",
+      "osWindows": "Windows",
+      "noToken": "Aucun jeton d’espace de travail dans cette session — l’agent vous demandera de choisir un groupe de travail au premier lancement."
+    }
   },
   "knowledge": {
     "headingSops": "Procédures opératoires standard",
@@ -6751,9 +6769,37 @@
         "mergeGranted": "Peut fusionner les pull requests",
         "mergeWithheld": "Les fusions attendent une personne",
         "signoffRequired": "Validation requise pour terminer",
-        "signoffOptional": "Aucune validation requise"
+        "signoffOptional": "Aucune validation requise",
+        "ceremoniesUnattended": "Peut mener des cérémonies sans personne",
+        "ceremoniesNeedPeople": "Les cérémonies exigent une personne",
+        "reassignGranted": "Peut réattribuer après {hours} h d’inactivité",
+        "reassignWithheld": "Les absents gardent leur travail"
       },
-      "workspaceDefaultsHint": "Tout ce qui reste sur « Utiliser la valeur par défaut » suit les valeurs par défaut de votre espace de travail dans Paramètres → Manager IA."
+      "workspaceDefaultsHint": "Tout ce qui reste sur « Utiliser la valeur par défaut » suit les valeurs par défaut de votre espace de travail dans Paramètres → Manager IA.",
+      "ceremonies": {
+        "sectionTitle": "Cérémonies",
+        "sectionHelp": "Ce que le manager peut faire lorsqu’il mène une mêlée ou une planification sans les personnes concernées."
+      },
+      "allowUnattendedCeremonies": {
+        "label": "Mener des cérémonies sans personne",
+        "help": "Autorise le manager à mener une mêlée planifiée que personne n’a rejointe. Désactivé : la session est tout de même enregistrée, montrant que personne n’est venu, mais rien n’est décidé au nom de l’équipe."
+      },
+      "allowAgentReassignment": {
+        "label": "Confier le travail bloqué aux agents",
+        "help": "Autorise une cérémonie à confier à un agent le ticket d’une personne absente. L’absence ne suffit jamais à elle seule : le ticket doit aussi être resté intact pendant la durée ci-dessous."
+      },
+      "agentReassignIdleHours": {
+        "label": "Seulement après une inactivité de",
+        "help": "Durée pendant laquelle un ticket doit rester intact avant que le droit de son propriétaire absent ne s’éteigne. Assez longue pour qu’une absence normale ne l’atteigne jamais.",
+        "unit": "heures",
+        "inherited": "Valeur héritée utilisée : {value} heures"
+      },
+      "agentReassignMaxPerSession": {
+        "label": "Au maximum, par cérémonie",
+        "help": "Limite stricte du nombre de tickets qu’une seule cérémonie peut transférer, afin qu’une mêlée ne réattribue jamais discrètement tout un sprint.",
+        "unit": "tickets",
+        "inherited": "Valeur héritée utilisée : {value}"
+      }
     },
     "backlog": {
       "title": "Backlog classé",
@@ -7575,7 +7621,20 @@
     },
     "stall": {
       "title": "Pourquoi il reste bloqué",
-      "unrecorded": "Aucun verrou enregistré — rien n’a encore tenté d’exécuter ce ticket."
+      "unrecorded": "Aucun verrou enregistré — rien n’a encore tenté d’exécuter ce ticket.",
+      "laneGate": "Barrière du couloir",
+      "gate": {
+        "auto": "Automatique",
+        "human": "Approbation humaine requise"
+      },
+      "staffed": "Agents affectés au couloir",
+      "noneStaffed": "Aucun",
+      "candidate": "« Exécuter maintenant » lancerait",
+      "noCandidate": "Rien ne peut l’exécuter",
+      "streak": "Exécutions échouées consécutives",
+      "streakValue": "{count} (l’autonomie s’arrête à {limit})",
+      "cooldown": "Temps d’attente restant",
+      "capabilityMismatch": "Capacité manquante"
     },
     "stats": {
       "title": "Sauts et exécutions",
@@ -7596,7 +7655,8 @@
       "laneMove": "{from} → {to}",
       "laneEntered": "Entré en {to}",
       "backward": "Reprise",
-      "run": "Exécution n° {id}"
+      "run": "Exécution n° {id}",
+      "dispatchedBy": "Lancée par {who}"
     },
     "kind": {
       "created": "Créé",
@@ -7618,7 +7678,22 @@
       "aria": "Source : {label}"
     },
     "copyDiagnostics": "Copier le diagnostic",
-    "copyDiagnosticsAria": "Copier le diagnostic complet du cycle de vie de ce ticket, avec chaque évènement, identifiant d'exécution et motif de blocage"
+    "copyDiagnosticsAria": "Copier le diagnostic complet du cycle de vie de ce ticket, avec chaque évènement, identifiant d'exécution et motif de blocage",
+    "failures": {
+      "title": "Analyse des échecs",
+      "help": "Exécutions échouées regroupées par cause. Une même cause qui se répète à intervalle régulier est une boucle de reprise, pas une série d’échecs indépendants.",
+      "runs": "{count, plural, one {# exécution a échoué ainsi} other {# exécutions ont échoué ainsi}}",
+      "cadence": "toutes les ~{interval}",
+      "cadenceOnce": "s’est produit une fois",
+      "window": "Première {first} · dernière {last}",
+      "dispatchedBy": "lancée par {who}",
+      "runIds": "Exécutions : {ids}"
+    },
+    "dispatchers": {
+      "title": "Qui a lancé les exécutions",
+      "help": "Le sous-système qui a démarré chaque exécution. Tout ce qui n’est pas le déclencheur de couloir a atteint le répartiteur sans passer par son disjoncteur d’échecs consécutifs.",
+      "counts": "{runs} exécutions · {completed} réussies · {failed} en échec"
+    }
   },
   "taskChanges": {
     "allChanges": "Toutes les modifications",
@@ -9066,7 +9141,10 @@
     "errorCreateSprint": "Échec de la création du sprint",
     "errorStart": "Impossible de démarrer la session",
     "errorAdvance": "Impossible de passer au tour suivant",
-    "errorComplete": "Impossible de terminer la session"
+    "errorComplete": "Impossible de terminer la session",
+    "startSession": "Démarrer la mêlée",
+    "startSessionHint": "Démarrer la mêlée",
+    "startSessionFacilitatorOnly": "Seul l’animateur peut la démarrer"
   },
   "meetings": {
     "title": "Réunions",
@@ -11052,5 +11130,108 @@
       "talent": "Talents et marketplace",
       "governance": "Sécurité, architecture et gouvernance"
     }
+  },
+  "ceremonyHistory": {
+    "loading": "Chargement…",
+    "errorLoad": "Impossible de charger l’historique des cérémonies.",
+    "filterAll": "Toutes",
+    "filterStandup": "Mêlées",
+    "filterPlanning": "Planification",
+    "count": "{count} enregistrées",
+    "emptyTitle": "Aucune cérémonie n’a encore eu lieu",
+    "emptyHelp": "Dès qu’une mêlée ou une session de planification se termine, elle apparaît ici avec les présents et ce qui a changé.",
+    "loadMore": "Charger les précédentes",
+    "durationMinutes": "{minutes} min",
+    "attended": "{present} sur {expected} présents",
+    "missed": "{count} absents",
+    "reassigned": "{count} réattribuées",
+    "dispatched": "{count} exécutions d’agent lancées",
+    "detailTitle": "{kind} · {when}",
+    "whoWasHere": "Qui était présent",
+    "whatHappened": "Ce qui s’est passé",
+    "noParticipants": "Personne n’était installé à cette cérémonie.",
+    "noJournal": "Rien n’a été enregistré pour cette cérémonie.",
+    "seatHuman": "Personne",
+    "seatAgent": "Agent",
+    "seatAdHoc": "venu spontanément",
+    "spoke": "a parlé {seconds} s",
+    "kind": {
+      "standup": "Mêlée",
+      "planning": "Planification"
+    },
+    "closeReason": {
+      "facilitator": "Clôturée par une personne",
+      "unattended": "Menée par le manager",
+      "no_humans": "Personne n’est venu",
+      "expired": "Expirée"
+    },
+    "concludedBy": {
+      "manager": "Menée par le manager",
+      "system": "Clôturée automatiquement"
+    },
+    "attendance": {
+      "unknown": "Inconnu",
+      "present": "Présent",
+      "absent": "Absent",
+      "excused": "Facultatif"
+    }
+  },
+  "observability": {
+    "agents": "Agents",
+    "agentsHint": "Cliquez sur un agent pour afficher ses diagnostics. Sélectionnez-en plusieurs pour comparer.",
+    "selectAll": "Tout sélectionner",
+    "clear": "Effacer",
+    "loadingAgents": "Chargement des agents…",
+    "agentFallback": "Agent",
+    "agentNumbered": "Agent {id}",
+    "cloudAgentFallback": "Agent cloud",
+    "scopedFromPanel": "{name} (limité depuis le panneau)",
+    "noAgents": "Aucun agent pour le moment. Enregistrez un agent auto-hébergé dans <link>Effectif</link> ou créez un agent cloud — les deux apparaîtront ici dès leur première exécution.",
+    "online": "EN LIGNE",
+    "offline": "HORS LIGNE",
+    "viewLabel": "Vue :",
+    "logView": "Vue journaux",
+    "timelineView": "Vue chronologie",
+    "conn": {
+      "connecting": "connexion",
+      "connected": "connecté",
+      "offline": "hors ligne",
+      "disconnected": "déconnecté"
+    },
+    "refreshing": "Actualisation…",
+    "refreshCloud": "Actualiser le cloud",
+    "autoScroll": "Défilement automatique",
+    "copyTriage": "Copier les infos de triage",
+    "copyReport": "Copier le rapport (+diffs)",
+    "copyTriageTitle": "Copier dans le presse-papiers un rapport de triage complet (agents, télémétrie, erreurs, journaux)",
+    "copyReportTitle": "Copier dans le presse-papiers un rapport complet — supports/PRD, les modifications de code (diffs), la télémétrie, les erreurs et les journaux",
+    "cloudNote": "Les agents cloud s’exécutent côté serveur via la passerelle (pas de flux relais en direct) ; leurs lignes de journal sont dérivées de la télémétrie d’exécution. Utilisez « Actualiser le cloud » pour obtenir les données les plus récentes.",
+    "registerThenSelect": "Enregistrez ou créez d’abord un agent, puis sélectionnez-le ci-dessus.",
+    "selectForLogs": "Sélectionnez un ou plusieurs agents ci-dessus pour afficher les diagnostics.",
+    "waitingForLogs": "En attente de sortie de journal…",
+    "timeline": "Chronologie",
+    "categoryFilterPlaceholder": "Filtre de catégorie (ex. llm, thinking)",
+    "refresh": "Actualiser",
+    "viewGantt": "Gantt",
+    "viewList": "Liste",
+    "loadingTimeline": "Chargement de la chronologie…",
+    "noTimelineEvents": "Aucun événement dans la chronologie",
+    "noTimelineHint": "Les événements d’audit d’appels d’outils et les tâches de workflow apparaîtront ici dès que les agents s’exécuteront.",
+    "registerFirst": "Enregistrez ou créez d’abord un agent.",
+    "goToWorkforce": "Aller à Effectif →",
+    "selectForTimeline": "Sélectionnez un ou plusieurs agents ci-dessus pour afficher la chronologie d’exécution.",
+    "errLoadAgents": "Échec du chargement des agents",
+    "errLoadDiagnostics": "Échec du chargement des diagnostics"
+  },
+  "embedInstall": {
+    "heading": "Installer dans votre application hôte",
+    "intro": "Un développeur de l’application hôte installe le paquet et affiche un composant par page, en transmettant votre JWT SSO/locataire signé. Le jeton est remis à l’iframe via <code>postMessage</code> — jamais dans une URL.",
+    "stepInstall": "1 · Installer",
+    "stepMount": "2 · Monter une surface",
+    "mountableViews": "Vues montables ({count})",
+    "noCapabilities": "Aucune capacité activée — activez Produit / Agile / Sécurité ci-dessus pour exposer des vues.",
+    "copyInstall": "Copier l’installation",
+    "copySnippet": "Copier l’extrait",
+    "copiedFlash": "✓ Copié"
   }
 }

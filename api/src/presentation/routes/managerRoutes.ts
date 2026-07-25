@@ -29,6 +29,7 @@ import {
 } from '../../application/manager/ManagerService';
 import {
   normalizePrMergePolicy, resolveTenantManagerDefaults, DEFAULT_MANAGER_POLICY,
+  AGENT_REASSIGN_IDLE_HOURS_RANGE, AGENT_REASSIGN_MAX_PER_SESSION_RANGE,
 } from '../../application/manager/managerPolicy';
 import { resolveManagerTypesForTenant, normalizeManagerType } from '../../application/manager/managerTypes';
 import {
@@ -76,6 +77,20 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     return typeof v === 'boolean' ? v : undefined;
   }
 
+  /**
+   * A TRI-STATE numeric body field (0365). Same three-way contract as
+   * {@link triStateBool}, plus a range clamp — an out-of-range or non-numeric value is
+   * IGNORED rather than clamped, because silently rewriting "reassign after 0 hours" to
+   * the minimum would grant more autonomy than the operator typed.
+   */
+  function triStateNumber(v: unknown, range: { min: number; max: number }): number | null | undefined {
+    if (v === undefined) return undefined;
+    if (v === null) return null;
+    if (typeof v !== 'number' || !Number.isFinite(v)) return undefined;
+    const n = Math.round(v);
+    return n >= range.min && n <= range.max ? n : undefined;
+  }
+
   type DefaultsBody = {
     enabled?: boolean | null;
     prMergePolicy?: string | null;
@@ -84,6 +99,10 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     autoPrioritize?: boolean | null;
     requireSignoffToComplete?: boolean | null;
     allowAutoMerge?: boolean | null;
+    allowUnattendedCeremonies?: boolean | null;
+    allowAgentReassignment?: boolean | null;
+    agentReassignIdleHours?: number | null;
+    agentReassignMaxPerSession?: number | null;
   };
 
   /**
@@ -121,11 +140,16 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     const bools = [
       'enabled', 'autoAssign', 'autoBusinessValue', 'autoPrioritize',
       'requireSignoffToComplete', 'allowAutoMerge',
+      'allowUnattendedCeremonies', 'allowAgentReassignment',
     ] as const;
     for (const key of bools) {
       const v = triStateBool(body[key]);
       if (v !== undefined) patch[key] = v;
     }
+    const idle = triStateNumber(body.agentReassignIdleHours, AGENT_REASSIGN_IDLE_HOURS_RANGE);
+    if (idle !== undefined) patch.agentReassignIdleHours = idle;
+    const cap = triStateNumber(body.agentReassignMaxPerSession, AGENT_REASSIGN_MAX_PER_SESSION_RANGE);
+    if (cap !== undefined) patch.agentReassignMaxPerSession = cap;
     if (body.prMergePolicy !== undefined) {
       patch.prMergePolicy = body.prMergePolicy === null || body.prMergePolicy === ''
         ? null
@@ -283,6 +307,11 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       /** Tri-state (0363): true/false = an explicit project decision, null = inherit the
        *  workspace default, absent = leave whatever is stored alone. */
       allowAutoMerge?: boolean | null;
+      /** Ceremony autonomy (0365) — all tri-state, for the same reason. */
+      allowUnattendedCeremonies?: boolean | null;
+      allowAgentReassignment?: boolean | null;
+      agentReassignIdleHours?: number | null;
+      agentReassignMaxPerSession?: number | null;
     };
     const body = (await c.req.json<ConfigBody>().catch(() => ({} as ConfigBody)));
 
@@ -302,6 +331,15 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       // NOT coerced with `!!` — null must survive as "inherit the workspace tier", which
       // `!!null === false` would silently turn into "this project refuses merge authority".
       ...(triStateBool(body.allowAutoMerge) !== undefined ? { allowAutoMerge: triStateBool(body.allowAutoMerge) } : {}),
+      // Ceremony autonomy (0365) — tri-state for the same reason as allowAutoMerge.
+      ...(triStateBool(body.allowUnattendedCeremonies) !== undefined
+        ? { allowUnattendedCeremonies: triStateBool(body.allowUnattendedCeremonies) } : {}),
+      ...(triStateBool(body.allowAgentReassignment) !== undefined
+        ? { allowAgentReassignment: triStateBool(body.allowAgentReassignment) } : {}),
+      ...(triStateNumber(body.agentReassignIdleHours, AGENT_REASSIGN_IDLE_HOURS_RANGE) !== undefined
+        ? { agentReassignIdleHours: triStateNumber(body.agentReassignIdleHours, AGENT_REASSIGN_IDLE_HOURS_RANGE) } : {}),
+      ...(triStateNumber(body.agentReassignMaxPerSession, AGENT_REASSIGN_MAX_PER_SESSION_RANGE) !== undefined
+        ? { agentReassignMaxPerSession: triStateNumber(body.agentReassignMaxPerSession, AGENT_REASSIGN_MAX_PER_SESSION_RANGE) } : {}),
     });
 
     // A manager is a team member: keep its roster role in lock-step with its type.
@@ -354,7 +392,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
           taskId: runTaskId,
           ok,
           summary: summary ?? {
-            projectId, skipped: !ok, scored: 0, ranked: 0, assigned: 0,
+            projectId, skipped: !ok, scored: 0, ranked: 0, scheduled: 0, assigned: 0,
             prsConducted: 0, prsMerged: 0, dispatched: 0, audited: 0, flagged: 0, remediated: 0, remediationDeferred: 0,
           },
         });

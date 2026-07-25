@@ -105,15 +105,18 @@ describe('TicketParticipantsService.syncStates — ledger → manifest matching'
   });
 
   it('does not apply one role\'s lane-less verdict to a DIFFERENT role', async () => {
-    // The fallback widens lane scope, never role scope: it is still an assertion about
-    // one role, and a security approval must never satisfy the reviewer's slot.
+    // The fallback widens LANE scope, never ROLE scope: it is still an assertion about one
+    // role, so a Code Reviewer's approval must never satisfy the Security slot. Two slots,
+    // one verdict ⇒ exactly one write, and it is the reviewer's.
     const { db, updates } = makeDb(
-      [laneAgentSlot({ roleKey: 'security', state: 'in_progress' })],
+      [
+        laneAgentSlot({ id: 'p1', roleKey: 'code-reviewer', state: 'in_progress' }),
+        laneAgentSlot({ id: 'p2', roleKey: 'security', state: 'assigned' }),
+      ],
       [signoff({ laneKey: null, roleKey: 'code-reviewer' })],
     );
     await new TicketParticipantsService(db).syncStates(env, 1, 42);
-    // No verdict for `security`, so the slot falls back to its assignee-derived state.
-    expect(updates).toEqual([expect.objectContaining({ state: 'assigned' })]);
+    expect(updates).toEqual([expect.objectContaining({ state: 'completed', signoffId: 's1' })]);
   });
 
   it('records a waiver as `waived` rather than `completed`, keeping it auditable', async () => {

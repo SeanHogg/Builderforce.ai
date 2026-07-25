@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { MermaidDiagram } from './MermaidDiagram';
 import { downloadText } from '@/lib/download';
+import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 
 /** Fences whose content is a file the user will want to keep, → its extension. */
 const SAVEABLE_FENCE: Record<string, { ext: string; mime: string }> = {
@@ -73,9 +74,10 @@ export function ChatMessageContent({
                 {lang || 'text'}
               </span>
               <div style={{ display: 'flex', gap: 6 }}>
+                {/* Fire-and-forget as before — this fence header has no confirmation state. */}
                 <button
                   type="button"
-                  onClick={() => navigator.clipboard?.writeText(code)}
+                  onClick={() => { void copyTextToClipboard(code); }}
                   style={{ fontSize: '0.68rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 4 }}
                 >
                   {t('copy')}

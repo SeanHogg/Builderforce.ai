@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Select } from '@/components/Select';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -578,7 +579,9 @@ function MonitorPanel({
   const [events, setEvents] = useState<MonitorEvent[]>([]);
   const [signalUrl, setSignalUrl] = useState<string | null>(null);
   const [currentIncidentId, setCurrentIncidentId] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  // Signal-URL copy: the write, the 1500ms confirmation and its unmount-safe reset
+  // all live in the shared hook.
+  const { copied, copy } = useCopyToClipboard(1500);
   const [policies, setPolicies] = useState<EscalationPolicy[]>([]);
 
   // form fields
@@ -725,13 +728,11 @@ function MonitorPanel({
     }
   };
 
+  // A refused clipboard stays silent here as before: the hook's `error` state is not
+  // surfaced, so the button simply never flips to "Copied" and the URL is still visible.
   const copySignalUrl = async () => {
     if (!signalUrl) return;
-    try {
-      await navigator.clipboard.writeText(signalUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch { /* clipboard unavailable */ }
+    await copy(signalUrl);
   };
 
   const showSignalUrl = signalUrl && (monitorType === 'webhook' || monitorType === 'heartbeat');

@@ -16,6 +16,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 type Lang = 'curl' | 'python' | 'javascript';
 const LANGS: Lang[] = ['curl', 'python', 'javascript'];
@@ -94,13 +95,10 @@ console.log(await r.json());`;
 
 function CodeBlock({ code, label }: { code: string; label: string }) {
   const t = useTranslations('modelApiSamples');
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    void navigator.clipboard?.writeText(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    });
-  };
+  // 1600ms confirmation, owned by the shared hook. Was a bare `.then()` with no
+  // `.catch()`, so a denied clipboard became an unhandled rejection.
+  const { copied, copy: copyCode } = useCopyToClipboard(1600);
+  const copy = () => { void copyCode(code); };
   return (
     <div style={{ position: 'relative', marginTop: 10 }}>
       <button

@@ -17,6 +17,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { AUTH_API_URL } from '@/lib/auth';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { feedbackApi, type FeedbackCollector, type CreateFeedbackCollectorResult } from '@/lib/feedbackApi';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 const ingestBase = `${AUTH_API_URL}/api/feedback-ingest`;
 
@@ -253,11 +254,10 @@ function CreatedKeyPanel({ created, onDismiss }: { created: CreateFeedbackCollec
 
 function CopyBlock({ label, value }: { label: string; value: string }) {
   const t = useTranslations('feedback');
-  const [copied, setCopied] = useState(false);
-  const copy = () => navigator.clipboard?.writeText(value).then(() => {
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  });
+  // 1500ms confirmation, owned by the shared hook. Was a bare `.then()` with no
+  // `.catch()`, so a denied clipboard became an unhandled rejection.
+  const { copied, copy: copyValue } = useCopyToClipboard(1500);
+  const copy = () => { void copyValue(value); };
   return (
     <div style={{ marginTop: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, gap: 8 }}>
