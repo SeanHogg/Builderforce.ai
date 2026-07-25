@@ -27,12 +27,17 @@ interface Props {
 const REASON_TONE: Record<AutoRunReason, 'ok' | 'warn' | 'muted' | 'info'> = {
   will_run: 'ok',
   already_running: 'info',
+  // Transient and self-clearing (the next lane entry is a different lane), so it
+  // reads like the other "in motion" states rather than as a problem.
+  same_lane_reentry: 'info',
   human_gate: 'warn',
   capability_mismatch: 'warn',
   run_cap_exhausted: 'warn',
   // A billing stop, not backpressure: it will not clear by waiting or by clicking
   // Run now, so it reads as a warning that needs a decision — never as 'info'.
   cloud_run_limit: 'warn',
+  // Same class of stop, and it holds the WHOLE workspace rather than this ticket.
+  tenant_token_limit: 'warn',
   cooldown_active: 'info',
   no_agent: 'muted',
   no_board: 'muted',
@@ -40,6 +45,7 @@ const REASON_TONE: Record<AutoRunReason, 'ok' | 'warn' | 'muted' | 'info'> = {
   terminal_lane: 'muted',
   not_executable: 'muted',
   pending_approval: 'warn',
+  lane_requirement_gate: 'warn',
 };
 
 const TONE_COLOR: Record<'ok' | 'warn' | 'muted' | 'info', string> = {

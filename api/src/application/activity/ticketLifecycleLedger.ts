@@ -51,7 +51,7 @@ import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/read
 import { ExecutionStatus, TaskStatus } from '../../domain/shared/types';
 import {
   autoRunReasonEvaluationText, EVALUATED_AUTO_RUN_REASONS,
-  type AutoRunEvaluation, type AutoRunReason,
+  type AutoRunEvaluation, type AutoRunReason, type TenantTokenVerdict,
 } from '../swimlane/evaluateAutoRun';
 import { normalizeErrorMessage } from '../quality/errorSpec';
 import { activityLogVersionKey } from './activityLog';
@@ -117,6 +117,24 @@ export interface LifecycleEvent {
    * failures cannot tell WHO to go and stop.
    */
   dispatchedBy?: string | null;
+  /**
+   * How long a run WAITED between being created and actually starting, ms — set on
+   * `run_dispatched` only, and only when the wait is non-trivial.
+   *
+   * A queued run is not an idle ticket: it holds the live-run idempotency guard, so
+   * every autonomy tick against that ticket correctly refuses with `already_running`
+   * and the ticket does not move. Measured on task 683 — two windows of 4h and 23h
+   * where the only rows written were `already_running` skips, while the run holding
+   * the ticket had been created and not yet started.
+   *
+   * That was unreadable before, because the timeline dated each run by
+   * `startedAt ?? createdAt`: a run created at 04:40 and started 23 hours later
+   * rendered as a 13-second run the following day, with its entire queue wait
+   * silently removed from the ticket's history. Dating by `createdAt` and reporting
+   * the wait explicitly turns "an inexplicable day of skips" into "this run sat in
+   * the queue for a day".
+   */
+  queuedMs?: number | null;
   /** Which table this row came from — so the timeline reads as evidence. */
   source: LifecycleEventSource;
 }
@@ -402,11 +420,28 @@ export interface LifecycleGateSnapshot {
   consecutiveFailures: number;
   failureBreakerAt: number;
   cooldownRemainingMs: number;
+  /**
+   * The WORKSPACE token verdict — the gate that pauses every ticket a tenant owns.
+   *
+   * Null means the evaluator never got to it (an earlier gate decided), not that the
+   * workspace has budget. This is the block that leaves NO trace on the ticket: the
+   * autonomous sweep skips a token-blocked tenant above the trigger, so the chain of
+   * custody simply stops, and every other field here keeps saying the ticket is ready.
+   */
+  tenantTokens: TenantTokenVerdict | null;
 }
 
 /** Cap on the execution ids listed per failure group — an id list is a pointer,
  *  not the evidence, so a few beat all 134. */
 const MAX_GROUP_EXAMPLE_IDS = 5;
+
+/**
+ * Below this, the gap between a run being created and starting is ordinary dispatch
+ * latency and reporting it would be noise. Above it, the run spent real time queued
+ * while holding the ticket's live-run guard — which is a finding, because for that
+ * whole window autonomy was correctly refusing to start anything else.
+ */
+export const QUEUE_WAIT_REPORTING_FLOOR_MS = 60_000;
 
 /** One failed execution, as far as the rollup cares. */
 export interface FailedRunRow {
@@ -513,6 +548,7 @@ export function toGateSnapshot(e: AutoRunEvaluation): LifecycleGateSnapshot {
     consecutiveFailures: e.consecutiveFailures,
     failureBreakerAt: e.failureBreakerAt,
     cooldownRemainingMs: e.cooldownRemainingMs,
+    tenantTokens: e.tenantTokens,
   };
 }
 
@@ -679,7 +715,11 @@ export async function buildTicketLifecycle(
     if (r.status === ExecutionStatus.COMPLETED) runsCompleted += 1;
     if (r.status === ExecutionStatus.FAILED) runsFailed += 1;
     if (LIVE_EXEC_STATUSES.has(r.status)) hasLiveRun = true;
-    const dispatchedAt = ((r.startedAt ?? r.createdAt) as Date).toISOString();
+    // DISPATCH TIME IS `created_at`, never `started_at` — see `queuedMs` on
+    // {@link LifecycleEvent} for the day of history the old fallback erased.
+    const createdAt = r.createdAt as Date;
+    const dispatchedAt = createdAt.toISOString();
+    const queuedMs = r.startedAt ? Math.max(0, (r.startedAt as Date).getTime() - createdAt.getTime()) : null;
     dispatchedRows.push({ status: r.status, submittedBy: r.submittedBy, at: dispatchedAt });
     events.push({
       at: dispatchedAt,
@@ -690,6 +730,7 @@ export async function buildTicketLifecycle(
       agentRef: r.cloudAgentRef,
       dispatchedBy: r.submittedBy,
       detail: `Run #${r.id} (${r.status})`,
+      ...(queuedMs != null && queuedMs >= QUEUE_WAIT_REPORTING_FLOOR_MS ? { queuedMs } : {}),
       source: 'executions',
     });
     if (r.completedAt && (r.status === ExecutionStatus.COMPLETED || r.status === ExecutionStatus.FAILED)) {

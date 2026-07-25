@@ -112,6 +112,9 @@ export type { BrainRunRequest, BrainRunSnapshot } from './brainRunStore';
 // Execution triage — capture the Brain run (LLM/tool/error trace) as a report.
 export {
   buildBrainTriageReport,
+  detectUnbackedWriteClaim,
+  detectUnbackedTicketClaim,
+  detectAnnouncedButUnmadeToolCall,
   isFailedToolResult,
   isEvermindModel,
   modelsUsedInTrace,
@@ -131,6 +134,10 @@ export type { BrainTraceEvent, BuildBrainTriageOptions, BrainDiagnostics, ByoUnr
 // in-memory trace no longer holds.
 export { stepSig, parseStepMessage, traceWithPersistedSteps } from './persistedSteps';
 export type { PersistedStep } from './persistedSteps';
+
+// Deployed API version (session-cached) — the "which build produced this capture?"
+// half of the diagnostics version stamp. Each surface supplies its own /health read.
+export { fetchApiVersionVia } from './apiVersion';
 
 // Chat ⇄ work linking — the directive that ties identified work / code changes to
 // the current chat, plus the predicates behind the "a code change is always tied to

@@ -15,6 +15,8 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { boards, swimlanes, swimlaneAgentAssignments, swimlaneRequirements, tasks, ticketParticipants } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
+import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';
 import { resolveArtifacts } from '../artifact/resolveArtifacts';
 import { isAgentRefRoleCapable } from '../kanban/roleCapability';
 import { isParticipantOpen } from '../kanban/participantStates';
@@ -46,9 +48,11 @@ export type AutoRunReason =
   | 'human_gate'          // the lane gate is 'human' — waits for explicit approval / Run now
   | 'no_agent'            // no lane-staffed agent AND no owner agent — nothing to run as
   | 'capability_mismatch' // every candidate agent lacks the lane's required capabilities
-  | 'already_running'     // a live run already exists (or a same-lane re-entry loop guard)
+  | 'already_running'     // a live (pending/submitted/running/paused) run already exists on the ticket
+  | 'same_lane_reentry'   // the run that just finished already SERVED this lane — the loop guard suppressed an immediate re-dispatch into it
   | 'run_cap_exhausted'   // the ticket's last N consecutive runs all FAILED — autonomy stops re-dispatching (a human Run-now still overrides)
   | 'cloud_run_limit'     // the TENANT is over its monthly cloud-run allowance — NOT retryable, and a human Run-now does not override it either
+  | 'tenant_token_limit'  // the WORKSPACE is out of token budget — pauses EVERY ticket it owns, not just this one
   | 'cooldown_active'     // the ticket's last run failed too recently — backing off before the next autonomous attempt (a human Run-now still overrides)
   | 'not_executable'      // a system/coordination chore (e.g. an AI Manager run task) — never dispatched to an agent
   | 'pending_approval'    // an EXTERNAL feedback request — a human must accept it in triage before any agent may touch it
@@ -74,8 +78,10 @@ export const AUTO_RUN_REASON_TEXT: Record<AutoRunReason, string> = {
   no_agent: 'No run: the lane has no staffed agent and the ticket owner is not eligible to execute this stage. Staff the lane, or dispatch explicitly with Run now.',
   capability_mismatch: 'No run: every candidate agent lacks the capabilities this lane requires.',
   already_running: 'No new run: this ticket already has a live execution.',
+  same_lane_reentry: 'No new run: the run that just finished already served this lane, so the loop guard suppressed an immediate re-dispatch into the same lane. Nothing is executing right now.',
   run_cap_exhausted: 'No run: the ticket\'s last consecutive runs all failed, so autonomy has stopped re-dispatching it. A human Run now overrides.',
   cloud_run_limit: 'No run: this workspace has used its monthly cloud-run allowance. Retrying will NOT clear this — upgrade the plan, or wait for the allowance to reset. On-prem and VS Code runs stay unlimited.',
+  tenant_token_limit: 'No run: this workspace has used its token allowance, so autonomy is paused for EVERY ticket it owns — not just this one. It resumes on its own when the allowance resets, or immediately on an upgrade.',
   cooldown_active: 'No run yet: the ticket is in its post-failure back-off window before the next autonomous attempt.',
   not_executable: 'No run: this is a system/coordination chore, never dispatched to an agent.',
   pending_approval: 'No run: this is an external feedback request awaiting human acceptance in triage.',
@@ -100,8 +106,8 @@ export const AUTO_RUN_REASON_TEXT: Record<AutoRunReason, string> = {
  */
 export const EVALUATED_AUTO_RUN_REASONS: ReadonlySet<AutoRunReason> = new Set<AutoRunReason>([
   'will_run', 'no_board', 'no_lane', 'terminal_lane', 'human_gate', 'no_agent',
-  'capability_mismatch', 'already_running', 'run_cap_exhausted', 'cooldown_active',
-  'not_executable', 'pending_approval',
+  'capability_mismatch', 'already_running', 'same_lane_reentry', 'run_cap_exhausted',
+  'cooldown_active', 'not_executable', 'pending_approval', 'tenant_token_limit',
 ]);
 
 /**
@@ -309,6 +315,21 @@ async function manifestProducerRef(db: Db, tenantId: number, taskId: number, sta
 }
 
 export interface AutoRunEvaluation {
+  /**
+   * The lane this verdict is ABOUT — read live from `tasks.status`, not the
+   * `args.status` the caller supplied.
+   *
+   * Callers hand in a status they read at some earlier point: the autonomous sweep
+   * snapshots hundreds of rows and then dispatches them one at a time, so by the
+   * time a ticket is evaluated it may have moved. Trusting that snapshot evaluated
+   * the WRONG LANE'S gate — measured on task 683, whose completed runs advanced it
+   * into a human-gated `in_review` while the sweep, still holding `in_progress`,
+   * evaluated the auto-gated Implementation lane, dispatched through the human gate,
+   * and dragged the ticket BACK to `in_progress` (8 backward hops, 17 autonomous, 0
+   * human — a review loop that could never converge). Re-reading the row costs
+   * nothing (the same query already loads the owner + source) and makes the human
+   * gate unbypassable by a stale snapshot.
+   */
   status: string;
   /** The ticket's owner agent (tasks.assigned_agent_ref), if any. */
   assignedAgentRef: string | null;
@@ -348,6 +369,30 @@ export interface AutoRunEvaluation {
   /** {@link MAX_CONSECUTIVE_AUTORUN_FAILURES} — shipped so a reader can compare the
    *  streak to the threshold without knowing (or duplicating) the server constant. */
   failureBreakerAt: number;
+  /**
+   * The WORKSPACE-level token verdict, when it was resolved — see
+   * {@link resolveTenantTokenGate} for why it is resolved lazily.
+   *
+   * Null means "not consulted" (some earlier gate already decided), NOT "fine".
+   * Present-and-exhausted is the fact that explains a ticket sitting idle for days
+   * with an open lane gate and a qualified agent: the autonomous sweep skips a
+   * token-blocked tenant WHOLESALE, above the trigger, so not one per-ticket skip
+   * row is ever written and the ticket's chain of custody shows an unbroken gap.
+   * Reporting it here is what turns that silence into an answer.
+   */
+  tenantTokens: TenantTokenVerdict | null;
+}
+
+/** The workspace token verdict as a ticket-level reader needs it: blocked or not,
+ *  which window blew, and the usage/limit pair that proves it. */
+export interface TenantTokenVerdict {
+  hasTokens: boolean;
+  reason: 'daily_exhausted' | 'monthly_exhausted' | null;
+  usageToday: number;
+  dailyLimit: number;
+  usageMonth: number;
+  monthlyLimit: number;
+  effectivePlan: 'free' | 'pro' | 'teams';
 }
 
 /**
@@ -369,7 +414,12 @@ export function classifyResolvedAutoRun(input: {
 }): { reason: AutoRunReason; canRunNow: boolean } {
   if (input.gate === 'human') return { reason: 'human_gate', canRunNow: false };
   if (!input.decisionAutoRun) return { reason: input.hasCapabilityMismatch ? 'capability_mismatch' : 'no_agent', canRunNow: false };
-  if (input.sameLaneReentry) return { reason: 'already_running', canRunNow: false };
+  // The loop guard and the live-run guard are DIFFERENT facts and now say so. Both
+  // used to report `already_running`, which made a report claiming a live run while
+  // its own gate snapshot printed `liveExecution: (none)` — a self-contradiction the
+  // reader can only resolve by reading this function. A re-entry skip means nothing
+  // is executing; it means the run that just ended already served this lane.
+  if (input.sameLaneReentry) return { reason: 'same_lane_reentry', canRunNow: false };
   if (input.hasLiveExecution) return { reason: 'already_running', canRunNow: false };
   // Circuit-breaker: a ticket that would otherwise auto-run but whose last N runs all
   // failed is halted so autonomy stops re-dispatching an identically-failing run. A
@@ -400,17 +450,29 @@ const ACTIVE_STATUSES = new Set<string>([
 export async function evaluateTaskAutoRun(
   db: Db,
   runtimeService: RuntimeService,
-  args: { tenantId: number; projectId: number; taskId: number; status: string; originLaneKey?: string },
+  args: {
+    tenantId: number; projectId: number; taskId: number; status: string; originLaneKey?: string;
+    /** Pre-resolved workspace token verdict, when the caller already has one (the
+     *  autonomous sweep resolves it once per tenant before its candidate loop). Skips
+     *  the lookup below — the DECISION still lives here, only the input is reused. */
+    tenantTokens?: TenantTokenVerdict;
+    /** Serves the token gate's tenant-stable lookups through the read-through cache. */
+    env?: Env;
+  },
 ): Promise<AutoRunEvaluation> {
   const [taskRow] = await db
-    .select({ assignedAgentRef: tasks.assignedAgentRef, source: tasks.source })
+    .select({ assignedAgentRef: tasks.assignedAgentRef, source: tasks.source, status: tasks.status })
     .from(tasks)
     .where(eq(tasks.id, args.taskId))
     .limit(1);
   const assignedAgentRef = taskRow?.assignedAgentRef ?? null;
+  // THE LANE, live. `args.status` is only the caller's expectation — see the
+  // `status` field doc on {@link AutoRunEvaluation} for the stale-snapshot bug this
+  // closes. Falls back to the caller's value only when the row is gone.
+  const status = taskRow?.status ?? args.status;
 
   const base = (over: Partial<AutoRunEvaluation> & { reason: AutoRunReason }): AutoRunEvaluation => ({
-    status: args.status,
+    status,
     assignedAgentRef,
     laneResolved: false,
     isTerminalLane: false,
@@ -423,6 +485,7 @@ export async function evaluateTaskAutoRun(
     cooldownRemainingMs: 0,
     consecutiveFailures: 0,
     failureBreakerAt: MAX_CONSECUTIVE_AUTORUN_FAILURES,
+    tenantTokens: null,
     ...over,
   });
 
@@ -444,7 +507,7 @@ export async function evaluateTaskAutoRun(
   if (isUnapprovedFeedbackTask(taskRow?.source)) return base({ reason: 'pending_approval' });
 
   // Done / terminal status: the ticket is finalized (commit + PR), never auto-run.
-  if (args.status === TaskStatus.DONE) return base({ reason: 'terminal_lane', isTerminalLane: true });
+  if (status === TaskStatus.DONE) return base({ reason: 'terminal_lane', isTerminalLane: true });
 
   const board = await findCanonicalBoard(db, args.projectId, args.tenantId);
   if (!board) return base({ reason: 'no_board' });
@@ -452,7 +515,7 @@ export async function evaluateTaskAutoRun(
   const [lane] = await db
     .select({ id: swimlanes.id, gate: swimlanes.gate, isTerminal: swimlanes.isTerminal })
     .from(swimlanes)
-    .where(and(eq(swimlanes.boardId, board.id), eq(swimlanes.key, args.status)))
+    .where(and(eq(swimlanes.boardId, board.id), eq(swimlanes.key, status)))
     .limit(1);
   if (!lane) return base({ reason: 'no_lane' });
 
@@ -517,7 +580,7 @@ export async function evaluateTaskAutoRun(
   // stage as the coder; suppressing the fallback surfaces the lane as `no_agent` so the
   // Coordinator/manager resolves the right producer instead of burning failing runs.
   let ownerFallbackRef: string | null = assignedAgentRef;
-  if (isReviewLane(args.status)) {
+  if (isReviewLane(status)) {
     // NO SELF-REVIEW. On a review lane the owner is (almost always) the agent that
     // produced the work, so falling back to it would have the author grade its own
     // homework — and record a sign-off for it. A reviewer must be explicitly staffed
@@ -535,7 +598,7 @@ export async function evaluateTaskAutoRun(
     // dropping the fallback outright. The old `null` meant an unstaffed lane simply
     // stalled at `no_agent` forever: assigning a coder to a ticket did nothing, and
     // nothing ever resolved the producer the manifest had already named.
-    ownerFallbackRef = await manifestProducerRef(db, args.tenantId, args.taskId, args.status);
+    ownerFallbackRef = await manifestProducerRef(db, args.tenantId, args.taskId, status);
   } else if (assignedAgentRef && producerRoleKey) {
     if (!(await isAgentRefRoleCapable(db, args.tenantId, assignedAgentRef, producerRoleKey))) {
       ownerFallbackRef = null;
@@ -565,18 +628,44 @@ export async function evaluateTaskAutoRun(
   // precisely the condition that would refuse the dispatch.
   const { consecutiveFailures, cooldownRemainingMs } = assessRerunBackoff(plainExecs, Date.now());
 
-  const { reason, canRunNow } = classifyResolvedAutoRun({
+  const classified = classifyResolvedAutoRun({
     gate,
     decisionAutoRun: decision.autoRun,
     hasCapabilityMismatch: !!decision.capabilityMismatches?.length,
-    sameLaneReentry: !!args.originLaneKey && args.originLaneKey === args.status,
+    sameLaneReentry: !!args.originLaneKey && args.originLaneKey === status,
     hasLiveExecution: !!liveExecution,
     consecutiveFailures,
     cooldownRemainingMs,
   });
 
+  // WORKSPACE TOKEN GATE — last, and only for a ticket that would otherwise run.
+  //
+  // This gate is real (the autonomous sweep refuses to dispatch anything for a
+  // token-blocked tenant) but it used to live ONLY in the sweep, above the trigger.
+  // A blocked tenant's tickets were skipped wholesale with no per-ticket telemetry,
+  // so the ledger saw an unbroken silence and the live gate — blind to the condition
+  // — kept answering `will_run` for a ticket that had not moved in eleven days. The
+  // evaluator is the single source of truth for "why isn't this running", so the
+  // condition belongs here, where the trigger, triage chip, Run-now and the lifecycle
+  // report all read it from one place.
+  //
+  // Resolved LAZILY: only when every other gate is open. A ticket held by staffing, a
+  // human gate or the breaker pays nothing, so evaluating a few hundred sweep
+  // candidates costs at most one token lookup per ticket actually about to spend
+  // money — and the sweep passes its own per-tenant verdict in, so in practice it
+  // costs nothing there either.
+  let tenantTokens: TenantTokenVerdict | null = null;
+  let { reason, canRunNow } = classified;
+  if (canRunNow) {
+    tenantTokens = await resolveTenantTokenGate(db, args.tenantId, args.tenantTokens, args.env);
+    if (tenantTokens && !tenantTokens.hasTokens) {
+      reason = 'tenant_token_limit';
+      canRunNow = false;
+    }
+  }
+
   return {
-    status: args.status,
+    status,
     assignedAgentRef,
     laneResolved: true,
     isTerminalLane: false,
@@ -590,5 +679,36 @@ export async function evaluateTaskAutoRun(
     cooldownRemainingMs: reason === 'cooldown_active' ? cooldownRemainingMs : 0,
     consecutiveFailures,
     failureBreakerAt: MAX_CONSECUTIVE_AUTORUN_FAILURES,
+    tenantTokens,
   };
+}
+
+/**
+ * The workspace token verdict for one tenant, reusing the caller's when it has one.
+ *
+ * Fails OPEN (returns null → "not consulted") on any error, matching the sweep's own
+ * contract: a usage-scan blip must never freeze a tenant's board. Null therefore
+ * never means "blocked" — only `hasTokens: false` does.
+ */
+async function resolveTenantTokenGate(
+  db: Db,
+  tenantId: number,
+  supplied: TenantTokenVerdict | undefined,
+  env: Env | undefined,
+): Promise<TenantTokenVerdict | null> {
+  if (supplied) return supplied;
+  try {
+    const a = await getTenantTokenAvailability(db, tenantId, undefined, env);
+    return {
+      hasTokens: a.hasTokens,
+      reason: a.reason,
+      usageToday: a.usageToday,
+      dailyLimit: a.dailyLimit,
+      usageMonth: a.usageMonth,
+      monthlyLimit: a.monthlyLimit,
+      effectivePlan: a.effectivePlan,
+    };
+  } catch {
+    return null;
+  }
 }
