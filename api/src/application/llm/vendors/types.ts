@@ -503,17 +503,31 @@ export const CASCADE_STATUSES: ReadonlySet<number> = new Set<number>([
 export const AUTH_STATUSES: ReadonlySet<number> = new Set<number>([401, 403]);
 
 /**
- * True when a non-OK 4xx body is a CAPACITY / billing condition — a usage cap,
- * spend limit, low credit balance, or exhausted quota — rather than a malformed
- * request. Several upstreams return these as HTTP **400** (not 429): Anthropic
- * emits `invalid_request_error` "You have reached your specified API usage
- * limits" / "Your credit balance is too low to access the Anthropic API", and
- * OpenAI-shaped vendors use `insufficient_quota` / "exceeded your current
- * quota". These are NOT payload bugs — the *request* is fine and a DIFFERENT
- * vendor can serve it — so the cascade must fail over (and cool this vendor)
- * instead of hard-failing the run with a misleading 400. (Fix: a cloud coding
- * run flooring onto the direct-Anthropic backstop died with a fatal 400 when
- * that account hit its monthly usage cap, never failing over — execution #73.)
+ * True when a non-OK 4xx body is a CAPACITY / BILLING / ACCOUNT condition — a
+ * usage cap, spend limit, low credit balance, exhausted quota, unverified payment
+ * method or a suspended/inactive account — rather than a malformed request.
+ *
+ * Several upstreams return these as HTTP **400** (not 429 or 402): Anthropic emits
+ * `invalid_request_error` "You have reached your specified API usage limits" /
+ * "Your credit balance is too low to access the Anthropic API", OpenAI-shaped
+ * vendors use `insufficient_quota` / "exceeded your current quota", and Meta
+ * answers "Billing verification failed. Please check your payment method."
+ *
+ * None are payload bugs — the *request* is fine and a DIFFERENT vendor can serve
+ * it — so the cascade must fail over (and cool this vendor) instead of hard-failing
+ * the run with a misleading 400. (Fix 1: a cloud coding run flooring onto the
+ * direct-Anthropic backstop died with a fatal 400 when that account hit its monthly
+ * usage cap, never failing over — execution #73. Fix 2: a tenant's Meta BYO account
+ * failed billing verification and, because that 400 classified as request_error —
+ * "the caller's bug" — every run routed to it died terminally with the account
+ * FIRST in that tenant's BYO precedence, instead of standing the vendor down and
+ * moving on — task 683, execution #4259.)
+ *
+ * The account-unusable half is deliberately grouped with capacity rather than with
+ * `auth`: a dead payment method does not recover inside the 5-minute transient
+ * window any more than a monthly cap does, and the capacity class already carries
+ * the right response — a 60-minute backoff that trips the VENDOR cooldown on the
+ * first strike, because one unusable account is unusable for every model on it.
  */
 /**
  * Stable marker embedded in the retryable error a capacity/billing limit raises
@@ -527,7 +541,27 @@ export const CAPACITY_LIMIT_MARKER = 'capacity/usage limit';
 
 export function isCapacityLimitBody(text: string | undefined | null): boolean {
   if (!text) return false;
-  return /usage\s+limit|credit\s+balance|insufficient[_\s-]?quota|exceeded\s+your\s+(current\s+)?quota|spend(ing)?\s+limit|billing\s+(hard\s+)?limit|reached\s+your[^.]*\blimit/i.test(
+  return (
+    /usage\s+limit|credit\s+balance|insufficient[_\s-]?quota|exceeded\s+your\s+(current\s+)?quota|spend(ing)?\s+limit|billing\s+(hard\s+)?limit|reached\s+your[^.]*\blimit/i.test(text)
+    || isAccountUnusableBody(text)
+  );
+}
+
+/**
+ * True when a 4xx body says the ACCOUNT itself cannot serve requests — billing
+ * unverified, no payment method, subscription inactive, account suspended or
+ * deactivated. Split out from the usage-cap patterns above because the two read
+ * differently even though they earn the identical response (fail over + long
+ * vendor cooldown), and because a reader tracing "why did my BYO key stop being
+ * used" needs to find this list by name.
+ *
+ * Deliberately requires an explicit billing/account signal: a bare "invalid
+ * request" or a validation error naming a parameter must stay a request_error, or
+ * a genuine payload bug would be silently retried across every vendor in the chain.
+ */
+export function isAccountUnusableBody(text: string | undefined | null): boolean {
+  if (!text) return false;
+  return /billing\s+(verification|is\s+not|not)\b|verify\s+your\s+billing|payment\s+(method|details|information)|payment\s+required|add\s+a\s+payment|no\s+active\s+subscription|subscription\s+(has\s+)?(expired|inactive|cancell?ed)|account\s+(is\s+)?(suspended|deactivated|disabled|not\s+active|inactive)|not\s+been\s+activated|access\s+(is\s+)?(suspended|revoked)/i.test(
     text,
   );
 }
