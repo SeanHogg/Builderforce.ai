@@ -224,18 +224,38 @@ export interface LaneAgentApprovalDecision {
 }
 
 /**
- * Given a lane's staffed approvers and the ticket's current state, decide what the lane
- * gate should do this hop. PURE — the queries live in {@link resolveLaneApprovers} and in
- * `laneRequirementGate.enforceLaneAgentApproval`.
+ * The approvers whose sign-off is OWED right now. PURE.
  *
- * THE CRITICAL RULE IS THAT AN APPROVAL IS ONLY OWED AFTER THE WORK HAS RUN. A slot at
+ * THE CRITICAL RULE: AN APPROVAL IS ONLY OWED AFTER THE WORK HAS RUN. A slot at
  * `pending`/`assigned`/`unstaffed` means no run has been attributed to it yet
  * (`attributeRunToManifest` advances a slot to `in_progress` when a run for that
  * role/stage finalizes). Treating those as owed would make the gate dispatch a REVIEW on
  * the very first entry into a staffed lane — i.e. every un-templated board would review
- * work that had never been implemented, and `blocked` would suppress the implementation
- * run that should have happened. That is a far worse regression than the missing
- * sign-off this whole feature exists to fix, so it gets its own named rule and tests.
+ * work that had never been implemented, and the lane gate's `blocked` would suppress the
+ * implementation run that should have happened. That is a far worse regression than the
+ * missing sign-off this whole feature exists to fix, so it gets its own named rule.
+ *
+ * Exported separately from {@link decideLaneAgentApproval} so the lane gate can take this
+ * cheap decision BEFORE paying for the live-run and verdict-history queries — tier (b)
+ * runs on nearly every lane entry, and the common case owes nothing.
+ */
+export function laneApprovalOwed(
+  approvers: readonly StaffedLaneApprover[],
+  stateByRole: ReadonlyMap<string, string>,
+): StaffedLaneApprover[] {
+  return approvers.filter((a) => {
+    const state = stateByRole.get(a.roleKey);
+    if (!state || isParticipantSatisfied(state)) return false;
+    // `in_progress` = a run has been attributed. `changes_requested` = a reviewer already
+    // answered and the lane is still unmet. Everything else means the work is pending.
+    return state === 'in_progress' || state === 'changes_requested';
+  });
+}
+
+/**
+ * Given a lane's staffed approvers and the ticket's current state, decide what the lane
+ * gate should do this hop. PURE — the queries live in {@link resolveLaneApprovers} and in
+ * `laneRequirementGate.enforceLaneAgentApproval`.
  */
 export function decideLaneAgentApproval(input: {
   approvers: readonly StaffedLaneApprover[];
@@ -247,13 +267,7 @@ export function decideLaneAgentApproval(input: {
   /** `swimlanes.requirement_gate` for the lane ('off' is filtered out upstream). */
   requirementGate: string;
 }): LaneAgentApprovalDecision {
-  const owed = input.approvers.filter((a) => {
-    const state = input.stateByRole.get(a.roleKey);
-    if (!state || isParticipantSatisfied(state)) return false;
-    // `in_progress` = a run has been attributed. `changes_requested` = a reviewer already
-    // answered and the lane is still unmet. Everything else means the work is pending.
-    return state === 'in_progress' || state === 'changes_requested';
-  });
+  const owed = laneApprovalOwed(input.approvers, input.stateByRole);
   if (owed.length === 0) return { owed: [], ask: null, blocked: false, flagged: false };
 
   // One approver per hop: sign-offs are sequential judgements, and a burst would spend N

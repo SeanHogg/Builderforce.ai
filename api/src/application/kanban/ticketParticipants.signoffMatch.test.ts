@@ -121,6 +121,32 @@ describe('TicketParticipantsService.syncStates — ledger → manifest matching'
     await new TicketParticipantsService(db).syncStates(env, 1, 42);
     expect(updates).toEqual([expect.objectContaining({ state: 'waived' })]);
   });
+
+  it('PRESERVES `in_progress` when no verdict exists — the erasure that broke the loop', async () => {
+    // `in_progress` is written by run ATTRIBUTION ("a run for this role/stage finalized"),
+    // which syncStates cannot re-derive. It used to recompute the baseline as `assigned`
+    // and clobber it — and it did so constantly, because `listParticipants` re-derives on
+    // every read for a ticket with no `template` slot (i.e. every ticket on a board with
+    // no requirement rows) and `deriveManifest` ends by calling syncStates. The slot
+    // bounced back to `assigned`, so the lane-agent approval rule never saw the work as
+    // done and never asked for the sign-off.
+    const { db, updates } = makeDb([laneAgentSlot({ state: 'in_progress' })], []);
+    await new TicketParticipantsService(db).syncStates(env, 1, 42);
+    expect(updates).toEqual([]); // nothing changed ⇒ no write at all
+  });
+
+  it('still lets a verdict override a preserved `in_progress`', async () => {
+    const { db, updates } = makeDb([laneAgentSlot({ state: 'in_progress' })], [signoff({ verdict: 'approved' })]);
+    await new TicketParticipantsService(db).syncStates(env, 1, 42);
+    expect(updates).toEqual([expect.objectContaining({ state: 'completed' })]);
+  });
+
+  it('still lets a DELEGATED verdict hand a preserved `in_progress` slot back to assigned', async () => {
+    // Delegation reassigns the responsibility, so dropping the in-flight marker is right.
+    const { db, updates } = makeDb([laneAgentSlot({ state: 'in_progress' })], [signoff({ verdict: 'delegated' })]);
+    await new TicketParticipantsService(db).syncStates(env, 1, 42);
+    expect(updates).toEqual([expect.objectContaining({ state: 'assigned' })]);
+  });
 });
 
 describe('composition: a staffed lane reaches "all required roles signed off" with no template', () => {
