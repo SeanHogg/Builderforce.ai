@@ -43,7 +43,7 @@ import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
 import { selectToolsForTurn } from './selectTools';
 import { setLastResolvedModel } from './lastResolvedModel';
 import { chatWorkLinkingDirective, isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, isReadOnlyPlatformTool } from './chatWorkLinking';
-import { shouldRecoverStalledTurn, stallRecoveryNudge, MAX_ANNOUNCEMENT_RECOVERIES } from '@builderforce/agent-stall';
+import { shouldRecoverStalledTurn, isExhaustedStall, stallRecoveryNudge, stallExhaustedNotice, MAX_ANNOUNCEMENT_RECOVERIES } from '@builderforce/agent-stall';
 import {
   formatEvermindMemoryBlock,
   countReconciledMemories,
@@ -1587,6 +1587,31 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: finalText, ...(finalMeta ? { metadata: finalMeta } : {}) }]);
     c.streamingText = '';
     recordAppended(c, assistantMsg);
+
+    // The model spent every recovery still describing calls instead of making them.
+    // The text stays (it is what it said), but returning here silently would show a
+    // promise as the answer and let the run read as a success — the "it doesn't
+    // execute, it just dies" report. Name the cause and the only remedy that works.
+    if (
+      runTool
+      && isExhaustedStall({
+        text: result.text,
+        toolCallCount: result.toolCalls.length,
+        availableToolCount: toolSpecs?.length ?? 0,
+        recoveriesUsed: announcementRecoveries,
+      })
+    ) {
+      const notice = stallExhaustedNotice(resolved);
+      pushTrace(c, {
+        ts: nowIso(),
+        category: 'error',
+        label: 'loop.stall_unrecovered',
+        args: { step: iter, model: resolved, attempts: announcementRecoveries },
+        result: notice,
+        isError: true,
+      });
+      c.error = notice;
+    }
     emit(c);
 
     emitEvermindLearnReconcile(assistantMsg, finalText);

@@ -346,6 +346,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       projectId: row.projectId,
       taskId:    id,
       status:    row.status,
+      env:       c.env as Env,
     });
     return c.json(evaln);
   });
@@ -371,7 +372,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const row = await loadTenantTask(id, tenantId);
     if (!row) return c.json({ error: 'Task not found' }, 404);
     const evaln = await evaluateTaskAutoRun(db, runtimeService, {
-      tenantId, projectId: row.projectId, taskId: id, status: row.status,
+      tenantId, projectId: row.projectId, taskId: id, status: row.status, env: c.env as Env,
     }).catch(() => null);
     // The WHOLE evaluation goes in, not just its reason: the ledger turns it into the
     // gate snapshot (lane gate, staffing, candidate agent, breaker streak, cooldown)
@@ -401,6 +402,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       projectId: row.projectId,
       taskId:    id,
       status:    row.status,
+      env:       c.env as Env,
     });
     if (evaln.liveExecution) {
       return c.json({ error: 'A run is already in progress for this ticket.', reason: 'already_running' satisfies AutoRunReason, executionId: evaln.liveExecution.id }, 409);

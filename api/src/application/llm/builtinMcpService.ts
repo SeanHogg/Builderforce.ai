@@ -2660,6 +2660,7 @@ async function evaluateAndDispatch(
     projectId: plain.projectId,
     taskId: plain.id,
     status: plain.status,
+    env,
   });
   // Always run the full trigger: beyond dispatching, it applies the lane requirement
   // gate (which can itself dispatch a reviewer round-trip) and emits the
