@@ -6233,7 +6233,9 @@
     },
     "queuedCount": "{count, plural, one {# Nachricht in Warteschlange} other {# Nachrichten in Warteschlange}}",
     "onboardMe": "Hilf mir beim Einstieg",
-    "onboardMePrompt": "Ich bin neu hier – hilf mir beim Einstieg. Frag mich, was ich bauen möchte, erkläre, wie Nutzung und Kosten funktionieren, empfiehl, ob der Free- oder Pro-Plan zu meinem Zeitrahmen passt, und hilf mir, mein vorhandenes KI-Konto zu verbinden, falls ich eines habe."
+    "onboardMePrompt": "Ich bin neu hier – hilf mir beim Einstieg. Frag mich, was ich bauen möchte, erkläre, wie Nutzung und Kosten funktionieren, empfiehl, ob der Free- oder Pro-Plan zu meinem Zeitrahmen passt, und hilf mir, mein vorhandenes KI-Konto zu verbinden, falls ich eines habe.",
+    "providerCapBanner": "Dein {providers}-API-Schlüssel hat sein Nutzungslimit erreicht — dieser Lauf ist auf den gemeinsamen Modell-Pool zurückgefallen.",
+    "manageApiKeys": "API-Schlüssel verwalten →"
   },
   "chatMessage": {
     "copy": "Kopieren",

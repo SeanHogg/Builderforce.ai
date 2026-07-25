@@ -12,6 +12,7 @@ import {
   CLOUD_LONG_LIVED_ORPHAN_REASON,
   CLOUD_LONG_LIVED_SILENCE_MS,
   SERVERLESS_WALL_MS,
+  isInfrastructureEviction,
 } from './orphanReasons';
 
 const start = 1_000_000_000_000;
@@ -56,5 +57,38 @@ describe('cloudSilenceCeilingMs', () => {
     // was deleted must still get the generous ceiling, not a tight fast-fail.
     expect(cloudSilenceCeilingMs('worker')).toBe(CLOUD_LONG_LIVED_SILENCE_MS);
     expect(cloudSilenceCeilingMs('bogus')).toBe(CLOUD_LONG_LIVED_SILENCE_MS);
+  });
+});
+
+/**
+ * A PLATFORM eviction is not a run failure. Cloudflare resets every live Durable
+ * Object when a new Worker version deploys, so one release interrupts every
+ * in-flight cloud run at once — and those interruptions used to be written as
+ * terminal failures that each spent a strike against the 3-failure autonomy
+ * breaker. Measured on task 683: 3 of its 5 failures were one deploy.
+ */
+describe('isInfrastructureEviction', () => {
+  it('recognises the platform messages that mean "we took the runtime away"', () => {
+    const evictions = [
+      'Durable Object reset because its code was updated.',
+      'The Durable Object is overloaded and is being reset.',
+      'Error: durable object reset because its code was updated',
+      'The execution context was cancelled.',
+    ];
+    for (const m of evictions) expect(isInfrastructureEviction(m), m).toBe(true);
+  });
+
+  it('does NOT swallow a real run failure', () => {
+    const realFailures = [
+      'Gateway 400 on model \'direct/meta/muse-spark-1.1\'',
+      CLOUD_ORPHAN_REASON,
+      CLOUD_LONG_LIVED_ORPHAN_REASON,
+      'Monthly cloud-run allowance reached (30/25 on the free plan).',
+      'The agent could not find the repository.',
+      '',
+      null,
+      undefined,
+    ];
+    for (const m of realFailures) expect(isInfrastructureEviction(m), String(m)).toBe(false);
   });
 });

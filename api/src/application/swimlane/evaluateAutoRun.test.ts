@@ -3,6 +3,8 @@ import {
   classifyResolvedAutoRun,
   parseRequiredCapabilities,
   trailingFailureStreak,
+  autoRunCooldownRemainingMs,
+  AUTORUN_COOLDOWN_BASE_MS,
   MAX_CONSECUTIVE_AUTORUN_FAILURES,
   AUTO_RUN_REASON_TEXT,
   EVALUATED_AUTO_RUN_REASONS,
@@ -118,6 +120,37 @@ describe('trailingFailureStreak', () => {
 
   it('is 0 for no runs', () => {
     expect(trailingFailureStreak([])).toBe(0);
+  });
+
+  // A deploy resets every live Durable Object at once, so an ordinary release used
+  // to spend strikes against the 3-failure breaker on healthy tickets. Measured on
+  // task 683: 3 of its 5 failures were this message inside one 47-minute window.
+  const evicted = { status: 'failed', errorMessage: 'Durable Object reset because its code was updated.' };
+
+  it('does not count a platform eviction as a strike', () => {
+    expect(trailingFailureStreak([evicted, evicted, evicted])).toBe(0);
+  });
+
+  it('skips an eviction without BREAKING a genuine streak around it', () => {
+    // Conservative on purpose: a deploy landing between two real failures must not
+    // hand the ticket a clean slate, or the breaker stops catching retry storms.
+    expect(trailingFailureStreak([{ status: 'failed' }, evicted, { status: 'failed' }])).toBe(2);
+  });
+
+  it('still stops at a completed run sitting behind an eviction', () => {
+    expect(trailingFailureStreak([evicted, { status: 'completed' }, { status: 'failed' }])).toBe(0);
+  });
+
+  it('backs off from the newest COUNTED failure, not from an eviction on top of it', () => {
+    const now = Date.UTC(2026, 6, 25, 12, 0, 0);
+    const realFailedAt = new Date(now - 60_000);          // 1 min ago → still cooling
+    const remaining = autoRunCooldownRemainingMs([
+      { ...evicted, completedAt: new Date(now - 1_000) }, // a deploy 1s ago
+      { status: 'failed', completedAt: realFailedAt },
+    ], now);
+    // One counted failure → a 5-minute window measured from the REAL failure, so
+    // ~4 minutes are still owed. Measuring from the eviction would have said ~5.
+    expect(remaining).toBe(AUTORUN_COOLDOWN_BASE_MS - 60_000);
   });
 });
 
