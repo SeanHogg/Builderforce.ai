@@ -100,6 +100,10 @@ export async function createProject(data: {
   modality?: string;
   /** Where the project was born — 'ide' tags it for the Designer badge. */
   origin?: string;
+  /** Project start date (ISO) — used server-side for end≥start validation at creation. */
+  startDate?: string;
+  /** Explicit project deadline / end date (ISO) captured in the setup wizard. */
+  dueDate?: string;
 }): Promise<Project> {
   const res = await projectsRequest<Project>('/api/projects', {
     method: 'POST',
