@@ -51,7 +51,9 @@ import { listActiveManagerDirectives } from './managerDirectives';
 import { RoleAssignmentService, type AssigneeKind } from '../kanban/roleAssignmentService';
 import { recommendTopAssignee } from '../metrics/assigneeRecommender';
 import { producerRoleForActionType } from '../kanban/roleCapability';
-import { resolveSignoffGate } from '../kanban/signoffGate';
+import { resolveSignoffGate, type SignoffGateResult } from '../kanban/signoffGate';
+import { decideTicketReadiness } from './evaluateTicketReadiness';
+import { dispatchCloudRunForTask as dispatchCloudRunForTaskRef } from '../../presentation/routes/runtimeRoutes';
 import { mergeRecordedPullRequest, updateRecordedPullRequestBranch } from '../repos/mergeRecordedPr';
 import { pollPrCiStatus } from '../repos/pollPrCiStatus';
 import { dispatchTaskFinalize } from '../../presentation/routes/taskRoutes';
@@ -509,6 +511,9 @@ interface ManagedTaskRow {
   gitBranch: string | null;
   githubPrUrl: string | null;
   createdAt: Date;
+  /** Needed by the review evaluation to answer "was this supposed to produce code?". */
+  taskType: string | null;
+  actionType: string | null;
 }
 
 async function loadManagedTasks(db: Db, projectId: number): Promise<ManagedTaskRow[]> {
@@ -519,7 +524,7 @@ async function loadManagedTasks(db: Db, projectId: number): Promise<ManagedTaskR
       dueDate: tasks.dueDate, storyPoints: tasks.storyPoints,
       assignedUserId: tasks.assignedUserId, assignedAgentRef: tasks.assignedAgentRef,
       assignedAgentHostId: tasks.assignedAgentHostId, gitBranch: tasks.gitBranch, githubPrUrl: tasks.githubPrUrl,
-      createdAt: tasks.createdAt,
+      createdAt: tasks.createdAt, taskType: tasks.taskType, actionType: tasks.actionType,
     })
     .from(tasks)
     .where(and(
@@ -872,6 +877,71 @@ export async function runManagerForProject(
  *   • MERGE   — open PRs are merged + closed per policy: 'immediate' merges now,
  *     'on_green' merges only once CI is green, 'queue' leaves them for a human.
  */
+/** Narrow the free-form `pull_requests.build_status` column to the readiness vocabulary. */
+function normalizeBuildStatus(v: string | null | undefined): 'success' | 'failure' | 'pending' | null {
+  return v === 'success' || v === 'failure' || v === 'pending' ? v : null;
+}
+
+/**
+ * ASK the outstanding roles to sign off — the step whose absence made the whole
+ * accountability model inert.
+ *
+ * Producer credit is automatic (a terminal run with PR evidence completes the slot via
+ * `attributeRunToManifest`), but a REVIEWER slot only clears when an agent records a
+ * verdict, and nothing was ever asking one to. So for each outstanding slot with a
+ * resolved agent assignee, dispatch that agent AS the role with an explicit instruction
+ * to record its sign-off — the same contract `laneRequirementGate` uses for its reviewer
+ * round-trip, reused here so a board with no `swimlane_requirements` rows still gets
+ * reviewed. `reviewRole` in the payload is what makes the run's attribution land on the
+ * right slot.
+ *
+ * Returns the role names actually dispatched. Bounded to ONE dispatch per pass per
+ * ticket: sign-offs are sequential judgements, and a burst would spend N runs to answer
+ * one question. Skips slots with no assignee (an `unstaffed` staffing gap the
+ * accountability report already surfaces) and never dispatches when a run is live.
+ */
+async function driveOutstandingSignoffs(
+  env: Env,
+  db: Db,
+  runtimeService: RuntimeService,
+  args: {
+    tenantId: number; projectId: number;
+    task: ManagedTaskRow;
+    signoff: SignoffGateResult;
+    managerRef: string | null;
+  },
+): Promise<string[]> {
+  const candidate = args.signoff.outstanding.find((o) => o.assigneeKind === 'agent' && !!o.assigneeRef);
+  if (!candidate?.assigneeRef) return [];
+  try {
+    const payload = JSON.stringify({
+      cloudAgentRef: candidate.assigneeRef,
+      laneKey: args.task.status,
+      reviewRole: candidate.roleKey,
+      reviewInstruction:
+        `You are the ${candidate.roleName} accountable for ticket #${args.task.id} ("${args.task.title}") at lane '${args.task.status}'. `
+        + `Review the delivered work against the ticket description, the PRD and its acceptance criteria`
+        + `${args.task.githubPrUrl ? ` (pull request: ${args.task.githubPrUrl})` : ''}. `
+        + `Then RECORD YOUR VERDICT — this is required, the ticket cannot complete without it: `
+        + `POST /api/kanban/tasks/${args.task.id}/signoff with roleKey='${candidate.roleKey}', `
+        + `verdict 'approved' if the work meets the criteria, or 'changes_requested' with the specific fixes needed. `
+        + `Always pass \`contribution\` linking the evidence you actually inspected (prUrl, diffFiles, executionId) — `
+        + `an approval with no linked contribution is itself an audit finding.`,
+    });
+    const deferred: Promise<unknown>[] = [];
+    await dispatchCloudRunForTaskRef(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
+      taskId: args.task.id,
+      tenantId: args.tenantId,
+      payload,
+      submittedBy: `manager:signoff-request:${args.managerRef ?? 'system'}`,
+    });
+    await Promise.allSettled(deferred);
+    return [candidate.roleName];
+  } catch {
+    return [];
+  }
+}
+
 async function coordinatePullRequests(
   env: Env,
   db: Db,
@@ -909,30 +979,87 @@ async function coordinatePullRequests(
       ? await runtimeService.listActiveByTasks(reviewReady.map((t) => t.id))
       : [];
     const liveTaskIds = new Set<number>(liveExecs.map((e) => e.taskId as unknown as number));
+    // Build statuses for the whole review cohort in ONE query rather than a poll per
+    // ticket (this loop runs every 5 minutes across every project).
+    const reviewPrBuild = reviewReady.length
+      ? await db
+        .select({ taskId: pullRequests.taskId, buildStatus: pullRequests.buildStatus, status: pullRequests.status })
+        .from(pullRequests)
+        .where(and(
+          eq(pullRequests.tenantId, tenantId),
+          inArray(pullRequests.taskId, reviewReady.map((t) => t.id)),
+        ))
+      : [];
+    const buildByTask = new Map<number, string | null>();
+    for (const r of reviewPrBuild) if (r.taskId != null) buildByTask.set(r.taskId, r.buildStatus);
+
     for (const t of reviewReady) {
       try {
-        if (liveTaskIds.has(t.id)) continue; // still working — leave it
+        // THE EVALUATION. Four questions, one verdict, one recorded action — see
+        // `evaluateTicketReadiness`. Every outcome is journalled, including the ones
+        // that do nothing, because the old silent `continue` is precisely how 280
+        // tickets sat in review for up to 19 days with no explanation anywhere.
+        const signoff = await resolveSignoffGate(env, db, { tenantId, taskId: t.id });
+        const readiness = decideTicketReadiness({
+          taskType: t.taskType,
+          actionType: t.actionType,
+          hasBranch: !!t.gitBranch,
+          hasPr: !!t.githubPrUrl,
+          buildStatus: normalizeBuildStatus(buildByTask.get(t.id)),
+          hasLiveRun: liveTaskIds.has(t.id),
+          signoff,
+          requireSignoff: policy.requireSignoffToComplete,
+          requireGreenBuild: policy.prMergePolicy === 'on_green',
+        });
 
-        // THE GATE. Read the ticket's manifest and require unanimity before completing.
-        // Recorded either way: a withheld completion must be explainable on the manager
-        // feed, not an invisible no-op (which is how the old silent skip hid tickets).
-        const gate = policy.requireSignoffToComplete
-          ? await resolveSignoffGate(env, db, { tenantId, taskId: t.id })
-          : null;
-        if (gate && !gate.satisfied) {
+        if (readiness.action === 'wait_for_run' || readiness.action === 'wait_for_build') {
+          continue; // transient by definition — re-evaluated next pass, no noise
+        }
+
+        // Expected a deliverable and there is none, or the build is red: this ticket is
+        // not reviewable, it is unfinished. Send it BACK to implementation and start its
+        // agent — the behaviour whose absence let implementable work rot in review.
+        if (readiness.action === 'return_to_implementation' || readiness.action === 'return_build_failed') {
+          await db.update(tasks)
+            .set({ status: TaskStatus.IN_PROGRESS, completedAt: null, updatedAt: new Date() })
+            .where(and(eq(tasks.id, t.id), eq(tasks.status, TaskStatus.IN_REVIEW)));
+          const restarted = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+            tenantId, projectId, taskId: t.id, status: TaskStatus.IN_PROGRESS,
+            submittedBy: `manager:review-return:${policy.managerRef ?? 'system'}`,
+          }).catch(() => false);
           await recordManagerAction(db, {
             tenantId, projectId, taskId: t.id, runTaskId, actionType: 'flag',
-            summary: `Held "${t.title}" in review — ${gate.detail}`,
+            summary: `Returned "${t.title}" to implementation — ${readiness.detail}`,
+            detail: { action: readiness.action, expectsCode: readiness.expectsCode, restarted },
+          });
+          continue;
+        }
+
+        // Sign-offs outstanding: ASK for them. Dispatching the owing role is what closes
+        // the accountability loop — without it the manifest just accumulates `assigned`
+        // slots forever (measured: 487 required slots, 0 ever satisfied).
+        if (readiness.action === 'drive_signoff') {
+          const dispatched = await driveOutstandingSignoffs(env, db, runtimeService, {
+            tenantId, projectId, task: t, signoff, managerRef: policy.managerRef,
+          });
+          await recordManagerAction(db, {
+            tenantId, projectId, taskId: t.id, runTaskId, actionType: 'flag',
+            summary: dispatched.length
+              ? `Requested sign-off on "${t.title}" from ${dispatched.join(', ')} — ${readiness.detail}`
+              : `Held "${t.title}" in review — ${readiness.detail}`,
             detail: {
-              signoffGate: gate.reason,
-              requiredCount: gate.requiredCount,
-              satisfiedCount: gate.satisfiedCount,
-              outstanding: gate.outstanding.map((o) => ({ roleKey: o.roleKey, roleName: o.roleName, state: o.state })),
+              action: readiness.action,
+              signoffGate: signoff.reason,
+              requiredCount: signoff.requiredCount,
+              satisfiedCount: signoff.satisfiedCount,
+              outstanding: signoff.outstanding.map((o) => ({ roleKey: o.roleKey, roleName: o.roleName, state: o.state })),
+              dispatchedTo: dispatched,
             },
           });
           continue;
         }
 
+        // readiness.action === 'complete' — every check passed.
         const canOpenPr = !!t.gitBranch && !t.githubPrUrl && (!!t.assignedAgentRef || t.assignedAgentHostId != null);
         await db.update(tasks)
           .set({ status: TaskStatus.DONE, completedAt: new Date(), updatedAt: new Date() })
@@ -950,11 +1077,15 @@ async function coordinatePullRequests(
         await recordManagerAction(db, {
           tenantId, projectId, taskId: t.id, runTaskId, actionType: 'flag',
           summary: canOpenPr
-            ? `All required roles signed off — opened PR for "${t.title}".`
-            : `All required roles signed off — closed "${t.title}" (no branch to merge).`,
-          detail: gate
-            ? { signoffGate: gate.reason, requiredCount: gate.requiredCount, satisfiedCount: gate.satisfiedCount, openedPr: canOpenPr }
-            : { signoffGate: 'not_required', openedPr: canOpenPr },
+            ? `${readiness.detail} Opened PR for "${t.title}".`
+            : `${readiness.detail} Closed "${t.title}" (no branch to merge).`,
+          detail: {
+            action: readiness.action,
+            signoffGate: signoff.reason,
+            requiredCount: signoff.requiredCount,
+            satisfiedCount: signoff.satisfiedCount,
+            openedPr: canOpenPr,
+          },
         });
       } catch { /* skip */ }
     }
