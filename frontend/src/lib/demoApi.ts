@@ -29,6 +29,10 @@ const TOUR_SEEN_KEY = 'bf_demo_tour_seen';
 export interface DemoSessionState {
   persona: DemoPersona;
   tenantName: string;
+  /** The demo tenant's id (auth Tenant.id, a string). The demo chrome activates
+   *  ONLY when the currently authenticated tenant matches this — so a stale flag
+   *  can never hijack a real account signed into afterwards in the same tab. */
+  tenantId: string;
   startedAt: number;
 }
 
@@ -134,7 +138,7 @@ export async function startDemoSession(persona: DemoPersona): Promise<{ entryPat
     role: data.tenant.role,
   };
   persistSession(data.webToken, user, data.tenantToken, tenant);
-  setDemoState({ persona: data.persona, tenantName: data.tenant.name, startedAt: Date.now() });
+  setDemoState({ persona: data.persona, tenantName: data.tenant.name, tenantId: tenant.id, startedAt: Date.now() });
 
   return { entryPath: data.entryPath };
 }
