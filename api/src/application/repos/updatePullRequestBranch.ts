@@ -61,9 +61,29 @@ export async function updatePullRequestBranch(
       }
       if (detail && Number(detail.diverged_commits_count) === 0) return { ok: true, updated: false };
     } else {
-      const state = detail?.mergeable_state;
+      let state = detail?.mergeable_state;
+      // GitHub computes `mergeable_state` LAZILY: the first GET on a PR it has not
+      // recently evaluated returns 'unknown' and *schedules* the computation. Treating
+      // 'unknown' as "the branch was updated" made the manager record a `sync_pr` and
+      // defer the merge to its next pass — where the same 'unknown' came back and it
+      // deferred again. That was a genuine livelock, measured at 40,559 `sync_pr`
+      // actions against 10 real merges, with PRs sitting open for 19 days.
+      //
+      // So re-poll ONCE (the first GET is what triggers the computation, and it is
+      // usually ready within a second), then fall through rather than defer.
+      if (state === 'unknown' || state == null) {
+        const retryRes = await fetch(detailUrl, { headers }).catch(() => null);
+        if (retryRes?.ok) {
+          const retry = await retryRes.json().catch(() => null) as Record<string, unknown> | null;
+          if (retry?.mergeable_state != null) state = retry.mergeable_state;
+        }
+      }
       if (state === 'dirty') return { ok: false, code: 'conflict', reason: 'could not update PR branch from its base: merge conflicts' };
-      if (state === 'unknown' || state == null) return { ok: true, updated: true };
+      // STILL unknown after the re-poll: do NOT report a phantom update. Report the
+      // branch as current so the caller proceeds to the merge, and let the merge API be
+      // the authority — it fails cleanly and visibly if the PR really is not mergeable.
+      // Deferring here is what never converged; a rejected merge at least records why.
+      if (state === 'unknown' || state == null) return { ok: true, updated: false };
       if (typeof state === 'string' && state !== 'behind') return { ok: true, updated: false };
     }
   }
