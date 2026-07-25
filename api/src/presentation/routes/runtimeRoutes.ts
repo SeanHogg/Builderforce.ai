@@ -25,7 +25,8 @@ import {
   handleContainerOp, loadContainerRunContext, resolveCloudAgent, agentAllowsHostExecution, DEFAULT_CLOUD_REF,
 } from '../../application/runtime/cloudAgentEngine';
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
-import { enforceCloudRunCap } from '../../application/runtime/cloudRunLedger';
+import { enforceCloudRunCap, type CloudRunCapResult } from '../../application/runtime/cloudRunLedger';
+import { assessRerunBackoff, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
 import { evaluateExecutionApprovalGate } from '../../application/runtime/executionApprovalGate';
 import { revertRun } from '../../application/runtime/runRollback';
 import { resolveActorFromContext } from '../../application/activity/activityLog';
@@ -286,17 +287,43 @@ async function dispatchAndQueue(
 }
 
 /**
- * Context-free dispatch: create AND start a cloud run for a task. Used by the
- * CI-webhook auto-fix loop (no request context — it has only `env`, `db`, the
- * injected `runtimeService`, and `waitUntil`). Returns the new execution id, or
- * null if the task can't be resolved for the tenant.
+ * Context-free dispatch: create AND start a cloud run for a task. Used by every
+ * non-HTTP dispatcher (the lane trigger, the lane requirement gate's reviewer /
+ * producer runs, the AI Manager, the validator / security / incident dispatchers,
+ * the CI-webhook auto-fix loop). Returns the new execution id, or null when the
+ * task can't be resolved, the tenant is over its cloud-run allowance, or autonomy
+ * is in backoff on this ticket.
+ *
+ * ── THIS IS WHERE BACKPRESSURE LIVES ────────────────────────────────────────────
+ * The consecutive-failure breaker and the re-run cooldown used to sit inside
+ * `evaluateTaskAutoRun`, which only the lane trigger consults — so the nine other
+ * callers below dispatched with no backpressure whatsoever. Measured on task 467:
+ * 134 runs, all failing on the same cloud-run-cap message, every five minutes, with
+ * a three-strike breaker that never saw one of them.
+ *
+ * Both guards therefore run HERE, at the single choke point every autonomous cloud
+ * entry already funnels through, so a dispatch path cannot opt out of them by
+ * construction. `force` is the deliberate, explicit override for a HUMAN-initiated
+ * dispatch (Run now, a manager approving a held run, "fix with agent") — a person
+ * clicking is the same override the breaker always honoured.
+ *
+ * The cloud-run cap is NOT subject to `force`: it is a billing entitlement, not
+ * backpressure, so a human cannot click past it either. It is checked BEFORE the
+ * execution row is created, so a quota refusal no longer materialises as a `failed`
+ * run that every scheduler then retries as though it were transient.
  */
 export async function dispatchCloudRunForTask(
   env: Env,
   db: Db,
   runtimeService: RuntimeService,
   waitUntil: (p: Promise<unknown>) => void,
-  params: { taskId: number; tenantId: number; payload?: string; submittedBy?: string; agentHostId?: number | null },
+  params: {
+    taskId: number; tenantId: number; payload?: string; submittedBy?: string;
+    agentHostId?: number | null;
+    /** HUMAN-initiated dispatch: skip the failure breaker + re-run cooldown (never
+     *  the cloud-run cap). Autonomous callers must leave this unset. */
+    force?: boolean;
+  },
 ): Promise<number | null> {
   const [taskRow] = await db
     .select({
@@ -313,6 +340,69 @@ export async function dispatchCloudRunForTask(
   const authorization = await authorizeManagedTaskExecution(db, params.tenantId, params.taskId, params.payload);
   if (!authorization.allowed) throw new Error(authorization.reason ?? 'managed execution is not authorized');
 
+  const submittedBy = params.submittedBy ?? 'system:autofix';
+
+  // (1) CLOUD-RUN CAP — checked before the execution row exists. A quota refusal is
+  // not a run that failed; it is a run that must not start, and it cannot clear by
+  // retrying (only a new billing month or an upgrade clears it). Creating a `failed`
+  // execution for it is what made every scheduler treat it as a transient blip and
+  // retry it on the next tick. Refuse, record WHY against the ticket, create nothing.
+  //
+  // ONLY for a cloud-bound dispatch. On-prem runs execute on the user's own machine
+  // and are unlimited by policy (it is what the refusal message itself promises), so
+  // a task with a pinned host skips the pre-flight entirely. Delivery to that host can
+  // still fail and fall through to cloud — which is why the gate inside
+  // `startDispatchedExecution` stays, and why `cloudGate` is only handed down when it
+  // was actually resolved here.
+  const hostPinned = (params.agentHostId ?? taskRow.assignedAgentHostId) != null;
+  const cloudGate = hostPinned ? undefined : await enforceCloudRunCap(db, params.tenantId, env);
+  if (cloudGate && !cloudGate.allowed) {
+    await recordCloudToolEvent(db, {
+      tenantId: params.tenantId,
+      cloudAgentRef: taskRow.assignedAgentRef ?? submittedBy,
+      executionId: null,
+      sessionKey: `task:${params.taskId}`,
+      toolName: 'auto_run_skipped',
+      category: 'planning',
+      // `reason` must be a real AutoRunReason: the lifecycle ledger reads this blob to
+      // resolve the ticket's stall reason, and an off-vocabulary value would resolve to
+      // no explanation at all — the silent-gap failure mode this whole pass removes.
+      detail: {
+        taskId: params.taskId, reason: 'cloud_run_limit' satisfies AutoRunReason, retryable: false,
+        used: cloudGate.used, limit: cloudGate.limit, plan: cloudGate.effectivePlan, submittedBy,
+      },
+      result: `Dispatch refused: monthly cloud-run allowance reached (${cloudGate.used}/${cloudGate.limit} on the ${cloudGate.effectivePlan} plan). Retrying will not clear this — upgrade at builderforce.ai/pricing. On-prem and VS Code runs stay unlimited.`.slice(0, 300),
+    }).catch(() => { /* best-effort telemetry */ });
+    return null;
+  }
+
+  // (2) FAILURE BREAKER + RE-RUN COOLDOWN — the same verdict `evaluateTaskAutoRun`
+  // shows in triage, applied to EVERY autonomous dispatcher rather than only the lane
+  // trigger. A human dispatch (`force`) overrides, exactly as it always did.
+  if (!params.force) {
+    const backoff = assessRerunBackoff(
+      (await runtimeService.listByTask(params.taskId)).map((e) => e.toPlain()),
+      Date.now(),
+    );
+    if (backoff.blockedBy) {
+      await recordCloudToolEvent(db, {
+        tenantId: params.tenantId,
+        cloudAgentRef: taskRow.assignedAgentRef ?? submittedBy,
+        executionId: null,
+        sessionKey: `task:${params.taskId}`,
+        toolName: 'auto_run_skipped',
+        category: 'planning',
+        detail: {
+          taskId: params.taskId, reason: backoff.blockedBy, submittedBy,
+          consecutiveFailures: backoff.consecutiveFailures,
+          ...(backoff.cooldownRemainingMs ? { cooldownRemainingMs: backoff.cooldownRemainingMs } : {}),
+        },
+        result: `Dispatch refused (${backoff.blockedBy}) for task ${params.taskId}: ${backoff.consecutiveFailures} consecutive failed runs. A human "Run now" overrides.`.slice(0, 300),
+      }).catch(() => { /* best-effort telemetry */ });
+      return null;
+    }
+  }
+
   // A per-run pinned host (e.g. an approved high-priority on-prem run) overrides
   // the task's assignee for THIS dispatch so host targeting survives the replay.
   const effectiveTaskRow = (params.agentHostId != null
@@ -323,10 +413,17 @@ export async function dispatchCloudRunForTask(
     taskId: params.taskId,
     agentHostId: effectiveTaskRow.assignedAgentHostId ?? undefined,
     tenantId: params.tenantId,
-    submittedBy: params.submittedBy ?? 'system:autofix',
+    submittedBy,
     payload: params.payload,
   });
-  await startDispatchedExecution(env, db, runtimeService, waitUntil, params.tenantId, execution as SubmittedExecution, effectiveTaskRow, params.payload);
+  // A resolved `cloudGate` is handed down so the choke point below does not re-run the
+  // cap query — one check per dispatch, two places that can act on it. Omitted for a
+  // host-pinned dispatch, so a host that fails delivery still gets capped down there.
+  await startDispatchedExecution(
+    env, db, runtimeService, waitUntil, params.tenantId,
+    execution as SubmittedExecution, effectiveTaskRow, params.payload,
+    cloudGate ? { cloudGate } : undefined,
+  );
   return execution.id;
 }
 
@@ -340,6 +437,9 @@ async function startDispatchedExecution(
   execution: SubmittedExecution,
   taskRow: ExecutionTaskRow,
   payload: string | undefined,
+  /** A cloud-run cap verdict the caller already resolved, so the pre-submit gate in
+   *  {@link dispatchCloudRunForTask} and this one never query it twice. */
+  opts?: { cloudGate?: CloudRunCapResult },
 ): Promise<unknown> {
   // On-Prem (hosted) execution happens ONLY when a host is explicitly pinned on the
   // task — a cloud agent is never broadcast to a client machine. Resolve a dispatch
@@ -489,7 +589,12 @@ async function startDispatchedExecution(
     // autofix), so gating here covers them all. Over the cap → fail fast with an
     // upgrade hint rather than start a run we'd have to run for free. Superadmin /
     // unlimited plans pass; a metering error fails OPEN (never blocks a real run).
-    const cloudGate = await enforceCloudRunCap(db, tenantId, env);
+    //
+    // An AUTONOMOUS dispatch never reaches this branch: `dispatchCloudRunForTask`
+    // already refused before creating a run (and passes its verdict down via `opts`
+    // so the query is not repeated). What lands here is an HTTP submit, where the
+    // person who clicked deserves a visible failed run carrying the reason.
+    const cloudGate = opts?.cloudGate ?? await enforceCloudRunCap(db, tenantId, env);
     if (!cloudGate.allowed) {
       const msg = `Monthly cloud-run allowance reached (${cloudGate.used}/${cloudGate.limit} on the ${cloudGate.effectivePlan} plan). Upgrade at builderforce.ai/pricing to run more cloud agents — on-prem and VS Code runs stay unlimited.`;
       await recordCloudToolEvent(db, {

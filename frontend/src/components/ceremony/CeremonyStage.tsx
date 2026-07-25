@@ -142,10 +142,18 @@ export function CeremonyStage({
   }, []);
   const { peers, connected, send } = useCeremonyRoom(projectId, me, { onChange: reload, onFrame });
 
-  // Live cameras/mics for the round-table — one media room per project ceremony.
-  // Mesh P2P; joins only while the user turns cameras on (no forced capture).
+  // Live cameras/mics for the round table. Mesh P2P; joins only while the user turns
+  // cameras on (no forced capture).
+  //
+  // The key comes from the SERVER (0366): a ceremony now has a companion `meetings` row,
+  // and `session.meetingRoomKey` is that meeting's stored `room_key`. This used to be
+  // `ceremony-${projectId}`, synthesised here and persisted nowhere — which meant the
+  // ceremony and the meetings surface could never share a call, and every consecutive
+  // standup on a board reused one room. The project-scoped key survives only as the
+  // fallback for an informal huddle with no session open.
+  const mediaRoomKey = session?.meetingRoomKey ?? `ceremony-${projectId}`;
   const media = useMediaRoom(
-    camerasOn ? `ceremony-${projectId}` : null,
+    camerasOn ? mediaRoomKey : null,
     { name: me.name, ref: me.ref },
     { enabled: camerasOn },
   );

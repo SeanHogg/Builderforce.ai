@@ -288,14 +288,13 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     return c.json(await hydrate(tenantId, meeting.id), 201);
   });
 
-  // ── Detail ─────────────────────────────────────────────────────────────────
-  r.get('/:id', async (c) => {
-    const { tenantId } = scope(c);
-    const detail = await hydrate(tenantId, c.req.param('id'));
-    if (!detail) return c.json({ error: 'Not found' }, 404);
-    if (!(await canAccess(c, detail.meeting, detail.attendees))) return c.json({ error: 'Not authorized for this meeting' }, 403);
-    return c.json(detail);
-  });
+  // NOTE: the single-segment DETAIL route `GET /:id` is registered at the BOTTOM of this
+  // file, after every literal single-segment path (`/availability`, `/freebusy`,
+  // `/suggest`). Hono matches in registration order and the first handler to return a
+  // response wins, so a `/:id` registered here swallowed all three: `GET /freebusy` ran
+  // the detail handler, which compared a `uuid` column to the string 'freebusy' and blew
+  // up in Postgres — taking out the meeting-time suggestions the scheduling panel calls.
+  // Two-segment routes like `/:id/transcript` are unaffected and stay where they read best.
 
   // ── Join — returns the room key + ICE config; marks presence + goes live ──────
   r.post('/:id/join', async (c) => {
@@ -607,6 +606,17 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const busy = mergeBusy(appBusy, extBusy);
     const slots = suggestSlots(availability, busy, { fromMs, toMs, durationMinutes, count });
     return c.json({ slots });
+  });
+
+  // ── Detail ─────────────────────────────────────────────────────────────────
+  // LAST on purpose: `/:id` matches any single segment, so registering it above the
+  // literal paths above (`/availability`, `/freebusy`, `/suggest`) made those unreachable.
+  r.get('/:id', async (c) => {
+    const { tenantId } = scope(c);
+    const detail = await hydrate(tenantId, c.req.param('id'));
+    if (!detail) return c.json({ error: 'Not found' }, 404);
+    if (!(await canAccess(c, detail.meeting, detail.attendees))) return c.json({ error: 'Not authorized for this meeting' }, 403);
+    return c.json(detail);
   });
 
   return r;

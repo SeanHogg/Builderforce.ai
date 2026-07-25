@@ -424,8 +424,28 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     if (evaln.candidate.model) payloadObj.model = evaln.candidate.model;
     const executionId = await dispatchCloudRunForTask(
       c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p),
-      { taskId: id, tenantId: c.get('tenantId'), payload: JSON.stringify(payloadObj), submittedBy: (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:run-now' },
+      {
+        taskId: id,
+        tenantId: c.get('tenantId'),
+        payload: JSON.stringify(payloadObj),
+        submittedBy: (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:run-now',
+        // THE human override. Run-now has always ignored the lane gate and the failure
+        // breaker — an explicit click is the approval — so it says so explicitly now
+        // that the breaker is enforced in the dispatcher rather than only in the
+        // evaluator this route already bypassed via `candidate`.
+        force: true,
+      },
     );
+    // The dispatcher refuses without creating a run when the tenant is over its
+    // monthly cloud-run allowance — an entitlement `force` deliberately does NOT
+    // clear. Reporting `ok: true, executionId: null` would tell the user work had
+    // started when nothing had, which is the exact lie this whole pass is removing.
+    if (executionId == null) {
+      return c.json({
+        error: 'The run could not be started. The tenant may have reached its monthly cloud-run allowance — see the ticket\'s Lifecycle panel for the recorded reason.',
+        reason: 'cloud_run_limit' satisfies AutoRunReason,
+      }, 402);
+    }
     return c.json({ ok: true, executionId, agentRef: evaln.candidate.agentRef }, 202);
   });
 

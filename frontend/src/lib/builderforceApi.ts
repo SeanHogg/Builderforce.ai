@@ -1470,6 +1470,10 @@ export type AutoRunReason =
   | 'capability_mismatch'
   | 'already_running'
   | 'run_cap_exhausted'
+  /** The TENANT is over its monthly cloud-run allowance. Unlike every other
+   *  refusal this one does not clear by retrying, and a human "Run now" does not
+   *  override it — it is an entitlement, not backpressure. */
+  | 'cloud_run_limit'
   | 'cooldown_active'
   | 'not_executable'
   | 'pending_approval';
@@ -1817,7 +1821,11 @@ export type ManagerActionType =
   | 'coordinate'
   /** A PR was ready but the effective policy withholds merge authority (0363) — the
    *  manager stopped and said so instead of skipping silently. */
-  | 'merge_blocked';
+  | 'merge_blocked'
+  /** A stalled ticket was diagnosed and its remedy applied (0367 stall triage). */
+  | 'triage'
+  /** The manager's own remedy stopped working, so the ticket went to a human (0367). */
+  | 'escalate';
 
 /** Persisted manager configuration for a project (null until first configured). */
 export interface ManagerConfig {
@@ -2108,7 +2116,52 @@ export const managerApi = {
     const q = limit != null ? `?limit=${limit}` : '';
     return request<{ actions: ManagerAction[] }>(`/api/manager/${projectId}/activity${q}`).then((r) => r.actions);
   },
+
+  /** The stuck-ticket register (0367): what is not moving, why, and what has been tried. */
+  stalls: (projectId: number): Promise<StallRegister> =>
+    request<StallRegister>(`/api/manager/${projectId}/stalls`),
 };
+
+/** Why a ticket is not moving — mirrors the API's `StallCause`. */
+export type StallCause =
+  | 'live' | 'cooling_down' | 'moving' | 'never_started' | 'unassigned'
+  | 'capability_gap' | 'human_gate' | 'failure_breaker' | 'missing_deliverable'
+  | 'build_failed' | 'awaiting_signoff' | 'pr_conflict' | 'pr_unreconciled'
+  | 'merge_withheld' | 'blocked' | 'unknown';
+
+/** What the manager did (or handed over) about it — mirrors the API's `StallRemedy`. */
+export type StallRemedy =
+  | 'none' | 'assign' | 'dispatch' | 'coordinate' | 'return_to_implementation'
+  | 'drive_signoff' | 'reset_breaker' | 'reconcile_pr' | 'resolve_conflict' | 'escalate_human';
+
+/** One stuck ticket in the register. */
+export interface StallWatchRow {
+  taskId: number;
+  title: string;
+  status: string;
+  cause: StallCause;
+  remedy: StallRemedy;
+  detail: string;
+  /** Consecutive applications of `remedy` that did NOT move the ticket. */
+  attempts: number;
+  idleMs: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  lastAttemptAt: string | null;
+  /** Set once the manager conceded its own remedy is not working. */
+  escalatedAt: string | null;
+}
+
+export interface StallRegister {
+  rows: StallWatchRow[];
+  /** Open stalls handed to a human. */
+  escalated: number;
+  /** Open stalls the manager is still working itself. */
+  working: number;
+  byCause: Array<{ cause: StallCause; count: number }>;
+  /** The attempt ceiling at which a remedy converts to an escalation. */
+  maxAttempts: number;
+}
 
 /** Dependency edge semantics (mirrors the API's DEP_TYPES). */
 export type DepType = 'finish_to_start' | 'start_to_start' | 'finish_to_finish' | 'start_to_finish';
@@ -4588,6 +4641,10 @@ export type CeremonyKind = 'standup' | 'planning';
 export type CeremonyCloseReason = 'facilitator' | 'unattended' | 'no_humans' | 'expired';
 /** Resolved attendance verdict per seat (migration 0365). */
 export type CeremonyAttendance = 'unknown' | 'present' | 'absent' | 'excused';
+/** Where that verdict came from (migration 0366). `manual` is never recomputed. */
+export type CeremonyAttendanceSource = 'derived' | 'pto' | 'manual';
+/** The verdicts a manager may assert. 'unknown' means "not concluded", not a correction. */
+export const CEREMONY_CORRECTABLE: readonly CeremonyAttendance[] = ['present', 'absent', 'excused'];
 
 export interface CeremonySession {
   id: string;
@@ -4613,6 +4670,11 @@ export interface CeremonySession {
   humansPresent?: number;
   reassignedCount?: number;
   dispatchedCount?: number;
+  /** The companion meeting this ceremony is held in (0366). */
+  meetingId?: string | null;
+  /** Its media relay key, resolved SERVER-SIDE — never derived on the client, so the
+   *  round table and the meetings surface join literally the same room. */
+  meetingRoomKey?: string | null;
 }
 
 export interface CeremonyParticipant {
@@ -4628,6 +4690,11 @@ export interface CeremonyParticipant {
   joinedAt?: string | null;
   leftAt?: string | null;
   attendance?: CeremonyAttendance;
+  /** Provenance (0366) — 'manual' means a person asserted it and it is never recomputed. */
+  attendanceSource?: CeremonyAttendanceSource;
+  attendanceNote?: string | null;
+  attendanceSetBy?: string | null;
+  attendanceSetAt?: string | null;
 }
 
 /** One journal row — an `activity_log` event targeting this session. */
@@ -4711,6 +4778,19 @@ export const ceremonySessionsApi = {
    *  it did (reassignments, the close), read from the shared activity log. */
   detail: (id: string): Promise<CeremonySessionDetail> =>
     request<CeremonySessionDetail>(`${CEREMONY_BASE}/sessions/${id}`),
+  /** CORRECT one seat's attendance verdict (0366, MANAGER+). Stored as `manual`, which
+   *  is what makes it survive a re-conclude — the server never recomputes a manual row.
+   *  Allowed on concluded sessions: most corrections are noticed after the fact. */
+  correctAttendance: (
+    sessionId: string,
+    participantId: string,
+    attendance: CeremonyAttendance,
+    note?: string,
+  ): Promise<CeremonySessionDetail> =>
+    request<CeremonySessionDetail>(
+      `${CEREMONY_BASE}/sessions/${sessionId}/participants/${participantId}/attendance`,
+      { method: 'PATCH', body: JSON.stringify({ attendance, note }) },
+    ),
 };
 
 /** A recurring standup/planning. The frequent cron sweep opens a session for every

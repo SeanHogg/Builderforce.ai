@@ -12,6 +12,7 @@
  *   PUT   /api/manager/:projectId           designate a manager + tune policy (MANAGER)
  *   POST  /api/manager/:projectId/run       run the manager pass now (MANAGER)
  *   GET   /api/manager/:projectId/activity  the decision audit feed
+ *   GET   /api/manager/:projectId/stalls    the stuck-ticket register (0367)
  */
 import { Hono } from 'hono';
 import { and, eq, sql, asc, desc, inArray } from 'drizzle-orm';
@@ -27,6 +28,7 @@ import {
   recordManagerAction, createManagerCoachingTask, syncManagerRosterRole,
   getTenantManagerDefaults, upsertTenantManagerDefaults, type TenantManagerDefaultsPatch,
 } from '../../application/manager/ManagerService';
+import { getStallRegister } from '../../application/manager/stallWatch';
 import {
   normalizePrMergePolicy, resolveTenantManagerDefaults, DEFAULT_MANAGER_POLICY,
   AGENT_REASSIGN_IDLE_HOURS_RANGE, AGENT_REASSIGN_MAX_PER_SESSION_RANGE,
@@ -398,9 +400,14 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
         await finalizeManagerRunTask(db, {
           taskId: runTaskId,
           ok,
+          // An all-zero summary for a pass that threw before producing one. Every field
+          // of ManagerRunSummary must appear: the compiler is the only thing that
+          // catches a new counter being added without a zero here, and a missing one
+          // would surface as an undefined count on the run card.
           summary: summary ?? {
             projectId, skipped: !ok, scored: 0, ranked: 0, scheduled: 0, assigned: 0,
             prsConducted: 0, prsMerged: 0, dispatched: 0, audited: 0, flagged: 0, remediated: 0, remediationDeferred: 0,
+            stalled: 0, unstuck: 0, escalated: 0, stallsResolved: 0, staleRunTasksClosed: 0,
           },
         });
       }
@@ -515,6 +522,23 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     const limit = Number(c.req.query('limit')) || 50;
     const actions = await listManagerActions(db, tenantId, projectId, limit);
     return c.json({ actions });
+  });
+
+  // GET /api/manager/:projectId/stalls — the STUCK-TICKET REGISTER (0367).
+  //
+  // What the manager currently cannot finish, why, what it has tried, and which ones
+  // it has handed back to a human. Distinct from /activity, which is the stream of
+  // decisions taken: this is the standing list of work that is not moving. Read-only
+  // and served through the shared read-through cache (the manager pass invalidates it
+  // on every write), so a polled panel never reaches the database.
+  router.get('/:projectId/stalls', async (c) => {
+    const tenantId = c.get('tenantId');
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    const register = await getStallRegister(c.env as Env, db, { tenantId, projectId });
+    return c.json(register);
   });
 
   return router;

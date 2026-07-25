@@ -47,6 +47,16 @@ export interface ManagerSweepResult {
   remediated: number;
   /** Flagged tickets left for a later tick because a project hit its per-pass cap. */
   remediationDeferred: number;
+  /** Tickets diagnosed as STALLED across the sweep (0367 stall triage). */
+  stalled: number;
+  /** Stalled tickets the manager applied its own remedy to. */
+  unstuck: number;
+  /** Stalled tickets handed to a human because the manager's remedy stopped working. */
+  escalated: number;
+  /** Previously-stalled tickets that started moving again. */
+  stallsResolved: number;
+  /** Orphaned "backlog management pass" cards closed by the per-pass reaper. */
+  staleRunTasksClosed: number;
   tokenBlockedTenants: number;
 }
 
@@ -89,6 +99,7 @@ export async function runManagerSweep(
   const result: ManagerSweepResult = {
     projects: managed.length, managed: 0, scored: 0, ranked: 0, scheduled: 0, assigned: 0,
     prsConducted: 0, prsMerged: 0, dispatched: 0, remediated: 0, remediationDeferred: 0,
+    stalled: 0, unstuck: 0, escalated: 0, stallsResolved: 0, staleRunTasksClosed: 0,
     tokenBlockedTenants: 0,
   };
 
@@ -129,6 +140,11 @@ export async function runManagerSweep(
       for (let i = 0; i < s.dispatched; i++) budget.tryReserve(p.tenantId);
       result.remediated += s.remediated;
       result.remediationDeferred += s.remediationDeferred;
+      result.stalled += s.stalled;
+      result.unstuck += s.unstuck;
+      result.escalated += s.escalated;
+      result.stallsResolved += s.stallsResolved;
+      result.staleRunTasksClosed += s.staleRunTasksClosed;
     } catch (err) {
       console.error(`[cron:manager] project=${p.projectId} tenant=${p.tenantId} failed`, err);
     }

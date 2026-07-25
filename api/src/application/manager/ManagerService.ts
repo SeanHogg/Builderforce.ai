@@ -56,12 +56,11 @@ import { resolveManagerIdentity } from './managerIdentity';
 import { resolveManagerTypeById, normalizeManagerType } from './managerTypes';
 import { listActiveManagerDirectives } from './managerDirectives';
 import { RoleAssignmentService, type AssigneeKind } from '../kanban/roleAssignmentService';
-import { recommendTopAssignee } from '../metrics/assigneeRecommender';
-import { producerRoleForActionType } from '../kanban/roleCapability';
-import { resolveSignoffGate, type SignoffGateResult } from '../kanban/signoffGate';
-import { buildSignoffRequestPayload } from '../kanban/signoffRequest';
+import { assignTicketOwner } from './assignOwner';
+import { resolveSignoffGate } from '../kanban/signoffGate';
+import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness } from './evaluateTicketReadiness';
-import { dispatchCloudRunForTask as dispatchCloudRunForTaskRef } from '../../presentation/routes/runtimeRoutes';
+import { runStallTriage, MAX_TRIAGE_DISPATCHES_PER_RUN } from './triageStage';
 import { mergeRecordedPullRequest, updateRecordedPullRequestBranch } from '../repos/mergeRecordedPr';
 import { pollPrCiStatus } from '../repos/pollPrCiStatus';
 import { dispatchTaskFinalize } from '../../presentation/routes/taskRoutes';
@@ -1014,23 +1013,16 @@ export async function runManagerForProject(
       .slice(0, MAX_ASSIGNMENTS_PER_RUN);
     for (const t of unowned) {
       try {
-        // Role-aware: constrain the pick to the ticket's producer role (from its
-        // technical action-type) so a coding ticket never lands on a role-incapable
-        // owner (the #467 root cause). No constraint when the type implies no role.
-        const roleKey = producerRoleForActionType((t as { actionType?: string | null }).actionType);
-        const pick = await recommendTopAssignee(env, db, projectId, roleKey ? { roleKey } : {});
-        if (!pick) continue;
-        const set: Record<string, unknown> = { assignedUserId: null, assignedAgentRef: null, assignedAgentHostId: null, updatedAt: new Date() };
-        let label = '';
-        if (pick.memberKind === 'human') { set.assignedUserId = pick.memberRef; label = `teammate ${pick.memberRef}`; }
-        else if (pick.memberKind === 'cloud_agent') { set.assignedAgentRef = pick.memberRef; label = `agent ${pick.memberRef}`; }
-        else { const hid = Number(pick.memberRef); if (Number.isFinite(hid)) { set.assignedAgentHostId = hid; label = `host agent ${hid}`; } }
-        if (!label) continue;
-        await db.update(tasks).set(set).where(eq(tasks.id, t.id));
+        // Role-aware pick + persist — the ONE implementation shared with the stall
+        // triage stage, whose `unassigned` remedy is exactly this (see assignOwner.ts).
+        const pick = await assignTicketOwner(env, db, {
+          projectId, taskId: t.id, actionType: t.actionType,
+        });
+        if (!pick.assigned) continue;
         summary.assigned += 1;
         await recordManagerAction(db, {
           tenantId, projectId, taskId: t.id, runTaskId, actionType: 'assign',
-          summary: `Assigned "${t.title}" to ${label}.`,
+          summary: `Assigned "${t.title}" to ${pick.label}.`,
           detail: { memberKind: pick.memberKind, memberRef: pick.memberRef },
         });
       } catch { /* skip */ }
@@ -1038,7 +1030,10 @@ export async function runManagerForProject(
   }
 
   // 4. PR — conduct (open) PRs for finished work, then merge/close per policy. ---
-  await coordinatePullRequests(env, db, runtimeService, { tenantId, projectId, policy, managed, summary, runTaskId });
+  // Records which tickets it acted on so the TRIAGE stage below can diagnose them
+  // without re-applying a remedy the review pass just applied.
+  const conductedTaskIds = new Set<number>();
+  await coordinatePullRequests(env, db, runtimeService, { tenantId, projectId, policy, managed, summary, runTaskId, conductedTaskIds });
 
   // 5. DISPATCH — kick the top-ranked runnable tickets NOW, in priority order. ---
   // Skipped on the cron path (the autonomous executor sweep owns dispatch there — see
@@ -1125,6 +1120,66 @@ export async function runManagerForProject(
     }
   }
 
+  // 7. TRIAGE — what has STOPPED MOVING, why, and what unsticks it. -------------
+  // The stages above each act on a ticket for a reason of their own (score it, rank
+  // it, staff it, merge its PR, audit its roles); none of them asks the question a
+  // human PM asks first. Measured before this stage existed: 809 of 821 tickets
+  // stalled, 466 never executed even once, and nothing in the system was accountable
+  // for noticing. Every remedy applied here is RECORDED so the next pass can grade
+  // whether it worked — an ineffective fix escalates instead of repeating, which is
+  // the generalised cure for the 4058:1 sync-to-merge livelock. See stallTriage.ts.
+  {
+    const triage = await runStallTriage(env, db, runtimeService, {
+      tenantId, projectId, managed, conductedTaskIds,
+      // Same dispatch-ownership rule step 5 follows: on the cron path the autonomous
+      // executor is the single dispatcher, so triage staffs and coordinates but does
+      // not race it to start a run it would start anyway.
+      ownsDispatch: shouldDispatch,
+      policy: {
+        requireSignoffToComplete: policy.requireSignoffToComplete,
+        prMergePolicy: policy.prMergePolicy,
+        allowAutoMerge: policy.allowAutoMerge,
+        autoAssign: policy.autoAssign,
+        managerRef: policy.managerRef,
+      },
+    }).catch(() => null);
+    if (triage) {
+      summary.stalled = triage.stalled;
+      summary.unstuck = triage.unstuck;
+      summary.escalated = triage.escalated;
+      summary.stallsResolved = triage.resolved;
+      // Runs triage started are REAL dispatches: counting them here is what makes the
+      // sweep reserve them against the tenant's shared per-tick budget, so this stage
+      // cannot quietly outspend the executor drawing on the same pool.
+      summary.dispatched += triage.dispatched;
+      for (const entry of triage.journal) {
+        await recordManagerAction(db, {
+          tenantId, projectId, taskId: entry.taskId, runTaskId,
+          actionType: entry.detail.escalated ? 'escalate' : 'triage',
+          summary: entry.summary,
+          detail: entry.detail,
+        });
+      }
+      // Say so when a cap bit. A bounded pass that reports nothing reads as "the
+      // manager looked and everything was fine", which is exactly the false clean
+      // bill of health this whole stage exists to stop. One row per pass, not per
+      // deferred ticket — the register already carries the per-ticket state.
+      if (triage.deferred > 0) {
+        await recordManagerAction(db, {
+          tenantId, projectId, runTaskId, actionType: 'triage',
+          summary:
+            `Unstuck ${triage.unstuck} of ${triage.stalled} stalled ${triage.stalled === 1 ? 'ticket' : 'tickets'} this pass — ` +
+            `${triage.deferred} waiting for the next one (max ${MAX_TRIAGE_DISPATCHES_PER_RUN} new runs per pass).`,
+          detail: {
+            stalled: triage.stalled, unstuck: triage.unstuck, deferred: triage.deferred,
+            escalated: triage.escalated, dispatched: triage.dispatched,
+            dispatchCap: MAX_TRIAGE_DISPATCHES_PER_RUN, ownsDispatch: shouldDispatch,
+          },
+        });
+      }
+    }
+  }
+
   // Credit the acting identity: when a specific agent is the manager, journal that it
   // ran (with its persona/model) so the feed attributes the pass to the teammate, not
   // an anonymous "system". No noise for the default system manager.
@@ -1144,7 +1199,8 @@ export async function runManagerForProject(
   // Best-effort (recordActivity never throws). Skipped on an idle pass (nothing done).
   const didSomething =
     summary.scored || summary.ranked || summary.scheduled || summary.assigned ||
-    summary.dispatched || summary.prsConducted || summary.prsMerged || summary.flagged;
+    summary.dispatched || summary.prsConducted || summary.prsMerged || summary.flagged ||
+    summary.stalled || summary.unstuck || summary.escalated || summary.staleRunTasksClosed;
   if (didSomething) {
     const actor = identity.agentRef
       ? cloudAgentActor(identity.agentRef, identity.label || 'AI Manager')
@@ -1160,12 +1216,18 @@ export async function runManagerForProject(
         `PRs ${summary.prsConducted + summary.prsMerged}` +
         `${summary.flagged ? `, flagged ${summary.flagged}` : ''}` +
         `${summary.remediated ? `, staffed ${summary.remediated}` : ''}` +
-        `${summary.remediationDeferred ? ` (${summary.remediationDeferred} deferred)` : ''}.`,
+        `${summary.remediationDeferred ? ` (${summary.remediationDeferred} deferred)` : ''}` +
+        `${summary.stalled ? `, stuck ${summary.stalled}` : ''}` +
+        `${summary.unstuck ? ` (unstuck ${summary.unstuck})` : ''}` +
+        `${summary.escalated ? `, escalated ${summary.escalated}` : ''}` +
+        `${summary.stallsResolved ? `, cleared ${summary.stallsResolved}` : ''}.`,
       metadata: {
         scored: summary.scored, ranked: summary.ranked, scheduled: summary.scheduled, assigned: summary.assigned,
         dispatched: summary.dispatched, prsConducted: summary.prsConducted,
         prsMerged: summary.prsMerged, flagged: summary.flagged,
         remediated: summary.remediated, remediationDeferred: summary.remediationDeferred,
+        stalled: summary.stalled, unstuck: summary.unstuck, escalated: summary.escalated,
+        stallsResolved: summary.stallsResolved, staleRunTasksClosed: summary.staleRunTasksClosed,
         trigger: submittedBy, managerType: policy.managerType, coachingApplied: coachingDirectives.length,
       },
     });
@@ -1193,68 +1255,6 @@ function normalizeBuildStatus(v: string | null | undefined): 'success' | 'failur
   return v === 'success' || v === 'failure' || v === 'pending' ? v : null;
 }
 
-/**
- * ASK the outstanding roles to sign off — the step whose absence made the whole
- * accountability model inert.
- *
- * Producer credit is automatic (a terminal run with PR evidence completes the slot via
- * `attributeRunToManifest`), but a REVIEWER slot only clears when an agent records a
- * verdict, and nothing was ever asking one to. So for each outstanding slot with a
- * resolved agent assignee, dispatch that agent AS the role with an explicit instruction
- * to record its sign-off — the same contract `laneRequirementGate` uses for its reviewer
- * round-trip, reused here so a board with no `swimlane_requirements` rows still gets
- * reviewed. `reviewRole` in the payload is what makes the run's attribution land on the
- * right slot.
- *
- * Returns the role names actually dispatched. Bounded to ONE dispatch per pass per
- * ticket: sign-offs are sequential judgements, and a burst would spend N runs to answer
- * one question. Skips slots with no assignee (an `unstaffed` staffing gap the
- * accountability report already surfaces) and never dispatches when a run is live.
- */
-async function driveOutstandingSignoffs(
-  env: Env,
-  db: Db,
-  runtimeService: RuntimeService,
-  args: {
-    tenantId: number; projectId: number;
-    task: ManagedTaskRow;
-    signoff: SignoffGateResult;
-    managerRef: string | null;
-  },
-): Promise<string[]> {
-  const candidate = args.signoff.outstanding.find((o) => o.assigneeKind === 'agent' && !!o.assigneeRef);
-  if (!candidate?.assigneeRef) return [];
-  try {
-    // ONE shared sign-off request contract with the lane requirement gate + the
-    // lane-agent approval path (`kanban/signoffRequest.ts`). It also supplies the
-    // `laneKey` this hand-written instruction omitted — without it the agent's verdict
-    // is recorded against no lane and never satisfies the lane-scoped manifest slot the
-    // gate is waiting on. `candidate.stageKey` is the slot's OWN stage, which is the
-    // lane the verdict has to match; the ticket's current status is only a fallback for
-    // a stage-less slot.
-    const payload = buildSignoffRequestPayload({
-      cloudAgentRef: candidate.assigneeRef,
-      taskId: args.task.id,
-      taskTitle: args.task.title,
-      roleKey: candidate.roleKey,
-      roleName: candidate.roleName,
-      laneKey: candidate.stageKey ?? args.task.status,
-      prUrl: args.task.githubPrUrl,
-    });
-    const deferred: Promise<unknown>[] = [];
-    await dispatchCloudRunForTaskRef(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
-      taskId: args.task.id,
-      tenantId: args.tenantId,
-      payload,
-      submittedBy: `manager:signoff-request:${args.managerRef ?? 'system'}`,
-    });
-    await Promise.allSettled(deferred);
-    return [candidate.roleName];
-  } catch {
-    return [];
-  }
-}
-
 async function coordinatePullRequests(
   env: Env,
   db: Db,
@@ -1262,9 +1262,11 @@ async function coordinatePullRequests(
   ctx: {
     tenantId: number; projectId: number; policy: EffectiveManagerPolicy;
     managed: ManagedTaskRow[]; summary: ManagerRunSummary; runTaskId: number | null;
+    /** Populated with every ticket this stage acted on, so TRIAGE does not double-act. */
+    conductedTaskIds: Set<number>;
   },
 ): Promise<void> {
-  const { tenantId, projectId, policy, managed, summary, runTaskId } = ctx;
+  const { tenantId, projectId, policy, managed, summary, runTaskId, conductedTaskIds } = ctx;
 
   // CONDUCT: complete review-ready tickets and open their PRs (skip under 'queue').
   //
@@ -1328,6 +1330,10 @@ async function coordinatePullRequests(
         if (readiness.action === 'wait_for_run' || readiness.action === 'wait_for_build') {
           continue; // transient by definition — re-evaluated next pass, no noise
         }
+        // Past the transient checks this pass WILL act on the ticket, so claim it:
+        // TRIAGE still diagnoses and registers it (the stuck list must be complete)
+        // but must not re-apply a remedy on top of the one about to run here.
+        conductedTaskIds.add(t.id);
 
         // Expected a deliverable and there is none, or the build is red: this ticket is
         // not reviewable, it is unfinished. Send it BACK to implementation and start its

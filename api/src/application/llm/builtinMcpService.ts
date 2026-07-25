@@ -2473,6 +2473,19 @@ const CATALOG: BuiltinTool[] = [
     },
   },
   {
+    tool: 'manager.stalled_tickets', mutates: false,
+    description: 'THE STUCK-TICKET REGISTER the AI Manager maintains: which tickets have STOPPED MOVING right now, the diagnosed cause of each (never_started, unassigned, capability_gap, human_gate, failure_breaker, missing_deliverable, build_failed, awaiting_signoff, pr_conflict, pr_unreconciled, merge_withheld, blocked), the remedy the manager applied, and — the load-bearing field — how many consecutive attempts of that remedy FAILED to move the ticket. A row whose remedy is "escalate_human" is one the manager has given up on: its own fix provably did not work, so a person is needed. `byCause` ranks what is holding up the most work. Use this to answer "what is stuck and what is being done about it?", and prefer it over counting tickets yourself — the register already grades whether each fix worked. Pair with autonomy.wiring_audit (can autonomy work at all) and tickets.lifecycle (why THIS one ticket is stuck).',
+    parameters: obj({ projectId: N }, []),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('the stall register needs the platform environment');
+      const { getStallRegister } = await import('../manager/stallWatch');
+      return getStallRegister(ctx.env, ctx.db, {
+        tenantId: ctx.tenantId,
+        projectId: a.projectId != null ? num(a.projectId) : null,
+      });
+    },
+  },
+  {
     tool: 'tickets.lifecycle', mutates: false,
     description: 'THE CHAIN OF CUSTODY for ONE ticket: every lifecycle event in order — created, auto-run decision (dispatched or the exact gate that declined it), run started/completed/failed, each lane move with who moved it — where every event names the source table it was read from, so it is evidence rather than narration. Plus a verdict: autonomous vs human lane hops, runs dispatched/completed/failed, whether it reached a terminal lane, whether it is stalled and the LIVE gate holding it right now. Use this to answer "why is THIS ticket stuck?" and to tell an agent-driven ticket from a human-driven one.',
     parameters: obj({ taskId: N }, ['taskId']),
@@ -2822,7 +2835,11 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // allowlist it could only guess, which is how a livelock and an empty sign-off ledger
   // survived for weeks. Diagnosis is deliberately separate from the remedies, which are
   // the already-audited mutating tools above.
-  'autonomy.wiring_audit', 'autonomy.summary', 'tickets.lifecycle',
+  // `manager.stalled_tickets` also carries what the manager has ALREADY TRIED on each
+  // stuck ticket and how many times it failed — so an agent asked to unstick a board
+  // starts from the manager's own attempt history rather than repeating a remedy that
+  // has provably not worked.
+  'autonomy.wiring_audit', 'autonomy.summary', 'tickets.lifecycle', 'manager.stalled_tickets',
   // Security agent: file SOC 2 findings mid-run. NOT security.configure_access —
   // deciding who can see security tickets is an admin action, never an unattended
   // agent reconfiguring its own findings' visibility.

@@ -24,6 +24,27 @@ import { TaskStatus } from '../../domain/shared/types';
  *  any swimlane flagged `isTerminal` is treated as done-class at runtime. */
 const DONE_CLASS = new Set<string>([TaskStatus.DONE]);
 
+/**
+ * Lane keys whose work is JUDGING work someone else already did.
+ *
+ * The distinction matters for exactly one rule, and it is a safety rule: on a review
+ * lane the ticket's OWNER must never be used as the auto-run fallback agent. The
+ * fallback exists to answer "I assigned Ada to this ticket, why isn't she working
+ * it" — correct on a producing lane, and a self-review on this one. Since `in_review`
+ * became auto-gated (0369) so an AI reviewer can actually be dispatched, without this
+ * rule that same change would have had the author's own agent re-run on its own
+ * output and call it reviewed.
+ *
+ * Exported as a lane CLASS (not a hardcoded status compare) so the review semantics
+ * live in one place alongside {@link DONE_CLASS}.
+ */
+export const REVIEW_CLASS = new Set<string>([TaskStatus.IN_REVIEW]);
+
+/** True when the lane's work is a judgement on someone else's output. */
+export function isReviewLane(status: string | null | undefined): boolean {
+  return !!status && REVIEW_CLASS.has(status);
+}
+
 type LaneInfo = { position: number; isTerminal: boolean };
 type OrdinalMap = Record<string, LaneInfo>;
 
