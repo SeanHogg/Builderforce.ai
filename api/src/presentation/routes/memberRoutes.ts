@@ -22,6 +22,7 @@ import { deploymentEvents, integrationCredentials, memberMetricsPeriod, memberPr
 import { decryptCredentials } from '../../application/integrations/credentialCrypto';
 import { syncMemberCalendar, type CalendarCredential } from '../../application/integrations/googleCalendarSync';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { memberProfilesCacheKey as profilesCacheKey, readMemberProfiles } from '../../application/member/memberProfiles';
 import {
   computeDora,
   computeMemberMetrics,
@@ -42,7 +43,6 @@ const MEMBER_KINDS = new Set(['human', 'cloud_agent', 'host_agent']);
 const clampDays = (raw: number, def: number, max: number) =>
   Math.min(max, Math.max(1, Number.isFinite(raw) ? raw : def));
 
-function profilesCacheKey(tenantId: number): string { return `member-profiles:tenant:${tenantId}`; }
 
 /** The profile fields a caller may set (server owns id/tenant/segment/timestamps). */
 interface ProfileBody {
@@ -75,10 +75,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
   // profile PUT below.
   router.get('/profiles', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const profiles = await getOrSetCached(c.env as Env, profilesCacheKey(tenantId), async () =>
-      db.select().from(memberProfiles).where(eq(memberProfiles.tenantId, tenantId)),
-    );
-    return c.json({ profiles });
+    return c.json({ profiles: await readMemberProfiles(c.env as Env, db, tenantId) });
   });
 
   // ── GET /api/members/:kind/:ref/profile — one profile (null if unset) ──────
@@ -112,8 +109,6 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
       memberKind: kind as 'human' | 'cloud_agent' | 'host_agent',
       memberRef: ref,
       timezone: body.timezone ?? null,
-      workHours: body.workHours ?? null,
-      pto: body.pto ?? null,
       responseSlaHours: body.responseSlaHours ?? null,
       weeklyCapacityHours: body.weeklyCapacityHours ?? null,
       dailyCapacityPoints: body.dailyCapacityPoints ?? null,
@@ -130,6 +125,18 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
       costRateUsdCents: body.costRateUsdCents ?? null,
       syncSource: body.syncSource ?? 'manual',
       updatedAt: new Date(),
+      // `pto` and `workHours` are CALENDAR-OWNED and PRESENCE-ONLY: written only when the
+      // caller actually sent the key, never defaulted to null.
+      //
+      // Every other field above is a full-object replace, which is right for fields the
+      // editor renders — omitting one there means "clear it". These two are different:
+      // no UI edits them, the Google Calendar sync is their only real writer, and a
+      // client that PUTs a partial profile would silently erase someone's approved leave.
+      // Since 0366 that leave is what excuses them from a ceremony instead of marking
+      // them absent, so the erasure would end with an agent taking work off someone
+      // who was on holiday.
+      ...(body.pto !== undefined ? { pto: body.pto } : {}),
+      ...(body.workHours !== undefined ? { workHours: body.workHours } : {}),
     };
 
     const [row] = await db

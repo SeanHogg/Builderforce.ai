@@ -47,28 +47,100 @@ const granted = {
 
 describe('attendance verdicts', () => {
   it('marks a human who was observed as present', () => {
-    expect(resolveAttendanceVerdict(seat({ joinedAt: hoursAgo(1) }))).toBe('present');
+    expect(resolveAttendanceVerdict(seat({ joinedAt: hoursAgo(1) })).verdict).toBe('present');
   });
 
   it('treats an accrued speaking turn as proof of presence even with no heartbeat', () => {
     // The backstop that matters most: a facilitated session where the heartbeat never
     // landed must not report the person who spoke as a no-show, because that verdict is
     // the one that can take their work away.
-    expect(resolveAttendanceVerdict(seat({ joinedAt: null, durationMs: 5_000 }))).toBe('present');
+    expect(resolveAttendanceVerdict(seat({ joinedAt: null, durationMs: 5_000 })).verdict).toBe('present');
   });
 
   it('marks an expected human who never appeared as absent', () => {
-    expect(resolveAttendanceVerdict(seat())).toBe('absent');
+    expect(resolveAttendanceVerdict(seat()).verdict).toBe('absent');
   });
 
   it('excuses an optional seat that never appeared', () => {
-    expect(resolveAttendanceVerdict(seat({ required: false }))).toBe('excused');
+    expect(resolveAttendanceVerdict(seat({ required: false })).verdict).toBe('excused');
   });
 
   it('always counts agents as present — they cannot fail to show up', () => {
-    expect(resolveAttendanceVerdict(seat({ memberKind: 'cloud_agent' }))).toBe('present');
-    expect(resolveAttendanceVerdict(seat({ memberKind: 'host_agent' }))).toBe('present');
+    expect(resolveAttendanceVerdict(seat({ memberKind: 'cloud_agent' })).verdict).toBe('present');
+    expect(resolveAttendanceVerdict(seat({ memberKind: 'host_agent' })).verdict).toBe('present');
     expect(isHumanSeat('cloud_agent')).toBe(false);
+  });
+
+  it('EXCUSES someone on approved leave instead of marking them absent', () => {
+    // The point of reading member_profiles.pto: a holiday must not contribute to
+    // having your tickets handed to an agent.
+    const r = resolveAttendanceVerdict(seat({ onPto: true }));
+    expect(r.verdict).toBe('excused');
+    expect(r.source).toBe('pto');
+  });
+
+  it('counts someone who joined anyway as PRESENT, whatever their calendar said', () => {
+    const r = resolveAttendanceVerdict(seat({ onPto: true, joinedAt: hoursAgo(1) }));
+    expect(r.verdict).toBe('present');
+    expect(r.source).toBe('derived');
+  });
+
+  it('returns a MANUAL verdict untouched, outranking every derived signal', () => {
+    // A manager said this person was here; a missing heartbeat must not undo that.
+    const r = resolveAttendanceVerdict(seat({ storedVerdict: 'present', storedSource: 'manual' }));
+    expect(r.verdict).toBe('present');
+    expect(r.source).toBe('manual');
+  });
+
+  it('honours a manual ABSENT even for someone the heartbeat observed', () => {
+    const r = resolveAttendanceVerdict(seat({
+      joinedAt: hoursAgo(1), durationMs: 9_000, storedVerdict: 'absent', storedSource: 'manual',
+    }));
+    expect(r.verdict).toBe('absent');
+    expect(r.source).toBe('manual');
+  });
+
+  it('ignores a manual source carrying no usable verdict rather than freezing on unknown', () => {
+    // A row stamped 'manual' but still 'unknown' is incoherent; falling through to the
+    // derived answer beats persisting 'unknown' forever.
+    expect(resolveAttendanceVerdict(seat({ storedVerdict: 'unknown', storedSource: 'manual' })).verdict).toBe('absent');
+  });
+
+  it('does not let a stale DERIVED verdict override a fresh signal', () => {
+    // Only 'manual' is sticky. A previously-derived 'absent' must be recomputable.
+    const r = resolveAttendanceVerdict(seat({ joinedAt: hoursAgo(1), storedVerdict: 'absent', storedSource: 'derived' }));
+    expect(r.verdict).toBe('present');
+  });
+});
+
+describe('attendance + PTO through the summary', () => {
+  it('keeps someone on leave OUT of absentHumans, so their work is never reassigned', () => {
+    const s = resolveAttendance([
+      seat({ memberRef: 'u1', memberName: 'Sam', onPto: true }),
+      seat({ memberRef: 'u2', memberName: 'Ada' }),
+    ]);
+    expect(s.absentHumans.map((a) => a.memberRef)).toEqual(['u2']);
+    // Still counted as expected — the standup did have two seats — but not as a no-show.
+    expect(s.humansExpected).toBe(2);
+    expect(s.humansPresent).toBe(0);
+  });
+
+  it('a roster of nothing but people on leave is still unattended', () => {
+    // Nobody came, so the unattended-ceremony gate still applies; they just aren't
+    // blamed for it.
+    const s = resolveAttendance([seat({ memberRef: 'u1', onPto: true })]);
+    expect(s.unattended).toBe(true);
+    expect(s.absentHumans).toHaveLength(0);
+  });
+
+  it('a manual correction to present feeds straight into the counters', () => {
+    const s = resolveAttendance([
+      seat({ memberRef: 'u1', storedVerdict: 'present', storedSource: 'manual' }),
+      seat({ memberRef: 'u2' }),
+    ]);
+    expect(s.humansPresent).toBe(1);
+    expect(s.unattended).toBe(false);
+    expect(s.absentHumans.map((a) => a.memberRef)).toEqual(['u2']);
   });
 });
 
