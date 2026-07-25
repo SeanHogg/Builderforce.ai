@@ -110,6 +110,7 @@ function ManagerDefaultsInner() {
     autoAssign: stored?.autoAssign ?? null,
     autoBusinessValue: stored?.autoBusinessValue ?? null,
     autoPrioritize: stored?.autoPrioritize ?? null,
+    autoSchedule: stored?.autoSchedule ?? null,
     allowUnattendedCeremonies: stored?.allowUnattendedCeremonies ?? null,
     allowAgentReassignment: stored?.allowAgentReassignment ?? null,
     agentReassignIdleHours: stored?.agentReassignIdleHours ?? null,

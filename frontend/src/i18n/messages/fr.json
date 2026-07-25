@@ -2669,7 +2669,9 @@
       "task": "Tâche",
       "roadmap": "Feuille de route"
     },
-    "exportCsv": "Exporter CSV"
+    "exportCsv": "Exporter CSV",
+    "milestoneTip": "Jalon — une seule date est définie",
+    "derivedTip": "Dates déduites des éléments qu'il contient"
   },
   "reconcile": {
     "loading": "Chargement des éléments de travail…",
@@ -6686,7 +6688,8 @@
       "unranked": "Non classés",
       "unowned": "Sans responsable",
       "openPullRequests": "PR ouvertes",
-      "flagged": "Lacunes de couverture"
+      "flagged": "Lacunes de couverture",
+      "undated": "Sans dates"
     },
     "chart": {
       "title": "Backlog par priorité",
@@ -6799,6 +6802,10 @@
         "help": "Limite stricte du nombre de tickets qu’une seule cérémonie peut transférer, afin qu’une mêlée ne réattribue jamais discrètement tout un sprint.",
         "unit": "tickets",
         "inherited": "Valeur héritée utilisée : {value}"
+      },
+      "autoSchedule": {
+        "label": "Placer le travail sur un calendrier",
+        "help": "Attribue une date de début et une échéance aux tickets sans dates, par ordre de priorité et en respectant les dépendances. Ne modifie jamais une date que vous avez définie."
       }
     },
     "backlog": {
@@ -6822,7 +6829,9 @@
       "sync_pr": "PR actualisée",
       "merge_pr": "PR fusionnée",
       "flag": "Signalé",
-      "coordinate": "Rôle affecté"
+      "coordinate": "Rôle affecté",
+      "schedule": "Planifié",
+      "merge_blocked": "Fusion refusée"
     },
     "runTasks": {
       "title": "Tâches du manager",

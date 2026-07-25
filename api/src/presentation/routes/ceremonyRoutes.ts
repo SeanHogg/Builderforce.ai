@@ -40,7 +40,6 @@ import {
   concludeCeremonySession, recordCeremonyPresence, CEREMONY_TARGET_TYPE,
 } from '../../application/ceremony/concludeCeremony';
 import { getActivityLog, resolveActorFromContext } from '../../application/activity/activityLog';
-import { getEffectiveManagerPolicy } from '../../application/manager/ManagerService';
 import { isValidCron, nextCronTime } from '../../domain/workflowSchedule';
 import { relayToRoom } from './realtimeRelay';
 

@@ -97,6 +97,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     autoAssign?: boolean | null;
     autoBusinessValue?: boolean | null;
     autoPrioritize?: boolean | null;
+    autoSchedule?: boolean | null;
     requireSignoffToComplete?: boolean | null;
     allowAutoMerge?: boolean | null;
     allowUnattendedCeremonies?: boolean | null;
@@ -138,7 +139,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
 
     const patch: TenantManagerDefaultsPatch = {};
     const bools = [
-      'enabled', 'autoAssign', 'autoBusinessValue', 'autoPrioritize',
+      'enabled', 'autoAssign', 'autoBusinessValue', 'autoPrioritize', 'autoSchedule',
       'requireSignoffToComplete', 'allowAutoMerge',
       'allowUnattendedCeremonies', 'allowAgentReassignment',
     ] as const;
@@ -200,6 +201,9 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
         total: sql<number>`count(*)::int`,
         unscored: sql<number>`count(*) filter (where ${tasks.businessValue} is null)::int`,
         unranked: sql<number>`count(*) filter (where ${tasks.managerRank} is null)::int`,
+        // Work with NO place on the timeline (0364) — the number that made the planning
+        // spine read "no dates" from top to bottom, now visible before a human notices it.
+        undated: sql<number>`count(*) filter (where ${tasks.startDate} is null and ${tasks.dueDate} is null)::int`,
         unowned: sql<number>`count(*) filter (where ${tasks.assignedUserId} is null and ${tasks.assignedAgentRef} is null and ${tasks.assignedAgentHostId} is null)::int`,
         // Role/diagnostic coverage, read off the denormalised verdict on the task —
         // free here (same aggregate) rather than a second pass over ticket_audits.
@@ -274,6 +278,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
         total: counts?.total ?? 0,
         unscored: counts?.unscored ?? 0,
         unranked: counts?.unranked ?? 0,
+        undated: counts?.undated ?? 0,
         unowned: counts?.unowned ?? 0,
         openPullRequests: prCount?.open ?? 0,
         flagged: counts?.flagged ?? 0,
@@ -302,6 +307,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       autoAssign?: boolean;
       autoBusinessValue?: boolean;
       autoPrioritize?: boolean;
+      autoSchedule?: boolean;
       managerType?: string;
       requireSignoffToComplete?: boolean;
       /** Tri-state (0363): true/false = an explicit project decision, null = inherit the
@@ -326,6 +332,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       ...(body.autoAssign !== undefined ? { autoAssign: !!body.autoAssign } : {}),
       ...(body.autoBusinessValue !== undefined ? { autoBusinessValue: !!body.autoBusinessValue } : {}),
       ...(body.autoPrioritize !== undefined ? { autoPrioritize: !!body.autoPrioritize } : {}),
+      ...(body.autoSchedule !== undefined ? { autoSchedule: !!body.autoSchedule } : {}),
       ...(body.managerType !== undefined ? { managerType: normalizeManagerType(body.managerType) } : {}),
       ...(body.requireSignoffToComplete !== undefined ? { requireSignoffToComplete: !!body.requireSignoffToComplete } : {}),
       // NOT coerced with `!!` — null must survive as "inherit the workspace tier", which

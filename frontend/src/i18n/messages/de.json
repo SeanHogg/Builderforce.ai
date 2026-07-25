@@ -2669,7 +2669,9 @@
       "task": "Aufgabe",
       "roadmap": "Roadmap"
     },
-    "exportCsv": "CSV exportieren"
+    "exportCsv": "CSV exportieren",
+    "milestoneTip": "Meilenstein — nur ein Datum ist gesetzt",
+    "derivedTip": "Termine aus den enthaltenen Elementen abgeleitet"
   },
   "reconcile": {
     "loading": "Arbeitselemente werden geladen…",
@@ -6686,7 +6688,8 @@
       "unranked": "Nicht eingeordnet",
       "unowned": "Ohne Verantwortlichen",
       "openPullRequests": "Offene PRs",
-      "flagged": "Abdeckungslücken"
+      "flagged": "Abdeckungslücken",
+      "undated": "Ohne Termine"
     },
     "chart": {
       "title": "Backlog nach Priorität",
@@ -6799,6 +6802,10 @@
         "help": "Harte Grenze, wie viele Tickets eine einzelne Zeremonie übergeben darf – damit ein Standup nie unbemerkt einen ganzen Sprint umverteilt.",
         "unit": "Tickets",
         "inherited": "Geerbter Wert wird verwendet: {value}"
+      },
+      "autoSchedule": {
+        "label": "Die Arbeit terminieren",
+        "help": "Gibt Tickets ohne Termine ein Start- und Fälligkeitsdatum in der Reihenfolge des Rankings und berücksichtigt Abhängigkeiten. Ändert nie ein Datum, das du selbst gesetzt hast."
       }
     },
     "backlog": {
@@ -6822,7 +6829,9 @@
       "sync_pr": "PR aktualisiert",
       "merge_pr": "PR zusammengeführt",
       "flag": "Markiert",
-      "coordinate": "Rolle besetzt"
+      "coordinate": "Rolle besetzt",
+      "schedule": "Terminiert",
+      "merge_blocked": "Merge verweigert"
     },
     "runTasks": {
       "title": "Manager-Aufgaben",
