@@ -625,7 +625,7 @@ const CATALOG: BuiltinTool[] = [
       const hasExplicitAssignee = Object.values(explicitAssignee).some((v) => v != null);
       const policyAssignee = hasExplicitAssignee
         ? { assignedUserId: null, assignedAgentRef: null, assignedAgentHostId: null }
-        : resolveManagerAssignee((await getEffectiveManagerPolicy(ctx.db, ctx.tenantId, projectId)).managerRef);
+        : resolveManagerAssignee((await getEffectiveManagerPolicy(ctx.db, ctx.tenantId, projectId, ctx.env)).managerRef);
       const coordinator = hasExplicitAssignee
         ? explicitAssignee
         : Object.values(policyAssignee).some((v) => v != null)

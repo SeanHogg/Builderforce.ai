@@ -26,7 +26,6 @@
  */
 import { and, asc, eq } from 'drizzle-orm';
 import {
-  boards,
   swimlaneAgentAssignments,
   swimlaneRequirements,
   swimlanes,
@@ -47,7 +46,7 @@ import { isParticipantSatisfied } from '../kanban/participantStates';
 import { buildSignoffRequestPayload } from '../kanban/signoffRequest';
 import { recordActivity, cloudAgentActor } from '../activity/activityLog';
 import { findCanonicalBoard } from './canonicalBoard';
-import { decideLaneAgentApproval, resolveLaneApprovers, type StaffedLaneApprover } from './laneApprover';
+import { decideLaneAgentApproval, laneApprovalOwed, resolveLaneApprovers, type StaffedLaneApprover } from './laneApprover';
 
 /** Emit the Coordinator hand-off signal: role R was dispatched to work the ticket. */
 async function emitRoleDispatched(env: Env, db: Db, a: { tenantId: number; projectId: number; taskId: number; roleKey: string; roleName: string; agentRef: string; responsibility: 'reviewer' | 'producer' }): Promise<void> {
@@ -165,8 +164,14 @@ async function enforceLaneAgentApproval(
   const manifest = await participants.listParticipants(env, args.tenantId, args.taskId).catch(() => []);
   const stateByRole = new Map(manifest.filter((p) => p.stageKey === args.status).map((p) => [p.roleKey, p.state]));
 
+  // Cheap pre-check on the SAME shared rule the full decision applies, so the common case
+  // (the lane's work has not run yet) costs nothing extra — this path is reached on nearly
+  // every lane entry, and the two queries below are only worth paying for once an approval
+  // is genuinely outstanding.
+  if (laneApprovalOwed(approvers, stateByRole).length === 0) return none;
+
   // Roles that have ALREADY recorded any verdict, and whether a run already owns the
-  // ticket — the two loop/idempotency guards the pure decision needs.
+  // ticket — the two loop/idempotency guards the decision needs.
   const answered = new Set(
     (await db
       .select({ roleKey: ticketRoleSignoffs.roleKey })
@@ -293,10 +298,7 @@ export async function enforceLaneRequirements(
     for (const s of signoffs) latest.set(s.roleKey, s.verdict);
 
     // Live-run guard: never pile up runs — if one is in flight, only flag this hop.
-    const execs = await runtimeService.listByTask(args.taskId).catch(() => []);
-    const hasLive = execs
-      .map((e) => e.toPlain())
-      .some((e) => ['pending', 'submitted', 'running', 'paused'].includes(e.status));
+    const hasLive = await hasLiveRun(runtimeService, args.taskId);
 
     const dispatchedReviewers: string[] = [];
     const dispatchedProducers: string[] = [];

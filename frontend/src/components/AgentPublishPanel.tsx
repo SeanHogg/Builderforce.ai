@@ -9,6 +9,7 @@ import { publishAgent, validateAgent, ingestAgentKnowledge, type ValidateAgentRe
 import ModelApiSamples from '@/components/ModelApiSamples';
 import { MambaEngine } from '@/lib/mamba-engine';
 import { downloadJson, downloadText } from '@/lib/download';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 const INSTALL_COMMAND = 'iwr -useb https://builderforce.ai/install.ps1 | iex';
 
@@ -66,7 +67,8 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
   const [publishError, setPublishError] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [validation, setValidation] = useState<ValidateAgentResult | null>(null);
-  const [copiedInstall, setCopiedInstall] = useState(false);
+  // 2000ms confirmation (the hook's default), owned by the shared hook.
+  const installCopy = useCopyToClipboard();
   const [includeMamba, setIncludeMamba] = useState(false);
   const [mambaSnapshot, setMambaSnapshot] = useState<MambaStateSnapshot | null>(null);
   const [knowledgeText, setKnowledgeText] = useState('');
@@ -198,12 +200,11 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
     }
   }, [isProfileValid, projectId, selectedJob, profile]);
 
+  // Previously a bare `.then()` with no `.catch()` — a denied clipboard became an
+  // unhandled rejection. The shared hook resolves `false` instead of rejecting.
   const handleCopyInstall = useCallback(() => {
-    navigator.clipboard.writeText(INSTALL_COMMAND).then(() => {
-      setCopiedInstall(true);
-      setTimeout(() => setCopiedInstall(false), 2000);
-    });
-  }, []);
+    void installCopy.copy(INSTALL_COMMAND);
+  }, [installCopy]);
 
   return (
     <div className="h-full flex flex-col bg-gray-900 text-gray-100 text-sm">
@@ -429,7 +430,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                       className="shrink-0 bg-gray-700 hover:bg-gray-600 text-gray-100 text-xs px-2 py-1 rounded"
                       title={tp('copyTitle')}
                     >
-                      {copiedInstall ? `✓ ${tp('copied')}` : tp('copy')}
+                      {installCopy.copied ? `✓ ${tp('copied')}` : tp('copy')}
                     </button>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">

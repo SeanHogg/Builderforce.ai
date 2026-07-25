@@ -28,7 +28,7 @@ import {
   getTenantManagerDefaults, upsertTenantManagerDefaults, type TenantManagerDefaultsPatch,
 } from '../../application/manager/ManagerService';
 import {
-  normalizePrMergePolicy, resolveTenantManagerDefaults,
+  normalizePrMergePolicy, resolveTenantManagerDefaults, DEFAULT_MANAGER_POLICY,
 } from '../../application/manager/managerPolicy';
 import { resolveManagerTypesForTenant, normalizeManagerType } from '../../application/manager/managerTypes';
 import {
@@ -86,14 +86,27 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     allowAutoMerge?: boolean | null;
   };
 
-  // GET /api/manager/defaults — the workspace posture: the raw stored opinions PLUS the
-  // policy a project with no config row of its own resolves to. The UI renders the
-  // resolved values rather than re-deriving them, so backend and surface cannot disagree.
-  // Read-through cached inside getTenantManagerDefaults; invalidated by the PATCH below.
+  /**
+   * The workspace posture, in three parts, all resolved SERVER-SIDE by the one shared fold:
+   *   • `defaults`      — the raw stored opinions (nulls included, so the UI can tell
+   *                       "not set" from "set to the same value as the default").
+   *   • `policy`        — what a project with no config row of its own gets.
+   *   • `builtinPolicy` — the tier BELOW this one, i.e. what a field left unset resolves
+   *                       to. Sent explicitly so the "Use default → currently X" hint is
+   *                       never computed on the client; folding tiers in two places is how
+   *                       a surface ends up promising something the manager won't do.
+   */
+  const defaultsPayload = (defaults: Awaited<ReturnType<typeof getTenantManagerDefaults>>) => ({
+    defaults,
+    policy: resolveTenantManagerDefaults(defaults),
+    builtinPolicy: DEFAULT_MANAGER_POLICY,
+  });
+
+  // GET /api/manager/defaults — read-through cached inside getTenantManagerDefaults and
+  // invalidated by the PATCH below.
   router.get('/defaults', async (c) => {
     const tenantId = c.get('tenantId');
-    const defaults = await getTenantManagerDefaults(db, tenantId, c.env as Env);
-    return c.json({ defaults, policy: resolveTenantManagerDefaults(defaults) });
+    return c.json(defaultsPayload(await getTenantManagerDefaults(db, tenantId, c.env as Env)));
   });
 
   // PATCH /api/manager/defaults — set the workspace defaults (managers only). Same role
@@ -123,7 +136,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       updatedBy: userId ?? null,
       env: c.env as Env,
     });
-    const policy = resolveTenantManagerDefaults(defaults);
+    const payload = defaultsPayload(defaults);
 
     // Autonomy posture is a governance change — record WHO changed it on the shared
     // audit timeline, not just in the row's updated_by.
@@ -132,11 +145,11 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       actor: await resolveActorFromContext(c.env as Env, db, c as never),
       verb: 'manager.defaults.update',
       targetType: 'tenant', targetId: tenantId,
-      summary: `Updated the workspace AI Manager defaults (merge authority: ${policy.allowAutoMerge ? 'granted' : 'withheld'}).`,
+      summary: `Updated the workspace AI Manager defaults (merge authority: ${payload.policy.allowAutoMerge ? 'granted' : 'withheld'}).`,
       metadata: { patch },
     }).catch(() => { /* the timeline is best-effort — never fail the write */ });
 
-    return c.json({ defaults, policy });
+    return c.json(payload);
   });
 
   // GET /api/manager/:projectId — config + effective policy + coordination stats +
@@ -148,9 +161,9 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       return c.json({ error: 'Project not found' }, 404);
     }
 
-    // `policy` is the full three-tier fold; `tenantDefaults` is the raw workspace tier,
-    // shipped alongside it so the project form can label a control "inherited from the
-    // workspace" WITHOUT re-implementing the precedence rules client-side.
+    // `policy` is the full three-tier fold; `tenantPolicy` (below) is the tier this
+    // project INHERITS — both resolved by the shared fold, so the project form can label a
+    // control "inherited from the workspace: X" WITHOUT re-implementing precedence.
     const [config, policy, tenantDefaults] = await Promise.all([
       getManagerConfigRow(db, tenantId, projectId),
       getEffectiveManagerPolicy(db, tenantId, projectId, c.env as Env),
@@ -230,7 +243,9 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     return c.json({
       config: config ?? null,
       policy,
-      tenantDefaults,
+      /** What this project inherits when its own row says nothing (the workspace tier,
+       *  resolved). NOT the same as `policy`, which already includes this project's row. */
+      tenantPolicy: resolveTenantManagerDefaults(tenantDefaults),
       stats: {
         total: counts?.total ?? 0,
         unscored: counts?.unscored ?? 0,
@@ -295,7 +310,8 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       { managerRef: config.managerRef, managerType: config.managerType });
 
     const policy = await getEffectiveManagerPolicy(db, tenantId, projectId, c.env as Env);
-    return c.json({ config, policy, tenantDefaults: await getTenantManagerDefaults(db, tenantId, c.env as Env) });
+    const tenantPolicy = resolveTenantManagerDefaults(await getTenantManagerDefaults(db, tenantId, c.env as Env));
+    return c.json({ config, policy, tenantPolicy });
   });
 
   // POST /api/manager/:projectId/run — run the manager pass now (managers only).

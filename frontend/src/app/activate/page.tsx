@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { AUTH_API_URL, getStoredWebToken } from '@/lib/auth';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 type Mode = 'device' | 'key';
 type Phase =
@@ -26,7 +27,8 @@ function ActivateInner() {
   const [phase, setPhase] = useState<Phase>('loading');
   const [error, setError] = useState('');
   const [key, setKey] = useState('');
-  const [copied, setCopied] = useState(false);
+  // 1500ms confirmation, owned by the shared hook (write + reset timer + unmount safety).
+  const { copied, copy } = useCopyToClipboard(1500);
 
   // Signed-out visitors are sent straight to sign-in and returned here afterwards.
   // `next` is the param /login honours (a `redirect` param is ignored, which used to
@@ -109,15 +111,8 @@ function ActivateInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, phase]);
 
-  async function copyKey() {
-    try {
-      await navigator.clipboard.writeText(key);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* clipboard blocked — user can select manually */
-    }
-  }
+  // Clipboard refusal stays silent as before — the key is on screen to select manually.
+  function copyKey() { void copy(key); }
 
   return (
     <main style={styles.wrap}>

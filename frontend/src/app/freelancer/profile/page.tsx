@@ -15,6 +15,7 @@ import {
   getMyEmbedToken, checkMySlug, getResumeSuggestions, connectHiredVideo,
   type FreelancerProfile, type SlugCheck,
 } from '@/lib/freelancerApi';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 const DISCIPLINES = TALENT_DISCIPLINES;
 const AVAILABILITIES = TALENT_AVAILABILITIES;
@@ -38,7 +39,8 @@ export default function FreelancerProfilePage() {
   const [autofilled, setAutofilled] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  // 1500ms confirmation, owned by the shared hook.
+  const { copied, copy } = useCopyToClipboard(1500);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -165,9 +167,8 @@ export default function FreelancerProfilePage() {
   const publicPath = profile ? `/talent/${profile.slug || profile.userId}` : '';
   const publicUrl = typeof window !== 'undefined' && publicPath ? `${window.location.origin}${publicPath}` : publicPath;
 
-  const copyLink = async () => {
-    try { await navigator.clipboard.writeText(publicUrl); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard blocked */ }
-  };
+  // Clipboard refusal stays silent as before — the URL is visible next to the button.
+  const copyLink = () => { void copy(publicUrl); };
 
   // A fully-resolved profile object from current (possibly unsaved) editor state, for
   // the Preview slide-out — reuses the exact public render (TalentProfileView).

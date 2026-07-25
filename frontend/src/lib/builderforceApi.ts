@@ -1833,11 +1833,14 @@ export interface ManagerTenantDefaults {
   allowAutoMerge: boolean | null;
 }
 
-/** GET/PATCH /api/manager/defaults — the stored workspace opinions plus the policy a
- *  project with no config row of its own resolves to (server-computed). */
+/** GET/PATCH /api/manager/defaults. Every resolved value is server-computed. */
 export interface ManagerDefaultsResponse {
+  /** The raw stored opinions — nulls kept, so "not set" stays distinguishable. */
   defaults: ManagerTenantDefaults | null;
+  /** What a project with no config row of its own resolves to. */
   policy: ManagerPolicy;
+  /** The tier BELOW the workspace — what a field left unset resolves to. */
+  builtinPolicy: ManagerPolicy;
 }
 
 /** One standing coaching directive that steers the manager (project-scoped, or
