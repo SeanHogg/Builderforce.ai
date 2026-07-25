@@ -173,6 +173,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       autoBusinessValue?: boolean;
       autoPrioritize?: boolean;
       managerType?: string;
+      requireSignoffToComplete?: boolean;
     };
     const body = (await c.req.json<ConfigBody>().catch(() => ({} as ConfigBody)));
 
@@ -188,6 +189,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       ...(body.autoBusinessValue !== undefined ? { autoBusinessValue: !!body.autoBusinessValue } : {}),
       ...(body.autoPrioritize !== undefined ? { autoPrioritize: !!body.autoPrioritize } : {}),
       ...(body.managerType !== undefined ? { managerType: normalizeManagerType(body.managerType) } : {}),
+      ...(body.requireSignoffToComplete !== undefined ? { requireSignoffToComplete: !!body.requireSignoffToComplete } : {}),
     });
 
     // A manager is a team member: keep its roster role in lock-step with its type.

@@ -34,6 +34,7 @@ import { normalizeRoleText } from '../kanban/roleMatch';
 import { BUILTIN_ROLES } from '../kanban/roleCatalog';
 import { resolveRoleCapableAgents } from '../kanban/roleCapability';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
+import { isParticipantSatisfied } from '../kanban/participantStates';
 import { recordActivity, cloudAgentActor } from '../activity/activityLog';
 import { findCanonicalBoard } from './canonicalBoard';
 
@@ -194,10 +195,9 @@ export async function enforceLaneRequirements(
     if (requiredProducers.length > 0) {
       const manifest = await participants.listParticipants(env, args.tenantId, args.taskId).catch(() => []);
       const stateByRole = new Map(manifest.filter((p) => p.stageKey === args.status).map((p) => [p.roleKey, p.state]));
-      const done = new Set(['completed', 'waived', 'skipped']);
       for (const req of requiredProducers) {
         const st = stateByRole.get(req.ref);
-        if (st && done.has(st)) continue;
+        if (st && isParticipantSatisfied(st)) continue;
         producerUnmet = true;
         const canDispatch = !hasLive && dispatchedReviewers.length === 0 && dispatchedProducers.length === 0 && st !== 'in_progress';
         if (!canDispatch) continue;

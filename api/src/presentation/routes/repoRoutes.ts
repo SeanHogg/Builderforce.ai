@@ -20,7 +20,8 @@
  */
 import { Hono } from 'hono';
 import { and, eq, desc, sql } from 'drizzle-orm';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { TenantRole } from '../../domain/shared/types';
 import {
   projectRepositories,
   pullRequests,
@@ -522,7 +523,14 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
   // POST /api/repos/pull-requests/:id/merge — Approve & merge a recorded PR from
   // the product. Server-side with the tenant's decrypted token; records who
   // approved (audit) and busts the cached detail.
-  router.post('/pull-requests/:id/merge', async (c) => {
+  //
+  // DEVELOPER+ — this writes to the tenant's real repository and closes the PR, so it
+  // sits at the same tier as every other route that spends or ships. It previously
+  // carried NO role gate at all (only `authMiddleware`), which meant any authenticated
+  // tenant member — including a VIEWER — could merge any PR in the tenant, while merely
+  // *running* the AI Manager required MANAGER. The UI-only affordance was the sole
+  // barrier, and an API caller walked straight past it.
+  router.post('/pull-requests/:id/merge', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
     const id = c.req.param('id');

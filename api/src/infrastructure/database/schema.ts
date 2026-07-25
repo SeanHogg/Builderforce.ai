@@ -1282,6 +1282,11 @@ export const projectManagerConfigs = pgTable('project_manager_configs', {
    *  'delivery' | 'qa' | 'service_desk' | 'devops') or a `role:<key>` custom-role type
    *  (up to a 60-char role key). Shapes what it values + prioritizes. */
   managerType:       varchar('manager_type', { length: 80 }).notNull().default('general'),
+  /** Self-governance precondition (0362): the manager may complete a ticket + merge its
+   *  PR autonomously ONLY when every REQUIRED participation slot has signed off. Default
+   *  true — before this existed, the manager force-completed in-review tickets and
+   *  squash-merged them with no sign-off verification at all. See signoffGate.ts. */
+  requireSignoffToComplete: boolean('require_signoff_to_complete').notNull().default(true),
   lastRunAt:         timestamp('last_run_at'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
