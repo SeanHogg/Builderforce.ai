@@ -17,6 +17,7 @@ import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest
 import { ensureTaskPrdRecord, linkSpecToTask } from '../../application/prd/taskPrd';
 import { recordStatusTransition } from '../../application/task/taskLifecycle';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
+import { buildTicketLifecycle } from '../../application/activity/ticketLifecycleLedger';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
@@ -346,6 +347,40 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       status:    row.status,
     });
     return c.json(evaln);
+  });
+
+  // GET /api/tasks/:id/lifecycle — the AUDIT read: the ticket's whole life as an
+  // ordered, provenance-tagged chain of custody (created → auto-run decision → run →
+  // lane move → … → done), plus a verdict that answers the only question that matters:
+  // did this ticket move through its lifecycle AUTONOMOUSLY, or did a human push it
+  // every hop?
+  //
+  // Nothing here is newly instrumented — it JOINS four streams the platform already
+  // wrote (`activity_log`, `task_status_transitions`, `executions`, `tool_audit_events`),
+  // which is why it answers for tickets closed weeks ago, not just new ones. The
+  // decisive column is `task_status_transitions.actor_kind`: 'system' hops are autonomy,
+  // 'human' hops are a person. Zero human hops to a terminal lane = provably autonomous.
+  //
+  // Uncached for the same reason as autorun-diagnostics: it folds in a LIVE re-evaluation
+  // of the gate (`evaluateTaskAutoRun`) so "why is it stuck right now" reflects current
+  // staffing rather than a recorded skip that may since have been fixed.
+  router.get('/:id/lifecycle', async (c) => {
+    const id = Number(c.req.param('id'));
+    const tenantId = c.get('tenantId');
+    const row = await loadTenantTask(id, tenantId);
+    if (!row) return c.json({ error: 'Task not found' }, 404);
+    const evaln = await evaluateTaskAutoRun(db, runtimeService, {
+      tenantId, projectId: row.projectId, taskId: id, status: row.status,
+    }).catch(() => null);
+    const lifecycle = await buildTicketLifecycle(db, {
+      tenantId,
+      taskId: id,
+      ...(evaln ? { isTerminalLane: evaln.isTerminalLane } : {}),
+      // 'will_run' is not a stall reason — only a refusal explains a stalled ticket.
+      liveReason: evaln && !evaln.canRunNow ? evaln.reason : null,
+    });
+    if (!lifecycle) return c.json({ error: 'Task not found' }, 404);
+    return c.json(lifecycle);
   });
 
   // POST /api/tasks/:id/run-now — manual TRIAGE trigger: dispatch the ticket's

@@ -14,7 +14,10 @@
  * with no change in the resulting site.
  */
 
+import { and, eq, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
+import type { Db } from '../../infrastructure/database/connection';
+import { projectSites, qaTargets } from '../../infrastructure/database/schema';
 import {
   SITES_PREFIX,
   HOSTING_APEX,
@@ -34,8 +37,7 @@ export interface PublishAsset {
 
 export interface PublishInput {
   env: Env;
-  /** Neon tagged-template client, supplied by the caller's router. */
-  sql: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<Record<string, unknown>[]>;
+  db: Db;
   bucket: R2Bucket;
   projectId: number;
   tenantId: number;
@@ -71,15 +73,18 @@ export type PublishResult = PublishSuccess | PublishFailure;
  * by a different project.
  */
 export async function publishStaticSite(input: PublishInput): Promise<PublishResult> {
-  const { env, sql, bucket, projectId, tenantId, projectName, requestedSubdomain, assets } = input;
+  const { env, db, bucket, projectId, tenantId, projectName, requestedSubdomain, assets } = input;
 
   if (assets.length === 0) {
     return { ok: false, status: 400, error: 'No assets uploaded. Build the project first.' };
   }
 
-  const [current] = await sql`
-    SELECT subdomain FROM project_sites WHERE project_id = ${projectId} LIMIT 1`;
-  const oldSub = current?.subdomain as string | undefined;
+  const [current] = await db
+    .select({ subdomain: projectSites.subdomain })
+    .from(projectSites)
+    .where(eq(projectSites.projectId, projectId))
+    .limit(1);
+  const oldSub = current?.subdomain;
 
   const requested = requestedSubdomain?.trim() || oldSub || projectName || `app-${projectId}`;
   const subdomain = normalizeSubdomain(requested);
@@ -92,9 +97,12 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
   }
 
   // Global uniqueness — a subdomain can't be claimed by another project.
-  const [owner] = await sql`
-    SELECT project_id FROM project_sites WHERE subdomain = ${subdomain} LIMIT 1`;
-  if (owner && Number(owner.project_id) !== projectId) {
+  const [owner] = await db
+    .select({ projectId: projectSites.projectId })
+    .from(projectSites)
+    .where(eq(projectSites.subdomain, subdomain))
+    .limit(1);
+  if (owner && Number(owner.projectId) !== projectId) {
     return { ok: false, status: 409, error: `Subdomain "${subdomain}" is taken.` };
   }
 
@@ -122,20 +130,33 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
   }
 
   const versionToken = newVersionToken();
-  await sql`
-    INSERT INTO project_sites
-      (project_id, tenant_id, subdomain, mode, status, r2_prefix, version_token, asset_count, total_bytes, published_at)
-    VALUES
-      (${projectId}, ${tenantId}, ${subdomain}, 'static', 'active', ${newPrefix}, ${versionToken}, ${assets.length}, ${totalBytes}, NOW())
-    ON CONFLICT (project_id) DO UPDATE SET
-      subdomain = EXCLUDED.subdomain,
-      r2_prefix = EXCLUDED.r2_prefix,
-      version_token = EXCLUDED.version_token,
-      status = 'active',
-      asset_count = EXCLUDED.asset_count,
-      total_bytes = EXCLUDED.total_bytes,
-      published_at = NOW(),
-      updated_at = NOW()`;
+  await db
+    .insert(projectSites)
+    .values({
+      projectId,
+      tenantId,
+      subdomain,
+      mode: 'static',
+      status: 'active',
+      r2Prefix: newPrefix,
+      versionToken,
+      assetCount: assets.length,
+      totalBytes,
+      publishedAt: sql`NOW()`,
+    })
+    .onConflictDoUpdate({
+      target: projectSites.projectId,
+      set: {
+        subdomain,
+        r2Prefix: newPrefix,
+        versionToken,
+        status: 'active',
+        assetCount: assets.length,
+        totalBytes,
+        publishedAt: sql`NOW()`,
+        updatedAt: sql`NOW()`,
+      },
+    });
   await invalidateSite(env, subdomain);
 
   const url = `https://${subdomain}.${HOSTING_APEX}`;
@@ -146,14 +167,19 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
   // app with no manual "add a target" step. Best-effort — a failure here must
   // never fail the publish itself.
   try {
-    await sql`
-      UPDATE qa_targets SET base_url = ${url}, status = 'active', updated_at = NOW()
-      WHERE project_id = ${projectId} AND is_default = true`;
-    await sql`
-      INSERT INTO qa_targets (tenant_id, project_id, name, base_url, is_default, status)
+    await db
+      .update(qaTargets)
+      .set({ baseUrl: url, status: 'active', updatedAt: sql`NOW()` })
+      .where(and(eq(qaTargets.projectId, projectId), eq(qaTargets.isDefault, true)));
+    // INSERT ... SELECT ... WHERE NOT EXISTS stays raw: it creates the default
+    // target only if none exists, in ONE statement. Splitting it into a read then
+    // an insert would open a race that could produce two defaults for a project.
+    await db.execute(sql`
+      INSERT INTO ${qaTargets} (tenant_id, project_id, name, base_url, is_default, status)
       SELECT ${tenantId}, ${projectId}, 'Production', ${url}, true, 'active'
       WHERE NOT EXISTS (
-        SELECT 1 FROM qa_targets WHERE project_id = ${projectId} AND is_default = true)`;
+        SELECT 1 FROM ${qaTargets}
+        WHERE ${qaTargets.projectId} = ${projectId} AND ${qaTargets.isDefault} = true)`);
   } catch {
     /* target auto-provisioning is best-effort; publish still succeeded */
   }

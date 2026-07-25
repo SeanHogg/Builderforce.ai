@@ -20,7 +20,6 @@
  * than blocking the proposal.
  */
 import { and, eq, desc, sql as dsql, inArray } from 'drizzle-orm';
-import type { neon } from '@neondatabase/serverless';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { ToolService } from '../tools/ToolService';
@@ -40,8 +39,6 @@ import type {
   RfpResponseBody, RfpCapabilityRoster, RfpPhase, RfpNarrative, RfpPortfolioMatch, RfpScanFreshness, BrandPalette,
 } from './types';
 
-type Sql = ReturnType<typeof neon<false, false>>;
-
 const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
 const MILLICENTS_PER_USD = 100_000;
 
@@ -50,7 +47,6 @@ export interface RfpGenerateDeps {
   db: Db;
   toolService: ToolService;
   auditRunner: AuditRunner;
-  sql: Sql;
   secret: string;
 }
 
@@ -158,7 +154,7 @@ async function ensureFreshScan(
     // a server-side repo file-tree read → feature signals → a fresh tool_runs row).
     for (const audit of listSystemAudits()) {
       try {
-        await deps.auditRunner.runAudit(deps.env, deps.sql, {
+        await deps.auditRunner.runAudit(deps.env, {
           tenantId, projectId, auditId: audit.id, userId, secret: deps.secret,
         });
         refreshed = true;

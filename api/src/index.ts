@@ -55,6 +55,7 @@ import { createPmoRoutes }         from './presentation/routes/pmoRoutes';
 import { createTimeRoutes }        from './presentation/routes/timeRoutes';
 import { createInsightsRoutes }    from './presentation/routes/insightsRoutes';
 import { createAiImpactRoutes }    from './presentation/routes/aiImpactRoutes';
+import { createAutonomyRoutes }    from './presentation/routes/autonomyRoutes';
 import { createBenchmarkingRoutes } from './presentation/routes/benchmarkingRoutes';
 import { createRecommendationsRoutes } from './presentation/routes/recommendationsRoutes';
 import { createDevexRoutes }       from './presentation/routes/devexRoutes';
@@ -555,6 +556,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Additional insight lenses (each is its own router mounted on the same prefix;
   // Hono merges them — distinct subpaths, each carries its own authMiddleware).
   app.route('/api/insights',   createAiImpactRoutes(db));
+  app.route('/api/insights',   createAutonomyRoutes(db));
   app.route('/api/insights',   createBenchmarkingRoutes(db));
   app.route('/api/insights',   createRecommendationsRoutes(db));
   app.route('/api/devex',      createDevexRoutes(db));

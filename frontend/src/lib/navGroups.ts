@@ -128,6 +128,12 @@ export const NAV_GROUPS: NavGroup[] = [
       // redirect here with ?panel=). activePaths keeps the tab highlighted on the
       // retired routes while they redirect in. [insights consolidation]
       { id: '/insights/delivery', labelKey: 'tab.delivery', icon: '📦', activePaths: ['/insights/bottlenecks', '/insights/dora', '/insights/space', '/insights/benchmarking', '/insights/funnel'] },
+      // Autonomy Health — "are manager/agent-created tickets actually completing
+      // their lifecycle autonomously?". Its own tab because it answers a question
+      // no delivery metric does (per-ORIGIN funnel + the autonomous-vs-human hop
+      // split); it is ALSO a Delivery-hub drill-down panel so the dashboard cards
+      // and the Brain can open the same lens in a slide-out.
+      { id: '/insights/autonomy', labelKey: 'tab.autonomy', icon: '🕹' },
       // Finance is a HUB: FinOps spend + Investment Allocation + DevFinOps (R&D /
       // SOC / audit) are drill-down slide-outs of this one tab (their old routes
       // redirect here with ?drill=). activePaths keeps the tab highlighted on the

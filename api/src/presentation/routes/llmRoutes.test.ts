@@ -41,8 +41,8 @@ vi.mock('../../application/llm/LlmProxyService', async (orig) => ({
   llmProxyForPlan: mocks.llmProxyForPlan,
 }));
 // Partial mock — keep the real provider-key exports and only stub the OAuth
-// resolver (it makes a raw neon() call the db mock doesn't cover) so the
-// completion path reaches proxyForCompletion.
+// resolver (its Drizzle read isn't covered by the db mock) so the completion
+// path reaches proxyForCompletion.
 vi.mock('../../application/llm/tenantProviderKeyService', async (orig) => ({
   ...(await orig<typeof import('../../application/llm/tenantProviderKeyService')>()),
   resolveAnthropicOAuthToken: async () => null,
