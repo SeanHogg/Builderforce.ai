@@ -40,6 +40,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { ideAgents, swimlaneAgentAssignments } from '../../infrastructure/database/schema';
+import { isParticipantSatisfied } from '../kanban/participantStates';
 import { BUILTIN_ROLES, isReviewRole, roleDisplayName } from '../kanban/roleCatalog';
 import { agentRoleKeys } from '../kanban/roleCapability';
 import { normalizeRoleText } from '../kanban/roleMatch';
@@ -206,6 +207,68 @@ export function decideLaneApprovers(input: {
     return { tier: 'none', approvers: [], approverResolved: false, reason: 'lane_agents_not_role_capable' };
   }
   return { tier: 'lane_agents', approvers: [...byRole.values()], approverResolved: true, reason: 'lane_agents' };
+}
+
+/** An approver of tier (b), which always has a concrete agent to dispatch. */
+export type StaffedLaneApprover = LaneApprover & { agentRef: string };
+
+export interface LaneAgentApprovalDecision {
+  /** Roles whose approval is owed right now (work has run, slot not satisfied). */
+  owed: string[];
+  /** The ONE approver to ask this hop — null when there is nobody to ask right now. */
+  ask: StaffedLaneApprover | null;
+  /** Suppress the lane's NORMAL auto-run this hop. */
+  blocked: boolean;
+  /** The lane's accountability is unmet (drives the ticket flag). */
+  flagged: boolean;
+}
+
+/**
+ * Given a lane's staffed approvers and the ticket's current state, decide what the lane
+ * gate should do this hop. PURE — the queries live in {@link resolveLaneApprovers} and in
+ * `laneRequirementGate.enforceLaneAgentApproval`.
+ *
+ * THE CRITICAL RULE IS THAT AN APPROVAL IS ONLY OWED AFTER THE WORK HAS RUN. A slot at
+ * `pending`/`assigned`/`unstaffed` means no run has been attributed to it yet
+ * (`attributeRunToManifest` advances a slot to `in_progress` when a run for that
+ * role/stage finalizes). Treating those as owed would make the gate dispatch a REVIEW on
+ * the very first entry into a staffed lane — i.e. every un-templated board would review
+ * work that had never been implemented, and `blocked` would suppress the implementation
+ * run that should have happened. That is a far worse regression than the missing
+ * sign-off this whole feature exists to fix, so it gets its own named rule and tests.
+ */
+export function decideLaneAgentApproval(input: {
+  approvers: readonly StaffedLaneApprover[];
+  /** Manifest slot state for THIS lane, keyed by role. Missing ⇒ no slot materialised. */
+  stateByRole: ReadonlyMap<string, string>;
+  /** Roles that already recorded ANY verdict — never re-asked from a lane hop. */
+  answered: ReadonlySet<string>;
+  hasLiveRun: boolean;
+  /** `swimlanes.requirement_gate` for the lane ('off' is filtered out upstream). */
+  requirementGate: string;
+}): LaneAgentApprovalDecision {
+  const owed = input.approvers.filter((a) => {
+    const state = input.stateByRole.get(a.roleKey);
+    if (!state || isParticipantSatisfied(state)) return false;
+    // `in_progress` = a run has been attributed. `changes_requested` = a reviewer already
+    // answered and the lane is still unmet. Everything else means the work is pending.
+    return state === 'in_progress' || state === 'changes_requested';
+  });
+  if (owed.length === 0) return { owed: [], ask: null, blocked: false, flagged: false };
+
+  // One approver per hop: sign-offs are sequential judgements, and a burst would spend N
+  // paid runs answering one question. A role that already answered is re-asked by the AI
+  // Manager's verdict-blind review pass, not by every lane hop (loop safety).
+  const ask = input.hasLiveRun ? null : (owed.find((a) => !input.answered.has(a.roleKey)) ?? null);
+  return {
+    owed: owed.map((a) => a.roleKey),
+    ask,
+    // Suppress the lane's normal agent only when an approval run is actually going out
+    // this hop, or the lane's gate is 'hard' (an unmet hard gate waits, by definition —
+    // the same rule the requirement-row path applies).
+    blocked: ask !== null || input.requirementGate === 'hard',
+    flagged: true,
+  };
 }
 
 /**

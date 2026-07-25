@@ -434,7 +434,17 @@ export class TicketParticipantsService {
       .where(eq(ticketRoleSignoffs.taskId, taskId))
       .orderBy(asc(ticketRoleSignoffs.createdAt));
     const latestBySlot = new Map<string, { id: string; verdict: string }>();
-    for (const s of signoffs) latestBySlot.set(`${s.laneKey ?? ''}:${s.roleKey}`, { id: s.id, verdict: s.verdict });
+    // A verdict recorded WITHOUT a laneKey, indexed by role alone. `laneKey` is optional
+    // on the sign-off route and the MCP tool, so an agent that omits it produced a ledger
+    // row keyed `:role` that matched NO lane-scoped slot — the verdict was recorded and
+    // then ignored by every gate reading the manifest. An unscoped sign-off is best read
+    // as "this role approved the ticket", so it is applied to that role's slots as a
+    // FALLBACK only; an exact lane match always wins.
+    const latestByRole = new Map<string, { id: string; verdict: string }>();
+    for (const s of signoffs) {
+      latestBySlot.set(`${s.laneKey ?? ''}:${s.roleKey}`, { id: s.id, verdict: s.verdict });
+      if (s.laneKey == null) latestByRole.set(s.roleKey, { id: s.id, verdict: s.verdict });
+    }
 
     // Child task statuses for rollup.
     const childIds = rows.map((r) => r.childTaskId).filter((n): n is number => n != null);
@@ -445,7 +455,7 @@ export class TicketParticipantsService {
     }
 
     for (const r of rows) {
-      const so = latestBySlot.get(`${r.stageKey ?? ''}:${r.roleKey}`);
+      const so = latestBySlot.get(`${r.stageKey ?? ''}:${r.roleKey}`) ?? latestByRole.get(r.roleKey);
       let state: ParticipantState = r.assigneeRef ? 'assigned' : (r.required ? 'unstaffed' : 'pending');
       let signoffId: string | null = r.signoffId;
       if (r.childTaskId != null) {

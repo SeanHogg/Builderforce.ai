@@ -1064,7 +1064,10 @@
     "requiresRoleHint": "{role, select, viewer {Requires Viewer role} developer {Requires Developer role} manager {Requires Manager role} owner {Requires Owner role} other {Requires {role} role}}",
     "requiresDeveloperRole": "Requires Developer role",
     "closePanel": "Close panel",
-    "panel": "Panel"
+    "panel": "Panel",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Copy failed"
   },
   "prdCreate": {
     "title": "New PRD",
@@ -1376,7 +1379,13 @@
     "spendSave": "Save",
     "spendSaving": "Saving…",
     "spendSaved": "Saved",
-    "spendSaveFailed": "Could not save"
+    "spendSaveFailed": "Could not save",
+    "managerDefaults": "AI Manager",
+    "managerDefaultsTitle": "Workspace AI Manager defaults",
+    "managerDefaultsSubtitle": "How the AI Manager behaves across every project in this workspace. A project can refine these on its own Manager tab — but it can never grant itself a permission you withhold here.",
+    "managerDefaultsError": "Could not load the workspace AI Manager defaults.",
+    "managerDefaultsProjectHint": "To change just one project:",
+    "managerDefaultsProjectLink": "open its Manager settings"
   },
   "pmo": {
     "title": "Portfolio (PMO)",
@@ -6718,8 +6727,35 @@
         "queue": {
           "label": "Leave for a human",
           "help": "Never merge automatically — hold every pull request for someone to review and merge."
-        }
-      }
+        },
+        "needsAuthority": "Timing only matters once the manager is allowed to merge — right now merges wait for a person."
+      },
+      "allowAutoMerge": {
+        "label": "Let the manager merge pull requests",
+        "help": "This is permission to merge at all — separate from the timing choice below. When off, the manager still prepares and checks everything, then leaves the merge to a person."
+      },
+      "requireSignoff": {
+        "label": "Require sign-off before finishing",
+        "help": "Only finish a ticket and merge its pull request once every required reviewer has signed off. A ticket nobody was asked to review never qualifies."
+      },
+      "tri": {
+        "on": "On",
+        "off": "Off",
+        "inherit": "Use default",
+        "builtinIs": "Built-in default: {value}",
+        "workspaceIs": "Workspace default: {value}"
+      },
+      "effective": {
+        "title": "In effect right now",
+        "help": "What the manager will actually do once every level of these settings is combined. For permissions, the strictest answer wins.",
+        "managingOn": "Managing the backlog",
+        "managingOff": "Managing paused",
+        "mergeGranted": "May merge pull requests",
+        "mergeWithheld": "Merges wait for a person",
+        "signoffRequired": "Sign-off required to finish",
+        "signoffOptional": "No sign-off required"
+      },
+      "workspaceDefaultsHint": "Anything left on “Use default” follows your workspace defaults in Settings → AI Manager."
     },
     "backlog": {
       "title": "Ranked backlog",
@@ -7582,7 +7618,9 @@
       "executions": "Run records",
       "tool_audit_events": "Auto-run decision audit",
       "aria": "Source: {label}"
-    }
+    },
+    "copyDiagnostics": "Copy diagnostics",
+    "copyDiagnosticsAria": "Copy the full lifecycle diagnostics for this ticket, including every event, run id and gate reason"
   },
   "taskChanges": {
     "allChanges": "All changes",

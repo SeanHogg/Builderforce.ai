@@ -8,6 +8,10 @@ import { Select } from '@/components/Select';
 import { RoleGate } from '@/components/RoleGate';
 import PillTabs, { type PillTab } from '@/components/PillTabs';
 import { usePermission } from '@/lib/rbac';
+import {
+  ManagerAutonomyControls, ManagerEffectiveSummary,
+  type ManagerAutonomyValue,
+} from '@/components/manager/ManagerAutonomyControls';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import {
   managerApi,
@@ -60,7 +64,6 @@ const PRIORITY_BADGE: Record<TaskPriority, string> = {
   urgent: 'badge-red',
 };
 const PRIORITIES: TaskPriority[] = ['urgent', 'high', 'medium', 'low'];
-const PR_POLICIES: PrMergePolicy[] = ['immediate', 'on_green', 'queue'];
 const ACTION_ICON: Record<ManagerActionType, string> = {
   prioritize: '📊',
   assign: '👤',
@@ -70,7 +73,29 @@ const ACTION_ICON: Record<ManagerActionType, string> = {
   merge_pr: '🔀',
   flag: '🚩',
   coordinate: '🧭',
+  merge_blocked: '✋',
 };
+
+/**
+ * Translate a patch from the shared (tri-state) control set into the project config patch
+ * the API takes.
+ *
+ * Only `allowAutoMerge` is nullable on a project row, so a `null` on any other field would
+ * be a write the column cannot hold — dropped here rather than coerced, because coercing
+ * `null` to `false` on e.g. `enabled` would silently pause a project the user was trying
+ * to leave alone.
+ */
+function autonomyPatchToConfigPatch(patch: Partial<ManagerAutonomyValue>): ManagerConfigPatch {
+  const out: ManagerConfigPatch = {};
+  if (patch.allowAutoMerge !== undefined) out.allowAutoMerge = patch.allowAutoMerge;
+  if (typeof patch.enabled === 'boolean') out.enabled = patch.enabled;
+  if (typeof patch.requireSignoffToComplete === 'boolean') out.requireSignoffToComplete = patch.requireSignoffToComplete;
+  if (typeof patch.autoAssign === 'boolean') out.autoAssign = patch.autoAssign;
+  if (typeof patch.autoBusinessValue === 'boolean') out.autoBusinessValue = patch.autoBusinessValue;
+  if (typeof patch.autoPrioritize === 'boolean') out.autoPrioritize = patch.autoPrioritize;
+  if (patch.prMergePolicy != null) out.prMergePolicy = patch.prMergePolicy;
+  return out;
+}
 
 // ── Shared inline styles (all colours from theme vars → light + dark safe) ──
 const panelStyle: CSSProperties = {
@@ -274,8 +299,25 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   }
   if (!data) return null;
 
-  const { policy, stats, backlog, actions, runTasks, autonomy, managerTypes, directives } = data;
+  const { config, policy, stats, backlog, actions, runTasks, autonomy, managerTypes, directives } = data;
   const managerValue = policy.managerRef ?? '';
+
+  // The opinions stored at the PROJECT tier, as the shared control set reads them.
+  //
+  // Merge authority is the raw stored value so "inherit the workspace answer" (null) stays
+  // distinguishable from "this project says no". The rest bind to the RESOLVED policy
+  // because their columns are NOT NULL (0265): a project with no row yet has no separate
+  // stored value to show, and the first write to any of them materialises the row with
+  // exactly the values on screen.
+  const projectAutonomy: ManagerAutonomyValue = {
+    enabled: policy.enabled,
+    allowAutoMerge: config ? config.allowAutoMerge : null,
+    requireSignoffToComplete: policy.requireSignoffToComplete,
+    prMergePolicy: policy.prMergePolicy,
+    autoAssign: policy.autoAssign,
+    autoBusinessValue: policy.autoBusinessValue,
+    autoPrioritize: policy.autoPrioritize,
+  };
   const capWindow = autonomy?.reason === 'monthly_exhausted' ? 'monthly' : 'daily';
   const activeDirectives = directives.filter((d) => d.status === 'active');
 
@@ -478,60 +520,21 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
             )}
           </div>
 
-          {/* Toggles */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 20 }}>
-            <ToggleRow
-              label={t('policy.enabled.label')} help={t('policy.enabled.help')}
-              checked={policy.enabled} disabled={saving}
-              onChange={(v) => savePatch({ enabled: v })}
-            />
-            <ToggleRow
-              label={t('policy.autoBusinessValue.label')} help={t('policy.autoBusinessValue.help')}
-              checked={policy.autoBusinessValue} disabled={saving}
-              onChange={(v) => savePatch({ autoBusinessValue: v })}
-            />
-            <ToggleRow
-              label={t('policy.autoPrioritize.label')} help={t('policy.autoPrioritize.help')}
-              checked={policy.autoPrioritize} disabled={saving}
-              onChange={(v) => savePatch({ autoPrioritize: v })}
-            />
-            <ToggleRow
-              label={t('policy.autoAssign.label')} help={t('policy.autoAssign.help')}
-              checked={policy.autoAssign} disabled={saving}
-              onChange={(v) => savePatch({ autoAssign: v })}
-            />
-          </div>
+          {/* What the manager will actually do once the workspace defaults and this
+              project's settings are combined — server-resolved, never re-derived here. */}
+          <ManagerEffectiveSummary effective={policy} />
 
-          {/* PR-merge policy segmented control */}
-          <div>
-            <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: 4 }}>
-              {t('policy.prMerge.label')}
-            </div>
-            <div style={{ ...mutedStyle, marginBottom: 8 }}>{t('policy.prMerge.help')}</div>
-            <div role="radiogroup" style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 6, border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 4 }}>
-              {PR_POLICIES.map((p) => {
-                const active = policy.prMergePolicy === p;
-                return (
-                  <button
-                    key={p}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    disabled={saving}
-                    onClick={() => savePatch({ prMergePolicy: p })}
-                    title={t(`policy.prMerge.${p}.help`)}
-                    style={{
-                      padding: '7px 12px', borderRadius: 7, border: 'none', cursor: saving ? 'default' : 'pointer',
-                      background: active ? 'var(--accent, #2563eb)' : 'transparent',
-                      color: active ? '#fff' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.82rem',
-                    }}
-                  >
-                    {t(`policy.prMerge.${p}.label`)}
-                  </button>
-                );
-              })}
-            </div>
-            <div style={{ ...mutedStyle, marginTop: 8 }}>{t(`policy.prMerge.${policy.prMergePolicy}.help`)}</div>
+          {/* The autonomy control set — the SAME component the workspace-defaults panel
+              in /settings renders, at the project scope. */}
+          <ManagerAutonomyControls
+            tier="project"
+            value={projectAutonomy}
+            effective={policy}
+            disabled={saving}
+            onChange={(patch) => savePatch(autonomyPatchToConfigPatch(patch))}
+          />
+          <div style={{ ...mutedStyle, marginTop: 12, fontSize: '0.72rem' }}>
+            {t('policy.workspaceDefaultsHint')}
           </div>
         </div>
       </RoleGate>
@@ -797,36 +800,6 @@ function StatTile({ label, value, tone }: { label: string; value: number; tone?:
       </div>
       <div style={{ ...mutedStyle, marginTop: 2 }}>{label}</div>
     </div>
-  );
-}
-
-function ToggleRow({ label, help, checked, disabled, onChange }: {
-  label: string; help: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void;
-}) {
-  return (
-    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '8px 0', cursor: disabled ? 'default' : 'pointer' }}>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-        style={{
-          flexShrink: 0, marginTop: 2, width: 40, height: 22, borderRadius: 999, border: 'none', position: 'relative',
-          cursor: disabled ? 'default' : 'pointer', transition: 'background 0.2s',
-          background: checked ? 'var(--accent, #2563eb)' : 'var(--border-subtle)',
-        }}
-      >
-        <span style={{
-          position: 'absolute', top: 2, left: checked ? 20 : 2, width: 18, height: 18, borderRadius: '50%',
-          background: '#fff', transition: 'left 0.2s',
-        }} />
-      </button>
-      <span>
-        <span style={{ display: 'block', fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{label}</span>
-        <span style={{ display: 'block', ...mutedStyle }}>{help}</span>
-      </span>
-    </label>
   );
 }
 
