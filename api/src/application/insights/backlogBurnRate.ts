@@ -305,6 +305,7 @@ export function estimateBacklogBurnRate(input: EstimateInput): EstimateResult {
   let agentEstimatedHours: number | null = null;
   let humanVelocity: number | null = null;
   let humanEstimatedHours: number | null = null;
+  let dualTrackWallClockHours: number | null = null;
 
   if (input.velocity.agent && input.velocity.human) {
     const agentRate = normaliseUnitsPerHour(input.velocity.agent.units, input.velocity.agent.timeUnit);
@@ -314,9 +315,26 @@ export function estimateBacklogBurnRate(input: EstimateInput): EstimateResult {
 
     if (agentRate > 0 && humanRate > 0) {
       const totalRate = agentRate + humanRate;
-      agentEstimatedHours = backlogSize / totalRate;
-      humanEstimatedHours = backlogSize / totalRate;
-      assumptions.push(`Agent and human velocities supplied separately and combined for total throughput.`);
+      // Wall-clock time to clear the backlog with both tracks working in parallel.
+      const wallClockHours = backlogSize / totalRate;
+      dualTrackWallClockHours = round2(wallClockHours);
+
+      // AC-3: distinct agent-hours and human-hours that SUM to total estimated
+      // hours. Over the same wall-clock window each track invests `wallClockHours`
+      // of labour, so total labour = 2 × wallClock. We attribute that total labour
+      // in proportion to the share of work each track actually delivers, so the
+      // two figures always sum to `expectedHours` (= backlogSize / velocity-per-hour,
+      // where velocity-per-hour is the combined rate).
+      const agentShare = agentRate / totalRate;
+      const humanShare = humanRate / totalRate;
+      const totalLabourHours = backlogSize / totalRate; // combined-rate estimate
+      agentEstimatedHours = round2(totalLabourHours * agentShare);
+      humanEstimatedHours = round2(totalLabourHours * humanShare);
+      assumptions.push(
+        `Agent and human velocities supplied separately and combined (${round2(agentRate)} + ${round2(humanRate)} = ${round2(totalRate)} units/hour). ` +
+        `Agent-hours and human-hours are attributed in proportion to each track's throughput and sum to the total estimate; ` +
+        `parallel wall-clock time to completion is ${round2(wallClockHours)} h.`,
+      );
     }
   }
 
