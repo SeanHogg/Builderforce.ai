@@ -150,6 +150,56 @@ export function detectUnbackedTicketClaim(events: BrainTraceEvent[], messages: B
   return messages.some((m) => m.role === 'assistant' && typeof m.content === 'string' && TICKET_CLAIM.test(m.content));
 }
 
+/**
+ * An advertised tool identifier written LITERALLY into prose. Nothing else in normal
+ * assistant text looks like `builtin_chats_list_tickets` or `mcp__server__tool` — the
+ * model only types these when it is trying (and failing) to make a call.
+ */
+const TOOL_IDENT = /\b(?:builtin_[a-z0-9]+(?:_[a-z0-9]+)+|mcp__[a-z0-9_]+)\b/i;
+
+/**
+ * Prose that ANNOUNCES a tool/function call rather than emitting one — "I'll call the
+ * tool…", "Calling the required function now", "run tool X". Deliberately requires an
+ * action verb bound to the words tool/function, so ordinary talk ABOUT tooling
+ * ("the export tool in settings") doesn't trip it.
+ */
+const TOOL_ANNOUNCE = new RegExp(
+  [
+    // "I'll call the tool…", "I will now invoke the function…", "let me run the tool…"
+    "\\b(?:i(?:'ll| will| am going to| ?'m going to)?|let me)\\s+(?:now\\s+)?(?:call|invoke|run|execute)\\b[^.!?\\n]{0,40}\\b(?:tool|function)\\b",
+    // "Calling the required function now", "invoking the tool"
+    '\\b(?:calling|invoking|executing)\\b[^.!?\\n]{0,40}\\b(?:tool|function)\\b',
+    // The bare imperative a model writes when it means to emit a call: "run tool X".
+    '\\b(?:call|run|invoke|execute)\\s+(?:the\\s+)?(?:tool|function)\\b',
+  ].join('|'),
+  'i',
+);
+
+/**
+ * The "it doesn't execute, it just dies" signature: an assistant turn that NARRATES a
+ * tool call — naming an advertised tool id, or announcing it in prose — while the run
+ * recorded ZERO tool steps.
+ *
+ * This is a provider/model fault, not a user one: the agent loop only runs structured
+ * `toolCalls` (plus the inline dialects `xmlToolCalls` lifts), so a model that writes
+ * its intent as plain text stalls forever — each turn re-announces the same call, the
+ * data never arrives, and the run ends with nothing done. Without this detector the
+ * triage block scores such a run "healthy" (no errors, no truncation, no context
+ * pressure), which is exactly backwards.
+ *
+ * Pure over the merged trace + visible messages, so both copy surfaces flag it
+ * identically.
+ */
+export function detectAnnouncedButUnmadeToolCall(events: BrainTraceEvent[], messages: BrainMessage[]): boolean {
+  if (events.some((e) => e.category === 'tool')) return false;
+  return messages.some(
+    (m) =>
+      m.role === 'assistant' &&
+      typeof m.content === 'string' &&
+      (TOOL_IDENT.test(m.content) || TOOL_ANNOUNCE.test(m.content)),
+  );
+}
+
 function cap(s: unknown, n = 2000): string {
   const str = typeof s === 'string' ? s : JSON.stringify(s ?? '');
   return str.length > n ? str.slice(0, n) + `… (+${str.length - n} chars)` : str;
@@ -339,6 +389,12 @@ export interface BrainDiagnostics {
   /** Turns that ended on `length` or produced empty text. */
   emptyOrLengthFinishes: number;
   /**
+   * True when a turn NARRATED a tool call ("I'll call the tool…", `builtin_…`) while
+   * the run made none — the model isn't emitting structured `toolCalls`, so nothing
+   * ever executes. See {@link detectAnnouncedButUnmadeToolCall}.
+   */
+  announcedUnmadeToolCall: boolean;
+  /**
    * True when tool steps were RECOVERED from durable history but no `llm` turn
    * covers them — i.e. the chat predates durable turn records (or was reopened),
    * so the turn/token figures describe only this session while the tool figures
@@ -351,8 +407,11 @@ export interface BrainDiagnostics {
    * from `inconclusive`: the former means there is no failure to explain, the
    * latter that there IS one but the signals don't separate A from B. Collapsing
    * both into "inconclusive" made a clean run read as an unsolved problem.
+   *
+   * `tool-calls-not-emitted` outranks the rest: a run that narrated its calls did
+   * nothing at all, and every other signal on it reads clean.
    */
-  likelyCause: 'context-exhaustion' | 'model-degradation' | 'inconclusive' | 'healthy';
+  likelyCause: 'tool-calls-not-emitted' | 'context-exhaustion' | 'model-degradation' | 'inconclusive' | 'healthy';
 }
 
 /** Byte length of a JSON-serialized value (UTF-16 length is a fine proxy here). */
@@ -365,8 +424,16 @@ function byteLen(v: unknown): number {
  * Derive {@link BrainDiagnostics} from a recorded trace. Pure — no clock, no I/O
  * — so both the web report and the VS Code transcript compute the identical
  * block from the same events (single source of truth for A-vs-B triage).
+ *
+ * `messages` is the visible conversation. It is optional only so older callers keep
+ * compiling; without it the narrated-tool-call verdict can't be reached, so every
+ * surface should pass it.
  */
-export function computeBrainDiagnostics(events: BrainTraceEvent[], requestedModel?: string): BrainDiagnostics {
+export function computeBrainDiagnostics(
+  events: BrainTraceEvent[],
+  requestedModel?: string,
+  messages: BrainMessage[] = [],
+): BrainDiagnostics {
   const llm = events.filter((e) => e.category === 'llm');
   const toolEvents = events.filter((e) => e.category === 'tool');
   const errors = events.filter((e) => e.isError || e.category === 'error');
@@ -437,13 +504,19 @@ export function computeBrainDiagnostics(events: BrainTraceEvent[], requestedMode
   // implying an unresolved one. (A run that did NOTHING is not evidence of health,
   // so require it to have actually produced work.)
   const didWork = toolEvents.length > 0 || completionTokenTotal > 0 || llm.length > 0;
+  // A run that narrated its tool calls instead of emitting them produces NO errors,
+  // NO truncation and NO context pressure — it scored "healthy" while accomplishing
+  // nothing. It outranks the other verdicts because it explains the whole run.
+  const announcedUnmadeToolCall = detectAnnouncedButUnmadeToolCall(events, messages);
   const healthy =
-    errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal && didWork;
+    errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal
+    && !announcedUnmadeToolCall && didWork;
   const likelyCause: BrainDiagnostics['likelyCause'] =
-    contextSignal && !degradationSignal ? 'context-exhaustion'
-      : degradationSignal && !contextSignal ? 'model-degradation'
-        : healthy ? 'healthy'
-          : 'inconclusive';
+    announcedUnmadeToolCall ? 'tool-calls-not-emitted'
+      : contextSignal && !degradationSignal ? 'context-exhaustion'
+        : degradationSignal && !contextSignal ? 'model-degradation'
+          : healthy ? 'healthy'
+            : 'inconclusive';
 
   return {
     turns: llm.length,
@@ -461,6 +534,7 @@ export function computeBrainDiagnostics(events: BrainTraceEvent[], requestedMode
     evermindUsed,
     downgradeEvents,
     emptyOrLengthFinishes,
+    announcedUnmadeToolCall,
     turnCoveragePartial,
     likelyCause,
   };
@@ -478,13 +552,15 @@ function kb(bytes: number): string {
  */
 export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
   const verdict =
-    d.likelyCause === 'context-exhaustion'
-      ? 'Likely CONTEXT EXHAUSTION (case A) — the transcript outgrew the model window.'
-      : d.likelyCause === 'model-degradation'
-        ? 'Likely MODEL DEGRADATION (case B) — an Evermind/SSM turn returned empty while tokens stayed low.'
-        : d.likelyCause === 'healthy'
-          ? 'No failure signal — no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging.'
-          : 'Inconclusive — not enough signal to separate context exhaustion from model degradation.';
+    d.likelyCause === 'tool-calls-not-emitted'
+      ? 'TOOL CALLS NOT EMITTED — a turn NARRATED a tool call in prose ("I\'ll call the tool…", a bare `builtin_…` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Check the "Tools available to the model" line in the Chat diagnostics block (0 tools ⇒ it had none to emit), then try a different model.'
+      : d.likelyCause === 'context-exhaustion'
+        ? 'Likely CONTEXT EXHAUSTION (case A) — the transcript outgrew the model window.'
+        : d.likelyCause === 'model-degradation'
+          ? 'Likely MODEL DEGRADATION (case B) — an Evermind/SSM turn returned empty while tokens stayed low.'
+          : d.likelyCause === 'healthy'
+            ? 'No failure signal — no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging.'
+            : 'Inconclusive — not enough signal to separate context exhaustion from model degradation.';
 
   const lines: string[] = ['--- Diagnostics ---', `Likely cause: ${verdict}`];
   // When the turn/token figures cover only THIS session while the tool figures
@@ -561,7 +637,7 @@ export function buildBrainTriageReport(opts: BuildBrainTriageOptions): string {
 
   // Diagnostics block — the A-vs-B verdict + the token/tool-payload/downgrade
   // numbers behind it. Same builder the VS Code transcript uses.
-  lines.push('', ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel)));
+  lines.push('', ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel, messages)));
 
   // Structural honesty flag — a "saved the file" claim with no successful file-write
   // tool call this run (the "it said it updated the file but didn't" failure mode).

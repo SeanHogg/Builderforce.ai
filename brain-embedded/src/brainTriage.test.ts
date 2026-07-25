@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { buildBrainTriageReport, isFailedToolResult, detectUnbackedWriteClaim, detectUnbackedTicketClaim, type BrainTraceEvent } from './brainTriage';
+import {
+  buildBrainTriageReport,
+  computeBrainDiagnostics,
+  detectAnnouncedButUnmadeToolCall,
+  detectUnbackedTicketClaim,
+  detectUnbackedWriteClaim,
+  isFailedToolResult,
+  type BrainTraceEvent,
+} from './brainTriage';
 import type { BrainMessage } from './types';
 
 describe('isFailedToolResult', () => {
@@ -24,6 +32,56 @@ describe('isFailedToolResult', () => {
   it('still flags a stringified error envelope', () => {
     expect(isFailedToolResult('{"ok":false,"reason":"x"}')).toBe(true);
     expect(isFailedToolResult('{"error":"boom"}')).toBe(true);
+  });
+});
+
+/**
+ * The "VSIX doesn't execute, it just dies" failure: the model writes its tool calls as
+ * PROSE, the agent loop only runs structured `tool_calls`, so nothing ever executes —
+ * while every other signal (no errors, no truncation, low tokens) reads perfectly
+ * clean and the run used to be scored "healthy".
+ */
+describe('detectAnnouncedButUnmadeToolCall', () => {
+  const msg = (role: string, content: string): BrainMessage => ({ role, content } as BrainMessage);
+  const llm: BrainTraceEvent = { ts: '', category: 'llm', label: 'llm.complete', usage: { prompt: 3454, completion: 663 } };
+  const toolEv: BrainTraceEvent = { ts: '', category: 'tool', label: 'builtin_chats_list_tickets', result: { ok: true } };
+
+  it('flags a bare advertised tool id typed into prose', () => {
+    const messages = [msg('assistant', 'run tool builtin_chats_list_tickets with chatId is 85')];
+    expect(detectAnnouncedButUnmadeToolCall([llm], messages)).toBe(true);
+  });
+
+  it('flags a first-person announcement that never became a call', () => {
+    const messages = [msg('assistant', "I'll start by listing the tickets. Calling the required function now.")];
+    expect(detectAnnouncedButUnmadeToolCall([llm], messages)).toBe(true);
+    expect(detectAnnouncedButUnmadeToolCall([llm], [msg('assistant', 'I will now call the tool to list them.')])).toBe(true);
+  });
+
+  it('stays silent once the run actually made a tool call', () => {
+    const messages = [msg('assistant', 'run tool builtin_chats_list_tickets with chatId is 85')];
+    expect(detectAnnouncedButUnmadeToolCall([llm, toolEv], messages)).toBe(false);
+  });
+
+  it('does not fire on ordinary talk about tooling, or on the user\'s own words', () => {
+    expect(detectAnnouncedButUnmadeToolCall([llm], [msg('assistant', 'You can use the export tool in Settings.')])).toBe(false);
+    expect(detectAnnouncedButUnmadeToolCall([llm], [msg('assistant', 'Visit builderforce.ai for the docs.')])).toBe(false);
+    expect(detectAnnouncedButUnmadeToolCall([llm], [msg('user', 'run tool builtin_chats_list_tickets')])).toBe(false);
+  });
+
+  it('makes the verdict the cause instead of scoring the run healthy', () => {
+    const messages = [msg('assistant', 'run tool builtin_chats_list_tickets with chatId is 85')];
+    expect(computeBrainDiagnostics([llm], undefined, messages).likelyCause).toBe('tool-calls-not-emitted');
+    // Same trace, no narrated call ⇒ the old healthy verdict still stands.
+    expect(computeBrainDiagnostics([llm], undefined, [msg('assistant', 'Here is the summary.')]).likelyCause).toBe('healthy');
+  });
+
+  it('surfaces the verdict in the report a user pastes', () => {
+    const report = buildBrainTriageReport({
+      capturedAt: '2026-07-25T00:00:00.000Z',
+      events: [llm],
+      messages: [msg('assistant', "I'll call the tool to list the tickets for chat #85 now.")],
+    });
+    expect(report).toContain('TOOL CALLS NOT EMITTED');
   });
 });
 

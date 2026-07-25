@@ -1468,15 +1468,26 @@ export type AutoRunReason =
   | 'human_gate'
   | 'no_agent'
   | 'capability_mismatch'
+  /** A live (pending/submitted/running/paused) run exists on the ticket. */
   | 'already_running'
+  /** The run that just finished already SERVED this lane, so the loop guard
+   *  suppressed an immediate re-dispatch. Distinct from `already_running`: nothing
+   *  is executing. The two shared one reason until a report claimed a live run
+   *  directly above its own `liveExecution: (none)`. */
+  | 'same_lane_reentry'
   | 'run_cap_exhausted'
   /** The TENANT is over its monthly cloud-run allowance. Unlike every other
    *  refusal this one does not clear by retrying, and a human "Run now" does not
    *  override it — it is an entitlement, not backpressure. */
   | 'cloud_run_limit'
+  /** The WORKSPACE is out of token budget — this pauses EVERY ticket the tenant
+   *  owns, so a ticket showing it is not individually stuck. */
+  | 'tenant_token_limit'
   | 'cooldown_active'
   | 'not_executable'
-  | 'pending_approval';
+  | 'pending_approval'
+  /** The lane owes a role sign-off, so its normal agent is suppressed. */
+  | 'lane_requirement_gate';
 
 export interface AutoRunDiagnostic {
   status: string;
@@ -1553,6 +1564,11 @@ export interface LifecycleEvent {
   /** `executions.submitted_by` — WHICH dispatcher started this run
    *  (`system:lane-auto`, `system:coordinator`, `manager:signoff-request:…`, …). */
   dispatchedBy?: string | null;
+  /** How long a `run_dispatched` waited between being created and actually starting,
+   *  ms — present only when the wait was long enough to matter. A queued run holds
+   *  the ticket's live-run guard, so this is the fact that explains a long stretch
+   *  of `already_running` skips with nothing visibly happening. */
+  queuedMs?: number | null;
   source: LifecycleEventSource;
 }
 
@@ -1598,6 +1614,23 @@ export interface LifecycleGateSnapshot {
   consecutiveFailures: number;
   failureBreakerAt: number;
   cooldownRemainingMs: number;
+  /** The WORKSPACE token verdict. Null means the evaluator never reached it (an
+   *  earlier gate decided) — NOT that the workspace has budget. When it is present
+   *  and exhausted, every ticket the tenant owns is paused, which is why a ticket can
+   *  show an open lane gate and a qualified agent and still never dispatch. */
+  tenantTokens: LifecycleTenantTokens | null;
+}
+
+/** Workspace token budget as the lifecycle report needs it: blocked or not, which
+ *  window blew, and the usage/limit pair that proves it. */
+export interface LifecycleTenantTokens {
+  hasTokens: boolean;
+  reason: 'daily_exhausted' | 'monthly_exhausted' | null;
+  usageToday: number;
+  dailyLimit: number;
+  usageMonth: number;
+  monthlyLimit: number;
+  effectivePlan: 'free' | 'pro' | 'teams';
 }
 
 /** How the ticket came into existence — `manager_card` is a grooming card that is

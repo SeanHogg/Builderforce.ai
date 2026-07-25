@@ -177,6 +177,14 @@ export async function runAutonomousExecutionSweep(
       }
 
       if (availability && !availability.hasTokens) {
+        // The tenant is skipped WHOLESALE, above the trigger — so not one of its
+        // tickets gets a per-ticket skip row, and each ticket's chain of custody shows
+        // an unbroken silence for as long as the block lasts (measured: eleven days on
+        // task 683, whose report still read "nothing is gating this ticket"). Writing a
+        // row per ticket per tick would answer that at a cost of thousands of audit
+        // rows a day per blocked tenant, which the DB budget cannot carry. Instead the
+        // condition is modelled by `evaluateTaskAutoRun`, so the LIVE gate — the one a
+        // lifecycle report reads — answers `tenant_token_limit` on demand and for free.
         result.tokenBlockedTenants += 1;
         result.pendingUnderBlockedTenants += tenantCandidates.length;
         // Nudge the tenant to upgrade — they have agents queued but no budget. Deduped
@@ -210,8 +218,29 @@ export async function runAutonomousExecutionSweep(
             tenantId: c.tenantId,
             projectId: c.projectId,
             taskId: c.taskId,
+            // A SNAPSHOT, deliberately: `c.status` is what the scan read, possibly
+            // minutes and several lane moves ago. The evaluator re-reads the row and
+            // gates on the lane the ticket is actually in — passing this only lets it
+            // fall back when the row has since been deleted. Trusting the snapshot is
+            // what let the sweep evaluate an auto-gated Implementation lane for a
+            // ticket already sitting in a human-gated review lane, dispatch through
+            // that gate, and drag the ticket backwards on every tick.
             status: c.status,
             submittedBy: 'system:auto-exec',
+            // The verdict this loop already gated on — reused so the evaluator's own
+            // token gate costs no second lookup per ticket, and so the sweep and the
+            // evaluator cannot disagree about the tenant's budget within one tick.
+            ...(availability ? {
+              tenantTokens: {
+                hasTokens: availability.hasTokens,
+                reason: availability.reason,
+                usageToday: availability.usageToday,
+                dailyLimit: availability.dailyLimit,
+                usageMonth: availability.usageMonth,
+                monthlyLimit: availability.monthlyLimit,
+                effectivePlan: availability.effectivePlan,
+              },
+            } : {}),
           });
           // Only a ticket that actually started a run counts against the per-tenant
           // budget — no-ops (already running / human-gated / no qualifying agent) are
