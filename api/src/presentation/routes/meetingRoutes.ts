@@ -27,6 +27,8 @@ import { pushMeetingEvent, deleteMeetingEvent } from '../../application/calendar
 import type { CalendarProviderName } from '../../application/calendar/calendarProviders';
 import { loadExternalBusy, mergeBusy } from '../../application/calendar/calendarFreeBusy';
 import { loadProjectTeamMembers } from '../../application/metrics/assigneeRecommender';
+import { findActiveCeremonyForMeeting } from '../../application/ceremony/ceremonyMeeting';
+import { recordCeremonyPresence } from '../../application/ceremony/concludeCeremony';
 import { BrainService } from '../../application/brain/BrainService';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import {
@@ -327,6 +329,29 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
         memberName: body.name || 'Guest', email: body.email ?? null, role: 'attendee', response: 'accepted', joinedAt: now,
       });
     }
+
+    // WRITE THROUGH TO THE CEREMONY (0366). If this meeting is the shell for a live
+    // standup/planning session, joining the call IS attending the ceremony — and the
+    // ceremony, not `meeting_attendees`, is the side that owns attendance and feeds the
+    // rules that can reassign someone's work. Routed through the SAME
+    // `recordCeremonyPresence` the round-table heartbeat uses, so the two surfaces cannot
+    // produce disagreeing records. Best-effort: never cost someone their video call.
+    try {
+      const session = await findActiveCeremonyForMeeting(db, tenantId, id);
+      if (session) {
+        await recordCeremonyPresence(db, {
+          tenantId,
+          segmentId: session.segmentId,
+          sessionId: session.id,
+          memberKind: 'human',
+          memberRef: userId,
+          memberName: mine?.memberName || body.name || 'Guest',
+        });
+      }
+    } catch (err) {
+      console.error(`[meeting:join] ceremony presence write-through failed meeting=${id}`, err);
+    }
+
     return c.json({ roomKey: m.roomKey, videoEnabled: m.videoEnabled, iceServers: await iceServers(env), meeting: await hydrate(tenantId, id) });
   });
 

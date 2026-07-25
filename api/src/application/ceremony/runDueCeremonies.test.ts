@@ -16,6 +16,8 @@ const state = {
   selectCount: 0,
   /** When set, the invite fan-out's `notified_at` claim throws (best-effort guard). */
   failNotify: false,
+  /** When set, minting the companion meeting throws (best-effort guard). */
+  failMeeting: false,
 };
 
 function nextResult(): unknown[] {
@@ -41,7 +43,15 @@ const fakeDb = {
   insert: () => {
     const b = builder();
     const origValues = b.values as () => unknown;
-    b.values = (v: unknown) => { state.inserts.push({ values: v }); return origValues(); };
+    b.values = (v: unknown) => {
+      // Discriminated on the payload so ONLY the companion-meeting insert fails; the
+      // session + roster inserts must still succeed for the test that uses this.
+      if (state.failMeeting && !Array.isArray(v) && (v as Record<string, unknown>)?.roomKey !== undefined) {
+        throw new Error('meeting boom');
+      }
+      state.inserts.push({ values: v });
+      return origValues();
+    };
     return b;
   },
   update: () => {
@@ -102,12 +112,27 @@ const schedule = (over: Record<string, unknown> = {}) => ({
  */
 const watermarks = () => state.updates.filter((u) => u.patch.lastStatus !== undefined);
 
+/**
+ * The CEREMONY ROSTER insert, found by shape rather than by position.
+ *
+ * Opening a ceremony now issues four inserts — session, roster, companion meeting (0366),
+ * meeting guest list — so "the last insert" no longer means the roster. `turnOrder` is
+ * the discriminator: only ceremony participants carry it (meeting attendees have
+ * role/response instead).
+ */
+const rosterInsert = (): Array<Record<string, unknown>> => {
+  const hit = state.inserts.find((i) =>
+    Array.isArray(i.values) && (i.values[0] as Record<string, unknown> | undefined)?.turnOrder !== undefined);
+  return (hit?.values as Array<Record<string, unknown>>) ?? [];
+};
+
 beforeEach(() => {
   state.results = [];
   state.updates = [];
   state.inserts = [];
   state.selectCount = 0;
   state.failNotify = false;
+  state.failMeeting = false;
 });
 
 // ── Re-arm ─────────────────────────────────────────────────────────────────────
@@ -204,7 +229,7 @@ describe('runDueCeremonies', () => {
     expect(r.errors).toBe(0);
 
     // Participants seeded from the (mocked) member metrics, quietest first.
-    const participantInsert = state.inserts.at(-1)?.values as Array<Record<string, unknown>>;
+    const participantInsert = rosterInsert();
     expect(participantInsert.map((p) => p.memberRef)).toEqual(['u2', 'u1']);
     expect(participantInsert.map((p) => p.turnOrder)).toEqual([0, 1]);
 
@@ -216,6 +241,36 @@ describe('runDueCeremonies', () => {
     // A scheduled roster is EXPECTED to attend (0365) — that is what makes a later
     // no-show meaningful rather than just "this seat was never filled".
     expect(participantInsert.every((p) => p.required === true)).toBe(true);
+  });
+
+  it('mints the companion meeting so the ceremony has a real, persisted media room', () => {
+    // 0366: the round table used to synthesise `ceremony-<projectId>` client-side —
+    // never persisted, and shared by every consecutive standup on the board.
+    state.results = [[schedule()], [], [], [{ id: 'sess-1' }]];
+    return runDueCeremonies({} as never).then(() => {
+      const meetingInsert = state.inserts
+        .map((i) => i.values as Record<string, unknown>)
+        .find((v) => !Array.isArray(v) && v?.roomKey !== undefined);
+
+      expect(meetingInsert).toBeDefined();
+      // Derived from the SESSION id, not random: the room is the ceremony, so the two
+      // cannot drift and a client that knows the session can predict the room.
+      expect(meetingInsert!.roomKey).toBe('ceremony-sess-1');
+      expect(meetingInsert!.kind).toBe('standup');
+      expect(meetingInsert!.status).toBe('live');
+    });
+  });
+
+  it('still opens the ceremony when the companion meeting cannot be created', () => {
+    // The shell is an affordance, not a precondition — a ceremony without it still
+    // records attendance, which is the part that matters.
+    state.failMeeting = true;
+    state.results = [[schedule()], [], [], [{ id: 'sess-1' }]];
+    return runDueCeremonies({} as never).then((r) => {
+      expect(r.opened).toBe(1);
+      expect(r.errors).toBe(0);
+      expect(watermarks()[0]!.patch.lastStatus).toBe('opened');
+    });
   });
 
   it('claims the invite fan-out on the session, so a later tick cannot re-notify', async () => {
