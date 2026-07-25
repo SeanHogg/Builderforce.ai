@@ -640,10 +640,31 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       modality?: string | null;
       /** Where the project was born — 'ide' tags it for the Designer badge. */
       origin?: string | null;
+      /** Project start date (0255) as an ISO/date string — used only for end≥start validation at creation. */
+      startDate?: string | null;
+      /** Explicit project deadline (0255) as an ISO/date string, captured in the setup wizard. */
+      dueDate?: string | null;
     }>();
     const tenantId = c.get('tenantId');
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
+
+    // Explicit project deadline captured during setup (PRD FR-3.1). A non-empty
+    // string → Date; omitted/empty → no explicit deadline (derived from tasks).
+    // An unparseable string is a client error rather than a silent Invalid Date.
+    let dueDate: Date | null = null;
+    if (typeof body.dueDate === 'string' && body.dueDate.trim()) {
+      const parsed = new Date(body.dueDate);
+      if (Number.isNaN(parsed.getTime())) return c.json({ error: 'dueDate is not a valid date' }, 400);
+      dueDate = parsed;
+    }
+    // FR-3.2: the end/deadline date must not be earlier than the start date.
+    if (dueDate && typeof body.startDate === 'string' && body.startDate.trim()) {
+      const start = new Date(body.startDate);
+      if (!Number.isNaN(start.getTime()) && dueDate.getTime() < start.getTime()) {
+        return c.json({ error: 'End date must not be earlier than the start date' }, 400);
+      }
+    }
 
     const guard = buildPlanLimitsGuard(db);
     const limitErr = await guard.checkProjectLimit(tenantId);
