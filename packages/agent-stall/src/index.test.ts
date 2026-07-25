@@ -5,7 +5,9 @@ import {
   isExhaustedStall,
   stallRecoveryNudge,
   stallExhaustedNotice,
+  modelFailoverNotice,
   MAX_ANNOUNCEMENT_RECOVERIES,
+  MAX_MODEL_FAILOVERS,
 } from './index';
 
 /**
@@ -211,6 +213,41 @@ describe('stallExhaustedNotice', () => {
 
   it('says nothing ran, so the text above is not mistaken for work done', () => {
     expect(stallExhaustedNotice('m')).toContain('nothing was actually run');
+  });
+
+  /**
+   * Once the run has ALREADY swapped models, "pick a different model" is bad advice —
+   * two of them just refused, so the reader should be pointed at the tool catalog.
+   */
+  it('changes the advice once the run already failed over', () => {
+    const out = stallExhaustedNotice('coder-1', ['xai-oauth/grok-4.3', 'coder-1']);
+    expect(out).toContain('xai-oauth/grok-4.3');
+    expect(out).toContain('unlikely to be any single model');
+    expect(out).toContain('Tools available to the model');
+    expect(out).not.toContain('pick a different model');
+  });
+
+  it('does not list the current model as one it failed over FROM', () => {
+    expect(stallExhaustedNotice('coder-1', ['coder-1'])).toContain('pick a different model');
+  });
+});
+
+describe('modelFailoverNotice', () => {
+  it('names both ends of the swap, so a changed model is never silent', () => {
+    const out = modelFailoverNotice('xai-oauth/grok-4.3', 'coder-1');
+    expect(out).toContain('xai-oauth/grok-4.3');
+    expect(out).toContain('Retrying on `coder-1`');
+  });
+
+  it('reads sensibly when the run pinned nothing', () => {
+    for (const from of [undefined, null, '', 'default']) {
+      expect(modelFailoverNotice(from, 'coder-1')).toContain('The previous model');
+    }
+  });
+
+  it('allows at least one swap, and stops well short of the whole catalog', () => {
+    expect(MAX_MODEL_FAILOVERS).toBeGreaterThan(0);
+    expect(MAX_MODEL_FAILOVERS).toBeLessThanOrEqual(3);
   });
 });
 

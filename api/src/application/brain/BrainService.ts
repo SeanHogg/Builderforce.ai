@@ -27,7 +27,7 @@ import { vendorForModel } from '../llm/vendors';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from '../llm/builtinMcpService';
-import { shouldRecoverStalledTurn, isExhaustedStall, stallRecoveryNudge, stallExhaustedNotice, MAX_ANNOUNCEMENT_RECOVERIES } from '@builderforce/agent-stall';
+import { shouldRecoverStalledTurn, isExhaustedStall, stallRecoveryNudge, stallExhaustedNotice, MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS } from '@builderforce/agent-stall';
 import {
   BRAIN_ORIGIN, TEAM_ORIGIN, ACCESSIBLE_ORIGINS,
   resolveChatAccess, syncPendingMemberships as syncPendingMembershipsShared,
@@ -936,6 +936,13 @@ export class BrainService {
     // Budget for the announced-but-untaken tool call recovery below (shared with the
     // Brain run loop and the agent runtime via `@builderforce/agent-stall`).
     let announcementRecoveries = 0;
+    // The model this reply is currently talking to, plus every model already tried.
+    // A model that burns its whole stall budget without emitting a tool call is spent;
+    // dropping the pin hands the next attempt to the gateway cascade, which routes
+    // past it to a different model rather than returning a promise as the answer.
+    let activeModel = pinnedModel;
+    const triedModels: string[] = [];
+    let modelFailovers = 0;
     let lastModel = pinnedModel ?? '';
     let lastFinish = '';
     // Auto-compact the running transcript BEFORE each paid turn so a tool-heavy reply
@@ -950,7 +957,7 @@ export class BrainService {
       const compaction = await compactMessages(convo, CLOUD_COMPACT_DEFAULTS, summarize);
       if (compaction.compacted) convo.splice(0, convo.length, ...compaction.messages);
       const result = await service.complete({
-        model: pinnedModel,
+        model: activeModel,
         messages: convo as never,
         tools,
         temperature: replyTemp,
@@ -988,12 +995,26 @@ export class BrainService {
           continue;
         }
         // Every recovery spent and the reply is STILL only a description of calls it
-        // never made. Returning `content` alone hands the requester a promise dressed
-        // as an answer; append the reason so the reply says what went wrong and which
-        // remedy actually works (a different model).
-        text = isExhaustedStall(stallInput)
-          ? `${content}\n\n${stallExhaustedNotice(lastModel)}`
-          : content;
+        // never made. Re-prompting THIS model is finished — so fail over rather than
+        // hand the requester a promise dressed as an answer. Dropping the pin routes
+        // the retry through the gateway cascade, which selects a different model; the
+        // model that just failed goes into `triedModels` so a repeat is recognisable.
+        if (isExhaustedStall(stallInput)) {
+          for (const m of [activeModel, lastModel]) if (m && !triedModels.includes(m)) triedModels.push(m);
+          // Only worth retrying while an UNTRIED route remains: once the pin is already
+          // dropped, another unpinned attempt would just re-select the same model.
+          if (modelFailovers < MAX_MODEL_FAILOVERS && activeModel) {
+            modelFailovers += 1;
+            activeModel = undefined;
+            announcementRecoveries = 0;
+            convo.push({ role: 'assistant', content });
+            convo.push({ role: 'user', content: stallRecoveryNudge(false) });
+            continue;
+          }
+          text = `${content}\n\n${stallExhaustedNotice(lastModel, triedModels)}`;
+          break;
+        }
+        text = content;
         break;
       }
 
