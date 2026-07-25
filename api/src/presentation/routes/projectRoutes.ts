@@ -692,6 +692,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       governance: body.governance ?? null,
       modality: body.modality ?? null,
       origin: body.origin ?? null,
+      dueDate,
       tenantId,
     });
     await ensureProjectTemplate(c.env.UPLOADS, project);
