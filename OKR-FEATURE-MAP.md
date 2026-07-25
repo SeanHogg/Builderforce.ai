@@ -229,6 +229,18 @@
 
 ---
 
+## Mapping: Known Implementation Gaps (from ROADMAP.md — Known Implementation Gaps)
+
+> Defect-fix work items discovered during the 2026-03-28 API audit. Each is mapped to the OKR epic it most directly serves once resolved.
+
+| Feature (fix) | Location | Severity | Epic | Justification |
+|---------------|----------|----------|------|---------------|
+| Agent channels endpoint returns real data (needs channel registry schema) | `clawRoutes.ts:1103` | HIGH | Orchestration | Channel registry underpins agent-to-agent messaging; a working endpoint is required for cross-agent coordination. |
+| Helcim recurring billing schedule after `APPROVED` webhook | `HelcimProvider.ts:78` | HIGH | Revenue | Converts one-time charges into recurring subscriptions — a direct blocker on subscription revenue. |
+| Helcim webhook event mapping (real payload schema vs placeholder) | `HelcimProvider.ts:130` | HIGH | Revenue | Correct subscription lifecycle events are required for accurate billing state and revenue recognition. |
+
+---
+
 ## Feature Review Process
 
 Per PRD §5 (Review Process), the following procedure governs the accuracy of this mapping:
