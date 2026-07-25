@@ -23,6 +23,8 @@ export interface CreateProjectDto {
   governance?:    string | null;
   modality?:      string | null;
   origin?:        string | null;
+  /** Explicit PM-set deadline (0255) captured at creation time. null = derive from tasks. */
+  dueDate?:       Date | null;
 }
 
 export interface UpdateProjectDto {
