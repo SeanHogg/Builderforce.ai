@@ -6282,6 +6282,7 @@
         "human_gate": "Warte auf Freigabe",
         "capability_mismatch": "Agent fehlen erforderliche Fähigkeiten",
         "run_cap_exhausted": "Zu viele fehlgeschlagene Läufe — zur Prüfung pausiert",
+        "cloud_run_limit": "Monatliches Cloud-Lauf-Kontingent aufgebraucht — Upgrade für weitere Läufe",
         "cooldown_active": "Abkühlphase nach einem fehlgeschlagenen Lauf — erneuter Versuch in Kürze",
         "no_agent": "Kein Agent zugewiesen",
         "no_board": "Kein Board konfiguriert",
@@ -6701,7 +6702,8 @@
       "overview": "Überblick",
       "backlog": "Backlog",
       "activity": "Aktivität",
-      "policy": "Richtlinie"
+      "policy": "Richtlinie",
+      "stuck": "Blockiert"
     },
     "insightNudge": "{unscored} Tickets brauchen noch einen Geschäftswert und {unranked} sind nicht eingeordnet – führen Sie den Manager aus, um sie aufzuholen.",
     "coverageNudge": "{flagged} Tickets fehlt eine erforderliche Rolle oder ein Prüfer – der Manager besetzt sie beim nächsten Durchlauf automatisch.",
@@ -6831,7 +6833,9 @@
       "flag": "Markiert",
       "coordinate": "Rolle besetzt",
       "schedule": "Terminiert",
-      "merge_blocked": "Merge verweigert"
+      "merge_blocked": "Merge verweigert",
+      "triage": "Triagiert",
+      "escalate": "Eskaliert"
     },
     "runTasks": {
       "title": "Manager-Aufgaben",
@@ -6852,6 +6856,49 @@
       "title": "Letzte Aktivität",
       "working": "Der Manager arbeitet – Entscheidungen werden live übertragen…",
       "empty": "Der Manager hat noch keine Aktionen durchgeführt."
+    },
+    "stalls": {
+      "title": "Blockierte Tickets",
+      "caption": "Arbeit, die der Manager nicht abschließen kann, warum, und was er bereits versucht hat. Nach {maxAttempts} Versuchen, die ein Ticket nicht bewegen, hört der Manager auf und übergibt es an Sie.",
+      "loading": "Prüfe, was blockiert ist…",
+      "empty": "Nichts ist blockiert – jedes Ticket bewegt sich oder ist fertig.",
+      "error": "Die Liste blockierter Tickets konnte nicht geladen werden.",
+      "retry": "Erneut versuchen",
+      "byCause": "Was die Arbeit aufhält",
+      "needsYou": "Braucht Sie",
+      "lastTried": "Zuletzt versucht {when}",
+      "attemptsOf": "{attempts} von {max} Versuchen",
+      "idleDays": "{days, plural, one {# Tag} other {# Tage}}",
+      "idleToday": "Weniger als ein Tag",
+      "stat": {
+        "working": "Manager kümmert sich darum",
+        "escalated": "An eine Person übergeben"
+      },
+      "col": {
+        "ticket": "Ticket",
+        "cause": "Warum es blockiert ist",
+        "doing": "Was der Manager tut",
+        "attempts": "Versuche",
+        "stuckFor": "Blockiert seit"
+      },
+      "cause": {
+        "live": "Läuft",
+        "cooling_down": "Wartet nach Fehlschlag",
+        "moving": "In Bewegung",
+        "never_started": "Nie gestartet",
+        "unassigned": "Niemand zugewiesen",
+        "capability_gap": "Kein fähiger Agent",
+        "human_gate": "Wartet auf menschliche Freigabe",
+        "failure_breaker": "Nach wiederholten Fehlern gestoppt",
+        "missing_deliverable": "Kein Ergebnis geliefert",
+        "build_failed": "Build nicht grün",
+        "awaiting_signoff": "Wartet auf Freigabe",
+        "pr_conflict": "Pull Request hat Konflikte",
+        "pr_unreconciled": "Pull-Request-Status abgewichen",
+        "merge_withheld": "Merge durch Richtlinie zurückgehalten",
+        "blocked": "Blockiert",
+        "unknown": "Nicht klassifiziert"
+      }
     }
   },
   "project360": {
@@ -11183,7 +11230,11 @@
       "present": "Anwesend",
       "absent": "Gefehlt",
       "excused": "Optional"
-    }
+    },
+    "errorCorrect": "Anwesenheit konnte nicht aktualisiert werden.",
+    "correctAria": "Anwesenheit von {name}",
+    "sourcePto": "Im genehmigten Urlaub",
+    "sourceManual": "Von einem Manager korrigiert"
   },
   "observability": {
     "agents": "Agenten",

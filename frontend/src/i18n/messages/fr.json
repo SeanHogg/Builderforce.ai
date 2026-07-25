@@ -6282,6 +6282,7 @@
         "human_gate": "En attente d'approbation",
         "capability_mismatch": "Compétences requises manquantes",
         "run_cap_exhausted": "Trop d'exécutions en échec — en pause pour révision",
+        "cloud_run_limit": "Quota mensuel d’exécutions cloud atteint — passez à un forfait supérieur",
         "cooldown_active": "Pause après une exécution en échec — nouvelle tentative sous peu",
         "no_agent": "Aucun agent assigné",
         "no_board": "Aucun tableau configuré",
@@ -6701,7 +6702,8 @@
       "overview": "Vue d’ensemble",
       "backlog": "Backlog",
       "activity": "Activité",
-      "policy": "Politique"
+      "policy": "Politique",
+      "stuck": "Bloqués"
     },
     "insightNudge": "{unscored} tickets ont encore besoin d’une valeur métier et {unranked} ne sont pas classés — lancez le manager pour les mettre à jour.",
     "coverageNudge": "{flagged} tickets n’ont pas de rôle ou de relecteur obligatoire — le manager les affectera automatiquement lors de son prochain passage.",
@@ -6831,7 +6833,9 @@
       "flag": "Signalé",
       "coordinate": "Rôle affecté",
       "schedule": "Planifié",
-      "merge_blocked": "Fusion refusée"
+      "merge_blocked": "Fusion refusée",
+      "triage": "Trié",
+      "escalate": "Escaladé"
     },
     "runTasks": {
       "title": "Tâches du manager",
@@ -6852,6 +6856,49 @@
       "title": "Activité récente",
       "working": "Le manager travaille — diffusion des décisions en direct…",
       "empty": "Le manager n’a encore effectué aucune action."
+    },
+    "stalls": {
+      "title": "Tickets bloqués",
+      "caption": "Le travail que le manager ne peut pas terminer, pourquoi, et ce qu'il a déjà tenté. Après {maxAttempts} tentatives qui ne font pas avancer un ticket, le manager cesse de réessayer et vous le confie.",
+      "loading": "Vérification de ce qui est bloqué…",
+      "empty": "Rien n’est bloqué : chaque ticket avance ou est terminé.",
+      "error": "Impossible de charger la liste des tickets bloqués.",
+      "retry": "Réessayer",
+      "byCause": "Ce qui freine le travail",
+      "needsYou": "Requiert votre attention",
+      "lastTried": "Dernière tentative {when}",
+      "attemptsOf": "{attempts} tentative(s) sur {max}",
+      "idleDays": "{days, plural, one {# jour} other {# jours}}",
+      "idleToday": "Moins d’un jour",
+      "stat": {
+        "working": "Le manager s’en occupe",
+        "escalated": "Confié à une personne"
+      },
+      "col": {
+        "ticket": "Ticket",
+        "cause": "Pourquoi il est bloqué",
+        "doing": "Ce que fait le manager",
+        "attempts": "Tentatives",
+        "stuckFor": "Bloqué depuis"
+      },
+      "cause": {
+        "live": "En cours",
+        "cooling_down": "En pause après un échec",
+        "moving": "En mouvement",
+        "never_started": "Jamais démarré",
+        "unassigned": "Personne d’assigné",
+        "capability_gap": "Aucun agent compétent",
+        "human_gate": "En attente d’une approbation humaine",
+        "failure_breaker": "Arrêté après des échecs répétés",
+        "missing_deliverable": "Aucun livrable produit",
+        "build_failed": "Build non validé",
+        "awaiting_signoff": "En attente de validation",
+        "pr_conflict": "La pull request est en conflit",
+        "pr_unreconciled": "État de la pull request désynchronisé",
+        "merge_withheld": "Fusion retenue par la politique",
+        "blocked": "Bloqué",
+        "unknown": "Non classé"
+      }
     }
   },
   "project360": {
@@ -11183,7 +11230,11 @@
       "present": "Présent",
       "absent": "Absent",
       "excused": "Facultatif"
-    }
+    },
+    "errorCorrect": "Impossible de mettre à jour la présence.",
+    "correctAria": "Présence de {name}",
+    "sourcePto": "En congé approuvé",
+    "sourceManual": "Corrigé par un manager"
   },
   "observability": {
     "agents": "Agents",

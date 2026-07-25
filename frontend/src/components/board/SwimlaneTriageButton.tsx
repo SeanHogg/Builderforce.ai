@@ -30,6 +30,9 @@ const REASON_TONE: Record<AutoRunReason, 'ok' | 'warn' | 'muted' | 'info'> = {
   human_gate: 'warn',
   capability_mismatch: 'warn',
   run_cap_exhausted: 'warn',
+  // A billing stop, not backpressure: it will not clear by waiting or by clicking
+  // Run now, so it reads as a warning that needs a decision — never as 'info'.
+  cloud_run_limit: 'warn',
   cooldown_active: 'info',
   no_agent: 'muted',
   no_board: 'muted',

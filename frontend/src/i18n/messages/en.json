@@ -6284,6 +6284,7 @@
         "human_gate": "Waiting for approval",
         "capability_mismatch": "Agent missing required skills",
         "run_cap_exhausted": "Too many failed runs — paused for review",
+        "cloud_run_limit": "Monthly cloud-run allowance used — upgrade to run more",
         "cooldown_active": "Cooling down after a failed run — retrying shortly",
         "no_agent": "No agent assigned",
         "no_board": "No board configured",
@@ -6703,7 +6704,8 @@
       "overview": "Overview",
       "backlog": "Backlog",
       "activity": "Activity",
-      "policy": "Policy"
+      "policy": "Policy",
+      "stuck": "Stuck"
     },
     "insightNudge": "{unscored} tickets still need a business value and {unranked} aren’t ranked — run the manager to catch them up.",
     "coverageNudge": "{flagged} tickets are missing a required role or reviewer — the manager staffs these automatically on its next pass.",
@@ -6833,7 +6835,9 @@
       "flag": "Flagged",
       "coordinate": "Staffed",
       "schedule": "Scheduled",
-      "merge_blocked": "Merge withheld"
+      "merge_blocked": "Merge withheld",
+      "triage": "Triaged",
+      "escalate": "Escalated"
     },
     "runTasks": {
       "title": "Manager tasks",
@@ -6854,6 +6858,49 @@
       "title": "Recent activity",
       "working": "Manager is working — streaming decisions live…",
       "empty": "The manager hasn’t taken any actions yet."
+    },
+    "stalls": {
+      "title": "Stuck tickets",
+      "caption": "Work the manager cannot finish, why, and what it has already tried. After {maxAttempts} attempts that fail to move a ticket, the manager stops retrying and hands it to you.",
+      "loading": "Checking what is stuck…",
+      "empty": "Nothing is stuck — every ticket is either moving or finished.",
+      "error": "Could not load the stuck list.",
+      "retry": "Try again",
+      "byCause": "What is holding work up",
+      "needsYou": "Needs you",
+      "lastTried": "Last tried {when}",
+      "attemptsOf": "{attempts} of {max} tries",
+      "idleDays": "{days, plural, one {# day} other {# days}}",
+      "idleToday": "Under a day",
+      "stat": {
+        "working": "Manager is working these",
+        "escalated": "Handed to a human"
+      },
+      "col": {
+        "ticket": "Ticket",
+        "cause": "Why it is stuck",
+        "doing": "What the manager is doing",
+        "attempts": "Attempts",
+        "stuckFor": "Stuck for"
+      },
+      "cause": {
+        "live": "Running",
+        "cooling_down": "Backing off",
+        "moving": "In motion",
+        "never_started": "Never started",
+        "unassigned": "Nobody assigned",
+        "capability_gap": "No capable agent",
+        "human_gate": "Awaiting human approval",
+        "failure_breaker": "Halted after repeated failures",
+        "missing_deliverable": "No deliverable produced",
+        "build_failed": "Build not green",
+        "awaiting_signoff": "Awaiting sign-off",
+        "pr_conflict": "Pull request conflicts",
+        "pr_unreconciled": "Pull request state drifted",
+        "merge_withheld": "Merge withheld by policy",
+        "blocked": "Blocked",
+        "unknown": "Unclassified"
+      }
     }
   },
   "project360": {
@@ -11185,7 +11232,11 @@
       "present": "Present",
       "absent": "Missed it",
       "excused": "Optional"
-    }
+    },
+    "errorCorrect": "Could not update attendance.",
+    "correctAria": "Attendance for {name}",
+    "sourcePto": "On approved leave",
+    "sourceManual": "Corrected by a manager"
   },
   "observability": {
     "agents": "Agents",

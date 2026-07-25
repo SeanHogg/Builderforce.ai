@@ -709,7 +709,9 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
     const executionId = await dispatchCloudRunForTask(
       c.env as Env, db, runtimeService,
       (p) => c.executionCtx.waitUntil(p),
-      { taskId: task.id as unknown as number, tenantId, submittedBy: `quality:${userId ?? 'system'}` },
+      // `force`: this IS the human's "fix with agent" click — deliberately gate-blind,
+      // like Run-now — so the failure breaker and re-run cooldown do not apply.
+      { taskId: task.id as unknown as number, tenantId, submittedBy: `quality:${userId ?? 'system'}`, force: true },
     );
 
     // Funnel the new ticket through the ONE lane-entry helper as well. The explicit

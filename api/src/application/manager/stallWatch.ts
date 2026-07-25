@@ -286,7 +286,11 @@ export async function getStallRegister(
         ))
         // Escalated first (they need a human), then longest-idle.
         .orderBy(sql`${managerStallWatch.escalatedAt} asc nulls last`, desc(managerStallWatch.idleMs))
-        .limit(MAX_REGISTER_ROWS);
+        .limit(MAX_REGISTER_ROWS)
+        // Deploy ordering: the Worker can go live moments before its migration lands.
+        // An empty register then reads as "nothing recorded yet", which is true, and
+        // is a far better answer than a 500 on the page that exists to explain stalls.
+        .catch(() => []);
       return rows;
     },
     { kvTtlSeconds: REGISTER_TTL_SECONDS },
