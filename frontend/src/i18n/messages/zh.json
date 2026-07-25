@@ -2413,7 +2413,10 @@
         "not_executable": "属于系统或协调事务——按设计从不派发给智能体。",
         "pending_approval": "外部请求需先由人工在分诊中接受，智能体才可处理。",
         "unrecorded": "从未记录任何自动运行决策——自主执行从未评估过这些工单。",
-        "lane_requirement_gate": "该泳道要求的角色签核尚未完成，因此需求关卡改为派发该评审者，并在评审通过前暂停泳道的常规代理。"
+        "lane_requirement_gate": "该泳道要求的角色签核尚未完成，因此需求关卡改为派发该评审者，并在评审通过前暂停泳道的常规代理。",
+        "same_lane_reentry": "刚结束的运行已经服务于该泳道，因此循环保护阻止了立即重新派发。当前没有任何运行在执行。",
+        "tenant_token_limit": "工作区已用完令牌额度，因此其所有工单的自主执行都已暂停，直到额度重置或升级套餐。",
+        "cloud_run_limit": "工作区已用完本月云端运行额度。重试无法解除——请升级套餐或等待重置。本地和 VS Code 运行不受限制。"
       }
     }
   },
@@ -6292,7 +6295,9 @@
         "terminal_lane": "已完成 — 无需运行",
         "not_executable": "系统任务 — 不由智能体运行",
         "pending_approval": "外部请求——等待人工批准",
-        "lane_requirement_gate": "等待角色签核"
+        "lane_requirement_gate": "等待角色签核",
+        "same_lane_reentry": "刚完成此阶段",
+        "tenant_token_limit": "工作区令牌已用尽 — 请升级或等待重置"
       }
     },
     "businessValue": {

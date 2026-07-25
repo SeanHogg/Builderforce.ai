@@ -35,7 +35,11 @@ describe('tool availability in chat diagnostics', () => {
     expect(out).not.toContain('ZERO tools registered');
   });
 
-  it('says nothing at all when the host did not gather tool state', () => {
-    expect(render(base)).not.toContain('Tools available');
+  it('says the host did not gather tool state rather than omitting the line', () => {
+    // A silently absent count reads exactly like a healthy one — the omission that
+    // let the VSIX ship a report with no tool state at all.
+    const out = render(base);
+    expect(out).toContain('Tools available to the model: not gathered');
+    expect(out).not.toContain('ZERO tools registered');
   });
 });

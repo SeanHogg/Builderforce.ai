@@ -38,7 +38,8 @@ export const ORIGIN_ORDER: TicketOrigin[] = ['agent', 'manager_card', 'human', '
  */
 export type AutonomyStallReason =
   | 'will_run' | 'no_board' | 'no_lane' | 'terminal_lane' | 'human_gate' | 'no_agent'
-  | 'capability_mismatch' | 'already_running' | 'run_cap_exhausted' | 'cooldown_active'
+  | 'capability_mismatch' | 'already_running' | 'same_lane_reentry' | 'run_cap_exhausted'
+  | 'cooldown_active' | 'cloud_run_limit' | 'tenant_token_limit' | 'lane_requirement_gate'
   | 'not_executable' | 'pending_approval' | 'unrecorded';
 
 /** One origin bucket's autonomy funnel. Field-for-field the server's shape. */

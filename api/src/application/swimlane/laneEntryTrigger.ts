@@ -33,7 +33,7 @@ import { buildRuntimeService } from '../../buildRuntimeService';
 import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
 import { recordCloudToolEvent } from '../runtime/cloudAgentEngine';
 import { evaluateExecutionApprovalGate } from '../runtime/executionApprovalGate';
-import { evaluateTaskAutoRun } from './evaluateAutoRun';
+import { evaluateTaskAutoRun, type TenantTokenVerdict } from './evaluateAutoRun';
 import { enforceLaneRequirements } from './laneRequirementGate';
 import { TicketAuditService } from '../audit/ticketAuditService';
 import { signalPendingWork } from '../runtime/cronWorkSignal';
@@ -80,22 +80,37 @@ export async function maybeAutoRunOnLaneEntry(
   env: Env,
   db: Db,
   runtimeService: RuntimeService,
-  args: { tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string; originLaneKey?: string },
+  args: {
+    tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string;
+    originLaneKey?: string;
+    /** Pre-resolved workspace token verdict (the sweep resolves one per tenant). */
+    tenantTokens?: TenantTokenVerdict;
+  },
 ): Promise<boolean> {
   try {
     // ONE read-only evaluation answers "should this run, as which agent, and if
     // not why" — shared verbatim with the triage diagnostic + Run-now endpoints so
     // the trigger and the UI can never disagree. It already applies the terminal/
     // board/lane/gate resolution, the owner-fallback, the capability guardrail, the
-    // same-lane loop guard, the per-ticket re-run cooldown and the live-run
-    // idempotency check.
+    // same-lane loop guard, the per-ticket re-run cooldown, the live-run idempotency
+    // check and the workspace token gate.
     const evaln = await evaluateTaskAutoRun(db, runtimeService, {
       tenantId:     args.tenantId,
       projectId:    args.projectId,
       taskId:       args.taskId,
       status:       args.status,
       originLaneKey: args.originLaneKey,
+      ...(args.tenantTokens ? { tenantTokens: args.tenantTokens } : {}),
+      env,
     });
+
+    // THE LANE, as the evaluator resolved it live from the row — NOT `args.status`.
+    // A caller working from a stale snapshot (the sweep scans hundreds of tickets and
+    // dispatches them one at a time) would otherwise gate against one lane and then
+    // stamp the run, the telemetry and the loop-guard `laneKey` with another. Every
+    // use below is deliberately `lane`, so a ticket that moved between the caller's
+    // read and this evaluation is handled as the lane it is actually IN.
+    const lane = evaln.status;
 
     // Pillar 2 — lane requirement gating: entering a lane recomputes the ticket's
     // role/diagnostic audit and, when a required reviewer (e.g. the Architect) has
@@ -106,7 +121,7 @@ export async function maybeAutoRunOnLaneEntry(
       tenantId:    args.tenantId,
       projectId:   args.projectId,
       taskId:      args.taskId,
-      status:      args.status,
+      status:      lane,
       submittedBy: args.submittedBy,
     });
     if (gate.blocked) {
@@ -132,12 +147,12 @@ export async function maybeAutoRunOnLaneEntry(
         category:      'planning',
         detail:        {
           taskId: args.taskId,
-          lane: args.status,
+          lane,
           reason: 'lane_requirement_gate',
           ...(gate.dispatchedReviewers.length ? { dispatchedReviewers: gate.dispatchedReviewers } : {}),
           ...(gate.dispatchedProducers.length ? { dispatchedProducers: gate.dispatchedProducers } : {}),
         },
-        result: (`Auto-run skipped (lane_requirement_gate) for task ${args.taskId} on lane '${args.status}': `
+        result: (`Auto-run skipped (lane_requirement_gate) for task ${args.taskId} on lane '${lane}': `
           + `awaiting role sign-off${gate.dispatchedReviewers.length ? ` — dispatched reviewer(s): ${gate.dispatchedReviewers.join(', ')}` : ''}`
           + `${gate.dispatchedProducers.length ? ` — dispatched producer(s): ${gate.dispatchedProducers.join(', ')}` : ''}.`).slice(0, 300),
       }).catch(() => { /* best-effort telemetry — never block the trigger */ });
@@ -150,7 +165,7 @@ export async function maybeAutoRunOnLaneEntry(
     if (evaln.decision.capabilityMismatches?.length) {
       for (const m of evaln.decision.capabilityMismatches) {
         console.warn(
-          `[capability_mismatch] task ${args.taskId} lane '${args.status}': agent '${m.agentRef}' lacks required capabilities [${m.missing.join(', ')}] — skipped for auto-run`,
+          `[capability_mismatch] task ${args.taskId} lane '${lane}': agent '${m.agentRef}' lacks required capabilities [${m.missing.join(', ')}] — skipped for auto-run`,
         );
         // Surface the skip as a first-class Observability event, not just a server
         // log: a mis-staffed lane whose candidate agent lacks its required
@@ -166,16 +181,17 @@ export async function maybeAutoRunOnLaneEntry(
           sessionKey:    `task:${args.taskId}`,
           toolName:      'auto_run_skipped',
           category:      'planning',
-          detail:        { taskId: args.taskId, lane: args.status, reason: 'capability_mismatch', agentRef: m.agentRef, missing: m.missing },
-          result:        `Auto-run skipped: agent '${m.agentRef}' lacks required capabilities [${m.missing.join(', ')}] for lane '${args.status}'.`.slice(0, 300),
+          detail:        { taskId: args.taskId, lane, reason: 'capability_mismatch', agentRef: m.agentRef, missing: m.missing },
+          result:        `Auto-run skipped: agent '${m.agentRef}' lacks required capabilities [${m.missing.join(', ')}] for lane '${lane}'.`.slice(0, 300),
         });
       }
     }
     // For every OTHER non-run reason (no_agent, human_gate, terminal_lane, no_lane,
-    // no_board, already_running, cooldown_active, not_executable) the trigger
-    // previously returned false with no surfaced event, leaving a stuck ticket
-    // undiagnosable from the agent timeline. Emit one best-effort Observability event
-    // for any skip reason NOT already covered by the capability_mismatch loop above.
+    // no_board, already_running, same_lane_reentry, cooldown_active, not_executable,
+    // tenant_token_limit) the trigger previously returned false with no surfaced
+    // event, leaving a stuck ticket undiagnosable from the agent timeline. Emit one
+    // best-effort Observability event for any skip reason NOT already covered by the
+    // capability_mismatch loop above.
     if (!evaln.canRunNow && evaln.reason !== 'capability_mismatch') {
       const skipAgentRef =
         evaln.decision.agentRef ??
@@ -189,8 +205,8 @@ export async function maybeAutoRunOnLaneEntry(
         sessionKey:    `task:${args.taskId}`,
         toolName:      'auto_run_skipped',
         category:      'planning',
-        detail:        { taskId: args.taskId, lane: args.status, reason: evaln.reason, ...(evaln.cooldownRemainingMs ? { cooldownRemainingMs: evaln.cooldownRemainingMs } : {}) },
-        result:        `Auto-run skipped (${evaln.reason}) for task ${args.taskId} on lane '${args.status}'.`.slice(0, 300),
+        detail:        { taskId: args.taskId, lane, reason: evaln.reason, ...(evaln.cooldownRemainingMs ? { cooldownRemainingMs: evaln.cooldownRemainingMs } : {}) },
+        result:        `Auto-run skipped (${evaln.reason}) for task ${args.taskId} on lane '${lane}'.`.slice(0, 300),
       }).catch(() => { /* best-effort telemetry — never block the trigger */ });
     }
     if (!evaln.canRunNow) return false;
@@ -207,7 +223,7 @@ export async function maybeAutoRunOnLaneEntry(
     // ref the dispatcher resolves + attributes the run to). `laneKey` records which
     // lane this run serves so a completion that re-enters the SAME lane (a loop) is
     // suppressed by the same-lane guard above on the next hop.
-    const payloadObj: { cloudAgentRef?: string; model?: string; laneKey?: string } = { laneKey: args.status };
+    const payloadObj: { cloudAgentRef?: string; model?: string; laneKey?: string } = { laneKey: lane };
     if (evaln.decision.agentRef) payloadObj.cloudAgentRef = evaln.decision.agentRef;
     if (evaln.decision.model) payloadObj.model = evaln.decision.model;
 
@@ -249,8 +265,8 @@ export async function maybeAutoRunOnLaneEntry(
           sessionKey:    `task:${args.taskId}`,
           toolName:      'auto_run_awaiting_approval',
           category:      'planning',
-          detail:        { taskId: args.taskId, lane: args.status, approvalId: gate.approvalId, reason: gate.reason },
-          result:        `Auto-run held for approval (${gate.reason}) on task ${args.taskId}, lane '${args.status}'.`.slice(0, 300),
+          detail:        { taskId: args.taskId, lane, approvalId: gate.approvalId, reason: gate.reason },
+          result:        `Auto-run held for approval (${gate.reason}) on task ${args.taskId}, lane '${lane}'.`.slice(0, 300),
         }).catch(() => { /* best-effort telemetry — never block the trigger */ });
         return false;
       }
@@ -279,8 +295,8 @@ export async function maybeAutoRunOnLaneEntry(
       sessionKey:    `task:${args.taskId}`,
       toolName:      'auto_run_dispatched',
       category:      'planning',
-      detail:        { taskId: args.taskId, lane: args.status, reason: 'will_run', agentRef: evaln.decision.agentRef ?? null, submittedBy: args.submittedBy },
-      result:        `Auto-run dispatched for task ${args.taskId} on lane '${args.status}'${evaln.decision.agentRef ? ` as ${evaln.decision.agentRef}` : ''}.`.slice(0, 300),
+      detail:        { taskId: args.taskId, lane, reason: 'will_run', agentRef: evaln.decision.agentRef ?? null, submittedBy: args.submittedBy },
+      result:        `Auto-run dispatched for task ${args.taskId} on lane '${lane}'${evaln.decision.agentRef ? ` as ${evaln.decision.agentRef}` : ''}.`.slice(0, 300),
     }).catch(() => { /* best-effort telemetry — never block the trigger */ });
     return true;
   } catch (err) {

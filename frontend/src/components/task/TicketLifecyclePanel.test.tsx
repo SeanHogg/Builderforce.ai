@@ -128,6 +128,8 @@ describe('TicketLifecyclePanel', () => {
       consecutiveFailures: 134,
       failureBreakerAt: 3,
       cooldownRemainingMs: 0,
+      // Null = an earlier gate decided, so the workspace budget was never reached.
+      tenantTokens: null,
     },
   };
 

@@ -2413,7 +2413,10 @@
         "not_executable": "Es una tarea de sistema o coordinación: por diseño nunca se asigna a un agente.",
         "pending_approval": "Es una solicitud externa que espera aceptación humana en el triaje antes de que un agente pueda tocarla.",
         "unrecorded": "Nunca se registró una decisión de ejecución automática: la autonomía no evaluó estos tickets.",
-        "lane_requirement_gate": "El carril exige una aprobación de rol que sigue pendiente, así que la puerta de requisitos lanzó a ese revisor y suspendió al agente habitual del carril hasta que se resuelva la revisión."
+        "lane_requirement_gate": "El carril exige una aprobación de rol que sigue pendiente, así que la puerta de requisitos lanzó a ese revisor y suspendió al agente habitual del carril hasta que se resuelva la revisión.",
+        "same_lane_reentry": "La ejecución que acaba de terminar ya atendió este carril, así que la protección de bucle impidió relanzarla de inmediato. No hay nada en ejecución.",
+        "tenant_token_limit": "El espacio de trabajo agotó su cuota de tokens, así que la autonomía está en pausa para todos sus tickets hasta que la cuota se reinicie o se mejore el plan.",
+        "cloud_run_limit": "El espacio de trabajo agotó su cuota mensual de ejecuciones en la nube. Reintentar no lo resuelve: mejora el plan o espera al reinicio. Las ejecuciones on-premise y de VS Code siguen sin límite."
       }
     }
   },
@@ -6292,7 +6295,9 @@
         "terminal_lane": "Hecho — no requiere ejecución",
         "not_executable": "Tarea del sistema — no la ejecuta un agente",
         "pending_approval": "Solicitud externa: a la espera de aprobación",
-        "lane_requirement_gate": "Esperando la aprobación del rol"
+        "lane_requirement_gate": "Esperando la aprobación del rol",
+        "same_lane_reentry": "Acaba de terminar esta etapa",
+        "tenant_token_limit": "Espacio sin tokens: mejora el plan o espera al reinicio"
       }
     },
     "businessValue": {
