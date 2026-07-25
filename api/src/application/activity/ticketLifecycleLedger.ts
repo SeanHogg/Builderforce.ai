@@ -49,7 +49,10 @@ import {
 } from '../../infrastructure/database/schema';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { ExecutionStatus, TaskStatus } from '../../domain/shared/types';
-import { AUTO_RUN_REASON_TEXT, type AutoRunEvaluation, type AutoRunReason } from '../swimlane/evaluateAutoRun';
+import {
+  autoRunReasonEvaluationText, EVALUATED_AUTO_RUN_REASONS,
+  type AutoRunEvaluation, type AutoRunReason,
+} from '../swimlane/evaluateAutoRun';
 import { normalizeErrorMessage } from '../quality/errorSpec';
 import { activityLogVersionKey } from './activityLog';
 
@@ -147,8 +150,20 @@ export interface TicketAutonomySignals {
   hasLiveRun: boolean;
   /** The most recent auto-run refusal recorded for the ticket, if any. */
   lastSkipReason: AutoRunReason | null;
-  /** Live re-evaluation of the gate (authoritative when supplied by the caller). */
-  liveReason?: AutoRunReason | null;
+  /**
+   * Live re-evaluation of the gate — AUTHORITATIVE whenever the key is present, and
+   * carrying `will_run` when the gate finds nothing blocking.
+   *
+   * DELIBERATELY NOT NULLABLE. It used to be `AutoRunReason | null`, where `null`
+   * meant "evaluated, nothing is blocking" and absent meant "not evaluated" — two
+   * different facts that `??` cannot tell apart. {@link classifyTicketAutonomy} read
+   * it with `liveReason ?? lastSkipReason`, so a clean live verdict fell straight
+   * through to a stale recorded skip: task 173 reported `stallReason: human_gate`,
+   * quoting a refusal recorded eleven days earlier, in the same payload as a live gate
+   * block reading `laneGate: auto, canRunNow: true`. Making the type two-state removes
+   * the ambiguity at its source rather than guarding against it at each read.
+   */
+  liveReason?: AutoRunReason;
 }
 
 export interface TicketAutonomyVerdict extends TicketAutonomySignals {
@@ -188,6 +203,38 @@ const LIVE_EXEC_STATUSES = new Set<string>([
 ]);
 
 /**
+ * Reconcile the LIVE gate verdict against the last RECORDED refusal, for a ticket that
+ * is definitely sitting. PURE.
+ *
+ * Neither source alone is trustworthy, in opposite ways:
+ *
+ *  • A RECORDED skip is history. The lane may since have been staffed, or re-gated from
+ *    'human' to 'auto' — which is exactly how task 173 came to report `human_gate`,
+ *    quoting a refusal from eleven days earlier, against a lane the same payload showed
+ *    as `laneGate: auto, canRunNow: true`.
+ *  • A LIVE `will_run` is current but PARTIAL. `evaluateTaskAutoRun` models the lane gate,
+ *    staffing and backpressure; it does not model the lane REQUIREMENT gate or the tenant
+ *    run allowance, both applied later. Treating its "nothing blocks" as the final word
+ *    would erase a recorded `lane_requirement_gate` — the very reason the ticket is stuck.
+ *
+ * So: a live BLOCKING reason always wins (it is current and decisive). A live `will_run`
+ * wins only over recorded reasons the live gate ACTUALLY MODELS
+ * ({@link EVALUATED_AUTO_RUN_REASONS}); a recorded reason outside that set describes a
+ * gate the evaluator never looked at, so `will_run` does not refute it and the recorded
+ * reason stands.
+ */
+export function reconcileStallReason(s: TicketAutonomySignals): AutoRunReason | null {
+  const recorded = s.lastSkipReason ?? null;
+  // No live evaluation ran (the batch/fleet caller) — history is all there is.
+  if (s.liveReason === undefined) return recorded;
+  // The live gate names a blocker: current, decisive, and it supersedes any history.
+  if (s.liveReason !== 'will_run') return s.liveReason;
+  // Live gate is clear. Keep a recorded reason it is blind to; otherwise report the
+  // clean verdict, which is itself the finding — the holder is downstream of the gate.
+  return recorded && !EVALUATED_AUTO_RUN_REASONS.has(recorded) ? recorded : 'will_run';
+}
+
+/**
  * Turn the raw counts into the verdict. PURE — no DB, no clock — so every branch is
  * unit-testable and the meaning of "autonomous" is pinned in exactly one place.
  *
@@ -202,9 +249,7 @@ export function classifyTicketAutonomy(s: TicketAutonomySignals): TicketAutonomy
   // Stalled = not finished and nothing is running. A ticket with a live run is
   // "working", not stalled, no matter how long it has been going.
   const stalled = !reachedTerminal && !s.hasLiveRun;
-  // The live evaluation wins when present: a recorded skip may be stale (the lane was
-  // staffed since), whereas the live gate is what autonomy would decide right now.
-  const stallReason = stalled ? (s.liveReason ?? s.lastSkipReason ?? null) : null;
+  const stallReason = stalled ? reconcileStallReason(s) : null;
   return {
     ...s,
     reachedTerminal,
@@ -212,7 +257,9 @@ export function classifyTicketAutonomy(s: TicketAutonomySignals): TicketAutonomy
     progressedAutonomously,
     stalled,
     stallReason,
-    stallText: stallReason ? AUTO_RUN_REASON_TEXT[stallReason] ?? null : null,
+    // Evaluation tense: a verdict never dispatches anything, so `will_run` must not
+    // claim a run was started (see {@link autoRunReasonEvaluationText}).
+    stallText: stallReason ? autoRunReasonEvaluationText(stallReason) : null,
   };
 }
 
@@ -452,7 +499,9 @@ export function toGateSnapshot(e: AutoRunEvaluation): LifecycleGateSnapshot {
   return {
     canRunNow: e.canRunNow,
     reason: e.reason,
-    reasonText: AUTO_RUN_REASON_TEXT[e.reason] ?? e.reason,
+    // This snapshot is a read-only evaluation — it dispatches nothing, so `will_run`
+    // reads in the conditional tense rather than reporting a run that never happened.
+    reasonText: autoRunReasonEvaluationText(e.reason),
     laneGate: e.laneGate,
     laneResolved: e.laneResolved,
     isTerminalLane: e.isTerminalLane,
@@ -499,9 +548,16 @@ export async function buildTicketLifecycle(
   args: { tenantId: number; taskId: number; live?: AutoRunEvaluation | null },
 ): Promise<TicketLifecycle | null> {
   // The live evaluation already resolved the lane and re-derived the gate, so it —
-  // not a second query — decides terminality, and 'will_run' is never a stall reason.
+  // not a second query — decides terminality AND the stall reason.
+  //
+  // The gate's verdict is forwarded VERBATIM, including `will_run`. Suppressing it (the
+  // previous `canRunNow ? null : reason`) looked like "no stall reason to report", but
+  // the classifier's `??` then fell through to the last recorded skip — so a ticket the
+  // gate had just cleared was reported as blocked by a gate that no longer applied.
+  // "Nothing is gating it" is itself the finding, and it is the one that points a reader
+  // downstream of the gate instead of at a phantom approval.
   const gate = args.live ? toGateSnapshot(args.live) : null;
-  const liveReason = gate ? (gate.canRunNow ? null : gate.reason) : undefined;
+  const liveReason = gate ? gate.reason : undefined;
   const [task] = await db
     .select({
       id: tasks.id,
@@ -954,7 +1010,9 @@ export async function summarizeAutonomy(
         reason,
         text: reason === 'unrecorded'
           ? 'No auto-run decision was ever recorded for this ticket — autonomy never evaluated it.'
-          : AUTO_RUN_REASON_TEXT[reason],
+          // A funnel is an assessment, never a dispatch record — same tense rule as the
+          // per-ticket verdict, so the two surfaces cannot describe one gate differently.
+          : autoRunReasonEvaluationText(reason),
         tickets,
       }))
       .sort((a, b) => b.tickets - a.tickets),

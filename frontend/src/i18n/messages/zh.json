@@ -1068,7 +1068,8 @@
     "panel": "面板",
     "copy": "复制",
     "copied": "已复制",
-    "copyFailed": "复制失败"
+    "copyFailed": "复制失败",
+    "copyDiagnostics": "复制诊断信息"
   },
   "prdCreate": {
     "title": "新建 PRD",
@@ -2411,7 +2412,8 @@
         "cooldown_active": "工单处于失败后的退避等待期，之后才会再次自主尝试。",
         "not_executable": "属于系统或协调事务——按设计从不派发给智能体。",
         "pending_approval": "外部请求需先由人工在分诊中接受，智能体才可处理。",
-        "unrecorded": "从未记录任何自动运行决策——自主执行从未评估过这些工单。"
+        "unrecorded": "从未记录任何自动运行决策——自主执行从未评估过这些工单。",
+        "lane_requirement_gate": "该泳道要求的角色签核尚未完成，因此需求关卡改为派发该评审者，并在评审通过前暂停泳道的常规代理。"
       }
     }
   },
@@ -6289,7 +6291,8 @@
         "no_lane": "泳道未配置",
         "terminal_lane": "已完成 — 无需运行",
         "not_executable": "系统任务 — 不由智能体运行",
-        "pending_approval": "外部请求——等待人工批准"
+        "pending_approval": "外部请求——等待人工批准",
+        "lane_requirement_gate": "等待角色签核"
       }
     },
     "businessValue": {
@@ -6898,7 +6901,8 @@
         "merge_withheld": "策略限制合并",
         "blocked": "被阻塞",
         "unknown": "未分类"
-      }
+      },
+      "copyDiagnosticsAria": "复制完整的 AI 经理诊断信息 — 策略层级、自主运行状况、待办统计、每次管理运行、每项决策以及每个停滞的工单"
     }
   },
   "project360": {
@@ -7733,7 +7737,6 @@
       "tool_audit_events": "自动运行决策审计",
       "aria": "来源：{label}"
     },
-    "copyDiagnostics": "复制诊断信息",
     "copyDiagnosticsAria": "复制此工单的完整生命周期诊断信息，包含所有事件、运行 ID 和门控原因",
     "failures": {
       "title": "故障分析",

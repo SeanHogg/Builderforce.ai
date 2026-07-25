@@ -1068,7 +1068,8 @@
     "panel": "Panel",
     "copy": "Copy",
     "copied": "Copied",
-    "copyFailed": "Copy failed"
+    "copyFailed": "Copy failed",
+    "copyDiagnostics": "Copy diagnostics"
   },
   "prdCreate": {
     "title": "New PRD",
@@ -2411,7 +2412,8 @@
         "cooldown_active": "The ticket is in its post-failure back-off window before the next autonomous attempt.",
         "not_executable": "A system or coordination chore — never dispatched to an agent by design.",
         "pending_approval": "An external request awaiting human acceptance in triage before any agent may touch it.",
-        "unrecorded": "No auto-run decision was ever recorded — autonomy never evaluated these tickets."
+        "unrecorded": "No auto-run decision was ever recorded — autonomy never evaluated these tickets.",
+        "lane_requirement_gate": "The lane requires a role sign-off that is still outstanding, so the requirement gate dispatched that reviewer and suppressed the lane's normal agent until the review clears."
       }
     }
   },
@@ -6291,7 +6293,8 @@
         "no_lane": "Lane not configured",
         "terminal_lane": "Done — no run needed",
         "not_executable": "System task — not run by an agent",
-        "pending_approval": "External request — awaiting human approval"
+        "pending_approval": "External request — awaiting human approval",
+        "lane_requirement_gate": "Waiting on role sign-off"
       }
     },
     "businessValue": {
@@ -6900,7 +6903,8 @@
         "merge_withheld": "Merge withheld by policy",
         "blocked": "Blocked",
         "unknown": "Unclassified"
-      }
+      },
+      "copyDiagnosticsAria": "Copy the full AI Manager diagnostics — policy tiers, autonomy health, backlog counts, every management pass, every decision and every stuck ticket"
     }
   },
   "project360": {
@@ -7735,7 +7739,6 @@
       "tool_audit_events": "Auto-run decision audit",
       "aria": "Source: {label}"
     },
-    "copyDiagnostics": "Copy diagnostics",
     "copyDiagnosticsAria": "Copy the full lifecycle diagnostics for this ticket, including every event, run id and gate reason",
     "failures": {
       "title": "Failure analysis",

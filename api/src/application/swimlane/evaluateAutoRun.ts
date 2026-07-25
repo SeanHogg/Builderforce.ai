@@ -51,7 +51,8 @@ export type AutoRunReason =
   | 'cloud_run_limit'     // the TENANT is over its monthly cloud-run allowance — NOT retryable, and a human Run-now does not override it either
   | 'cooldown_active'     // the ticket's last run failed too recently — backing off before the next autonomous attempt (a human Run-now still overrides)
   | 'not_executable'      // a system/coordination chore (e.g. an AI Manager run task) — never dispatched to an agent
-  | 'pending_approval';   // an EXTERNAL feedback request — a human must accept it in triage before any agent may touch it
+  | 'pending_approval'    // an EXTERNAL feedback request — a human must accept it in triage before any agent may touch it
+  | 'lane_requirement_gate'; // the lane's REQUIREMENT gate suppressed the normal agent — a required reviewer/producer round-trip is owed first
 
 /**
  * One English sentence per {@link AutoRunReason} — what a NON-UI caller should be
@@ -78,7 +79,56 @@ export const AUTO_RUN_REASON_TEXT: Record<AutoRunReason, string> = {
   cooldown_active: 'No run yet: the ticket is in its post-failure back-off window before the next autonomous attempt.',
   not_executable: 'No run: this is a system/coordination chore, never dispatched to an agent.',
   pending_approval: 'No run: this is an external feedback request awaiting human acceptance in triage.',
+  lane_requirement_gate: 'No run by the lane\'s normal agent: this lane requires a role sign-off that is still outstanding, so the requirement gate dispatched that reviewer/producer instead and suppressed the normal agent until the review clears.',
 };
+
+/**
+ * The reasons {@link evaluateTaskAutoRun} can itself return — i.e. the conditions the
+ * LIVE gate actually looks at.
+ *
+ * WHY THE DISTINCTION MATTERS. A live re-evaluation supersedes a recorded skip only for
+ * what it models. `evaluateTaskAutoRun` resolves the board, the lane, the lane's GATE
+ * column, staffing/capability and the re-run backpressure — it does NOT model the lane
+ * REQUIREMENT gate (`enforceLaneRequirements`, applied later by the trigger) or the
+ * tenant cloud-run allowance (applied at dispatch). So it can answer `will_run` for a
+ * ticket that the trigger will then decline for one of those.
+ *
+ * Consumers that reconcile a live verdict against a recorded one (the lifecycle ledger)
+ * use this set to know which recorded reasons a live `will_run` genuinely refutes and
+ * which it is simply blind to. Deriving that from one exported set keeps the knowledge
+ * with the evaluator that owns it, rather than in a second hand-maintained list.
+ */
+export const EVALUATED_AUTO_RUN_REASONS: ReadonlySet<AutoRunReason> = new Set<AutoRunReason>([
+  'will_run', 'no_board', 'no_lane', 'terminal_lane', 'human_gate', 'no_agent',
+  'capability_mismatch', 'already_running', 'run_cap_exhausted', 'cooldown_active',
+  'not_executable', 'pending_approval',
+]);
+
+/**
+ * `will_run` in the EVALUATION tense — for callers that only ASK the gate.
+ *
+ * {@link AUTO_RUN_REASON_TEXT} is written for the MCP task tools, which evaluate and
+ * then actually fire the trigger, so there `will_run` truthfully reports a dispatch
+ * that happened. A READ-ONLY caller (the lifecycle ledger's gate snapshot, the triage
+ * diagnostic) dispatches nothing — and printing "A run was dispatched for this ticket"
+ * directly above `liveExecution: (none)` is exactly the self-contradiction that makes a
+ * diagnostic report untrustworthy.
+ *
+ * Every OTHER reason is already tense-neutral ("No run: …"), so this is a single
+ * documented substitution rather than a forked copy of the whole table.
+ */
+export const WILL_RUN_EVALUATION_TEXT =
+  'Nothing is gating this ticket: the lane is auto-gated and an eligible agent is available, '
+  + 'so autonomy would dispatch it on the next evaluation. If it has nonetheless been sitting, '
+  + 'the cause is downstream of the gate — look at what the last completed run did (or did not) advance.';
+
+/**
+ * The reason sentence for a caller that EVALUATED the gate without dispatching.
+ * See {@link WILL_RUN_EVALUATION_TEXT} for why `will_run` alone needs re-phrasing.
+ */
+export function autoRunReasonEvaluationText(reason: AutoRunReason): string {
+  return reason === 'will_run' ? WILL_RUN_EVALUATION_TEXT : AUTO_RUN_REASON_TEXT[reason] ?? reason;
+}
 
 /**
  * How many consecutive FAILED runs a ticket may accumulate before autonomy stops

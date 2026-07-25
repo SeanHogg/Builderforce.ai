@@ -1068,7 +1068,8 @@
     "panel": "Panel",
     "copy": "Kopieren",
     "copied": "Kopiert",
-    "copyFailed": "Kopieren fehlgeschlagen"
+    "copyFailed": "Kopieren fehlgeschlagen",
+    "copyDiagnostics": "Diagnose kopieren"
   },
   "prdCreate": {
     "title": "Neues PRD",
@@ -2411,7 +2412,8 @@
         "cooldown_active": "Das Ticket ist in der Wartezeit nach einem Fehlschlag, bevor der nächste autonome Versuch erfolgt.",
         "not_executable": "Eine System- oder Koordinationsaufgabe – wird bewusst nie an einen Agenten übergeben.",
         "pending_approval": "Eine externe Anfrage, die im Triage erst menschlich angenommen werden muss, bevor ein Agent sie anfassen darf.",
-        "unrecorded": "Es wurde nie eine Auto-Run-Entscheidung erfasst – die Autonomie hat diese Tickets nie bewertet."
+        "unrecorded": "Es wurde nie eine Auto-Run-Entscheidung erfasst – die Autonomie hat diese Tickets nie bewertet.",
+        "lane_requirement_gate": "Die Spalte verlangt eine noch ausstehende Rollen-Freigabe, daher hat das Anforderungs-Gate diesen Prüfer gestartet und den regulären Agenten der Spalte bis zum Abschluss der Prüfung ausgesetzt."
       }
     }
   },
@@ -6289,7 +6291,8 @@
         "no_lane": "Spur nicht konfiguriert",
         "terminal_lane": "Fertig — kein Lauf nötig",
         "not_executable": "Systemaufgabe – wird nicht von einem Agenten ausgeführt",
-        "pending_approval": "Externe Anfrage – wartet auf Genehmigung"
+        "pending_approval": "Externe Anfrage – wartet auf Genehmigung",
+        "lane_requirement_gate": "Wartet auf Rollen-Freigabe"
       }
     },
     "businessValue": {
@@ -6898,7 +6901,8 @@
         "merge_withheld": "Merge durch Richtlinie zurückgehalten",
         "blocked": "Blockiert",
         "unknown": "Nicht klassifiziert"
-      }
+      },
+      "copyDiagnosticsAria": "Vollständige KI-Manager-Diagnose kopieren – Richtlinienebenen, Autonomie-Status, Backlog-Zahlen, jeder Management-Durchlauf, jede Entscheidung und jedes blockierte Ticket"
     }
   },
   "project360": {
@@ -7733,7 +7737,6 @@
       "tool_audit_events": "Audit der Auto-Lauf-Entscheidungen",
       "aria": "Quelle: {label}"
     },
-    "copyDiagnostics": "Diagnose kopieren",
     "copyDiagnosticsAria": "Die vollständige Lebenszyklus-Diagnose dieses Tickets kopieren, mit allen Ereignissen, Ausführungs-IDs und Gate-Gründen",
     "failures": {
       "title": "Fehleranalyse",

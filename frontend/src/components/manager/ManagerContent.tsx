@@ -740,8 +740,11 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       )}
 
       {/* ── Stuck: what the manager cannot finish, and what it has tried ── */}
+      {/* The overview goes down with it: the register's "Copy diagnostics" handover needs
+          the policy tiers, autonomy health, pass cards and decision feed that live here,
+          and re-fetching the same endpoint in the child would be a pure duplicate. */}
       {activeSub === 'stuck' && projectId != null && (
-        <ManagerStallRegister projectId={projectId} />
+        <ManagerStallRegister projectId={projectId} overview={data} />
       )}
 
       {activeSub === 'activity' && (
