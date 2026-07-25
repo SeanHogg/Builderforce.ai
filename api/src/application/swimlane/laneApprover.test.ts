@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  approverRoleKeyForLaneAgent, builtinRoleKeyFromText, decideLaneApprovers,
-  loadLaneStaffedAgents, resolveLaneApprovers, type LaneStaffedAgent,
+  approverRoleKeyForLaneAgent, builtinRoleKeyFromText, decideLaneAgentApproval, decideLaneApprovers,
+  laneApprovalOwed, loadLaneStaffedAgents, resolveLaneApprovers,
+  type LaneStaffedAgent, type StaffedLaneApprover,
 } from './laneApprover';
 import { swimlaneAgentAssignments } from '../../infrastructure/database/schema';
 
@@ -191,6 +192,110 @@ describe('decideLaneApprovers — the documented precedence', () => {
     expect(d.tier).toBe('none');
     expect(d.reason).toBe('lane_agents_not_role_capable');
     expect(d.approverResolved).toBe(false);
+  });
+});
+
+describe('decideLaneAgentApproval — what the lane gate does this hop', () => {
+  const reviewer: StaffedLaneApprover = {
+    roleKey: 'code-reviewer', roleName: 'Code Reviewer',
+    agentRef: 'agent-7', agentName: 'Review Bot', model: null,
+  };
+  const decide = (over: Partial<Parameters<typeof decideLaneAgentApproval>[0]> = {}) =>
+    decideLaneAgentApproval({
+      approvers: [reviewer],
+      stateByRole: new Map([['code-reviewer', 'in_progress']]),
+      answered: new Set<string>(),
+      hasLiveRun: false,
+      requirementGate: 'soft',
+      ...over,
+    });
+
+  it('asks the lane agent to sign off once its work has RUN, and holds the lane meanwhile', () => {
+    const d = decide();
+    expect(d.owed).toEqual(['code-reviewer']);
+    expect(d.ask?.agentRef).toBe('agent-7');
+    expect(d.blocked).toBe(true);
+    expect(d.flagged).toBe(true);
+  });
+
+  it.each(['pending', 'assigned', 'unstaffed'])(
+    'NEVER preempts the work: a slot in state %s owes nothing and does not block',
+    (state) => {
+      // THE regression this guards. Tier (b) now applies to 10 of 11 boards; if a
+      // not-yet-run slot counted as owed, the first entry into every staffed lane would
+      // dispatch a REVIEW of work that does not exist and `blocked` would suppress the
+      // implementation run that should have happened.
+      const d = decide({ stateByRole: new Map([['code-reviewer', state]]) });
+      expect(d.owed).toEqual([]);
+      expect(d.ask).toBeNull();
+      expect(d.blocked).toBe(false);
+      expect(d.flagged).toBe(false);
+    },
+  );
+
+  it.each(['completed', 'waived', 'skipped'])('owes nothing once the slot is satisfied (%s)', (state) => {
+    expect(decide({ stateByRole: new Map([['code-reviewer', state]]) }).owed).toEqual([]);
+  });
+
+  it('owes nothing when no slot was materialised at all — the fail-closed leaf', () => {
+    // No slot ⇒ nothing to ask about here; the empty manifest is what keeps
+    // `decideSignoffGate` shut, rather than this path inventing an approval.
+    const d = decide({ stateByRole: new Map() });
+    expect(d.owed).toEqual([]);
+    expect(d.blocked).toBe(false);
+  });
+
+  it('never piles a second run on a ticket that already has a live one', () => {
+    const d = decide({ hasLiveRun: true });
+    expect(d.owed).toEqual(['code-reviewer']);
+    expect(d.ask).toBeNull();
+    // Still flagged (the lane IS unmet) but the soft gate does not block — the live run
+    // already owns the ticket, so there is nothing to suppress.
+    expect(d.flagged).toBe(true);
+    expect(d.blocked).toBe(false);
+  });
+
+  it('stops re-asking a role that already recorded a verdict — loop safety', () => {
+    // Mirrors the requirement-row path's `!latest.has(ref)` guard. Without it every lane
+    // re-entry would spawn another paid review run for the same unanswered question.
+    const d = decide({ answered: new Set(['code-reviewer']) });
+    expect(d.owed).toEqual(['code-reviewer']);
+    expect(d.ask).toBeNull();
+  });
+
+  it('treats changes_requested as an unmet lane, re-asked by the manager not by lane hops', () => {
+    const d = decide({
+      stateByRole: new Map([['code-reviewer', 'changes_requested']]),
+      answered: new Set(['code-reviewer']),
+    });
+    expect(d.owed).toEqual(['code-reviewer']);
+    expect(d.ask).toBeNull();
+    expect(d.flagged).toBe(true);
+  });
+
+  it('asks ONE approver per hop even when several are owed', () => {
+    // Sign-offs are sequential judgements; a burst would spend N paid runs answering one
+    // question. The unasked roles stay in `owed`, so the lane is still reported unmet.
+    const security: StaffedLaneApprover = { ...reviewer, roleKey: 'security', roleName: 'Security', agentRef: 'agent-9' };
+    const d = decide({
+      approvers: [reviewer, security],
+      stateByRole: new Map([['code-reviewer', 'in_progress'], ['security', 'in_progress']]),
+    });
+    expect(d.owed).toEqual(['code-reviewer', 'security']);
+    expect(d.ask?.roleKey).toBe('code-reviewer');
+  });
+
+  it('a HARD gate holds the lane even when nobody can be asked', () => {
+    const d = decide({ hasLiveRun: true, requirementGate: 'hard' });
+    expect(d.ask).toBeNull();
+    expect(d.blocked).toBe(true);
+  });
+
+  it('laneApprovalOwed is the SAME rule the full decision applies (the gate pre-checks with it)', () => {
+    const stateByRole = new Map([['code-reviewer', 'in_progress']]);
+    expect(laneApprovalOwed([reviewer], stateByRole).map((a) => a.roleKey))
+      .toEqual(decide({ stateByRole }).owed);
+    expect(laneApprovalOwed([reviewer], new Map([['code-reviewer', 'assigned']]))).toEqual([]);
   });
 });
 

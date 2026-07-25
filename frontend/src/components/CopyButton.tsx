@@ -15,10 +15,9 @@
  * Clipboard access requires a secure context and can be denied by permission policy, so
  * failure is a real state, surfaced rather than swallowed.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback } from 'react';
 import { useTranslations } from 'next-intl';
-
-type CopyState = 'idle' | 'copied' | 'error';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 export interface CopyButtonProps {
   /** Built on click. May be async so a caller can fetch before copying. */
@@ -37,24 +36,9 @@ export function CopyButton({
   getText, label, ariaLabel, compact = false, feedbackMs = 2000,
 }: CopyButtonProps) {
   const t = useTranslations('common');
-  const [state, setState] = useState<CopyState>('idle');
-  // Clearing the timer on unmount prevents a setState on an unmounted panel — the copy
-  // lives in a slide-out that a user frequently closes within the feedback window.
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-
-  const onCopy = useCallback(async () => {
-    try {
-      const text = await getText();
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(text);
-      setState('copied');
-    } catch {
-      setState('error');
-    }
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setState('idle'), feedbackMs);
-  }, [getText, feedbackMs]);
+  // The write, the feedback state and the unmount-safe reset all live in the shared hook.
+  const { state, copy } = useCopyToClipboard(feedbackMs);
+  const onCopy = useCallback(() => { void copy(getText); }, [copy, getText]);
 
   const text = state === 'copied' ? t('copied') : state === 'error' ? t('copyFailed') : (label ?? t('copy'));
   const tone = state === 'copied' ? 'var(--success)' : state === 'error' ? 'var(--error-text)' : 'var(--text-secondary)';
