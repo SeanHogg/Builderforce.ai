@@ -425,6 +425,7 @@ export function estimateBacklogBurnRate(input: EstimateInput): EstimateResult {
     agentEstimatedHours,
     humanVelocity,
     humanEstimatedHours,
+    dualTrackWallClockHours,
     pessimisticHours: round2(pessimisticHours),
     expectedHours: round2(expectedHours),
     optimisticHours: round2(optimisticHours),
