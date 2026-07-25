@@ -21,12 +21,14 @@
  * Rows written under the OLD scheme (single unsalted SHA-256 of `JWT_SECRET`) still
  * decrypt via the helpers' versioned dual-read and upgrade in place on their next write —
  * so `env.JWT_SECRET` is threaded as the `legacySecret` fallback on every read.
- * Backed by the raw-SQL `tenant_llm_provider_keys` table (migrations 0088 + 0198),
- * queried via neon.
+ * Backed by the `tenant_llm_provider_keys` table (migrations 0088 + 0198),
+ * queried through the Drizzle query builder (`tenantLlmProviderKeys`).
  */
 
-import { neon } from '@neondatabase/serverless';
+import { and, asc, eq, inArray, ne, not, sql } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
+import { buildDatabase } from '../../infrastructure/database/connection';
+import { tenantLlmProviderKeys, tenantMembers } from '../../infrastructure/database/schema';
 import { encryptSecretForStorage, decryptSecretFromStorage } from '../../infrastructure/auth/MfaService';
 import { credentialSecret } from '../integrations/credentialCrypto';
 import { refreshAnthropicToken, OAUTH_SAFETY_MARGIN_MS, type AnthropicOAuthTokens } from './anthropicOAuth';
@@ -107,13 +109,14 @@ export async function setTenantProviderKey(
   userId: string | null,
 ): Promise<void> {
   const keyEnc = await encryptSecretForStorage(plaintextKey, credentialSecret(env), { tenantId });
-  const sql = neon(env.NEON_DATABASE_URL);
-  await sql`
-    INSERT INTO tenant_llm_provider_keys (tenant_id, provider, key_enc, auth_type, created_by_user_id)
-    VALUES (${tenantId}, ${provider}, ${keyEnc}, 'api_key', ${userId})
-    ON CONFLICT (tenant_id, provider)
-    DO UPDATE SET key_enc = ${keyEnc}, auth_type = 'api_key', updated_at = NOW()
-  `;
+  const db = buildDatabase(env);
+  await db
+    .insert(tenantLlmProviderKeys)
+    .values({ tenantId, provider, keyEnc, authType: 'api_key', createdByUserId: userId })
+    .onConflictDoUpdate({
+      target: [tenantLlmProviderKeys.tenantId, tenantLlmProviderKeys.provider],
+      set: { keyEnc, authType: 'api_key', updatedAt: sql`NOW()` },
+    });
 }
 
 /** Store (or replace) a tenant's OAuth subscription tokens, encrypted at rest. */
@@ -125,13 +128,14 @@ export async function setTenantProviderOAuth(
   userId: string | null,
 ): Promise<void> {
   const keyEnc = await encryptSecretForStorage(JSON.stringify(tokens), credentialSecret(env), { tenantId });
-  const sql = neon(env.NEON_DATABASE_URL);
-  await sql`
-    INSERT INTO tenant_llm_provider_keys (tenant_id, provider, key_enc, auth_type, created_by_user_id)
-    VALUES (${tenantId}, ${provider}, ${keyEnc}, 'oauth', ${userId})
-    ON CONFLICT (tenant_id, provider)
-    DO UPDATE SET key_enc = ${keyEnc}, auth_type = 'oauth', updated_at = NOW()
-  `;
+  const db = buildDatabase(env);
+  await db
+    .insert(tenantLlmProviderKeys)
+    .values({ tenantId, provider, keyEnc, authType: 'oauth', createdByUserId: userId })
+    .onConflictDoUpdate({
+      target: [tenantLlmProviderKeys.tenantId, tenantLlmProviderKeys.provider],
+      set: { keyEnc, authType: 'oauth', updatedAt: sql`NOW()` },
+    });
 }
 
 export interface OpenAICodexResolution {
@@ -197,12 +201,20 @@ async function loadProviderRow(
   // — a transient DB error (or an env without NEON bound) must degrade to "no BYO
   // credential" (the cascade keeps its operator-key floor), never 500 the request.
   try {
-    const sql = neon(env.NEON_DATABASE_URL);
-    const rows = (await sql`
-      SELECT key_enc, auth_type FROM tenant_llm_provider_keys
-      WHERE tenant_id = ${tenantId} AND provider = ${provider} LIMIT 1
-    `) as ProviderKeyRow[];
-    return rows[0] ?? null;
+    const db = buildDatabase(env);
+    const rows = await db
+      .select({ keyEnc: tenantLlmProviderKeys.keyEnc, authType: tenantLlmProviderKeys.authType })
+      .from(tenantLlmProviderKeys)
+      .where(and(
+        eq(tenantLlmProviderKeys.tenantId, tenantId),
+        eq(tenantLlmProviderKeys.provider, provider),
+      ))
+      .limit(1);
+    const row = rows[0];
+    if (!row) return null;
+    // Drizzle hands back camelCase; the callers below read the snake_case column
+    // names this row shape has always exposed — map back rather than rename them.
+    return { key_enc: row.keyEnc ?? undefined, auth_type: row.authType ?? undefined };
   } catch {
     return null;
   }
@@ -324,10 +336,21 @@ export async function resolveAnthropicOAuthToken(env: Env, tenantId: number): Pr
 export async function resolveTenantVendorKeys(env: Env, tenantId: number): Promise<TenantVendorKeys> {
   let rows: Array<{ provider?: string; key_enc?: string; auth_type?: string }> = [];
   try {
-    const sql = neon(env.NEON_DATABASE_URL);
-    rows = (await sql`
-      SELECT provider, key_enc, auth_type FROM tenant_llm_provider_keys WHERE tenant_id = ${tenantId}
-    `) as typeof rows;
+    const db = buildDatabase(env);
+    const selected = await db
+      .select({
+        provider: tenantLlmProviderKeys.provider,
+        keyEnc: tenantLlmProviderKeys.keyEnc,
+        authType: tenantLlmProviderKeys.authType,
+      })
+      .from(tenantLlmProviderKeys)
+      .where(eq(tenantLlmProviderKeys.tenantId, tenantId));
+    // Keep the snake_case row shape the loop below has always read.
+    rows = selected.map((r) => ({
+      provider: r.provider ?? undefined,
+      key_enc: r.keyEnc ?? undefined,
+      auth_type: r.authType ?? undefined,
+    }));
   } catch {
     return {};
   }
@@ -457,15 +480,17 @@ export async function providersConnectedInOtherWorkspaces(
 ): Promise<LlmProvider[]> {
   if (!userId || providers.length === 0) return [];
   try {
-    const sql = neon(env.NEON_DATABASE_URL);
-    const rows = (await sql`
-      SELECT DISTINCT k.provider
-      FROM tenant_llm_provider_keys k
-      JOIN tenant_members m ON m.tenant_id = k.tenant_id
-      WHERE m.user_id = ${userId} AND m.is_active = true
-        AND k.tenant_id <> ${tenantId}
-        AND k.provider = ANY(${providers as unknown as string[]})
-    `) as Array<{ provider: string }>;
+    const db = buildDatabase(env);
+    const rows = await db
+      .selectDistinct({ provider: tenantLlmProviderKeys.provider })
+      .from(tenantLlmProviderKeys)
+      .innerJoin(tenantMembers, eq(tenantMembers.tenantId, tenantLlmProviderKeys.tenantId))
+      .where(and(
+        eq(tenantMembers.userId, userId),
+        eq(tenantMembers.isActive, true),
+        ne(tenantLlmProviderKeys.tenantId, tenantId),
+        inArray(tenantLlmProviderKeys.provider, providers as readonly string[] as string[]),
+      ));
     return rows.map((r) => r.provider).filter(isSupportedProvider);
   } catch {
     return [];
@@ -479,12 +504,22 @@ export async function listTenantProviderKeys(
   env: Env,
   tenantId: number,
 ): Promise<ProviderKeySummary[]> {
-  const sql = neon(env.NEON_DATABASE_URL);
-  const rows = (await sql`
-    SELECT provider, auth_type, priority FROM tenant_llm_provider_keys
-    WHERE tenant_id = ${tenantId}
-    ORDER BY priority ASC NULLS LAST, provider ASC
-  `) as Array<{ provider: string; auth_type?: string; priority?: number | null }>;
+  const db = buildDatabase(env);
+  const selected = await db
+    .select({
+      provider: tenantLlmProviderKeys.provider,
+      authType: tenantLlmProviderKeys.authType,
+      priority: tenantLlmProviderKeys.priority,
+    })
+    .from(tenantLlmProviderKeys)
+    .where(eq(tenantLlmProviderKeys.tenantId, tenantId))
+    // `priority` NULL = unset and MUST sort last (a set precedence always wins).
+    .orderBy(sql`${tenantLlmProviderKeys.priority} ASC NULLS LAST`, asc(tenantLlmProviderKeys.provider));
+  const rows: Array<{ provider: string; auth_type?: string; priority?: number | null }> = selected.map((r) => ({
+    provider: r.provider,
+    auth_type: r.authType ?? undefined,
+    priority: r.priority,
+  }));
   return rows
     .filter((r) => isSupportedProvider(r.provider))
     .map((r) => ({
@@ -508,24 +543,33 @@ export async function setTenantProviderPriority(
   tenantId: number,
   order: readonly LlmProvider[],
 ): Promise<void> {
-  const sql = neon(env.NEON_DATABASE_URL);
+  const db = buildDatabase(env);
   const ranked = order.filter(isSupportedProvider);
   // Clear any provider NOT in the new order back to unset, then stamp the ranked ones.
-  // Empty order → clear ALL (a plain UPDATE; `= ANY('{}')` can't infer its element type).
+  // Empty order → clear ALL (an unqualified provider filter; `NOT IN ()` is not valid SQL).
   if (ranked.length === 0) {
-    await sql`UPDATE tenant_llm_provider_keys SET priority = NULL, updated_at = NOW() WHERE tenant_id = ${tenantId}`;
+    await db
+      .update(tenantLlmProviderKeys)
+      .set({ priority: null, updatedAt: sql`NOW()` })
+      .where(eq(tenantLlmProviderKeys.tenantId, tenantId));
     return;
   }
-  await sql`
-    UPDATE tenant_llm_provider_keys SET priority = NULL, updated_at = NOW()
-    WHERE tenant_id = ${tenantId}
-      AND NOT (provider = ANY(${ranked as unknown as string[]}))
-  `;
+  await db
+    .update(tenantLlmProviderKeys)
+    .set({ priority: null, updatedAt: sql`NOW()` })
+    .where(and(
+      eq(tenantLlmProviderKeys.tenantId, tenantId),
+      not(inArray(tenantLlmProviderKeys.provider, ranked as readonly string[] as string[])),
+    ));
   for (let i = 0; i < ranked.length; i++) {
-    await sql`
-      UPDATE tenant_llm_provider_keys SET priority = ${i}, updated_at = NOW()
-      WHERE tenant_id = ${tenantId} AND provider = ${ranked[i]}
-    `;
+    const provider = ranked[i] as LlmProvider;
+    await db
+      .update(tenantLlmProviderKeys)
+      .set({ priority: i, updatedAt: sql`NOW()` })
+      .where(and(
+        eq(tenantLlmProviderKeys.tenantId, tenantId),
+        eq(tenantLlmProviderKeys.provider, provider),
+      ));
   }
 }
 
@@ -548,6 +592,11 @@ export function byoVendorPriorityOrder(summaries: readonly ProviderKeySummary[])
 
 /** Remove a tenant's provider credential (API key or OAuth subscription). */
 export async function deleteTenantProviderKey(env: Env, tenantId: number, provider: LlmProvider): Promise<void> {
-  const sql = neon(env.NEON_DATABASE_URL);
-  await sql`DELETE FROM tenant_llm_provider_keys WHERE tenant_id = ${tenantId} AND provider = ${provider}`;
+  const db = buildDatabase(env);
+  await db
+    .delete(tenantLlmProviderKeys)
+    .where(and(
+      eq(tenantLlmProviderKeys.tenantId, tenantId),
+      eq(tenantLlmProviderKeys.provider, provider),
+    ));
 }

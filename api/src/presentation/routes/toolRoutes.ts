@@ -1,5 +1,4 @@
 import { Hono } from 'hono';
-import { neon } from '@neondatabase/serverless';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
@@ -30,7 +29,6 @@ export function createToolRoutes(
   runtimeService: RuntimeService,
 ): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-  const sql = (env: HonoEnv['Bindings']) => neon(env.NEON_DATABASE_URL);
 
   // Public definitions need no cache (static in-memory data, no DB round-trip).
   router.get('/', (c) => c.json({ tools: toolService.list() }));
@@ -54,7 +52,7 @@ export function createToolRoutes(
     if (!Number.isFinite(projectId)) return c.json({ error: 'projectId is required' }, 400);
 
     const secret = (c.env as Env).INTEGRATION_ENCRYPTION_SECRET ?? (c.env as Env).JWT_SECRET ?? '';
-    const outcome = await auditRunner.runAudit(c.env as Env, sql(c.env), { tenantId, projectId, auditId, userId, secret });
+    const outcome = await auditRunner.runAudit(c.env as Env, { tenantId, projectId, auditId, userId, secret });
     if (!outcome) return c.json({ error: 'Unknown audit' }, 404);
 
     // Fire the existing lane-autorun trigger for every remediation ticket filed

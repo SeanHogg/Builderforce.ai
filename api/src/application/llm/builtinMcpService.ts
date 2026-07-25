@@ -2818,6 +2818,25 @@ const MCP_VERB: Record<string, string> = {
  *  activity — skip the generic wrapper emit for them to avoid a double entry. */
 const SELF_EMITTING_TOOLS = new Set(['kanban.signoff', 'kanban.assess_resource']);
 
+/**
+ * Canonical `target_type` for a tool's domain, where the tool's dotted prefix is the
+ * PLURAL of the entity its HTTP twin records.
+ *
+ * Without this the naive `tool.split('.')[0]` filed an MCP-created ticket under
+ * `target_type='tasks'` while the HTTP route (`emitTaskActivity`) writes `'task'` — so
+ * a per-ticket audit query (`?targetType=task&targetId=<id>`) silently returned ONLY
+ * human-created tickets and none of the agent/AI-Manager-created ones. Agent-authored
+ * work was effectively invisible to the audit stream, which is exactly the blindness
+ * the ticket-lifecycle ledger exists to remove. Canonicalizing here keeps the MCP and
+ * HTTP writers on ONE vocabulary instead of two that silently disagree.
+ */
+const MCP_TARGET_TYPE: Record<string, string> = {
+  tasks: 'task', projects: 'project', specs: 'spec', objectives: 'objective',
+  key_results: 'key_result', portfolios: 'portfolio', initiatives: 'initiative',
+  incidents: 'incident', jobs: 'job', proposals: 'proposal', meetings: 'meeting',
+  deliverables: 'deliverable', docs: 'doc', roadmap: 'roadmap_item',
+};
+
 async function emitBuiltinToolActivity(env: Env, db: Db, tenantId: number, userId: string | null | undefined, tool: string, result: unknown): Promise<void> {
   if (SELF_EMITTING_TOOLS.has(tool)) return;
   try {
@@ -2831,7 +2850,7 @@ async function emitBuiltinToolActivity(env: Env, db: Db, tenantId: number, userI
       projectId: r && typeof r.projectId === 'number' ? r.projectId : null,
       actor,
       verb: MCP_VERB[tool] ?? tool,
-      targetType: domain ?? null,
+      targetType: (domain ? MCP_TARGET_TYPE[domain] ?? domain : null),
       targetId,
       targetLabel: label,
       summary: `${tool}${label ? `: ${label}` : ''}`.slice(0, 300),

@@ -475,7 +475,8 @@
       "monitors": "Monitors",
       "reporting": "Reporting",
       "rfp": "RFP",
-      "feedback": "Feedback"
+      "feedback": "Feedback",
+      "autonomy": "Autonomy"
     },
     "primaryAria": "Primary"
   },
@@ -1061,7 +1062,9 @@
     "typeDesign": "Design",
     "typeIncident": "Incident",
     "requiresRoleHint": "{role, select, viewer {Requires Viewer role} developer {Requires Developer role} manager {Requires Manager role} owner {Requires Owner role} other {Requires {role} role}}",
-    "requiresDeveloperRole": "Requires Developer role"
+    "requiresDeveloperRole": "Requires Developer role",
+    "closePanel": "Close panel",
+    "panel": "Panel"
   },
   "prdCreate": {
     "title": "New PRD",
@@ -1582,7 +1585,9 @@
         "crossTeam": "Cross-team",
         "crossTeamDesc": "Rank each team against the others",
         "delayTaxonomy": "Delay causes",
-        "delayTaxonomyDesc": "Why work is running late"
+        "delayTaxonomyDesc": "Why work is running late",
+        "autonomy": "Autonomy Health",
+        "autonomyDesc": "Did the work finish itself? Lifecycle funnel by who created the ticket, the autonomous-vs-human move split, and where autonomy stalls."
       },
       "summary": {
         "cycleTime": "Avg cycle time",
@@ -2331,6 +2336,73 @@
       "title": "This lens needs a higher plan",
       "body": "Advanced insights aren't included in your {plan} plan. Upgrade to unlock forecasting, anomaly detection and the exec lenses.",
       "cta": "View plans"
+    },
+    "autonomy": {
+      "title": "Autonomy Health",
+      "subtitle": "Do the tickets your AI manager and your people open actually run their full lifecycle on their own? Compare the funnel by who created the work, see who is really moving the board, and find the gates where autonomy dies.",
+      "scopeAll": "All projects in this workspace.",
+      "scopeProject": "Scoped to {project}.",
+      "coverage": {
+        "full": "Full coverage — all {n} tickets opened in the last {days} days were audited.",
+        "truncated": "Sample only — the audit was capped at {n} tickets from the last {days} days, so these figures cover the newest tickets, not every one."
+      },
+      "origin": {
+        "label": "Created by",
+        "agent": "Agent",
+        "manager_card": "Manager card",
+        "human": "Human",
+        "system": "Automation",
+        "unknown": "Unattributed"
+      },
+      "stage": {
+        "created": "Created",
+        "dispatched": "Ever dispatched",
+        "progressed": "Progressed autonomously",
+        "terminal": "Reached Done",
+        "fullyAutonomous": "Fully autonomous"
+      },
+      "allOrigins": "All origins",
+      "conversion": "End-to-end",
+      "ticketsCreated": "{n} created",
+      "endToEnd": "reached Done with zero human lane moves ({n} tickets).",
+      "funnelAria": "Autonomy funnel for tickets created by {origin} — {n} tickets, shown as a share of those created.",
+      "originMixAria": "Tickets created in this window, split by who created them.",
+      "hopsAutonomous": "Autonomous moves",
+      "hopsHuman": "Human moves",
+      "hopsOfTotal": "{share} autonomous of {n} moves",
+      "hopSplitAria": "Lane moves for {origin}: {a} autonomous, {h} human.",
+      "stallAria": "Gates holding {n} stalled tickets, ranked by ticket count.",
+      "noTickets": "No tickets were opened in this window.",
+      "noHops": "No lane moves were recorded in this window.",
+      "noStalls": "Nothing is stalled — no ticket is short of Done with nothing running.",
+      "stat": {
+        "fully": "Finished autonomously",
+        "fullySub": "{n} of {total} tickets reached Done with no human hop",
+        "dispatchedSub": "{n} of {total} tickets got at least one run",
+        "hopShare": "Moves made by autonomy",
+        "hopShareSub": "{a} autonomous vs {h} human lane moves",
+        "stalled": "Stalled at a gate",
+        "stalledSub": "{share} of tickets — short of Done, nothing running",
+        "neverStartedSub": "{share} of tickets — never ran, never moved"
+      },
+      "gateShort": {
+        "unrecorded": "Never evaluated"
+      },
+      "gate": {
+        "will_run": "A run was dispatched for these tickets.",
+        "no_board": "The project has no board, so there is no lane for autonomy to resolve against.",
+        "no_lane": "No swimlane on the board matches the ticket's status, so autonomy has nothing to trigger on.",
+        "terminal_lane": "The ticket sits in a terminal (Done) lane, which never auto-runs.",
+        "human_gate": "The lane is human-gated — a person must approve it or press Run now.",
+        "no_agent": "The lane has no staffed agent and the owner cannot execute this stage. Staff the lane, or dispatch explicitly with Run now.",
+        "capability_mismatch": "Every candidate agent lacks the skills this lane requires.",
+        "already_running": "A run is already live on the ticket, so no new one was dispatched.",
+        "run_cap_exhausted": "The last consecutive runs all failed, so autonomy stopped re-dispatching. A human Run now overrides it.",
+        "cooldown_active": "The ticket is in its post-failure back-off window before the next autonomous attempt.",
+        "not_executable": "A system or coordination chore — never dispatched to an agent by design.",
+        "pending_approval": "An external request awaiting human acceptance in triage before any agent may touch it.",
+        "unrecorded": "No auto-run decision was ever recorded — autonomy never evaluated these tickets."
+      }
     }
   },
   "cloudAgentForm": {
@@ -3468,7 +3540,8 @@
       "empCost": "Labor cost",
       "empPerformers": "Performers",
       "empInitiatives": "Initiative mix",
-      "forecast": "Forecast"
+      "forecast": "Forecast",
+      "autonomy": "Autonomy"
     },
     "title": {
       "aiProductivity": "AI Productivity Score",
@@ -3573,7 +3646,18 @@
       "forecastCycleProjection": "Projected cycle time",
       "forecastCfrProjection": "Projected change-failure",
       "forecastAnomalies": "Open anomalies",
-      "forecastCostTrend": "Spend forecast"
+      "forecastCostTrend": "Spend forecast",
+      "autoFully": "Finished autonomously",
+      "autoDispatched": "Ever dispatched",
+      "autoHopShare": "Moves made by autonomy",
+      "autoStalled": "Stalled at a gate",
+      "autoNeverStarted": "Never started",
+      "autoOriginFunnel": "Lifecycle funnel by origin",
+      "autoHopSplit": "Autonomous vs human moves",
+      "autoStallGates": "Where autonomy stalls",
+      "autoOriginMix": "Who opens the work",
+      "autoFunnelTable": "Autonomy funnel (table)",
+      "autoCoverage": "Audit coverage"
     },
     "loading": "Loading…",
     "overview": {
@@ -7419,7 +7503,86 @@
     "errMove": "Move failed",
     "tabChanges": "Changes",
     "release": "Release",
-    "delayReason": "Delay reason"
+    "delayReason": "Delay reason",
+    "lifecycleAction": "Lifecycle",
+    "lifecycleActionTitle": "Lifecycle & autonomy proof — did this ticket move itself, or did a person push every hop?"
+  },
+  "ticketLifecycle": {
+    "title": "Lifecycle / autonomy proof",
+    "loading": "Assembling the chain of custody…",
+    "errorTitle": "Could not load this ticket’s lifecycle",
+    "retry": "Try again",
+    "openedAt": "Opened",
+    "currentLane": "Current lane",
+    "origin": {
+      "label": "Opened by",
+      "human": "A person",
+      "agent": "An agent (AI Manager)",
+      "system": "Automation",
+      "manager_card": "AI Manager grooming card",
+      "unknown": "Not recorded"
+    },
+    "verdict": {
+      "fullyAutonomous": "Ran autonomously end-to-end — 0 human lane moves",
+      "fullyAutonomousDetail": "Autonomy made {hops, plural, one {# lane move} other {# lane moves}} and reached a terminal lane. No person ever moved this ticket.",
+      "partialStalled": "Partially autonomous — stalled",
+      "partialStalledDetail": "Autonomy made {hops, plural, one {# lane move} other {# lane moves}}, but the ticket is short of Done with nothing running.",
+      "partialRunning": "Partially autonomous — still working",
+      "partialRunningDetail": "Autonomy made {hops, plural, one {# lane move} other {# lane moves}} and a run is live right now.",
+      "humanDriven": "Human-driven — autonomy never moved this ticket",
+      "humanDrivenDetail": "Every lane move was made by a person ({hops} in total). Not one autonomous hop is on record.",
+      "assisted": "Finished with human help",
+      "assistedDetail": "It reached a terminal lane, but a person made {humanHops} of the {totalHops} lane moves.",
+      "noMovement": "Never moved",
+      "noMovementDetail": "This ticket has not changed lane once — neither a person nor autonomy has moved it.",
+      "liveRun": "Run live now",
+      "managerCardTitle": "Coordination card",
+      "managerCard": "The AI Manager opens these to groom the backlog, and autonomy deliberately refuses to dispatch them. Here “no runs” is the intended behaviour, not a failure."
+    },
+    "stall": {
+      "title": "Why it is sitting there",
+      "unrecorded": "No gate was recorded — nothing has tried to run this ticket yet."
+    },
+    "stats": {
+      "title": "Hops & runs",
+      "autonomousHops": "Autonomous hops",
+      "autonomousHopsHint": "Lane moves written by an agent or by automation.",
+      "humanHops": "Human hops",
+      "humanHopsHint": "Lane moves a person made.",
+      "runsDispatched": "Runs dispatched",
+      "runsCompleted": "Runs completed",
+      "runsFailed": "Runs failed",
+      "backwardHops": "Redo hops",
+      "backwardHopsHint": "Backward lane moves — work sent back for another pass."
+    },
+    "timeline": {
+      "title": "Chain of custody",
+      "help": "Every row names the table it was read from, so this reads as evidence rather than narration.",
+      "empty": "No lifecycle events recorded for this ticket yet.",
+      "laneMove": "{from} → {to}",
+      "laneEntered": "Entered {to}",
+      "backward": "Redo",
+      "run": "Run #{id}"
+    },
+    "kind": {
+      "created": "Created",
+      "lane_moved": "Lane moved",
+      "run_dispatched": "Run dispatched",
+      "run_completed": "Run completed",
+      "run_failed": "Run failed",
+      "autorun_dispatched": "Auto-run dispatched",
+      "autorun_skipped": "Auto-run declined",
+      "autorun_error": "Auto-run error",
+      "autorun_awaiting_approval": "Auto-run awaiting approval",
+      "role_event": "Role event"
+    },
+    "source": {
+      "activity_log": "Activity / audit log",
+      "task_status_transitions": "Lane transition log",
+      "executions": "Run records",
+      "tool_audit_events": "Auto-run decision audit",
+      "aria": "Source: {label}"
+    }
   },
   "taskChanges": {
     "allChanges": "All changes",

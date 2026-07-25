@@ -14,8 +14,10 @@
  */
 
 import { Hono } from 'hono';
-import { neon } from '@neondatabase/serverless';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
+import { buildDatabase } from '../../infrastructure/database/connection';
+import { projectRepositories, projects } from '../../infrastructure/database/schema';
 import { verifyGitHubOidcToken } from '../../application/ide/githubOidc';
 import { publishStaticSite, assetsFromFormData } from '../../application/ide/publishStaticSite';
 
@@ -36,19 +38,25 @@ export function createDeployRoutes(): Hono<HonoEnv> {
     if (!verified.ok) return c.json({ error: verified.error }, 401);
 
     const [owner, repo] = verified.claims.repository.split('/');
-    const sql = neon(c.env.NEON_DATABASE_URL);
+    const db = buildDatabase(c.env);
 
     // The repo↔project binding IS the authorization. Prefer the default binding
     // when a repo somehow backs more than one project.
-    const [binding] = await sql`
-      SELECT pr.project_id, pr.tenant_id, p.name
-      FROM project_repositories pr
-      JOIN projects p ON p.id = pr.project_id
-      WHERE pr.provider = 'github'
-        AND lower(pr.owner) = lower(${owner})
-        AND lower(pr.repo)  = lower(${repo})
-      ORDER BY pr.is_default DESC, pr.created_at ASC
-      LIMIT 1`;
+    const [binding] = await db
+      .select({
+        projectId: projectRepositories.projectId,
+        tenantId: projectRepositories.tenantId,
+        name: projects.name,
+      })
+      .from(projectRepositories)
+      .innerJoin(projects, eq(projects.id, projectRepositories.projectId))
+      .where(and(
+        eq(projectRepositories.provider, 'github'),
+        sql`lower(${projectRepositories.owner}) = lower(${owner})`,
+        sql`lower(${projectRepositories.repo}) = lower(${repo})`,
+      ))
+      .orderBy(desc(projectRepositories.isDefault), asc(projectRepositories.createdAt))
+      .limit(1);
 
     if (!binding) {
       return c.json({
@@ -60,10 +68,10 @@ export function createDeployRoutes(): Hono<HonoEnv> {
     const form = await c.req.formData();
     const result = await publishStaticSite({
       env: c.env,
-      sql,
+      db,
       bucket,
-      projectId: Number(binding.project_id),
-      tenantId: Number(binding.tenant_id),
+      projectId: Number(binding.projectId),
+      tenantId: Number(binding.tenantId),
       projectName: String(binding.name ?? ''),
       requestedSubdomain: form.get('subdomain') as string | null,
       assets: assetsFromFormData(form, ['subdomain']),

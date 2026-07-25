@@ -2163,6 +2163,35 @@ textarea.input { resize: vertical; line-height: 1.5; }
   to { transform: translateX(0); }
 }
 
+/* Drawer header action (e.g. the ticket drawer's "Lifecycle" button): a labelled
+   36px-tall button that collapses to icon-only on a phone, so a header carrying
+   several actions still fits one row at 360px. Tap target stays 36×36 either way. */
+.drawer-action {
+  height: 36px;
+  min-width: 36px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.drawer-action:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+@media (max-width: 640px) {
+  .drawer-action { width: 36px; padding: 0; }
+  .drawer-action .drawer-action-label { display: none; }
+}
+
 /* ── Page inner wrapper: responsive centered content ── */
 .page-inner {
   padding: 24px;

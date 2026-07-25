@@ -35,6 +35,10 @@ vi.mock('@/lib/builderforceApi', () => {
       assigneeProfiles: vi.fn().mockResolvedValue({}),
       participantsSummary: vi.fn().mockResolvedValue([]),
       flaggedForProject: vi.fn().mockResolvedValue([]),
+      // `loadData` unions freelance hires into the assignee picker; without this the
+      // whole mount-time Promise.all rejects and the board renders its error state
+      // (which is why the checkbox/bulk-status assertions below could not find a row).
+      assignable: vi.fn().mockResolvedValue({ agents: [], humans: [], hires: [] }),
     },
   };
 });

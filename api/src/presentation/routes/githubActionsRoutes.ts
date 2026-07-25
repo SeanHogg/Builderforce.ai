@@ -45,8 +45,7 @@
  * semantics all live inside it.
  */
 import { Hono } from 'hono';
-import { eq } from 'drizzle-orm';
-import { neon } from '@neondatabase/serverless';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { verifyGitHubOidcToken } from '../../application/ide/githubOidc';
 import {
   handleContainerOp,
@@ -58,7 +57,7 @@ import {
 import { resolveTicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
-import { executions } from '../../infrastructure/database/schema';
+import { executions, projectRepositories } from '../../infrastructure/database/schema';
 import { BUILDERFORCE_AGENT_OIDC_AUDIENCE } from '../../application/runtime/githubActionsWorkflow';
 import { renderAgentRunnerScript } from '../../application/runtime/githubActionsRunner';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
@@ -116,18 +115,19 @@ export function createGitHubActionsRoutes(db: Db, runtimeService: RuntimeService
     }
 
     const [owner, repo] = verified.claims.repository.split('/');
-    const sql = neon(env.NEON_DATABASE_URL);
 
     // The repo↔project binding is the first half of the authorization, mirroring
     // deployRoutes. Prefer the default binding when a repo backs more than one.
-    const [binding] = await sql`
-      SELECT pr.project_id, pr.tenant_id
-      FROM project_repositories pr
-      WHERE pr.provider = 'github'
-        AND lower(pr.owner) = lower(${owner})
-        AND lower(pr.repo)  = lower(${repo})
-      ORDER BY pr.is_default DESC, pr.created_at ASC
-      LIMIT 1`;
+    const [binding] = await db
+      .select({ projectId: projectRepositories.projectId, tenantId: projectRepositories.tenantId })
+      .from(projectRepositories)
+      .where(and(
+        eq(projectRepositories.provider, 'github'),
+        sql`lower(${projectRepositories.owner}) = lower(${owner})`,
+        sql`lower(${projectRepositories.repo}) = lower(${repo})`,
+      ))
+      .orderBy(desc(projectRepositories.isDefault), asc(projectRepositories.createdAt))
+      .limit(1);
 
     if (!binding) {
       return c.json(
@@ -150,7 +150,7 @@ export function createGitHubActionsRoutes(db: Db, runtimeService: RuntimeService
     //
     // Answered as a flat 403 with no detail: distinguishing "wrong tenant" from
     // "no such execution" would confirm the existence of other tenants' runs.
-    if (ctx.tenantId !== Number(binding.tenant_id) || ctx.projectId !== Number(binding.project_id)) {
+    if (ctx.tenantId !== Number(binding.tenantId) || ctx.projectId !== Number(binding.projectId)) {
       return c.json({ error: 'This repository may not drive that execution.' }, 403);
     }
 

@@ -113,6 +113,7 @@ export const CAPABILITIES = {
   'insights.devex':       'manager',   // DevEx surveys & AI DevEx analysis lens
   'insights.portfolio':   'manager',   // PMO / CEO: portfolio rollup + innovation funnel
   'insights.compliance':  'manager',   // CISO: audit / evidence packs
+  'insights.autonomy':    'manager',   // Autonomy Health: per-origin lifecycle funnel, hop split & stall gates (mirrors requireRole(MANAGER) on /api/insights/autonomy)
 
   // Feature pages with their own destinations (manager-gated authoring).
   'devex.manage':         'manager',   // author DevEx survey templates & launch campaigns
