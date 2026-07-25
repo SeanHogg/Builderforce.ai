@@ -1028,6 +1028,41 @@ interface BrainTraceEvent {
  */
 declare function isFailedToolResult(result: unknown): boolean;
 /**
+ * Structural honesty check for the "it said it updated the file but didn't" failure:
+ * an assistant message that CLAIMS a file/attachment write while NO file-write tool
+ * call succeeded in the run. Pure over the recorded trace + visible messages, so the
+ * web report and the VS Code transcript flag it identically. The Brain system prompt
+ * tells the model not to fake a save; this makes a violation visible in every triage
+ * capture (and is reusable by a run-loop guard).
+ */
+declare function detectUnbackedWriteClaim(events: BrainTraceEvent[], messages: BrainMessage[]): boolean;
+/**
+ * The ticket twin of {@link detectUnbackedWriteClaim}: an assistant turn that CLAIMS it
+ * created/filed/linked a ticket, gap, or task while NO create/link tool call succeeded
+ * this run — the "it said it linked the gap to the chat, but the chat shows no link"
+ * failure. The run loop links a REAL create deterministically (autoLinkCreatedItem), so
+ * a claim with no successful create/link tool means nothing was actually filed or
+ * linked. Pure over the recorded trace + visible messages, so both copy surfaces flag
+ * it identically.
+ */
+declare function detectUnbackedTicketClaim(events: BrainTraceEvent[], messages: BrainMessage[]): boolean;
+/**
+ * The "it doesn't execute, it just dies" signature: an assistant turn that NARRATES a
+ * tool call — naming an advertised tool id, or announcing it in prose — while the run
+ * recorded ZERO tool steps.
+ *
+ * This is a provider/model fault, not a user one: the agent loop only runs structured
+ * `toolCalls` (plus the inline dialects `xmlToolCalls` lifts), so a model that writes
+ * its intent as plain text stalls forever — each turn re-announces the same call, the
+ * data never arrives, and the run ends with nothing done. Without this detector the
+ * triage block scores such a run "healthy" (no errors, no truncation, no context
+ * pressure), which is exactly backwards.
+ *
+ * Pure over the merged trace + visible messages, so both copy surfaces flag it
+ * identically.
+ */
+declare function detectAnnouncedButUnmadeToolCall(events: BrainTraceEvent[], messages: BrainMessage[]): boolean;
+/**
  * An `evermind/…` (or project-/tenant-pinned) model id means a tenant's own
  * Evermind artifact answered the turn rather than a stock pool model. Matches the
  * `evermind/` vendor prefix and the `project_evermind:` / `tenant_model:` pin refs.
@@ -1129,6 +1164,12 @@ interface BrainDiagnostics {
     /** Turns that ended on `length` or produced empty text. */
     emptyOrLengthFinishes: number;
     /**
+     * True when a turn NARRATED a tool call ("I'll call the tool…", `builtin_…`) while
+     * the run made none — the model isn't emitting structured `toolCalls`, so nothing
+     * ever executes. See {@link detectAnnouncedButUnmadeToolCall}.
+     */
+    announcedUnmadeToolCall: boolean;
+    /**
      * True when tool steps were RECOVERED from durable history but no `llm` turn
      * covers them — i.e. the chat predates durable turn records (or was reopened),
      * so the turn/token figures describe only this session while the tool figures
@@ -1141,15 +1182,22 @@ interface BrainDiagnostics {
      * from `inconclusive`: the former means there is no failure to explain, the
      * latter that there IS one but the signals don't separate A from B. Collapsing
      * both into "inconclusive" made a clean run read as an unsolved problem.
+     *
+     * `tool-calls-not-emitted` outranks the rest: a run that narrated its calls did
+     * nothing at all, and every other signal on it reads clean.
      */
-    likelyCause: 'context-exhaustion' | 'model-degradation' | 'inconclusive' | 'healthy';
+    likelyCause: 'tool-calls-not-emitted' | 'context-exhaustion' | 'model-degradation' | 'inconclusive' | 'healthy';
 }
 /**
  * Derive {@link BrainDiagnostics} from a recorded trace. Pure — no clock, no I/O
  * — so both the web report and the VS Code transcript compute the identical
  * block from the same events (single source of truth for A-vs-B triage).
+ *
+ * `messages` is the visible conversation. It is optional only so older callers keep
+ * compiling; without it the narrated-tool-call verdict can't be reached, so every
+ * surface should pass it.
  */
-declare function computeBrainDiagnostics(events: BrainTraceEvent[], requestedModel?: string): BrainDiagnostics;
+declare function computeBrainDiagnostics(events: BrainTraceEvent[], requestedModel?: string, messages?: BrainMessage[]): BrainDiagnostics;
 /**
  * Render {@link BrainDiagnostics} as transcript lines. Shared by both copy
  * surfaces so the "Diagnostics" block is identical on web and in VS Code. Emits
@@ -1632,6 +1680,28 @@ declare function parseStepMessage(metadata: string | null): {
  * RESULT payload is lossy (capped at `STEP_RESULT_CAP` in the stored copy).
  */
 declare function traceWithPersistedSteps(messages: BrainMessage[], trace: BrainTraceEvent[]): BrainTraceEvent[];
+
+/**
+ * The deployed API version, read once per session from `/health`.
+ *
+ * A support capture with no build stamp is ambiguous in the worst way: a dump taken
+ * minutes BEFORE a deploy is byte-identical to one taken after, so a fixed bug reads
+ * as unfixed. Every surface therefore stamps `UI x · API y` onto its diagnostics.
+ *
+ * The surfaces REACH `/health` differently — the web app hits the api origin
+ * unauthenticated, the VS Code webview goes through its configured gateway base — so
+ * the caller supplies the read and this module owns the part that must not be
+ * duplicated: a session cache plus in-flight coalescing, so the footer, the sidebar
+ * and a diagnostics capture cost one request between them.
+ */
+/**
+ * Resolve the API version through `read`, caching the first success for the session.
+ * Resolves null when `/health` is unreachable — a diagnostics capture must never fail
+ * because a version lookup did.
+ */
+declare function fetchApiVersionVia(read: () => Promise<{
+    version?: string;
+} | null>): Promise<string | null>;
 
 /**
  * Chat ⇄ work linking — the single source for (a) the system-prompt directive that
@@ -2137,4 +2207,4 @@ interface ToolSelection {
  */
 declare function selectToolsForTurn(tools: BrainToolSpec[] | undefined, options: SelectToolsOptions): ToolSelection;
 
-export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AllowanceState, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, ChatErrorAction, type ChatInputAttachment, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type PersistedStep, type PreparedImage, type ProvenanceAccount, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type ToolSelection, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, allowanceState, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, effortProfile, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parseStepMessage, prepareImageDataUrl, reasoningForRun, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, traceWithPersistedSteps, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AllowanceState, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, ChatErrorAction, type ChatInputAttachment, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type PersistedStep, type PreparedImage, type ProvenanceAccount, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type ToolSelection, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, allowanceState, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, effortProfile, fetchApiVersionVia, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parseStepMessage, prepareImageDataUrl, reasoningForRun, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, traceWithPersistedSteps, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };

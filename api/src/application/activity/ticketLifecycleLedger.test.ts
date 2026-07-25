@@ -346,6 +346,7 @@ describe('toGateSnapshot', () => {
     cooldownRemainingMs: 0,
     consecutiveFailures: 134,
     failureBreakerAt: 3,
+    tenantTokens: null,
   };
 
   it('carries the EVIDENCE behind the reason, not just the reason', () => {
@@ -365,5 +366,24 @@ describe('toGateSnapshot', () => {
 
   it('defaults an absent mismatch list to empty rather than undefined', () => {
     expect(toGateSnapshot({ ...evaluation, decision: { autoRun: true } }).capabilityMismatches).toEqual([]);
+  });
+
+  // The workspace token block is the one gate that leaves NO trace on the ticket (the
+  // sweep skips a blocked tenant above the trigger), so the snapshot carrying the
+  // usage/limit pair is the only place a reader can see it.
+  it('carries the workspace token verdict that explains a ticket nothing ever dispatches', () => {
+    const g = toGateSnapshot({
+      ...evaluation,
+      canRunNow: false,
+      reason: 'tenant_token_limit',
+      tenantTokens: {
+        hasTokens: false, reason: 'monthly_exhausted',
+        usageToday: 40_000, dailyLimit: 200_000,
+        usageMonth: 1_050_000, monthlyLimit: 1_000_000,
+        effectivePlan: 'free',
+      },
+    });
+    expect(g.tenantTokens).toMatchObject({ hasTokens: false, reason: 'monthly_exhausted', usageMonth: 1_050_000 });
+    expect(g.reasonText).toContain('EVERY ticket');
   });
 });

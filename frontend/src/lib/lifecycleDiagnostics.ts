@@ -77,6 +77,10 @@ function formatEvent(e: LifecycleEvent, index: number): string {
   if (e.agentRef) parts.push(`agent=${e.agentRef}`);
   // WHO dispatched it. On a stalled ticket this is usually the answer.
   if (e.dispatchedBy) parts.push(`by=${e.dispatchedBy}`);
+  // How long the run sat between being created and starting. A queued run holds the
+  // ticket's live-run guard, so a long wait here is what a stretch of `already_running`
+  // skips with no visible activity actually means.
+  if (e.queuedMs != null && e.queuedMs > 0) parts.push(`QUEUED ${formatDuration(e.queuedMs)} before starting`);
   parts.push(`src=${e.source}`);
   const head = parts.join('  ');
   // Server `detail` can be long (an error message, a skip explanation) — keep it, on its
@@ -150,6 +154,21 @@ function formatGate(gate: LifecycleGateSnapshot): string[] {
     `${gate.consecutiveFailures} (autonomy halts at ${gate.failureBreakerAt})`,
   ));
   out.push(line('cooldownRemaining', gate.cooldownRemainingMs > 0 ? formatDuration(gate.cooldownRemainingMs) : 'none'));
+  // The WORKSPACE budget. Printed with its numbers because "the plan ran out" is a
+  // different action (upgrade / wait for the reset) from every other gate on this
+  // ticket, and because it explains a silence rather than a refusal: a token-blocked
+  // tenant is skipped ABOVE the trigger, so its tickets record nothing at all.
+  const t = gate.tenantTokens;
+  if (t) {
+    out.push(line('workspaceTokens', t.hasTokens
+      ? `budget available (${t.effectivePlan} plan)`
+      : `EXHAUSTED — ${t.reason ?? 'blocked'} on the ${t.effectivePlan} plan. `
+        + `Autonomy is paused for EVERY ticket in this workspace until it resets or the plan is upgraded.`));
+    out.push(line('  tokensToday', `${t.usageToday.toLocaleString()} / ${t.dailyLimit > 0 ? t.dailyLimit.toLocaleString() : 'unlimited'}`));
+    out.push(line('  tokensThisMonth', `${t.usageMonth.toLocaleString()} / ${t.monthlyLimit > 0 ? t.monthlyLimit.toLocaleString() : 'unlimited'}`));
+  } else {
+    out.push(line('workspaceTokens', '(not consulted — an earlier gate decided; this is NOT a statement that budget remains)'));
+  }
   return out;
 }
 
@@ -242,9 +261,12 @@ export function buildLifecycleDiagnosticsReport(
   out.push('');
 
   out.push('-- Dispatchers (executions.submitted_by) --');
-  out.push('Which subsystem started the runs. Anything other than system:lane-auto reached the');
-  out.push('dispatcher WITHOUT going through the lane trigger, so the trigger\'s consecutive-');
-  out.push('failure breaker and re-run cooldown never applied to those runs.');
+  out.push('Which subsystem started the runs — the one to go and stop when a ticket is churning.');
+  out.push('system:lane-auto (a lane entry) and system:auto-exec (the cron backstop) are both the');
+  out.push('SAME lane trigger, and the failure breaker + re-run cooldown are enforced at the');
+  out.push('dispatcher itself, so no dispatcher here escaped them. What the split does tell you is');
+  out.push('WHY each run started: a ticket driven almost entirely by system:auto-exec was rescued');
+  out.push('by the sweep every time rather than advanced by anything reacting to its own progress.');
   out.push(...formatDispatchers(data.dispatchers));
   out.push('');
 

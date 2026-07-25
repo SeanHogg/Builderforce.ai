@@ -366,6 +366,11 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
         + `${tools.loading ? ' (catalog still loading)' : ''}`
         + `${tools.error ? ` · catalog error: ${tools.error}` : ''}`,
     );
+  } else {
+    // NEVER omit this line. A silently absent tool count is indistinguishable from a
+    // healthy one, and that is precisely how a surface that forgot to gather it went
+    // unnoticed: the VSIX report read clean while the model had no tools to call.
+    lines.push('- Tools available to the model: not gathered (this surface did not report its tool registry — a zero here is invisible, so treat any "announced a tool call and stopped" turn as unexplained)');
   }
 
   const ev = d.evermind;

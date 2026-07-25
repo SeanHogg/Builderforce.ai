@@ -20,6 +20,8 @@ import {
   isEffort,
   reasoningForRun,
   classifyModelFunding,
+  getMcpToolStatus,
+  fetchApiVersionVia,
   type Effort,
   type BrainConfig,
   type BrainChat,
@@ -1251,7 +1253,7 @@ function Chat({ init }: { init: InitData }) {
   const copyTranscript = useCallback(async () => {
     const pid = associatedProjectId;
     const claims = decodeTokenClaims(getToken());
-    const [agents, tickets, evermind, consumption] = await Promise.all([
+    const [agents, tickets, evermind, consumption, apiVersion] = await Promise.all([
       chatId != null ? ticketAdapter.listAgents(chatId).catch(() => []) : Promise.resolve([]),
       chatId != null ? ticketAdapter.listTickets(chatId).catch(() => []) : Promise.resolve([]),
       pid != null
@@ -1265,6 +1267,10 @@ function Chat({ init }: { init: InitData }) {
       // Shared read-through cache — the same snapshot the header's PlanBadge shows,
       // so the report and the chip can't disagree (and it's usually already loaded).
       fetchPlanSnapshot(apiReq),
+      // Which BUILD produced this capture. `/health` is public; it rides the gateway
+      // base so the version reported is the one THIS webview is actually talking to.
+      // Session-cached + coalesced in the shared helper.
+      fetchApiVersionVia(() => apiReq<{ version?: string }>('/health').catch(() => null)),
     ]);
     // The learn-gate outcome for the most recent assistant turn (the persistence adapter
     // attaches it from the server's send-messages response).
@@ -1310,6 +1316,18 @@ function Chat({ init }: { init: InitData }) {
         extensionVersion: init.extensionVersion ?? null,
         baseUrl: init.baseUrl ?? null,
       },
+      // What the model could actually CALL. Without this a tool-less Brain — one that
+      // announces "I'll call the tool…" and then stops, with 0 tool calls in the trace
+      // — is indistinguishable from a model that simply chose not to act. The COUNT is
+      // the live registry the conversation runs on (`toolSpecs`, navigation + the MCP
+      // catalog together); the catalog status explains a zero.
+      tools: (() => {
+        const mcp = getMcpToolStatus();
+        return { count: toolSpecs.length, error: mcp.error, loading: mcp.loading };
+      })(),
+      // Which build produced this capture — without it a dump taken just before a
+      // deploy is indistinguishable from one taken after, so a fixed bug reads unfixed.
+      versions: { ui: init.extensionVersion ?? null, api: apiVersion },
     };
     post('copy', {
       text: buildTranscript({
@@ -1326,7 +1344,7 @@ function Chat({ init }: { init: InitData }) {
     });
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
-  }, [conv.messages, conv.trace, conv.error, init.model, init.extensionVersion, init.baseUrl, modelSurface, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatId, ticketAdapter, apiReq, init.project?.id]);
+  }, [conv.messages, conv.trace, conv.error, init.model, init.extensionVersion, init.baseUrl, modelSurface, toolSpecs, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatId, ticketAdapter, apiReq, init.project?.id]);
 
   // Consolidate: summarize the whole chat into ONE compact assistant message tagged
   // as a consolidation marker. It's shown back to the user (the "flag"), and the

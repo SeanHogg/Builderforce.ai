@@ -2413,7 +2413,10 @@
         "not_executable": "Eine System- oder Koordinationsaufgabe – wird bewusst nie an einen Agenten übergeben.",
         "pending_approval": "Eine externe Anfrage, die im Triage erst menschlich angenommen werden muss, bevor ein Agent sie anfassen darf.",
         "unrecorded": "Es wurde nie eine Auto-Run-Entscheidung erfasst – die Autonomie hat diese Tickets nie bewertet.",
-        "lane_requirement_gate": "Die Spalte verlangt eine noch ausstehende Rollen-Freigabe, daher hat das Anforderungs-Gate diesen Prüfer gestartet und den regulären Agenten der Spalte bis zum Abschluss der Prüfung ausgesetzt."
+        "lane_requirement_gate": "Die Spalte verlangt eine noch ausstehende Rollen-Freigabe, daher hat das Anforderungs-Gate diesen Prüfer gestartet und den regulären Agenten der Spalte bis zum Abschluss der Prüfung ausgesetzt.",
+        "same_lane_reentry": "Der gerade beendete Lauf hat diese Spalte bereits bedient, daher hat die Schleifensicherung ein sofortiges erneutes Starten verhindert. Es läuft nichts.",
+        "tenant_token_limit": "Der Workspace hat sein Token-Kontingent aufgebraucht, daher ist die Autonomie für ALLE seine Tickets pausiert, bis das Kontingent zurückgesetzt oder der Tarif erhöht wird.",
+        "cloud_run_limit": "Der Workspace hat sein monatliches Cloud-Lauf-Kontingent aufgebraucht. Ein erneuter Versuch ändert daran nichts — Tarif erhöhen oder auf die Zurücksetzung warten. On-Prem- und VS-Code-Läufe bleiben unbegrenzt."
       }
     }
   },
@@ -6292,7 +6295,9 @@
         "terminal_lane": "Fertig — kein Lauf nötig",
         "not_executable": "Systemaufgabe – wird nicht von einem Agenten ausgeführt",
         "pending_approval": "Externe Anfrage – wartet auf Genehmigung",
-        "lane_requirement_gate": "Wartet auf Rollen-Freigabe"
+        "lane_requirement_gate": "Wartet auf Rollen-Freigabe",
+        "same_lane_reentry": "Hat diese Phase gerade beendet",
+        "tenant_token_limit": "Workspace ohne Token — Upgrade oder auf Zurücksetzung warten"
       }
     },
     "businessValue": {

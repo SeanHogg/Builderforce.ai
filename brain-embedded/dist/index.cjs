@@ -55,7 +55,11 @@ __export(src_exports, {
   consolidationMetadata: () => consolidationMetadata,
   countReconciledMemories: () => countReconciledMemories,
   deriveChatTitle: () => deriveChatTitle,
+  detectAnnouncedButUnmadeToolCall: () => detectAnnouncedButUnmadeToolCall,
+  detectUnbackedTicketClaim: () => detectUnbackedTicketClaim,
+  detectUnbackedWriteClaim: () => detectUnbackedWriteClaim,
   effortProfile: () => effortProfile,
+  fetchApiVersionVia: () => fetchApiVersionVia,
   filterMentionCandidates: () => filterMentionCandidates,
   formatBrainDiagnostics: () => formatBrainDiagnostics,
   formatBrainProvenance: () => formatBrainProvenance,
@@ -1410,6 +1414,24 @@ function detectUnbackedTicketClaim(events, messages) {
   if (filedOk) return false;
   return messages.some((m) => m.role === "assistant" && typeof m.content === "string" && TICKET_CLAIM.test(m.content));
 }
+var TOOL_IDENT = /\b(?:builtin_[a-z0-9]+(?:_[a-z0-9]+)+|mcp__[a-z0-9_]+)\b/i;
+var TOOL_ANNOUNCE = new RegExp(
+  [
+    // "I'll call the tool…", "I will now invoke the function…", "let me run the tool…"
+    "\\b(?:i(?:'ll| will| am going to| ?'m going to)?|let me)\\s+(?:now\\s+)?(?:call|invoke|run|execute)\\b[^.!?\\n]{0,40}\\b(?:tool|function)\\b",
+    // "Calling the required function now", "invoking the tool"
+    "\\b(?:calling|invoking|executing)\\b[^.!?\\n]{0,40}\\b(?:tool|function)\\b",
+    // The bare imperative a model writes when it means to emit a call: "run tool X".
+    "\\b(?:call|run|invoke|execute)\\s+(?:the\\s+)?(?:tool|function)\\b"
+  ].join("|"),
+  "i"
+);
+function detectAnnouncedButUnmadeToolCall(events, messages) {
+  if (events.some((e) => e.category === "tool")) return false;
+  return messages.some(
+    (m) => m.role === "assistant" && typeof m.content === "string" && (TOOL_IDENT.test(m.content) || TOOL_ANNOUNCE.test(m.content))
+  );
+}
 function cap(s, n = 2e3) {
   const str2 = typeof s === "string" ? s : JSON.stringify(s ?? "");
   return str2.length > n ? str2.slice(0, n) + `\u2026 (+${str2.length - n} chars)` : str2;
@@ -1494,7 +1516,7 @@ function byteLen(v) {
   const s = typeof v === "string" ? v : JSON.stringify(v ?? "");
   return s.length;
 }
-function computeBrainDiagnostics(events, requestedModel) {
+function computeBrainDiagnostics(events, requestedModel, messages = []) {
   const llm = events.filter((e) => e.category === "llm");
   const toolEvents = events.filter((e) => e.category === "tool");
   const errors = events.filter((e) => e.isError || e.category === "error");
@@ -1541,8 +1563,9 @@ function computeBrainDiagnostics(events, requestedModel) {
   const contextSignal = promptTokenPeak >= 24e3 || truncatedToolResults > 0 || downgradeEvents > 0 || largestToolResult != null && largestToolResult.bytes >= 2e4;
   const degradationSignal = evermindUsed.length > 0 && emptyOrLengthFinishes > 0 && (!tokensMeasured || promptTokenPeak < 24e3) && truncatedToolResults === 0;
   const didWork = toolEvents.length > 0 || completionTokenTotal > 0 || llm.length > 0;
-  const healthy = errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal && didWork;
-  const likelyCause = contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : healthy ? "healthy" : "inconclusive";
+  const announcedUnmadeToolCall = detectAnnouncedButUnmadeToolCall(events, messages);
+  const healthy = errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal && !announcedUnmadeToolCall && didWork;
+  const likelyCause = announcedUnmadeToolCall ? "tool-calls-not-emitted" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : healthy ? "healthy" : "inconclusive";
   return {
     turns: llm.length,
     toolCalls: toolEvents.length,
@@ -1559,6 +1582,7 @@ function computeBrainDiagnostics(events, requestedModel) {
     evermindUsed,
     downgradeEvents,
     emptyOrLengthFinishes,
+    announcedUnmadeToolCall,
     turnCoveragePartial,
     likelyCause
   };
@@ -1567,7 +1591,7 @@ function kb(bytes) {
   return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
 }
 function formatBrainDiagnostics(d) {
-  const verdict = d.likelyCause === "context-exhaustion" ? "Likely CONTEXT EXHAUSTION (case A) \u2014 the transcript outgrew the model window." : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
+  const verdict = d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Check the "Tools available to the model" line in the Chat diagnostics block (0 tools \u21D2 it had none to emit), then try a different model.' : d.likelyCause === "context-exhaustion" ? "Likely CONTEXT EXHAUSTION (case A) \u2014 the transcript outgrew the model window." : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
   const lines = ["--- Diagnostics ---", `Likely cause: ${verdict}`];
   const scope = d.turnCoveragePartial ? " (this session)" : "";
   lines.push(`Turns${scope}: ${d.turns} \xB7 Tool calls: ${d.toolCalls} \xB7 Errors: ${d.errors}${d.loopExhausted ? " \xB7 LOOP EXHAUSTED" : ""}`);
@@ -1603,7 +1627,7 @@ function buildBrainTriageReport(opts) {
   lines.push(...formatBrainProvenance(events, { configuredModel, surface }));
   lines.push(`Steps: ${events.length} \xB7 Errors: ${errors.length} \xB7 Messages: ${messages.length}`);
   if (error) lines.push(`Last error: ${error}`);
-  lines.push("", ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel)));
+  lines.push("", ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel, messages)));
   if (detectUnbackedWriteClaim(events, messages)) {
     lines.push("", "\u26A0 UNBACKED WRITE CLAIM \u2014 an assistant turn claimed it saved/updated a file, but no file-write tool (attachments.write / project_files.save) succeeded in this run. The file was NOT modified.");
   }
@@ -3174,6 +3198,21 @@ function subscribeToChatMessages(baseUrl, getToken, chatId, onChanged) {
   };
 }
 
+// src/apiVersion.ts
+var cached = null;
+var inflight = null;
+function fetchApiVersionVia(read) {
+  if (cached) return Promise.resolve(cached);
+  if (inflight) return inflight;
+  inflight = read().then((data) => {
+    cached = data?.version ?? null;
+    return cached;
+  }).catch(() => null).finally(() => {
+    inflight = null;
+  });
+  return inflight;
+}
+
 // src/pendingPrompt.ts
 var PENDING_PROMPT_KEY = "bf_pending_prompt";
 function savePendingPrompt(text) {
@@ -3358,6 +3397,8 @@ function formatChatDiagnostics(d) {
     lines.push(
       `- Tools available to the model: ${tools.count} registered` + (tools.count > advertised ? ` \xB7 up to ${advertised} advertised per turn (relevance-selected)` : "") + `${tools.loading ? " (catalog still loading)" : ""}${tools.error ? ` \xB7 catalog error: ${tools.error}` : ""}`
     );
+  } else {
+    lines.push('- Tools available to the model: not gathered (this surface did not report its tool registry \u2014 a zero here is invisible, so treat any "announced a tool call and stopped" turn as unexplained)');
   }
   const ev = d.evermind;
   if (ev) {
@@ -3429,7 +3470,11 @@ function formatChatDiagnostics(d) {
   consolidationMetadata,
   countReconciledMemories,
   deriveChatTitle,
+  detectAnnouncedButUnmadeToolCall,
+  detectUnbackedTicketClaim,
+  detectUnbackedWriteClaim,
   effortProfile,
+  fetchApiVersionVia,
   filterMentionCandidates,
   formatBrainDiagnostics,
   formatBrainProvenance,

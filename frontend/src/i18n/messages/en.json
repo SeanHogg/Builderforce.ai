@@ -2413,7 +2413,10 @@
         "not_executable": "A system or coordination chore — never dispatched to an agent by design.",
         "pending_approval": "An external request awaiting human acceptance in triage before any agent may touch it.",
         "unrecorded": "No auto-run decision was ever recorded — autonomy never evaluated these tickets.",
-        "lane_requirement_gate": "The lane requires a role sign-off that is still outstanding, so the requirement gate dispatched that reviewer and suppressed the lane's normal agent until the review clears."
+        "lane_requirement_gate": "The lane requires a role sign-off that is still outstanding, so the requirement gate dispatched that reviewer and suppressed the lane's normal agent until the review clears.",
+        "same_lane_reentry": "The run that just finished already served this lane, so the loop guard suppressed an immediate re-dispatch into it. Nothing is executing.",
+        "tenant_token_limit": "The workspace has used its token allowance, so autonomy is paused for every ticket it owns until the allowance resets or the plan is upgraded.",
+        "cloud_run_limit": "The workspace has used its monthly cloud-run allowance. Retrying will not clear this — upgrade the plan or wait for the reset. On-prem and VS Code runs stay unlimited."
       }
     }
   },
@@ -6294,7 +6297,9 @@
         "terminal_lane": "Done — no run needed",
         "not_executable": "System task — not run by an agent",
         "pending_approval": "External request — awaiting human approval",
-        "lane_requirement_gate": "Waiting on role sign-off"
+        "lane_requirement_gate": "Waiting on role sign-off",
+        "same_lane_reentry": "Just finished this stage",
+        "tenant_token_limit": "Workspace out of tokens — upgrade or wait for the reset"
       }
     },
     "businessValue": {

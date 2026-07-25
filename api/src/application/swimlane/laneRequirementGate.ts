@@ -44,7 +44,7 @@ import { roleDisplayName } from '../kanban/roleCatalog';
 import { resolveRoleCapableAgents } from '../kanban/roleCapability';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
 import { isParticipantSatisfied } from '../kanban/participantStates';
-import { buildSignoffRequestPayload } from '../kanban/signoffRequest';
+import { buildProducerRequestPayload, buildSignoffRequestPayload } from '../kanban/signoffRequest';
 import { recordActivity, cloudAgentActor } from '../activity/activityLog';
 import { findCanonicalBoard } from './canonicalBoard';
 import { decideLaneAgentApproval, laneApprovalOwed, resolveLaneApprovers, type StaffedLaneApprover } from './laneApprover';
@@ -304,15 +304,32 @@ export async function enforceLaneRequirements(
     const dispatchedReviewers: string[] = [];
     const dispatchedProducers: string[] = [];
 
+    // The ticket's manifest state for THIS lane — loaded ONCE and shared by both blocks
+    // below. The producer block used to load it privately and the reviewer block had no
+    // slot awareness at all, which is the bug the reviewer filter below fixes.
+    const manifest = await participants.listParticipants(env, args.tenantId, args.taskId).catch(() => []);
+    const stateByRole = new Map(manifest.filter((p) => p.stageKey === args.status).map((p) => [p.roleKey, p.state]));
+
     // ── Reviewers (quorum-aware round-trip) ─────────────────────────────────
     // The reviewer SET is met once `reviewerQuorum` approvals land (2-of-3 advances on
-    // the 2nd approval, not the 1st). To-dispatch = reviewers NEVER engaged (no verdict
-    // row) — once a reviewer records any verdict we stop re-dispatching it, so repeated
-    // lane entries can't spawn an endless reviewer loop.
+    // the 2nd approval, not the 1st). To-dispatch = reviewers not yet ASKED and not yet
+    // ANSWERED — both halves are required for loop safety, see the filter below.
     const approvedReviewers = requiredReviewers.filter((r) => latest.get(r.ref) === 'approved').length;
     const reviewerSetUnmet = requiredReviewers.length > 0 && approvedReviewers < reviewerQuorum;
     if (reviewerSetUnmet && !hasLive) {
-      const toDispatch = requiredReviewers.filter((r) => !latest.has(r.ref));
+      // `!latest.has(ref)` alone is not a loop guard, only a de-duplicator for reviewers
+      // that ANSWERED. A reviewer run that COMPLETES WITHOUT recording a verdict writes
+      // no ledger row, so this filter re-selected it on every sweep tick, forever — and
+      // because those runs succeed, neither the consecutive-failure breaker nor the
+      // re-run cooldown (which both key on FAILED runs) ever saw them. One un-recorded
+      // verdict was therefore an unbounded paid dispatch loop.
+      //
+      // `in_progress` is the slot state `markRoleInProgress` writes the moment a reviewer
+      // is dispatched, so it is the record that this lane already asked. One ask per
+      // reviewer per stage; re-asking is the AI Manager's `driveOutstandingSignoffs`,
+      // which is bounded, journalled to `manager_actions`, and escalates through stall
+      // triage — the path that is supposed to own retries.
+      const toDispatch = requiredReviewers.filter((r) => !latest.has(r.ref) && stateByRole.get(r.ref) !== 'in_progress');
       for (const req of toDispatch) {
         const agentRef = await resolveRoleAgent(env, db, args.tenantId, args.projectId, board.id, req.ref);
         if (!agentRef) continue;
@@ -350,8 +367,6 @@ export async function enforceLaneRequirements(
     // nothing). Loop-safe: an in_progress/completed producer slot is never re-dispatched.
     let producerUnmet = false;
     if (requiredProducers.length > 0) {
-      const manifest = await participants.listParticipants(env, args.tenantId, args.taskId).catch(() => []);
-      const stateByRole = new Map(manifest.filter((p) => p.stageKey === args.status).map((p) => [p.roleKey, p.state]));
       for (const req of requiredProducers) {
         const st = stateByRole.get(req.ref);
         if (st && isParticipantSatisfied(st)) continue;
@@ -360,15 +375,16 @@ export async function enforceLaneRequirements(
         if (!canDispatch) continue;
         const agentRef = await resolveRoleAgent(env, db, args.tenantId, args.projectId, board.id, req.ref);
         if (!agentRef) continue;
-        const payload = JSON.stringify({
+        // ONE shared contract with the reviewer paths. The string this replaced named
+        // neither the `kanban.signoff` tool nor `laneKey`, so a producer that finished
+        // real work still left its slot unsatisfied — see `kanban/signoffRequest.ts`.
+        const payload = buildProducerRequestPayload({
           cloudAgentRef: agentRef,
+          taskId: args.taskId,
+          taskTitle: taskRow?.title ?? null,
+          roleKey: req.ref,
+          roleName: roleName(req.ref),
           laneKey: args.status,
-          actAsRole: req.ref,
-          reviewInstruction:
-            `You are the ${roleName(req.ref)} assigned to PRODUCE the work for ticket #${args.taskId} at lane '${args.status}'. ` +
-            `Implement/author the required deliverable (open a PR for code, or write the PRD section for a spec role). ` +
-            `Your run is recorded as this role's participation on the accountability manifest. ` +
-            `When the deliverable is complete, record a role-attributed sign-off for lane '${args.status}' with contribution evidence.`,
         });
         const deferred: Promise<unknown>[] = [];
         const execId = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {

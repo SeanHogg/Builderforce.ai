@@ -77,6 +77,9 @@ const lifecycle: TicketLifecycle = {
     consecutiveFailures: 134,
     failureBreakerAt: 3,
     cooldownRemainingMs: 3_600_000,
+    // Null = the evaluator stopped at the human gate above it, so the workspace
+    // budget was never consulted (NOT "the workspace has budget").
+    tenantTokens: null,
   },
 };
 
@@ -193,6 +196,43 @@ describe('buildLifecycleDiagnosticsReport', () => {
     expect(clean).toContain('(no failed runs recorded)');
     expect(clean).toContain('(no runs dispatched)');
   });
+
+  // The dispatchers note used to assert that anything other than `system:lane-auto`
+  // reached the dispatcher WITHOUT the lane trigger, so the breaker never applied to
+  // those runs. Both halves are false: `system:auto-exec` IS the lane trigger (the
+  // cron backstop calls it), and the breaker + cooldown are enforced at the dispatch
+  // choke point, which no dispatcher can bypass. A report that names the wrong
+  // subsystem is worse than one that names none.
+  it('does not accuse other dispatchers of bypassing the breaker', () => {
+    expect(report).not.toContain('WITHOUT going through the lane trigger');
+    expect(report).toContain('SAME lane trigger');
+  });
+
+  it('shows the WORKSPACE token budget — the gate that leaves no trace on the ticket', () => {
+    const broke = buildLifecycleDiagnosticsReport({
+      ...lifecycle,
+      gate: {
+        ...lifecycle.gate!,
+        canRunNow: false,
+        reason: 'tenant_token_limit',
+        tenantTokens: {
+          hasTokens: false, reason: 'monthly_exhausted',
+          usageToday: 12_000, dailyLimit: 200_000,
+          usageMonth: 1_200_000, monthlyLimit: 1_000_000,
+          effectivePlan: 'free',
+        },
+      },
+    }, ctx);
+    expect(broke).toContain('workspaceTokens: EXHAUSTED — monthly_exhausted on the free plan.');
+    expect(broke).toContain('EVERY ticket in this workspace');
+    expect(broke).toContain('tokensThisMonth: 1,200,000 / 1,000,000');
+  });
+
+  it('never reads an unconsulted token gate as "the workspace has budget"', () => {
+    // `tenantTokens: null` means an earlier gate decided. Printing nothing would let a
+    // reader infer budget remains — the same silent-inference bug as the old report.
+    expect(report).toContain('workspaceTokens: (not consulted');
+  });
 });
 
 describe('formatEventSection', () => {
@@ -200,6 +240,21 @@ describe('formatEventSection', () => {
     at: new Date(Date.UTC(2026, 6, 11, 14, i)).toISOString(),
     kind: 'run_failed', actorKind: 'system', actorName: 'agent-1',
     detail: 'Monthly cloud-run allowance reached.', source: 'executions', ...over,
+  });
+
+  // A run that is CREATED and only starts hours later holds the ticket's live-run
+  // guard for that whole window, so autonomy correctly refuses every tick with
+  // `already_running` and the ticket does not move. Dating the row by `startedAt`
+  // hid exactly that: on task 683 a run created at 04:40 and started 23 hours later
+  // rendered as a 13-second run the next day, and the day the ticket spent blocked
+  // vanished from its own history.
+  it('states how long a run sat QUEUED before it started', () => {
+    const rows = formatEventSection([evt(0, { kind: 'run_dispatched', queuedMs: 82_800_000 })]);
+    expect(rows[0]).toContain('QUEUED 23h 00m before starting');
+  });
+
+  it('stays quiet about ordinary dispatch latency', () => {
+    expect(formatEventSection([evt(0, { kind: 'run_dispatched' })])[0]).not.toContain('QUEUED');
   });
 
   it('collapses strictly-consecutive identical rows and states the repeat count', () => {

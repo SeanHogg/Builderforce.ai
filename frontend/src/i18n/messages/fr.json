@@ -2413,7 +2413,10 @@
         "not_executable": "Tâche système ou de coordination — jamais confiée à un agent, par conception.",
         "pending_approval": "Demande externe en attente d'acceptation humaine au triage avant qu'un agent puisse y toucher.",
         "unrecorded": "Aucune décision d'exécution automatique n'a été enregistrée — l'autonomie n'a jamais évalué ces tickets.",
-        "lane_requirement_gate": "La colonne exige une validation de rôle encore en attente : la porte d'exigences a donc lancé ce relecteur et suspendu l'agent habituel de la colonne jusqu'à ce que la revue aboutisse."
+        "lane_requirement_gate": "La colonne exige une validation de rôle encore en attente : la porte d'exigences a donc lancé ce relecteur et suspendu l'agent habituel de la colonne jusqu'à ce que la revue aboutisse.",
+        "same_lane_reentry": "L'exécution qui vient de se terminer desservait déjà cette colonne : la protection anti-boucle a empêché un relancement immédiat. Rien ne s'exécute.",
+        "tenant_token_limit": "L'espace de travail a épuisé son quota de jetons : l'autonomie est en pause pour tous ses tickets jusqu'à la réinitialisation du quota ou une montée en gamme.",
+        "cloud_run_limit": "L'espace de travail a épuisé son quota mensuel d'exécutions cloud. Réessayer n'y changera rien : passez à un forfait supérieur ou attendez la réinitialisation. Les exécutions on-premise et VS Code restent illimitées."
       }
     }
   },
@@ -6292,7 +6295,9 @@
         "terminal_lane": "Terminé — aucune exécution",
         "not_executable": "Tâche système — non exécutée par un agent",
         "pending_approval": "Demande externe — en attente d’approbation",
-        "lane_requirement_gate": "En attente de validation du rôle"
+        "lane_requirement_gate": "En attente de validation du rôle",
+        "same_lane_reentry": "Vient de terminer cette étape",
+        "tenant_token_limit": "Espace à court de jetons — passez à un forfait supérieur ou attendez la réinitialisation"
       }
     },
     "businessValue": {
