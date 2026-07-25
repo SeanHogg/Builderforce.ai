@@ -6233,7 +6233,9 @@
     },
     "queuedCount": "{count, plural, one {# mensaje en cola} other {# mensajes en cola}}",
     "onboardMe": "Ayúdame a empezar",
-    "onboardMePrompt": "Soy nuevo aquí: ayúdame a empezar. Pregúntame qué quiero construir, explícame cómo funcionan el uso y los costes, recomiéndame si el plan Free o Pro se ajusta a mi plazo y ayúdame a conectar mi cuenta de IA existente si tengo una."
+    "onboardMePrompt": "Soy nuevo aquí: ayúdame a empezar. Pregúntame qué quiero construir, explícame cómo funcionan el uso y los costes, recomiéndame si el plan Free o Pro se ajusta a mi plazo y ayúdame a conectar mi cuenta de IA existente si tengo una.",
+    "providerCapBanner": "Tu clave de API de {providers} alcanzó su límite de uso; esta ejecución recurrió al grupo de modelos compartido.",
+    "manageApiKeys": "Gestionar tus claves de API →"
   },
   "chatMessage": {
     "copy": "Copiar",

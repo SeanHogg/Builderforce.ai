@@ -17,6 +17,7 @@ import { boards, swimlanes, swimlaneAgentAssignments, swimlaneRequirements, task
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';
+import { isInfrastructureEviction } from '../runtime/orphanReasons';
 import { resolveArtifacts } from '../artifact/resolveArtifacts';
 import { isAgentRefRoleCapable } from '../kanban/roleCapability';
 import { isParticipantOpen } from '../kanban/participantStates';
@@ -77,7 +78,7 @@ export const AUTO_RUN_REASON_TEXT: Record<AutoRunReason, string> = {
   human_gate: 'No run: this lane is human-gated — a person must approve it or use Run now.',
   no_agent: 'No run: the lane has no staffed agent and the ticket owner is not eligible to execute this stage. Staff the lane, or dispatch explicitly with Run now.',
   capability_mismatch: 'No run: every candidate agent lacks the capabilities this lane requires.',
-  already_running: 'No new run: this ticket already has a live execution.',
+  already_running: 'No new run: this ticket already has a live execution. If that run is PAUSED it is waiting on an answer to an agent question — it holds the ticket until answered (or until the 72-hour paused deadline releases it), so answering it is what unblocks the ticket.',
   same_lane_reentry: 'No new run: the run that just finished already served this lane, so the loop guard suppressed an immediate re-dispatch into the same lane. Nothing is executing right now.',
   run_cap_exhausted: 'No run: the ticket\'s last consecutive runs all failed, so autonomy has stopped re-dispatching it. A human Run now overrides.',
   cloud_run_limit: 'No run: this workspace has used its monthly cloud-run allowance. Retrying will NOT clear this — upgrade the plan, or wait for the allowance to reset. On-prem and VS Code runs stay unlimited.',
@@ -154,13 +155,25 @@ export const MAX_CONSECUTIVE_AUTORUN_FAILURES = 3;
  * rows and STOPS at the first run that is not a failure — a `completed` or a
  * deliberate `cancelled` (or any live run) resets the streak, so the breaker only
  * trips on an unbroken run of failures and clears the moment one run does not fail.
+ *
+ * PLATFORM EVICTIONS ARE SKIPPED, not counted and not treated as a break: a run the
+ * runtime killed because a deploy replaced its code says nothing about whether this
+ * ticket can succeed ({@link isInfrastructureEviction}). Counting them meant three
+ * deploys inside one window could halt autonomy on a healthy ticket — measured on
+ * task 683, where 3 of 5 failures were one deploy's Durable Object resets. Skipping
+ * rather than breaking is the conservative reading: a genuine failure either side of
+ * a deploy still forms one streak, so the breaker keeps protecting against the retry
+ * storms it exists for.
+ *
  * Pure — unit-tested directly.
  */
-export function trailingFailureStreak(execs: ReadonlyArray<{ status: string }>): number {
+export function trailingFailureStreak(execs: ReadonlyArray<{ status: string; errorMessage?: string | null }>): number {
   let n = 0;
   for (const e of execs) {
-    if (e.status === ExecutionStatus.FAILED) n += 1;
-    else break;
+    if (e.status === ExecutionStatus.FAILED) {
+      if (isInfrastructureEviction(e.errorMessage)) continue;
+      n += 1;
+    } else break;
   }
   return n;
 }
@@ -195,7 +208,14 @@ export function autoRunCooldownMs(consecutiveFailures: number): number {
 }
 
 /** The end of a run, for cooldown math: when it finished, else its last update. */
-export interface ExecTiming { status: string; completedAt?: Date | null; updatedAt?: Date | null; createdAt?: Date | null }
+export interface ExecTiming {
+  status: string;
+  completedAt?: Date | null;
+  updatedAt?: Date | null;
+  createdAt?: Date | null;
+  /** Read only to recognise a platform eviction — see {@link trailingFailureStreak}. */
+  errorMessage?: string | null;
+}
 
 /**
  * How much of the per-ticket cooldown is still owed, from the SAME newest-first
@@ -206,7 +226,10 @@ export interface ExecTiming { status: string; completedAt?: Date | null; updated
 export function autoRunCooldownRemainingMs(execs: ReadonlyArray<ExecTiming>, nowMs: number): number {
   const streak = trailingFailureStreak(execs);
   if (streak === 0) return 0;
-  const lastFailure = execs[0];
+  // The newest run that actually COUNTED toward the streak — a platform eviction
+  // sitting on top of it is not a failure to back off from, so backing off from its
+  // timestamp would extend the wait for something the ticket did not do.
+  const lastFailure = execs.find((e) => e.status === ExecutionStatus.FAILED && !isInfrastructureEviction(e.errorMessage));
   const endedAt = lastFailure?.completedAt ?? lastFailure?.updatedAt ?? lastFailure?.createdAt ?? null;
   if (!endedAt) return 0; // untimestamped row — never block on missing data
   const elapsed = nowMs - endedAt.getTime();

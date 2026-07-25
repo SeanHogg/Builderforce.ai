@@ -1540,6 +1540,9 @@ export type LifecycleEventKind =
   | 'autorun_skipped'
   | 'autorun_error'
   | 'autorun_awaiting_approval'
+  /** A non-terminal RUN state that held the ticket still — an abandoned agent
+   *  question timing out, a self-heal re-queue, a backplane crash, a queued run. */
+  | 'run_lifecycle'
   | 'role_event';
 
 /** Who drove one event. 'system' covers agents + automation (the `actor_kind` the

@@ -20,6 +20,7 @@ import { loadPersonaSetpoints } from '../../application/artifact/capabilityConte
 import { buildLimbicBlock, type LimbicState, type AgentExecParams } from '@builderforce/agent-tools';
 import { parseRoutingBias, parsePolicyGates } from '../../application/runtime/cloudDispatch';
 import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
+import { isInfrastructureEviction } from '../../application/runtime/orphanReasons';
 import { releasePendingSteers } from '../../application/runtime/executionSteering';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
@@ -228,11 +229,32 @@ export class CloudRunnerDO implements DurableObject {
       ).catch(() => { /* already terminal/cancelled — leave it */ });
       await this.cleanup(cursor.executionId);
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      // A PLATFORM EVICTION is not a run failure. Cloudflare resets every live
+      // Durable Object when a new Worker version is deployed, so an ordinary deploy
+      // interrupts every in-flight run at once. Failing them wrote the raw
+      // "Durable Object reset because its code was updated." onto the ticket AND
+      // spent a strike against the 3-failure autonomy breaker — three deploys in an
+      // hour could halt a healthy ticket (task 683: 3 of 5 failures, one 47-minute
+      // deploy window).
+      //
+      // The cursor is persisted on every tick, so the run is resumable exactly where
+      // it stopped: re-arm the alarm and leave the row `running`. If even that write
+      // is lost (the isolate may be going away as we speak), the row simply stays
+      // non-terminal and `staleExecutionReaper` self-heals it onto a fresh durable
+      // runner within minutes — the machinery that already exists for a dropped run.
+      // Either way we must NOT cleanup(): that deletes the cursor this run resumes from.
+      if (isInfrastructureEviction(message)) {
+        await this.persistAndArm(cursor).catch(() => { /* isolate going away — the reaper picks it up */ });
+        return;
+      }
+
       // Don't clobber a cancellation; otherwise fail the run so it isn't stuck.
       if (!(await this.isCancelled(cursor.executionId))) {
         await this.runtimeService.update(cursor.executionId, {
           status: ExecutionStatus.FAILED,
-          errorMessage: err instanceof Error ? err.message : String(err),
+          errorMessage: message,
         }).catch(() => { /* already terminal/cancelled — leave it */ });
       }
       await this.cleanup(cursor.executionId);

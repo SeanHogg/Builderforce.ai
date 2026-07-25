@@ -6233,7 +6233,9 @@
     },
     "queuedCount": "已排队 {count} 条消息",
     "onboardMe": "帮我快速上手",
-    "onboardMePrompt": "我是新用户——帮我快速上手。询问我想构建什么，说明用量和费用的运作方式，根据我的时间安排推荐免费版还是专业版，并在我有现成的 AI 账户时帮我连接。"
+    "onboardMePrompt": "我是新用户——帮我快速上手。询问我想构建什么，说明用量和费用的运作方式，根据我的时间安排推荐免费版还是专业版，并在我有现成的 AI 账户时帮我连接。",
+    "providerCapBanner": "你的 {providers} API 密钥已达用量上限——本次运行已回退到共享模型池。",
+    "manageApiKeys": "管理你的 API 密钥 →"
   },
   "chatMessage": {
     "copy": "复制",

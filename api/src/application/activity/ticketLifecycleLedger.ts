@@ -71,6 +71,29 @@ export const AUTORUN_DECISION_TOOLS = [
   'auto_run_awaiting_approval',
 ] as const;
 
+/**
+ * RUN-scoped telemetry that explains why a ticket sat still — read per execution,
+ * not per task, because these events are keyed to `exec:<id>`.
+ *
+ * Everything here was ALREADY being written and the ledger simply never looked:
+ * the reaper's abandoned-question timeout, the self-heal re-queue, a backplane
+ * crash, a run queued behind an allowance. So a ticket held for hours by one
+ * non-terminal run produced a chain of custody that just stopped — the reader saw
+ * `already_running` repeating against an execution list where every row had
+ * finished, with nothing to say WHY the live one was not progressing (measured on
+ * task 683: two windows, ~4h and ~23h, of `already_running` and nothing else).
+ *
+ * Deliberately NOT including `run.failed`: the failure is already carried by the
+ * `executions` row itself, and duplicating it would double every failure in the
+ * timeline. These are the states an execution row cannot express.
+ */
+export const RUN_LIFECYCLE_TOOLS = [
+  'run.paused_timeout',
+  'runtime.requeue',
+  'runtime.crash',
+  'runtime.queued',
+] as const;
+
 /** Where a ledger event was READ FROM — the chain of custody for an audit. */
 export type LifecycleEventSource = 'activity_log' | 'task_status_transitions' | 'executions' | 'tool_audit_events';
 
@@ -84,6 +107,9 @@ export type LifecycleEventKind =
   | 'autorun_skipped'
   | 'autorun_error'
   | 'autorun_awaiting_approval'
+  /** A non-terminal RUN state that held the ticket — paused-timeout, re-queue,
+   *  backplane crash, queued. See {@link RUN_LIFECYCLE_TOOLS}. */
+  | 'run_lifecycle'
   | 'role_event';
 
 /** Who drove one event. 'system' covers agents + automation (the `actor_kind` the
@@ -668,6 +694,27 @@ export async function buildTicketLifecycle(
       )),
   ]);
 
+  // Run-scoped telemetry ({@link RUN_LIFECYCLE_TOOLS}) — keyed to the ticket's OWN
+  // executions, so it needs their ids and cannot join the batch above. One extra
+  // round trip on a human-triggered audit read, served by the existing
+  // `idx_tool_audit_execution (execution_id)` index and bounded by the ticket's run
+  // count. Skipped entirely for a ticket that never ran.
+  const execIds = execRows.map((r) => Number(r.id));
+  const runLifecycleRows = execIds.length === 0 ? [] : await db
+    .select({
+      toolName: toolAuditEvents.toolName,
+      result: toolAuditEvents.result,
+      cloudAgentRef: toolAuditEvents.cloudAgentRef,
+      executionId: toolAuditEvents.executionId,
+      ts: toolAuditEvents.ts,
+    })
+    .from(toolAuditEvents)
+    .where(and(
+      eq(toolAuditEvents.tenantId, args.tenantId),
+      inArray(toolAuditEvents.executionId, execIds),
+      inArray(toolAuditEvents.toolName, [...RUN_LIFECYCLE_TOOLS]),
+    ));
+
   const events: LifecycleEvent[] = [];
 
   // 1. Creation + role events (activity_log).
@@ -772,6 +819,23 @@ export async function buildTicketLifecycle(
       reason: parsed.reason ?? null,
       agentRef: parsed.agentRef ?? r.cloudAgentRef ?? null,
       detail: r.result,
+      source: 'tool_audit_events',
+    });
+  }
+
+  // 5. Run-scoped lifecycle states — what a non-terminal run was DOING while the
+  //    ticket sat still. The tool name leads the detail because it is the
+  //    classification (`runtime.requeue` vs `run.paused_timeout` are different
+  //    findings), and the message follows as the evidence.
+  for (const r of runLifecycleRows) {
+    events.push({
+      at: (r.ts as Date).toISOString(),
+      kind: 'run_lifecycle',
+      actorKind: 'system',
+      actorName: r.cloudAgentRef,
+      executionId: r.executionId == null ? null : Number(r.executionId),
+      agentRef: r.cloudAgentRef,
+      detail: `${r.toolName}: ${r.result ?? '(no detail recorded)'}`,
       source: 'tool_audit_events',
     });
   }

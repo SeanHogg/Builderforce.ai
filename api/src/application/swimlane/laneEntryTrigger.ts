@@ -205,8 +205,18 @@ export async function maybeAutoRunOnLaneEntry(
         sessionKey:    `task:${args.taskId}`,
         toolName:      'auto_run_skipped',
         category:      'planning',
-        detail:        { taskId: args.taskId, lane, reason: evaln.reason, ...(evaln.cooldownRemainingMs ? { cooldownRemainingMs: evaln.cooldownRemainingMs } : {}) },
-        result:        `Auto-run skipped (${evaln.reason}) for task ${args.taskId} on lane '${lane}'.`.slice(0, 300),
+        // NAME THE LIVE RUN. `already_running` on its own reads as "busy", which is
+        // wrong for the case that actually freezes tickets: a run PAUSED on an
+        // `ask_human` question counts as live and holds the ticket for up to the
+        // 72-hour paused deadline. Recording the id + status turns a wall of
+        // identical skips into "run #4413 has been waiting for a human since 04:40".
+        detail: {
+          taskId: args.taskId, lane, reason: evaln.reason,
+          ...(evaln.cooldownRemainingMs ? { cooldownRemainingMs: evaln.cooldownRemainingMs } : {}),
+          ...(evaln.liveExecution ? { liveExecutionId: evaln.liveExecution.id, liveExecutionStatus: evaln.liveExecution.status } : {}),
+        },
+        result: (`Auto-run skipped (${evaln.reason}) for task ${args.taskId} on lane '${lane}'`
+          + `${evaln.liveExecution ? ` — run #${evaln.liveExecution.id} is ${evaln.liveExecution.status}` : ''}.`).slice(0, 300),
       }).catch(() => { /* best-effort telemetry — never block the trigger */ });
     }
     if (!evaln.canRunNow) return false;
