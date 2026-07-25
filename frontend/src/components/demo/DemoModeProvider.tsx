@@ -23,6 +23,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { classifyShell } from '@/lib/shellRouting';
+import { useOptionalAuth } from '@/lib/AuthContext';
 import { BookDemoForm } from './BookDemoForm';
 import { DemoTour } from './DemoTour';
 import {
@@ -35,7 +36,7 @@ import {
   queueDemoEvent,
   flushDemoEvents,
   trackDemoEvent,
-  type DemoPersona,
+  type DemoSessionState,
 } from '@/lib/demoApi';
 import { clearSession } from '@/lib/auth';
 
@@ -49,9 +50,12 @@ export function DemoModeProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  const [active, setActive] = useState(false);
-  const [persona, setPersona] = useState<DemoPersona | null>(null);
-  const [tenantName, setTenantName] = useState('');
+  // The live authenticated tenant. The demo flag is only honoured when it belongs
+  // to THIS tenant — see below. DemoModeProvider is mounted inside AuthProvider,
+  // which renders its subtree only after auth has hydrated, so this is populated.
+  const currentTenantId = useOptionalAuth()?.tenant?.id ?? null;
+
+  const [demoState, setDemoStateLocal] = useState<DemoSessionState | null>(null);
   const [prompt, setPrompt] = useState<Prompt>('none');
   const [showLeadForm, setShowLeadForm] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
@@ -62,16 +66,38 @@ export function DemoModeProvider({ children }: { children: React.ReactNode }) {
   // Read synchronously inside event callbacks so the auto convert/exit prompts
   // stay suppressed while the guided tour owns the screen.
   const tourOpenRef = useRef(false);
+  const inAppRef = useRef(false);
+
+  // Read the demo flag on mount (sessionStorage is client-only).
+  useEffect(() => {
+    const state = getDemoState();
+    setDemoStateLocal(state);
+    if (state) startedRef.current = state.startedAt;
+  }, []);
+
+  // A demo session is genuine ONLY when the demo flag's tenant matches the tenant
+  // the visitor is actually signed in as. Otherwise the flag is stale — e.g. this
+  // tab ran a demo earlier and the user has since signed into their real account,
+  // or it's a legacy flag from before session-binding (no tenantId). Either way,
+  // self-heal by clearing it so the banner/panel never hijack a real workspace.
+  useEffect(() => {
+    if (!demoState) return;
+    const stale = !demoState.tenantId || (currentTenantId != null && currentTenantId !== demoState.tenantId);
+    if (stale) {
+      clearDemoMode();
+      setDemoStateLocal(null);
+    }
+  }, [demoState, currentTenantId]);
+
+  const active = !!demoState && demoState.tenantId != null && demoState.tenantId === currentTenantId;
+  const persona = active && demoState ? demoState.persona : null;
+  const tenantName = demoState?.tenantName ?? '';
 
   // The demo chrome (banner, convert/exit prompts, tour) belongs INSIDE the
-  // product only — never overlaid on the public marketing site. A demo session
-  // persists in sessionStorage across navigation, so a visitor who leaves the
-  // app for a marketing page (/, /pricing, …) would otherwise keep seeing the
-  // banner + "Make this your workspace" panel there. Gate everything on the
-  // canonical shell classification: chrome shows only on authenticated app
-  // routes. `inAppRef` mirrors it for async callbacks (timers, exit-intent).
+  // product only — never overlaid on the public marketing site. Gate everything
+  // on the canonical shell classification: chrome shows only on authenticated
+  // app routes. `inAppRef` mirrors it for async callbacks (timers, exit-intent).
   const inApp = active && classifyShell(pathname) === 'app';
-  const inAppRef = useRef(false);
   useEffect(() => { inAppRef.current = inApp; }, [inApp]);
 
   const openTour = useCallback(() => {
@@ -84,17 +110,6 @@ export function DemoModeProvider({ children }: { children: React.ReactNode }) {
     tourOpenRef.current = false;
     setTourOpen(false);
     markTourSeen();
-  }, []);
-
-  // Detect demo mode on mount (sessionStorage is client-only).
-  useEffect(() => {
-    const state = getDemoState();
-    if (state) {
-      setActive(true);
-      setPersona(state.persona);
-      setTenantName(state.tenantName);
-      startedRef.current = state.startedAt;
-    }
   }, []);
 
   // Flush queued funnel events when the tab hides.
