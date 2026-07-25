@@ -1494,6 +1494,11 @@ export interface AutoRunDiagnostic {
   /** Milliseconds still owed on the per-ticket re-run cooldown (0 unless the reason
    *  is `cooldown_active`) — lets triage say when the ticket resumes. */
   cooldownRemainingMs?: number;
+  /** Trailing consecutive FAILED runs. Reported even when it did not decide the
+   *  reason — a stall shown with a deep streak is a retry storm, not a quiet wait. */
+  consecutiveFailures?: number;
+  /** The server's breaker threshold, so the UI compares without duplicating it. */
+  failureBreakerAt?: number;
 }
 
 // ── Ticket lifecycle / autonomy proof (GET /api/tasks/:id/lifecycle) ────────
@@ -1541,7 +1546,54 @@ export interface LifecycleEvent {
   executionId?: number | null;
   agentRef?: string | null;
   detail?: string | null;
+  /** `executions.submitted_by` — WHICH dispatcher started this run
+   *  (`system:lane-auto`, `system:coordinator`, `manager:signoff-request:…`, …). */
+  dispatchedBy?: string | null;
   source: LifecycleEventSource;
+}
+
+/** Failed runs collapsed by cause — the retry-storm rollup. */
+export interface LifecycleFailureGroup {
+  /** The error message with its volatile parts (ids, counters) stripped. */
+  signature: string;
+  /** One verbatim message, so collapsing never loses the exact text. */
+  sample: string;
+  runs: number;
+  firstAt: string;
+  lastAt: string;
+  exampleExecutionIds: number[];
+  dispatchers: string[];
+  /** Median gap between consecutive failures — a tight regular interval across many
+   *  runs is an automated retry loop, not a few unlucky attempts. */
+  medianIntervalMs: number | null;
+}
+
+/** What one dispatcher did to this ticket — names the subsystem to go and stop. */
+export interface LifecycleDispatcher {
+  submittedBy: string;
+  runs: number;
+  completed: number;
+  failed: number;
+  firstAt: string;
+  lastAt: string;
+}
+
+/** The LIVE gate evaluation: why it is not running right now, WITH the evidence. */
+export interface LifecycleGateSnapshot {
+  canRunNow: boolean;
+  reason: AutoRunReason;
+  reasonText: string;
+  laneGate: 'auto' | 'human' | null;
+  laneResolved: boolean;
+  isTerminalLane: boolean;
+  assignedAgentRef: string | null;
+  staffedAgentRefs: string[];
+  candidateAgentRef: string | null;
+  liveExecution: { id: number; status: string } | null;
+  capabilityMismatches: { agentRef: string; missing: string[] }[];
+  consecutiveFailures: number;
+  failureBreakerAt: number;
+  cooldownRemainingMs: number;
 }
 
 /** How the ticket came into existence — `manager_card` is a grooming card that is
@@ -1584,6 +1636,12 @@ export interface TicketLifecycle {
   createdAt: string;
   events: LifecycleEvent[];
   verdict: TicketAutonomyVerdict;
+  /** Failed runs collapsed by cause, dominant cause first. */
+  failures: LifecycleFailureGroup[];
+  /** Which subsystem dispatched the runs, busiest first. */
+  dispatchers: LifecycleDispatcher[];
+  /** The live gate evaluation (null when the server could not evaluate it). */
+  gate: LifecycleGateSnapshot | null;
 }
 
 /** The three work-item types you can convert between across the board ⇄ OKR boundary. */
@@ -1774,6 +1832,11 @@ export interface ManagerConfig {
    *  `prMergePolicy`, which only says HOW a permitted merge happens. `null` = inherit the
    *  workspace default (see `ManagerTenantDefaults`). */
   allowAutoMerge: boolean | null;
+  /** Ceremony autonomy for THIS project (0365). `null` = inherit the workspace default. */
+  allowUnattendedCeremonies: boolean | null;
+  allowAgentReassignment: boolean | null;
+  agentReassignIdleHours: number | null;
+  agentReassignMaxPerSession: number | null;
   managerType: ManagerTypeId;
   lastRunAt: string | null;
 }
@@ -1815,6 +1878,16 @@ export interface ManagerPolicy {
   requireSignoffToComplete: boolean;
   /** Whether the manager may merge unattended at all (0363) — the resolved grant. */
   allowAutoMerge: boolean;
+  /** May the manager CONDUCT a ceremony with no humans present (0365)? When false, a
+   *  standup nobody joined is recorded as abandoned and acts on nothing. */
+  allowUnattendedCeremonies: boolean;
+  /** May a ceremony move an absent human's ticket onto an agent (0365)? Absence alone
+   *  never suffices — the ticket must also be idle past `agentReassignIdleHours`. */
+  allowAgentReassignment: boolean;
+  /** Hours a ticket must have sat untouched before an absent owner's claim lapses. */
+  agentReassignIdleHours: number;
+  /** Hard cap on reassignments one ceremony may make. */
+  agentReassignMaxPerSession: number;
 }
 
 /**
@@ -1831,6 +1904,11 @@ export interface ManagerTenantDefaults {
   autoPrioritize: boolean | null;
   requireSignoffToComplete: boolean | null;
   allowAutoMerge: boolean | null;
+  /** Ceremony autonomy (0365) — same tier, same fold, same null-means-inherit rule. */
+  allowUnattendedCeremonies: boolean | null;
+  allowAgentReassignment: boolean | null;
+  agentReassignIdleHours: number | null;
+  agentReassignMaxPerSession: number | null;
 }
 
 /** GET/PATCH /api/manager/defaults. Every resolved value is server-computed. */
@@ -1936,9 +2014,10 @@ export interface ManagerOverview {
   managerTypes: ManagerTypeOption[];
   /** Standing coaching directives that steer this project's passes (incl. tenant-wide). */
   directives: ManagerDirective[];
-  /** The raw workspace tier, shipped so the project form can label a control "inherited
-   *  from the workspace" without re-implementing the precedence rules. */
-  tenantDefaults: ManagerTenantDefaults | null;
+  /** What this project INHERITS when its own row says nothing — the workspace tier already
+   *  resolved by the server. Distinct from `policy`, which includes this project's row.
+   *  Shipped so the form can say "inherited: on/off" without re-folding the tiers. */
+  tenantPolicy: ManagerPolicy;
 }
 
 /** Editable subset accepted by PUT /api/manager/:projectId. */
@@ -1955,6 +2034,11 @@ export type ManagerConfigPatch = Partial<{
   /** Tri-state: true/false = an explicit project decision, `null` = inherit the workspace
    *  default. Omitting the key leaves whatever is stored alone. */
   allowAutoMerge: boolean | null;
+  /** Ceremony autonomy (0365) — tri-state for the same reason. */
+  allowUnattendedCeremonies: boolean | null;
+  allowAgentReassignment: boolean | null;
+  agentReassignIdleHours: number | null;
+  agentReassignMaxPerSession: number | null;
 }>;
 
 /** Editable subset accepted by PATCH /api/manager/defaults. `null` clears an opinion. */
@@ -4276,6 +4360,10 @@ export interface SpineCost { llmUsd: number; humanUsd: number; totalUsd: number;
 export interface SpineNode {
   key: string; id: string; kind: SpineNodeKind; parentKey: string | null;
   title: string; status: string; startDate: string | null; endDate: string | null; depth: number;
+  /** Dates inferred from the span of descendants rather than set on the row itself. */
+  datesDerived: boolean;
+  /** Keys of the nodes that must finish before this one starts (drawn as arrows). */
+  dependsOn: string[];
   declaredCostClass: CostClass | null; costClassSource: string;
   inheritedCostClass: CostClass | null; effectiveCostClass: CostClass | null;
   costClassVerified: boolean; anomaly: boolean; hasDescendantAnomaly: boolean;
@@ -4485,11 +4573,18 @@ export interface Sprint {
 // ── Ceremony sessions (standup / planning tracking; /api/agile/ceremonies) ──
 export type CeremonyKind = 'standup' | 'planning';
 
+/** How a session ended (migration 0365). */
+export type CeremonyCloseReason = 'facilitator' | 'unattended' | 'no_humans' | 'expired';
+/** Resolved attendance verdict per seat (migration 0365). */
+export type CeremonyAttendance = 'unknown' | 'present' | 'absent' | 'excused';
+
 export interface CeremonySession {
   id: string;
   projectId: number;
   kind: CeremonyKind;
-  status: 'active' | 'completed';
+  /** 'abandoned' = concluded without being conducted (nobody came, and the workspace
+   *  has not granted unattended ceremonies). */
+  status: 'active' | 'completed' | 'abandoned';
   facilitatorId: string | null;
   turnMode: 'facilitator' | 'timeboxed';
   turnSeconds: number;
@@ -4498,6 +4593,15 @@ export interface CeremonySession {
   turnStartedAt: string | null;
   startedAt: string;
   endedAt: string | null;
+  /** Set when the cron sweep auto-opened this session from a schedule. */
+  scheduleId?: string | null;
+  /** Outcome (0365) — who closed it, why, and what it did. */
+  concludedBy?: 'human' | 'manager' | 'system' | null;
+  closeReason?: CeremonyCloseReason | null;
+  humansExpected?: number;
+  humansPresent?: number;
+  reassignedCount?: number;
+  dispatchedCount?: number;
 }
 
 export interface CeremonyParticipant {
@@ -4508,11 +4612,37 @@ export interface CeremonyParticipant {
   memberName: string;
   turnOrder: number;
   durationMs: number;
+  /** Attendance (0365). `required` false = an ad-hoc joiner, never a no-show. */
+  required?: boolean;
+  joinedAt?: string | null;
+  leftAt?: string | null;
+  attendance?: CeremonyAttendance;
+}
+
+/** One journal row — an `activity_log` event targeting this session. */
+export interface CeremonyJournalEvent {
+  id: number;
+  actorType: string;
+  actorName: string | null;
+  verb: string;
+  targetLabel: string | null;
+  summary: string | null;
+  occurredAt: string;
+  metadata: unknown;
 }
 
 export interface CeremonySessionDetail {
   session: CeremonySession | null;
   participants?: CeremonyParticipant[];
+  /** Present only on the by-id detail read. */
+  journal?: CeremonyJournalEvent[];
+}
+
+/** A page of concluded ceremonies for one project. */
+export interface CeremonyHistoryPage {
+  sessions: CeremonySession[];
+  /** ISO `startedAt` of the last row; pass as `before` for the next page. */
+  nextCursor: string | null;
 }
 
 /** Tenant-wide ceremonies rollup — cadence + engagement across all projects. */
@@ -4545,11 +4675,29 @@ export const ceremonySessionsApi = {
     request(`${CEREMONY_BASE}/sessions`, { method: 'POST', body: JSON.stringify({ projectId, kind, participants }) }),
   advanceTurn: (id: string, currentTurn: number): Promise<CeremonySessionDetail> =>
     request(`${CEREMONY_BASE}/sessions/${id}/turn`, { method: 'PATCH', body: JSON.stringify({ currentTurn }) }),
-  /** End the session. The server then auto-dispatches the project's agent-owned
-   *  work through the canonical lane-entry gate (bounded) — the client does NOT
-   *  submit executions itself any more. */
+  /** End the session. The server resolves attendance, applies the ceremony autonomy
+   *  rules and dispatches the project's agent-owned work through the canonical
+   *  lane-entry gate (bounded) — the client does NOT submit executions itself. */
   complete: (id: string): Promise<CeremonySessionDetail> =>
     request(`${CEREMONY_BASE}/sessions/${id}/complete`, { method: 'POST' }),
+  /** "I am in the room" (0365). Records the CALLER's own presence — the server takes
+   *  no identity from the body — so an attendance record can never be forged for
+   *  someone else. Member-level, not manager-gated: recording that you turned up is
+   *  not an act of facilitation. */
+  heartbeat: (id: string): Promise<{ recorded: boolean; reason?: string }> =>
+    request(`${CEREMONY_BASE}/sessions/${id}/attendance`, { method: 'POST' }),
+  /** Ceremonies that have already run, newest first. Keyset-paginated on startedAt. */
+  history: (projectId: number, opts?: { kind?: CeremonyKind; limit?: number; before?: string | null }): Promise<CeremonyHistoryPage> => {
+    const q = new URLSearchParams({ projectId: String(projectId) });
+    if (opts?.kind) q.set('kind', opts.kind);
+    if (opts?.limit) q.set('limit', String(opts.limit));
+    if (opts?.before) q.set('before', opts.before);
+    return request<CeremonyHistoryPage>(`${CEREMONY_BASE}/sessions/history?${q.toString()}`);
+  },
+  /** One past ceremony in full: roster + attendance verdicts + the journal of what
+   *  it did (reassignments, the close), read from the shared activity log. */
+  detail: (id: string): Promise<CeremonySessionDetail> =>
+    request<CeremonySessionDetail>(`${CEREMONY_BASE}/sessions/${id}`),
 };
 
 /** A recurring standup/planning. The frequent cron sweep opens a session for every

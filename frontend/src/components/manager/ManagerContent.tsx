@@ -98,6 +98,13 @@ function autonomyPatchToConfigPatch(patch: Partial<ManagerAutonomyValue>): Manag
   if (typeof patch.autoBusinessValue === 'boolean') out.autoBusinessValue = patch.autoBusinessValue;
   if (typeof patch.autoPrioritize === 'boolean') out.autoPrioritize = patch.autoPrioritize;
   if (patch.prMergePolicy != null) out.prMergePolicy = patch.prMergePolicy;
+  // Ceremony autonomy (0365) is tri-state at the PROJECT tier too — these columns are
+  // new, so `null` genuinely means "inherit the workspace answer" and must pass through
+  // rather than being narrowed to a boolean like the 0265 columns above.
+  if (patch.allowUnattendedCeremonies !== undefined) out.allowUnattendedCeremonies = patch.allowUnattendedCeremonies;
+  if (patch.allowAgentReassignment !== undefined) out.allowAgentReassignment = patch.allowAgentReassignment;
+  if (patch.agentReassignIdleHours !== undefined) out.agentReassignIdleHours = patch.agentReassignIdleHours;
+  if (patch.agentReassignMaxPerSession !== undefined) out.agentReassignMaxPerSession = patch.agentReassignMaxPerSession;
   return out;
 }
 
@@ -303,7 +310,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   }
   if (!data) return null;
 
-  const { config, policy, stats, backlog, actions, runTasks, autonomy, managerTypes, directives } = data;
+  const { config, policy, tenantPolicy, stats, backlog, actions, runTasks, autonomy, managerTypes, directives } = data;
   const managerValue = policy.managerRef ?? '';
 
   // The opinions stored at the PROJECT tier, as the shared control set reads them.
@@ -321,6 +328,13 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
     autoAssign: policy.autoAssign,
     autoBusinessValue: policy.autoBusinessValue,
     autoPrioritize: policy.autoPrioritize,
+    // Read from the CONFIG ROW, not the resolved policy: these columns are nullable at
+    // the project tier, so "not set / inherit" is a real stored state that the resolved
+    // policy cannot express (it would report the inherited answer as this project's own).
+    allowUnattendedCeremonies: config ? config.allowUnattendedCeremonies : null,
+    allowAgentReassignment: config ? config.allowAgentReassignment : null,
+    agentReassignIdleHours: config ? config.agentReassignIdleHours : null,
+    agentReassignMaxPerSession: config ? config.agentReassignMaxPerSession : null,
   };
   const capWindow = autonomy?.reason === 'monthly_exhausted' ? 'monthly' : 'daily';
   const activeDirectives = directives.filter((d) => d.status === 'active');
@@ -534,6 +548,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
             tier="project"
             value={projectAutonomy}
             effective={policy}
+            inherited={tenantPolicy}
             disabled={saving}
             onChange={(patch) => savePatch(autonomyPatchToConfigPatch(patch))}
           />
