@@ -13,8 +13,8 @@ import {
 import { taskStatusLabel } from '@/lib/taskStatus';
 import { CopyButton } from '@/components/CopyButton';
 import { buildLifecycleDiagnosticsReport } from '@/lib/lifecycleDiagnostics';
+import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import { formatDuration } from '@/lib/duration';
-import { APP_VERSION } from '@/lib/appVersions';
 
 /**
  * TicketLifecyclePanel — the per-ticket AUTONOMY PROOF.
@@ -246,13 +246,9 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
         {data && (
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <CopyButton
-              label={t('copyDiagnostics')}
+              label={tCommon('copyDiagnostics')}
               ariaLabel={t('copyDiagnosticsAria')}
-              getText={() => buildLifecycleDiagnosticsReport(data, {
-                uiVersion: APP_VERSION,
-                capturedAt: new Date().toISOString(),
-                sourceUrl: typeof window === 'undefined' ? null : window.location.href,
-              })}
+              getText={async () => buildLifecycleDiagnosticsReport(data, await captureDiagnosticsContext())}
             />
           </div>
         )}

@@ -1068,7 +1068,8 @@
     "panel": "Panneau",
     "copy": "Copier",
     "copied": "Copié",
-    "copyFailed": "Échec de la copie"
+    "copyFailed": "Échec de la copie",
+    "copyDiagnostics": "Copier le diagnostic"
   },
   "prdCreate": {
     "title": "Nouveau PRD",
@@ -2411,7 +2412,8 @@
         "cooldown_active": "Le ticket est dans sa fenêtre d'attente après échec, avant la prochaine tentative autonome.",
         "not_executable": "Tâche système ou de coordination — jamais confiée à un agent, par conception.",
         "pending_approval": "Demande externe en attente d'acceptation humaine au triage avant qu'un agent puisse y toucher.",
-        "unrecorded": "Aucune décision d'exécution automatique n'a été enregistrée — l'autonomie n'a jamais évalué ces tickets."
+        "unrecorded": "Aucune décision d'exécution automatique n'a été enregistrée — l'autonomie n'a jamais évalué ces tickets.",
+        "lane_requirement_gate": "La colonne exige une validation de rôle encore en attente : la porte d'exigences a donc lancé ce relecteur et suspendu l'agent habituel de la colonne jusqu'à ce que la revue aboutisse."
       }
     }
   },
@@ -6289,7 +6291,8 @@
         "no_lane": "Voie non configurée",
         "terminal_lane": "Terminé — aucune exécution",
         "not_executable": "Tâche système — non exécutée par un agent",
-        "pending_approval": "Demande externe — en attente d’approbation"
+        "pending_approval": "Demande externe — en attente d’approbation",
+        "lane_requirement_gate": "En attente de validation du rôle"
       }
     },
     "businessValue": {
@@ -6898,7 +6901,8 @@
         "merge_withheld": "Fusion retenue par la politique",
         "blocked": "Bloqué",
         "unknown": "Non classé"
-      }
+      },
+      "copyDiagnosticsAria": "Copier le diagnostic complet du Manager IA : niveaux de politique, état de l’autonomie, compteurs du backlog, chaque passe de gestion, chaque décision et chaque ticket bloqué"
     }
   },
   "project360": {
@@ -7733,7 +7737,6 @@
       "tool_audit_events": "Audit des décisions d’exécution auto",
       "aria": "Source : {label}"
     },
-    "copyDiagnostics": "Copier le diagnostic",
     "copyDiagnosticsAria": "Copier le diagnostic complet du cycle de vie de ce ticket, avec chaque évènement, identifiant d'exécution et motif de blocage",
     "failures": {
       "title": "Analyse des échecs",
