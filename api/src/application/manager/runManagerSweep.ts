@@ -37,6 +37,8 @@ export interface ManagerSweepResult {
   managed: number;
   scored: number;
   ranked: number;
+  /** Previously-undated tickets placed on the timeline this tick (0364). */
+  scheduled: number;
   assigned: number;
   prsConducted: number;
   prsMerged: number;
@@ -85,7 +87,7 @@ export async function runManagerSweep(
   const managed = await loadManagedProjects(db, MAX_PROJECTS_PER_TICK);
 
   const result: ManagerSweepResult = {
-    projects: managed.length, managed: 0, scored: 0, ranked: 0, assigned: 0,
+    projects: managed.length, managed: 0, scored: 0, ranked: 0, scheduled: 0, assigned: 0,
     prsConducted: 0, prsMerged: 0, dispatched: 0, remediated: 0, remediationDeferred: 0,
     tokenBlockedTenants: 0,
   };
@@ -117,6 +119,7 @@ export async function runManagerSweep(
       result.managed += 1;
       result.scored += s.scored;
       result.ranked += s.ranked;
+      result.scheduled += s.scheduled;
       result.assigned += s.assigned;
       result.prsConducted += s.prsConducted;
       result.prsMerged += s.prsMerged;

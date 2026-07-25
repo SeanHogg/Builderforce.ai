@@ -555,7 +555,8 @@
     "selectProject": "Wählen Sie ein Projekt, um eine Zeremonie zu starten.",
     "viewLive": "Live-Runde",
     "viewSchedules": "Zeitpläne",
-    "viewSwitchLabel": "Zeremonie-Ansicht"
+    "viewSwitchLabel": "Zeremonie-Ansicht",
+    "viewHistory": "Verlauf"
   },
   "projectCard": {
     "details": "Details",
@@ -2888,7 +2889,24 @@
     "errUnhireFailed": "Entlassen fehlgeschlagen",
     "errRemoveMember": "Mitglied konnte nicht entfernt werden",
     "errChangeRole": "Rolle konnte nicht geändert werden",
-    "errRevokeInvite": "Einladung konnte nicht widerrufen werden"
+    "errRevokeInvite": "Einladung konnte nicht widerrufen werden",
+    "copiedExclaim": "Kopiert!",
+    "manifest": {
+      "assignedConfig": "Zugewiesene Konfiguration",
+      "copyManifest": "Manifest kopieren",
+      "emptyNote": "Keine Skills oder Personas zugewiesen",
+      "noneAssigned": "Nichts zugewiesen",
+      "personas": "Personas",
+      "skills": "Skills",
+      "content": "Inhalte"
+    },
+    "quickstart": {
+      "title": "Neuen Agenten verbinden",
+      "intro": "Vorkonfiguriert für <b>{name}</b>. Führe dies auf einem beliebigen Rechner aus — der Agent installiert sich und registriert sich direkt in dieser Arbeitsgruppe.",
+      "osUnix": "macOS / Linux",
+      "osWindows": "Windows",
+      "noToken": "Kein Arbeitsbereich-Token in dieser Sitzung — der Agent fragt dich beim ersten Start nach einer Arbeitsgruppe."
+    }
   },
   "knowledge": {
     "headingSops": "Standardarbeitsanweisungen",
@@ -6751,9 +6769,37 @@
         "mergeGranted": "Darf Pull Requests mergen",
         "mergeWithheld": "Merges warten auf einen Menschen",
         "signoffRequired": "Freigabe zum Abschließen erforderlich",
-        "signoffOptional": "Keine Freigabe erforderlich"
+        "signoffOptional": "Keine Freigabe erforderlich",
+        "ceremoniesUnattended": "Darf Zeremonien ohne Personen führen",
+        "ceremoniesNeedPeople": "Zeremonien brauchen eine Person",
+        "reassignGranted": "Darf ab {hours} h Untätigkeit neu zuweisen",
+        "reassignWithheld": "Abwesende behalten ihre Arbeit"
       },
-      "workspaceDefaultsHint": "Alles, was auf „Standard verwenden“ bleibt, folgt den Arbeitsbereich-Standards unter Einstellungen → KI-Manager."
+      "workspaceDefaultsHint": "Alles, was auf „Standard verwenden“ bleibt, folgt den Arbeitsbereich-Standards unter Einstellungen → KI-Manager.",
+      "ceremonies": {
+        "sectionTitle": "Zeremonien",
+        "sectionHelp": "Was der Manager darf, wenn er ein Standup oder eine Planung durchführt und die betroffenen Personen nicht da sind."
+      },
+      "allowUnattendedCeremonies": {
+        "label": "Zeremonien ohne Personen durchführen",
+        "help": "Erlaubt dem Manager, ein geplantes Standup durchzuführen, dem niemand beigetreten ist. Aus: Die Sitzung wird trotzdem erfasst und zeigt, dass niemand da war – aber es wird nichts im Namen des Teams entschieden."
+      },
+      "allowAgentReassignment": {
+        "label": "Liegengebliebene Arbeit an Agenten geben",
+        "help": "Erlaubt einer Zeremonie, ein Ticket von einer abwesenden Person an einen Agenten zu übergeben. Fehlen allein genügt nie – das Ticket muss außerdem den unten genannten Zeitraum unberührt geblieben sein."
+      },
+      "agentReassignIdleHours": {
+        "label": "Erst nach Untätigkeit von",
+        "help": "Wie lange ein Ticket unberührt bleiben muss, bevor der Anspruch der abwesenden Person erlischt. Lang genug, dass eine normale Abwesenheit ihn nie erreicht.",
+        "unit": "Stunden",
+        "inherited": "Geerbter Wert wird verwendet: {value} Stunden"
+      },
+      "agentReassignMaxPerSession": {
+        "label": "Höchstens, pro Zeremonie",
+        "help": "Harte Grenze, wie viele Tickets eine einzelne Zeremonie übergeben darf – damit ein Standup nie unbemerkt einen ganzen Sprint umverteilt.",
+        "unit": "Tickets",
+        "inherited": "Geerbter Wert wird verwendet: {value}"
+      }
     },
     "backlog": {
       "title": "Geordnetes Backlog",
@@ -7575,7 +7621,20 @@
     },
     "stall": {
       "title": "Warum es liegen bleibt",
-      "unrecorded": "Keine Sperre erfasst — bisher hat nichts versucht, dieses Ticket auszuführen."
+      "unrecorded": "Keine Sperre erfasst — bisher hat nichts versucht, dieses Ticket auszuführen.",
+      "laneGate": "Spuren-Gate",
+      "gate": {
+        "auto": "Automatisch",
+        "human": "Freigabe durch Person erforderlich"
+      },
+      "staffed": "Der Spur zugewiesene Agenten",
+      "noneStaffed": "Keine",
+      "candidate": "„Jetzt ausführen“ würde starten",
+      "noCandidate": "Nichts kann es ausführen",
+      "streak": "Aufeinanderfolgende fehlgeschlagene Läufe",
+      "streakValue": "{count} (Autonomie stoppt bei {limit})",
+      "cooldown": "Verbleibende Abkühlzeit",
+      "capabilityMismatch": "Fehlende Fähigkeit"
     },
     "stats": {
       "title": "Schritte & Läufe",
@@ -7596,7 +7655,8 @@
       "laneMove": "{from} → {to}",
       "laneEntered": "Eingetreten in {to}",
       "backward": "Nacharbeit",
-      "run": "Lauf #{id}"
+      "run": "Lauf #{id}",
+      "dispatchedBy": "Gestartet von {who}"
     },
     "kind": {
       "created": "Erstellt",
@@ -7618,7 +7678,22 @@
       "aria": "Quelle: {label}"
     },
     "copyDiagnostics": "Diagnose kopieren",
-    "copyDiagnosticsAria": "Die vollständige Lebenszyklus-Diagnose dieses Tickets kopieren, mit allen Ereignissen, Ausführungs-IDs und Gate-Gründen"
+    "copyDiagnosticsAria": "Die vollständige Lebenszyklus-Diagnose dieses Tickets kopieren, mit allen Ereignissen, Ausführungs-IDs und Gate-Gründen",
+    "failures": {
+      "title": "Fehleranalyse",
+      "help": "Fehlgeschlagene Läufe nach Ursache gruppiert. Eine Ursache, die sich in regelmäßigen Abständen wiederholt, ist eine Wiederholungsschleife und keine Reihe unabhängiger Fehler.",
+      "runs": "{count, plural, one {# Lauf ist so fehlgeschlagen} other {# Läufe sind so fehlgeschlagen}}",
+      "cadence": "ca. alle {interval}",
+      "cadenceOnce": "einmal aufgetreten",
+      "window": "Erster {first} · letzter {last}",
+      "dispatchedBy": "gestartet von {who}",
+      "runIds": "Läufe: {ids}"
+    },
+    "dispatchers": {
+      "title": "Wer die Läufe gestartet hat",
+      "help": "Das Subsystem, das jeden Lauf gestartet hat. Alles außer dem Spur-Trigger hat den Dispatcher erreicht, ohne dessen Schutzschalter für aufeinanderfolgende Fehler zu passieren.",
+      "counts": "{runs} Läufe · {completed} abgeschlossen · {failed} fehlgeschlagen"
+    }
   },
   "taskChanges": {
     "allChanges": "Alle Änderungen",
@@ -9066,7 +9141,10 @@
     "errorCreateSprint": "Sprint konnte nicht erstellt werden",
     "errorStart": "Sitzung konnte nicht gestartet werden",
     "errorAdvance": "Zug konnte nicht weitergegeben werden",
-    "errorComplete": "Sitzung konnte nicht abgeschlossen werden"
+    "errorComplete": "Sitzung konnte nicht abgeschlossen werden",
+    "startSession": "Standup starten",
+    "startSessionHint": "Das Standup starten",
+    "startSessionFacilitatorOnly": "Nur der Moderator kann starten"
   },
   "meetings": {
     "title": "Besprechungen",
@@ -11052,5 +11130,108 @@
       "talent": "Talente & Marktplatz",
       "governance": "Sicherheit, Architektur & Governance"
     }
+  },
+  "ceremonyHistory": {
+    "loading": "Wird geladen…",
+    "errorLoad": "Der Zeremonienverlauf konnte nicht geladen werden.",
+    "filterAll": "Alle",
+    "filterStandup": "Standups",
+    "filterPlanning": "Planung",
+    "count": "{count} erfasst",
+    "emptyTitle": "Es hat noch keine Zeremonie stattgefunden",
+    "emptyHelp": "Sobald ein Standup oder eine Planungssitzung endet, erscheint sie hier – mit Anwesenheit und allen Änderungen.",
+    "loadMore": "Ältere laden",
+    "durationMinutes": "{minutes} Min.",
+    "attended": "{present} von {expected} anwesend",
+    "missed": "{count} haben gefehlt",
+    "reassigned": "{count} neu zugewiesen",
+    "dispatched": "{count} Agentenläufe gestartet",
+    "detailTitle": "{kind} · {when}",
+    "whoWasHere": "Wer da war",
+    "whatHappened": "Was passiert ist",
+    "noParticipants": "An dieser Zeremonie war niemand beteiligt.",
+    "noJournal": "Für diese Zeremonie wurde nichts erfasst.",
+    "seatHuman": "Person",
+    "seatAgent": "Agent",
+    "seatAdHoc": "spontan dazugekommen",
+    "spoke": "sprach {seconds} s",
+    "kind": {
+      "standup": "Standup",
+      "planning": "Planung"
+    },
+    "closeReason": {
+      "facilitator": "Von einer Person beendet",
+      "unattended": "Vom Manager durchgeführt",
+      "no_humans": "Niemand war da",
+      "expired": "Zeitüberschreitung"
+    },
+    "concludedBy": {
+      "manager": "Vom Manager durchgeführt",
+      "system": "Automatisch beendet"
+    },
+    "attendance": {
+      "unknown": "Unbekannt",
+      "present": "Anwesend",
+      "absent": "Gefehlt",
+      "excused": "Optional"
+    }
+  },
+  "observability": {
+    "agents": "Agenten",
+    "agentsHint": "Klicke auf einen Agenten, um seine Diagnose zu sehen. Wähle mehrere aus, um sie zu vergleichen.",
+    "selectAll": "Alle auswählen",
+    "clear": "Leeren",
+    "loadingAgents": "Agenten werden geladen…",
+    "agentFallback": "Agent",
+    "agentNumbered": "Agent {id}",
+    "cloudAgentFallback": "Cloud-Agent",
+    "scopedFromPanel": "{name} (aus dem Panel eingegrenzt)",
+    "noAgents": "Noch keine Agenten. Registriere einen selbst gehosteten Agenten in <link>Belegschaft</link> oder erstelle einen Cloud-Agenten — beide erscheinen hier, sobald sie laufen.",
+    "online": "ONLINE",
+    "offline": "OFFLINE",
+    "viewLabel": "Ansicht:",
+    "logView": "Log-Ansicht",
+    "timelineView": "Zeitleisten-Ansicht",
+    "conn": {
+      "connecting": "verbinde",
+      "connected": "verbunden",
+      "offline": "offline",
+      "disconnected": "getrennt"
+    },
+    "refreshing": "Wird aktualisiert…",
+    "refreshCloud": "Cloud aktualisieren",
+    "autoScroll": "Auto-Scroll",
+    "copyTriage": "Triage-Infos kopieren",
+    "copyReport": "Bericht kopieren (+Diffs)",
+    "copyTriageTitle": "Einen vollständigen Triage-Bericht (Agenten, Telemetrie, Fehler, Logs) in die Zwischenablage kopieren",
+    "copyReportTitle": "Einen vollständigen Bericht — Material/PRD, die Codeänderungen (Diffs), Telemetrie, Fehler und Logs — in die Zwischenablage kopieren",
+    "cloudNote": "Cloud-Agenten laufen serverseitig über das Gateway (kein Live-Relay-Stream); ihre Logzeilen werden aus der Ausführungstelemetrie abgeleitet. Nutze „Cloud aktualisieren“ für den neuesten Stand.",
+    "registerThenSelect": "Registriere oder erstelle zuerst einen Agenten und wähle ihn dann oben aus.",
+    "selectForLogs": "Wähle oben einen oder mehrere Agenten aus, um die Diagnose zu sehen.",
+    "waitingForLogs": "Warte auf Log-Ausgabe…",
+    "timeline": "Zeitleiste",
+    "categoryFilterPlaceholder": "Kategoriefilter (z. B. llm, thinking)",
+    "refresh": "Aktualisieren",
+    "viewGantt": "Gantt",
+    "viewList": "Liste",
+    "loadingTimeline": "Zeitleiste wird geladen…",
+    "noTimelineEvents": "Keine Zeitleisten-Ereignisse",
+    "noTimelineHint": "Audit-Ereignisse von Tool-Aufrufen und Workflow-Aufgaben erscheinen hier, sobald die Agenten laufen.",
+    "registerFirst": "Registriere oder erstelle zuerst einen Agenten.",
+    "goToWorkforce": "Zur Belegschaft →",
+    "selectForTimeline": "Wähle oben einen oder mehrere Agenten aus, um die Ausführungs-Zeitleiste zu sehen.",
+    "errLoadAgents": "Agenten konnten nicht geladen werden",
+    "errLoadDiagnostics": "Diagnose konnte nicht geladen werden"
+  },
+  "embedInstall": {
+    "heading": "In deiner Host-App installieren",
+    "intro": "Ein Entwickler der Host-App installiert das Paket und rendert eine Komponente pro Seite, wobei dein signiertes SSO-/Mandanten-JWT übergeben wird. Das Token wird dem iframe über <code>postMessage</code> übergeben — niemals in einer URL.",
+    "stepInstall": "1 · Installieren",
+    "stepMount": "2 · Eine Oberfläche einbinden",
+    "mountableViews": "Einbindbare Ansichten ({count})",
+    "noCapabilities": "Keine Funktionsbereiche aktiviert — schalte oben Produkt / Agile / Sicherheit ein, um Ansichten freizugeben.",
+    "copyInstall": "Installation kopieren",
+    "copySnippet": "Snippet kopieren",
+    "copiedFlash": "✓ Kopiert"
   }
 }

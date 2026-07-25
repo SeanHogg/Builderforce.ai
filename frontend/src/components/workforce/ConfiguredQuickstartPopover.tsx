@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 /**
  * The reusable Quick Start one-liner, pre-configured for the user's currently
@@ -66,8 +68,12 @@ export function ConfiguredQuickstartPopover({
   tenantToken,
   onClose,
 }: ConfiguredQuickstartPopoverProps) {
+  const t = useTranslations('workforce');
+  const tc = useTranslations('common');
   const [os, setOs] = useState<Os>(detectOs);
-  const [copied, setCopied] = useState(false);
+  // The write, the 2000ms "Copied!" window and its unmount-safe reset live in the
+  // shared hook — this popover is dismissed on any outside click, well inside it.
+  const { copied, copy } = useCopyToClipboard();
   const ref = useRef<HTMLDivElement>(null);
 
   const command = useMemo(() => buildCommand(os, tenantToken, workgroupSlug), [os, tenantToken, workgroupSlug]);
@@ -86,13 +92,9 @@ export function ConfiguredQuickstartPopover({
     };
   }, [onClose]);
 
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(command);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch { /* clipboard blocked — user can select manually */ }
-  };
+  // A blocked clipboard stays silent as before (the hook's `error` state is unused) —
+  // the command stays on screen to select manually.
+  const copyCommand = () => { void copy(command); };
 
   const osBtn = (value: Os): React.CSSProperties => ({
     padding: '4px 10px',
@@ -105,29 +107,31 @@ export function ConfiguredQuickstartPopover({
   });
 
   return (
-    <div ref={ref} className="card" style={cardStyle} role="dialog" aria-label="Connect a new agent">
+    <div ref={ref} className="card" style={cardStyle} role="dialog" aria-label={t('quickstart.title')}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
         <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-strong)', margin: 0 }}>
-          Connect a new agent
+          {t('quickstart.title')}
         </h4>
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close"
+          aria-label={tc('close')}
           style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}
         >
           ×
         </button>
       </div>
       <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 12px' }}>
-        Pre-configured for <strong style={{ color: 'var(--text-strong)' }}>{workgroupName}</strong>. Run this on
-        any machine — the agent installs and registers straight into this workgroup.
+        {t.rich('quickstart.intro', {
+          name: workgroupName,
+          b: (chunks) => <strong style={{ color: 'var(--text-strong)' }}>{chunks}</strong>,
+        })}
       </p>
 
       {/* OS toggle */}
       <div style={{ display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
-        <button type="button" style={osBtn('unix')} onClick={() => setOs('unix')}>macOS / Linux</button>
-        <button type="button" style={osBtn('windows')} onClick={() => setOs('windows')}>Windows</button>
+        <button type="button" style={osBtn('unix')} onClick={() => setOs('unix')}>{t('quickstart.osUnix')}</button>
+        <button type="button" style={osBtn('windows')} onClick={() => setOs('windows')}>{t('quickstart.osWindows')}</button>
       </div>
 
       {/* Command block */}
@@ -143,20 +147,20 @@ export function ConfiguredQuickstartPopover({
         </code>
         <button
           type="button"
-          onClick={copy}
+          onClick={copyCommand}
           style={{
             flexShrink: 0, padding: '4px 10px', fontSize: 12, fontWeight: 600,
             background: copied ? 'var(--surface-coral-soft)' : 'var(--accent)',
             color: copied ? 'var(--accent)' : '#fff', border: 'none', borderRadius: 6, cursor: 'pointer',
           }}
         >
-          {copied ? 'Copied!' : 'Copy'}
+          {copied ? t('copiedExclaim') : tc('copy')}
         </button>
       </div>
 
       {!tenantToken && (
         <p style={{ fontSize: 11, color: 'var(--error-text)', margin: '10px 0 0' }}>
-          No workspace token in this session — the agent will prompt you to pick a workgroup on first run.
+          {t('quickstart.noToken')}
         </p>
       )}
     </div>

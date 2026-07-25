@@ -14,6 +14,7 @@ import {
 import { saveFile } from '@/lib/api';
 import { parseRepoIdentifier, isValidRepoSegment } from '@/lib/repoIdentifier';
 import { formatRepoDiagnostic } from '@/lib/repoDiagnostic';
+import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 import { useGithubActionsReadiness } from '@/components/repos/githubActionsSurface';
 
 /**
@@ -204,13 +205,15 @@ export function SourceControlContent({
       cred ? { name: cred.name, provider: cred.provider, baseUrl: cred.baseUrl } : null,
       testResult[r.id] ?? null,
     );
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedId(r.id);
-      setTimeout(() => setCopiedId((cur) => (cur === r.id ? null : cur)), 2000);
-    } catch {
+    // Shared write (never throws — reports a refused clipboard as `false`). The
+    // confirmation stays local: it is keyed by ROW id across a list, which one hook
+    // instance per component cannot represent.
+    if (!await copyTextToClipboard(text)) {
       setError(t('errClipboard'));
+      return;
     }
+    setCopiedId(r.id);
+    setTimeout(() => setCopiedId((cur) => (cur === r.id ? null : cur)), 2000);
   };
 
   const test = async (id: string) => {

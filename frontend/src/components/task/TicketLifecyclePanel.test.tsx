@@ -87,6 +87,48 @@ describe('TicketLifecyclePanel', () => {
       },
     ],
     verdict: makeVerdict(),
+    failures: [],
+    dispatchers: [],
+    gate: null,
+  };
+
+  /** A ticket in the state this panel exists for: a retry storm behind a shut gate. */
+  const stormed: TicketLifecycle = {
+    ...lifecycle,
+    verdict: makeVerdict({
+      fullyAutonomous: false, reachedTerminal: false, isTerminal: false,
+      currentStatus: 'in_review', stalled: true, stallReason: 'human_gate',
+      runsDispatched: 136, runsCompleted: 2, runsFailed: 134,
+    }),
+    failures: [{
+      signature: 'Monthly cloud-run allowance reached (<n>/<n> on the free plan).',
+      sample: 'Monthly cloud-run allowance reached (30/25 on the free plan).',
+      runs: 134,
+      firstAt: '2026-07-11T14:12:00.918Z',
+      lastAt: '2026-07-11T19:47:14.230Z',
+      exampleExecutionIds: [1878, 1853],
+      dispatchers: ['system:coordinator'],
+      medianIntervalMs: 300_000,
+    }],
+    dispatchers: [
+      { submittedBy: 'system:coordinator', runs: 134, completed: 0, failed: 134, firstAt: '2026-07-11T14:11:57.864Z', lastAt: '2026-07-11T19:47:11.529Z' },
+    ],
+    gate: {
+      canRunNow: false,
+      reason: 'human_gate',
+      reasonText: 'No run: this lane is human-gated.',
+      laneGate: 'human',
+      laneResolved: true,
+      isTerminalLane: false,
+      assignedAgentRef: 'fdbbd9af',
+      staffedAgentRefs: [],
+      candidateAgentRef: 'fdbbd9af',
+      liveExecution: null,
+      capabilityMismatches: [],
+      consecutiveFailures: 134,
+      failureBreakerAt: 3,
+      cooldownRemainingMs: 0,
+    },
   };
 
   it('renders the verdict, the hop tiles and a provenance chip per event', async () => {
@@ -124,6 +166,45 @@ describe('TicketLifecyclePanel', () => {
     });
     // Localized gate copy wins over the server's English sentence.
     expect(getByText('board.triage.reason.no_agent')).toBeTruthy();
+  });
+
+  it('collapses a retry storm into ONE failure row with its cadence', async () => {
+    // 134 identical failures must read as one finding. Rendering them as 134 timeline
+    // entries is what made the original report unusable.
+    vi.mocked(tasksApi.lifecycle).mockResolvedValue(stormed);
+    const { getByText } = render(<TicketLifecyclePanel taskId={7} onClose={() => {}} />);
+
+    await waitFor(() => {
+      expect(getByText('ticketLifecycle.failures.title')).toBeTruthy();
+    });
+    expect(getByText('Monthly cloud-run allowance reached (30/25 on the free plan).')).toBeTruthy();
+    expect(getByText(/ticketLifecycle\.failures\.runs.*134/)).toBeTruthy();
+  });
+
+  it('names the DISPATCHER responsible, and shows the breaker streak beside its limit', async () => {
+    vi.mocked(tasksApi.lifecycle).mockResolvedValue(stormed);
+    const { getByText } = render(<TicketLifecyclePanel taskId={7} onClose={() => {}} />);
+
+    await waitFor(() => {
+      expect(getByText('ticketLifecycle.dispatchers.title')).toBeTruthy();
+    });
+    // The subsystem to go and stop.
+    expect(getByText('system:coordinator')).toBeTruthy();
+    // A 134-deep streak next to a breaker that halts at 3 IS the diagnosis.
+    expect(getByText(/ticketLifecycle\.stall\.streakValue.*134.*3/)).toBeTruthy();
+    // …and the lane's own gate setting, which the bare reason never showed.
+    expect(getByText('ticketLifecycle.stall.gate.human')).toBeTruthy();
+  });
+
+  it('omits the failure and dispatcher sections for a ticket with neither', async () => {
+    vi.mocked(tasksApi.lifecycle).mockResolvedValue(lifecycle);
+    const { queryByText, getByText } = render(<TicketLifecyclePanel taskId={7} onClose={() => {}} />);
+
+    await waitFor(() => {
+      expect(getByText('ticketLifecycle.stats.title')).toBeTruthy();
+    });
+    expect(queryByText('ticketLifecycle.failures.title')).toBeNull();
+    expect(queryByText('ticketLifecycle.dispatchers.title')).toBeNull();
   });
 
   it('fetches nothing while closed', () => {

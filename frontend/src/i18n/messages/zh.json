@@ -555,7 +555,8 @@
     "selectProject": "选择一个项目以开始仪式。",
     "viewLive": "实时圆桌",
     "viewSchedules": "定期安排",
-    "viewSwitchLabel": "仪式视图"
+    "viewSwitchLabel": "仪式视图",
+    "viewHistory": "历史记录"
   },
   "projectCard": {
     "details": "详情",
@@ -2888,7 +2889,24 @@
     "errUnhireFailed": "解雇失败",
     "errRemoveMember": "移除成员失败",
     "errChangeRole": "更改角色失败",
-    "errRevokeInvite": "撤销邀请失败"
+    "errRevokeInvite": "撤销邀请失败",
+    "copiedExclaim": "已复制！",
+    "manifest": {
+      "assignedConfig": "已分配的配置",
+      "copyManifest": "复制清单",
+      "emptyNote": "未分配技能或人设",
+      "noneAssigned": "未分配",
+      "personas": "人设",
+      "skills": "技能",
+      "content": "内容"
+    },
+    "quickstart": {
+      "title": "连接新代理",
+      "intro": "已为 <b>{name}</b> 预先配置。在任意机器上运行此命令——代理会自动安装并直接注册到该工作组。",
+      "osUnix": "macOS / Linux",
+      "osWindows": "Windows",
+      "noToken": "此会话中没有工作区令牌——代理会在首次运行时提示你选择工作组。"
+    }
   },
   "knowledge": {
     "headingSops": "标准作业程序",
@@ -6751,9 +6769,37 @@
         "mergeGranted": "可以合并拉取请求",
         "mergeWithheld": "合并需等待真人处理",
         "signoffRequired": "完成前必须签核",
-        "signoffOptional": "无需签核"
+        "signoffOptional": "无需签核",
+        "ceremoniesUnattended": "可在无人时举行仪式",
+        "ceremoniesNeedPeople": "仪式需要有人出席",
+        "reassignGranted": "可重新分配闲置 {hours} 小时以上的工作",
+        "reassignWithheld": "缺席者保留自己的工作"
       },
-      "workspaceDefaultsHint": "凡是保持“使用默认值”的项，都会遵循“设置 → AI 经理”中的工作区默认值。"
+      "workspaceDefaultsHint": "凡是保持“使用默认值”的项，都会遵循“设置 → AI 经理”中的工作区默认值。",
+      "ceremonies": {
+        "sectionTitle": "仪式",
+        "sectionHelp": "当管理者主持站会或规划会而相关成员不在场时，它可以做什么。"
+      },
+      "allowUnattendedCeremonies": {
+        "label": "无人时也可举行仪式",
+        "help": "允许管理者主持无人加入的计划站会。关闭时：会议仍会被记录并显示无人出席，但不会代表团队做出任何决定。"
+      },
+      "allowAgentReassignment": {
+        "label": "将停滞的工作交给智能体",
+        "help": "允许仪式把缺席成员的工单转交给智能体。仅仅缺席永远不够——该工单还必须已闲置下方设定的时长。"
+      },
+      "agentReassignIdleHours": {
+        "label": "仅在闲置超过",
+        "help": "工单必须闲置多久，缺席负责人对它的归属才会失效。该时长足够长，正常的缺席永远不会触发。",
+        "unit": "小时",
+        "inherited": "正在使用继承值：{value} 小时"
+      },
+      "agentReassignMaxPerSession": {
+        "label": "每场仪式最多",
+        "help": "单场仪式最多可转交的工单数量上限，避免一次站会悄悄重新分配整个迭代。",
+        "unit": "个工单",
+        "inherited": "正在使用继承值：{value}"
+      }
     },
     "backlog": {
       "title": "已排序的待办列表",
@@ -7575,7 +7621,20 @@
     },
     "stall": {
       "title": "它为何停在这里",
-      "unrecorded": "没有记录到任何拦截原因 —— 还没有任何流程尝试运行这张工单。"
+      "unrecorded": "没有记录到任何拦截原因 —— 还没有任何流程尝试运行这张工单。",
+      "laneGate": "泳道闸门",
+      "gate": {
+        "auto": "自动",
+        "human": "需人工审批"
+      },
+      "staffed": "泳道上配置的代理",
+      "noneStaffed": "无",
+      "candidate": "“立即运行”将调度",
+      "noCandidate": "无可运行者",
+      "streak": "连续失败的运行次数",
+      "streakValue": "{count} 次（自主执行在 {limit} 次时停止）",
+      "cooldown": "剩余冷却时间",
+      "capabilityMismatch": "能力不匹配"
     },
     "stats": {
       "title": "流转与运行",
@@ -7596,7 +7655,8 @@
       "laneMove": "{from} → {to}",
       "laneEntered": "进入 {to}",
       "backward": "返工",
-      "run": "运行 #{id}"
+      "run": "运行 #{id}",
+      "dispatchedBy": "由 {who} 调度"
     },
     "kind": {
       "created": "已创建",
@@ -7618,7 +7678,22 @@
       "aria": "来源：{label}"
     },
     "copyDiagnostics": "复制诊断信息",
-    "copyDiagnosticsAria": "复制此工单的完整生命周期诊断信息，包含所有事件、运行 ID 和门控原因"
+    "copyDiagnosticsAria": "复制此工单的完整生命周期诊断信息，包含所有事件、运行 ID 和门控原因",
+    "failures": {
+      "title": "故障分析",
+      "help": "按原因归类的失败运行。同一原因以固定间隔反复出现属于重试循环，而非一系列互不相关的失败。",
+      "runs": "{count, plural, other {# 次运行以同样方式失败}}",
+      "cadence": "约每 {interval} 一次",
+      "cadenceOnce": "仅发生一次",
+      "window": "首次 {first} · 最近 {last}",
+      "dispatchedBy": "由 {who} 调度",
+      "runIds": "运行：{ids}"
+    },
+    "dispatchers": {
+      "title": "由谁调度这些运行",
+      "help": "启动每次运行的子系统。除泳道触发器之外的调度方都绕过了其连续失败熔断器。",
+      "counts": "{runs} 次运行 · {completed} 次完成 · {failed} 次失败"
+    }
   },
   "taskChanges": {
     "allChanges": "所有变更",
@@ -9066,7 +9141,10 @@
     "errorCreateSprint": "创建冲刺失败",
     "errorStart": "无法开始会话",
     "errorAdvance": "无法进入下一位",
-    "errorComplete": "无法结束会话"
+    "errorComplete": "无法结束会话",
+    "startSession": "开始站会",
+    "startSessionHint": "开始本次站会",
+    "startSessionFacilitatorOnly": "只有主持人可以开始"
   },
   "meetings": {
     "title": "会议",
@@ -11052,5 +11130,108 @@
       "talent": "人才与市场",
       "governance": "安全、架构与治理"
     }
+  },
+  "ceremonyHistory": {
+    "loading": "加载中…",
+    "errorLoad": "无法加载仪式历史记录。",
+    "filterAll": "全部",
+    "filterStandup": "站会",
+    "filterPlanning": "规划会",
+    "count": "已记录 {count} 场",
+    "emptyTitle": "尚未举行过任何仪式",
+    "emptyHelp": "站会或规划会结束后，会在这里显示出席情况以及发生的变更。",
+    "loadMore": "加载更早记录",
+    "durationMinutes": "{minutes} 分钟",
+    "attended": "{expected} 人中有 {present} 人出席",
+    "missed": "{count} 人缺席",
+    "reassigned": "重新分配 {count} 项",
+    "dispatched": "启动 {count} 次智能体运行",
+    "detailTitle": "{kind} · {when}",
+    "whoWasHere": "出席人员",
+    "whatHappened": "发生了什么",
+    "noParticipants": "本次仪式没有任何参与者。",
+    "noJournal": "本次仪式没有任何记录。",
+    "seatHuman": "成员",
+    "seatAgent": "智能体",
+    "seatAdHoc": "临时加入",
+    "spoke": "发言 {seconds} 秒",
+    "kind": {
+      "standup": "站会",
+      "planning": "规划会"
+    },
+    "closeReason": {
+      "facilitator": "由成员结束",
+      "unattended": "由管理者主持",
+      "no_humans": "无人出席",
+      "expired": "已超时"
+    },
+    "concludedBy": {
+      "manager": "由管理者主持",
+      "system": "自动结束"
+    },
+    "attendance": {
+      "unknown": "未知",
+      "present": "出席",
+      "absent": "缺席",
+      "excused": "非必需"
+    }
+  },
+  "observability": {
+    "agents": "代理",
+    "agentsHint": "点击某个代理查看其诊断信息。选择多个可进行对比。",
+    "selectAll": "全选",
+    "clear": "清除",
+    "loadingAgents": "正在加载代理…",
+    "agentFallback": "代理",
+    "agentNumbered": "代理 {id}",
+    "cloudAgentFallback": "云代理",
+    "scopedFromPanel": "{name}（来自面板的范围限定）",
+    "noAgents": "暂无代理。请在<link>工作团队</link>中注册自托管代理，或创建云代理——两者运行后都会显示在这里。",
+    "online": "在线",
+    "offline": "离线",
+    "viewLabel": "视图：",
+    "logView": "日志视图",
+    "timelineView": "时间线视图",
+    "conn": {
+      "connecting": "连接中",
+      "connected": "已连接",
+      "offline": "离线",
+      "disconnected": "已断开"
+    },
+    "refreshing": "正在刷新…",
+    "refreshCloud": "刷新云端",
+    "autoScroll": "自动滚动",
+    "copyTriage": "复制排查信息",
+    "copyReport": "复制报告（含差异）",
+    "copyTriageTitle": "将完整的排查报告（代理、遥测、错误、日志）复制到剪贴板",
+    "copyReportTitle": "将完整报告——材料/PRD、代码改动（差异）、遥测、错误和日志——复制到剪贴板",
+    "cloudNote": "云代理通过网关在服务端运行（没有实时中继流）；其日志行由执行遥测派生而来。请使用“刷新云端”获取最新内容。",
+    "registerThenSelect": "请先注册或创建一个代理，然后在上方选择它。",
+    "selectForLogs": "在上方选择一个或多个代理以查看诊断信息。",
+    "waitingForLogs": "正在等待日志输出…",
+    "timeline": "时间线",
+    "categoryFilterPlaceholder": "类别筛选（例如 llm、thinking）",
+    "refresh": "刷新",
+    "viewGantt": "甘特图",
+    "viewList": "列表",
+    "loadingTimeline": "正在加载时间线…",
+    "noTimelineEvents": "暂无时间线事件",
+    "noTimelineHint": "代理运行后，工具调用审计事件和工作流任务将显示在这里。",
+    "registerFirst": "请先注册或创建一个代理。",
+    "goToWorkforce": "前往工作团队 →",
+    "selectForTimeline": "在上方选择一个或多个代理以查看执行时间线。",
+    "errLoadAgents": "加载代理失败",
+    "errLoadDiagnostics": "加载诊断信息失败"
+  },
+  "embedInstall": {
+    "heading": "在你的宿主应用中安装",
+    "intro": "宿主应用的开发者安装该软件包，并在每个页面渲染一个组件，同时传入你签发的 SSO/租户 JWT。令牌通过 <code>postMessage</code> 传递给 iframe——绝不会出现在 URL 中。",
+    "stepInstall": "1 · 安装",
+    "stepMount": "2 · 挂载界面",
+    "mountableViews": "可挂载视图（{count}）",
+    "noCapabilities": "尚未启用任何能力——请在上方开启 产品 / 敏捷 / 安全 以暴露视图。",
+    "copyInstall": "复制安装命令",
+    "copySnippet": "复制代码片段",
+    "copiedFlash": "✓ 已复制"
   }
 }

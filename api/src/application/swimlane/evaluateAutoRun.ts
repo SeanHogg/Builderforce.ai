@@ -240,6 +240,19 @@ export interface AutoRunEvaluation {
    *  Non-zero only alongside `reason: 'cooldown_active'` — surfaced so the triage
    *  UI can say WHEN the ticket resumes rather than just that it is waiting. */
   cooldownRemainingMs: number;
+  /**
+   * The ticket's most-recent consecutive FAILED runs ({@link trailingFailureStreak}).
+   *
+   * Reported even when it did not decide the verdict, because it is the fact that
+   * distinguishes "nothing has tried" from "something is retrying an identical
+   * failure". A ticket showing `human_gate` with a streak of 60 is a RETRY STORM
+   * that some dispatcher is driving past the breaker — a diagnosis the bare reason
+   * cannot express, and one that previously took a source dive to reach.
+   */
+  consecutiveFailures: number;
+  /** {@link MAX_CONSECUTIVE_AUTORUN_FAILURES} — shipped so a reader can compare the
+   *  streak to the threshold without knowing (or duplicating) the server constant. */
+  failureBreakerAt: number;
 }
 
 /**
@@ -313,6 +326,8 @@ export async function evaluateTaskAutoRun(
     liveExecution: null,
     canRunNow: false,
     cooldownRemainingMs: 0,
+    consecutiveFailures: 0,
+    failureBreakerAt: MAX_CONSECUTIVE_AUTORUN_FAILURES,
     ...over,
   });
 
@@ -441,6 +456,7 @@ export async function evaluateTaskAutoRun(
   // Both the breaker streak and the re-run cooldown are derived from THIS one
   // newest-first list — no second query per ticket (the sweep evaluates hundreds).
   const cooldownRemainingMs = autoRunCooldownRemainingMs(plainExecs, Date.now());
+  const consecutiveFailures = trailingFailureStreak(plainExecs);
 
   const { reason, canRunNow } = classifyResolvedAutoRun({
     gate,
@@ -448,7 +464,7 @@ export async function evaluateTaskAutoRun(
     hasCapabilityMismatch: !!decision.capabilityMismatches?.length,
     sameLaneReentry: !!args.originLaneKey && args.originLaneKey === args.status,
     hasLiveExecution: !!liveExecution,
-    consecutiveFailures: trailingFailureStreak(plainExecs),
+    consecutiveFailures,
     cooldownRemainingMs,
   });
 
@@ -465,5 +481,7 @@ export async function evaluateTaskAutoRun(
     canRunNow,
     reason,
     cooldownRemainingMs: reason === 'cooldown_active' ? cooldownRemainingMs : 0,
+    consecutiveFailures,
+    failureBreakerAt: MAX_CONSECUTIVE_AUTORUN_FAILURES,
   };
 }

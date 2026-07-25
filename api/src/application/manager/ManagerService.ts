@@ -9,6 +9,10 @@
  *   2. RANK    — order the backlog by priority × value × due-date urgency and persist
  *                each ticket's `manager_rank` (what the priority-aware dispatcher and
  *                the board default-sort read). Fixes "items not ordered in priority".
+ *   2.5 SCHEDULE — place every UNDATED ticket on the timeline in rank order, honouring
+ *                the project's task_dependencies DAG (0364). Ranking says what comes
+ *                first; this says WHEN, which is what the planning spine, the Gantt,
+ *                the calendar — and step 2's own urgency term — actually read.
  *   3. ASSIGN  — give unowned work to the best-fit teammate/agent (so nothing sits
  *                invisible to autonomy).
  *   4. PR      — CONDUCT (open) PRs for finished work and MERGE + CLOSE open PRs per
@@ -37,6 +41,8 @@ import { TaskStatus, TaskPriority } from '../../domain/shared/types';
 import { notSystemTask } from '../task/taskScope';
 import { nextProjectKeySeqBase } from '../task/taskKeys';
 import { rankBacklog, type RankableTask, type TaskPriorityTier } from './prioritize';
+import { listProjectDependencies } from '../task/taskDependencies';
+import { scheduleItems, estimateDaysFromStoryPoints } from '../planning/scheduleWork';
 import {
   heuristicBusinessValue, riceBusinessValueFromFeature, normalizeFeatureName,
   type FeatureScoreRow, type ScoredValue,
@@ -97,6 +103,8 @@ export interface ManagerRunSummary {
   reason?: string;
   scored: number;
   ranked: number;
+  /** Previously-undated tickets this pass placed on the timeline (0364). */
+  scheduled: number;
   assigned: number;
   prsConducted: number;
   prsMerged: number;
@@ -127,9 +135,14 @@ export async function getManagerConfigRow(
       autoAssign: projectManagerConfigs.autoAssign,
       autoBusinessValue: projectManagerConfigs.autoBusinessValue,
       autoPrioritize: projectManagerConfigs.autoPrioritize,
+      autoSchedule: projectManagerConfigs.autoSchedule,
       managerType: projectManagerConfigs.managerType,
       requireSignoffToComplete: projectManagerConfigs.requireSignoffToComplete,
       allowAutoMerge: projectManagerConfigs.allowAutoMerge,
+      allowUnattendedCeremonies: projectManagerConfigs.allowUnattendedCeremonies,
+      allowAgentReassignment: projectManagerConfigs.allowAgentReassignment,
+      agentReassignIdleHours: projectManagerConfigs.agentReassignIdleHours,
+      agentReassignMaxPerSession: projectManagerConfigs.agentReassignMaxPerSession,
       lastRunAt: projectManagerConfigs.lastRunAt,
     })
     .from(projectManagerConfigs)
@@ -160,8 +173,14 @@ export async function getTenantManagerDefaults(
         autoAssign: tenantManagerDefaults.autoAssign,
         autoBusinessValue: tenantManagerDefaults.autoBusinessValue,
         autoPrioritize: tenantManagerDefaults.autoPrioritize,
+        autoSchedule: tenantManagerDefaults.autoSchedule,
         requireSignoffToComplete: tenantManagerDefaults.requireSignoffToComplete,
         allowAutoMerge: tenantManagerDefaults.allowAutoMerge,
+        // Ceremony autonomy (0365) rides the same tier and the same fold.
+        allowUnattendedCeremonies: tenantManagerDefaults.allowUnattendedCeremonies,
+        allowAgentReassignment: tenantManagerDefaults.allowAgentReassignment,
+        agentReassignIdleHours: tenantManagerDefaults.agentReassignIdleHours,
+        agentReassignMaxPerSession: tenantManagerDefaults.agentReassignMaxPerSession,
       })
       .from(tenantManagerDefaults)
       .where(eq(tenantManagerDefaults.tenantId, tenantId))
@@ -209,8 +228,13 @@ export async function upsertTenantManagerDefaults(
       autoAssign: normalized.autoAssign ?? null,
       autoBusinessValue: normalized.autoBusinessValue ?? null,
       autoPrioritize: normalized.autoPrioritize ?? null,
+      autoSchedule: normalized.autoSchedule ?? null,
       requireSignoffToComplete: normalized.requireSignoffToComplete ?? null,
       allowAutoMerge: normalized.allowAutoMerge ?? null,
+      allowUnattendedCeremonies: normalized.allowUnattendedCeremonies ?? null,
+      allowAgentReassignment: normalized.allowAgentReassignment ?? null,
+      agentReassignIdleHours: normalized.agentReassignIdleHours ?? null,
+      agentReassignMaxPerSession: normalized.agentReassignMaxPerSession ?? null,
       updatedBy: opts?.updatedBy ?? null,
       updatedAt: now,
     })
@@ -222,8 +246,13 @@ export async function upsertTenantManagerDefaults(
         ...(normalized.autoAssign !== undefined ? { autoAssign: normalized.autoAssign } : {}),
         ...(normalized.autoBusinessValue !== undefined ? { autoBusinessValue: normalized.autoBusinessValue } : {}),
         ...(normalized.autoPrioritize !== undefined ? { autoPrioritize: normalized.autoPrioritize } : {}),
+        ...(normalized.autoSchedule !== undefined ? { autoSchedule: normalized.autoSchedule } : {}),
         ...(normalized.requireSignoffToComplete !== undefined ? { requireSignoffToComplete: normalized.requireSignoffToComplete } : {}),
         ...(normalized.allowAutoMerge !== undefined ? { allowAutoMerge: normalized.allowAutoMerge } : {}),
+        ...(normalized.allowUnattendedCeremonies !== undefined ? { allowUnattendedCeremonies: normalized.allowUnattendedCeremonies } : {}),
+        ...(normalized.allowAgentReassignment !== undefined ? { allowAgentReassignment: normalized.allowAgentReassignment } : {}),
+        ...(normalized.agentReassignIdleHours !== undefined ? { agentReassignIdleHours: normalized.agentReassignIdleHours } : {}),
+        ...(normalized.agentReassignMaxPerSession !== undefined ? { agentReassignMaxPerSession: normalized.agentReassignMaxPerSession } : {}),
         ...(opts?.updatedBy !== undefined ? { updatedBy: opts.updatedBy } : {}),
         updatedAt: now,
       },
@@ -253,7 +282,7 @@ export async function upsertManagerConfig(
   db: Db,
   tenantId: number,
   projectId: number,
-  patch: Partial<Pick<ManagerConfigRow, 'managerRef' | 'enabled' | 'prMergePolicy' | 'autoAssign' | 'autoBusinessValue' | 'autoPrioritize' | 'managerType' | 'requireSignoffToComplete' | 'allowAutoMerge'>>,
+  patch: Partial<Pick<ManagerConfigRow, 'managerRef' | 'enabled' | 'prMergePolicy' | 'autoAssign' | 'autoBusinessValue' | 'autoPrioritize' | 'autoSchedule' | 'managerType' | 'requireSignoffToComplete' | 'allowAutoMerge' | 'allowUnattendedCeremonies' | 'allowAgentReassignment' | 'agentReassignIdleHours' | 'agentReassignMaxPerSession'>>,
 ): Promise<ManagerConfigRow> {
   const now = new Date();
   await db
@@ -266,6 +295,10 @@ export async function upsertManagerConfig(
       autoAssign: patch.autoAssign ?? true,
       autoBusinessValue: patch.autoBusinessValue ?? true,
       autoPrioritize: patch.autoPrioritize ?? true,
+      // Default TRUE on insert, like its grooming siblings (0364): scheduling only ever
+      // fills tickets with NO dates and never overwrites a human's, so a newly-configured
+      // project gains a timeline rather than another empty column.
+      autoSchedule: patch.autoSchedule ?? true,
       managerType: normalizeManagerType(patch.managerType),
       // Default TRUE on insert: a newly-configured project must not silently gain
       // unreviewed auto-merge authority just because the caller omitted the field.
@@ -274,6 +307,13 @@ export async function upsertManagerConfig(
       // here would pin a brand-new project against a workspace-wide grant it should have
       // received; writing `true` would grant authority nobody asked for.
       allowAutoMerge: patch.allowAutoMerge ?? null,
+      // Ceremony autonomy (0364) — NULL on insert for the same reason as allowAutoMerge:
+      // a brand-new project has never had an opinion about whether its standups may run
+      // without its people, and an ADD COLUMN default would invent one.
+      allowUnattendedCeremonies: patch.allowUnattendedCeremonies ?? null,
+      allowAgentReassignment: patch.allowAgentReassignment ?? null,
+      agentReassignIdleHours: patch.agentReassignIdleHours ?? null,
+      agentReassignMaxPerSession: patch.agentReassignMaxPerSession ?? null,
       updatedAt: now,
     })
     .onConflictDoUpdate({
@@ -285,9 +325,14 @@ export async function upsertManagerConfig(
         ...(patch.autoAssign !== undefined ? { autoAssign: patch.autoAssign } : {}),
         ...(patch.autoBusinessValue !== undefined ? { autoBusinessValue: patch.autoBusinessValue } : {}),
         ...(patch.autoPrioritize !== undefined ? { autoPrioritize: patch.autoPrioritize } : {}),
+        ...(patch.autoSchedule !== undefined ? { autoSchedule: patch.autoSchedule } : {}),
         ...(patch.managerType !== undefined ? { managerType: normalizeManagerType(patch.managerType) } : {}),
         ...(patch.requireSignoffToComplete !== undefined ? { requireSignoffToComplete: patch.requireSignoffToComplete } : {}),
         ...(patch.allowAutoMerge !== undefined ? { allowAutoMerge: patch.allowAutoMerge } : {}),
+        ...(patch.allowUnattendedCeremonies !== undefined ? { allowUnattendedCeremonies: patch.allowUnattendedCeremonies } : {}),
+        ...(patch.allowAgentReassignment !== undefined ? { allowAgentReassignment: patch.allowAgentReassignment } : {}),
+        ...(patch.agentReassignIdleHours !== undefined ? { agentReassignIdleHours: patch.agentReassignIdleHours } : {}),
+        ...(patch.agentReassignMaxPerSession !== undefined ? { agentReassignMaxPerSession: patch.agentReassignMaxPerSession } : {}),
         updatedAt: now,
       },
     });
@@ -620,6 +665,8 @@ interface ManagedTaskRow {
   priority: string;
   businessValue: number | null;
   businessValueSource: string | null;
+  /** Needed by the SCHEDULE pass: a ticket is "unscheduled" only when BOTH are null. */
+  startDate: Date | null;
   dueDate: Date | null;
   storyPoints: number | null;
   assignedUserId: string | null;
@@ -638,7 +685,7 @@ async function loadManagedTasks(db: Db, projectId: number): Promise<ManagedTaskR
     .select({
       id: tasks.id, title: tasks.title, description: tasks.description, status: tasks.status,
       priority: tasks.priority, businessValue: tasks.businessValue, businessValueSource: tasks.businessValueSource,
-      dueDate: tasks.dueDate, storyPoints: tasks.storyPoints,
+      startDate: tasks.startDate, dueDate: tasks.dueDate, storyPoints: tasks.storyPoints,
       assignedUserId: tasks.assignedUserId, assignedAgentRef: tasks.assignedAgentRef,
       assignedAgentHostId: tasks.assignedAgentHostId, gitBranch: tasks.gitBranch, githubPrUrl: tasks.githubPrUrl,
       createdAt: tasks.createdAt, taskType: tasks.taskType, actionType: tasks.actionType,
@@ -718,7 +765,7 @@ export async function runManagerForProject(
   // links to it so the run task shows exactly what this pass changed.
   const runTaskId = args.runTaskId ?? null;
   const summary: ManagerRunSummary = {
-    projectId, skipped: false, scored: 0, ranked: 0, assigned: 0, prsConducted: 0, prsMerged: 0, dispatched: 0,
+    projectId, skipped: false, scored: 0, ranked: 0, scheduled: 0, assigned: 0, prsConducted: 0, prsMerged: 0, dispatched: 0,
     audited: 0, flagged: 0, remediated: 0, remediationDeferred: 0,
   };
 
@@ -812,6 +859,82 @@ export async function runManagerForProject(
       summary: `Ranked ${ranked.length} tickets by priority × value × urgency.`,
       detail: { top },
     });
+    // Ranking reorders `managed` for the SCHEDULE pass below, which places work in
+    // rank order — the manager's own judgement of what comes first is what decides
+    // what gets the earliest window.
+    const rankOf = new Map(ranked.map((r) => [r.taskId, r.rank]));
+    managed = [...managed].sort(
+      (a, b) => (rankOf.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rankOf.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+    );
+  }
+
+  // 2.5 SCHEDULE — place unscheduled work on the TIMELINE (0364). ----------------
+  // The pass that never existed. Ranking answers "what first"; nothing answered
+  // "WHEN" or "AFTER WHAT", so `start_date`/`due_date` were null on every ticket the
+  // system created — which is why the planning spine rendered "no dates" at every
+  // level, and why this pass's OWN urgency term (urgencyScore, above) was scoring an
+  // always-null column.
+  //
+  // Deliberately conservative: it only fills tickets that have NEITHER date, so a
+  // human's (or an Epic fan-out's) dates are never overwritten; it schedules in rank
+  // order, honouring the project's `task_dependencies` DAG through the same shared
+  // planner the Epic fan-out uses; and it sizes each item from its story points when
+  // estimated. Idempotent — a second pass finds nothing left unscheduled.
+  if (policy.autoSchedule) {
+    const unscheduled = managed.filter((t) => t.startDate == null && t.dueDate == null);
+    if (unscheduled.length > 0) {
+      try {
+        const edges = await listProjectDependencies(db, projectId);
+        const inScope = new Set(unscheduled.map((t) => t.id));
+        // An already-dated predecessor still constrains its successor, so the planner
+        // sees every managed ticket — but only the unscheduled ones are WRITTEN.
+        const anchorById = new Map(managed.map((t) => [t.id, t]));
+        const items = managed.map((t) => ({
+          key: String(t.id),
+          estimateDays: estimateDaysFromStoryPoints(t.storyPoints),
+          afterKeys: edges
+            .filter((e) => e.successorTaskId === t.id && anchorById.has(e.predecessorTaskId))
+            .map((e) => String(e.predecessorTaskId)),
+        }));
+        const plan = scheduleItems(items, { anchor: new Date(now) });
+        const writes: unknown[] = [];
+        const stampedAt = new Date();
+        for (const t of unscheduled) {
+          const window = plan.windows.get(String(t.id));
+          if (!window) continue;
+          writes.push(
+            db.update(tasks)
+              .set({ startDate: window.startDate, dueDate: window.endDate, updatedAt: stampedAt })
+              .where(eq(tasks.id, t.id)),
+          );
+          // Reflect locally so later steps in THIS pass see the fresh window.
+          t.startDate = window.startDate;
+          t.dueDate = window.endDate;
+          summary.scheduled += 1;
+        }
+        await flushBatched(db, writes);
+        if (summary.scheduled > 0) {
+          const span = plan.span;
+          await recordManagerAction(db, {
+            tenantId, projectId, runTaskId, actionType: 'schedule',
+            summary:
+              `Scheduled ${summary.scheduled} previously-undated ${summary.scheduled === 1 ? 'ticket' : 'tickets'} ` +
+              `in rank order${span ? ` across ${span.startDate.toISOString().slice(0, 10)} → ${span.endDate.toISOString().slice(0, 10)}` : ''}` +
+              `${edges.length ? `, honouring ${edges.length} dependency ${edges.length === 1 ? 'edge' : 'edges'}` : ''}.`,
+            detail: {
+              scheduled: summary.scheduled,
+              dependencyEdges: edges.length,
+              from: span?.startDate.toISOString() ?? null,
+              to: span?.endDate.toISOString() ?? null,
+              // A cycle in the project's dependency graph degrades scheduling (those
+              // tickets start at the anchor instead of after their predecessor), so it
+              // is reported rather than silently absorbed.
+              cyclic: plan.cyclic.length,
+            },
+          });
+        }
+      } catch { /* scheduling is best-effort; the rest of the pass stands */ }
+    }
   }
 
   // 3. ASSIGN — give unowned runnable tickets to the best-fit teammate/agent. ----
@@ -935,7 +1058,7 @@ export async function runManagerForProject(
   // Credit the acting identity: when a specific agent is the manager, journal that it
   // ran (with its persona/model) so the feed attributes the pass to the teammate, not
   // an anonymous "system". No noise for the default system manager.
-  if (identity.agentRef && (summary.scored || summary.ranked || summary.assigned || summary.dispatched)) {
+  if (identity.agentRef && (summary.scored || summary.ranked || summary.scheduled || summary.assigned || summary.dispatched)) {
     await recordManagerAction(db, {
       tenantId, projectId, runTaskId, actionType: 'manage',
       summary: `${identity.label} managed the board${identity.personaDirective ? ' with its persona' : ''}.`,
@@ -950,7 +1073,7 @@ export async function runManagerForProject(
   // the actual manager agent when one is designated, else the system "AI Manager".
   // Best-effort (recordActivity never throws). Skipped on an idle pass (nothing done).
   const didSomething =
-    summary.scored || summary.ranked || summary.assigned ||
+    summary.scored || summary.ranked || summary.scheduled || summary.assigned ||
     summary.dispatched || summary.prsConducted || summary.prsMerged || summary.flagged;
   if (didSomething) {
     const actor = identity.agentRef
@@ -962,13 +1085,14 @@ export async function runManagerForProject(
       targetType: 'project', targetId: projectId,
       summary:
         `Managed the backlog — scored ${summary.scored}, ranked ${summary.ranked}, ` +
+        `${summary.scheduled ? `scheduled ${summary.scheduled}, ` : ''}` +
         `assigned ${summary.assigned}, dispatched ${summary.dispatched}, ` +
         `PRs ${summary.prsConducted + summary.prsMerged}` +
         `${summary.flagged ? `, flagged ${summary.flagged}` : ''}` +
         `${summary.remediated ? `, staffed ${summary.remediated}` : ''}` +
         `${summary.remediationDeferred ? ` (${summary.remediationDeferred} deferred)` : ''}.`,
       metadata: {
-        scored: summary.scored, ranked: summary.ranked, assigned: summary.assigned,
+        scored: summary.scored, ranked: summary.ranked, scheduled: summary.scheduled, assigned: summary.assigned,
         dispatched: summary.dispatched, prsConducted: summary.prsConducted,
         prsMerged: summary.prsMerged, flagged: summary.flagged,
         remediated: summary.remediated, remediationDeferred: summary.remediationDeferred,

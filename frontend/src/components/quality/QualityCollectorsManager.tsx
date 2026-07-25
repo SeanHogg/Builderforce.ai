@@ -16,6 +16,7 @@ import {
   type QualityMappingRule,
 } from '@/lib/builderforceApi';
 import { ErrorConsumptionCard } from './ErrorConsumptionCard';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 const ingestBase = `${AUTH_API_URL}/api/quality-ingest`;
 
@@ -397,8 +398,10 @@ function CreatedKeyPanel({ created, onDismiss, t }: {
 }
 
 function CopyBlock({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = () => navigator.clipboard?.writeText(value).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+  // 1500ms confirmation, owned by the shared hook. Was a bare `.then()` with no
+  // `.catch()`, so a denied clipboard became an unhandled rejection.
+  const { copied, copy: copyValue } = useCopyToClipboard(1500);
+  const copy = () => { void copyValue(value); };
   return (
     <div style={{ marginTop: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>

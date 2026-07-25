@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 
 interface ErrorBoundaryProps {
   homePath?: string;
@@ -43,11 +44,10 @@ export class ErrorBoundary extends React.Component<
       .filter(Boolean)
       .join('\n');
 
-    try {
-      await navigator.clipboard.writeText(ticket);
-    } catch {
-      /* clipboard unavailable */
-    }
+    // This is a class component, so the hook is illegal here — the plain shared
+    // function is the same one implementation. A refused clipboard resolves false and
+    // is ignored, exactly as the old try/catch did (there is no feedback state here).
+    await copyTextToClipboard(ticket);
   };
 
   render() {
