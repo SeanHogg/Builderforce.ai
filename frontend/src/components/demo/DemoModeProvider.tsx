@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { classifyShell } from '@/lib/shellRouting';
 import { BookDemoForm } from './BookDemoForm';
 import { DemoTour } from './DemoTour';
 import {
@@ -62,6 +63,17 @@ export function DemoModeProvider({ children }: { children: React.ReactNode }) {
   // stay suppressed while the guided tour owns the screen.
   const tourOpenRef = useRef(false);
 
+  // The demo chrome (banner, convert/exit prompts, tour) belongs INSIDE the
+  // product only — never overlaid on the public marketing site. A demo session
+  // persists in sessionStorage across navigation, so a visitor who leaves the
+  // app for a marketing page (/, /pricing, …) would otherwise keep seeing the
+  // banner + "Make this your workspace" panel there. Gate everything on the
+  // canonical shell classification: chrome shows only on authenticated app
+  // routes. `inAppRef` mirrors it for async callbacks (timers, exit-intent).
+  const inApp = active && classifyShell(pathname) === 'app';
+  const inAppRef = useRef(false);
+  useEffect(() => { inAppRef.current = inApp; }, [inApp]);
+
   const openTour = useCallback(() => {
     if (!persona) return;
     tourOpenRef.current = true;
@@ -98,10 +110,10 @@ export function DemoModeProvider({ children }: { children: React.ReactNode }) {
   // Mark it seen the moment it fires so a mid-tour reload doesn't relaunch it —
   // the banner's "Take the tour" button remains available to replay it.
   useEffect(() => {
-    if (!active || !persona || hasTourSeen()) return;
+    if (!active || !persona || !inApp || hasTourSeen()) return;
     const timer = setTimeout(() => { markTourSeen(); openTour(); }, 1400);
     return () => clearTimeout(timer);
-  }, [active, persona, openTour]);
+  }, [active, persona, inApp, openTour]);
 
   const openConvert = useCallback(() => {
     if (convertShownRef.current || tourOpenRef.current) return;
@@ -111,19 +123,21 @@ export function DemoModeProvider({ children }: { children: React.ReactNode }) {
   }, [persona, pathname]);
 
   // Count route views as engagement + fire the convert prompt at the threshold.
+  // Only fire while in-app so the one-shot isn't consumed on a marketing route
+  // (where the panel wouldn't render) and lost before the visitor returns.
   useEffect(() => {
     if (!active) return;
     viewsRef.current += 1;
     queueDemoEvent({ kind: 'page_view', persona, path: pathname });
-    if (!convertShownRef.current && viewsRef.current >= ENGAGE_VIEWS) openConvert();
-  }, [active, pathname, persona, openConvert]);
+    if (!convertShownRef.current && inApp && viewsRef.current >= ENGAGE_VIEWS) openConvert();
+  }, [active, pathname, persona, inApp, openConvert]);
 
   // Time-based engagement trigger.
   useEffect(() => {
     if (!active) return;
     const elapsed = Date.now() - (startedRef.current || Date.now());
     const remaining = Math.max(0, ENGAGE_TIME_MS - elapsed);
-    const timer = setTimeout(() => { if (!convertShownRef.current) openConvert(); }, remaining);
+    const timer = setTimeout(() => { if (!convertShownRef.current && inAppRef.current) openConvert(); }, remaining);
     return () => clearTimeout(timer);
   }, [active, openConvert]);
 
@@ -131,7 +145,7 @@ export function DemoModeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!active) return;
     const trigger = () => {
-      if (hasExitPrompted() || convertShownRef.current || tourOpenRef.current) return;
+      if (!inAppRef.current || hasExitPrompted() || convertShownRef.current || tourOpenRef.current) return;
       markExitPrompted();
       setPrompt('exit');
       trackDemoEvent({ kind: 'exit_prompt_shown', persona, path: pathname });
@@ -164,7 +178,10 @@ export function DemoModeProvider({ children }: { children: React.ReactNode }) {
     window.location.assign('/');
   }, [persona, pathname]);
 
-  if (!active) return <>{children}</>;
+  // Render the demo chrome ONLY inside the product. On the public marketing site
+  // (or before a demo starts) pass children straight through — the banner and
+  // conversion panels must never overlay a marketing page.
+  if (!inApp) return <>{children}</>;
 
   const personaLabel = persona ? t(`personas.${persona}`) : '';
 
