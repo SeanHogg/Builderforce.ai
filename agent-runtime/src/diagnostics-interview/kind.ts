@@ -10,8 +10,8 @@ import {
   type Likelihood,
   type Impact,
   type Rating,
-  type RatingLevel,
-} from './types';
+  RatingLevel,
+} from './types.js';
 
 /**
  * Convert a single-purpose rating phrase (e.g., "High risk") into Level.
