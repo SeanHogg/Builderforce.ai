@@ -85,6 +85,7 @@ __export(src_exports, {
   linkedTicketsToAdvance: () => linkedTicketsToAdvance,
   mentionRecipient: () => mentionRecipient,
   modelsUsedInTrace: () => modelsUsedInTrace,
+  nextFallbackModel: () => nextFallbackModel,
   parseByoUnresolved: () => parseByoUnresolved,
   parseDirectedRecipient: () => parseDirectedRecipient,
   parseMessageAuthor: () => parseMessageAuthor,
@@ -1361,9 +1362,15 @@ function shouldRecoverStalledTurn(input) {
 function isExhaustedStall(input) {
   return isStalledTurn(input) && input.recoveriesUsed >= MAX_ANNOUNCEMENT_RECOVERIES;
 }
-function stallExhaustedNotice(model) {
+var MAX_MODEL_FAILOVERS = 2;
+function modelFailoverNotice(from, to) {
+  const who = from && from !== "default" ? `\`${from}\`` : "The previous model";
+  return `${who} described tool calls instead of making them, ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row, so it cannot complete this request. Retrying on \`${to}\`.`;
+}
+function stallExhaustedNotice(model, tried) {
   const who = model && model !== "default" ? `The model \`${model}\`` : "The model";
-  return `${who} described tool calls instead of making them, ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row, so nothing was actually run and the answer above is only a description of intended actions. This is a model limitation, not a configuration error \u2014 pick a different model for this chat and send the message again.`;
+  const others = (tried ?? []).filter((m) => m && m !== model);
+  return `${who} described tool calls instead of making them, ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row, so nothing was actually run and the answer above is only a description of intended actions.` + (others.length ? ` This run already failed over from ${others.map((m) => `\`${m}\``).join(", ")}, so the problem is unlikely to be any single model \u2014 check that the tool catalog loaded (see the "Tools available to the model" line in a copied diagnostics report).` : " This is a model limitation, not a configuration error \u2014 pick a different model for this chat and send the message again.");
 }
 
 // src/persistedSteps.ts
@@ -2455,7 +2462,7 @@ async function autoLinkCreatedItem(chatId, c, persistence, runTool, toolName, ou
   });
 }
 async function runLoop(chatId, c, req) {
-  const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
+  const { resolvedSystemPrompt, tools: toolSpecs, model, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
   const allTools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
   const usedTools = /* @__PURE__ */ new Set();
@@ -2538,6 +2545,9 @@ ${extra}`;
 ${chatWorkLinkingDirective(chatId)}`;
   const readDedupe = /* @__PURE__ */ new Set();
   let announcementRecoveries = 0;
+  let activeModel = model;
+  const triedModels = [];
+  let modelFailovers = 0;
   const emitEvermindLearnReconcile = (assistantMsg, finalText) => {
     const learn = assistantMsg?.evermindLearn;
     if (learn?.learned) {
@@ -2578,7 +2588,7 @@ ${chatWorkLinkingDirective(chatId)}`;
     if (c.abort?.signal.aborted) return;
     c.streamingText = "";
     emit(c);
-    const working = await buildWorkingTranscript(c, systemPrompt, stream, model);
+    const working = await buildWorkingTranscript(c, systemPrompt, stream, activeModel);
     if (c.abort?.signal.aborted) return;
     const llmStart = nowMs2();
     let firstTokenAt;
@@ -2599,7 +2609,7 @@ ${chatWorkLinkingDirective(chatId)}`;
     }
     try {
       result = await stream(
-        { messages: working, tools, tool_choice: tools ? "auto" : void 0, model, maxTokens, reasoning, metadata, signal: c.abort?.signal },
+        { messages: working, tools, tool_choice: tools ? "auto" : void 0, model: activeModel, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         { onTextDelta: (d) => {
           if (firstTokenAt === void 0) firstTokenAt = nowMs2();
           c.streamingText += d;
@@ -2613,7 +2623,7 @@ ${chatWorkLinkingDirective(chatId)}`;
         category: "error",
         label: "llm.complete",
         durationMs: nowMs2() - llmStart,
-        args: { model: model ?? "default", step: iter },
+        args: { model: activeModel ?? "default", step: iter },
         result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
         isError: true
       });
@@ -2621,8 +2631,8 @@ ${chatWorkLinkingDirective(chatId)}`;
     }
     accrueByoUnresolved(c, result.byoUnresolved);
     accrueProviderCap(c, result.providerCap);
-    const resolved = result.resolvedModel ?? model ?? "default";
-    const requested = model ?? "default";
+    const resolved = result.resolvedModel ?? activeModel ?? "default";
+    const requested = activeModel ?? "default";
     setLastResolvedModel(result.resolvedModel);
     if (requested !== "default" && resolved !== "default" && resolved !== requested) {
       pushTrace(c, {
@@ -2786,12 +2796,30 @@ ${chatWorkLinkingDirective(chatId)}`;
       availableToolCount: toolSpecs?.length ?? 0,
       recoveriesUsed: announcementRecoveries
     })) {
-      const notice = stallExhaustedNotice(resolved);
+      for (const m of [activeModel, resolved]) if (m && m !== "default" && !triedModels.includes(m)) triedModels.push(m);
+      const next = modelFailovers < MAX_MODEL_FAILOVERS ? pickFallbackModel?.(triedModels) : void 0;
+      if (next) {
+        modelFailovers += 1;
+        pushTrace(c, {
+          ts: nowIso(),
+          category: "message",
+          label: "loop.model_failover",
+          args: { step: iter, from: resolved, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
+          result: modelFailoverNotice(resolved, next)
+        });
+        activeModel = next;
+        announcementRecoveries = 0;
+        convo.push({ role: "user", content: stallRecoveryNudge(false) });
+        c.streamingText = "";
+        emit(c);
+        continue;
+      }
+      const notice = stallExhaustedNotice(resolved, triedModels);
       pushTrace(c, {
         ts: nowIso(),
         category: "error",
         label: "loop.stall_unrecovered",
-        args: { step: iter, model: resolved, attempts: announcementRecoveries },
+        args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: triedModels },
         result: notice,
         isError: true
       });
@@ -2817,7 +2845,7 @@ ${chatWorkLinkingDirective(chatId)}`;
       let closeFirstTokenAt;
       const closing = await stream(
         // No `tools` → the model can't call another tool and must produce text.
-        { messages: working, model, maxTokens, reasoning, metadata, signal: c.abort?.signal },
+        { messages: working, model: activeModel, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         { onTextDelta: (d) => {
           if (closeFirstTokenAt === void 0) closeFirstTokenAt = nowMs2();
           c.streamingText += d;
@@ -2832,7 +2860,7 @@ ${chatWorkLinkingDirective(chatId)}`;
         label: "llm.complete",
         durationMs: nowMs2() - closeStart,
         ttftMs: closeFirstTokenAt !== void 0 ? closeFirstTokenAt - closeStart : void 0,
-        args: { model: closing.resolvedModel ?? model ?? "default", requestedModel: model ?? "default", step: MAX_TOOL_ITERATIONS, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
+        args: { model: closing.resolvedModel ?? activeModel ?? "default", requestedModel: activeModel ?? "default", step: MAX_TOOL_ITERATIONS, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
         usage: closing.usage,
         finishReason: closing.finishReason,
         textChars: closing.text.length,
@@ -2877,6 +2905,7 @@ function useBrainConversation(options) {
     extraSystem,
     systemPrompt,
     model,
+    pickFallbackModel,
     maxTokens,
     reasoning,
     toolSpecs,
@@ -2970,6 +2999,7 @@ ${extraSystem}` : resolvedSystemPrompt;
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0,
       model,
+      pickFallbackModel,
       maxTokens,
       reasoning,
       runTool,
@@ -2983,7 +3013,7 @@ ${extraSystem}` : resolvedSystemPrompt;
       userTurn,
       projectId
     }),
-    [fullSystemPrompt, toolSpecs, model, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId]
+    [fullSystemPrompt, toolSpecs, model, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId]
   );
   const send = (0, import_react6.useCallback)(
     async (text, opts) => {
@@ -3236,6 +3266,30 @@ function fetchApiVersionVia(read) {
     inflight = null;
   });
   return inflight;
+}
+
+// src/modelFallback.ts
+function ids(list) {
+  return (list ?? []).map((m) => m.id).filter((id) => !!id);
+}
+function nextFallbackModel(surface, tried) {
+  if (!surface) return void 0;
+  const used = new Set(tried.filter(Boolean));
+  const byo = ids(surface.byo?.models);
+  const byoSet = new Set(byo);
+  const coding = (surface.codingModels ?? []).filter(Boolean);
+  const pool = ids(surface.data);
+  const tiers = [
+    coding.filter((m) => byoSet.has(m)),
+    coding,
+    byo,
+    pool
+  ];
+  for (const tier of tiers) {
+    const hit = tier.find((m) => !used.has(m));
+    if (hit) return hit;
+  }
+  return void 0;
 }
 
 // src/pendingPrompt.ts
@@ -3525,6 +3579,7 @@ function formatChatDiagnostics(d) {
   linkedTicketsToAdvance,
   mentionRecipient,
   modelsUsedInTrace,
+  nextFallbackModel,
   parseByoUnresolved,
   parseDirectedRecipient,
   parseMessageAuthor,

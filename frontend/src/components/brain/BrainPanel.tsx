@@ -22,6 +22,7 @@ import {
   formatChatDiagnostics,
   classifyModelFunding,
   getMcpToolStatus,
+  nextFallbackModel,
   type BrainTraceEvent,
   type ChatDiagnosticsData,
 } from '@seanhogg/builderforce-brain-embedded';
@@ -479,12 +480,24 @@ export function BrainPanel({
   // Gate the Evermind hooks on the per-chat switch — off ⇒ no recall/learn this chat.
   const gatedEvermind = memoryEnabled ? evermind : undefined;
 
+  // The shared (module-cached) model surface. Read here — ABOVE the conversation hook
+  // — because the run loop needs it to fail over when a model will not emit tool
+  // calls; the diagnostics capture below reads the same cached object.
+  const llmModels = useLlmModels();
+  // Tool-call failover: the SHARED selector over that surface, so "which model next"
+  // is decided in one place for every host rather than per surface.
+  const pickFallbackModel = useCallback(
+    (tried: readonly string[]) => nextFallbackModel({ ...llmModels.fundingSurface, codingModels: llmModels.codingModels }, tried),
+    [llmModels],
+  );
+
   const conv = useBrainConversation({
     chatId: chats.activeChatId,
     modality,
     extraSystem: ambientSystem,
     systemPrompt: personaSystemPrompt,
     model: personaModel,
+    pickFallbackModel,
     toolSpecs,
     runTool,
     needsConfirm,
@@ -929,9 +942,6 @@ export function BrainPanel({
   // Was a local 'idle' | 'copied' | 'error' + a 2000ms reset — the same states the
   // shared hook owns, so it replaces the local copy verbatim.
   const capture = useCopyToClipboard();
-  // The shared (module-cached) model surface: the diagnostics report needs the plan
-  // pool + vendor-tagged BYO models to attribute WHO funds the active model.
-  const llmModels = useLlmModels();
   const modalityCopy = useModalityCopy();
   const localizedModalities = useLocalizedModalities();
   const personaLabel = useMemo(() => {

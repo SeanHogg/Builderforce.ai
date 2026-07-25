@@ -1,6 +1,6 @@
 {
   "name": "@builderforce/agent-stall",
-  "version": "2026.7.2",
+  "version": "2026.7.3",
   "private": true,
   "type": "module",
   "description": "Runtime-agnostic detection + recovery for an agent turn that ANNOUNCES a tool call and then ends without making one. Shared by the Brain run loop (browser) and the on-prem/cloud agent loop (Node).",
