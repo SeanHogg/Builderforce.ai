@@ -1413,7 +1413,9 @@ export const managerActions = pgTable('manager_actions', {
    *  'sync_pr' | 'flag' (a required check is unmet — written only when the verdict
    *  CHANGES) | 'coordinate' (the manager staffed a flagged ticket's missing
    *  role/reviewer) | 'merge_blocked' (0363: the PR is ready but the effective policy
-   *  withholds merge authority — written once per PR, not once per pass). */
+   *  withholds merge authority — written once per PR, not once per pass) |
+   *  'triage' (0367: a stalled ticket was diagnosed and its remedy applied) |
+   *  'escalate' (0367: the manager's own remedy stopped working and a human is needed). */
   actionType: varchar('action_type', { length: 24 }).notNull(),
   summary:    text('summary').notNull(),
   /** Structured JSON payload for drill-in. */
@@ -1757,7 +1759,13 @@ export const executions = pgTable('executions', {
   agentHostId:       integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  submittedBy:  varchar('submitted_by', { length: 36 }).notNull(),
+  /** WHICH dispatcher started this run — `system:lane-auto`, `system:coordinator`,
+   *  `manager:signoff-request:<ref>`, `<base>:lane-approver:<role>`, `user:<id>`.
+   *  Read by the ticket lifecycle ledger to attribute a retry storm to the subsystem
+   *  responsible. Widened 36→128 in 0368: the lane-approver paths COMPOSE this value
+   *  and overflowed at any role key longer than 3 chars. Build it with
+   *  `composeDispatcherLabel()`, never a raw template. */
+  submittedBy:  varchar('submitted_by', { length: 128 }).notNull(),
   sessionId:    varchar('session_id', { length: 128 }),
   status:       executionStatusEnum('status').notNull().default('pending'),
   payload:      text('payload'),

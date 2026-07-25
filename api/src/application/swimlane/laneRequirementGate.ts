@@ -38,6 +38,7 @@ import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import type { TicketAuditService } from '../audit/ticketAuditService';
 import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
+import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 import { normalizeRoleText } from '../kanban/roleMatch';
 import { roleDisplayName } from '../kanban/roleCatalog';
 import { resolveRoleCapableAgents } from '../kanban/roleCapability';
@@ -206,7 +207,7 @@ async function enforceLaneAgentApproval(
       taskId: args.taskId,
       tenantId: args.tenantId,
       payload,
-      submittedBy: `${args.submittedBy}:lane-approver:${approver.roleKey}`,
+      submittedBy: composeDispatcherLabel(args.submittedBy, 'lane-approver', approver.roleKey),
     }).catch(() => null);
     await Promise.allSettled(deferred);
     if (execId != null) {
@@ -332,7 +333,7 @@ export async function enforceLaneRequirements(
           taskId: args.taskId,
           tenantId: args.tenantId,
           payload,
-          submittedBy: `${args.submittedBy}:reviewer:${req.ref}`,
+          submittedBy: composeDispatcherLabel(args.submittedBy, 'reviewer', req.ref),
         }).catch(() => null);
         await Promise.allSettled(deferred);
         // Attribution (§5.6): record the reviewer is now engaged (execution-linked).
@@ -374,7 +375,7 @@ export async function enforceLaneRequirements(
           taskId: args.taskId,
           tenantId: args.tenantId,
           payload,
-          submittedBy: `${args.submittedBy}:producer:${req.ref}`,
+          submittedBy: composeDispatcherLabel(args.submittedBy, 'producer', req.ref),
         }).catch(() => null);
         await Promise.allSettled(deferred);
         if (execId != null) await participants.markRoleInProgress(env, args.tenantId, args.taskId, req.ref, args.status, execId).catch(() => {});

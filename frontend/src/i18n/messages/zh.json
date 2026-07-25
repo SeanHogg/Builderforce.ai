@@ -6282,6 +6282,7 @@
         "human_gate": "等待人工批准",
         "capability_mismatch": "智能体缺少所需技能",
         "run_cap_exhausted": "失败次数过多——已暂停以待人工检查",
+        "cloud_run_limit": "本月云端运行额度已用完 — 升级后可继续运行",
         "cooldown_active": "上次运行失败后正在冷却——稍后自动重试",
         "no_agent": "未分配智能体",
         "no_board": "未配置看板",
@@ -6701,7 +6702,8 @@
       "overview": "概览",
       "backlog": "待办列表",
       "activity": "活动",
-      "policy": "策略"
+      "policy": "策略",
+      "stuck": "停滞"
     },
     "insightNudge": "还有 {unscored} 个工单待评估业务价值，{unranked} 个尚未排序——运行经理以补齐。",
     "coverageNudge": "有 {flagged} 个工单缺少必需的角色或评审人——经理将在下一轮自动为其配置人员。",
@@ -6831,7 +6833,9 @@
       "flag": "已标记",
       "coordinate": "已配置角色",
       "schedule": "已排期",
-      "merge_blocked": "合并被阻止"
+      "merge_blocked": "合并被阻止",
+      "triage": "已分诊",
+      "escalate": "已升级"
     },
     "runTasks": {
       "title": "经理任务",
@@ -6852,6 +6856,49 @@
       "title": "最近活动",
       "working": "经理正在工作 — 正在实时流式显示决策…",
       "empty": "经理尚未采取任何操作。"
+    },
+    "stalls": {
+      "title": "停滞的工单",
+      "caption": "经理无法完成的工作、原因，以及它已经尝试过的措施。同一措施尝试 {maxAttempts} 次仍未推动工单后，经理将停止重试并移交给您。",
+      "loading": "正在检查哪些工单停滞…",
+      "empty": "没有停滞的工单——每个工单要么在推进，要么已完成。",
+      "error": "无法加载停滞列表。",
+      "retry": "重试",
+      "byCause": "阻碍工作的原因",
+      "needsYou": "需要您处理",
+      "lastTried": "上次尝试于 {when}",
+      "attemptsOf": "{max} 次中的第 {attempts} 次",
+      "idleDays": "{days} 天",
+      "idleToday": "不到一天",
+      "stat": {
+        "working": "经理正在处理",
+        "escalated": "已移交给人工"
+      },
+      "col": {
+        "ticket": "工单",
+        "cause": "停滞原因",
+        "doing": "经理正在做什么",
+        "attempts": "尝试次数",
+        "stuckFor": "停滞时长"
+      },
+      "cause": {
+        "live": "运行中",
+        "cooling_down": "退避等待中",
+        "moving": "推进中",
+        "never_started": "从未启动",
+        "unassigned": "无人负责",
+        "capability_gap": "没有具备能力的智能体",
+        "human_gate": "等待人工审批",
+        "failure_breaker": "反复失败后已停止",
+        "missing_deliverable": "未产出交付物",
+        "build_failed": "构建未通过",
+        "awaiting_signoff": "等待签核",
+        "pr_conflict": "合并请求存在冲突",
+        "pr_unreconciled": "合并请求状态不一致",
+        "merge_withheld": "策略限制合并",
+        "blocked": "被阻塞",
+        "unknown": "未分类"
+      }
     }
   },
   "project360": {
@@ -11183,7 +11230,11 @@
       "present": "出席",
       "absent": "缺席",
       "excused": "非必需"
-    }
+    },
+    "errorCorrect": "无法更新出席记录。",
+    "correctAria": "{name} 的出席情况",
+    "sourcePto": "已批准的休假",
+    "sourceManual": "由管理者更正"
   },
   "observability": {
     "agents": "代理",

@@ -13,6 +13,7 @@ import {
   type ManagerAutonomyValue,
 } from '@/components/manager/ManagerAutonomyControls';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
+import { ManagerStallRegister } from '@/components/manager/ManagerStallRegister';
 import {
   managerApi,
   agentHosts,
@@ -79,6 +80,8 @@ const ACTION_ICON: Record<ManagerActionType, string> = {
   flag: '🚩',
   coordinate: '🧭',
   merge_blocked: '✋',
+  triage: '🚧',
+  escalate: '🔔',
 };
 
 /**
@@ -366,6 +369,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   const subTabs: PillTab[] = [
     { id: '', label: t('subnav.overview'), icon: '📊', href: href('') },
     { id: 'backlog', label: t('subnav.backlog'), icon: '📋', href: href('backlog') },
+    { id: 'stuck', label: t('subnav.stuck'), icon: '🚧', href: href('stuck') },
     { id: 'activity', label: t('subnav.activity'), icon: '📡', href: href('activity') },
     ...(canManage ? [{ id: 'policy', label: t('subnav.policy'), icon: '⚙️', href: href('policy') }] : []),
   ];
@@ -733,6 +737,11 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           </div>
         )}
       </div>
+      )}
+
+      {/* ── Stuck: what the manager cannot finish, and what it has tried ── */}
+      {activeSub === 'stuck' && projectId != null && (
+        <ManagerStallRegister projectId={projectId} />
       )}
 
       {activeSub === 'activity' && (
