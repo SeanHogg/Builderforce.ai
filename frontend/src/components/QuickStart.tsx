@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 
 type Mode = 'oneliner' | 'npm' | 'hackable' | 'macos';
 type Pm = 'npm' | 'pnpm';
@@ -46,11 +48,14 @@ function CopyBtn({
   text,
   copyKey,
   copied,
+  ariaLabel,
   onCopy,
 }: {
   text: string;
   copyKey: string;
   copied: string | null;
+  /** Localized, threaded in as a prop — this is module scope, so no hook here. */
+  ariaLabel: string;
   onCopy: (text: string, key: string) => void;
 }) {
   return (
@@ -58,7 +63,7 @@ function CopyBtn({
       type="button"
       className="cc-copy-btn"
       onClick={() => onCopy(text, copyKey)}
-      aria-label="Copy command"
+      aria-label={ariaLabel}
     >
       {copied === copyKey ? '✓' : '⧉'}
     </button>
@@ -66,6 +71,7 @@ function CopyBtn({
 }
 
 export default function QuickStart() {
+  const t = useTranslations('quickStart');
   const [mode, setMode] = useState<Mode>('oneliner');
   const [pm, setPm] = useState<Pm>('npm');
   const [hackable, setHackable] = useState<HackableMode>('installer');
@@ -100,14 +106,13 @@ export default function QuickStart() {
       : `pnpm add -g @seanhogg/builderforce-agents${suffix}`;
   })();
 
+  // The plain shared write, not the hook: `copied` holds WHICH command was copied, so
+  // the hook's single boolean could not represent it. A refused clipboard resolves
+  // false and is ignored, exactly as the old catch did.
   const copy = async (text: string, key: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(key);
-      setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
-    } catch {
-      // ignore
-    }
+    if (!await copyTextToClipboard(text)) return;
+    setCopied(key);
+    setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
   };
 
   const showOsControls = mode === 'oneliner';
@@ -124,7 +129,7 @@ export default function QuickStart() {
   return (
     <section className="cc-quickstart">
       <h2 className="cc-section-title">
-        <span className="cc-agentHost-accent">⟩</span> Quick Start
+        <span className="cc-agentHost-accent">⟩</span> {t('sectionTitle')}
       </h2>
       <div className="cc-code-block">
         <div className="cc-code-header">
@@ -140,7 +145,7 @@ export default function QuickStart() {
                 className={`cc-mode-btn${mode === m ? ' active' : ''}`}
                 onClick={() => selectMode(m)}
               >
-                {m === 'oneliner' ? 'One-liner' : m === 'npm' ? 'npm' : m === 'hackable' ? 'Hackable' : 'macOS'}
+                {m === 'oneliner' ? t('modeOneliner') : m === 'npm' ? 'npm' : m === 'hackable' ? t('modeHackable') : 'macOS'}
               </button>
             ))}
           </div>
@@ -179,7 +184,7 @@ export default function QuickStart() {
             <div className="cc-os-indicator">
               <span className="cc-os-detected">{osLabel}</span>
               <button type="button" className="cc-os-change-btn" onClick={() => setOsPickerExpanded(true)}>
-                change
+                {t('change')}
               </button>
             </div>
           )}
@@ -232,7 +237,7 @@ export default function QuickStart() {
                 onClick={() => setBeta((b) => !b)}
               >
                 <span className="cc-beta-label">β</span>
-                <span className="cc-beta-text">Beta</span>
+                <span className="cc-beta-text">{t('beta')}</span>
               </button>
             </div>
           )}
@@ -245,7 +250,7 @@ export default function QuickStart() {
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
                 <span className="cc-cmd-text">{onelinerCommand}</span>
-                <CopyBtn text={onelinerCommand} copyKey="oneliner" copied={copied} onCopy={copy} />
+                <CopyBtn text={onelinerCommand} copyKey="oneliner" copied={copied} ariaLabel={t('copyCommandAria')} onCopy={copy} />
               </div>
             </>
           )}
@@ -256,13 +261,13 @@ export default function QuickStart() {
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
                 <span className="cc-cmd-text">{quickInstallCommand}</span>
-                <CopyBtn text={quickInstallCommand} copyKey="install" copied={copied} onCopy={copy} />
+                <CopyBtn text={quickInstallCommand} copyKey="install" copied={copied} ariaLabel={t('copyCommandAria')} onCopy={copy} />
               </div>
               <div className="cc-code-line cc-comment">{COMMENTS.quickOnboard[betaMode]}</div>
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
                 <span className="cc-cmd-text">builderforce onboard</span>
-                <CopyBtn text="builderforce onboard" copyKey="onboard" copied={copied} onCopy={copy} />
+                <CopyBtn text="builderforce onboard" copyKey="onboard" copied={copied} ariaLabel={t('copyCommandAria')} onCopy={copy} />
               </div>
             </>
           )}
@@ -277,6 +282,7 @@ export default function QuickStart() {
                   text="curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git"
                   copyKey="hackable-installer"
                   copied={copied}
+                  ariaLabel={t('copyCommandAria')}
                   onCopy={copy}
                 />
               </div>
@@ -289,18 +295,18 @@ export default function QuickStart() {
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
                 <span className="cc-cmd-text">git clone https://github.com/seanhogg/agents.git</span>
-                <CopyBtn text="git clone https://github.com/seanhogg/agents.git" copyKey="clone" copied={copied} onCopy={copy} />
+                <CopyBtn text="git clone https://github.com/seanhogg/agents.git" copyKey="clone" copied={copied} ariaLabel={t('copyCommandAria')} onCopy={copy} />
               </div>
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
                 <span className="cc-cmd-text">cd builderforce-agents &amp;&amp; pnpm install &amp;&amp; pnpm run build</span>
-                <CopyBtn text="cd builderforce-agents && pnpm install && pnpm run build" copyKey="build" copied={copied} onCopy={copy} />
+                <CopyBtn text="cd builderforce-agents && pnpm install && pnpm run build" copyKey="build" copied={copied} ariaLabel={t('copyCommandAria')} onCopy={copy} />
               </div>
               <div className="cc-code-line cc-comment"># You built it, now meet it</div>
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
                 <span className="cc-cmd-text">pnpm run builderforce onboard</span>
-                <CopyBtn text="pnpm run builderforce onboard" copyKey="hackable-onboard" copied={copied} onCopy={copy} />
+                <CopyBtn text="pnpm run builderforce onboard" copyKey="hackable-onboard" copied={copied} ariaLabel={t('copyCommandAria')} onCopy={copy} />
               </div>
             </>
           )}
@@ -308,8 +314,8 @@ export default function QuickStart() {
           {mode === 'macos' && (
             <div className="cc-macos">
               <div className="cc-macos-desc">
-                <span className="cc-macos-tagline">Companion App (Beta)</span>
-                <span className="cc-macos-subtitle">Menubar access to your agent. Works great alongside the CLI.</span>
+                <span className="cc-macos-tagline">{t('macosTagline')}</span>
+                <span className="cc-macos-subtitle">{t('macosSubtitle')}</span>
               </div>
               <a href={RELEASES_URL} className="cc-macos-btn" target="_blank" rel="noopener noreferrer">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -317,16 +323,16 @@ export default function QuickStart() {
                   <polyline points="7 10 12 15 17 10" />
                   <line x1="12" y1="15" x2="12" y2="3" />
                 </svg>
-                Download for macOS
+                {t('macosDownload')}
               </a>
-              <span className="cc-macos-meta">Requires macOS 14+ · Universal Binary</span>
+              <span className="cc-macos-meta">{t('macosMeta')}</span>
             </div>
           )}
         </div>
       </div>
 
       <p className="cc-quickstart-note">
-        Works on macOS, Windows &amp; Linux. The one-liner installs Node.js and everything else for you.
+        {t('note')}
       </p>
 
       <style>{`

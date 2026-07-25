@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 
 /**
  * Shared "save this key now" banner used by both the owner self-service mint
@@ -63,13 +65,17 @@ interface Props {
 }
 
 export function MintedTenantApiKeyDisplay({ rawKey, name, onDismiss }: Props) {
+  const t = useTranslations('mintedApiKey');
+  // Which of the three buttons is confirming — per-item state the shared hook's single
+  // flag cannot represent, so only the write itself comes from the shared module.
   const [copied, setCopied] = useState<'key' | 'url' | 'snippet' | null>(null);
 
-  const copy = (what: 'key' | 'url' | 'snippet', text: string) => {
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopied(what);
-      setTimeout(() => setCopied(null), 1500);
-    });
+  const copy = async (what: 'key' | 'url' | 'snippet', text: string) => {
+    // Was a bare `.then()` with no `.catch()` — a denied clipboard became an unhandled
+    // rejection. The shared write resolves false instead of rejecting.
+    if (!await copyTextToClipboard(text)) return;
+    setCopied(what);
+    setTimeout(() => setCopied(null), 1500);
   };
 
   const snippet = `import { BuilderforceClient } from '@seanhogg/builderforce-sdk';
@@ -82,7 +88,7 @@ const client = new BuilderforceClient({
   return (
     <div style={cardStyle}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
-        Save this key now — it will not be shown again
+        {t('saveNow')}
       </div>
       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{name}</div>
 
@@ -92,21 +98,21 @@ const client = new BuilderforceClient({
       <div style={labelStyle}>BUILDERFORCE_BASE_URL</div>
       <div style={codeBox}>{BUILDERFORCE_BASE_URL}</div>
 
-      <div style={labelStyle}>Quickstart</div>
+      <div style={labelStyle}>{t('quickstart')}</div>
       <pre style={{ ...codeBox, whiteSpace: 'pre-wrap', margin: 0 }}>{snippet}</pre>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
         <button type="button" onClick={() => copy('key', rawKey)} style={buttonStyle}>
-          {copied === 'key' ? '✓ Copied' : 'Copy key'}
+          {copied === 'key' ? `✓ ${t('copied')}` : t('copyKey')}
         </button>
         <button type="button" onClick={() => copy('url', BUILDERFORCE_BASE_URL)} style={buttonStyle}>
-          {copied === 'url' ? '✓ Copied' : 'Copy base URL'}
+          {copied === 'url' ? `✓ ${t('copied')}` : t('copyBaseUrl')}
         </button>
         <button type="button" onClick={() => copy('snippet', snippet)} style={buttonStyle}>
-          {copied === 'snippet' ? '✓ Copied' : 'Copy quickstart'}
+          {copied === 'snippet' ? `✓ ${t('copied')}` : t('copyQuickstart')}
         </button>
         <button type="button" onClick={onDismiss} style={{ ...buttonStyle, background: 'none' }}>
-          I&apos;ve saved it
+          {t('savedIt')}
         </button>
       </div>
     </div>

@@ -6,6 +6,7 @@ import { usePermissionDebugger, type PermissionRegistration } from '@/lib/Permis
 import { useEmulation } from '@/lib/EmulationContext';
 import { useRolePreview } from '@/lib/RolePreviewContext';
 import { downloadText, toCsv } from '@/lib/download';
+import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 
 type PanelTab = 'page' | 'user' | 'role' | 'missing';
 
@@ -49,7 +50,8 @@ export default function PermissionDebuggerPanel() {
       null,
       2,
     );
-    navigator.clipboard.writeText(json).catch(() => undefined);
+    // Fire-and-forget as before — this panel shows no copy confirmation.
+    void copyTextToClipboard(json);
   }
 
   function exportCsv() {

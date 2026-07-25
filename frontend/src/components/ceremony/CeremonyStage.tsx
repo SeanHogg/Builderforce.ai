@@ -157,6 +157,32 @@ export function CeremonyStage({
     return s;
   }, [peers, connected, me]);
 
+  // ATTENDANCE (0365). Presence used to exist only as live WebSocket peers — real while
+  // the tab was open, gone the instant it closed — so a concluded ceremony could not say
+  // who had actually turned up. This beat persists it: `joined_at` is stamped on the
+  // first beat and `left_at` moves forward on each one, and the server resolves the
+  // verdict once at conclude.
+  //
+  // Every 60s while a session is live, and immediately on join. Deliberately coarse: this
+  // answers "was this person at the standup", a question minutes wide, so a chattier beat
+  // would buy nothing and cost a write per client per tick. Only ever records the CALLER
+  // (the endpoint takes no identity from the body), so this cannot mark anyone else present.
+  const sessionId = session?.status === 'active' ? session.id : null;
+  useEffect(() => {
+    if (!sessionId || !connected) return;
+    let cancelled = false;
+    const beat = () => {
+      if (cancelled) return;
+      // Silent: a dropped heartbeat is recoverable (the next one lands, and an accrued
+      // speaking turn is a server-side backstop), so it must not raise an error banner
+      // over a live ceremony.
+      ceremonySessionsApi.heartbeat(sessionId).catch(() => {});
+    };
+    beat();
+    const id = setInterval(beat, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [sessionId, connected]);
+
   // Expire stale peer cursors (a peer that stopped moving / left).
   useEffect(() => {
     const t = setInterval(() => {

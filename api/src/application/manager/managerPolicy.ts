@@ -25,8 +25,19 @@
  *                                  silently defeat the workspace switch entirely.
  *   • `allowAutoMerge`           — an explicit tenant `false` is a CEILING: no project may
  *                                  grant itself merge rights the workspace withheld.
+ *   • `allowUnattendedCeremonies`— a CEILING (0364): no project may let the manager run a
+ *                                  standup without its people if the workspace said no.
+ *   • `allowAgentReassignment`   — a CEILING (0364): likewise for moving an absent
+ *                                  human's work onto an agent.
  *   • `requireSignoffToComplete` — an explicit tenant `true` is a FLOOR: a project cannot
  *                                  opt out of a workspace-mandated review gate.
+ *
+ * The two ceremony GUARDRAIL NUMBERS (0364) resolve most-restrictive-wins as well, which
+ * for a number means the safest value rather than the last one: `agentReassignIdleHours`
+ * takes the LARGEST opinion (a project may demand more patience than the workspace, never
+ * less) and `agentReassignMaxPerSession` the SMALLEST (tighter, never looser). Treating
+ * them as plain overrides would let a project restore exactly the autonomy the guardrail
+ * exists to withhold.
  *
  * Everything else (`prMergePolicy`, `autoAssign`, `autoBusinessValue`, `autoPrioritize`,
  * `managerType`, `managerRef`) is a plain override where the project tier wins — those
@@ -61,9 +72,14 @@ export interface ManagerPolicyOverride {
   autoAssign?: boolean | null;
   autoBusinessValue?: boolean | null;
   autoPrioritize?: boolean | null;
+  autoSchedule?: boolean | null;
   managerType?: string | null;
   requireSignoffToComplete?: boolean | null;
   allowAutoMerge?: boolean | null;
+  allowUnattendedCeremonies?: boolean | null;
+  allowAgentReassignment?: boolean | null;
+  agentReassignIdleHours?: number | null;
+  agentReassignMaxPerSession?: number | null;
 }
 
 /** The persisted config shape (a `project_manager_configs` row projection). */
@@ -74,6 +90,9 @@ export interface ManagerConfigRow {
   autoAssign: boolean;
   autoBusinessValue: boolean;
   autoPrioritize: boolean;
+  /** Manager scheduling authority (0364). Optional so a row projected before the
+   *  migration lands still type-checks (folded to the default by the resolver). */
+  autoSchedule?: boolean;
   /** The manager's domain type (see managerTypes.ts). Defaults to 'general'. */
   managerType: string;
   /** Gate autonomous completion/merge on unanimous role sign-off (0362). Optional so a
@@ -84,6 +103,11 @@ export interface ManagerConfigRow {
    *  purpose: null = "inherit the workspace tier" (which itself falls back to the
    *  hardcoded `false`), so a project that has never had an opinion is not pinned to one. */
   allowAutoMerge?: boolean | null;
+  /** Ceremony autonomy for THIS project (0364) — all nullable, all meaning "inherit". */
+  allowUnattendedCeremonies?: boolean | null;
+  allowAgentReassignment?: boolean | null;
+  agentReassignIdleHours?: number | null;
+  agentReassignMaxPerSession?: number | null;
 }
 
 /**
@@ -97,8 +121,13 @@ export interface TenantManagerDefaultsRow {
   autoAssign: boolean | null;
   autoBusinessValue: boolean | null;
   autoPrioritize: boolean | null;
+  autoSchedule: boolean | null;
   requireSignoffToComplete: boolean | null;
   allowAutoMerge: boolean | null;
+  allowUnattendedCeremonies: boolean | null;
+  allowAgentReassignment: boolean | null;
+  agentReassignIdleHours: number | null;
+  agentReassignMaxPerSession: number | null;
 }
 
 export interface EffectiveManagerPolicy {
@@ -112,6 +141,19 @@ export interface EffectiveManagerPolicy {
   autoAssign: boolean;
   autoBusinessValue: boolean;
   autoPrioritize: boolean;
+  /**
+   * May the manager place unscheduled tickets on the TIMELINE (0364) — write start/due
+   * windows in rank order, honouring the `task_dependencies` DAG?
+   *
+   * Deliberately separate from {@link autoPrioritize}: ranking answers "what first",
+   * scheduling answers "WHEN". Nothing used to answer the second question at all, so
+   * the manager's own urgency term (`prioritize.urgencyScore`) scored a due-date column
+   * that was null on every ticket in the system.
+   *
+   * A tuning knob, not a permission — the project tier wins. It only ever fills a
+   * ticket that has NEITHER date; a human-set date is never overwritten.
+   */
+  autoSchedule: boolean;
   /** The manager's domain type id: a built-in ('general' | 'delivery' | 'qa' |
    *  'service_desk' | 'devops') or a `role:<key>` custom-role type. */
   managerType: string;
@@ -143,6 +185,48 @@ export interface EffectiveManagerPolicy {
    * withheld authority is visible on the surface rather than a silent skip.
    */
   allowAutoMerge: boolean;
+
+  /**
+   * MAY A CEREMONY BE CONDUCTED WITHOUT ITS HUMANS (migration 0364)?
+   *
+   * A scheduled standup opens whether or not anyone shows up — that part is just a
+   * calendar. This decides what happens NEXT when the room stays empty:
+   *
+   *   • false (the default) — the session is concluded as `abandoned` with
+   *     close_reason 'no_humans'. Nothing is reassigned and no agent work is
+   *     dispatched on its behalf. The ceremony is still RECORDED, so the history
+   *     shows a standup nobody attended — which is the signal a team actually needs.
+   *   • true — the manager conducts it solo: resolves attendance, applies the
+   *     reassignment rules below, dispatches agent-owned work, and closes it with
+   *     close_reason 'unattended'.
+   *
+   * Not granted by default for the same reason as {@link allowAutoMerge}: business
+   * transacted in a room containing none of the people it concerns is authority a
+   * workspace hands over on purpose or not at all.
+   */
+  allowUnattendedCeremonies: boolean;
+
+  /**
+   * MAY A CEREMONY MOVE A HUMAN'S TICKET ONTO AN AGENT (migration 0364)?
+   *
+   * Missing a standup is normal and is never, on its own, sufficient — see
+   * `ceremonyAttendance.selectReassignments`, which additionally requires the ticket
+   * to have sat untouched past {@link agentReassignIdleHours} and caps the whole
+   * thing at {@link agentReassignMaxPerSession}. False (the default) means an absent
+   * owner keeps their work however stale it is.
+   */
+  allowAgentReassignment: boolean;
+
+  /**
+   * THE CONDITION on {@link allowAgentReassignment}: how many hours a ticket must have
+   * sat untouched before an absent owner's claim on it lapses. Folded
+   * most-restrictive-wins — the LARGEST opinion across the tiers.
+   */
+  agentReassignIdleHours: number;
+
+  /** Hard bound on reassignments ONE ceremony may make. Folded most-restrictive-wins —
+   *  the SMALLEST opinion across the tiers. */
+  agentReassignMaxPerSession: number;
 }
 
 /**
@@ -159,12 +243,24 @@ export const DEFAULT_MANAGER_POLICY: EffectiveManagerPolicy = {
   autoAssign: true,
   autoBusinessValue: true,
   autoPrioritize: true,
+  // On by default (0364): placing already-owned work on a timeline is reversible, writes
+  // only to tickets with NO dates, and without it every dated surface stays empty.
+  autoSchedule: true,
   managerType: DEFAULT_MANAGER_TYPE,
   // Safe by default: autonomous completion requires unanimous sign-off (0362).
   requireSignoffToComplete: true,
   // NOT granted by default (0363). Grooming, ranking and assignment are reversible;
   // merging into a default branch is not. Authority must be handed over on purpose.
   allowAutoMerge: false,
+  // NOT granted by default (0364). An empty standup is recorded, never acted on.
+  allowUnattendedCeremonies: false,
+  // NOT granted by default (0364). An absent owner keeps their work.
+  allowAgentReassignment: false,
+  // Two full working days of silence before an absent owner's claim can lapse — long
+  // enough that a normal absence (a day off, one missed standup) never reaches it.
+  agentReassignIdleHours: 48,
+  // A standup that quietly re-homed a whole sprint would be indistinguishable from a bug.
+  agentReassignMaxPerSession: 3,
 };
 
 const VALID_PR_POLICIES: ReadonlySet<string> = new Set(['immediate', 'on_green', 'queue']);
@@ -251,6 +347,36 @@ function strictestObligation(fallback: boolean, ...values: (boolean | null | und
 }
 
 /**
+ * MOST RESTRICTIVE opinion wins for a GUARDRAIL NUMBER (0364) — the numeric analogue of
+ * {@link narrowestGrant}. `pick` says which direction is the safe one: `Math.max` for a
+ * threshold that must be waited out (a bigger number is more patient), `Math.min` for a
+ * cap (a smaller number does less).
+ *
+ * Plain last-tier-wins would be wrong here for the same reason it is wrong for the
+ * permissions: a project could restore precisely the autonomy the workspace guardrail
+ * exists to withhold, just by writing a looser number. Non-finite and out-of-range values
+ * are dropped rather than coerced, so a malformed column can never widen a bound.
+ */
+function tightestBound(
+  fallback: number,
+  pick: (a: number, b: number) => number,
+  values: (number | null | undefined)[],
+  range: { min: number; max: number },
+): number {
+  const set = values.filter(
+    (v): v is number => typeof v === 'number' && Number.isFinite(v) && v >= range.min && v <= range.max,
+  );
+  // The arrow is load-bearing: `reduce(Math.min)` would hand Math.min the accumulator,
+  // the value, the INDEX and the ARRAY, and the array coerces to NaN — silently
+  // collapsing every guardrail to NaN and disabling the bound it exists to enforce.
+  return set.length === 0 ? fallback : set.reduce((a, b) => pick(a, b));
+}
+
+/** Bounds on the ceremony guardrail numbers. A stored value outside these is ignored. */
+export const AGENT_REASSIGN_IDLE_HOURS_RANGE = { min: 1, max: 24 * 90 } as const;
+export const AGENT_REASSIGN_MAX_PER_SESSION_RANGE = { min: 0, max: 50 } as const;
+
+/**
  * THE resolver — fold the tiers into one effective policy.
  *
  * `hardcoded default ← tenant ← project`, each overriding only the fields it sets, with
@@ -282,6 +408,27 @@ export function resolveTieredManagerPolicy(tiers: {
       d.requireSignoffToComplete, tenant?.requireSignoffToComplete, project?.requireSignoffToComplete,
     ),
 
+    // Ceremony autonomy (0364) — the two grants are ceilings like allowAutoMerge, and the
+    // two guardrail numbers resolve to the safest opinion rather than the nearest one.
+    allowUnattendedCeremonies: narrowestGrant(
+      d.allowUnattendedCeremonies, tenant?.allowUnattendedCeremonies, project?.allowUnattendedCeremonies,
+    ),
+    allowAgentReassignment: narrowestGrant(
+      d.allowAgentReassignment, tenant?.allowAgentReassignment, project?.allowAgentReassignment,
+    ),
+    // Longest wait wins: a project may be more patient than the workspace, never less.
+    agentReassignIdleHours: tightestBound(
+      d.agentReassignIdleHours, Math.max,
+      [tenant?.agentReassignIdleHours, project?.agentReassignIdleHours],
+      AGENT_REASSIGN_IDLE_HOURS_RANGE,
+    ),
+    // Smallest cap wins: a project may be tighter than the workspace, never looser.
+    agentReassignMaxPerSession: tightestBound(
+      d.agentReassignMaxPerSession, Math.min,
+      [tenant?.agentReassignMaxPerSession, project?.agentReassignMaxPerSession],
+      AGENT_REASSIGN_MAX_PER_SESSION_RANGE,
+    ),
+
     // Tuning knobs — nearest (project) tier wins.
     managerRef,
     managerKind: resolveManagerKind(managerRef),
@@ -289,6 +436,7 @@ export function resolveTieredManagerPolicy(tiers: {
     autoAssign: lastSet(d.autoAssign, tenant?.autoAssign, project?.autoAssign),
     autoBusinessValue: lastSet(d.autoBusinessValue, tenant?.autoBusinessValue, project?.autoBusinessValue),
     autoPrioritize: lastSet(d.autoPrioritize, tenant?.autoPrioritize, project?.autoPrioritize),
+    autoSchedule: lastSet(d.autoSchedule, tenant?.autoSchedule, project?.autoSchedule),
     managerType: normalizeManagerType(lastSet<string>(d.managerType, tenant?.managerType, project?.managerType)),
   };
 }

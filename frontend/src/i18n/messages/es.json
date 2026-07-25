@@ -555,7 +555,8 @@
     "selectProject": "Selecciona un proyecto para iniciar una ceremonia.",
     "viewLive": "Mesa redonda en vivo",
     "viewSchedules": "Programaciones",
-    "viewSwitchLabel": "Vista de ceremonia"
+    "viewSwitchLabel": "Vista de ceremonia",
+    "viewHistory": "Historial"
   },
   "projectCard": {
     "details": "Detalles",
@@ -2888,7 +2889,24 @@
     "errUnhireFailed": "Error al cancelar la contratación",
     "errRemoveMember": "No se pudo eliminar al miembro",
     "errChangeRole": "No se pudo cambiar el rol",
-    "errRevokeInvite": "No se pudo revocar la invitación"
+    "errRevokeInvite": "No se pudo revocar la invitación",
+    "copiedExclaim": "¡Copiado!",
+    "manifest": {
+      "assignedConfig": "Configuración asignada",
+      "copyManifest": "Copiar manifiesto",
+      "emptyNote": "Sin habilidades ni personas asignadas",
+      "noneAssigned": "Nada asignado",
+      "personas": "Personas",
+      "skills": "Habilidades",
+      "content": "Contenido"
+    },
+    "quickstart": {
+      "title": "Conectar un nuevo agente",
+      "intro": "Preconfigurado para <b>{name}</b>. Ejecútalo en cualquier equipo: el agente se instala y se registra directamente en este grupo de trabajo.",
+      "osUnix": "macOS / Linux",
+      "osWindows": "Windows",
+      "noToken": "No hay token del espacio de trabajo en esta sesión: el agente te pedirá elegir un grupo de trabajo en la primera ejecución."
+    }
   },
   "knowledge": {
     "headingSops": "Procedimientos operativos estándar",
@@ -6751,9 +6769,37 @@
         "mergeGranted": "Puede fusionar pull requests",
         "mergeWithheld": "Las fusiones esperan a una persona",
         "signoffRequired": "Se exige aprobación para finalizar",
-        "signoffOptional": "No se exige aprobación"
+        "signoffOptional": "No se exige aprobación",
+        "ceremoniesUnattended": "Puede dirigir ceremonias sin nadie",
+        "ceremoniesNeedPeople": "Las ceremonias necesitan una persona",
+        "reassignGranted": "Puede reasignar trabajo inactivo {hours}h+",
+        "reassignWithheld": "Los ausentes conservan su trabajo"
       },
-      "workspaceDefaultsHint": "Todo lo que quede en «Usar el predeterminado» seguirá los valores de tu espacio de trabajo en Configuración → Manager IA."
+      "workspaceDefaultsHint": "Todo lo que quede en «Usar el predeterminado» seguirá los valores de tu espacio de trabajo en Configuración → Manager IA.",
+      "ceremonies": {
+        "sectionTitle": "Ceremonias",
+        "sectionHelp": "Qué puede hacer el mánager cuando dirige una daily o una planificación y las personas implicadas no están."
+      },
+      "allowUnattendedCeremonies": {
+        "label": "Celebrar ceremonias sin personas",
+        "help": "Permite que el mánager dirija una daily programada a la que no se unió nadie. Desactivado: la sesión se registra igualmente, mostrando que no asistió nadie, pero no se decide nada en nombre del equipo."
+      },
+      "allowAgentReassignment": {
+        "label": "Pasar trabajo estancado a los agentes",
+        "help": "Permite que una ceremonia mueva una tarea de quien faltó a un agente. Faltar nunca basta por sí solo: la tarea también debe llevar sin tocarse el periodo indicado abajo."
+      },
+      "agentReassignIdleHours": {
+        "label": "Solo tras estar inactiva",
+        "help": "Cuánto tiempo debe llevar una tarea sin tocarse antes de que caduque el derecho de su responsable ausente. Lo bastante largo como para que una ausencia normal nunca lo alcance.",
+        "unit": "horas",
+        "inherited": "Usando el valor heredado: {value} horas"
+      },
+      "agentReassignMaxPerSession": {
+        "label": "Como máximo, por ceremonia",
+        "help": "Límite estricto de cuántas tareas puede traspasar una sola ceremonia, para que una daily nunca reasigne en silencio todo un sprint.",
+        "unit": "tareas",
+        "inherited": "Usando el valor heredado: {value}"
+      }
     },
     "backlog": {
       "title": "Backlog ordenado",
@@ -7575,7 +7621,20 @@
     },
     "stall": {
       "title": "Por qué está detenido",
-      "unrecorded": "No se registró ninguna barrera: todavía nada ha intentado ejecutar este ticket."
+      "unrecorded": "No se registró ninguna barrera: todavía nada ha intentado ejecutar este ticket.",
+      "laneGate": "Puerta del carril",
+      "gate": {
+        "auto": "Automática",
+        "human": "Requiere aprobación humana"
+      },
+      "staffed": "Agentes asignados al carril",
+      "noneStaffed": "Ninguno",
+      "candidate": "«Ejecutar ahora» lanzaría",
+      "noCandidate": "Nada puede ejecutarlo",
+      "streak": "Ejecuciones fallidas consecutivas",
+      "streakValue": "{count} (la autonomía se detiene en {limit})",
+      "cooldown": "Enfriamiento restante",
+      "capabilityMismatch": "Capacidad incompatible"
     },
     "stats": {
       "title": "Saltos y ejecuciones",
@@ -7596,7 +7655,8 @@
       "laneMove": "{from} → {to}",
       "laneEntered": "Entró en {to}",
       "backward": "Retrabajo",
-      "run": "Ejecución n.º {id}"
+      "run": "Ejecución n.º {id}",
+      "dispatchedBy": "Lanzada por {who}"
     },
     "kind": {
       "created": "Creado",
@@ -7618,7 +7678,22 @@
       "aria": "Origen: {label}"
     },
     "copyDiagnostics": "Copiar diagnóstico",
-    "copyDiagnosticsAria": "Copiar el diagnóstico completo del ciclo de vida de este tique, con cada evento, id de ejecución y motivo de bloqueo"
+    "copyDiagnosticsAria": "Copiar el diagnóstico completo del ciclo de vida de este tique, con cada evento, id de ejecución y motivo de bloqueo",
+    "failures": {
+      "title": "Análisis de fallos",
+      "help": "Ejecuciones fallidas agrupadas por causa. Una misma causa que se repite a intervalos regulares es un bucle de reintentos, no una serie de fallos independientes.",
+      "runs": "{count, plural, one {# ejecución falló así} other {# ejecuciones fallaron así}}",
+      "cadence": "cada ~{interval}",
+      "cadenceOnce": "ocurrió una vez",
+      "window": "Primera {first} · última {last}",
+      "dispatchedBy": "lanzada por {who}",
+      "runIds": "Ejecuciones: {ids}"
+    },
+    "dispatchers": {
+      "title": "Quién lanzó las ejecuciones",
+      "help": "El subsistema que inició cada ejecución. Todo lo que no sea el disparador del carril llegó al despachador sin pasar por su cortacircuitos de fallos consecutivos.",
+      "counts": "{runs} ejecuciones · {completed} completadas · {failed} fallidas"
+    }
   },
   "taskChanges": {
     "allChanges": "Todos los cambios",
@@ -9066,7 +9141,10 @@
     "errorCreateSprint": "No se pudo crear el sprint",
     "errorStart": "No se pudo iniciar la sesión",
     "errorAdvance": "No se pudo avanzar el turno",
-    "errorComplete": "No se pudo finalizar la sesión"
+    "errorComplete": "No se pudo finalizar la sesión",
+    "startSession": "Iniciar daily",
+    "startSessionHint": "Iniciar la daily",
+    "startSessionFacilitatorOnly": "Solo el facilitador puede iniciarla"
   },
   "meetings": {
     "title": "Reuniones",
@@ -11052,5 +11130,108 @@
       "talent": "Talento y marketplace",
       "governance": "Seguridad, arquitectura y gobernanza"
     }
+  },
+  "ceremonyHistory": {
+    "loading": "Cargando…",
+    "errorLoad": "No se pudo cargar el historial de ceremonias.",
+    "filterAll": "Todas",
+    "filterStandup": "Dailies",
+    "filterPlanning": "Planificación",
+    "count": "{count} registradas",
+    "emptyTitle": "Aún no se ha celebrado ninguna ceremonia",
+    "emptyHelp": "Cuando termine una daily o una sesión de planificación, aparecerá aquí con quién asistió y qué cambió.",
+    "loadMore": "Cargar anteriores",
+    "durationMinutes": "{minutes} min",
+    "attended": "{present} de {expected} asistieron",
+    "missed": "{count} no asistieron",
+    "reassigned": "{count} reasignadas",
+    "dispatched": "{count} ejecuciones de agente iniciadas",
+    "detailTitle": "{kind} · {when}",
+    "whoWasHere": "Quién asistió",
+    "whatHappened": "Qué ocurrió",
+    "noParticipants": "No había nadie en esta ceremonia.",
+    "noJournal": "No se registró nada en esta ceremonia.",
+    "seatHuman": "Persona",
+    "seatAgent": "Agente",
+    "seatAdHoc": "se unió sin estar convocado",
+    "spoke": "habló {seconds}s",
+    "kind": {
+      "standup": "Daily",
+      "planning": "Planificación"
+    },
+    "closeReason": {
+      "facilitator": "Cerrada por una persona",
+      "unattended": "Dirigida por el mánager",
+      "no_humans": "No asistió nadie",
+      "expired": "Caducada"
+    },
+    "concludedBy": {
+      "manager": "Dirigida por el mánager",
+      "system": "Cerrada automáticamente"
+    },
+    "attendance": {
+      "unknown": "Desconocido",
+      "present": "Presente",
+      "absent": "No asistió",
+      "excused": "Opcional"
+    }
+  },
+  "observability": {
+    "agents": "Agentes",
+    "agentsHint": "Haz clic en un agente para ver sus diagnósticos. Selecciona más de uno para comparar.",
+    "selectAll": "Seleccionar todo",
+    "clear": "Limpiar",
+    "loadingAgents": "Cargando agentes…",
+    "agentFallback": "Agente",
+    "agentNumbered": "Agente {id}",
+    "cloudAgentFallback": "Agente en la nube",
+    "scopedFromPanel": "{name} (limitado desde el panel)",
+    "noAgents": "Aún no hay agentes. Registra un agente autoalojado en <link>Plantilla</link> o crea un agente en la nube: ambos aparecerán aquí en cuanto se ejecuten.",
+    "online": "EN LÍNEA",
+    "offline": "DESCONECTADO",
+    "viewLabel": "Vista:",
+    "logView": "Vista de registro",
+    "timelineView": "Vista de cronología",
+    "conn": {
+      "connecting": "conectando",
+      "connected": "conectado",
+      "offline": "sin conexión",
+      "disconnected": "desconectado"
+    },
+    "refreshing": "Actualizando…",
+    "refreshCloud": "Actualizar nube",
+    "autoScroll": "Desplazamiento automático",
+    "copyTriage": "Copiar info de diagnóstico",
+    "copyReport": "Copiar informe (+diffs)",
+    "copyTriageTitle": "Copiar al portapapeles un informe de diagnóstico completo (agentes, telemetría, errores, registros)",
+    "copyReportTitle": "Copiar al portapapeles un informe completo: materiales/PRD, los cambios de código (diffs), telemetría, errores y registros",
+    "cloudNote": "Los agentes en la nube se ejecutan en el servidor a través de la pasarela (sin flujo de relé en vivo); sus líneas de registro se derivan de la telemetría de ejecución. Usa «Actualizar nube» para ver lo más reciente.",
+    "registerThenSelect": "Registra o crea un agente primero y luego selecciónalo arriba.",
+    "selectForLogs": "Selecciona uno o más agentes arriba para ver los diagnósticos.",
+    "waitingForLogs": "Esperando salida de registro…",
+    "timeline": "Cronología",
+    "categoryFilterPlaceholder": "Filtro de categoría (p. ej. llm, thinking)",
+    "refresh": "Actualizar",
+    "viewGantt": "Gantt",
+    "viewList": "Lista",
+    "loadingTimeline": "Cargando cronología…",
+    "noTimelineEvents": "Sin eventos en la cronología",
+    "noTimelineHint": "Los eventos de auditoría de llamadas a herramientas y las tareas de flujo de trabajo aparecerán aquí cuando los agentes se ejecuten.",
+    "registerFirst": "Registra o crea un agente primero.",
+    "goToWorkforce": "Ir a Plantilla →",
+    "selectForTimeline": "Selecciona uno o más agentes arriba para ver la cronología de ejecución.",
+    "errLoadAgents": "No se pudieron cargar los agentes",
+    "errLoadDiagnostics": "No se pudieron cargar los diagnósticos"
+  },
+  "embedInstall": {
+    "heading": "Instalar en tu aplicación anfitriona",
+    "intro": "Un desarrollador de la aplicación anfitriona instala el paquete y renderiza un componente por página, pasando tu JWT firmado de SSO/inquilino. El token se entrega al iframe mediante <code>postMessage</code>, nunca en una URL.",
+    "stepInstall": "1 · Instalar",
+    "stepMount": "2 · Montar una superficie",
+    "mountableViews": "Vistas montables ({count})",
+    "noCapabilities": "No hay capacidades habilitadas: activa Producto / Agile / Seguridad arriba para exponer vistas.",
+    "copyInstall": "Copiar instalación",
+    "copySnippet": "Copiar fragmento",
+    "copiedFlash": "✓ Copiado"
   }
 }

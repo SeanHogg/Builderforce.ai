@@ -31,6 +31,9 @@ import { AuthService }     from './application/auth/AuthService';
 import { AgentService }    from './application/agent/AgentService';
 import { buildRuntimeService } from './buildRuntimeService';
 import { recommendTopAssignee } from './application/metrics/assigneeRecommender';
+import { addDependency } from './application/task/taskDependencies';
+import { asProjectId } from './domain/shared/types';
+import { bumpCacheVersion } from './infrastructure/cache/readThroughCache';
 import { AuditService }    from './application/audit/AuditService';
 import { AgentHostService }     from './application/agentHost/AgentHostService';
 
@@ -208,7 +211,7 @@ import { runMonitorSweep } from './application/monitoring/runMonitorSweep';
 import { createMonitoringRoutes } from './presentation/routes/monitoringRoutes';
 import { createMonitorWebhookRoutes } from './presentation/routes/monitorWebhookRoutes';
 import { runDueReports } from './application/reports/runDueReports';
-import { runDueCeremonies } from './application/ceremony/runDueCeremonies';
+import { runDueCeremonies, runCeremonyReaper } from './application/ceremony/runDueCeremonies';
 import { handleInboundEmail } from './application/workflow/inboundEmail';
 // ── Insights-everywhere + enterprise-lens extensions (integration batch) ──
 import { createCatalogAnalyticsRoutes } from './presentation/routes/catalogAnalyticsRoutes';
@@ -269,7 +272,16 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // --- Application ---
   const projectService  = new ProjectService(projectRepo, taskRepo);
   const taskService     = new TaskService(taskRepo, projectRepo, llmEpicDecomposer(env),
-    (projectId, roleKey) => recommendTopAssignee(env, db, projectId, roleKey ? { roleKey } : {}));
+    (projectId, roleKey) => recommendTopAssignee(env, db, projectId, roleKey ? { roleKey } : {}),
+    // Epic fan-out records its planned SEQUENCE as real precedence edges, through the
+    // same validated writer (DAG guard, same-project check) the REST/MCP paths use —
+    // a decomposition's order is data, not a detail of the plan that produced it.
+    async (projectId, predecessorTaskId, successorTaskId) => {
+      const project = await projectRepo.findById(asProjectId(projectId));
+      if (!project) return;
+      const result = await addDependency(db, project.tenantId as number, successorTaskId, predecessorTaskId);
+      if (result.ok) await bumpCacheVersion(env, `task-deps-version:project:${projectId}`).catch(() => {});
+    });
   const tenantService   = new TenantService(tenantRepo, paymentProvider);
   const toolService     = new ToolService(db);
   const auditRunner     = new AuditRunner(db, toolService, taskService);
@@ -995,6 +1007,16 @@ export default {
         runDueCeremonies(env)
           .then((r) => { if (r.opened > 0 || r.errors > 0) console.log(`[cron:ceremonies] due=${r.due} opened=${r.opened} skipped=${r.skipped} errors=${r.errors}`); })
           .catch((err) => { console.error('[cron:ceremonies] failed', err); }),
+      );
+      // The other half of the cadence (0365): CLOSE sessions nobody closed. Without
+      // this a scheduled ceremony never ends — one live session per board+kind is
+      // allowed, so the first standup left open blocks every future one on that board.
+      // Concludes through the SAME path a human's Complete click uses, so whether an
+      // empty room may be conducted is decided once, by the manager policy fold.
+      ctx.waitUntil(
+        runCeremonyReaper(env, buildDatabase(env))
+          .then((r) => { if (r.due > 0) console.log(`[cron:ceremonies:reap] due=${r.due} completed=${r.completed} abandoned=${r.abandoned} errors=${r.errors}`); })
+          .catch((err) => { console.error('[cron:ceremonies:reap] failed', err); }),
       );
     }
   },
