@@ -5,13 +5,16 @@ import { useTranslations } from 'next-intl';
 import { getStoredWebToken } from '@/lib/auth';
 import { downloadText } from '@/lib/download';
 import { AdminError, errText } from '../adminShared';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 export default function TokenPanel() {
   const t = useTranslations('admin');
   const [error, setError] = useState('');
   const [showToken, setShowToken] = useState(false);
-  const [copiedToken, setCopiedToken] = useState(false);
-  const [copiedEnv, setCopiedEnv] = useState(false);
+  // Two independent buttons → two hook instances, so confirming one does not light
+  // up the other. Both keep the previous 2000ms window (the hook's default).
+  const tokenCopy = useCopyToClipboard();
+  const envCopy = useCopyToClipboard();
   const [downloadedEnv, setDownloadedEnv] = useState(false);
 
   const webToken = getStoredWebToken();
@@ -21,13 +24,9 @@ export default function TokenPanel() {
       setError(t('token.noTokenSession'));
       return;
     }
-    try {
-      await navigator.clipboard.writeText(webToken);
-      setCopiedToken(true);
-      setTimeout(() => setCopiedToken(false), 2000);
-    } catch (err) {
-      setError(errText(err));
-    }
+    // The old catch surfaced the raw DOMException text; the shared write reports
+    // failure as `false`, so the user now gets a localized message instead.
+    if (!await tokenCopy.copy(webToken)) setError(t('common.copyFailed'));
   };
 
   const buildEnvTemplate = () => {
@@ -46,13 +45,8 @@ export default function TokenPanel() {
       setError(t('token.noTokenSession'));
       return;
     }
-    try {
-      await navigator.clipboard.writeText(buildEnvTemplate());
-      setCopiedEnv(true);
-      setTimeout(() => setCopiedEnv(false), 2000);
-    } catch (err) {
-      setError(errText(err));
-    }
+    // Thunk form: the template is built on click, not on every render.
+    if (!await envCopy.copy(buildEnvTemplate)) setError(t('common.copyFailed'));
   };
 
   const downloadEnvTemplate = () => {
@@ -89,7 +83,7 @@ export default function TokenPanel() {
           onClick={copyToken}
           disabled={!webToken}
         >
-          {copiedToken ? t('common.copied') : t('token.copyToken')}
+          {tokenCopy.copied ? t('common.copied') : t('token.copyToken')}
         </button>
         <button
           type="button"
@@ -97,7 +91,7 @@ export default function TokenPanel() {
           onClick={copyEnvTemplate}
           disabled={!webToken}
         >
-          {copiedEnv ? t('token.envCopied') : t('token.copyEnvTemplate')}
+          {envCopy.copied ? t('token.envCopied') : t('token.copyEnvTemplate')}
         </button>
         <button
           type="button"

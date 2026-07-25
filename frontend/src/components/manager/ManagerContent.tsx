@@ -24,7 +24,6 @@ import {
   type ManagerActionType,
   type ManagerBacklogItem,
   type ManagerRunTask,
-  type PrMergePolicy,
   type TaskPriority,
   type AgentHost,
 } from '@/lib/builderforceApi';
@@ -45,6 +44,11 @@ import {
  * overview (config + effective policy + stats + ranked backlog + activity feed),
  * lets a manager designate who runs the backlog and how (auto-score value,
  * auto-assign, auto-prioritize, PR-merge policy), and triggers a run on demand.
+ *
+ * The Policy sub-view edits the PROJECT tier of a three-tier policy (built-in default ←
+ * workspace defaults ← this project). It renders the shared <ManagerAutonomyControls> —
+ * the same control set /settings?sub=manager uses for the workspace tier — and displays
+ * the SERVER-resolved effective policy rather than folding the tiers itself.
  *
  * The surface is split into sub-views by the shared <PillTabs> bar (the same
  * secondary nav Settings / Security use), driven by `?sub=` so each view is

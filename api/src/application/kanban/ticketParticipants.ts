@@ -456,7 +456,21 @@ export class TicketParticipantsService {
 
     for (const r of rows) {
       const so = latestBySlot.get(`${r.stageKey ?? ''}:${r.roleKey}`) ?? latestByRole.get(r.roleKey);
-      let state: ParticipantState = r.assigneeRef ? 'assigned' : (r.required ? 'unstaffed' : 'pending');
+      // PRESERVE `in_progress`. It is written by run ATTRIBUTION
+      // (`recordRunAttribution`, i.e. "a run for this role/stage finalized"), which is
+      // evidence this function cannot re-derive from the ledger or the child task — so
+      // recomputing the baseline as `assigned` silently ERASED the record that a run had
+      // already served the slot. It erased it constantly, too: `listParticipants`
+      // re-derives whenever the ticket has no `template`-sourced row (which is every
+      // ticket on a board with no `swimlane_requirements`), and `deriveManifest` ends by
+      // calling this method. Any consumer keyed on `in_progress` — the producer
+      // re-dispatch guard here, and the lane-agent approval rule in
+      // `swimlane/laneApprover.ts` — therefore saw the slot bounce back to `assigned` and
+      // either re-dispatched work already in flight or never asked for the sign-off at
+      // all. A sign-off / child-task status / delegation below still overrides it.
+      let state: ParticipantState = r.state === 'in_progress'
+        ? 'in_progress'
+        : (r.assigneeRef ? 'assigned' : (r.required ? 'unstaffed' : 'pending'));
       let signoffId: string | null = r.signoffId;
       if (r.childTaskId != null) {
         const st = childStatus.get(r.childTaskId);
