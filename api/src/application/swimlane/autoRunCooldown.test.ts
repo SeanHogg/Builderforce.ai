@@ -2,12 +2,16 @@
  * Per-ticket re-run cooldown — the backpressure between "instant retry on the next
  * 5-minute sweep tick" and the 3-strike circuit breaker.
  *
- * The cooldown is evaluated inside `evaluateTaskAutoRun` (the ONE evaluator every
- * dispatch path funnels through), derived from the SAME newest-first execution list
- * the breaker counts, so these pure units are what every surface actually applies.
+ * The cooldown and the breaker are composed by `assessRerunBackoff`, which BOTH the
+ * evaluator (`evaluateTaskAutoRun`, for triage) and the dispatcher
+ * (`dispatchCloudRunForTask`, for enforcement) consume — so a ticket can never be
+ * shown one verdict and dispatched under another. This header used to claim the
+ * evaluator was "the ONE evaluator every dispatch path funnels through"; it was not,
+ * and that gap is exactly how task 467 accumulated 134 identical failed runs.
  */
 import { describe, it, expect } from 'vitest';
 import {
+  assessRerunBackoff,
   autoRunCooldownMs,
   autoRunCooldownRemainingMs,
   classifyResolvedAutoRun,
@@ -117,5 +121,66 @@ describe('classifyResolvedAutoRun — cooldown_active in the reason priority ord
     const cooled = classifyResolvedAutoRun({ ...base, consecutiveFailures: 2, cooldownRemainingMs: 1 });
     expect(cooled.canRunNow).toBe(false);
     expect(cooled.reason).toBe('cooldown_active');
+  });
+});
+
+/**
+ * The verdict the DISPATCHER enforces. Extracted so it applies to every dispatch
+ * path, not just the lane trigger — the omission that let task 467 accumulate 134
+ * identical failed runs past a three-strike breaker that never saw one of them.
+ */
+describe('assessRerunBackoff', () => {
+  const failedAt = (endedAt: string) => ({ status: 'failed', completedAt: new Date(endedAt) });
+  const now = Date.parse('2026-07-11T20:00:00.000Z');
+
+  it('lets a clean ticket through', () => {
+    const v = assessRerunBackoff([{ status: 'completed', completedAt: new Date('2026-07-11T19:00:00.000Z') }], now);
+    expect(v).toEqual({ consecutiveFailures: 0, cooldownRemainingMs: 0, blockedBy: null });
+  });
+
+  it('trips the breaker at the threshold and reports the streak', () => {
+    const execs = Array.from({ length: MAX_CONSECUTIVE_AUTORUN_FAILURES }, () => failedAt('2026-07-11T10:00:00.000Z'));
+    const v = assessRerunBackoff(execs, now);
+    expect(v.consecutiveFailures).toBe(MAX_CONSECUTIVE_AUTORUN_FAILURES);
+    expect(v.blockedBy).toBe('run_cap_exhausted');
+  });
+
+  it('stays tripped as the streak deepens — a storm never "ages out" of the breaker', () => {
+    // 134 failures long since cooled down is still halted: the cooldown expires on its
+    // own, the breaker does not, and that difference is the whole point.
+    const execs = Array.from({ length: 134 }, () => failedAt('2026-07-01T10:00:00.000Z'));
+    expect(assessRerunBackoff(execs, now).blockedBy).toBe('run_cap_exhausted');
+  });
+
+  it('backs off on a SINGLE recent failure without tripping the breaker', () => {
+    const v = assessRerunBackoff([failedAt('2026-07-11T19:58:00.000Z')], now);
+    expect(v.consecutiveFailures).toBe(1);
+    expect(v.blockedBy).toBe('cooldown_active');
+    expect(v.cooldownRemainingMs).toBeGreaterThan(0);
+  });
+
+  it('releases once the cooldown window has elapsed', () => {
+    const v = assessRerunBackoff([failedAt('2026-07-11T19:00:00.000Z')], now);
+    expect(v.consecutiveFailures).toBe(1);
+    expect(v.blockedBy).toBeNull();
+  });
+
+  it('prefers the breaker over the cooldown — the stronger reason wins', () => {
+    const execs = Array.from({ length: 5 }, () => failedAt('2026-07-11T19:59:00.000Z'));
+    expect(assessRerunBackoff(execs, now).blockedBy).toBe('run_cap_exhausted');
+  });
+
+  it('clears the moment one run does not fail', () => {
+    // A success at the head resets the streak even with failures behind it.
+    const v = assessRerunBackoff(
+      [{ status: 'completed', completedAt: new Date('2026-07-11T19:59:00.000Z') }, failedAt('2026-07-11T19:00:00.000Z')],
+      now,
+    );
+    expect(v.consecutiveFailures).toBe(0);
+    expect(v.blockedBy).toBeNull();
+  });
+
+  it('never blocks a ticket that has never run', () => {
+    expect(assessRerunBackoff([], now).blockedBy).toBeNull();
   });
 });

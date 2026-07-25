@@ -21,6 +21,7 @@ import { isParticipantOpen } from '../kanban/participantStates';
 import { decideLaneAutoRun, withOwnerAgentFallback, type LaneAgentLike, type LaneAutoRunDecision } from './laneAutoRun';
 import { findCanonicalBoard } from './canonicalBoard';
 import { isUnapprovedFeedbackTask } from '../feedback/feedbackSpec';
+import { isReviewLane } from '../task/taskLifecycle';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { ExecutionStatus, TaskStatus } from '../../domain/shared/types';
 
@@ -47,6 +48,7 @@ export type AutoRunReason =
   | 'capability_mismatch' // every candidate agent lacks the lane's required capabilities
   | 'already_running'     // a live run already exists (or a same-lane re-entry loop guard)
   | 'run_cap_exhausted'   // the ticket's last N consecutive runs all FAILED — autonomy stops re-dispatching (a human Run-now still overrides)
+  | 'cloud_run_limit'     // the TENANT is over its monthly cloud-run allowance — NOT retryable, and a human Run-now does not override it either
   | 'cooldown_active'     // the ticket's last run failed too recently — backing off before the next autonomous attempt (a human Run-now still overrides)
   | 'not_executable'      // a system/coordination chore (e.g. an AI Manager run task) — never dispatched to an agent
   | 'pending_approval';   // an EXTERNAL feedback request — a human must accept it in triage before any agent may touch it
@@ -72,6 +74,7 @@ export const AUTO_RUN_REASON_TEXT: Record<AutoRunReason, string> = {
   capability_mismatch: 'No run: every candidate agent lacks the capabilities this lane requires.',
   already_running: 'No new run: this ticket already has a live execution.',
   run_cap_exhausted: 'No run: the ticket\'s last consecutive runs all failed, so autonomy has stopped re-dispatching it. A human Run now overrides.',
+  cloud_run_limit: 'No run: this workspace has used its monthly cloud-run allowance. Retrying will NOT clear this — upgrade the plan, or wait for the allowance to reset. On-prem and VS Code runs stay unlimited.',
   cooldown_active: 'No run yet: the ticket is in its post-failure back-off window before the next autonomous attempt.',
   not_executable: 'No run: this is a system/coordination chore, never dispatched to an agent.',
   pending_approval: 'No run: this is an external feedback request awaiting human acceptance in triage.',
@@ -136,7 +139,7 @@ export function autoRunCooldownMs(consecutiveFailures: number): number {
 }
 
 /** The end of a run, for cooldown math: when it finished, else its last update. */
-interface ExecTiming { status: string; completedAt?: Date | null; updatedAt?: Date | null; createdAt?: Date | null }
+export interface ExecTiming { status: string; completedAt?: Date | null; updatedAt?: Date | null; createdAt?: Date | null }
 
 /**
  * How much of the per-ticket cooldown is still owed, from the SAME newest-first
@@ -154,6 +157,48 @@ export function autoRunCooldownRemainingMs(execs: ReadonlyArray<ExecTiming>, now
   if (!Number.isFinite(elapsed)) return 0;
   const remaining = autoRunCooldownMs(streak) - elapsed;
   return remaining > 0 ? remaining : 0;
+}
+
+/**
+ * The re-dispatch backpressure verdict for a ticket: its trailing failure streak, the
+ * cooldown still owed, and whether AUTONOMY may dispatch right now.
+ *
+ * ── WHY THIS IS ITS OWN PRIMITIVE ────────────────────────────────────────────────
+ * The breaker and the cooldown used to be reachable only from inside
+ * {@link evaluateTaskAutoRun}, which ONLY the lane trigger calls. Every other
+ * dispatcher — the lane requirement gate's reviewer/producer runs, the AI Manager's
+ * sign-off requests, the validator / security / incident dispatchers, the CI auto-fix
+ * loop — calls `dispatchCloudRunForTask` directly and therefore inherited no
+ * backpressure at all. Measured consequence on task 467: 134 runs, every one dying on
+ * the same cloud-run-cap message, on a five-minute cadence, with a three-strike
+ * breaker sitting right there unable to see them.
+ *
+ * So the verdict is extracted here and applied at the ONE dispatch choke point
+ * (`dispatchCloudRunForTask`), with this evaluator consuming the SAME function. Both
+ * callers therefore cannot disagree about whether a ticket is in backoff, and a new
+ * dispatch path cannot opt out of the breaker by construction — it would have to
+ * bypass the dispatcher itself.
+ *
+ * PURE — `execs` is newest-first (`ExecutionRepository.findByTask` orders createdAt
+ * DESC) and `nowMs` is injected, so every branch is unit-tested without a clock.
+ */
+export interface RerunBackoff {
+  consecutiveFailures: number;
+  cooldownRemainingMs: number;
+  /** The reason autonomy must NOT dispatch, or null when it may. A human "Run now"
+   *  ignores this — an explicit click is the override, exactly as before. */
+  blockedBy: Extract<AutoRunReason, 'run_cap_exhausted' | 'cooldown_active'> | null;
+}
+
+export function assessRerunBackoff(execs: readonly ExecTiming[], nowMs: number): RerunBackoff {
+  const consecutiveFailures = trailingFailureStreak(execs);
+  const cooldownRemainingMs = autoRunCooldownRemainingMs(execs, nowMs);
+  // Breaker before cooldown: a halted ticket reports the stronger reason (the cooldown
+  // would expire on its own; the breaker will not without intervention).
+  const blockedBy = consecutiveFailures >= MAX_CONSECUTIVE_AUTORUN_FAILURES
+    ? 'run_cap_exhausted' as const
+    : cooldownRemainingMs > 0 ? 'cooldown_active' as const : null;
+  return { consecutiveFailures, cooldownRemainingMs, blockedBy };
 }
 
 // Manifest slot states that still owe work live in the ONE shared classification
@@ -422,7 +467,18 @@ export async function evaluateTaskAutoRun(
   // stage as the coder; suppressing the fallback surfaces the lane as `no_agent` so the
   // Coordinator/manager resolves the right producer instead of burning failing runs.
   let ownerFallbackRef: string | null = assignedAgentRef;
-  if (board.lifecycleManaged) {
+  if (isReviewLane(args.status)) {
+    // NO SELF-REVIEW. On a review lane the owner is (almost always) the agent that
+    // produced the work, so falling back to it would have the author grade its own
+    // homework — and record a sign-off for it. A reviewer must be explicitly staffed
+    // on the lane, named by a requirement row, or resolved from the manifest; when
+    // none exists this correctly surfaces `no_agent`, which is an actionable
+    // "staff a reviewer" rather than a silent rubber-stamp.
+    //
+    // This is the guardrail that makes the auto-gated `in_review` lane (0369) safe:
+    // the gate opening lets a REVIEWER run, never the author again.
+    ownerFallbackRef = null;
+  } else if (board.lifecycleManaged) {
     // Lifecycle-managed board (PRD §5.5): the Assignee IS the Coordinator and is
     // NEVER the default per-stage executor. The per-stage PRODUCER is the ticket's
     // own participation manifest slot for this stage — so read it, rather than
@@ -453,10 +509,11 @@ export async function evaluateTaskAutoRun(
   const liveRow = plainExecs.find((e) => ACTIVE_STATUSES.has(e.status));
   const liveExecution = liveRow ? { id: liveRow.id, status: liveRow.status } : null;
 
-  // Both the breaker streak and the re-run cooldown are derived from THIS one
-  // newest-first list — no second query per ticket (the sweep evaluates hundreds).
-  const cooldownRemainingMs = autoRunCooldownRemainingMs(plainExecs, Date.now());
-  const consecutiveFailures = trailingFailureStreak(plainExecs);
+  // Breaker streak + re-run cooldown, from THIS one newest-first list (no second
+  // query per ticket — the sweep evaluates hundreds) and through the SAME
+  // {@link assessRerunBackoff} the dispatcher enforces, so triage always reports
+  // precisely the condition that would refuse the dispatch.
+  const { consecutiveFailures, cooldownRemainingMs } = assessRerunBackoff(plainExecs, Date.now());
 
   const { reason, canRunNow } = classifyResolvedAutoRun({
     gate,

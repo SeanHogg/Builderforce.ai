@@ -111,6 +111,9 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
       dispatchCloudRunForTask(c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p), {
         ...params,
         submittedBy: `user:${c.get('userId') ?? 'compile'}`,
+        // A person clicked Compile/Deploy — the same explicit override Run-now uses,
+        // so the failure breaker and re-run cooldown do not apply.
+        force: true,
       });
 
     const dispatched = await deployAndDispatch(spec, surface, {

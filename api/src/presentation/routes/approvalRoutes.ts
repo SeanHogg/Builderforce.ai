@@ -351,6 +351,12 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
             payload: replay.payload,
             agentHostId: replay.agentHostId,
             submittedBy: existing.requestedBy ?? userId,
+            // A manager just approved THIS run. That decision is the same explicit
+            // human override "Run now" carries, so it clears the failure breaker and
+            // the re-run cooldown — otherwise approving a run for a ticket whose last
+            // attempts failed would silently do nothing. (The cloud-run cap still
+            // applies: an approval is not an entitlement.)
+            force: true,
           },
         ).catch(() => null);
       }

@@ -4,12 +4,16 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { ViewToggle } from '@/components/ViewToggle';
+import { Select } from '@/components/Select';
+import { usePermission } from '@/lib/rbac';
 import {
   ceremonySessionsApi,
+  CEREMONY_CORRECTABLE,
   type CeremonyKind,
   type CeremonySession,
   type CeremonyParticipant,
   type CeremonyJournalEvent,
+  type CeremonyAttendance,
 } from '@/lib/builderforceApi';
 
 /**
@@ -48,35 +52,103 @@ function durationMinutes(session: CeremonySession): number | null {
   return Math.max(0, Math.round((new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime()) / 60_000));
 }
 
-function AttendanceRow({ p }: { p: CeremonyParticipant }) {
+/**
+ * One seat's attendance, correctable in place.
+ *
+ * The correction control decides its OWN visibility from `manager.manage` — the row is
+ * rendered identically for everyone and simply falls back to a static chip without the
+ * capability, so no caller has to thread a `canCorrect` boolean it would compute the
+ * same way. The server's `requireRole(MANAGER)` is the real authority either way.
+ *
+ * Correcting matters because the verdict is DERIVED (presence heartbeat + speaking time)
+ * and 'absent' is an input to the rules that can hand this person's work to an agent.
+ * Someone who dialled in by phone must be able to be marked present after the fact.
+ */
+function AttendanceRow({
+  p, sessionId, onCorrected,
+}: {
+  p: CeremonyParticipant;
+  sessionId: string;
+  onCorrected: (participants: CeremonyParticipant[]) => void;
+}) {
   const t = useTranslations('ceremonyHistory');
+  const { allowed: canCorrect } = usePermission('manager.manage');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const isHuman = p.memberKind === 'human';
   const verdict = p.attendance ?? 'unknown';
+  const source = p.attendanceSource ?? 'derived';
   const tone = verdict === 'present'
     ? { bg: 'var(--bg-elevated)', fg: 'var(--text-primary)' }
     : { bg: 'transparent', fg: 'var(--text-muted)' };
+
+  const correct = async (next: string) => {
+    if (next === verdict) return;
+    setBusy(true);
+    try {
+      const d = await ceremonySessionsApi.correctAttendance(sessionId, p.id, next as CeremonyAttendance);
+      onCorrected([...(d.participants ?? [])].sort((a, b) => a.turnOrder - b.turnOrder));
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('errorCorrect'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      gap: 10, flexWrap: 'wrap', padding: '8px 0', borderTop: '1px solid var(--border-subtle)',
-    }}>
-      <div style={{ minWidth: 0, flex: '1 1 160px' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
-          {p.memberName}
+    <div style={{ padding: '8px 0', borderTop: '1px solid var(--border-subtle)' }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
+      }}>
+        <div style={{ minWidth: 0, flex: '1 1 160px' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
+            {p.memberName}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            {isHuman ? t('seatHuman') : t('seatAgent')}
+            {p.required === false && ` · ${t('seatAdHoc')}`}
+          </div>
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-          {isHuman ? t('seatHuman') : t('seatAgent')}
-          {p.required === false && ` · ${t('seatAdHoc')}`}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          {p.durationMs > 0 && (
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+              {t('spoke', { seconds: Math.round(p.durationMs / 1000) })}
+            </span>
+          )}
+          {/* Agents cannot be absent, so their verdict is never correctable. */}
+          {canCorrect && isHuman ? (
+            <Select
+              value={verdict === 'unknown' ? '' : verdict}
+              disabled={busy}
+              aria-label={t('correctAria', { name: p.memberName })}
+              onChange={(e) => void correct(e.target.value)}
+              style={{
+                minHeight: 32, padding: '4px 8px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                background: 'var(--bg-base)', color: 'var(--text-primary)',
+                border: '1px solid var(--border-subtle)',
+              }}
+            >
+              {verdict === 'unknown' && <option value="">{t('attendance.unknown')}</option>}
+              {CEREMONY_CORRECTABLE.map((v) => (
+                <option key={v} value={v}>{t(`attendance.${v}`)}</option>
+              ))}
+            </Select>
+          ) : (
+            <span style={{ ...CHIP, background: tone.bg, color: tone.fg }}>{t(`attendance.${verdict}`)}</span>
+          )}
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-        {p.durationMs > 0 && (
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
-            {t('spoke', { seconds: Math.round(p.durationMs / 1000) })}
-          </span>
-        )}
-        <span style={{ ...CHIP, background: tone.bg, color: tone.fg }}>{t(`attendance.${verdict}`)}</span>
-      </div>
+
+      {/* Provenance — why this reads the way it does, without anyone knowing the rules. */}
+      {source !== 'derived' && (
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+          {source === 'pto' ? t('sourcePto') : t('sourceManual')}
+          {p.attendanceNote ? ` — ${p.attendanceNote}` : ''}
+        </div>
+      )}
+      {error && <div style={{ fontSize: 11, color: 'var(--error-text)', marginTop: 4 }}>{error}</div>}
     </div>
   );
 }
@@ -115,7 +187,9 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
         </h3>
         {participants.length === 0
           ? <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noParticipants')}</div>
-          : participants.map((p) => <AttendanceRow key={p.id} p={p} />)}
+          : participants.map((p) => (
+              <AttendanceRow key={p.id} p={p} sessionId={sessionId} onCorrected={setParticipants} />
+            ))}
       </section>
 
       <section>

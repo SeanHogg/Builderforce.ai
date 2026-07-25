@@ -7,6 +7,9 @@ import {
   pickManifestProducer,
   type ManifestSlot,
 } from './evaluateAutoRun';
+import { isReviewLane } from '../task/taskLifecycle';
+import { DEFAULT_SWIMLANES } from './defaultSwimlanes';
+import { TaskStatus } from '../../domain/shared/types';
 
 describe('classifyResolvedAutoRun', () => {
   const base = {
@@ -135,5 +138,48 @@ describe('pickManifestProducer — the per-stage executor on a lifecycle-managed
 
   it('is null for an empty manifest — which correctly reads as no_agent', () => {
     expect(pickManifestProducer([])).toBeNull();
+  });
+});
+
+/**
+ * The guardrail that makes the auto-gated `in_review` lane (0369) safe.
+ *
+ * Opening that gate lets a lane dispatch a REVIEWER. The danger is the owner
+ * fallback: on every other lane it correctly answers "I assigned Ada to this
+ * ticket, why isn't she working it", but on a review lane the ticket's owner is
+ * (almost always) the agent that produced the work — so the same fallback would
+ * have the author grade its own homework and record a sign-off for it.
+ */
+describe('isReviewLane — the no-self-review lane class', () => {
+  it('classifies the review lane', () => {
+    expect(isReviewLane(TaskStatus.IN_REVIEW)).toBe(true);
+  });
+
+  it('does NOT classify producing lanes, where the owner fallback is correct', () => {
+    for (const s of [TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY, TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED, TaskStatus.DONE]) {
+      expect(isReviewLane(s)).toBe(false);
+    }
+  });
+
+  it('is null-safe — an unresolved status is not a review lane', () => {
+    expect(isReviewLane(null)).toBe(false);
+    expect(isReviewLane(undefined)).toBe(false);
+    expect(isReviewLane('')).toBe(false);
+  });
+});
+
+describe('DEFAULT_SWIMLANES — the seeded gates', () => {
+  it('no longer ships in_review human-gated (the 0.7%-autonomy default)', () => {
+    // A human gate did not mean "a human reviews this" — nobody was reviewing. It
+    // meant every board shipped with autonomy off one lane short of Done.
+    expect(DEFAULT_SWIMLANES.find((l) => l.key === TaskStatus.IN_REVIEW)?.gate).toBe('auto');
+  });
+
+  it('seeds no human gate at all — a human gate is now an explicit operator choice', () => {
+    expect(DEFAULT_SWIMLANES.filter((l) => l.gate === 'human')).toEqual([]);
+  });
+
+  it('keeps Done terminal so an auto gate never re-runs a finished ticket', () => {
+    expect(DEFAULT_SWIMLANES.find((l) => l.key === TaskStatus.DONE)?.isTerminal).toBe(true);
   });
 });
