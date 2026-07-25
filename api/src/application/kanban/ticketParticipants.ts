@@ -24,7 +24,7 @@ import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrast
 import {
   boards, swimlaneRequirements, swimlanes, tasks, ticketParticipants, ticketRoleSignoffs,
 } from '../../infrastructure/database/schema';
-import { BUILTIN_ROLES } from './roleCatalog';
+import { roleDisplayName } from './roleCatalog';
 import { resolveRoleCapableAgents } from './roleCapability';
 import { projectRoleAssignments } from '../../infrastructure/database/schema';
 import { requirementApplies, type Responsibility } from './types';
@@ -33,10 +33,9 @@ import type { SignoffContribution } from '../audit/ticketAuditService';
 import { TaskStatus } from '../../domain/shared/types';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 
-const ROLE_NAME = new Map(BUILTIN_ROLES.map((r) => [r.key, r.name]));
-function roleName(key: string): string {
-  return ROLE_NAME.get(key) ?? key.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-}
+// Role display names come from the ONE resolver in `roleCatalog` (this module used to
+// keep its own private copy, and it disagreed with the lane gate's).
+const roleName = roleDisplayName;
 
 const versionKey = (taskId: number) => `participants:task:${taskId}`;
 const projectVersionKey = (projectId: number) => `participants:project:${projectId}`;
@@ -102,12 +101,35 @@ export interface AccountabilityReport {
   gaps: AccountabilityGap[];
 }
 
+/** A concrete participant resolved by the CALLER (kind/ref/name), bypassing role lookup. */
+export interface ExplicitAssignee {
+  kind: string;
+  ref: string;
+  name: string;
+}
+
 export interface AddParticipantInput {
   roleKey: string;
   responsibility?: Responsibility;
   stageKey?: string | null;
   note?: string | null;
-  source?: 'assessment' | 'manual';
+  /**
+   * Provenance of the slot. `lane_agent` is a slot materialised from a lane's
+   * `swimlane_agent_assignments` staffing on a board that declares no requirements
+   * (see `swimlane/laneApprover.ts`) — distinct from `template` so it never suppresses
+   * template derivation, and distinct from `assessment`/`manual` so a human's resource
+   * assessment is never confused with an inferred staffing slot.
+   */
+  source?: 'assessment' | 'manual' | 'lane_agent';
+  /**
+   * Pin the participant to a SPECIFIC resource instead of resolving one by role.
+   *
+   * Needed because the lane's staffed agent is not necessarily what `resolveAssignee`
+   * would pick (that walks project pin → first role-capable agent). A slot whose
+   * assignee is some other role-capable agent would send the sign-off request to an
+   * agent the operator never staffed on the lane.
+   */
+  assignee?: ExplicitAssignee | null;
 }
 
 /** Port for creating a child work-item task — injected from the route (TaskService). */
@@ -318,6 +340,9 @@ export class TicketParticipantsService {
    * Resource Assessment — add a role the ticket needs beyond the template (designer,
    * security engineer, …). Resolves a capable resource; when none is available the
    * row lands `unstaffed` — a first-class, audited RESOURCE GAP that blocks Done.
+   *
+   * Idempotent on the slot's unique index (taskId, stageKey, roleKey, responsibility,
+   * source), so a caller on a per-lane-entry hot path may call it every hop.
    */
   async addParticipant(env: Env, tenantId: number, taskId: number, input: AddParticipantInput): Promise<ManifestParticipant | null> {
     const ctx = await this.taskContext(taskId);
@@ -325,7 +350,8 @@ export class TicketParticipantsService {
     const projectId = ctx.projectId;
     const responsibility = input.responsibility ?? 'owner';
     const source = input.source ?? 'assessment';
-    const assignee = await this.resolveAssignee(env, tenantId, projectId, input.roleKey);
+    // An explicitly-named resource wins over role-based resolution (see ExplicitAssignee).
+    const assignee = input.assignee ?? await this.resolveAssignee(env, tenantId, projectId, input.roleKey);
     const now = new Date();
     const [row] = await this.db
       .insert(ticketParticipants)

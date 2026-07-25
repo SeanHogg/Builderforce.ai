@@ -1,12 +1,40 @@
 /**
  * managerPolicy — resolve the EFFECTIVE manager policy for a project.
  *
+ * THREE TIERS, ONE PURE FOLD (migration 0363):
+ *
+ *   hardcoded default  ←  tenant_manager_defaults row  ←  project_manager_configs row
+ *
  * The manager runs for every project by default (the tenant-wide system service).
- * A `project_manager_configs` row OVERRIDES that default: it can name a manager
- * (an AI agent or a human), disable the manager for the project, or tune what it's
- * allowed to do (assign work, backfill value, re-rank) and how much PR authority it
- * has. This pure resolver folds an optional row over the tenant default so every
- * caller (the sweep, the run-now endpoint, the surface) sees one consistent policy.
+ * A workspace can then state its own posture once (`tenant_manager_defaults`) instead
+ * of repeating it per project, and a `project_manager_configs` row refines that for one
+ * project: naming a manager (an AI agent or a human), pausing the manager, or tuning
+ * what it may do (assign work, backfill value, re-rank) and how much PR authority it
+ * has. Each tier overrides ONLY the fields it actually sets — a null/undefined column
+ * means "this tier has no opinion", which is why every `tenant_manager_defaults` column
+ * is nullable.
+ *
+ * PRECEDENCE IS NOT UNIFORMLY "LAST TIER WINS". Three fields are authority gates, and
+ * for those the MOST RESTRICTIVE opinion across the tiers wins:
+ *
+ *   • `enabled`                  — an explicit tenant `false` is a KILL-SWITCH; a project
+ *                                  row cannot re-enable the manager. It has to work this
+ *                                  way: `project_manager_configs.enabled` is NOT NULL
+ *                                  DEFAULT true, so every pre-existing project row
+ *                                  "sets" it, and last-tier-wins would let those rows
+ *                                  silently defeat the workspace switch entirely.
+ *   • `allowAutoMerge`           — an explicit tenant `false` is a CEILING: no project may
+ *                                  grant itself merge rights the workspace withheld.
+ *   • `requireSignoffToComplete` — an explicit tenant `true` is a FLOOR: a project cannot
+ *                                  opt out of a workspace-mandated review gate.
+ *
+ * Everything else (`prMergePolicy`, `autoAssign`, `autoBusinessValue`, `autoPrioritize`,
+ * `managerType`, `managerRef`) is a plain override where the project tier wins — those
+ * are tuning knobs, not permissions, so local judgement should beat a global preference.
+ *
+ * The fold is pure and total: every caller (the cron sweep, the run-now endpoint, the
+ * MCP tool, the settings surface) resolves through the SAME function, so the backend and
+ * the UI can never disagree about what the manager is allowed to do.
  */
 
 import { normalizeManagerType, DEFAULT_MANAGER_TYPE } from './managerTypes';
@@ -16,6 +44,27 @@ export type PrMergePolicy = 'immediate' | 'on_green' | 'queue';
 
 /** Who fills the manager role for a project. */
 export type ManagerKind = 'agent' | 'human' | 'system';
+
+/**
+ * ONE TIER's contribution to the policy — a partial set of opinions.
+ *
+ * `undefined` OR `null` both mean "this tier does not express an opinion about this
+ * field", so the resolver looks at the tier below it. That equivalence is what lets the
+ * all-nullable `tenant_manager_defaults` row and the mostly-NOT-NULL
+ * `project_manager_configs` row feed the SAME fold without either shape needing a
+ * bespoke code path — `ManagerConfigRow` is structurally assignable to this.
+ */
+export interface ManagerPolicyOverride {
+  managerRef?: string | null;
+  enabled?: boolean | null;
+  prMergePolicy?: string | null;
+  autoAssign?: boolean | null;
+  autoBusinessValue?: boolean | null;
+  autoPrioritize?: boolean | null;
+  managerType?: string | null;
+  requireSignoffToComplete?: boolean | null;
+  allowAutoMerge?: boolean | null;
+}
 
 /** The persisted config shape (a `project_manager_configs` row projection). */
 export interface ManagerConfigRow {
@@ -31,6 +80,25 @@ export interface ManagerConfigRow {
    *  row projected before the migration lands still type-checks (folded to the safe
    *  default by {@link resolveEffectiveManagerPolicy}). */
   requireSignoffToComplete?: boolean;
+  /** Grant of autonomous merge authority for THIS project (0363). Nullable in the DB on
+   *  purpose: null = "inherit the workspace tier" (which itself falls back to the
+   *  hardcoded `false`), so a project that has never had an opinion is not pinned to one. */
+  allowAutoMerge?: boolean | null;
+}
+
+/**
+ * The workspace tier — a `tenant_manager_defaults` row projection (0363). Every field is
+ * nullable because NULL is the meaningful "no workspace opinion" state; the row exists
+ * only to carry the opinions an operator actually expressed.
+ */
+export interface TenantManagerDefaultsRow {
+  enabled: boolean | null;
+  prMergePolicy: string | null;
+  autoAssign: boolean | null;
+  autoBusinessValue: boolean | null;
+  autoPrioritize: boolean | null;
+  requireSignoffToComplete: boolean | null;
+  allowAutoMerge: boolean | null;
 }
 
 export interface EffectiveManagerPolicy {
@@ -58,9 +126,31 @@ export interface EffectiveManagerPolicy {
    * verification at all. That is a deliberate, auditable opt-out, not a default.
    */
   requireSignoffToComplete: boolean;
+  /**
+   * MERGE AUTHORITY — may the manager merge a PR unattended at all (migration 0363)?
+   *
+   * Deliberately SEPARATE from {@link prMergePolicy}, which only answers HOW a permitted
+   * merge happens (right away vs. once CI is green vs. hold in a queue). Before 0363 the
+   * two were conflated: merge authority was inferred from `prMergePolicy !== 'queue'`, so
+   * the default-configured manager squash-merged into a default branch with nobody
+   * having granted it that. Writing to someone else's main branch is the most
+   * consequential thing the manager does, so it is now false unless a tier says
+   * otherwise, and the grant is visible in the config that made it.
+   *
+   * Enforced in `ManagerService.coordinatePullRequests` alongside — not instead of —
+   * {@link requireSignoffToComplete}: BOTH must pass before a merge. When this is false
+   * an otherwise-ready PR is journalled to `manager_actions` as 'merge_blocked' so
+   * withheld authority is visible on the surface rather than a silent skip.
+   */
+  allowAutoMerge: boolean;
 }
 
-/** The tenant default applied when a project has no explicit manager config row. */
+/**
+ * The hardcoded floor of the three-tier fold — what the manager does for a project with
+ * no workspace defaults row AND no project config row. Both tiers above it override only
+ * the fields they set, so this is also the value any field falls back to when nobody has
+ * an opinion about it.
+ */
 export const DEFAULT_MANAGER_POLICY: EffectiveManagerPolicy = {
   enabled: true,
   managerRef: null,
@@ -72,6 +162,9 @@ export const DEFAULT_MANAGER_POLICY: EffectiveManagerPolicy = {
   managerType: DEFAULT_MANAGER_TYPE,
   // Safe by default: autonomous completion requires unanimous sign-off (0362).
   requireSignoffToComplete: true,
+  // NOT granted by default (0363). Grooming, ranking and assignment are reversible;
+  // merging into a default branch is not. Authority must be handed over on purpose.
+  allowAutoMerge: false,
 };
 
 const VALID_PR_POLICIES: ReadonlySet<string> = new Set(['immediate', 'on_green', 'queue']);
@@ -124,21 +217,99 @@ export function resolveManagerAssignee(managerRef: string | null | undefined): M
   return none;
 }
 
-/** Fold an optional config row over the tenant default into one effective policy. */
-export function resolveEffectiveManagerPolicy(row: ManagerConfigRow | null | undefined): EffectiveManagerPolicy {
-  if (!row) return { ...DEFAULT_MANAGER_POLICY };
-  const managerRef = row.managerRef?.trim() || null;
+// ── the fold primitives ─────────────────────────────────────────────────────
+//
+// Each takes the tiers in ASCENDING precedence order (tenant, then project) and is
+// total: an all-silent tier list resolves to the hardcoded default.
+
+/** Last tier with an opinion wins. Used for the tuning knobs. */
+function lastSet<T>(fallback: T, ...values: (T | null | undefined)[]): T {
+  let out = fallback;
+  for (const v of values) if (v !== undefined && v !== null) out = v;
+  return out;
+}
+
+/**
+ * MOST RESTRICTIVE opinion wins, where `false` is the restrictive one — a permission.
+ * If NO tier has an opinion the hardcoded default stands; otherwise every tier that
+ * does have one must agree, so an explicit `false` anywhere is a hard ceiling that a
+ * lower tier cannot re-grant.
+ */
+function narrowestGrant(fallback: boolean, ...values: (boolean | null | undefined)[]): boolean {
+  const set = values.filter((v): v is boolean => v !== undefined && v !== null);
+  return set.length === 0 ? fallback : set.every((v) => v === true);
+}
+
+/**
+ * MOST RESTRICTIVE opinion wins, where `true` is the restrictive one — an obligation.
+ * Mirror image of {@link narrowestGrant}: an explicit `true` anywhere is a floor no
+ * other tier can relax.
+ */
+function strictestObligation(fallback: boolean, ...values: (boolean | null | undefined)[]): boolean {
+  const set = values.filter((v): v is boolean => v !== undefined && v !== null);
+  return set.length === 0 ? fallback : set.some((v) => v === true);
+}
+
+/**
+ * THE resolver — fold the tiers into one effective policy.
+ *
+ * `hardcoded default ← tenant ← project`, each overriding only the fields it sets, with
+ * the three authority gates resolved most-restrictive-wins (see the file header for the
+ * rule and why `enabled` in particular has to work that way). Pure and total: safe to
+ * call with no tiers, one tier, or both, and the only place this precedence exists.
+ */
+export function resolveTieredManagerPolicy(tiers: {
+  tenant?: ManagerPolicyOverride | null;
+  project?: ManagerPolicyOverride | null;
+}): EffectiveManagerPolicy {
+  const tenant = tiers.tenant ?? null;
+  const project = tiers.project ?? null;
+  const d = DEFAULT_MANAGER_POLICY;
+
+  // A designation is a project-tier concept (the workspace tier has no manager_ref
+  // column), so the project's value — including an explicit null meaning "the system
+  // service" — is simply the answer whenever the project tier is present.
+  const managerRef = lastSet<string | null>(d.managerRef, tenant?.managerRef, project?.managerRef)?.trim() || null;
+
   return {
-    enabled: row.enabled,
+    // Authority gates — most restrictive tier wins.
+    enabled: narrowestGrant(d.enabled, tenant?.enabled, project?.enabled),
+    allowAutoMerge: narrowestGrant(d.allowAutoMerge, tenant?.allowAutoMerge, project?.allowAutoMerge),
+    // A row projected before 0362/0363 backfill carries `undefined`, which reads as "no
+    // opinion" here — so a pre-migration read falls back to the SAFE default and can
+    // never widen authority.
+    requireSignoffToComplete: strictestObligation(
+      d.requireSignoffToComplete, tenant?.requireSignoffToComplete, project?.requireSignoffToComplete,
+    ),
+
+    // Tuning knobs — nearest (project) tier wins.
     managerRef,
     managerKind: resolveManagerKind(managerRef),
-    prMergePolicy: normalizePrMergePolicy(row.prMergePolicy),
-    autoAssign: row.autoAssign,
-    autoBusinessValue: row.autoBusinessValue,
-    autoPrioritize: row.autoPrioritize,
-    managerType: normalizeManagerType(row.managerType),
-    // A legacy row read before 0362 backfills has `undefined` here; default to the SAFE
-    // value rather than to false, so a pre-migration read can never widen authority.
-    requireSignoffToComplete: row.requireSignoffToComplete ?? DEFAULT_MANAGER_POLICY.requireSignoffToComplete,
+    prMergePolicy: normalizePrMergePolicy(lastSet<string>(d.prMergePolicy, tenant?.prMergePolicy, project?.prMergePolicy)),
+    autoAssign: lastSet(d.autoAssign, tenant?.autoAssign, project?.autoAssign),
+    autoBusinessValue: lastSet(d.autoBusinessValue, tenant?.autoBusinessValue, project?.autoBusinessValue),
+    autoPrioritize: lastSet(d.autoPrioritize, tenant?.autoPrioritize, project?.autoPrioritize),
+    managerType: normalizeManagerType(lastSet<string>(d.managerType, tenant?.managerType, project?.managerType)),
   };
+}
+
+/**
+ * Fold a project config row over the hardcoded default — the two-tier shorthand, kept
+ * for callers that have no workspace row to hand (and so that "no tenant tier" stays a
+ * legal, tested state). Delegates to {@link resolveTieredManagerPolicy}; there is no
+ * second copy of the precedence rules.
+ */
+export function resolveEffectiveManagerPolicy(row: ManagerConfigRow | null | undefined): EffectiveManagerPolicy {
+  return resolveTieredManagerPolicy({ project: row ?? null });
+}
+
+/**
+ * The policy a project with NO config row of its own gets — the workspace posture on its
+ * own. Backs the "these are your defaults" summary on the settings surface, so the UI
+ * reads the resolved values from the same fold instead of re-deriving them.
+ */
+export function resolveTenantManagerDefaults(
+  row: TenantManagerDefaultsRow | null | undefined,
+): EffectiveManagerPolicy {
+  return resolveTieredManagerPolicy({ tenant: row ?? null });
 }

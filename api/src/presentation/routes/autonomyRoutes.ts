@@ -25,6 +25,7 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
 import { getAutonomySummary } from '../../application/activity/ticketLifecycleLedger';
+import { getAutonomyWiringAudit } from '../../application/activity/autonomyWiringAudit';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -46,6 +47,21 @@ export function createAutonomyRoutes(db: Db): Hono<HonoEnv> {
     const rawProject = Number(c.req.query('projectId'));
     const projectId = Number.isFinite(rawProject) && rawProject > 0 ? Math.floor(rawProject) : null;
     return c.json(await getAutonomySummary(c.env as Env, db, { tenantId, projectId, windowDays }));
+  });
+
+  // Autonomy WIRING audit — "can the machinery work?", as opposed to /autonomy's
+  // "did tickets move?". Asserts mechanism invariants (is the sign-off loop closed, do
+  // merges converge, can every gating lane resolve an approver, does a completed run
+  // advance anything) and fails loudly with the numbers it judged on.
+  //
+  // This exists because the outcome funnel was measurably insufficient: it reported the
+  // symptom (0.7% autonomous) and the recorded skip reason, while an empty sign-off
+  // ledger, a 40,559-to-10 sync/merge livelock and silently no-op run attribution all
+  // went unnoticed. `canCompleteAutonomously: false` is the headline — a single critical
+  // violation means work cannot finish, however healthy the throughput charts look.
+  router.get('/autonomy/wiring', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId } = scope(c);
+    return c.json(await getAutonomyWiringAudit(c.env as Env, db, { tenantId }));
   });
 
   return router;

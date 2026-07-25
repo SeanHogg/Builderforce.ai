@@ -6,10 +6,12 @@
  * priority-ranked backlog, the coordination stats, the decision activity feed, and
  * a "run the manager now" button. Every read is tenant-scoped to the project.
  *
- *   GET  /api/manager/:projectId           config + policy + stats + ranked backlog
- *   PUT  /api/manager/:projectId           designate a manager + tune policy (MANAGER)
- *   POST /api/manager/:projectId/run        run the manager pass now (MANAGER)
- *   GET  /api/manager/:projectId/activity   the decision audit feed
+ *   GET   /api/manager/defaults             workspace-wide autonomy defaults + resolved policy
+ *   PATCH /api/manager/defaults             set the workspace defaults (MANAGER)
+ *   GET   /api/manager/:projectId           config + policy + stats + ranked backlog
+ *   PUT   /api/manager/:projectId           designate a manager + tune policy (MANAGER)
+ *   POST  /api/manager/:projectId/run       run the manager pass now (MANAGER)
+ *   GET   /api/manager/:projectId/activity  the decision audit feed
  */
 import { Hono } from 'hono';
 import { and, eq, sql, asc, desc, inArray } from 'drizzle-orm';
@@ -23,8 +25,11 @@ import {
   getManagerConfigRow, getEffectiveManagerPolicy, upsertManagerConfig,
   listManagerActions, runManagerForProject, createManagerRunTask, finalizeManagerRunTask,
   recordManagerAction, createManagerCoachingTask, syncManagerRosterRole,
+  getTenantManagerDefaults, upsertTenantManagerDefaults, type TenantManagerDefaultsPatch,
 } from '../../application/manager/ManagerService';
-import { normalizePrMergePolicy } from '../../application/manager/managerPolicy';
+import {
+  normalizePrMergePolicy, resolveTenantManagerDefaults,
+} from '../../application/manager/managerPolicy';
 import { resolveManagerTypesForTenant, normalizeManagerType } from '../../application/manager/managerTypes';
 import {
   addManagerDirective, listManagerDirectives, setManagerDirectiveStatus,
@@ -53,6 +58,87 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     return p ?? null;
   }
 
+  // ── workspace (tenant) autonomy defaults (migration 0363) ─────────────────
+  //
+  // Registered BEFORE '/:projectId' so the literal segment is never swallowed by the
+  // param route. The three-tier fold means these two endpoints and the per-project ones
+  // describe the SAME policy at different scopes, resolved by the one shared function.
+
+  /**
+   * A TRI-STATE body field. `undefined` = "the caller didn't mention it, leave it alone";
+   * `null` = "clear this workspace opinion, fall back to the hardcoded default"; a
+   * boolean = an explicit workspace opinion. Anything else is ignored rather than
+   * coerced, so a malformed field can never silently widen or narrow authority.
+   */
+  function triStateBool(v: unknown): boolean | null | undefined {
+    if (v === undefined) return undefined;
+    if (v === null) return null;
+    return typeof v === 'boolean' ? v : undefined;
+  }
+
+  type DefaultsBody = {
+    enabled?: boolean | null;
+    prMergePolicy?: string | null;
+    autoAssign?: boolean | null;
+    autoBusinessValue?: boolean | null;
+    autoPrioritize?: boolean | null;
+    requireSignoffToComplete?: boolean | null;
+    allowAutoMerge?: boolean | null;
+  };
+
+  // GET /api/manager/defaults — the workspace posture: the raw stored opinions PLUS the
+  // policy a project with no config row of its own resolves to. The UI renders the
+  // resolved values rather than re-deriving them, so backend and surface cannot disagree.
+  // Read-through cached inside getTenantManagerDefaults; invalidated by the PATCH below.
+  router.get('/defaults', async (c) => {
+    const tenantId = c.get('tenantId');
+    const defaults = await getTenantManagerDefaults(db, tenantId, c.env as Env);
+    return c.json({ defaults, policy: resolveTenantManagerDefaults(defaults) });
+  });
+
+  // PATCH /api/manager/defaults — set the workspace defaults (managers only). Same role
+  // gate as the per-project PUT: whoever may grant a project merge authority may grant it
+  // workspace-wide.
+  router.patch('/defaults', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId');
+    const userId = (c as { get(k: 'userId'): string | undefined }).get('userId');
+    const body = await c.req.json<DefaultsBody>().catch(() => ({} as DefaultsBody));
+
+    const patch: TenantManagerDefaultsPatch = {};
+    const bools = [
+      'enabled', 'autoAssign', 'autoBusinessValue', 'autoPrioritize',
+      'requireSignoffToComplete', 'allowAutoMerge',
+    ] as const;
+    for (const key of bools) {
+      const v = triStateBool(body[key]);
+      if (v !== undefined) patch[key] = v;
+    }
+    if (body.prMergePolicy !== undefined) {
+      patch.prMergePolicy = body.prMergePolicy === null || body.prMergePolicy === ''
+        ? null
+        : normalizePrMergePolicy(body.prMergePolicy);
+    }
+
+    const defaults = await upsertTenantManagerDefaults(db, tenantId, patch, {
+      updatedBy: userId ?? null,
+      env: c.env as Env,
+    });
+    const policy = resolveTenantManagerDefaults(defaults);
+
+    // Autonomy posture is a governance change — record WHO changed it on the shared
+    // audit timeline, not just in the row's updated_by.
+    await recordActivity(c.env as Env, db, {
+      tenantId,
+      actor: await resolveActorFromContext(c.env as Env, db, c as never),
+      verb: 'manager.defaults.update',
+      targetType: 'tenant', targetId: tenantId,
+      summary: `Updated the workspace AI Manager defaults (merge authority: ${policy.allowAutoMerge ? 'granted' : 'withheld'}).`,
+      metadata: { patch },
+    }).catch(() => { /* the timeline is best-effort — never fail the write */ });
+
+    return c.json({ defaults, policy });
+  });
+
   // GET /api/manager/:projectId — config + effective policy + coordination stats +
   // the priority-ranked backlog the manager produced. Not cached (live state).
   router.get('/:projectId', async (c) => {
@@ -62,9 +148,13 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       return c.json({ error: 'Project not found' }, 404);
     }
 
-    const [config, policy] = await Promise.all([
+    // `policy` is the full three-tier fold; `tenantDefaults` is the raw workspace tier,
+    // shipped alongside it so the project form can label a control "inherited from the
+    // workspace" WITHOUT re-implementing the precedence rules client-side.
+    const [config, policy, tenantDefaults] = await Promise.all([
       getManagerConfigRow(db, tenantId, projectId),
-      getEffectiveManagerPolicy(db, tenantId, projectId),
+      getEffectiveManagerPolicy(db, tenantId, projectId, c.env as Env),
+      getTenantManagerDefaults(db, tenantId, c.env as Env),
     ]);
 
     // Coordination stats (small aggregate queries).
@@ -140,6 +230,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     return c.json({
       config: config ?? null,
       policy,
+      tenantDefaults,
       stats: {
         total: counts?.total ?? 0,
         unscored: counts?.unscored ?? 0,
@@ -174,6 +265,9 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       autoPrioritize?: boolean;
       managerType?: string;
       requireSignoffToComplete?: boolean;
+      /** Tri-state (0363): true/false = an explicit project decision, null = inherit the
+       *  workspace default, absent = leave whatever is stored alone. */
+      allowAutoMerge?: boolean | null;
     };
     const body = (await c.req.json<ConfigBody>().catch(() => ({} as ConfigBody)));
 
@@ -190,6 +284,9 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       ...(body.autoPrioritize !== undefined ? { autoPrioritize: !!body.autoPrioritize } : {}),
       ...(body.managerType !== undefined ? { managerType: normalizeManagerType(body.managerType) } : {}),
       ...(body.requireSignoffToComplete !== undefined ? { requireSignoffToComplete: !!body.requireSignoffToComplete } : {}),
+      // NOT coerced with `!!` — null must survive as "inherit the workspace tier", which
+      // `!!null === false` would silently turn into "this project refuses merge authority".
+      ...(triStateBool(body.allowAutoMerge) !== undefined ? { allowAutoMerge: triStateBool(body.allowAutoMerge) } : {}),
     });
 
     // A manager is a team member: keep its roster role in lock-step with its type.
@@ -197,8 +294,8 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       prior ? { managerRef: prior.managerRef, managerType: prior.managerType } : null,
       { managerRef: config.managerRef, managerType: config.managerType });
 
-    const policy = await getEffectiveManagerPolicy(db, tenantId, projectId);
-    return c.json({ config, policy });
+    const policy = await getEffectiveManagerPolicy(db, tenantId, projectId, c.env as Env);
+    return c.json({ config, policy, tenantDefaults: await getTenantManagerDefaults(db, tenantId, c.env as Env) });
   });
 
   // POST /api/manager/:projectId/run — run the manager pass now (managers only).
@@ -216,7 +313,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
       return c.json({ error: 'Project not found' }, 404);
     }
-    const policy = await getEffectiveManagerPolicy(db, tenantId, projectId);
+    const policy = await getEffectiveManagerPolicy(db, tenantId, projectId, c.env as Env);
     if (!policy.enabled) {
       return c.json({ started: false, reason: 'disabled' as const });
     }

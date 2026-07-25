@@ -1287,11 +1287,62 @@ export const projectManagerConfigs = pgTable('project_manager_configs', {
    *  true — before this existed, the manager force-completed in-review tickets and
    *  squash-merged them with no sign-off verification at all. See signoffGate.ts. */
   requireSignoffToComplete: boolean('require_signoff_to_complete').notNull().default(true),
+  /** MERGE AUTHORITY for this project (0363) — may the manager merge unattended AT ALL,
+   *  as opposed to `prMergePolicy`, which only says HOW a permitted merge happens.
+   *  NULLABLE unlike its siblings, and that is the point: null = "inherit the workspace
+   *  tier" (`tenant_manager_defaults`, itself falling back to the hardcoded false), so a
+   *  project that has never expressed an opinion is not pinned to one by a column
+   *  default. Both this and requireSignoffToComplete must pass before a merge. */
+  allowAutoMerge:    boolean('allow_auto_merge'),
   lastRunAt:         timestamp('last_run_at'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
   byProject: uniqueIndex('uq_project_manager_configs_project').on(t.tenantId, t.projectId),
+}));
+
+/**
+ * WORKSPACE-WIDE manager defaults (migration 0363) — the tier BETWEEN the hardcoded
+ * defaults in `application/manager/managerPolicy.ts` and a per-project
+ * `project_manager_configs` row. One row per tenant.
+ *
+ * Before this existed the policy had a single tier, so "the manager may groom but never
+ * merge" had to be re-stated on every project and every NEW project silently started
+ * from the code defaults. Every column here is NULLABLE because NULL is meaningful:
+ * "this workspace expresses no opinion — fall through to the hardcoded default". That is
+ * what makes the fold a genuine three-level override instead of a second copy of the
+ * defaults.
+ *
+ * Precedence is NOT uniformly last-tier-wins: `enabled` and `allowAutoMerge` are
+ * CEILINGS (an explicit false here cannot be re-granted by a project row) and
+ * `requireSignoffToComplete` is a FLOOR (an explicit true cannot be relaxed). The rule
+ * lives in exactly one place — `resolveTieredManagerPolicy()`.
+ */
+export const tenantManagerDefaults = pgTable('tenant_manager_defaults', {
+  id:                uuid('id').primaryKey().defaultRandom(),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** Workspace kill-switch. false = the manager is off workspace-wide and a project row
+   *  cannot re-enable it (project rows have `enabled` NOT NULL DEFAULT true, so
+   *  last-tier-wins would let every existing row silently defeat this switch). */
+  enabled:           boolean('enabled'),
+  /** Default PR authority tier: 'immediate' | 'on_green' | 'queue'. */
+  prMergePolicy:     varchar('pr_merge_policy', { length: 12 }),
+  autoAssign:        boolean('auto_assign'),
+  autoBusinessValue: boolean('auto_business_value'),
+  autoPrioritize:    boolean('auto_prioritize'),
+  /** Workspace sign-off FLOOR: true = no project may complete/merge without unanimous
+   *  role sign-off (see 0362 + signoffGate.ts). */
+  requireSignoffToComplete: boolean('require_signoff_to_complete'),
+  /** Workspace grant of autonomous merge authority — a CEILING. false = no project may
+   *  merge unattended; true = projects may unless their own row says false. */
+  allowAutoMerge:    boolean('allow_auto_merge'),
+  /** Who last changed the workspace autonomy posture — the governance question is
+   *  "who granted the manager merge rights?", so the answer is stored. */
+  updatedBy:         varchar('updated_by', { length: 36 }),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant: uniqueIndex('uq_tenant_manager_defaults_tenant').on(t.tenantId),
 }));
 
 /**
@@ -1330,8 +1381,10 @@ export const managerActions = pgTable('manager_actions', {
    *  show exactly what it changed; null for cron-sweep decisions (feed-only). */
   runTaskId:  integer('run_task_id').references(() => tasks.id, { onDelete: 'set null' }),
   /** 'prioritize' | 'assign' | 'score_value' | 'dispatch' | 'merge_pr' | 'close_pr' |
-   *  'flag' (a required check is unmet — written only when the verdict CHANGES) |
-   *  'coordinate' (the manager staffed a flagged ticket's missing role/reviewer). */
+   *  'sync_pr' | 'flag' (a required check is unmet — written only when the verdict
+   *  CHANGES) | 'coordinate' (the manager staffed a flagged ticket's missing
+   *  role/reviewer) | 'merge_blocked' (0363: the PR is ready but the effective policy
+   *  withholds merge authority — written once per PR, not once per pass). */
   actionType: varchar('action_type', { length: 24 }).notNull(),
   summary:    text('summary').notNull(),
   /** Structured JSON payload for drill-in. */

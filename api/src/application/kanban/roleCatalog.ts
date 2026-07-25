@@ -42,6 +42,22 @@ export const BUILTIN_ROLES: JobRole[] = [
 const BY_KEY = new Map(BUILTIN_ROLES.map((r) => [r.key, r]));
 
 /**
+ * Human-readable name for a role key — the ONE display-name resolver.
+ *
+ * Three private copies of this existed (`ticketParticipants.roleName`,
+ * `laneRequirementGate.roleName`, and the lane-approver resolver needed a fourth), and
+ * they DISAGREED: two returned the raw key for a tenant-custom role while the third
+ * title-cased it. Since the name is what an agent is told it is ("You are the …") and
+ * what the accountability report prints, the title-casing behaviour is the correct one
+ * and now the only one.
+ */
+export function roleDisplayName(key: string): string {
+  const builtin = BY_KEY.get(key);
+  if (builtin) return builtin.name;
+  return key.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+/**
  * Roles whose sign-off is a JUDGEMENT ON THE CHANGE, as opposed to participation
  * in producing it.
  *
