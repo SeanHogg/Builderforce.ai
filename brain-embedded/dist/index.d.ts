@@ -1251,6 +1251,13 @@ interface UseBrainConversationOptions {
     /** Override the model (e.g. run the Brain as a specific assigned agent). */
     model?: string;
     /**
+     * Pick the next model when the current one burns its stall budget without emitting
+     * a tool call. Hosts pass `(tried) => nextFallbackModel(surface, tried)` using the
+     * `/llm/v1/models` surface they already cache. Omit to keep the run on one model
+     * and stop with an explanation instead of switching.
+     */
+    pickFallbackModel?: (tried: readonly string[]) => string | undefined;
+    /**
      * `max_tokens` for this conversation's completions — the host's Effort control
      * (see `effort.ts`, the single effort→params map). Omit for the 4096 default.
      */
@@ -1443,6 +1450,20 @@ interface BrainRunRequest {
     resolvedSystemPrompt: string;
     tools?: BrainToolSpec[];
     model?: string;
+    /**
+     * Pick the next model to try when the current one has burned its whole stall budget
+     * without emitting a single tool call — i.e. re-prompting it is spent and only a
+     * DIFFERENT model can finish the request.
+     *
+     * The loop is deliberately surface-agnostic here: the host holds the cached
+     * `/llm/v1/models` surface and answers with `nextFallbackModel(surface, tried)`, so
+     * the ordering (own account + tool-calling pool first) lives in ONE shared function
+     * rather than in each host. Return undefined — or omit the callback — to keep the
+     * previous behaviour: stop and explain, instead of switching.
+     *
+     * `tried` holds every model already attempted this run, requested and resolved.
+     */
+    pickFallbackModel?: (tried: readonly string[]) => string | undefined;
     runTool?: (name: string, args: unknown) => Promise<unknown>;
     /** Pure predicate: true → pause the loop for an explicit user confirmation. */
     needsConfirm?: (req: {
@@ -1706,6 +1727,56 @@ declare function traceWithPersistedSteps(messages: BrainMessage[], trace: BrainT
 declare function fetchApiVersionVia(read: () => Promise<{
     version?: string;
 } | null>): Promise<string | null>;
+
+/**
+ * Which model to try NEXT when the current one has proven it cannot do the job.
+ *
+ * The motivating case: a model that answers fluently but never emits structured
+ * `tool_calls` (measured on `xai-oauth/grok-4.3`). Re-prompting it does not help —
+ * `@builderforce/agent-stall` already spends a bounded recovery budget doing exactly
+ * that. Once that budget is gone the only remedy left is a DIFFERENT model, and
+ * telling the user to go pick one by hand is a worse product than the run picking one
+ * and saying so.
+ *
+ * Pure + host-agnostic: it reads the same model surface the funding classifier and the
+ * model pickers already hold, so no surface re-fetches `/llm/v1/models` to fail over.
+ */
+/**
+ * The gateway model surface, as `/llm/v1/models` returns it and both hosts cache it.
+ * Structurally a superset of what `classifyModelFunding` takes, so one cached object
+ * feeds both.
+ */
+interface ModelFallbackSurface {
+    /** The plan pool — every model this tenant may select. */
+    data?: Array<{
+        id?: string;
+    }>;
+    /** The curated tool-calling / coding subset of the pool. */
+    codingModels?: string[];
+    /** Models reachable through the tenant's OWN connected accounts (BYO). */
+    byo?: {
+        models?: Array<{
+            id?: string;
+            vendor?: string;
+        }>;
+    };
+}
+/**
+ * The next model to try, or undefined when nothing untried is left.
+ *
+ * Preference order, and why:
+ *  1. **BYO ∩ coding pool** — the tenant's own connected account (so the retry costs
+ *     nothing against the plan allowance) AND curated for tool calling, which is the
+ *     capability that just failed. Best on both axes.
+ *  2. **Coding pool** — curated for tool calling, plan-funded. We are failing over
+ *     *because of* tool calling, so this outranks an arbitrary BYO model.
+ *  3. **Anything else untried** — BYO first, then the rest of the plan pool.
+ *
+ * `tried` holds every model already attempted this run, including the original pin.
+ * A caller that pinned nothing (gateway auto-select) should pass its resolved model,
+ * so the failover cannot hand back the model that just failed.
+ */
+declare function nextFallbackModel(surface: ModelFallbackSurface | null | undefined, tried: readonly string[]): string | undefined;
 
 /**
  * Chat ⇄ work linking — the single source for (a) the system-prompt directive that
@@ -2211,4 +2282,4 @@ interface ToolSelection {
  */
 declare function selectToolsForTurn(tools: BrainToolSpec[] | undefined, options: SelectToolsOptions): ToolSelection;
 
-export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AllowanceState, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, ChatErrorAction, type ChatInputAttachment, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type PersistedStep, type PreparedImage, type ProvenanceAccount, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type ToolSelection, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, allowanceState, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, effortProfile, fetchApiVersionVia, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parseStepMessage, prepareImageDataUrl, reasoningForRun, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, traceWithPersistedSteps, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AllowanceState, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, ChatErrorAction, type ChatInputAttachment, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, type ModelFallbackSurface, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type PersistedStep, type PreparedImage, type ProvenanceAccount, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type ToolSelection, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, allowanceState, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, effortProfile, fetchApiVersionVia, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mentionRecipient, modelsUsedInTrace, nextFallbackModel, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parseStepMessage, prepareImageDataUrl, reasoningForRun, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, traceWithPersistedSteps, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };

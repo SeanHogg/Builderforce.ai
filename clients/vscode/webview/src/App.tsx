@@ -22,6 +22,7 @@ import {
   classifyModelFunding,
   getMcpToolStatus,
   fetchApiVersionVia,
+  nextFallbackModel,
   type Effort,
   type BrainConfig,
   type BrainChat,
@@ -215,6 +216,9 @@ function buildComposerDirectives(o: { effort: Effort; web: boolean }): string {
  */
 interface ModelSurface {
   data?: Array<{ id?: string }>;
+  /** The curated tool-calling / coding subset of the pool — what a tool-call
+   *  failover should draw from first (see nextFallbackModel). */
+  codingModels?: string[];
   byo?: { providers?: string[]; models?: Array<{ id?: string; vendor?: string }> };
   canUsePremiumModels?: boolean;
 }
@@ -776,6 +780,13 @@ function Chat({ init }: { init: InitData }) {
     [init.model, modelSurface, t],
   );
 
+  // Tool-call failover: hand the run loop the SHARED selector over the surface above,
+  // so "which model next" is decided in one place for every host rather than here.
+  const pickFallbackModel = useCallback(
+    (tried: readonly string[]) => nextFallbackModel(modelSurface, tried),
+    [modelSurface],
+  );
+
   // Project-Evermind memory hooks: recall the chat's project learnings before
   // answering (grounding the reply + surfacing recall/learn/reconcile steps in the
   // timeline). Bound to the chat's project (falling back to the IDE's open project) —
@@ -856,6 +867,10 @@ function Chat({ init }: { init: InitData }) {
     // code without recording one.
     projectId: evermindProjectId,
     model: init.model,
+    // When a model burns its stall budget describing tool calls it never makes, the
+    // run switches models itself instead of stranding the user with a promise. Reads
+    // the model surface already loaded for the picker — no extra fetch.
+    pickFallbackModel: pickFallbackModel,
     maxTokens: effortMaxTokens,
     reasoning,
     extraSystem,

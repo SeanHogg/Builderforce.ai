@@ -139,6 +139,11 @@ export type { PersistedStep } from './persistedSteps';
 // half of the diagnostics version stamp. Each surface supplies its own /health read.
 export { fetchApiVersionVia } from './apiVersion';
 
+// Which model to try NEXT when the current one won't emit tool calls. One ordering,
+// shared by every host that holds a `/llm/v1/models` surface.
+export { nextFallbackModel } from './modelFallback';
+export type { ModelFallbackSurface } from './modelFallback';
+
 // Chat ⇄ work linking — the directive that ties identified work / code changes to
 // the current chat, plus the predicates behind the "a code change is always tied to
 // a ticket" backstop (reused by non-React hosts driving the run loop directly).

@@ -62,6 +62,13 @@ export interface UseBrainConversationOptions {
   /** Override the model (e.g. run the Brain as a specific assigned agent). */
   model?: string;
   /**
+   * Pick the next model when the current one burns its stall budget without emitting
+   * a tool call. Hosts pass `(tried) => nextFallbackModel(surface, tried)` using the
+   * `/llm/v1/models` surface they already cache. Omit to keep the run on one model
+   * and stop with an explanation instead of switching.
+   */
+  pickFallbackModel?: (tried: readonly string[]) => string | undefined;
+  /**
    * `max_tokens` for this conversation's completions — the host's Effort control
    * (see `effort.ts`, the single effort→params map). Omit for the 4096 default.
    */
@@ -207,6 +214,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     extraSystem,
     systemPrompt,
     model,
+    pickFallbackModel,
     maxTokens,
     reasoning,
     toolSpecs,
@@ -334,6 +342,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined,
       model,
+      pickFallbackModel,
       maxTokens,
       reasoning,
       runTool,
@@ -347,7 +356,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       userTurn,
       projectId,
     }),
-    [fullSystemPrompt, toolSpecs, model, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId],
+    [fullSystemPrompt, toolSpecs, model, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId],
   );
 
   const send = useCallback(

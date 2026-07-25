@@ -184,18 +184,48 @@ export function isExhaustedStall(input: StalledTurnInput): boolean {
 }
 
 /**
- * The user-facing explanation for a run that never emitted a tool call. Names the
- * model, because the ONLY effective remedy is switching to one that emits structured
- * `tool_calls` — no amount of re-prompting fixes a model that will not.
- *
- * @param model the model that actually answered, when the loop resolved one.
+ * How many times ONE run may swap MODELS after a model burns its whole stall budget.
+ * Small on purpose: each switch replays the turn, and a run that two different models
+ * have already failed to act on is not going to be rescued by a third — at that point
+ * the honest move is to stop and say so, not to walk the catalog on the tenant's money.
  */
-export function stallExhaustedNotice(model?: string | null): string {
+export const MAX_MODEL_FAILOVERS = 2;
+
+/**
+ * The run switched models because the previous one would not emit tool calls. Shown
+ * on the timeline, so the swap is visible rather than a silent change of who is
+ * answering — a chat that quietly changes model is its own support ticket.
+ */
+export function modelFailoverNotice(from: string | null | undefined, to: string): string {
+  const who = from && from !== 'default' ? `\`${from}\`` : 'The previous model';
+  return (
+    `${who} described tool calls instead of making them, ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row,`
+    + ` so it cannot complete this request. Retrying on \`${to}\`.`
+  );
+}
+
+/**
+ * The user-facing explanation for a run that never emitted a tool call and could not
+ * be rescued by switching models either.
+ *
+ * Names every model tried, because "it didn't work" is unactionable while "these two
+ * both refused to act" tells the reader whether to pick a third or to suspect their
+ * tool catalog.
+ *
+ * @param model the model that actually answered last, when the loop resolved one.
+ * @param tried every model attempted this run, when the loop failed over.
+ */
+export function stallExhaustedNotice(model?: string | null, tried?: readonly string[]): string {
   const who = model && model !== 'default' ? `The model \`${model}\`` : 'The model';
+  const others = (tried ?? []).filter((m) => m && m !== model);
   return (
     `${who} described tool calls instead of making them, ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row,`
     + ' so nothing was actually run and the answer above is only a description of intended actions.'
-    + ' This is a model limitation, not a configuration error — pick a different model for this chat'
-    + ' and send the message again.'
+    + (others.length
+      ? ` This run already failed over from ${others.map((m) => `\`${m}\``).join(', ')}, so the problem`
+        + ' is unlikely to be any single model — check that the tool catalog loaded (see the'
+        + ' "Tools available to the model" line in a copied diagnostics report).'
+      : ' This is a model limitation, not a configuration error — pick a different model for this chat'
+        + ' and send the message again.')
   );
 }
