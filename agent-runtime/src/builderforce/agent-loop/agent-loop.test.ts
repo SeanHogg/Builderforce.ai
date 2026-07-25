@@ -180,6 +180,31 @@ describe("native Agent loop", () => {
       // 1 original turn + exactly MAX_ANNOUNCEMENT_RECOVERIES re-prompted turns.
       expect(turns).toBe(1 + MAX_ANNOUNCEMENT_RECOVERIES);
       expect(produced.filter(isNudge)).toHaveLength(MAX_ANNOUNCEMENT_RECOVERIES);
+      // Giving up must be LOUD. Ending on the promise alone leaves an autonomous run
+      // looking like a clean completion that happened to do nothing.
+      const tail = String(produced.at(-1)?.content ?? "");
+      expect(tail).toContain("nothing was actually run");
+      expect(tail).toContain("pick a different model");
+    });
+
+    /**
+     * The exact turn that ended VS Code chat #85: no first-person subject, just the
+     * call written out as text. It used to score as a complete answer, so the loop
+     * returned it and the run died having done nothing.
+     */
+    it("recovers a BARE pseudo-call, not just a first-person promise", async () => {
+      const streamFn = scriptedStreamFn([
+        assistant([{ type: "text", text: "run tool builtin_chats_list_tickets with chatId is 85" }], "stop"),
+        assistant([toolCall], "toolUse"),
+        assistant([{ type: "text", text: "3 tickets, all in backlog." }], "stop"),
+      ]);
+      const agent = new Agent({ model, tools: [echoTool], systemPrompt: "sys" });
+      agent.streamFn = streamFn;
+
+      const produced = await agent.prompt([{ role: "user", content: "go", timestamp: 0 }]);
+
+      expect(produced.filter(isNudge)).toHaveLength(1);
+      expect(produced.filter((m) => m.role === "toolResult")).toHaveLength(1);
     });
 
     it("leaves a genuine final answer alone even with tools available", async () => {

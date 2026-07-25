@@ -1139,6 +1139,55 @@ function resolveRecipient(choice, mention) {
   return choice ?? mention;
 }
 
+// ../packages/agent-stall/src/index.ts
+var ANNOUNCE_SUBJECT = "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
+var ANNOUNCE_FILLER = "(?:\\s+(?:now|then|first|next|quickly|briefly|just|also|actually|go ahead and|try to|attempt to))*";
+var ANNOUNCE_VERB = "(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|see|walk|trace|map)";
+var ANNOUNCE_GERUND = "(?:searching|fetching|retrieving|querying|loading|checking|looking|scanning|reading|listing|gathering|pulling|examining|inspecting|reviewing|analy[sz]ing)";
+var TOOL_IDENT = "(?:builtin_[a-z0-9]+(?:_[a-z0-9]+)+|mcp__[a-z0-9_]+)";
+var PSEUDO_CALL = [
+  // "call builtin_x", "run tool builtin_x", "invoke the function mcp__srv__x"
+  `(?:call|run|invoke|execute)\\s+(?:the\\s+)?(?:tool\\s+|function\\s+)?${TOOL_IDENT}`,
+  // "builtin_x({…})" / "builtin_x(" — the call written as code
+  `${TOOL_IDENT}\\s*[({]`,
+  // "builtin_x with chatId is 85" — the call written as an argument clause
+  `${TOOL_IDENT}\\s+(?:with|args|arguments)\\b`
+];
+var ANNOUNCED_ACTION = new RegExp(
+  [
+    "calling (the|this|that|a|it|them|these) [\\w\\s-]*?(tool|function|api|now)",
+    `${ANNOUNCE_SUBJECT}${ANNOUNCE_FILLER}\\s+${ANNOUNCE_VERB}\\b`,
+    "(one|just a) (moment|second|sec)\\b",
+    `${ANNOUNCE_GERUND} (it|that|this|these|those|the [\\w-]+|now|for)\\b`,
+    "stand ?by\\b",
+    ...PSEUDO_CALL
+  ].join("|"),
+  "i"
+);
+var TAIL_CHARS = 240;
+function announcesUntakenAction(text) {
+  const t = text.trim();
+  if (!t) return false;
+  return ANNOUNCED_ACTION.test(t.slice(-TAIL_CHARS));
+}
+var MAX_ANNOUNCEMENT_RECOVERIES = 3;
+function stallRecoveryNudge(lastChance) {
+  return "You said you would call a tool but did not actually call one \u2014 your last turn made zero tool calls. Make the call NOW in this turn, then answer using its result. If no tool can give you that data, say plainly which data you are missing and answer with what you already have. Do not announce another call." + (lastChance ? " This is your last chance to act: you have now stated an intention without acting several times in a row. Either emit a tool call in this turn, or give your complete final answer from what you already know \u2014 an answer that only describes what you are about to do will be shown to the user as-is." : "");
+}
+function isStalledTurn(input) {
+  return input.toolCallCount === 0 && input.availableToolCount > 0 && announcesUntakenAction(input.text);
+}
+function shouldRecoverStalledTurn(input) {
+  return isStalledTurn(input) && input.recoveriesUsed < MAX_ANNOUNCEMENT_RECOVERIES;
+}
+function isExhaustedStall(input) {
+  return isStalledTurn(input) && input.recoveriesUsed >= MAX_ANNOUNCEMENT_RECOVERIES;
+}
+function stallExhaustedNotice(model) {
+  const who = model && model !== "default" ? `The model \`${model}\`` : "The model";
+  return `${who} described tool calls instead of making them, ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row, so nothing was actually run and the answer above is only a description of intended actions. This is a model limitation, not a configuration error \u2014 pick a different model for this chat and send the message again.`;
+}
+
 // src/persistedSteps.ts
 function stepSig(category, label, tsIso) {
   return `${category}|${label}|${tsIso ?? ""}`;
@@ -1236,22 +1285,10 @@ function detectUnbackedTicketClaim(events, messages) {
   if (filedOk) return false;
   return messages.some((m) => m.role === "assistant" && typeof m.content === "string" && TICKET_CLAIM.test(m.content));
 }
-var TOOL_IDENT = /\b(?:builtin_[a-z0-9]+(?:_[a-z0-9]+)+|mcp__[a-z0-9_]+)\b/i;
-var TOOL_ANNOUNCE = new RegExp(
-  [
-    // "I'll call the tool…", "I will now invoke the function…", "let me run the tool…"
-    "\\b(?:i(?:'ll| will| am going to| ?'m going to)?|let me)\\s+(?:now\\s+)?(?:call|invoke|run|execute)\\b[^.!?\\n]{0,40}\\b(?:tool|function)\\b",
-    // "Calling the required function now", "invoking the tool"
-    "\\b(?:calling|invoking|executing)\\b[^.!?\\n]{0,40}\\b(?:tool|function)\\b",
-    // The bare imperative a model writes when it means to emit a call: "run tool X".
-    "\\b(?:call|run|invoke|execute)\\s+(?:the\\s+)?(?:tool|function)\\b"
-  ].join("|"),
-  "i"
-);
 function detectAnnouncedButUnmadeToolCall(events, messages) {
   if (events.some((e) => e.category === "tool")) return false;
   return messages.some(
-    (m) => m.role === "assistant" && typeof m.content === "string" && (TOOL_IDENT.test(m.content) || TOOL_ANNOUNCE.test(m.content))
+    (m) => m.role === "assistant" && typeof m.content === "string" && announcesUntakenAction(m.content)
   );
 }
 function cap(s, n = 2e3) {
@@ -1754,35 +1791,6 @@ function chatWorkLinkingDirective(chatId) {
 \u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide") so the change becomes a ticket linked to this chat that completes when it ships.
 \u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status="in_progress"). When the work is finished and shipped, advance it to "in_review" (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.
 \u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.`;
-}
-
-// ../packages/agent-stall/src/index.ts
-var ANNOUNCE_SUBJECT = "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
-var ANNOUNCE_FILLER = "(?:\\s+(?:now|then|first|next|quickly|briefly|just|also|actually|go ahead and|try to|attempt to))*";
-var ANNOUNCE_VERB = "(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|see|walk|trace|map)";
-var ANNOUNCE_GERUND = "(?:searching|fetching|retrieving|querying|loading|checking|looking|scanning|reading|listing|gathering|pulling|examining|inspecting|reviewing|analy[sz]ing)";
-var ANNOUNCED_ACTION = new RegExp(
-  [
-    "calling (the|this|that|a|it|them|these) [\\w\\s-]*?(tool|function|api|now)",
-    `${ANNOUNCE_SUBJECT}${ANNOUNCE_FILLER}\\s+${ANNOUNCE_VERB}\\b`,
-    "(one|just a) (moment|second|sec)\\b",
-    `${ANNOUNCE_GERUND} (it|that|this|these|those|the [\\w-]+|now|for)\\b`,
-    "stand ?by\\b"
-  ].join("|"),
-  "i"
-);
-var TAIL_CHARS = 240;
-function announcesUntakenAction(text) {
-  const t = text.trim();
-  if (!t) return false;
-  return ANNOUNCED_ACTION.test(t.slice(-TAIL_CHARS));
-}
-var MAX_ANNOUNCEMENT_RECOVERIES = 3;
-function stallRecoveryNudge(lastChance) {
-  return "You said you would call a tool but did not actually call one \u2014 your last turn made zero tool calls. Make the call NOW in this turn, then answer using its result. If no tool can give you that data, say plainly which data you are missing and answer with what you already have. Do not announce another call." + (lastChance ? " This is your last chance to act: you have now stated an intention without acting several times in a row. Either emit a tool call in this turn, or give your complete final answer from what you already know \u2014 an answer that only describes what you are about to do will be shown to the user as-is." : "");
-}
-function shouldRecoverStalledTurn(input) {
-  return input.toolCallCount === 0 && input.availableToolCount > 0 && input.recoveriesUsed < MAX_ANNOUNCEMENT_RECOVERIES && announcesUntakenAction(input.text);
 }
 
 // src/brainRunStore.ts
@@ -2594,6 +2602,23 @@ ${chatWorkLinkingDirective(chatId)}`;
     const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText, ...finalMeta ? { metadata: finalMeta } : {} }]);
     c.streamingText = "";
     recordAppended(c, assistantMsg);
+    if (runTool && isExhaustedStall({
+      text: result.text,
+      toolCallCount: result.toolCalls.length,
+      availableToolCount: toolSpecs?.length ?? 0,
+      recoveriesUsed: announcementRecoveries
+    })) {
+      const notice = stallExhaustedNotice(resolved);
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "error",
+        label: "loop.stall_unrecovered",
+        args: { step: iter, model: resolved, attempts: announcementRecoveries },
+        result: notice,
+        isError: true
+      });
+      c.error = notice;
+    }
     emit(c);
     emitEvermindLearnReconcile(assistantMsg, finalText);
     onActivity?.(chatId);
