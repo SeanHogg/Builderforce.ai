@@ -43,19 +43,17 @@ import type {
   LifecycleGateSnapshot,
   TicketLifecycle,
 } from './builderforceApi';
+import {
+  capText,
+  collapseRuns,
+  environmentLines,
+  jsonAppendix,
+  line,
+  windowRows,
+  REPORT_BUDGET_CHARS,
+  type DiagnosticsContext,
+} from './diagnosticsReport';
 import { formatDuration } from './duration';
-
-export interface LifecycleDiagnosticsContext {
-  /** Frontend build that rendered this (APP_VERSION). */
-  uiVersion?: string | null;
-  /** API build that served the ledger, when the page knows it. */
-  apiVersion?: string | null;
-  /** ISO timestamp of the capture. Passed in rather than read from the clock so the
-   *  builder stays pure and testable. */
-  capturedAt: string;
-  /** Absolute URL of the surface the capture was taken from, when available. */
-  sourceUrl?: string | null;
-}
 
 /**
  * How many event rows the chain of custody prints, as a head + tail window.
@@ -67,36 +65,6 @@ export interface LifecycleDiagnosticsContext {
  */
 export const EVENT_WINDOW_HEAD = 30;
 export const EVENT_WINDOW_TAIL = 50;
-
-/**
- * Per-row cap on the free-form server `detail`.
- *
- * Row COUNT is bounded by the window; row LENGTH is not — one stack trace or one
- * 4 KB provider error would blow the budget on its own. The cap is generous enough
- * to keep a whole error sentence, and the overflow is always announced with the
- * count of characters dropped so nobody mistakes it for the full text.
- */
-export const MAX_DETAIL_CHARS = 300;
-
-/**
- * Total size the report aims to stay under, in characters.
- *
- * When the report would exceed it, the appended raw JSON drops its `events` array —
- * the only unbounded part of the payload, ~90% of it on a storm ticket, and already
- * rendered (collapsed and windowed) in the chain of custody above. Every computed
- * block survives, so the JSON stays re-parseable and the whole diagnosis still fits
- * in a paste. 50 000 is the smallest limit these reports actually meet in practice,
- * so the budget sits below it with room for the JSON that replaces the events.
- */
-export const REPORT_BUDGET_CHARS = 45_000;
-
-/** `key: value` with absent values written explicitly, never silently dropped. */
-function line(label: string, value: unknown): string {
-  const v = value === null || value === undefined || value === ''
-    ? '(none)'
-    : typeof value === 'boolean' ? (value ? 'yes' : 'no') : String(value);
-  return `${label}: ${v}`;
-}
 
 /** One timeline row, dense but complete — every field the panel renders plus the ids. */
 function formatEvent(e: LifecycleEvent, index: number): string {
@@ -116,10 +84,7 @@ function formatEvent(e: LifecycleEvent, index: number): string {
   // Capped, and the overflow is stated: an unannounced truncation of an error message is
   // exactly the kind of quiet loss this report exists to avoid.
   if (!e.detail) return head;
-  const detail = e.detail.length > MAX_DETAIL_CHARS
-    ? `${e.detail.slice(0, MAX_DETAIL_CHARS)}… (+${e.detail.length - MAX_DETAIL_CHARS} chars)`
-    : e.detail;
-  return `${head}\n     detail: ${detail}`;
+  return `${head}\n     detail: ${capText(e.detail)}`;
 }
 
 /**
@@ -138,41 +103,30 @@ export function formatEventSection(events: readonly LifecycleEvent[]): string[] 
   // Collapse runs of the same event. The signature deliberately ignores the timestamp
   // and the execution id — those are what VARY between two occurrences of one repeated
   // fact, so including them would defeat the collapse entirely.
-  const collapsed: Array<{ event: LifecycleEvent; repeats: number; lastAt: string }> = [];
-  const signature = (e: LifecycleEvent): string =>
-    [e.kind, e.actorKind, e.actorName, e.fromStatus, e.toStatus, e.reason, e.dispatchedBy, e.source, e.detail].join('|');
-  for (const e of events) {
-    const prev = collapsed[collapsed.length - 1];
-    if (prev && signature(prev.event) === signature(e)) {
-      prev.repeats += 1;
-      prev.lastAt = e.at;
-      continue;
-    }
-    collapsed.push({ event: e, repeats: 1, lastAt: e.at });
-  }
+  const collapsed = collapseRuns(
+    events,
+    (e) => [e.kind, e.actorKind, e.actorName, e.fromStatus, e.toStatus, e.reason, e.dispatchedBy, e.source, e.detail].join('|'),
+    (e) => e.at,
+  );
 
-  const render = (row: (typeof collapsed)[number], index: number): string => {
-    const base = formatEvent(row.event, index);
+  // Rendered BEFORE windowing so each row's number is its true position in the full list.
+  const rendered = collapsed.map((row, index) => {
+    const base = formatEvent(row.item, index);
     if (row.repeats === 1) return base;
     // The repeat marker goes on the head line, before any `detail:` continuation.
     const [head, ...rest] = base.split('\n');
-    return [`${head}  ×${row.repeats} (through ${row.lastAt})`, ...rest].join('\n');
-  };
+    return [`${head}  ×${row.repeats} (through ${row.lastStamp})`, ...rest].join('\n');
+  });
 
-  if (collapsed.length <= EVENT_WINDOW_HEAD + EVENT_WINDOW_TAIL) {
-    return collapsed.map(render);
-  }
-
-  const head = collapsed.slice(0, EVENT_WINDOW_HEAD);
-  const tail = collapsed.slice(collapsed.length - EVENT_WINDOW_TAIL);
-  const elided = collapsed.length - head.length - tail.length;
-  return [
-    ...head.map(render),
-    `     … ${elided} row${elided === 1 ? '' : 's'} elided from the MIDDLE of the timeline (the head and the most recent`,
-    '       events are both kept). Repeated failures are summarised in "Failure analysis" above;',
-    '       for the untrimmed list re-fetch GET /api/tasks/<id>/lifecycle.',
-    ...tail.map((row, i) => render(row, collapsed.length - tail.length + i)),
-  ];
+  return windowRows(rendered, {
+    head: EVENT_WINDOW_HEAD,
+    tail: EVENT_WINDOW_TAIL,
+    note: (elided) => [
+      `     … ${elided} row${elided === 1 ? '' : 's'} elided from the MIDDLE of the timeline (the head and the most recent`,
+      '       events are both kept). Repeated failures are summarised in "Failure analysis" above;',
+      '       for the untrimmed list re-fetch GET /api/tasks/<id>/lifecycle.',
+    ],
+  });
 }
 
 /** The live gate block: the reason WITH the facts that produced it. */
@@ -234,7 +188,7 @@ function formatDispatchers(dispatchers: readonly LifecycleDispatcher[]): string[
  */
 export function buildLifecycleDiagnosticsReport(
   data: TicketLifecycle,
-  ctx: LifecycleDiagnosticsContext,
+  ctx: DiagnosticsContext,
 ): string {
   const v = data.verdict;
   const out: string[] = [];
@@ -243,11 +197,7 @@ export function buildLifecycleDiagnosticsReport(
   out.push('');
   // Environment FIRST: a report is worthless if you cannot tell which build produced
   // it, and it is the block most likely to be lost when a long report is cut short.
-  out.push('-- Environment --');
-  out.push(line('capturedAt', ctx.capturedAt));
-  out.push(line('uiVersion', ctx.uiVersion));
-  out.push(line('apiVersion', ctx.apiVersion));
-  out.push(line('sourceUrl', ctx.sourceUrl));
+  out.push(...environmentLines(ctx));
   out.push('');
 
   out.push('-- Ticket --');
@@ -273,7 +223,13 @@ export function buildLifecycleDiagnosticsReport(
 
   // The live re-evaluation, with its inputs. `stallReason` alone says WHICH gate; this
   // says why that gate answered the way it did, which is what a fix has to change.
-  out.push('-- Why it is not running right now (live gate evaluation) --');
+  //
+  // The heading follows the answer rather than presuming it: a report that says "why it
+  // is not running" above `canRunNow: yes` has already contradicted itself in its own
+  // section title, and a reader reasonably trusts headings over the fields beneath them.
+  out.push(data.gate?.canRunNow
+    ? '-- Gate says it CAN run — nothing here is blocking it (live gate evaluation) --'
+    : '-- Why it is not running right now (live gate evaluation) --');
   if (data.gate) out.push(...formatGate(data.gate));
   else out.push('(the server could not evaluate the gate for this ticket — see stallReason above, which then falls back to the last RECORDED auto-run refusal and may be stale)');
   out.push('');
@@ -312,19 +268,13 @@ export function buildLifecycleDiagnosticsReport(
   // whenever keeping it would push the WHOLE report past the budget — the size that
   // matters is the total, not the prose, since it is the total that gets truncated.
   const body = out.join('\n');
-  const full = JSON.stringify(data, null, 2);
-  const fits = body.length + full.length <= REPORT_BUDGET_CHARS;
-
-  out.push('-- Raw payload (JSON) --');
-  if (fits) {
-    out.push(full);
-  } else {
-    out.push(`(events elided: the full report would exceed ${REPORT_BUDGET_CHARS} characters. Every computed block below is intact.)`);
-    out.push(JSON.stringify({
+  out.push(...jsonAppendix(body.length, data, {
+    note: `(events elided: the full report would exceed ${REPORT_BUDGET_CHARS} characters. Every computed block above is intact.)`,
+    compact: () => ({
       ...data,
       events: `<elided: ${data.events.length} events — see the chain of custody above, or re-fetch GET /api/tasks/${data.taskId}/lifecycle>`,
-    }, null, 2));
-  }
+    }),
+  }));
 
   return out.join('\n');
 }

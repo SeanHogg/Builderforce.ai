@@ -1068,7 +1068,8 @@
     "panel": "Panel",
     "copy": "Copiar",
     "copied": "Copiado",
-    "copyFailed": "Error al copiar"
+    "copyFailed": "Error al copiar",
+    "copyDiagnostics": "Copiar diagnóstico"
   },
   "prdCreate": {
     "title": "Nuevo PRD",
@@ -2411,7 +2412,8 @@
         "cooldown_active": "El ticket está en su ventana de espera tras un fallo, antes del siguiente intento autónomo.",
         "not_executable": "Es una tarea de sistema o coordinación: por diseño nunca se asigna a un agente.",
         "pending_approval": "Es una solicitud externa que espera aceptación humana en el triaje antes de que un agente pueda tocarla.",
-        "unrecorded": "Nunca se registró una decisión de ejecución automática: la autonomía no evaluó estos tickets."
+        "unrecorded": "Nunca se registró una decisión de ejecución automática: la autonomía no evaluó estos tickets.",
+        "lane_requirement_gate": "El carril exige una aprobación de rol que sigue pendiente, así que la puerta de requisitos lanzó a ese revisor y suspendió al agente habitual del carril hasta que se resuelva la revisión."
       }
     }
   },
@@ -6289,7 +6291,8 @@
         "no_lane": "Carril no configurado",
         "terminal_lane": "Hecho — no requiere ejecución",
         "not_executable": "Tarea del sistema — no la ejecuta un agente",
-        "pending_approval": "Solicitud externa: a la espera de aprobación"
+        "pending_approval": "Solicitud externa: a la espera de aprobación",
+        "lane_requirement_gate": "Esperando la aprobación del rol"
       }
     },
     "businessValue": {
@@ -6898,7 +6901,8 @@
         "merge_withheld": "Fusión retenida por política",
         "blocked": "Bloqueado",
         "unknown": "Sin clasificar"
-      }
+      },
+      "copyDiagnosticsAria": "Copiar el diagnóstico completo del Manager IA: niveles de política, estado de la autonomía, recuentos del backlog, cada pase de gestión, cada decisión y cada ticket atascado"
     }
   },
   "project360": {
@@ -7733,7 +7737,6 @@
       "tool_audit_events": "Auditoría de decisiones de auto-ejecución",
       "aria": "Origen: {label}"
     },
-    "copyDiagnostics": "Copiar diagnóstico",
     "copyDiagnosticsAria": "Copiar el diagnóstico completo del ciclo de vida de este tique, con cada evento, id de ejecución y motivo de bloqueo",
     "failures": {
       "title": "Análisis de fallos",

@@ -109,7 +109,40 @@ export async function maybeAutoRunOnLaneEntry(
       status:      args.status,
       submittedBy: args.submittedBy,
     });
-    if (gate.blocked) return false;
+    if (gate.blocked) {
+      // INSTRUMENT THE BLOCK. This was the one non-run path in the whole trigger that
+      // returned silently: every other refusal below emits `auto_run_skipped`, so a
+      // ticket held here left NO row in `tool_audit_events` at all. Measured on task
+      // 173 — held in `in_review` awaiting a `code-reviewer` sign-off, swept every few
+      // minutes for eleven days, and its chain of custody showed an unbroken gap over
+      // exactly that period. The lifecycle report could then only fall back to a stale
+      // `human_gate` from before the lane was re-gated, because the condition actually
+      // holding the ticket had never been written down.
+      //
+      // `evaluateTaskAutoRun` cannot supply this reason (it does not model the
+      // requirement gate — see EVALUATED_AUTO_RUN_REASONS), so this recorded skip is
+      // the ONLY evidence of it, and the ledger deliberately keeps it even when the
+      // live gate answers `will_run`.
+      await recordCloudToolEvent(db, {
+        tenantId:      args.tenantId,
+        cloudAgentRef: evaln.candidate?.agentRef ?? evaln.assignedAgentRef ?? args.submittedBy,
+        executionId:   null,
+        sessionKey:    `task:${args.taskId}`,
+        toolName:      'auto_run_skipped',
+        category:      'planning',
+        detail:        {
+          taskId: args.taskId,
+          lane: args.status,
+          reason: 'lane_requirement_gate',
+          ...(gate.dispatchedReviewers.length ? { dispatchedReviewers: gate.dispatchedReviewers } : {}),
+          ...(gate.dispatchedProducers.length ? { dispatchedProducers: gate.dispatchedProducers } : {}),
+        },
+        result: (`Auto-run skipped (lane_requirement_gate) for task ${args.taskId} on lane '${args.status}': `
+          + `awaiting role sign-off${gate.dispatchedReviewers.length ? ` — dispatched reviewer(s): ${gate.dispatchedReviewers.join(', ')}` : ''}`
+          + `${gate.dispatchedProducers.length ? ` — dispatched producer(s): ${gate.dispatchedProducers.join(', ')}` : ''}.`).slice(0, 300),
+      }).catch(() => { /* best-effort telemetry — never block the trigger */ });
+      return false;
+    }
 
     // A lane whose every candidate agent lacks its required capabilities is a
     // configuration error, not a silent no-op. Emit a `capability_mismatch` warning

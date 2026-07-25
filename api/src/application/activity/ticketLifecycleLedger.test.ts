@@ -115,6 +115,53 @@ describe('classifyTicketAutonomy', () => {
     expect(v.stallReason).toBe('human_gate');
   });
 
+  it('reports a live `will_run` verbatim instead of falling back to a stale skip', () => {
+    // THE REGRESSION (task 173). The lane had since been re-gated to 'auto' and staffed,
+    // so the live gate cleared the ticket — but `will_run` was being suppressed to null
+    // and `??` then reached past it to a `human_gate` skip recorded eleven days earlier.
+    // The report named an approval gate that no longer existed, in the same payload as a
+    // gate block reading `laneGate: auto, canRunNow: true`.
+    const v = classifyTicketAutonomy({
+      ...autonomousToDone,
+      currentStatus: 'in_review',
+      isTerminal: false,
+      lastSkipReason: 'human_gate',
+      liveReason: 'will_run',
+    });
+    expect(v.stalled).toBe(true);
+    expect(v.stallReason).toBe('will_run');
+    expect(v.stallText).toContain('Nothing is gating this ticket');
+    // The tense guard: a verdict evaluates, it never dispatches.
+    expect(v.stallText).not.toContain('was dispatched');
+  });
+
+  it('keeps a recorded reason the live gate does NOT model, even when it answers will_run', () => {
+    // `evaluateTaskAutoRun` never looks at the lane REQUIREMENT gate, so its `will_run`
+    // means "nothing I model blocks this" — not "nothing blocks this". Task 173 is held
+    // in `in_review` awaiting a code-reviewer sign-off; letting a live will_run erase
+    // that recorded reason would delete the only evidence of the actual holder.
+    const v = classifyTicketAutonomy({
+      ...autonomousToDone,
+      currentStatus: 'in_review',
+      isTerminal: false,
+      lastSkipReason: 'lane_requirement_gate',
+      liveReason: 'will_run',
+    });
+    expect(v.stallReason).toBe('lane_requirement_gate');
+    expect(v.stallText).toContain('role sign-off');
+  });
+
+  it('lets a live BLOCKING reason override even an unmodelled recorded one', () => {
+    const v = classifyTicketAutonomy({
+      ...autonomousToDone,
+      currentStatus: 'in_review',
+      isTerminal: false,
+      lastSkipReason: 'lane_requirement_gate',
+      liveReason: 'run_cap_exhausted',
+    });
+    expect(v.stallReason).toBe('run_cap_exhausted');
+  });
+
   it('falls back to the recorded skip when no live evaluation was supplied', () => {
     const v = classifyTicketAutonomy({
       ...autonomousToDone, currentStatus: 'review', isTerminal: false, lastSkipReason: 'run_cap_exhausted',
