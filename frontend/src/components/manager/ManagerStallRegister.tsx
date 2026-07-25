@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'r
 import { useTranslations, useFormatter } from 'next-intl';
 import Link from 'next/link';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
-import { managerApi, type StallRegister, type StallWatchRow } from '@/lib/builderforceApi';
+import { CopyButton } from '@/components/CopyButton';
+import { managerApi, type ManagerOverview, type StallRegister, type StallWatchRow } from '@/lib/builderforceApi';
+import { buildManagerDiagnosticsReport } from '@/lib/managerDiagnostics';
+import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
 } from '@/components/dataTableStyles';
@@ -22,6 +25,13 @@ import {
  * without the ticket moving is not a fix in progress, it is a livelock — so the row
  * flips to "needs you" and sorts to the top. Showing the attempt count is what lets a
  * human tell "the manager is on it" from "the manager has been on it for a week".
+ *
+ * It also carries the surface's HANDOVER: "Copy diagnostics" serialises the manager's
+ * whole state — policy tiers, autonomy health, backlog counts, every management pass and
+ * every stuck row — into one paste. This is the tab a human opens when the board has
+ * rotted, and a screenshot of it loses exactly the fields that say why (which policy tier
+ * turned a capability off, whether the passes are completing, what each remedy has been
+ * tried against). See {@link ../../lib/managerDiagnostics}.
  */
 
 const panelStyle: CSSProperties = {
@@ -56,10 +66,18 @@ function Badge({ label, fg, bg }: { label: string; fg: string; bg: string }) {
 
 export interface ManagerStallRegisterProps {
   projectId: number;
+  /**
+   * The manager overview the parent already loaded (config, policy tiers, stats, passes,
+   * decisions, autonomy health). Passed in rather than re-fetched: the diagnostics report
+   * needs it, the parent has it live, and a second fetch of the same endpoint would be a
+   * pure duplicate. `null` while it is still loading — the button waits for it.
+   */
+  overview: ManagerOverview | null;
 }
 
-export function ManagerStallRegister({ projectId }: ManagerStallRegisterProps) {
+export function ManagerStallRegister({ projectId, overview }: ManagerStallRegisterProps) {
   const t = useTranslations('manager.stalls');
+  const tCommon = useTranslations('common');
   const format = useFormatter();
   const [data, setData] = useState<StallRegister | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,18 +117,63 @@ export function ManagerStallRegister({ projectId }: ManagerStallRegisterProps) {
     [data, t],
   );
 
-  if (loading) return <div style={{ ...panelStyle, ...mutedStyle }}>{t('loading')}</div>;
+  /**
+   * The one-paste handover. Built on click (never per render — it serialises the whole
+   * manager state) and re-reads the register first: this panel loads it once on mount, so
+   * a capture stamped "now" carrying minutes-old rows would be a subtly wrong report.
+   * A failed re-read falls back to what is on screen, and the report says which it used.
+   */
+  const buildReport = useCallback(async (): Promise<string> => {
+    if (!overview) return '';
+    const fresh = await managerApi.stalls(projectId).catch(() => null);
+    const stalls = fresh ?? data;
+    return buildManagerDiagnosticsReport(
+      { projectId, overview, stalls, stallsError: stalls == null ? (error ?? 'the stuck register could not be loaded') : null },
+      await captureDiagnosticsContext(),
+    );
+  }, [projectId, overview, data, error]);
+
+  // The header renders in EVERY state — including the failed one. A register that cannot
+  // load is itself a finding, and it is exactly when a human most wants to hand the state
+  // over, so the copy affordance must not disappear with the table.
+  const header = (
+    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ ...sectionTitleStyle, marginBottom: 4 }}>{t('title')}</div>
+        <div style={mutedStyle}>{t('caption', { maxAttempts: data?.maxAttempts ?? 3 })}</div>
+      </div>
+      {overview && (
+        <CopyButton
+          label={tCommon('copyDiagnostics')}
+          ariaLabel={t('copyDiagnosticsAria')}
+          getText={buildReport}
+        />
+      )}
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {header}
+        <div style={{ ...panelStyle, ...mutedStyle }}>{t('loading')}</div>
+      </div>
+    );
+  }
   if (error) {
     return (
-      <div style={{ ...panelStyle, ...mutedStyle }}>
-        {error}{' '}
-        <button
-          type="button"
-          onClick={() => void load()}
-          style={{ background: 'none', border: 'none', color: 'var(--accent, #2563eb)', cursor: 'pointer', fontWeight: 700, padding: 0 }}
-        >
-          {t('retry')}
-        </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {header}
+        <div style={{ ...panelStyle, ...mutedStyle }}>
+          {error}{' '}
+          <button
+            type="button"
+            onClick={() => void load()}
+            style={{ background: 'none', border: 'none', color: 'var(--accent, #2563eb)', cursor: 'pointer', fontWeight: 700, padding: 0 }}
+          >
+            {t('retry')}
+          </button>
+        </div>
       </div>
     );
   }
@@ -119,10 +182,7 @@ export function ManagerStallRegister({ projectId }: ManagerStallRegisterProps) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div>
-        <div style={{ ...sectionTitleStyle, marginBottom: 4 }}>{t('title')}</div>
-        <div style={mutedStyle}>{t('caption', { maxAttempts: data?.maxAttempts ?? 3 })}</div>
-      </div>
+      {header}
 
       {rows.length === 0 ? (
         <div style={{ ...panelStyle, ...mutedStyle }}>{t('empty')}</div>
