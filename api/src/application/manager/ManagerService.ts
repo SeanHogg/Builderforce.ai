@@ -51,6 +51,7 @@ import { listActiveManagerDirectives } from './managerDirectives';
 import { RoleAssignmentService, type AssigneeKind } from '../kanban/roleAssignmentService';
 import { recommendTopAssignee } from '../metrics/assigneeRecommender';
 import { producerRoleForActionType } from '../kanban/roleCapability';
+import { resolveSignoffGate } from '../kanban/signoffGate';
 import { mergeRecordedPullRequest, updateRecordedPullRequestBranch } from '../repos/mergeRecordedPr';
 import { pollPrCiStatus } from '../repos/pollPrCiStatus';
 import { dispatchTaskFinalize } from '../../presentation/routes/taskRoutes';
@@ -117,6 +118,7 @@ export async function getManagerConfigRow(
       autoBusinessValue: projectManagerConfigs.autoBusinessValue,
       autoPrioritize: projectManagerConfigs.autoPrioritize,
       managerType: projectManagerConfigs.managerType,
+      requireSignoffToComplete: projectManagerConfigs.requireSignoffToComplete,
       lastRunAt: projectManagerConfigs.lastRunAt,
     })
     .from(projectManagerConfigs)
@@ -137,7 +139,7 @@ export async function upsertManagerConfig(
   db: Db,
   tenantId: number,
   projectId: number,
-  patch: Partial<Pick<ManagerConfigRow, 'managerRef' | 'enabled' | 'prMergePolicy' | 'autoAssign' | 'autoBusinessValue' | 'autoPrioritize' | 'managerType'>>,
+  patch: Partial<Pick<ManagerConfigRow, 'managerRef' | 'enabled' | 'prMergePolicy' | 'autoAssign' | 'autoBusinessValue' | 'autoPrioritize' | 'managerType' | 'requireSignoffToComplete'>>,
 ): Promise<ManagerConfigRow> {
   const now = new Date();
   await db
@@ -151,6 +153,9 @@ export async function upsertManagerConfig(
       autoBusinessValue: patch.autoBusinessValue ?? true,
       autoPrioritize: patch.autoPrioritize ?? true,
       managerType: normalizeManagerType(patch.managerType),
+      // Default TRUE on insert: a newly-configured project must not silently gain
+      // unreviewed auto-merge authority just because the caller omitted the field.
+      requireSignoffToComplete: patch.requireSignoffToComplete ?? true,
       updatedAt: now,
     })
     .onConflictDoUpdate({
@@ -163,6 +168,7 @@ export async function upsertManagerConfig(
         ...(patch.autoBusinessValue !== undefined ? { autoBusinessValue: patch.autoBusinessValue } : {}),
         ...(patch.autoPrioritize !== undefined ? { autoPrioritize: patch.autoPrioritize } : {}),
         ...(patch.managerType !== undefined ? { managerType: normalizeManagerType(patch.managerType) } : {}),
+        ...(patch.requireSignoffToComplete !== undefined ? { requireSignoffToComplete: patch.requireSignoffToComplete } : {}),
         updatedAt: now,
       },
     });
@@ -877,10 +883,23 @@ async function coordinatePullRequests(
 ): Promise<void> {
   const { tenantId, projectId, policy, managed, summary, runTaskId } = ctx;
 
-  // CONDUCT: open PRs for review-complete cloud tickets (skip under 'queue').
+  // CONDUCT: complete review-ready tickets and open their PRs (skip under 'queue').
+  //
+  // SELF-GOVERNANCE (0362): this step is where the manager exercises completion
+  // authority, so it is where unanimous sign-off is enforced. Previously it force-wrote
+  // `status = DONE` for ANY in-review ticket with a branch, with no manifest check —
+  // agent work was merged unreviewed. Now `requireSignoffToComplete` (default true)
+  // demands every REQUIRED participation slot be satisfied first, and a ticket whose
+  // manifest has no required slots never qualifies (signoffGate fails closed).
+  //
+  // The eligibility filter also no longer requires `gitBranch`: a ticket can be real
+  // work with nothing to merge (a decision, a doc, a non-code chore). Those used to sit
+  // in review forever because only branch-bearing tickets were ever conducted. A
+  // fully-signed-off ticket with no branch is now closed directly — there is simply no
+  // PR to open for it.
   if (policy.prMergePolicy !== 'queue') {
     const reviewReady = managed
-      .filter((t) => t.status === TaskStatus.IN_REVIEW && t.assignedAgentRef && t.gitBranch && !t.githubPrUrl)
+      .filter((t) => t.status === TaskStatus.IN_REVIEW)
       .slice(0, MAX_PR_ACTIONS_PER_RUN);
     // One scan for in-flight runs across ALL review-ready tasks instead of a
     // listByTask() round-trip per task (N+1). listActiveByTasks already filters
@@ -893,20 +912,49 @@ async function coordinatePullRequests(
     for (const t of reviewReady) {
       try {
         if (liveTaskIds.has(t.id)) continue; // still working — leave it
+
+        // THE GATE. Read the ticket's manifest and require unanimity before completing.
+        // Recorded either way: a withheld completion must be explainable on the manager
+        // feed, not an invisible no-op (which is how the old silent skip hid tickets).
+        const gate = policy.requireSignoffToComplete
+          ? await resolveSignoffGate(env, db, { tenantId, taskId: t.id })
+          : null;
+        if (gate && !gate.satisfied) {
+          await recordManagerAction(db, {
+            tenantId, projectId, taskId: t.id, runTaskId, actionType: 'flag',
+            summary: `Held "${t.title}" in review — ${gate.detail}`,
+            detail: {
+              signoffGate: gate.reason,
+              requiredCount: gate.requiredCount,
+              satisfiedCount: gate.satisfiedCount,
+              outstanding: gate.outstanding.map((o) => ({ roleKey: o.roleKey, roleName: o.roleName, state: o.state })),
+            },
+          });
+          continue;
+        }
+
+        const canOpenPr = !!t.gitBranch && !t.githubPrUrl && (!!t.assignedAgentRef || t.assignedAgentHostId != null);
         await db.update(tasks)
           .set({ status: TaskStatus.DONE, completedAt: new Date(), updatedAt: new Date() })
           .where(eq(tasks.id, t.id));
-        await dispatchTaskFinalize(env as never, db, tenantId, t.id, {
-          assignedAgentHostId: t.assignedAgentHostId,
-          assignedAgentRef: t.assignedAgentRef,
-          gitBranch: t.gitBranch,
-          githubPrUrl: t.githubPrUrl,
-          title: t.title,
-        });
-        summary.prsConducted += 1;
+        if (canOpenPr) {
+          await dispatchTaskFinalize(env as never, db, tenantId, t.id, {
+            assignedAgentHostId: t.assignedAgentHostId,
+            assignedAgentRef: t.assignedAgentRef,
+            gitBranch: t.gitBranch,
+            githubPrUrl: t.githubPrUrl,
+            title: t.title,
+          });
+          summary.prsConducted += 1;
+        }
         await recordManagerAction(db, {
           tenantId, projectId, taskId: t.id, runTaskId, actionType: 'flag',
-          summary: `Review complete — opened PR for "${t.title}".`,
+          summary: canOpenPr
+            ? `All required roles signed off — opened PR for "${t.title}".`
+            : `All required roles signed off — closed "${t.title}" (no branch to merge).`,
+          detail: gate
+            ? { signoffGate: gate.reason, requiredCount: gate.requiredCount, satisfiedCount: gate.satisfiedCount, openedPr: canOpenPr }
+            : { signoffGate: 'not_required', openedPr: canOpenPr },
         });
       } catch { /* skip */ }
     }
@@ -978,6 +1026,29 @@ async function coordinatePullRequests(
       if (policy.prMergePolicy === 'on_green') {
         const live = await pollPrCiStatus(env, db, tenantId, pr);
         if (live !== 'success') continue; // still pending or red — leave it for the next tick
+      }
+
+      // SELF-GOVERNANCE (0362), enforced again at the merge itself. CONDUCT above is not
+      // the only way a PR reaches this loop — the inline run-end finalize, the Done-drag
+      // finalize and board-sync can all record one — so gating only the completion step
+      // would leave an unreviewed back door straight to a squash-merge. Re-checking here
+      // costs one cached manifest read and makes "merged ⇒ signed off" an invariant
+      // rather than a property of the path taken.
+      if (policy.requireSignoffToComplete && pr.taskId != null) {
+        const gate = await resolveSignoffGate(env, db, { tenantId, taskId: pr.taskId });
+        if (!gate.satisfied) {
+          await recordManagerAction(db, {
+            tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: 'flag',
+            summary: `Did not merge PR #${pr.number ?? '?'} — ${gate.detail}`,
+            detail: {
+              signoffGate: gate.reason,
+              requiredCount: gate.requiredCount,
+              satisfiedCount: gate.satisfiedCount,
+              outstanding: gate.outstanding.map((o) => ({ roleKey: o.roleKey, roleName: o.roleName, state: o.state })),
+            },
+          });
+          continue;
+        }
       }
       const result = await mergeRecordedPullRequest(db, env, {
         tenantId, prId: pr.id, method: 'squash', mergedBy: `manager:${policy.managerRef ?? 'system'}`,

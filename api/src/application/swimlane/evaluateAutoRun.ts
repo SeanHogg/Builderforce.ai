@@ -17,6 +17,7 @@ import { boards, swimlanes, swimlaneAgentAssignments, swimlaneRequirements, task
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveArtifacts } from '../artifact/resolveArtifacts';
 import { isAgentRefRoleCapable } from '../kanban/roleCapability';
+import { isParticipantOpen } from '../kanban/participantStates';
 import { decideLaneAutoRun, withOwnerAgentFallback, type LaneAgentLike, type LaneAutoRunDecision } from './laneAutoRun';
 import { findCanonicalBoard } from './canonicalBoard';
 import { isUnapprovedFeedbackTask } from '../feedback/feedbackSpec';
@@ -155,9 +156,9 @@ export function autoRunCooldownRemainingMs(execs: ReadonlyArray<ExecTiming>, now
   return remaining > 0 ? remaining : 0;
 }
 
-/** Manifest slot states that still owe work — a completed/waived/skipped producer
- *  must not be re-dispatched for the same stage. */
-const OPEN_PARTICIPANT_STATES = new Set(['pending', 'assigned', 'in_progress', 'changes_requested']);
+// Manifest slot states that still owe work live in the ONE shared classification
+// (`kanban/participantStates`) — a completed/waived/skipped producer must not be
+// re-dispatched for the same stage.
 
 /** A ticket-participation manifest slot, as far as producer selection cares. */
 export interface ManifestSlot {
@@ -175,7 +176,7 @@ export function pickManifestProducer(rows: ReadonlyArray<ManifestSlot>): string 
   const producer = rows.find((r) =>
     (r.responsibility === 'owner' || r.responsibility === 'contributor')
     && !!r.assigneeRef
-    && OPEN_PARTICIPANT_STATES.has(r.state));
+    && isParticipantOpen(r.state));
   return producer?.assigneeRef ?? null;
 }
 

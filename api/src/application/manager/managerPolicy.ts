@@ -27,6 +27,10 @@ export interface ManagerConfigRow {
   autoPrioritize: boolean;
   /** The manager's domain type (see managerTypes.ts). Defaults to 'general'. */
   managerType: string;
+  /** Gate autonomous completion/merge on unanimous role sign-off (0362). Optional so a
+   *  row projected before the migration lands still type-checks (folded to the safe
+   *  default by {@link resolveEffectiveManagerPolicy}). */
+  requireSignoffToComplete?: boolean;
 }
 
 export interface EffectiveManagerPolicy {
@@ -43,6 +47,17 @@ export interface EffectiveManagerPolicy {
   /** The manager's domain type id: a built-in ('general' | 'delivery' | 'qa' |
    *  'service_desk' | 'devops') or a `role:<key>` custom-role type. */
   managerType: string;
+  /**
+   * Self-governance precondition (migration 0362). When true — the default — the
+   * manager may complete a ticket and merge its PR autonomously ONLY once every
+   * REQUIRED participation slot has signed off. A ticket with no required slots never
+   * qualifies (see `signoffGate.ts`, which fails closed on an empty manifest), so
+   * "nobody reviewed it" can never read as "everybody approved it".
+   *
+   * False restores the pre-0362 behaviour: complete + squash-merge with no sign-off
+   * verification at all. That is a deliberate, auditable opt-out, not a default.
+   */
+  requireSignoffToComplete: boolean;
 }
 
 /** The tenant default applied when a project has no explicit manager config row. */
@@ -55,6 +70,8 @@ export const DEFAULT_MANAGER_POLICY: EffectiveManagerPolicy = {
   autoBusinessValue: true,
   autoPrioritize: true,
   managerType: DEFAULT_MANAGER_TYPE,
+  // Safe by default: autonomous completion requires unanimous sign-off (0362).
+  requireSignoffToComplete: true,
 };
 
 const VALID_PR_POLICIES: ReadonlySet<string> = new Set(['immediate', 'on_green', 'queue']);
@@ -120,5 +137,8 @@ export function resolveEffectiveManagerPolicy(row: ManagerConfigRow | null | und
     autoBusinessValue: row.autoBusinessValue,
     autoPrioritize: row.autoPrioritize,
     managerType: normalizeManagerType(row.managerType),
+    // A legacy row read before 0362 backfills has `undefined` here; default to the SAFE
+    // value rather than to false, so a pre-migration read can never widen authority.
+    requireSignoffToComplete: row.requireSignoffToComplete ?? DEFAULT_MANAGER_POLICY.requireSignoffToComplete,
   };
 }

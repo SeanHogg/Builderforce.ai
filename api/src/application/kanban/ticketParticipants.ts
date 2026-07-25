@@ -28,6 +28,7 @@ import { BUILTIN_ROLES } from './roleCatalog';
 import { resolveRoleCapableAgents } from './roleCapability';
 import { projectRoleAssignments } from '../../infrastructure/database/schema';
 import { requirementApplies, type Responsibility } from './types';
+import { ADVANCEABLE_PARTICIPANT_STATES, blocksCompletion, isParticipantSatisfied } from './participantStates';
 import type { SignoffContribution } from '../audit/ticketAuditService';
 import { TaskStatus } from '../../domain/shared/types';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
@@ -153,8 +154,7 @@ export class TicketParticipantsService {
     const terminal = lane?.isTerminal ?? targetStatus === TaskStatus.DONE;
     if (!terminal) return { blocked: false, outstanding: [] };
     const report = await this.getAccountability(env, tenantId, taskId);
-    const done = new Set(['completed', 'waived', 'skipped']);
-    const outstanding = report.participants.filter((p) => p.required && !done.has(p.state)).map((p) => p.roleName);
+    const outstanding = report.participants.filter(blocksCompletion).map((p) => p.roleName);
     return { blocked: outstanding.length > 0, outstanding };
   }
 
@@ -172,10 +172,9 @@ export class TicketParticipantsService {
       .from(ticketParticipants)
       .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId), eq(ticketParticipants.roleKey, opts.roleKey)));
     if (!all.length) return;
-    const advanceable = new Set<ParticipantState>(['pending', 'assigned', 'unstaffed', 'in_progress']);
     // Prefer the slot for the exact stage the run served; else any advanceable slot.
-    const exact = opts.stageKey != null ? all.filter((r) => r.stageKey === opts.stageKey && advanceable.has(r.state as ParticipantState)) : [];
-    const targets = exact.length ? exact : all.filter((r) => advanceable.has(r.state as ParticipantState));
+    const exact = opts.stageKey != null ? all.filter((r) => r.stageKey === opts.stageKey && ADVANCEABLE_PARTICIPANT_STATES.has(r.state as ParticipantState)) : [];
+    const targets = exact.length ? exact : all.filter((r) => ADVANCEABLE_PARTICIPANT_STATES.has(r.state as ParticipantState));
     if (!targets.length) return;
     for (const r of targets) {
       const isProducer = r.responsibility === 'owner' || r.responsibility === 'contributor';
@@ -208,13 +207,12 @@ export class TicketParticipantsService {
         .from(ticketParticipants)
         .innerJoin(tasks, eq(tasks.id, ticketParticipants.taskId))
         .where(and(eq(ticketParticipants.tenantId, tenantId), eq(tasks.projectId, projectId)));
-      const done = new Set<ParticipantState>(['completed', 'waived', 'skipped']);
       const byTask = new Map<number, { completed: number; required: number }>();
       for (const r of rows) {
         if (!r.required) continue;
         const agg = byTask.get(r.taskId) ?? { completed: 0, required: 0 };
         agg.required += 1;
-        if (done.has(r.state as ParticipantState)) agg.completed += 1;
+        if (isParticipantSatisfied(r.state)) agg.completed += 1;
         byTask.set(r.taskId, agg);
       }
       return [...byTask.entries()].map(([taskId, a]) => ({
@@ -514,15 +512,14 @@ export class TicketParticipantsService {
       for (const s of signoffs) latestBySlot.set(`${s.laneKey ?? ''}:${s.roleKey}`, s);
 
       const required = participants.filter((p) => p.required);
-      const done = new Set<ParticipantState>(['completed', 'waived', 'skipped']);
-      const completedCount = required.filter((p) => done.has(p.state)).length;
+      const completedCount = required.filter((p) => isParticipantSatisfied(p.state)).length;
       const percentComplete = required.length === 0 ? 100 : Math.round((completedCount / required.length) * 100);
 
       const gaps: AccountabilityGap[] = [];
       for (const p of required) {
         if (p.state === 'unstaffed') gaps.push({ kind: 'unstaffed', roleKey: p.roleKey, roleName: p.roleName, detail: 'No capable resource is available for this required role.' });
         else if (p.state === 'changes_requested') gaps.push({ kind: 'changes_requested', roleKey: p.roleKey, roleName: p.roleName, detail: 'Changes were requested and not yet resolved.' });
-        else if (!done.has(p.state)) gaps.push({ kind: 'unsigned', roleKey: p.roleKey, roleName: p.roleName, detail: 'Required role has not signed off.' });
+        else if (!isParticipantSatisfied(p.state)) gaps.push({ kind: 'unsigned', roleKey: p.roleKey, roleName: p.roleName, detail: 'Required role has not signed off.' });
       }
       for (const s of latestBySlot.values()) {
         const hasContribution = s.contribution && Object.values(s.contribution).some((v) => v != null && (!Array.isArray(v) || v.length > 0));
