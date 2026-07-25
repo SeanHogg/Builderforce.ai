@@ -27,7 +27,7 @@ import { vendorForModel } from '../llm/vendors';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from '../llm/builtinMcpService';
-import { shouldRecoverStalledTurn, stallRecoveryNudge, MAX_ANNOUNCEMENT_RECOVERIES } from '@builderforce/agent-stall';
+import { shouldRecoverStalledTurn, isExhaustedStall, stallRecoveryNudge, stallExhaustedNotice, MAX_ANNOUNCEMENT_RECOVERIES } from '@builderforce/agent-stall';
 import {
   BRAIN_ORIGIN, TEAM_ORIGIN, ACCESSIBLE_ORIGINS,
   resolveChatAccess, syncPendingMemberships as syncPendingMembershipsShared,
@@ -972,14 +972,13 @@ export class BrainService {
         // returns the promise to the user as the answer. Re-prompt instead, bounded
         // per reply by the shared budget. Same gate + wording as the Brain run loop
         // and the on-prem/cloud agent loop (`@builderforce/agent-stall`).
-        if (
-          shouldRecoverStalledTurn({
-            text: content,
-            toolCallCount: 0,
-            availableToolCount: tools.length,
-            recoveriesUsed: announcementRecoveries,
-          })
-        ) {
+        const stallInput = {
+          text: content,
+          toolCallCount: 0,
+          availableToolCount: tools.length,
+          recoveriesUsed: announcementRecoveries,
+        };
+        if (shouldRecoverStalledTurn(stallInput)) {
           announcementRecoveries += 1;
           convo.push({ role: 'assistant', content });
           convo.push({
@@ -988,7 +987,13 @@ export class BrainService {
           });
           continue;
         }
-        text = content;
+        // Every recovery spent and the reply is STILL only a description of calls it
+        // never made. Returning `content` alone hands the requester a promise dressed
+        // as an answer; append the reason so the reply says what went wrong and which
+        // remedy actually works (a different model).
+        text = isExhaustedStall(stallInput)
+          ? `${content}\n\n${stallExhaustedNotice(lastModel)}`
+          : content;
         break;
       }
 

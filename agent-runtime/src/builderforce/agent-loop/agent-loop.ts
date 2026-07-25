@@ -18,7 +18,13 @@ import type {
 import type { Message, Model, ToolResultMessage } from "../model/types.js";
 import { EventStream } from "./event-stream.js";
 import type { StreamFn } from "./stream.js";
-import { shouldRecoverStalledTurn, stallRecoveryNudge, MAX_ANNOUNCEMENT_RECOVERIES } from "@builderforce/agent-stall";
+import {
+  shouldRecoverStalledTurn,
+  isExhaustedStall,
+  stallRecoveryNudge,
+  stallExhaustedNotice,
+  MAX_ANNOUNCEMENT_RECOVERIES,
+} from "@builderforce/agent-stall";
 
 export interface AgentLoopConfig {
   model: Model;
@@ -325,16 +331,13 @@ async function runLoop(
       // promise as its result — for an autonomous run that is a silent no-op that
       // still burns the run. Re-prompt instead, bounded per run so a model that keeps
       // narrating can't spin. Nothing to do when steering already queued work.
-      if (
-        !hasMoreToolCalls
-        && pendingMessages.length === 0
-        && shouldRecoverStalledTurn({
-          text: assistantText(message),
-          toolCallCount: toolCalls.length,
-          availableToolCount: currentContext.tools?.length ?? 0,
-          recoveriesUsed: announcementRecoveries,
-        })
-      ) {
+      const stallInput = {
+        text: assistantText(message),
+        toolCallCount: toolCalls.length,
+        availableToolCount: currentContext.tools?.length ?? 0,
+        recoveriesUsed: announcementRecoveries,
+      };
+      if (!hasMoreToolCalls && pendingMessages.length === 0 && shouldRecoverStalledTurn(stallInput)) {
         announcementRecoveries += 1;
         pendingMessages = [
           {
@@ -343,6 +346,19 @@ async function runLoop(
             timestamp: Date.now(),
           },
         ];
+      } else if (!hasMoreToolCalls && pendingMessages.length === 0 && isExhaustedStall(stallInput)) {
+        // Every recovery spent and the model is STILL only describing calls. Ending
+        // here silently leaves a promise as the run's result — for an autonomous run
+        // that reads as a completed step that did nothing. Append the reason to the
+        // transcript so the run output, the ticket ledger and any human reviewer see
+        // WHY it produced nothing, instead of inferring success from a clean exit.
+        const notice: AgentMessage = {
+          role: "user",
+          content: stallExhaustedNotice(config.model?.id),
+          timestamp: Date.now(),
+        };
+        currentContext.messages.push(notice);
+        newMessages.push(notice);
       }
     }
 

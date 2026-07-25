@@ -43,6 +43,39 @@ const ANNOUNCE_VERB =
 const ANNOUNCE_GERUND =
   '(?:searching|fetching|retrieving|querying|loading|checking|looking|scanning|reading|listing|gathering|pulling|examining|inspecting|reviewing|analy[sz]ing)';
 
+/**
+ * A tool identifier exactly as the catalog advertises it — `builtin_chats_list_tickets`,
+ * `mcp__server__tool`. Nothing in ordinary prose looks like this: a model types it only
+ * when transcribing a call from definitions it was handed.
+ */
+const TOOL_IDENT = '(?:builtin_[a-z0-9]+(?:_[a-z0-9]+)+|mcp__[a-z0-9_]+)';
+
+/**
+ * A PSEUDO-CALL — the model writing the call ITSELF as plain text, with no
+ * first-person subject for {@link ANNOUNCE_SUBJECT} to catch:
+ * `run tool builtin_chats_list_tickets with chatId is 85`.
+ *
+ * This is the tail of the same degradation as the announcements above, and it was the
+ * hole that made the whole recovery useless in practice. Measured on VS Code chat #85
+ * (`xai-oauth/grok-4.3`): turns 1-2 promised in the first person ("I'll call the tool…")
+ * and WERE recovered, then the model dropped the narration and emitted the bare call —
+ * which scored as a COMPLETE ANSWER, ended the run, and showed the user
+ * `call builtin_chats_list_tickets with chatId is 85` as the reply. That is the reported
+ * "it doesn't execute, it just dies".
+ *
+ * Requires an invocation SHAPE, never a bare mention, so an answer that legitimately
+ * names a tool ("the builtin_tasks_create tool creates a task", "builtin_x: creates …")
+ * is left alone.
+ */
+const PSEUDO_CALL = [
+  // "call builtin_x", "run tool builtin_x", "invoke the function mcp__srv__x"
+  `(?:call|run|invoke|execute)\\s+(?:the\\s+)?(?:tool\\s+|function\\s+)?${TOOL_IDENT}`,
+  // "builtin_x({…})" / "builtin_x(" — the call written as code
+  `${TOOL_IDENT}\\s*[({]`,
+  // "builtin_x with chatId is 85" — the call written as an argument clause
+  `${TOOL_IDENT}\\s+(?:with|args|arguments)\\b`,
+];
+
 const ANNOUNCED_ACTION = new RegExp(
   [
     'calling (the|this|that|a|it|them|these) [\\w\\s-]*?(tool|function|api|now)',
@@ -50,6 +83,7 @@ const ANNOUNCED_ACTION = new RegExp(
     '(one|just a) (moment|second|sec)\\b',
     `${ANNOUNCE_GERUND} (it|that|this|these|those|the [\\w-]+|now|for)\\b`,
     'stand ?by\\b',
+    ...PSEUDO_CALL,
   ].join('|'),
   'i',
 );
@@ -99,14 +133,8 @@ export function stallRecoveryNudge(lastChance: boolean): string {
   );
 }
 
-/**
- * Should this turn be re-prompted instead of accepted as the final answer?
- *
- * Folds the whole gate — tools were actually offered, the budget is not spent, the
- * turn made no tool calls, and its text is an announcement — so no caller
- * re-implements the branching condition.
- */
-export function shouldRecoverStalledTurn(input: {
+/** The facts a loop knows about the turn it just finished. */
+export interface StalledTurnInput {
   /** Text the assistant produced this turn. */
   text: string;
   /** Tool calls the assistant made this turn. Non-empty means it acted — never a stall. */
@@ -115,11 +143,59 @@ export function shouldRecoverStalledTurn(input: {
   availableToolCount: number;
   /** Recoveries already spent in this run. */
   recoveriesUsed: number;
-}): boolean {
+}
+
+/**
+ * Is this turn a stall at all — tools were offered, none were called, and the text
+ * only promises? The budget-independent half, so the two gates below cannot drift on
+ * WHAT a stall is while disagreeing only on what to do about it.
+ */
+function isStalledTurn(input: StalledTurnInput): boolean {
   return (
     input.toolCallCount === 0
     && input.availableToolCount > 0
-    && input.recoveriesUsed < MAX_ANNOUNCEMENT_RECOVERIES
     && announcesUntakenAction(input.text)
+  );
+}
+
+/**
+ * Should this turn be re-prompted instead of accepted as the final answer?
+ *
+ * Folds the whole gate — tools were actually offered, the budget is not spent, the
+ * turn made no tool calls, and its text is an announcement — so no caller
+ * re-implements the branching condition.
+ */
+export function shouldRecoverStalledTurn(input: StalledTurnInput): boolean {
+  return isStalledTurn(input) && input.recoveriesUsed < MAX_ANNOUNCEMENT_RECOVERIES;
+}
+
+/**
+ * The stall SURVIVED every recovery: same signals, no attempts left.
+ *
+ * This is the branch that decides whether a run dies loudly or quietly. Without it the
+ * loop persists the final promise as the assistant's answer and returns normally, so
+ * the user is shown `call builtin_chats_list_tickets with chatId is 85` as a reply and
+ * has no idea the model never acted — the reported "it doesn't execute, it just dies".
+ * Callers should still show the text (it is what the model said) and additionally
+ * surface {@link stallExhaustedNotice}.
+ */
+export function isExhaustedStall(input: StalledTurnInput): boolean {
+  return isStalledTurn(input) && input.recoveriesUsed >= MAX_ANNOUNCEMENT_RECOVERIES;
+}
+
+/**
+ * The user-facing explanation for a run that never emitted a tool call. Names the
+ * model, because the ONLY effective remedy is switching to one that emits structured
+ * `tool_calls` — no amount of re-prompting fixes a model that will not.
+ *
+ * @param model the model that actually answered, when the loop resolved one.
+ */
+export function stallExhaustedNotice(model?: string | null): string {
+  const who = model && model !== 'default' ? `The model \`${model}\`` : 'The model';
+  return (
+    `${who} described tool calls instead of making them, ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row,`
+    + ' so nothing was actually run and the answer above is only a description of intended actions.'
+    + ' This is a model limitation, not a configuration error — pick a different model for this chat'
+    + ' and send the message again.'
   );
 }
