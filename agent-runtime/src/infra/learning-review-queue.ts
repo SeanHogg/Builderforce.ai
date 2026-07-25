@@ -9,6 +9,7 @@
  */
 
 import { logDebug, logInfo, logWarn } from "../logger.js";
+import { approvalGate } from "./approval-gate.js";
 
 // ── Base types ────────────────────────────────────────────────────────────────
 
