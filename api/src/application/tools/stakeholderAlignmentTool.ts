@@ -20,7 +20,7 @@ export const stakeholderAlignmentToolDefinition: QuestionnaireTool = {
   category: 'governance',
   kind: 'questionnaire',
   about:
-    'Diagnose alignment gaps by scoring five canonical questions: Priority Clarity, Documentation & Access, Conflict Detection, Sign-Off Process, and Visibility & Audit. The tool surfaces top-of-funnel risks like competing P0s, missed deadlines, and outdated maps.',
+    'Diagnose alignment gaps across the full priority lifecycle — Priority Clarity, Documentation & Access, Conflict Detection, Sign-Off Process, Escalation & SLAs, and Visibility & Audit. Rate each statement 1 (never) to 5 (always) to surface top-of-funnel risks like competing P0s, missed sign-off windows, unresolved conflicts, and outdated stakeholder maps, and get a prioritized plan to make "what are we working on and why?" answerable at any moment.',
   scale: [
     { value: 1, label: 'Very Low' },
     { value: 2, label: 'Low' },
