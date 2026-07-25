@@ -68,6 +68,7 @@ import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { getEffectiveManagerPolicy } from '../manager/ManagerService';
 import { concludeCeremonySession } from './concludeCeremony';
 import { notifyCeremonyOpened } from './ceremonyNotifier';
+import { ensureCeremonyMeeting } from './ceremonyMeeting';
 import type { Env } from '../../env';
 
 /** Max schedules processed per sweep — bounds work per cron tick. */
@@ -252,9 +253,28 @@ async function openScheduledCeremony(
     })),
   );
 
-  // Invite the humans. Best-effort and deliberately AFTER the roster insert: a session
-  // whose invites failed is still a valid session someone can join, whereas an invite
-  // pointing at a session that failed to seat anyone would be a link to an empty room.
+  // The companion meeting (0366) — the calendar entry + media room this ceremony is held
+  // in. Best-effort and after the roster insert, because it seeds the meeting's guest
+  // list from it: a ceremony whose shell failed to mint is still a valid ceremony that
+  // records attendance, whereas a shell with no guests would be a link to an empty room.
+  try {
+    await ensureCeremonyMeeting(db, {
+      id: session.id,
+      tenantId: s.tenantId,
+      segmentId: s.segmentId,
+      projectId: s.projectId,
+      kind: s.kind,
+      // The scheduler opens the session with no facilitator (the first human to act
+      // facilitates), so the meeting is hosted by nobody until someone joins.
+      facilitatorId: null,
+      startedAt: now,
+      meetingId: null,
+    });
+  } catch (err) {
+    console.error(`[cron:ceremonies] companion meeting failed session=${session.id}`, err);
+  }
+
+  // Invite the humans. Best-effort, and likewise after the roster insert.
   try {
     const [project] = await db
       .select({ name: projects.name })

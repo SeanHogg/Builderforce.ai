@@ -14,10 +14,14 @@ import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { memberProfiles } from '../../infrastructure/database/schema';
+import type { PtoBlock } from '../member/ptoWindows';
 
 export interface BusyBlock { start: string; end: string; }
 export interface CalEvent { summary?: string; eventType?: string; start?: { date?: string; dateTime?: string }; end?: { date?: string; dateTime?: string }; }
-export interface PtoBlock { from: string; to: string; reason: string; }
+
+/** Re-exported so existing importers keep working; the canonical definition — and the
+ *  reader that finally consumes these blocks — live in `application/member/ptoWindows`. */
+export type { PtoBlock };
 
 const PTO_RX = /\b(ooo|out of office|vacation|pto|holiday|annual leave|on leave|sick)\b/i;
 
