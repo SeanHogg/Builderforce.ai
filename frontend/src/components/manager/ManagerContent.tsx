@@ -70,6 +70,7 @@ const PRIORITY_BADGE: Record<TaskPriority, string> = {
 const PRIORITIES: TaskPriority[] = ['urgent', 'high', 'medium', 'low'];
 const ACTION_ICON: Record<ManagerActionType, string> = {
   prioritize: '📊',
+  schedule: '📅',
   assign: '👤',
   score_value: '💎',
   dispatch: '🚀',
@@ -97,6 +98,7 @@ function autonomyPatchToConfigPatch(patch: Partial<ManagerAutonomyValue>): Manag
   if (typeof patch.autoAssign === 'boolean') out.autoAssign = patch.autoAssign;
   if (typeof patch.autoBusinessValue === 'boolean') out.autoBusinessValue = patch.autoBusinessValue;
   if (typeof patch.autoPrioritize === 'boolean') out.autoPrioritize = patch.autoPrioritize;
+  if (typeof patch.autoSchedule === 'boolean') out.autoSchedule = patch.autoSchedule;
   if (patch.prMergePolicy != null) out.prMergePolicy = patch.prMergePolicy;
   // Ceremony autonomy (0365) is tri-state at the PROJECT tier too — these columns are
   // new, so `null` genuinely means "inherit the workspace answer" and must pass through
@@ -328,6 +330,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
     autoAssign: policy.autoAssign,
     autoBusinessValue: policy.autoBusinessValue,
     autoPrioritize: policy.autoPrioritize,
+    autoSchedule: policy.autoSchedule,
     // Read from the CONFIG ROW, not the resolved policy: these columns are nullable at
     // the project tier, so "not set / inherit" is a real stored state that the resolved
     // policy cannot express (it would report the inherited answer as this project's own).
@@ -440,6 +443,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
         <StatTile label={t('stat.total')} value={stats.total} />
         <StatTile label={t('stat.unscored')} value={stats.unscored} tone={stats.unscored > 0 ? 'warn' : undefined} />
         <StatTile label={t('stat.unranked')} value={stats.unranked} tone={stats.unranked > 0 ? 'warn' : undefined} />
+        <StatTile label={t('stat.undated')} value={stats.undated} tone={stats.undated > 0 ? 'warn' : undefined} />
         <StatTile label={t('stat.unowned')} value={stats.unowned} tone={stats.unowned > 0 ? 'warn' : undefined} />
         <StatTile label={t('stat.flagged')} value={stats.flagged} tone={stats.flagged > 0 ? 'warn' : undefined} />
         <StatTile label={t('stat.openPullRequests')} value={stats.openPullRequests} />

@@ -40,6 +40,9 @@ export interface ManagerAutonomyValue {
   autoAssign: TriState;
   autoBusinessValue: TriState;
   autoPrioritize: TriState;
+  /** May the manager place UNDATED tickets on the timeline (0364)? Ranking answers
+   *  "what first", this answers "when" — and until it existed nothing wrote a date. */
+  autoSchedule: TriState;
   /** Ceremony autonomy (0365) — may the manager run a standup without its people, and
    *  may it move an absent person's stale work onto an agent? */
   allowUnattendedCeremonies: TriState;
@@ -345,6 +348,17 @@ export function ManagerAutonomyControls({
         inheritedAs={inheritHint(inherited.autoPrioritize)}
         disabled={disabled}
         onChange={(v) => onChange({ autoPrioritize: v })}
+      />
+      {/* Directly after ranking, because it is the other half of the same act: rank
+          decides the order, schedule turns that order into dates. */}
+      <TriStateRow
+        label={t('policy.autoSchedule.label')}
+        help={t('policy.autoSchedule.help')}
+        value={value.autoSchedule}
+        inheritable={workspace}
+        inheritedAs={inheritHint(inherited.autoSchedule)}
+        disabled={disabled}
+        onChange={(v) => onChange({ autoSchedule: v })}
       />
       <TriStateRow
         label={t('policy.autoAssign.label')}

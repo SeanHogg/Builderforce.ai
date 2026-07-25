@@ -224,7 +224,7 @@ export function ObservabilityContent({
 
   // ---- Unified directory + selection derivation -----------------------------
   const scopedAgent: UnifiedAgent | null = scopedHostKey != null
-    ? { key: scopedHostKey, kind: 'host', hostId: propAgentHostId, name: propAgentHostName ?? t('agentNumbered', { id: propAgentHostId ?? '' }) }
+    ? { key: scopedHostKey, kind: 'host', hostId: propAgentHostId, name: propAgentHostName ?? t('agentNumbered', { id: String(propAgentHostId ?? '') }) }
     : scopedCloudKey != null
       ? { key: scopedCloudKey, kind: 'cloud', cloudRef: propCloudAgentRef, name: propCloudAgentName ?? t('cloudAgentFallback') }
       : null;
@@ -312,7 +312,9 @@ export function ObservabilityContent({
     const updateConnState = () => setConnState(connectedIds.size > 0 ? 'connected' : 'offline');
 
     for (const hostId of selectedHostIds) {
-      const name = agentByKey.get(`host:${hostId}`)?.name ?? t('agentNumbered', { id: hostId });
+      // String, not number: an ICU number arg would gain a locale thousands separator
+      // ("Agent 1,234") where the old template literal produced the raw id.
+      const name = agentByKey.get(`host:${hostId}`)?.name ?? t('agentNumbered', { id: String(hostId) });
       const gw = new AgentHostGateway({
         url: agentHosts.wsUrl(hostId),
         onEvent: (ev) => {

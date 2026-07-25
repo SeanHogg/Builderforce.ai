@@ -2669,7 +2669,9 @@
       "task": "Task",
       "roadmap": "Roadmap"
     },
-    "exportCsv": "Export CSV"
+    "exportCsv": "Export CSV",
+    "milestoneTip": "Milestone — only one date is set",
+    "derivedTip": "Dates inferred from the items inside it"
   },
   "reconcile": {
     "loading": "Loading work items…",
@@ -6688,7 +6690,8 @@
       "unranked": "Not yet ranked",
       "unowned": "No owner",
       "openPullRequests": "Open PRs",
-      "flagged": "Coverage gaps"
+      "flagged": "Coverage gaps",
+      "undated": "No dates"
     },
     "chart": {
       "title": "Backlog by priority",
@@ -6801,6 +6804,10 @@
         "help": "Hard limit on how many tickets one ceremony may hand over, so a single standup can never quietly re-home a whole sprint.",
         "unit": "tickets",
         "inherited": "Using the inherited value: {value}"
+      },
+      "autoSchedule": {
+        "label": "Put the work on a timeline",
+        "help": "Give undated tickets a start and due date in ranked order, respecting what blocks what. Never changes a date you set yourself."
       }
     },
     "backlog": {
@@ -6824,7 +6831,9 @@
       "sync_pr": "Updated PR",
       "merge_pr": "Merged PR",
       "flag": "Flagged",
-      "coordinate": "Staffed"
+      "coordinate": "Staffed",
+      "schedule": "Scheduled",
+      "merge_blocked": "Merge withheld"
     },
     "runTasks": {
       "title": "Manager tasks",

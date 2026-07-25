@@ -2669,7 +2669,9 @@
       "task": "Tarea",
       "roadmap": "Hoja de ruta"
     },
-    "exportCsv": "Exportar CSV"
+    "exportCsv": "Exportar CSV",
+    "milestoneTip": "Hito — solo hay una fecha definida",
+    "derivedTip": "Fechas deducidas de los elementos que contiene"
   },
   "reconcile": {
     "loading": "Cargando elementos de trabajo…",
@@ -6686,7 +6688,8 @@
       "unranked": "Sin ordenar",
       "unowned": "Sin responsable",
       "openPullRequests": "PR abiertos",
-      "flagged": "Brechas de cobertura"
+      "flagged": "Brechas de cobertura",
+      "undated": "Sin fechas"
     },
     "chart": {
       "title": "Backlog por prioridad",
@@ -6799,6 +6802,10 @@
         "help": "Límite estricto de cuántas tareas puede traspasar una sola ceremonia, para que una daily nunca reasigne en silencio todo un sprint.",
         "unit": "tareas",
         "inherited": "Usando el valor heredado: {value}"
+      },
+      "autoSchedule": {
+        "label": "Situar el trabajo en un calendario",
+        "help": "Asigna fecha de inicio y de entrega a los tickets sin fechas, por orden de prioridad y respetando qué bloquea a qué. Nunca cambia una fecha que hayas puesto tú."
       }
     },
     "backlog": {
@@ -6822,7 +6829,9 @@
       "sync_pr": "PR actualizado",
       "merge_pr": "PR fusionado",
       "flag": "Marcado",
-      "coordinate": "Rol asignado"
+      "coordinate": "Rol asignado",
+      "schedule": "Planificado",
+      "merge_blocked": "Fusión denegada"
     },
     "runTasks": {
       "title": "Tareas del manager",
