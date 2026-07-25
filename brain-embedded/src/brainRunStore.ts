@@ -43,7 +43,15 @@ import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
 import { selectToolsForTurn } from './selectTools';
 import { setLastResolvedModel } from './lastResolvedModel';
 import { chatWorkLinkingDirective, isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, isReadOnlyPlatformTool } from './chatWorkLinking';
-import { shouldRecoverStalledTurn, isExhaustedStall, stallRecoveryNudge, stallExhaustedNotice, MAX_ANNOUNCEMENT_RECOVERIES } from '@builderforce/agent-stall';
+import {
+  shouldRecoverStalledTurn,
+  isExhaustedStall,
+  stallRecoveryNudge,
+  stallExhaustedNotice,
+  modelFailoverNotice,
+  MAX_ANNOUNCEMENT_RECOVERIES,
+  MAX_MODEL_FAILOVERS,
+} from '@builderforce/agent-stall';
 import {
   formatEvermindMemoryBlock,
   countReconciledMemories,
@@ -210,6 +218,20 @@ export interface BrainRunRequest {
   resolvedSystemPrompt: string;
   tools?: BrainToolSpec[];
   model?: string;
+  /**
+   * Pick the next model to try when the current one has burned its whole stall budget
+   * without emitting a single tool call — i.e. re-prompting it is spent and only a
+   * DIFFERENT model can finish the request.
+   *
+   * The loop is deliberately surface-agnostic here: the host holds the cached
+   * `/llm/v1/models` surface and answers with `nextFallbackModel(surface, tried)`, so
+   * the ordering (own account + tool-calling pool first) lives in ONE shared function
+   * rather than in each host. Return undefined — or omit the callback — to keep the
+   * previous behaviour: stop and explain, instead of switching.
+   *
+   * `tried` holds every model already attempted this run, requested and resolved.
+   */
+  pickFallbackModel?: (tried: readonly string[]) => string | undefined;
   runTool?: (name: string, args: unknown) => Promise<unknown>;
   /** Pure predicate: true → pause the loop for an explicit user confirmation. */
   needsConfirm?: (req: { name: string; args: unknown }) => boolean;
@@ -1140,7 +1162,7 @@ async function autoLinkCreatedItem(
 export { startRun as runBrainLoop };
 
 async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promise<void> {
-  const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
+  const { resolvedSystemPrompt, tools: toolSpecs, model, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
   const allTools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined;
   // Tools this run has actually called — pinned into every later turn's selection
@@ -1260,6 +1282,13 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // spending the single retry on the first stall left the user holding the SECOND
   // promise. MAX_TOOL_ITERATIONS still caps the run either way.
   let announcementRecoveries = 0;
+  // The model this run is CURRENTLY talking to, and every model it has already tried.
+  // Both change when a model burns its whole stall budget without emitting a single
+  // tool call: re-prompting such a model is spent, so the run fails over to another
+  // one rather than handing the user a promise (see the failover branch below).
+  let activeModel = model;
+  const triedModels: string[] = [];
+  let modelFailovers = 0;
 
   // Evermind learning + reconciliation provenance for a completed turn. Extracted so
   // BOTH the normal final-answer branch AND the tool-budget-exhausted forced-final
@@ -1322,7 +1351,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     // when the transcript exceeds the token budget (instead of silently dropping it
     // and making the model thrash into "LOOP EXHAUSTED"). Falls back to the
     // drop-oldest window when no summarizer is reachable.
-    const working = await buildWorkingTranscript(c, systemPrompt, stream, model);
+    const working = await buildWorkingTranscript(c, systemPrompt, stream, activeModel);
     if (c.abort?.signal.aborted) return;
     const llmStart = nowMs();
     // Time-to-first-token: stamped on the FIRST streamed delta of this turn so
@@ -1350,7 +1379,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     }
     try {
       result = await stream(
-        { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model, maxTokens, reasoning, metadata, signal: c.abort?.signal },
+        { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model: activeModel, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         { onTextDelta: (d) => { if (firstTokenAt === undefined) firstTokenAt = nowMs(); c.streamingText += d; emit(c); } },
       );
     } catch (e) {
@@ -1362,7 +1391,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         category: 'error',
         label: 'llm.complete',
         durationMs: nowMs() - llmStart,
-        args: { model: model ?? 'default', step: iter },
+        args: { model: activeModel ?? 'default', step: iter },
         result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
         isError: true,
       });
@@ -1377,8 +1406,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     // different (often smaller-window) model than we requested. That's a prime
     // context-exhaustion symptom, so surface it as its own warning step instead
     // of leaving it buried in the model field — the diagnostics block counts it.
-    const resolved = result.resolvedModel ?? model ?? 'default';
-    const requested = model ?? 'default';
+    const resolved = result.resolvedModel ?? activeModel ?? 'default';
+    const requested = activeModel ?? 'default';
     // Record what ACTUALLY served this turn so `builtin_session_current_model` can
     // report the exact model (an MCP call is a separate request and can't see it).
     setLastResolvedModel(result.resolvedModel);
@@ -1588,10 +1617,12 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     c.streamingText = '';
     recordAppended(c, assistantMsg);
 
-    // The model spent every recovery still describing calls instead of making them.
-    // The text stays (it is what it said), but returning here silently would show a
-    // promise as the answer and let the run read as a success — the "it doesn't
-    // execute, it just dies" report. Name the cause and the only remedy that works.
+    // This model spent its whole recovery budget still DESCRIBING calls instead of
+    // making them. Re-prompting it again is spent — the only remedy that works is a
+    // different model, so the run switches to one itself rather than handing the user
+    // a promise and telling them to go pick one (the "it doesn't execute, it just
+    // dies" report). Bounded by MAX_MODEL_FAILOVERS: a run that has burned two models
+    // stops and says so rather than walking the catalog on the tenant's money.
     if (
       runTool
       && isExhaustedStall({
@@ -1601,12 +1632,35 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         recoveriesUsed: announcementRecoveries,
       })
     ) {
-      const notice = stallExhaustedNotice(resolved);
+      // Record BOTH what we asked for and what actually answered: a gateway
+      // auto-select run pinned nothing, so `resolved` is the only id that identifies
+      // the model to skip.
+      for (const m of [activeModel, resolved]) if (m && m !== 'default' && !triedModels.includes(m)) triedModels.push(m);
+      const next = modelFailovers < MAX_MODEL_FAILOVERS ? pickFallbackModel?.(triedModels) : undefined;
+      if (next) {
+        modelFailovers += 1;
+        pushTrace(c, {
+          ts: nowIso(),
+          category: 'message',
+          label: 'loop.model_failover',
+          args: { step: iter, from: resolved, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
+          result: modelFailoverNotice(resolved, next),
+        });
+        activeModel = next;
+        // The new model starts with a full stall budget — the old one's failures say
+        // nothing about this one, and carrying the count over would give it no chance.
+        announcementRecoveries = 0;
+        convo.push({ role: 'user', content: stallRecoveryNudge(false) });
+        c.streamingText = '';
+        emit(c);
+        continue;
+      }
+      const notice = stallExhaustedNotice(resolved, triedModels);
       pushTrace(c, {
         ts: nowIso(),
         category: 'error',
         label: 'loop.stall_unrecovered',
-        args: { step: iter, model: resolved, attempts: announcementRecoveries },
+        args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: triedModels },
         result: notice,
         isError: true,
       });
@@ -1644,7 +1698,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       let closeFirstTokenAt: number | undefined;
       const closing = await stream(
         // No `tools` → the model can't call another tool and must produce text.
-        { messages: working, model, maxTokens, reasoning, metadata, signal: c.abort?.signal },
+        { messages: working, model: activeModel, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         { onTextDelta: (d) => { if (closeFirstTokenAt === undefined) closeFirstTokenAt = nowMs(); c.streamingText += d; emit(c); } },
       );
       accrueByoUnresolved(c, closing.byoUnresolved);
@@ -1655,7 +1709,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         label: 'llm.complete',
         durationMs: nowMs() - closeStart,
         ttftMs: closeFirstTokenAt !== undefined ? closeFirstTokenAt - closeStart : undefined,
-        args: { model: closing.resolvedModel ?? model ?? 'default', requestedModel: model ?? 'default', step: MAX_TOOL_ITERATIONS, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
+        args: { model: closing.resolvedModel ?? activeModel ?? 'default', requestedModel: activeModel ?? 'default', step: MAX_TOOL_ITERATIONS, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
         usage: closing.usage,
         finishReason: closing.finishReason,
         textChars: closing.text.length,
