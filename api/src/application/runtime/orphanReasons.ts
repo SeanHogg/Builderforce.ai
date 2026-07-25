@@ -183,3 +183,35 @@ export const PAUSED_ORPHAN_REASON =
 /** A self-hosted host run that lost its process/connection mid-run. */
 export const HOST_ORPHAN_REASON =
   'Run did not report completion in time and was marked failed (orphaned run — the agent host stopped before writing a terminal status). Re-run the task.';
+
+/**
+ * True when a run's error is the PLATFORM evicting the executor, not the run doing
+ * anything wrong: a Durable Object reset because a deploy replaced its code, an
+ * isolate torn down mid-request, an overloaded/relocated DO.
+ *
+ * WHY THIS IS A DISTINCT CLASS. Cloudflare resets every live Durable Object when a
+ * new Worker version is published, so an ordinary deploy interrupts every in-flight
+ * cloud run at once. Those interruptions used to be written as terminal failures
+ * carrying the raw platform message, and each one counted toward the ticket's
+ * consecutive-failure breaker ({@link ../swimlane/evaluateAutoRun.trailingFailureStreak},
+ * 3 strikes) — so shipping three times in an hour could halt autonomy on a perfectly
+ * healthy ticket. Measured on task 683: three of its five failures were this exact
+ * message inside one 47-minute deploy window.
+ *
+ * The run's cursor is already persisted every tick, so the correct response is to
+ * re-arm and continue — see `CloudRunnerDO.alarm`. This predicate is the shared
+ * definition both that handler and the breaker read, so "a deploy is not a failure"
+ * is decided in one place.
+ */
+export function isInfrastructureEviction(message: string | null | undefined): boolean {
+  if (!message) return false;
+  return /durable object reset|code was updated|durable object is overloaded|isolate (was )?(reset|evicted|destroyed)|execution context was (cancelled|canceled)/i.test(
+    message,
+  );
+}
+
+/** Told to a human when a deploy interrupted their run and it could not be resumed
+ *  in place. Distinct from the orphan reasons above: nothing crashed, and re-running
+ *  is guaranteed to be worth it rather than merely likely. */
+export const INFRA_EVICTION_REASON =
+  'This run was interrupted by a platform restart (the cloud runtime was replaced mid-run, which happens when Builderforce deploys a new version). Nothing went wrong with the task itself and only the steps above ran — re-run it and it will continue normally.';

@@ -561,7 +561,7 @@ export function isCapacityLimitBody(text: string | undefined | null): boolean {
  */
 export function isAccountUnusableBody(text: string | undefined | null): boolean {
   if (!text) return false;
-  return /billing\s+(verification|is\s+not|not)\b|verify\s+your\s+billing|payment\s+(method|details|information)|payment\s+required|add\s+a\s+payment|no\s+active\s+subscription|subscription\s+(has\s+)?(expired|inactive|cancell?ed)|account\s+(is\s+)?(suspended|deactivated|disabled|not\s+active|inactive)|not\s+been\s+activated|access\s+(is\s+)?(suspended|revoked)/i.test(
+  return /billing\s+(verification|is\s+not|not)\b|verify\s+your\s+billing|payment\s+(method|details|information)|payment\s+required|add\s+a\s+payment|no\s+active\s+subscription|subscription\s+(has\s+)?(expired|inactive|cancell?ed)|account\b[^.]{0,24}?\b(suspended|deactivated|disabled|not\s+active|inactive)|not\s+been\s+activated|access\s+(is\s+)?(suspended|revoked)/i.test(
     text,
   );
 }

@@ -6233,7 +6233,9 @@
     },
     "queuedCount": "{count, plural, one {# message en file} other {# messages en file}}",
     "onboardMe": "Aidez-moi à démarrer",
-    "onboardMePrompt": "Je suis nouveau ici — aidez-moi à démarrer. Demandez-moi ce que je veux créer, expliquez comment fonctionnent l'usage et les coûts, recommandez si le plan Free ou Pro convient à mon échéance, et aidez-moi à connecter mon compte IA existant si j'en ai un."
+    "onboardMePrompt": "Je suis nouveau ici — aidez-moi à démarrer. Demandez-moi ce que je veux créer, expliquez comment fonctionnent l'usage et les coûts, recommandez si le plan Free ou Pro convient à mon échéance, et aidez-moi à connecter mon compte IA existant si j'en ai un.",
+    "providerCapBanner": "Votre clé API {providers} a atteint sa limite d’utilisation — cette exécution est repassée sur le pool de modèles partagé.",
+    "manageApiKeys": "Gérer vos clés API →"
   },
   "chatMessage": {
     "copy": "Copier",

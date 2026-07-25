@@ -70,6 +70,8 @@ const KIND_STYLE: Record<LifecycleEventKind, { glyph: string; tone: Tone }> = {
   autorun_skipped:          { glyph: '⊘', tone: 'warn' },
   autorun_error:            { glyph: '⚠', tone: 'danger' },
   autorun_awaiting_approval:{ glyph: '⏳', tone: 'warn' },
+  // Not a failure and not progress — the run existed but was not advancing.
+  run_lifecycle:            { glyph: '⏸', tone: 'warn' },
   role_event:               { glyph: '◆', tone: 'muted' },
 };
 
