@@ -4,13 +4,16 @@
  * The reaper must SELF-HEAL a stalled cloud run by re-queuing it ONCE on the
  * durable executor (CloudRunnerDO), and must NOT do so when a re-run would double
  * a PR (an open PR already exists) — it fails those instead. We drive the reaper
- * against a tiny in-memory fake of the neon tagged-template SQL so we can assert
+ * against a tiny in-memory fake of the Drizzle builder chain so we can assert
  * which executions get re-queued vs failed without a live database.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import type { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
-// A controllable fake for the neon tagged-template function. Each test seeds the
-// candidate rows + the PR count, and we capture the UPDATEs the reaper issues.
+// A controllable fake of the Drizzle `Db`. Each test seeds the candidate rows + the
+// PR count, and we capture the UPDATEs/INSERTs the reaper issues. Sweeps are told
+// apart by the `set` payload they write plus the bound params of their WHERE.
 interface Captured {
   failed: number[];
   failedReasons: Map<number, string>;
@@ -21,43 +24,63 @@ interface Captured {
 let candidateRows: Array<Record<string, unknown>> = [];
 let captured: Captured;
 
-function makeSql() {
-  return (strings: TemplateStringsArray, ...values: unknown[]) => {
-    const text = strings.join(' ');
-    // SELECT of stale cloud candidates.
-    if (text.includes('FROM executions e') && text.includes('JOIN tasks t')) {
-      return Promise.resolve(candidateRows);
-    }
-    // Persist the one-retry flag (requeue path).
-    if (text.includes('SET payload =')) {
-      captured.requeuedPayloads.set(Number(values[1]), String(values[0]));
-      return Promise.resolve([]);
-    }
-    // Fail a single cloud run by id. UPDATE ... error_message = ${reason} WHERE id = ${id}
-    // → values are [reason, id].
-    if (text.includes("status = 'failed'") && text.includes('WHERE id =')) {
-      const reason = String(values[0]);
-      const id = Number(values[1]);
-      captured.failed.push(id);
-      captured.failedReasons.set(id, reason);
-      return Promise.resolve([{ id, tenant_id: 1, agent_host_id: null, payload: null, error_message: reason }]);
-    }
-    // The host-running + queued sweeps (no candidates in these tests).
-    if (text.includes("status = 'failed'")) return Promise.resolve([]);
-    // requeue telemetry event.
-    if (text.includes("'runtime.requeue'")) {
-      // VALUES (tenant_id, NULL, cloud_agent_ref, execution_id, ...) — NULL is a
-      // literal so the interpolated values are [tenant_id, cloud_agent_ref, id, ...].
-      captured.requeueEvents.push(Number(values[2]));
-      return Promise.resolve([]);
-    }
-    // run.failed telemetry mirror.
-    return Promise.resolve([]);
+const dialect = new PgDialect();
+/** Bound parameters of a Drizzle WHERE clause, in order. */
+function paramsOf(where: unknown): unknown[] {
+  return where ? dialect.sqlToQuery(where as SQL).params : [];
+}
+
+/** A `.where()` leaf that is awaitable directly AND via `.returning()`. */
+function leaf<T>(rows: T[]) {
+  return {
+    returning: () => Promise.resolve(rows),
+    then: <R1, R2>(ok?: ((v: T[]) => R1 | PromiseLike<R1>) | null, err?: ((e: unknown) => R2 | PromiseLike<R2>) | null) =>
+      Promise.resolve(rows).then(ok, err),
   };
 }
 
-vi.mock('@neondatabase/serverless', () => ({
-  neon: () => makeSql(),
+function fakeDb() {
+  return {
+    // Only the stale-cloud-candidate SELECT projects `open_pr_count`; every other
+    // read (tasks kinds, the park-age sibling sweep) yields nothing here.
+    select: (fields: Record<string, unknown>) => {
+      const rows = 'open_pr_count' in fields ? candidateRows : [];
+      const where = () => Promise.resolve(rows);
+      return { from: () => ({ where, innerJoin: () => ({ where }) }) };
+    },
+    update: () => ({
+      set: (set: Record<string, unknown>) => ({
+        where: (cond: unknown) => {
+          const id = Number(paramsOf(cond)[0]);
+          // Persist the one-retry flag (requeue path) — payload-only update.
+          if (set.status === undefined && set.payload !== undefined) {
+            captured.requeuedPayloads.set(id, String(set.payload));
+            return leaf<Record<string, unknown>>([]);
+          }
+          // Fail ONE cloud run by id: `where id = $1 and status = $2` binds the id first.
+          // The bulk running/queued/paused sweeps bind a status string there instead.
+          if (set.status === 'failed' && Number.isFinite(id)) {
+            const reason = String(set.errorMessage);
+            captured.failed.push(id);
+            captured.failedReasons.set(id, reason);
+            return leaf([{ id, tenant_id: 1, agent_host_id: null, payload: null, error_message: reason }]);
+          }
+          // The host-running + queued + paused sweeps (no candidates in these tests).
+          return leaf<Record<string, unknown>>([]);
+        },
+      }),
+    }),
+    insert: () => ({
+      values: (v: Record<string, unknown>) => {
+        if (v.toolName === 'runtime.requeue') captured.requeueEvents.push(Number(v.executionId));
+        return Promise.resolve();
+      },
+    }),
+  };
+}
+
+vi.mock('../../infrastructure/database/connection', () => ({
+  buildDatabase: () => fakeDb(),
 }));
 
 import { reapStaleExecutions } from './staleExecutionReaper';

@@ -6,7 +6,6 @@
  */
 import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
-import { neon } from '@neondatabase/serverless';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
 import { signUpload } from '../../infrastructure/auth/uploadSign';
@@ -238,7 +237,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       c.executionCtx.waitUntil((async () => {
         for (const uid of mentioned) {
           try {
-            await notify(neon((c.env as Env).NEON_DATABASE_URL), c.env as Env, {
+            await notify(db, c.env as Env, {
               userId: uid, tenantId, kind: 'chat_mention',
               title: 'You were mentioned in a chat',
               body: 'A teammate addressed you in a Builderforce chat.',
@@ -478,7 +477,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
           const appUrl = (c.env as { APP_URL?: string }).APP_URL || 'https://builderforce.ai';
           const chatUrl = `${appUrl}/ide/dashboard?chat=${id}`;
           if (result.status === 'active' && result.memberUserId) {
-            await notify(neon((c.env as Env).NEON_DATABASE_URL), c.env as Env, {
+            await notify(db, c.env as Env, {
               userId: result.memberUserId, tenantId, kind: 'chat_invite',
               title: `${inviterName} invited you to a chat`,
               body: `You've been added to "${result.chatTitle}". Open Builderforce to join the conversation.`,

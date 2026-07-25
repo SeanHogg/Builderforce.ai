@@ -17,7 +17,6 @@
  */
 import { Hono } from 'hono';
 import { and, eq, desc } from 'drizzle-orm';
-import { neon } from '@neondatabase/serverless';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { rfpRequests, rfpResponses } from '../../infrastructure/database/schema';
@@ -160,7 +159,6 @@ export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: A
       db,
       toolService,
       auditRunner,
-      sql: neon(env.NEON_DATABASE_URL),
       secret: env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '',
     };
     const result = await generateRfpResponse(deps, { tenantId, requestId: id, userId });

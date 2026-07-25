@@ -8,8 +8,9 @@
  *   - an EXISTING 'standard' builder opting in to being hired (POST /freelancers/me/availability),
  * so the row shape never drifts between the two entry points.
  */
-import { neon } from '@neondatabase/serverless';
 import { provisionJobSeeker } from '../integrations/hiredVideo';
+import { buildDatabase } from '../../infrastructure/database/connection';
+import { freelancerProfiles } from '../../infrastructure/database/schema';
 import type { Env } from '../../env';
 
 export async function provisionForHireProfile(
@@ -21,12 +22,15 @@ export async function provisionForHireProfile(
     name: user.name ?? undefined,
     externalUserId: user.id,
   });
-  const sql = neon(env.NEON_DATABASE_URL);
-  await sql`
-    INSERT INTO freelancer_profiles
-      (user_id, hired_video_user_id, hired_video_connection_id, hired_video_claim_url, hired_video_resume_id)
-    VALUES
-      (${user.id}, ${prov.hiredVideoUserId ?? null}, ${prov.connectionId ?? null}, ${prov.claimUrl ?? null}, ${prov.resumeId ?? null})
-    ON CONFLICT (user_id) DO NOTHING
-  `;
+  const db = buildDatabase(env);
+  await db
+    .insert(freelancerProfiles)
+    .values({
+      userId: user.id,
+      hiredVideoUserId: prov.hiredVideoUserId ?? null,
+      hiredVideoConnectionId: prov.connectionId ?? null,
+      hiredVideoClaimUrl: prov.claimUrl ?? null,
+      hiredVideoResumeId: prov.resumeId ?? null,
+    })
+    .onConflictDoNothing({ target: freelancerProfiles.userId });
 }

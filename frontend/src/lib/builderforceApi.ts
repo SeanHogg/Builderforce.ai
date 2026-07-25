@@ -1496,6 +1496,96 @@ export interface AutoRunDiagnostic {
   cooldownRemainingMs?: number;
 }
 
+// ── Ticket lifecycle / autonomy proof (GET /api/tasks/:id/lifecycle) ────────
+// The audit read behind the Lifecycle panel. Every field mirrors the api's
+// `ticketLifecycleLedger` wire shape — the ledger JOINs four collectors that were
+// already writing, which is why it answers for tickets closed weeks ago too.
+// PER-TICKET only; the fleet-wide funnel over the same ledger is
+// `lib/autonomyApi.ts` (`GET /api/insights/autonomy`).
+
+/** Which table a ledger row was READ FROM — the chain of custody for an audit. */
+export type LifecycleEventSource =
+  | 'activity_log'
+  | 'task_status_transitions'
+  | 'executions'
+  | 'tool_audit_events';
+
+export type LifecycleEventKind =
+  | 'created'
+  | 'lane_moved'
+  | 'run_dispatched'
+  | 'run_completed'
+  | 'run_failed'
+  | 'autorun_dispatched'
+  | 'autorun_skipped'
+  | 'autorun_error'
+  | 'autorun_awaiting_approval'
+  | 'role_event';
+
+/** Who drove one event. 'system' covers agents + automation (the `actor_kind` the
+ *  lane-transition log records for every non-human write). */
+export type LifecycleActorKind = 'human' | 'hire' | 'cloud_agent' | 'host_agent' | 'system' | 'unknown';
+
+/** One ordered, provenance-tagged fact in a ticket's life. */
+export interface LifecycleEvent {
+  at: string;
+  kind: LifecycleEventKind;
+  actorKind: LifecycleActorKind;
+  actorName: string | null;
+  fromStatus?: string | null;
+  toStatus?: string | null;
+  /** Backward lane move (a redo / another pass). */
+  isBackward?: boolean | null;
+  /** The auto-run gate that fired, for the `autorun_*` kinds. */
+  reason?: AutoRunReason | null;
+  executionId?: number | null;
+  agentRef?: string | null;
+  detail?: string | null;
+  source: LifecycleEventSource;
+}
+
+/** How the ticket came into existence — `manager_card` is a grooming card that is
+ *  never executable by design, so "it never ran" is intended, not a failure. */
+export type TicketOrigin = 'human' | 'agent' | 'system' | 'manager_card' | 'unknown';
+
+/** The verdict: did autonomy move this ticket, or did a person push every hop? */
+export interface TicketAutonomyVerdict {
+  origin: TicketOrigin;
+  currentStatus: string;
+  isTerminal: boolean;
+  /** Lane moves written by an agent / automation. */
+  autonomousHops: number;
+  /** Lane moves a person made. */
+  humanHops: number;
+  /** Backward lane moves (redo). */
+  backwardHops: number;
+  runsDispatched: number;
+  runsCompleted: number;
+  runsFailed: number;
+  hasLiveRun: boolean;
+  reachedTerminal: boolean;
+  /** Reached a terminal lane with ZERO human lane moves. */
+  fullyAutonomous: boolean;
+  progressedAutonomously: boolean;
+  stalled: boolean;
+  stallReason: AutoRunReason | null;
+  /** The api's plain-English sentence for `stallReason` (fallback for locales /
+   *  reasons the UI has no catalog entry for). */
+  stallText: string | null;
+  /** The most recent recorded auto-run refusal, before the live re-evaluation. */
+  lastSkipReason?: AutoRunReason | null;
+}
+
+export interface TicketLifecycle {
+  taskId: number;
+  projectId: number;
+  title: string;
+  key: string;
+  createdAt: string;
+  events: LifecycleEvent[];
+  verdict: TicketAutonomyVerdict;
+}
+
 /** The three work-item types you can convert between across the board ⇄ OKR boundary. */
 export type WorkItemKind = 'task' | 'epic' | 'objective';
 /** Result of a {@link tasksApi.convertType} / objectives convert-type call. */
@@ -1590,6 +1680,11 @@ export const tasksApi = {
   /** Triage: why a ticket will / will not auto-run its assigned agent. */
   autorunDiagnostics: (id: number): Promise<AutoRunDiagnostic> =>
     request<AutoRunDiagnostic>(`/api/tasks/${id}/autorun-diagnostics`),
+
+  /** AUDIT: the ticket's whole life as an ordered, provenance-tagged chain of
+   *  custody, plus the verdict on whether autonomy or a human moved it. */
+  lifecycle: (id: number): Promise<TicketLifecycle> =>
+    request<TicketLifecycle>(`/api/tasks/${id}/lifecycle`),
 
   /** Triage: dispatch the ticket's owner / first-capable lane agent now,
    *  overriding the lane gate (an explicit human click is the approval). */

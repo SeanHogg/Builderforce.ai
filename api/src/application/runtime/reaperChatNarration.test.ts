@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
 /**
- * Cron-reaper → chat narration. The stale-execution reaper fails runs with RAW SQL,
- * bypassing RuntimeService.update and therefore every chat-awareness hook — so a run
- * that died silently (hung host, evicted cloud isolate, dropped queue, abandoned
- * ask_human) previously NEVER reached the humans driving the linked Brain chats: the
- * conversation showed "started working on…" and then nothing, forever.
+ * Cron-reaper → chat narration. The stale-execution reaper fails runs with bulk
+ * UPDATEs, bypassing RuntimeService.update and therefore every chat-awareness hook —
+ * so a run that died silently (hung host, evicted cloud isolate, dropped queue,
+ * abandoned ask_human) previously NEVER reached the humans driving the linked Brain
+ * chats: the conversation showed "started working on…" and then nothing, forever.
  *
  * These tests prove every reaped failure now fans out through
  * ChatTicketService.postRunMilestone (phase `failed`, per-execution idempotent) with
@@ -21,24 +23,52 @@ const h = vi.hoisted(() => ({
   taskKindQueries: 0,
 }));
 
-function makeSql() {
-  return (strings: TemplateStringsArray, ..._values: unknown[]) => {
-    const text = strings.join(' ');
-    if (text.includes('FROM executions e') && text.includes('JOIN tasks t')) return Promise.resolve([]);
-    if (text.includes('SELECT id, task_type FROM tasks')) {
-      h.taskKindQueries += 1;
-      return Promise.resolve(h.taskKindRows);
-    }
-    if (text.includes("status = 'paused'")) return Promise.resolve(h.reapedPausedRows);
-    if (text.includes("IN ('pending', 'submitted')")) return Promise.resolve(h.reapedQueuedRows);
-    if (text.includes('agent_host_id IS NOT NULL')) return Promise.resolve(h.reapedRunningRows);
-    if (text.includes('INSERT INTO tool_audit_events')) return Promise.resolve([]);
-    return Promise.resolve([]);
+const dialect = new PgDialect();
+/** Bound parameters of a Drizzle WHERE clause, in order — how the three bulk
+ *  sweeps are told apart (each binds its own status value first). */
+function paramsOf(where: unknown): unknown[] {
+  return where ? dialect.sqlToQuery(where as SQL).params : [];
+}
+
+function leaf<T>(rows: T[]) {
+  return {
+    returning: () => Promise.resolve(rows),
+    then: <R1, R2>(ok?: ((v: T[]) => R1 | PromiseLike<R1>) | null, err?: ((e: unknown) => R2 | PromiseLike<R2>) | null) =>
+      Promise.resolve(rows).then(ok, err),
   };
 }
 
-vi.mock('@neondatabase/serverless', () => ({ neon: () => makeSql() }));
-vi.mock('../../infrastructure/database/connection', () => ({ buildDatabase: () => ({}) }));
+function fakeDb() {
+  return {
+    select: (fields: Record<string, unknown>) => {
+      const rows = () => {
+        // The batched ticket-kind read (the no-N+1 assertion below counts these).
+        if ('task_type' in fields) {
+          h.taskKindQueries += 1;
+          return h.taskKindRows;
+        }
+        return []; // stale cloud candidates — none in these tests
+      };
+      const where = () => Promise.resolve(rows());
+      return { from: () => ({ where, innerJoin: () => ({ where }) }) };
+    },
+    update: () => ({
+      set: () => ({
+        where: (cond: unknown) => {
+          const params = paramsOf(cond);
+          if (params[0] === 'paused') return leaf(h.reapedPausedRows);
+          if (params.includes('submitted')) return leaf(h.reapedQueuedRows);
+          if (params[0] === 'running') return leaf(h.reapedRunningRows);
+          return leaf<Record<string, unknown>>([]);
+        },
+      }),
+    }),
+    // tool_audit_events telemetry mirror — asserted elsewhere.
+    insert: () => ({ values: () => Promise.resolve() }),
+  };
+}
+
+vi.mock('../../infrastructure/database/connection', () => ({ buildDatabase: () => fakeDb() }));
 vi.mock('../maintenance/parkAgeTimeout', () => ({
   runParkAgeTimeoutSweep: async () => ({ stale: 0, unparked: 0 }),
 }));

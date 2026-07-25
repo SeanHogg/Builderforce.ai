@@ -19,7 +19,6 @@
  * All IO lives here; the scanners (`auditScanners.ts`) stay pure/testable.
  */
 import { and, eq, ne, inArray } from 'drizzle-orm';
-import type { neon } from '@neondatabase/serverless';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { TaskType, TaskStatus } from '../../domain/shared/types';
@@ -31,8 +30,6 @@ import type { ToolService, SavedToolRun } from './ToolService';
 import type { TaskService } from '../task/TaskService';
 import { getSystemAudit } from './systemAudits';
 import type { AuditScanContext, ScannedRepo } from './auditScanners';
-
-type Sql = ReturnType<typeof neon<false, false>>;
 
 export interface RunAuditArgs {
   tenantId: number;
@@ -190,7 +187,7 @@ export class AuditRunner {
   }
 
   /** Run the audit end-to-end. */
-  async runAudit(env: Env, sql: Sql, args: RunAuditArgs): Promise<AuditRunOutcome | null> {
+  async runAudit(env: Env, args: RunAuditArgs): Promise<AuditRunOutcome | null> {
     const audit = getSystemAudit(args.auditId);
     if (!audit) return null;
 
@@ -206,7 +203,7 @@ export class AuditRunner {
     });
 
     // In-app notification (+ optional email) deep-linking to the report.
-    await notify(sql, env, {
+    await notify(this.db, env, {
       userId: args.userId,
       tenantId: args.tenantId,
       kind: 'audit_complete',

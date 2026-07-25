@@ -56,9 +56,7 @@ describe('Privacy diagnostic — per-gap ticket create→resolve', () => {
     vi.spyOn(runner, 'buildContext').mockResolvedValue({
       projectId: 42, projectName: 'Builderforce.ai', reposConfigured: 1, repos: [bareRepo()],
     } satisfies AuditScanContext);
-
-    const sql = (() => Promise.resolve([])) as never; // notify() no-op
-    const outcome = await runner.runAudit({} as never, sql, {
+    const outcome = await runner.runAudit({} as never, {
       tenantId: 7, projectId: 42, auditId: PRIVACY_AUDIT_ID, userId: 'u1', secret: 's',
     });
 

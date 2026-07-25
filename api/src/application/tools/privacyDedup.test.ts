@@ -46,10 +46,9 @@ describe('Privacy diagnostic — per-gap dedup on re-run', () => {
     vi.spyOn(runner, 'buildContext').mockResolvedValue({
       projectId: 42, projectName: 'Builderforce.ai', reposConfigured: 1, repos: [bareRepo()],
     } satisfies AuditScanContext);
-    const sql = (() => Promise.resolve([])) as never;
 
     // Run 1 — no open tickets yet → one per gap filed.
-    const first = await runner.runAudit({} as never, sql, {
+    const first = await runner.runAudit({} as never, {
       tenantId: 7, projectId: 42, auditId: PRIVACY_AUDIT_ID, userId: 'u1', secret: 's',
     });
     const filed = first!.agentTasks!.length;
@@ -61,7 +60,7 @@ describe('Privacy diagnostic — per-gap dedup on re-run', () => {
     vi.spyOn(runner as unknown as { openTaskTitles: (p: number) => Promise<Set<string>> }, 'openTaskTitles')
       .mockResolvedValue(openTitles);
 
-    const second = await runner.runAudit({} as never, sql, {
+    const second = await runner.runAudit({} as never, {
       tenantId: 7, projectId: 42, auditId: PRIVACY_AUDIT_ID, userId: 'u1', secret: 's',
     });
     expect(second!.agentTasks).toHaveLength(0);           // nothing re-filed

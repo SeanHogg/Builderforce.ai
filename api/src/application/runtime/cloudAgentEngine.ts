@@ -8,7 +8,6 @@
  * surface (CloudRunnerDO), and the worker-fallback path. Framework-free (no Hono)
  * so it is unit-testable against a mocked gateway/DB without standing up the Worker.
  */
-import { neon } from '@neondatabase/serverless';
 import { and, desc, eq, or, isNull } from 'drizzle-orm';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { buildCloudMemoryCapability } from './cloudMemory';
@@ -75,8 +74,8 @@ import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import { resolveAppBaseUrl } from '../../env';
 import type { Env } from '../../env';
-import type { Db } from '../../infrastructure/database/connection';
-import { boards, executions, tasks, specs, toolAuditEvents, usageSnapshots, projects, approvals, projectAgents } from '../../infrastructure/database/schema';
+import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import { boards, executions, tasks, specs, toolAuditEvents, usageSnapshots, projects, approvals, projectAgents, ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 
 /** Resolved cloud-agent identity for a run — engine, display label, surface, model. */
@@ -125,15 +124,25 @@ export async function resolveCloudAgent(
   const DEFAULT: ResolvedCloudAgent = { engine: CURRENT_ENGINE_ID, ref, runtimeSurface: 'durable' };
   if (!ref) return DEFAULT;
   try {
-    const sql = neon(env.NEON_DATABASE_URL);
-    const rows = (await sql`SELECT name, runtime_surface, base_model, runtime_support, preferred_runtime FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ name?: string; runtime_surface?: string; base_model?: string; runtime_support?: string; preferred_runtime?: string | null }>;
+    const db = buildDatabase(env);
+    const rows = await db
+      .select({
+        name:             ideAgents.name,
+        runtimeSurface:   ideAgents.runtimeSurface,
+        baseModel:        ideAgents.baseModel,
+        runtimeSupport:   ideAgents.runtimeSupport,
+        preferredRuntime: ideAgents.preferredRuntime,
+      })
+      .from(ideAgents)
+      .where(and(eq(ideAgents.id, ref), eq(ideAgents.tenantId, tenantId)))
+      .limit(1);
     const engine = CURRENT_ENGINE_ID;
     const label = typeof rows[0]?.name === 'string' && rows[0].name ? rows[0].name : undefined;
-    const runtimeSurface = rows[0]?.runtime_surface === 'container' ? 'container' : 'durable';
-    const rawModel = typeof rows[0]?.base_model === 'string' ? rows[0].base_model.trim() : '';
+    const runtimeSurface = rows[0]?.runtimeSurface === 'container' ? 'container' : 'durable';
+    const rawModel = typeof rows[0]?.baseModel === 'string' ? rows[0].baseModel.trim() : '';
     const baseModel = rawModel && rawModel !== AGENT_DEFAULT_MODEL_SENTINEL ? rawModel : undefined;
-    const runtimeSupport = typeof rows[0]?.runtime_support === 'string' ? rows[0].runtime_support : undefined;
-    const preferredRuntime = rows[0]?.preferred_runtime ?? null;
+    const runtimeSupport = typeof rows[0]?.runtimeSupport === 'string' ? rows[0].runtimeSupport : undefined;
+    const preferredRuntime = rows[0]?.preferredRuntime ?? null;
     return { engine, label, ref, runtimeSurface, baseModel, runtimeSupport, preferredRuntime };
   } catch {
     return DEFAULT;
@@ -152,8 +161,12 @@ export async function loadAgentPsychometric(
 ): Promise<string | null> {
   if (!ref) return null;
   try {
-    const sql = neon(env.NEON_DATABASE_URL);
-    const rows = (await sql`SELECT psychometric FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ psychometric?: string | null }>;
+    const db = buildDatabase(env);
+    const rows = await db
+      .select({ psychometric: ideAgents.psychometric })
+      .from(ideAgents)
+      .where(and(eq(ideAgents.id, ref), eq(ideAgents.tenantId, tenantId)))
+      .limit(1);
     return typeof rows[0]?.psychometric === 'string' ? rows[0].psychometric : null;
   } catch {
     return null;
@@ -226,7 +239,7 @@ async function loadGovernanceContext(db: Db, tenantId: number, projectId: number
  */
 /** Record a durable, agent-attributed file change for the task's Changes tab. */
 async function recordTaskFileChange(
-  env: Env,
+  db: Db,
   tenantId: number,
   taskId: number,
   executionId: number,
@@ -235,11 +248,7 @@ async function recordTaskFileChange(
   agent: string,
 ): Promise<void> {
   try {
-    const sql = neon(env.NEON_DATABASE_URL);
-    await sql`
-      INSERT INTO task_file_changes (tenant_id, task_id, execution_id, path, change, agent)
-      VALUES (${tenantId}, ${taskId}, ${executionId}, ${path}, ${change}, ${agent})
-    `;
+    await db.insert(taskFileChanges).values({ tenantId, taskId, executionId, path, change, agent });
   } catch { /* best-effort */ }
 }
 
@@ -384,7 +393,7 @@ async function landPrdChange(
   },
 ): Promise<void> {
   const fileChange = args.isUpdate ? 'modified' : 'created';
-  await recordTaskFileChange(env, args.tenantId, args.taskId, args.executionId, 'PRD.md', fileChange, args.agentLabel);
+  await recordTaskFileChange(db, args.tenantId, args.taskId, args.executionId, 'PRD.md', fileChange, args.agentLabel);
 
   const committed = await commitPrdAsPendingChange(db, gitSecret(env), args.tenantId, args.taskId, args.taskTitle, args.prd, args.agentLabel);
   if (committed.ok) {
@@ -1221,7 +1230,7 @@ export async function handleContainerOp(
     // Label from whether the path actually existed in the repo (commit.existed),
     // not the caller's `isNew` hint — that defaults to true and mislabels edits as "created".
     const change = commit.existed ? 'modified' : 'created';
-    await recordTaskFileChange(env, tenantId, taskId, executionId, path, change, agentLabel);
+    await recordTaskFileChange(db, tenantId, taskId, executionId, path, change, agentLabel);
     notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change, ts: new Date().toISOString() });
     await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'write_file', category: 'tool', detail: { path, summary: args.summary }, result: `committed to ${repo.ctx.branch}` });
     return { status: 200, body: { ok: true, branch: repo.ctx.branch, commitUrl: commit.commitUrl } };
@@ -1456,7 +1465,7 @@ function buildCloudProvider(args: {
         // created vs modified comes from whether the path pre-existed in the repo
         // (commit.existed), not first-write-this-run.
         const change = commit.existed ? 'modified' : 'created';
-        await recordTaskFileChange(env, tenantId, taskRow.id, executionId, path, change, agentLabel);
+        await recordTaskFileChange(db, tenantId, taskRow.id, executionId, path, change, agentLabel);
         notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change, ts: new Date().toISOString() });
         return { ok: true, branch: repoCtx.branch, commitUrl: commit.commitUrl, change };
       },
@@ -1475,7 +1484,7 @@ function buildCloudProvider(args: {
         const commit = await commitAgentFile(repoCtx, path, updated, agentCommitMessage(firstWriteThisRun ? 'Edit' : 'Update', path, taskRow.id, agentLabel));
         if (!commit.ok) return { ok: false, error: commit.reason };
         writtenPaths.add(path);
-        await recordTaskFileChange(env, tenantId, taskRow.id, executionId, path, 'modified', agentLabel);
+        await recordTaskFileChange(db, tenantId, taskRow.id, executionId, path, 'modified', agentLabel);
         notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: 'modified', ts: new Date().toISOString() });
         return { ok: true, branch: repoCtx.branch, commitUrl: commit.commitUrl, change: 'modified', replaced: edit.replaced };
       },
@@ -1485,7 +1494,7 @@ function buildCloudProvider(args: {
         const del = await deleteAgentFile(repoCtx, path, agentCommitMessage('Remove', path, taskRow.id, agentLabel, suffix));
         if (del.ok) {
           writtenPaths.delete(path);
-          await recordTaskFileChange(env, tenantId, taskRow.id, executionId, path, 'deleted', agentLabel);
+          await recordTaskFileChange(db, tenantId, taskRow.id, executionId, path, 'deleted', agentLabel);
           notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: 'deleted', ts: new Date().toISOString() });
           return { ok: true, branch: repoCtx.branch, commitUrl: del.commitUrl };
         }

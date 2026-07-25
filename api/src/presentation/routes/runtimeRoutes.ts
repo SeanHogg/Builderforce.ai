@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { neon } from '@neondatabase/serverless';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { dispatchGithubActionsRun, githubActionsAvailable } from '../../application/runtime/githubActionsDispatch';
 import { resolveTicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
@@ -41,6 +40,7 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import { approvals, chatTicketLinks, projectManagerConfigs } from '../../infrastructure/database/schema';
+import { agentPurchases, ideAgents, llmUsageLog, taskFileChanges } from '../../infrastructure/database/schema';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { resolveProjectInferenceModel } from '../../application/llm/projectEvermind';
 import { executionTokenGate } from './executionTokenGate';
@@ -1342,14 +1342,28 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const rows = await getOrSetCached(
       c.env as Env,
       runtimeHiredAgentsCacheKey(tenantId),
-      () => neon(c.env.NEON_DATABASE_URL)`
-        SELECT a.id, a.name, a.bio, a.skills, a.base_model
-        FROM ide_agents a
-        JOIN agent_purchases p ON p.agent_id = a.id
-        WHERE p.tenant_id = ${tenantId} AND p.unhired_at IS NULL AND a.status = 'active'
-        ORDER BY p.created_at DESC
-        LIMIT 200
-      ` as unknown as Promise<Array<{ id: string; name: string; bio: string | null; skills: unknown; base_model: string | null }>>,
+      // Projected with the ORIGINAL snake_case `base_model` key: the contract above
+      // (and the KV-cached payload) is read by projectHiredAgent, so the shape must
+      // not drift to Drizzle's camelCase.
+      // `unhired_at` (migration 0101, the soft-delete marker) is not declared on the
+      // Drizzle `agentPurchases` table, so the predicate stays a raw fragment.
+      async () => db
+        .select({
+          id: ideAgents.id,
+          name: ideAgents.name,
+          bio: ideAgents.bio,
+          skills: ideAgents.skills,
+          base_model: ideAgents.baseModel,
+        })
+        .from(ideAgents)
+        .innerJoin(agentPurchases, eq(agentPurchases.agentId, ideAgents.id))
+        .where(and(
+          eq(agentPurchases.tenantId, tenantId),
+          sql`${agentPurchases}.unhired_at is null`,
+          eq(ideAgents.status, 'active'),
+        ))
+        .orderBy(desc(agentPurchases.createdAt))
+        .limit(200),
     );
 
     const agents = rows.map((r) => projectHiredAgent(r));
@@ -1527,14 +1541,14 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const namedRefs = rows.map((r) => r.ref).filter((r): r is string => !!r);
     const hasDefault = rows.some((r) => r.ref == null);
 
-    // Resolve display names from the raw-SQL ide_agents table (best-effort).
+    // Resolve display names from the ide_agents table (best-effort).
     const nameByRef = new Map<string, string>();
     if (namedRefs.length > 0) {
       try {
-        const sql = neon((c.env as Env).NEON_DATABASE_URL);
-        const named = (await sql`
-          SELECT id, name FROM ide_agents WHERE tenant_id = ${tenantId} AND id = ANY(${namedRefs})
-        `) as Array<{ id: string; name: string }>;
+        const named = await db
+          .select({ id: ideAgents.id, name: ideAgents.name })
+          .from(ideAgents)
+          .where(and(eq(ideAgents.tenantId, tenantId), inArray(ideAgents.id, namedRefs)));
         for (const n of named) nameByRef.set(String(n.id), n.name);
       } catch { /* names are cosmetic — fall back to the ref */ }
     }
@@ -1926,14 +1940,16 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       c.env as Env,
       `task-cost:v1:${tenantId}:${taskId}`,
       async () => {
-        const sql = neon((c.env as Env).NEON_DATABASE_URL);
-        const rows = (await sql`
-          SELECT COALESCE(SUM(cost_usd_millicents), 0)::bigint AS cost_mc,
-                 COALESCE(SUM(total_tokens), 0)::bigint       AS tokens,
-                 COUNT(*)::int                                 AS requests
-            FROM llm_usage_log
-           WHERE tenant_id = ${tenantId} AND task_id = ${taskId}
-        `) as Array<{ cost_mc: string; tokens: string; requests: number }>;
+        // ::bigint comes back as a STRING from the driver, ::int as a number — the
+        // Number() coercions below are what normalise both.
+        const rows = await db
+          .select({
+            cost_mc: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}), 0)::bigint`,
+            tokens: sql<string>`coalesce(sum(${llmUsageLog.totalTokens}), 0)::bigint`,
+            requests: sql<number>`count(*)::int`,
+          })
+          .from(llmUsageLog)
+          .where(and(eq(llmUsageLog.tenantId, tenantId), eq(llmUsageLog.taskId, taskId)));
         const r = rows[0];
         return {
           estimatedCostUsd: millicentsToUsd(Number(r?.cost_mc ?? 0)),
@@ -1952,30 +1968,41 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   router.get('/tasks/:taskId/file-changes', async (c) => {
     const taskId = Number(c.req.param('taskId'));
     if (!Number.isFinite(taskId)) return c.json({ changes: [] });
-    const sql = neon((c.env as Env).NEON_DATABASE_URL);
-    const rows = (await sql`
-      SELECT f.path, f.change, f.agent, f.execution_id AS "executionId", f.created_at AS "createdAt",
-        ARRAY(
+    // `createdAt` is projected as the RAW driver string (not a Drizzle `Date`) so the
+    // JSON wire format the Changes tab already parses is unchanged.
+    const rows = await db
+      .select({
+        path: taskFileChanges.path,
+        change: taskFileChanges.change,
+        agent: taskFileChanges.agent,
+        executionId: taskFileChanges.executionId,
+        createdAt: sql<string>`${taskFileChanges.createdAt}`,
+        // NOTE: the outer-row references below interpolate the TABLE (`${taskFileChanges}`),
+        // not its columns. In a single-table select Drizzle renders an interpolated
+        // Column WITHOUT its table qualifier, so `${taskFileChanges.executionId}` would
+        // emit a bare `"execution_id"` that the correlated subquery resolves against its
+        // OWN table — silently turning the filter into a tautology.
+        models: sql<string[]>`ARRAY(
           SELECT DISTINCT substring(a.args from '"model"\\s*:\\s*"([^"]+)"')
           FROM tool_audit_events a
-          WHERE a.execution_id = f.execution_id AND a.tenant_id = f.tenant_id
+          WHERE a.execution_id = ${taskFileChanges}.execution_id AND a.tenant_id = ${taskFileChanges}.tenant_id
             AND a.tool_name = 'llm.complete'
             AND substring(a.args from '"model"\\s*:\\s*"([^"]+)"') IS NOT NULL
-        ) AS models,
-        COALESCE((
+        )`,
+        modelUsage: sql<Array<{ model: string; byo: boolean; provider: string | null }>>`COALESCE((
           SELECT jsonb_agg(DISTINCT jsonb_build_object(
             'model', u.model,
             'byo', u.byo,
             'provider', u.byo_provider
           ))
           FROM llm_usage_log u
-          WHERE u.execution_id = f.execution_id AND u.tenant_id = f.tenant_id
-        ), '[]'::jsonb) AS "modelUsage"
-      FROM task_file_changes f
-      WHERE f.task_id = ${taskId} AND f.tenant_id = ${c.get('tenantId')}
-      ORDER BY f.created_at DESC
-      LIMIT 500
-    `) as Array<{ path: string; change: string; agent: string; executionId: number | null; createdAt: string; models: string[]; modelUsage: Array<{ model: string; byo: boolean; provider: string | null }> }>;
+          WHERE u.execution_id = ${taskFileChanges}.execution_id AND u.tenant_id = ${taskFileChanges}.tenant_id
+        ), '[]'::jsonb)`,
+      })
+      .from(taskFileChanges)
+      .where(and(eq(taskFileChanges.taskId, taskId), eq(taskFileChanges.tenantId, c.get('tenantId'))))
+      .orderBy(desc(taskFileChanges.createdAt))
+      .limit(500);
     return c.json({ changes: rows });
   });
 
@@ -2028,14 +2055,17 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     };
 
     // Version token = newest change row for this path (null when unrecorded).
-    const sql = neon(env.NEON_DATABASE_URL);
-    const [ver] = (await sql`
-      SELECT created_at AS "ts"
-      FROM task_file_changes
-      WHERE task_id = ${taskId} AND tenant_id = ${tenantId} AND path = ${path}
-      ORDER BY created_at DESC
-      LIMIT 1
-    `) as Array<{ ts: string }>;
+    // Kept as the raw driver string so the cache key it composes is byte-identical.
+    const [ver] = await db
+      .select({ ts: sql<string>`${taskFileChanges.createdAt}` })
+      .from(taskFileChanges)
+      .where(and(
+        eq(taskFileChanges.taskId, taskId),
+        eq(taskFileChanges.tenantId, tenantId),
+        eq(taskFileChanges.path, path),
+      ))
+      .orderBy(desc(taskFileChanges.createdAt))
+      .limit(1);
 
     if (!ver?.ts) return c.json(await load());
     const body = await getOrSetCached(
@@ -2108,14 +2138,12 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
     // Version token = newest change row for this task (null when the run hasn't
     // written anything yet — then the branch content is stable at the base).
-    const sql = neon(env.NEON_DATABASE_URL);
-    const [ver] = (await sql`
-      SELECT created_at AS "ts"
-      FROM task_file_changes
-      WHERE task_id = ${taskId} AND tenant_id = ${tenantId}
-      ORDER BY created_at DESC
-      LIMIT 1
-    `) as Array<{ ts: string }>;
+    const [ver] = await db
+      .select({ ts: sql<string>`${taskFileChanges.createdAt}` })
+      .from(taskFileChanges)
+      .where(and(eq(taskFileChanges.taskId, taskId), eq(taskFileChanges.tenantId, tenantId)))
+      .orderBy(desc(taskFileChanges.createdAt))
+      .limit(1);
 
     const body = await getOrSetCached(
       env,

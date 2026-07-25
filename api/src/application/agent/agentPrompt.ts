@@ -13,7 +13,7 @@
  * stock OpenAI SDKs call a user's model verbatim.
  */
 
-import { neon } from '@neondatabase/serverless';
+import { eq, sql as dsql } from 'drizzle-orm';
 import {
   agentMemorySignal,
   compilePsychometricProfile,
@@ -23,6 +23,8 @@ import {
   type LimbicPsychProfile,
 } from '@builderforce/agent-tools';
 import type { Env } from '../../env';
+import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import { ideAgents } from '../../infrastructure/database/schema';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { recallAgentKnowledge } from './agentKnowledge';
 
@@ -131,11 +133,21 @@ async function loadWorkforceAgentBase(env: Env, agentId: string): Promise<Workfo
     env,
     `workforce_model:resolve:${agentId}`,
     async (): Promise<WorkforceAgentBase | null> => {
-      const rows = await neon(env.NEON_DATABASE_URL)`
-        SELECT name, title, bio, skills, base_model, r2_artifact_key, mamba_state, inference_mode, psychometric
-        FROM ide_agents WHERE id = ${agentId} LIMIT 1
-      `;
-      const a = rows[0] as Record<string, unknown> | undefined;
+      const [a] = await buildDatabase(env)
+        .select({
+          name: ideAgents.name,
+          title: ideAgents.title,
+          bio: ideAgents.bio,
+          skills: ideAgents.skills,
+          base_model: ideAgents.baseModel,
+          r2_artifact_key: ideAgents.r2ArtifactKey,
+          mamba_state: ideAgents.mambaState,
+          inference_mode: ideAgents.inferenceMode,
+          psychometric: ideAgents.psychometric,
+        })
+        .from(ideAgents)
+        .where(eq(ideAgents.id, agentId))
+        .limit(1);
       if (!a) return null;
       // Compile the agent's OWN personality (ide_agents.psychometric) into persona
       // directives + exec levers so a Workforce agent executes UNDER its traits on every
@@ -190,7 +202,7 @@ export async function resolveWorkforceModel(
   if (!base) return null;
 
   const recalledContext = query?.trim()
-    ? await recallAgentKnowledge(env, neon(env.NEON_DATABASE_URL), agentId, query)
+    ? await recallAgentKnowledge(env, buildDatabase(env), agentId, query)
     : '';
 
   // `buildAgentInference` lowers the descriptor to BOTH the system prompt (now carrying

@@ -31,6 +31,7 @@ import {
   specs,
   taskSpecs,
   platformPersonas,
+  taskFileChanges,
 } from '../../infrastructure/database/schema';
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
 import { invalidateAgentHostKeyCache } from '../../infrastructure/auth/keyResolutionCache';
@@ -44,7 +45,6 @@ import { resolveRepoCredential, isResolveError } from '../../application/repos/r
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { openDispatchPullRequest } from '../../application/repos/openDispatchPullRequest';
 import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
-import { neon } from '@neondatabase/serverless';
 import { executeGitProxy } from '../../application/repos/gitProxy';
 import { agentDispatches } from '../../infrastructure/database/schema';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
@@ -1591,11 +1591,14 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const change = ['created', 'modified', 'deleted'].includes(body.change ?? '') ? body.change! : 'modified';
     const agent = typeof body.agent === 'string' && body.agent.trim() ? body.agent.trim() : 'agent';
 
-    const sql = neon(c.env.NEON_DATABASE_URL);
-    await sql`
-      INSERT INTO task_file_changes (tenant_id, task_id, execution_id, path, change, agent)
-      VALUES (${agentHost.tenantId}, ${taskId}, ${Number.isFinite(Number(body.executionId)) ? Number(body.executionId) : null}, ${path}, ${change}, ${agent})
-    `;
+    await db.insert(taskFileChanges).values({
+      tenantId: agentHost.tenantId,
+      taskId,
+      executionId: Number.isFinite(Number(body.executionId)) ? Number(body.executionId) : null,
+      path,
+      change,
+      agent,
+    });
     return c.json({ ok: true });
   });
 

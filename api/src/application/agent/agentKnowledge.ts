@@ -12,16 +12,12 @@
  * (the `./retrieval` subpath is zero-dep + Worker-safe), so this never duplicates
  * the chunker/BM25.
  */
+import { asc, eq } from 'drizzle-orm';
 import { bm25Search, chunkText, type Bm25Doc } from '@seanhogg/builderforce-memory/retrieval';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-
-/** A neon tagged-template query function (`sql\`...\`` → rows). Structural so the
- *  module needs no neon import and is trivially faked in tests. */
-export type SqlClient = <T = Record<string, unknown>>(
-  strings: TemplateStringsArray,
-  ...values: unknown[]
-) => Promise<T[]>;
+import type { Db } from '../../infrastructure/database/connection';
+import { agentKnowledgeChunks } from '../../infrastructure/database/schema';
 
 export interface KnowledgeChunk {
   id: string;
@@ -56,15 +52,17 @@ export function chunkDocuments(docs: ReadonlyArray<{ text: string }>): string[] 
 }
 
 /** Load an agent's stored chunks, read-through cached (stable until re-ingest). */
-export async function loadAgentChunks(env: Env, sql: SqlClient, agentId: string): Promise<KnowledgeChunk[]> {
+export async function loadAgentChunks(env: Env, db: Db, agentId: string): Promise<KnowledgeChunk[]> {
   return getOrSetCached(
     env,
     cacheKey(agentId),
     async () => {
-      const rows = await sql<{ id: string; chunk_text: string }>`
-        SELECT id, chunk_text FROM agent_knowledge_chunks WHERE agent_id = ${agentId} ORDER BY ordinal ASC
-      `;
-      return rows.map((r) => ({ id: r.id, text: r.chunk_text }));
+      const rows = await db
+        .select({ id: agentKnowledgeChunks.id, chunkText: agentKnowledgeChunks.chunkText })
+        .from(agentKnowledgeChunks)
+        .where(eq(agentKnowledgeChunks.agentId, agentId))
+        .orderBy(asc(agentKnowledgeChunks.ordinal));
+      return rows.map((r) => ({ id: r.id, text: r.chunkText }));
     },
     { kvTtlSeconds: 300, l1TtlMs: 60_000 },
   );
@@ -77,40 +75,40 @@ export async function loadAgentChunks(env: Env, sql: SqlClient, agentId: string)
  */
 export async function recallAgentKnowledge(
   env: Env,
-  sql: SqlClient,
+  db: Db,
   agentId: string,
   query: string,
   topK: number = RECALL_TOP_K,
 ): Promise<string> {
-  const chunks = await loadAgentChunks(env, sql, agentId);
+  const chunks = await loadAgentChunks(env, db, agentId);
   return selectRecallContext(query, chunks, topK);
 }
 
 /**
  * Ingest documents for an agent: chunk → REPLACE the agent's chunk set → invalidate
  * the recall cache. Replace (not append) makes re-ingest idempotent. Returns the
- * number of chunks stored. Single bulk insert (UNNEST) — no per-chunk round-trip.
+ * number of chunks stored. Single bulk insert (one multi-row VALUES, the Drizzle
+ * equivalent of the previous UNNEST) — no per-chunk round-trip.
  */
 export async function ingestAgentKnowledge(
   env: Env,
-  sql: SqlClient,
+  db: Db,
   agentId: string,
   docs: ReadonlyArray<{ text: string }>,
   source?: string,
 ): Promise<number> {
   const texts = chunkDocuments(docs);
-  await sql`DELETE FROM agent_knowledge_chunks WHERE agent_id = ${agentId}`;
+  await db.delete(agentKnowledgeChunks).where(eq(agentKnowledgeChunks.agentId, agentId));
   if (texts.length > 0) {
-    const ids = texts.map(() => crypto.randomUUID());
-    const agentIds = texts.map(() => agentId);
-    const ordinals = texts.map((_, i) => i);
-    const sources = texts.map(() => source ?? null);
-    await sql`
-      INSERT INTO agent_knowledge_chunks (id, agent_id, ordinal, chunk_text, source)
-      SELECT * FROM UNNEST(
-        ${ids}::text[], ${agentIds}::text[], ${ordinals}::int[], ${texts}::text[], ${sources}::text[]
-      )
-    `;
+    await db.insert(agentKnowledgeChunks).values(
+      texts.map((text, i) => ({
+        id: crypto.randomUUID(),
+        agentId,
+        ordinal: i,
+        chunkText: text,
+        source: source ?? null,
+      })),
+    );
   }
   await invalidateCached(env, cacheKey(agentId));
   return texts.length;

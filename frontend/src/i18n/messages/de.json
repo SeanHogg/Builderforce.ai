@@ -475,7 +475,8 @@
       "monitors": "Monitore",
       "reporting": "Berichte",
       "rfp": "RFP",
-      "feedback": "Feedback"
+      "feedback": "Feedback",
+      "autonomy": "Autonomie"
     },
     "primaryAria": "Primär"
   },
@@ -1061,7 +1062,9 @@
     "typeDesign": "Design",
     "typeIncident": "Vorfall",
     "requiresRoleHint": "{role, select, viewer {Erfordert die Rolle „Betrachter“} developer {Erfordert die Rolle „Entwickler“} manager {Erfordert die Rolle „Manager“} owner {Erfordert die Rolle „Eigentümer“} other {Erfordert die Rolle „{role}“}}",
-    "requiresDeveloperRole": "Erfordert die Rolle „Entwickler“"
+    "requiresDeveloperRole": "Erfordert die Rolle „Entwickler“",
+    "closePanel": "Panel schließen",
+    "panel": "Panel"
   },
   "prdCreate": {
     "title": "Neues PRD",
@@ -1582,7 +1585,9 @@
         "crossTeam": "Team-übergreifend",
         "crossTeamDesc": "Jedes Team gegen die anderen einordnen",
         "delayTaxonomy": "Verzögerungsgründe",
-        "delayTaxonomyDesc": "Warum die Arbeit im Verzug ist"
+        "delayTaxonomyDesc": "Warum die Arbeit im Verzug ist",
+        "autonomy": "Autonomie-Gesundheit",
+        "autonomyDesc": "Hat sich die Arbeit selbst erledigt? Lebenszyklus-Funnel danach, wer das Ticket angelegt hat, Verhältnis autonomer zu menschlichen Wechseln und wo die Autonomie stehen bleibt."
       },
       "summary": {
         "cycleTime": "Ø Durchlaufzeit",
@@ -2331,6 +2336,73 @@
       "title": "Diese Ansicht erfordert einen höheren Tarif",
       "body": "Erweiterte Insights sind in Ihrem {plan}-Tarif nicht enthalten. Upgraden Sie, um Prognosen, Anomalieerkennung und die Führungsansichten freizuschalten.",
       "cta": "Tarife ansehen"
+    },
+    "autonomy": {
+      "title": "Autonomie-Gesundheit",
+      "subtitle": "Durchlaufen die Tickets, die dein KI-Manager und dein Team anlegen, ihren Lebenszyklus wirklich selbstständig? Vergleiche den Funnel danach, wer die Arbeit angelegt hat, sieh, wer das Board tatsächlich bewegt, und finde die Tore, an denen die Autonomie endet.",
+      "scopeAll": "Alle Projekte in diesem Workspace.",
+      "scopeProject": "Eingegrenzt auf {project}.",
+      "coverage": {
+        "full": "Vollständige Abdeckung – alle {n} in den letzten {days} Tagen angelegten Tickets wurden geprüft.",
+        "truncated": "Nur eine Stichprobe – die Prüfung war auf {n} Tickets der letzten {days} Tage begrenzt; diese Zahlen umfassen also die neuesten Tickets, nicht alle."
+      },
+      "origin": {
+        "label": "Angelegt von",
+        "agent": "Agent",
+        "manager_card": "Manager-Karte",
+        "human": "Mensch",
+        "system": "Automatisierung",
+        "unknown": "Ohne Zuordnung"
+      },
+      "stage": {
+        "created": "Angelegt",
+        "dispatched": "Mindestens ein Lauf",
+        "progressed": "Autonom vorangebracht",
+        "terminal": "Bis Fertig gelangt",
+        "fullyAutonomous": "Vollständig autonom"
+      },
+      "allOrigins": "Alle Quellen",
+      "conversion": "Ende zu Ende",
+      "ticketsCreated": "{n} angelegt",
+      "endToEnd": "erreichten Fertig ohne einen einzigen menschlichen Spaltenwechsel ({n} Tickets).",
+      "funnelAria": "Autonomie-Funnel für Tickets von {origin} – {n} Tickets, als Anteil der angelegten Tickets.",
+      "originMixAria": "In diesem Zeitraum angelegte Tickets, aufgeteilt danach, wer sie angelegt hat.",
+      "hopsAutonomous": "Autonome Wechsel",
+      "hopsHuman": "Menschliche Wechsel",
+      "hopsOfTotal": "{share} autonom von {n} Wechseln",
+      "hopSplitAria": "Spaltenwechsel für {origin}: {a} autonom, {h} menschlich.",
+      "stallAria": "Tore, die {n} feststeckende Tickets halten, nach Ticketzahl sortiert.",
+      "noTickets": "In diesem Zeitraum wurde kein Ticket angelegt.",
+      "noHops": "In diesem Zeitraum wurde kein Spaltenwechsel erfasst.",
+      "noStalls": "Nichts steckt fest – kein Ticket ist unfertig, ohne dass etwas läuft.",
+      "stat": {
+        "fully": "Autonom abgeschlossen",
+        "fullySub": "{n} von {total} Tickets erreichten Fertig ohne menschliches Zutun",
+        "dispatchedSub": "{n} von {total} Tickets hatten mindestens einen Lauf",
+        "hopShare": "Von der Autonomie bewegt",
+        "hopShareSub": "{a} autonome gegenüber {h} menschlichen Spaltenwechseln",
+        "stalled": "An einem Tor festgesteckt",
+        "stalledSub": "{share} der Tickets – unfertig, nichts läuft",
+        "neverStartedSub": "{share} der Tickets – nie gelaufen, nie bewegt"
+      },
+      "gateShort": {
+        "unrecorded": "Nie bewertet"
+      },
+      "gate": {
+        "will_run": "Für diese Tickets wurde ein Lauf gestartet.",
+        "no_board": "Das Projekt hat kein Board, also kann die Autonomie keine Spalte auflösen.",
+        "no_lane": "Keine Spalte des Boards passt zum Status des Tickets, also hat die Autonomie keinen Auslöser.",
+        "terminal_lane": "Das Ticket liegt in einer Endspalte (Fertig), die niemals automatisch läuft.",
+        "human_gate": "Die Spalte ist menschlich freizugeben – jemand muss zustimmen oder „Jetzt ausführen“ drücken.",
+        "no_agent": "Die Spalte hat keinen zugewiesenen Agenten und die verantwortliche Person kann diese Phase nicht ausführen. Besetze die Spalte, oder starte ausdrücklich mit „Jetzt ausführen“.",
+        "capability_mismatch": "Allen möglichen Agenten fehlen die von dieser Spalte verlangten Fähigkeiten.",
+        "already_running": "Auf dem Ticket läuft bereits eine Ausführung, daher wurde keine neue gestartet.",
+        "run_cap_exhausted": "Die letzten Läufe scheiterten hintereinander, daher startet die Autonomie keine weiteren. Ein menschliches „Jetzt ausführen“ setzt das außer Kraft.",
+        "cooldown_active": "Das Ticket ist in der Wartezeit nach einem Fehlschlag, bevor der nächste autonome Versuch erfolgt.",
+        "not_executable": "Eine System- oder Koordinationsaufgabe – wird bewusst nie an einen Agenten übergeben.",
+        "pending_approval": "Eine externe Anfrage, die im Triage erst menschlich angenommen werden muss, bevor ein Agent sie anfassen darf.",
+        "unrecorded": "Es wurde nie eine Auto-Run-Entscheidung erfasst – die Autonomie hat diese Tickets nie bewertet."
+      }
     }
   },
   "cloudAgentForm": {
@@ -3468,7 +3540,8 @@
       "empCost": "Arbeitskosten",
       "empPerformers": "Leistung",
       "empInitiatives": "Initiativen-Mix",
-      "forecast": "Prognose"
+      "forecast": "Prognose",
+      "autonomy": "Autonomie"
     },
     "title": {
       "aiProductivity": "KI-Produktivitätswert",
@@ -3573,7 +3646,18 @@
       "forecastCycleProjection": "Prognostizierte Durchlaufzeit",
       "forecastCfrProjection": "Prognostizierte Änderungsfehler",
       "forecastAnomalies": "Offene Anomalien",
-      "forecastCostTrend": "Ausgabenprognose"
+      "forecastCostTrend": "Ausgabenprognose",
+      "autoFully": "Autonom abgeschlossen",
+      "autoDispatched": "Mindestens ein Lauf",
+      "autoHopShare": "Von der Autonomie bewegt",
+      "autoStalled": "An einem Tor festgesteckt",
+      "autoNeverStarted": "Nie gestartet",
+      "autoOriginFunnel": "Lebenszyklus-Funnel nach Quelle",
+      "autoHopSplit": "Autonome gegenüber menschlichen Wechseln",
+      "autoStallGates": "Wo die Autonomie stehen bleibt",
+      "autoOriginMix": "Wer die Arbeit anlegt",
+      "autoFunnelTable": "Autonomie-Funnel (Tabelle)",
+      "autoCoverage": "Prüfungsabdeckung"
     },
     "loading": "Laden…",
     "overview": {
@@ -7417,7 +7501,86 @@
     "errMove": "Verschieben fehlgeschlagen",
     "tabChanges": "Änderungen",
     "release": "Release",
-    "delayReason": "Verzögerungsgrund"
+    "delayReason": "Verzögerungsgrund",
+    "lifecycleAction": "Lebenszyklus",
+    "lifecycleActionTitle": "Lebenszyklus & Autonomie-Nachweis — hat sich dieses Ticket selbst bewegt, oder hat es bei jedem Schritt ein Mensch geschoben?"
+  },
+  "ticketLifecycle": {
+    "title": "Lebenszyklus / Autonomie-Nachweis",
+    "loading": "Beweiskette wird zusammengestellt…",
+    "errorTitle": "Der Lebenszyklus dieses Tickets konnte nicht geladen werden",
+    "retry": "Erneut versuchen",
+    "openedAt": "Erstellt",
+    "currentLane": "Aktuelle Spur",
+    "origin": {
+      "label": "Erstellt von",
+      "human": "Einer Person",
+      "agent": "Einem Agenten (KI-Manager)",
+      "system": "Automatisierung",
+      "manager_card": "Grooming-Karte des KI-Managers",
+      "unknown": "Nicht erfasst"
+    },
+    "verdict": {
+      "fullyAutonomous": "Lief durchgängig autonom — 0 menschliche Spurwechsel",
+      "fullyAutonomousDetail": "Die Autonomie hat {hops, plural, one {# Spurwechsel} other {# Spurwechsel}} vorgenommen und eine Endspur erreicht. Keine Person hat dieses Ticket bewegt.",
+      "partialStalled": "Teilweise autonom — festgefahren",
+      "partialStalledDetail": "Die Autonomie hat {hops, plural, one {# Spurwechsel} other {# Spurwechsel}} vorgenommen, aber das Ticket ist nicht bei Erledigt und es läuft nichts.",
+      "partialRunning": "Teilweise autonom — arbeitet noch",
+      "partialRunningDetail": "Die Autonomie hat {hops, plural, one {# Spurwechsel} other {# Spurwechsel}} vorgenommen, und aktuell läuft ein Lauf.",
+      "humanDriven": "Von Menschen getrieben — die Autonomie hat dieses Ticket nie bewegt",
+      "humanDrivenDetail": "Jeden Spurwechsel hat eine Person gemacht (insgesamt {hops}). Kein einziger autonomer Schritt ist erfasst.",
+      "assisted": "Mit menschlicher Hilfe abgeschlossen",
+      "assistedDetail": "Es hat eine Endspur erreicht, aber eine Person hat {humanHops} der {totalHops} Spurwechsel gemacht.",
+      "noMovement": "Nie bewegt",
+      "noMovementDetail": "Dieses Ticket hat nicht ein einziges Mal die Spur gewechselt — weder eine Person noch die Autonomie hat es bewegt.",
+      "liveRun": "Lauf aktiv",
+      "managerCardTitle": "Koordinationskarte",
+      "managerCard": "Der KI-Manager erstellt diese Karten, um das Backlog zu pflegen; die Autonomie verweigert deren Ausführung bewusst. „Keine Läufe“ ist hier das gewollte Verhalten, kein Fehler."
+    },
+    "stall": {
+      "title": "Warum es liegen bleibt",
+      "unrecorded": "Keine Sperre erfasst — bisher hat nichts versucht, dieses Ticket auszuführen."
+    },
+    "stats": {
+      "title": "Schritte & Läufe",
+      "autonomousHops": "Autonome Schritte",
+      "autonomousHopsHint": "Spurwechsel, die ein Agent oder die Automatisierung geschrieben hat.",
+      "humanHops": "Menschliche Schritte",
+      "humanHopsHint": "Spurwechsel, die eine Person gemacht hat.",
+      "runsDispatched": "Läufe gestartet",
+      "runsCompleted": "Läufe erfolgreich",
+      "runsFailed": "Läufe fehlgeschlagen",
+      "backwardHops": "Nacharbeit-Schritte",
+      "backwardHopsHint": "Spurwechsel zurück — Arbeit für eine weitere Runde zurückgeschickt."
+    },
+    "timeline": {
+      "title": "Beweiskette",
+      "help": "Jede Zeile nennt die Tabelle, aus der sie gelesen wurde — das ist Beweis, keine Erzählung.",
+      "empty": "Für dieses Ticket sind noch keine Lebenszyklus-Ereignisse erfasst.",
+      "laneMove": "{from} → {to}",
+      "laneEntered": "Eingetreten in {to}",
+      "backward": "Nacharbeit",
+      "run": "Lauf #{id}"
+    },
+    "kind": {
+      "created": "Erstellt",
+      "lane_moved": "Spur gewechselt",
+      "run_dispatched": "Lauf gestartet",
+      "run_completed": "Lauf abgeschlossen",
+      "run_failed": "Lauf fehlgeschlagen",
+      "autorun_dispatched": "Auto-Lauf gestartet",
+      "autorun_skipped": "Auto-Lauf abgelehnt",
+      "autorun_error": "Auto-Lauf-Fehler",
+      "autorun_awaiting_approval": "Auto-Lauf wartet auf Freigabe",
+      "role_event": "Rollen-Ereignis"
+    },
+    "source": {
+      "activity_log": "Aktivitäts-/Audit-Log",
+      "task_status_transitions": "Spurwechsel-Log",
+      "executions": "Lauf-Datensätze",
+      "tool_audit_events": "Audit der Auto-Lauf-Entscheidungen",
+      "aria": "Quelle: {label}"
+    }
   },
   "taskChanges": {
     "allChanges": "Alle Änderungen",

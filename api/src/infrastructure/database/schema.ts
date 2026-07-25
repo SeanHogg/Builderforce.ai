@@ -1565,6 +1565,20 @@ export const ideAgents = pgTable('ide_agents', {
   priceUnit:        varchar('price_unit', { length: 100 }),
   evalScore:        real('eval_score'),
   published:        boolean('published').notNull().default(false),
+  /** Training job this agent was produced by (0022). */
+  jobId:            text('job_id').references(() => ideTrainingJobs.id, { onDelete: 'set null' }),
+  loraRank:         integer('lora_rank'),
+  /** R2 key of the trained LoRA adapter artifact (0022). */
+  r2ArtifactKey:    text('r2_artifact_key'),
+  resumeMd:         text('resume_md'),
+  // ── Local inference pipeline (0036): adapter caching + Mamba state sync ──
+  packageVersion:   text('package_version').notNull().default('1.0'),
+  /** Serialized Mamba SSM hidden state, synced between inference calls. */
+  mambaState:       jsonb('mamba_state'),
+  /** 'base' | (fine-tuned modes) — which weights an inference call should use. */
+  inferenceMode:    text('inference_mode').notNull().default('base'),
+  requestCount:     integer('request_count').notNull().default(0),
+  lastUsedAt:       timestamp('last_used_at'),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),
 });
@@ -1835,6 +1849,11 @@ export const agentPurchases = pgTable('agent_purchases', {
   id:        uuid('id').primaryKey().defaultRandom(),
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   agentId:   varchar('agent_id', { length: 64 }).notNull(),
+  /** Soft-delete stamp for "unhire" (migration 0101). NULL = the tenant is CURRENTLY
+   *  holding the agent; a timestamp = released, but the row (and therefore the hire
+   *  provenance behind any work the agent did) is kept. Every active-hire read filters
+   *  on `unhired_at IS NULL`; re-hiring revives the same row by clearing it. */
+  unhiredAt: timestamp('unhired_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_agent_purchases').on(t.tenantId, t.agentId),
@@ -6611,7 +6630,9 @@ export const freelancerEngagements = pgTable('freelancer_engagements', {
 
 /** Raw audited "click sense" + engagement stream (portal + VSIX). Append-only. */
 export const activitySignals = pgTable('activity_signals', {
-  id:               bigint('id', { mode: 'number' }).primaryKey(),   // DB bigserial
+  // DB is `bigserial` — declaring it as such makes the id DB-generated and OPTIONAL
+  // on insert (a plain bigint().primaryKey() forces callers to invent one).
+  id:               bigserial('id', { mode: 'number' }).primaryKey(),
   userId:           varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
   tenantId:         integer('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
   engagementId:     varchar('engagement_id', { length: 36 }).references(() => freelancerEngagements.id, { onDelete: 'set null' }),
@@ -6783,10 +6804,21 @@ export const freelancerReviews = pgTable('freelancer_reviews', {
   reviewerUserId:    varchar('reviewer_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   rating:            integer('rating').notNull(),   // 1..5
   comment:           text('comment'),
+  /**
+   * Which way the review points (0299): 'employer_to_freelancer' (the freelancer's
+   * received rating) or 'freelancer_to_employer' (the client rating). The SUBJECT is
+   * implied by direction — freelancerUserId for the former, tenantId for the latter.
+   */
+  direction:         varchar('direction', { length: 24 }).notNull().default('employer_to_freelancer'),
+  wouldWorkAgain:    boolean('would_work_again'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
   byFreelancer: index('idx_reviews_freelancer').on(t.freelancerUserId),
+  byFreelancerDir: index('idx_reviews_freelancer_dir').on(t.freelancerUserId, t.direction),
+  byTenantDir: index('idx_reviews_tenant_dir').on(t.tenantId, t.direction),
+  /** Replaces the single-column unique so BOTH sides may review one engagement. */
+  uqEngagementDirection: uniqueIndex('uq_review_engagement_direction').on(t.engagementId, t.direction),
 }));
 
 /** Invoice generated on timecard approval; carries payment status. One per timecard. */
@@ -6811,7 +6843,10 @@ export const freelancerInvoices = pgTable('freelancer_invoices', {
 
 /** In-app notifications for both sides of the marketplace. */
 export const freelancerNotifications = pgTable('freelancer_notifications', {
-  id:         bigint('id', { mode: 'number' }).primaryKey(),   // DB bigserial
+  // DB is `bigserial` (0273) — declare it as such so Drizzle treats the id as
+  // DB-generated and OPTIONAL on insert (a plain bigint().primaryKey() would
+  // force every caller to invent an id).
+  id:         bigserial('id', { mode: 'number' }).primaryKey(),
   userId:     varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
   tenantId:   integer('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
   kind:       varchar('kind', { length: 40 }).notNull(),
@@ -7191,4 +7226,174 @@ export const feedbackSubmissions = pgTable('feedback_submissions', {
   byTenant:      index('idx_feedback_submissions_tenant_status').on(t.tenantId, t.status, t.createdAt),
   byCollector:   index('idx_feedback_submissions_collector').on(t.collectorId, t.createdAt),
   byFingerprint: index('idx_feedback_submissions_fingerprint').on(t.projectId, t.fingerprint),
+}));
+
+// ---------------------------------------------------------------------------
+// Tables that existed in migrations but had no Drizzle definition until now.
+// Their absence is why the routes/services below them dropped to raw SQL; with
+// these defined, the Drizzle query builder is the ONE access path (no raw neon).
+// ---------------------------------------------------------------------------
+
+/** Per-call inference telemetry for a trained IDE agent (0036). */
+export const agentInferenceLogs = pgTable('agent_inference_logs', {
+  id:               text('id').primaryKey(),
+  agentId:          text('agent_id').notNull().references(() => ideAgents.id, { onDelete: 'cascade' }),
+  modelRef:         text('model_ref').notNull(),
+  promptTokens:     integer('prompt_tokens'),
+  completionTokens: integer('completion_tokens'),
+  latencyMs:        integer('latency_ms'),
+  status:           text('status').notNull(),
+  errorMessage:     text('error_message'),
+  inferenceMode:    text('inference_mode'),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+});
+
+/** Retrieval chunks backing an agent's recalled knowledge (0249). */
+export const agentKnowledgeChunks = pgTable('agent_knowledge_chunks', {
+  id:        text('id').primaryKey(),
+  agentId:   text('agent_id').notNull().references(() => ideAgents.id, { onDelete: 'cascade' }),
+  ordinal:   integer('ordinal').notNull(),
+  chunkText: text('chunk_text').notNull(),
+  source:    text('source'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+/**
+ * Two-party employer<->freelancer thread (0298). Read state is tracked per SIDE
+ * via the two watermark columns, not per message, so a thread with many managers
+ * on the employer side stays correct.
+ */
+export const freelancerConversations = pgTable('freelancer_conversations', {
+  id:                   varchar('id', { length: 36 }).primaryKey(),
+  tenantId:             integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  freelancerUserId:     varchar('freelancer_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /** The manager who opened the thread (employer-side default notify target). */
+  employerUserId:       varchar('employer_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  /** What the thread hangs off: engagement | job | proposal | direct. */
+  subjectType:          varchar('subject_type', { length: 20 }).notNull().default('direct'),
+  engagementId:         varchar('engagement_id', { length: 36 }).references(() => freelancerEngagements.id, { onDelete: 'set null' }),
+  jobId:                varchar('job_id', { length: 36 }).references(() => jobPostings.id, { onDelete: 'set null' }),
+  proposalId:           varchar('proposal_id', { length: 36 }).references(() => jobProposals.id, { onDelete: 'set null' }),
+  projectId:            integer('project_id'),
+  title:                varchar('title', { length: 200 }),
+  /** Denormalized last-message cache so the list view renders without a per-row scan. */
+  lastMessageAt:        timestamp('last_message_at'),
+  lastMessagePreview:   varchar('last_message_preview', { length: 280 }),
+  lastSenderUserId:     varchar('last_sender_user_id', { length: 36 }),
+  employerLastReadAt:   timestamp('employer_last_read_at'),
+  freelancerLastReadAt: timestamp('freelancer_last_read_at'),
+  createdAt:            timestamp('created_at').notNull().defaultNow(),
+  updatedAt:            timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant:     index('idx_fl_conv_tenant').on(t.tenantId, t.lastMessageAt),
+  byFreelancer: index('idx_fl_conv_freelancer').on(t.freelancerUserId, t.lastMessageAt),
+}));
+
+/** A single message in a {@link freelancerConversations} thread (0298). */
+export const freelancerMessages = pgTable('freelancer_messages', {
+  id:             varchar('id', { length: 36 }).primaryKey(),
+  conversationId: varchar('conversation_id', { length: 36 }).notNull().references(() => freelancerConversations.id, { onDelete: 'cascade' }),
+  senderUserId:   varchar('sender_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  body:           text('body').notNull(),
+  /** Optional attachment (R2 object) — a signed/served link the recipient can open. */
+  attachmentKey:  varchar('attachment_key', { length: 255 }),
+  attachmentName: varchar('attachment_name', { length: 255 }),
+  attachmentType: varchar('attachment_type', { length: 120 }),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byConversation: index('idx_fl_msg_conversation').on(t.conversationId, t.createdAt),
+}));
+
+/** Training dataset for an IDE project (0022). */
+export const ideDatasets = pgTable('ide_datasets', {
+  id:               text('id').primaryKey(),
+  projectId:        integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  name:             text('name').notNull(),
+  description:      text('description'),
+  capabilityPrompt: text('capability_prompt').notNull(),
+  r2Key:            text('r2_key').notNull().default(''),
+  exampleCount:     integer('example_count').notNull().default(0),
+  status:           text('status').notNull().default('pending'),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byProject: index('idx_ide_datasets_project_id').on(t.projectId),
+}));
+
+/** A fine-tune run and its eval scorecard (0022, eval columns added in 0323). */
+export const ideTrainingJobs = pgTable('ide_training_jobs', {
+  id:                    text('id').primaryKey(),
+  projectId:             integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  datasetId:             text('dataset_id').references(() => ideDatasets.id, { onDelete: 'set null' }),
+  baseModel:             text('base_model').notNull(),
+  loraRank:              integer('lora_rank').notNull().default(8),
+  epochs:                integer('epochs').notNull().default(3),
+  batchSize:             integer('batch_size').notNull().default(4),
+  learningRate:          real('learning_rate').notNull().default(0.0002),
+  status:                text('status').notNull().default('pending'),
+  currentEpoch:          integer('current_epoch').notNull().default(0),
+  currentLoss:           real('current_loss'),
+  r2ArtifactKey:         text('r2_artifact_key'),
+  errorMessage:          text('error_message'),
+  evalScore:             real('eval_score'),
+  evalCodeCorrectness:   real('eval_code_correctness'),
+  evalReasoningQuality:  real('eval_reasoning_quality'),
+  evalHallucinationRate: real('eval_hallucination_rate'),
+  evalDetails:           text('eval_details'),
+  evaluatedAt:           timestamp('evaluated_at'),
+  createdAt:             timestamp('created_at').notNull().defaultNow(),
+  updatedAt:             timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byProject: index('idx_ide_training_jobs_project_id').on(t.projectId),
+}));
+
+/** Streamed per-step log lines for a training job (0022). */
+export const ideTrainingLogs = pgTable('ide_training_logs', {
+  id:        text('id').primaryKey(),
+  jobId:     text('job_id').notNull().references(() => ideTrainingJobs.id, { onDelete: 'cascade' }),
+  epoch:     integer('epoch'),
+  step:      integer('step'),
+  loss:      real('loss'),
+  message:   text('message').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byJob: index('idx_ide_training_logs_job_id').on(t.jobId),
+}));
+
+/**
+ * Per-agent file-change traceability for a ticket's shared workspace (0089).
+ * Each row = one file the executing agent created/modified/deleted.
+ */
+export const taskFileChanges = pgTable('task_file_changes', {
+  id:          bigserial('id', { mode: 'number' }).primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  taskId:      integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  executionId: integer('execution_id'),
+  path:        text('path').notNull(),
+  /** 'created' | 'modified' | 'deleted'. */
+  change:      text('change').notNull(),
+  /** Executing agent label (attribution). */
+  agent:       text('agent').notNull(),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byTask: index('idx_task_file_changes_task').on(t.taskId, t.createdAt),
+}));
+
+/**
+ * BYO LLM provider credentials (0088). `keyEnc` holds EITHER an encrypted API
+ * key (authType='api_key') or an encrypted `{access,refresh,expires}` JSON blob
+ * (authType='oauth', 0198) — `authType` is the discriminator the storage layer
+ * reads to decode it. `priority`: LOWER number = tried FIRST, NULL = unset (0338).
+ */
+export const tenantLlmProviderKeys = pgTable('tenant_llm_provider_keys', {
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  provider:        text('provider').notNull(),
+  keyEnc:          text('key_enc').notNull(),
+  createdByUserId: text('created_by_user_id'),
+  authType:        text('auth_type').notNull().default('api_key'),
+  priority:        integer('priority'),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.tenantId, t.provider] }),
 }));

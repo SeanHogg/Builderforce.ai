@@ -21,6 +21,7 @@
 import type { ComponentType, ReactNode } from 'react';
 import type { Capability } from '@/lib/rbac';
 import { DeliveryLens } from './DeliveryLens';
+import { AutonomyLens } from './AutonomyLens';
 import { BottleneckLens } from './BottleneckLens';
 import { DoraLens } from './DoraLens';
 import { SpaceLens } from './SpaceLens';
@@ -30,11 +31,12 @@ import { CrossTeamBenchmarkLens } from './CrossTeamBenchmarkLens';
 import { DelayTaxonomyLens } from './DelayTaxonomyLens';
 import {
   DeliverySummary, BottleneckSummary, DoraSummary, SpaceSummary, BenchmarkingSummary, FunnelSummary,
+  AutonomySummary,
 } from './DeliverySummaries';
 
 /** Stable ids (also the `?panel=` deep-link + Brain enum values). */
 export type DeliveryPanelId =
-  | 'delivery' | 'bottlenecks' | 'dora' | 'space' | 'benchmarking' | 'funnel'
+  | 'delivery' | 'autonomy' | 'bottlenecks' | 'dora' | 'space' | 'benchmarking' | 'funnel'
   | 'crossTeam' | 'delayTaxonomy';
 
 export interface DeliveryPanelDef {
@@ -60,6 +62,14 @@ export const DELIVERY_PANELS: Record<DeliveryPanelId, DeliveryPanelDef> = {
   delivery: {
     id: 'delivery', icon: '📦', titleKey: 'panel.delivery', descKey: 'panel.deliveryDesc',
     capability: 'insights.delivery', width: WIDE, Summary: DeliverySummary, render: () => <DeliveryLens />,
+  },
+  // Autonomy Health also has its OWN route (/insights/autonomy, the Insights tab).
+  // It is registered here as well so the hub card, the widget drill-downs and the
+  // Brain can all open the identical lens in the slide-out — one component, one
+  // definition, two entry points.
+  autonomy: {
+    id: 'autonomy', icon: '🕹', titleKey: 'panel.autonomy', descKey: 'panel.autonomyDesc',
+    capability: 'insights.autonomy', width: WIDE, Summary: AutonomySummary, render: () => <AutonomyLens />,
   },
   bottlenecks: {
     id: 'bottlenecks', icon: '⏳', titleKey: 'panel.bottlenecks', descKey: 'panel.bottlenecksDesc',

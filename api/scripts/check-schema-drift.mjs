@@ -22,9 +22,22 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
-const schemaFile = resolve(here, '../src/infrastructure/database/schema.ts');
+const srcDir = resolve(here, '../src');
 const migrationsDir = resolve(here, '../migrations');
 const allowlistFile = resolve(here, '.schema-drift-allowlist.txt');
+
+/** Every .ts file under src/ — pgTable() declarations are NOT confined to
+ *  schema.ts: finopsTables.ts, devexSurveys.ts and recommendationsEngine.ts each
+ *  declare their own domain tables. Scanning only schema.ts made those tables
+ *  invisible to BOTH directions of this check. */
+function collectSourceFiles(dir, out = []) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = resolve(dir, entry.name);
+    if (entry.isDirectory()) collectSourceFiles(full, out);
+    else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) out.push(full);
+  }
+  return out;
+}
 
 // Pre-existing drift captured when this script first landed — mostly tables
 // created by an early `drizzle-kit push` that was never converted to a tracked
@@ -48,7 +61,9 @@ const allowlist = existsSync(allowlistFile)
 //     ...
 //   });
 
-const schemaText = readFileSync(schemaFile, 'utf8');
+const schemaText = collectSourceFiles(srcDir)
+  .map((f) => readFileSync(f, 'utf8'))
+  .join('\n');
 
 const drizzleTables = []; // [{ table, cols: Set<string> }]
 // The column object closes with a `}` at column 0 (start of line). A table with
@@ -169,6 +184,15 @@ for (const file of sqlFiles) {
     for (const c of cols) recordColumns(m[1].toLowerCase(), c[1]);
   }
 
+  // DROP TABLE [IF EXISTS] a, b [CASCADE]; — a dropped table is no longer part of
+  // the live schema, so it must leave the reconstructed model. Without this the
+  // REVERSE check below would demand a schema.ts definition for a table that no
+  // longer exists.
+  for (const m of text.matchAll(/DROP TABLE(?:\s+IF EXISTS)?\s+([^;]+);/gi)) {
+    for (const name of m[1].split(','))
+      migratedColumns.delete(name.trim().replace(/\s+CASCADE|\s+RESTRICT/i, '').toLowerCase());
+  }
+
   // Apply this migration's renames AFTER its creates, in file order, so a later
   // migration's rename mutates columns/tables added by earlier ones.
   applyRenames(raw, text);
@@ -196,16 +220,49 @@ for (const { table, cols } of drizzleTables) {
   }
 }
 
+// ── Reverse: every migrated table needs a Drizzle definition ────────────────
+//
+// Drizzle is the ONE database access layer, so a table that exists in the
+// migrations but has NO `pgTable` declaration is unreachable by design: the
+// only way to touch it would be a raw client, which is exactly what this
+// codebase no longer allows. That gap is how 9 tables (freelancer_messages,
+// ide_datasets, tenant_llm_provider_keys, …) ended up served by ad-hoc raw SQL.
+// The forward check above could never see it — it only walks schema.ts.
+
+const reverseAllowlistFile = resolve(here, '.schema-missing-allowlist.txt');
+const reverseAllowlist = existsSync(reverseAllowlistFile)
+  ? new Set(
+      readFileSync(reverseAllowlistFile, 'utf8')
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0 && !l.startsWith('#')),
+    )
+  : new Set();
+
+const declaredTables = new Set(drizzleTables.map((t) => t.table));
+let reverseAllowed = 0;
+
+for (const table of migratedColumns.keys()) {
+  if (declaredTables.has(table)) continue;
+  if (reverseAllowlist.has(table)) { reverseAllowed++; continue; }
+  errors.push(
+    `Table '${table}' is created by a migration but has no pgTable() declaration in schema.ts ` +
+    `— it is unreachable, since Drizzle is the only database access layer.`,
+  );
+}
+
 if (errors.length > 0) {
   console.error('NEW schema drift detected (not in allowlist):\n');
   for (const err of errors) console.error('  - ' + err);
   console.error('\nAdd a migration in api/migrations/ that creates the missing column(s), or remove from schema.ts.');
   console.error('To deliberately grandfather this drift (e.g. for a baseline-push table), add the bullet to scripts/.schema-drift-allowlist.txt.');
+  console.error("For a migrated table with no pgTable() declaration: add it to schema.ts, or list the bare table name in scripts/.schema-missing-allowlist.txt if it is intentionally unmapped (e.g. a pure join/audit table written only by SQL migrations).");
   process.exit(1);
 }
 
 console.log(
   `Schema drift check passed: ${drizzleTables.length} drizzle tables, ` +
   `${[...migratedColumns.values()].reduce((sum, s) => sum + s.size, 0)} migrated columns, ` +
-  `${allowed} pre-existing drift items grandfathered.`,
+  `${allowed} pre-existing drift items grandfathered, ` +
+  `${reverseAllowed} migrated tables intentionally unmapped.`,
 );

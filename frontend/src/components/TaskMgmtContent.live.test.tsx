@@ -48,6 +48,9 @@ vi.mock('@/lib/builderforceApi', () => ({
     assigneeProfiles: vi.fn().mockResolvedValue({}),
     participantsSummary: vi.fn().mockResolvedValue([]),
     flaggedForProject: vi.fn().mockResolvedValue([]),
+    // See the sibling suite: `loadData` calls this on mount, so omitting it fails the
+    // whole Promise.all and no run chips ever render.
+    assignable: vi.fn().mockResolvedValue({ agents: [], humans: [], hires: [] }),
   },
 }));
 

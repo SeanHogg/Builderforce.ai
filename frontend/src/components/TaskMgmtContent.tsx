@@ -55,6 +55,7 @@ import { AgentTab } from './agent/AgentTab';
 import { TaskChangesPanel } from './agent/TaskChangesPanel';
 import { TaskPrdTab } from './task/TaskPrdTab';
 import { AccountabilityTab } from './task/AccountabilityTab';
+import { TicketLifecyclePanel } from './task/TicketLifecyclePanel';
 import { RunTaskButton } from './task/RunTaskButton';
 import { ApprovalResolveControl } from './humanRequests/ApprovalResolveControl';
 import { ChatMessageContent } from './ChatMessageContent';
@@ -242,6 +243,9 @@ export function TaskMgmtContent({
   const [ceremony, setCeremony] = useState<CeremonyMode | null>(null);
   const [prdOpen, setPrdOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'details' | 'agent' | 'changes' | 'prd' | 'accountability'>('details');
+  // Ticket whose LIFECYCLE / AUTONOMY PROOF panel is open (opened from the drawer
+  // header, stacks above the drawer). null = closed.
+  const [lifecycleTaskId, setLifecycleTaskId] = useState<number | null>(null);
   // Inline per-field editing in the task drawer. Only one field is editable at a
   // time; `fieldDraft` holds the in-progress value (string for text/date inputs).
   const [editingField, setEditingField] = useState<
@@ -274,6 +278,8 @@ export function TaskMgmtContent({
   // is gone, so there's no deep-link left to honour.
   const closeDrawer = useCallback(() => {
     setDrawerTask(null);
+    // The lifecycle audit is a child of the drawer — it must not outlive it.
+    setLifecycleTaskId(null);
     if (searchParams?.get('task')) {
       const params = new URLSearchParams(Array.from(searchParams.entries()));
       params.delete('task');
@@ -2132,7 +2138,27 @@ export function TaskMgmtContent({
                   {drawerTask.key}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {/* LIFECYCLE / AUTONOMY PROOF — "did this ticket move itself, or did a
+                  person push it every hop?". Opens the audit slide-out over the drawer.
+                  Suppressed on a restricted ticket like every other drill-down, since
+                  its lane history would leak what the mask hides. The label collapses
+                  to the icon on a phone so the header stays on one row. */}
+              {!drawerTask.restricted && (
+              <button
+                type="button"
+                className="drawer-action"
+                onClick={() => setLifecycleTaskId(drawerTask.id)}
+                aria-label={tTask('lifecycleAction')}
+                title={tTask('lifecycleActionTitle')}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden style={{ width: 17, height: 17, stroke: 'currentColor', fill: 'none', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }}>
+                  <circle cx="12" cy="12" r="9" />
+                  <polyline points="12 7 12 12 16 14" />
+                </svg>
+                <span className="drawer-action-label">{tTask('lifecycleAction')}</span>
+              </button>
+              )}
               {!drawerTask.restricted && (
               <button
                 type="button"
@@ -2656,6 +2682,11 @@ export function TaskMgmtContent({
           </div>
         </>
       )}
+
+      {/* Lifecycle / autonomy proof for the drawer ticket. Rendered outside the
+          drawer markup so it survives the drawer's own overflow clipping, and
+          stacked above it (see the panel's zIndex). */}
+      <TicketLifecyclePanel taskId={lifecycleTaskId} onClose={() => setLifecycleTaskId(null)} />
 
       {effectiveProjectId != null && (
         <BoardConfigPanel

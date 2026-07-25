@@ -475,7 +475,8 @@
       "monitors": "监控器",
       "reporting": "报告",
       "rfp": "RFP 响应",
-      "feedback": "反馈"
+      "feedback": "反馈",
+      "autonomy": "自主"
     },
     "primaryAria": "主导航"
   },
@@ -1061,7 +1062,9 @@
     "typeDesign": "设计",
     "typeIncident": "事件",
     "requiresRoleHint": "{role, select, viewer {需要观察者角色} developer {需要开发者角色} manager {需要管理者角色} owner {需要所有者角色} other {需要 {role} 角色}}",
-    "requiresDeveloperRole": "需要开发者角色"
+    "requiresDeveloperRole": "需要开发者角色",
+    "closePanel": "关闭面板",
+    "panel": "面板"
   },
   "prdCreate": {
     "title": "新建 PRD",
@@ -1582,7 +1585,9 @@
         "crossTeam": "跨团队",
         "crossTeamDesc": "将每个团队与其他团队排名",
         "delayTaxonomy": "延误原因",
-        "delayTaxonomyDesc": "工作为何延误"
+        "delayTaxonomyDesc": "工作为何延误",
+        "autonomy": "自主健康度",
+        "autonomyDesc": "工作是否自行完成？按创建者划分的生命周期漏斗、自主与人工移动之比，以及自主执行停滞之处。"
       },
       "summary": {
         "cycleTime": "平均周期时间",
@@ -2331,6 +2336,73 @@
       "title": "此视图需要更高的套餐",
       "body": "高级洞察不包含在您的 {plan} 套餐中。升级即可解锁预测、异常检测和高管视图。",
       "cta": "查看套餐"
+    },
+    "autonomy": {
+      "title": "自主健康度",
+      "subtitle": "AI 管理者和团队成员创建的工单，真的能自主走完整个生命周期吗？按创建者对比漏斗，看清究竟是谁在推动看板，并找出自主执行中断的关卡。",
+      "scopeAll": "本工作区的全部项目。",
+      "scopeProject": "范围：{project}。",
+      "coverage": {
+        "full": "完整覆盖——已审计最近 {days} 天内创建的全部 {n} 个工单。",
+        "truncated": "仅为抽样——审计上限为最近 {days} 天内的 {n} 个工单，因此这些数字只覆盖最新的工单，而非全部。"
+      },
+      "origin": {
+        "label": "创建者",
+        "agent": "智能体",
+        "manager_card": "管理者卡片",
+        "human": "人工",
+        "system": "自动化",
+        "unknown": "无归属"
+      },
+      "stage": {
+        "created": "已创建",
+        "dispatched": "曾被派发",
+        "progressed": "自主推进过",
+        "terminal": "到达完成",
+        "fullyAutonomous": "完全自主"
+      },
+      "allOrigins": "所有来源",
+      "conversion": "端到端",
+      "ticketsCreated": "已创建 {n} 个",
+      "endToEnd": "在零人工移动的情况下到达完成（{n} 个工单）。",
+      "funnelAria": "由{origin}创建的工单的自主漏斗——共 {n} 个工单，按占创建数的比例显示。",
+      "originMixAria": "本时间窗内创建的工单，按创建者划分。",
+      "hopsAutonomous": "自主移动",
+      "hopsHuman": "人工移动",
+      "hopsOfTotal": "{n} 次移动中自主占 {share}",
+      "hopSplitAria": "{origin}的泳道移动：自主 {a} 次，人工 {h} 次。",
+      "stallAria": "阻塞 {n} 个停滞工单的关卡，按工单数排序。",
+      "noTickets": "本时间窗内没有创建任何工单。",
+      "noHops": "本时间窗内没有记录到泳道移动。",
+      "noStalls": "没有停滞——不存在未完成且无任务运行的工单。",
+      "stat": {
+        "fully": "自主完成",
+        "fullySub": "{total} 个工单中有 {n} 个在无人工介入下到达完成",
+        "dispatchedSub": "{total} 个工单中有 {n} 个至少运行过一次",
+        "hopShare": "由自主完成的移动",
+        "hopShareSub": "自主 {a} 次，人工 {h} 次泳道移动",
+        "stalled": "停滞在关卡",
+        "stalledSub": "占工单 {share}——未完成且无任务运行",
+        "neverStartedSub": "占工单 {share}——从未运行、从未移动"
+      },
+      "gateShort": {
+        "unrecorded": "从未评估"
+      },
+      "gate": {
+        "will_run": "已为这些工单派发运行。",
+        "no_board": "该项目没有看板，自主执行无法解析到对应泳道。",
+        "no_lane": "看板上没有与工单状态匹配的泳道，自主执行无从触发。",
+        "terminal_lane": "工单位于终止（完成）泳道，永不自动运行。",
+        "human_gate": "该泳道需人工把关——须有人批准或点击“立即运行”。",
+        "no_agent": "该泳道未配置智能体，且负责人无法执行此阶段。请为泳道配置智能体，或用“立即运行”显式派发。",
+        "capability_mismatch": "所有候选智能体都缺少该泳道要求的技能。",
+        "already_running": "工单已有正在进行的运行，因此未派发新的运行。",
+        "run_cap_exhausted": "最近连续多次运行均失败，自主执行已停止重新派发。人工“立即运行”可覆盖。",
+        "cooldown_active": "工单处于失败后的退避等待期，之后才会再次自主尝试。",
+        "not_executable": "属于系统或协调事务——按设计从不派发给智能体。",
+        "pending_approval": "外部请求需先由人工在分诊中接受，智能体才可处理。",
+        "unrecorded": "从未记录任何自动运行决策——自主执行从未评估过这些工单。"
+      }
     }
   },
   "cloudAgentForm": {
@@ -3468,7 +3540,8 @@
       "empCost": "人力成本",
       "empPerformers": "绩效",
       "empInitiatives": "战略分布",
-      "forecast": "预测"
+      "forecast": "预测",
+      "autonomy": "自主"
     },
     "title": {
       "aiProductivity": "AI 生产力评分",
@@ -3573,7 +3646,18 @@
       "forecastCycleProjection": "预测周期时间",
       "forecastCfrProjection": "预测变更失败",
       "forecastAnomalies": "未处理异常",
-      "forecastCostTrend": "花费预测"
+      "forecastCostTrend": "花费预测",
+      "autoFully": "自主完成",
+      "autoDispatched": "曾被派发",
+      "autoHopShare": "由自主完成的移动",
+      "autoStalled": "停滞在关卡",
+      "autoNeverStarted": "从未启动",
+      "autoOriginFunnel": "按来源划分的生命周期漏斗",
+      "autoHopSplit": "自主与人工移动对比",
+      "autoStallGates": "自主执行停滞之处",
+      "autoOriginMix": "谁在创建工作",
+      "autoFunnelTable": "自主漏斗（表格）",
+      "autoCoverage": "审计覆盖范围"
     },
     "loading": "加载中…",
     "overview": {
@@ -7417,7 +7501,86 @@
     "errMove": "移动失败",
     "tabChanges": "变更",
     "release": "发布版本",
-    "delayReason": "延误原因"
+    "delayReason": "延误原因",
+    "lifecycleAction": "生命周期",
+    "lifecycleActionTitle": "生命周期与自主性证据 —— 这张工单是自己推进的，还是每一步都靠人推动？"
+  },
+  "ticketLifecycle": {
+    "title": "生命周期 / 自主性证据",
+    "loading": "正在汇总证据链…",
+    "errorTitle": "无法加载该工单的生命周期",
+    "retry": "重试",
+    "openedAt": "创建时间",
+    "currentLane": "当前泳道",
+    "origin": {
+      "label": "创建者",
+      "human": "由人创建",
+      "agent": "由智能体创建（AI 管理者）",
+      "system": "由自动化创建",
+      "manager_card": "AI 管理者的梳理卡片",
+      "unknown": "无记录"
+    },
+    "verdict": {
+      "fullyAutonomous": "全程自主完成 —— 0 次人工泳道流转",
+      "fullyAutonomousDetail": "自主流程完成了 {hops, plural, other {# 次泳道流转}} 并到达终态泳道，全程无人推动过它。",
+      "partialStalled": "部分自主 —— 已停滞",
+      "partialStalledDetail": "自主流程完成了 {hops, plural, other {# 次泳道流转}}，但工单尚未完成，且当前没有任何运行。",
+      "partialRunning": "部分自主 —— 仍在推进",
+      "partialRunningDetail": "自主流程完成了 {hops, plural, other {# 次泳道流转}}，目前有一次运行正在进行。",
+      "humanDriven": "由人推动 —— 自主性从未推动过这张工单",
+      "humanDrivenDetail": "每一次泳道流转都由人完成（共 {hops} 次）。记录中没有任何一次自主流转。",
+      "assisted": "在人工协助下完成",
+      "assistedDetail": "工单到达了终态泳道，但 {totalHops} 次泳道流转中有 {humanHops} 次由人完成。",
+      "noMovement": "从未流转",
+      "noMovementDetail": "这张工单一次都没有换过泳道 —— 人和自主流程都没有推动过它。",
+      "liveRun": "正在运行",
+      "managerCardTitle": "协调卡片",
+      "managerCard": "AI 管理者创建这类卡片用于梳理待办，自主流程按设计有意拒绝派发它们。因此“没有运行”在这里是预期行为，而不是故障。"
+    },
+    "stall": {
+      "title": "它为何停在这里",
+      "unrecorded": "没有记录到任何拦截原因 —— 还没有任何流程尝试运行这张工单。"
+    },
+    "stats": {
+      "title": "流转与运行",
+      "autonomousHops": "自主流转",
+      "autonomousHopsHint": "由智能体或自动化写入的泳道流转。",
+      "humanHops": "人工流转",
+      "humanHopsHint": "由人完成的泳道流转。",
+      "runsDispatched": "已派发运行",
+      "runsCompleted": "成功运行",
+      "runsFailed": "失败运行",
+      "backwardHops": "返工流转",
+      "backwardHopsHint": "向后的泳道流转 —— 工作被退回重做。"
+    },
+    "timeline": {
+      "title": "证据链",
+      "help": "每一行都标注了它读取自哪张表，因此这是证据，而非叙述。",
+      "empty": "该工单尚无生命周期事件记录。",
+      "laneMove": "{from} → {to}",
+      "laneEntered": "进入 {to}",
+      "backward": "返工",
+      "run": "运行 #{id}"
+    },
+    "kind": {
+      "created": "已创建",
+      "lane_moved": "泳道流转",
+      "run_dispatched": "已派发运行",
+      "run_completed": "运行完成",
+      "run_failed": "运行失败",
+      "autorun_dispatched": "自动运行已派发",
+      "autorun_skipped": "自动运行被拒",
+      "autorun_error": "自动运行出错",
+      "autorun_awaiting_approval": "自动运行待批准",
+      "role_event": "角色事件"
+    },
+    "source": {
+      "activity_log": "活动 / 审计日志",
+      "task_status_transitions": "泳道流转日志",
+      "executions": "运行记录",
+      "tool_audit_events": "自动运行决策审计",
+      "aria": "来源：{label}"
+    }
   },
   "taskChanges": {
     "allChanges": "所有变更",

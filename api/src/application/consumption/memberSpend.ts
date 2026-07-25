@@ -18,7 +18,6 @@
  */
 
 import { and, eq, gte, sql as dsql } from 'drizzle-orm';
-import { neon } from '@neondatabase/serverless';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { llmUsageLog, tenantMembers, tenants, users } from '../../infrastructure/database/schema';
@@ -204,14 +203,13 @@ export async function maybeEmitSpendNotification(
       .set({ spendNotifyPeriod: monthKey, spendNotifyLevel: level })
       .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId)));
 
-    const sqlc = neon(env.NEON_DATABASE_URL);
     const capUsd = millicentsToUsd(availability.capMillicents).toFixed(2);
     const spentUsd = millicentsToUsd(availability.spentMillicents).toFixed(2);
     const memberName = state?.name || 'A team member';
 
     // The seat's own notification (addressed to them).
     const reached = level >= 100;
-    await notify(sqlc, env, {
+    await notify(db, env, {
       userId,
       tenantId,
       kind: reached ? 'spend_cap_reached' : 'spend_cap_warning',
@@ -231,7 +229,7 @@ export async function maybeEmitSpendNotification(
       .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.role, 'owner'), eq(tenantMembers.isActive, true)));
     for (const o of owners) {
       if (o.userId === userId) continue;
-      await notify(sqlc, env, {
+      await notify(db, env, {
         userId: o.userId,
         tenantId,
         kind: reached ? 'spend_cap_reached' : 'spend_cap_warning',

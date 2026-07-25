@@ -3,8 +3,18 @@
  * Projects are the unified API projects (projects table). Project files in R2 under ide/projects/{projectId}/.
  */
 import { Hono } from 'hono';
-import { neon } from '@neondatabase/serverless';
+import { and, asc, desc, eq, gt, sql } from 'drizzle-orm';
 import type { Env, HonoEnv } from '../../env';
+import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import {
+  agentInferenceLogs,
+  ideAgents,
+  ideDatasets,
+  ideTrainingJobs,
+  ideTrainingLogs,
+  projectSites,
+  projects,
+} from '../../infrastructure/database/schema';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { invalidateCached, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import {
@@ -60,10 +70,69 @@ function parseProjectIdInt(param: string): number {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function resolveProjectId(env: HonoEnv['Bindings'], param: string): Promise<number> {
+/**
+ * `SELECT *` projections that keep the raw snake_case keys — AND the raw
+ * Postgres timestamp text — these endpoints have always returned to clients.
+ *
+ * Timestamps and int8 are cast to text on purpose: Drizzle maps `timestamptz` to
+ * a JS `Date` (which would serialise as an ISO-Z string, not the wire form
+ * clients already parse) and `bigint` to a `number` (the pg driver returns a
+ * string). Casting keeps the response byte-identical to the raw-SQL version.
+ */
+const datasetRow = {
+  id: ideDatasets.id,
+  project_id: ideDatasets.projectId,
+  name: ideDatasets.name,
+  description: ideDatasets.description,
+  capability_prompt: ideDatasets.capabilityPrompt,
+  r2_key: ideDatasets.r2Key,
+  example_count: ideDatasets.exampleCount,
+  status: ideDatasets.status,
+  created_at: sql<string>`${ideDatasets.createdAt}::text`,
+  updated_at: sql<string>`${ideDatasets.updatedAt}::text`,
+};
+
+const trainingJobRow = {
+  id: ideTrainingJobs.id,
+  project_id: ideTrainingJobs.projectId,
+  dataset_id: ideTrainingJobs.datasetId,
+  base_model: ideTrainingJobs.baseModel,
+  lora_rank: ideTrainingJobs.loraRank,
+  epochs: ideTrainingJobs.epochs,
+  batch_size: ideTrainingJobs.batchSize,
+  learning_rate: ideTrainingJobs.learningRate,
+  status: ideTrainingJobs.status,
+  current_epoch: ideTrainingJobs.currentEpoch,
+  current_loss: ideTrainingJobs.currentLoss,
+  r2_artifact_key: ideTrainingJobs.r2ArtifactKey,
+  error_message: ideTrainingJobs.errorMessage,
+  eval_score: ideTrainingJobs.evalScore,
+  eval_code_correctness: ideTrainingJobs.evalCodeCorrectness,
+  eval_reasoning_quality: ideTrainingJobs.evalReasoningQuality,
+  eval_hallucination_rate: ideTrainingJobs.evalHallucinationRate,
+  eval_details: ideTrainingJobs.evalDetails,
+  evaluated_at: sql<string | null>`${ideTrainingJobs.evaluatedAt}::text`,
+  created_at: sql<string>`${ideTrainingJobs.createdAt}::text`,
+  updated_at: sql<string>`${ideTrainingJobs.updatedAt}::text`,
+};
+
+const trainingLogRow = {
+  id: ideTrainingLogs.id,
+  job_id: ideTrainingLogs.jobId,
+  epoch: ideTrainingLogs.epoch,
+  step: ideTrainingLogs.step,
+  loss: ideTrainingLogs.loss,
+  message: ideTrainingLogs.message,
+  created_at: sql<string>`${ideTrainingLogs.createdAt}::text`,
+};
+
+async function resolveProjectId(db: Db, param: string): Promise<number> {
   if (UUID_RE.test(param)) {
-    const rows = await neon(env.NEON_DATABASE_URL)`SELECT id FROM projects WHERE public_id = ${param} LIMIT 1`;
-    const row = rows[0] as { id: number } | undefined;
+    const [row] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.publicId, param))
+      .limit(1);
     if (!row) throw new Error('Project not found');
     return row.id;
   }
@@ -71,23 +140,24 @@ async function resolveProjectId(env: HonoEnv['Bindings'], param: string): Promis
 }
 
 /** Fetch the fields the template-seeding decision needs, by numeric project id. */
-async function fetchSeedableProject(env: HonoEnv['Bindings'], id: number): Promise<SeedableProject | null> {
-  const rows = await neon(env.NEON_DATABASE_URL)`
-    SELECT template, modality, source_control_repo_full_name, github_repo_url
-    FROM projects WHERE id = ${id} LIMIT 1`;
-  const row = rows[0] as {
-    template: string | null;
-    modality: string | null;
-    source_control_repo_full_name: string | null;
-    github_repo_url: string | null;
-  } | undefined;
+async function fetchSeedableProject(db: Db, id: number): Promise<SeedableProject | null> {
+  const [row] = await db
+    .select({
+      template: projects.template,
+      modality: projects.modality,
+      sourceControlRepoFullName: projects.sourceControlRepoFullName,
+      githubRepoUrl: projects.githubRepoUrl,
+    })
+    .from(projects)
+    .where(eq(projects.id, id))
+    .limit(1);
   if (!row) return null;
   return {
     id,
     template: row.template,
     modality: row.modality,
-    sourceControlRepoFullName: row.source_control_repo_full_name,
-    githubRepoUrl: row.github_repo_url,
+    sourceControlRepoFullName: row.sourceControlRepoFullName,
+    githubRepoUrl: row.githubRepoUrl,
   };
 }
 
@@ -112,10 +182,8 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  const sql = (env: HonoEnv['Bindings']) => neon(env.NEON_DATABASE_URL);
   const storage = (env: HonoEnv['Bindings']) => env.UPLOADS;
   const r2 = (c: { env: HonoEnv['Bindings'] }) => storage(c.env);
-  const getSql = (c: { env: HonoEnv['Bindings'] }) => sql(c.env);
 
   /**
    * Ownership gate for every project-scoped IDE resource. Files, sites, datasets,
@@ -124,16 +192,24 @@ export function createIdeRoutes(): Hono<HonoEnv> {
    * caller could read/overwrite another tenant's source, datasets, models or sites by
    * guessing an id. Returns false when the project is missing or another tenant's.
    */
-  const projectInTenant = async (c: { env: HonoEnv['Bindings']; get: (k: 'tenantId') => unknown }, projectId: number): Promise<boolean> => {
+  const projectInTenant = async (db: Db, tenantId: number, projectId: number): Promise<boolean> => {
     if (!Number.isInteger(projectId) || projectId < 1) return false;
-    const [row] = await getSql(c)`SELECT 1 FROM projects WHERE id = ${projectId} AND tenant_id = ${c.get('tenantId') as number} LIMIT 1`;
+    const [row] = await db
+      .select({ present: sql<number>`1` })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
+      .limit(1);
     return !!row;
   };
 
   /** Ownership gate for a training job (and its logs), via its project's tenant. */
-  const trainingJobInTenant = async (c: { env: HonoEnv['Bindings']; get: (k: 'tenantId') => unknown }, jobId: string): Promise<boolean> => {
-    const [job] = await getSql(c)`SELECT project_id FROM ide_training_jobs WHERE id = ${jobId} LIMIT 1`;
-    return !!job && projectInTenant(c, Number(job.project_id));
+  const trainingJobInTenant = async (db: Db, tenantId: number, jobId: string): Promise<boolean> => {
+    const [job] = await db
+      .select({ projectId: ideTrainingJobs.projectId })
+      .from(ideTrainingJobs)
+      .where(eq(ideTrainingJobs.id, jobId))
+      .limit(1);
+    return !!job && projectInTenant(db, tenantId, Number(job.projectId));
   };
 
   // ---------- Project files (R2) — projectId accepts integer or public UUID ----
@@ -141,10 +217,12 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   // tested contract for keys, path validation, missing-vs-empty, and the
   // structural content guard. Routes only do auth/lookup + HTTP mapping.
   router.get('/projects/:projectId/files', async (c) => {
-    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, c.req.param('projectId'));
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
-    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     let rel = await listWorkspaceFiles(bucket, projectId);
 
     // Lazy self-heal: projects created before template seeding (or via the
@@ -156,7 +234,6 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       objs.some((o) => o.path === 'package.json' && o.size > 0);
 
     if (templateNeedsBackfill(rel)) {
-      const tenantId = c.get('tenantId') as number;
       // getRepoStatus is cached (~30s), so a healthy repo-backed project pays only
       // this — no Neon read — on the hot file-list path.
       const repoStatus = await getRepoStatus(c.env as Env, tenantId, projectId).catch(() => ({ linked: false as const }));
@@ -176,7 +253,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         // nothing runnable. THIS is the wipe. Only touch it when there's STILL no
         // real package.json, so a genuine imported repo skips the Neon read too.
         if (!hasRealPackageJson(rel)) {
-          const project = await fetchSeedableProject(c.env, projectId);
+          const project = await fetchSeedableProject(db, projectId);
           if (project && (await ensureRunnableScaffold(bucket, project, rel)) > 0) {
             rel = await listWorkspaceFiles(bucket, projectId);
           }
@@ -184,7 +261,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       } else {
         // Non-repo project: seed the modality scaffold's missing/empty files
         // (also heals the partial-empty "blank editor" case).
-        const project = await fetchSeedableProject(c.env, projectId);
+        const project = await fetchSeedableProject(db, projectId);
         if (project && (await ensureProjectTemplate(bucket, project, rel)) > 0) {
           rel = await listWorkspaceFiles(bucket, projectId);
         }
@@ -195,11 +272,13 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.get('/projects/:projectId/files/*', async (c) => {
-    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, c.req.param('projectId'));
     const path = c.req.param('*') || '';
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
-    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     const content = await readWorkspaceFile(bucket, projectId, path);
     // Missing is 404, NOT an empty 200 — a blank body for a file that was never
     // written let callers cache '' as if it were real content, which is how
@@ -209,11 +288,13 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.put('/projects/:projectId/files/*', async (c) => {
-    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, c.req.param('projectId'));
     const path = c.req.param('*') || '';
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
-    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     // The store enforces the path + structural-content contracts, so no caller
     // (editor, agent, script) can persist a traversal path or another file's
     // content (JSON into .js, source into .html) — 400/422 with the reason.
@@ -223,11 +304,13 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.delete('/projects/:projectId/files/*', async (c) => {
-    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, c.req.param('projectId'));
     const path = c.req.param('*') || '';
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
-    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     await deleteWorkspaceFile(bucket, projectId, path);
     return c.json({ success: true });
   });
@@ -241,9 +324,10 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   // GET status — the linked default repo + import baseline (cached; invalidated on
   // any import/commit/create below).
   router.get('/projects/:projectId/repo-status', async (c) => {
-    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
-    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, c.req.param('projectId'));
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     const status = await getOrSetCached(
       c.env as Env,
       repoStatusKey(projectId),
@@ -255,9 +339,10 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   // POST import — pull a repo's files into the R2 workspace so it opens in the IDE.
   router.post('/projects/:projectId/import', async (c) => {
-    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
-    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, c.req.param('projectId'));
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     const body = await c.req.json<{ repoId?: string; ref?: string }>().catch(() => ({} as { repoId?: string; ref?: string }));
     if (!body.repoId) return c.json({ error: 'repoId is required' }, 400);
     const result = await importRepoToWorkspace(c.env as Env, tenantId, projectId, body.repoId, body.ref);
@@ -268,9 +353,10 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   // POST commit — push R2 workspace edits back to the repo as a branch + PR.
   router.post('/projects/:projectId/commit', async (c) => {
-    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
-    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, c.req.param('projectId'));
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     const body = await c.req.json<{ repoId?: string; message?: string; branch?: string }>().catch(() => ({} as { repoId?: string; message?: string; branch?: string }));
     if (!body.repoId) return c.json({ error: 'repoId is required' }, 400);
     const result = await commitWorkspaceToRepo(c.env as Env, tenantId, projectId, body.repoId, { message: body.message, branch: body.branch });
@@ -281,9 +367,10 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   // POST create-repo — make a clean remote repo, bind it, push the workspace.
   router.post('/projects/:projectId/create-repo', async (c) => {
-    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
-    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, c.req.param('projectId'));
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     const body = await c.req.json<{ provider?: string; name?: string; private?: boolean; credentialId?: string }>().catch(() => ({} as { provider?: string; name?: string; private?: boolean; credentialId?: string }));
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     if (!body.credentialId) return c.json({ error: 'credentialId is required' }, 400);
@@ -300,9 +387,10 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   // builds every push and deploys". Returns the committed workflow so the UI can
   // show exactly what was added.
   router.post('/projects/:projectId/enable-deploys', async (c) => {
-    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
-    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, c.req.param('projectId'));
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     const body = await c.req
       .json<{ repoId?: string; subdomain?: string; distDir?: string }>()
       .catch(() => ({} as { repoId?: string; subdomain?: string; distDir?: string }));
@@ -333,11 +421,25 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   // GET /projects/:projectId/site — current published-site record (or null).
   router.get('/projects/:projectId/site', async (c) => {
-    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
-    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
-    const [row] = await getSql(c)`
-      SELECT subdomain, mode, status, version_token, asset_count, total_bytes, published_at
-      FROM project_sites WHERE project_id = ${projectId} LIMIT 1`;
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, c.req.param('projectId'));
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const [row] = await db
+      .select({
+        subdomain: projectSites.subdomain,
+        mode: projectSites.mode,
+        status: projectSites.status,
+        version_token: projectSites.versionToken,
+        asset_count: projectSites.assetCount,
+        // int8 arrives as a string from the driver; Drizzle's bigint mapper would
+        // turn it into a number and change this field's type on the wire.
+        total_bytes: sql<string>`${projectSites.totalBytes}::text`,
+        published_at: sql<string | null>`${projectSites.publishedAt}::text`,
+      })
+      .from(projectSites)
+      .where(eq(projectSites.projectId, projectId))
+      .limit(1);
     if (!row) return c.json({ site: null });
     return c.json({
       site: {
@@ -358,14 +460,19 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   // Body: multipart/form-data — optional `subdomain` field + one file part per
   // asset, the part NAME being the dist-relative path (e.g. `assets/app.4f3a.js`).
   router.post('/projects/:projectId/publish', async (c) => {
-    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    const db = buildDatabase(c.env);
+    const projectId = await resolveProjectId(db, c.req.param('projectId'));
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
 
     const tenantId = c.get('tenantId') as number;
-    const [proj] = await getSql(c)`SELECT tenant_id, name FROM projects WHERE id = ${projectId} LIMIT 1`;
+    const [proj] = await db
+      .select({ tenantId: projects.tenantId, name: projects.name })
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1);
     if (!proj) return c.json({ error: 'Project not found' }, 404);
-    if (Number(proj.tenant_id) !== tenantId) return c.json({ error: 'Forbidden' }, 403);
+    if (Number(proj.tenantId) !== tenantId) return c.json({ error: 'Forbidden' }, 403);
 
     const form = await c.req.formData();
 
@@ -374,7 +481,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     // Actions deploy produce an identical site.
     const result = await publishStaticSite({
       env: c.env,
-      sql: getSql(c),
+      db,
       bucket,
       projectId,
       tenantId,
@@ -390,29 +497,40 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   // ---------- Datasets (project_id = API project id, integer) ----------
   router.get('/datasets', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
     const raw = c.req.query('projectId');
     if (!raw) return c.json({ error: 'projectId query parameter is required' }, 400);
     const projectId = parseProjectIdInt(raw);
-    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
-    const rows = await getSql(c)`
-      SELECT * FROM ide_datasets WHERE project_id = ${projectId} ORDER BY created_at DESC
-    `;
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const rows = await db
+      .select(datasetRow)
+      .from(ideDatasets)
+      .where(eq(ideDatasets.projectId, projectId))
+      .orderBy(desc(ideDatasets.createdAt));
     return c.json(rows);
   });
 
   router.get('/datasets/:id', async (c) => {
-    const [row] = await getSql(c)`SELECT * FROM ide_datasets WHERE id = ${c.req.param('id')}`;
-    if (!row || !(await projectInTenant(c, Number(row.project_id)))) return c.json({ error: 'Dataset not found' }, 404);
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const [row] = await db.select(datasetRow).from(ideDatasets).where(eq(ideDatasets.id, c.req.param('id')));
+    if (!row || !(await projectInTenant(db, tenantId, Number(row.project_id)))) return c.json({ error: 'Dataset not found' }, 404);
     return c.json(row);
   });
 
   router.get('/datasets/:id/download', async (c) => {
-    const [row] = await getSql(c)`SELECT r2_key, status, project_id FROM ide_datasets WHERE id = ${c.req.param('id')}`;
-    if (!row || !(await projectInTenant(c, Number(row.project_id)))) return c.json({ error: 'Dataset not found' }, 404);
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const [row] = await db
+      .select({ r2Key: ideDatasets.r2Key, status: ideDatasets.status, projectId: ideDatasets.projectId })
+      .from(ideDatasets)
+      .where(eq(ideDatasets.id, c.req.param('id')));
+    if (!row || !(await projectInTenant(db, tenantId, Number(row.projectId)))) return c.json({ error: 'Dataset not found' }, 404);
     if (row.status !== 'ready') return c.json({ error: 'Dataset is not ready' }, 409);
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
-    const key = IDE_PREFIX + (row.r2_key as string);
+    const key = IDE_PREFIX + row.r2Key;
     const obj = await bucket.get(key);
     if (!obj) return c.json({ error: 'Dataset file not found' }, 404);
     return new Response(await obj.text(), {
@@ -421,6 +539,8 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.post('/datasets/generate', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
     const body = await c.req.json<{
       projectId: string | number;
       capabilityPrompt: string;
@@ -431,13 +551,17 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'projectId, capabilityPrompt, and name are required' }, 400);
     }
     const projectId = typeof body.projectId === 'number' ? body.projectId : parseProjectIdInt(String(body.projectId));
-    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     const id = generateId();
     const exampleCount = Math.min(body.exampleCount ?? 50, 200);
-    await getSql(c)`
-      INSERT INTO ide_datasets (id, project_id, name, capability_prompt, r2_key, status)
-      VALUES (${id}, ${projectId}, ${body.name}, ${body.capabilityPrompt}, '', 'generating')
-    `;
+    await db.insert(ideDatasets).values({
+      id,
+      projectId,
+      name: body.name,
+      capabilityPrompt: body.capabilityPrompt,
+      r2Key: '',
+      status: 'generating',
+    });
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -486,14 +610,18 @@ export function createIdeRoutes(): Hono<HonoEnv> {
           const r2Key = `datasets/${String(projectId)}/${id}.jsonl`;
           const bucket = r2(c);
           if (bucket) await bucket.put(IDE_PREFIX + r2Key, jsonl, { httpMetadata: { contentType: 'application/jsonl' } });
-          await getSql(c)`
-            UPDATE ide_datasets SET r2_key = ${r2Key}, example_count = ${examples.length}, status = 'ready', updated_at = NOW() WHERE id = ${id}
-          `;
-          const [dataset] = await getSql(c)`SELECT * FROM ide_datasets WHERE id = ${id}`;
+          await db
+            .update(ideDatasets)
+            .set({ r2Key, exampleCount: examples.length, status: 'ready', updatedAt: sql`NOW()` })
+            .where(eq(ideDatasets.id, id));
+          const [dataset] = await db.select(datasetRow).from(ideDatasets).where(eq(ideDatasets.id, id));
           emit({ type: 'done', dataset });
         } catch (e) {
           const msg = e instanceof Error ? e.message : 'Dataset generation failed';
-          await getSql(c)`UPDATE ide_datasets SET status = 'error', updated_at = NOW() WHERE id = ${id}`;
+          await db
+            .update(ideDatasets)
+            .set({ status: 'error', updatedAt: sql`NOW()` })
+            .where(eq(ideDatasets.id, id));
           emit({ type: 'error', message: msg });
         }
         controller.enqueue(encoder.encode('data: [DONE]\n\n'));
@@ -507,17 +635,23 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   // ---------- Training (project_id = API project id, integer) ----------
   router.get('/training', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
     const raw = c.req.query('projectId');
     if (!raw) return c.json({ error: 'projectId query parameter is required' }, 400);
     const projectId = parseProjectIdInt(raw);
-    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
-    const rows = await getSql(c)`
-      SELECT * FROM ide_training_jobs WHERE project_id = ${projectId} ORDER BY created_at DESC
-    `;
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const rows = await db
+      .select(trainingJobRow)
+      .from(ideTrainingJobs)
+      .where(eq(ideTrainingJobs.projectId, projectId))
+      .orderBy(desc(ideTrainingJobs.createdAt));
     return c.json(rows);
   });
 
   router.post('/training', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
     const body = await c.req.json<{
       projectId: string | number;
       datasetId?: string;
@@ -529,21 +663,28 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     }>();
     if (body.projectId == null || !body.baseModel) return c.json({ error: 'projectId and baseModel are required' }, 400);
     const projectId = typeof body.projectId === 'number' ? body.projectId : parseProjectIdInt(String(body.projectId));
-    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     const id = generateId();
-    await getSql(c)`
-      INSERT INTO ide_training_jobs (id, project_id, dataset_id, base_model, lora_rank, epochs, batch_size, learning_rate)
-      VALUES (${id}, ${projectId}, ${body.datasetId ?? null}, ${body.baseModel},
-        ${body.loraRank ?? 8}, ${body.epochs ?? 3}, ${body.batchSize ?? 4}, ${body.learningRate ?? 0.0002})
-    `;
-    await getSql(c)`INSERT INTO ide_training_logs (id, job_id, message) VALUES (${generateId()}, ${id}, 'Training job created')`;
-    const [row] = await getSql(c)`SELECT * FROM ide_training_jobs WHERE id = ${id}`;
-    return c.json(row, 201);
+    await db.insert(ideTrainingJobs).values({
+      id,
+      projectId,
+      datasetId: body.datasetId ?? null,
+      baseModel: body.baseModel,
+      loraRank: body.loraRank ?? 8,
+      epochs: body.epochs ?? 3,
+      batchSize: body.batchSize ?? 4,
+      learningRate: body.learningRate ?? 0.0002,
+    });
+    await db.insert(ideTrainingLogs).values({ id: generateId(), jobId: id, message: 'Training job created' });
+    const [row] = await db.select(trainingJobRow).from(ideTrainingJobs).where(eq(ideTrainingJobs.id, id));
+    return c.json(row!, 201);
   });
 
   router.get('/training/:id', async (c) => {
-    const [row] = await getSql(c)`SELECT * FROM ide_training_jobs WHERE id = ${c.req.param('id')}`;
-    if (!row || !(await projectInTenant(c, Number(row.project_id)))) return c.json({ error: 'Training job not found' }, 404);
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const [row] = await db.select(trainingJobRow).from(ideTrainingJobs).where(eq(ideTrainingJobs.id, c.req.param('id')));
+    if (!row || !(await projectInTenant(db, tenantId, Number(row.project_id)))) return c.json({ error: 'Training job not found' }, 404);
     return c.json(row);
   });
 
@@ -556,27 +697,36 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       errorMessage?: string;
     }>();
     const id = c.req.param('id');
-    if (!(await trainingJobInTenant(c, id))) return c.json({ error: 'Training job not found' }, 404);
-    const [row] = await getSql(c)`
-      UPDATE ide_training_jobs
-      SET status = COALESCE(${body.status ?? null}, status),
-          current_epoch = COALESCE(${body.currentEpoch ?? null}, current_epoch),
-          current_loss = COALESCE(${body.currentLoss ?? null}, current_loss),
-          r2_artifact_key = COALESCE(${body.r2ArtifactKey ?? null}, r2_artifact_key),
-          error_message = COALESCE(${body.errorMessage ?? null}, error_message),
-          updated_at = NOW()
-      WHERE id = ${id}
-      RETURNING *
-    `;
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    if (!(await trainingJobInTenant(db, tenantId, id))) return c.json({ error: 'Training job not found' }, 404);
+    // COALESCE(<param>, <column>) === "leave the column alone when the field was
+    // absent or null", so an omitted key is simply left out of the SET.
+    const [row] = await db
+      .update(ideTrainingJobs)
+      .set({
+        ...(body.status != null ? { status: body.status } : {}),
+        ...(body.currentEpoch != null ? { currentEpoch: body.currentEpoch } : {}),
+        ...(body.currentLoss != null ? { currentLoss: body.currentLoss } : {}),
+        ...(body.r2ArtifactKey != null ? { r2ArtifactKey: body.r2ArtifactKey } : {}),
+        ...(body.errorMessage != null ? { errorMessage: body.errorMessage } : {}),
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(ideTrainingJobs.id, id))
+      .returning(trainingJobRow);
     if (!row) return c.json({ error: 'Training job not found' }, 404);
     return c.json(row);
   });
 
   router.get('/training/:id/logs', async (c) => {
-    if (!(await trainingJobInTenant(c, c.req.param('id')))) return c.json({ error: 'Training job not found' }, 404);
-    const rows = await getSql(c)`
-      SELECT * FROM ide_training_logs WHERE job_id = ${c.req.param('id')} ORDER BY created_at ASC
-    `;
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    if (!(await trainingJobInTenant(db, tenantId, c.req.param('id')))) return c.json({ error: 'Training job not found' }, 404);
+    const rows = await db
+      .select(trainingLogRow)
+      .from(ideTrainingLogs)
+      .where(eq(ideTrainingLogs.jobId, c.req.param('id')))
+      .orderBy(asc(ideTrainingLogs.createdAt));
     return c.json(rows);
   });
 
@@ -584,35 +734,49 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const body = await c.req.json<{ epoch?: number; step?: number; loss?: number; message: string }>();
     if (!body.message) return c.json({ error: 'message is required' }, 400);
     const jobId = c.req.param('id');
-    if (!(await trainingJobInTenant(c, jobId))) return c.json({ error: 'Training job not found' }, 404);
-    const [row] = await getSql(c)`
-      INSERT INTO ide_training_logs (id, job_id, epoch, step, loss, message)
-      VALUES (${generateId()}, ${jobId}, ${body.epoch ?? null}, ${body.step ?? null}, ${body.loss ?? null}, ${body.message})
-      RETURNING *
-    `;
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    if (!(await trainingJobInTenant(db, tenantId, jobId))) return c.json({ error: 'Training job not found' }, 404);
+    const [row] = await db
+      .insert(ideTrainingLogs)
+      .values({
+        id: generateId(),
+        jobId,
+        epoch: body.epoch ?? null,
+        step: body.step ?? null,
+        loss: body.loss ?? null,
+        message: body.message,
+      })
+      .returning(trainingLogRow);
     return c.json(row!, 201);
   });
 
   router.get('/training/:id/logs/stream', async (c) => {
     const jobId = c.req.param('id');
-    if (!(await trainingJobInTenant(c, jobId))) return c.json({ error: 'Training job not found' }, 404);
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    if (!(await trainingJobInTenant(db, tenantId, jobId))) return c.json({ error: 'Training job not found' }, 404);
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
         let afterTimestamp = new Date(0).toISOString();
         let complete = false;
         while (!complete) {
-          const jobRows = await getSql(c)`SELECT status FROM ide_training_jobs WHERE id = ${jobId}`;
+          const jobRows = await db.select({ status: ideTrainingJobs.status }).from(ideTrainingJobs).where(eq(ideTrainingJobs.id, jobId));
           if (jobRows.length === 0) break;
           const currentJob = jobRows[0];
           if (!currentJob) break;
-          complete = (currentJob.status as string) === 'completed' || (currentJob.status as string) === 'failed';
-          const logRows = await getSql(c)`
-            SELECT * FROM ide_training_logs WHERE job_id = ${jobId} AND created_at > ${afterTimestamp} ORDER BY created_at ASC
-          `;
+          complete = currentJob.status === 'completed' || currentJob.status === 'failed';
+          // The watermark is the raw Postgres timestamp text of the last row sent;
+          // bind it as-is so no precision is lost round-tripping through JS Date.
+          const logRows = await db
+            .select(trainingLogRow)
+            .from(ideTrainingLogs)
+            .where(and(eq(ideTrainingLogs.jobId, jobId), gt(ideTrainingLogs.createdAt, sql`${afterTimestamp}`)))
+            .orderBy(asc(ideTrainingLogs.createdAt));
           for (const row of logRows) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(row)}\n\n`));
-            afterTimestamp = row.created_at as string;
+            afterTimestamp = row.created_at;
           }
           if (!complete) await new Promise(r => setTimeout(r, 1000));
         }
@@ -627,9 +791,11 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.post('/training/:id/artifact', async (c) => {
     const jobId = c.req.param('id');
-    const [job] = await getSql(c)`SELECT project_id FROM ide_training_jobs WHERE id = ${jobId}`;
-    if (!job || !(await projectInTenant(c, Number(job.project_id)))) return c.json({ error: 'Training job not found' }, 404);
-    const projectId = Number(job.project_id);
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const [job] = await db.select({ projectId: ideTrainingJobs.projectId }).from(ideTrainingJobs).where(eq(ideTrainingJobs.id, jobId));
+    if (!job || !(await projectInTenant(db, tenantId, Number(job.projectId)))) return c.json({ error: 'Training job not found' }, 404);
+    const projectId = Number(job.projectId);
     const body = await c.req.arrayBuffer();
     if (!body || body.byteLength === 0) return c.json({ error: 'Empty artifact body' }, 400);
     const r2Key = `artifacts/${String(projectId)}/${jobId}/adapter.bin`;
@@ -639,21 +805,26 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       httpMetadata: { contentType: 'application/octet-stream' },
       customMetadata: { jobId, projectId: String(projectId), uploadedAt: new Date().toISOString() },
     });
-    await getSql(c)`UPDATE ide_training_jobs SET r2_artifact_key = ${r2Key}, updated_at = NOW() WHERE id = ${jobId}`;
-    await getSql(c)`INSERT INTO ide_training_logs (id, job_id, message) VALUES (${generateId()}, ${jobId}, ${'LoRA adapter uploaded: ' + r2Key})`;
+    await db
+      .update(ideTrainingJobs)
+      .set({ r2ArtifactKey: r2Key, updatedAt: sql`NOW()` })
+      .where(eq(ideTrainingJobs.id, jobId));
+    await db.insert(ideTrainingLogs).values({ id: generateId(), jobId, message: 'LoRA adapter uploaded: ' + r2Key });
     return c.json({ r2Key }, 201);
   });
 
   router.post('/training/:id/evaluate', async (c) => {
     const jobId = c.req.param('id');
-    const [job] = await getSql(c)`SELECT * FROM ide_training_jobs WHERE id = ${jobId}`;
-    if (!job || !(await projectInTenant(c, Number(job.project_id)))) return c.json({ error: 'Training job not found' }, 404);
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const [job] = await db.select(trainingJobRow).from(ideTrainingJobs).where(eq(ideTrainingJobs.id, jobId));
+    if (!job || !(await projectInTenant(db, tenantId, Number(job.project_id)))) return c.json({ error: 'Training job not found' }, 404);
     let examples: { instruction: string; input: string; output: string }[] = [];
     if (job.dataset_id) {
-      const [ds] = await getSql(c)`SELECT r2_key FROM ide_datasets WHERE id = ${job.dataset_id}`;
-      if (ds?.r2_key) {
+      const [ds] = await db.select({ r2Key: ideDatasets.r2Key }).from(ideDatasets).where(eq(ideDatasets.id, job.dataset_id));
+      if (ds?.r2Key) {
         const bucket = r2(c);
-        const key = IDE_PREFIX + (ds.r2_key as string);
+        const key = IDE_PREFIX + ds.r2Key;
         const obj = bucket ? await bucket.get(key) : null;
         if (obj) {
           const text = await obj.text();
@@ -687,28 +858,44 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     // fabricated flat 0.85). Persist the full breakdown so it's queryable — the
     // training panel charts correctness/reasoning/hallucination instead of a log.
     const evaluated = await evaluateFinetuneOutputs(service, examples, modelOutputs);
-    await getSql(c)`
-      UPDATE ide_training_jobs
-      SET eval_score = ${evaluated.score},
-          eval_code_correctness = ${evaluated.code_correctness},
-          eval_reasoning_quality = ${evaluated.reasoning_quality},
-          eval_hallucination_rate = ${evaluated.hallucination_rate},
-          eval_details = ${evaluated.details},
-          evaluated_at = NOW(),
-          updated_at = NOW()
-      WHERE id = ${jobId}
-    `;
-    await getSql(c)`INSERT INTO ide_training_logs (id, job_id, message) VALUES (${generateId()}, ${jobId}, ${`Evaluation complete — score: ${evaluated.score.toFixed(3)}`})`;
+    await db
+      .update(ideTrainingJobs)
+      .set({
+        evalScore: evaluated.score,
+        evalCodeCorrectness: evaluated.code_correctness,
+        evalReasoningQuality: evaluated.reasoning_quality,
+        evalHallucinationRate: evaluated.hallucination_rate,
+        evalDetails: evaluated.details,
+        evaluatedAt: sql`NOW()`,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(ideTrainingJobs.id, jobId));
+    await db.insert(ideTrainingLogs).values({
+      id: generateId(),
+      jobId,
+      message: `Evaluation complete — score: ${evaluated.score.toFixed(3)}`,
+    });
     return c.json({ job_id: jobId, ...evaluated, created_at: new Date().toISOString() });
   });
 
   // ---------- Agents (workforce registry) ----------
+  // NOTE: every `ide_agents` statement below runs through `db.execute(sql\`\`)`
+  // rather than the query builder. The Drizzle `ideAgents` table does not declare
+  // the columns migration 0022/0036 added (job_id, lora_rank, r2_artifact_key,
+  // resume_md, package_version, mamba_state, inference_mode, request_count,
+  // last_used_at), so the builder can neither write them nor reproduce the
+  // `SELECT *` row shape these endpoints return to clients.
   router.get('/agents', async (c) => {
-    const rows = await getSql(c)`SELECT * FROM ide_agents WHERE status = 'active' ORDER BY hire_count DESC, created_at DESC`;
+    const db = buildDatabase(c.env);
+    const rows = (await db.execute(sql`
+      SELECT * FROM ide_agents WHERE status = 'active' ORDER BY hire_count DESC, created_at DESC
+    `)).rows;
     return c.json(rows);
   });
 
   router.post('/agents', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
     const body = await c.req.json<{
       project_id: string | number;
       job_id?: string;
@@ -725,7 +912,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       package_version?: string;
     }>();
     const projectId = typeof body.project_id === 'number' ? body.project_id : parseProjectIdInt(String(body.project_id));
-    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     const id = generateId();
     const skillsJson = JSON.stringify(body.skills ?? []);
     const hasLora = !!body.r2_artifact_key;
@@ -733,33 +920,38 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const inferenceMode = hasLora && hasMamba ? 'hybrid' : hasLora ? 'lora' : 'base';
     const packageVersion = body.package_version ?? (hasMamba ? '2.0' : hasLora ? '1.0' : '1.0');
     const mambaStateJson = hasMamba ? JSON.stringify(body.mamba_state) : null;
-    await getSql(c)`
-      INSERT INTO ide_agents (id, project_id, job_id, name, title, bio, skills, base_model, lora_rank, r2_artifact_key, resume_md, status, hire_count, eval_score, package_version, mamba_state, inference_mode)
-      VALUES (${id}, ${projectId}, ${body.job_id ?? null}, ${body.name}, ${body.title}, ${body.bio}, ${skillsJson},
+    // `tenant_id` MUST be written: it is what scopes the agent to this workspace.
+    // Omitting it (as this INSERT previously did) left every agent published through
+    // this route with tenant_id = NULL — i.e. owned by no tenant at all.
+    await db.execute(sql`
+      INSERT INTO ide_agents (id, tenant_id, project_id, job_id, name, title, bio, skills, base_model, lora_rank, r2_artifact_key, resume_md, status, hire_count, eval_score, package_version, mamba_state, inference_mode)
+      VALUES (${id}, ${tenantId}, ${projectId}, ${body.job_id ?? null}, ${body.name}, ${body.title}, ${body.bio}, ${skillsJson},
         ${body.base_model}, ${body.lora_rank ?? null}, ${body.r2_artifact_key ?? null}, ${body.resume_md ?? null}, 'active', 0, ${body.eval_score ?? null},
         ${packageVersion}, ${mambaStateJson}::jsonb, ${inferenceMode})
-    `;
-    const [row] = await getSql(c)`SELECT * FROM ide_agents WHERE id = ${id}`;
+    `);
+    const [row] = (await db.execute(sql`SELECT * FROM ide_agents WHERE id = ${id}`)).rows;
     // Publishing a trained agent (status 'active', carries its eval_score) makes it
     // appear in the public workforce registry — drop the cached listing so the new
     // agent and its evaluation score show up immediately.
     await invalidateCached(c.env as Env, PUBLIC_LIST_CACHE_KEY);
-    return c.json(row, 201);
+    return c.json(row!, 201);
   });
 
   router.get('/agents/:id', async (c) => {
-    const [row] = await getSql(c)`SELECT * FROM ide_agents WHERE id = ${c.req.param('id')}`;
+    const db = buildDatabase(c.env);
+    const [row] = (await db.execute(sql`SELECT * FROM ide_agents WHERE id = ${c.req.param('id')}`)).rows;
     if (!row) return c.json({ error: 'Agent not found' }, 404);
     return c.json(row);
   });
 
   router.get('/agents/:id/package', async (c) => {
     const agentId = c.req.param('id');
-    const [agent] = await getSql(c)`SELECT * FROM ide_agents WHERE id = ${agentId}`;
+    const db = buildDatabase(c.env);
+    const [agent] = (await db.execute(sql`SELECT * FROM ide_agents WHERE id = ${agentId}`)).rows;
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
-    await getSql(c)`
+    await db.execute(sql`
       UPDATE ide_agents SET request_count = request_count + 1, last_used_at = NOW() WHERE id = ${agentId}
-    `;
+    `);
     const skills: string[] = Array.isArray(agent.skills) ? agent.skills : JSON.parse(typeof agent.skills === 'string' ? agent.skills : '[]');
     const mambaState = agent.mamba_state ?? null;
     const version = mambaState ? '2.0' : '1.0';
@@ -785,7 +977,10 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.get('/agents/:id/mamba-state', async (c) => {
-    const [agent] = await getSql(c)`SELECT mamba_state, package_version FROM ide_agents WHERE id = ${c.req.param('id')}`;
+    const db = buildDatabase(c.env);
+    const [agent] = (await db.execute(sql`
+      SELECT mamba_state, package_version FROM ide_agents WHERE id = ${c.req.param('id')}
+    `)).rows;
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
     if (!agent.mamba_state) return c.json({ error: 'No mamba state stored for this agent' }, 404);
     return c.json(agent.mamba_state);
@@ -793,16 +988,22 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.put('/agents/:id/mamba-state', async (c) => {
     const agentId = c.req.param('id');
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
     // Owner-only write: an agent's brain state may only be overwritten by the tenant
     // whose project owns it (reads stay marketplace-public for hiring/inference).
-    const [owner] = await getSql(c)`SELECT project_id FROM ide_agents WHERE id = ${agentId} LIMIT 1`;
-    if (!owner || !(await projectInTenant(c, Number(owner.project_id)))) return c.json({ error: 'Agent not found' }, 404);
+    const [owner] = await db
+      .select({ projectId: ideAgents.projectId })
+      .from(ideAgents)
+      .where(eq(ideAgents.id, agentId))
+      .limit(1);
+    if (!owner || !(await projectInTenant(db, tenantId, Number(owner.projectId)))) return c.json({ error: 'Agent not found' }, 404);
     const snapshot = await c.req.json();
     const required = ['data', 'dim', 'order', 'channels', 'step'];
     for (const key of required) {
       if (!(key in snapshot)) return c.json({ error: `Missing field: ${key}` }, 400);
     }
-    const [row] = await getSql(c)`
+    const [row] = (await db.execute(sql`
       UPDATE ide_agents
       SET mamba_state = ${JSON.stringify(snapshot)}::jsonb, package_version = '2.0', inference_mode = CASE
         WHEN r2_artifact_key IS NOT NULL THEN 'hybrid'
@@ -810,13 +1011,14 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       END, updated_at = NOW()
       WHERE id = ${agentId}
       RETURNING id, package_version, inference_mode
-    `;
+    `)).rows;
     if (!row) return c.json({ error: 'Agent not found' }, 404);
     return c.json({ ok: true, agent_id: agentId, package_version: row.package_version, inference_mode: row.inference_mode });
   });
 
   router.post('/agents/:id/chat', async (c) => {
     const agentId = c.req.param('id');
+    const db = buildDatabase(c.env);
     const body = await c.req.json<{ messages: Array<{ role: string; content: string }>; stream?: boolean }>();
     if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
       return c.json({ error: 'messages array is required' }, 400);
@@ -824,14 +1026,14 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     if (!c.env.OPENROUTER_API_KEY?.trim()) {
       return c.json({ error: 'LLM not configured' }, 503);
     }
-    const [agent] = await getSql(c)`SELECT * FROM ide_agents WHERE id = ${agentId}`;
+    const [agent] = (await db.execute(sql`SELECT * FROM ide_agents WHERE id = ${agentId}`)).rows;
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
 
     // Recall grounded context from the agent's ingested proprietary knowledge,
     // keyed on the latest user message. '' when the agent has no knowledge or
     // nothing is relevant (read-through cached; invalidated on re-ingest).
     const latestUser = [...body.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
-    const recalledContext = await recallAgentKnowledge(c.env, getSql(c), agentId, latestUser);
+    const recalledContext = await recallAgentKnowledge(c.env, db, agentId, latestUser);
     const descriptor: AgentDescriptor = {
       name: agent.name as string,
       title: agent.title as string,
@@ -875,11 +1077,16 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         requestBody: { agentId, messages, stream: streamed } as unknown as Record<string, unknown>,
         responseBody: null, errorMessage: null,
       });
-      await getSql(c)`
-        INSERT INTO agent_inference_logs (id, agent_id, model_ref, latency_ms, status, inference_mode, created_at)
-        VALUES (${logId}, ${agentId}, ${'builderforce/workforce-' + agentId}, ${latencyMs}, ${status}, ${inferenceMode}, NOW())
-      `;
-      await getSql(c)`UPDATE ide_agents SET request_count = request_count + 1, last_used_at = NOW() WHERE id = ${agentId}`;
+      await db.insert(agentInferenceLogs).values({
+        id: logId,
+        agentId,
+        modelRef: 'builderforce/workforce-' + agentId,
+        latencyMs,
+        status,
+        inferenceMode,
+        createdAt: sql`NOW()`,
+      });
+      await db.execute(sql`UPDATE ide_agents SET request_count = request_count + 1, last_used_at = NOW() WHERE id = ${agentId}`);
       if (!result.response.body) return c.json({ error: 'No stream body' }, 502);
       return new Response(result.response.body, {
         headers: {
@@ -891,10 +1098,16 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     } catch (err) {
       status = 'error';
       errorMessage = err instanceof Error ? err.message : String(err);
-      await getSql(c)`
-        INSERT INTO agent_inference_logs (id, agent_id, model_ref, latency_ms, status, error_message, inference_mode, created_at)
-        VALUES (${logId}, ${agentId}, ${'builderforce/workforce-' + agentId}, ${Date.now() - startMs}, ${status}, ${errorMessage}, ${inferenceMode}, NOW())
-      `;
+      await db.insert(agentInferenceLogs).values({
+        id: logId,
+        agentId,
+        modelRef: 'builderforce/workforce-' + agentId,
+        latencyMs: Date.now() - startMs,
+        status,
+        errorMessage,
+        inferenceMode,
+        createdAt: sql`NOW()`,
+      });
       return c.json({ error: errorMessage }, 502);
     }
   });
@@ -905,15 +1118,21 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   // supersedes the agent's prior knowledge set. Body: { text?, documents?[] }.
   router.post('/agents/:id/ingest', async (c) => {
     const agentId = c.req.param('id');
-    const [agent] = await getSql(c)`SELECT project_id FROM ide_agents WHERE id = ${agentId} LIMIT 1`;
-    if (!agent || !(await projectInTenant(c, Number(agent.project_id)))) return c.json({ error: 'Agent not found' }, 404);
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const [agent] = await db
+      .select({ projectId: ideAgents.projectId })
+      .from(ideAgents)
+      .where(eq(ideAgents.id, agentId))
+      .limit(1);
+    if (!agent || !(await projectInTenant(db, tenantId, Number(agent.projectId)))) return c.json({ error: 'Agent not found' }, 404);
     const body = await c.req.json<{ text?: string; documents?: Array<{ name?: string; text?: string }> }>();
     const docs = [
       ...(body.text?.trim() ? [{ text: body.text }] : []),
       ...((body.documents ?? []).filter((d): d is { name?: string; text: string } => Boolean(d?.text?.trim()))),
     ];
     if (docs.length === 0) return c.json({ error: 'text or documents required' }, 400);
-    const chunks = await ingestAgentKnowledge(c.env, getSql(c), agentId, docs);
+    const chunks = await ingestAgentKnowledge(c.env, db, agentId, docs);
     return c.json({ chunks });
   });
 
