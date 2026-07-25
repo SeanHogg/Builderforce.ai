@@ -206,7 +206,7 @@ export function toDpoRecords(rows: LabeledTrace[], filter: DpoFilter = {}): DpoR
     const prompt = extractPrompt(row.requestBody);
     const completion = extractCompletion(row.responseBody);
     if (!prompt || !completion) continue;
-    const key = `${row.actionType} ${prompt}`;
+    const key = `${row.actionType}\u0000${prompt}`;
     const bucket = byPrompt.get(key) ?? [];
     bucket.push({ prompt, actionType: row.actionType, completion, score: row.score });
     byPrompt.set(key, bucket);

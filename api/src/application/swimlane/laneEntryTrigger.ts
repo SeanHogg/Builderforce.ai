@@ -231,6 +231,24 @@ export async function maybeAutoRunOnLaneEntry(
       submittedBy: args.submittedBy,
     });
     await Promise.allSettled(deferred);
+
+    // Autonomy TOOK this hop. Every REFUSAL above is recorded, but a success used to
+    // leave only an `executions` row — so "did autonomy advance this ticket, or did a
+    // human?" could only ever be inferred, never read. Recording the positive decision
+    // alongside the negatives makes the ticket's lifecycle ledger a complete chain:
+    // the auditor sees the decision AND the run it produced, on the same lane, in order.
+    // Same task-scoped session key the skip events use, so one query returns them all.
+    // Best-effort — telemetry must never turn a dispatched run into a reported failure.
+    await recordCloudToolEvent(db, {
+      tenantId:      args.tenantId,
+      cloudAgentRef: evaln.decision.agentRef ?? args.submittedBy,
+      executionId:   null,
+      sessionKey:    `task:${args.taskId}`,
+      toolName:      'auto_run_dispatched',
+      category:      'planning',
+      detail:        { taskId: args.taskId, lane: args.status, reason: 'will_run', agentRef: evaln.decision.agentRef ?? null, submittedBy: args.submittedBy },
+      result:        `Auto-run dispatched for task ${args.taskId} on lane '${args.status}'${evaln.decision.agentRef ? ` as ${evaln.decision.agentRef}` : ''}.`.slice(0, 300),
+    }).catch(() => { /* best-effort telemetry — never block the trigger */ });
     return true;
   } catch (err) {
     // Best-effort: the status change already succeeded; an autonomous-run failure

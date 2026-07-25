@@ -23,9 +23,10 @@
  * it every few minutes is safe.
  */
 
-import { neon } from '@neondatabase/serverless';
+import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import { executions, pullRequests, tasks, toolAuditEvents } from '../../infrastructure/database/schema';
 import { ChatTicketService, ticketKindForTaskType } from '../brain/ChatTicketService';
 import { cloudOrphanReason, cloudSilenceCeilingMs, PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON } from './orphanReasons';
 import { markReaperRequeued, parseExecutor } from './cloudDispatch';
@@ -63,8 +64,23 @@ export interface ReapResult {
   parkAge: ParkAgeTimeoutResult;
 }
 
+/**
+ * The snake_case projection every reap UPDATE returns. Deliberately aliased back to
+ * the raw column names ({@link ReapedRow}) — the telemetry mirror, the chat
+ * narration and the self-heal re-dispatch all read these keys, and the reaper's
+ * rows are also the shape the read-path repair speaks.
+ */
+const REAPED_RETURNING = {
+  id: executions.id,
+  tenant_id: executions.tenantId,
+  agent_host_id: executions.agentHostId,
+  payload: executions.payload,
+  error_message: executions.errorMessage,
+  task_id: executions.taskId,
+} as const;
+
 export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise<ReapResult> {
-  const sql = neon(env.NEON_DATABASE_URL);
+  const db = buildDatabase(env);
   const runningCutoff = new Date(nowMs - RUNNING_DEADLINE_MS).toISOString();
   const cloudRunningCutoff = new Date(nowMs - CLOUD_RUNNING_DEADLINE_MS).toISOString();
   const queuedCutoff = new Date(nowMs - QUEUED_DEADLINE_MS).toISOString();
@@ -73,17 +89,20 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
   // Hung HOST runs: a real long-lived process that went silent (crash / dropped
   // connection). Cloud runs (agent_host_id IS NULL) are handled below on a much
   // tighter deadline, so scope this to host runs only.
-  const running = (await sql`
-    UPDATE executions
-       SET status = 'failed',
-           error_message = 'Execution timed out — the agent did not report completion (host crash or dropped connection).',
-           completed_at = now(),
-           updated_at = now()
-     WHERE status = 'running'
-       AND agent_host_id IS NOT NULL
-       AND COALESCE(started_at, created_at) < ${runningCutoff}
-    RETURNING id, tenant_id, agent_host_id, payload, error_message, task_id
-  `) as ReapedRow[];
+  const running: ReapedRow[] = await db
+    .update(executions)
+    .set({
+      status: 'failed',
+      errorMessage: 'Execution timed out — the agent did not report completion (host crash or dropped connection).',
+      completedAt: sql`now()`,
+      updatedAt: sql`now()`,
+    })
+    .where(and(
+      eq(executions.status, 'running'),
+      isNotNull(executions.agentHostId),
+      sql`coalesce(${executions.startedAt}, ${executions.createdAt}) < ${runningCutoff}`,
+    ))
+    .returning(REAPED_RETURNING);
 
   // Hung CLOUD runs: the serverless background task was stopped at the ~30s wall
   // (or a container that booted then died) before writing a terminal status.
@@ -91,19 +110,37 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
   // on the durable executor (CloudRunnerDO), which survives long multi-step runs.
   // Pull the candidates first (with task context the DO `/start` needs) so we can
   // decide per-row whether to re-dispatch or fail — see requeueCloudRun.
-  const cloudCandidates = (await sql`
-    SELECT e.id, e.tenant_id, e.agent_host_id, e.payload, e.error_message,
-           e.started_at AS started_at, e.created_at AS created_at, e.updated_at AS updated_at,
-           t.id AS task_id, t.title AS task_title, t.description AS task_description,
-           t.project_id AS project_id, e.cloud_agent_ref AS cloud_agent_ref,
-           (SELECT count(*) FROM pull_requests pr
-              WHERE pr.task_id = t.id AND pr.status <> 'merged' AND pr.status <> 'closed') AS open_pr_count
-      FROM executions e
-      JOIN tasks t ON t.id = e.task_id
-     WHERE e.status = 'running'
-       AND e.agent_host_id IS NULL
-       AND COALESCE(e.updated_at, e.created_at) < ${cloudRunningCutoff}
-  `) as CloudCandidateRow[];
+  // The three timestamps are projected as RAW strings (not Drizzle `Date`s) because
+  // `tsToMs` parses them with millisecond precision — the per-surface silence
+  // ceiling below is a sub-second decision (execution #136 turned on 2s).
+  const cloudCandidates: CloudCandidateRow[] = await db
+    .select({
+      id: executions.id,
+      tenant_id: executions.tenantId,
+      agent_host_id: executions.agentHostId,
+      payload: executions.payload,
+      error_message: executions.errorMessage,
+      started_at: sql<string | null>`${executions.startedAt}`,
+      created_at: sql<string | null>`${executions.createdAt}`,
+      updated_at: sql<string | null>`${executions.updatedAt}`,
+      task_id: tasks.id,
+      task_title: tasks.title,
+      task_description: tasks.description,
+      project_id: tasks.projectId,
+      cloud_agent_ref: executions.cloudAgentRef,
+      // The outer-row reference interpolates the TABLE, not the column: Drizzle drops
+      // the table qualifier on an interpolated Column in a single-table select, which
+      // would let the correlated `pr.task_id = "id"` bind to pull_requests' own column.
+      open_pr_count: sql<number | string>`(select count(*) from ${pullRequests} pr
+              where pr.task_id = ${tasks}.id and pr.status <> 'merged' and pr.status <> 'closed')`,
+    })
+    .from(executions)
+    .innerJoin(tasks, eq(tasks.id, executions.taskId))
+    .where(and(
+      eq(executions.status, 'running'),
+      isNull(executions.agentHostId),
+      sql`coalesce(${executions.updatedAt}, ${executions.createdAt}) < ${cloudRunningCutoff}`,
+    ));
 
   const cloudRunning: ReapedRow[] = [];
   let requeuedCloud = 0;
@@ -130,7 +167,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
       hasCloudRunner: !!env.CLOUD_RUNNER,
     });
 
-    if (eligible && (await requeueCloudRun(env, sql, row))) {
+    if (eligible && (await requeueCloudRun(env, db, row))) {
       requeuedCloud += 1;
       continue;
     }
@@ -139,29 +176,33 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
     // ran on a long-lived executor (durable/container) and crashed — don't claim a
     // 30s serverless timeout or tell the user to downgrade to a durable runtime.
     const reason = cloudOrphanReason(tsToMs(row.started_at ?? row.created_at), tsToMs(row.updated_at ?? row.created_at));
-    const [failed] = (await sql`
-      UPDATE executions
-         SET status = 'failed',
-             error_message = ${reason},
-             completed_at = now(),
-             updated_at = now()
-       WHERE id = ${row.id} AND status = 'running'
-      RETURNING id, tenant_id, agent_host_id, payload, error_message, task_id
-    `) as ReapedRow[];
+    const [failed] = await db
+      .update(executions)
+      .set({
+        status: 'failed',
+        errorMessage: reason,
+        completedAt: sql`now()`,
+        updatedAt: sql`now()`,
+      })
+      .where(and(eq(executions.id, row.id), eq(executions.status, 'running')))
+      .returning(REAPED_RETURNING);
     if (failed) cloudRunning.push(failed);
   }
 
   // Dropped queue: submitted/pending but no agent ever took it.
-  const queued = (await sql`
-    UPDATE executions
-       SET status = 'failed',
-           error_message = 'Execution was never picked up by an agent within the dispatch window.',
-           completed_at = now(),
-           updated_at = now()
-     WHERE status IN ('pending', 'submitted')
-       AND created_at < ${queuedCutoff}
-    RETURNING id, tenant_id, agent_host_id, payload, error_message, task_id
-  `) as ReapedRow[];
+  const queued: ReapedRow[] = await db
+    .update(executions)
+    .set({
+      status: 'failed',
+      errorMessage: 'Execution was never picked up by an agent within the dispatch window.',
+      completedAt: sql`now()`,
+      updatedAt: sql`now()`,
+    })
+    .where(and(
+      inArray(executions.status, ['pending', 'submitted']),
+      sql`${executions.createdAt} < ${queuedCutoff}`,
+    ))
+    .returning(REAPED_RETURNING);
 
   // Abandoned agent QUESTION: a run parked on `ask_human` that nobody answered
   // within the (generous) paused deadline. Unlike the sweeps above this is not a
@@ -169,16 +210,19 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
   // `laneRequirementGate` both count a paused run as LIVE, so until this row goes
   // terminal the ticket can never auto-run again. Measured from `updated_at` so a
   // still-active back-and-forth on the question keeps the run alive.
-  const paused = (await sql`
-    UPDATE executions
-       SET status = 'failed',
-           error_message = ${PAUSED_ORPHAN_REASON},
-           completed_at = now(),
-           updated_at = now()
-     WHERE status = 'paused'
-       AND COALESCE(updated_at, started_at, created_at) < ${pausedCutoff}
-    RETURNING id, tenant_id, agent_host_id, payload, error_message, task_id
-  `) as ReapedRow[];
+  const paused: ReapedRow[] = await db
+    .update(executions)
+    .set({
+      status: 'failed',
+      errorMessage: PAUSED_ORPHAN_REASON,
+      completedAt: sql`now()`,
+      updatedAt: sql`now()`,
+    })
+    .where(and(
+      eq(executions.status, 'paused'),
+      sql`coalesce(${executions.updatedAt}, ${executions.startedAt}, ${executions.createdAt}) < ${pausedCutoff}`,
+    ))
+    .returning(REAPED_RETURNING);
 
   // Mirror each reaped failure onto the Observability Logs/Timeline (derived only
   // from tool_audit_events). Without this the run just stops at its last
@@ -192,25 +236,29 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
   ];
   await Promise.all(reaped.map(async ({ row: r, toolName }) => {
     try {
-      await sql`
-        INSERT INTO tool_audit_events
-          (tenant_id, agent_host_id, cloud_agent_ref, execution_id, session_key, tool_name, category, result, ts)
-        VALUES
-          (${r.tenant_id}, ${r.agent_host_id}, ${cloudRefFromPayload(r.payload)}, ${r.id},
-           ${'exec:' + r.id}, ${toolName}, 'error', ${r.error_message ?? 'Run failed'}, now())
-      `;
+      await db.insert(toolAuditEvents).values({
+        tenantId: r.tenant_id,
+        agentHostId: r.agent_host_id,
+        cloudAgentRef: cloudRefFromPayload(r.payload),
+        executionId: r.id,
+        sessionKey: 'exec:' + r.id,
+        toolName,
+        category: 'error',
+        result: r.error_message ?? 'Run failed',
+        ts: sql`now()`,
+      });
     } catch {
       /* telemetry is best-effort — never break the reap sweep on it */
     }
   }));
 
   // …and narrate each reaped failure into the ticket's linked Brain chats. The
-  // raw-SQL sweeps above bypass RuntimeService.update, so without this a run that
+  // bulk sweeps above bypass RuntimeService.update, so without this a run that
   // dies silently (hung host, evicted cloud isolate, dropped queue, abandoned
   // ask_human) NEVER reaches the human driving the conversation — the chat shows
   // "started working on…" and then nothing, forever. Idempotent per execution
   // (run:{id}:failed), so racing the read-path reaper's narration is harmless.
-  await narrateReapedRuns(env, sql, reaped.map(({ row }) => row));
+  await narrateReapedRuns(env, db, reaped.map(({ row }) => row));
 
   // Same family of "reap a stuck state on the frequent tick": surface any ticket
   // parked on a run_workflow whose spawned workflow never settled past the
@@ -249,16 +297,17 @@ interface ReapedRow {
  * `tasks` read resolves the chat-ticket kind (task|epic|gap); per-execution+phase
  * idempotent; best-effort — narration must never break the reap sweep.
  */
-async function narrateReapedRuns(env: Env, sql: SqlTag, rows: ReapedRow[]): Promise<void> {
+async function narrateReapedRuns(env: Env, db: Db, rows: ReapedRow[]): Promise<void> {
   const withTask = rows.filter((r) => r.task_id != null);
   if (withTask.length === 0) return;
   try {
     const taskIds = [...new Set(withTask.map((r) => Number(r.task_id)))];
-    const kinds = (await sql`
-      SELECT id, task_type FROM tasks WHERE id = ANY(${taskIds})
-    `) as Array<{ id: number; task_type: string | null }>;
+    const kinds = await db
+      .select({ id: tasks.id, task_type: tasks.taskType })
+      .from(tasks)
+      .where(inArray(tasks.id, taskIds));
     const kindByTask = new Map(kinds.map((k) => [Number(k.id), ticketKindForTaskType(k.task_type)]));
-    const chatTickets = new ChatTicketService(buildDatabase(env), env);
+    const chatTickets = new ChatTicketService(db, env);
     await Promise.all(withTask.map((r) => chatTickets.postRunMilestone(r.tenant_id, {
       kind: kindByTask.get(Number(r.task_id)) ?? 'task',
       ref: String(r.task_id),
@@ -293,8 +342,6 @@ function tsToMs(ts: string | null | undefined): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
-type SqlTag = ReturnType<typeof neon<false, false>>;
-
 /**
  * Re-queue an orphaned cloud run on the durable executor (CloudRunnerDO) exactly
  * once. We DON'T pass `artifacts`: the DO's prepareCloudRun re-reads the repo, so
@@ -304,16 +351,16 @@ type SqlTag = ReturnType<typeof neon<false, false>>;
  * true only when the DO accepted the run (it flips the row back to `running`);
  * any failure returns false so the caller fails the run with CLOUD_ORPHAN_REASON.
  */
-async function requeueCloudRun(env: Env, sql: SqlTag, row: CloudCandidateRow): Promise<boolean> {
+async function requeueCloudRun(env: Env, db: Db, row: CloudCandidateRow): Promise<boolean> {
   if (!env.CLOUD_RUNNER) return false;
 
   const requeuedPayload = markReaperRequeued(row.payload);
   // Persist the one-retry flag first — its absence is the only thing that makes a
   // run eligible, so writing it up-front is what guarantees "at most one retry".
-  await sql`
-    UPDATE executions SET payload = ${requeuedPayload}, updated_at = now()
-     WHERE id = ${row.id} AND status = 'running'
-  `;
+  await db
+    .update(executions)
+    .set({ payload: requeuedPayload, updatedAt: sql`now()` })
+    .where(and(eq(executions.id, row.id), eq(executions.status, 'running')));
 
   // Shared dispatch contract + kickoff (cloudSelfHeal) so the durable `/start` body
   // matches every other self-heal path.
@@ -332,14 +379,17 @@ async function requeueCloudRun(env: Env, sql: SqlTag, row: CloudCandidateRow): P
   // Surface the self-heal on the Observability timeline so the gap (a run that
   // looked dead) is explained rather than silently resurrected.
   try {
-    await sql`
-      INSERT INTO tool_audit_events
-        (tenant_id, agent_host_id, cloud_agent_ref, execution_id, session_key, tool_name, category, result, ts)
-      VALUES
-        (${row.tenant_id}, NULL, ${row.cloud_agent_ref}, ${row.id}, ${'exec:' + row.id},
-         'runtime.requeue', 'planning',
-         ${'Orphaned cloud run re-queued once on the durable executor (CloudRunnerDO) to run to completion.'}, now())
-    `;
+    await db.insert(toolAuditEvents).values({
+      tenantId: row.tenant_id,
+      agentHostId: null,
+      cloudAgentRef: row.cloud_agent_ref,
+      executionId: row.id,
+      sessionKey: 'exec:' + row.id,
+      toolName: 'runtime.requeue',
+      category: 'planning',
+      result: 'Orphaned cloud run re-queued once on the durable executor (CloudRunnerDO) to run to completion.',
+      ts: sql`now()`,
+    });
   } catch {
     /* telemetry is best-effort */
   }

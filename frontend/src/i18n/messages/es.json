@@ -475,7 +475,8 @@
       "monitors": "Monitores",
       "reporting": "Informes",
       "rfp": "RFP",
-      "feedback": "Comentarios"
+      "feedback": "Comentarios",
+      "autonomy": "Autonomía"
     },
     "primaryAria": "Principal"
   },
@@ -1061,7 +1062,9 @@
     "typeDesign": "Diseño",
     "typeIncident": "Incidente",
     "requiresRoleHint": "{role, select, viewer {Requiere el rol de Observador} developer {Requiere el rol de Desarrollador} manager {Requiere el rol de Gerente} owner {Requiere el rol de Propietario} other {Requiere el rol {role}}}",
-    "requiresDeveloperRole": "Requiere el rol de Desarrollador"
+    "requiresDeveloperRole": "Requiere el rol de Desarrollador",
+    "closePanel": "Cerrar el panel",
+    "panel": "Panel"
   },
   "prdCreate": {
     "title": "Nuevo PRD",
@@ -1582,7 +1585,9 @@
         "crossTeam": "Entre equipos",
         "crossTeamDesc": "Clasifica cada equipo frente a los demás",
         "delayTaxonomy": "Causas de retraso",
-        "delayTaxonomyDesc": "Por qué el trabajo va con retraso"
+        "delayTaxonomyDesc": "Por qué el trabajo va con retraso",
+        "autonomy": "Salud de la autonomía",
+        "autonomyDesc": "¿El trabajo se terminó solo? Embudo del ciclo de vida según quién creó el ticket, reparto de movimientos autónomos y humanos, y dónde se detiene la autonomía."
       },
       "summary": {
         "cycleTime": "Tiempo de ciclo medio",
@@ -2331,6 +2336,73 @@
       "title": "Esta vista requiere un plan superior",
       "body": "Los insights avanzados no se incluyen en tu plan {plan}. Mejora para desbloquear pronósticos, detección de anomalías y las vistas ejecutivas.",
       "cta": "Ver planes"
+    },
+    "autonomy": {
+      "title": "Salud de la autonomía",
+      "subtitle": "¿Los tickets que abren tu manager de IA y tu equipo recorren de verdad todo su ciclo de vida por sí solos? Compara el embudo según quién creó el trabajo, comprueba quién mueve realmente el tablero y localiza las puertas donde la autonomía se detiene.",
+      "scopeAll": "Todos los proyectos de este espacio de trabajo.",
+      "scopeProject": "Ámbito: {project}.",
+      "coverage": {
+        "full": "Cobertura completa: se auditaron los {n} tickets abiertos en los últimos {days} días.",
+        "truncated": "Solo una muestra: la auditoría se limitó a {n} tickets de los últimos {days} días, así que estas cifras cubren los tickets más recientes, no todos."
+      },
+      "origin": {
+        "label": "Creado por",
+        "agent": "Agente",
+        "manager_card": "Tarjeta del manager",
+        "human": "Persona",
+        "system": "Automatización",
+        "unknown": "Sin atribución"
+      },
+      "stage": {
+        "created": "Creados",
+        "dispatched": "Alguna ejecución",
+        "progressed": "Avanzaron solos",
+        "terminal": "Llegaron a Hecho",
+        "fullyAutonomous": "Totalmente autónomos"
+      },
+      "allOrigins": "Todos los orígenes",
+      "conversion": "De extremo a extremo",
+      "ticketsCreated": "{n} creados",
+      "endToEnd": "llegaron a Hecho sin ningún movimiento humano de carril ({n} tickets).",
+      "funnelAria": "Embudo de autonomía de los tickets creados por {origin}: {n} tickets, mostrados como porcentaje de los creados.",
+      "originMixAria": "Tickets creados en este periodo, según quién los creó.",
+      "hopsAutonomous": "Movimientos autónomos",
+      "hopsHuman": "Movimientos humanos",
+      "hopsOfTotal": "{share} autónomos de {n} movimientos",
+      "hopSplitAria": "Movimientos de carril de {origin}: {a} autónomos, {h} humanos.",
+      "stallAria": "Puertas que retienen {n} tickets detenidos, ordenadas por número de tickets.",
+      "noTickets": "No se abrió ningún ticket en este periodo.",
+      "noHops": "No se registró ningún movimiento de carril en este periodo.",
+      "noStalls": "Nada está detenido: ningún ticket está sin terminar y sin nada en ejecución.",
+      "stat": {
+        "fully": "Terminados de forma autónoma",
+        "fullySub": "{n} de {total} tickets llegaron a Hecho sin intervención humana",
+        "dispatchedSub": "{n} de {total} tickets tuvieron al menos una ejecución",
+        "hopShare": "Movimientos hechos por la autonomía",
+        "hopShareSub": "{a} movimientos autónomos frente a {h} humanos",
+        "stalled": "Detenidos en una puerta",
+        "stalledSub": "{share} de los tickets: sin terminar y sin nada en ejecución",
+        "neverStartedSub": "{share} de los tickets: nunca se ejecutaron ni se movieron"
+      },
+      "gateShort": {
+        "unrecorded": "Nunca evaluados"
+      },
+      "gate": {
+        "will_run": "Se lanzó una ejecución para estos tickets.",
+        "no_board": "El proyecto no tiene tablero, así que la autonomía no puede resolver ningún carril.",
+        "no_lane": "Ningún carril del tablero coincide con el estado del ticket, así que la autonomía no tiene nada que disparar.",
+        "terminal_lane": "El ticket está en un carril terminal (Hecho), que nunca se ejecuta automáticamente.",
+        "human_gate": "El carril requiere aprobación humana: alguien debe aprobarlo o pulsar Ejecutar ahora.",
+        "no_agent": "El carril no tiene ningún agente asignado y la persona propietaria no puede ejecutar esta etapa. Asigna un agente al carril o lanza la ejecución con Ejecutar ahora.",
+        "capability_mismatch": "Ningún agente candidato tiene las habilidades que exige este carril.",
+        "already_running": "El ticket ya tiene una ejecución en curso, así que no se lanzó otra.",
+        "run_cap_exhausted": "Las últimas ejecuciones consecutivas fallaron, así que la autonomía dejó de reintentarlo. Ejecutar ahora lo fuerza.",
+        "cooldown_active": "El ticket está en su ventana de espera tras un fallo, antes del siguiente intento autónomo.",
+        "not_executable": "Es una tarea de sistema o coordinación: por diseño nunca se asigna a un agente.",
+        "pending_approval": "Es una solicitud externa que espera aceptación humana en el triaje antes de que un agente pueda tocarla.",
+        "unrecorded": "Nunca se registró una decisión de ejecución automática: la autonomía no evaluó estos tickets."
+      }
     }
   },
   "cloudAgentForm": {
@@ -3468,7 +3540,8 @@
       "empCost": "Costo laboral",
       "empPerformers": "Desempeño",
       "empInitiatives": "Mezcla de iniciativas",
-      "forecast": "Pronóstico"
+      "forecast": "Pronóstico",
+      "autonomy": "Autonomía"
     },
     "title": {
       "aiProductivity": "Puntuación de productividad de IA",
@@ -3573,7 +3646,18 @@
       "forecastCycleProjection": "Tiempo de ciclo proyectado",
       "forecastCfrProjection": "Fallo de cambios proyectado",
       "forecastAnomalies": "Anomalías abiertas",
-      "forecastCostTrend": "Pronóstico de gasto"
+      "forecastCostTrend": "Pronóstico de gasto",
+      "autoFully": "Terminados de forma autónoma",
+      "autoDispatched": "Alguna ejecución",
+      "autoHopShare": "Movimientos hechos por la autonomía",
+      "autoStalled": "Detenidos en una puerta",
+      "autoNeverStarted": "Nunca empezaron",
+      "autoOriginFunnel": "Embudo del ciclo de vida por origen",
+      "autoHopSplit": "Movimientos autónomos frente a humanos",
+      "autoStallGates": "Dónde se detiene la autonomía",
+      "autoOriginMix": "Quién abre el trabajo",
+      "autoFunnelTable": "Embudo de autonomía (tabla)",
+      "autoCoverage": "Cobertura de la auditoría"
     },
     "loading": "Cargando…",
     "overview": {
@@ -7417,7 +7501,86 @@
     "errMove": "Error al mover",
     "tabChanges": "Cambios",
     "release": "Versión",
-    "delayReason": "Motivo del retraso"
+    "delayReason": "Motivo del retraso",
+    "lifecycleAction": "Ciclo de vida",
+    "lifecycleActionTitle": "Ciclo de vida y prueba de autonomía: ¿avanzó este ticket por sí solo o lo empujó una persona en cada paso?"
+  },
+  "ticketLifecycle": {
+    "title": "Ciclo de vida / prueba de autonomía",
+    "loading": "Reuniendo la cadena de custodia…",
+    "errorTitle": "No se pudo cargar el ciclo de vida de este ticket",
+    "retry": "Reintentar",
+    "openedAt": "Creado",
+    "currentLane": "Carril actual",
+    "origin": {
+      "label": "Creado por",
+      "human": "Una persona",
+      "agent": "Un agente (Gestor de IA)",
+      "system": "Automatización",
+      "manager_card": "Ficha de refinamiento del Gestor de IA",
+      "unknown": "Sin registrar"
+    },
+    "verdict": {
+      "fullyAutonomous": "Se ejecutó de forma autónoma de principio a fin: 0 movimientos de carril humanos",
+      "fullyAutonomousDetail": "La autonomía hizo {hops, plural, one {# movimiento de carril} other {# movimientos de carril}} y llegó a un carril final. Ninguna persona movió este ticket.",
+      "partialStalled": "Parcialmente autónomo: atascado",
+      "partialStalledDetail": "La autonomía hizo {hops, plural, one {# movimiento de carril} other {# movimientos de carril}}, pero el ticket no llegó a Hecho y no hay nada en ejecución.",
+      "partialRunning": "Parcialmente autónomo: sigue trabajando",
+      "partialRunningDetail": "La autonomía hizo {hops, plural, one {# movimiento de carril} other {# movimientos de carril}} y ahora mismo hay una ejecución activa.",
+      "humanDriven": "Impulsado por personas: la autonomía nunca movió este ticket",
+      "humanDrivenDetail": "Todos los movimientos de carril los hizo una persona ({hops} en total). No hay ni un salto autónomo registrado.",
+      "assisted": "Terminado con ayuda humana",
+      "assistedDetail": "Llegó a un carril final, pero una persona hizo {humanHops} de los {totalHops} movimientos de carril.",
+      "noMovement": "Nunca se movió",
+      "noMovementDetail": "Este ticket no ha cambiado de carril ni una vez: no lo ha movido ni una persona ni la autonomía.",
+      "liveRun": "Ejecución activa",
+      "managerCardTitle": "Ficha de coordinación",
+      "managerCard": "El Gestor de IA crea estas fichas para refinar el backlog y la autonomía se niega deliberadamente a despacharlas. Aquí «ninguna ejecución» es el comportamiento previsto, no un fallo."
+    },
+    "stall": {
+      "title": "Por qué está detenido",
+      "unrecorded": "No se registró ninguna barrera: todavía nada ha intentado ejecutar este ticket."
+    },
+    "stats": {
+      "title": "Saltos y ejecuciones",
+      "autonomousHops": "Saltos autónomos",
+      "autonomousHopsHint": "Movimientos de carril escritos por un agente o por la automatización.",
+      "humanHops": "Saltos humanos",
+      "humanHopsHint": "Movimientos de carril hechos por una persona.",
+      "runsDispatched": "Ejecuciones lanzadas",
+      "runsCompleted": "Ejecuciones completadas",
+      "runsFailed": "Ejecuciones fallidas",
+      "backwardHops": "Saltos de retrabajo",
+      "backwardHopsHint": "Movimientos de carril hacia atrás: trabajo devuelto para otra pasada."
+    },
+    "timeline": {
+      "title": "Cadena de custodia",
+      "help": "Cada fila indica la tabla de la que se leyó, así que esto es evidencia y no un relato.",
+      "empty": "Todavía no hay eventos de ciclo de vida para este ticket.",
+      "laneMove": "{from} → {to}",
+      "laneEntered": "Entró en {to}",
+      "backward": "Retrabajo",
+      "run": "Ejecución n.º {id}"
+    },
+    "kind": {
+      "created": "Creado",
+      "lane_moved": "Cambio de carril",
+      "run_dispatched": "Ejecución lanzada",
+      "run_completed": "Ejecución completada",
+      "run_failed": "Ejecución fallida",
+      "autorun_dispatched": "Auto-ejecución lanzada",
+      "autorun_skipped": "Auto-ejecución rechazada",
+      "autorun_error": "Error de auto-ejecución",
+      "autorun_awaiting_approval": "Auto-ejecución pendiente de aprobación",
+      "role_event": "Evento de rol"
+    },
+    "source": {
+      "activity_log": "Registro de actividad / auditoría",
+      "task_status_transitions": "Registro de cambios de carril",
+      "executions": "Registros de ejecución",
+      "tool_audit_events": "Auditoría de decisiones de auto-ejecución",
+      "aria": "Origen: {label}"
+    }
   },
   "taskChanges": {
     "allChanges": "Todos los cambios",

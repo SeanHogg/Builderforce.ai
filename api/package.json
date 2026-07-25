@@ -1,6 +1,6 @@
 {
   "name": "builderforce-api",
-  "version": "2026.7.134",
+  "version": "2026.7.135",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
@@ -12,10 +12,11 @@
     "db:push": "npx drizzle-kit@0.30.6 push",
     "type-check": "tsc --noEmit",
     "check:schema": "node scripts/check-schema-drift.mjs",
+    "check:db-access": "node scripts/check-db-access.mjs",
     "check:migrations": "node scripts/check-migrations.mjs",
     "check:tracks": "node scripts/check-track-manifest.mjs --check",
     "check:source": "node scripts/check-source-text.mjs",
-    "test": "npm run check:schema && npm run check:migrations && npm run check:tracks && npm run check:source && vitest run",
+    "test": "npm run check:schema && npm run check:db-access && npm run check:migrations && npm run check:tracks && npm run check:source && vitest run",
     "typecheck:native": "tsgo --noEmit"
   },
   "dependencies": {
