@@ -6896,7 +6896,8 @@
       "schedule": "Scheduled",
       "merge_blocked": "Merge withheld",
       "triage": "Triaged",
-      "escalate": "Escalated"
+      "escalate": "Escalated",
+      "systemic": "Platform finding"
     },
     "runTasks": {
       "title": "Manager tasks",

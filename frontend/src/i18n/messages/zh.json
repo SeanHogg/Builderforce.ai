@@ -6896,7 +6896,8 @@
       "schedule": "已排期",
       "merge_blocked": "合并被阻止",
       "triage": "已分诊",
-      "escalate": "已升级"
+      "escalate": "已升级",
+      "systemic": "平台问题"
     },
     "runTasks": {
       "title": "经理任务",
