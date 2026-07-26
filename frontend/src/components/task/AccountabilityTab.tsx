@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { kanbanApi } from '@/lib/builderforceApi';
 import type { AccountabilityReport, ManifestParticipant, JobRole } from '@/lib/kanban';
@@ -40,20 +40,29 @@ function StateChip({ state, label }: { state: string; label: string }) {
 }
 
 function ContributionLinks({ p, contribution }: { p: ManifestParticipant; contribution?: AccountabilityReport['signoffs'][number]['contribution'] }) {
+  const t = useTranslations('accountability');
   const evidence = contribution ?? p.evidence;
   const labels: string[] = [];
   if (p.childTaskId != null) labels.push(`#${p.childTaskId}`);
-  if (evidence?.executionId != null) labels.push(`Run #${evidence.executionId}`);
-  if (evidence?.prdRevision != null) labels.push(`PRD r${evidence.prdRevision}`);
-  if (evidence?.toolRunId) labels.push(`Test ${evidence.toolRunId}`);
-  if (evidence?.diffFiles?.length) labels.push(`${evidence.diffFiles.length} file${evidence.diffFiles.length === 1 ? '' : 's'}`);
+  if (evidence?.executionId != null) labels.push(t('contribution.run', { id: evidence.executionId }));
+  if (evidence?.prdRevision != null) labels.push(t('contribution.prd', { revision: evidence.prdRevision }));
+  if (evidence?.toolRunId) labels.push(t('contribution.test', { id: evidence.toolRunId }));
+  if (evidence?.diffFiles?.length) labels.push(t('contribution.files', { count: evidence.diffFiles.length }));
   return (
     <span style={{ color: 'var(--text-secondary)' }}>
-      {evidence?.prUrl && <><a href={evidence.prUrl} target="_blank" rel="noreferrer">PR</a>{labels.length ? ' · ' : ''}</>}
+      {evidence?.prUrl && <><a href={evidence.prUrl} target="_blank" rel="noreferrer">{t('contribution.pr')}</a>{labels.length ? ' · ' : ''}</>}
       {labels.length ? labels.join(' · ') : evidence?.reviewThreadRef ?? (!evidence?.prUrl ? '—' : '')}
     </span>
   );
 }
+
+/** Verdicts a human can record here. `delegated` is an agent-to-agent hand-off,
+ *  recorded by the coordinator rather than chosen from this table. */
+const HUMAN_VERDICTS = ['approved', 'changes_requested', 'waived'] as const;
+type HumanVerdict = (typeof HUMAN_VERDICTS)[number];
+
+/** Verdicts the server requires a written reason for (kanbanRoutes signoff, 400). */
+const NEEDS_REASON = new Set<HumanVerdict>(['waived']);
 
 export function AccountabilityTab({ taskId }: { taskId: number }) {
   const t = useTranslations('accountability');
@@ -66,6 +75,11 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
   const [busy, setBusy] = useState(false);
   const [addRole, setAddRole] = useState('');
   const [addNote, setAddNote] = useState('');
+  // Inline sign-off: which slot's form is open, and its draft. Only one at a time —
+  // this is a deliberate, per-role act, not a bulk approve-everything button.
+  const [signing, setSigning] = useState<{ roleKey: string; laneKey: string | null } | null>(null);
+  const [verdict, setVerdict] = useState<HumanVerdict>('approved');
+  const [summary, setSummary] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -99,6 +113,29 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
     try { await kanbanApi.materializeParticipants(taskId); load(); }
     catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }, [taskId, load]);
+
+  /**
+   * Record the open slot's sign-off. The SERVER is the authority on who may sign as
+   * a role (default-deny capability check, 403 with the reason) — the control is
+   * offered to everyone and the refusal is surfaced verbatim rather than guessed at
+   * client-side, which would need this component to re-derive role capability.
+   */
+  const submitSignoff = useCallback(async () => {
+    if (!signing) return;
+    setBusy(true);
+    try {
+      await kanbanApi.signoff(taskId, {
+        roleKey: signing.roleKey,
+        laneKey: signing.laneKey ?? undefined,
+        verdict,
+        summary: summary.trim() || undefined,
+        waiveReason: verdict === 'waived' ? summary.trim() : undefined,
+      });
+      setSigning(null); setSummary(''); setVerdict('approved');
+      setError(null);
+      load();
+    } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+  }, [taskId, signing, verdict, summary, load]);
 
   const verdictLabel = (v: string) => t.has(`verdict.${v}` as never) ? t(`verdict.${v}` as never) : v;
   const stateLabel = (s: string) => t.has(`state.${s}` as never) ? t(`state.${s}` as never) : s;
@@ -150,27 +187,91 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
                 <th style={thStyle}>{t('table.when')}</th>
                 <th style={thStyle}>{t('table.comments')}</th>
                 <th style={thStyle}>{t('table.contribution')}</th>
+                <th style={thStyle}>{t('table.action')}</th>
               </tr>
             </thead>
             <tbody>
               {required.length === 0 && (
-                <tr style={trStyle}><td style={tdMutedStyle} colSpan={7}>{t('table.empty')}</td></tr>
+                <tr style={trStyle}><td style={tdMutedStyle} colSpan={8}>{t('table.empty')}</td></tr>
               )}
               {required.map((p) => {
                 const so = signoffBySlot.get(`${p.stageKey ?? ''}:${p.roleKey}`);
+                const open = signing?.roleKey === p.roleKey && signing.laneKey === (p.stageKey ?? null);
+                // A slot already satisfied needs no action; everything else is signable.
+                const outstanding = p.state !== 'completed' && p.state !== 'waived' && p.state !== 'skipped';
                 return (
-                  <tr key={p.id} style={trStyle}>
-                    <td style={tdStyle}>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.roleName}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.has(`responsibility.${p.responsibility}` as never) ? t(`responsibility.${p.responsibility}` as never) : p.responsibility}{p.source !== 'template' ? ` · ${t('addedBadge')}` : ''}</div>
-                    </td>
-                    <td style={tdStyle}>{so?.memberName ?? p.assigneeName ?? <span style={{ color: 'var(--text-muted)' }}>{t('unassigned')}</span>}</td>
-                    <td style={tdStyle}><StateChip state={p.state} label={stateLabel(p.state)} /></td>
-                    <td style={tdStyle}>{so ? verdictLabel(so.verdict) : <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
-                    <td style={tdMutedStyle}>{so ? new Date(so.createdAt).toLocaleString() : '—'}</td>
-                    <td style={tdMutedStyle}>{so?.summary ?? so?.waiveReason ?? '—'}</td>
-                    <td style={tdStyle}><ContributionLinks p={p} contribution={so?.contribution} /></td>
-                  </tr>
+                  <Fragment key={p.id}>
+                    <tr style={trStyle}>
+                      <td style={tdStyle}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.roleName}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.has(`responsibility.${p.responsibility}` as never) ? t(`responsibility.${p.responsibility}` as never) : p.responsibility}{p.source !== 'template' ? ` · ${t('addedBadge')}` : ''}</div>
+                      </td>
+                      <td style={tdStyle}>{so?.memberName ?? p.assigneeName ?? <span style={{ color: 'var(--text-muted)' }}>{t('unassigned')}</span>}</td>
+                      <td style={tdStyle}><StateChip state={p.state} label={stateLabel(p.state)} /></td>
+                      <td style={tdStyle}>{so ? verdictLabel(so.verdict) : <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
+                      <td style={tdMutedStyle}>{so ? new Date(so.createdAt).toLocaleString() : '—'}</td>
+                      <td style={tdMutedStyle}>{so?.summary ?? so?.waiveReason ?? '—'}</td>
+                      <td style={tdStyle}><ContributionLinks p={p} contribution={so?.contribution} /></td>
+                      <td style={tdStyle}>
+                        {outstanding && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSigning(open ? null : { roleKey: p.roleKey, laneKey: p.stageKey ?? null });
+                              setSummary(''); setVerdict('approved');
+                            }}
+                            style={{
+                              padding: '4px 10px', fontSize: 12, fontWeight: 600, borderRadius: 8, whiteSpace: 'nowrap',
+                              border: '1px solid var(--border-subtle)', background: 'var(--bg-base)',
+                              color: 'var(--text-secondary)', cursor: 'pointer',
+                            }}
+                          >
+                            {open ? t('signoff.cancel') : t('signoff.action')}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                    {open && (
+                      <tr style={trStyle}>
+                        <td style={{ ...tdStyle, background: 'var(--bg-deep)' }} colSpan={8}>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <Select
+                              value={verdict}
+                              onChange={(e) => setVerdict(e.target.value as HumanVerdict)}
+                              aria-label={t('table.verdict')}
+                              style={{ padding: '7px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+                            >
+                              {HUMAN_VERDICTS.map((v) => (
+                                <option key={v} value={v} style={{ background: 'var(--bg-base)', color: 'var(--text-primary)' }}>
+                                  {verdictLabel(v)}
+                                </option>
+                              ))}
+                            </Select>
+                            <input
+                              value={summary}
+                              onChange={(e) => setSummary(e.target.value)}
+                              placeholder={NEEDS_REASON.has(verdict) ? t('signoff.reasonRequired') : t('signoff.summaryPlaceholder')}
+                              style={{ flex: '1 1 200px', minWidth: 0, padding: '7px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+                            />
+                            <button
+                              type="button"
+                              onClick={submitSignoff}
+                              disabled={busy || (NEEDS_REASON.has(verdict) && !summary.trim())}
+                              style={{
+                                padding: '7px 14px', fontSize: 13, fontWeight: 700, borderRadius: 8, border: 'none',
+                                background: 'var(--coral-bright, #f97316)', color: '#fff',
+                                cursor: busy ? 'not-allowed' : 'pointer',
+                                opacity: busy || (NEEDS_REASON.has(verdict) && !summary.trim()) ? 0.6 : 1,
+                              }}
+                            >
+                              {busy ? t('signoff.recording') : t('signoff.confirm', { role: p.roleName })}
+                            </button>
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>{t('signoff.help')}</div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>

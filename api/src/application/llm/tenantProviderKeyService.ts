@@ -81,13 +81,74 @@ export function isSupportedProvider(p: string): p is LlmProvider {
   return (SUPPORTED_PROVIDERS as readonly string[]).includes(p);
 }
 
-/** The gateway vendor ids a tenant can serve from their OWN connected providers.
- *  A free tenant may freely pick / strict-pin any model owned by one of these
- *  (they pay their own provider) — the single source both the models endpoint and
- *  the model-choice gates use so "connected providers ⇒ model choice" stays
- *  consistent across surfaces. */
-export function byoVendorIdSet(providers: readonly LlmProvider[]): Set<string> {
-  return new Set(providers.map((p) => PROVIDER_VENDOR_MAP[p].vendorId));
+/**
+ * The gateway vendor a connected provider actually DISPATCHES on — which depends on
+ * HOW it authenticates, not just which provider it is.
+ *
+ * A connected SUBSCRIPTION (OAuth) rides its own vendor because the transport differs
+ * from the api-key one: ChatGPT/Codex → `openai-codex`, SuperGrok → `xai-oauth`. Only
+ * Anthropic shares one vendor across both modes (the `anthropic` vendor prefers the
+ * OAuth token when bound). Mapping an OAuth provider to its api-key vendor id
+ * (`openai` / `xai`) yields a vendor the tenant has NO credential for: the seed picks a
+ * `direct/<vendor>/…` flagship that can't dispatch, the tenant's BYO precedence stops
+ * matching (`vendorForModel` returns the oauth id), and the proxy's BYO boundary filter
+ * drops it — the "connected accounts were never tried" failure. THE single mapping;
+ * derive every vendor-id set from it.
+ */
+export function byoVendorIdFor(provider: LlmProvider, authType: ProviderAuthType): string {
+  if (authType === 'oauth') {
+    if (provider === 'openai') return 'openai-codex';
+    if (provider === 'xai') return 'xai-oauth';
+  }
+  return PROVIDER_VENDOR_MAP[provider].vendorId;
+}
+
+/** The gateway vendor ids a tenant can serve from their CONFIGURED provider rows —
+ *  the catalog/picker view (what they connected), auth-type aware via
+ *  {@link byoVendorIdFor}. For the DISPATCH view (what actually resolved this call)
+ *  use {@link byoVendorIdsFromCredentials}. */
+export function byoVendorIdsFromSummaries(summaries: readonly ProviderKeySummary[]): Set<string> {
+  return new Set(summaries.map((s) => byoVendorIdFor(s.provider, s.authType)));
+}
+
+/** Just the resolved-credential fields the BYO vendor-id derivation needs — so the
+ *  proxy (which holds the fields, not a credentials object) shares the one helper. */
+export interface ResolvedByoCredentials {
+  anthropicOAuthToken?: string | null;
+  openaiCodexAuth?: { accessToken: string; accountId: string } | null;
+  xaiOAuthToken?: string | null;
+  vendorKeys?: TenantVendorKeys | null;
+}
+
+/**
+ * The gateway vendor ids a tenant can serve from their OWN connected account THIS call —
+ * an api-key overlay per provider plus each connected subscription on its OAuth vendor.
+ *
+ * THE single source for: the BYO auto-seed (`byoAutoSeedModels`), the proxy's BYO
+ * execution boundary (`LlmProxyService.connectedByoVendors`), the free-plan model-choice
+ * gate, and the strict-pin gate — so what the gateway SEEDS can never name a vendor the
+ * gateway then FILTERS OUT.
+ */
+/** How a provider authenticates in a RESOLVED credential set — `oauth` when its
+ *  subscription token resolved this call, `api_key` otherwise. Pair with
+ *  {@link byoVendorIdFor} when you need the dispatch vendor for ONE provider. */
+export function resolvedAuthTypeFor(provider: LlmProvider, creds: ResolvedByoCredentials): ProviderAuthType {
+  if (provider === 'anthropic' && creds.anthropicOAuthToken) return 'oauth';
+  if (provider === 'openai' && creds.openaiCodexAuth) return 'oauth';
+  if (provider === 'xai' && creds.xaiOAuthToken) return 'oauth';
+  return 'api_key';
+}
+
+export function byoVendorIdsFromCredentials(creds: ResolvedByoCredentials): Set<string> {
+  const set = new Set<string>();
+  const keys = creds.vendorKeys ?? {};
+  for (const p of Object.keys(keys) as LlmProvider[]) {
+    if (keys[p]) set.add(byoVendorIdFor(p, 'api_key'));
+  }
+  if (creds.anthropicOAuthToken) set.add(byoVendorIdFor('anthropic', 'oauth'));
+  if (creds.openaiCodexAuth) set.add(byoVendorIdFor('openai', 'oauth'));
+  if (creds.xaiOAuthToken) set.add(byoVendorIdFor('xai', 'oauth'));
+  return set;
 }
 
 /** The connected providers implied by a resolved credential set — the api-keys
@@ -577,17 +638,15 @@ export async function setTenantProviderPriority(
  * The tenant's connected providers as ordered GATEWAY VENDOR IDS (most-preferred
  * first) — the precedence {@link byoAutoSeedModels} sorts its flagship seeds by.
  * Only providers with a set `priority` are included (unset providers fall back to
- * catalog-tier ordering inside the seed). Maps each provider → its gateway vendor
- * id ('google' → 'googleai') so the ids line up with `vendorForModel(flagship)`.
+ * catalog-tier ordering inside the seed). Maps each provider → its DISPATCH vendor id
+ * via {@link byoVendorIdFor} ('google' → 'googleai', an OAuth xAI → 'xai-oauth') so the
+ * ids line up with `vendorForModel(flagship)` — otherwise the tenant's chosen order
+ * silently ranks every subscription-connected provider last.
  */
 export function byoVendorPriorityOrder(summaries: readonly ProviderKeySummary[]): string[] {
   return summaries
     .filter((s) => s.priority !== null)
-    .map((s) => s.provider === 'openai' && s.authType === 'oauth'
-      ? 'openai-codex'
-      : s.provider === 'xai' && s.authType === 'oauth'
-        ? 'xai-oauth'
-        : PROVIDER_VENDOR_MAP[s.provider].vendorId);
+    .map((s) => byoVendorIdFor(s.provider, s.authType));
 }
 
 /** Remove a tenant's provider credential (API key or OAuth subscription). */
