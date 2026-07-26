@@ -249,7 +249,7 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
       // RBAC (default-deny, AC-6): only a member ROLE-CAPABLE of roleKey may sign off as
       // it. Agents check capability; humans pass if manager, pinned, or discipline-matched.
       const capable = memberKind === 'agent'
-        ? await isAgentRefRoleCapable(db, tenantId, memberRef, body.roleKey)
+        ? await isAgentRefRoleCapable(db, tenantId, memberRef, body.roleKey, taskScope.projectId)
         : (isManager(c) || await humanIsRoleCapable(db, tenantId, memberRef, body.roleKey, taskScope.projectId));
       if (!capable) return c.json({ error: `not authorized to sign off as role '${body.roleKey}'` }, 403);
 

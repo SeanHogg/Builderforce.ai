@@ -18,7 +18,7 @@ import { executions } from '../database/schema';
 import { prepareCloudRun, runCloudToolLoop, markCloudExecutionRunning, initialCloudLimbicState, evolveCloudLimbicState, recordLimbicState, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
 import { loadPersonaSetpoints } from '../../application/artifact/capabilityContext';
 import { buildLimbicBlock, type LimbicState, type AgentExecParams } from '@builderforce/agent-tools';
-import { parseRoutingBias, parsePolicyGates } from '../../application/runtime/cloudDispatch';
+import { parseRoutingBias, parsePolicyGates, parseModel } from '../../application/runtime/cloudDispatch';
 import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
 import { isInfrastructureEviction } from '../../application/runtime/orphanReasons';
 import { releasePendingSteers } from '../../application/runtime/executionSteering';
@@ -106,11 +106,12 @@ export class CloudRunnerDO implements DurableObject {
   }
 
   private async start(body: StartBody): Promise<void> {
-    let model: string | undefined;
-    try {
-      const p = body.payload ? (JSON.parse(body.payload) as { model?: unknown }) : null;
-      if (p && typeof p.model === 'string' && p.model.trim()) model = p.model.trim();
-    } catch { /* payload not JSON — use default model */ }
+    // THE shared reader (`cloudDispatch.parseModel`), not a local re-parse. The inline
+    // copy that used to live here is how the durable surface — where reviewer runs
+    // actually execute — missed the supersession rewrite that reader applies: a payload
+    // pinned to a retired id led the BYO chain and 503'd. Two parsers for one field is
+    // one parser too many.
+    const model = parseModel(body.payload);
 
     // Already cancelled before we start → don't transition or spend.
     if (await this.isCancelled(body.executionId)) return;

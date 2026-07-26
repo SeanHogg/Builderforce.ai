@@ -32,6 +32,9 @@ import { RuntimeService } from '../runtime/RuntimeService';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
 import { recordCloudToolEvent } from '../runtime/cloudAgentEngine';
+import {
+  autoRunSkipState, claimAutoRunSkipState, clearAutoRunSkip, emitAutoRunSkip, recordAutoRunSkip,
+} from '../runtime/autoRunSkipLedger';
 import { evaluateExecutionApprovalGate } from '../runtime/executionApprovalGate';
 import { evaluateTaskAutoRun, type TenantTokenVerdict } from './evaluateAutoRun';
 import { enforceLaneRequirements } from './laneRequirementGate';
@@ -146,13 +149,12 @@ export async function maybeAutoRunOnLaneEntry(
       // requirement gate — see EVALUATED_AUTO_RUN_REASONS), so this recorded skip is
       // the ONLY evidence of it, and the ledger deliberately keeps it even when the
       // live gate answers `will_run`.
-      await recordCloudToolEvent(db, {
+      await recordAutoRunSkip(env, db, {
         tenantId:      args.tenantId,
+        taskId:        args.taskId,
         cloudAgentRef: evaln.candidate?.agentRef ?? evaln.assignedAgentRef ?? args.submittedBy,
-        executionId:   null,
-        sessionKey:    `task:${args.taskId}`,
-        toolName:      'auto_run_skipped',
-        category:      'planning',
+        lane,
+        reason:        'lane_requirement_gate',
         detail:        {
           taskId: args.taskId,
           lane,
@@ -160,10 +162,10 @@ export async function maybeAutoRunOnLaneEntry(
           ...(gate.dispatchedReviewers.length ? { dispatchedReviewers: gate.dispatchedReviewers } : {}),
           ...(gate.dispatchedProducers.length ? { dispatchedProducers: gate.dispatchedProducers } : {}),
         },
-        result: (`Auto-run skipped (lane_requirement_gate) for task ${args.taskId} on lane '${lane}': `
+        result: `Auto-run skipped (lane_requirement_gate) for task ${args.taskId} on lane '${lane}': `
           + `awaiting role sign-off${gate.dispatchedReviewers.length ? ` — dispatched reviewer(s): ${gate.dispatchedReviewers.join(', ')}` : ''}`
-          + `${gate.dispatchedProducers.length ? ` — dispatched producer(s): ${gate.dispatchedProducers.join(', ')}` : ''}.`).slice(0, 300),
-      }).catch(() => { /* best-effort telemetry — never block the trigger */ });
+          + `${gate.dispatchedProducers.length ? ` — dispatched producer(s): ${gate.dispatchedProducers.join(', ')}` : ''}.`,
+      });
       return false;
     }
 
@@ -171,7 +173,16 @@ export async function maybeAutoRunOnLaneEntry(
     // configuration error, not a silent no-op. Emit a `capability_mismatch` warning
     // so a mis-staffed lane is diagnosable (the triage diagnostic surfaces the same).
     if (evaln.decision.capabilityMismatches?.length) {
+      // ONE claim for the whole mismatch SET (re-staffing the lane with a different
+      // wrong-role agent IS a state change worth re-recording), then a row per agent so
+      // each lands on that agent's own tool-audit timeline.
+      const mismatchState = autoRunSkipState(
+        lane,
+        `capability_mismatch:${evaln.decision.capabilityMismatches.map((m) => m.agentRef).sort().join(',')}`,
+      );
+      const mismatchIsNew = await claimAutoRunSkipState(env, args.tenantId, args.taskId, mismatchState);
       for (const m of evaln.decision.capabilityMismatches) {
+        if (!mismatchIsNew) continue;
         console.warn(
           `[capability_mismatch] task ${args.taskId} lane '${lane}': agent '${m.agentRef}' lacks required capabilities [${m.missing.join(', ')}] — skipped for auto-run`,
         );
@@ -182,15 +193,12 @@ export async function maybeAutoRunOnLaneEntry(
         // run was skipped) + keyed to the agent ref so it lands in that agent's
         // tool-audit timeline alongside its runs. Best-effort (recordCloudToolEvent
         // swallows its own errors) so telemetry never blocks the trigger.
-        await recordCloudToolEvent(db, {
+        await emitAutoRunSkip(db, {
           tenantId:      args.tenantId,
+          taskId:        args.taskId,
           cloudAgentRef: m.agentRef,
-          executionId:   null,
-          sessionKey:    `task:${args.taskId}`,
-          toolName:      'auto_run_skipped',
-          category:      'planning',
           detail:        { taskId: args.taskId, lane, reason: 'capability_mismatch', agentRef: m.agentRef, missing: m.missing },
-          result:        `Auto-run skipped: agent '${m.agentRef}' lacks required capabilities [${m.missing.join(', ')}] for lane '${lane}'.`.slice(0, 300),
+          result:        `Auto-run skipped: agent '${m.agentRef}' lacks required capabilities [${m.missing.join(', ')}] for lane '${lane}'.`,
         });
       }
     }
@@ -206,13 +214,14 @@ export async function maybeAutoRunOnLaneEntry(
         evaln.staffedAgentRefs[0] ??
         evaln.assignedAgentRef ??
         args.submittedBy;
-      await recordCloudToolEvent(db, {
+      await recordAutoRunSkip(env, db, {
         tenantId:      args.tenantId,
+        taskId:        args.taskId,
         cloudAgentRef: skipAgentRef,
-        executionId:   null,
-        sessionKey:    `task:${args.taskId}`,
-        toolName:      'auto_run_skipped',
-        category:      'planning',
+        lane,
+        // `already_running` names the LIVE RUN in its state so a ticket that moves from
+        // one blocking run to the next is re-recorded rather than suppressed as "same".
+        reason:        evaln.liveExecution ? `${evaln.reason}:${evaln.liveExecution.id}` : evaln.reason,
         // NAME THE LIVE RUN. `already_running` on its own reads as "busy", which is
         // wrong for the case that actually freezes tickets: a run PAUSED on an
         // `ask_human` question counts as live and holds the ticket for up to the
@@ -223,11 +232,16 @@ export async function maybeAutoRunOnLaneEntry(
           ...(evaln.cooldownRemainingMs ? { cooldownRemainingMs: evaln.cooldownRemainingMs } : {}),
           ...(evaln.liveExecution ? { liveExecutionId: evaln.liveExecution.id, liveExecutionStatus: evaln.liveExecution.status } : {}),
         },
-        result: (`Auto-run skipped (${evaln.reason}) for task ${args.taskId} on lane '${lane}'`
-          + `${evaln.liveExecution ? ` — run #${evaln.liveExecution.id} is ${evaln.liveExecution.status}` : ''}.`).slice(0, 300),
-      }).catch(() => { /* best-effort telemetry — never block the trigger */ });
+        result: `Auto-run skipped (${evaln.reason}) for task ${args.taskId} on lane '${lane}'`
+          + `${evaln.liveExecution ? ` — run #${evaln.liveExecution.id} is ${evaln.liveExecution.status}` : ''}.`,
+      });
     }
     if (!evaln.canRunNow) return false;
+
+    // The ticket is about to RUN, so drop its skip-suppression marker: a stall that
+    // recurs after a real run is new information, and must not be swallowed as a
+    // repeat of the state recorded before the run.
+    await clearAutoRunSkip(env, args.tenantId, args.taskId);
 
     // This ticket SHOULD run. Signal the KV work-gate so the next frequent cron
     // tick runs the backstop fan-out (dispatch within 5 min) even if the live

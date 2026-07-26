@@ -19,6 +19,8 @@ import {
   SUPERSEDED_MODEL_IDS,
   type ActionModelRankStat,
 } from './LlmProxyService';
+import { CODING_BACKSTOP_MODELS } from './modelPool';
+import { parseModel, withDefaultModel } from '../runtime/cloudDispatch';
 import { catalogEntry, vendorForModel, autoRoutableModelsByTier, modelsByTier, tierForModel } from './vendors';
 
 // ---------------------------------------------------------------------------
@@ -244,6 +246,55 @@ describe('canonicalModelId (superseded → live successor)', () => {
     // otherwise ride a retired id all the way to dispatch.
     expect(pickCloudModel('claude-opus-4-8', 'pro', false, { byoVendors: new Set(['anthropic']) }))
       .toEqual({ model: 'claude-opus-5', strict: true });
+  });
+
+  /**
+   * THE RATCHET. Recognition lists (CODING_MODEL_POOL, PAID_OVERFLOW_MODELS) may and must
+   * keep a superseded id — a historical run that landed on one must not be retro-classified
+   * as "degraded onto a non-coder", and its spend is still overflow. ROUTING lists are the
+   * opposite: every id in one is a model we will actually SEND to, and the pool constants
+   * are deliberately exempt from `canonicalModelId` (they are edited by hand). Without this
+   * assertion a version bump that updates the map but forgets a chain silently reintroduces
+   * the 555-failure outage — a retired id at the head of the BYO chain, reported as
+   * `byo_unavailable` while four providers sit connected.
+   */
+  it('NO routing chain contains a superseded id (recognition lists may; dispatch lists may not)', () => {
+    const routing: Array<[string, readonly string[]]> = [
+      ['CODING_PREMIUM_FALLBACK_MODELS', CODING_PREMIUM_FALLBACK_MODELS],
+      ['CODING_BACKSTOP_MODELS', CODING_BACKSTOP_MODELS],
+      ['FREE_MODEL_POOL', FREE_MODEL_POOL],
+      ...(['free', 'pro', 'teams'] as const).map((p) => [`codingModelsForPlan('${p}')`, codingModelsForPlan(p)] as [string, readonly string[]]),
+    ];
+    for (const [label, list] of routing) {
+      for (const id of list) {
+        expect(SUPERSEDED_MODEL_IDS[id], `${label} routes to superseded id '${id}' → use '${SUPERSEDED_MODEL_IDS[id]}'`).toBeUndefined();
+      }
+    }
+  });
+});
+
+/**
+ * `parseModel` is the single reader of an execution payload's pinned model, and an
+ * execution payload is durable state written at dispatch and read back arbitrarily
+ * later — the exact profile the supersession map exists for.
+ */
+describe('parseModel — the stored-payload dispatch seam', () => {
+  it('rewrites a superseded pin read back off a payload', () => {
+    expect(parseModel(JSON.stringify({ model: 'claude-opus-4-8' }))).toBe('claude-opus-5');
+    expect(parseModel(JSON.stringify({ model: '  claude-opus-4-1  ' }))).toBe('claude-opus-5');
+  });
+
+  it('leaves a live id alone and still returns undefined for absent/blank/non-JSON', () => {
+    expect(parseModel(JSON.stringify({ model: 'claude-opus-5' }))).toBe('claude-opus-5');
+    expect(parseModel(JSON.stringify({ model: '   ' }))).toBeUndefined();
+    expect(parseModel(JSON.stringify({ repoId: 'r1' }))).toBeUndefined();
+    expect(parseModel('not json')).toBeUndefined();
+    expect(parseModel(undefined)).toBeUndefined();
+  });
+
+  it('withDefaultModel still treats a superseded pin as ALREADY pinned (no double-write)', () => {
+    const payload = JSON.stringify({ model: 'claude-opus-4-8' });
+    expect(withDefaultModel(payload, 'some-other-model')).toBe(payload);
   });
 });
 

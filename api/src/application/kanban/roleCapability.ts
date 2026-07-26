@@ -162,12 +162,7 @@ export async function resolveRoleCapableAgents(
     const pins = await db
       .select({ projectId: projectRoleAssignments.projectId, assigneeRef: projectRoleAssignments.assigneeRef, assigneeName: projectRoleAssignments.assigneeName })
       .from(projectRoleAssignments)
-      .where(and(
-        eq(projectRoleAssignments.tenantId, tenantId),
-        eq(projectRoleAssignments.roleKey, roleKey),
-        eq(projectRoleAssignments.assigneeKind, 'agent'),
-        or(eq(projectRoleAssignments.projectId, projectId), isNull(projectRoleAssignments.projectId)),
-      ));
+      .where(rolePinConditions(tenantId, roleKey, projectId));
 
     const out: RoleCandidate[] = [];
     const seen = new Set<string>();
@@ -193,6 +188,36 @@ export async function resolveRoleCapableAgents(
   });
 }
 
+/**
+ * The `project_role_assignments` predicate for "this agent is PINNED to this role",
+ * scoped to a project with the workspace-wide (null projectId) pin folded in.
+ *
+ * Extracted so the two readers of that table — {@link resolveRoleCapableAgents}, which
+ * SELECTS a role's agents, and {@link isAgentRefRoleCapable}, which GATES one agent —
+ * can never disagree about what a pin is. They disagreed for weeks, and it cost the
+ * platform its entire sign-off ledger (see that function's note).
+ */
+function rolePinConditions(tenantId: number, roleKey: string, projectId?: number | null) {
+  return and(
+    eq(projectRoleAssignments.tenantId, tenantId),
+    eq(projectRoleAssignments.roleKey, roleKey),
+    eq(projectRoleAssignments.assigneeKind, 'agent'),
+    projectId == null
+      ? isNull(projectRoleAssignments.projectId)
+      : or(eq(projectRoleAssignments.projectId, projectId), isNull(projectRoleAssignments.projectId)),
+  );
+}
+
+/** Is this agent explicitly PINNED to `roleKey` (project-specific or workspace-wide)? */
+async function agentIsRolePinned(db: Db, tenantId: number, agentRef: string, roleKey: string, projectId?: number | null): Promise<boolean> {
+  const [pin] = await db
+    .select({ ref: projectRoleAssignments.assigneeRef })
+    .from(projectRoleAssignments)
+    .where(and(rolePinConditions(tenantId, roleKey, projectId), eq(projectRoleAssignments.assigneeRef, agentRef)))
+    .limit(1);
+  return !!pin;
+}
+
 /** Load the capability-relevant columns for one agent ref (or null if missing). */
 export async function loadAgentCapabilityRow(db: Db, tenantId: number, agentRef: string): Promise<RoleCapableAgentRow | null> {
   const [row] = await db
@@ -203,15 +228,49 @@ export async function loadAgentCapabilityRow(db: Db, tenantId: number, agentRef:
   return row ?? null;
 }
 
-/** Is the given agent ref capable of `roleKey`? Unknown ref ⇒ not capable (false)
- *  when a role is required. Empty roleKey ⇒ true (no constraint). */
-export async function isAgentRefRoleCapable(db: Db, tenantId: number, agentRef: string | null | undefined, roleKey: string | null | undefined): Promise<boolean> {
+/**
+ * Is the given agent ref capable of `roleKey`? Unknown ref ⇒ not capable (false)
+ * when a role is required. Empty roleKey ⇒ true (no constraint).
+ *
+ * THIS IS THE GATE, and it must accept exactly what {@link resolveRoleCapableAgents}
+ * — THE SELECTOR — dispatches on. It did not, and that asymmetry is the measured cause
+ * of an empty sign-off ledger: **0 rows in `ticket_role_signoffs` against 1,030 reviewer
+ * runs**, with 2,288 required manifest slots stuck `assigned` and not one ticket ever
+ * advanced by `decideSignoffGate`.
+ *
+ * The selector accepts FOUR paths — (1) an explicit `project_role_assignments` pin,
+ * (2) `ide_agents.role_keys`, (3) `builtin_kind`, (4) fuzzy title/skill. This gate read
+ * only `agentIsRoleCapable`, which covers 2–4. So an agent dispatched as a reviewer
+ * BECAUSE it was pinned was then told `403 not authorized to sign off as role '<key>'`
+ * when it called `kanban.signoff`. The tool existed, was on the allowlist and was named
+ * correctly in the instruction — every attempt was rejected at the door.
+ *
+ * `agentRoleKeys` makes this unrecoverable rather than merely likely: a row with a
+ * `builtin_kind` returns EARLY, deliberately refusing fuzzy widening, and its own
+ * comment directs the reader to "grant cross-role capability explicitly through
+ * role_keys **or a project role assignment**" — the second of which this function never
+ * consulted. The documented escape hatch did not exist.
+ *
+ * Pass `projectId` wherever it is known so a project-scoped pin resolves; omitting it
+ * still honours workspace-wide pins.
+ */
+export async function isAgentRefRoleCapable(
+  db: Db,
+  tenantId: number,
+  agentRef: string | null | undefined,
+  roleKey: string | null | undefined,
+  projectId?: number | null,
+): Promise<boolean> {
   const nk = (roleKey ?? '').trim();
   if (!nk) return true;
   const ref = (agentRef ?? '').trim();
   if (!ref) return false;
   const row = await loadAgentCapabilityRow(db, tenantId, ref);
-  return row ? agentIsRoleCapable(row, nk) : false;
+  if (row && agentIsRoleCapable(row, nk)) return true;
+  // Path 1 — the explicit pin. Checked even when the agent row is missing/unmatched:
+  // a deliberate human assignment is the STRONGEST capability signal there is, and it
+  // is the selector's highest-precedence path.
+  return agentIsRolePinned(db, tenantId, ref, nk, projectId);
 }
 
 /** Is a human role-capable of `roleKey`? True when pinned to it (project_role_assignments)

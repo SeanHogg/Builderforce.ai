@@ -593,7 +593,7 @@ export async function evaluateTaskAutoRun(
   let qualifiedLaneAgents = laneAgents;
   if (producerRoleKey) {
     const roleCapable = await Promise.all(laneAgents.map((a) =>
-      a.agentRef ? isAgentRefRoleCapable(db, args.tenantId, a.agentRef, producerRoleKey) : Promise.resolve(true)));
+      a.agentRef ? isAgentRefRoleCapable(db, args.tenantId, a.agentRef, producerRoleKey, args.projectId) : Promise.resolve(true)));
     qualifiedLaneAgents = laneAgents.filter((_, i) => roleCapable[i]);
   }
 
@@ -623,7 +623,7 @@ export async function evaluateTaskAutoRun(
     // nothing ever resolved the producer the manifest had already named.
     ownerFallbackRef = await manifestProducerRef(db, args.tenantId, args.taskId, status);
   } else if (assignedAgentRef && producerRoleKey) {
-    if (!(await isAgentRefRoleCapable(db, args.tenantId, assignedAgentRef, producerRoleKey))) {
+    if (!(await isAgentRefRoleCapable(db, args.tenantId, assignedAgentRef, producerRoleKey, args.projectId))) {
       ownerFallbackRef = null;
     }
   }

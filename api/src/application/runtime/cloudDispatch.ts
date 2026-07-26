@@ -13,6 +13,7 @@
  */
 import { coercePolicyGates, type PolicyGate } from '@builderforce/agent-tools';
 import { ExecutionStatus } from '../../domain/shared/types';
+import { canonicalModelId } from '../llm/modelPool';
 
 export type CloudSurface = 'durable' | 'container' | 'github_actions';
 
@@ -190,14 +191,28 @@ export function parseRepoId(payload: string | undefined): string | undefined {
   }
 }
 
-/** The pinned model off an execution payload (trimmed), or undefined when absent /
- *  blank / the payload is not JSON. The single reader of `payload.model` — the dispatch
- *  loop, the durable runner, and `withDefaultModel` all go through this. */
+/**
+ * The pinned model off an execution payload (trimmed and REWRITTEN through the
+ * supersession map), or undefined when absent / blank / the payload is not JSON. The
+ * single reader of `payload.model` — the dispatch loop, the durable runner, and
+ * `withDefaultModel` all go through this.
+ *
+ * An execution payload is DURABLE STATE, and long-lived state is exactly what
+ * `canonicalModelId` exists for: the payload is written once at dispatch (from a lane
+ * agent's `model` column, a manifest role approver, a re-dispatch copying the prior
+ * run's pin) and can be read back weeks later, after the vendor has retired that id.
+ * The gateway seam (`LlmProxyService.complete`) rewrites `body.model`, but a stale id
+ * read HERE still leads the BYO chain and still names the failing model in every
+ * diagnostic — measured as **555 reviewer-run failures on `claude-opus-4-8`**, a
+ * superseded id no agent row pins, reported as `byo_unavailable` with four providers
+ * connected. Rewriting at the reader means no caller can reintroduce it.
+ */
 export function parseModel(payload: string | undefined): string | undefined {
   if (!payload) return undefined;
   try {
     const p = JSON.parse(payload) as { model?: unknown };
-    return typeof p.model === 'string' && p.model.trim() ? p.model.trim() : undefined;
+    if (typeof p.model !== 'string' || !p.model.trim()) return undefined;
+    return canonicalModelId(p.model) || undefined;
   } catch {
     return undefined;
   }

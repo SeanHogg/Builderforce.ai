@@ -411,6 +411,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
             prsConducted: 0, prsMerged: 0, dispatched: 0, audited: 0, flagged: 0, remediated: 0, remediationDeferred: 0,
             stalled: 0, unstuck: 0, escalated: 0, stallsResolved: 0, staleRunTasksClosed: 0,
             censusStalled: 0, censusTopCause: null, systemicFindings: 0, systemicTicketsCreated: 0,
+            truncated: [],
           },
         });
       }

@@ -25,6 +25,7 @@ import {
   markCloudExecutionRunning, prepareCloudRun, gitSecret, recordCloudToolEvent, recordPrdDirective,
   handleContainerOp, loadContainerRunContext, resolveCloudAgent, agentAllowsHostExecution, DEFAULT_CLOUD_REF,
 } from '../../application/runtime/cloudAgentEngine';
+import { recordAutoRunSkip, clearAutoRunSkip } from '../../application/runtime/autoRunSkipLedger';
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
 import { enforceCloudRunCap, type CloudRunCapResult } from '../../application/runtime/cloudRunLedger';
 import { assessRerunBackoff, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
@@ -331,6 +332,9 @@ export async function dispatchCloudRunForTask(
       id: tasks.id, title: tasks.title, description: tasks.description,
       assignedAgentHostId: tasks.assignedAgentHostId, assignedAgentRef: tasks.assignedAgentRef,
       assignedUserId: tasks.assignedUserId,
+      // The lane is part of an auto-run skip's STATE (see autoRunSkipLedger): the same
+      // refusal on a different lane is a different fact about the ticket.
+      status: tasks.status,
       priority: tasks.priority, projectId: tasks.projectId,
     })
     .from(tasks)
@@ -358,13 +362,12 @@ export async function dispatchCloudRunForTask(
   const hostPinned = (params.agentHostId ?? taskRow.assignedAgentHostId) != null;
   const cloudGate = hostPinned ? undefined : await enforceCloudRunCap(db, params.tenantId, env);
   if (cloudGate && !cloudGate.allowed) {
-    await recordCloudToolEvent(db, {
+    await recordAutoRunSkip(env, db, {
       tenantId: params.tenantId,
+      taskId: params.taskId,
       cloudAgentRef: taskRow.assignedAgentRef ?? submittedBy,
-      executionId: null,
-      sessionKey: `task:${params.taskId}`,
-      toolName: 'auto_run_skipped',
-      category: 'planning',
+      lane: taskRow.status,
+      reason: 'cloud_run_limit',
       // `reason` must be a real AutoRunReason: the lifecycle ledger reads this blob to
       // resolve the ticket's stall reason, and an off-vocabulary value would resolve to
       // no explanation at all — the silent-gap failure mode this whole pass removes.
@@ -372,8 +375,8 @@ export async function dispatchCloudRunForTask(
         taskId: params.taskId, reason: 'cloud_run_limit' satisfies AutoRunReason, retryable: false,
         used: cloudGate.used, limit: cloudGate.limit, plan: cloudGate.effectivePlan, submittedBy,
       },
-      result: `Dispatch refused: monthly cloud-run allowance reached (${cloudGate.used}/${cloudGate.limit} on the ${cloudGate.effectivePlan} plan). Retrying will not clear this — upgrade at builderforce.ai/pricing. On-prem and VS Code runs stay unlimited.`.slice(0, 300),
-    }).catch(() => { /* best-effort telemetry */ });
+      result: `Dispatch refused: monthly cloud-run allowance reached (${cloudGate.used}/${cloudGate.limit} on the ${cloudGate.effectivePlan} plan). Retrying will not clear this — upgrade at builderforce.ai/pricing. On-prem and VS Code runs stay unlimited.`,
+    });
     return null;
   }
 
@@ -386,20 +389,21 @@ export async function dispatchCloudRunForTask(
       Date.now(),
     );
     if (backoff.blockedBy) {
-      await recordCloudToolEvent(db, {
+      await recordAutoRunSkip(env, db, {
         tenantId: params.tenantId,
+        taskId: params.taskId,
         cloudAgentRef: taskRow.assignedAgentRef ?? submittedBy,
-        executionId: null,
-        sessionKey: `task:${params.taskId}`,
-        toolName: 'auto_run_skipped',
-        category: 'planning',
+        lane: taskRow.status,
+        // The failure COUNT is part of the state: each additional failed run is a real
+        // change (it is what walks the ticket toward the breaker), not a repeat.
+        reason: `${backoff.blockedBy}:${backoff.consecutiveFailures}`,
         detail: {
           taskId: params.taskId, reason: backoff.blockedBy, submittedBy,
           consecutiveFailures: backoff.consecutiveFailures,
           ...(backoff.cooldownRemainingMs ? { cooldownRemainingMs: backoff.cooldownRemainingMs } : {}),
         },
-        result: `Dispatch refused (${backoff.blockedBy}) for task ${params.taskId}: ${backoff.consecutiveFailures} consecutive failed runs. A human "Run now" overrides.`.slice(0, 300),
-      }).catch(() => { /* best-effort telemetry */ });
+        result: `Dispatch refused (${backoff.blockedBy}) for task ${params.taskId}: ${backoff.consecutiveFailures} consecutive failed runs. A human "Run now" overrides.`,
+      });
       return null;
     }
   }
@@ -417,6 +421,9 @@ export async function dispatchCloudRunForTask(
     submittedBy,
     payload: params.payload,
   });
+  // A run is starting — drop the skip-suppression marker so a stall AFTER this run is
+  // recorded in full rather than swallowed as a repeat of the pre-run state.
+  await clearAutoRunSkip(env, params.tenantId, params.taskId);
   // A resolved `cloudGate` is handed down so the choke point below does not re-run the
   // cap query — one check per dispatch, two places that can act on it. Omitted for a
   // host-pinned dispatch, so a host that fails delivery still gets capped down there.
