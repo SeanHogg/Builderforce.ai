@@ -229,6 +229,18 @@ const RUN_STARTING_REMEDIES: ReadonlySet<string> = new Set([
  */
 export const NEVER_ATTEMPTED_AFTER_MS = 3 * 86_400_000;
 
+/**
+ * What share of the stalled set ONE cause must hold before the report calls it a
+ * concentrated defect rather than a distribution.
+ *
+ * A quarter, deliberately NOT a majority. The measured case is 313 of 755 tickets (41%)
+ * sharing `unassigned` — plainly one defect, and a 50% bar would have stayed silent on
+ * exactly the finding this block exists to surface. The bar that matters is not "most of
+ * the stalls" but "far more than per-ticket remediation can ever work through", and at a
+ * quarter of a stalled backlog that is already true by orders of magnitude.
+ */
+export const CONCENTRATED_COHORT_SHARE = 0.25;
+
 /** Tolerant parse of an action's `detail` JSON blob — never throws, never guesses. */
 export function parseActionDetail(detail: string | null | undefined): Record<string, unknown> | null {
   if (!detail) return null;
@@ -569,14 +581,17 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
   // backlog's health. The failure they exist to catch is the one that hid for weeks: a
   // register that looked complete, ranked the wrong cause first, and had no field
   // anywhere saying how much of the problem it had actually looked at.
+  // `undefined` means the caller never asked for a census; `null` means it asked and the
+  // read failed. Only the second is a finding — reporting the first would fire on every
+  // caller that predates the census and drown the real signal in false warnings.
   const census = input.census ?? null;
-  if (census == null) {
+  if (census == null && input.census === null) {
     warning.push({
       severity: 'warning',
       code: 'census_unavailable',
       text: `The full-coverage stall census could not be loaded${input.censusError ? ` (${input.censusError})` : ''}. Everything said about stall causes below therefore comes from the stuck register ALONE, which is bounded by what deep triage has diagnosed — treat its cause ranking as a sample, not a count.`,
     });
-  } else {
+  } else if (census != null) {
     // Coverage: the register is a sample of the census, and the report must say by how
     // much before anyone reasons about the cause ranking.
     if (census.stalled > 0 && census.deepDiagnosed < census.stalled) {
@@ -590,7 +605,7 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
     }
     // The concentration finding — the one that reframes remediation entirely.
     const top = census.cohorts[0];
-    if (top && census.stalled > 0 && top.count >= census.stalled / 2) {
+    if (top && census.stalled > 0 && top.count >= census.stalled * CONCENTRATED_COHORT_SHARE) {
       critical.push({
         severity: 'critical',
         code: 'stall_cause_concentrated',

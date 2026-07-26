@@ -17,6 +17,7 @@ import type {
   ManagerOverview,
   ManagerPolicy,
   ManagerRunTask,
+  StallCensusResponse,
   StallRegister,
   StallWatchRow,
 } from './builderforceApi';
@@ -165,7 +166,7 @@ describe('buildManagerDiagnosticsReport — structure', () => {
     // The ordering that survives a truncated paste: provenance, then the answer, then
     // the evidence. A report cut in half must still say which build and what is wrong.
     expect(report.indexOf('uiVersion:')).toBeLessThan(report.indexOf('-- Findings'));
-    expect(report.indexOf('-- Findings')).toBeLessThan(report.indexOf('-- Stuck register --'));
+    expect(report.indexOf('-- Findings')).toBeLessThan(report.indexOf('-- Stuck register'));
     expect(report.indexOf('-- Findings')).toBeLessThan(report.indexOf('-- Decision feed'));
   });
 
@@ -556,5 +557,76 @@ describe('buildManagerDiagnosticsReport — the new sections', () => {
       expect(full, key).toContain(`${key}: `);
     }
     expect(full).toContain('managerType: general');
+  });
+});
+
+describe('the stall census in the diagnostics report', () => {
+  const census: StallCensusResponse = {
+    projectId: 11, managed: 767, stalled: 755, moving: 12, deepDiagnosed: 44,
+    computedAt: iso(MIN),
+    cohorts: [
+      { cause: 'unassigned', count: 313, sampleTaskIds: [7, 8, 9], maxIdleMs: 26 * DAY },
+      { cause: 'awaiting_signoff', count: 149, sampleTaskIds: [21], maxIdleMs: 20 * DAY },
+      { cause: 'failure_breaker', count: 116, sampleTaskIds: [33], maxIdleMs: 25 * DAY },
+    ],
+    findings: [],
+  };
+  const withCensus = { ...input, census };
+
+  it('prints the census ABOVE the register, and says which one is the count', () => {
+    const r = buildManagerDiagnosticsReport(withCensus, ctx);
+    expect(r).toContain('-- Stall census (EVERY ticket) + platform findings --');
+    expect(r.indexOf('-- Stall census')).toBeLessThan(r.indexOf('-- Stuck register'));
+    // The register must be labelled as the sample it is, or a reader ranks causes from it.
+    expect(r).toContain('-- Stuck register (the per-ticket sample deep triage has worked) --');
+    expect(r).toContain('unassigned: 313');
+  });
+
+  it('states the coverage gap between what is stalled and what was diagnosed', () => {
+    const codes = managerFindings(withCensus, now).map((f) => f.code);
+    expect(codes).toContain('triage_coverage_gap');
+  });
+
+  it('names a concentrated cause as ONE defect rather than N ticket problems', () => {
+    const f = managerFindings(withCensus, now).find((x) => x.code === 'stall_cause_concentrated');
+    expect(f?.severity).toBe('critical');
+    expect(f?.text).toMatch(/not N independent ticket problems/i);
+  });
+
+  it('flags a large cohort the manager has raised NO finding for', () => {
+    const codes = managerFindings(withCensus, now).map((f) => f.code);
+    expect(codes).toContain('systemic_never_raised');
+  });
+
+  it('reports an open finding and the ticket it filed', () => {
+    const r = { ...withCensus, census: { ...census, findings: [{
+      id: 'f1', cause: 'unassigned' as const, ticketCount: 313,
+      summary: 'No lane on any board has staffing.',
+      remediation: 'Staff each lane with a role-capable agent.',
+      source: 'ai', createdTaskId: 900, createdTaskKey: 'BF-900',
+      firstSeenAt: iso(HOUR), lastSeenAt: iso(MIN),
+    }] } };
+    const codes = managerFindings(r, now).map((f) => f.code);
+    expect(codes).toContain('systemic_finding_open');
+    expect(codes).not.toContain('systemic_never_raised');
+    expect(buildManagerDiagnosticsReport(r, ctx)).toContain('BF-900');
+  });
+
+  it('flags a finding that could NOT be ticketed — it has no owner', () => {
+    const r = { ...withCensus, census: { ...census, findings: [{
+      id: 'f2', cause: 'unassigned' as const, ticketCount: 313,
+      summary: 'x', remediation: 'Staff the lanes.', source: 'ai',
+      createdTaskId: null, createdTaskKey: null,
+      firstSeenAt: iso(HOUR), lastSeenAt: iso(MIN),
+    }] } };
+    expect(managerFindings(r, now).map((f) => f.code)).toContain('systemic_finding_unticketed');
+  });
+
+  it('says the census is MISSING rather than rendering a healthy zero', () => {
+    const r = buildManagerDiagnosticsReport({ ...input, census: null, censusError: 'boom' }, ctx);
+    expect(r).toContain('boom');
+    expect(r).toContain('this is NOT the same as "nothing is stalled"');
+    expect(managerFindings({ ...input, census: null }, now).map((f) => f.code))
+      .toContain('census_unavailable');
   });
 });
