@@ -25,11 +25,11 @@ import {
   type ManagerActionType,
   type ManagerBacklogItem,
   type ManagerRunTask,
-  type TaskPriority,
   type AgentHost,
 } from '@/lib/builderforceApi';
 import type { CloudAgentTarget, TeamMember } from '@/lib/taskAssignee';
 import { assigneeName } from '@/lib/taskAssignee';
+import { TASK_PRIORITIES_DESC, taskPriorityBadgeClass } from '@/lib/taskPriority';
 import {
   tableWrapStyle,
   tableStyle,
@@ -62,13 +62,7 @@ import {
  * by anyone in the workspace. Fully localized + themed (light/dark) + responsive.
  */
 
-const PRIORITY_BADGE: Record<TaskPriority, string> = {
-  low: 'badge-gray',
-  medium: 'badge-blue',
-  high: 'badge-yellow',
-  urgent: 'badge-red',
-};
-const PRIORITIES: TaskPriority[] = ['urgent', 'high', 'medium', 'low'];
+const PRIORITIES = TASK_PRIORITIES_DESC;
 const ACTION_ICON: Record<ManagerActionType, string> = {
   prioritize: '📊',
   schedule: '📅',
@@ -863,7 +857,7 @@ function BacklogRow({ item, assignee, unassignedLabel, priorityLabel, bvTooltip 
       <td style={{ ...tdMutedStyle, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{item.key}</td>
       <td style={tdStyle}>{item.title}</td>
       <td style={tdStyle}>
-        <span className={PRIORITY_BADGE[item.priority]} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>
+        <span className={taskPriorityBadgeClass(item.priority)} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>
           {priorityLabel}
         </span>
       </td>
