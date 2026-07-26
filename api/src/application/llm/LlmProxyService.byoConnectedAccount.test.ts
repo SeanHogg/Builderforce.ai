@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { llmProxyForPlan, CODING_BACKSTOP_MODELS, type ProxyEnv } from './LlmProxyService';
+import { _resetMemoryCooldowns, recordFailure } from '../../infrastructure/auth/cooldownStore';
 
 // ---------------------------------------------------------------------------
 // Connected-account (BYO subscription) dispatch — the REAL proxy path.
@@ -20,8 +21,12 @@ import { llmProxyForPlan, CODING_BACKSTOP_MODELS, type ProxyEnv } from './LlmPro
 
 const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
+const XAI_OAUTH_ENDPOINT = 'https://api.x.ai/v1/responses';
 const originalFetch = globalThis.fetch;
 afterEach(() => { (globalThis as { fetch: typeof fetch }).fetch = originalFetch; });
+// Cooldowns live in a module-level map when KV isn't bound, so one test's recorded
+// failure would otherwise bench a model for the next one.
+beforeEach(() => { _resetMemoryCooldowns(); });
 
 // Env with an OpenRouter free key so the shared coding pool is a REACHABLE fallback
 // when the connected account fails (mirrors the cloud default).
@@ -158,6 +163,74 @@ describe('connected account — failure stays inside the BYO boundary', () => {
     // the thrown cause, not be empty.
     expect(anthropicFo!.detail).toContain('Network connection lost');
     expect(sharedCalls).toEqual([]);
+  });
+});
+
+describe('MULTIPLE connected accounts fail over to each other', () => {
+  /** Anthropic (subscription) + xAI SuperGrok (subscription), Anthropic first. */
+  function twoAccountProxy() {
+    return llmProxyForPlan(env, 'free', false, {
+      codingOnly: true,
+      backstopModels: CODING_BACKSTOP_MODELS,
+      anthropicOAuthToken: 'sk-ant-oat-test-token',
+      xaiOAuthToken: 'xai-oat-test-token',
+      byoRequired: true,
+    });
+  }
+
+  /** xAI Responses-API 200 (the shape the xai-oauth vendor parses). */
+  function xaiOk(text: string) {
+    return new Response(
+      JSON.stringify({ id: 'resp_1', output_text: text, usage: { input_tokens: 5, output_tokens: 2 } }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  }
+
+  it('a PINNED BYO model that fails hands off to the tenant\'s OTHER connected account', async () => {
+    // The measured production stall: a cloud run pins `claude-opus-4-8` (its own BYO
+    // model, so it legitimately leads) while xAI/OpenAI/Meta are ALSO connected. Before
+    // the fix the pin was the entire BYO chain, so one bad Anthropic call ended the run
+    // with `byo_unavailable` and the other accounts were never tried.
+    const seen: string[] = [];
+    const fetchSpy = vi.fn(async (input: string | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      seen.push(url);
+      if (url === ANTHROPIC_ENDPOINT) return new Response('upstream boom', { status: 500 });
+      if (url === XAI_OAUTH_ENDPOINT) return xaiOk('planned on grok');
+      throw new Error(`shared pool must not be reached: ${url}`);
+    });
+    (globalThis as { fetch: typeof fetch }).fetch = fetchSpy as unknown as typeof fetch;
+
+    const result = await twoAccountProxy().complete({ ...request, model: 'claude-opus-4-8' });
+
+    expect(result.response.status).toBe(200);
+    expect(result.resolvedVendor).toBe('xai-oauth');
+    expect(result.resolvedModel).toBe('xai-oauth/grok-4.3');
+    // The pin still LED — failover, not reordering.
+    expect(seen[0]).toBe(ANTHROPIC_ENDPOINT);
+    expect(seen).toContain(XAI_OAUTH_ENDPOINT);
+    // Still inside the BYO boundary: no operator-funded model was touched.
+    expect(seen.some((u) => u === OPENROUTER_ENDPOINT)).toBe(false);
+  });
+
+  it('a COOLED connected model is probed rather than 503-ing while accounts are usable', async () => {
+    // Every connected candidate is benched, so the chain composes empty. Failing closed
+    // here is what converted a ≤90s cooldown into a permanently stalled ticket (autonomy
+    // halts after 3 consecutive failures), so the owner's own account gets one probe.
+    await recordFailure(env, 'anthropic', 'claude-opus-4-8', 500);
+
+    const fetchSpy = vi.fn(async (input: string | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === ANTHROPIC_ENDPOINT) return anthropicOk('planned after probe');
+      throw new Error(`shared pool must not be reached: ${url}`);
+    });
+    (globalThis as { fetch: typeof fetch }).fetch = fetchSpy as unknown as typeof fetch;
+
+    const result = await connectedProxy().complete(request);
+
+    expect(result.response.status).toBe(200);
+    expect(result.resolvedModel).toBe('claude-opus-4-8');
+    expect(fetchSpy).toHaveBeenCalled();
   });
 });
 

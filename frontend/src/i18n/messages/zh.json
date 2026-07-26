@@ -6314,7 +6314,8 @@
       "flagged": "已标记",
       "flaggedTitle": "此工单跳过了必需的角色或诊断——需要复核",
       "participantsTitle": "必需角色参与情况：已完成 & 必需"
-    }
+    },
+    "prdBadgeTitle": "{count, plural, other {# 个关联的 PRD}}"
   },
   "projectsContent": {
     "errLoad": "加载项目失败。请检查连接后重试。",
@@ -10502,7 +10503,8 @@
       "when": "时间",
       "comments": "备注",
       "contribution": "贡献",
-      "empty": "此工单暂无必需角色。"
+      "empty": "此工单暂无必需角色。",
+      "action": "操作"
     },
     "verdict": {
       "approved": "已批准",
@@ -10533,6 +10535,22 @@
       "add": "添加必需角色",
       "materialize": "创建工作项",
       "materializeHelp": "为每个资源生成一个子任务，使进度汇总到此工单。"
+    },
+    "contribution": {
+      "pr": "PR",
+      "run": "运行 #{id}",
+      "prd": "PRD 第 {revision} 版",
+      "test": "测试 {id}",
+      "files": "{count, plural, other {# 个文件}}"
+    },
+    "signoff": {
+      "action": "签署",
+      "cancel": "取消",
+      "confirm": "以{role}身份签署",
+      "recording": "记录中…",
+      "summaryPlaceholder": "你检查了什么？（可选）",
+      "reasonRequired": "豁免原因（必填）",
+      "help": "只有具备该角色能力的成员才能以此角色签署；工作区会记录签署人、时间及依据。"
     }
   },
   "rfpPage": {
@@ -11303,5 +11321,33 @@
     "copyInstall": "复制安装命令",
     "copySnippet": "复制代码片段",
     "copiedFlash": "✓ 已复制"
+  },
+  "ticketContext": {
+    "thisTicket": "本工单",
+    "thisEpic": "本史诗",
+    "parentEpic": "所属史诗",
+    "signoffs": "签署",
+    "basisLane": "第 {index} 阶段，共 {total} 阶段",
+    "basisSignoff": "已签署 {done}/{total}",
+    "basisChildren": "子项已完成 {done}/{total}",
+    "basisWeight": "权重 {weight}%",
+    "partOfEpic": "所属史诗",
+    "epicChildren": "已完成 {done}/{total} 项",
+    "waitingOn": "等待",
+    "gapsOnly": "{count, plural, other {# 项问责缺口}}",
+    "dispatchReviewers": "派发审核人",
+    "dispatching": "派发中…",
+    "reviewSignoffs": "查看签署",
+    "objective": "目标",
+    "noObjective": "尚未关联任何目标。请在规划看板中关联，使其价值可衡量。",
+    "objectiveAttained": "达成度",
+    "objectiveShare": "本工单占该目标关联交付的 <b>{share}%</b>（已完成 {done}/{total}）。",
+    "objectiveInherited": "继承自本工单的范围——没有直接的交付关联。",
+    "via": {
+      "task": "直接关联",
+      "epic": "经由史诗",
+      "project": "项目目标",
+      "initiative": "举措目标"
+    }
   }
 }

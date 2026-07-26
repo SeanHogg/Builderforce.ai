@@ -219,9 +219,9 @@ interface LineageSeed { id: string; via: TicketObjective['via']; viaLabel: strin
 export async function buildTicketContext(
   db: Db,
   env: Env,
-  input: { tenantId: number; taskId: number },
+  input: { tenantId: number; segmentId: string | null; taskId: number },
 ): Promise<TicketContext | null> {
-  const { tenantId, taskId } = input;
+  const { tenantId, segmentId, taskId } = input;
 
   const [task] = await db
     .select({
@@ -294,6 +294,7 @@ export async function buildTicketContext(
     children: isEpic ? { id: taskId, key: '', title: '', status: task.status, ...ownChildren } : null,
     objectives: await loadObjectiveLineage(db, {
       tenantId,
+      segmentId,
       taskId,
       projectId: task.projectId,
       parentTaskId: task.parentTaskId,
@@ -316,11 +317,17 @@ export async function buildTicketContext(
 async function loadObjectiveLineage(
   db: Db,
   o: {
-    tenantId: number; taskId: number; projectId: number; parentTaskId: number | null;
-    parentTitle: string | null; initiativeId: string | null; ordinals: OrdinalMap;
+    tenantId: number; segmentId: string | null; taskId: number; projectId: number;
+    parentTaskId: number | null; parentTitle: string | null; initiativeId: string | null;
+    ordinals: OrdinalMap;
   },
 ): Promise<TicketObjective[]> {
   const taskIds = [o.taskId, ...(o.parentTaskId != null ? [o.parentTaskId] : [])];
+  // Segment scope, applied EXACTLY as the PMO reads apply it (portfolioRollup /
+  // pmoRoutes), so the objectives a ticket claims to serve are the same ones /pmo
+  // shows. A single-mode tenant carries no segment and every row is in scope.
+  const linkSegment = o.segmentId == null ? undefined : eq(objectiveLinks.segmentId, o.segmentId);
+  const objSegment = o.segmentId == null ? undefined : eq(objectives.segmentId, o.segmentId);
 
   // Links reaching this ticket: its own, its Epic's, and (when the project rolls
   // up to one) the initiative's. One query — the alternative is three round-trips
@@ -331,13 +338,14 @@ async function loadObjectiveLineage(
   const [linkRows, scopedRows, initiativeRow] = await Promise.all([
     db.select({ objectiveId: objectiveLinks.objectiveId, linkKind: objectiveLinks.linkKind, taskId: objectiveLinks.taskId })
       .from(objectiveLinks)
-      .where(and(eq(objectiveLinks.tenantId, o.tenantId), or(...linkFilters))),
+      .where(and(eq(objectiveLinks.tenantId, o.tenantId), linkSegment, or(...linkFilters))),
     // Scope-declared objectives (0268): owned by the project, or by the initiative
     // the project rolls up to — no link row needed.
     db.select({ id: objectives.id, projectId: objectives.projectId, initiativeId: objectives.initiativeId })
       .from(objectives)
       .where(and(
         eq(objectives.tenantId, o.tenantId),
+        objSegment,
         o.initiativeId != null
           ? or(eq(objectives.projectId, o.projectId), eq(objectives.initiativeId, o.initiativeId))
           : eq(objectives.projectId, o.projectId),

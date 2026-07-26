@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Context } from 'hono';
 import type { HonoEnv } from '../../env';
-import type { TenantLlmCredentials } from '../../application/llm/tenantProviderKeyService';
+import type { LlmProvider, TenantLlmCredentials } from '../../application/llm/tenantProviderKeyService';
 
 // Hoisted mocks — vi.mock must declare the spies via vi.hoisted so the
 // factory closures see them.
@@ -67,9 +67,13 @@ beforeEach(() => {
   });
 });
 
+/** A connected-provider row as `listTenantProviderKeys` returns it. */
+const connected = (provider: LlmProvider, authType: 'api_key' | 'oauth' = 'api_key') =>
+  ({ provider, authType, priority: null });
+
 describe('byoModelsFor', () => {
   it('uses the bare direct-Anthropic ids, not the OpenRouter anthropic namespace', () => {
-    const models = byoModelsFor(['anthropic']);
+    const models = byoModelsFor([connected('anthropic')]);
     expect(models.map((m) => m.id)).toContain('claude-sonnet-5');
     expect(models.some((m) => m.id.startsWith('anthropic/'))).toBe(false);
     expect(models.every((m) => vendorForModel(m.id) === 'anthropic')).toBe(true);
@@ -83,11 +87,23 @@ describe('byoModelsFor', () => {
       { provider: 'xai' as const, vendor: 'xai', prefix: 'direct/xai/' },
     ];
     for (const { provider, vendor, prefix } of cases) {
-      const models = byoModelsFor([provider]);
+      const models = byoModelsFor([connected(provider)]);
       expect(models.length).toBeGreaterThan(0);
       expect(models.every((m) => m.id.startsWith(prefix))).toBe(true);
       expect(models.every((m) => vendorForModel(m.id) === vendor)).toBe(true);
     }
+  });
+
+  it('a SUBSCRIPTION-connected provider lists its OAuth route, not the api-key one', () => {
+    // The tenant has no OpenAI/xAI api key — offering `direct/openai/…` would hand the
+    // picker (and the strict-pin gate) models their credential cannot dispatch.
+    const codex = byoModelsFor([connected('openai', 'oauth')]);
+    expect(codex.length).toBeGreaterThan(0);
+    expect(codex.every((m) => m.id.startsWith('openai-codex/'))).toBe(true);
+
+    const grok = byoModelsFor([connected('xai', 'oauth')]);
+    expect(grok.length).toBeGreaterThan(0);
+    expect(grok.every((m) => m.id.startsWith('xai-oauth/'))).toBe(true);
   });
 });
 

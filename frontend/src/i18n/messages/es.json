@@ -6314,7 +6314,8 @@
       "flagged": "Marcado",
       "flaggedTitle": "Este ticket omitió un rol o diagnóstico requerido: requiere revisión",
       "participantsTitle": "Participación de roles requeridos: completados de requeridos"
-    }
+    },
+    "prdBadgeTitle": "{count, plural, one {# PRD vinculado} other {# PRD vinculados}}"
   },
   "projectsContent": {
     "errLoad": "Error al cargar los proyectos. Comprueba tu conexión e inténtalo de nuevo.",
@@ -10502,7 +10503,8 @@
       "when": "Cuándo",
       "comments": "Comentarios",
       "contribution": "Contribución",
-      "empty": "Aún no hay roles requeridos para este ticket."
+      "empty": "Aún no hay roles requeridos para este ticket.",
+      "action": "Acción"
     },
     "verdict": {
       "approved": "Aprobado",
@@ -10533,6 +10535,22 @@
       "add": "Añadir rol requerido",
       "materialize": "Crear elementos de trabajo",
       "materializeHelp": "Genera una subtarea por recurso para que el progreso se agregue a este ticket."
+    },
+    "contribution": {
+      "pr": "PR",
+      "run": "Ejecución n.º {id}",
+      "prd": "PRD r{revision}",
+      "test": "Prueba {id}",
+      "files": "{count, plural, one {# archivo} other {# archivos}}"
+    },
+    "signoff": {
+      "action": "Aprobar",
+      "cancel": "Cancelar",
+      "confirm": "Aprobar como {role}",
+      "recording": "Registrando…",
+      "summaryPlaceholder": "¿Qué has revisado? (opcional)",
+      "reasonRequired": "Motivo de la exención (obligatorio)",
+      "help": "Solo un miembro capacitado para este rol puede aprobarlo; el espacio de trabajo registra quién aprobó, cuándo y con qué evidencia."
     }
   },
   "rfpPage": {
@@ -11303,5 +11321,33 @@
     "copyInstall": "Copiar instalación",
     "copySnippet": "Copiar fragmento",
     "copiedFlash": "✓ Copiado"
+  },
+  "ticketContext": {
+    "thisTicket": "Este ticket",
+    "thisEpic": "Esta épica",
+    "parentEpic": "Épica principal",
+    "signoffs": "Aprobaciones",
+    "basisLane": "Etapa {index} de {total}",
+    "basisSignoff": "{done} de {total} aprobadas",
+    "basisChildren": "{done} de {total} subelementos completados",
+    "basisWeight": "{weight}% de peso",
+    "partOfEpic": "Parte de la épica",
+    "epicChildren": "{done} de {total} elementos completados",
+    "waitingOn": "Esperando a",
+    "gapsOnly": "{count, plural, one {# brecha de responsabilidad} other {# brechas de responsabilidad}}",
+    "dispatchReviewers": "Enviar revisores",
+    "dispatching": "Enviando…",
+    "reviewSignoffs": "Ver aprobaciones",
+    "objective": "Objetivo",
+    "noObjective": "Sin objetivo vinculado. Vincúlalo en el tablero de Planificación para que su valor sea medible.",
+    "objectiveAttained": "alcanzado",
+    "objectiveShare": "Este ticket representa el <b>{share}%</b> de la entrega vinculada a este objetivo ({done} de {total} completados).",
+    "objectiveInherited": "Heredado del alcance de este ticket: sin vínculo directo de entrega.",
+    "via": {
+      "task": "Vinculado directamente",
+      "epic": "A través de la épica",
+      "project": "Objetivo del proyecto",
+      "initiative": "Objetivo de la iniciativa"
+    }
   }
 }

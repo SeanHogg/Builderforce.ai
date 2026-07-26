@@ -6314,7 +6314,8 @@
       "flagged": "Markiert",
       "flaggedTitle": "Dieses Ticket hat eine erforderliche Rolle oder Diagnose übersprungen – Prüfung nötig",
       "participantsTitle": "Beteiligung erforderlicher Rollen: abgeschlossen von erforderlich"
-    }
+    },
+    "prdBadgeTitle": "{count, plural, one {# verknüpftes PRD} other {# verknüpfte PRDs}}"
   },
   "projectsContent": {
     "errLoad": "Projekte konnten nicht geladen werden. Prüfe deine Verbindung und versuche es erneut.",
@@ -10502,7 +10503,8 @@
       "when": "Wann",
       "comments": "Kommentare",
       "contribution": "Beitrag",
-      "empty": "Noch keine erforderlichen Rollen für dieses Ticket."
+      "empty": "Noch keine erforderlichen Rollen für dieses Ticket.",
+      "action": "Aktion"
     },
     "verdict": {
       "approved": "Genehmigt",
@@ -10533,6 +10535,22 @@
       "add": "Erforderliche Rolle hinzufügen",
       "materialize": "Arbeitspakete erstellen",
       "materializeHelp": "Erstellt pro Ressource eine Unteraufgabe, sodass der Fortschritt zu diesem Ticket zusammenläuft."
+    },
+    "contribution": {
+      "pr": "PR",
+      "run": "Lauf #{id}",
+      "prd": "PRD r{revision}",
+      "test": "Test {id}",
+      "files": "{count, plural, one {# Datei} other {# Dateien}}"
+    },
+    "signoff": {
+      "action": "Freigeben",
+      "cancel": "Abbrechen",
+      "confirm": "Als {role} freigeben",
+      "recording": "Wird erfasst…",
+      "summaryPlaceholder": "Was hast du geprüft? (optional)",
+      "reasonRequired": "Grund für den Verzicht (erforderlich)",
+      "help": "Nur ein für diese Rolle befähigtes Mitglied kann sie freigeben; der Workspace protokolliert wer, wann und mit welchem Nachweis freigegeben hat."
     }
   },
   "rfpPage": {
@@ -11303,5 +11321,33 @@
     "copyInstall": "Installation kopieren",
     "copySnippet": "Snippet kopieren",
     "copiedFlash": "✓ Kopiert"
+  },
+  "ticketContext": {
+    "thisTicket": "Dieses Ticket",
+    "thisEpic": "Dieses Epic",
+    "parentEpic": "Übergeordnetes Epic",
+    "signoffs": "Freigaben",
+    "basisLane": "Phase {index} von {total}",
+    "basisSignoff": "{done} von {total} freigegeben",
+    "basisChildren": "{done} von {total} Unterelementen erledigt",
+    "basisWeight": "{weight} % Gewichtung",
+    "partOfEpic": "Teil des Epics",
+    "epicChildren": "{done} von {total} Elementen erledigt",
+    "waitingOn": "Wartet auf",
+    "gapsOnly": "{count, plural, one {# Verantwortungslücke} other {# Verantwortungslücken}}",
+    "dispatchReviewers": "Prüfer beauftragen",
+    "dispatching": "Wird beauftragt…",
+    "reviewSignoffs": "Freigaben ansehen",
+    "objective": "Ziel",
+    "noObjective": "Mit keinem Ziel verknüpft. Verknüpfe es im Planungsboard, damit sein Wert messbar wird.",
+    "objectiveAttained": "erreicht",
+    "objectiveShare": "Dieses Ticket macht <b>{share} %</b> der mit diesem Ziel verknüpften Lieferung aus ({done} von {total} erledigt).",
+    "objectiveInherited": "Vom Geltungsbereich dieses Tickets geerbt – keine direkte Lieferverknüpfung.",
+    "via": {
+      "task": "Direkt verknüpft",
+      "epic": "Über das Epic",
+      "project": "Projektziel",
+      "initiative": "Initiativenziel"
+    }
   }
 }
