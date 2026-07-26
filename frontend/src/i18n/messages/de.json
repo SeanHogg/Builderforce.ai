@@ -6961,6 +6961,36 @@
         "unknown": "Nicht klassifiziert"
       },
       "copyDiagnosticsAria": "Vollständige KI-Manager-Diagnose kopieren – Richtlinienebenen, Autonomie-Status, Backlog-Zahlen, jeder Management-Durchlauf, jede Entscheidung und jedes blockierte Ticket"
+    },
+    "census": {
+      "title": "Blockade-Übersicht",
+      "caption": "Alle Tickets dieses Projekts, klassifiziert danach, was sie aufhält — nicht nur die, die der Manager im Detail untersucht hat.",
+      "loading": "Blockaden werden gezählt…",
+      "empty": "Nichts hängt fest – alle Tickets bewegen sich oder sind fertig.",
+      "error": "Die Blockade-Übersicht konnte nicht geladen werden.",
+      "retry": "Erneut versuchen",
+      "coverageNote": "{stalled} Tickets hängen fest; {diagnosed} wurden bisher im Detail untersucht. Der Rest wird hier gezählt, aber noch nicht einzeln geprüft.",
+      "computedAt": "Gezählt {when}.",
+      "stat": {
+        "managed": "Aktive Tickets",
+        "stalled": "Hängen fest",
+        "moving": "In Bewegung",
+        "deepDiagnosed": "Im Detail untersucht"
+      },
+      "cohorts": {
+        "title": "Was die Arbeit aufhält – über alle Tickets hinweg",
+        "aria": "Feststeckende Tickets nach Ursache gruppiert"
+      },
+      "findings": {
+        "title": "Plattform-Befunde",
+        "caption": "Wenn viele Tickets aus demselben Grund feststecken, ist das ein einzelner Defekt und nicht eine Vielzahl von Ticket-Problemen. Der Manager diagnostiziert ihn und legt ein Ticket zur Behebung an.",
+        "headline": "{count} Tickets hängen an „{cause}“ fest",
+        "remediation": "Behebung:",
+        "sourceAi": "vom Modell diagnostiziert",
+        "sourceHeuristic": "aus Messwerten diagnostiziert",
+        "openTicket": "{key} öffnen",
+        "raised": "Erfasst {when}"
+      }
     }
   },
   "project360": {

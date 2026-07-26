@@ -2174,6 +2174,16 @@ export const managerApi = {
   /** The stuck-ticket register (0367): what is not moving, why, and what has been tried. */
   stalls: (projectId: number): Promise<StallRegister> =>
     request<StallRegister>(`/api/manager/${projectId}/stalls`),
+
+  /**
+   * The FULL-COVERAGE stall census (0373) plus the systemic findings raised from it.
+   *
+   * Distinct from `stalls`, and the distinction is the point: that register is bounded
+   * by what the manager's deep triage stage has had budget to diagnose, so its own
+   * `byCause` summary is a sample. This is the count across EVERY ticket.
+   */
+  census: (projectId: number): Promise<StallCensusResponse> =>
+    request<StallCensusResponse>(`/api/manager/${projectId}/census`),
 };
 
 /** Why a ticket is not moving — mirrors the API's `StallCause`. */
@@ -2215,6 +2225,51 @@ export interface StallRegister {
   byCause: Array<{ cause: StallCause; count: number }>;
   /** The attempt ceiling at which a remedy converts to an escalation. */
   maxAttempts: number;
+}
+
+/** One cause bucket of the census — every ticket sharing a single stall cause. */
+export interface CensusCohort {
+  cause: StallCause;
+  count: number;
+  /** Longest-idle members, so an operator can open a concrete instance. */
+  sampleTaskIds: number[];
+  maxIdleMs: number;
+}
+
+/**
+ * A stall cohort the manager judged a PLATFORM defect rather than ticket work, with the
+ * root cause and remediation it reasoned out and the ticket it filed.
+ */
+export interface SystemicFindingRow {
+  id: string;
+  cause: StallCause;
+  ticketCount: number;
+  summary: string;
+  remediation: string;
+  /** 'ai' when a model produced it, 'heuristic' when the deterministic fallback did. */
+  source: string;
+  createdTaskId: number | null;
+  createdTaskKey: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+}
+
+export interface StallCensusResponse {
+  projectId: number;
+  /** Non-terminal, non-archived tickets the manager is accountable for. */
+  managed: number;
+  stalled: number;
+  moving: number;
+  cohorts: CensusCohort[];
+  /**
+   * How many of the stalled set the DEEP triage stage has confirmed.
+   *
+   * Reported so breadth is never mistaken for certainty: the census classifies every
+   * ticket cheaply, and this says how much of it has been verified in depth.
+   */
+  deepDiagnosed: number;
+  computedAt: string;
+  findings: SystemicFindingRow[];
 }
 
 /** Dependency edge semantics (mirrors the API's DEP_TYPES). */
