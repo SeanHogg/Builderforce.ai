@@ -33,6 +33,7 @@ export interface AdminGroupMeta {
 export const ADMIN_GROUP_META: AdminGroupMeta[] = [
   { id: '', labelKey: 'tab.adminOverview', icon: '🩺', subs: [
     { id: '', subKey: 'health', icon: '🩺' },
+    { id: 'cron', subKey: 'cron', icon: '⏱' },
   ] },
   { id: 'users', labelKey: 'tab.adminUsers', icon: '👤', subs: [
     { id: '', subKey: 'directory', icon: '👤' },

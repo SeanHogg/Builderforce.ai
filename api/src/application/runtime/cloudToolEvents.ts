@@ -50,5 +50,16 @@ export async function recordCloudToolEvent(
       durationMs:   args.durationMs ?? null,
       ts:           new Date(),
     });
-  } catch { /* telemetry is best-effort — never break the run */ }
+  } catch (error) {
+    // Telemetry remains non-blocking, but a missing tool record can no longer be
+    // silent—the correlation fields are enough to find the affected run.
+    console.error('[cloud-tool-event] append failed', {
+      tenantId: args.tenantId,
+      executionId: args.executionId,
+      cloudAgentRef: args.cloudAgentRef ?? null,
+      toolName: args.toolName,
+      toolCallId: args.toolCallId ?? null,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    });
+  }
 }

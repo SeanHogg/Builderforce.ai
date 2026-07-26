@@ -679,6 +679,20 @@ export async function createManagerCoachingTask(
      * coaching behaviour before this parameter existed.
      */
     taskType?: 'task' | 'gap';
+    /**
+     * Fire the lane trigger the moment the ticket is created. Default true — a human
+     * coaching the manager ("go do this") means it now.
+     *
+     * The SYSTEMIC-FINDINGS path passes false, deliberately. A platform-defect ticket is
+     * the output of one model call over a stall census: it names a defect, it does not
+     * specify work an agent should start unsupervised the instant it exists. Firing the
+     * trigger at creation is also what made the measured failure so loud — task 1032 was
+     * dispatched, refused and recorded as an error within two seconds of being filed.
+     * Skipping it does NOT make the ticket inert: it is a normal high-priority ticket, so
+     * the manager's ranked, budgeted dispatch stage (or a human) picks it up on the next
+     * pass, with all the backpressure that path applies.
+     */
+    autoDispatch?: boolean;
   },
 ): Promise<number | null> {
   const { tenantId, projectId } = args;
@@ -727,12 +741,14 @@ export async function createManagerCoachingTask(
 
     // Immediacy: if the manager is an agent and the lane is staffed, start now — else the
     // manager's next pass (step 5 dispatch) picks up the assigned runnable ticket anyway.
-    try {
-      await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
-        tenantId, projectId, taskId, status: TaskStatus.TODO,
-        submittedBy: args.submittedBy ?? `coach:${args.createdBy ?? 'human'}`,
-      });
-    } catch { /* dispatch is best-effort; autonomy still picks it up */ }
+    if (args.autoDispatch !== false) {
+      try {
+        await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+          tenantId, projectId, taskId, status: TaskStatus.TODO,
+          submittedBy: args.submittedBy ?? `coach:${args.createdBy ?? 'human'}`,
+        });
+      } catch { /* dispatch is best-effort; autonomy still picks it up */ }
+    }
     return taskId;
   } catch {
     return null;
@@ -991,6 +1007,11 @@ export async function runManagerForProject(
     const writeOps: unknown[] = [];
     const stampedAt = new Date();
     for (const t of unscored) {
+      // Checked between tickets, never mid-write: the collected `writeOps` are flushed
+      // below whatever happens, so shedding here loses only the tickets not yet scored.
+      // Up to MAX_AI_SCORES_PER_RUN of these iterations make an LLM call, so this is a
+      // genuinely unbounded-latency stage sitting at the very front of the pass.
+      if (budget.over()) { budget.shed('value'); break; }
       try {
         const riceMatch = featureIndex.byName.get(normalizeFeatureName(t.title));
         let value: ScoredValue;
@@ -1121,6 +1142,7 @@ export async function runManagerForProject(
       .filter((t) => RUNNABLE.includes(t.status) && !t.assignedUserId && !t.assignedAgentRef && t.assignedAgentHostId == null)
       .slice(0, MAX_ASSIGNMENTS_PER_RUN);
     for (const t of unowned) {
+      if (budget.over()) { budget.shed('assign'); break; }
       try {
         // Role-aware pick + persist — the ONE implementation shared with the stall
         // triage stage, whose `unassigned` remedy is exactly this (see assignOwner.ts).
@@ -1170,7 +1192,13 @@ export async function runManagerForProject(
       summary.censusStalled = census.stalled;
       summary.censusTopCause = census.cohorts[0]?.cause ?? null;
 
-      const systemic = await raiseSystemicFindings(env, db, runtimeService, {
+      // The census itself is set-based arithmetic and always runs — measurement is the
+      // one thing a truncated pass must not lose. The DIAGNOSIS below spends up to
+      // MAX_FINDINGS_PER_PASS model calls, so it is shed like any other optional work;
+      // the cohorts are still recorded, and the next pass raises the finding.
+      const systemic = budget.over()
+        ? (budget.shed('systemic'), { findings: [], ticketsCreated: 0, resolved: 0, journal: [] })
+        : await raiseSystemicFindings(env, db, runtimeService, {
         tenantId, projectId, census,
         personaDirective: identity.personaDirective,
         // ONE ticket-creation path for the whole manager — the same primitive the
@@ -1181,6 +1209,10 @@ export async function runManagerForProject(
           // Groups with the diagnostics engine's existing platform-gap tickets rather
           // than looking like ordinary feature work.
           taskType: 'gap',
+          // NEVER dispatched at creation — see `autoDispatch`. A platform-defect ticket
+          // is a diagnosis, not a work order, and the measured failure was exactly this
+          // ticket being dispatched, refused and recorded as an error on arrival.
+          autoDispatch: false,
           submittedBy: `manager:systemic:${policy.managerRef ?? 'system'}`,
         }),
       });
@@ -1221,6 +1253,7 @@ export async function runManagerForProject(
     .orderBy(sql`${tasks.managerRank} asc nulls last`, asc(tasks.updatedAt))
     .limit(MAX_DISPATCHES_PER_RUN);
   for (const t of runnable) {
+    if (budget.over()) { budget.shed('dispatch'); break; }
     try {
       const started = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
         tenantId, projectId, taskId: t.id, status: t.status, submittedBy,
@@ -1245,6 +1278,12 @@ export async function runManagerForProject(
   {
     const auditService = new TicketAuditService(db);
     for (const t of managed.slice(0, MAX_AUDITS_PER_RUN)) {
+      // The stage that sat between the two budget-guarded regions with no guard of its
+      // own: 40 audits plus coordinator ticks that each rewind a lane and can start a
+      // run. An unguarded stage here defeats the whole budget, because the pass can still
+      // be evicted before it reaches its closing journal — which is the failure the
+      // budget exists to end, not merely to reduce.
+      if (budget.over()) { budget.shed('audit'); break; }
       try {
         const result = await auditService.computeAudit(env, tenantId, t.id);
         summary.audited += 1;

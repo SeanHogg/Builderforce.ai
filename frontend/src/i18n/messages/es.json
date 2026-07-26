@@ -2410,6 +2410,7 @@
         "terminal_lane": "El ticket está en un carril terminal (Hecho), que nunca se ejecuta automáticamente.",
         "human_gate": "El carril requiere aprobación humana: alguien debe aprobarlo o pulsar Ejecutar ahora.",
         "no_agent": "El carril no tiene ningún agente asignado y la persona propietaria no puede ejecutar esta etapa. Asigna un agente al carril o lanza la ejecución con Ejecutar ahora.",
+        "managed_no_role": "Este tablero está gestionado por ciclo de vida, así que toda ejecución debe atribuirse a un rol que la etapa autorice, y aquí ningún rol autorizado se resuelve en un agente. Asignar una persona propietaria no sirve: quien figura como asignado es el Coordinador, nunca el ejecutor. Asigna un agente al carril, fija el rol o deja que el Coordinador resuelva el participante de la etapa.",
         "capability_mismatch": "Ningún agente candidato tiene las habilidades que exige este carril.",
         "already_running": "El ticket ya tiene una ejecución en curso, así que no se lanzó otra.",
         "run_cap_exhausted": "Las últimas ejecuciones consecutivas fallaron, así que la autonomía dejó de reintentarlo. Ejecutar ahora lo fuerza.",
@@ -6296,6 +6297,7 @@
         "cloud_run_limit": "Cuota mensual de ejecuciones en la nube agotada: mejora el plan para seguir",
         "cooldown_active": "En espera tras una ejecución fallida: se reintentará en breve",
         "no_agent": "Sin agente asignado",
+        "managed_no_role": "Ningún rol puede ejecutar esta etapa",
         "no_board": "Sin tablero configurado",
         "no_lane": "Carril no configurado",
         "terminal_lane": "Hecho — no requiere ejecución",
@@ -7904,7 +7906,8 @@
       "feedback": "Comentarios",
       "releaseNotes": "Novedades",
       "demoFunnel": "Embudo de demo",
-      "salesLeads": "Leads de ventas"
+      "salesLeads": "Leads de ventas",
+      "cron": "Tareas programadas"
     },
     "common": {
       "loading": "Cargando…",
@@ -8610,6 +8613,71 @@
         "pmo": "Centro de mando PMO",
         "talent": "Talento y marketplace",
         "governance": "Seguridad, arquitectura y gobernanza"
+      }
+    },
+    "cron": {
+      "title": "Tareas programadas",
+      "subtitle": "Cloudflare entrega los disparadores cron al Worker, nunca a una URL. Fuerza una ejecución aquí en lugar de esperar a la compuerta de trabajo.",
+      "forceNote": "Ejecutar una tarea aquí omite la compuerta KV y no mueve el temporizador del intervalo mínimo, así que una ejecución forzada nunca retrasa el siguiente disparo real. Usa «Señalar trabajo pendiente» para probar la compuerta en sí.",
+      "gate": {
+        "heading": "Compuerta de trabajo (KV)",
+        "checkedAt": "Consultado {at}",
+        "wouldRun": "El siguiente disparo ejecutaría el barrido de base de datos",
+        "wouldSkip": "El siguiente disparo se omitiría: Postgres sigue dormido",
+        "reason": {
+          "signal": "una escritura señaló trabajo pendiente",
+          "floor": "ha transcurrido el intervalo mínimo",
+          "idle": "nada señalado y el intervalo mínimo no ha vencido",
+          "kv-unavailable": "KV no está disponible, así que la compuerta permite pasar"
+        },
+        "floorInterval": "Intervalo mínimo",
+        "overridden": "sobrescrito",
+        "lastFloor": "Último barrido mínimo",
+        "nextFloor": "Próximo barrido mínimo",
+        "never": "Nunca",
+        "asap": "Siguiente disparo",
+        "explainIdle": "Una compuerta inactiva no significa que no haya nada pendiente. La señal solo se emite cuando un ticket supera realmente sus compuertas, así que un tablero de tickets estancados no señala nada y espera al barrido mínimo.",
+        "kvUnbound": "AUTH_CACHE_KV no está vinculado, así que la compuerta permite pasar y cada disparo ejecuta el barrido.",
+        "signalled": "Trabajo pendiente señalado: el siguiente disparo programado ejecutará el barrido."
+      },
+      "actions": {
+        "runFrequent": "▶ Ejecutar el disparo de 5 minutos",
+        "signal": "⚑ Señalar trabajo pendiente",
+        "run": "Ejecutar",
+        "runGroup": "▶ Ejecutar el grupo",
+        "running": "Ejecutando…"
+      },
+      "cadence": {
+        "frequent": "Disparo frecuente",
+        "daily": "Diario",
+        "weekly-mon": "Semanal (lunes)",
+        "weekly-fri": "Semanal (viernes)",
+        "everyFiveMinutes": "cada 5 minutos (con compuerta de trabajo)"
+      },
+      "table": {
+        "sweep": "Tarea",
+        "description": "Qué hace",
+        "lastRun": "Última ejecución forzada"
+      },
+      "badge": {
+        "dispatches": "inicia ejecuciones de agentes",
+        "unavailable": "desactivada en este entorno"
+      },
+      "outcome": {
+        "ok": "Correcto en {ms} ms",
+        "noop": "nada que hacer",
+        "failed": "Falló",
+        "timedOut": "Sigue en ejecución tras {ms} ms: consulta los registros para ver el resultado",
+        "skipped": "Omitida (desactivada)"
+      },
+      "result": {
+        "heading": "Forzado {target}:",
+        "summary": "{ok} de {total} tareas completadas en {ms} ms · {dispatched} ejecuciones de agentes iniciadas"
+      },
+      "confirm": {
+        "title": "¿Forzar una tarea programada?",
+        "dispatch": "Ejecutar «{target}» inicia ejecuciones reales de agentes en todos los espacios de trabajo ({count} de las tareas seleccionadas despachan trabajo). Esto consume tokens y no es una simulación.",
+        "confirmLabel": "Ejecutar ahora"
       }
     }
   },

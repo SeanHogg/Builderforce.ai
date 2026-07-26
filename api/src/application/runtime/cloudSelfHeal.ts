@@ -106,8 +106,12 @@ async function countOpenPrs(db: Db, taskId: number): Promise<number> {
       .from(pullRequests)
       .where(and(eq(pullRequests.taskId, taskId), ne(pullRequests.status, 'merged'), ne(pullRequests.status, 'closed')));
     return rows.length;
-  } catch {
-    return 0;
+  } catch (error) {
+    console.error('[cloud-self-heal] open PR lookup failed; refusing unsafe requeue', {
+      taskId,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    });
+    return 1;
   }
 }
 
@@ -122,7 +126,14 @@ async function recordEvent(db: Db, args: { tenantId: number; cloudAgentRef: stri
       args: args.detail != null ? JSON.stringify(args.detail) : null,
       result: args.result, durationMs: null, ts: new Date(),
     });
-  } catch { /* telemetry is best-effort */ }
+  } catch (error) {
+    console.error('[cloud-self-heal] telemetry append failed', {
+      tenantId: args.tenantId,
+      executionId: args.executionId,
+      toolName: args.toolName,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    });
+  }
 }
 
 /**
@@ -137,10 +148,19 @@ export async function selfHealCloudRun(env: Env, db: Db, input: SelfHealInput): 
   if (!isSelfHealEligible({ payload: input.payload, openPrCount, hasCloudRunner: !!env.CLOUD_RUNNER })) return 'ineligible';
 
   const requeuedPayload = markReaperRequeued(input.payload);
-  await db.update(executions)
+  const updated = await db.update(executions)
     .set({ payload: requeuedPayload, updatedAt: new Date() })
     .where(and(eq(executions.id, input.executionId), eq(executions.status, 'running')))
-    .catch(() => { /* best-effort */ });
+    .returning({ id: executions.id })
+    .catch((error) => {
+      console.error('[cloud-self-heal] failed to persist once-only requeue marker', {
+        tenantId: input.tenantId,
+        executionId: input.executionId,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
+      return [];
+    });
+  if (updated.length === 0) return 'ineligible';
 
   const ok = await dispatchDurableStart(env, input.executionId, buildDurableStartBody({ ...input, payload: requeuedPayload }));
   if (!ok) return 'ineligible';
@@ -184,7 +204,11 @@ export async function loadCloudRunForSelfHeal(db: Db, executionId: number): Prom
       payload: row.payload,
       status: row.status,
     };
-  } catch {
+  } catch (error) {
+    console.error('[cloud-self-heal] execution context load failed', {
+      executionId,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    });
     return null;
   }
 }
@@ -212,7 +236,12 @@ export async function handleCloudRunCrash(env: Env, db: Db, executionId: number,
   await db.update(executions)
     .set({ status: 'failed', errorMessage: reason, completedAt: new Date(), updatedAt: new Date() })
     .where(and(eq(executions.id, executionId), ne(executions.status, 'failed'), ne(executions.status, 'cancelled')))
-    .catch(() => { /* best-effort */ });
+    .catch((error) => console.error('[cloud-self-heal] terminal failure transition failed', {
+      tenantId: run.tenantId,
+      executionId,
+      reason,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    }));
   await recordEvent(db, {
     tenantId: run.tenantId, cloudAgentRef: run.cloudAgentRef, executionId,
     toolName: 'run.failed', category: 'error', result: reason,

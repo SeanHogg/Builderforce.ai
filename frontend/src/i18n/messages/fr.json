@@ -2410,6 +2410,7 @@
         "terminal_lane": "Le ticket est dans une colonne terminale (Terminé), qui ne s'exécute jamais automatiquement.",
         "human_gate": "La colonne exige une validation humaine — quelqu’un doit l’approuver ou cliquer sur Exécuter maintenant.",
         "no_agent": "La colonne n'a aucun agent affecté et la personne propriétaire ne peut pas exécuter cette étape. Affectez un agent à la colonne, ou lancez explicitement avec Exécuter maintenant.",
+        "managed_no_role": "Ce tableau est géré par cycle de vie : toute exécution doit être attribuée à un rôle autorisé par l’étape, et ici aucun rôle autorisé ne se résout en un agent. Affecter une personne responsable n’y changera rien : la personne assignée est le Coordinateur, jamais l’exécutant. Affectez un agent à la colonne, épinglez le rôle, ou laissez le Coordinateur résoudre le participant de l’étape.",
         "capability_mismatch": "Aucun agent candidat ne possède les compétences exigées par cette colonne.",
         "already_running": "Une exécution est déjà en cours sur le ticket : aucune nouvelle n'a été lancée.",
         "run_cap_exhausted": "Les dernières exécutions consécutives ont toutes échoué : l'autonomie a cessé de relancer. Exécuter maintenant passe outre.",
@@ -6296,6 +6297,7 @@
         "cloud_run_limit": "Quota mensuel d’exécutions cloud atteint — passez à un forfait supérieur",
         "cooldown_active": "Pause après une exécution en échec — nouvelle tentative sous peu",
         "no_agent": "Aucun agent assigné",
+        "managed_no_role": "Aucun rôle ne peut exécuter cette étape",
         "no_board": "Aucun tableau configuré",
         "no_lane": "Voie non configurée",
         "terminal_lane": "Terminé — aucune exécution",
@@ -7904,7 +7906,8 @@
       "feedback": "Retours",
       "releaseNotes": "Nouveautés",
       "demoFunnel": "Entonnoir démo",
-      "salesLeads": "Leads commerciaux"
+      "salesLeads": "Leads commerciaux",
+      "cron": "Tâches planifiées"
     },
     "common": {
       "loading": "Chargement…",
@@ -8610,6 +8613,71 @@
         "pmo": "Centre de commande PMO",
         "talent": "Talents et marketplace",
         "governance": "Sécurité, architecture et gouvernance"
+      }
+    },
+    "cron": {
+      "title": "Tâches planifiées",
+      "subtitle": "Cloudflare transmet les déclencheurs cron au Worker, jamais à une URL. Forcez une exécution ici au lieu d’attendre la barrière de travail.",
+      "forceNote": "Exécuter une tâche ici contourne la barrière KV et ne réinitialise pas le minuteur du seuil : une exécution forcée ne retarde donc jamais le prochain déclenchement réel. Utilisez « Signaler du travail en attente » pour tester la barrière elle-même.",
+      "gate": {
+        "heading": "Barrière de travail (KV)",
+        "checkedAt": "Vérifié {at}",
+        "wouldRun": "Le prochain déclenchement lancerait le balayage de la base de données",
+        "wouldSkip": "Le prochain déclenchement serait ignoré — Postgres reste en veille",
+        "reason": {
+          "signal": "une écriture a signalé du travail en attente",
+          "floor": "l’intervalle seuil est écoulé",
+          "idle": "rien n’a été signalé et le seuil n’est pas échu",
+          "kv-unavailable": "KV est injoignable, la barrière laisse donc passer"
+        },
+        "floorInterval": "Intervalle seuil",
+        "overridden": "remplacé",
+        "lastFloor": "Dernier balayage seuil",
+        "nextFloor": "Prochain balayage seuil",
+        "never": "Jamais",
+        "asap": "Prochain déclenchement",
+        "explainIdle": "Une barrière inactive ne signifie pas qu’il n’y a rien en attente. Le signal ne part que lorsqu’un ticket franchit réellement ses barrières : un tableau de tickets bloqués ne signale donc rien et attend le balayage seuil.",
+        "kvUnbound": "AUTH_CACHE_KV n’est pas lié : la barrière laisse passer et chaque déclenchement lance le balayage.",
+        "signalled": "Travail en attente signalé — le prochain déclenchement planifié lancera le balayage."
+      },
+      "actions": {
+        "runFrequent": "▶ Lancer le tick de 5 minutes",
+        "signal": "⚑ Signaler du travail en attente",
+        "run": "Lancer",
+        "runGroup": "▶ Lancer le groupe",
+        "running": "En cours…"
+      },
+      "cadence": {
+        "frequent": "Tick fréquent",
+        "daily": "Quotidien",
+        "weekly-mon": "Hebdomadaire (lundi)",
+        "weekly-fri": "Hebdomadaire (vendredi)",
+        "everyFiveMinutes": "toutes les 5 minutes (sous barrière de travail)"
+      },
+      "table": {
+        "sweep": "Tâche",
+        "description": "Rôle",
+        "lastRun": "Dernière exécution forcée"
+      },
+      "badge": {
+        "dispatches": "démarre des exécutions d’agents",
+        "unavailable": "désactivée dans cet environnement"
+      },
+      "outcome": {
+        "ok": "OK en {ms} ms",
+        "noop": "rien à faire",
+        "failed": "Échec",
+        "timedOut": "Toujours en cours après {ms} ms — consultez les journaux pour le résultat",
+        "skipped": "Ignorée (désactivée)"
+      },
+      "result": {
+        "heading": "{target} forcé :",
+        "summary": "{ok} tâches sur {total} terminées en {ms} ms · {dispatched} exécutions d’agents démarrées"
+      },
+      "confirm": {
+        "title": "Forcer une tâche planifiée ?",
+        "dispatch": "Lancer « {target} » démarre de véritables exécutions d’agents dans tous les espaces de travail ({count} des tâches sélectionnées déclenchent du travail). Cela consomme des jetons et n’est pas un essai à blanc.",
+        "confirmLabel": "Lancer maintenant"
       }
     }
   },

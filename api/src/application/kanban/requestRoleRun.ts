@@ -55,6 +55,26 @@ export interface RoleRunRequest {
 }
 
 /**
+ * The dispatch payload for a role run. Exported because the lane trigger must hand the
+ * governance approval gate the payload it is ACTUALLY about to dispatch — an approval
+ * that later replays a differently-shaped payload is an approval for a different run.
+ * One builder, so the gated payload and the dispatched one cannot drift.
+ */
+export function buildRoleRunPayload(req: RoleRunRequest): string {
+  const spec = {
+    cloudAgentRef: req.agentRef,
+    model: req.model ?? null,
+    taskId: req.taskId,
+    taskTitle: req.taskTitle ?? null,
+    roleKey: req.roleKey,
+    roleName: req.roleName,
+    laneKey: req.laneKey,
+    prUrl: req.prUrl ?? null,
+  };
+  return req.kind === 'producer' ? buildProducerRequestPayload(spec) : buildSignoffRequestPayload(spec);
+}
+
+/**
  * Dispatch the role's run and record it. Returns the execution id, or `null` when the
  * dispatcher refused — in which case NOTHING is recorded, because a slot marked
  * `in_progress` with no run behind it is a slot nobody will ever ask again.
@@ -66,17 +86,7 @@ export async function requestRoleRun(
   participants: TicketParticipantsService,
   req: RoleRunRequest,
 ): Promise<number | null> {
-  const spec = {
-    cloudAgentRef: req.agentRef,
-    model: req.model ?? null,
-    taskId: req.taskId,
-    taskTitle: req.taskTitle ?? null,
-    roleKey: req.roleKey,
-    roleName: req.roleName,
-    laneKey: req.laneKey,
-    prUrl: req.prUrl ?? null,
-  };
-  const payload = req.kind === 'producer' ? buildProducerRequestPayload(spec) : buildSignoffRequestPayload(spec);
+  const payload = buildRoleRunPayload(req);
 
   const deferred: Promise<unknown>[] = [];
   const executionId = await dispatchCloudRunForTask(

@@ -2410,6 +2410,7 @@
         "terminal_lane": "The ticket sits in a terminal (Done) lane, which never auto-runs.",
         "human_gate": "The lane is human-gated — a person must approve it or press Run now.",
         "no_agent": "The lane has no staffed agent and the owner cannot execute this stage. Staff the lane, or dispatch explicitly with Run now.",
+        "managed_no_role": "This board is lifecycle-managed, so every run must be attributed to a role the stage authorises — and no authorised role resolves to an agent here. Assigning an owner will not help: the assignee is the Coordinator, never the executor. Staff the lane, pin the role, or let the Coordinator resolve the stage participant.",
         "capability_mismatch": "Every candidate agent lacks the skills this lane requires.",
         "already_running": "A run is already live on the ticket, so no new one was dispatched.",
         "run_cap_exhausted": "The last consecutive runs all failed, so autonomy stopped re-dispatching. A human Run now overrides it.",
@@ -6296,6 +6297,7 @@
         "cloud_run_limit": "Monthly cloud-run allowance used — upgrade to run more",
         "cooldown_active": "Cooling down after a failed run — retrying shortly",
         "no_agent": "No agent assigned",
+        "managed_no_role": "No role can execute this stage",
         "no_board": "No board configured",
         "no_lane": "Lane not configured",
         "terminal_lane": "Done — no run needed",
@@ -7904,7 +7906,8 @@
       "feedback": "Feedback",
       "releaseNotes": "Release notes",
       "demoFunnel": "Demo funnel",
-      "salesLeads": "Sales leads"
+      "salesLeads": "Sales leads",
+      "cron": "Scheduled sweeps"
     },
     "common": {
       "loading": "Loading…",
@@ -8610,6 +8613,71 @@
         "pmo": "PMO Command Center",
         "talent": "Talent & Marketplace",
         "governance": "Security, Architecture & Governance"
+      }
+    },
+    "cron": {
+      "title": "Scheduled sweeps",
+      "subtitle": "Cloudflare delivers cron triggers to the Worker, never to a URL. Force a run here instead of waiting out the work-gate.",
+      "forceNote": "Running a sweep here bypasses the KV work-gate and does not move the floor timer, so a forced run never delays the next real tick. Use \"Signal pending work\" to test the gate itself.",
+      "gate": {
+        "heading": "KV work-gate",
+        "checkedAt": "Checked {at}",
+        "wouldRun": "The next tick would run the database fan-out",
+        "wouldSkip": "The next tick would skip — Postgres stays asleep",
+        "reason": {
+          "signal": "a write signalled pending work",
+          "floor": "the floor interval has elapsed",
+          "idle": "nothing signalled and the floor is not due",
+          "kv-unavailable": "KV is unreachable, so the gate fails open"
+        },
+        "floorInterval": "Floor interval",
+        "overridden": "overridden",
+        "lastFloor": "Last floor sweep",
+        "nextFloor": "Next floor sweep",
+        "never": "Never",
+        "asap": "Next tick",
+        "explainIdle": "An idle gate does not mean nothing is pending. The signal only fires when a ticket actually passes its gates, so a board of stalled tickets signals nothing and waits for the floor sweep.",
+        "kvUnbound": "AUTH_CACHE_KV is not bound, so the gate fails open and every tick runs the fan-out.",
+        "signalled": "Pending work signalled — the next scheduled tick will run the fan-out."
+      },
+      "actions": {
+        "runFrequent": "▶ Run the 5-minute tick",
+        "signal": "⚑ Signal pending work",
+        "run": "Run",
+        "runGroup": "▶ Run group",
+        "running": "Running…"
+      },
+      "cadence": {
+        "frequent": "Frequent tick",
+        "daily": "Daily",
+        "weekly-mon": "Weekly (Monday)",
+        "weekly-fri": "Weekly (Friday)",
+        "everyFiveMinutes": "every 5 minutes (work-gated)"
+      },
+      "table": {
+        "sweep": "Sweep",
+        "description": "What it does",
+        "lastRun": "Last forced run"
+      },
+      "badge": {
+        "dispatches": "starts agent runs",
+        "unavailable": "disabled in this environment"
+      },
+      "outcome": {
+        "ok": "OK in {ms} ms",
+        "noop": "nothing to do",
+        "failed": "Failed",
+        "timedOut": "Still running after {ms} ms — check the logs for the result",
+        "skipped": "Skipped (disabled)"
+      },
+      "result": {
+        "heading": "Forced {target}:",
+        "summary": "{ok} of {total} sweeps completed in {ms} ms · {dispatched} agent runs started"
+      },
+      "confirm": {
+        "title": "Force a scheduled sweep?",
+        "dispatch": "Running \"{target}\" starts real agent runs across every tenant ({count} of the selected sweeps dispatch work). This spends tokens and is not a dry run.",
+        "confirmLabel": "Run now"
       }
     }
   },

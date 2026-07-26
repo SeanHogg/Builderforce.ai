@@ -307,6 +307,18 @@ export interface Env {
   AUTH_CACHE_KV?: KVNamespace;
 
   /**
+   * Optional override (milliseconds) for the KV cron work-gate's floor interval —
+   * how long an idle platform may go without an unconditional Postgres fan-out.
+   * Unset → 30 min (see `application/runtime/cronWorkSignal.ts`). Clamped to
+   * [5 min, 6 h]; a non-numeric value falls back to the default.
+   *
+   * This is a COST dial, not a correctness one: shorter = more idle Neon wake-ups
+   * (~48/day at 30 min) and tighter worst-case staleness; longer = cheaper compute.
+   * Set via `wrangler secret put CRON_FLOOR_INTERVAL_MS` or a `[vars]` entry.
+   */
+  CRON_FLOOR_INTERVAL_MS?: string;
+
+  /**
    * Optional KV namespace backing the shared (L2) semantic response cache
    * (`/v1/semantic-cache`). Holds, per tenant+namespace partition, a bounded
    * list of {embedding, response} so a paraphrased prompt answered on one

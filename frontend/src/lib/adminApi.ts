@@ -179,6 +179,64 @@ export interface AdminSystemHealth {
   databases: AdminSystemDatabase[];
 }
 
+// ---------------------------------------------------------------------------
+// Scheduled sweeps (GET/POST /api/admin/cron) — mirrors application/runtime/
+// cronSweepRunner.ts. Cloudflare delivers crons to scheduled(), never to a URL,
+// so this is the only in-product way to see the work-gate's state and to force a
+// tick instead of waiting out the floor interval.
+// ---------------------------------------------------------------------------
+
+export type AdminCronCadence = 'frequent' | 'daily' | 'weekly-mon' | 'weekly-fri';
+
+export interface AdminCronSweep {
+  key: string;
+  cadence: AdminCronCadence;
+  description: string;
+  /** Can start billable agent runs — confirm before forcing. */
+  dispatches: boolean;
+  /** False when an env flag disables it (e.g. the demo reseed). */
+  available: boolean;
+}
+
+export interface AdminCronState {
+  now: string;
+  gate: {
+    /** What the next frequent tick would do if it fired right now. */
+    wouldRun: boolean;
+    reason: 'signal' | 'floor' | 'idle' | 'kv-unavailable';
+    floorDue: boolean;
+    floorIntervalMs: number;
+    floorIntervalOverridden: boolean;
+    lastFloorSweepAt: string | null;
+    nextFloorDueAt: string | null;
+    kvBound: boolean;
+  };
+  cadences: Array<{ cadence: AdminCronCadence; cron: string | null; sweeps: number }>;
+  sweeps: AdminCronSweep[];
+}
+
+export interface AdminCronOutcome {
+  key: string;
+  cadence: AdminCronCadence;
+  ok: boolean;
+  ms: number;
+  summary: string | null;
+  error?: string;
+  /** Outlived the response deadline — still running, NOT cancelled. */
+  timedOut?: boolean;
+  /** Skipped because the sweep is unavailable in this environment. */
+  skipped?: boolean;
+}
+
+export interface AdminCronRunResult {
+  target: string;
+  kind: 'sweep' | 'cadence' | 'all';
+  ranAt: string;
+  totalMs: number;
+  dispatchesReserved: number;
+  results: AdminCronOutcome[];
+}
+
 /** One zero-filled daily point (matches the API MetricPoint). */
 export interface AdminMetricPoint { day: string; value: number; }
 
@@ -780,6 +838,28 @@ export const adminApi = {
     return adminRequest('/api/admin/system-health/maintenance', {
       method: 'POST', body: JSON.stringify(input),
     });
+  },
+
+  /** Scheduled sweeps + the live KV work-gate decision. */
+  async cronState(): Promise<AdminCronState> {
+    return adminRequest<AdminCronState>('/api/admin/cron');
+  },
+
+  /**
+   * Force-run scheduled work now. `target` is a sweep key, a cadence group, or
+   * 'all'. `timeoutMs` bounds how long the RESPONSE waits per sweep — a slower
+   * sweep keeps running server-side and is reported `timedOut`, never cancelled.
+   */
+  async cronRun(target: string, timeoutMs?: number): Promise<AdminCronRunResult> {
+    return adminRequest<AdminCronRunResult>(`/api/admin/cron/${encodeURIComponent(target)}`, {
+      method: 'POST',
+      body: JSON.stringify(timeoutMs ? { timeoutMs } : {}),
+    });
+  },
+
+  /** Set the KV pending-work flag so the NEXT real cron tick runs the fan-out. */
+  async cronSignal(): Promise<{ ok: boolean; gate: { wouldRun: boolean; reason: string } }> {
+    return adminRequest('/api/admin/cron/signal', { method: 'POST', body: JSON.stringify({}) });
   },
 
   async errors(): Promise<AdminError[]> {

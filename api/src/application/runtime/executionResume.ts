@@ -55,6 +55,11 @@ export async function resumePausedExecution(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ approvalId: args.approvalId ?? null }),
-    }).catch(() => { /* best-effort */ });
+    }).catch((error) => console.error('[execution-resume] durable runner wake-up failed', {
+      executionId: args.executionId,
+      tenantId: args.tenantId,
+      approvalId: args.approvalId ?? null,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    }));
   }
 }

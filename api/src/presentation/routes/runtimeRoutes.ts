@@ -342,10 +342,37 @@ export async function dispatchCloudRunForTask(
     .where(and(eq(tasks.id, params.taskId), eq(projects.tenantId, params.tenantId)))
     .limit(1);
   if (!taskRow) return null;
-  const authorization = await authorizeManagedTaskExecution(db, params.tenantId, params.taskId, params.payload);
-  if (!authorization.allowed) throw new Error(authorization.reason ?? 'managed execution is not authorized');
 
   const submittedBy = params.submittedBy ?? 'system:autofix';
+
+  // (0) MANAGED AUTHORIZATION — a REFUSAL, not an exception.
+  //
+  // This used to `throw`, and the throw was the whole failure mode: it happens BEFORE the
+  // execution row exists, so nothing counted it. The lane trigger's catch recorded a raw
+  // `auto_run_error` (unbounded — one row per sweep tick, on a database held under
+  // $5/month), the failure breaker and the re-run cooldown never saw a failure to back
+  // off from, and every other caller `.catch(() => null)`d it into silence. A managed
+  // board therefore refused every autonomous dispatch forever, invisibly.
+  //
+  // It is the same KIND of answer as the two guards below — "this run must not start,
+  // and here is why" — so it is recorded and returned the same way: through the
+  // state-gated skip ledger, with a real `AutoRunReason` the lifecycle ledger can resolve.
+  const authorization = await authorizeManagedTaskExecution(db, params.tenantId, params.taskId, params.payload);
+  if (!authorization.allowed) {
+    await recordAutoRunSkip(env, db, {
+      tenantId: params.tenantId,
+      taskId: params.taskId,
+      cloudAgentRef: taskRow.assignedAgentRef ?? submittedBy,
+      lane: taskRow.status,
+      reason: 'managed_no_role' satisfies AutoRunReason,
+      detail: {
+        taskId: params.taskId, reason: 'managed_no_role' satisfies AutoRunReason,
+        managed: authorization.managed, refusal: authorization.reason ?? null, submittedBy,
+      },
+      result: `Dispatch refused: ${authorization.reason ?? 'managed execution is not authorized'}`,
+    });
+    return null;
+  }
 
   // (1) CLOUD-RUN CAP — checked before the execution row exists. A quota refusal is
   // not a run that failed; it is a run that must not start, and it cannot clear by

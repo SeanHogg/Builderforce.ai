@@ -149,6 +149,9 @@ export const timeEntries = pgTable('time_entries', {
  */
 export const activityLog = pgTable('activity_log', {
   id:           bigserial('id', { mode: 'number' }).primaryKey(),
+  /** Stable producer key for retried projections (for example an execution
+   * lifecycle outbox event). Null for legacy/direct activity emitters. */
+  eventKey:     varchar('event_key', { length: 160 }),
   /** Nullable ONLY for platform-global events (pre-tenant login/registration),
    *  absorbed from the retired audit_events table (mig 0295). Tenant-scoped reads
    *  filter on tenantId, so a global row is simply invisible to any one tenant. */
@@ -173,6 +176,7 @@ export const activityLog = pgTable('activity_log', {
   occurredAt:   timestamp('occurred_at').notNull().defaultNow(),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
+  uniqueIndex('idx_activity_log_event_key').on(t.eventKey),
   index('idx_activity_log_tenant_time').on(t.tenantId, t.occurredAt),
   index('idx_activity_log_actor').on(t.tenantId, t.actorType, t.actorRef, t.occurredAt),
   index('idx_activity_log_target').on(t.tenantId, t.targetType, t.targetId),
@@ -972,4 +976,3 @@ export const rehearsalSteps = pgTable('rehearsal_steps', {
   detail:       text('detail'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
 });
-
