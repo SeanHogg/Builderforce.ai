@@ -120,7 +120,8 @@ export async function ensureAgentWorkflow(
 
   // The presence cache would otherwise keep saying "absent" for up to 5 minutes
   // after the operator enabled the surface.
-  await invalidateCached(env, workflowPresenceKey(tenantId, repoId)).catch(() => {});
+  await invalidateCached(env, workflowPresenceKey(tenantId, repoId))
+    .catch((error) => console.error('[github-actions-dispatch] workflow-presence cache invalidation failed', { tenantId, repoId, error }));
   return { ok: true, created: !existing.ok };
 }
 

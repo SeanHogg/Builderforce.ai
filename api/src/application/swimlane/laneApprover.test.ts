@@ -329,9 +329,9 @@ describe('loadLaneStaffedAgents', () => {
     // per staffed agent would be an N+1 directly on the hot path.
     const { db, calls } = makeDb(
       [
-        { agentRef: 'a1', name: 'Rev', role: 'Code Reviewer', model: 'opus', position: 0 },
-        { agentRef: 'a2', name: 'Sec', role: 'Security', model: null, position: 1 },
-        { agentRef: 'a3', name: 'Dev', role: 'Developer', model: null, position: 2 },
+        { swimlaneId: 'lane-1', agentRef: 'a1', name: 'Rev', role: 'Code Reviewer', model: 'opus', position: 0 },
+        { swimlaneId: 'lane-1', agentRef: 'a2', name: 'Sec', role: 'Security', model: null, position: 1 },
+        { swimlaneId: 'lane-1', agentRef: 'a3', name: 'Dev', role: 'Developer', model: null, position: 2 },
       ],
       [
         { id: 'a1', name: 'Rev', title: 'Code Reviewer', skills: null, builtinKind: null, roleKeys: ['code-reviewer'] },
@@ -352,7 +352,7 @@ describe('loadLaneStaffedAgents', () => {
     // lane resolves to no role instead of burning a run dispatching something that is
     // gone. Same for a dangling ref.
     const { db } = makeDb(
-      [{ agentRef: 'ghost', name: 'Ghost', role: 'Code Reviewer', model: null, position: 0 }],
+      [{ swimlaneId: 'lane-1', agentRef: 'ghost', name: 'Ghost', role: 'Code Reviewer', model: null, position: 0 }],
       [],
     );
     const staffed = await loadLaneStaffedAgents(db, 1, 'lane-1');
@@ -361,7 +361,7 @@ describe('loadLaneStaffedAgents', () => {
   });
 
   it('skips assignment rows with no agent_ref and never queries when none remain', async () => {
-    const { db, calls } = makeDb([{ agentRef: null, name: null, role: 'Reviewer', model: null, position: 0 }], []);
+    const { db, calls } = makeDb([{ swimlaneId: 'lane-1', agentRef: null, name: null, role: 'Reviewer', model: null, position: 0 }], []);
     expect(await loadLaneStaffedAgents(db, 1, 'lane-1')).toEqual([]);
     expect(calls.agents).toBe(0);
   });
@@ -382,7 +382,7 @@ describe('resolveLaneApprovers', () => {
 
   it('reads staffing for tier (b) and returns the resolved approver', async () => {
     const { db } = makeDb(
-      [{ agentRef: 'a1', name: 'Rev', role: 'Code Reviewer', model: 'sonnet', position: 0 }],
+      [{ swimlaneId: 'lane-1', agentRef: 'a1', name: 'Rev', role: 'Code Reviewer', model: 'sonnet', position: 0 }],
       [{ id: 'a1', name: 'Rev', title: 'Code Reviewer', skills: null, builtinKind: null, roleKeys: null }],
     );
     const d = await resolveLaneApprovers(db, { tenantId: 1, swimlaneId: 'lane-1', requirementRoleKeys: [] });

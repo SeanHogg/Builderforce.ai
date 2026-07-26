@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { createPassBudget, MANAGER_PASS_BUDGET_MS } from './ManagerService';
+import {
+  createPassBudget, finalizeManagerRunTask, MANAGER_PASS_BUDGET_MS, type ManagerRunSummary,
+} from './ManagerService';
 
 /**
  * THE EVICTION. A manager pass runs inside ONE Worker invocation. On project 11 (673
@@ -52,5 +54,54 @@ describe('createPassBudget', () => {
     // the invocation ceiling would defeat the entire mechanism.
     expect(MANAGER_PASS_BUDGET_MS).toBeGreaterThan(5_000);
     expect(MANAGER_PASS_BUDGET_MS).toBeLessThan(30_000);
+  });
+});
+
+/**
+ * THE COMPOSITION, not the primitive.
+ *
+ * `createPassBudget` being correct proves nothing about the promise the budget exists to
+ * keep: that a truncated pass still CLOSES, and says what it shed. The measured failure
+ * was a pass that never wrote its closing row at all for two weeks, so the closing row —
+ * and the sentence the diagnostics report parses back out of it — is the thing under test.
+ */
+describe('a truncated pass still closes, and names what it deferred', () => {
+  /** Captures the row `finalizeManagerRunTask` writes. */
+  function stubDb() {
+    const writes: Array<Record<string, unknown>> = [];
+    const chain = (): Record<string, unknown> => {
+      const self: Record<string, unknown> = {};
+      self.set = (v: Record<string, unknown>) => { writes.push(v); return self; };
+      self.where = () => self;
+      self.then = (resolve: (v: unknown) => unknown) => Promise.resolve([]).then(resolve);
+      return self;
+    };
+    return { db: { update: () => chain() } as never, writes };
+  }
+
+  const summary = (truncated: string[]): ManagerRunSummary => ({
+    scored: 3, ranked: 300, assigned: 1, prsConducted: 0, prsMerged: 0, dispatched: 2,
+    audited: 40, flagged: 5, remediated: 0, remediationDeferred: 0, stalled: 0, unstuck: 0,
+    escalated: 0, stallsResolved: 0, staleRunTasksClosed: 0, censusStalled: 0,
+    censusTopCause: null, systemicFindings: 0, systemicTicketsCreated: 0, scheduled: 0,
+    truncated,
+  } as unknown as ManagerRunSummary);
+
+  it('marks the run card DONE and lists the shed stages', async () => {
+    const { db, writes } = stubDb();
+    await finalizeManagerRunTask(db, { taskId: 1031, summary: summary(['pr_conduct', 'triage']), ok: true });
+
+    const row = writes[0]!;
+    expect(row.status).toBe('done');
+    expect(row.completedAt).toBeInstanceOf(Date);
+    expect(String(row.description)).toContain('deferred: pr_conduct, triage');
+  });
+
+  // A complete pass must be DISTINGUISHABLE from a truncated one — that indistinguishability
+  // was the larger half of the original failure.
+  it('says nothing about deferral on a complete pass', async () => {
+    const { db, writes } = stubDb();
+    await finalizeManagerRunTask(db, { taskId: 1031, summary: summary([]), ok: true });
+    expect(String(writes[0]!.description)).not.toContain('deferred');
   });
 });

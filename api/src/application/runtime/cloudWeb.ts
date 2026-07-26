@@ -246,7 +246,7 @@ export async function readCapped(res: Response): Promise<{ text: string; truncat
       total += value.byteLength;
     }
   } finally {
-    await reader.cancel().catch(() => { /* already closed */ });
+    await reader.cancel().catch((error) => console.warn('[cloud-web] response reader cancellation failed', { error }));
   }
   const joined = new Uint8Array(total);
   let offset = 0;
@@ -359,7 +359,8 @@ export function buildCloudWebCapability(args: { env: Env; search?: CloudWebSearc
         }
         const r = await vendor.search(query, apiKey);
         if (r.ok && meter) {
-          await recordOutboundFetch(meter.db, meter.tenantId, vendor.endpoint).catch(() => { /* best-effort */ });
+          await recordOutboundFetch(meter.db, meter.tenantId, vendor.endpoint)
+            .catch((error) => console.error('[cloud-web] search usage ledger write failed', { tenantId: meter.tenantId, vendor: vendor.id, error }));
         }
         return r;
       }, {
@@ -368,7 +369,8 @@ export function buildCloudWebCapability(args: { env: Env; search?: CloudWebSearc
       });
       // A vendor blip (or a cap that resets) must be retryable on the next step, never
       // pinned for the TTL — same rule as a failed fetch.
-      if (!result.ok) await invalidateCached(env, key).catch(() => { /* best-effort */ });
+      if (!result.ok) await invalidateCached(env, key)
+        .catch((error) => console.error('[cloud-web] failed-search cache invalidation failed', { vendor: vendor.id, key, error }));
       return result;
     },
   };
@@ -387,6 +389,7 @@ async function fetchCached(env: Env, rawUrl: string): Promise<WebFetchResult> {
   });
   // Never pin a failure for the TTL — a transient 502/timeout must be retryable on
   // the agent's very next step.
-  if (!result.ok) await invalidateCached(env, key).catch(() => { /* best-effort */ });
+  if (!result.ok) await invalidateCached(env, key)
+    .catch((error) => console.error('[cloud-web] failed-fetch cache invalidation failed', { key, error }));
   return result;
 }
