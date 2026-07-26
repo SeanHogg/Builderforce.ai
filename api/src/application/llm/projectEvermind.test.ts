@@ -11,6 +11,7 @@ import {
   computeProjectAffect,
   extractMemoriesToEvermind,
   QUARANTINE_FAILURE_STREAK,
+  reseedProjectEvermind,
   PROJECT_EVERMIND_MODEL_PREFIX,
   type ProjectEvermindRecentEntry,
   type EvermindServeReadiness,
@@ -213,7 +214,13 @@ describe('setProjectEvermindInference (benchmark-gated promotion)', () => {
   const ready: EvermindServeReadiness = { ready: true, passRate: 1, samples: [] };
   const notReady: EvermindServeReadiness = {
     ready: false, passRate: 0,
-    samples: [{ prompt: 'Summarize the status.', text: 'commit commit commit the the in the in the', coherent: false }],
+    samples: [{
+      prompt: 'Summarize the status.',
+      text: 'commit commit commit the the in the in the',
+      coherent: false,
+      failure: 'repetition',
+      detail: 'the decoder is stuck repeating the same word or phrase',
+    }],
   };
 
   it('REFUSES to enable a head that fails the coherence probe (no DB write)', async () => {
@@ -326,5 +333,56 @@ describe('computeProjectAffect (limbic state for the brain map)', () => {
       expect(a.state[k]).toBeGreaterThanOrEqual(0);
       expect(a.state[k]).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe('reseedProjectEvermind (the repair door for a head trained into gibberish)', () => {
+  /** A store that records what was written, so the version the bytes land under is checkable. */
+  function writeStore() {
+    const puts: string[] = [];
+    return { store: { put: async (key: string) => { puts.push(key); } }, puts };
+  }
+
+  it('writes the new base at version+1 and clears quarantine, leaving inference OFF', async () => {
+    // A quarantined v100 — the exact situation that previously had no remedy: seeding
+    // refuses to clobber a seeded head, so the bad artifact was stuck there forever.
+    const { db, setCalls } = updatableDb({
+      name: 'PM', version: 100, mode: 'connected', contributions: 12,
+      inferenceEnabled: false, quarantinedAt: new Date(), quarantineReason: 'gibberish',
+    });
+    const { store, puts } = writeStore();
+    await reseedProjectEvermind(env, db, store, {
+      tenantId: 7, projectId: 30,
+      modelBlob: new ArrayBuffer(8),
+      tokenizer: { vocab: { a: 0 }, merges: [] },
+    });
+
+    // NEW version, never an overwrite of v100 — refs are immutable and memoised per
+    // isolate, so reusing a version would keep serving the old weights from cache.
+    expect(puts).toEqual([
+      'evermind/project/7/30/v101/model.evermind',
+      'evermind/project/7/30/v101/tokenizer.json',
+    ]);
+    expect(setCalls).toHaveLength(1);
+    expect(setCalls[0]).toMatchObject({
+      version: 101,
+      inferenceEnabled: false,   // must re-earn the right to serve
+      serveFailureStreak: 0,
+      quarantinedAt: null,
+      quarantineReason: null,
+    });
+  });
+
+  it('falls back to an ordinary seed when the project was never seeded', async () => {
+    // version 0 → this is a first seed, not a replacement: it must land at v1 via the
+    // one seeding implementation rather than a second, divergent code path.
+    const { db } = updatableDb({ name: 'PM', version: 0, mode: 'connected', contributions: 0, inferenceEnabled: false }, [[{ id: 'x' }]]);
+    const { store, puts } = writeStore();
+    await reseedProjectEvermind(env, db, store, {
+      tenantId: 7, projectId: 31,
+      modelBlob: new ArrayBuffer(8),
+      tokenizer: { vocab: { a: 0 }, merges: [] },
+    });
+    expect(puts[0]).toBe('evermind/project/7/31/v1/model.evermind');
   });
 });

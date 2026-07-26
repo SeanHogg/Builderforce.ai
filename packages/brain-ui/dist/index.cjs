@@ -1876,7 +1876,7 @@ var POP = {
 };
 
 // src/evermind/EvermindConsole.tsx
-var import_react7 = require("react");
+var import_react10 = require("react");
 
 // src/evermind/types.ts
 function defaultFormatWhen(atMs) {
@@ -1981,6 +1981,59 @@ var DEFAULT_EVERMIND_LABELS = {
   notDistilled: "Not distilled",
   distilledBy: (model) => `via ${model}`,
   teacherFault: (model, reason) => `The teacher${model ? ` (${model})` : ""} produced no answer (${reason}), so nothing was learned for this task. Check the pinned teacher model and your frontier credit, then teach it again.`,
+  testTitle: "Test bench",
+  testHint: "Run a prompt through the model and see exactly what it writes, graded the same way a real reply is. This is how you check the model is worth switching on \u2014 before anyone chats with it.",
+  testPlaceholder: "Ask the model something, e.g. \u201CSummarise where this project stands.\u201D",
+  testRunCta: "Run prompt",
+  testReadinessCta: "Readiness check",
+  testRunning: "Generating\u2026",
+  testResultReadiness: (passed, total) => `Readiness check \u2014 ${passed} of ${total} answers usable`,
+  testResultPrompt: "What the model produced",
+  testServable: "Usable",
+  testRefused: "Refused",
+  testRefusedBecause: (detail) => `This would not be shown to a user: ${detail}.`,
+  testEmptyOutput: "(the model produced nothing)",
+  testVerdictReady: "This model is coherent enough to serve replies.",
+  testVerdictNotReady: "This model is not coherent enough to serve replies yet. Teach it more, set a teacher model, or re-seed it below.",
+  maintenanceTitle: "Maintenance",
+  maintenanceHint: "Repair and tidy the model when it has gone wrong. None of this deletes your project\u2019s work.",
+  reseedLabel: "Replace the model",
+  reseedHint: "Start over from a known-good base, keeping the project. Use this when the model has trained itself into nonsense. Replies stay switched off until it passes a readiness check again.",
+  reseedCta: "Replace\u2026",
+  reseedConfirm: "Replace this model\u2019s brain with a fresh base? What it has learned so far will no longer shape its answers. This cannot be undone.",
+  reseedStarterOption: "Fresh starter base (untrained)",
+  reseedDone: (version) => `Model replaced \u2014 now at v${version}. Run a readiness check before switching replies back on.`,
+  reindexLabel: "Rebuild recall index",
+  reindexHint: "Re-file every memory against the current model. Memories are filed when they are learned, so recall drifts as the model changes \u2014 rebuild if it starts recalling the wrong things.",
+  reindexCta: "Rebuild index",
+  reindexDone: (reindexed) => `Re-filed ${reindexed} memor${reindexed === 1 ? "y" : "ies"}.`,
+  cleanupLabel: "Clean up",
+  cleanupHint: "Throw away anything queued but not yet learned, and clear cached answers so repeat questions are answered fresh. Learned knowledge is untouched.",
+  cleanupCta: "Clean up",
+  cleanupConfirm: "Discard everything queued but not yet learned, and clear cached answers?",
+  cleanupDone: (discarded, cached) => `Discarded ${discarded} queued item(s) and cleared ${cached} cached answer(s).`,
+  analyzeTitle: "Check what it has learned",
+  analyzeHint: "Read back everything the model has learned and have a frontier model check it for mistakes, stale facts and nonsense \u2014 then fix what is wrong by teaching the corrections.",
+  analyzeCta: "Check knowledge",
+  analyzing: "Checking\u2026",
+  analyzeClean: (analyzed) => `Checked ${analyzed} memor${analyzed === 1 ? "y" : "ies"} \u2014 nothing looks wrong.`,
+  analyzeSummary: (issues, analyzed, model) => `${issues} of ${analyzed} memories need attention (checked by ${model}).`,
+  analyzeSummaryLocal: (issues, analyzed) => `${issues} of ${analyzed} memories need attention.`,
+  analyzeVerdict: (verdict) => ({
+    ok: "Fine",
+    incoherent: "Nonsense",
+    incorrect: "Wrong",
+    outdated: "Out of date",
+    unusable: "Not an answer",
+    redundant: "Duplicate"
+  })[verdict] ?? verdict,
+  analyzeCorrectionLabel: "Will be replaced with",
+  analyzeSelectAll: "Select all",
+  analyzeSelectNone: "Clear selection",
+  analyzeApplyCta: (count) => `Fix ${count} selected`,
+  analyzeApplying: "Fixing\u2026",
+  analyzeApplied: (corrected, forgotten, version) => `Fixed: ${corrected} corrected, ${forgotten} forgotten. Model is now at v${version}.`,
+  analyzeSkipped: (count) => `${count} could not be applied.`,
   refresh: "Refresh",
   errorGeneric: "Something went wrong. Try again."
 };
@@ -2006,8 +2059,10 @@ function evermindLearnedStatus(entry) {
   return { state: "self" };
 }
 
-// src/evermind/EvermindConsole.tsx
-var import_jsx_runtime10 = require("react/jsx-runtime");
+// src/evermind/EvermindTestBench.tsx
+var import_react7 = require("react");
+
+// src/evermind/consoleStyles.ts
 var C = {
   surface: "var(--bf-ev-surface, var(--bg-surface, var(--bf-surface, var(--vscode-editorWidget-background, transparent))))",
   surface2: "var(--bf-ev-surface-2, var(--bg-elevated, var(--bf-surface-2, var(--vscode-textBlockQuote-background, rgba(148,163,184,0.08)))))",
@@ -2015,25 +2070,502 @@ var C = {
   text: "var(--bf-ev-text, var(--text-primary, var(--bf-text, inherit)))",
   text2: "var(--bf-ev-text-2, var(--text-secondary, var(--bf-text-muted, #6b7280)))",
   accent: "var(--bf-ev-accent, var(--coral-bright, var(--accent, var(--bf-accent, #ff6b5e))))",
-  danger: "var(--bf-ev-danger, var(--danger-text, #d9534f))"
+  danger: "var(--bf-ev-danger, var(--danger-text, #d9534f))",
+  ok: "var(--bf-ev-ok, var(--success-text, #16a34a))",
+  warnText: "var(--bf-warn-text, #92400e)",
+  warnBg: "var(--bf-warn-bg, #fef3c7)",
+  warnBorder: "var(--bf-warn-border, #f59e0b)"
 };
-function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate }) {
-  const t = (0, import_react7.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
-  const [data, setData] = (0, import_react7.useState)(null);
-  const [targets, setTargets] = (0, import_react7.useState)(null);
-  const [seedModels, setSeedModels] = (0, import_react7.useState)([]);
-  const [teacherOpts, setTeacherOpts] = (0, import_react7.useState)(null);
-  const [selectedSlug, setSelectedSlug] = (0, import_react7.useState)("");
-  const [teachPrompt, setTeachPrompt] = (0, import_react7.useState)("");
-  const [teachText, setTeachText] = (0, import_react7.useState)("");
-  const [busy, setBusy] = (0, import_react7.useState)(false);
-  const [validating, setValidating] = (0, import_react7.useState)(false);
-  const [validateResult, setValidateResult] = (0, import_react7.useState)(null);
-  const [notice, setNotice] = (0, import_react7.useState)(null);
+var italic = { margin: 0, fontSize: "0.78rem", color: C.text2, fontStyle: "italic" };
+var fieldLabel = { fontSize: "0.78rem", fontWeight: 600, color: C.text2 };
+var fieldTitle = { fontSize: "0.82rem", fontWeight: 600, color: C.text };
+var fieldHint = { fontSize: "0.72rem", color: C.text2, lineHeight: 1.4 };
+var select = {
+  padding: "7px 9px",
+  fontSize: "0.8rem",
+  borderRadius: 8,
+  border: `1px solid ${C.border}`,
+  background: C.surface2,
+  color: C.text,
+  boxSizing: "border-box"
+};
+var optionStyle = nativeOptionStyle;
+var sectionBlock = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  borderTop: `1px solid ${C.border}`,
+  paddingTop: 10
+};
+var outputBox = {
+  fontFamily: "var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, Menlo, monospace)",
+  fontSize: "0.74rem",
+  lineHeight: 1.5,
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
+  background: C.surface,
+  border: `1px solid ${C.border}`,
+  borderRadius: 6,
+  padding: "8px 10px",
+  color: C.text,
+  maxHeight: 220,
+  overflow: "auto"
+};
+function primaryBtn(disabled) {
+  return {
+    padding: "8px 14px",
+    fontSize: "0.8rem",
+    fontWeight: 600,
+    borderRadius: 8,
+    border: "1px solid transparent",
+    background: disabled ? C.surface2 : C.accent,
+    color: disabled ? C.text2 : "#fff",
+    cursor: disabled ? "not-allowed" : "pointer",
+    whiteSpace: "nowrap"
+  };
+}
+function secondaryBtn(disabled) {
+  return {
+    padding: "8px 14px",
+    fontSize: "0.8rem",
+    fontWeight: 600,
+    borderRadius: 8,
+    border: `1px solid ${C.border}`,
+    background: "transparent",
+    color: disabled ? C.text2 : C.text,
+    cursor: disabled ? "not-allowed" : "pointer",
+    whiteSpace: "nowrap",
+    opacity: disabled ? 0.7 : 1
+  };
+}
+function dangerBtn(disabled) {
+  return {
+    padding: "8px 14px",
+    fontSize: "0.8rem",
+    fontWeight: 600,
+    borderRadius: 8,
+    border: `1px solid ${disabled ? C.border : C.danger}`,
+    background: "transparent",
+    color: disabled ? C.text2 : C.danger,
+    cursor: disabled ? "not-allowed" : "pointer",
+    whiteSpace: "nowrap",
+    opacity: disabled ? 0.7 : 1
+  };
+}
+var ghostBtn = {
+  marginLeft: "auto",
+  padding: "2px 8px",
+  fontSize: "0.9rem",
+  lineHeight: 1,
+  borderRadius: 6,
+  border: `1px solid ${C.border}`,
+  background: "transparent",
+  color: C.text2,
+  cursor: "pointer"
+};
+var linkBtn = {
+  padding: 0,
+  fontSize: "0.7rem",
+  fontWeight: 600,
+  border: "none",
+  background: "transparent",
+  color: C.accent,
+  cursor: "pointer"
+};
+function pill(seeded) {
+  return {
+    fontSize: 11,
+    fontWeight: 600,
+    padding: "3px 10px",
+    borderRadius: 999,
+    border: `1px solid ${C.border}`,
+    background: C.surface2,
+    color: seeded ? C.accent : C.text2
+  };
+}
+function tag(muted) {
+  return {
+    fontSize: "0.64rem",
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    padding: "1px 6px",
+    borderRadius: 5,
+    border: `1px solid ${C.border}`,
+    color: muted ? C.text2 : C.accent,
+    background: C.surface
+  };
+}
+function verdictTag(tone) {
+  const color = tone === "ok" ? C.ok : tone === "warn" ? C.warnText : C.danger;
+  return {
+    fontSize: "0.62rem",
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    padding: "1px 6px",
+    borderRadius: 5,
+    whiteSpace: "nowrap",
+    color,
+    border: `1px solid ${color}`,
+    ...tone === "warn" ? { background: C.warnBg } : {}
+  };
+}
+var warnBox = {
+  margin: 0,
+  fontSize: "0.74rem",
+  lineHeight: 1.5,
+  borderRadius: 6,
+  padding: "6px 8px",
+  color: C.warnText,
+  background: C.warnBg,
+  border: `1px solid ${C.warnBorder}`
+};
+
+// src/evermind/EvermindTestBench.tsx
+var import_jsx_runtime10 = require("react/jsx-runtime");
+function EvermindTestBench({ t, disabled, onProbe }) {
+  const [prompt, setPrompt] = (0, import_react7.useState)("");
+  const [running, setRunning] = (0, import_react7.useState)(false);
+  const [result, setResult] = (0, import_react7.useState)(null);
   const [error, setError] = (0, import_react7.useState)(null);
-  const [loaded, setLoaded] = (0, import_react7.useState)(false);
-  const [loadFailed, setLoadFailed] = (0, import_react7.useState)(false);
-  const reload = (0, import_react7.useCallback)(async () => {
+  const run = (0, import_react7.useCallback)(async (withPrompt) => {
+    setRunning(true);
+    setError(null);
+    try {
+      setResult(await onProbe(withPrompt ? prompt.trim() : void 0));
+    } catch (err) {
+      setResult(null);
+      setError(err instanceof Error ? err.message : t.errorGeneric);
+    } finally {
+      setRunning(false);
+    }
+  }, [onProbe, prompt, t.errorGeneric]);
+  const busy = disabled || running;
+  const canRunPrompt = prompt.trim().length >= 3;
+  const passed = result?.samples.filter((s) => s.coherent).length ?? 0;
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: fieldTitle, children: t.testTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: fieldHint, children: t.testHint }),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+      "textarea",
+      {
+        value: prompt,
+        onChange: (e) => setPrompt(e.target.value),
+        disabled: busy,
+        placeholder: t.testPlaceholder,
+        rows: 2,
+        style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" }
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", onClick: () => void run(true), disabled: busy || !canRunPrompt, style: primaryBtn(busy || !canRunPrompt), children: running ? t.testRunning : t.testRunCta }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", onClick: () => void run(false), disabled: busy, style: secondaryBtn(busy), children: t.testReadinessCta })
+    ] }),
+    error && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
+    result && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginTop: 2 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { ...fieldTitle, flex: "1 1 auto", minWidth: 0 }, children: result.mode === "readiness" ? t.testResultReadiness(passed, result.samples.length) : t.testResultPrompt }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: verdictTag(result.ready ? "ok" : "bad"), children: result.ready ? t.testServable : t.testRefused })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", lineHeight: 1.5, color: result.ready ? C.text2 : C.danger }, children: result.ready ? t.testVerdictReady : t.testVerdictNotReady }),
+      result.samples.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4 }, children: [
+        result.samples.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: verdictTag(s.coherent ? "ok" : "bad"), children: s.coherent ? t.testServable : t.testRefused }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { fontSize: "0.72rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: s.prompt })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: outputBox, children: s.text.trim() || t.testEmptyOutput }),
+        !s.coherent && s.detail && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: { ...italic, color: C.danger, fontStyle: "normal", fontSize: "0.72rem" }, children: t.testRefusedBecause(s.detail) })
+      ] }, `${s.prompt}-${i}`))
+    ] })
+  ] });
+}
+
+// src/evermind/EvermindMaintenance.tsx
+var import_react8 = require("react");
+var import_jsx_runtime11 = require("react/jsx-runtime");
+function EvermindMaintenance({
+  t,
+  disabled,
+  seedModels,
+  onReseed,
+  onReindex,
+  onCleanup
+}) {
+  const [slug, setSlug] = (0, import_react8.useState)("");
+  const [pending, setPending] = (0, import_react8.useState)(null);
+  const doReseed = (0, import_react8.useCallback)(async () => {
+    setPending(null);
+    await onReseed?.(slug || void 0);
+  }, [onReseed, slug]);
+  const doCleanup = (0, import_react8.useCallback)(async () => {
+    setPending(null);
+    await onCleanup?.();
+  }, [onCleanup]);
+  if (!onReseed && !onReindex && !onCleanup) return null;
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { style: fieldTitle, children: t.maintenanceTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { style: fieldHint, children: t.maintenanceHint }),
+    onReindex && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+      Row,
+      {
+        title: t.reindexLabel,
+        hint: t.reindexHint,
+        action: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", onClick: () => void onReindex(), disabled, style: secondaryBtn(disabled), children: t.reindexCta })
+      }
+    ),
+    onCleanup && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+      Row,
+      {
+        title: t.cleanupLabel,
+        hint: t.cleanupHint,
+        action: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", onClick: () => setPending("cleanup"), disabled: disabled || pending === "cleanup", style: secondaryBtn(disabled || pending === "cleanup"), children: t.cleanupCta }),
+        confirm: pending === "cleanup" ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+          Confirm,
+          {
+            message: t.cleanupConfirm,
+            confirmLabel: t.cleanupCta,
+            cancelLabel: t.validateClear,
+            disabled,
+            onConfirm: () => void doCleanup(),
+            onCancel: () => setPending(null)
+          }
+        ) : null
+      }
+    ),
+    onReseed && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+      Row,
+      {
+        title: t.reseedLabel,
+        hint: t.reseedHint,
+        action: /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+            "select",
+            {
+              value: slug,
+              onChange: (e) => setSlug(e.target.value),
+              disabled,
+              "aria-label": t.reseedLabel,
+              style: { ...select, maxWidth: 200 },
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { value: "", style: optionStyle, children: t.reseedStarterOption }),
+                seedModels.map((m) => /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug))
+              ]
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", onClick: () => setPending("reseed"), disabled: disabled || pending === "reseed", style: dangerBtn(disabled || pending === "reseed"), children: t.reseedCta })
+        ] }),
+        confirm: pending === "reseed" ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+          Confirm,
+          {
+            message: t.reseedConfirm,
+            confirmLabel: t.reseedCta,
+            cancelLabel: t.validateClear,
+            danger: true,
+            disabled,
+            onConfirm: () => void doReseed(),
+            onCancel: () => setPending(null)
+          }
+        ) : null
+      }
+    )
+  ] });
+}
+function Row({ title, hint, action, confirm }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { style: { fontSize: "0.8rem", fontWeight: 600, color: C.text }, children: title }),
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { style: fieldHint, children: hint })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { style: { flex: "0 1 auto" }, children: action })
+    ] }),
+    confirm
+  ] });
+}
+function Confirm({
+  message,
+  confirmLabel,
+  cancelLabel,
+  danger,
+  disabled,
+  onConfirm,
+  onCancel
+}) {
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { ...warnBox, display: "flex", flexDirection: "column", gap: 8 }, role: "alertdialog", "aria-label": message, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { children: message }),
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", onClick: onConfirm, disabled, style: danger ? dangerBtn(disabled) : secondaryBtn(disabled), children: confirmLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", onClick: onCancel, disabled, style: secondaryBtn(disabled), children: cancelLabel })
+    ] })
+  ] });
+}
+
+// src/evermind/EvermindAnalyzer.tsx
+var import_react9 = require("react");
+var import_jsx_runtime12 = require("react/jsx-runtime");
+var TONE = {
+  ok: "ok",
+  incoherent: "bad",
+  incorrect: "bad",
+  outdated: "warn",
+  unusable: "bad",
+  redundant: "warn"
+};
+function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired }) {
+  const [analysis, setAnalysis] = (0, import_react9.useState)(null);
+  const [selected, setSelected] = (0, import_react9.useState)(/* @__PURE__ */ new Set());
+  const [running, setRunning] = (0, import_react9.useState)(false);
+  const [applying, setApplying] = (0, import_react9.useState)(false);
+  const [repair, setRepair] = (0, import_react9.useState)(null);
+  const [error, setError] = (0, import_react9.useState)(null);
+  const run = (0, import_react9.useCallback)(async () => {
+    setRunning(true);
+    setError(null);
+    setRepair(null);
+    try {
+      const result = await onAnalyze();
+      setAnalysis(result);
+      setSelected(new Set(result.findings.map((f) => f.id)));
+    } catch (err) {
+      setAnalysis(null);
+      setError(err instanceof Error ? err.message : t.errorGeneric);
+    } finally {
+      setRunning(false);
+    }
+  }, [onAnalyze, t.errorGeneric]);
+  const apply = (0, import_react9.useCallback)(async () => {
+    if (!onApply || !analysis) return;
+    const picked = analysis.findings.filter((f) => selected.has(f.id));
+    if (picked.length === 0) return;
+    setApplying(true);
+    setError(null);
+    try {
+      setRepair(await onApply(picked));
+      setAnalysis(null);
+      setSelected(/* @__PURE__ */ new Set());
+      onRepaired?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.errorGeneric);
+    } finally {
+      setApplying(false);
+    }
+  }, [analysis, onApply, onRepaired, selected, t.errorGeneric]);
+  const toggle = (0, import_react9.useCallback)((id) => {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const findings = analysis?.findings ?? [];
+  const allSelected = (0, import_react9.useMemo)(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
+  const busy = disabled || running || applying;
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { style: fieldTitle, children: t.analyzeTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { style: fieldHint, children: t.analyzeHint }),
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", onClick: () => void run(), disabled: busy, style: secondaryBtn(busy), children: running ? t.analyzing : t.analyzeCta }),
+      findings.length > 0 && onApply && /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(import_jsx_runtime12.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { type: "button", onClick: () => void apply(), disabled: busy || selected.size === 0, style: primaryBtn(busy || selected.size === 0), children: applying ? t.analyzeApplying : t.analyzeApplyCta(selected.size) }),
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+          "button",
+          {
+            type: "button",
+            onClick: () => setSelected(allSelected ? /* @__PURE__ */ new Set() : new Set(findings.map((f) => f.id))),
+            disabled: busy,
+            style: linkBtn,
+            children: allSelected ? t.analyzeSelectNone : t.analyzeSelectAll
+          }
+        )
+      ] })
+    ] }),
+    error && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
+    repair && /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.accent }, role: "status", children: [
+      t.analyzeApplied(repair.corrected, repair.forgotten, repair.version),
+      repair.skipped.length > 0 ? ` ${t.analyzeSkipped(repair.skipped.length)}` : ""
+    ] }),
+    analysis?.warning && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { style: warnBox, role: "note", children: analysis.warning }),
+    analysis && findings.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { style: italic, children: t.analyzeClean(analysis.analyzed) }),
+    analysis && findings.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(import_jsx_runtime12.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", color: C.text2 }, children: analysis.model ? t.analyzeSummary(findings.length, analysis.analyzed, analysis.model) : t.analyzeSummaryLocal(findings.length, analysis.analyzed) }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: findings.map((f) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+        FindingRow,
+        {
+          t,
+          finding: f,
+          selectable: !!onApply,
+          selected: selected.has(f.id),
+          disabled: busy,
+          onToggle: () => toggle(f.id)
+        },
+        f.id
+      )) })
+    ] })
+  ] });
+}
+function FindingRow({
+  t,
+  finding,
+  selected,
+  selectable,
+  disabled,
+  onToggle
+}) {
+  const tone = TONE[finding.verdict] ?? "warn";
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("li", { style: {
+    background: C.surface2,
+    border: `1px solid ${selected ? C.accent : C.border}`,
+    borderRadius: 8,
+    padding: "8px 10px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 5
+  }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+      selectable && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+        "input",
+        {
+          type: "checkbox",
+          checked: selected,
+          onChange: onToggle,
+          disabled,
+          "aria-label": finding.issue,
+          style: { margin: 0, cursor: disabled ? "not-allowed" : "pointer" }
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { style: verdictTag(tone), children: t.analyzeVerdict(finding.verdict) }),
+      finding.prompt && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: finding.prompt })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { style: { fontSize: "0.74rem", lineHeight: 1.45, color: C.text }, children: finding.issue }),
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { style: { ...outputBox, maxHeight: 96, fontSize: "0.7rem", color: C.text2 }, children: finding.excerpt }),
+    finding.correction && /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 3 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.analyzeCorrectionLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { style: { ...outputBox, maxHeight: 140, fontSize: "0.7rem" }, children: finding.correction })
+    ] })
+  ] });
+}
+
+// src/evermind/EvermindConsole.tsx
+var import_jsx_runtime13 = require("react/jsx-runtime");
+function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate }) {
+  const t = (0, import_react10.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
+  const [data, setData] = (0, import_react10.useState)(null);
+  const [targets, setTargets] = (0, import_react10.useState)(null);
+  const [seedModels, setSeedModels] = (0, import_react10.useState)([]);
+  const [teacherOpts, setTeacherOpts] = (0, import_react10.useState)(null);
+  const [selectedSlug, setSelectedSlug] = (0, import_react10.useState)("");
+  const [teachPrompt, setTeachPrompt] = (0, import_react10.useState)("");
+  const [teachText, setTeachText] = (0, import_react10.useState)("");
+  const [busy, setBusy] = (0, import_react10.useState)(false);
+  const [validating, setValidating] = (0, import_react10.useState)(false);
+  const [validateResult, setValidateResult] = (0, import_react10.useState)(null);
+  const [notice, setNotice] = (0, import_react10.useState)(null);
+  const [error, setError] = (0, import_react10.useState)(null);
+  const [loaded, setLoaded] = (0, import_react10.useState)(false);
+  const [loadFailed, setLoadFailed] = (0, import_react10.useState)(false);
+  const reload = (0, import_react10.useCallback)(async () => {
     const targetsP = adapter.loadTargets?.().catch(() => null);
     try {
       const d = await adapter.loadData();
@@ -2050,11 +2582,11 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (tg) setTargets(tg);
     }
   }, [adapter]);
-  (0, import_react7.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     setLoaded(false);
     void reload();
   }, [reload]);
-  (0, import_react7.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     if (!canManage) return;
     let cancelled = false;
     void adapter.loadSeedModels().then((m) => {
@@ -2072,20 +2604,20 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       cancelled = true;
     };
   }, [adapter, canManage]);
-  (0, import_react7.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     if (!refreshMs) return;
     const id = setInterval(() => {
       if (!busy) void reload();
     }, refreshMs);
     return () => clearInterval(id);
   }, [refreshMs, busy, reload]);
-  const lastRefreshSignal = (0, import_react7.useRef)(refreshSignal);
-  (0, import_react7.useEffect)(() => {
+  const lastRefreshSignal = (0, import_react10.useRef)(refreshSignal);
+  (0, import_react10.useEffect)(() => {
     if (refreshSignal == null || refreshSignal === lastRefreshSignal.current) return;
     lastRefreshSignal.current = refreshSignal;
     void reload();
   }, [refreshSignal, reload]);
-  const runValidate = (0, import_react7.useCallback)(async (prompt) => {
+  const runValidate = (0, import_react10.useCallback)(async (prompt) => {
     const task = prompt.trim();
     if (task.length < 3) return;
     setValidating(true);
@@ -2101,11 +2633,11 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setValidating(false);
     }
   }, [adapter, onValidate, t.errorGeneric]);
-  const clearValidate = (0, import_react7.useCallback)(() => {
+  const clearValidate = (0, import_react10.useCallback)(() => {
     setValidateResult(null);
     onValidate?.(null);
   }, [onValidate]);
-  const run = (0, import_react7.useCallback)(async (op, successNotice) => {
+  const run = (0, import_react10.useCallback)(async (op, successNotice) => {
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -2119,40 +2651,40 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setBusy(false);
     }
   }, [reload, t.errorGeneric]);
-  if (!loaded) return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(Section, { "aria-busy": true, children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: { margin: 0, color: C.text2, fontSize: "0.82rem" }, children: t.loading }) });
+  if (!loaded) return /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Section, { "aria-busy": true, children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { style: { margin: 0, color: C.text2, fontSize: "0.82rem" }, children: t.loading }) });
   const seeded = !!data?.seeded;
   const frozen = data?.mode === "offline-frozen";
   const inherited = !!data?.inherited;
   const quarantined = !!data?.quarantinedAt;
   const quarantineReason = data?.quarantineReason?.trim() || "";
   const scopeName = projectName?.trim();
-  const Header = /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("header", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { "aria-hidden": true, style: { fontSize: "1.05rem" }, children: "\u{1F9E0}" }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("h3", { style: { margin: 0, fontSize: "0.95rem", fontWeight: 700, color: C.text }, children: t.title }),
-    scopeName && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { style: { fontSize: "0.8rem", color: C.text2 }, title: scopeName, children: [
+  const Header = /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("header", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { "aria-hidden": true, style: { fontSize: "1.05rem" }, children: "\u{1F9E0}" }),
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("h3", { style: { margin: 0, fontSize: "0.95rem", fontWeight: 700, color: C.text }, children: t.title }),
+    scopeName && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { style: { fontSize: "0.8rem", color: C.text2 }, title: scopeName, children: [
       "\xB7 ",
       scopeName
     ] }),
-    !loadFailed && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: pill(seeded), children: seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded }),
-    !loadFailed && seeded && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(RegressionChip, { t, evalPoint: data?.eval ?? null }),
-    !loadFailed && quarantined && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { style: quarantinePill, title: t.quarantinedHint(quarantineReason), children: [
+    !loadFailed && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: pill(seeded), children: seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded }),
+    !loadFailed && seeded && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(RegressionChip, { t, evalPoint: data?.eval ?? null }),
+    !loadFailed && quarantined && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { style: quarantinePill, title: t.quarantinedHint(quarantineReason), children: [
       "\u26A0 ",
       t.quarantinedBadge
     ] }),
-    showHeaderRefresh && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", onClick: () => void reload(), disabled: busy, style: ghostBtn, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
+    showHeaderRefresh && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", onClick: () => void reload(), disabled: busy, style: ghostBtn, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
   ] });
   if (loadFailed) {
-    return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(Section, { "aria-label": t.title, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(Section, { "aria-label": t.title, children: [
       Header,
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.danger }, role: "alert", children: t.errorGeneric }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", onClick: () => void reload(), disabled: busy, style: primaryBtn(busy), children: t.refresh })
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.danger }, role: "alert", children: t.errorGeneric }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", onClick: () => void reload(), disabled: busy, style: primaryBtn(busy), children: t.refresh })
     ] });
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(Section, { "aria-label": t.title, children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(Section, { "aria-label": t.title, children: [
     Header,
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.text2 }, children: t.description }),
-    !canManage && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, fontStyle: "italic" }, children: t.managerOnlyHint }),
-    inherited && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.text2 }, children: t.description }),
+    !canManage && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, fontStyle: "italic" }, children: t.managerOnlyHint }),
+    inherited && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
       "p",
       {
         style: { margin: 0, fontSize: "0.72rem", lineHeight: 1.5, color: C.text2, fontStyle: "italic" },
@@ -2160,24 +2692,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         children: t.inheritedHint
       }
     ),
-    quarantined && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
-      "p",
-      {
-        style: {
-          margin: 0,
-          fontSize: "0.74rem",
-          lineHeight: 1.5,
-          borderRadius: 6,
-          padding: "6px 8px",
-          color: "var(--bf-warn-text, #92400e)",
-          background: "var(--bf-warn-bg, #fef3c7)",
-          border: "1px solid var(--bf-warn-border, #f59e0b)"
-        },
-        role: "alert",
-        children: t.quarantinedHint(quarantineReason)
-      }
-    ),
-    targets && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(TargetsList, { t, targets }),
+    quarantined && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { style: warnBox, role: "alert", children: t.quarantinedHint(quarantineReason) }),
+    targets && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(TargetsList, { t, targets }),
     inherited ? (
       // INHERITED — read-only. This build has no `project_evermind` row of its own;
       // it is displaying its container project's. Every write endpoint keeps exact-id
@@ -2186,8 +2702,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       // rendering the container's unchanged stats. Rendering the stats WITHOUT the
       // controls is the honest surface — the model is genuinely shared and genuinely
       // shown; it is just not managed from here.
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(StatRow, { t, data })
-    ) : !seeded ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(StatRow, { t, data })
+    ) : !seeded ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
       SeedControls,
       {
         t,
@@ -2198,9 +2714,9 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         onSelect: setSelectedSlug,
         onSeed: () => selectedSlug && run(() => adapter.seedFromModel(selectedSlug))
       }
-    ) : /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(StatRow, { t, data }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+    ) : /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(StatRow, { t, data }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
         ToggleRow,
         {
           label: t.inferenceLabel,
@@ -2212,7 +2728,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           onToggle: () => run(() => adapter.setInference(!data?.inferenceEnabled))
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
         ToggleRow,
         {
           label: t.learningLabel,
@@ -2224,7 +2740,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           onToggle: () => run(() => adapter.setMode(frozen ? "connected" : "offline-frozen"))
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
         TeacherPicker,
         {
           t,
@@ -2235,7 +2751,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           onChange: (m) => run(() => adapter.setTeacher(m || null))
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
         TeachBox,
         {
           t,
@@ -2263,9 +2779,9 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           onValidate: () => runValidate(data?.teacherModel ? teachPrompt : teachPrompt.trim() || teachText)
         }
       ),
-      validateResult && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(ValidateResults, { t, result: validateResult, onClear: clearValidate }),
-      canManage && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+      validateResult && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(ValidateResults, { t, result: validateResult, onClear: clearValidate }),
+      canManage && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
           "button",
           {
             type: "button",
@@ -2278,13 +2794,13 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
             children: busy ? t.flushing : t.flushCta
           }
         ),
-        (data?.pending ?? 0) > 0 && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { style: { fontSize: "0.74rem", color: C.text2 }, children: [
+        (data?.pending ?? 0) > 0 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { style: { fontSize: "0.74rem", color: C.text2 }, children: [
           t.pendingLabel,
           ": ",
           data?.pending
         ] })
       ] }),
-      canManage && adapter.importMemory && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+      canManage && adapter.importMemory && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
         ImportBox,
         {
           t,
@@ -2299,10 +2815,54 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           })
         }
       ),
-      showRecent && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(RecentList, { t, entries: data?.recent ?? [] })
+      adapter.probe && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+        EvermindTestBench,
+        {
+          t,
+          disabled: !canManage || busy,
+          onProbe: (p) => adapter.probe(p)
+        }
+      ),
+      canManage && adapter.analyze && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+        EvermindAnalyzer,
+        {
+          t,
+          disabled: busy,
+          onAnalyze: () => adapter.analyze(),
+          ...adapter.applyFindings ? { onApply: (f) => adapter.applyFindings(f) } : {},
+          onRepaired: () => void reload()
+        }
+      ),
+      canManage && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+        EvermindMaintenance,
+        {
+          t,
+          disabled: busy,
+          seedModels,
+          ...adapter.reseed ? {
+            onReseed: (slug) => run(async () => {
+              const r = await adapter.reseed(slug);
+              setNotice(t.reseedDone(r.version));
+            })
+          } : {},
+          ...adapter.reindex ? {
+            onReindex: () => run(async () => {
+              const r = await adapter.reindex();
+              setNotice(t.reindexDone(r.reindexed));
+            })
+          } : {},
+          ...adapter.cleanup ? {
+            onCleanup: () => run(async () => {
+              const r = await adapter.cleanup();
+              setNotice(t.cleanupDone(r.discarded, r.cachedAnswers));
+            })
+          } : {}
+        }
+      ),
+      showRecent && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(RecentList, { t, entries: data?.recent ?? [] })
     ] }),
-    notice && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", color: C.accent }, role: "status", children: notice }),
-    error && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error })
+    notice && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", color: C.accent }, role: "status", children: notice }),
+    error && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error })
   ] });
 }
 function RegressionChip({ t, evalPoint }) {
@@ -2314,7 +2874,7 @@ function RegressionChip({ t, evalPoint }) {
   const color = tone === "up" ? "#22c55e" : tone === "down" ? "#f87171" : C.text2;
   const label = tone === "flat" ? t.evalFlat : t.evalDelta(pct.toFixed(1));
   const title = t.evalTooltip(evalPoint.version, evalPoint.baseLoss.toFixed(3), evalPoint.newLoss.toFixed(3), evalPoint.evalSize);
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
     "span",
     {
       title,
@@ -2331,14 +2891,14 @@ function RegressionChip({ t, evalPoint }) {
         padding: "2px 8px"
       },
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { "aria-hidden": true, children: arrow }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { "aria-hidden": true, children: arrow }),
         label
       ]
     }
   );
 }
 function Section({ children, ...rest }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
     "section",
     {
       ...rest,
@@ -2364,13 +2924,13 @@ function SeedControls({
   onSelect,
   onSeed
 }) {
-  if (!canManage) return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: italic, children: t.notSetUp });
-  if (models.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: italic, children: t.noModels });
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("label", { style: fieldLabel, children: t.pickModelLabel }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("select", { value: selectedSlug, onChange: (e) => onSelect(e.target.value), disabled: busy, style: { ...select, flex: "1 1 200px" }, children: models.map((m) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug)) }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", onClick: onSeed, disabled: busy || !selectedSlug, style: primaryBtn(busy || !selectedSlug), children: busy ? t.working : t.enableCta })
+  if (!canManage) return /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { style: italic, children: t.notSetUp });
+  if (models.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { style: italic, children: t.noModels });
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("label", { style: fieldLabel, children: t.pickModelLabel }),
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("select", { value: selectedSlug, onChange: (e) => onSelect(e.target.value), disabled: busy, style: { ...select, flex: "1 1 200px" }, children: models.map((m) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", onClick: onSeed, disabled: busy || !selectedSlug, style: primaryBtn(busy || !selectedSlug), children: busy ? t.working : t.enableCta })
     ] })
   ] });
 }
@@ -2382,9 +2942,9 @@ function StatRow({ t, data }) {
     { label: t.pendingLabel, value: String(data.pending) },
     { label: t.lastLearnedLabel, value: last }
   ];
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 8 }, children: stats.map((s) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: { fontSize: "0.66rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: s.label }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: { fontSize: "0.9rem", fontWeight: 700, color: C.text, marginTop: 2, wordBreak: "break-word" }, children: s.value })
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 8 }, children: stats.map((s) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { fontSize: "0.66rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: s.label }),
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { fontSize: "0.9rem", fontWeight: 700, color: C.text, marginTop: 2, wordBreak: "break-word" }, children: s.value })
   ] }, s.label)) });
 }
 function ToggleRow({
@@ -2396,12 +2956,12 @@ function ToggleRow({
   onText,
   offText
 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: fieldTitle, children: label }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: fieldHint, children: hint })
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: fieldTitle, children: label }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: fieldHint, children: hint })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
       "button",
       {
         type: "button",
@@ -2435,16 +2995,16 @@ function TeacherPicker({
 }) {
   const models = opts?.models ?? [];
   const options = value && !models.includes(value) ? [value, ...models] : models;
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: fieldTitle, children: t.teacherLabel }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: fieldHint, children: t.teacherHint })
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: fieldTitle, children: t.teacherLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: fieldHint, children: t.teacherHint })
     ] }),
-    !canManage ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: { ...select, color: C.text2 }, children: value || t.teacherNone }) : opts && !opts.isPaid ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: italic, children: t.teacherPaidOnly }) : /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("select", { value, onChange: (e) => onChange(e.target.value), disabled: busy, "aria-label": t.teacherLabel, style: { ...select, maxWidth: 340 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("option", { value: "", style: optionStyle, children: t.teacherNone }),
-      options.map((m) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("option", { value: m, style: optionStyle, children: m }, m))
+    !canManage ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { ...select, color: C.text2 }, children: value || t.teacherNone }) : opts && !opts.isPaid ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { style: italic, children: t.teacherPaidOnly }) : /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("select", { value, onChange: (e) => onChange(e.target.value), disabled: busy, "aria-label": t.teacherLabel, style: { ...select, maxWidth: 340 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "", style: optionStyle, children: t.teacherNone }),
+      options.map((m) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: m, style: optionStyle, children: m }, m))
     ] }),
-    value && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: { fontSize: "0.72rem", lineHeight: 1.4, color: C.accent, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px" }, children: t.teacherActiveHint(value) })
+    value && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { fontSize: "0.72rem", lineHeight: 1.4, color: C.accent, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px" }, children: t.teacherActiveHint(value) })
   ] });
 }
 function TeachBox({
@@ -2462,66 +3022,66 @@ function TeachBox({
   const teaching = !!teacherModel;
   const canTeach = teaching ? prompt.trim().length >= 20 : text2.trim().length >= 20;
   const canValidate = (teaching ? prompt : prompt.trim() || text2).trim().length >= 3;
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: fieldTitle, children: teaching ? t.teachTeacherTitle : t.teachTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: fieldHint, children: teaching ? t.teachTeacherHint(teacherModel) : t.teachHint }),
-    teaching ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("textarea", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachTaskPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } }) : /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("input", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachPromptPlaceholder, style: { ...select, width: "100%" } }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("textarea", { value: text2, onChange: (e) => onText(e.target.value), disabled: busy, placeholder: t.teachTextPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } })
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: fieldTitle, children: teaching ? t.teachTeacherTitle : t.teachTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: fieldHint, children: teaching ? t.teachTeacherHint(teacherModel) : t.teachHint }),
+    teaching ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("textarea", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachTaskPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } }) : /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("input", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachPromptPlaceholder, style: { ...select, width: "100%" } }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("textarea", { value: text2, onChange: (e) => onText(e.target.value), disabled: busy, placeholder: t.teachTextPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", onClick: onTeach, disabled: busy || !canTeach, style: primaryBtn(busy || !canTeach), children: busy ? t.teaching : teaching ? t.teachTeacherCta : t.teachCta }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", onClick: onValidate, disabled: busy || validating || !canValidate, style: secondaryBtn(busy || validating || !canValidate), title: t.validateHint, children: validating ? t.validating : t.validateCta })
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", onClick: onTeach, disabled: busy || !canTeach, style: primaryBtn(busy || !canTeach), children: busy ? t.teaching : teaching ? t.teachTeacherCta : t.teachCta }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", onClick: onValidate, disabled: busy || validating || !canValidate, style: secondaryBtn(busy || validating || !canValidate), title: t.validateHint, children: validating ? t.validating : t.validateCta })
     ] })
   ] });
 }
 function ImportBox({ t, busy, frozen, onImport }) {
   const disabled = busy || frozen;
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: fieldTitle, children: t.importTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: fieldHint, children: t.importHint }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", onClick: onImport, disabled, style: { ...secondaryBtn(disabled), alignSelf: "flex-start" }, children: busy ? t.importing : t.importCta })
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: fieldTitle, children: t.importTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: fieldHint, children: t.importHint }),
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", onClick: onImport, disabled, style: { ...secondaryBtn(disabled), alignSelf: "flex-start" }, children: busy ? t.importing : t.importCta })
   ] });
 }
 function ValidateResults({ t, result, onClear }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { ...fieldTitle, flex: 1, minWidth: 0 }, children: t.validateResultTitle(result.prompt) }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { fontSize: "0.64rem", fontWeight: 600, color: C.text2, border: `1px solid ${C.border}`, borderRadius: 999, padding: "1px 8px" }, children: t.validateMethod(result.method) }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", onClick: onClear, style: { ...ghostBtn, marginLeft: 0 }, children: t.validateClear })
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { ...fieldTitle, flex: 1, minWidth: 0 }, children: t.validateResultTitle(result.prompt) }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { fontSize: "0.64rem", fontWeight: 600, color: C.text2, border: `1px solid ${C.border}`, borderRadius: 999, padding: "1px 8px" }, children: t.validateMethod(result.method) }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", onClick: onClear, style: { ...ghostBtn, marginLeft: 0 }, children: t.validateClear })
     ] }),
-    result.matches.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: italic, children: t.validateEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: result.matches.map((m) => {
+    result.matches.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { style: italic, children: t.validateEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: result.matches.map((m) => {
       const primary = m.id === result.primaryId;
       const pct = Math.round(m.score * 100);
-      return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("li", { style: { display: "flex", flexDirection: "column", gap: 4, border: `1px solid ${primary ? C.accent : C.border}`, borderRadius: 6, padding: "6px 8px", background: C.surface }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-          primary && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: tag(false), children: t.validatePrimaryBadge }),
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(m.version) }),
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { marginLeft: "auto", fontSize: "0.68rem", fontWeight: 700, color: C.accent }, children: t.validateScore(pct) })
+      return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("li", { style: { display: "flex", flexDirection: "column", gap: 4, border: `1px solid ${primary ? C.accent : C.border}`, borderRadius: 6, padding: "6px 8px", background: C.surface }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+          primary && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: tag(false), children: t.validatePrimaryBadge }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(m.version) }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { marginLeft: "auto", fontSize: "0.68rem", fontWeight: 700, color: C.accent }, children: t.validateScore(pct) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: { height: 4, borderRadius: 999, background: C.border, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: { width: `${pct}%`, height: "100%", background: C.accent } }) }),
-        m.prompt && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: m.prompt }),
-        m.text && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: { fontSize: "0.72rem", color: C.text2, lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 54, overflow: "hidden" }, children: m.text })
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { height: 4, borderRadius: 999, background: C.border, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { width: `${pct}%`, height: "100%", background: C.accent } }) }),
+        m.prompt && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: m.prompt }),
+        m.text && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { fontSize: "0.72rem", color: C.text2, lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 54, overflow: "hidden" }, children: m.text })
       ] }, m.id);
     }) })
   ] });
 }
 function TargetsList({ t, targets }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: fieldTitle, children: t.targetsTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: fieldHint, children: t.targetsHint }),
-    targets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: italic, children: t.targetsEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: targets.map((tg, i) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: fieldTitle, children: t.targetsTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: fieldHint, children: t.targetsHint }),
+    targets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { style: italic, children: t.targetsEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: targets.map((tg, i) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
       "li",
       {
         style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: tag(false), children: i === 0 ? t.targetSelfBadge : t.targetBuildBadge }),
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { fontSize: "0.78rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: tg.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.targetProjectId(tg.projectId) }),
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: targetChip, children: tg.seeded ? t.targetSeeded(tg.version) : t.targetUnseeded }),
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: targetChip, children: tg.mode === "connected" ? t.targetConnected : t.targetFrozen }),
-            tg.inferenceEnabled && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { ...targetChip, color: C.accent, borderColor: C.accent }, children: t.targetInferenceOn })
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: tag(false), children: i === 0 ? t.targetSelfBadge : t.targetBuildBadge }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { fontSize: "0.78rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: tg.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.targetProjectId(tg.projectId) }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: targetChip, children: tg.seeded ? t.targetSeeded(tg.version) : t.targetUnseeded }),
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: targetChip, children: tg.mode === "connected" ? t.targetConnected : t.targetFrozen }),
+            tg.inferenceEnabled && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { ...targetChip, color: C.accent, borderColor: C.accent }, children: t.targetInferenceOn })
           ] })
         ]
       },
@@ -2530,32 +3090,32 @@ function TargetsList({ t, targets }) {
   ] });
 }
 function RecentList({ t, entries }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: fieldTitle, children: t.inspectTitle }),
-    entries.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { style: italic, children: t.inspectEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: entries.map((e) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(RecentRow, { t, entry: e }, e.id)) })
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: fieldTitle, children: t.inspectTitle }),
+    entries.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { style: italic, children: t.inspectEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: entries.map((e) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(RecentRow, { t, entry: e }, e.id)) })
   ] });
 }
 function RecentRow({ t, entry }) {
-  const [open, setOpen] = (0, import_react7.useState)(false);
+  const [open, setOpen] = (0, import_react10.useState)(false);
   const status = evermindLearnedStatus(entry);
   const faulted = status.state === "fault";
   const body = entry.kind === "delta" ? t.deltaEntry : faulted ? "" : entry.text ?? "";
   const hasDetail = entry.kind !== "delta" && (!!entry.prompt || !!entry.text || faulted);
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("li", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 3 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: tag(entry.kind === "delta"), children: entry.kind === "delta" ? t.kindDelta : t.kindText }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(entry.version) }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.weightTag(entry.weight) }),
-      faulted && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: faultTag, children: t.notDistilled }),
-      status.state === "distilled" && status.teacherModel && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.distilledBy(status.teacherModel) }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { marginLeft: "auto", fontSize: "0.68rem", color: C.text2 }, children: t.formatWhen(entry.at) })
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("li", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 3 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: tag(entry.kind === "delta"), children: entry.kind === "delta" ? t.kindDelta : t.kindText }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(entry.version) }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.weightTag(entry.weight) }),
+      faulted && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: faultTag, children: t.notDistilled }),
+      status.state === "distilled" && status.teacherModel && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.distilledBy(status.teacherModel) }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { marginLeft: "auto", fontSize: "0.68rem", color: C.text2 }, children: t.formatWhen(entry.at) })
     ] }),
-    entry.prompt && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: { fontSize: "0.76rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: entry.prompt }),
-    open ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 2 }, children: faulted ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.5 }, children: t.teacherFault(status.teacherModel ?? "", status.reason) }) : entry.text && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.detailTextLabel }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: { fontSize: "0.74rem", color: C.text, lineHeight: 1.5, wordBreak: "break-word", whiteSpace: "pre-wrap" }, children: entry.text })
-    ] }) }) : body && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.45, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 72, overflow: "hidden" }, children: body }),
-    hasDetail && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("button", { type: "button", onClick: () => setOpen((v) => !v), style: { ...linkBtn, alignSelf: "flex-start" }, children: open ? t.hideDetail : t.viewDetail })
+    entry.prompt && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { fontSize: "0.76rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: entry.prompt }),
+    open ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 2 }, children: faulted ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.5 }, children: t.teacherFault(status.teacherModel ?? "", status.reason) }) : entry.text && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.detailTextLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { fontSize: "0.74rem", color: C.text, lineHeight: 1.5, wordBreak: "break-word", whiteSpace: "pre-wrap" }, children: entry.text })
+    ] }) }) : body && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.45, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 72, overflow: "hidden" }, children: body }),
+    hasDetail && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", onClick: () => setOpen((v) => !v), style: { ...linkBtn, alignSelf: "flex-start" }, children: open ? t.hideDetail : t.viewDetail })
   ] });
 }
 var faultTag = {
@@ -2565,18 +3125,18 @@ var faultTag = {
   letterSpacing: "0.04em",
   padding: "1px 6px",
   borderRadius: 5,
-  color: "var(--bf-warn-text, #92400e)",
-  background: "var(--bf-warn-bg, #fef3c7)",
-  border: "1px solid var(--bf-warn-border, #f59e0b)"
+  color: C.warnText,
+  background: C.warnBg,
+  border: `1px solid ${C.warnBorder}`
 };
 var quarantinePill = {
   fontSize: 11,
   fontWeight: 700,
   padding: "2px 8px",
   borderRadius: 999,
-  color: "var(--bf-warn-text, #92400e)",
-  background: "var(--bf-warn-bg, #fef3c7)",
-  border: "1px solid var(--bf-warn-border, #f59e0b)",
+  color: C.warnText,
+  background: C.warnBg,
+  border: `1px solid ${C.warnBorder}`,
   whiteSpace: "nowrap"
 };
 var targetChip = {
@@ -2589,97 +3149,12 @@ var targetChip = {
   color: C.text2,
   whiteSpace: "nowrap"
 };
-var italic = { margin: 0, fontSize: "0.78rem", color: C.text2, fontStyle: "italic" };
-var fieldLabel = { fontSize: "0.78rem", fontWeight: 600, color: C.text2 };
-var fieldTitle = { fontSize: "0.82rem", fontWeight: 600, color: C.text };
-var fieldHint = { fontSize: "0.72rem", color: C.text2, lineHeight: 1.4 };
-var select = {
-  padding: "7px 9px",
-  fontSize: "0.8rem",
-  borderRadius: 8,
-  border: `1px solid ${C.border}`,
-  background: C.surface2,
-  color: C.text,
-  boxSizing: "border-box"
-};
-var optionStyle = nativeOptionStyle;
-function primaryBtn(disabled) {
-  return {
-    padding: "8px 14px",
-    fontSize: "0.8rem",
-    fontWeight: 600,
-    borderRadius: 8,
-    border: "1px solid transparent",
-    background: disabled ? C.surface2 : C.accent,
-    color: disabled ? C.text2 : "#fff",
-    cursor: disabled ? "not-allowed" : "pointer",
-    whiteSpace: "nowrap"
-  };
-}
-var ghostBtn = {
-  marginLeft: "auto",
-  padding: "2px 8px",
-  fontSize: "0.9rem",
-  lineHeight: 1,
-  borderRadius: 6,
-  border: `1px solid ${C.border}`,
-  background: "transparent",
-  color: C.text2,
-  cursor: "pointer"
-};
-function secondaryBtn(disabled) {
-  return {
-    padding: "8px 14px",
-    fontSize: "0.8rem",
-    fontWeight: 600,
-    borderRadius: 8,
-    border: `1px solid ${C.border}`,
-    background: "transparent",
-    color: disabled ? C.text2 : C.text,
-    cursor: disabled ? "not-allowed" : "pointer",
-    whiteSpace: "nowrap",
-    opacity: disabled ? 0.7 : 1
-  };
-}
-var linkBtn = {
-  padding: 0,
-  fontSize: "0.7rem",
-  fontWeight: 600,
-  border: "none",
-  background: "transparent",
-  color: C.accent,
-  cursor: "pointer"
-};
-function pill(seeded) {
-  return {
-    fontSize: 11,
-    fontWeight: 600,
-    padding: "3px 10px",
-    borderRadius: 999,
-    border: `1px solid ${C.border}`,
-    background: C.surface2,
-    color: seeded ? C.accent : C.text2
-  };
-}
-function tag(isDelta) {
-  return {
-    fontSize: "0.64rem",
-    fontWeight: 700,
-    textTransform: "uppercase",
-    letterSpacing: "0.04em",
-    padding: "1px 6px",
-    borderRadius: 5,
-    border: `1px solid ${C.border}`,
-    color: isDelta ? C.text2 : C.accent,
-    background: C.surface
-  };
-}
 
 // src/project360/Project360View.tsx
-var import_react8 = require("react");
+var import_react11 = require("react");
 
 // src/project360/Sunburst.tsx
-var import_jsx_runtime11 = require("react/jsx-runtime");
+var import_jsx_runtime14 = require("react/jsx-runtime");
 var CX = 160;
 var CY = 160;
 var R_CENTER = 46;
@@ -2719,7 +3194,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
   const nPillars = pillars.length || 1;
   const pillarSpan = 360 / nPillars;
   const dimsByPillar = pillars.map((p) => dimensions.filter((d) => d.pillar === p.key));
-  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
     "svg",
     {
       className: "bf-360-wheel",
@@ -2734,8 +3209,8 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
           const dims = dimsByPillar[pi];
           const dimSpan = pillarSpan / (dims.length || 1);
           const pLabel = labelAt((R_INNER_0 + R_INNER_1) / 2, pMid);
-          return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("g", { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+          return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("g", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
               "path",
               {
                 d: sector(R_INNER_0, R_INNER_1, pStart + 0.6, pEnd - 0.6),
@@ -2744,7 +3219,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                 className: "bf-360-arc bf-360-arc--pillar"
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
               "text",
               {
                 x: pLabel.x,
@@ -2762,7 +3237,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
               const isSel = selected === dim.key;
               const lab = labelAt((R_OUTER_0 + R_OUTER_1) / 2, dMid);
               const lines = twoLines(dim.label);
-              return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+              return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
                 "g",
                 {
                   className: "bf-360-arc-group",
@@ -2771,7 +3246,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                   "aria-pressed": isSel,
                   "aria-label": `${dim.label}: ${dim.score} of 100`,
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+                    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
                       "path",
                       {
                         d: sector(R_OUTER_0, R_OUTER_1, dStart + 0.6, dEnd - 0.6),
@@ -2780,7 +3255,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                         className: `bf-360-arc bf-360-arc--dim${isSel ? " is-selected" : ""}`
                       }
                     ),
-                    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+                    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
                       "text",
                       {
                         x: lab.x,
@@ -2788,7 +3263,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                         className: "bf-360-arc-label",
                         textAnchor: "middle",
                         dominantBaseline: "central",
-                        children: lines.map((ln, li) => /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("tspan", { x: lab.x, dy: li === 0 ? lines.length > 1 ? "-0.5em" : "0" : "1em", children: ln }, li))
+                        children: lines.map((ln, li) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("tspan", { x: lab.x, dy: li === 0 ? lines.length > 1 ? "-0.5em" : "0" : "1em", children: ln }, li))
                       }
                     )
                   ]
@@ -2798,10 +3273,10 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
             })
           ] }, pillar.key);
         }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("circle", { cx: CX, cy: CY, r: R_CENTER, className: "bf-360-center", onClick: () => onSelect?.(null), role: "button", "aria-label": "Clear selection" }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("circle", { cx: CX, cy: CY, r: R_CENTER, fill: "none", stroke: overall.color, strokeWidth: 3, className: "bf-360-center-ring" }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("text", { x: CX, y: CY - 8, className: "bf-360-center-score", textAnchor: "middle", dominantBaseline: "central", fill: overall.color, children: overall.score }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("text", { x: CX, y: CY + 14, className: "bf-360-center-label", textAnchor: "middle", dominantBaseline: "central", children: "HEALTH" })
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("circle", { cx: CX, cy: CY, r: R_CENTER, className: "bf-360-center", onClick: () => onSelect?.(null), role: "button", "aria-label": "Clear selection" }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("circle", { cx: CX, cy: CY, r: R_CENTER, fill: "none", stroke: overall.color, strokeWidth: 3, className: "bf-360-center-ring" }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("text", { x: CX, y: CY - 8, className: "bf-360-center-score", textAnchor: "middle", dominantBaseline: "central", fill: overall.color, children: overall.score }),
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("text", { x: CX, y: CY + 14, className: "bf-360-center-label", textAnchor: "middle", dominantBaseline: "central", children: "HEALTH" })
       ]
     }
   );
@@ -2840,25 +3315,25 @@ var DEFAULT_PROJECT360_LABELS = {
 };
 
 // src/project360/Project360View.tsx
-var import_jsx_runtime12 = require("react/jsx-runtime");
+var import_jsx_runtime15 = require("react/jsx-runtime");
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react8.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
-  const [selected, setSelected] = (0, import_react8.useState)(null);
-  const sortedWorkforce = (0, import_react8.useMemo)(
+  const L = (0, import_react11.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
+  const [selected, setSelected] = (0, import_react11.useState)(null);
+  const sortedWorkforce = (0, import_react11.useMemo)(
     () => [...data?.workforce ?? []].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)),
     [data?.workforce]
   );
   if (error) {
-    return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "bf-360-state__title", children: L.loadError }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "bf-360-state__hint", children: error }),
-      onRefresh && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
+    return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "bf-360-state__title", children: L.loadError }),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "bf-360-state__hint", children: error }),
+      onRefresh && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
     ] });
   }
   if (!data || loading) {
-    return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "bf-360-spinner" }),
+    return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "bf-360-spinner" }),
       L.connecting
     ] });
   }
@@ -2878,24 +3353,24 @@ Gaps:
 ${lines}`
     });
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "bf-360", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("header", { className: "bf-360-head", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "bf-360-head__id", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "bf-360-head__title", children: project.name }),
-        project.key && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "bf-360-head__key", children: project.key })
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "bf-360", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("header", { className: "bf-360-head", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "bf-360-head__id", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "bf-360-head__title", children: project.name }),
+        project.key && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "bf-360-head__key", children: project.key })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "bf-360-head__spacer" }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard }),
-      gaps.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { className: "bf-btn bf-btn--primary", onClick: improveAll, children: L.improveAll }),
-      onRefresh && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "bf-360-head__spacer" }),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard }),
+      gaps.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { className: "bf-btn bf-btn--primary", onClick: improveAll, children: L.improveAll }),
+      onRefresh && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
     ] }),
-    !hasData ? /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "bf-360-state__title", children: L.noData }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "bf-360-state__hint", children: L.noDataHint }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard })
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "bf-360-grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "bf-360-col bf-360-col--wheel", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+    !hasData ? /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "bf-360-state__title", children: L.noData }),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "bf-360-state__hint", children: L.noDataHint }),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "bf-360-grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: "bf-360-col bf-360-col--wheel", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
           Sunburst,
           {
             pillars,
@@ -2906,83 +3381,83 @@ ${lines}`
             ariaLabel: `${project.name} health wheel`
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "bf-360-overall", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "bf-360-progress", "aria-label": `${L.progress} ${overall.progressPct}%`, children: /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "bf-360-progress__fill", style: { width: `${overall.progressPct}%`, background: overall.color } }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "bf-360-progress__label", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "bf-360-overall", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "bf-360-progress", "aria-label": `${L.progress} ${overall.progressPct}%`, children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "bf-360-progress__fill", style: { width: `${overall.progressPct}%`, background: overall.color } }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "bf-360-progress__label", children: [
             L.progress,
             ": ",
             overall.progressPct,
             "%"
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "bf-360-counts", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(Count, { n: counts.open, label: L.counts_open }),
-            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(Count, { n: counts.blocked, label: L.counts_blocked, tone: counts.blocked ? "warn" : void 0 }),
-            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(Count, { n: counts.overdue, label: L.counts_overdue, tone: counts.overdue ? "bad" : void 0 }),
-            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(Count, { n: counts.activeRuns, label: L.counts_running, tone: counts.activeRuns ? "good" : void 0 })
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "bf-360-counts", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Count, { n: counts.open, label: L.counts_open }),
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Count, { n: counts.blocked, label: L.counts_blocked, tone: counts.blocked ? "warn" : void 0 }),
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Count, { n: counts.overdue, label: L.counts_overdue, tone: counts.overdue ? "bad" : void 0 }),
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(Count, { n: counts.activeRuns, label: L.counts_running, tone: counts.activeRuns ? "good" : void 0 })
           ] })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "bf-360-col bf-360-col--detail", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "bf-360-legend-head", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { children: selectedDim ? selectedDim.label : L.allDimensions }),
-          selectedDim && /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("button", { className: "bf-360-clear", onClick: () => setSelected(null), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: "bf-360-col bf-360-col--detail", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "bf-360-legend-head", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { children: selectedDim ? selectedDim.label : L.allDimensions }),
+          selectedDim && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("button", { className: "bf-360-clear", onClick: () => setSelected(null), children: [
             L.allDimensions,
             " \u2715"
           ] })
         ] }),
-        selectedDim ? /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "bf-360-dim-detail", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(ScoreDot, { score: selectedDim.score, color: selectedDim.color }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "bf-360-dim-detail__summary", children: selectedDim.summary })
-        ] }) : /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("ul", { className: "bf-360-dim-list", children: dimensions.map((d) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
+        selectedDim ? /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "bf-360-dim-detail", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(ScoreDot, { score: selectedDim.score, color: selectedDim.color }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "bf-360-dim-detail__summary", children: selectedDim.summary })
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("ul", { className: "bf-360-dim-list", children: dimensions.map((d) => /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
           "button",
           {
             className: "bf-360-dim-row",
             onClick: () => setSelected(d.key),
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(ScoreDot, { score: d.score, color: d.color }),
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "bf-360-dim-row__label", children: d.label }),
-              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "bf-360-dim-row__summary", children: d.summary })
+              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(ScoreDot, { score: d.score, color: d.color }),
+              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "bf-360-dim-row__label", children: d.label }),
+              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "bf-360-dim-row__summary", children: d.summary })
             ]
           }
         ) }, d.key)) })
       ] })
     ] }),
-    hasData && /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(import_jsx_runtime12.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "bf-360-section", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("h3", { className: "bf-360-section__title", children: [
+    hasData && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(import_jsx_runtime15.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: "bf-360-section", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("h3", { className: "bf-360-section__title", children: [
           L.missingItems,
-          shownGaps.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "bf-360-section__count", children: shownGaps.length })
+          shownGaps.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "bf-360-section__count", children: shownGaps.length })
         ] }),
-        shownGaps.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "bf-360-empty", children: L.noGaps }) : /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("ul", { className: "bf-360-gaps", children: shownGaps.map((g) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(GapRow, { gap: g, onAction }, g.id)) })
+        shownGaps.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "bf-360-empty", children: L.noGaps }) : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("ul", { className: "bf-360-gaps", children: shownGaps.map((g) => /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(GapRow, { gap: g, onAction }, g.id)) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("section", { className: "bf-360-section", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("h3", { className: "bf-360-section__title", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("section", { className: "bf-360-section", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("h3", { className: "bf-360-section__title", children: [
           L.workforce,
-          workforce.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "bf-360-section__count", children: workforce.length })
+          workforce.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "bf-360-section__count", children: workforce.length })
         ] }),
-        workforce.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "bf-360-empty", children: L.noWorkforce }) : /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("ul", { className: "bf-360-people", children: sortedWorkforce.map((m) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(MemberRow, { member: m, labels: L, onAction }, m.ref)) })
+        workforce.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "bf-360-empty", children: L.noWorkforce }) : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("ul", { className: "bf-360-people", children: sortedWorkforce.map((m) => /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(MemberRow, { member: m, labels: L, onAction }, m.ref)) })
       ] })
     ] })
   ] });
 }
 function Count({ n, label, tone }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("span", { className: `bf-360-count${tone ? ` bf-360-count--${tone}` : ""}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("b", { children: n }),
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { className: `bf-360-count${tone ? ` bf-360-count--${tone}` : ""}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("b", { children: n }),
     " ",
     label
   ] });
 }
 function ScoreDot({ score, color }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "bf-360-scoredot", style: { borderColor: color, color }, children: score });
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "bf-360-scoredot", style: { borderColor: color, color }, children: score });
 }
 function GapRow({ gap, onAction }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("li", { className: `bf-360-gap bf-360-gap--${gap.severity}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: `bf-360-sev bf-360-sev--${gap.severity}`, "aria-hidden": true }),
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "bf-360-gap__body", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "bf-360-gap__title", children: gap.title }),
-      gap.detail && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "bf-360-gap__detail", children: gap.detail })
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("li", { className: `bf-360-gap bf-360-gap--${gap.severity}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: `bf-360-sev bf-360-sev--${gap.severity}`, "aria-hidden": true }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "bf-360-gap__body", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "bf-360-gap__title", children: gap.title }),
+      gap.detail && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "bf-360-gap__detail", children: gap.detail })
     ] }),
-    gap.action && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { className: "bf-btn bf-360-gap__cta", onClick: () => onAction?.(gap.action), children: gap.action.label })
+    gap.action && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { className: "bf-btn bf-360-gap__cta", onClick: () => onAction?.(gap.action), children: gap.action.label })
   ] });
 }
 function MemberRow({ member, labels, onAction }) {
@@ -2994,25 +3469,25 @@ function MemberRow({ member, labels, onAction }) {
     available: labels.status_available
   }[member.status];
   const task = member.taskId != null ? { id: member.taskId, key: member.taskKey, title: member.taskTitle ?? "", taskType: member.taskType } : void 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("li", { className: "bf-360-person", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: `bf-360-dot bf-360-dot--${member.status}`, title: statusLabel, "aria-label": statusLabel }),
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "bf-360-person__body", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "bf-360-person__top", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "bf-360-person__name", children: member.name }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: `bf-360-kind bf-360-kind--${member.kind}`, children: member.kind }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "bf-360-person__status", children: statusLabel })
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("li", { className: "bf-360-person", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: `bf-360-dot bf-360-dot--${member.status}`, title: statusLabel, "aria-label": statusLabel }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "bf-360-person__body", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "bf-360-person__top", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "bf-360-person__name", children: member.name }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: `bf-360-kind bf-360-kind--${member.kind}`, children: member.kind }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "bf-360-person__status", children: statusLabel })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "bf-360-person__reason", children: member.reason })
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "bf-360-person__reason", children: member.reason })
     ] }),
-    task && /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "bf-360-person__actions", children: [
-      (member.status === "idle" || member.status === "available") && member.kind !== "human" && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "run-task", label: labels.member_run, task }), children: labels.member_run }),
-      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "open-task", label: labels.member_open, task }), children: labels.member_open })
+    task && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "bf-360-person__actions", children: [
+      (member.status === "idle" || member.status === "available") && member.kind !== "human" && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "run-task", label: labels.member_run, task }), children: labels.member_run }),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "open-task", label: labels.member_open, task }), children: labels.member_open })
     ] })
   ] });
 }
 
 // src/projectList/ProjectListView.tsx
-var import_react9 = require("react");
+var import_react12 = require("react");
 
 // src/projectList/types.ts
 var DEFAULT_PROJECT_LIST_LABELS = {
@@ -3025,66 +3500,66 @@ var DEFAULT_PROJECT_LIST_LABELS = {
 };
 
 // src/projectList/ProjectListView.tsx
-var import_jsx_runtime13 = require("react/jsx-runtime");
+var import_jsx_runtime16 = require("react/jsx-runtime");
 function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react9.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
-  const header = /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("header", { className: "bf-list-head", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "bf-list-head__id", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-list-head__title", children: title }),
-      data && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { className: "bf-list-head__count", children: [
+  const L = (0, import_react12.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
+  const header = /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("header", { className: "bf-list-head", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "bf-list-head__id", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "bf-list-head__title", children: title }),
+      data && /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("span", { className: "bf-list-head__count", children: [
         data.total,
         " ",
         L.items
       ] })
     ] }),
-    subtitle && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-list-head__sub", children: subtitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-list-head__spacer" }),
-    onRefresh && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
+    subtitle && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { className: "bf-list-head__sub", children: subtitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { className: "bf-list-head__spacer" }),
+    onRefresh && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
   ] });
   if (error) {
-    return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "bf-list", children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "bf-list", children: [
       header,
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "bf-360-state", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-360-state__title", children: L.loadError }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-360-state__hint", children: error }),
-        onRefresh && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { className: "bf-360-state__title", children: L.loadError }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { className: "bf-360-state__hint", children: error }),
+        onRefresh && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
       ] })
     ] });
   }
   if (!data || loading) {
-    return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "bf-list", children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "bf-list", children: [
       header,
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "bf-360-state", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-360-spinner" }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { className: "bf-360-spinner" }),
         L.connecting
       ] })
     ] });
   }
   if (data.total === 0) {
-    return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "bf-list", children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "bf-list", children: [
       header,
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "bf-360-state", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-360-state__title", children: L.empty }),
-        L.emptyHint && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-360-state__hint", children: L.emptyHint })
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { className: "bf-360-state__title", children: L.empty }),
+        L.emptyHint && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { className: "bf-360-state__hint", children: L.emptyHint })
       ] })
     ] });
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "bf-list", children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "bf-list", children: [
     header,
-    data.groups.filter((g) => g.items.length > 0).map((g) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("section", { className: "bf-list-group", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("h3", { className: "bf-list-group__title", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: `bf-list-group__dot bf-list-tone--${g.tone ?? "default"}`, "aria-hidden": true }),
+    data.groups.filter((g) => g.items.length > 0).map((g) => /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("section", { className: "bf-list-group", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("h3", { className: "bf-list-group__title", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: `bf-list-group__dot bf-list-tone--${g.tone ?? "default"}`, "aria-hidden": true }),
         g.label,
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-360-section__count", children: g.items.length })
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "bf-360-section__count", children: g.items.length })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("ul", { className: "bf-list-rows", children: g.items.map((it) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Row, { item: it, onAction }, it.id)) })
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("ul", { className: "bf-list-rows", children: g.items.map((it) => /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Row2, { item: it, onAction }, it.id)) })
     ] }, g.key))
   ] });
 }
-function Row({ item, onAction }) {
+function Row2({ item, onAction }) {
   const act = item.action;
   const clickable = !!act && !!onAction;
-  return /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("li", { className: "bf-list-row", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("li", { className: "bf-list-row", children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
     "button",
     {
       className: "bf-list-row__main",
@@ -3092,12 +3567,12 @@ function Row({ item, onAction }) {
       onClick: clickable ? () => onAction(act) : void 0,
       title: clickable ? act.label : void 0,
       children: [
-        item.key && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-list-row__key", children: item.key }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { className: "bf-list-row__body", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-list-row__title", children: item.title }),
-          item.subtitle && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-list-row__sub", children: item.subtitle })
+        item.key && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "bf-list-row__key", children: item.key }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("span", { className: "bf-list-row__body", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "bf-list-row__title", children: item.title }),
+          item.subtitle && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "bf-list-row__sub", children: item.subtitle })
         ] }),
-        item.badges && item.badges.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-list-row__badges", children: item.badges.map((b, i) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: `bf-list-badge bf-list-tone--${b.tone ?? "default"}`, children: b.label }, i)) })
+        item.badges && item.badges.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "bf-list-row__badges", children: item.badges.map((b, i) => /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: `bf-list-badge bf-list-tone--${b.tone ?? "default"}`, children: b.label }, i)) })
       ]
     }
   ) });

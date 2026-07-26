@@ -164,6 +164,95 @@ export interface EvermindTeacherOptions {
 }
 
 /**
+ * One graded generation from the TEST BENCH — what the model actually produced for a
+ * prompt, plus the verdict the SERVE PATH would reach on it. This is the difference
+ * between "which memories would be recalled" (Validate) and "what will a user see"
+ * (this): only the latter can catch a head that emits gibberish, before a user does.
+ */
+export interface EvermindProbeSample {
+  prompt: string;
+  /** The raw text the model generated. Shown verbatim — no cleanup, no truncation. */
+  text: string;
+  /** Whether this output would be served to a user, or refused as unusable. */
+  coherent: boolean;
+  /** Which signal rejected it (`repetition`, `non-words`, …); null when it passed. */
+  failure: string | null;
+  /** Plain-language explanation of {@link failure} (empty when coherent). */
+  detail: string;
+}
+
+/** A test-bench run: one prompt, or the fixed readiness suite the enable-gate uses. */
+export interface EvermindProbeResult {
+  version: number;
+  /** `readiness` = the fixed probe suite that gates enabling inference; `prompt` = the
+   *  operator's own prompt. Both are graded identically. */
+  mode: 'readiness' | 'prompt';
+  /** Whether the run clears the bar (a readiness run needs a MAJORITY of samples). */
+  ready: boolean;
+  /** Fraction of samples that were servable (0..1). */
+  passRate: number;
+  samples: EvermindProbeSample[];
+}
+
+/** What a knowledge audit concluded about one learned memory. */
+export type EvermindKnowledgeVerdict = 'ok' | 'incoherent' | 'incorrect' | 'outdated' | 'unusable' | 'redundant';
+
+/** One audited memory: what is wrong with it and (when repairable) the replacement. */
+export interface EvermindKnowledgeFinding {
+  id: number;
+  verdict: EvermindKnowledgeVerdict;
+  /** One sentence naming the problem. */
+  issue: string;
+  /** The task this memory answered — the key its correction is re-taught under. */
+  prompt?: string;
+  /** Excerpt of the memory as it stands today. */
+  excerpt: string;
+  /** The corrected knowledge to learn instead. Absent when the memory is simply dropped. */
+  correction?: string;
+  /** Whether the local coherence screen or the frontier reviewer produced this verdict. */
+  source: 'coherence-gate' | 'frontier';
+}
+
+/** The result of a read-only knowledge audit. */
+export interface EvermindKnowledgeAnalysis {
+  version: number;
+  /** How many learned memories were reviewed. */
+  analyzed: number;
+  /** The frontier model that graded, or null when only the local screen ran. */
+  model: string | null;
+  findings: EvermindKnowledgeFinding[];
+  /** Present when the frontier review could not run — local findings still returned. */
+  warning?: string;
+}
+
+/** What applying a set of findings actually changed. */
+export interface EvermindKnowledgeRepair {
+  /** Memories re-taught with corrected knowledge. */
+  corrected: number;
+  /** Memories dropped from the recall ring. */
+  forgotten: number;
+  /** Contributions merged by the closing flush. */
+  merged: number;
+  version: number;
+  skipped: Array<{ id: number; reason: string }>;
+}
+
+/** What a clean-up pass removed. */
+export interface EvermindCleanupResult {
+  /** Queued-but-unmerged contributions dropped. */
+  discarded: number;
+  /** Cached question→answer pairs purged. */
+  cachedAnswers: number;
+}
+
+/** What a recall reindex recomputed. */
+export interface EvermindReindexResult {
+  reindexed: number;
+  skipped: number;
+  version: number;
+}
+
+/**
  * Host-provided data access + mutations — the only coupling to a backend. The web
  * app wires this to its `projectEvermindApi` client; the VS Code webview wires it to
  * its bearer-fetch REST client. Same console, same endpoints, different host.
@@ -199,6 +288,28 @@ export interface EvermindConsoleAdapter {
    * project" list; a host that omits it simply hides the section. Ordered `[self, …builds]`.
    */
   loadTargets?(): Promise<EvermindTarget[]>;
+  /**
+   * OPTIONAL — TEST BENCH: generate from the model and grade the output. Pass a prompt
+   * to see what the model produces for it; omit it to run the fixed readiness suite that
+   * gates enabling inference. When present the console renders the test bench.
+   */
+  probe?(prompt?: string): Promise<EvermindProbeResult>;
+  /**
+   * OPTIONAL — REPLACE the model's weights with a fresh base (a published model by
+   * `slug`, or a clean starter base when omitted), as a new version. The repair path for
+   * a model that has trained itself into gibberish. Inference is left OFF afterwards.
+   */
+  reseed?(slug?: string): Promise<{ version: number }>;
+  /** OPTIONAL — recompute every learned memory's recall embedding against the current
+   *  model, so retrieval stops drifting as the model learns. */
+  reindex?(): Promise<EvermindReindexResult>;
+  /** OPTIONAL — drop queued-but-unmerged contributions and purge cached answers.
+   *  Never touches what the model has already learned. */
+  cleanup?(): Promise<EvermindCleanupResult>;
+  /** OPTIONAL — audit what the model has learned (read-only) and report what is wrong. */
+  analyze?(): Promise<EvermindKnowledgeAnalysis>;
+  /** OPTIONAL — apply an audit's findings: forget bad knowledge, re-teach corrections. */
+  applyFindings?(findings: EvermindKnowledgeFinding[]): Promise<EvermindKnowledgeRepair>;
 }
 
 /** Every visible string. Parametric ones are functions the host localizes. */
@@ -318,6 +429,57 @@ export interface EvermindConsoleLabels {
   distilledBy: (model: string) => string;
   /** The expanded explanation of a distillation fault (model may be empty). */
   teacherFault: (model: string, reason: string) => string;
+  // Test bench (generate + grade — "what will this model actually produce?")
+  testTitle: string;
+  testHint: string;
+  testPlaceholder: string;
+  testRunCta: string;
+  testReadinessCta: string;
+  testRunning: string;
+  /** Header over the results of a readiness run vs a single prompt run. */
+  testResultReadiness: (passed: number, total: number) => string;
+  testResultPrompt: string;
+  testServable: string;
+  testRefused: string;
+  /** The plain-language reason an output was refused. */
+  testRefusedBecause: (detail: string) => string;
+  testEmptyOutput: string;
+  testVerdictReady: string;
+  testVerdictNotReady: string;
+  // Maintenance (re-seed / reindex / clean up)
+  maintenanceTitle: string;
+  maintenanceHint: string;
+  reseedLabel: string;
+  reseedHint: string;
+  reseedCta: string;
+  reseedConfirm: string;
+  reseedStarterOption: string;
+  reseedDone: (version: number) => string;
+  reindexLabel: string;
+  reindexHint: string;
+  reindexCta: string;
+  reindexDone: (reindexed: number) => string;
+  cleanupLabel: string;
+  cleanupHint: string;
+  cleanupCta: string;
+  cleanupConfirm: string;
+  cleanupDone: (discarded: number, cached: number) => string;
+  // Knowledge analyzer (audit learned knowledge, then repair it)
+  analyzeTitle: string;
+  analyzeHint: string;
+  analyzeCta: string;
+  analyzing: string;
+  analyzeClean: (analyzed: number) => string;
+  analyzeSummary: (issues: number, analyzed: number, model: string) => string;
+  analyzeSummaryLocal: (issues: number, analyzed: number) => string;
+  analyzeVerdict: (verdict: EvermindKnowledgeVerdict) => string;
+  analyzeCorrectionLabel: string;
+  analyzeSelectAll: string;
+  analyzeSelectNone: string;
+  analyzeApplyCta: (count: number) => string;
+  analyzeApplying: string;
+  analyzeApplied: (corrected: number, forgotten: number, version: number) => string;
+  analyzeSkipped: (count: number) => string;
   // Misc
   refresh: string;
   errorGeneric: string;
@@ -433,6 +595,65 @@ export const DEFAULT_EVERMIND_LABELS: EvermindConsoleLabels = {
   teacherFault: (model, reason) =>
     `The teacher${model ? ` (${model})` : ''} produced no answer (${reason}), so nothing was learned for this task. ` +
     'Check the pinned teacher model and your frontier credit, then teach it again.',
+  testTitle: 'Test bench',
+  testHint:
+    'Run a prompt through the model and see exactly what it writes, graded the same way a real reply is. This is how you check the model is worth switching on — before anyone chats with it.',
+  testPlaceholder: 'Ask the model something, e.g. “Summarise where this project stands.”',
+  testRunCta: 'Run prompt',
+  testReadinessCta: 'Readiness check',
+  testRunning: 'Generating…',
+  testResultReadiness: (passed, total) => `Readiness check — ${passed} of ${total} answers usable`,
+  testResultPrompt: 'What the model produced',
+  testServable: 'Usable',
+  testRefused: 'Refused',
+  testRefusedBecause: (detail) => `This would not be shown to a user: ${detail}.`,
+  testEmptyOutput: '(the model produced nothing)',
+  testVerdictReady: 'This model is coherent enough to serve replies.',
+  testVerdictNotReady: 'This model is not coherent enough to serve replies yet. Teach it more, set a teacher model, or re-seed it below.',
+  maintenanceTitle: 'Maintenance',
+  maintenanceHint: 'Repair and tidy the model when it has gone wrong. None of this deletes your project’s work.',
+  reseedLabel: 'Replace the model',
+  reseedHint:
+    'Start over from a known-good base, keeping the project. Use this when the model has trained itself into nonsense. Replies stay switched off until it passes a readiness check again.',
+  reseedCta: 'Replace…',
+  reseedConfirm: 'Replace this model’s brain with a fresh base? What it has learned so far will no longer shape its answers. This cannot be undone.',
+  reseedStarterOption: 'Fresh starter base (untrained)',
+  reseedDone: (version) => `Model replaced — now at v${version}. Run a readiness check before switching replies back on.`,
+  reindexLabel: 'Rebuild recall index',
+  reindexHint:
+    'Re-file every memory against the current model. Memories are filed when they are learned, so recall drifts as the model changes — rebuild if it starts recalling the wrong things.',
+  reindexCta: 'Rebuild index',
+  reindexDone: (reindexed) => `Re-filed ${reindexed} memor${reindexed === 1 ? 'y' : 'ies'}.`,
+  cleanupLabel: 'Clean up',
+  cleanupHint:
+    'Throw away anything queued but not yet learned, and clear cached answers so repeat questions are answered fresh. Learned knowledge is untouched.',
+  cleanupCta: 'Clean up',
+  cleanupConfirm: 'Discard everything queued but not yet learned, and clear cached answers?',
+  cleanupDone: (discarded, cached) => `Discarded ${discarded} queued item(s) and cleared ${cached} cached answer(s).`,
+  analyzeTitle: 'Check what it has learned',
+  analyzeHint:
+    'Read back everything the model has learned and have a frontier model check it for mistakes, stale facts and nonsense — then fix what is wrong by teaching the corrections.',
+  analyzeCta: 'Check knowledge',
+  analyzing: 'Checking…',
+  analyzeClean: (analyzed) => `Checked ${analyzed} memor${analyzed === 1 ? 'y' : 'ies'} — nothing looks wrong.`,
+  analyzeSummary: (issues, analyzed, model) => `${issues} of ${analyzed} memories need attention (checked by ${model}).`,
+  analyzeSummaryLocal: (issues, analyzed) => `${issues} of ${analyzed} memories need attention.`,
+  analyzeVerdict: (verdict) => ({
+    ok: 'Fine',
+    incoherent: 'Nonsense',
+    incorrect: 'Wrong',
+    outdated: 'Out of date',
+    unusable: 'Not an answer',
+    redundant: 'Duplicate',
+  }[verdict] ?? verdict),
+  analyzeCorrectionLabel: 'Will be replaced with',
+  analyzeSelectAll: 'Select all',
+  analyzeSelectNone: 'Clear selection',
+  analyzeApplyCta: (count) => `Fix ${count} selected`,
+  analyzeApplying: 'Fixing…',
+  analyzeApplied: (corrected, forgotten, version) =>
+    `Fixed: ${corrected} corrected, ${forgotten} forgotten. Model is now at v${version}.`,
+  analyzeSkipped: (count) => `${count} could not be applied.`,
   refresh: 'Refresh',
   errorGeneric: 'Something went wrong. Try again.',
 };

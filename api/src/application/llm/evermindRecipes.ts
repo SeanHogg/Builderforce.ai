@@ -21,6 +21,7 @@ import { assessEvermindCoherence, type ArtifactStore } from './evermindRuntime';
 import {
   provisionDefaultProjectEvermind,
   seedProjectEvermind,
+  reseedProjectEvermind,
   setProjectEvermindTeacher,
   setProjectEvermindInference,
 } from './projectEvermind';
@@ -59,10 +60,14 @@ export interface SeedFromPublishedResult {
 }
 
 /**
- * Seed a project's base Evermind (version 1) from an ALREADY-PUBLISHED Studio model
- * (by slug). Server-side R2 copy — reads the published model's two objects and seeds
- * the project base without the browser round-tripping the blob. Extracted here so
- * BOTH the `/seed-from-model` route and recipe application share one implementation.
+ * Seed a project's base Evermind from an ALREADY-PUBLISHED Studio model (by slug).
+ * Server-side R2 copy — reads the published model's two objects and seeds the project
+ * base without the browser round-tripping the blob. Extracted here so BOTH the
+ * `/seed-from-model` route and recipe application share one implementation.
+ *
+ * `replace: true` is the REPAIR path: it overwrites a head that is already seeded (as a
+ * new version) instead of no-op'ing, which is how a project whose model trained itself
+ * into gibberish is recovered from a known-good published model.
  */
 export async function seedProjectEvermindFromPublished(
   env: Env,
@@ -71,6 +76,7 @@ export async function seedProjectEvermindFromPublished(
   projectId: number,
   slug: string,
   name?: string,
+  opts: { replace?: boolean } = {},
 ): Promise<SeedFromPublishedResult> {
   if (!env.UPLOADS) return { ok: false, version: 0, error: 'R2 artifact storage not configured' };
   const clean = slug.trim();
@@ -98,13 +104,16 @@ export async function seedProjectEvermindFromPublished(
     return { ok: false, version: 0, error: 'published model tokenizer is malformed' };
   }
 
-  const head = await seedProjectEvermind(env, db, env.UPLOADS, {
+  const seedParams = {
     tenantId,
     projectId,
     name: name?.trim() || tm.name || undefined,
     modelBlob,
     tokenizer: { vocab: tokenizer.vocab as Record<string, number>, merges: tokenizer.merges as string[] },
-  });
+  };
+  const head = opts.replace
+    ? await reseedProjectEvermind(env, db, env.UPLOADS, seedParams)
+    : await seedProjectEvermind(env, db, env.UPLOADS, seedParams);
   return { ok: true, version: head.version };
 }
 

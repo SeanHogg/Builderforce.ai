@@ -1623,14 +1623,12 @@ export async function runCloudToolLoop(
   // in-process evermind vendor (uploads-threaded) serves it, and a toy-model failure
   // cascades to the coding backstop (graceful). [[evermind-learning-architecture]]
   //
-  // GUARDED by tool capability. This loop is tool-driven on EVERY turn (`cloudTools`
-  // below), and a backend with no function-calling handed `tools` answers in prose
-  // rather than failing — so hard-pinning one (`strict: true`, no cascade) made the
-  // agent narrate calls it could never emit while doing zero work. `modelSupportsTools`
-  // is the shared declaration; a tool-less pin is refused here and the normal
-  // coding-pool selection runs instead. The dispatcher already withholds such a pin,
-  // so this covers the remaining route: an agent explicitly configured with a
-  // tool-less `base_model`.
+  // This loop is tool-driven on EVERY turn (`cloudTools` below), which used to
+  // disqualify Evermind outright — a tool-less backend handed `tools` answers in
+  // prose rather than failing, so the agent narrated calls it could never emit. It
+  // tool-calls now (constrained decoding, ../llm/evermindToolCall), so the pin is
+  // honoured; `modelSupportsTools` remains the shared declaration for any FUTURE
+  // tool-less vendor and still guards an explicitly configured `base_model`.
   const requestedInferenceModel = typeof effectiveModel === 'string' && effectiveModel.startsWith('evermind/')
     ? effectiveModel
     : undefined;
@@ -1698,6 +1696,12 @@ export async function runCloudToolLoop(
   // The resolved pin rides CloudLoopState so the DO surface keeps every tick on it.
   // A live project-Evermind pin hard-pins the project model (strict) and skips the
   // coding-pool selection entirely; otherwise the normal learned-routing seed runs.
+  //
+  // STRICT is load-bearing and stays: it bypasses chain composition entirely, which
+  // is the only reason a project-Evermind pin survives for a BYO tenant (the composer
+  // filters every non-connected vendor out of the chain, and `evermind` is nobody's
+  // connected vendor). Now that the head can DECLINE a turn it isn't competent for,
+  // the graceful fallback rides the per-turn cascade below instead.
   const pick = projectInferenceModel
     ? { model: projectInferenceModel, strict: true as const }
     : pickCloudModel(effectiveModel, routing.effectivePlan, routing.premiumOverride, {
@@ -1887,7 +1891,16 @@ export async function runCloudToolLoop(
       // where the chain stays inside their own accounts) to another connected
       // provider — instead of hard-failing the run on ONE unavailable model.
       const retryStatus = result!.response.status;
-      const retryable = retryStatus === 429 || retryStatus === 413 || retryStatus === 503;
+      // A project-Evermind pin additionally cascades on 400. That is the status the
+      // evermind vendor uses to DECLINE a turn it is not competent for — it ranked
+      // its tool choice no better than the alternatives, or its prose failed the
+      // coherence bar. Because the pin is strict (no in-proxy cascade), the run would
+      // otherwise die on the tenant's own under-trained head; dropping the pin here
+      // reproduces the graceful outcome the old blanket tool-capability gate gave by
+      // never pinning it at all. Scoped to `evermind/` so a genuine malformed-request
+      // 400 on a frontier model still fails fast instead of burning a second attempt.
+      const evermindDeclined = retryStatus === 400 && activeModel.startsWith('evermind/');
+      const retryable = retryStatus === 429 || retryStatus === 413 || retryStatus === 503 || evermindDeclined;
       if (!retryable || attempt >= 1 || (!strictPin && !activeModel)) break;
       await recordCloudToolEvent(db, {
         tenantId, cloudAgentRef, executionId,
@@ -1897,7 +1910,9 @@ export async function runCloudToolLoop(
           ? 'pinned model context window too small — dropping pin, walking the cascade to a bigger-window model'
           : retryStatus === 503
             ? 'pinned model unavailable (cooldown / provider outage) — dropping pin, walking the cascade'
-            : 'pinned model rate-limited — dropping pin, walking the cascade',
+            : evermindDeclined
+              ? 'project Evermind declined this turn (low tool-choice confidence or incoherent output) — dropping pin, walking the cascade'
+              : 'pinned model rate-limited — dropping pin, walking the cascade',
       });
       // Unlock for this turn AND the rest of the run: don't re-pin after a cascade.
       strictPin = false;

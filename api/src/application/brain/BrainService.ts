@@ -20,7 +20,7 @@ import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from 
 import { classifyReplyAccount, buildReplyProvenance } from '../llm/replyProvenance';
 import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../activity/activityLog';
 import { getProjectEvermindHead, recordEvermindServeOutcome } from '../llm/projectEvermind';
-import { looksLikeCoherentText, EVERMIND_ANSWER_MIN_CHARS } from '../llm/projectMemory';
+import { isServableText } from '../llm/textCoherence';
 import { learnFromPersistedTurns } from './brainEvermindLearning';
 import { tenantProxyForPlan } from '../llm/tenantProxy';
 import { vendorForModel } from '../llm/vendors';
@@ -1111,7 +1111,9 @@ export class BrainService {
         // (same bar the memory-first resolver uses — DRY). An under-trained head emits
         // gibberish that clears the length check; keep the capable-model answer instead.
         const evRan = evModel.startsWith('evermind/'); // false if it cascaded to a real model
-        const evCoherent = evRan && evChoice.content.trim().length >= EVERMIND_ANSWER_MIN_CHARS && looksLikeCoherentText(evChoice.content);
+        // The transcript is passed as context so domain jargon the conversation already
+        // uses is never mistaken for the invented-word gibberish the gate hunts for.
+        const evCoherent = evRan && isServableText(evChoice.content, { context: transcript }).coherent;
         // Feed the outcome to the head's quarantine counter (only when Evermind ITSELF
         // ran — a cascade-away isn't the SSM's output). N incoherent serves in a row
         // auto-disable inference so a broken head stops answering in gibberish.

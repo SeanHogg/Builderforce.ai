@@ -16,6 +16,13 @@
  *                  to R2 → record the version bump in `project_evermind`.
  *   GET /head    — current { version, ref, mode } for replicas to compare against.
  *
+ * Maintenance doors (all single-writer, so none can race a merge):
+ *   POST /reindex          — recompute every memory's recall embedding against the
+ *                            CURRENT head (they are computed at merge time and drift
+ *                            out of the query's embedding space as the model learns).
+ *   POST /discard-pending  — drop queued-but-unmerged contributions (a bad batch).
+ *   POST /forget           — remove specific learned memories from the recall ring.
+ *
  * Guards (Phase 5): `offline-frozen` mode rejects learns; a debounce window
  * batches bursts into a single republish; the pending queue is capped; a diff
  * taken against a STALE base is dropped (the agent recomputes against the new
@@ -259,6 +266,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     if (request.method === 'POST' && url.pathname.endsWith('/flush')) return this.handleFlush();
     if (request.method === 'GET' && url.pathname.endsWith('/recent')) return this.handleRecent();
     if (request.method === 'POST' && url.pathname.endsWith('/recall')) return this.handleRecall(request);
+    if (request.method === 'POST' && url.pathname.endsWith('/reindex')) return this.handleReindex();
+    if (request.method === 'POST' && url.pathname.endsWith('/discard-pending')) return this.handleDiscardPending();
+    if (request.method === 'POST' && url.pathname.endsWith('/forget')) return this.handleForget(request);
     if (request.method === 'GET' && url.pathname.endsWith('/head')) return this.handleHead();
     return new Response('not found', { status: 404 });
   }
@@ -352,6 +362,77 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const model = { lm: pkg.loadLM(), tok };
     embedModelCache = { key: head.ref, model };
     return model;
+  }
+
+  /**
+   * REINDEX the recall embeddings.
+   *
+   * Each memory's embedding is computed once, at the merge that learned it, using the
+   * model AS IT WAS THEN. Recall embeds the QUERY with the CURRENT head — so after a few
+   * merges the stored vectors and the query vector live in progressively different
+   * spaces, and recall quality decays silently. Nothing in the product re-derived them,
+   * which is exactly the "no way to reindex" gap.
+   *
+   * This recomputes every text memory's embedding against the current head, in one pass,
+   * on the single writer (so it can't race a merge). Idempotent and safe to re-run: it
+   * writes the same ring back with fresh vectors.
+   */
+  private async handleReindex(): Promise<Response> {
+    const meta = await this.state.storage.get<CoordMeta>(META_KEY);
+    if (!meta) return this.json({ ok: false, error: 'this Evermind has no coordinator state yet' }, 409);
+    const recent = (await this.state.storage.get<RecentEntry[]>(RECENT_KEY)) ?? [];
+    if (recent.length === 0) return this.json({ ok: true, reindexed: 0, skipped: 0, version: 0 });
+
+    const model = await this.loadEmbeddingModel(meta);
+    if (!model) return this.json({ ok: false, error: 'model not available for reindexing (unseeded or artifact storage unbound)' }, 503);
+    const head = await getProjectEvermindHead(this.env, this.db, meta.tenantId, meta.projectId);
+
+    let reindexed = 0;
+    let skipped = 0;
+    const next = recent.map((e) => {
+      const source = `${e.prompt ?? ''} ${e.text ?? ''}`.trim();
+      if (e.kind !== 'text' || !source) { skipped++; return e; }
+      const vec = embedTokens(model.lm, model.tok.encode(source).slice(0, EMBED_MAX_TOKENS));
+      if (vec.length === 0) { skipped++; return e; }
+      reindexed++;
+      return { ...e, emb: packVec(vec) };
+    });
+    await this.state.storage.put(RECENT_KEY, next);
+    return this.json({ ok: true, reindexed, skipped, version: head.version });
+  }
+
+  /**
+   * Drop everything QUEUED but not yet merged. The operator escape hatch for a bad
+   * batch (a broken importer, a teach against the wrong project, a run that contributed
+   * noise): without it the only way past a poisoned queue was to merge it into the
+   * weights. Already-merged knowledge is untouched — use `/forget` for that.
+   */
+  private async handleDiscardPending(): Promise<Response> {
+    const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
+    if (pending.length > 0) await this.state.storage.put(PENDING_KEY, []);
+    return this.json({ ok: true, discarded: pending.length });
+  }
+
+  /**
+   * FORGET specific learned memories by id: remove them from the inspection/recall ring
+   * so they can never be recalled or used to ground a reply again.
+   *
+   * Honest about what this does and does not do — the ring is the RECALL surface, not
+   * the weights. Removing an entry stops it being retrieved and stops it grounding
+   * answers; the residual influence it had on the neocortex is superseded the normal
+   * way, by teaching the corrected knowledge (write-through: update == replace). That
+   * is exactly how the knowledge analyzer repairs a bad memory — forget + re-teach.
+   */
+  private async handleForget(request: Request): Promise<Response> {
+    const body = (await request.json().catch(() => null)) as { ids?: unknown } | null;
+    const ids = Array.isArray(body?.ids) ? body.ids.filter((n): n is number => typeof n === 'number') : [];
+    if (ids.length === 0) return this.json({ ok: false, error: 'ids[] is required' }, 400);
+    const recent = (await this.state.storage.get<RecentEntry[]>(RECENT_KEY)) ?? [];
+    const drop = new Set(ids);
+    const next = recent.filter((e) => !drop.has(e.id));
+    const forgotten = recent.length - next.length;
+    if (forgotten > 0) await this.state.storage.put(RECENT_KEY, next);
+    return this.json({ ok: true, forgotten, remaining: next.length });
   }
 
   /**
