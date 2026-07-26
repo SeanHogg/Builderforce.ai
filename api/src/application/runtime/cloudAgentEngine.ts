@@ -30,7 +30,7 @@ import { CODING_BACKSTOP_MODELS, RECOGNIZED_CODER_MODELS, codingModelsForPlan, e
 import { evaluatePremiumModelAccess } from '../../domain/tenant/planFeatures';
 import { TenantPlan } from '../../domain/shared/types';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
-import { resolveTenantLlmCredentials, byoVendorIdSet, providersFromCredentials, type TenantVendorKeys } from '../llm/tenantProviderKeyService';
+import { resolveTenantLlmCredentials, byoVendorIdsFromCredentials, type TenantVendorKeys } from '../llm/tenantProviderKeyService';
 import { cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool, callBuiltinTool } from '../llm/builtinMcpService';
 import { TenantRole } from '../../domain/shared/types';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
@@ -1174,7 +1174,7 @@ export async function handleContainerOp(
     const pick = pickCloudModel(model, ctx.effectivePlan, ctx.premiumOverride, {
       // Context-aware seed: a small-window model isn't picked for a big container turn.
       estimatedTokens: estimateRequestTokens(sendMessages, containerTools),
-      byoVendors: byoVendorIdSet(providersFromCredentials(containerCreds)),
+      byoVendors: byoVendorIdsFromCredentials(containerCreds),
       // Tenant BYO precedence — lead with the owner's chosen account (e.g. Meta first).
       byoVendorPriority: containerCreds.vendorPriority,
       // Parity with the durable loop: a PREMIUM pin needs a paid plan + validated card.
@@ -1683,7 +1683,7 @@ export async function runCloudToolLoop(
         // Context-aware seed: don't pick a small-window model for a big first turn.
         estimatedTokens: estimateRequestTokens(messages, cloudTools),
         // A free tenant may pin a model their connected provider (BYO) serves.
-        byoVendors: byoVendorIdSet(providersFromCredentials(loopCreds)),
+        byoVendors: byoVendorIdsFromCredentials(loopCreds),
         // Tenant BYO precedence — lead with the owner's chosen account (e.g. Meta first).
         byoVendorPriority: loopCreds.vendorPriority,
         // A PREMIUM pin is honoured only with a paid plan + a validated card; otherwise
@@ -1855,19 +1855,25 @@ export async function runCloudToolLoop(
         if (abortController.signal.aborted) { cancelled = true; break; }
         throw e;
       }
-      // Retry a pinned/locked model that the gateway rate-limited (429) OR that the
-      // request overflowed (413 — context window too small), and only once. 413 needs
-      // this because a strict pin gets NO in-proxy cascade: dropping the pin lets the
-      // proxy walk to a bigger-window model instead of hard-failing the run.
-      const retryable = result!.response.status === 429 || result!.response.status === 413;
+      // Retry a pinned/locked model that the gateway rate-limited (429), that the
+      // request overflowed (413 — context window too small), or that the gateway
+      // reported unavailable (503 — cooled / provider outage), and only once. All
+      // three need it because a pin gets NO in-proxy cascade: dropping the pin lets
+      // the proxy walk its chain — to a bigger-window model, or (for a BYO tenant,
+      // where the chain stays inside their own accounts) to another connected
+      // provider — instead of hard-failing the run on ONE unavailable model.
+      const retryStatus = result!.response.status;
+      const retryable = retryStatus === 429 || retryStatus === 413 || retryStatus === 503;
       if (!retryable || attempt >= 1 || (!strictPin && !activeModel)) break;
       await recordCloudToolEvent(db, {
         tenantId, cloudAgentRef, executionId,
         toolName: 'model.cascade', category: 'llm',
-        detail: { step, from: activeModel || null, reason: String(result!.response.status) },
-        result: result!.response.status === 413
+        detail: { step, from: activeModel || null, reason: String(retryStatus) },
+        result: retryStatus === 413
           ? 'pinned model context window too small — dropping pin, walking the cascade to a bigger-window model'
-          : 'pinned model rate-limited — dropping pin, walking the cascade',
+          : retryStatus === 503
+            ? 'pinned model unavailable (cooldown / provider outage) — dropping pin, walking the cascade'
+            : 'pinned model rate-limited — dropping pin, walking the cascade',
       });
       // Unlock for this turn AND the rest of the run: don't re-pin after a cascade.
       strictPin = false;

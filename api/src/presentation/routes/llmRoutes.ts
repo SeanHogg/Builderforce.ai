@@ -18,6 +18,7 @@ import {
   resolveStrictPin,
   estimateRequestTokens,
   isPremiumModelSelection,
+  byoAutoSeedModels,
   CODING_BACKSTOP_MODELS,
   FREE_MODEL_POOL,
   PRO_MODEL_POOL,
@@ -74,11 +75,15 @@ import {
   setTenantProviderPriority,
   deleteTenantProviderKey,
   isSupportedProvider,
-  byoVendorIdSet,
+  byoVendorIdFor,
+  byoVendorIdsFromCredentials,
+  byoVendorIdsFromSummaries,
+  resolvedAuthTypeFor,
   providersFromCredentials,
   formatByoUnresolvedHeader,
   providersConnectedInOtherWorkspaces,
   SUPPORTED_PROVIDERS,
+  type ProviderKeySummary,
   type TenantVendorKeys,
   type LlmProvider,
 } from '../../application/llm/tenantProviderKeyService';
@@ -260,10 +265,13 @@ function byoModelRef(entry: { id: string; vendor: string }): string {
   return `direct/${entry.vendor}/${entry.id}`;
 }
 
-/** A tenant's connected-provider list → the pinnable models served through that
- *  provider's canonical tenant-keyed route. */
-export function byoModelsFor(providers: readonly LlmProvider[]): Array<{ id: string; vendor: string; tier: string; contextWindow?: number }> {
-  const vendorIds = byoVendorIdSet(providers);
+/** A tenant's connected-provider rows → the pinnable models served through that
+ *  provider's canonical tenant-keyed route. Takes the SUMMARIES (not bare provider
+ *  ids) because the route depends on how the provider authenticates: a connected
+ *  ChatGPT/SuperGrok subscription serves `openai-codex/…` / `xai-oauth/…` models,
+ *  NOT the `direct/<vendor>/…` api-key ones the tenant has no key for. */
+export function byoModelsFor(summaries: readonly ProviderKeySummary[]): Array<{ id: string; vendor: string; tier: string; contextWindow?: number }> {
+  const vendorIds = byoVendorIdsFromSummaries(summaries);
   if (vendorIds.size === 0) return [];
   return getCatalog()
     .filter((e) => vendorIds.has(e.vendor))
@@ -1167,11 +1175,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         error: `${provider} connection test could not run: ${status.replaceAll('_', ' ')}.`,
       });
     }
-    const model = provider === 'openai' && creds.openaiCodexAuth
-      ? 'openai-codex/gpt-5.3-codex'
-      : provider === 'xai' && creds.xaiOAuthToken
-        ? 'xai-oauth/grok-4.3'
-        : byoModelsFor([provider])[0]?.id;
+    // Test the model this account actually LEADS with (the same BYO flagship routing
+    // seeds), on the route its auth type dispatches through — so a green test means
+    // "the credential the cascade will use works", not "some catalog id worked".
+    const authType = resolvedAuthTypeFor(provider, creds);
+    const model = byoAutoSeedModels(new Set([byoVendorIdFor(provider, authType)]), { agentic: false })[0]
+      ?? byoModelsFor([{ provider, authType, priority: null }])[0]?.id;
     if (!model) {
       return c.json({
         ok: false,
@@ -1566,7 +1575,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // their own account instead of the gateway silently cascading onto our free
     // pool. Mirrors the Anthropic passthrough's "runs on the tenant's account, period"
     // guarantee for OpenAI/Google. A bare/mismatched model just stays a soft hint.
-    const byoVendors = byoVendorIdSet((Object.keys(tenantVendorKeys) as LlmProvider[]).filter((p) => tenantVendorKeys[p]));
+    const byoVendors = byoVendorIdsFromCredentials({ vendorKeys: tenantVendorKeys });
     if (typeof parsed.model === 'string' && byoVendors.has(vendorForModel(parsed.model))) {
       (openaiBody as { modelStrict?: boolean }).modelStrict = true;
     }
@@ -1860,15 +1869,8 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // metered byo). The connected vendors also unlock free-plan model choice.
     const tenantCreds = await resolveTenantLlmCredentials(c.env, access.tenantId);
     const { anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, vendorKeys: tenantVendorKeys } = tenantCreds;
-    const byoVendors = byoVendorIdSet(providersFromCredentials(tenantCreds));
-    if (tenantCreds.openaiCodexAuth) {
-      byoVendors.delete('openai');
-      byoVendors.add('openai-codex');
-    }
-    if (tenantCreds.xaiOAuthToken) {
-      byoVendors.delete('xai');
-      byoVendors.add('xai-oauth');
-    }
+    // DISPATCH vendor ids — a connected subscription rides `openai-codex` / `xai-oauth`.
+    const byoVendors = byoVendorIdsFromCredentials(tenantCreds);
 
     const queryStrict = c.req.query('strict') === 'true';
     const wantsStrict = resolveStrictPin(bodyAny, queryStrict);
@@ -2324,8 +2326,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // (their own account serves them, $0 to us). Connecting a provider ALSO unlocks
     // model choice on the free plan — "LLM choices are based on the connected
     // providers." Resolved only for an authenticated tenant.
-    const byoProviders = access ? (await listTenantProviderKeys(c.env, access.tenantId)).map((d) => d.provider) : [];
-    const byoModels = byoModelsFor(byoProviders);
+    // Keep the SUMMARIES (not just provider ids): a subscription-connected provider
+    // serves a different model route than an api-key one, and only the summary carries
+    // the auth type that decides which.
+    const byoProviderRows: ProviderKeySummary[] = access ? await listTenantProviderKeys(c.env, access.tenantId) : [];
+    const byoModels = byoModelsFor(byoProviderRows);
+    // The wire shape stays a plain provider-id list (what every client reads).
+    const byoProviders = byoProviderRows.map((d) => d.provider);
     // THE single frontier-access rule (superadmin || premium override || connected BYO
     // account || paid plan) — shared with every backend gate via evaluateFrontierAccess,
     // so the client's model-choice / frontier-teacher unlock matches the server exactly.

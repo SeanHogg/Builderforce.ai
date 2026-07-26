@@ -6314,7 +6314,8 @@
       "flagged": "Signalé",
       "flaggedTitle": "Ce ticket a sauté un rôle ou diagnostic requis — révision nécessaire",
       "participantsTitle": "Participation des rôles requis : terminés sur requis"
-    }
+    },
+    "prdBadgeTitle": "{count, plural, one {# PRD lié} other {# PRD liés}}"
   },
   "projectsContent": {
     "errLoad": "Échec du chargement des projets. Vérifiez votre connexion et réessayez.",
@@ -10502,7 +10503,8 @@
       "when": "Quand",
       "comments": "Commentaires",
       "contribution": "Contribution",
-      "empty": "Aucun rôle requis pour ce ticket pour le moment."
+      "empty": "Aucun rôle requis pour ce ticket pour le moment.",
+      "action": "Action"
     },
     "verdict": {
       "approved": "Approuvé",
@@ -10533,6 +10535,22 @@
       "add": "Ajouter un rôle requis",
       "materialize": "Créer des éléments de travail",
       "materializeHelp": "Crée une sous-tâche par ressource pour que la progression remonte à ce ticket."
+    },
+    "contribution": {
+      "pr": "PR",
+      "run": "Exécution n° {id}",
+      "prd": "PRD r{revision}",
+      "test": "Test {id}",
+      "files": "{count, plural, one {# fichier} other {# fichiers}}"
+    },
+    "signoff": {
+      "action": "Valider",
+      "cancel": "Annuler",
+      "confirm": "Valider en tant que {role}",
+      "recording": "Enregistrement…",
+      "summaryPlaceholder": "Qu’avez-vous vérifié ? (facultatif)",
+      "reasonRequired": "Motif de la dérogation (obligatoire)",
+      "help": "Seul un membre compétent pour ce rôle peut le valider ; l’espace de travail enregistre qui a validé, quand et sur quelles preuves."
     }
   },
   "rfpPage": {
@@ -11303,5 +11321,33 @@
     "copyInstall": "Copier l’installation",
     "copySnippet": "Copier l’extrait",
     "copiedFlash": "✓ Copié"
+  },
+  "ticketContext": {
+    "thisTicket": "Ce ticket",
+    "thisEpic": "Cette épopée",
+    "parentEpic": "Épopée parente",
+    "signoffs": "Validations",
+    "basisLane": "Étape {index} sur {total}",
+    "basisSignoff": "{done} sur {total} validées",
+    "basisChildren": "{done} sur {total} sous-éléments terminés",
+    "basisWeight": "poids de {weight} %",
+    "partOfEpic": "Fait partie de l’épopée",
+    "epicChildren": "{done} sur {total} éléments terminés",
+    "waitingOn": "En attente de",
+    "gapsOnly": "{count, plural, one {# écart de responsabilité} other {# écarts de responsabilité}}",
+    "dispatchReviewers": "Envoyer les relecteurs",
+    "dispatching": "Envoi…",
+    "reviewSignoffs": "Voir les validations",
+    "objective": "Objectif",
+    "noObjective": "Aucun objectif lié. Liez-le depuis le tableau Planification pour rendre sa valeur mesurable.",
+    "objectiveAttained": "atteint",
+    "objectiveShare": "Ce ticket représente <b>{share} %</b> de la livraison liée à cet objectif ({done} sur {total} terminés).",
+    "objectiveInherited": "Hérité du périmètre de ce ticket — aucun lien de livraison direct.",
+    "via": {
+      "task": "Lié directement",
+      "epic": "Via l’épopée",
+      "project": "Objectif du projet",
+      "initiative": "Objectif de l’initiative"
+    }
   }
 }

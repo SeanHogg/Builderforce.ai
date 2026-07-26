@@ -492,6 +492,9 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const env = c.env as Env;
     const row = await loadTenantTask(id, tenantId);
     if (!row) return c.json({ error: 'Task not found' }, 404);
+    // Segment-scoped like every other OKR read, so the objectives a ticket claims
+    // to serve are exactly the ones /pmo shows for the same viewer.
+    const segmentId = (c as { get(k: 'segmentId'): string | undefined }).get('segmentId') ?? null;
     const [treeVer, signoffVer, pmoVer] = await Promise.all([
       getCacheVersion(env, `task-tree-version:project:${row.projectId}`),
       getCacheVersion(env, `participants:task:${id}`),
@@ -499,8 +502,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     ]);
     const payload = await getOrSetCached(
       env,
-      `task-context:task:${id}:v:${treeVer}.${signoffVer}.${pmoVer}`,
-      () => buildTicketContext(db, env, { tenantId, taskId: id }),
+      `task-context:task:${id}:s:${segmentId ?? '-'}:v:${treeVer}.${signoffVer}.${pmoVer}`,
+      () => buildTicketContext(db, env, { tenantId, segmentId, taskId: id }),
     );
     if (!payload) return c.json({ error: 'Task not found' }, 404);
     return c.json(payload);

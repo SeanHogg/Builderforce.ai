@@ -6314,7 +6314,8 @@
       "flagged": "Flagged",
       "flaggedTitle": "This ticket skipped a required role or diagnostic — review needed",
       "participantsTitle": "Required-role participation: complete of required"
-    }
+    },
+    "prdBadgeTitle": "{count, plural, one {# linked PRD} other {# linked PRDs}}"
   },
   "projectsContent": {
     "errLoad": "Failed to load projects. Check your connection and try again.",
@@ -10502,7 +10503,8 @@
       "when": "When",
       "comments": "Comments",
       "contribution": "Contribution",
-      "empty": "No required roles for this ticket yet."
+      "empty": "No required roles for this ticket yet.",
+      "action": "Action"
     },
     "verdict": {
       "approved": "Approved",
@@ -10533,6 +10535,22 @@
       "add": "Add required role",
       "materialize": "Create work items",
       "materializeHelp": "Spin up a child task per resource so progress rolls up to this ticket."
+    },
+    "contribution": {
+      "pr": "PR",
+      "run": "Run #{id}",
+      "prd": "PRD r{revision}",
+      "test": "Test {id}",
+      "files": "{count, plural, one {# file} other {# files}}"
+    },
+    "signoff": {
+      "action": "Sign off",
+      "cancel": "Cancel",
+      "confirm": "Sign off as {role}",
+      "recording": "Recording…",
+      "summaryPlaceholder": "What did you check? (optional)",
+      "reasonRequired": "Reason for waiving (required)",
+      "help": "Only a member capable of this role may sign off as it; the workspace records who signed, when and with what evidence."
     }
   },
   "rfpPage": {
@@ -11303,5 +11321,33 @@
     "copyInstall": "Copy install",
     "copySnippet": "Copy snippet",
     "copiedFlash": "✓ Copied"
+  },
+  "ticketContext": {
+    "thisTicket": "This ticket",
+    "thisEpic": "This epic",
+    "parentEpic": "Parent epic",
+    "signoffs": "Sign-offs",
+    "basisLane": "Stage {index} of {total}",
+    "basisSignoff": "{done} of {total} signed off",
+    "basisChildren": "{done} of {total} child items done",
+    "basisWeight": "{weight}% weight",
+    "partOfEpic": "Part of epic",
+    "epicChildren": "{done} of {total} items done",
+    "waitingOn": "Waiting on",
+    "gapsOnly": "{count, plural, one {# accountability gap} other {# accountability gaps}}",
+    "dispatchReviewers": "Dispatch reviewers",
+    "dispatching": "Dispatching…",
+    "reviewSignoffs": "Review sign-offs",
+    "objective": "Objective",
+    "noObjective": "Not linked to an objective. Link it on the Planning board so its value is measurable.",
+    "objectiveAttained": "attained",
+    "objectiveShare": "This ticket is <b>{share}%</b> of the delivery linked to this objective ({done} of {total} done).",
+    "objectiveInherited": "Inherited from this ticket’s scope — no direct delivery link.",
+    "via": {
+      "task": "Directly linked",
+      "epic": "Via epic",
+      "project": "Project goal",
+      "initiative": "Initiative goal"
+    }
   }
 }
