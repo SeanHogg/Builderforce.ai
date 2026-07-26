@@ -13,10 +13,11 @@
  * Demo mode is remembered in sessionStorage so the DemoModeProvider can show the
  * banner + convert/exit prompts for the duration of the visit.
  */
-import { AUTH_API_URL, persistSession } from './auth';
+import { persistSession } from './auth';
+import { apiRequestStream } from './apiClient';
 import type { AuthUser, Tenant } from './types';
 import { getVisitorId } from './visitor';
-import { readLocaleCookie } from '@/i18n/config';
+
 
 export type DemoPersona = 'ai-team' | 'insights' | 'pmo' | 'talent' | 'governance';
 
@@ -112,10 +113,12 @@ export function markExitPrompted(): void {
  */
 export async function startDemoSession(persona: DemoPersona): Promise<{ entryPath: string }> {
   const visitorId = getVisitorId();
-  const res = await fetch(`${AUTH_API_URL}/api/demo/session`, {
+  const res = await apiRequestStream('/api/demo/session', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    auth: 'none',
     body: JSON.stringify({ persona, visitorId }),
+    // The caller renders the API's `code` inline, so this is not a system fault.
+    expectedErrors: [400, 403, 429],
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { code?: string; error?: string };
@@ -180,11 +183,13 @@ export async function trackDemoEvents(events: DemoEventInput[]): Promise<void> {
   const visitorId = getVisitorId();
   if (!visitorId) return;
   try {
-    await fetch(`${AUTH_API_URL}/api/demo/events`, {
+    await apiRequestStream('/api/demo/events', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      auth: 'none',
       body: JSON.stringify({ visitorId, events }),
       keepalive: true,
+      // Fires on unload; a failure must never raise the global error toast.
+      expectedErrors: [400, 401, 403, 404, 429, 500, 502, 503],
     });
   } catch {
     /* best-effort */
@@ -206,13 +211,12 @@ export interface SalesLeadInput {
 
 export async function submitSalesLead(input: SalesLeadInput): Promise<void> {
   const visitorId = getVisitorId();
-  const res = await fetch(`${AUTH_API_URL}/api/demo/leads`, {
+  // The locale header comes from the shared transport now — no per-call copy.
+  const res = await apiRequestStream('/api/demo/leads', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Builderforce-Locale': readLocaleCookie() ?? 'en',
-    },
+    auth: 'none',
     body: JSON.stringify({ ...input, visitorId }),
+    expectedErrors: [400, 429],
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };

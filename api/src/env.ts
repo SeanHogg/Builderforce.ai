@@ -1,4 +1,5 @@
 import type { TenantRole } from './domain/shared/types';
+import type { Db } from './infrastructure/database/connection';
 
 /** Cloudflare Worker environment bindings for the API worker. */
 export interface Env {
@@ -485,6 +486,15 @@ export interface Vars {
   tokenJti?: string;
   /** True when the request is running under an emulation token (read-only). */
   isEmulation?: boolean;
+  /**
+   * The request's database handle, built once by the auth middleware.
+   *
+   * Downstream middleware (e.g. `requirePermission`) reads this instead of
+   * calling `buildDatabase` again — one connection per request rather than one
+   * per consumer, and it keeps those middlewares free of an infrastructure
+   * import. Absent on unauthenticated paths, so callers must fall back.
+   */
+  db?: Db;
 }
 
 /** Combined Hono environment type used across the app. */

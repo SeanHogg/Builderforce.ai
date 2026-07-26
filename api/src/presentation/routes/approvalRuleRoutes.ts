@@ -19,6 +19,8 @@
 import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { requirePermission } from '../middleware/requirePermission';
+import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { approvalRules } from '../../infrastructure/database/schema';
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
@@ -28,6 +30,8 @@ export function createApprovalRuleRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
   router.use('*', requireRole(TenantRole.MANAGER));
+  // Configuring the approval policy is the `approval:configure` action.
+  router.use('*', requirePermission(PERMISSIONS.APPROVAL_CONFIGURE));
 
   // POST /api/approval-rules
   router.post('/', async (c) => {

@@ -397,7 +397,8 @@
       "marketplace": "Mercado",
       "incidents": "Incidentes",
       "monitoring": "Monitorización",
-      "reliability": "Fiabilidad"
+      "reliability": "Fiabilidad",
+      "agentOps": "Operación de agentes"
     },
     "tab": {
       "projects": "Proyectos",
@@ -476,7 +477,10 @@
       "reporting": "Informes",
       "rfp": "RFP",
       "feedback": "Comentarios",
-      "autonomy": "Autonomía"
+      "autonomy": "Autonomía",
+      "coordination": "Coordinación",
+      "memory": "Memoria",
+      "rehearsal": "Ensayo"
     },
     "primaryAria": "Principal"
   },
@@ -8312,7 +8316,14 @@
     },
     "permissions": {
       "title": "Roles y permisos",
-      "colPermission": "Permiso"
+      "colPermission": "Permiso",
+      "enforced": "Aplicado",
+      "advisory": "Informativo",
+      "granted": "Concedido",
+      "denied": "Denegado",
+      "enforcedHint": "Este permiso se comprueba en cada solicitud. Las excepciones surten efecto de inmediato.",
+      "advisoryHint": "Este permiso aún no se comprueba en tiempo de solicitud: la ruta se controla solo por el nivel de rol, así que editar esta fila solo cambia lo que muestra la tabla.",
+      "enforcementNote": "Las filas marcadas como Aplicado se comprueban en cada solicitud, por lo que una excepción surte efecto de inmediato. Las filas marcadas como Informativo se controlan solo por el nivel de rol: editarlas cambia únicamente esta tabla, no lo que un miembro puede hacer realmente."
     },
     "modules": {
       "title": "Módulos de la plataforma",
@@ -11409,6 +11420,92 @@
       "epic": "A través de la épica",
       "project": "Objetivo del proyecto",
       "initiative": "Objetivo de la iniciativa"
+    }
+  },
+  "agentOps": {
+    "loading": "Cargando…",
+    "close": "Cerrar",
+    "genericError": "Algo salió mal.",
+    "coordination": {
+      "title": "Coordinación",
+      "subtitle": "Varios agentes pueden trabajar el mismo ticket a la vez y compartir una sola rama. Aquí se ve quién retiene cada archivo ahora mismo y las notas que se dejan entre ellos.",
+      "ticketLabel": "Número de ticket",
+      "ticketPlaceholder": "p. ej. 412",
+      "inspect": "Inspeccionar ticket",
+      "empty": "Introduce un número de ticket para ver qué archivos retienen sus agentes y qué se han comunicado.",
+      "leasesTitle": "Archivos retenidos ahora",
+      "noLeases": "Ningún agente retiene un archivo en este ticket.",
+      "notesTitle": "Espacio de trabajo compartido",
+      "noNotes": "Ningún agente ha publicado una nota en este ticket.",
+      "resource": "Archivo",
+      "holder": "Retenido por",
+      "mode": "Bloqueo",
+      "reason": "Motivo",
+      "exclusive": "Exclusivo",
+      "shared": "Compartido",
+      "release": "Liberar a la fuerza",
+      "releaseTitle": "¿Liberar este archivo a la fuerza?",
+      "releaseConfirm": "{holder} todavía retiene {resource}. Al liberarlo, otro agente podrá escribir el archivo de inmediato: hazlo solo si sabes que quien lo retiene ya se detuvo."
+    },
+    "memory": {
+      "title": "Memoria",
+      "subtitle": "Todo lo que creen tus agentes, con hasta dónde llega cada creencia, de dónde vino y cuándo deja de ser cierta. Se muestra según el ámbito del proyecto actual: exactamente lo que recordaría un agente que se ejecute aquí.",
+      "tableTitle": "Hechos recordados",
+      "empty": "Tus agentes aún no han guardado ningún hecho en este ámbito.",
+      "key": "Clave",
+      "fact": "Hecho",
+      "scope": "Ámbito",
+      "origin": "Procedencia",
+      "expiry": "Caduca",
+      "durable": "Nunca",
+      "lapsed": "Caducado",
+      "fromRun": "ejecución n.º {id}",
+      "scopeTenant": "Todo el espacio de trabajo",
+      "scopeProject": "Este proyecto",
+      "scopeTicket": "Ticket n.º {id}",
+      "forget": "Olvidar",
+      "forgetTitle": "¿Olvidar este hecho?",
+      "forgetConfirm": "Los agentes dejarán de recordar «{key}». Si existe una versión más amplia con la misma clave, esa volverá a ser visible.",
+      "purge": "Borrar caducados",
+      "purgeTitle": "¿Borrar los hechos caducados?",
+      "purgeConfirm": "Elimina los hechos cuya caducidad ya pasó. Los agentes dejaron de recordarlos al caducar, así que nada cambia para una ejecución.",
+      "statTotal": "Hechos en el ámbito",
+      "statTotalHint": "Lo que puede recordar un agente que se ejecute aquí.",
+      "statScoped": "De ámbito reducido",
+      "statScopedHint": "Hechos que no salen de este proyecto o de un ticket.",
+      "statExpiring": "Con caducidad",
+      "statExpiringHint": "Hechos temporales que caducarán por sí solos.",
+      "statLapsed": "Ya caducados",
+      "statLapsedHint": "Ya no se recuerdan; pendientes de limpieza."
+    },
+    "rehearsal": {
+      "title": "Ensayo",
+      "subtitle": "Ejecuta un agente de verdad sobre un ticket con todos los efectos suprimidos —sin commit, sin pull request, sin escribir en memoria, sin avisar a nadie— y luego lee lo que habría hecho.",
+      "startTitle": "Ejecutar un ensayo",
+      "kind": "Tipo",
+      "kindDryRun": "Simulación",
+      "kindReplay": "Repetición",
+      "kindTrial": "Prueba",
+      "ticket": "Ticket",
+      "ticketPlaceholder": "p. ej. 412",
+      "agent": "Agente",
+      "agentPlaceholder": "Déjalo vacío para usar el agente asignado al ticket",
+      "startHint": "Un ensayo consume tokens del modelo, por eso se limita a una ejecución corta. Una prueba ensaya el mismo agente sobre los tickets actualizados más recientemente de este proyecto.",
+      "start": "Ejecutar ensayo",
+      "running": "Ejecutando…",
+      "historyTitle": "Ensayos anteriores",
+      "empty": "Todavía no hay ensayos. Ejecuta uno antes de cambiar un prompt, un paquete de políticas o un modelo fijado.",
+      "wouldWrite": "Habría escrito",
+      "stepCount": "{count} efectos",
+      "outcome": "Resultado",
+      "finished": "Terminó",
+      "unfinished": "Se quedó sin pasos",
+      "failed": "Falló",
+      "viewReport": "Informe",
+      "reportTitle": "Lo que el agente habría hecho",
+      "frozenAt": "Leyó el repositorio en",
+      "suppressedTitle": "Efectos suprimidos",
+      "noSteps": "El agente no produjo ningún efecto: ni escribió código ni guardó nada."
     }
   }
 }

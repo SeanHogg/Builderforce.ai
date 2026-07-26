@@ -397,7 +397,8 @@
       "marketplace": "Marché",
       "incidents": "Incidents",
       "monitoring": "Surveillance",
-      "reliability": "Fiabilité"
+      "reliability": "Fiabilité",
+      "agentOps": "Ops des agents"
     },
     "tab": {
       "projects": "Projets",
@@ -476,7 +477,10 @@
       "reporting": "Rapports",
       "rfp": "Appels d'offres",
       "feedback": "Retours",
-      "autonomy": "Autonomie"
+      "autonomy": "Autonomie",
+      "coordination": "Coordination",
+      "memory": "Mémoire",
+      "rehearsal": "Répétition"
     },
     "primaryAria": "Principale"
   },
@@ -8312,7 +8316,14 @@
     },
     "permissions": {
       "title": "Rôles et autorisations",
-      "colPermission": "Autorisation"
+      "colPermission": "Autorisation",
+      "enforced": "Appliquée",
+      "advisory": "Indicative",
+      "granted": "Accordée",
+      "denied": "Refusée",
+      "enforcedHint": "Cette autorisation est vérifiée à chaque requête. Les dérogations prennent effet immédiatement.",
+      "advisoryHint": "Cette autorisation n'est pas encore vérifiée au moment de la requête : la route est protégée uniquement par le niveau de rôle, donc modifier cette ligne ne change que l'affichage de ce tableau.",
+      "enforcementNote": "Les lignes marquées Appliquée sont vérifiées à chaque requête ; une dérogation prend donc effet immédiatement. Les lignes marquées Indicative sont protégées uniquement par le niveau de rôle : les modifier ne change que ce tableau, pas ce qu'un membre peut réellement faire."
     },
     "modules": {
       "title": "Modules de la plateforme",
@@ -11409,6 +11420,92 @@
       "epic": "Via l’épopée",
       "project": "Objectif du projet",
       "initiative": "Objectif de l’initiative"
+    }
+  },
+  "agentOps": {
+    "loading": "Chargement…",
+    "close": "Fermer",
+    "genericError": "Une erreur est survenue.",
+    "coordination": {
+      "title": "Coordination",
+      "subtitle": "Plusieurs agents peuvent traiter le même ticket en même temps et partager une seule branche. Voici qui détient quels fichiers en ce moment, et les notes qu’ils se laissent.",
+      "ticketLabel": "Numéro de ticket",
+      "ticketPlaceholder": "ex. 412",
+      "inspect": "Inspecter le ticket",
+      "empty": "Saisissez un numéro de ticket pour voir quels fichiers ses agents détiennent et ce qu’ils se sont dit.",
+      "leasesTitle": "Fichiers détenus actuellement",
+      "noLeases": "Aucun agent ne détient de fichier sur ce ticket.",
+      "notesTitle": "Espace de travail partagé",
+      "noNotes": "Aucun agent n’a laissé de note sur ce ticket.",
+      "resource": "Fichier",
+      "holder": "Détenu par",
+      "mode": "Verrou",
+      "reason": "Motif",
+      "exclusive": "Exclusif",
+      "shared": "Partagé",
+      "release": "Libérer de force",
+      "releaseTitle": "Libérer ce fichier de force ?",
+      "releaseConfirm": "{holder} détient encore {resource}. Le libérer permet à un autre agent d’écrire immédiatement dans le fichier — ne le faites que si vous savez que le détenteur s’est arrêté."
+    },
+    "memory": {
+      "title": "Mémoire",
+      "subtitle": "Tout ce que vos agents tiennent pour vrai, avec la portée de chaque croyance, son origine et le moment où elle cesse d’être vraie. Affiché selon la portée du projet courant — exactement ce qu’un agent exécuté ici pourrait rappeler.",
+      "tableTitle": "Faits mémorisés",
+      "empty": "Vos agents n’ont encore enregistré aucun fait dans cette portée.",
+      "key": "Clé",
+      "fact": "Fait",
+      "scope": "Portée",
+      "origin": "Provenance",
+      "expiry": "Expire",
+      "durable": "Jamais",
+      "lapsed": "Expiré",
+      "fromRun": "exécution n° {id}",
+      "scopeTenant": "Tout l’espace de travail",
+      "scopeProject": "Ce projet",
+      "scopeTicket": "Ticket n° {id}",
+      "forget": "Oublier",
+      "forgetTitle": "Oublier ce fait ?",
+      "forgetConfirm": "Les agents cesseront de rappeler « {key} ». S’il existe une version plus large de la même clé, celle-ci redeviendra visible.",
+      "purge": "Purger les expirés",
+      "purgeTitle": "Purger les faits expirés ?",
+      "purgeConfirm": "Supprime les faits dont l’expiration est passée. Les agents avaient déjà cessé de les rappeler, donc rien ne change pour une exécution.",
+      "statTotal": "Faits dans la portée",
+      "statTotalHint": "Ce qu’un agent exécuté ici peut rappeler.",
+      "statScoped": "Portée restreinte",
+      "statScopedHint": "Faits qui restent dans ce projet ou sur un seul ticket.",
+      "statExpiring": "Avec expiration",
+      "statExpiringHint": "Faits limités dans le temps, qui expireront d’eux-mêmes.",
+      "statLapsed": "Déjà expirés",
+      "statLapsedHint": "Plus rappelés ; en attente de nettoyage."
+    },
+    "rehearsal": {
+      "title": "Répétition",
+      "subtitle": "Exécutez réellement un agent sur un ticket, tous les effets supprimés — aucun commit, aucune pull request, aucune écriture en mémoire, personne d’alerté — puis lisez ce qu’il aurait fait.",
+      "startTitle": "Lancer une répétition",
+      "kind": "Type",
+      "kindDryRun": "À blanc",
+      "kindReplay": "Rejeu",
+      "kindTrial": "Essai",
+      "ticket": "Ticket",
+      "ticketPlaceholder": "ex. 412",
+      "agent": "Agent",
+      "agentPlaceholder": "Laissez vide pour utiliser l’agent affecté au ticket",
+      "startHint": "Une répétition consomme des jetons de modèle : elle est donc limitée à une exécution courte. Un essai répète le même agent sur les tickets récemment mis à jour de ce projet.",
+      "start": "Lancer la répétition",
+      "running": "En cours…",
+      "historyTitle": "Répétitions passées",
+      "empty": "Aucune répétition pour l’instant. Lancez-en une avant de modifier un prompt, un pack de règles ou un modèle épinglé.",
+      "wouldWrite": "Aurait écrit",
+      "stepCount": "{count} effets",
+      "outcome": "Résultat",
+      "finished": "Terminé",
+      "unfinished": "Étapes épuisées",
+      "failed": "Échec",
+      "viewReport": "Rapport",
+      "reportTitle": "Ce que l’agent aurait fait",
+      "frozenAt": "Dépôt lu à",
+      "suppressedTitle": "Effets supprimés",
+      "noSteps": "L’agent n’a produit aucun effet : il n’a ni écrit de code ni rien enregistré."
     }
   }
 }

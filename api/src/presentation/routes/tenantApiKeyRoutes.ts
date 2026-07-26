@@ -16,6 +16,8 @@ import { Hono } from 'hono';
 import type { Db } from '../../infrastructure/database/connection';
 import type { HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { requirePermission } from '../middleware/requirePermission';
+import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { TenantRole } from '../../domain/shared/types';
 import {
   mintTenantApiKey,
@@ -61,7 +63,7 @@ export function createTenantApiKeyRoutes(db: Db): Hono<HonoEnv> {
   // POST /api/tenants/:tenantId/api-keys — mint a new bfk_* key. Optional
   // `scopes` mints a least-privilege service token (e.g. for the channel-3
   // seams); omit it for a full-tenant gateway key. Unknown scopes are dropped.
-  router.post('/', async (c) => {
+  router.post('/', requirePermission(PERMISSIONS.APIKEY_ROTATE), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId   = c.get('userId') as string;
     const body     = await c.req.json<{ name?: string; allowedOrigins?: string[] | null; scopes?: unknown }>()
@@ -75,14 +77,14 @@ export function createTenantApiKeyRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // GET /api/tenants/:tenantId/api-keys
-  router.get('/', async (c) => {
+  router.get('/', requirePermission(PERMISSIONS.APIKEY_READ), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const keys = await listTenantApiKeys(db, tenantId);
     return c.json({ keys });
   });
 
   // GET /api/tenants/:tenantId/api-keys/:keyId/usage — per-key audit trail
-  router.get('/:keyId/usage', async (c) => {
+  router.get('/:keyId/usage', requirePermission(PERMISSIONS.APIKEY_READ), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const keyId    = c.req.param('keyId');
     const days     = Number(c.req.query('days')  ?? '30');
@@ -93,7 +95,7 @@ export function createTenantApiKeyRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // PATCH /api/tenants/:tenantId/api-keys/:keyId — partial update (name, allowedOrigins)
-  router.patch('/:keyId', async (c) => {
+  router.patch('/:keyId', requirePermission(PERMISSIONS.APIKEY_ROTATE), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const keyId    = c.req.param('keyId');
     const body     = await c.req.json<{ name?: string; allowedOrigins?: string[] | null }>()
@@ -111,7 +113,7 @@ export function createTenantApiKeyRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // DELETE /api/tenants/:tenantId/api-keys/:keyId
-  router.delete('/:keyId', async (c) => {
+  router.delete('/:keyId', requirePermission(PERMISSIONS.APIKEY_DELETE), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const keyId    = c.req.param('keyId');
     const ok = await revokeTenantApiKey(db, { tenantId, keyId, env: c.env });
