@@ -26,7 +26,13 @@ import {
   type EvermindValidateResult,
 } from './types';
 import { evermindLearnedStatus } from './learnedStatus';
-import { nativeOptionStyle } from '../optionStyle';
+import { EvermindTestBench } from './EvermindTestBench';
+import { EvermindMaintenance } from './EvermindMaintenance';
+import { EvermindAnalyzer } from './EvermindAnalyzer';
+import {
+  C, italic, fieldLabel, fieldTitle, fieldHint, select, optionStyle, sectionBlock,
+  primaryBtn, secondaryBtn, ghostBtn, linkBtn, pill, tag, warnBox,
+} from './consoleStyles';
 
 export interface EvermindConsoleProps {
   adapter: EvermindConsoleAdapter;
@@ -57,18 +63,6 @@ export interface EvermindConsoleProps {
    *  on the web Studio's Knowledge Map). The console also renders the result inline. */
   onValidate?: (result: EvermindValidateResult | null) => void;
 }
-
-/* Cascading theme tokens: evermind-namespaced → host app tokens → VS Code tokens →
-   a legible literal, so the console themes in every host without per-host CSS. */
-const C = {
-  surface: 'var(--bf-ev-surface, var(--bg-surface, var(--bf-surface, var(--vscode-editorWidget-background, transparent))))',
-  surface2: 'var(--bf-ev-surface-2, var(--bg-elevated, var(--bf-surface-2, var(--vscode-textBlockQuote-background, rgba(148,163,184,0.08)))))',
-  border: 'var(--bf-ev-border, var(--border-subtle, var(--bf-border, var(--vscode-panel-border, rgba(148,163,184,0.3)))))',
-  text: 'var(--bf-ev-text, var(--text-primary, var(--bf-text, inherit)))',
-  text2: 'var(--bf-ev-text-2, var(--text-secondary, var(--bf-text-muted, #6b7280)))',
-  accent: 'var(--bf-ev-accent, var(--coral-bright, var(--accent, var(--bf-accent, #ff6b5e))))',
-  danger: 'var(--bf-ev-danger, var(--danger-text, #d9534f))',
-};
 
 export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate }: EvermindConsoleProps) {
   const t = useMemo<EvermindConsoleLabels>(() => ({ ...DEFAULT_EVERMIND_LABELS, ...(labels ?? {}) }), [labels]);
@@ -234,18 +228,7 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
           {t.inheritedHint}
         </p>
       )}
-      {quarantined && (
-        <p
-          style={{
-            margin: 0, fontSize: '0.74rem', lineHeight: 1.5, borderRadius: 6, padding: '6px 8px',
-            color: 'var(--bf-warn-text, #92400e)', background: 'var(--bf-warn-bg, #fef3c7)',
-            border: '1px solid var(--bf-warn-border, #f59e0b)',
-          }}
-          role="alert"
-        >
-          {t.quarantinedHint(quarantineReason)}
-        </p>
-      )}
+      {quarantined && <p style={warnBox} role="alert">{t.quarantinedHint(quarantineReason)}</p>}
 
       {/* Read-only "Everminds under this project" list — self + IDE builds. Self-gating:
           renders nothing until the host's optional loadTargets resolves. */}
@@ -351,6 +334,53 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
                     : t.importNothing,
                 );
               })}
+            />
+          )}
+
+          {/* TEST BENCH — "what will this model actually produce?". Rendered for every
+              viewer (reading what the model writes is not a privileged action); the
+              underlying endpoint is manager-gated, so a non-manager sees the section
+              disabled rather than a control that 403s. */}
+          {adapter.probe && (
+            <EvermindTestBench
+              t={t} disabled={!canManage || busy}
+              onProbe={(p) => adapter.probe!(p)}
+            />
+          )}
+
+          {/* KNOWLEDGE ANALYZER — audit what was learned, then repair it. */}
+          {canManage && adapter.analyze && (
+            <EvermindAnalyzer
+              t={t} disabled={busy}
+              onAnalyze={() => adapter.analyze!()}
+              {...(adapter.applyFindings ? { onApply: (f) => adapter.applyFindings!(f) } : {})}
+              onRepaired={() => void reload()}
+            />
+          )}
+
+          {/* MAINTENANCE — replace / rebuild index / clean up. Each control appears only
+              when its host implements it; the section hides itself when none do. */}
+          {canManage && (
+            <EvermindMaintenance
+              t={t} disabled={busy} seedModels={seedModels}
+              {...(adapter.reseed ? {
+                onReseed: (slug?: string) => run(async () => {
+                  const r = await adapter.reseed!(slug);
+                  setNotice(t.reseedDone(r.version));
+                }),
+              } : {})}
+              {...(adapter.reindex ? {
+                onReindex: () => run(async () => {
+                  const r = await adapter.reindex!();
+                  setNotice(t.reindexDone(r.reindexed));
+                }),
+              } : {})}
+              {...(adapter.cleanup ? {
+                onCleanup: () => run(async () => {
+                  const r = await adapter.cleanup!();
+                  setNotice(t.cleanupDone(r.discarded, r.cachedAnswers));
+                }),
+              } : {})}
             />
           )}
 
@@ -531,7 +561,7 @@ function TeachBox({
   // whatever task/transcript is typed) — a lower bar than teaching.
   const canValidate = (teaching ? prompt : (prompt.trim() || text)).trim().length >= 3;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+    <div style={sectionBlock}>
       <div style={fieldTitle}>{teaching ? t.teachTeacherTitle : t.teachTitle}</div>
       <div style={fieldHint}>{teaching ? t.teachTeacherHint(teacherModel) : t.teachHint}</div>
       {teaching ? (
@@ -560,7 +590,7 @@ function TeachBox({
 function ImportBox({ t, busy, frozen, onImport }: { t: EvermindConsoleLabels; busy: boolean; frozen: boolean; onImport: () => void }) {
   const disabled = busy || frozen;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+    <div style={sectionBlock}>
       <div style={fieldTitle}>{t.importTitle}</div>
       <div style={fieldHint}>{t.importHint}</div>
       <button type="button" onClick={onImport} disabled={disabled} style={{ ...secondaryBtn(disabled), alignSelf: 'flex-start' }}>
@@ -613,7 +643,7 @@ function ValidateResults({ t, result, onClear }: { t: EvermindConsoleLabels; res
  *  even for a single target — the value is the explicit count + per-target state. */
 function TargetsList({ t, targets }: { t: EvermindConsoleLabels; targets: EvermindTarget[] }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+    <div style={sectionBlock}>
       <div style={fieldTitle}>{t.targetsTitle}</div>
       <div style={fieldHint}>{t.targetsHint}</div>
       {targets.length === 0 ? (
@@ -643,7 +673,7 @@ function TargetsList({ t, targets }: { t: EvermindConsoleLabels; targets: Evermi
 
 function RecentList({ t, entries }: { t: EvermindConsoleLabels; entries: EvermindRecentEntry[] }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+    <div style={sectionBlock}>
       <div style={fieldTitle}>{t.inspectTitle}</div>
       {entries.length === 0 ? (
         <p style={italic}>{t.inspectEmpty}</p>
@@ -704,23 +734,20 @@ function RecentRow({ t, entry }: { t: EvermindConsoleLabels; entry: EvermindRece
   );
 }
 
+
 /** The "not distilled" warning tag. `--bf-warn-*` cascade from the host theme, with
  *  literal fallbacks that stay legible on both light and dark surfaces. */
 const faultTag: React.CSSProperties = {
   fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
   padding: '1px 6px', borderRadius: 5,
-  color: 'var(--bf-warn-text, #92400e)',
-  background: 'var(--bf-warn-bg, #fef3c7)',
-  border: '1px solid var(--bf-warn-border, #f59e0b)',
+  color: C.warnText, background: C.warnBg, border: `1px solid ${C.warnBorder}`,
 };
 
 /** The header quarantine badge — the same `--bf-warn-*` cascade as the fault tag, in
  *  the rounded-pill shape the other header chips use. */
 const quarantinePill: React.CSSProperties = {
   fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
-  color: 'var(--bf-warn-text, #92400e)',
-  background: 'var(--bf-warn-bg, #fef3c7)',
-  border: '1px solid var(--bf-warn-border, #f59e0b)',
+  color: C.warnText, background: C.warnBg, border: `1px solid ${C.warnBorder}`,
   whiteSpace: 'nowrap',
 };
 
@@ -729,62 +756,3 @@ const targetChip: React.CSSProperties = {
   fontSize: '0.64rem', fontWeight: 600, padding: '1px 7px', borderRadius: 999,
   border: `1px solid ${C.border}`, background: C.surface, color: C.text2, whiteSpace: 'nowrap',
 };
-
-/* ── Style atoms ──────────────────────────────────────────────────────────── */
-
-const italic: React.CSSProperties = { margin: 0, fontSize: '0.78rem', color: C.text2, fontStyle: 'italic' };
-const fieldLabel: React.CSSProperties = { fontSize: '0.78rem', fontWeight: 600, color: C.text2 };
-const fieldTitle: React.CSSProperties = { fontSize: '0.82rem', fontWeight: 600, color: C.text };
-const fieldHint: React.CSSProperties = { fontSize: '0.72rem', color: C.text2, lineHeight: 1.4 };
-const select: React.CSSProperties = {
-  padding: '7px 9px', fontSize: '0.8rem', borderRadius: 8,
-  border: `1px solid ${C.border}`, background: C.surface2, color: C.text, boxSizing: 'border-box',
-};
-/* Every native <option> carries its own opaque bg/fg — see nativeOptionStyle. */
-const optionStyle = nativeOptionStyle;
-
-function primaryBtn(disabled: boolean): React.CSSProperties {
-  return {
-    padding: '8px 14px', fontSize: '0.8rem', fontWeight: 600, borderRadius: 8,
-    border: '1px solid transparent',
-    background: disabled ? C.surface2 : C.accent,
-    color: disabled ? C.text2 : '#fff',
-    cursor: disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
-  };
-}
-
-const ghostBtn: React.CSSProperties = {
-  marginLeft: 'auto', padding: '2px 8px', fontSize: '0.9rem', lineHeight: 1,
-  borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent',
-  color: C.text2, cursor: 'pointer',
-};
-
-function secondaryBtn(disabled: boolean): React.CSSProperties {
-  return {
-    padding: '8px 14px', fontSize: '0.8rem', fontWeight: 600, borderRadius: 8,
-    border: `1px solid ${C.border}`, background: 'transparent',
-    color: disabled ? C.text2 : C.text,
-    cursor: disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: disabled ? 0.7 : 1,
-  };
-}
-
-const linkBtn: React.CSSProperties = {
-  padding: 0, fontSize: '0.7rem', fontWeight: 600, border: 'none', background: 'transparent',
-  color: C.accent, cursor: 'pointer',
-};
-
-function pill(seeded: boolean): React.CSSProperties {
-  return {
-    fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999,
-    border: `1px solid ${C.border}`, background: C.surface2,
-    color: seeded ? C.accent : C.text2,
-  };
-}
-
-function tag(isDelta: boolean): React.CSSProperties {
-  return {
-    fontSize: '0.64rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
-    padding: '1px 6px', borderRadius: 5, border: `1px solid ${C.border}`,
-    color: isDelta ? C.text2 : C.accent, background: C.surface,
-  };
-}

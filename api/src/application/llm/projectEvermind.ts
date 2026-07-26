@@ -39,6 +39,7 @@ import type { Env } from '../../env';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { rankEvermindRecall, hashRecallPrompt, type RankedRecall } from './evermindRecall';
 import type { TeacherSkipReason } from './evermindTeacher';
+import type { EvermindCoherenceAssessment } from './evermindRuntime';
 
 /** R2 key prefix under which per-project Evermind model versions live. */
 export const PROJECT_EVERMIND_ROOT = 'evermind/project';
@@ -346,6 +347,71 @@ export async function seedProjectEvermind(
 }
 
 /**
+ * REPLACE a project's Evermind weights with a fresh base, as a NEW version.
+ *
+ * {@link seedProjectEvermind} deliberately refuses to clobber an existing head (seeding
+ * twice must not destroy a trained model), which left exactly one situation with no
+ * remedy in the product: a head that trained itself into gibberish. It could be
+ * quarantined but never repaired — "retrain or re-seed" was an operator action with no
+ * door in the UI or the API. This is that door.
+ *
+ * It writes the new bytes at `version + 1` rather than overwriting v1, because every
+ * ref is immutable and cached per-isolate by ref: reusing a version would leave live
+ * isolates serving the OLD weights from memo. Advancing preserves the audit trail too —
+ * the bad version's artifacts stay in R2 for post-mortem.
+ *
+ * Inference is left OFF and quarantine bookkeeping cleared: a fresh base has never
+ * passed a coherence probe, so it must be re-promoted deliberately (through the same
+ * benchmark gate as any other enable). Learning history (the coordinator's ring) is
+ * untouched — the knowledge is not the problem, the weights are.
+ */
+export async function reseedProjectEvermind(
+  env: Env,
+  db: Db,
+  store: ArtifactWriteStore,
+  params: {
+    tenantId: number;
+    projectId: number;
+    name?: string;
+    modelBlob: ArrayBuffer;
+    tokenizer: { vocab: Record<string, number>; merges: string[] };
+  },
+): Promise<ProjectEvermindHead> {
+  const { tenantId, projectId } = params;
+  const existing = await getProjectEvermindHead(env, db, tenantId, projectId);
+  // Never seeded → this is an ordinary seed; reuse the one seeding implementation.
+  if (existing.version < 1) {
+    return seedProjectEvermind(env, db, store, params);
+  }
+
+  const nextVersion = existing.version + 1;
+  await putProjectEvermindVersion(store, tenantId, projectId, nextVersion, params.modelBlob, params.tokenizer);
+
+  await db
+    .update(projectEvermind)
+    .set({
+      version: nextVersion,
+      ...(params.name?.trim() ? { name: params.name.trim() } : {}),
+      // A replaced base has proven nothing yet — it must re-earn the right to serve.
+      inferenceEnabled: false,
+      serveFailureStreak: 0,
+      quarantinedAt: null,
+      quarantineReason: null,
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(projectEvermind.tenantId, tenantId),
+      eq(projectEvermind.projectId, projectId),
+      // Forward-only, same guard as a merge: a concurrent merge that already advanced
+      // past us wins rather than being rolled back.
+      sql`${projectEvermind.version} < ${nextVersion}`,
+    ));
+
+  await bumpCacheVersion(env, versionKey(tenantId, projectId));
+  return getProjectEvermindHead(env, db, tenantId, projectId);
+}
+
+/**
  * A tiny generic corpus the DEFAULT project Evermind's byte-BPE tokenizer trains
  * on so it can round-trip code + English out of the box (the base vocab always
  * covers all 256 bytes, so any input is representable regardless). Small on
@@ -527,14 +593,10 @@ export type SetInferenceResult =
   | { ok: true; inferenceEnabled: boolean }
   | { ok: false; reason: 'not_ready'; readiness: EvermindServeReadiness };
 
-/** A head's fitness-to-serve verdict from generating probe samples and scoring them. */
-export interface EvermindServeReadiness {
-  ready: boolean;
-  /** Fraction of probe samples that were substantive AND coherent (0..1). */
-  passRate: number;
-  /** The probe generations + their per-sample coherence verdict, for display/triage. */
-  samples: Array<{ prompt: string; text: string; coherent: boolean }>;
-}
+/** A head's fitness-to-serve verdict from generating probe samples and scoring them.
+ *  Structurally the runtime's assessment — aliased (not re-declared) so the probe
+ *  samples' failure reasons reach the UI without the two shapes drifting. */
+export type EvermindServeReadiness = EvermindCoherenceAssessment;
 
 /**
  * Toggle the opt-in inference consumer flag. Bumps the head cache.
@@ -1209,11 +1271,65 @@ export async function flushProjectEvermind(
   tenantId: number,
   projectId: number,
 ): Promise<LearnDispatchResult> {
+  return dispatchCoordinator(env, tenantId, projectId, '/flush');
+}
+
+/**
+ * The ONE way this module talks to a project's coordinator: resolve the stub, POST,
+ * parse. Every maintenance door (flush / reindex / discard-pending / forget) rides it,
+ * so "what happens when the binding is unset" is answered in exactly one place.
+ */
+async function dispatchCoordinator(
+  env: Env,
+  tenantId: number,
+  projectId: number,
+  path: string,
+  body?: Record<string, unknown>,
+): Promise<LearnDispatchResult> {
   const stub = coordinatorStub(env, tenantId, projectId);
   if (!stub) return { ok: false, status: 503, body: { error: 'concurrent learning not configured (no coordinator binding)' } };
-  const res = await stub.fetch('https://coordinator/flush', { method: 'POST' });
-  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  return { ok: res.ok, status: res.status, body };
+  const res = await stub.fetch(`https://coordinator${path}`, {
+    method: 'POST',
+    ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
+  });
+  const parsed = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  return { ok: res.ok, status: res.status, body: parsed };
+}
+
+/**
+ * Recompute every learned memory's recall embedding against the CURRENT head. Memories
+ * are embedded at merge time with the model as it was then, while recall embeds the
+ * QUERY with today's model — so recall quality decays silently as the head learns.
+ * This is the "reindex" the console exposes.
+ */
+export async function reindexProjectEvermindRecall(
+  env: Env,
+  tenantId: number,
+  projectId: number,
+): Promise<LearnDispatchResult> {
+  return dispatchCoordinator(env, tenantId, projectId, '/reindex');
+}
+
+/** Drop queued-but-unmerged contributions (a bad import/teach batch) without touching
+ *  anything already learned. */
+export async function discardProjectEvermindPending(
+  env: Env,
+  tenantId: number,
+  projectId: number,
+): Promise<LearnDispatchResult> {
+  return dispatchCoordinator(env, tenantId, projectId, '/discard-pending');
+}
+
+/** Remove specific learned memories from the recall ring so they can no longer be
+ *  recalled or used to ground a reply. Used by the knowledge analyzer's repair pass. */
+export async function forgetProjectEvermindMemories(
+  env: Env,
+  tenantId: number,
+  projectId: number,
+  ids: number[],
+): Promise<LearnDispatchResult> {
+  if (ids.length === 0) return { ok: true, status: 200, body: { forgotten: 0 } };
+  return dispatchCoordinator(env, tenantId, projectId, '/forget', { ids });
 }
 
 /** One raw memory to fold into the model — the `key` is echoed back so the caller

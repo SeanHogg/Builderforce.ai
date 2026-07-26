@@ -83,6 +83,16 @@ export type {
   EvermindSeedModel,
   EvermindTarget,
   EvermindTeacherOptions,
+  EvermindValidateMatch,
+  EvermindValidateResult,
+  EvermindProbeSample,
+  EvermindProbeResult,
+  EvermindKnowledgeVerdict,
+  EvermindKnowledgeFinding,
+  EvermindKnowledgeAnalysis,
+  EvermindKnowledgeRepair,
+  EvermindCleanupResult,
+  EvermindReindexResult,
 } from './evermind/types';
 
 export { Project360View } from './project360/Project360View';

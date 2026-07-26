@@ -23,6 +23,12 @@ import {
   teachProjectEvermindFromText,
   flushProjectEvermind,
   validateProjectEvermind,
+  probeProjectEvermind,
+  reseedProjectEvermind,
+  reindexProjectEvermind,
+  cleanupProjectEvermind,
+  analyzeProjectEvermind,
+  applyProjectEvermindFindings,
 } from '@/lib/projectEvermindApi';
 import { useEvermindValidation } from './EvermindValidationContext';
 
@@ -80,6 +86,20 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     flush: async () => { const r = await flushProjectEvermind(projectId); return { merged: r.merged, version: r.version }; },
     validate: (prompt) => validateProjectEvermind(projectId, prompt),
     loadTargets: () => listProjectEvermindTargets(projectId),
+    // Test bench + maintenance + knowledge audit. All plain REST on this project, so
+    // the web host implements every one; the console self-gates on their presence.
+    probe: (prompt) => probeProjectEvermind(projectId, prompt),
+    reseed: async (slug) => { const r = await reseedProjectEvermind(projectId, slug); return { version: r.version }; },
+    reindex: async () => {
+      const r = await reindexProjectEvermind(projectId);
+      return { reindexed: r.reindexed, skipped: r.skipped, version: r.version };
+    },
+    cleanup: async () => {
+      const r = await cleanupProjectEvermind(projectId);
+      return { discarded: r.discarded, cachedAnswers: r.cachedAnswers };
+    },
+    analyze: () => analyzeProjectEvermind(projectId),
+    applyFindings: (findings) => applyProjectEvermindFindings(projectId, findings),
   }), [projectId, teacherModels, canUseFrontierModels]);
 
   const labels = useMemo<Partial<EvermindConsoleLabels>>(() => ({
@@ -165,6 +185,55 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     hideDetail: t('hideDetail'),
     detailPromptLabel: t('detailPromptLabel'),
     detailTextLabel: t('detailTextLabel'),
+    // Test bench
+    testTitle: t('testTitle'),
+    testHint: t('testHint'),
+    testPlaceholder: t('testPlaceholder'),
+    testRunCta: t('testRunCta'),
+    testReadinessCta: t('testReadinessCta'),
+    testRunning: t('testRunning'),
+    testResultReadiness: (passed, total) => t('testResultReadiness', { passed, total }),
+    testResultPrompt: t('testResultPrompt'),
+    testServable: t('testServable'),
+    testRefused: t('testRefused'),
+    testRefusedBecause: (detail) => t('testRefusedBecause', { detail }),
+    testEmptyOutput: t('testEmptyOutput'),
+    testVerdictReady: t('testVerdictReady'),
+    testVerdictNotReady: t('testVerdictNotReady'),
+    // Maintenance
+    maintenanceTitle: t('maintenanceTitle'),
+    maintenanceHint: t('maintenanceHint'),
+    reseedLabel: t('reseedLabel'),
+    reseedHint: t('reseedHint'),
+    reseedCta: t('reseedCta'),
+    reseedConfirm: t('reseedConfirm'),
+    reseedStarterOption: t('reseedStarterOption'),
+    reseedDone: (version) => t('reseedDone', { version }),
+    reindexLabel: t('reindexLabel'),
+    reindexHint: t('reindexHint'),
+    reindexCta: t('reindexCta'),
+    reindexDone: (count) => t('reindexDone', { count }),
+    cleanupLabel: t('cleanupLabel'),
+    cleanupHint: t('cleanupHint'),
+    cleanupCta: t('cleanupCta'),
+    cleanupConfirm: t('cleanupConfirm'),
+    cleanupDone: (discarded, cached) => t('cleanupDone', { discarded, cached }),
+    // Knowledge analyzer
+    analyzeTitle: t('analyzeTitle'),
+    analyzeHint: t('analyzeHint'),
+    analyzeCta: t('analyzeCta'),
+    analyzing: t('analyzing'),
+    analyzeClean: (analyzed) => t('analyzeClean', { analyzed }),
+    analyzeSummary: (issues, analyzed, model) => t('analyzeSummary', { issues, analyzed, model }),
+    analyzeSummaryLocal: (issues, analyzed) => t('analyzeSummaryLocal', { issues, analyzed }),
+    analyzeVerdict: (verdict) => t('analyzeVerdict', { verdict }),
+    analyzeCorrectionLabel: t('analyzeCorrectionLabel'),
+    analyzeSelectAll: t('analyzeSelectAll'),
+    analyzeSelectNone: t('analyzeSelectNone'),
+    analyzeApplyCta: (count) => t('analyzeApplyCta', { count }),
+    analyzeApplying: t('analyzeApplying'),
+    analyzeApplied: (corrected, forgotten, version) => t('analyzeApplied', { corrected, forgotten, version }),
+    analyzeSkipped: (count) => t('analyzeSkipped', { count }),
     refresh: t('refresh'),
     errorGeneric: t('errorGeneric'),
   }), [t, format]);

@@ -366,6 +366,169 @@ export async function setProjectEvermindTeacher(
   );
 }
 
+/** One graded test-bench generation (mirrors api `EvermindProbeResult` samples). */
+export interface ProjectEvermindProbeSample {
+  prompt: string;
+  /** The raw text the model generated — shown verbatim. */
+  text: string;
+  /** Whether this output would be served to a user, or refused as unusable. */
+  coherent: boolean;
+  /** The signal that rejected it (`repetition`, `non-words`, …); null when it passed. */
+  failure: string | null;
+  /** Plain-language explanation of `failure` (empty when coherent). */
+  detail: string;
+}
+
+/** A test-bench run: the operator's prompt, or the fixed readiness suite. */
+export interface ProjectEvermindProbeResult {
+  version: number;
+  projectId: number;
+  mode: 'readiness' | 'prompt';
+  ready: boolean;
+  passRate: number;
+  samples: ProjectEvermindProbeSample[];
+}
+
+/**
+ * TEST BENCH — generate from the project's Evermind and grade the output with the same
+ * rule the serve path applies. With a `prompt`, runs that prompt; without one, runs the
+ * fixed readiness suite that gates enabling inference.
+ *
+ * This is what makes "what will this model produce?" answerable BEFORE a user finds out:
+ * `validate` only previews which learned MEMORIES would be recalled and generates
+ * nothing. Manager-gated server-side; 409 when the model isn't set up and 422 when the
+ * artifact can't be run, both surfaced as ordinary inline errors rather than a system fault.
+ */
+export async function probeProjectEvermind(
+  projectId: number,
+  prompt?: string,
+): Promise<ProjectEvermindProbeResult> {
+  return apiRequest<ProjectEvermindProbeResult>(
+    `/api/projects/${projectId}/evermind/probe`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prompt ? { prompt } : {}),
+      expectedErrors: [409, 422],
+    },
+  );
+}
+
+/**
+ * REPLACE the model's weights with a fresh base, as a new version — from a published
+ * Studio model (`slug`) or a clean starter base when omitted. The repair path for a
+ * model that has trained itself into gibberish. Inference is left OFF: the new base has
+ * to pass a readiness check before it may serve again.
+ */
+export async function reseedProjectEvermind(
+  projectId: number,
+  slug?: string,
+): Promise<{ ok: boolean; version: number; inferenceEnabled: boolean }> {
+  return apiRequest<{ ok: boolean; version: number; inferenceEnabled: boolean }>(
+    `/api/projects/${projectId}/evermind/reseed`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(slug ? { slug } : {}),
+    },
+  );
+}
+
+/** Recompute every learned memory's recall embedding against the CURRENT model, so
+ *  retrieval stops drifting as the model learns. */
+export async function reindexProjectEvermind(
+  projectId: number,
+): Promise<{ ok: boolean; reindexed: number; skipped: number; version: number }> {
+  return apiRequest<{ ok: boolean; reindexed: number; skipped: number; version: number }>(
+    `/api/projects/${projectId}/evermind/reindex`,
+    { method: 'POST', expectedErrors: [409, 503] },
+  );
+}
+
+/** Discard queued-but-unmerged contributions and purge cached answers. Never touches
+ *  what the model has already learned. */
+export async function cleanupProjectEvermind(
+  projectId: number,
+): Promise<{ ok: boolean; discarded: number; cachedAnswers: number }> {
+  return apiRequest<{ ok: boolean; discarded: number; cachedAnswers: number }>(
+    `/api/projects/${projectId}/evermind/cleanup`,
+    { method: 'POST' },
+  );
+}
+
+/** What a knowledge audit concluded about one learned memory. */
+export type ProjectEvermindKnowledgeVerdict = 'ok' | 'incoherent' | 'incorrect' | 'outdated' | 'unusable' | 'redundant';
+
+/** One audited memory + (where repairable) the correction that would replace it. */
+export interface ProjectEvermindKnowledgeFinding {
+  id: number;
+  verdict: ProjectEvermindKnowledgeVerdict;
+  issue: string;
+  prompt?: string;
+  excerpt: string;
+  correction?: string;
+  source: 'coherence-gate' | 'frontier';
+}
+
+/** A read-only knowledge audit. */
+export interface ProjectEvermindKnowledgeAnalysis {
+  version: number;
+  analyzed: number;
+  /** The frontier model that graded, or null when only the local coherence screen ran. */
+  model: string | null;
+  findings: ProjectEvermindKnowledgeFinding[];
+  /** Present when the frontier review couldn't run — local findings are still returned. */
+  warning?: string;
+}
+
+/** What applying findings actually changed. */
+export interface ProjectEvermindKnowledgeRepair {
+  corrected: number;
+  forgotten: number;
+  merged: number;
+  version: number;
+  skipped: Array<{ id: number; reason: string }>;
+}
+
+/**
+ * ANALYZE — read back what the Evermind has learned and have it checked for mistakes,
+ * stale facts and nonsense. Read-only: nothing changes until findings are applied.
+ * Frontier-gated server-side (402 when the plan can't reach a frontier model).
+ */
+export async function analyzeProjectEvermind(
+  projectId: number,
+): Promise<ProjectEvermindKnowledgeAnalysis> {
+  return apiRequest<ProjectEvermindKnowledgeAnalysis>(
+    `/api/projects/${projectId}/evermind/analyze`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+      expectedErrors: [402],
+    },
+  );
+}
+
+/**
+ * APPLY an audit's findings: forget the bad memories and re-teach the corrections in
+ * their place (write-through — update == replace), then merge so the fixes are real
+ * weights rather than a queued intention.
+ */
+export async function applyProjectEvermindFindings(
+  projectId: number,
+  findings: ProjectEvermindKnowledgeFinding[],
+): Promise<ProjectEvermindKnowledgeRepair> {
+  return apiRequest<ProjectEvermindKnowledgeRepair>(
+    `/api/projects/${projectId}/evermind/analyze`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apply: true, findings }),
+      expectedErrors: [400, 402],
+    },
+  );
+}
+
 /** Set the learning mode: connected (contribute) | offline-frozen (pinned, no write-back). */
 export async function setProjectEvermindMode(
   projectId: number,
