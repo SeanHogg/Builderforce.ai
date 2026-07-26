@@ -74,6 +74,35 @@ export async function upsertProjectFact(
 }
 
 /**
+ * Purge this project's memory-first Q&A CACHE rows (source {@link QA_CACHE_SOURCE}),
+ * leaving durable beliefs untouched. Returns how many were removed.
+ *
+ * The cache replays a previous answer verbatim on an exact-repeat question, which is
+ * precisely what you must be able to clear after the underlying knowledge changes (or
+ * after a bad answer got pinned before the coherence gate could reject it). Durable
+ * facts are deliberately NOT touched — that is knowledge, not a cached reply.
+ */
+export async function purgeProjectQaCache(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+): Promise<number> {
+  if (!Number.isInteger(projectId) || projectId <= 0) return 0;
+  const removed = await db
+    .delete(projectFacts)
+    .where(and(
+      eq(projectFacts.tenantId, tenantId),
+      eq(projectFacts.projectId, projectId),
+      eq(projectFacts.source, QA_CACHE_SOURCE),
+    ))
+    .returning({ id: projectFacts.id })
+    .catch(() => [] as Array<{ id: string }>);
+  if (removed.length > 0) await bumpCacheVersion(env, versionKey(tenantId, projectId));
+  return removed.length;
+}
+
+/**
  * Recall project facts (read-through cached). With a `query`, ranks by lexical
  * overlap (ILIKE, same graceful fallback as cloudMemory); without one, returns the
  * most important/recent. Degrades to [] on any error (e.g. pre-migration table).

@@ -65,6 +65,15 @@ function evLabels(labels: LabelBundle): Partial<EvermindConsoleLabels> {
     'importTitle', 'importHint', 'importCta', 'importing', 'importNothing',
     'quarantinedBadge', 'targetsTitle', 'targetsHint', 'targetsEmpty', 'targetSelfBadge',
     'targetBuildBadge', 'targetUnseeded', 'targetInferenceOn', 'targetConnected', 'targetFrozen',
+    // Test bench / maintenance / knowledge analyzer.
+    'testTitle', 'testHint', 'testPlaceholder', 'testRunCta', 'testReadinessCta', 'testRunning',
+    'testResultPrompt', 'testServable', 'testRefused', 'testEmptyOutput', 'testVerdictReady',
+    'testVerdictNotReady',
+    'maintenanceTitle', 'maintenanceHint', 'reseedLabel', 'reseedHint', 'reseedCta',
+    'reseedConfirm', 'reseedStarterOption', 'reindexLabel', 'reindexHint', 'reindexCta',
+    'cleanupLabel', 'cleanupHint', 'cleanupCta', 'cleanupConfirm',
+    'analyzeTitle', 'analyzeHint', 'analyzeCta', 'analyzing', 'analyzeCorrectionLabel',
+    'analyzeSelectAll', 'analyzeSelectNone', 'analyzeApplying',
   ];
   for (const k of keys) {
     const v = s(k);
@@ -153,6 +162,19 @@ export function EvermindScreen({ init }: { init: InitData }) {
       validate: (prompt) => req(`${base}/validate`, { method: 'POST', body: JSON.stringify({ prompt }) }),
       // Read-only list of every Evermind under this project (self + IDE builds).
       loadTargets: () => req<{ targets?: EvermindTarget[] }>(`${base}/targets`).then((r) => r.targets ?? []),
+      // Test bench: generate from the model and grade it — the sidebar gets the SAME
+      // "what will this actually produce?" answer as the web console, not a lesser one.
+      probe: (prompt) => req(`${base}/probe`, { method: 'POST', body: JSON.stringify(prompt ? { prompt } : {}) }),
+      // Maintenance: replace the weights / rebuild the recall index / clean up.
+      reseed: (slug) => req<{ version?: number }>(`${base}/reseed`, { method: 'POST', body: JSON.stringify(slug ? { slug } : {}) })
+        .then((r) => ({ version: r.version ?? 0 })),
+      reindex: () => req<{ reindexed?: number; skipped?: number; version?: number }>(`${base}/reindex`, { method: 'POST' })
+        .then((r) => ({ reindexed: r.reindexed ?? 0, skipped: r.skipped ?? 0, version: r.version ?? 0 })),
+      cleanup: () => req<{ discarded?: number; cachedAnswers?: number }>(`${base}/cleanup`, { method: 'POST' })
+        .then((r) => ({ discarded: r.discarded ?? 0, cachedAnswers: r.cachedAnswers ?? 0 })),
+      // Knowledge audit + repair.
+      analyze: () => req(`${base}/analyze`, { method: 'POST', body: JSON.stringify({}) }),
+      applyFindings: (findings) => req(`${base}/analyze`, { method: 'POST', body: JSON.stringify({ apply: true, findings }) }),
       // Import: host reads the snapshot (fs) → gateway absorbs the entries → host compacts
       // the absorbed ones to stubs. The three steps split by capability (fs on the host,
       // authed fetch in the webview), so no single layer needs powers it lacks.

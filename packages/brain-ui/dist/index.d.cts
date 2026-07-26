@@ -982,6 +982,90 @@ interface EvermindTeacherOptions {
     isPaid: boolean;
 }
 /**
+ * One graded generation from the TEST BENCH — what the model actually produced for a
+ * prompt, plus the verdict the SERVE PATH would reach on it. This is the difference
+ * between "which memories would be recalled" (Validate) and "what will a user see"
+ * (this): only the latter can catch a head that emits gibberish, before a user does.
+ */
+interface EvermindProbeSample {
+    prompt: string;
+    /** The raw text the model generated. Shown verbatim — no cleanup, no truncation. */
+    text: string;
+    /** Whether this output would be served to a user, or refused as unusable. */
+    coherent: boolean;
+    /** Which signal rejected it (`repetition`, `non-words`, …); null when it passed. */
+    failure: string | null;
+    /** Plain-language explanation of {@link failure} (empty when coherent). */
+    detail: string;
+}
+/** A test-bench run: one prompt, or the fixed readiness suite the enable-gate uses. */
+interface EvermindProbeResult {
+    version: number;
+    /** `readiness` = the fixed probe suite that gates enabling inference; `prompt` = the
+     *  operator's own prompt. Both are graded identically. */
+    mode: 'readiness' | 'prompt';
+    /** Whether the run clears the bar (a readiness run needs a MAJORITY of samples). */
+    ready: boolean;
+    /** Fraction of samples that were servable (0..1). */
+    passRate: number;
+    samples: EvermindProbeSample[];
+}
+/** What a knowledge audit concluded about one learned memory. */
+type EvermindKnowledgeVerdict = 'ok' | 'incoherent' | 'incorrect' | 'outdated' | 'unusable' | 'redundant';
+/** One audited memory: what is wrong with it and (when repairable) the replacement. */
+interface EvermindKnowledgeFinding {
+    id: number;
+    verdict: EvermindKnowledgeVerdict;
+    /** One sentence naming the problem. */
+    issue: string;
+    /** The task this memory answered — the key its correction is re-taught under. */
+    prompt?: string;
+    /** Excerpt of the memory as it stands today. */
+    excerpt: string;
+    /** The corrected knowledge to learn instead. Absent when the memory is simply dropped. */
+    correction?: string;
+    /** Whether the local coherence screen or the frontier reviewer produced this verdict. */
+    source: 'coherence-gate' | 'frontier';
+}
+/** The result of a read-only knowledge audit. */
+interface EvermindKnowledgeAnalysis {
+    version: number;
+    /** How many learned memories were reviewed. */
+    analyzed: number;
+    /** The frontier model that graded, or null when only the local screen ran. */
+    model: string | null;
+    findings: EvermindKnowledgeFinding[];
+    /** Present when the frontier review could not run — local findings still returned. */
+    warning?: string;
+}
+/** What applying a set of findings actually changed. */
+interface EvermindKnowledgeRepair {
+    /** Memories re-taught with corrected knowledge. */
+    corrected: number;
+    /** Memories dropped from the recall ring. */
+    forgotten: number;
+    /** Contributions merged by the closing flush. */
+    merged: number;
+    version: number;
+    skipped: Array<{
+        id: number;
+        reason: string;
+    }>;
+}
+/** What a clean-up pass removed. */
+interface EvermindCleanupResult {
+    /** Queued-but-unmerged contributions dropped. */
+    discarded: number;
+    /** Cached question→answer pairs purged. */
+    cachedAnswers: number;
+}
+/** What a recall reindex recomputed. */
+interface EvermindReindexResult {
+    reindexed: number;
+    skipped: number;
+    version: number;
+}
+/**
  * Host-provided data access + mutations — the only coupling to a backend. The web
  * app wires this to its `projectEvermindApi` client; the VS Code webview wires it to
  * its bearer-fetch REST client. Same console, same endpoints, different host.
@@ -1020,6 +1104,30 @@ interface EvermindConsoleAdapter {
      * project" list; a host that omits it simply hides the section. Ordered `[self, …builds]`.
      */
     loadTargets?(): Promise<EvermindTarget[]>;
+    /**
+     * OPTIONAL — TEST BENCH: generate from the model and grade the output. Pass a prompt
+     * to see what the model produces for it; omit it to run the fixed readiness suite that
+     * gates enabling inference. When present the console renders the test bench.
+     */
+    probe?(prompt?: string): Promise<EvermindProbeResult>;
+    /**
+     * OPTIONAL — REPLACE the model's weights with a fresh base (a published model by
+     * `slug`, or a clean starter base when omitted), as a new version. The repair path for
+     * a model that has trained itself into gibberish. Inference is left OFF afterwards.
+     */
+    reseed?(slug?: string): Promise<{
+        version: number;
+    }>;
+    /** OPTIONAL — recompute every learned memory's recall embedding against the current
+     *  model, so retrieval stops drifting as the model learns. */
+    reindex?(): Promise<EvermindReindexResult>;
+    /** OPTIONAL — drop queued-but-unmerged contributions and purge cached answers.
+     *  Never touches what the model has already learned. */
+    cleanup?(): Promise<EvermindCleanupResult>;
+    /** OPTIONAL — audit what the model has learned (read-only) and report what is wrong. */
+    analyze?(): Promise<EvermindKnowledgeAnalysis>;
+    /** OPTIONAL — apply an audit's findings: forget bad knowledge, re-teach corrections. */
+    applyFindings?(findings: EvermindKnowledgeFinding[]): Promise<EvermindKnowledgeRepair>;
 }
 /** Every visible string. Parametric ones are functions the host localizes. */
 interface EvermindConsoleLabels {
@@ -1124,6 +1232,54 @@ interface EvermindConsoleLabels {
     distilledBy: (model: string) => string;
     /** The expanded explanation of a distillation fault (model may be empty). */
     teacherFault: (model: string, reason: string) => string;
+    testTitle: string;
+    testHint: string;
+    testPlaceholder: string;
+    testRunCta: string;
+    testReadinessCta: string;
+    testRunning: string;
+    /** Header over the results of a readiness run vs a single prompt run. */
+    testResultReadiness: (passed: number, total: number) => string;
+    testResultPrompt: string;
+    testServable: string;
+    testRefused: string;
+    /** The plain-language reason an output was refused. */
+    testRefusedBecause: (detail: string) => string;
+    testEmptyOutput: string;
+    testVerdictReady: string;
+    testVerdictNotReady: string;
+    maintenanceTitle: string;
+    maintenanceHint: string;
+    reseedLabel: string;
+    reseedHint: string;
+    reseedCta: string;
+    reseedConfirm: string;
+    reseedStarterOption: string;
+    reseedDone: (version: number) => string;
+    reindexLabel: string;
+    reindexHint: string;
+    reindexCta: string;
+    reindexDone: (reindexed: number) => string;
+    cleanupLabel: string;
+    cleanupHint: string;
+    cleanupCta: string;
+    cleanupConfirm: string;
+    cleanupDone: (discarded: number, cached: number) => string;
+    analyzeTitle: string;
+    analyzeHint: string;
+    analyzeCta: string;
+    analyzing: string;
+    analyzeClean: (analyzed: number) => string;
+    analyzeSummary: (issues: number, analyzed: number, model: string) => string;
+    analyzeSummaryLocal: (issues: number, analyzed: number) => string;
+    analyzeVerdict: (verdict: EvermindKnowledgeVerdict) => string;
+    analyzeCorrectionLabel: string;
+    analyzeSelectAll: string;
+    analyzeSelectNone: string;
+    analyzeApplyCta: (count: number) => string;
+    analyzeApplying: string;
+    analyzeApplied: (corrected: number, forgotten: number, version: number) => string;
+    analyzeSkipped: (count: number) => string;
     refresh: string;
     errorGeneric: string;
 }
@@ -1479,4 +1635,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, ConsolidateForkControl, type ConsolidateForkControlProps, type ConsolidateForkLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_CONSOLIDATE_FORK_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindLearnedStatus, type EvermindMode, type EvermindRecentEntry, type EvermindSeedModel, type EvermindTarget, type EvermindTeacherOptions, type EvermindTeacherSkipReason, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, selectPendingAskUser, serializeAskUser, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, ConsolidateForkControl, type ConsolidateForkControlProps, type ConsolidateForkLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_CONSOLIDATE_FORK_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, selectPendingAskUser, serializeAskUser, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
