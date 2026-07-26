@@ -41,6 +41,7 @@ import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { chatErrorAction, type ChatErrorAction } from './chatError';
 import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
 import { selectToolsForTurn } from './selectTools';
+import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel } from './lastResolvedModel';
 import { chatWorkLinkingDirective, isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, isReadOnlyPlatformTool } from './chatWorkLinking';
 import {
@@ -51,6 +52,7 @@ import {
   modelFailoverNotice,
   MAX_ANNOUNCEMENT_RECOVERIES,
   MAX_MODEL_FAILOVERS,
+  toolNamesMentionedIn,
 } from '@builderforce/agent-stall';
 import {
   formatEvermindMemoryBlock,
@@ -1289,6 +1291,14 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   let activeModel = model;
   const triedModels: string[] = [];
   let modelFailovers = 0;
+  // The user's ACTUAL request for this run, resolved once. Every turn's tool
+  // selection scores against this and nothing else — see the `query` note below.
+  const requestQuery =
+    (req.userTurn !== undefined ? latestUserText([{ role: 'user', content: req.userTurn }]) : '')
+    || latestUserText(convo)
+    || '';
+  // Tool names the resolved system prompt tells the model to call. Always advertised.
+  const promptNamedTools = toolNamesMentionedIn(systemPrompt);
 
   // Evermind learning + reconciliation provenance for a completed turn. Extracted so
   // BOTH the normal final-answer branch AND the tool-budget-exhausted forced-final
@@ -1364,10 +1374,31 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     // tool call at all (observed: 308 tools → three consecutive turns with zero
     // calls), besides dominating the prompt budget. No-ops for small catalogs.
     const selection = selectToolsForTurn(allTools, {
-      query: latestUserText(working) ?? latestUserText(convo) ?? '',
+      // The REQUEST, captured once before the loop — never "the latest user message".
+      // The loop pushes its own `role:'user'` turns (the stall-recovery nudge, the
+      // tool-budget close-out), so reading the newest one re-rolled the advertised
+      // set from text WE wrote: after one recovery the query became "…made zero tool
+      // calls… answer using its result…", which scores `key_results`/`dashboards`/
+      // `incidents` and drops the ticket tools the user actually asked for. The tool
+      // the model was told to call then genuinely did not exist, and it narrated.
+      // Holding the request steady also keeps the advertised set STABLE across turns
+      // — a tool must not vanish between one turn and the next.
+      query: requestQuery,
       pinned: usedTools,
+      // Tools the SYSTEM PROMPT instructs the model to call (e.g. the chat↔ticket
+      // directive names `builtin_chats_list_tickets`) are never optional: telling a
+      // model to call a tool we then decline to advertise is the exact contradiction
+      // that produces a narrated call. Derived from the prompt text, so a directive
+      // edit can never silently desync from this list.
+      required: promptNamedTools,
     });
-    const tools = selection.tools.length > 0 ? selection.tools : undefined;
+    // The ROUTER rides along whenever selection actually trimmed something, so the
+    // tools that missed the cut stay REACHABLE instead of silently ceasing to exist.
+    // Three fixed schemas buy back the whole catalog; see toolRouter.ts.
+    const advertised = selection.trimmed
+      ? [...selection.tools, ...routerToolSpecs(allTools?.length ?? 0)]
+      : selection.tools;
+    const tools = advertised.length > 0 ? advertised : undefined;
     if (selection.trimmed) {
       pushTrace(c, {
         ts: nowIso(),
@@ -1482,7 +1513,35 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       }
       c.streamingText = '';
       emit(c);
-      for (const tc of result.toolCalls) {
+      for (const rawCall of result.toolCalls) {
+        // Router calls resolve against the in-memory catalog FIRST. `find`/`describe`
+        // are answered locally (no network, no host dispatch); `invoke` unwraps to the
+        // real tool and then falls through to the normal path below — so a routed call
+        // still passes the confirm gate, the read-dedupe, the audit step and the
+        // auto-link, exactly like a directly-advertised one.
+        let tc = rawCall;
+        if (isRouterTool(tc.name)) {
+          const routed = handleRouterCall(allTools ?? [], tc.name, parseArgs(tc.args));
+          if ('result' in routed) {
+            convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(routed.result) });
+            pushDurableStep(c, chatId, persistence, {
+              ts: nowIso(),
+              category: 'tool',
+              label: tc.name,
+              args: parseArgs(tc.args),
+              result: routed.result,
+            });
+            continue;
+          }
+          tc = { ...tc, name: routed.dispatch.name, args: JSON.stringify(routed.dispatch.args ?? {}) };
+          pushTrace(c, {
+            ts: nowIso(),
+            category: 'message',
+            label: 'tools.routed',
+            args: { step: iter, via: rawCall.name },
+            result: `Called ${tc.name} through the tool router (it was not advertised directly this turn).`,
+          });
+        }
         const args = parseArgs(tc.args);
         // Human-in-the-loop gate: pause for an explicit confirm when the host's
         // predicate says so. The resolver lives on the cell, so whichever Brain

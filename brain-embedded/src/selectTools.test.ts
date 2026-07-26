@@ -78,3 +78,52 @@ describe('selectToolsForTurn', () => {
     expect(selectToolsForTurn(undefined, { query: 'x' })).toEqual({ tools: [], trimmed: false, available: 0 });
   });
 });
+
+/**
+ * Regression, measured on VS Code chat #85 (317 tools, 64 advertised).
+ *
+ * The run loop pushes its OWN `role:'user'` turns — the stall-recovery nudge, the
+ * tool-budget close-out — so a selector fed "the latest user message" re-rolled the
+ * advertised set from text the LOOP wrote. After one recovery the query became
+ * "…made zero tool calls… answer using its result…", which scores `key_results` /
+ * `dashboards` / `incidents` and drops the ticket tools entirely. The model was then
+ * telling the truth when it said "only file, search, and run_command tools are
+ * available" — and had been narrating `builtin_chats_list_tickets` because the SYSTEM
+ * PROMPT names it.
+ */
+describe('the advertised set is driven by the request, not by loop-injected text', () => {
+  const catalog: BrainToolSpec[] = Array.from({ length: 200 }, (_, i) => ({
+    type: 'function',
+    function: { name: `builtin_pad_${i}_call_data_result`, description: 'padding that matches nudge words' },
+  }));
+  const ticketTool: BrainToolSpec = {
+    type: 'function',
+    function: { name: 'builtin_chats_list_tickets', description: 'List the work items a chat is tied to' },
+  };
+  // Deliberately LAST: catalog-order backfill must not be what saves it.
+  const tools = [...catalog, ticketTool];
+  const nudge = 'You said you would call a tool but did not actually call one — your last turn made zero tool calls. Make the call NOW in this turn, then answer using its result.';
+  const request = 'review all tickets in the backlog and group them by their status';
+
+  it('keeps the requested tool when the query is the real request', () => {
+    const sel = selectToolsForTurn(tools, { query: request, limit: 20 });
+    expect(sel.tools.map((t) => t.function!.name)).toContain('builtin_chats_list_tickets');
+  });
+
+  it('loses it when the query is the recovery nudge — the bug this pins', () => {
+    const sel = selectToolsForTurn(tools, { query: nudge, limit: 20 });
+    expect(sel.tools.map((t) => t.function!.name)).not.toContain('builtin_chats_list_tickets');
+  });
+
+  it('keeps it ANYWAY when the system prompt names it as required', () => {
+    // The prompt-named backstop makes the selection safe even under a bad query:
+    // never instruct a model to call a tool and then decline to advertise it.
+    const sel = selectToolsForTurn(tools, { query: nudge, limit: 20, required: ['builtin_chats_list_tickets'] });
+    expect(sel.tools.map((t) => t.function!.name)).toContain('builtin_chats_list_tickets');
+  });
+
+  it('required outranks relevance, so it survives even at limit 1', () => {
+    const sel = selectToolsForTurn(tools, { query: nudge, limit: 1, required: ['builtin_chats_list_tickets'] });
+    expect(sel.tools.map((t) => t.function!.name)).toEqual(['builtin_chats_list_tickets']);
+  });
+});

@@ -210,4 +210,17 @@ export { STEP_MESSAGE_ROLE, isStepMessage, attachEvermindLearn, formatEvermindLe
 export { formatChatDiagnostics, classifyModelFunding, allowanceState } from './chatDiagnostics';
 export { getMcpToolStatus, setMcpToolStatus, type McpToolStatus } from './mcpToolStatus';
 export { selectToolsForTurn, DEFAULT_TOOL_LIMIT, type ToolSelection } from './selectTools';
+// The tool ROUTER — three fixed tools that keep the whole catalog reachable even when
+// per-turn selection trims it, so a tool below the cut is a lookup away, not missing.
+export {
+  routerToolSpecs,
+  isRouterTool,
+  handleRouterCall,
+  findTools,
+  describeTool,
+  TOOL_ROUTER_FIND,
+  TOOL_ROUTER_DESCRIBE,
+  TOOL_ROUTER_INVOKE,
+  type ToolCatalogMatch,
+} from './toolRouter';
 export type { ChatDiagnosticsData, ChatDiagnosticsEvermind, ChatDiagnosticsAccount, ChatDiagnosticsMeter, AllowanceState } from './chatDiagnostics';

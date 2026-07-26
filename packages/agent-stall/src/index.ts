@@ -51,6 +51,20 @@ const ANNOUNCE_GERUND =
 const TOOL_IDENT = '(?:builtin_[a-z0-9]+(?:_[a-z0-9]+)+|mcp__[a-z0-9_]+)';
 
 /**
+ * Every advertised tool identifier appearing in `text`, de-duplicated, in order.
+ *
+ * Two callers, one pattern — which is the point of putting it here. The stall
+ * detector below uses it to recognise a call written as prose; the per-turn tool
+ * SELECTOR uses it to find the tools a system prompt instructs the model to call, so
+ * a relevance filter can never drop a tool the prompt just promised. Those two must
+ * agree on what a tool name looks like, or the loop recovers from a stall the
+ * selector caused.
+ */
+export function toolNamesMentionedIn(text: string): string[] {
+  return [...new Set(text.match(new RegExp(TOOL_IDENT, 'gi')) ?? [])];
+}
+
+/**
  * A PSEUDO-CALL — the model writing the call ITSELF as plain text, with no
  * first-person subject for {@link ANNOUNCE_SUBJECT} to catch:
  * `run tool builtin_chats_list_tickets with chatId is 85`.
