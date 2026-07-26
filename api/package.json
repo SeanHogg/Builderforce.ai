@@ -18,7 +18,8 @@
     "check:tenant-scope": "node scripts/check-tenant-scope.mjs",
     "check:tracks": "node scripts/check-track-manifest.mjs --check",
     "check:source": "node scripts/check-source-text.mjs",
-    "test": "npm run check:schema && npm run check:db-access && npm run check:version && npm run check:migrations && npm run check:layering && npm run check:tenant-scope && npm run check:tracks && npm run check:source && vitest run",
+    "check:silent-catches": "node scripts/check-silent-catches.mjs",
+    "test": "npm run check:schema && npm run check:db-access && npm run check:version && npm run check:migrations && npm run check:layering && npm run check:tenant-scope && npm run check:tracks && npm run check:source && npm run check:silent-catches && vitest run",
     "typecheck:native": "tsgo --noEmit",
     "check:version": "node scripts/check-version-sync.mjs"
   },

@@ -184,7 +184,7 @@ export class AgentHostRelayDO implements DurableObject {
 
     ws.addEventListener("error", (error) => {
       console.error('[agent-host-relay] upstream websocket error; awaiting close event', {
-        executionId: this.executionId,
+        agentHostId: this.agentHostId,
         error,
       });
     });
