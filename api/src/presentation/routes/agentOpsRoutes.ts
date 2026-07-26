@@ -73,19 +73,13 @@ export function createAgentOpsRoutes(db: DbHandle) {
    */
   router.delete('/coordination/:taskId/leases', requireRole(TenantRole.MANAGER), async (c) => {
     const taskId = Number(c.req.param('taskId'));
-    const body = (await c.req.json<{ resource?: unknown; repoSlug?: unknown }>().catch(() => ({}))) as {
-      resource?: unknown; repoSlug?: unknown;
-    };
+    const body = (await c.req.json<{ resource?: unknown }>().catch(() => ({}))) as { resource?: unknown };
     const resource = typeof body.resource === 'string' ? body.resource : '';
     if (!Number.isFinite(taskId) || !resource) return json({ error: 'taskId and resource are required' }, 400);
-    // The raw resource string goes to the service, which canonicalises it — a client
-    // never supplies a lease key.
-    const released = await forceReleaseLease(c.env, db, {
-      tenantId: c.get('tenantId'),
-      taskId,
-      resource,
-      ...(typeof body.repoSlug === 'string' ? { repoSlug: body.repoSlug } : {}),
-    });
+    // Only the PATH comes from the client. The service resolves which live lease that
+    // is within the ticket's scope, so a client can neither name a lease outside this
+    // ticket nor be trusted with the repo/branch half of a lease key.
+    const released = await forceReleaseLease(c.env, db, { tenantId: c.get('tenantId'), taskId, resource });
     return json({ released });
   });
 

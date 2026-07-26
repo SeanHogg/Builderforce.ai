@@ -24,9 +24,10 @@
  *
  * CACHING. Recall is read-heavy and runs on every agent turn, so it is served through
  * the canonical read-through cache. The keyspace (arbitrary query strings × scopes) is
- * unbounded, so the key embeds a per-tenant VERSION token that every write bumps —
- * never an enumerated key list. Expiry is ALSO applied in SQL, so a lapsed fact stops
- * being recalled when it lapses rather than when a sweep gets to it.
+ * unbounded, so the key embeds VERSION tokens rather than an enumerated key list — and
+ * it embeds BOTH stores' tokens (see {@link scopeCacheToken}), because `project_facts`
+ * has four other writers that know nothing about this module. Expiry is ALSO applied in
+ * SQL, so a lapsed fact stops being recalled when it lapses, not when a sweep runs.
  */
 
 import { and, desc, eq, gt, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
@@ -45,11 +46,12 @@ import {
   visibleScopeChain,
   type MemoryOrigin,
   type MemoryScopeContext,
+  type ResolvedScope,
 } from '../../domain/memory/memoryScope';
 import { agentMemory, projectFacts } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { QA_CACHE_SOURCE, deleteProjectFact, recallProjectFacts, upsertProjectFact } from '../llm/projectFacts';
+import { QA_CACHE_SOURCE, deleteProjectFact, projectFactsVersion, recallProjectFacts, upsertProjectFact } from '../llm/projectFacts';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -60,6 +62,29 @@ const RECALL_L1_TTL_MS = 30_000;
 const clamp01 = (n: number): number => (n < 0 ? 0 : n > 1 ? 1 : n);
 const errMessage = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 const versionKey = (tenantId: number): string => `mem:ver:${tenantId}`;
+
+/**
+ * The COMPOSITE cache token for a scope context.
+ *
+ * A governed read unions two stores, and they are invalidated independently: this
+ * module bumps `mem:ver:<tenant>` on its own writes, while `project_facts` is also
+ * written by the Brain, VS Code, the MCP tool and `projectFactsRoutes`, which bump only
+ * the project-facts token. Keying on ours alone meant a fact written by any of those
+ * surfaces stayed invisible to `memory_recall` for the whole cache TTL — minutes of
+ * stale reads on the one path whose job is "recall what we already know".
+ *
+ * Composing both tokens makes EITHER write invalidate the union, with no cross-module
+ * bump and therefore no import cycle.
+ */
+async function scopeCacheToken(env: Env, ctx: MemoryScopeContext, chain: ResolvedScope[]): Promise<string> {
+  const projectScope = chain.find((s) => s.kind === 'project');
+  const [ownVersion, factsVersion] = await Promise.all([
+    getCacheVersion(env, versionKey(ctx.tenantId)),
+    projectScope ? projectFactsVersion(env, ctx.tenantId, projectScope.id) : Promise.resolve('0'),
+  ]);
+  const scopeSig = chain.map((s) => `${s.kind}${s.id}`).join('|');
+  return `${ownVersion}.${factsVersion}:${scopeSig}`;
+}
 
 /** Significant lowercase words (drop 1-char noise) — each becomes an ILIKE matcher. */
 function tokenize(query: string): string[] {
@@ -158,11 +183,10 @@ export async function recall(
   const n = Math.min(Math.max(1, Math.trunc(limit ?? RECALL_DEFAULT)), RECALL_MAX);
   const chain = visibleScopeChain(ctx);
   try {
-    const ver = await getCacheVersion(env, versionKey(ctx.tenantId));
-    const scopeSig = chain.map((s) => `${s.kind}${s.id}`).join('|');
+    const token = await scopeCacheToken(env, ctx, chain);
     const entries = await getOrSetCached(
       env,
-      `mem:recall:${ctx.tenantId}:${ver}:${scopeSig}:${n}:${query}`,
+      `mem:recall:${ctx.tenantId}:${token}:${n}:${query}`,
       async () => {
         // The two backings are read CONCURRENTLY — a fan-out of two, not an N+1: the
         // scoped store answers tenant+ticket in ONE query via an IN over the chain.
@@ -338,11 +362,10 @@ export async function listGovernedMemories(
   const limit = Math.min(Math.max(1, Math.trunc(opts?.limit ?? 200)), 500);
   const chain = visibleScopeChain(ctx);
   try {
-    const ver = await getCacheVersion(env, versionKey(ctx.tenantId));
-    const scopeSig = chain.map((s) => `${s.kind}${s.id}`).join('|');
+    const token = await scopeCacheToken(env, ctx, chain);
     return await getOrSetCached(
       env,
-      `mem:governed:${ctx.tenantId}:${ver}:${scopeSig}:${limit}`,
+      `mem:governed:${ctx.tenantId}:${token}:${limit}`,
       async () => {
         const scopedKinds = chain.filter((s) => s.kind !== 'project');
         const projectScope = chain.find((s) => s.kind === 'project');

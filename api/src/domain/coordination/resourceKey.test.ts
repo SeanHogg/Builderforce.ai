@@ -7,12 +7,13 @@ import {
   isLeaseLive,
   normalizeResourcePath,
   resourceKeyFor,
+  resourcePathFromKey,
   type LeaseLike,
 } from './resourceKey';
 
 const NOW = new Date('2026-07-26T12:00:00Z');
 const lease = (over: Partial<LeaseLike> = {}): LeaseLike => ({
-  resourceKey: 'repo:acme/web:src/app.ts',
+  resourceKey: 'repo:acme/web:task-1:src/app.ts',
   mode: 'exclusive',
   executionId: 1,
   expiresAt: new Date(NOW.getTime() + 60_000),
@@ -43,38 +44,59 @@ describe('normalizeResourcePath', () => {
 
 describe('resourceKeyFor', () => {
   it('is case-insensitive on the repo slug (one host repo = one lock)', () => {
-    expect(resourceKeyFor('Acme/Web', 'src/a.ts')).toBe(resourceKeyFor('acme/web', 'src/a.ts'));
+    expect(resourceKeyFor('Acme/Web', 'task-1', 'src/a.ts')).toBe(resourceKeyFor('acme/web', 'task-1', 'src/a.ts'));
   });
 
   it('separates the same path in different repos', () => {
-    expect(resourceKeyFor('acme/web', 'src/a.ts')).not.toBe(resourceKeyFor('acme/api', 'src/a.ts'));
+    expect(resourceKeyFor('acme/web', 'task-1', 'src/a.ts')).not.toBe(resourceKeyFor('acme/api', 'task-1', 'src/a.ts'));
   });
 
   it('falls back to a stable slug when no repo is bound', () => {
-    expect(resourceKeyFor('', 'src/a.ts')).toBe('repo:unbound:src/a.ts');
+    expect(resourceKeyFor('', 'task-1', 'src/a.ts')).toBe('repo:unbound:task-1:src/a.ts');
+  });
+
+  it('SEPARATES branches — two tickets editing one file are not in conflict', () => {
+    // Each ticket works its own branch and reconciles through its own PR, so a key of
+    // (repo, path) would serialize agents that never actually collided.
+    expect(resourceKeyFor('acme/web', 'task-1', 'src/a.ts')).not.toBe(resourceKeyFor('acme/web', 'task-2', 'src/a.ts'));
+  });
+
+  it('is case-SENSITIVE on the branch, because git refs are', () => {
+    expect(resourceKeyFor('acme/web', 'Task-1', 'src/a.ts')).not.toBe(resourceKeyFor('acme/web', 'task-1', 'src/a.ts'));
+  });
+
+  it('keeps slash-bearing branch names intact', () => {
+    expect(resourceKeyFor('acme/web', 'feat/task-1', 'src/a.ts')).toBe('repo:acme/web:feat/task-1:src/a.ts');
+  });
+});
+
+describe('resourcePathFromKey', () => {
+  it('round-trips the path out of a key, including slash-bearing branches', () => {
+    expect(resourcePathFromKey(resourceKeyFor('acme/web', 'feat/x', 'src/api/routes.ts'))).toBe('src/api/routes.ts');
+    expect(resourcePathFromKey(resourceKeyFor('acme/web', 'task-1', 'repo'))).toBe(REPO_ROOT);
   });
 });
 
 describe('conflictKeysFor', () => {
   it('enumerates the file then every ancestor then the root, most specific first', () => {
-    expect(conflictKeysFor('acme/web', 'src/api/routes.ts')).toEqual([
-      'repo:acme/web:src/api/routes.ts',
-      'repo:acme/web:src/api',
-      'repo:acme/web:src',
-      'repo:acme/web:*',
+    expect(conflictKeysFor('acme/web', 'task-1', 'src/api/routes.ts')).toEqual([
+      'repo:acme/web:task-1:src/api/routes.ts',
+      'repo:acme/web:task-1:src/api',
+      'repo:acme/web:task-1:src',
+      'repo:acme/web:task-1:*',
     ]);
   });
 
   it('reduces to just the root for a whole-repo claim', () => {
-    expect(conflictKeysFor('acme/web', 'repo')).toEqual(['repo:acme/web:*']);
+    expect(conflictKeysFor('acme/web', 'task-1', 'repo')).toEqual(['repo:acme/web:task-1:*']);
   });
 
   it('makes a repo-root lease block a nested file (containment)', () => {
-    expect(conflictKeysFor('acme/web', 'src/a.ts')).toContain(resourceKeyFor('acme/web', REPO_ROOT));
+    expect(conflictKeysFor('acme/web', 'task-1', 'src/a.ts')).toContain(resourceKeyFor('acme/web', 'task-1', REPO_ROOT));
   });
 
   it('makes a directory lease block a file inside it', () => {
-    expect(conflictKeysFor('acme/web', 'src/api/routes.ts')).toContain(resourceKeyFor('acme/web', 'src/api'));
+    expect(conflictKeysFor('acme/web', 'task-1', 'src/api/routes.ts')).toContain(resourceKeyFor('acme/web', 'task-1', 'src/api'));
   });
 });
 
