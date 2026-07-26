@@ -6961,6 +6961,36 @@
         "unknown": "Sin clasificar"
       },
       "copyDiagnosticsAria": "Copiar el diagnóstico completo del Manager IA: niveles de política, estado de la autonomía, recuentos del backlog, cada pase de gestión, cada decisión y cada ticket atascado"
+    },
+    "census": {
+      "title": "Censo de bloqueos",
+      "caption": "Todos los tickets de este proyecto, clasificados según lo que los detiene, no solo los que el gestor ha diagnosticado en profundidad.",
+      "loading": "Contando lo que está detenido…",
+      "empty": "Nada está detenido: todos los tickets avanzan o están terminados.",
+      "error": "No se pudo cargar el censo de bloqueos.",
+      "retry": "Reintentar",
+      "coverageNote": "{stalled} tickets están detenidos; {diagnosed} se han diagnosticado en profundidad hasta ahora. El resto se cuenta aquí, pero aún no se ha investigado individualmente.",
+      "computedAt": "Contado {when}.",
+      "stat": {
+        "managed": "Tickets activos",
+        "stalled": "Detenidos",
+        "moving": "En movimiento",
+        "deepDiagnosed": "Diagnosticados a fondo"
+      },
+      "cohorts": {
+        "title": "Qué frena el trabajo, en todos los tickets",
+        "aria": "Tickets detenidos agrupados por causa"
+      },
+      "findings": {
+        "title": "Hallazgos de la plataforma",
+        "caption": "Cuando muchos tickets se detienen por el mismo motivo, se trata de un solo defecto y no de muchos problemas de tickets. El gestor lo diagnostica y abre un ticket para corregirlo.",
+        "headline": "{count} tickets detenidos por «{cause}»",
+        "remediation": "Solución:",
+        "sourceAi": "diagnosticado por el modelo",
+        "sourceHeuristic": "diagnosticado a partir de mediciones",
+        "openTicket": "Abrir {key}",
+        "raised": "Detectado {when}"
+      }
     }
   },
   "project360": {

@@ -203,6 +203,37 @@ export const managerStallWatch = pgTable('manager_stall_watch', {
   byEscalated: index('idx_manager_stall_watch_escalated').on(t.tenantId, t.escalatedAt),
 }));
 
+/**
+ * SYSTEMIC findings (0373) — a stall CAUSE the manager has concluded is a platform
+ * problem rather than N independent tickets, plus the one ticket it filed for it.
+ *
+ * The per-ticket register (`manager_stall_watch`) answers "what is stuck?". This
+ * answers the question that outranks it once a cohort gets large: "these 313 tickets
+ * are not 313 problems — what is the ONE thing wrong?" See
+ * {@link ../../application/manager/systemicDiagnosis}.
+ */
+export const managerSystemicFindings = pgTable('manager_systemic_findings', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:     integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  /** {@link ../../application/manager/stallTriage.StallCause}. */
+  cause:         varchar('cause', { length: 32 }).notNull(),
+  ticketCount:   integer('ticket_count').notNull().default(0),
+  summary:       text('summary').notNull(),
+  remediation:   text('remediation').notNull(),
+  /** 'ai' when a model produced it, 'heuristic' when the deterministic fallback did. */
+  source:        varchar('source', { length: 16 }).notNull().default('ai'),
+  createdTaskId: integer('created_task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  status:        varchar('status', { length: 16 }).notNull().default('open'),
+  firstSeenAt:   timestamp('first_seen_at').notNull().defaultNow(),
+  lastSeenAt:    timestamp('last_seen_at').notNull().defaultNow(),
+  resolvedAt:    timestamp('resolved_at'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byLookup: index('idx_manager_systemic_lookup').on(t.tenantId, t.projectId, t.status, t.lastSeenAt),
+}));
+
 
 export const agents = pgTable('agents', {
   id:         serial('id').primaryKey(),

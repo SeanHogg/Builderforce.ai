@@ -6961,6 +6961,36 @@
         "unknown": "未分类"
       },
       "copyDiagnosticsAria": "复制完整的 AI 经理诊断信息 — 策略层级、自主运行状况、待办统计、每次管理运行、每项决策以及每个停滞的工单"
+    },
+    "census": {
+      "title": "停滞普查",
+      "caption": "本项目的每一张工单，按阻塞原因分类——不仅限于管理器已深入诊断的那些。",
+      "loading": "正在统计停滞情况…",
+      "empty": "没有停滞：所有工单都在推进或已完成。",
+      "error": "无法加载停滞普查。",
+      "retry": "重试",
+      "coverageNote": "共有 {stalled} 张工单停滞，其中 {diagnosed} 张已完成深入诊断。其余已计入此处，但尚未逐一排查。",
+      "computedAt": "统计于 {when}。",
+      "stat": {
+        "managed": "活跃工单",
+        "stalled": "停滞",
+        "moving": "推进中",
+        "deepDiagnosed": "已深入诊断"
+      },
+      "cohorts": {
+        "title": "全部工单中，是什么在阻塞工作",
+        "aria": "按原因分组的停滞工单"
+      },
+      "findings": {
+        "title": "平台问题",
+        "caption": "当大量工单因同一原因停滞时，这是一个缺陷，而非许多工单各自的问题。管理器会诊断该缺陷并创建工单来修复它。",
+        "headline": "{count} 张工单因“{cause}”停滞",
+        "remediation": "修复方案：",
+        "sourceAi": "由模型诊断",
+        "sourceHeuristic": "依据实测数据诊断",
+        "openTicket": "打开 {key}",
+        "raised": "发现于 {when}"
+      }
     }
   },
   "project360": {
