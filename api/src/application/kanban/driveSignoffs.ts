@@ -28,8 +28,8 @@ import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import type { SignoffGateResult, SignoffOwnership } from './signoffGate';
 import { classifySignoffOwnership, describeSignoffOwnership } from './signoffGate';
-import { buildSignoffRequestPayload } from './signoffRequest';
-import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
+import { requestRoleRun } from './requestRoleRun';
+import { TicketParticipantsService } from './ticketParticipants';
 
 /** The minimal ticket shape a sign-off request needs. */
 export interface SignoffTargetTask {
@@ -90,6 +90,7 @@ export async function driveOutstandingSignoffs(
     managerRef: string | null;
   },
 ): Promise<SignoffDriveResult> {
+  const participants = new TicketParticipantsService(db);
   const ownership = classifySignoffOwnership(args.signoff.outstanding);
   const result: SignoffDriveResult = {
     asked: [],
@@ -102,23 +103,35 @@ export async function driveOutstandingSignoffs(
   try {
     // `candidate.stageKey` is the slot's OWN stage, which is the lane the verdict has
     // to match; the ticket's current status is only a fallback for a stage-less slot.
-    const payload = buildSignoffRequestPayload({
-      cloudAgentRef: candidate.assigneeRef,
+    //
+    // `requestRoleRun` is what makes the round-trip WORK, not just fire: it marks the
+    // slot `in_progress` on success, which is the record `pickSignoffCandidate` reads to
+    // move on to the next role. Without it every pass re-picked slot #1 and roles 2..N
+    // were never asked once — the "all reviewers assigned, none executing" state.
+    const executionId = await requestRoleRun(env, db, runtimeService, participants, {
+      tenantId: args.tenantId,
+      projectId: args.projectId,
       taskId: args.task.id,
       taskTitle: args.task.title,
       roleKey: candidate.roleKey,
       roleName: candidate.roleName,
+      agentRef: candidate.assigneeRef,
       laneKey: candidate.stageKey ?? args.task.status,
+      kind: 'reviewer',
+      submittedBy: `manager:signoff-request:${args.managerRef ?? 'system'}`,
       prUrl: args.task.githubPrUrl,
     });
-    const deferred: Promise<unknown>[] = [];
-    await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
-      taskId: args.task.id,
-      tenantId: args.tenantId,
-      payload,
-      submittedBy: `manager:signoff-request:${args.managerRef ?? 'system'}`,
-    });
-    await Promise.allSettled(deferred);
+    // A REFUSAL is not an ask. The dispatcher returns null when the cloud-run cap, the
+    // failure breaker or the re-run cooldown blocks it; reporting `asked` anyway is what
+    // let the feed claim reviewers had been requested on passes where nothing started —
+    // and, because the caller counts an ask as an applied remedy, it also counted an
+    // attempt that never happened.
+    if (executionId == null) {
+      return {
+        ...result,
+        blockedDetail: `${result.blockedDetail} The dispatcher refused to start ${candidate.roleName}'s review — the ticket's failure breaker, re-run cooldown or the workspace's cloud-run allowance is blocking it.`.trim(),
+      };
+    }
     return { ...result, asked: [candidate.roleName] };
   } catch {
     return result;
