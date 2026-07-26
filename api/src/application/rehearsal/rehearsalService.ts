@@ -189,8 +189,13 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
   const taskRow = { id: task.id, title: task.title, description: task.description };
 
   try {
+    // `readOnly` is load-bearing, not a nicety: prep runs BEFORE the shadow provider
+    // wraps anything, and by default it drafts a PRD, commits it to the real ticket
+    // branch and records a personality event. Without this flag a rehearsal's very
+    // first act would be a real commit.
     const prep = await prepareCloudRun(
       env, db, executionId, taskRow, tenantId, projectId, agentLabel, input.model, undefined, agentRef ?? undefined,
+      undefined, { readOnly: true },
     );
 
     const result = await runCloudToolLoop(

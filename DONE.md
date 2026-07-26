@@ -67,6 +67,47 @@ The only measurement of autonomy was production-observed (0.7% reach Done), beca
 
 ---
 
+## 2026-07-26 — ✅ RESOLVED: deploy-breaking FK type mismatch in 0372, and the CI hole that let it through
+
+**The failure.** `npm run db:migrate` died on `0372_rehearsal.sql`:
+
+```
+NeonDbError: foreign key constraint "rehearsals_created_by_fkey" cannot be implemented
+detail: Key columns "created_by" of the referencing table and "id" of the referenced
+        table are of incompatible types: integer and character varying.
+```
+
+`users.id` is `VARCHAR(36)` — every other migration that references it says so (`0335`, `0352`, `0354`, `0361`). 0372 declared `created_by INTEGER`, so Postgres refused the constraint, the `CREATE TABLE` aborted, and the deploy failed.
+
+**The same mistake ran three layers deep**, and the two lower layers were *silently* wrong rather than loudly:
+
+| layer | was | now |
+|---|---|---|
+| `migrations/0372_rehearsal.sql` | `created_by INTEGER REFERENCES users(id)` | `VARCHAR(36)` |
+| `schema/collaboration.ts` | `integer('created_by').references(() => users.id)` | `varchar('created_by', { length: 36 })` |
+| `rehearsalService.ts` | `createdBy?: number \| null` (×2) | `string \| null` |
+| `agentOpsRoutes.ts` | `Number.isFinite(Number(userId)) ? Number(userId) : null` | pass the id through as the string it is |
+
+That last row is the quiet one: `c.get('userId')` is a VARCHAR user id, so `Number(userId)` was `NaN` for **every real user** and the coercion resolved to `null`. Had the FK type been compatible, the migration would have applied cleanly and `rehearsals.created_by` would simply have been NULL forever — attribution that looks implemented and records nothing.
+
+**Why nothing caught it.** `check-schema-drift.mjs` says so in its own header — it "flags missing columns, not type mismatches". tsgo happily typechecks a Drizzle `integer()` pointed at a `varchar()` primary key. No test touches real DDL. So the first signal available was a red deploy.
+
+**The guard.** A third check in `check-migrations.mjs` (already in CI, already the migration-file guard): parse every column declaration across all 314 migrations, then re-read each inline `REFERENCES t(c)` and compare the declared types of both sides, folding aliases (`int4`/`serial` → integer, `character varying` → varchar) and allowing genuinely compatible pairs (varchar↔text, int↔bigint). Baseline tables like `users` are created by no tracked migration, so the referenced type falls back to the **Drizzle schema** — which is what makes the `users.id` case resolvable at all.
+
+Getting it to zero false positives took two parser fixes worth recording, because both would have blocked every deploy: the type regex was greedily swallowing `NOT NULL REFERENCES …` into the type, and `ALTER TABLE … ADD COLUMN a …, ADD COLUMN b …` was attributing the *second* column's `REFERENCES` to the first. Both now parse clause-by-clause with a paren-aware comma splitter. Verified by re-introducing the exact 0372 bug and watching the guard reproduce the deploy error statically:
+
+```
+0372_rehearsal.sql: rehearsals.created_by INTEGER → users.id VARCHAR (schema: users.id)
+```
+
+**DRY:** the schema parser now lives once, in `scripts/lib/drizzleSchema.mjs`, and both guards import it (drift needs column NAMES, the FK check needs TYPES) — rather than two regexes that could disagree about what the schema declares.
+
+**Also fixed:** `coordinationCapability.test.ts` failed typecheck against the `LeaseHolder` shape (0370 added a required `branch`, the fixture didn't have it). One shared fixture, one line.
+
+**Files:** `migrations/0372_rehearsal.sql`, `schema/collaboration.ts`, `application/rehearsal/rehearsalService.ts`, `presentation/routes/agentOpsRoutes.ts`, `scripts/check-migrations.mjs`, `scripts/check-schema-drift.mjs`, `scripts/lib/drizzleSchema.mjs` (new), `application/coordination/coordinationCapability.test.ts`. 3,697 tests green; all four CI guards green.
+
+---
+
 ## 2026-07-26 — ✅ SHIPPED: the Evermind console can VALIDATE, REPAIR and AUDIT a model (test bench + maintenance + knowledge analyzer)
 
 **The gap.** The training console could seed, toggle, teach and inspect — but there was no way to answer the only question that matters before switching a model on: *what will it actually produce?* "Validate" previews which learned MEMORIES would be recalled and generates **zero tokens**, so a head emitting fluent gibberish looked perfectly healthy right up until a user received some. And once it had gone wrong there was nothing to do about it: no re-seed (seeding deliberately refuses to clobber a trained head), no reindex, no way to clear a poisoned queue or a pinned cached answer, and no way to find out that what it *learned* was wrong.
