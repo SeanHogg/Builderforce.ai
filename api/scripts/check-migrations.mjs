@@ -34,6 +34,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, relative, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseDrizzleTables } from './lib/drizzleSchema.mjs';
 
 const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const migrationsDir = resolve(here, '../migrations');
@@ -243,48 +244,65 @@ function fkTypesCompatible(a, b) {
  */
 function collectMigrationColumns(sqlFiles) {
   const columns = new Map(); // table -> Map<column, {type,file}>
-  const fks = [];            // { table, column, refTable, refColumn, file }
+  const fks = [];            // { table, column, type, refTable, refColumn, file }
+
+  /**
+   * Split a definition list on TOP-LEVEL commas only, so `NUMERIC(10,2)` stays one
+   * clause. This is what makes both the CREATE-TABLE body and the multi-column
+   * `ALTER TABLE … ADD COLUMN a …, ADD COLUMN b …` form parse correctly — reading
+   * either as "everything up to the next `;`" let one column's `REFERENCES` be
+   * attributed to the previous column, which is a false positive that would block
+   * every deploy.
+   */
+  function splitTopLevelCommas(body) {
+    const out = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < body.length; i++) {
+      const ch = body[i];
+      if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+      else if (ch === ',' && depth === 0) { out.push(body.slice(start, i)); start = i + 1; }
+    }
+    out.push(body.slice(start));
+    return out.map((s) => s.trim()).filter(Boolean);
+  }
+
+  /** Record one `<name> <type> … [REFERENCES t(c)]` clause. */
+  function readClause(table, clause, file) {
+    // Table-level constraints carry no column type.
+    if (/^(primary\s+key|unique|constraint|foreign\s+key|check|exclude)\b/i.test(clause)) return;
+    const colM = /^["']?(\w+)["']?\s+([\s\S]+)$/.exec(clause);
+    if (!colM) return;
+    const column = colM[1].toLowerCase();
+    const type = canonicalSqlType(colM[2]);
+    if (!type) return;
+    if (!columns.has(table)) columns.set(table, new Map());
+    if (!columns.get(table).has(column)) columns.get(table).set(column, { type, file });
+    const refM = /references\s+["']?(\w+)["']?\s*\(\s*["']?(\w+)["']?\s*\)/i.exec(clause);
+    if (refM) fks.push({ table, column, type, refTable: refM[1].toLowerCase(), refColumn: refM[2].toLowerCase(), file });
+  }
 
   for (const { file, text } of sqlFiles) {
     // Strip line comments so a commented-out REFERENCES never registers.
     const sql = text.replace(/--[^\n]*/g, '');
+
     const createRe = /create\s+table\s+(?:if\s+not\s+exists\s+)?["']?(\w+)["']?\s*\(([\s\S]*?)\n\s*\)\s*;/gi;
     let m;
     while ((m = createRe.exec(sql)) !== null) {
       const table = m[1].toLowerCase();
-      const body = m[2];
-      if (!columns.has(table)) columns.set(table, new Map());
-      const cols = columns.get(table);
-
-      for (const rawLine of body.split('\n')) {
-        const line = rawLine.trim().replace(/,$/, '');
-        if (!line) continue;
-        // Skip table-level constraints — only column definitions carry a type.
-        if (/^(primary\s+key|unique|constraint|foreign\s+key|check|exclude)\b/i.test(line)) continue;
-        const colM = /^["']?(\w+)["']?\s+([A-Za-z][\w ]*(?:\([^)]*\))?)/.exec(line);
-        if (!colM) continue;
-        const column = colM[1].toLowerCase();
-        const type = canonicalSqlType(colM[2]);
-        if (!cols.has(column)) cols.set(column, { type, file });
-
-        const refM = /references\s+["']?(\w+)["']?\s*\(\s*["']?(\w+)["']?\s*\)/i.exec(line);
-        if (refM) {
-          fks.push({ table, column, type, refTable: refM[1].toLowerCase(), refColumn: refM[2].toLowerCase(), file });
-        }
-      }
+      for (const clause of splitTopLevelCommas(m[2])) readClause(table, clause, file);
     }
 
-    // `ALTER TABLE x ADD COLUMN y <type> … REFERENCES z(c)` — the other way a typed
-    // FK column enters the schema.
-    const alterRe = /alter\s+table\s+["']?(\w+)["']?\s+add\s+column\s+(?:if\s+not\s+exists\s+)?["']?(\w+)["']?\s+([A-Za-z][\w ]*(?:\([^)]*\))?)([^;]*);/gi;
+    // `ALTER TABLE x ADD COLUMN y <type> … REFERENCES z(c)[, ADD COLUMN …]` — the
+    // other way a typed FK column enters the schema.
+    const alterRe = /alter\s+table\s+["']?(\w+)["']?\s+([\s\S]*?);/gi;
     while ((m = alterRe.exec(sql)) !== null) {
       const table = m[1].toLowerCase();
-      const column = m[2].toLowerCase();
-      const type = canonicalSqlType(m[3]);
-      if (!columns.has(table)) columns.set(table, new Map());
-      if (!columns.get(table).has(column)) columns.get(table).set(column, { type, file });
-      const refM = /references\s+["']?(\w+)["']?\s*\(\s*["']?(\w+)["']?\s*\)/i.exec(m[4] ?? '');
-      if (refM) fks.push({ table, column, type, refTable: refM[1].toLowerCase(), refColumn: refM[2].toLowerCase(), file });
+      for (const clause of splitTopLevelCommas(m[2])) {
+        const addM = /^add\s+column\s+(?:if\s+not\s+exists\s+)?([\s\S]+)$/i.exec(clause);
+        if (addM) readClause(table, addM[1], file);
+      }
     }
   }
   return { columns, fks };
@@ -293,15 +311,31 @@ function collectMigrationColumns(sqlFiles) {
 const sqlTexts = files.map((f) => ({ file: f, text: readFileSync(join(migrationsDir, f), 'utf8') }));
 const { columns: migColumns, fks: migFks } = collectMigrationColumns(sqlTexts);
 
+// Baseline tables (`users`, …) predate the tracked migration set — nothing in
+// api/migrations/ creates them — so the SQL pass alone cannot resolve `users.id`.
+// That is precisely the FK that broke the deploy, so fall back to the Drizzle
+// schema, which is the live declaration of those columns. Shared parser with
+// check-schema-drift.mjs so the two guards read the schema identically.
+const drizzleTypes = parseDrizzleTables(resolve(here, '../src'));
+
+/** The declared type of a referenced column: migrations first (they are the DDL of
+ *  record), then the schema for tables no migration creates. */
+function resolveTargetType(table, column) {
+  const fromSql = migColumns.get(table)?.get(column);
+  if (fromSql) return { type: fromSql.type, source: fromSql.file };
+  const fromSchema = drizzleTypes.get(table)?.get(column);
+  if (fromSchema?.type) return { type: fromSchema.type, source: `schema: ${table}.${column}` };
+  return null;
+}
+
 const fkTypeMismatches = [];
 for (const fk of migFks) {
-  const target = migColumns.get(fk.refTable)?.get(fk.refColumn);
-  // An unresolved target means the referenced table is declared somewhere this
-  // lexical pass cannot see (or is created by an extension). Silence beats a false
-  // failure that blocks deploys.
+  const target = resolveTargetType(fk.refTable, fk.refColumn);
+  // Still unresolved → the referenced table is declared somewhere neither pass can
+  // see. Silence beats a false failure that blocks every deploy.
   if (!target) continue;
   if (!fkTypesCompatible(fk.type, target.type)) {
-    fkTypeMismatches.push({ ...fk, targetType: target.type, targetFile: target.file });
+    fkTypeMismatches.push({ ...fk, targetType: target.type, targetFile: target.source });
   }
 }
 

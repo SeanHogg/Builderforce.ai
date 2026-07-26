@@ -43,6 +43,21 @@ function versionKey(tenantId: number, projectId: number): string {
   return `project_facts:${tenantId}:${projectId}`;
 }
 
+/**
+ * This project's fact-store version token, for callers that CACHE over project facts
+ * without going through `recallProjectFacts`.
+ *
+ * Exported because `application/memory/memoryService` caches a recall that UNIONS this
+ * store with `agent_memory`, and every write here bumps only the token above. Without
+ * folding this token into that key, a fact written by the Brain / VS Code / the MCP
+ * tool / `projectFactsRoutes` would be invisible to an agent's `memory_recall` for the
+ * whole cache TTL — a stale-read window measured in minutes, on the exact path whose
+ * job is "recall what we already know".
+ */
+export function projectFactsVersion(env: Env, tenantId: number, projectId: number): Promise<string> {
+  return getCacheVersion(env, versionKey(tenantId, projectId));
+}
+
 /** Significant lowercase words (drop 1-char noise) — each becomes an ILIKE matcher. */
 function tokenize(query: string): string[] {
   return [...new Set(query.toLowerCase().split(/[^a-z0-9]+/i).filter((w) => w.length > 1))].slice(0, 12);

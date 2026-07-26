@@ -29,6 +29,7 @@ import {
   findBlockingLease,
   normalizeResourcePath,
   resourceKeyFor,
+  resourcePathFromKey,
   type LeaseLike,
 } from '../../domain/coordination/resourceKey';
 import { resourceLeases } from '../../infrastructure/database/schema';
@@ -45,6 +46,9 @@ export interface LeaseHolder {
   taskId: number | null;
   /** `owner/name` of the repo the run is working, or '' when none is bound. */
   repoSlug: string;
+  /** The BRANCH the run commits to — part of the lease identity, because that is the
+   *  ref agents actually share. See domain/coordination/resourceKey.ts. */
+  branch: string;
   scopeKey: string;
 }
 
@@ -97,13 +101,13 @@ export async function acquireLease(
 ): Promise<LeaseClaimResult> {
   const mode: LeaseMode = opts?.mode === 'shared' ? 'shared' : 'exclusive';
   const path = normalizeResourcePath(resource);
-  const key = resourceKeyFor(holder.repoSlug, path);
+  const key = resourceKeyFor(holder.repoSlug, holder.branch, path);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + (opts?.ttlSeconds ?? LEASE_TTL_SECONDS) * 1000);
 
   try {
     // 1. Containment check across the ancestor set (most specific first).
-    const keys = conflictKeysFor(holder.repoSlug, path);
+    const keys = conflictKeysFor(holder.repoSlug, holder.branch, path);
     const existing = (await liveLeasesFor(db, holder.tenantId, keys)) as Array<
       LeaseLike & { holderLabel: string; reason: string | null }
     >;
@@ -120,7 +124,7 @@ export async function acquireLease(
         note:
           `'${path}' is held by ${blocking.holderLabel}`
           + `${blocking.reason ? ` (${blocking.reason})` : ''}`
-          + `${blocking.resourceKey !== key ? ` via a lease on the enclosing '${blocking.resourceKey.split(':').slice(2).join(':')}'` : ''}`
+          + `${blocking.resourceKey !== key ? ` via a lease on the enclosing '${resourcePathFromKey(blocking.resourceKey)}'` : ''}`
           + '. Work on something else, or post a workspace_note explaining what you need from them.',
       };
     }
@@ -196,7 +200,7 @@ export async function acquireLease(
 /** Release one lease this run holds. Releasing something it does not hold is a no-op. */
 export async function releaseLease(env: Env, db: Db, holder: LeaseHolder, resource: string): Promise<LeaseReleaseResult> {
   const path = normalizeResourcePath(resource);
-  const key = resourceKeyFor(holder.repoSlug, path);
+  const key = resourceKeyFor(holder.repoSlug, holder.branch, path);
   try {
     const released = await db
       .update(resourceLeases)
@@ -253,22 +257,30 @@ export async function releaseAllForExecution(
 export async function forceReleaseLease(
   env: Env,
   db: Db,
-  args: { tenantId: number; taskId: number; resource: string; repoSlug?: string },
+  args: { tenantId: number; taskId: number; resource: string },
 ): Promise<number> {
-  const key = resourceKeyFor(args.repoSlug ?? '', args.resource);
   const scopeKey = coordinationScopeKey(args.taskId);
+  const wanted = normalizeResourcePath(args.resource);
+
+  // Match by the lease's own PATH rather than by rebuilding its key. A key embeds the
+  // repo slug and branch, and the operator UI knows neither — asking the client to
+  // supply them would mean trusting client input to identify a lock, and would break
+  // silently the moment a ticket's branch is renamed. A coordination scope holds a
+  // handful of live leases, so resolving them and matching exactly is both cheap and
+  // unambiguous.
+  const live = await db
+    .select({ id: resourceLeases.id, resourceKey: resourceLeases.resourceKey })
+    .from(resourceLeases)
+    .where(scopedToTenant(resourceLeases, args.tenantId, eq(resourceLeases.scopeKey, scopeKey), isNull(resourceLeases.releasedAt)))
+    .catch(() => [] as Array<{ id: string; resourceKey: string }>);
+
+  const targets = live.filter((l) => resourcePathFromKey(l.resourceKey) === wanted).map((l) => l.id);
+  if (targets.length === 0) return 0;
+
   const released = await db
     .update(resourceLeases)
     .set({ releasedAt: new Date() })
-    .where(
-      scopedToTenant(
-        resourceLeases,
-        args.tenantId,
-        eq(resourceLeases.scopeKey, scopeKey),
-        eq(resourceLeases.resourceKey, key),
-        isNull(resourceLeases.releasedAt),
-      ),
-    )
+    .where(scopedToTenant(resourceLeases, args.tenantId, inArray(resourceLeases.id, targets), isNull(resourceLeases.releasedAt)))
     .returning({ id: resourceLeases.id })
     .catch(() => [] as Array<{ id: string }>);
   if (released.length > 0) await invalidateScope(env, args.tenantId, scopeKey);
@@ -313,7 +325,7 @@ export async function listLeases(
       .map((r) => ({ ...r, expiresAtDate: new Date(r.expiresAt) }))
       .filter((r) => r.expiresAtDate.getTime() > now)
       .map((r) => ({
-        resource: r.resourceKey.split(':').slice(2).join(':'),
+        resource: resourcePathFromKey(r.resourceKey),
         mode: r.mode as LeaseMode,
         holder: r.holderLabel,
         mine: viewerExecutionId != null && r.executionId === viewerExecutionId,

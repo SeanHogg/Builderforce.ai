@@ -39,7 +39,7 @@ import { cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool, callBuilt
 import { TenantRole } from '../../domain/shared/types';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
 import { recordUsageRow, clampTokenCount, normalizeByoProvider } from '../llm/usageLedger';
-import { ensureTaskPrdRecord, appendTaskPrdRevision } from '../prd/taskPrd';
+import { ensureTaskPrdRecord, appendTaskPrdRevision, findTaskPrimarySpec } from '../prd/taskPrd';
 import { loadCapabilityContext, loadPersonaSetpoints } from '../artifact/capabilityContext';
 import { recordPersonalityEvent, compilePersonalityApplication } from '../persona/recordPersonalityEvent';
 import { resolveArtifacts } from '../artifact/resolveArtifacts';
@@ -348,7 +348,15 @@ async function loadWorkspaceContext(
  *   • committed to the ticket's git branch as a pending change (branch + PR),
  *     via the provider API so it works even on the cloud (no-runtime) path.
  */
-async function ensureTaskPrd(
+/**
+ * Resolve the PRD a run works against.
+ *
+ * Exported for its `readOnly` invariant, which is load-bearing for rehearsal and
+ * otherwise untestable: the write path here is the single biggest escaping effect in
+ * run PREP (it commits to a real branch), and it runs above the seam the shadow
+ * provider decorates. A test pins that `readOnly` never reaches it.
+ */
+export async function ensureTaskPrd(
   env: Env,
   db: Db,
   executionId: number,
@@ -1266,6 +1274,7 @@ export async function handleContainerOp(
       holder: {
         tenantId, executionId, label: agentLabel, taskId,
         repoSlug: `${repo.ctx.owner}/${repo.ctx.repo}`,
+        branch: repo.ctx.branch,
         scopeKey: coordinationScopeKey(taskId),
       },
       reason: typeof args.summary === 'string' && args.summary ? `writing: ${args.summary}` : 'writing this file',
@@ -1296,6 +1305,11 @@ export async function handleContainerOp(
     const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
     const repoCtx = repo.ok ? repo.ctx : null;
     const repoMiss = repo.ok ? '' : repo.reason;
+    // The container runs its OWN loop, so it never reaches the durable loop's terminal
+    // release — without this, every file a finished container run wrote stays locked
+    // until its lease lapses (15 min), blocking a peer agent on the same ticket for no
+    // reason. This is that surface's equivalent of the release in `runCloudToolLoop`.
+    await releaseAllForExecution(env, db, tenantId, executionId, coordinationScopeKey(taskId));
     const fin = await finalizeCloudRun(env, db, { tenantId, cloudAgentRef, executionId, taskRow, agentLabel, repoCtx, repoMiss, writtenPaths, finalOutput, cancelled });
     if (!cancelled) {
       await runtimeService.update(executionId, fin.ok ? { status: ExecutionStatus.COMPLETED, result: fin.output } : { status: ExecutionStatus.FAILED, errorMessage: fin.output }).catch(() => { /* terminal already */ });
@@ -1521,6 +1535,10 @@ function buildCloudProvider(args: {
     label: agentLabel,
     taskId: taskRow.id,
     repoSlug: repoCtx ? `${repoCtx.owner}/${repoCtx.repo}` : '',
+    // The ticket BRANCH, not the base: contention exists only between agents committing
+    // to the same ref, and every ticket has its own. Keying on the repo alone would
+    // serialize unrelated tickets that happen to touch one file.
+    branch: repoCtx?.branch ?? '',
     scopeKey: coordinationScopeKey(taskRow.id),
   };
 
@@ -2676,14 +2694,29 @@ export async function prepareCloudRun(
   artifacts: ResolvedArtifacts | undefined,
   cloudAgentRef?: string,
   payload?: string,
-  opts?: { shell?: boolean },
+  opts?: {
+    shell?: boolean;
+    /**
+     * REHEARSAL: prep must not change anything.
+     *
+     * The shadow provider (application/rehearsal/shadowProvider.ts) intercepts the
+     * LOOP, but prep runs BEFORE the loop and is not read-only by default: it drafts
+     * and commits a PRD to the real ticket branch, and records a personality-
+     * application event attributed to the agent. Both escape a rehearsal — the first
+     * as a real commit, the second as skew in personality telemetry. This flag makes
+     * prep observe-only; everything it READS is unchanged, so the prompts a rehearsal
+     * runs on are the prompts the live run would get (minus a PRD it would have
+     * created, which the report notes).
+     */
+    readOnly?: boolean;
+  },
 ): Promise<{ systemPrompt: string; userContent: string; execParams: AgentExecParams; agentPsychometric: string | null }> {
   const tPrep0 = Date.now();
   // The agent's OWN personality (independent of assigned personas) — folded into the
   // capability prompt block, the exec params, and (by the caller) the limbic setpoints.
   const agentPsychometric = await loadAgentPsychometric(env, tenantId, cloudAgentRef);
   const [prd, governance, capabilities, workspace, factsBlock, lessonsBlock] = await Promise.all([
-    ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model),
+    ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model, opts?.readOnly === true),
     loadGovernanceContext(db, tenantId, projectId, cloudAgentRef),
     loadCapabilityContext(env, db, artifacts, agentPsychometric),
     // The repo the agent runs against — its identity + top-level shape (so a wrong/
@@ -2731,7 +2764,9 @@ export async function prepareCloudRun(
   // returns null when the agent's own psychometric yields no directives, so a V2 /
   // neutral-profile run records nothing and stays byte-identical. The GET now derives
   // only to backfill gaps. Best-effort — telemetry must never block a run.
-  if (cloudAgentRef) {
+  // Skipped for a rehearsal: this attributes a personality APPLICATION to the agent,
+  // and a probe must not move the numbers that describe how the real agent behaves.
+  if (cloudAgentRef && !opts?.readOnly) {
     const application = compilePersonalityApplication({
       agentPsychometric,
       execParams: capabilities.execParams,

@@ -54,14 +54,33 @@ export function normalizeResourcePath(raw: string): string {
 }
 
 /**
- * The canonical lease key for a path within a repo. Including the repo slug means a
- * multi-repo ticket (the roadmap's "multi-repo spanning") gets per-repo locks for free
- * rather than colliding on bare paths. `repoSlug` is lowercased because git hosts treat
- * owner/name case-insensitively and two spellings must not be two locks.
+ * The canonical lease key: repo, BRANCH, path.
+ *
+ * The branch is not decoration — it is what makes the lock the right SIZE. Every
+ * ticket works its own branch, so two agents on two different tickets editing the same
+ * file are not in conflict at all: they commit to different refs and reconcile through
+ * their pull requests. A key of (repo, path) would serialize them, producing refusals
+ * for work that never collided and getting worse the busier the repo is. Contention is
+ * real only WITHIN a branch — which is exactly the case a swimlane stage creates when
+ * it staffs several agents onto one ticket.
+ *
+ * Including the repo slug additionally gives per-repo locks for free when multi-repo
+ * spanning lands. `repoSlug` is lowercased (git hosts treat owner/name
+ * case-insensitively, so two spellings must not be two locks); the branch is NOT, since
+ * git refs are case-sensitive. `:` is a safe separator because a git ref cannot contain
+ * one.
  */
-export function resourceKeyFor(repoSlug: string, path: string): string {
+export function resourceKeyFor(repoSlug: string, branch: string, path: string): string {
   const slug = (repoSlug || 'unbound').trim().toLowerCase();
-  return `repo:${slug}:${normalizeResourcePath(path)}`;
+  const ref = (branch || 'unbound').trim();
+  return `repo:${slug}:${ref}:${normalizeResourcePath(path)}`;
+}
+
+/** The human-facing path inside a lease key — everything after `repo:<slug>:<branch>:`.
+ *  The ONE place the key is taken apart, so a key-format change cannot leave a display
+ *  showing `main:src/app.ts` (or, worse, silently truncating a path). */
+export function resourcePathFromKey(key: string): string {
+  return key.split(':').slice(3).join(':');
 }
 
 /**
@@ -70,14 +89,17 @@ export function resourceKeyFor(repoSlug: string, path: string): string {
  * refusal message names the closest blocking lease.
  *
  * `src/api/routes.ts` → [`…:src/api/routes.ts`, `…:src/api`, `…:src`, `…:*`]
+ *
+ * All within ONE branch — see {@link resourceKeyFor} for why the branch is part of the
+ * identity rather than a filter applied afterwards.
  */
-export function conflictKeysFor(repoSlug: string, path: string): string[] {
+export function conflictKeysFor(repoSlug: string, branch: string, path: string): string[] {
   const normalized = normalizeResourcePath(path);
-  if (normalized === REPO_ROOT) return [resourceKeyFor(repoSlug, REPO_ROOT)];
+  if (normalized === REPO_ROOT) return [resourceKeyFor(repoSlug, branch, REPO_ROOT)];
   const segments = normalized.split('/');
   const keys: string[] = [];
-  for (let i = segments.length; i > 0; i--) keys.push(resourceKeyFor(repoSlug, segments.slice(0, i).join('/')));
-  keys.push(resourceKeyFor(repoSlug, REPO_ROOT));
+  for (let i = segments.length; i > 0; i--) keys.push(resourceKeyFor(repoSlug, branch, segments.slice(0, i).join('/')));
+  keys.push(resourceKeyFor(repoSlug, branch, REPO_ROOT));
   return keys;
 }
 
