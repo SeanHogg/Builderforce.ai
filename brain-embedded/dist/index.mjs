@@ -542,6 +542,20 @@ function countReconciledMemories(items, answer) {
 
 // src/BrainActionsContext.tsx
 import { createContext as createContext2, useCallback, useContext as useContext2, useEffect, useMemo as useMemo2, useRef, useState } from "react";
+
+// src/toolSpecs.ts
+function toolSpecsFor(actions) {
+  return actions.map((action) => ({
+    type: "function",
+    function: {
+      name: action.name,
+      description: action.description,
+      parameters: action.parameters
+    }
+  }));
+}
+
+// src/BrainActionsContext.tsx
 import { jsx as jsx2 } from "react/jsx-runtime";
 var BrainActionsContext = createContext2(null);
 function BrainActionsProvider({ children }) {
@@ -587,14 +601,7 @@ function BrainActionsProvider({ children }) {
     return !!m;
   }, []);
   const toolSpecs = useMemo2(() => {
-    return [...registry.current.values()].map(({ action }) => ({
-      type: "function",
-      function: {
-        name: action.name,
-        description: action.description,
-        parameters: action.parameters
-      }
-    }));
+    return toolSpecsFor([...registry.current.values()].map((e) => e.action));
   }, [version]);
   const value = useMemo2(
     () => ({ toolSpecs, runTool, isMutating, register }),
@@ -621,6 +628,15 @@ function useRegisterBrainActions(actions) {
 // src/useMcpExtensions.ts
 import { useEffect as useEffect2, useMemo as useMemo3, useRef as useRef2, useState as useState2 } from "react";
 
+// src/mcpToolStatus.ts
+var status = { count: 0, error: null, loading: true };
+function setMcpToolStatus(next) {
+  status = next;
+}
+function getMcpToolStatus() {
+  return status;
+}
+
 // src/lastResolvedModel.ts
 var lastResolvedModel;
 function setLastResolvedModel(model) {
@@ -631,16 +647,7 @@ function getLastResolvedModel() {
   return lastResolvedModel;
 }
 
-// src/mcpToolStatus.ts
-var status = { count: 0, error: null, loading: true };
-function setMcpToolStatus(next) {
-  status = next;
-}
-function getMcpToolStatus() {
-  return status;
-}
-
-// src/useMcpExtensions.ts
+// src/mcpCatalog.ts
 var CREATE_DEDUPE_MS = 8e3;
 var recentCreates = /* @__PURE__ */ new Map();
 function nowMs() {
@@ -667,6 +674,66 @@ function isCreateTool(name, tool) {
 function isErrorResult(out) {
   return !!out && typeof out === "object" && typeof out.error === "string";
 }
+async function fetchMcpToolEntries(transport, skipExtensionIds = []) {
+  const token = transport.getToken();
+  const headers = { Accept: "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${transport.baseUrl}/llm/v1/mcp/tools`, { headers });
+  if (!res.ok) throw new Error(`tool catalog unavailable (HTTP ${res.status})`);
+  const body = await res.json();
+  const skip = new Set(skipExtensionIds);
+  return (body.tools ?? []).filter((t) => !skip.has(t.extensionId));
+}
+function mcpActionsFrom(entries, transport, onToolResult) {
+  return entries.map((entry) => ({
+    name: entry.name,
+    description: entry.description,
+    parameters: entry.parameters,
+    // Gate writes off the advertised flag; only an explicit mutates=false is
+    // read-only. Undefined (external servers) ⇒ mutating, so the host's
+    // confirm-before-mutate gate fires (fail safe).
+    mutates: entry.mutates !== false,
+    run: (args) => {
+      const mutating = entry.mutates !== false;
+      const exec = async () => {
+        const token = transport.getToken();
+        const headers = { "Content-Type": "application/json" };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const res = await fetch(`${transport.baseUrl}/llm/v1/mcp/call`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: withObservedModel(entry.tool, args) })
+        });
+        const body = await res.json().catch(() => ({}));
+        const out = !res.ok ? { error: body.error ?? `MCP call failed (${res.status})` } : body.result ?? body;
+        onToolResult?.({
+          name: entry.name,
+          tool: entry.tool,
+          extensionId: entry.extensionId,
+          mutating,
+          ok: res.ok && !isErrorResult(out)
+        });
+        return out;
+      };
+      if (mutating && isCreateTool(entry.name, entry.tool)) {
+        const key = `${entry.extensionId}:${entry.tool}:${stableStringify(args)}`;
+        const now = nowMs();
+        const prior = recentCreates.get(key);
+        if (prior && now - prior.at < CREATE_DEDUPE_MS) return prior.result;
+        const result = exec();
+        recentCreates.set(key, { at: now, result });
+        for (const [k, v] of recentCreates) if (now - v.at >= CREATE_DEDUPE_MS) recentCreates.delete(k);
+        result.then((out) => {
+          if (isErrorResult(out)) recentCreates.delete(key);
+        }).catch(() => recentCreates.delete(key));
+        return result;
+      }
+      return exec();
+    }
+  }));
+}
+
+// src/useMcpExtensions.ts
 function useMcpExtensions(options) {
   const { transport } = useBrainConfig();
   const [entries, setEntries] = useState2([]);
@@ -677,16 +744,9 @@ function useMcpExtensions(options) {
   onToolResultRef.current = options?.onToolResult;
   useEffect2(() => {
     let cancelled = false;
-    const token = transport.getToken();
-    const headers = { Accept: "application/json" };
-    if (token) headers.Authorization = `Bearer ${token}`;
-    const skip = new Set(skipKey ? skipKey.split(",") : []);
-    fetch(`${transport.baseUrl}/llm/v1/mcp/tools`, { headers }).then(async (res) => {
-      if (!res.ok) throw new Error(`tool catalog unavailable (HTTP ${res.status})`);
-      return await res.json();
-    }).then((body) => {
+    fetchMcpToolEntries(transport, skipKey ? skipKey.split(",") : []).then((tools) => {
       if (cancelled) return;
-      setEntries((body.tools ?? []).filter((t) => !skip.has(t.extensionId)));
+      setEntries(tools);
       setError(null);
     }).catch((e) => {
       if (cancelled) return;
@@ -700,52 +760,7 @@ function useMcpExtensions(options) {
     };
   }, [transport, skipKey]);
   const actions = useMemo3(
-    () => entries.map((entry) => ({
-      name: entry.name,
-      description: entry.description,
-      parameters: entry.parameters,
-      // Gate writes off the advertised flag; only an explicit mutates=false is
-      // read-only. Undefined (external servers) ⇒ mutating, so the host's
-      // confirm-before-mutate gate fires (fail safe).
-      mutates: entry.mutates !== false,
-      run: (args) => {
-        const mutating = entry.mutates !== false;
-        const exec = async () => {
-          const token = transport.getToken();
-          const headers = { "Content-Type": "application/json" };
-          if (token) headers.Authorization = `Bearer ${token}`;
-          const res = await fetch(`${transport.baseUrl}/llm/v1/mcp/call`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: withObservedModel(entry.tool, args) })
-          });
-          const body = await res.json().catch(() => ({}));
-          const out = !res.ok ? { error: body.error ?? `MCP call failed (${res.status})` } : body.result ?? body;
-          onToolResultRef.current?.({
-            name: entry.name,
-            tool: entry.tool,
-            extensionId: entry.extensionId,
-            mutating,
-            ok: res.ok && !isErrorResult(out)
-          });
-          return out;
-        };
-        if (mutating && isCreateTool(entry.name, entry.tool)) {
-          const key = `${entry.extensionId}:${entry.tool}:${stableStringify(args)}`;
-          const now = nowMs();
-          const prior = recentCreates.get(key);
-          if (prior && now - prior.at < CREATE_DEDUPE_MS) return prior.result;
-          const result = exec();
-          recentCreates.set(key, { at: now, result });
-          for (const [k, v] of recentCreates) if (now - v.at >= CREATE_DEDUPE_MS) recentCreates.delete(k);
-          result.then((out) => {
-            if (isErrorResult(out)) recentCreates.delete(key);
-          }).catch(() => recentCreates.delete(key));
-          return result;
-        }
-        return exec();
-      }
-    })),
+    () => mcpActionsFrom(entries, transport, (info) => onToolResultRef.current?.(info)),
     [entries, transport]
   );
   useRegisterBrainActions(actions);
@@ -1229,9 +1244,7 @@ function parseStepMessage(metadata) {
 }
 function traceWithPersistedSteps(messages, trace) {
   const seen = /* @__PURE__ */ new Set();
-  for (const ev of trace) {
-    if (ev.category !== "message") seen.add(stepSig(ev.category, ev.label, ev.ts));
-  }
+  for (const ev of trace) seen.add(stepSig(ev.category, ev.label, ev.ts));
   const fromMessages = [];
   for (const message of messages) {
     if (!isStepMessage(message)) continue;
@@ -1299,6 +1312,46 @@ function detectAnnouncedButUnmadeToolCall(events, messages) {
   return messages.some(
     (m) => m.role === "assistant" && typeof m.content === "string" && announcesUntakenAction(m.content)
   );
+}
+var LOOP_STEP = {
+  recovery: "loop.recover_announced_tool_call",
+  failover: "loop.model_failover",
+  unrecovered: "loop.stall_unrecovered"
+};
+function stallRecoveriesInTrace(events) {
+  return events.filter((e) => e.label === LOOP_STEP.recovery).length;
+}
+function modelFailoversInTrace(events) {
+  return events.filter((e) => e.label === LOOP_STEP.failover).length;
+}
+function stallUnrecoveredInTrace(events) {
+  return events.some((e) => e.label === LOOP_STEP.unrecovered);
+}
+function toolExposureInTrace(events) {
+  let lastTurn = null;
+  let min = null;
+  let catalog = null;
+  for (const ev of events) {
+    if (ev.category !== "llm") continue;
+    const a = ev.args;
+    if (typeof a?.advertisedTools === "number") {
+      lastTurn = a.advertisedTools;
+      min = min == null ? a.advertisedTools : Math.min(min, a.advertisedTools);
+    }
+    if (typeof a?.catalogTools === "number") catalog = a.catalogTools;
+  }
+  return { lastTurn, min, catalog };
+}
+function narratedUnadvertisedInTrace(events) {
+  const seen = [];
+  for (const ev of events) {
+    const raw = ev.args?.narratedUnadvertised;
+    if (!Array.isArray(raw)) continue;
+    for (const n of raw) {
+      if (typeof n === "string" && n && !seen.includes(n)) seen.push(n);
+    }
+  }
+  return seen;
 }
 function cap(s, n = 2e3) {
   const str = typeof s === "string" ? s : JSON.stringify(s ?? "");
@@ -1411,8 +1464,10 @@ function computeBrainDiagnostics(events, requestedModel, messages = []) {
     const toolCallsThisTurn = ev.args?.toolCalls;
     const askedNoTools = typeof toolCallsThisTurn === "number" ? toolCallsThisTurn === 0 : true;
     if (finish === "length" || emptyText && askedNoTools) emptyOrLengthFinishes += 1;
-    const resolved = ev.args?.model;
-    if (req && typeof resolved === "string" && resolved && resolved !== "default" && resolved !== req) downgradeEvents += 1;
+    const a = ev.args;
+    const asked = typeof a?.requestedModel === "string" && a.requestedModel !== "default" ? a.requestedModel : req;
+    const resolved = a?.model;
+    if (asked && typeof resolved === "string" && resolved && resolved !== "default" && resolved !== asked) downgradeEvents += 1;
   }
   let toolResultBytes = 0;
   let truncatedToolResults = 0;
@@ -1432,8 +1487,14 @@ function computeBrainDiagnostics(events, requestedModel, messages = []) {
   const degradationSignal = evermindUsed.length > 0 && emptyOrLengthFinishes > 0 && (!tokensMeasured || promptTokenPeak < 24e3) && truncatedToolResults === 0;
   const didWork = toolEvents.length > 0 || completionTokenTotal > 0 || llm.length > 0;
   const announcedUnmadeToolCall = detectAnnouncedButUnmadeToolCall(events, messages);
+  const stallRecoveries = stallRecoveriesInTrace(events);
+  const modelFailovers = modelFailoversInTrace(events);
+  const stallUnrecovered = stallUnrecoveredInTrace(events);
+  const exposure = toolExposureInTrace(events);
+  const narratedUnadvertisedTools = narratedUnadvertisedInTrace(events);
+  const noToolsAdvertised = exposure.min === 0 && toolEvents.length === 0;
   const healthy = errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal && !announcedUnmadeToolCall && didWork;
-  const likelyCause = announcedUnmadeToolCall ? "tool-calls-not-emitted" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : healthy ? "healthy" : "inconclusive";
+  const likelyCause = noToolsAdvertised ? "no-tools-advertised" : narratedUnadvertisedTools.length > 0 ? "tool-not-advertised" : announcedUnmadeToolCall ? "tool-calls-not-emitted" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : healthy ? "healthy" : "inconclusive";
   return {
     turns: llm.length,
     toolCalls: toolEvents.length,
@@ -1451,6 +1512,13 @@ function computeBrainDiagnostics(events, requestedModel, messages = []) {
     downgradeEvents,
     emptyOrLengthFinishes,
     announcedUnmadeToolCall,
+    stallRecoveries,
+    modelFailovers,
+    stallUnrecovered,
+    advertisedToolsLastTurn: exposure.lastTurn,
+    advertisedToolsMin: exposure.min,
+    catalogTools: exposure.catalog,
+    narratedUnadvertisedTools,
     turnCoveragePartial,
     likelyCause
   };
@@ -1459,7 +1527,7 @@ function kb(bytes) {
   return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
 }
 function formatBrainDiagnostics(d) {
-  const verdict = d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Check the "Tools available to the model" line in the Chat diagnostics block (0 tools \u21D2 it had none to emit), then try a different model.' : d.likelyCause === "context-exhaustion" ? "Likely CONTEXT EXHAUSTION (case A) \u2014 the transcript outgrew the model window." : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
+  const verdict = d.likelyCause === "no-tools-advertised" ? 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.' : d.likelyCause === "tool-not-advertised" ? `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.` : d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.' : d.likelyCause === "context-exhaustion" ? "Likely CONTEXT EXHAUSTION (case A) \u2014 the transcript outgrew the model window." : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
   const lines = ["--- Diagnostics ---", `Likely cause: ${verdict}`];
   const scope = d.turnCoveragePartial ? " (this session)" : "";
   lines.push(`Turns${scope}: ${d.turns} \xB7 Tool calls: ${d.toolCalls} \xB7 Errors: ${d.errors}${d.loopExhausted ? " \xB7 LOOP EXHAUSTED" : ""}`);
@@ -1478,6 +1546,22 @@ function formatBrainDiagnostics(d) {
   lines.push(
     `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` \xB7 largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ""}${d.truncatedToolResults ? ` \xB7 ${d.truncatedToolResults} truncated before the model saw them` : ""}`
   );
+  if (d.advertisedToolsLastTurn != null) {
+    const range = d.advertisedToolsMin != null && d.advertisedToolsMin !== d.advertisedToolsLastTurn ? `${d.advertisedToolsMin}\u2013${d.advertisedToolsLastTurn}` : `${d.advertisedToolsLastTurn}`;
+    lines.push(
+      `Tools advertised per turn: ${range}${d.catalogTools ? ` (of ${d.catalogTools} in the catalog)` : ""}${d.advertisedToolsMin === 0 ? " \xB7 \u26A0 a turn was offered NONE" : ""}`
+    );
+  } else {
+    lines.push("Tools advertised per turn: not recorded (this run predates per-turn tool accounting).");
+  }
+  if (d.narratedUnadvertisedTools.length) {
+    lines.push(`Narrated but never advertised: ${d.narratedUnadvertisedTools.join(", ")} \u2014 the model was told to call a tool it was not given.`);
+  }
+  if (d.stallRecoveries > 0 || d.modelFailovers > 0 || d.stallUnrecovered) {
+    lines.push(
+      `Stall handling: ${d.stallRecoveries} re-prompt(s) \xB7 ${d.modelFailovers} model failover(s)${d.stallUnrecovered ? " \xB7 GAVE UP (the stall survived every attempt)" : " \xB7 recovered"}`
+    );
+  }
   if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
   if (d.emptyOrLengthFinishes > 0) lines.push(`Degenerate turns: ${d.emptyOrLengthFinishes} ended on \`length\` or returned empty text.`);
   if (d.evermindUsed.length) lines.push(`Evermind/SSM answered: ${d.evermindUsed.join(", ")}`);
@@ -2211,6 +2295,9 @@ ${summary}`;
   }
   return assembleCompacted(systemPrompt, convo, note, COMPACT_TAIL_TURNS);
 }
+function resetBrainRunStore() {
+  cells.clear();
+}
 function subscribeRunStore(listener) {
   storeListeners.add(listener);
   return () => {
@@ -2553,6 +2640,7 @@ ${chatWorkLinkingDirective(chatId)}`;
     });
     const advertised = selection.trimmed ? [...selection.tools, ...routerToolSpecs(allTools?.length ?? 0)] : selection.tools;
     const tools = advertised.length > 0 ? advertised : void 0;
+    const advertisedNames = new Set(advertised.map((t) => t.function.name));
     if (selection.trimmed) {
       pushTrace(c, {
         ts: nowIso(),
@@ -2598,6 +2686,7 @@ ${chatWorkLinkingDirective(chatId)}`;
         result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) \u2014 a smaller context window can truncate long transcripts.`
       });
     }
+    const narratedUnadvertised = result.toolCalls.length === 0 ? toolNamesMentionedIn(result.text).filter((n) => !advertisedNames.has(n)) : [];
     pushDurableStep(c, chatId, persistence, {
       ts: nowIso(),
       category: "llm",
@@ -2617,7 +2706,14 @@ ${chatWorkLinkingDirective(chatId)}`;
         // could NOT resolve — so triage tells "ran on the shared pool despite a
         // connected Claude account (expired?)" apart from "nothing connected".
         account: result.account,
-        byoUnresolved: result.byoUnresolved
+        byoUnresolved: result.byoUnresolved,
+        // How many tools the turn was actually OFFERED, out of the whole catalog.
+        // A zero here is the difference between "the model refused to act" and "it had
+        // nothing to act with" — previously unanswerable from a copied report, which
+        // only ever carried the registry-wide total.
+        advertisedTools: advertised.length,
+        catalogTools: allTools?.length ?? 0,
+        ...narratedUnadvertised.length ? { narratedUnadvertised } : {}
       },
       // Structured diagnostics fields — the A-vs-B triage reads these directly.
       usage: result.usage,
@@ -2751,11 +2847,11 @@ ${chatWorkLinkingDirective(chatId)}`;
       }
       convo.push({ role: "assistant", content: result.text });
       convo.push({ role: "user", content: stallRecoveryNudge(lastChance) });
-      pushTrace(c, {
+      pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
         category: "message",
         label: "loop.recover_announced_tool_call",
-        args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES },
+        args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES, advertisedTools: advertised.length },
         result: `Model announced a tool call without making one \u2014 re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
       });
       c.streamingText = "";
@@ -2778,7 +2874,7 @@ ${chatWorkLinkingDirective(chatId)}`;
       const next = modelFailovers < MAX_MODEL_FAILOVERS ? pickFallbackModel?.(triedModels) : void 0;
       if (next) {
         modelFailovers += 1;
-        pushTrace(c, {
+        pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: "message",
           label: "loop.model_failover",
@@ -2793,11 +2889,11 @@ ${chatWorkLinkingDirective(chatId)}`;
         continue;
       }
       const notice = stallExhaustedNotice(resolved, triedModels);
-      pushTrace(c, {
+      pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
         category: "error",
         label: "loop.stall_unrecovered",
-        args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: triedModels },
+        args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: triedModels, advertisedTools: advertised.length },
         result: notice,
         isError: true
       });
@@ -3510,6 +3606,7 @@ export {
   TOOL_ROUTER_DESCRIBE,
   TOOL_ROUTER_FIND,
   TOOL_ROUTER_INVOKE,
+  XmlToolCallFilter,
   accountUsedInTrace,
   activeMentionToken,
   allowanceState,
@@ -3534,7 +3631,9 @@ export {
   detectUnbackedTicketClaim,
   detectUnbackedWriteClaim,
   effortProfile,
+  extractXmlToolCalls,
   fetchApiVersionVia,
+  fetchMcpToolEntries,
   filterMentionCandidates,
   findTools,
   formatBrainDiagnostics,
@@ -3561,8 +3660,11 @@ export {
   isTicketRecordingTool,
   lastConsolidationIndex,
   linkedTicketsToAdvance,
+  mcpActionsFrom,
   mentionRecipient,
+  modelFailoversInTrace,
   modelsUsedInTrace,
+  narratedUnadvertisedInTrace,
   nextFallbackModel,
   parseByoUnresolved,
   parseDirectedRecipient,
@@ -3571,6 +3673,7 @@ export {
   parseStepMessage,
   prepareImageDataUrl,
   reasoningForRun,
+  resetBrainRunStore,
   resolveRecipient,
   resolveRunConfirm,
   routerToolSpecs,
@@ -3580,6 +3683,8 @@ export {
   selectToolsForTurn,
   setLastResolvedModel,
   setMcpToolStatus,
+  stallRecoveriesInTrace,
+  stallUnrecoveredInTrace,
   startRun,
   stepSig,
   stopRun,
@@ -3588,6 +3693,8 @@ export {
   subscribeRunStore,
   subscribeToChatMessages,
   takePendingPrompt,
+  toolExposureInTrace,
+  toolSpecsFor,
   traceWithPersistedSteps,
   useBrainActions,
   useBrainChats,
