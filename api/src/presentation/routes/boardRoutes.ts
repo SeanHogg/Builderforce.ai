@@ -32,7 +32,7 @@
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { authMiddleware, isManager } from '../middleware/authMiddleware';
 import { ForbiddenError } from '../../domain/shared/errors';
 import {
@@ -284,6 +284,16 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
 
     const now = new Date();
+    // APPEND when no position is given, rather than defaulting to 0. `?? 0` stacked every
+    // un-positioned lane onto the same ordinal, and lane ORDER is what decides which lane a
+    // completing run advances into — so a tie made "the next lane" depend on row order.
+    // Measured: board ad030733 carries `ready` and `todo` both at position 1.
+    const nextPosition = body.position ?? await db
+      .select({ max: sql<number>`coalesce(max(${swimlanes.position}), -1)` })
+      .from(swimlanes)
+      .where(and(eq(swimlanes.tenantId, tenantId), eq(swimlanes.boardId, boardId)))
+      .then((r) => Number(r[0]?.max ?? -1) + 1)
+      .catch(() => 0);
     const [row] = await db
       .insert(swimlanes)
       .values({
@@ -292,7 +302,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         boardId,
         key: body.key.trim(),
         name: body.name.trim(),
-        position: body.position ?? 0,
+        position: nextPosition,
         isTerminal: body.isTerminal ?? false,
         gate: body.gate ?? 'auto',
         executionMode: body.executionMode ?? 'sequential',

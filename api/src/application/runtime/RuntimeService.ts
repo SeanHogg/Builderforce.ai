@@ -15,7 +15,7 @@ import {
   cloudOrphanReason, cloudSilenceCeilingMs, HOST_ORPHAN_REASON,
   PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON,
 } from './orphanReasons';
-import { parseExecutor, parseActAsRole, parseCloudAgentRef } from './cloudDispatch';
+import { parseExecutor, parseActAsRole, parseCloudAgentRef, isRoleAttributedRun } from './cloudDispatch';
 import type { PolicyGate } from '@builderforce/agent-tools';
 import { ticketKindForTaskType, type RunMilestonePhase } from '../brain/ChatTicketService';
 
@@ -512,8 +512,17 @@ export class RuntimeService {
         // no code) and likewise must not move its lane — the lane mirrors the incident's
         // own status (IncidentService.updateIncident), not the run's completion.
         const isIncidentTriageRun = isIncidentTriagePayload(execution.payload);
-        // Both classes run against an already-open ticket and hold its lane.
-        const holdsLane = isReviewRun || isIncidentTriageRun;
+        // A ROLE-ATTRIBUTED run (a reviewer asked for a verdict, or a producer asked for
+        // this stage's deliverable) likewise runs against an already-open ticket. Its
+        // VERDICT is what advances the stage — the run merely completing is not — so it
+        // must not move the lane. Omitting this is why a 20-second sign-off run pushed
+        // task 387 out of `in_review` 1.5 seconds after finishing, whatever it decided,
+        // and it is half of the `in_review → ready` churn (the other half is the
+        // Coordinator rewind). The manifest attribution below still runs, so the run's
+        // evidence lands on its slot exactly as before.
+        const isRoleRun = isRoleAttributedRun(execution.payload);
+        // All three classes run against an already-open ticket and hold its lane.
+        const holdsLane = isReviewRun || isIncidentTriageRun || isRoleRun;
         const managedResult = !holdsLane && (dto.status === ExecutionStatus.RUNNING || terminal)
           ? await this.onManagedRunStatus?.({
               tenantId, taskId: Number(execution.taskId), projectId, executionId: Number(saved.id),
