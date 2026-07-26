@@ -69,7 +69,9 @@ export async function runApprovalExpirySweep(env: Env, db: Db): Promise<Approval
       await sendSlackNotification(
         env.SLACK_APPROVAL_WEBHOOK_URL,
         `:warning: *${list.length} approval request(s) expired without review:*\n${lines}`,
-      ).catch(() => { /* notification is advisory; expiry already persisted */ });
+      ).catch((error) => { /* notification is advisory; expiry already persisted */ 
+        console.error('[suppressed-error] application/approvals/runApprovalExpirySweep.ts:69 runApprovalExpirySweep', { error });
+      });
     }
   }
 

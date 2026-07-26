@@ -29,7 +29,9 @@ export class SessionRoomDO implements DurableObject {
         try {
           const body = await request.text();
           if (body) frame = body;
-        } catch { /* keep default */ }
+        } catch (error) { /* keep default */ 
+          console.error('[suppressed-error] infrastructure/relay/SessionRoomDO.ts:32 fetch', { error });
+        }
         this.broadcast(frame);
         return new Response(null, { status: 204 });
       }
@@ -41,7 +43,9 @@ export class SessionRoomDO implements DurableObject {
     this.clients.add(server);
     server.addEventListener('close', () => this.clients.delete(server));
     server.addEventListener('error', () => this.clients.delete(server));
-    try { server.send('{"type":"connected"}'); } catch { /* ignore */ }
+    try { server.send('{"type":"connected"}'); } catch (error) { /* ignore */ 
+      console.error('[suppressed-error] infrastructure/relay/SessionRoomDO.ts:44 fetch', { error });
+    }
 
     return new Response(null, { status: 101, webSocket: client });
   }

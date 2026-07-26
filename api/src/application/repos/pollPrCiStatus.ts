@@ -59,7 +59,9 @@ export async function pollPrCiStatus(env: Env, db: Db, tenantId: number, pr: Pol
     // green — an on_green policy on a repo with no CI must not deadlock.
     const live = detail.checks ?? (detail.checksTotal === 0 ? 'success' : null);
     if (live && live !== pr.buildStatus) {
-      await setPullRequestBuildStatus(db, pr.id, live).catch(() => {});
+      await setPullRequestBuildStatus(db, pr.id, live).catch((error) => {
+        console.error('[suppressed-error] application/repos/pollPrCiStatus.ts:62 pollPrCiStatus', { error });
+      });
     }
     return live ?? pr.buildStatus;
   } catch {

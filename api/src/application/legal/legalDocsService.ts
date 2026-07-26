@@ -69,8 +69,10 @@ async function recordLegalVersion(
       changeKind,
       changedBy,
     });
-  } catch {
+  } catch (error) {
     // History is an audit convenience; never fail the legal write over it.
+  
+    console.error('[suppressed-error] application/legal/legalDocsService.ts:72 recordLegalVersion', { error });
   }
 }
 

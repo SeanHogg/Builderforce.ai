@@ -606,7 +606,9 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     let reason: string | null = null;
-    try { const b = await c.req.json<{ reason?: string }>(); reason = b.reason ?? null; } catch { /* optional */ }
+    try { const b = await c.req.json<{ reason?: string }>(); reason = b.reason ?? null; } catch (error) { /* optional */ 
+      console.error('[suppressed-error] presentation/routes/activityRoutes.ts:609 createTimecardRoutes', { error });
+    }
     const db = buildDatabase(c.env);
     const rows = await db
       .update(timecards)

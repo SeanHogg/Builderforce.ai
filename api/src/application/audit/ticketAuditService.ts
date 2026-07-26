@@ -102,7 +102,9 @@ export class TicketAuditService {
         verdict: input.verdict ?? 'approved',
         summary: input.summary ?? null,
         reviewerName: input.memberName ?? null,
-      }).catch(() => { /* best-effort */ });
+      }).catch((error) => {
+        console.error('[suppressed-error] application/audit/ticketAuditService.ts:100 recordSignoff', { error });
+      });
     }
 
     return { ...audit, signoffId };

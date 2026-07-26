@@ -556,7 +556,9 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
         summary: `Published "${doc.title}" v${nextVersion}`,
         metadata: { versionNumber: nextVersion, changeNote: body.changeNote?.trim() || null },
       });
-    })().catch(() => {}));
+    })().catch((error) => {
+      console.error('[suppressed-error] presentation/routes/knowledgeRoutes.ts:547 createKnowledgeRoutes', { error });
+    }));
     return c.json(await loadDoc(tenantId, id));
   });
 

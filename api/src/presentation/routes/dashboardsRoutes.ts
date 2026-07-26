@@ -86,7 +86,9 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
         matchedMetric: answer.matchedMetric,
         createdBy: createdBy ?? null,
       });
-    } catch { /* history is non-critical */ }
+    } catch (error) { /* history is non-critical */ 
+      console.error('[suppressed-error] presentation/routes/dashboardsRoutes.ts:89 createDashboardsRoutes', { error });
+    }
 
     return c.json(answer);
   });

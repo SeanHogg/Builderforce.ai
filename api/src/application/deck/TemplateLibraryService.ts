@@ -146,7 +146,9 @@ export async function deleteTemplate(db: Db, env: Env, tenantId: number, id: str
     .where(and(eq(deckTemplates.id, id), eq(deckTemplates.tenantId, tenantId)))
     .returning({ id: deckTemplates.id, r2Key: deckTemplates.r2Key })) as Array<{ id: string; r2Key: string | null }>;
   if (!rows[0]) return false;
-  if (rows[0].r2Key && env.UPLOADS) await env.UPLOADS.delete(rows[0].r2Key).catch(() => { /* best-effort */ });
+  if (rows[0].r2Key && env.UPLOADS) await env.UPLOADS.delete(rows[0].r2Key).catch((error) => { /* best-effort */ 
+    console.error('[suppressed-error] application/deck/TemplateLibraryService.ts:149 deleteTemplate', { error });
+  });
   await invalidateCached(env, cacheKey(tenantId));
   return true;
 }

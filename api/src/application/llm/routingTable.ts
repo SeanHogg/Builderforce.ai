@@ -235,8 +235,10 @@ export async function applyOutcomeToRoutingTable(
           merged: outcome.merged,
         });
         await setCached(env, cacheKey(scope), next, { kvTtlSeconds: 86_400, l1TtlMs: 60_000 });
-      } catch {
+      } catch (error) {
         // Best-effort: the reconcile job repairs any dropped increment.
+      
+        console.error('[suppressed-error] application/llm/routingTable.ts:238 applyOutcomeToRoutingTable', { error });
       }
     }),
   );

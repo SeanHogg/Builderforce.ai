@@ -50,7 +50,9 @@ async function forkIncidentsFromTickets(db: Db, env: Env, conn: ItsmConnection, 
         ticketType: str2(f.ticketType) ?? str2(f.category),
       }, incidentRef);
       if (opened?.created) {
-        await escalation.pageInitial(env, conn.tenantId, opened.incidentId).catch(() => {});
+        await escalation.pageInitial(env, conn.tenantId, opened.incidentId).catch((error) => {
+          console.error('[suppressed-error] application/boardsync/itsmIngest.ts:53 forkIncidentsFromTickets', { error });
+        });
         // Enrich with an agent triage run against the incident's board task.
         const detail = await incidents.getIncident(conn.tenantId, opened.incidentId);
         await dispatchIncidentTriage(env, db, {
@@ -58,7 +60,9 @@ async function forkIncidentsFromTickets(db: Db, env: Env, conn: ItsmConnection, 
           incidentId: opened.incidentId,
           boardTaskId: detail?.incident.boardTaskId ?? null,
           incidentRef,
-        }).catch(() => {});
+        }).catch((error) => {
+          console.error('[suppressed-error] application/boardsync/itsmIngest.ts:56 forkIncidentsFromTickets', { error });
+        });
       }
     } catch (err) {
       console.error('[itsm] incident fork failed', ticket.externalId, err);

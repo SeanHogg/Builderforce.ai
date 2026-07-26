@@ -45,7 +45,9 @@ export function createMonitorWebhookRoutes(db: Db): Hono<HonoEnv> {
     };
 
     const res = await svc.recordSignal(monitor.tenantId, monitorId, signal, c.env as Env);
-    await bumpCacheVersion(c.env as Env, monitoringVersionKey(monitor.tenantId)).catch(() => {});
+    await bumpCacheVersion(c.env as Env, monitoringVersionKey(monitor.tenantId)).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/monitorWebhookRoutes.ts:48 createMonitorWebhookRoutes', { error });
+    });
     return c.json({ ok: true, status: res.status });
   });
 

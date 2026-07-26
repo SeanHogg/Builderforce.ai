@@ -109,7 +109,9 @@ export async function resolveTaskPrTarget(
   // where nobody ever sees it. Busting first costs one request and removes the
   // whole failure mode.
   const versionToken = String(Date.now());
-  await invalidatePullRequestDetail(env, pr.id, versionToken).catch(() => {});
+  await invalidatePullRequestDetail(env, pr.id, versionToken).catch((error) => {
+    console.error('[suppressed-error] application/checks/publishTaskVerdict.ts:112 resolveTaskPrTarget', { error });
+  });
   const detail = await getPullRequestDetail(env, pr.id, versionToken, {
     provider: auth.auth.repo.provider,
     host: auth.auth.coords.host,

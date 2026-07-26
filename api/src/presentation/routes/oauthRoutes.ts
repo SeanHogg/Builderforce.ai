@@ -334,7 +334,9 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
       try {
         const linkPayload = await verifyWebJwt(linkToken, c.env.JWT_SECRET);
         linkUserId = linkPayload.sub;
-      } catch { /* invalid token — fall through to normal login flow */ }
+      } catch (error) { /* invalid token — fall through to normal login flow */ 
+        console.error('[suppressed-error] presentation/routes/oauthRoutes.ts:337 createOAuthRoutes', { error });
+      }
     }
 
     const state = await createOAuthState(c.env.JWT_SECRET, redirect, linkUserId);

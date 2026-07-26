@@ -193,12 +193,16 @@ export async function commitWorkspaceToRepo(
       await db.insert(repoBranches).values({
         tenantId, segmentId: repo.segmentId ?? null, repoId: repo.id, taskId: null,
         name: branch, baseBranch: base, createdBy: 'designer', createdAt: now,
-      }).catch(() => { /* best-effort */ });
+      }).catch((error) => { /* best-effort */ 
+        console.error('[suppressed-error] application/ide/repoBridge.ts:193 commitWorkspaceToRepo', { error });
+      });
       await db.insert(pullRequests).values({
         tenantId, segmentId: repo.segmentId ?? null, projectId, repoId: repo.id, taskId: null,
         provider: repo.provider, branchName: branch, baseBranch: base, status: 'open',
         number: prNumber, url: prUrl, createdAt: now, updatedAt: now,
-      }).catch(() => { /* best-effort */ });
+      }).catch((error) => { /* best-effort */ 
+        console.error('[suppressed-error] application/ide/repoBridge.ts:197 commitWorkspaceToRepo', { error });
+      });
     }
   }
 

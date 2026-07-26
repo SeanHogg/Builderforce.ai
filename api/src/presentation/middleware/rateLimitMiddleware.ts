@@ -118,8 +118,10 @@ export const rateLimitMiddleware: MiddlewareHandler<RateLimitHonoEnv> = async (c
         429,
       );
     }
-  } catch {
+  } catch (error) {
     // DO unavailable — allow request through
+  
+    console.error('[suppressed-error] presentation/middleware/rateLimitMiddleware.ts:121 rateLimitMiddleware', { error });
   }
 
   return next();

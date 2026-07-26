@@ -204,7 +204,9 @@ export async function emitWebhookEvent(db: Db, input: EmitInput, deps: EmitDeps 
         }
       } catch (err) {
         await recordDeliveryFailure(db, delivery.id, 1, timestamp, err)
-          .catch(() => { /* never let bookkeeping throw into the emit path */ });
+          .catch((error) => { /* never let bookkeeping throw into the emit path */ 
+            console.error('[suppressed-error] application/seams/webhookService.ts:206 emitWebhookEvent', { error });
+          });
       }
     }),
   );
@@ -264,7 +266,9 @@ export async function runWebhookRetrySweep(env: Env, nowMs: number = Date.now(),
         .update(webhookDeliveries)
         .set({ nextRetryAt: null, lastError: !row.active ? 'subscription inactive' : 'no stored payload' })
         .where(eq(webhookDeliveries.id, row.id))
-        .catch(() => { /* bookkeeping best-effort */ });
+        .catch((error) => { /* bookkeeping best-effort */ 
+          console.error('[suppressed-error] application/seams/webhookService.ts:263 runWebhookRetrySweep', { error });
+        });
       continue;
     }
 
@@ -292,7 +296,9 @@ export async function runWebhookRetrySweep(env: Env, nowMs: number = Date.now(),
       }
     } catch (err) {
       await recordDeliveryFailure(db, row.id, attempts, nowSec, err)
-        .catch(() => { /* never let bookkeeping throw into the sweep */ });
+        .catch((error) => { /* never let bookkeeping throw into the sweep */ 
+          console.error('[suppressed-error] application/seams/webhookService.ts:294 runWebhookRetrySweep', { error });
+        });
     }
   }
 

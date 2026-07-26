@@ -421,7 +421,9 @@ export async function resolveTenantVendorKeys(env: Env, tenantId: number): Promi
     if ((row.auth_type ?? 'api_key') !== 'api_key' || !row.key_enc) continue;
     try {
       out[row.provider] = await decryptSecretFromStorage(row.key_enc, credentialSecret(env), { tenantId, legacySecret: env.JWT_SECRET });
-    } catch { /* skip an undecryptable row — never fail the batch */ }
+    } catch (error) { /* skip an undecryptable row — never fail the batch */ 
+      console.error('[suppressed-error] application/llm/tenantProviderKeyService.ts:424 resolveTenantVendorKeys', { error });
+    }
   }
   return out;
 }

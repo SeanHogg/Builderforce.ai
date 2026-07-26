@@ -47,8 +47,10 @@ function readHostBi(settingsRaw: string | null | undefined): HostBiConfig | null
     if (typeof baseUrl === 'string' && /^https:\/\//.test(baseUrl) && typeof token === 'string' && token) {
       return { baseUrl: baseUrl.replace(/\/+$/, ''), token };
     }
-  } catch {
+  } catch (error) {
     /* fall through */
+  
+    console.error('[suppressed-error] application/seams/validationEngagementsService.ts:50 readHostBi', { error });
   }
   return null;
 }

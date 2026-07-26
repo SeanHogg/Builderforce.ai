@@ -131,11 +131,15 @@ export async function checkTermsAcceptance(
 /** Call after publishing or amending a legal document. Best-effort. */
 export async function invalidateActiveTermsVersion(env: Env | undefined): Promise<void> {
   if (!env) return;
-  await invalidateCached(env, ACTIVE_TERMS_KEY).catch(() => {});
+  await invalidateCached(env, ACTIVE_TERMS_KEY).catch((error) => {
+    console.error('[suppressed-error] application/legal/termsAcceptance.ts:134 invalidateActiveTermsVersion', { error });
+  });
 }
 
 /** Call after a user accepts terms. Best-effort. */
 export async function invalidateAcceptedTermsVersion(env: Env | undefined, userId: string): Promise<void> {
   if (!env) return;
-  await invalidateCached(env, acceptedTermsKey(userId)).catch(() => {});
+  await invalidateCached(env, acceptedTermsKey(userId)).catch((error) => {
+    console.error('[suppressed-error] application/legal/termsAcceptance.ts:140 invalidateAcceptedTermsVersion', { error });
+  });
 }

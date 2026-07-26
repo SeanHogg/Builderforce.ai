@@ -42,7 +42,9 @@ export async function recordIngestion(db: Db, row: RecordIngestionRow): Promise<
       itemsIngested: Math.max(0, Math.floor(row.itemsIngested ?? 0)),
       metadata:      row.metadata ? JSON.stringify(row.metadata) : null,
     });
-  } catch { /* never let ingestion logging fail the request */ }
+  } catch (error) { /* never let ingestion logging fail the request */ 
+    console.error('[suppressed-error] application/ingestion/ingestionLedger.ts:45 recordIngestion', { error });
+  }
 }
 
 /** Bytes ingested by a tenant since `since` — the single window-sum the meter and

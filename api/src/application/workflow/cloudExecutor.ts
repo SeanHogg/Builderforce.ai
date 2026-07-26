@@ -143,8 +143,10 @@ async function executeCloudNode(env: CloudExecutorEnv, node: NodeInput, inputTex
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
           return { output: JSON.stringify({ ...parsed, $branch: taken }) };
         }
-      } catch {
+      } catch (error) {
         /* non-JSON payload — fall through to passthrough */
+      
+        console.error('[suppressed-error] application/workflow/cloudExecutor.ts:146 executeCloudNode', { error });
       }
       return { output: inputText };
     }

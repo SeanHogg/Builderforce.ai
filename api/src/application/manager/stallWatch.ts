@@ -199,8 +199,10 @@ export async function recordStall(
       });
     await invalidateCached(env, registerKey(args.tenantId, args.projectId));
     await invalidateCached(env, registerKey(args.tenantId, null));
-  } catch {
+  } catch (error) {
     /* the register is observability — never let it fail the manager pass */
+  
+    console.error('[suppressed-error] application/manager/stallWatch.ts:202 recordStall', { error });
   }
 }
 
