@@ -199,14 +199,27 @@ async function execTool(spec, workdir, writtenPaths, name, parsed, proc) {
     return gitTool(spec, workdir, proc, name, parsed);
   }
   // Durable cross-run memory. Like the platform tools, the container holds no DB
-  // creds, so both verbs relay to the Worker's `memory` op — which drives the SAME
-  // capability the durable surface uses, so a fact stored by a container run is
-  // recalled by a durable one and vice versa.
+  // creds, so all three verbs relay to the Worker's `memory` op — which drives the
+  // SAME governed capability the durable surface uses (scope chain, provenance, TTL;
+  // migration 0371), so a fact stored by a container run is recalled by a durable one
+  // and vice versa, under one set of rules.
   if (name === 'memory_recall') {
     return op(spec, { op: 'memory', args: { action: 'recall', query: parsed.query, limit: parsed.limit } });
   }
   if (name === 'memory_remember') {
-    return op(spec, { op: 'memory', args: { action: 'remember', key: parsed.key, content: parsed.content, tags: parsed.tags, importance: parsed.importance } });
+    return op(spec, {
+      op: 'memory',
+      args: {
+        action: 'remember',
+        key: parsed.key, content: parsed.content, tags: parsed.tags, importance: parsed.importance,
+        // Governance metadata the model may now supply — how widely the fact applies
+        // and when it lapses. The Worker resolves the concrete scope owner from the run.
+        scope: parsed.scope, ttl_days: parsed.ttl_days,
+      },
+    });
+  }
+  if (name === 'memory_forget') {
+    return op(spec, { op: 'memory', args: { action: 'forget', key: parsed.key } });
   }
   // Platform (project-management) tools — the container holds no DB creds, so it
   // relays each `builtin_*` call back to the Worker, which runs the curated,

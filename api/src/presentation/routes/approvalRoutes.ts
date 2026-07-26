@@ -36,6 +36,8 @@ import { Hono } from 'hono';
 import type { MiddlewareHandler } from 'hono';
 import { eq, and, desc, lt, getTableColumns } from 'drizzle-orm';
 import { authMiddleware, requireRole, isManager } from '../middleware/authMiddleware';
+import { memberHasPermission } from '../../application/rbac/effectivePermissions';
+import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { TenantRole, hasMinRole } from '../../domain/shared/types';
 import { approvals, executions, tasks } from '../../infrastructure/database/schema';
 import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
@@ -285,10 +287,24 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
     if (body.status === 'answered' && !body.responseText?.trim()) {
       return c.json({ error: 'responseText is required when answering' }, 400);
     }
-    if (body.status !== 'answered' && !isManager(c as never)) {
-      return c.json({
-        error: `Requires at least '${TenantRole.MANAGER}' role to approve or reject a request`,
-      }, 403);
+    // Approving/rejecting is the governance action; ANSWERING a question merely
+    // steers a run that is already approved, so it stays at the developer tier.
+    // The split cannot be a route-level middleware because it depends on the
+    // request BODY, so the permission is checked inline — same registry, same
+    // resolution (role defaults → overrides → per-user grants/revocations) as
+    // `requirePermission`, just applied where the branch actually is.
+    if (body.status !== 'answered') {
+      if (!isManager(c as never)) {
+        return c.json({
+          error: `Requires at least '${TenantRole.MANAGER}' role to approve or reject a request`,
+        }, 403);
+      }
+      const mayApprove = await memberHasPermission(
+        db, tenantId, userId, c.get('role') as string, PERMISSIONS.APPROVAL_APPROVE, env,
+      );
+      if (!mayApprove) {
+        return c.json({ error: `Requires the '${PERMISSIONS.APPROVAL_APPROVE}' permission` }, 403);
+      }
     }
 
     const [existing] = await db.select().from(approvals).where(and(eq(approvals.id, id), eq(approvals.tenantId, tenantId)));

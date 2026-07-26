@@ -3,8 +3,8 @@
  * All requests use the Web JWT (not tenant token). Requires user.isSuperadmin and WebJWT with sa: true.
  */
 
-import { getApiBaseUrl } from './apiClient';
-import { checkUnauthorizedAndRedirect, getStoredWebToken } from './auth';
+import { apiRequest, apiRequestText, type RequestOptions } from './apiClient';
+import { getStoredWebToken } from './auth';
 import type { LlmModelStatus, VendorId } from './builderforceApi';
 import type { PsychometricProfile } from './psychometric';
 import type { FeedbackQueue, FeedbackStatus } from './feedbackApi';
@@ -559,6 +559,16 @@ export interface PermissionMatrix {
   roles: string[];
   permissions: string[];
   matrix: Record<string, string[]>;
+  /**
+   * Permissions backed by a real request-time gate (`requirePermission`).
+   * Anything not listed is still gated by the ROLE ladder alone, so editing its
+   * row changes what this screen shows and nothing else — the table labels the
+   * difference rather than implying uniform control.
+   *
+   * Optional so an older API that predates the field degrades to "unknown"
+   * instead of rendering every row as advisory.
+   */
+  enforced?: string[];
   overrides: Array<{
     tenantId: number | null;
     role: string;
@@ -610,31 +620,15 @@ export interface EffectivePermissions {
 // Request helper — uses Web token only
 // ---------------------------------------------------------------------------
 
-async function adminRequest<T>(
-  path: string,
-  opts: RequestInit & { body?: string } = {}
-): Promise<T> {
-  const webToken = getStoredWebToken();
-  if (!webToken) throw new Error('Not authenticated. Sign in with a superadmin account.');
-  const hadToken = true;
-  const { body, ...init } = opts;
-  const url = `${getApiBaseUrl()}${path}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${webToken}`,
-      ...(init.headers as Record<string, string>),
-    },
-    ...(body !== undefined && { body }),
-  });
-  checkUnauthorizedAndRedirect(res, hadToken);
-  if (!res.ok) {
-    const msg = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(msg.error || res.statusText || `Admin request failed (${res.status})`);
-  }
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+/**
+ * Superadmin endpoints run on the WEB token (a platform operator is not acting
+ * inside any one workspace), so this is `apiRequest` in `web` auth mode — not a
+ * separate transport. The only extra behaviour is the friendlier "sign in with a
+ * superadmin account" message when no token is stored at all.
+ */
+async function adminRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  if (!getStoredWebToken()) throw new Error('Not authenticated. Sign in with a superadmin account.');
+  return apiRequest<T>(path, { ...opts, auth: 'web' });
 }
 
 // ---------------------------------------------------------------------------
@@ -1215,13 +1209,8 @@ export const adminApi = {
   },
 
   async permissionsMatrixExport(): Promise<string> {
-    const webToken = getStoredWebToken();
-    if (!webToken) throw new Error('Not authenticated.');
-    const res = await fetch(`${getApiBaseUrl()}/api/admin/permissions/matrix/export`, {
-      headers: { Authorization: `Bearer ${webToken}` },
-    });
-    if (!res.ok) throw new Error(`Export failed (${res.status})`);
-    return res.text();
+    if (!getStoredWebToken()) throw new Error('Not authenticated.');
+    return apiRequestText('/api/admin/permissions/matrix/export', { auth: 'web' });
   },
 
   // Modules
@@ -1362,12 +1351,10 @@ export const adminApi = {
     if (params?.targetUserId) q.set('targetUserId', params.targetUserId);
     if (params?.tenantId) q.set('tenantId', String(params.tenantId));
     const suffix = q.toString();
-    const res = await fetch(
-      `${getApiBaseUrl()}/api/admin/audit-log/export${suffix ? `?${suffix}` : ''}`,
-      { headers: { Authorization: `Bearer ${webToken}` } },
+    return apiRequestText(
+      `/api/admin/audit-log/export${suffix ? `?${suffix}` : ''}`,
+      { auth: 'web' },
     );
-    if (!res.ok) throw new Error(`Audit log export failed (${res.status})`);
-    return res.text();
   },
 
   // ─── Tenant API keys (bfk_*) — superadmin mint-on-behalf ─────────────────

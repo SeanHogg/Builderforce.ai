@@ -5,7 +5,7 @@ import { verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { UnauthorizedError, ForbiddenError } from '../../domain/shared/errors';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { users } from '../../infrastructure/database/schema';
-import { checkTermsAcceptance } from './termsEnforcement';
+import { checkTermsAcceptance } from '../../application/legal/termsAcceptance';
 
 /**
  * Middleware that gates access to superadmin-only endpoints.
@@ -54,7 +54,7 @@ export const superAdminMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) 
     throw new ForbiddenError('Superadmin access is restricted to platform operator accounts');
   }
 
-  const terms = await checkTermsAcceptance(db, payload.sub);
+  const terms = await checkTermsAcceptance(db, payload.sub, c.env);
   if (terms.needsAcceptance) {
     return c.json({
       error: 'Terms acceptance required',

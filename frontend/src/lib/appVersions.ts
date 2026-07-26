@@ -19,6 +19,7 @@
  */
 
 import { fetchApiVersionVia } from '@seanhogg/builderforce-brain-embedded';
+import { apiRequest } from './apiClient';
 
 const AUTH_API_URL = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
 
@@ -33,6 +34,12 @@ export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '—';
  */
 export function fetchApiVersion(): Promise<string | null> {
   return fetchApiVersionVia(() =>
-    fetch(`${AUTH_API_URL}/health`, { credentials: 'omit' }).then((r) => (r.ok ? r.json() : null)),
+    apiRequest<{ version?: string } | null>('/health', {
+      auth: 'none',
+      credentials: 'omit',
+      // A version probe must never toast: it is ambient and its failure is
+      // already handled by resolving null.
+      expectedErrors: [400, 401, 403, 404, 429, 500, 502, 503],
+    }).catch(() => null),
   );
 }

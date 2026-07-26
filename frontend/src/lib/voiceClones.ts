@@ -8,7 +8,7 @@
  * Reuses the shared auth/base-URL helpers in apiClient (no token re-derivation).
  */
 
-import { apiRequest, getApiBaseUrl, getAuthHeaders } from './apiClient';
+import { apiRequest } from './apiClient';
 
 export interface VoiceClone {
   id: number;
@@ -59,12 +59,9 @@ export async function createVoiceClone(input: {
   if (input.embedding) form.append('embedding', JSON.stringify(input.embedding));
   if (input.reference) form.append('reference', input.reference, input.reference.name);
 
-  // Multipart — let FormData set its own Content-Type boundary (mirrors publishSite).
-  const headers = { ...getAuthHeaders() } as Record<string, string>;
-  delete headers['Content-Type'];
-  const res = await fetch(`${getApiBaseUrl()}${BASE}`, { method: 'POST', headers, body: form });
-  if (!res.ok) throw new Error((await safeError(res)) ?? `Create failed (${res.status})`);
-  return (await res.json()) as VoiceClone;
+  // apiRequest leaves Content-Type unset for FormData so the multipart boundary
+  // survives — no header surgery needed.
+  return apiRequest<VoiceClone>(BASE, { method: 'POST', body: form });
 }
 
 export async function deleteVoiceClone(cloneId: number): Promise<void> {

@@ -49,6 +49,7 @@ import { createTenantRoutes }      from './presentation/routes/tenantRoutes';
 import { createSegmentRoutes }     from './presentation/routes/segmentRoutes';
 import { createEmbedRoutes }       from './presentation/routes/embedRoutes';
 import { createGovernanceRoutes }  from './presentation/routes/governanceRoutes';
+import { createAgentOpsRoutes }    from './presentation/routes/agentOpsRoutes';
 import { createProductRoutes }     from './presentation/routes/productRoutes';
 import { createAgileRoutes }       from './presentation/routes/agileRoutes';
 import { createMeetingRoutes }     from './presentation/routes/meetingRoutes';
@@ -556,6 +557,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/segments', createSegmentRoutes(db));
   app.route('/api/embed',    createEmbedRoutes(db));
   app.route('/api/governance', createGovernanceRoutes(db));
+  // Agent Ops: coordination (leases + blackboard), memory governance, rehearsal (0370-0372).
+  app.route('/api/agent-ops',  createAgentOpsRoutes(db));
   app.route('/api/product',  createProductRoutes(db));
   app.route('/api/agile',    createAgileRoutes(db));
   // Live video/audio collaboration: meetings (WebRTC mesh + scheduling) and the

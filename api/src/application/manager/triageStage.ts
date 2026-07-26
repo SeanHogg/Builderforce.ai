@@ -31,6 +31,7 @@
  * than spending a whole tick on one project.
  */
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { liveExecution } from '../rehearsal/executionMode';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
@@ -198,6 +199,8 @@ async function loadBulkSignals(
   const empty: BulkSignals = { lastMovedAt: new Map(), everRan: new Set(), prByTask: new Map(), liveTaskIds: new Set() };
   if (args.taskIds.length === 0) return empty;
 
+  // `liveExecution()` on the "has this ticket ever run?" probe: a rehearsal (0372)
+  // must not count, or the manager treats a never-attempted ticket as already tried.
   const [moves, ran, prs, live] = await Promise.all([
     db.select({ taskId: taskStatusTransitions.taskId, at: sql<Date>`max(${taskStatusTransitions.occurredAt})` })
       .from(taskStatusTransitions)
@@ -206,7 +209,7 @@ async function loadBulkSignals(
       .catch(() => []),
     db.selectDistinct({ taskId: executions.taskId })
       .from(executions)
-      .where(inArray(executions.taskId, args.taskIds))
+      .where(and(inArray(executions.taskId, args.taskIds), liveExecution()))
       .catch(() => []),
     db.select({
       taskId: pullRequests.taskId, id: pullRequests.id, number: pullRequests.number,

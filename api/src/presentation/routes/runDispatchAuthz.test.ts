@@ -132,10 +132,28 @@ const PENDING_APPROVAL = {
   requestedBy: 'user-abc',
 };
 
+/**
+ * Approving/rejecting now ALSO resolves the caller's effective permission set
+ * (role defaults → role overrides → module grants → per-user grants/revocations),
+ * so the stub has to answer three extra reads:
+ *
+ *   - `role_permission_overrides`   → none, so the role defaults stand;
+ *   - `tenant_member_modules` join  → none (this is the `innerJoin` shape);
+ *   - `user_permission_overrides`   → none, so nothing is granted or revoked.
+ *
+ * With all three empty a MANAGER holds `approval:approve` by default, which is
+ * what these tests are about — the point is that the gate now READS them at all.
+ */
 function approvalApp() {
   const updated = vi.fn();
   const db = {
-    select: () => ({ from: () => ({ where: () => Promise.resolve([PENDING_APPROVAL]) }) }),
+    select: () => ({
+      from: () => ({
+        where: () => Promise.resolve([PENDING_APPROVAL]),
+        // The module-grant lookup joins platform_modules; no grants in these tests.
+        innerJoin: () => ({ where: () => Promise.resolve([]) }),
+      }),
+    }),
     update: () => ({ set: (v: unknown) => { updated(v); return { where: () => Promise.resolve(undefined) }; } }),
     insert: () => ({ values: () => Promise.resolve(undefined) }),
   };

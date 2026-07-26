@@ -1082,7 +1082,7 @@ const CATALOG: BuiltinTool[] = [
         content: str(a.content),
         title: a.title != null ? str(a.title) : undefined,
         version: a.version != null ? str(a.version) : undefined,
-      }, ctx.userId ?? null);
+      }, ctx.userId ?? null, ctx.env);
     },
   },
   {
@@ -1097,6 +1097,7 @@ const CATALOG: BuiltinTool[] = [
         a.docType,
         { version: str(a.version), content: str(a.content), title: a.title != null ? str(a.title) : undefined },
         ctx.userId ?? null,
+        ctx.env,
       );
     },
   },

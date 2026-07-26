@@ -41,6 +41,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { activityLogVersionKey } from './activityLog';
+import { liveExecution } from '../rehearsal/executionMode';
 import { isParticipantSatisfied } from '../kanban/participantStates';
 import { expectsCodeDeliverable } from '../manager/evaluateTicketReadiness';
 import { ExecutionStatus, TaskStatus } from '../../domain/shared/types';
@@ -205,10 +206,12 @@ export async function auditAutonomyWiring(db: Db, args: { tenantId: number }): P
   }));
 
   // ── 4. Is a completed run advancing anything? (silent attribution no-op) ──
+  // `liveExecution()`: rehearsals (0372) run the real loop but ship nothing, so
+  // counting them here would report probes as completed delivery.
   const [runAgg] = await db
     .select({ completed: sql<number>`count(*)::int` })
     .from(executions)
-    .where(and(eq(executions.tenantId, tenantId), eq(executions.status, ExecutionStatus.COMPLETED)));
+    .where(and(eq(executions.tenantId, tenantId), eq(executions.status, ExecutionStatus.COMPLETED), liveExecution()));
   const completedRuns = Number(runAgg?.completed ?? 0);
 
   checks.push(check({

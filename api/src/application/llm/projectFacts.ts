@@ -5,14 +5,17 @@
  * durable BELIEFS (decisions, conventions, locations, repo/lib versions) that every
  * surface — VS Code, web Brain, cloud agent, on-prem — reads AND writes to the SAME
  * place, so a fact one run learns is recalled by all others on that project. It is the
- * project-scoped twin of the tenant `agent_memory` (cloudMemory.ts).
+ * project-scoped twin of the tenant/ticket `agent_memory` store. BOTH are governed by
+ * application/memory/memoryService (scope chain, provenance, TTL) — an agent write goes
+ * through that service, never directly here, so a fact's visibility and expiry are
+ * decided in exactly one place.
  *
  * Write-through per the Evermind law: `upsertProjectFact` replaces by stable key
  * (update == replace, never accumulate). Recall is a read served through the canonical
  * read-through cache, keyed by a per-(tenant,project) VERSION token bumped on every
  * write, so a recall never serves a stale fact set.
  */
-import { and, desc, eq, ilike, ne, or, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gt, ilike, isNull, ne, or, type SQL } from 'drizzle-orm';
 import { projectFacts } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -58,19 +61,50 @@ export async function upsertProjectFact(
   key: string,
   content: string,
   source = 'agent',
+  /** Governance metadata (0371): which run formed the belief, and when it lapses.
+   *  Optional so the six existing callers are unchanged; supplied by
+   *  application/memory/memoryService, which is the governed write path. */
+  opts?: { expiresAt?: Date | null; originExecutionId?: number | null },
 ): Promise<boolean> {
   const k = (key ?? '').trim().slice(0, 255);
   const c = (content ?? '').trim();
   if (!k || !c || !Number.isInteger(projectId) || projectId <= 0) return false;
+  const expiresAt = opts?.expiresAt ?? null;
+  const originExecutionId = opts?.originExecutionId ?? null;
   await db
     .insert(projectFacts)
-    .values({ tenantId, projectId, key: k, content: c, source: source.slice(0, 64) })
+    .values({ tenantId, projectId, key: k, content: c, source: source.slice(0, 64), expiresAt, originExecutionId })
     .onConflictDoUpdate({
       target: [projectFacts.tenantId, projectFacts.projectId, projectFacts.key],
-      set: { content: c, source: source.slice(0, 64), updatedAt: new Date() },
+      // A re-write REPLACES the governance metadata too: re-remembering a fact without
+      // a TTL makes it durable again, which is the only reading of "update == replace"
+      // that does not leave a stale expiry silently attached to fresh content.
+      set: { content: c, source: source.slice(0, 64), expiresAt, originExecutionId, updatedAt: new Date() },
     });
   await bumpCacheVersion(env, versionKey(tenantId, projectId));
   return true;
+}
+
+/**
+ * Delete one project fact by key. The project-scope half of memory_forget; the
+ * tenant/ticket half lives in application/memory/memoryService against `agent_memory`.
+ */
+export async function deleteProjectFact(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  key: string,
+): Promise<boolean> {
+  const k = (key ?? '').trim().slice(0, 255);
+  if (!k || !Number.isInteger(projectId) || projectId <= 0) return false;
+  const removed = await db
+    .delete(projectFacts)
+    .where(and(eq(projectFacts.tenantId, tenantId), eq(projectFacts.projectId, projectId), eq(projectFacts.key, k)))
+    .returning({ id: projectFacts.id })
+    .catch(() => [] as Array<{ id: string }>);
+  if (removed.length > 0) await bumpCacheVersion(env, versionKey(tenantId, projectId));
+  return removed.length > 0;
 }
 
 /**
@@ -104,7 +138,7 @@ export async function purgeProjectQaCache(
 
 /**
  * Recall project facts (read-through cached). With a `query`, ranks by lexical
- * overlap (ILIKE, same graceful fallback as cloudMemory); without one, returns the
+ * overlap (ILIKE, with a graceful no-match fallback); without one, returns the
  * most important/recent. Degrades to [] on any error (e.g. pre-migration table).
  */
 export async function recallProjectFacts(
@@ -125,10 +159,14 @@ export async function recallProjectFacts(
       async () => {
         // Durable beliefs only — Q&A cache rows (source=qa-cache) are retrieved by
         // exact question key (projectMemory), never surfaced as ambient RAG facts.
+        // An EXPIRED fact is already gone as far as recall is concerned (0371) — the
+        // read is the authority, the retention sweep is only housekeeping. Without
+        // this a lapsed belief keeps riding the prompt until a cron happens to run.
         const base = and(
           eq(projectFacts.tenantId, tenantId),
           eq(projectFacts.projectId, projectId),
           ne(projectFacts.source, QA_CACHE_SOURCE),
+          or(isNull(projectFacts.expiresAt), gt(projectFacts.expiresAt, new Date())),
         );
         const words = tokenize(query);
         const where: SQL | undefined = words.length > 0 ? and(base, or(...words.map((w) => ilike(projectFacts.content, `%${w}%`)))) : base;
@@ -170,7 +208,12 @@ export async function getProjectFactByKey(
         const [row] = await db
           .select({ content: projectFacts.content })
           .from(projectFacts)
-          .where(and(eq(projectFacts.tenantId, tenantId), eq(projectFacts.projectId, projectId), eq(projectFacts.key, k)))
+          .where(and(
+            eq(projectFacts.tenantId, tenantId),
+            eq(projectFacts.projectId, projectId),
+            eq(projectFacts.key, k),
+            or(isNull(projectFacts.expiresAt), gt(projectFacts.expiresAt, new Date())),
+          ))
           .limit(1);
         return row?.content ?? null;
       },

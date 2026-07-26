@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { AuditService } from '../../application/audit/AuditService';
 import type { HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { requirePermission } from '../middleware/requirePermission';
+import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { TenantRole, asTenantId } from '../../domain/shared/types';
 
 /**
@@ -14,6 +16,9 @@ export function createAuditRoutes(auditService: AuditService): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
   router.use('*', requireRole(TenantRole.MANAGER));
+  // Refines the role tier with the registry permission, so an operator revoking
+  // `audit:read` from one manager actually takes effect.
+  router.use('*', requirePermission(PERMISSIONS.AUDIT_READ));
 
   // GET /api/audit/events?limit=100&offset=0
   router.get('/events', async (c) => {

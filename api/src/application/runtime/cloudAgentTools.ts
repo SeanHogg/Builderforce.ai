@@ -107,7 +107,13 @@ export const cloudToolRegistry = buildCoreToolRegistry();
  * (Postgres-backed `agent_memory`), and read a public URL (`web`, backed by the
  * Worker's `fetch` behind an SSRF egress policy — see `cloudWeb.ts`).
  * → list_files, search_code, read_file, write_file, edit_file, delete_file,
- * run_checks, ask_human, memory_recall, memory_remember, web_fetch, finish.
+ * run_checks, ask_human, memory_recall, memory_remember, memory_forget, claim_resource,
+ * release_resource, workspace_note, workspace_read, web_fetch, finish.
+ *
+ * `memory.forget` and `coordinate` are surface capabilities here because the Worker
+ * backs both authoritatively: memory is Postgres (a delete is a real delete, unlike the
+ * on-prem SSM store which supersedes), and coordination is the `resource_leases` /
+ * `coordination_notes` pair from migration 0370.
  *
  * `web.search` is deliberately NOT in this constant, because unlike every other
  * capability here it is not a property of the SURFACE — it is a property of the TENANT.
@@ -118,7 +124,8 @@ export const cloudToolRegistry = buildCoreToolRegistry();
  * advertised — an agent is never handed a tool that is certain to fail.
  */
 export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
-  'repo.read', 'repo.search', 'repo.write', 'repo.edit', 'repo.delete', 'static-check', 'human', 'memory', 'web',
+  'repo.read', 'repo.search', 'repo.write', 'repo.edit', 'repo.delete', 'static-check', 'human', 'memory', 'memory.forget',
+  'coordinate', 'web',
 ]);
 
 /**
@@ -130,9 +137,16 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  * advertises repo.read + repo.write + shell + memory, and NOT repo.search /
  * static-check (shell-free) / human (not yet wired in the image).
  * → list_files, read_file, write_file, run_command, memory_recall, memory_remember,
- * finish — plus the six git tools `shell` also unlocks (git_status, git_diff,
- * git_history, git_sync_latest, git_undo, git_redo), which the image genuinely
- * implements in its `gitTool` handler.
+ * memory_forget, finish — plus the six git tools `shell` also unlocks (git_status,
+ * git_diff, git_history, git_sync_latest, git_undo, git_redo), which the image
+ * genuinely implements in its `gitTool` handler. `memory_forget` relays through the
+ * SAME `memory` container-op as recall/remember (action:'forget'), so it needs no new
+ * op in the image.
+ *
+ * `coordinate` is INTENTIONALLY omitted (not a gap): the container commits through the
+ * Worker's `write` op, and THAT path is already lease-guarded on the Worker side — so
+ * the container is protected by the same locks without advertising four tools its
+ * image has no handler for. Add it here only alongside a `coordinate` container-op.
  *
  * `repo.edit` is INTENTIONALLY omitted (not a gap): unlike the shell-less durable
  * surface — which must do surgical edits over the git API (read blob → string-replace
@@ -146,7 +160,7 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  * advertises to the gateway, so it MUST match what that image implements.
  */
 export const CONTAINER_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
-  'repo.read', 'repo.write', 'shell', 'memory',
+  'repo.read', 'repo.write', 'shell', 'memory', 'memory.forget',
 ]);
 
 /**

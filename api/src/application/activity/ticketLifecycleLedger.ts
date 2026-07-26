@@ -49,6 +49,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { ExecutionStatus } from '../../domain/shared/types';
+import { liveExecution } from '../rehearsal/executionMode';
 import { isDoneStatus } from '../../domain/shared/doneClass';
 import {
   autoRunReasonEvaluationText, EVALUATED_AUTO_RUN_REASONS,
@@ -677,7 +678,7 @@ export async function buildTicketLifecycle(
         completedAt: executions.completedAt,
       })
       .from(executions)
-      .where(eq(executions.taskId, args.taskId)),
+      .where(and(eq(executions.taskId, args.taskId), liveExecution())),
     db
       .select({
         toolName: toolAuditEvents.toolName,
@@ -1021,7 +1022,7 @@ export async function summarizeAutonomy(
         n: sql<number>`count(*)::int`,
       })
       .from(executions)
-      .where(inArray(executions.taskId, ids))
+      .where(and(inArray(executions.taskId, ids), liveExecution()))
       .groupBy(executions.taskId, executions.status),
     // Latest auto-run refusal per ticket → the gate holding it.
     db.execute(sql`

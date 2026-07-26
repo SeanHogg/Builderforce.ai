@@ -22,10 +22,29 @@ const names = (tools: ReadonlyArray<{ function?: { name?: string } }>): string[]
 describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
   it('advertises exactly the provider-backed tools (no shell)', () => {
     expect(names(CLOUD_AGENT_TOOLS)).toEqual([
-      'ask_human', 'delete_file', 'edit_file', 'finish', 'list_files',
-      'memory_recall', 'memory_remember', 'read_file', 'run_checks', 'search_code',
-      'web_fetch', 'write_file',
+      'ask_human', 'claim_resource', 'delete_file', 'edit_file', 'finish', 'list_files',
+      'memory_forget', 'memory_recall', 'memory_remember', 'read_file', 'release_resource',
+      'run_checks', 'search_code', 'web_fetch', 'workspace_note', 'workspace_read',
+      'write_file',
     ]);
+  });
+
+  it('backs `coordinate` — several agents can be staffed onto one ticket at once', () => {
+    // A stage whose dispatches carry no `dependsOn` releases them ALL at once, and the
+    // 'any'/'n_of_m' success policies exist for exactly that. Those agents share one
+    // git branch, so this surface must offer the arbiter (migration 0370).
+    expect(CLOUD_SURFACE_CAPS.has('coordinate')).toBe(true);
+    for (const t of ['claim_resource', 'release_resource', 'workspace_note', 'workspace_read']) {
+      expect(names(CLOUD_AGENT_TOOLS)).toContain(t);
+    }
+  });
+
+  it('backs `memory.forget` — a Postgres delete really deletes', () => {
+    // Split from `memory` for the same reason `web.search` is split from `web`: the
+    // on-prem SSM store SUPERSEDES a belief rather than erasing it, so only a surface
+    // whose delete is authoritative may advertise this.
+    expect(CLOUD_SURFACE_CAPS.has('memory.forget')).toBe(true);
+    expect(names(CLOUD_AGENT_TOOLS)).toContain('memory_forget');
   });
 
   it('includes web_fetch but NOT web_search — search is TENANT-gated, not surface-wide', () => {
@@ -47,9 +66,20 @@ describe('CONTAINER_SURFACE_CAPS → container toolset (must match server.mjs)',
   it('advertises exactly what the image implements', () => {
     expect(names(CONTAINER_AGENT_TOOLS)).toEqual([
       'finish', 'git_diff', 'git_history', 'git_redo', 'git_status', 'git_sync_latest',
-      'git_undo', 'list_files', 'memory_recall', 'memory_remember', 'read_file',
-      'run_command', 'write_file',
+      'git_undo', 'list_files', 'memory_forget', 'memory_recall', 'memory_remember',
+      'read_file', 'run_command', 'write_file',
     ]);
+  });
+
+  it('does NOT advertise `coordinate` — the image has no handler for those four tools', () => {
+    // Not a gap: the container commits through the Worker's `write` op, and THAT path
+    // takes the same implicit lease (`claimWriteLease`), so a container run is already
+    // serialised against durable runs. Advertising the tools without an image handler
+    // would 400 mid-run — the exact defect the `repo.edit` omission guards against.
+    expect(CONTAINER_SURFACE_CAPS.has('coordinate')).toBe(false);
+    for (const t of ['claim_resource', 'release_resource', 'workspace_note', 'workspace_read']) {
+      expect(names(CONTAINER_AGENT_TOOLS)).not.toContain(t);
+    }
   });
 
   it('`shell` unlocks all six git tools, which the image handles in gitTool()', () => {

@@ -13,7 +13,7 @@
  */
 
 import { BRAND } from './content';
-import { getApiBaseUrl } from './apiClient';
+import { apiRequest } from './apiClient';
 
 export type ModelTier = 'FREE' | 'PRO' | 'STANDARD' | 'PREMIUM' | 'ULTRA';
 
@@ -139,11 +139,10 @@ function toRecord(m: CatalogModel): ModelRecord {
 let inflight: Promise<ModelRecord[]> | null = null;
 
 async function fetchCatalog(): Promise<ModelRecord[]> {
-  const res = await fetch(`${getApiBaseUrl()}/llm/v1/catalog`, {
+  const json = await apiRequest<{ data?: CatalogModel[] }>('/llm/v1/catalog', {
+    auth: 'none',
     headers: { Accept: 'application/json' },
   });
-  if (!res.ok) throw new Error(`Catalog request failed (${res.status})`);
-  const json = (await res.json()) as { data?: CatalogModel[] };
   return Array.isArray(json.data) ? json.data.map(toRecord) : [];
 }
 

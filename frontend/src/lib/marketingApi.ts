@@ -8,6 +8,7 @@
  */
 
 import { AUTH_API_URL, getStoredTenantToken, getStoredWebToken } from './auth';
+import { apiRequestStream } from './apiClient';
 import { getExistingVisitorId, getVisitorId, getFirstTouch } from './visitor';
 import type { ToolResult } from './tools';
 
@@ -35,10 +36,12 @@ export function trackToolRun(toolId: string, input: Record<string, number>, resu
   const visitorId = getVisitorId();
   if (!visitorId) return;
   const touch = getFirstTouch();
-  void fetch(`${AUTH_API_URL}/api/marketing/track`, {
+  void apiRequestStream('/api/marketing/track', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    auth: 'none',
     keepalive: true,
+    // Ambient attribution — never a toast.
+    expectedErrors: [400, 401, 403, 404, 429, 500, 502, 503],
     body: JSON.stringify({
       visitorId,
       toolId,
@@ -59,7 +62,11 @@ export async function getMarketingSession(): Promise<MarketingSessionView | null
   const visitorId = getVisitorId();
   if (!visitorId) return null;
   try {
-    const res = await fetch(`${AUTH_API_URL}/api/marketing/session/${encodeURIComponent(visitorId)}`);
+    const res = await apiRequestStream(`/api/marketing/session/${encodeURIComponent(visitorId)}`, {
+      auth: 'none',
+      // Attribution lookup is ambient — a miss is normal, never a toast.
+      expectedErrors: [400, 401, 403, 404, 429, 500],
+    });
     if (!res.ok) return null;
     return (await res.json()) as MarketingSessionView;
   } catch {
@@ -74,10 +81,15 @@ export function convertVisitor(): void {
   const visitorId = getExistingVisitorId();
   const token = getStoredTenantToken() ?? getStoredWebToken();
   if (!visitorId || !token) return;
-  void fetch(`${AUTH_API_URL}/api/marketing/convert`, {
+  void apiRequestStream('/api/marketing/convert', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    // Either credential closes the session; the tenant token is preferred when
+    // present, which is what the transport's 'tenant' mode already does — but a
+    // web-only user must still convert, so pass the resolved token explicitly.
+    auth: 'none',
+    headers: { Authorization: `Bearer ${token}` },
     keepalive: true,
     body: JSON.stringify({ visitorId }),
+    expectedErrors: [400, 401, 403, 404, 429, 500, 502, 503],
   }).catch(() => { /* best-effort */ });
 }

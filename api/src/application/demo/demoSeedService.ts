@@ -37,7 +37,7 @@ import {
   users,
 } from '../../infrastructure/database/schema';
 import { provisionBuiltinAgents } from '../agent/provisionBuiltinAgents';
-import { getActiveTermsVersion } from '../../presentation/middleware/termsEnforcement';
+import { getActiveTermsVersion } from '../legal/termsAcceptance';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import {
   DEMO_BLUEPRINTS,

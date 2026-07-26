@@ -14,6 +14,7 @@ import { legalDocuments, legalDocumentVersions } from '../../infrastructure/data
 import type { Env } from '../../env';
 import { ideProxy, newTraceId, readProxyChoice } from '../llm/LlmProxyService';
 import { logTrace } from '../llm/traceLogger';
+import { invalidateActiveTermsVersion } from './termsAcceptance';
 
 export const LEGAL_DOC_TYPES = ['terms', 'privacy'] as const;
 export type LegalDocType = (typeof LEGAL_DOC_TYPES)[number];
@@ -171,6 +172,7 @@ export async function publishLegalDoc(
   docType: LegalDocType,
   input: { version: string; title?: string; content: string },
   publishedBy: string | null,
+  env?: Env,
 ): Promise<LegalDocResponse> {
   const label = LEGAL_DOC_LABELS[docType];
   const version = input.version?.trim();
@@ -203,6 +205,11 @@ export async function publishLegalDoc(
 
   await recordLegalVersion(db, docType, { version, title, content }, 'publish', publishedBy);
 
+  // The auth middlewares read the active terms version from cache on every
+  // request — a publish that skipped this would keep serving the OLD version
+  // until the TTL lapsed, so nobody would be prompted to re-accept.
+  if (docType === 'terms') await invalidateActiveTermsVersion(env);
+
   return getActiveLegalDoc(db, docType);
 }
 
@@ -216,6 +223,7 @@ export async function amendActiveLegalDoc(
   docType: LegalDocType,
   input: { version?: string; title?: string; content: string },
   amendedBy: string | null = null,
+  env?: Env,
 ): Promise<LegalDocResponse> {
   const label = LEGAL_DOC_LABELS[docType];
   const version = input.version?.trim();
@@ -238,6 +246,7 @@ export async function amendActiveLegalDoc(
       docType,
       { version: version || DEFAULT_LEGAL[docType].version, title, content },
       amendedBy,
+      env,
     );
   }
 
@@ -257,6 +266,10 @@ export async function amendActiveLegalDoc(
     .where(eq(legalDocuments.id, active.id));
 
   await recordLegalVersion(db, docType, { version: nextVersion, title, content }, 'amend', amendedBy);
+
+  // An amend can bump the version string, which is exactly what the acceptance
+  // gate compares — invalidate for the same reason publish does.
+  if (docType === 'terms') await invalidateActiveTermsVersion(env);
 
   return getActiveLegalDoc(db, docType);
 }

@@ -292,7 +292,8 @@ function attemptsToFailovers(attempts: ImageDispatchAttempt[]): ImageFailoverEve
 // Plan → image-proxy factory
 // ---------------------------------------------------------------------------
 
-export type EffectivePlan = 'free' | 'pro' | 'teams';
+export type { EffectivePlan } from '../../domain/tenant/effectivePlan';
+import type { EffectivePlan } from '../../domain/tenant/effectivePlan';
 
 export function imageProductNameForPlan(effectivePlan: EffectivePlan, premiumOverride = false): ImageProductName {
   return premiumOverride || effectivePlan !== 'free' ? 'builderforceImagePro' : 'builderforceImage';

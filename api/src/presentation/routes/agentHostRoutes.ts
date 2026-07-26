@@ -47,6 +47,7 @@ import { openDispatchPullRequest } from '../../application/repos/openDispatchPul
 import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
 import { executeGitProxy } from '../../application/repos/gitProxy';
 import { agentDispatches } from '../../infrastructure/database/schema';
+import { taskInTenant } from '../../infrastructure/database/tenantScope';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { normalizeRequestKind } from '../../domain/approval/requestKind';
 import type { HonoEnv, Env } from '../../env';
@@ -1590,6 +1591,14 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (!Number.isFinite(taskId) || !path) return c.json({ error: 'taskId and path are required' }, 400);
     const change = ['created', 'modified', 'deleted'].includes(body.change ?? '') ? body.change! : 'modified';
     const agent = typeof body.agent === 'string' && body.agent.trim() ? body.agent.trim() : 'agent';
+
+    // `taskId` arrives in the request BODY. The row is stamped with the host's
+    // tenant, and the FK to tasks.id only proves the task exists — so without this
+    // check a host key for tenant A could attach file-change rows to tenant B's
+    // task. Tasks inherit tenancy through their project, hence the shared helper.
+    if (!(await taskInTenant(db, taskId, agentHost.tenantId))) {
+      return c.json({ error: 'task not found' }, 404);
+    }
 
     await db.insert(taskFileChanges).values({
       tenantId: agentHost.tenantId,

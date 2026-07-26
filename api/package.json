@@ -1,6 +1,6 @@
 {
   "name": "builderforce-api",
-  "version": "2026.7.156",
+  "version": "2026.7.157",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
@@ -14,9 +14,11 @@
     "check:schema": "node scripts/check-schema-drift.mjs",
     "check:db-access": "node scripts/check-db-access.mjs",
     "check:migrations": "node scripts/check-migrations.mjs",
+    "check:layering": "node scripts/check-layering.mjs",
+    "check:tenant-scope": "node scripts/check-tenant-scope.mjs",
     "check:tracks": "node scripts/check-track-manifest.mjs --check",
     "check:source": "node scripts/check-source-text.mjs",
-    "test": "npm run check:schema && npm run check:db-access && npm run check:migrations && npm run check:tracks && npm run check:source && vitest run",
+    "test": "npm run check:schema && npm run check:db-access && npm run check:migrations && npm run check:layering && npm run check:tenant-scope && npm run check:tracks && npm run check:source && vitest run",
     "typecheck:native": "tsgo --noEmit"
   },
   "dependencies": {

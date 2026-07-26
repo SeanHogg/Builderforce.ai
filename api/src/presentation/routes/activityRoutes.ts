@@ -25,6 +25,7 @@ import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { freelancerStatsCacheKey } from './freelancerRoutes';
 import { TenantRole } from '../../domain/shared/types';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   activitySignals,
   freelancerEngagements,
@@ -409,7 +410,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
       .select({ ...cardColumns, freelancer_name: users.displayName })
       .from(timecards)
       .innerJoin(users, eq(users.id, timecards.userId))
-      .where(eq(timecards.tenantId, tenantId))
+      .where(scopedToTenant(timecards, tenantId))
       .orderBy(desc(timecards.periodStart))
       .limit(500);
     return c.json(rows.map(mapCard));
@@ -443,7 +444,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
       .select({ ...cardColumns, freelancer_name: users.displayName })
       .from(timecards)
       .innerJoin(users, eq(users.id, timecards.userId))
-      .where(and(eq(timecards.id, id), eq(timecards.tenantId, tenantId)));
+      .where(scopedToTenant(timecards, tenantId, eq(timecards.id, id)));
     if (!cardRow) return c.json({ error: 'Not found' }, 404);
     const rows = await db
       .select(entryColumns)
@@ -569,7 +570,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const rows = await db
       .update(timecards)
       .set({ status: 'approved', approvedAt: sql`NOW()`, approvedByUserId: actor, updatedAt: sql`NOW()` })
-      .where(and(eq(timecards.id, id), eq(timecards.tenantId, tenantId), eq(timecards.status, 'submitted')))
+      .where(scopedToTenant(timecards, tenantId, eq(timecards.id, id), eq(timecards.status, 'submitted')))
       .returning({
         id: timecards.id,
         engagementId: timecards.engagementId,
@@ -610,7 +611,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const rows = await db
       .update(timecards)
       .set({ status: 'draft', rejectReason: reason, submittedAt: null, updatedAt: sql`NOW()` })
-      .where(and(eq(timecards.id, id), eq(timecards.tenantId, tenantId), eq(timecards.status, 'submitted')))
+      .where(scopedToTenant(timecards, tenantId, eq(timecards.id, id), eq(timecards.status, 'submitted')))
       .returning({ id: timecards.id, userId: timecards.userId });
     const card = rows[0];
     if (!card) return c.json({ error: 'Not found or not submitted' }, 404);
@@ -625,7 +626,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
       .select({ ...invoiceColumns, freelancer_name: users.displayName })
       .from(freelancerInvoices)
       .innerJoin(users, eq(users.id, freelancerInvoices.freelancerUserId))
-      .where(eq(freelancerInvoices.tenantId, tenantId))
+      .where(scopedToTenant(freelancerInvoices, tenantId))
       .orderBy(desc(freelancerInvoices.issuedAt))
       .limit(500);
     return c.json(rows.map(mapInvoice));
@@ -658,9 +659,10 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
         freelancerUserId: freelancerInvoices.freelancerUserId,
       })
       .from(freelancerInvoices)
-      .where(and(
+      .where(scopedToTenant(
+        freelancerInvoices,
+        tenantId,
         eq(freelancerInvoices.id, invId),
-        eq(freelancerInvoices.tenantId, tenantId),
         eq(freelancerInvoices.status, 'pending'),
       ));
     if (!inv) return c.json({ error: 'Not found or already settled' }, 404);
@@ -679,9 +681,10 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const [inv] = await db
       .select({ id: freelancerInvoices.id })
       .from(freelancerInvoices)
-      .where(and(
+      .where(scopedToTenant(
+        freelancerInvoices,
+        tenantId,
         eq(freelancerInvoices.id, invId),
-        eq(freelancerInvoices.tenantId, tenantId),
         eq(freelancerInvoices.status, 'pending'),
       ));
     if (!inv) return c.json({ error: 'Not found or already settled' }, 404);

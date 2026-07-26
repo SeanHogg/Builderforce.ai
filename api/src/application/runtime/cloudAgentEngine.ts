@@ -10,7 +10,11 @@
  */
 import { and, desc, eq, or, isNull } from 'drizzle-orm';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { buildCloudMemoryCapability } from './cloudMemory';
+import { buildMemoryCapability } from '../memory/memoryService';
+import { isMemoryScope } from '../../domain/memory/memoryScope';
+import { buildCoordinationCapability, claimWriteLease, guardRepoWrite } from '../coordination/coordinationCapability';
+import { releaseAllForExecution, type LeaseHolder } from '../coordination/leaseService';
+import { coordinationScopeKey } from '../../domain/coordination/resourceKey';
 import { buildCloudWebCapability } from './cloudWeb';
 import { isValidatorReviewPayload } from '../validation/validatorReviewMarker';
 import { recordActivity, SYSTEM_ACTOR } from '../activity/activityLog';
@@ -1096,7 +1100,7 @@ export async function handleContainerOp(
   // container memory calls appear on the timeline like the Worker loop's.
   if (op === 'memory') {
     const action = typeof args.action === 'string' ? args.action : '';
-    const memory = buildCloudMemoryCapability({ db, env, tenantId, projectId });
+    const memory = buildMemoryCapability({ db, env, tenantId, projectId, ticketId: taskId, origin: 'cloud-run', executionId });
     const tStart = Date.now();
     let result: Record<string, unknown>;
     let toolName = 'memory';
@@ -1114,9 +1118,18 @@ export async function handleContainerOp(
         if (!key.trim() || !content.trim()) return { status: 200, body: { ok: false, error: 'key and content are required' } };
         const tags = Array.isArray(args.tags) ? args.tags.filter((t): t is string => typeof t === 'string') : undefined;
         const importance = typeof args.importance === 'number' && Number.isFinite(args.importance) ? args.importance : undefined;
-        result = (await memory.remember(key, content, { tags, importance })) as unknown as Record<string, unknown>;
+        const scope = isMemoryScope(args.scope) ? args.scope : undefined;
+        const ttlDays = typeof args.ttl_days === 'number' && Number.isFinite(args.ttl_days) ? args.ttl_days : undefined;
+        result = (await memory.remember(key, content, { tags, importance, scope, ttlDays })) as unknown as Record<string, unknown>;
+      } else if (action === 'forget') {
+        // The container relays `memory_forget` through the same op (it holds no DB
+        // creds), so the scoped delete stays behind the one governed service.
+        toolName = 'memory_forget';
+        const key = typeof args.key === 'string' ? args.key : '';
+        if (!key.trim()) return { status: 200, body: { ok: false, error: 'key is required' } };
+        result = (await memory.forget!(key)) as unknown as Record<string, unknown>;
       } else {
-        return { status: 200, body: { ok: false, error: `unknown memory action '${action}' (expected 'recall' or 'remember')` } };
+        return { status: 200, body: { ok: false, error: `unknown memory action '${action}' (expected 'recall', 'remember' or 'forget')` } };
       }
     } catch (e) {
       result = { ok: false, error: e instanceof Error ? e.message : String(e) };
@@ -1231,6 +1244,26 @@ export async function handleContainerOp(
     if (!path || !content) return { status: 200, body: { ok: false, error: 'path and content are both required' } };
     const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
     if (!repo.ok) return { status: 200, body: { ok: false, error: `no repo bound to this task (${repo.reason}); include the file contents in your final summary instead` } };
+    // The container writes through the Worker rather than through the capability
+    // provider, so it must take the SAME implicit lease the durable surface takes —
+    // otherwise a container run and a durable run on one ticket are unsynchronised.
+    const blocked = await claimWriteLease({
+      env, db, path,
+      holder: {
+        tenantId, executionId, label: agentLabel, taskId,
+        repoSlug: `${repo.ctx.owner}/${repo.ctx.repo}`,
+        scopeKey: coordinationScopeKey(taskId),
+      },
+      reason: typeof args.summary === 'string' && args.summary ? `writing: ${args.summary}` : 'writing this file',
+      onRefused: (p, heldBy) => {
+        void recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef, executionId,
+          toolName: 'coordination.refused', category: 'tool',
+          detail: { path: p, heldBy }, result: `write to '${p}' refused — held by ${heldBy}`,
+        }).catch(() => {});
+      },
+    });
+    if (blocked) return { status: 200, body: { ok: false, error: blocked } };
     const commit = await commitAgentFile(repo.ctx, path, content, agentCommitMessage(isNew ? 'Add' : 'Update', path, taskId, agentLabel));
     if (!commit.ok) return { status: 200, body: { ok: false, error: commit.reason } };
     // Label from whether the path actually existed in the repo (commit.existed),
@@ -1375,6 +1408,33 @@ export interface CloudLoopOpts {
    *  `reasoning_effort`) and attached on a strict pin. Applied to every LLM turn so
    *  personality changes how the agent reasons and samples, not just its prompt. */
   execParams?: AgentExecParams;
+  /**
+   * REHEARSAL seam (Open/Closed + Dependency Inversion). The loop builds its surface
+   * provider and then hands it here for the caller to wrap. Rehearsal supplies a shadow
+   * decorator (application/rehearsal/shadowProvider.ts) that passes every READ straight
+   * through and RECORDS every effect instead of performing it — so a dry-run/replay is
+   * the real loop, the real registry and the real prompts, with nothing escaping.
+   *
+   * Absent on a live run, in which case the provider is used exactly as built and
+   * behaviour is byte-identical. Deliberately NOT part of {@link CloudLoopState}: a
+   * function cannot survive DO cursor persistence, so a rehearsal runs in one call
+   * (`maxSteps`) rather than across alarm ticks.
+   */
+  decorateProvider?: (provider: CapabilityProvider) => CapabilityProvider;
+  /**
+   * Pin repo READS to this git ref instead of the base/branch the run would compute.
+   * Replay uses it to re-run against the tree the original execution actually saw, so a
+   * comparison measures the agent change rather than a moved main.
+   */
+  frozenReadRef?: string;
+  /**
+   * Skip the terminal {@link finalizeCloudRun} entirely. Set ONLY by rehearsal: the
+   * shadow provider already guarantees `writtenPaths` stays empty (so no PR could
+   * open), but finalize also releases steers, writes run summaries and touches the
+   * ticket — none of which a rehearsal is entitled to do. Cheaper and far clearer than
+   * relying on every branch inside finalize to no-op.
+   */
+  suppressFinalize?: boolean;
 }
 export interface CloudLoopResult {
   ok: boolean;
@@ -1423,14 +1483,32 @@ function buildCloudProvider(args: {
   /** Resolved BYO web-search backing, or null when this tenant has no key. Null must
    *  coincide with `capabilities` lacking `web.search`. */
   webSearch: ResolvedWebSearchCredential | null;
+  /** Replay: pin repo reads to this ref rather than computing base→branch. */
+  frozenReadRef?: string;
 }): CapabilityProvider {
   const { env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths } = args;
   // Read/list against the ticket branch only once it exists (created on the first
   // commit). Before any write, the branch ref 404s — read from `base` instead, so
   // the agent sees the real codebase rather than mistaking the missing branch for
   // "no repo access".
-  const readRef = (): string => (repoCtx ? (writtenPaths.size > 0 ? repoCtx.branch : repoCtx.base) : '');
+  // A replay pins reads to the ref the ORIGINAL run saw; a live run computes it (base
+  // before the first write, the ticket branch after — the branch does not exist until
+  // the first commit, and a 404 there reads to the agent as "no repo access").
+  const readRef = (): string =>
+    args.frozenReadRef ?? (repoCtx ? (writtenPaths.size > 0 ? repoCtx.branch : repoCtx.base) : '');
   const noRepo = (suffix = ''): string => `no repo bound to this task (${repoMiss})${suffix}`;
+
+  // WHO this run is, for coordination purposes. A ticket is one blackboard, so every
+  // agent staffed onto the same ticket — in the same stage or a later one — shares a
+  // scope and contends for the same leases.
+  const leaseHolder: LeaseHolder = {
+    tenantId,
+    executionId,
+    label: agentLabel,
+    taskId: taskRow.id,
+    repoSlug: repoCtx ? `${repoCtx.owner}/${repoCtx.repo}` : '',
+    scopeKey: coordinationScopeKey(taskRow.id),
+  };
 
   return {
     capabilities: args.capabilities,
@@ -1461,7 +1539,12 @@ function buildCloudProvider(args: {
         return { ok: true, query, total: sr.total, truncated: sr.truncated, matches: sr.matches };
       },
     },
-    repoWrite: {
+    // Every write goes through the coordination guard, which takes an implicit
+    // exclusive lease on the path first. Correctness must not depend on the model
+    // choosing to call `claim_resource`, so the surface claims on its behalf: a peer
+    // agent in the same stage now gets a refusal naming the holder instead of silently
+    // reverting the other agent's change on the shared ticket branch.
+    repoWrite: guardRepoWrite({
       async writeFile(path, content, _summary) {
         if (!repoCtx) return { ok: false, error: noRepo('; include the file contents in your final summary instead') };
         const firstWriteThisRun = !writtenPaths.has(path);
@@ -1510,7 +1593,21 @@ function buildCloudProvider(args: {
         }
         return { ok: false, error: del.reason };
       },
-    },
+    }, {
+      env,
+      db,
+      holder: leaseHolder,
+      onRefused: (path, heldBy) => {
+        // A refusal is a real coordination event, not a tool error — surface it on the
+        // run timeline so an operator can see two agents contending for one file.
+        void recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef, executionId,
+          toolName: 'coordination.refused', category: 'tool',
+          detail: { path, heldBy },
+          result: `write to '${path}' refused — held by ${heldBy}`,
+        }).catch(() => {});
+      },
+    }),
     staticCheck: {
       async verify() {
         if (!repoCtx) return { ok: true, ran: false, note: `No repository is bound (${repoMiss}) — nothing to validate here; return the deliverable in your finish summary.` };
@@ -1539,9 +1636,13 @@ function buildCloudProvider(args: {
         return { paused: true, approvalId, note: 'Question sent to a human. The run is paused until it is answered; you will resume with the answer.' };
       },
     },
-    // Durable cross-run memory. Project-scoped runs use the SHARED `project_facts`
-    // store (recalled by every surface); else the tenant-wide `agent_memory` twin.
-    memory: buildCloudMemoryCapability({ db, env, tenantId, projectId }),
+    // Durable cross-run memory, GOVERNED (0371): the run's scope chain decides both
+    // what it may recall (ticket → project → tenant, never a sibling project) and where
+    // a write lands, and every fact carries its origin run + optional TTL. The backing
+    // table is a routing detail of the scope, not a decision made here.
+    memory: buildMemoryCapability({ db, env, tenantId, projectId, ticketId: taskRow.id, origin: 'cloud-run', executionId }),
+    // Multi-agent coordination for this ticket: leases + the shared blackboard.
+    coordination: buildCoordinationCapability({ env, db, holder: leaseHolder }),
     // Read a public URL (docs / an API spec / a linked issue) so the agent isn't
     // limited to what the repo already contains — and, when the TENANT has a BYO
     // search key, discover that URL in the first place. Search is metered per query,
@@ -1787,10 +1888,14 @@ export async function runCloudToolLoop(
   // The surface's capability backing + the tool context handed to every dispatch.
   // The provider closes over the LIVE `writtenPaths` set + `repoCtx`, so write/delete
   // bookkeeping and the base→branch read switch stay correct as the run progresses.
-  const provider = buildCloudProvider({
+  const builtProvider = buildCloudProvider({
     env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths,
     capabilities: surfaceCaps, webSearch: webSearchCred,
+    ...(opts?.frozenReadRef ? { frozenReadRef: opts.frozenReadRef } : {}),
   });
+  // Rehearsal wraps the provider here (see CloudLoopOpts.decorateProvider). A live run
+  // passes nothing and uses the provider as built.
+  const provider = opts?.decorateProvider ? opts.decorateProvider(builtProvider) : builtProvider;
   const toolCtx: ToolContext = { caps: provider, signal: abortController.signal };
 
   try {
@@ -2141,6 +2246,16 @@ export async function runCloudToolLoop(
       state: resumeState(),
     };
   }
+
+  // Terminal: hand every path this run held back to its peers immediately rather than
+  // making them wait out the lease TTL. Released here (not in `finally`) because a
+  // DEFERRED tick is not the end of the run — the agent keeps its leases across ticks,
+  // which is exactly what makes a multi-tick read→edit→write sequence safe.
+  await releaseAllForExecution(env, db, tenantId, executionId, coordinationScopeKey(taskRow.id));
+
+  // Rehearsal: the loop is over and nothing may be shipped, closed or summarised onto
+  // the real ticket. Hand the transcript back and stop.
+  if (opts?.suppressFinalize) return { ok: true, output: finalOutput, cancelled, finished: true };
 
   const fin = await finalizeCloudRun(env, db, {
     tenantId, cloudAgentRef, executionId, taskRow, agentLabel,

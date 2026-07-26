@@ -6,19 +6,15 @@
  * the model already emits the rows, so it saves straight from the browser.
  */
 
-import { AUTH_API_URL, getStoredTenantToken } from './auth';
+
+import { apiRequestStream } from './apiClient';
 import { downloadBlob, downloadText, filenameFromResponse } from './download';
 
 export type OfficeFormat = 'docx' | 'pptx';
 
 async function exportOffice(format: OfficeFormat, markdown: string, title: string): Promise<void> {
-  const token = getStoredTenantToken();
-  const res = await fetch(`${AUTH_API_URL}/api/exports/${format}`, {
+  const res = await apiRequestStream(`/api/exports/${format}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
     body: JSON.stringify({ markdown, title }),
   });
   if (!res.ok) {

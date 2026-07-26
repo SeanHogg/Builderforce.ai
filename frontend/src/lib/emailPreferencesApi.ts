@@ -7,8 +7,8 @@
  * language), and the endpoint is behind `webAuthMiddleware` to match.
  */
 
-import { AUTH_API_URL, checkUnauthorizedAndRedirect, getStoredWebToken } from './auth';
-import { LOCALE_HEADER, readLocaleCookie, type Locale } from '@/i18n/config';
+import { apiRequest } from './apiClient';
+import type { Locale } from '@/i18n/config';
 
 /** The categories a user can opt out of individually. Mirrors the API's
  *  LIFECYCLE_CATEGORIES — the API rejects anything else. */
@@ -32,24 +32,14 @@ export interface EmailPreferencesResponse {
   preferences: EmailPreferences;
 }
 
-async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const token = getStoredWebToken();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const locale = readLocaleCookie();
-  if (locale) headers[LOCALE_HEADER] = locale;
-
-  const res = await fetch(`${AUTH_API_URL}${path}`, {
-    ...opts,
-    headers: { ...headers, ...(opts.headers as Record<string, string>) },
-  });
-  checkUnauthorizedAndRedirect(res, !!token);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error || res.statusText || `Request failed (${res.status})`);
-  }
-  return res.json() as Promise<T>;
-}
+/**
+ * Person-level credential, one transport. This used to be a local copy of the
+ * fetch wrapper; the copy set the locale header (correctly — it is the module
+ * that most needs it) but dropped `dispatchApiError`, so a failed save here was
+ * silent. `apiRequest` supplies both.
+ */
+const request = <T>(path: string, opts: Parameters<typeof apiRequest>[1] = {}): Promise<T> =>
+  apiRequest<T>(path, { ...opts, auth: 'web' });
 
 export const emailPreferencesApi = {
   get: (): Promise<EmailPreferencesResponse> =>

@@ -5,76 +5,31 @@
  */
 
 import { attachEvermindLearn, subscribeToChatMessages } from '@seanhogg/builderforce-brain-embedded';
-import {
-  AUTH_API_URL,
-  checkUnauthorizedAndRedirect,
-  getStoredTenantToken,
-  getStoredWebToken,
-} from './auth';
+import { AUTH_API_URL, getStoredTenantToken } from './auth';
 import { downloadBlob, filenameFromResponse } from './download';
 import { planLimitErrorFromResponse } from './planLimitError';
-import { dispatchApiError } from './errors/apiErrorEvent';
+import { apiRequest, apiRequestStream, apiRequestText, type RequestOptions } from './apiClient';
 
 /**
- * Surface a non-ok response as the global error toast (so failures like a board
- * move 500 are visible and copyable instead of failing silently) and throw.
- * Shared by request()/webRequest() so both paths report errors identically.
+ * `request` / `webRequest` are the two credential flavours this module's ~250
+ * consumers call. They are THIN WRAPPERS over `apiClient.apiRequest` — not
+ * re-implementations.
+ *
+ * They used to be their own copy of the fetch wrapper, and that copy was missing
+ * two headers `apiClient` sends: `X-Emulation-Token` and the locale header. Since
+ * 236 modules import from here and only 30 imported `apiClient` directly, the
+ * practical effect was that superadmin emulation showed the ADMIN's own data on
+ * almost every screen, and the API never learned which language the user had
+ * picked. Both are fixed by construction now: there is one place that builds
+ * headers, and it is `apiClient.getAuthHeaders`.
  */
-async function throwApiError(res: Response, method: string, path: string): Promise<never> {
-  const body = await res.json().catch(() => ({})) as { error?: string; code?: string; details?: unknown };
-  const message = body.error || res.statusText || `Request failed (${res.status})`;
-  dispatchApiError({
-    method: (method || 'GET').toUpperCase(),
-    url: `${AUTH_API_URL}${path}`,
-    status: res.status,
-    code: body.code,
-    message,
-    details: body.details,
-    requestId: res.headers.get('x-request-id') ?? undefined,
-  });
-  throw new Error(message);
+export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  return apiRequest<T>(path, opts);
 }
 
-function authHeaders(): Record<string, string> {
-  const token = getStoredTenantToken();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
-}
-
-function webAuthHeaders(): Record<string, string> {
-  const token = getStoredWebToken();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
-}
-
-async function webRequest<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const headers = webAuthHeaders();
-  const hadToken = !!headers.Authorization;
-  const res = await fetch(`${AUTH_API_URL}${path}`, {
-    ...opts,
-    headers: { ...headers, ...(opts.headers as Record<string, string>) },
-  });
-  checkUnauthorizedAndRedirect(res, hadToken);
-  if (res.status === 402) throw await planLimitErrorFromResponse(res);
-  if (!res.ok) await throwApiError(res, (opts.method as string) ?? 'GET', path);
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
-}
-
-export async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const headers = authHeaders();
-  const hadToken = !!headers.Authorization;
-  const res = await fetch(`${AUTH_API_URL}${path}`, {
-    ...opts,
-    headers: { ...headers, ...(opts.headers as Record<string, string>) },
-  });
-  checkUnauthorizedAndRedirect(res, hadToken);
-  if (res.status === 402) throw await planLimitErrorFromResponse(res);
-  if (!res.ok) await throwApiError(res, (opts.method as string) ?? 'GET', path);
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+/** Same transport, carrying the person-level web JWT instead of the workspace one. */
+async function webRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  return apiRequest<T>(path, { ...opts, auth: 'web' });
 }
 
 // ---------------------------------------------------------------------------
@@ -348,16 +303,16 @@ export const decksApi = {
     if (args.templateId) q.set('template', args.templateId);
     if (args.quarter) q.set('quarter', args.quarter);
     if (args.mode) q.set('mode', args.mode);
-    const res = await fetch(`${AUTH_API_URL}/api/decks/download?${q.toString()}`, { headers: authHeaders() });
-    if (!res.ok) await throwApiError(res, 'GET', '/api/decks/download');
+    const res = await apiRequestStream(`/api/decks/download?${q.toString()}`);
+    if (!res.ok) throw new Error(`Deck download failed (${res.status})`);
     const blob = await res.blob();
     downloadBlob(blob, filenameFromResponse(res, `deck-${args.quarter ?? 'latest'}.pptx`));
   },
 
   /** Download a previously generated deck by id. */
   async downloadById(deckId: string, filename = 'deck.pptx'): Promise<void> {
-    const res = await fetch(`${AUTH_API_URL}/api/decks/${encodeURIComponent(deckId)}/download`, { headers: authHeaders() });
-    if (!res.ok) await throwApiError(res, 'GET', `/api/decks/${deckId}/download`);
+    const res = await apiRequestStream(`/api/decks/${encodeURIComponent(deckId)}/download`);
+    if (!res.ok) throw new Error(`Deck download failed (${res.status})`);
     downloadBlob(await res.blob(), filename);
   },
 };
@@ -474,24 +429,14 @@ export const brain = {
 
   /** Upload a file for use as an attachment in chat. Returns key, name, type. */
   upload: async (file: File): Promise<{ key: string; name: string; type: string }> => {
-    const token = getStoredTenantToken();
-    const hadToken = !!token;
     const form = new FormData();
     form.append('file', file);
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(`${AUTH_API_URL}/api/brain/upload`, {
+    // apiRequest leaves Content-Type unset for FormData so the multipart
+    // boundary survives — no hand-built header block needed.
+    return request<{ key: string; name: string; type: string }>('/api/brain/upload', {
       method: 'POST',
-      headers,
       body: form,
     });
-    checkUnauthorizedAndRedirect(res, hadToken);
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({})) as { error?: string };
-      throw new Error(body.error || res.statusText || 'Upload failed');
-    }
-    const data = (await res.json()) as { key: string; name: string; type: string };
-    return data;
   },
 
   /** URL to view/download an uploaded file by key. */
@@ -743,19 +688,20 @@ export async function llmChat(
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
   options?: { temperature?: number; maxTokens?: number; model?: string }
 ): Promise<{ content: string }> {
-  const headers = authHeaders();
-  const hadToken = !!headers.Authorization;
-  const res = await fetch(`${AUTH_API_URL}/llm/v1/chat/completions`, {
+  // Streams through the shared transport for headers + the 401 redirect, but
+  // keeps its own error parsing: the gateway returns OpenAI-shaped error
+  // envelopes that callers branch on via `.code`/`.body` (see parseLlmError),
+  // which the generic handler would flatten to a message string.
+  const res = await apiRequestStream('/llm/v1/chat/completions', {
     method: 'POST',
-    headers,
     body: JSON.stringify({
       model: options?.model ?? 'openai/gpt-4o-mini',
       messages,
       temperature: options?.temperature ?? 0.3,
       max_tokens: options?.maxTokens ?? 4096,
     }),
+    expectedErrors: [400, 402, 403, 429, 500, 502, 503],
   });
-  checkUnauthorizedAndRedirect(res, hadToken);
   if (!res.ok) throw await parseLlmError(res);
   const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
   const content = data.choices?.[0]?.message?.content?.trim() ?? '';
@@ -1131,9 +1077,7 @@ export const workflowDefinitions = {
     }),
   /** Export a definition as YAML text (for download / hand-editing). */
   exportYaml: async (id: string): Promise<string> => {
-    const res = await fetch(`${AUTH_API_URL}/api/workflow-definitions/${id}/export`, { headers: authHeaders() });
-    if (!res.ok) throw new Error('Export failed');
-    return res.text();
+    return apiRequestText(`/api/workflow-definitions/${id}/export`);
   },
   /** Create a definition from a hand-authored YAML/JSON document. */
   importYaml: (name: string, yaml: string) =>
@@ -1189,18 +1133,12 @@ export async function listMarketplaceSkills(params?: {
   if (params?.page != null) q.set('page', String(params.page));
   if (params?.limit != null) q.set('limit', String(params.limit));
   const query = q.toString();
-  const res = await fetch(`${AUTH_API_URL}/marketplace/skills${query ? `?${query}` : ''}`);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error || res.statusText || 'Request failed');
-  }
-  const data = (await res.json()) as {
+  return apiRequest<{
     skills: MarketplaceSkill[];
     total: number;
     page: number;
     limit: number;
-  };
-  return data;
+  }>(`/marketplace/skills${query ? `?${query}` : ''}`, { auth: 'none' });
 }
 
 // ---------------------------------------------------------------------------
@@ -2932,10 +2870,7 @@ export const empMetricsApi = {
 
   /** EMP-20 — download the member metrics as CSV/JSON (auth'd blob → browser save). */
   exportMetrics: async (days = 30, format: 'csv' | 'json' = 'csv'): Promise<void> => {
-    const token = getStoredTenantToken();
-    const res = await fetch(`${AUTH_API_URL}/api/members/metrics/export?days=${days}&format=${format}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    const res = await apiRequestStream(`/api/members/metrics/export?days=${days}&format=${format}`);
     if (!res.ok) throw new Error(`Export failed (${res.status})`);
     const blob = await res.blob();
     downloadBlob(blob, `member-metrics-${days}d-${new Date().toISOString().slice(0, 10)}.${format}`);
@@ -4134,16 +4069,19 @@ function mpHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function mpRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${AUTH_API_URL}${path}`, {
+/**
+ * The public marketplace carries its OWN credential (a marketplace token in
+ * localStorage), not the workspace or web JWT — so it opts out of the transport's
+ * auth modes and supplies the Authorization header itself. Everything else about
+ * the request (locale header, error reporting, 402 handling) still comes from the
+ * one transport.
+ */
+async function mpRequest<T>(path: string, init?: RequestOptions): Promise<T> {
+  return apiRequest<T>(path, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...mpHeaders(), ...(init?.headers as Record<string, string> ?? {}) },
+    auth: 'none',
+    headers: { ...mpHeaders(), ...(init?.headers ?? {}) },
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? res.statusText ?? 'Request failed');
-  }
-  return res.json() as Promise<T>;
 }
 
 export interface MarketplaceUser {
@@ -4670,9 +4608,7 @@ export const pmoApi = {
     const q = new URLSearchParams();
     if (params.from && params.to) { q.set('from', params.from); q.set('to', params.to); }
     if (params.projectId != null) q.set('project', String(params.projectId));
-    const res = await fetch(`${AUTH_API_URL}/api/pmo/spine/export.csv${q.toString() ? `?${q}` : ''}`, { headers: authHeaders() });
-    if (!res.ok) throw new Error(`Export failed (${res.status})`);
-    return res.text();
+    return apiRequestText(`/api/pmo/spine/export.csv${q.toString() ? `?${q}` : ''}`);
   },
   /** Set (or clear, with null) the CAPEX/OPEX class on any level. A PM 'manual'
    *  set also verifies the row; pass source:'agent' for an applied suggestion. */
@@ -6856,10 +6792,11 @@ export const pendingPromptsApi = {
   save(prompt: string, path?: string): void {
     const anonId = getAnonId();
     if (!anonId || !prompt.trim()) return;
-    void fetch(`${AUTH_API_URL}/api/pending-prompts`, {
+    void apiRequest('/api/pending-prompts', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      auth: 'none',
       body: JSON.stringify({ anonId, prompt: prompt.trim(), path }),
+      expectedErrors: [400, 401, 403, 404, 429, 500, 502, 503],
     }).catch(() => {});
   },
 
@@ -6868,13 +6805,10 @@ export const pendingPromptsApi = {
     const anonId = getAnonId();
     if (!anonId) return null;
     try {
-      const res = await fetch(`${AUTH_API_URL}/api/pending-prompts/claim`, {
+      const body = await webRequest<{ prompt?: string | null }>('/api/pending-prompts/claim', {
         method: 'POST',
-        headers: webAuthHeaders(),
         body: JSON.stringify({ anonId }),
       });
-      if (!res.ok) return null;
-      const body = (await res.json().catch(() => ({}))) as { prompt?: string | null };
       return body.prompt ?? null;
     } catch {
       return null;
@@ -6954,13 +6888,10 @@ export const personasApi = {
     if (params?.sort) qs.set('sort', params.sort);
     const query = qs.toString();
     try {
-      const res = await fetch(`${AUTH_API_URL}/api/personas/public${query ? `?${query}` : ''}`);
-      if (res.status === 404) return [];
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error || res.statusText || `Request failed (${res.status})`);
-      }
-      const data = (await res.json()) as { personas?: PublicPersona[] } | PublicPersona[];
+      const data = await apiRequest<{ personas?: PublicPersona[] } | PublicPersona[]>(
+        `/api/personas/public${query ? `?${query}` : ''}`,
+        { auth: 'none', expectedErrors: [404] },
+      );
       return Array.isArray(data) ? data : data.personas ?? [];
     } catch (e) {
       if (isNotFound(e)) return [];
@@ -6971,13 +6902,10 @@ export const personasApi = {
   /** Fetch a single public persona by slug. Returns null when missing / unsupported. */
   getBySlug: async (slug: string): Promise<PublicPersona | null> => {
     try {
-      const res = await fetch(`${AUTH_API_URL}/api/personas/${encodeURIComponent(slug)}`);
-      if (res.status === 404) return null;
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error || res.statusText || `Request failed (${res.status})`);
-      }
-      const data = (await res.json()) as { persona?: PublicPersona } | PublicPersona;
+      const data = await apiRequest<{ persona?: PublicPersona } | PublicPersona>(
+        `/api/personas/${encodeURIComponent(slug)}`,
+        { auth: 'none', expectedErrors: [404] },
+      );
       return (data as { persona?: PublicPersona }).persona ?? (data as PublicPersona);
     } catch (e) {
       if (isNotFound(e)) return null;

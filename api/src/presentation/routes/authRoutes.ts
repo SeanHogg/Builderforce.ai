@@ -42,7 +42,7 @@ import {
 } from '../../infrastructure/auth/MfaService';
 import { revokeTenantApiKeyByRawKey } from '../../application/llm/tenantApiKeyService';
 import { issueVerificationCode, verifyVerificationCode, type VerifyResult } from '../../application/auth/EmailVerificationService';
-import { checkTermsAcceptance } from '../middleware/termsEnforcement';
+import { checkTermsAcceptance, invalidateAcceptedTermsVersion } from '../../application/legal/termsAcceptance';
 import { getActiveLegalDoc } from '../../application/legal/legalDocsService';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
@@ -477,7 +477,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
   router.get('/legal/terms/status', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const terms = await getActiveLegalDoc(db, 'terms');
-    const status = await checkTermsAcceptance(db, userId);
+    const status = await checkTermsAcceptance(db, userId, c.env);
     return c.json({
       requiredVersion: status.requiredVersion ?? terms.version,
       acceptedVersion: status.acceptedVersion,
@@ -511,6 +511,11 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
           updatedAt: sql`now()`,
         },
       });
+
+    // The auth middlewares serve this from the read-through cache, so the accept
+    // MUST invalidate it — otherwise the user keeps getting 428 until the TTL
+    // lapses, on the one screen that is supposed to unblock them.
+    await invalidateAcceptedTermsVersion(c.env, userId);
 
     return c.json({
       acceptedVersion: terms.version,
@@ -750,6 +755,9 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       { userId: created.id, documentType: 'terms', version: termsDoc.version },
       { userId: created.id, documentType: 'privacy', version: privacyDoc.version },
     ]);
+    // Registration accepts terms implicitly — drop any cached "not accepted" so
+    // the very first authenticated call after signup isn't gated with a 428.
+    await invalidateAcceptedTermsVersion(c.env, created.id);
 
     // A freelancer gets a for-hire profile stub immediately (private + unpublished
     // until they fill it in) and is auto-provisioned a hired.video job-seeker
