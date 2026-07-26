@@ -23,6 +23,7 @@ import {
   type VendorModule,
 } from './types';
 import { evermindGenerate, buildEvermindCompletion } from '../evermindRuntime';
+import { isServableText } from '../textCoherence';
 
 export const evermindModule: VendorModule = {
   id: 'evermind',
@@ -69,6 +70,29 @@ export const evermindModule: VendorModule = {
       maxTokens: params.maxTokens,
       temperature: params.temperature,
     });
+    // Coherence gate on the RAW PIN too. This vendor used to return whatever the head
+    // produced, unfiltered — the gate + auto-quarantine only existed on the opt-in
+    // project-serve path, so a deliberate `evermind/<ref>` pin was the one door through
+    // which an under-trained head could still answer a user in gibberish. It is now
+    // closed: a degraded head refuses rather than serves, on EVERY path.
+    //
+    // 400 (not 500) because that is what the registry's `dispatchInternal` treats as
+    // "this candidate can't do it — try the next": a SOFT pin therefore cascades to a
+    // real model, while a HARD pin (`modelStrict`) surfaces this explanation instead of
+    // gibberish. The last user message is passed as context so a jargon-dense but
+    // legitimate answer isn't mis-accused.
+    const lastUser = [...params.messages].reverse().find((m) => m['role'] === 'user');
+    const context = typeof lastUser?.['content'] === 'string' ? (lastUser['content'] as string) : undefined;
+    const verdict = isServableText(gen.content, { ...(context ? { context } : {}) });
+    if (!verdict.coherent) {
+      throw new VendorFatalError(
+        'evermind',
+        400,
+        `Evermind produced incoherent output and refused to serve it: ${verdict.detail}. `
+        + 'Retrain or re-seed this model past the coherence bar (Project Evermind → Test bench), '
+        + 'or run this request on a different model.',
+      );
+    }
     return {
       raw: buildEvermindCompletion(gen, `evermind/${ref}`),
       content: gen.content,
