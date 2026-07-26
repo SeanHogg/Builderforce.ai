@@ -46,7 +46,7 @@ export async function authorizeManagedTaskExecution(
     roleRequiredHere = decision?.approvers.some((a) => a.roleKey === roleKey) === true;
   }
   if (!roleRequiredHere) return { allowed: false, managed: true, reason: `Role '${roleKey}' is not required in stage '${task.status}'.` };
-  if (!(await isAgentRefRoleCapable(db, tenantId, agentRef, roleKey))) {
+  if (!(await isAgentRefRoleCapable(db, tenantId, agentRef, roleKey, task.projectId))) {
     return { allowed: false, managed: true, reason: `Agent '${agentRef}' is not capable of acting as role '${roleKey}'.` };
   }
   return { allowed: true, managed: true };
