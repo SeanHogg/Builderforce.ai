@@ -165,6 +165,160 @@ if (staleAllowlist.length > 0) {
   failed = true;
 }
 
+// ---------------------------------------------------------------------------
+// THIRD GUARD — foreign-key column types.
+//
+// Postgres REFUSES to create a foreign key whose column type is incompatible with
+// the referenced key's type: `foreign key constraint "…_fkey" cannot be implemented
+// … "created_by" of the referencing table and "id" of the referenced table are of
+// incompatible types: integer and character varying`. That is not a warning — the
+// CREATE TABLE fails, the migration aborts, and the DEPLOY dies.
+//
+// Nothing caught it before it shipped: `check-schema-drift.mjs` deliberately checks
+// only that a column EXISTS ("this script flags missing columns, not type
+// mismatches"), tsgo happily typechecks a Drizzle `integer()` pointed at a
+// `varchar()` primary key, and no test touches real DDL. So the first signal was a
+// red deploy (0372_rehearsal.sql: `created_by INTEGER REFERENCES users(id)` against
+// `users.id VARCHAR(36)`).
+//
+// This guard closes that hole statically: collect every column declaration across
+// all migrations, then re-read each inline `REFERENCES <table>(<col>)` and compare
+// the declared type of both sides. Purely lexical — no database needed — so it runs
+// in the same CI step as the rest of the migration guards.
+// ---------------------------------------------------------------------------
+
+/**
+ * The type token(s) at the start of a column definition, stopping BEFORE the
+ * constraint keywords that follow it (`NOT NULL`, `PRIMARY KEY`, `REFERENCES`,
+ * `DEFAULT`…). Handles the multi-word Postgres spellings; everything else is a
+ * single identifier.
+ */
+const TYPE_TOKEN_RE =
+  /^(character\s+varying|double\s+precision|timestamp\s+with(?:out)?\s+time\s+zone|time\s+with(?:out)?\s+time\s+zone|bit\s+varying|[A-Za-z]\w*)\s*(\([^)]*\))?/i;
+
+/** Postgres type aliases folded to one canonical name, so `INT4`/`INTEGER`/`SERIAL`
+ *  and `VARCHAR(36)`/`CHARACTER VARYING` compare as equal rather than as drift. */
+function canonicalSqlType(raw) {
+  const m = TYPE_TOKEN_RE.exec(raw.trim());
+  // Unparseable → return something that can never match, so the caller's
+  // "target not found" path skips it rather than reporting a phantom mismatch.
+  if (!m) return '';
+  const bare = m[1].toLowerCase().replace(/\s+/g, ' ');
+  const ALIASES = {
+    int: 'integer', int4: 'integer', integer: 'integer',
+    serial: 'integer', serial4: 'integer',
+    int8: 'bigint', bigint: 'bigint', bigserial: 'bigint', serial8: 'bigint',
+    int2: 'smallint', smallint: 'smallint', smallserial: 'smallint',
+    varchar: 'varchar', 'character varying': 'varchar', char: 'varchar', 'character': 'varchar',
+    text: 'text',
+    uuid: 'uuid',
+    bool: 'boolean', boolean: 'boolean',
+  };
+  return ALIASES[bare] ?? bare;
+}
+
+/**
+ * FK compatibility as Postgres actually enforces it: the types must be comparable.
+ * `varchar` vs `text` IS allowed (both are string types with an equality operator);
+ * `integer` vs `varchar` is not. Kept deliberately narrow — this guard exists to
+ * catch the fatal mismatch, not to police style.
+ */
+function fkTypesCompatible(a, b) {
+  if (!a || !b) return true; // unparseable side — never fail on a guess
+  if (a === b) return true;
+  const STRINGY = new Set(['varchar', 'text']);
+  if (STRINGY.has(a) && STRINGY.has(b)) return true;
+  const INTY = new Set(['integer', 'bigint', 'smallint']);
+  if (INTY.has(a) && INTY.has(b)) return true; // Postgres permits int-family FKs
+  return false;
+}
+
+/**
+ * Parse every `CREATE TABLE` body across the migrations into
+ * `table -> column -> { type, refTable, refColumn, file }`.
+ *
+ * Deliberately lexical and forgiving: a line it cannot parse is skipped rather than
+ * guessed at, because a false FAILURE here blocks every deploy while a false pass
+ * only means we keep the status quo.
+ */
+function collectMigrationColumns(sqlFiles) {
+  const columns = new Map(); // table -> Map<column, {type,file}>
+  const fks = [];            // { table, column, refTable, refColumn, file }
+
+  for (const { file, text } of sqlFiles) {
+    // Strip line comments so a commented-out REFERENCES never registers.
+    const sql = text.replace(/--[^\n]*/g, '');
+    const createRe = /create\s+table\s+(?:if\s+not\s+exists\s+)?["']?(\w+)["']?\s*\(([\s\S]*?)\n\s*\)\s*;/gi;
+    let m;
+    while ((m = createRe.exec(sql)) !== null) {
+      const table = m[1].toLowerCase();
+      const body = m[2];
+      if (!columns.has(table)) columns.set(table, new Map());
+      const cols = columns.get(table);
+
+      for (const rawLine of body.split('\n')) {
+        const line = rawLine.trim().replace(/,$/, '');
+        if (!line) continue;
+        // Skip table-level constraints — only column definitions carry a type.
+        if (/^(primary\s+key|unique|constraint|foreign\s+key|check|exclude)\b/i.test(line)) continue;
+        const colM = /^["']?(\w+)["']?\s+([A-Za-z][\w ]*(?:\([^)]*\))?)/.exec(line);
+        if (!colM) continue;
+        const column = colM[1].toLowerCase();
+        const type = canonicalSqlType(colM[2]);
+        if (!cols.has(column)) cols.set(column, { type, file });
+
+        const refM = /references\s+["']?(\w+)["']?\s*\(\s*["']?(\w+)["']?\s*\)/i.exec(line);
+        if (refM) {
+          fks.push({ table, column, type, refTable: refM[1].toLowerCase(), refColumn: refM[2].toLowerCase(), file });
+        }
+      }
+    }
+
+    // `ALTER TABLE x ADD COLUMN y <type> … REFERENCES z(c)` — the other way a typed
+    // FK column enters the schema.
+    const alterRe = /alter\s+table\s+["']?(\w+)["']?\s+add\s+column\s+(?:if\s+not\s+exists\s+)?["']?(\w+)["']?\s+([A-Za-z][\w ]*(?:\([^)]*\))?)([^;]*);/gi;
+    while ((m = alterRe.exec(sql)) !== null) {
+      const table = m[1].toLowerCase();
+      const column = m[2].toLowerCase();
+      const type = canonicalSqlType(m[3]);
+      if (!columns.has(table)) columns.set(table, new Map());
+      if (!columns.get(table).has(column)) columns.get(table).set(column, { type, file });
+      const refM = /references\s+["']?(\w+)["']?\s*\(\s*["']?(\w+)["']?\s*\)/i.exec(m[4] ?? '');
+      if (refM) fks.push({ table, column, type, refTable: refM[1].toLowerCase(), refColumn: refM[2].toLowerCase(), file });
+    }
+  }
+  return { columns, fks };
+}
+
+const sqlTexts = files.map((f) => ({ file: f, text: readFileSync(join(migrationsDir, f), 'utf8') }));
+const { columns: migColumns, fks: migFks } = collectMigrationColumns(sqlTexts);
+
+const fkTypeMismatches = [];
+for (const fk of migFks) {
+  const target = migColumns.get(fk.refTable)?.get(fk.refColumn);
+  // An unresolved target means the referenced table is declared somewhere this
+  // lexical pass cannot see (or is created by an extension). Silence beats a false
+  // failure that blocks deploys.
+  if (!target) continue;
+  if (!fkTypesCompatible(fk.type, target.type)) {
+    fkTypeMismatches.push({ ...fk, targetType: target.type, targetFile: target.file });
+  }
+}
+
+if (fkTypeMismatches.length > 0) {
+  console.error('\n❌  Foreign key with an incompatible column type — Postgres will REFUSE this constraint and the migration will fail on deploy:\n');
+  for (const f of fkTypeMismatches) {
+    console.error(`   ${f.file}: ${f.table}.${f.column} ${f.type.toUpperCase()} → ${f.refTable}.${f.refColumn} ${f.targetType.toUpperCase()} (${f.targetFile})`);
+  }
+  console.error(
+    '\n   Give the referencing column the SAME type as the key it points at, and fix\n' +
+      '   the Drizzle column in src/infrastructure/database/schema/ to match — a\n' +
+      '   mismatch there typechecks fine but silently discards every value (an\n' +
+      '   integer column fed a VARCHAR user id stores NULL forever).',
+  );
+  failed = true;
+}
+
 if (failed) process.exit(1);
 
 const allowed = [...collidingPrefixes].filter((p) => allowlist.has(p));

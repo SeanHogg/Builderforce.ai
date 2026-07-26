@@ -154,7 +154,10 @@ export function createAgentOpsRoutes(db: DbHandle) {
 
     const agentRef = typeof body.agentRef === 'string' ? body.agentRef : undefined;
     const model = typeof body.model === 'string' && body.model ? body.model : undefined;
-    const createdBy = Number.isFinite(Number(userId)) ? Number(userId) : null;
+    // `users.id` is a VARCHAR(36) — coercing it through Number() yielded NaN for every
+    // real user, so this attribution was ALWAYS null. Pass the id through as the string
+    // it is; the column and the service signature now agree with the schema.
+    const createdBy = typeof userId === 'string' && userId ? userId : null;
 
     try {
       if (kind === 'trial') {
