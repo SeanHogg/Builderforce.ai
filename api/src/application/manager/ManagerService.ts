@@ -1093,12 +1093,19 @@ export async function runManagerForProject(
         if (!moved) continue;
         summary.remediated += 1;
         const roles = [...new Set(result.missing.map((m) => m.ref))];
+        // WORD IT AS WHAT HAPPENED. `coordinateTicket` never writes a ticket owner — it
+        // rewinds the lane and asks the lane gate to dispatch the missing role. Calling
+        // a bare rewind "Staffing …" told operators a ticket had been staffed when its
+        // assignee column was still empty, which is exactly the contradiction that makes
+        // the feed untrustworthy. Only a dispatch actually put someone on it.
+        const checks = `${result.missing.length} unmet ${result.missing.length === 1 ? 'check' : 'checks'}`;
         await recordManagerAction(db, {
           tenantId, projectId, taskId: t.id, runTaskId, actionType: 'coordinate',
-          summary:
-            `Staffing ${result.missing.length} unmet ${result.missing.length === 1 ? 'check' : 'checks'} ` +
-            `on "${t.title}" — ${roles.join(', ')}${outcome.status !== t.status ? ` (moved to ${outcome.status})` : ''}` +
-            `${outcome.dispatched ? ' · started' : ''}.`,
+          summary: outcome.dispatched
+            ? `Staffed ${checks} on "${t.title}" — started ${roles.join(', ')}`
+              + `${outcome.status !== t.status ? ` (moved to ${outcome.status})` : ''}.`
+            : `Rewound "${t.title}" to ${outcome.status} for ${checks} — ${roles.join(', ')} still unfilled; `
+              + 'nothing was dispatched and the ticket has no owner yet.',
           detail: {
             roles, missing: result.missing.length, fromStatus: t.status,
             toStatus: outcome.status, dispatched: outcome.dispatched,
@@ -1113,7 +1120,7 @@ export async function runManagerForProject(
       await recordManagerAction(db, {
         tenantId, projectId, runTaskId, actionType: 'coordinate',
         summary:
-          `Staffed ${summary.remediated} flagged ${summary.remediated === 1 ? 'ticket' : 'tickets'} this pass — ` +
+          `Coordinated ${summary.remediated} flagged ${summary.remediated === 1 ? 'ticket' : 'tickets'} this pass — ` +
           `${summary.remediationDeferred} more queued for the next one (cap ${MAX_REMEDIATIONS_PER_RUN}/pass).`,
         detail: { remediated: summary.remediated, deferred: summary.remediationDeferred, cap: MAX_REMEDIATIONS_PER_RUN },
       });
@@ -1358,21 +1365,34 @@ async function coordinatePullRequests(
         // the accountability loop — without it the manifest just accumulates `assigned`
         // slots forever (measured: 487 required slots, 0 ever satisfied).
         if (readiness.action === 'drive_signoff') {
-          const dispatched = await driveOutstandingSignoffs(env, db, runtimeService, {
+          const drive = await driveOutstandingSignoffs(env, db, runtimeService, {
             tenantId, projectId, task: t, signoff, managerRef: policy.managerRef,
           });
           await recordManagerAction(db, {
             tenantId, projectId, taskId: t.id, runTaskId, actionType: 'flag',
-            summary: dispatched.length
-              ? `Requested sign-off on "${t.title}" from ${dispatched.join(', ')} — ${readiness.detail}`
-              : `Held "${t.title}" in review — ${readiness.detail}`,
+            summary: drive.asked.length
+              ? `Requested sign-off on "${t.title}" from ${drive.asked.join(', ')} — ${readiness.detail}`
+              // "Held in review" alone was unactionable and, worse, indistinguishable
+              // from a ticket whose reviewer WAS asked. Say why nothing was asked.
+              : `Held "${t.title}" in review — ${readiness.detail}${drive.blockedDetail ? ` ${drive.blockedDetail}` : ''}`,
             detail: {
               action: readiness.action,
               signoffGate: signoff.reason,
               requiredCount: signoff.requiredCount,
               satisfiedCount: signoff.satisfiedCount,
-              outstanding: signoff.outstanding.map((o) => ({ roleKey: o.roleKey, roleName: o.roleName, state: o.state })),
-              dispatchedTo: dispatched,
+              // Carry the ASSIGNEE, not just the role. "Waiting on Architect" reads as a
+              // staffed ticket; "Waiting on Architect (nobody assigned)" is the fact.
+              outstanding: signoff.outstanding.map((o) => ({
+                roleKey: o.roleKey,
+                roleName: o.roleName,
+                state: o.state,
+                assigneeKind: o.assigneeKind,
+                assigneeName: o.assigneeName,
+              })),
+              unstaffedCount: drive.ownership.unstaffed.length,
+              humanOwedCount: drive.ownership.humanOwed.length,
+              dispatchableCount: drive.ownership.dispatchable.length,
+              dispatchedTo: drive.asked,
             },
           });
           continue;

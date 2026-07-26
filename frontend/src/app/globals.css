@@ -137,6 +137,20 @@
   --warning: #f59e0b;
   --warning-text: #fcd34d;
   --warning-bg: rgba(245, 158, 11, 0.16);
+  --warning-border: rgba(245, 158, 11, 0.45);
+  /* `danger-*` / `info-*`: the names ~30 call sites already use. They were never
+     DEFINED, so every one of them fell through to its light-mode literal fallback
+     (#fef2f2 / #991b1b) and painted a pale-pink block in dark mode. `danger` is this
+     codebase's synonym for `error`, so it ALIASES it rather than repeating values —
+     one hue, flipped once per theme. */
+  --danger: var(--error);
+  --danger-text: var(--error-text);
+  --danger-bg: var(--error-bg);
+  --danger-border: var(--error-border);
+  --info: #60a5fa;
+  --info-text: #bfdbfe;
+  --info-bg: rgba(59, 130, 246, 0.18);
+  --info-border: rgba(59, 130, 246, 0.45);
   /* Opaque panel surfaces — theme-aware aliases that flip via the tokens they
      reference (bg-elevated / surface-interactive are overridden per theme). Many
      components reference these intuitive names; defining them here keeps them
@@ -241,6 +255,12 @@ html[data-theme='light'] {
   --warning: #d97706;
   --warning-text: #b45309;
   --warning-bg: rgba(245, 158, 11, 0.14);
+  --warning-border: rgba(245, 158, 11, 0.4);
+  /* danger-* alias the light `error-*` values above; info-* darken for white surfaces. */
+  --info: #2563eb;
+  --info-text: #1e40af;
+  --info-bg: rgba(59, 130, 246, 0.12);
+  --info-border: rgba(59, 130, 246, 0.35);
   --text-on-accent: #fff;
   --badge-unread: #6366f1;
 }
