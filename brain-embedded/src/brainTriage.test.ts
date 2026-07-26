@@ -295,3 +295,54 @@ describe('tool exposure + stall handling signals', () => {
     expect(d.downgradeEvents).toBe(1);
   });
 });
+
+/**
+ * The memory-first short-circuit answers WITHOUT calling a model, so its turn has no
+ * `llm` event, no tokens and no tool steps — indistinguishable from "the model refused
+ * to emit tool calls" unless the report names it. It matters most when the answering
+ * head is the project Evermind SSM: it cannot call tools at all, so a garbled or stale
+ * reply is explained by WHO answered, not by which model was picked.
+ */
+describe('memory-first answers in the diagnostics', () => {
+  const memStep = (over: Record<string, unknown> = {}): BrainTraceEvent => ({
+    ts: '',
+    category: 'recall',
+    label: 'evermind.answer',
+    args: { query: 'what project is this chat associated with ?' },
+    result: { source: 'evermind', skippedLlm: true, version: 768, evermindProjectId: 42, ...over },
+  });
+
+  it('names ANSWERED FROM MEMORY when no model ran, instead of blaming the model', () => {
+    const d = computeBrainDiagnostics([memStep()], undefined, []);
+    expect(d.likelyCause).toBe('memory-answered');
+    expect(d.memoryAnswers).toEqual([{ source: 'evermind', version: 768, projectId: 42 }]);
+    const report = formatBrainDiagnostics(d).join('\n');
+    expect(report).toContain('ANSWERED FROM MEMORY');
+    expect(report).toContain('project #42');
+    expect(report).toContain('cannot call tools');
+    // The remedy the model-fault verdicts prescribe is actively wrong here.
+    expect(report).toContain('Switching models changes nothing');
+  });
+
+  it('distinguishes a Q&A cache replay from an SSM generation', () => {
+    const d = computeBrainDiagnostics([memStep({ source: 'qa-cache', version: undefined, evermindProjectId: undefined })], undefined, []);
+    expect(d.memoryAnswers).toEqual([{ source: 'qa-cache' }]);
+    expect(formatBrainDiagnostics(d).join('\n')).toContain('replay of an earlier answer');
+  });
+
+  it('does NOT hijack the verdict on a mixed run, but still reports the memory turn', () => {
+    // A run where the model narrated its calls AND an earlier turn came from memory:
+    // the model fault is still the thing to fix, and the memory turn is still stated.
+    const llm: BrainTraceEvent = { ts: '', category: 'llm', label: 'llm.complete', args: { advertisedTools: 20 }, usage: { prompt: 3454, completion: 663 } };
+    const messages = [{ role: 'assistant', content: 'run tool builtin_chats_list_tickets with chatId is 85' } as BrainMessage];
+    const d = computeBrainDiagnostics([memStep(), llm], undefined, messages);
+    expect(d.likelyCause).toBe('tool-calls-not-emitted');
+    expect(formatBrainDiagnostics(d).join('\n')).toContain('Answered from memory (LLM skipped): 1 turn(s)');
+  });
+
+  it('ignores a recall step that did NOT skip the model', () => {
+    const d = computeBrainDiagnostics([memStep({ skippedLlm: false })], undefined, []);
+    expect(d.memoryAnswers).toEqual([]);
+    expect(d.likelyCause).not.toBe('memory-answered');
+  });
+});

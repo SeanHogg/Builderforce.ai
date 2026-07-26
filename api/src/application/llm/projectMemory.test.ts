@@ -74,17 +74,41 @@ describe('resolveMemoryAnswer', () => {
     // cache miss, ide_projects children (none), head for proj 42.
     const { db } = memoryDb([[], [], [headRow()]]);
     const runEvermind = vi.fn(async () => 'This is a sufficiently long Evermind reply about the project.');
-    const ans = await resolveMemoryAnswer(env, db, 7, 42, 'How does auth work?', { runEvermind });
+    const ans = await resolveMemoryAnswer(env, db, 7, 42, 'How does auth work?', { runEvermind, toolsAvailable: false });
     expect(ans?.source).toBe('evermind');
     expect(ans?.evermindVersion).toBe(3);
     expect(ans?.evermindProjectId).toBe(42); // triage: which Evermind
     expect(runEvermind).toHaveBeenCalledTimes(1);
   });
 
+  it('never runs the Evermind leg when the caller HAS tools (the SSM cannot call one)', async () => {
+    // Cache miss only — the Evermind leg must not even resolve its targets, because a
+    // tool-capable run must reach the model that can actually fetch the answer.
+    const { db } = memoryDb([[], [], [headRow()]]);
+    const runEvermind = vi.fn(async () => 'a substantive answer that would otherwise qualify');
+    expect(await resolveMemoryAnswer(env, db, 7, 42, 'which tickets are in the backlog?', { runEvermind, toolsAvailable: true })).toBeNull();
+    expect(runEvermind).not.toHaveBeenCalled();
+  });
+
+  it('bars the Evermind leg by DEFAULT (a caller that says nothing is assumed tool-capable)', async () => {
+    const { db } = memoryDb([[], [], [headRow()]]);
+    const runEvermind = vi.fn(async () => 'a substantive answer that would otherwise qualify');
+    expect(await resolveMemoryAnswer(env, db, 7, 42, 'q?', { runEvermind })).toBeNull();
+    expect(runEvermind).not.toHaveBeenCalled();
+  });
+
+  it('still replays the Q&A cache for a TOOL-CAPABLE caller (a real model produced it)', async () => {
+    const { db } = memoryDb([[{ content: 'Auth uses PKCE OAuth via the gateway.' }]]);
+    const runEvermind = vi.fn(async () => 'should not be called');
+    const ans = await resolveMemoryAnswer(env, db, 7, 42, 'How does auth work?', { runEvermind, toolsAvailable: true });
+    expect(ans).toEqual({ text: 'Auth uses PKCE OAuth via the gateway.', source: 'qa-cache' });
+    expect(runEvermind).not.toHaveBeenCalled();
+  });
+
   it('returns null when Evermind is not opted in (inferenceEnabled false)', async () => {
     const { db } = memoryDb([[], [], [headRow({ inferenceEnabled: false })]]);
     const runEvermind = vi.fn(async () => 'a substantive answer that would otherwise qualify');
-    expect(await resolveMemoryAnswer(env, db, 7, 42, 'q?', { runEvermind })).toBeNull();
+    expect(await resolveMemoryAnswer(env, db, 7, 42, 'q?', { runEvermind, toolsAvailable: false })).toBeNull();
     expect(runEvermind).not.toHaveBeenCalled();
   });
 
@@ -92,7 +116,7 @@ describe('resolveMemoryAnswer', () => {
     const { db } = memoryDb([[], [], [headRow()]]);
     const runEvermind = vi.fn(async () => 'nope'); // < EVERMIND_ANSWER_MIN_CHARS
     expect('nope'.length).toBeLessThan(EVERMIND_ANSWER_MIN_CHARS);
-    expect(await resolveMemoryAnswer(env, db, 7, 42, 'q?', { runEvermind })).toBeNull();
+    expect(await resolveMemoryAnswer(env, db, 7, 42, 'q?', { runEvermind, toolsAvailable: false })).toBeNull();
   });
 
   it('returns null when an under-trained head returns long-but-incoherent garbage', async () => {
@@ -103,7 +127,7 @@ describe('resolveMemoryAnswer', () => {
       '� `` **ARserting yoularmy dir this your sintens byy b I - A met toades misin the ge simpelying e the the isb wonvert bled a suchrech u me toan I mend in the you reper seArrading';
     const runEvermind = vi.fn(async () => garbage);
     expect(garbage.length).toBeGreaterThanOrEqual(EVERMIND_ANSWER_MIN_CHARS);
-    expect(await resolveMemoryAnswer(env, db, 7, 42, 'status?', { runEvermind })).toBeNull();
+    expect(await resolveMemoryAnswer(env, db, 7, 42, 'status?', { runEvermind, toolsAvailable: false })).toBeNull();
   });
 
   it('returns null without runEvermind and no cache hit (caller proceeds to the LLM)', async () => {
@@ -147,6 +171,19 @@ describe('looksLikeCoherentText', () => {
         'S cane syour commitemend commiting ete the inten you commits : The commete eg in the commit commit commit ticket ticketO commit PRge in the in the k y i o y',
       ),
     ).toBe(false);
+    // Sample 3 — the one that actually reached a user (VS Code chat, "what project is
+    // this chat associated with?"). No replacement char, no repetition collapse, and
+    // "the" is only 8% of tokens, so every earlier check passed it. What gives it away
+    // structurally is the punctuation it never opened: two orphaned `)`.
+    expect(
+      looksLikeCoherentText(
+        'edicationlatches tist deagneannog, oredionisiing chats code related tot, bound reposea this inatic exie. '
+        + 'The cainstiel.ts, ore). The bountiore tensis for-builticack oatic exinaation,g reposeanhogg/builainaints, '
+        + 'codehe ruilainain_acode relien.\n\naacky is exansiconic.gatediaanhogao sicic.. The bount '
+        + 'reposeanhogg/builtisteckets.\n\nodochedet exensiatnic.ga, upele colognots, vxens, or relidats, or ysis '
+        + 'exenets, siannoing, catic. The bountiat). The bount relatedort inat',
+      ),
+    ).toBe(false);
   });
 
   it('accepts normal English answers (no false rejects)', () => {
@@ -161,6 +198,22 @@ describe('looksLikeCoherentText', () => {
     expect(looksLikeCoherentText('El estado del proyecto es verde y todas las tareas están al día o casi.')).toBe(true);
     // CJK has no ASCII letters to score — accepted.
     expect(looksLikeCoherentText('项目状态为绿色，所有工单都按计划进行，最近一次部署已通过持续集成。')).toBe(true);
+    // German compounds make long tokens the norm — length alone must never be the signal.
+    expect(looksLikeCoherentText(
+      'Dieser Chat gehört zum Projekt BuilderForce. Das Rückstandsverzeichnis enthält neunzehn Vorgänge, die '
+      + 'überwiegend durch die Überprüfungsfreigabe blockiert sind, weil eine Benutzerzustimmung erforderlich ist.',
+    )).toBe(true);
+  });
+
+  it('accepts balanced brackets in real prose and code, and a single stray closer', () => {
+    expect(looksLikeCoherentText(
+      'The failure comes from resolveMemoryAnswer (in projectMemory.ts): resolveEvermindTargets returns the '
+      + 'container project plus every ide_projects storageProjectId, so getProjectEvermindHead(env, db) can '
+      + 'return a head the chat never opted into.',
+    )).toBe(true);
+    // One orphaned closer is ordinary punctuation noise (an emoticon, a truncated quote)
+    // — the gate needs TWO before it calls the text broken.
+    expect(looksLikeCoherentText('Deploy finished and every check passed on the first run :) nothing else to report here.')).toBe(true);
   });
 
   it('rejects empty / whitespace', () => {

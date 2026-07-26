@@ -151,6 +151,21 @@ export interface StallInput {
    * answer rather than a remedy that cannot run.
    */
   signoffDispatchable?: boolean | null;
+  /**
+   * The CURRENT STAGE's outstanding required roles, for a ticket that is NOT in review.
+   *
+   * The hole this closes: the lane requirement gate asks each role exactly once per stage
+   * (the slot's `in_progress` marker is the record that it asked) and delegates re-asking
+   * to the manager. But the manager could only drive sign-offs for `in_review` tickets —
+   * `readiness` above is null on every other lane — so a stage whose one ask was refused,
+   * or whose reviewer finished without recording a verdict, had NO retry owner at all. It
+   * then fell through to `unknown → coordinate`, which re-runs the very gate that will not
+   * re-ask. Measured: an epic at stage 3 of 7 with 10 required slots and 0 sign-offs.
+   *
+   * Null when the question does not apply (in-review tickets use `readiness`, which
+   * carries the whole-ticket gate).
+   */
+  stageSignoff?: { roleNames: string[]; dispatchable: boolean } | null;
   /** PR state, when the ticket has one. */
   pr: {
     /** Our stored row says it is open. */
@@ -324,6 +339,33 @@ export function diagnoseStall(input: StallInput): StallDiagnosis {
       `Stuck ${age}: created but never run even once — starting it.`,
     );
   }
+  // ── This stage's roles owe work, on ANY lane ──────────────────────────────
+  // Placed after every stronger diagnosis (conflicted PR, red build, blocked, a ticket
+  // that never ran once) but BEFORE the `will_run → dispatch` fall-through, which is the
+  // ordering the measured failure turns on: the evaluator does not model the lane
+  // requirement gate, so it answers `will_run` for a ticket the gate then declines. That
+  // made `dispatch` the diagnosis for a ticket whose only real blocker was an owed role,
+  // and re-dispatching it just re-runs the gate that has ALREADY asked this stage and
+  // will not ask again (the slot's `in_progress` marker is exactly what stops it). The
+  // remedy applied nothing, `attempts` stayed at zero, and the escalation ceiling that
+  // hands the ticket to a human was unreachable. Asking the owed role is the action that
+  // can actually move it.
+  if (input.stageSignoff && input.stageSignoff.roleNames.length > 0) {
+    const roles = input.stageSignoff.roleNames.join(', ');
+    return input.stageSignoff.dispatchable
+      ? stalled(
+        'awaiting_signoff', 'drive_signoff',
+        `Stuck ${age}: this stage's required role${input.stageSignoff.roleNames.length === 1 ? '' : 's'} (${roles}) never recorded their work — asking again.`,
+      )
+      : {
+        stalled: true,
+        cause: 'awaiting_signoff',
+        remedy: 'escalate_human',
+        detail: `Stuck ${age}: this stage needs ${roles}, and no agent can be asked — the role is unstaffed or held by a person.`,
+        escalated: true,
+      };
+  }
+
   if (input.autoRunReason === 'will_run') {
     return stalled(
       'never_started', 'dispatch',
@@ -335,6 +377,30 @@ export function diagnoseStall(input: StallInput): StallDiagnosis {
     'unknown', 'coordinate',
     `Stuck ${age} with no recognised blocker — re-coordinating the ticket to find the unmet step.`,
   );
+}
+
+/**
+ * Build {@link StallInput.stageSignoff} from a stage-scoped gate. PURE.
+ *
+ * Lives here rather than inline in the triage loop so the rule that decides whether a
+ * ticket is "waiting on this stage's roles" is testable without a database — it is the
+ * input that turns a useless `coordinate` into an actionable ask, and getting its null
+ * cases wrong either escalates a healthy ticket or hides a stuck one.
+ *
+ * Null for an IN-REVIEW ticket: there `readiness` already carries the whole-ticket gate
+ * and owns the diagnosis, so answering twice would let the weaker branch win.
+ */
+export function stageSignoffFor(
+  status: string,
+  gate: { outstanding: readonly { roleName: string }[] } | null,
+  ownership: { dispatchable: readonly unknown[] } | null,
+  inReviewStatus: string,
+): StallInput['stageSignoff'] {
+  if (status === inReviewStatus || !gate || !ownership) return null;
+  return {
+    roleNames: [...new Set(gate.outstanding.map((o) => o.roleName))],
+    dispatchable: ownership.dispatchable.length > 0,
+  };
 }
 
 /**

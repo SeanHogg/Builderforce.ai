@@ -52,6 +52,21 @@ export interface ResolveMemoryDeps {
    * (Q&A cache still applies).
    */
   runEvermind?: (ref: string, question: string) => Promise<string | null>;
+  /**
+   * Whether the CALLING RUN has tools available. Default `true` (safe), which BARS
+   * the Evermind leg.
+   *
+   * The Evermind SSM has no function-calling (see the `evermind` vendor's
+   * `supportsTools: false`), so it can only answer from what it has already learned —
+   * never from live data and never by DOING anything. Letting it short-circuit a
+   * tool-capable run meant a request like "list the backlog and fix the code" (or even
+   * "what project is this chat on?") was answered from stale weights while the tools
+   * that could actually answer it were never called. The Q&A cache leg is unaffected:
+   * it replays an answer a real model already produced.
+   *
+   * Pass `false` only for a genuinely tool-less caller.
+   */
+  toolsAvailable?: boolean;
 }
 
 /** Normalize a question so trivial vari(spacing/case/punctuation) hit the same cache row. */
@@ -84,8 +99,9 @@ export function qaCacheKey(question: string): string {
  * Resolve an answer from memory WITHOUT calling a paid LLM, or null when memory can't
  * confidently answer (caller then runs the normal loop). Order:
  *   1. Exact-repeat Q&A cache (deterministic key match) — zero model cost.
- *   2. Evermind-first — only when the project opted in (`inferenceEnabled`, version ≥ 1)
- *      AND the SSM returns a substantive reply.
+ *   2. Evermind-first — only when the CALLER HAS NO TOOLS (the SSM cannot call any, so
+ *      it must not pre-empt a run that could fetch the real answer), the project opted
+ *      in (`inferenceEnabled`, version ≥ 1), AND the SSM returns a substantive reply.
  */
 export async function resolveMemoryAnswer(
   env: Env,
@@ -107,7 +123,11 @@ export async function resolveMemoryAnswer(
   // 2) Evermind-first (opt-in). A project can target MANY Everminds (its own head + the
   // IDE builds grouped under it); try each inference-enabled, seeded one in order and
   // adopt the FIRST substantive reply. Same resolver every surface uses.
-  if (deps.runEvermind) {
+  //
+  // Barred outright when the caller has tools: the SSM cannot call one, so answering
+  // from it would strand a request whose answer lives behind a tool call. Defaults to
+  // barred when the caller says nothing (see `toolsAvailable`).
+  if (deps.runEvermind && deps.toolsAvailable === false) {
     const targets = (await resolveEvermindTargets(env, db, tenantId, projectId).catch(() => []))
       .filter((h) => h.inferenceEnabled && h.version >= 1 && h.ref);
     for (const head of targets) {

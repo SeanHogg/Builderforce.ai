@@ -191,8 +191,76 @@ export const CODING_MODEL_POOL: readonly string[] = [
   // them as tool/structured-output capable. Routing onto them happens via
   // CODING_PREMIUM_FALLBACK_MODELS, never auto-selection.
   'claude-sonnet-5',
+  'claude-opus-5',
   'claude-opus-4-8',
 ];
+
+/**
+ * Superseded model ids → the live successor the gateway dispatches instead.
+ *
+ * A pinned model id is DURABLE STATE: it is written onto an agent's `base_model`, a
+ * workflow node config, a lane's coding default, and every execution row that ran on
+ * it. Vendors ship a new frontier model every few months and eventually 404 the old
+ * id — so without a rewrite layer, state pinned months ago starts failing, and the
+ * failure surfaces far from its cause (an empty BYO flagship seed reading as "no
+ * configured provider is currently usable", never "that model id is retired").
+ *
+ * This map is that layer, and it is the ONLY place a version bump has to be made:
+ * add `old -> new` here and every stored pin, seed constant, and strict dispatch
+ * follows on the next request. Entries are chained through {@link canonicalModelId}
+ * (a -> b -> c resolves to c), so a bump never requires rewriting earlier rows.
+ *
+ * Rules for entries:
+ *   • Only map WITHIN a vendor and ACROSS a version — never across vendors or tiers
+ *     (Opus → Opus, never Opus → Sonnet). A silent tier downgrade is worse than a 404.
+ *   • Keep the old id in the vendor CATALOG while the vendor still serves it; this map
+ *     changes what we DISPATCH, the catalog changes what we RECOGNISE.
+ */
+export const SUPERSEDED_MODEL_IDS: Readonly<Record<string, string>> = {
+  // Anthropic direct (bare `claude-*` ids on the Messages API).
+  'claude-opus-4-8': 'claude-opus-5',
+  'claude-opus-4-7': 'claude-opus-5',
+  'claude-opus-4-6': 'claude-opus-5',
+  'claude-opus-4-5': 'claude-opus-5',
+  'claude-opus-4-1': 'claude-opus-5',
+  'claude-opus-4-0': 'claude-opus-5',
+  'claude-sonnet-4-6': 'claude-sonnet-5',
+  'claude-sonnet-4-5': 'claude-sonnet-5',
+  'claude-sonnet-4-0': 'claude-sonnet-5',
+  // OpenRouter-routed Anthropic slugs share the same supersession. Sonnet only: the
+  // OpenRouter catalog carries no Opus slug, and `anthropic/claude-opus-* -> …-sonnet-5`
+  // would be a silent TIER DOWNGRADE — worse than a 404, because the run would quietly
+  // produce weaker output with nothing in the trace saying the model changed.
+  'anthropic/claude-sonnet-4-6': 'anthropic/claude-sonnet-5',
+  'anthropic/claude-sonnet-4-5': 'anthropic/claude-sonnet-5',
+};
+
+/** Hard ceiling on {@link SUPERSEDED_MODEL_IDS} chain-following — a mis-edit that
+ *  introduces a cycle (`a -> b -> a`) must degrade to "return what we have", never
+ *  hang the request thread. */
+const SUPERSESSION_MAX_HOPS = 8;
+
+/**
+ * Resolve a model id through {@link SUPERSEDED_MODEL_IDS} to the id the gateway
+ * should actually dispatch. Returns the input unchanged for a live id, an unknown
+ * id (the premium OpenRouter long tail is off our catalog by definition and must
+ * pass through untouched), or a blank/non-string value.
+ *
+ * Apply this at every seam where a STORED or CALLER-SUPPLIED model id enters the
+ * dispatch path — never to the curated pool constants, which are edited directly.
+ * Pure + unit-testable.
+ */
+export function canonicalModelId(model: string | undefined | null): string {
+  const id = typeof model === 'string' ? model.trim() : '';
+  if (!id) return '';
+  let current = id;
+  for (let hop = 0; hop < SUPERSESSION_MAX_HOPS; hop += 1) {
+    const next = SUPERSEDED_MODEL_IDS[current];
+    if (!next || next === current) return current;
+    current = next;
+  }
+  return current;
+}
 
 /**
  * Default driver for a cloud run that has no explicit model selection. The cloud
@@ -233,7 +301,7 @@ export const CODING_DEFAULT_MODEL: string =
  * backstop" — only Anthropic's direct floor had been hand-added to CODING_MODEL_POOL.
  */
 const BYO_FRONTIER_FLAGSHIPS: Readonly<Record<string, { agentic: string; chat: string }>> = {
-  anthropic: { agentic: 'claude-opus-4-8', chat: 'claude-sonnet-5' },
+  anthropic: { agentic: 'claude-opus-5', chat: 'claude-sonnet-5' },
   openai:    { agentic: 'direct/openai/gpt-4.1', chat: 'direct/openai/gpt-4.1' },
   'openai-codex': { agentic: 'openai-codex/gpt-5.3-codex', chat: 'openai-codex/gpt-5.3-codex' },
   'xai-oauth': { agentic: 'xai-oauth/grok-4.3', chat: 'xai-oauth/grok-4.3' },
@@ -533,7 +601,7 @@ export const CHEAPEST_PAID_CODER = 'deepseek/deepseek-v4-flash'; // $0.10/$0.20
  * reliable-first (DeepSeek → Xiaomi → OpenRouter-routed Claude), then the
  * DIRECT-ANTHROPIC last-resort floor: the OpenRouter-routed coders all share
  * OpenRouter's availability, so an OpenRouter-wide outage sinks them together —
- * `claude-sonnet-5` / `claude-opus-4-8` call Claude DIRECTLY on CLAUDE_API_KEY
+ * `claude-sonnet-5` / `claude-opus-5` call Claude DIRECTLY on CLAUDE_API_KEY
  * (independent availability), Sonnet first (cheaper). Any vendor whose key is
  * unbound no-key-skips at dispatch, so the chain degrades cleanly to whatever is
  * reachable and surfaces an honest exhaustion only if nothing is.
@@ -556,7 +624,7 @@ export const CODING_PREMIUM_FALLBACK_MODELS: readonly string[] = leadPoolWithVen
   '@cf/moonshotai/kimi-k2.7-code',             // 256K ctx — slowest; huge-context last resort
   'anthropic/claude-sonnet-5',   // strongest agentic coder (via OpenRouter)
   'claude-sonnet-5',             // direct-Anthropic last-resort floor (CLAUDE_API_KEY)
-  'claude-opus-4-8',
+  'claude-opus-5',
 ], PAID_LEAD_VENDOR);
 
 /**
@@ -618,6 +686,9 @@ export const PAID_OVERFLOW_MODELS: ReadonlySet<string> = new Set<string>([
   // call on its own CLAUDE_API_KEY, so they are overflow spend by id on every path
   // (primary appended-fallback OR credited backstop) and count against the cap.
   'claude-sonnet-5',
+  'claude-opus-5',
+  // Superseded but still catalogued (see the Anthropic CATALOG note): a run that
+  // resolves onto one is still Builderforce funding its own key, so it stays overflow.
   'claude-opus-4-8',
 ]);
 
@@ -994,6 +1065,24 @@ export interface LlmProxyOptions {
    *  temporarily unresolved. Prevents an expired/revoked key from silently
    *  changing the funding source to BuilderForce's shared pool. */
   byoRequired?: boolean;
+  /** What the tenant CONFIGURED (a stored credential row per provider) and, for each
+   *  provider that could not be resolved this call, WHY. Diagnostics only — routing
+   *  never reads it. It exists so a fail-closed BYO 503 can NAME the providers and the
+   *  models it walked instead of asserting a bare "no configured provider is usable",
+   *  which reads as a lie to an operator looking at four connected accounts in the UI.
+   *  Sourced from {@link TenantLlmCredentials} (`configuredProviders` +
+   *  `unresolvedReasons`), the same fields behind `x-builderforce-byo-unresolved`. */
+  byoDiagnostics?: ByoDiagnostics;
+}
+
+/** Configured-vs-resolved BYO state, carried purely so a fail-closed 503 can explain
+ *  itself. Mirrors the {@link TenantLlmCredentials} fields it is built from. */
+export interface ByoDiagnostics {
+  /** Every provider with a stored credential row — what the UI shows as "connected". */
+  configuredProviders?: readonly string[];
+  /** provider → why it produced no usable credential this call (`revoked`, `expired`,
+   *  `undecryptable`, …). Only populated for a configured-but-unresolved provider. */
+  unresolvedReasons?: Readonly<Record<string, string>>;
 }
 
 export class LlmProxyService {
@@ -1013,6 +1102,7 @@ export class LlmProxyService {
   private readonly tenantVendorKeys: TenantVendorKeys;
   private readonly byoVendorPriority: readonly string[];
   private readonly byoRequired: boolean;
+  private readonly byoDiagnostics: ByoDiagnostics;
 
   constructor(env: ProxyEnv, options?: LlmProxyOptions) {
     this.env = env;
@@ -1031,6 +1121,7 @@ export class LlmProxyService {
     this.tenantVendorKeys = options?.tenantVendorKeys ?? {};
     this.byoVendorPriority = options?.byoVendorPriority ?? [];
     this.byoRequired = options?.byoRequired ?? false;
+    this.byoDiagnostics = options?.byoDiagnostics ?? {};
     // Mark every vendor a BYO key overrides as tenant-funded up front, so any
     // resolution landing on that vendor this request is stamped byo (cost 0,
     // on-prem/VSIX exempt). vendorEnv() applies the matching key override.
@@ -1056,12 +1147,45 @@ export class LlmProxyService {
    *  ({@link byoAutoSeedModels}) can never disagree with the ids the BYO boundary
    *  filter in {@link buildCandidateChain} keeps. */
   private get connectedByoVendors(): Set<string> {
-    return byoVendorIdsFromCredentials({
+    // Memoized: the credentials are fixed for this instance's lifetime, and this set is
+    // read per-candidate by the BYO chain filter and per-attempt by the cooldown scope
+    // check — rebuilding it in those loops was pure waste.
+    this.connectedByoVendorsMemo ??= byoVendorIdsFromCredentials({
       anthropicOAuthToken: this.anthropicOAuthToken,
       openaiCodexAuth: this.openaiCodexAuth,
       xaiOAuthToken: this.xaiOAuthToken,
       vendorKeys: this.tenantVendorKeys,
     });
+    return this.connectedByoVendorsMemo;
+  }
+
+  private connectedByoVendorsMemo?: Set<string>;
+
+  /**
+   * Cooldown SCOPE — is this vendor served by the tenant's OWN credential this request?
+   *
+   * The cooldown store is keyed globally (`cooldown:<vendor>:<model>`, see
+   * cooldownStore.ts), which is exactly right for the operator's SHARED keys: one 429 on
+   * our OpenRouter key really does mean the next request should skip that model. It is
+   * wrong in BOTH directions once the call rides a tenant's own account:
+   *
+   *   - READ: a bench written by our shared key — or by another tenant's lapsed
+   *     subscription — says nothing about THIS owner's account. Gating on it hides a
+   *     healthy credential, and on the strict-pin path turns it into a hard 503 that the
+   *     caller reads as "your provider is unavailable" (which is how a green Integrations
+   *     card could sit next to a failing Test connection).
+   *   - WRITE: an owner's own 401 would bench that model for our shared key AND for every
+   *     other tenant, so one expired token starves the pool for everybody.
+   *
+   * So a vendor the tenant can serve themselves is exempt from the cooldown keyspace
+   * entirely. Its failure signal lives in two stores that ARE tenant-scoped:
+   * `vendorHealth` (governs BYO seed ORDER) and `providerAuthAlerts` (drives the
+   * "reconnect this account" prompt + the daily BYO credential probe's email). This is
+   * the same rule the non-strict path already applied via its BYO probe backstop —
+   * stated once, here, so strict dispatch, chain composition and cooldown writes agree.
+   */
+  private isOwnerServedVendor(vendor: string): boolean {
+    return this.connectedByoVendors.has(vendor);
   }
 
   /** Vendors whose call was served with a tenant's OWN BYO credential this
@@ -1124,7 +1248,17 @@ export class LlmProxyService {
   ): Promise<ProxyResult> {
     const startedAt = Date.now();
     const tid = traceId ?? newTraceId();
-    const callerModel = (body as { model?: unknown }).model;
+    // Rewrite a superseded pin to its live successor BEFORE anything reads it. This is
+    // the gateway-side seam of {@link canonicalModelId}: `body.model` is whatever the
+    // caller had stored (an agent base_model, a lane default, an SDK pin), and that can
+    // be months old. Rewriting here covers the strict-pin branch and the chained branch
+    // together, so a retired id can never reach `dispatch` — and can never be filtered
+    // out of the BYO seed as "not dispatchable", which is what turned a stale Opus pin
+    // into a bare `byo_unavailable` with four providers connected.
+    const rawCallerModel = (body as { model?: unknown }).model;
+    const callerModel = typeof rawCallerModel === 'string' && rawCallerModel.trim()
+      ? canonicalModelId(rawCallerModel)
+      : rawCallerModel;
     // `modelStrict` OR the public `strict` alias → single-model hard pin. Both
     // funnel through `resolveStrictPin` (which also enforces the "model present"
     // precondition) so the service can't disagree with the route's gate.
@@ -1245,12 +1379,19 @@ export class LlmProxyService {
       ...seedPrefix.map((m) => vendorForModel(m)),
       ...fallbackPairs.map((p) => p.vendor),
     ]));
+    // Never ASK about a vendor the tenant serves themselves: the global keyspace can't
+    // speak for the owner's account ({@link isOwnerServedVendor}). Filtering the pairs
+    // BEFORE the read (rather than the results after) both applies the exemption and drops
+    // those KV subrequests. Without it, a stale bench on connected provider A silently
+    // demotes it below connected provider B — violating the tenant's own BYO precedence —
+    // and, once it covers every connected model, composes an empty chain that only the
+    // probe backstop below rescues.
     const [cooledSet, cooledVendors] = await Promise.all([
       loadCooldowns(this.env, [
         ...seedPrefix.map((m) => ({ vendor: vendorForModel(m), model: m })),
         ...fallbackPairs,
-      ]),
-      loadCooledVendors(this.env, seedVendors),
+      ].filter((p) => !this.isOwnerServedVendor(p.vendor))),
+      loadCooledVendors(this.env, seedVendors.filter((v) => !this.isOwnerServedVendor(v))),
     ]);
     // Pinned hint bypasses vendor-level cooldown so a caller-explicit paid model
     // (`anthropic/claude-3-haiku`) gets tried even when the same vendor's free
@@ -1280,10 +1421,20 @@ export class LlmProxyService {
           probed.paidOverflow = false; // BYO-only chain — always the tenant's own account.
           return this.finalize(probed, tid, startedAt, probe, probed.response.status < 400 ? 'success' : undefined);
         }
-        // Genuinely nothing to try: BYO is required but no credential resolved.
+        // Genuinely nothing to try. Report WHAT was walked, not just that nothing was:
+        // the seed we composed, the vendors that actually resolved, what the tenant has
+        // configured (with the per-provider reason it was unusable), and anything the
+        // cooldown gate removed. Passing `seed` (not `[]`) as the candidate chain also
+        // makes the cloud loop's ` · chain: …` suffix report the real list.
         return this.finalize(
-          byoUnavailableResult(seed[0] ?? 'byo-required'),
-          tid, startedAt, [], 'byo_unavailable',
+          byoUnavailableResult(seed[0] ?? 'byo-required', {
+            attempted: seed,
+            connectedVendors: [...connectedByo],
+            cooled: seed.filter((m) => cooledSet.has(`${vendorForModel(m)}/${m}`) || cooledVendors.has(vendorForModel(m))),
+            configuredProviders: this.byoDiagnostics.configuredProviders ?? [],
+            unresolvedReasons: this.byoDiagnostics.unresolvedReasons ?? {},
+          }),
+          tid, startedAt, seed, 'byo_unavailable',
         );
       }
       // Every model in the seed + premium fallback list is on cooldown. The
@@ -1414,18 +1565,34 @@ export class LlmProxyService {
   ): Promise<ProxyResult> {
     const vendor = vendorForModel(model);
     if (this.byoStrict && !this.connectedByoVendors.has(vendor)) {
-      return strictUnavailableResult(model, 'byo_provider_required');
+      // Name the vendor the pin needs AND the vendors that actually resolved — the bare
+      // reason code can't distinguish "you pinned a model on an account you never
+      // connected" from "the account IS connected but its credential didn't resolve".
+      const usable = [...this.connectedByoVendors];
+      return strictUnavailableResult(model, 'byo_provider_required', {
+        requiredVendor: vendor,
+        connectedVendors: usable,
+        configuredProviders: this.byoDiagnostics.configuredProviders ?? [],
+        unresolvedReasons: this.byoDiagnostics.unresolvedReasons ?? {},
+      });
     }
     if (!vendorKeyBound(this.vendorEnv(), vendor)) {
       return strictUnavailableResult(model, 'vendor_key_unconfigured');
     }
 
-    const [cooledSet, cooledVendors] = await Promise.all([
-      loadCooldowns(this.env, [{ vendor, model }]),
-      loadCooledVendors(this.env, [vendor]),
-    ]);
-    if (cooledVendors.has(vendor) || cooledSet.has(`${vendor}/${model}`)) {
-      return strictUnavailableResult(model, 'cooldown');
+    // A vendor the tenant serves from their OWN account is exempt from the global
+    // cooldown keyspace ({@link isOwnerServedVendor}) — the pinned model IS the owner's
+    // account, so it gets its one attempt and surfaces the REAL upstream error instead of
+    // a synthetic 503 inherited from someone else's key. Skipping the gate also drops two
+    // KV subrequests from every BYO strict-pin dispatch.
+    if (!this.isOwnerServedVendor(vendor)) {
+      const [cooledSet, cooledVendors] = await Promise.all([
+        loadCooldowns(this.env, [{ vendor, model }]),
+        loadCooledVendors(this.env, [vendor]),
+      ]);
+      if (cooledVendors.has(vendor) || cooledSet.has(`${vendor}/${model}`)) {
+        return strictUnavailableResult(model, 'cooldown');
+      }
     }
 
     return this.dispatch([model], body, requestHeaders);
@@ -2027,8 +2194,14 @@ export class LlmProxyService {
    */
   private async applyCooldowns(attempts: ReadonlyArray<DispatchAttempt>): Promise<void> {
     if (attempts.length === 0) return;
+    // An attempt that rode the tenant's OWN credential writes NO cooldown: the keyspace is
+    // global, so one owner's expired token would bench that model for our shared key and
+    // for every other tenant ({@link isOwnerServedVendor}). Their signal is the vendor-health
+    // fault below (seed order) plus the per-tenant `providerAuthAlerts` record the gateway
+    // route and the daily BYO probe both write.
+    const coolable = attempts.filter((a) => !this.isOwnerServedVendor(a.vendor));
     await Promise.all([
-      ...attempts.map((a) => recordFailure(this.env, a.vendor, a.model, a.status, a.error)),
+      ...coolable.map((a) => recordFailure(this.env, a.vendor, a.model, a.status, a.error)),
       // Independent of the cooldown above: extend the 5xx streak that governs BYO
       // SEED ORDER. `recordVendorUpstreamFault` ignores non-5xx, so handing it every
       // attempt is safe — a 429 or an auth failure must not demote a vendor, those
@@ -2198,7 +2371,7 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[]; byoRequired?: boolean },
+  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[]; byoRequired?: boolean; byoDiagnostics?: ByoDiagnostics },
 ): LlmProxyService {
   const routing = resolveRouting(effectivePlan, premiumOverride);
   const { productName, modelPool } = routing;
@@ -2237,6 +2410,9 @@ export function llmProxyForPlan(
     // chosen account (e.g. Meta first), matching the cloud-agent pin.
     ...(opts?.byoVendorPriority?.length ? { byoVendorPriority: opts.byoVendorPriority } : {}),
     ...(opts?.byoRequired ? { byoRequired: true } : {}),
+    // Diagnostics only — lets a fail-closed BYO 503 name the connected providers and
+    // the reason each was unusable instead of asserting a bare "none is usable".
+    ...(opts?.byoDiagnostics ? { byoDiagnostics: opts.byoDiagnostics } : {}),
   });
 }
 
@@ -2459,11 +2635,19 @@ export interface PickCloudModelResult {
 }
 
 export function pickCloudModel(
-  explicit: string | undefined,
+  explicitRaw: string | undefined,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
   opts?: PickCloudModelOptions,
 ): PickCloudModelResult {
+  // The pin arrives from DURABLE STATE (an agent's `base_model`, a lane default, a
+  // compile-run config) that may predate a vendor version bump, so rewrite it through
+  // the supersession map before ANY gate reads it. Doing it here rather than at each
+  // gate keeps `isKnownModel`, `vendorForModel`, the free-plan BYO check and the pin
+  // this function RETURNS (which is then written onto the execution row) all agreeing
+  // on one id — a stale id would otherwise fail `isKnownModel` and silently drop the
+  // run back to the plan default with no signal that the pin was the problem.
+  const explicit = canonicalModelId(explicitRaw) || undefined;
   // An explicit pin is honored (strict) ONLY when it PREEMPTS the connected-BYO seed
   // (shared rule — see explicitModelPreemptsByo): nothing connected, or the pin is on
   // the tenant's OWN account. A non-BYO pin while an account is connected (e.g. a
@@ -2558,17 +2742,41 @@ export function adminPoolProxy(
 function strictUnavailableResult(
   model: string,
   reason: 'cooldown' | 'vendor_key_unconfigured' | 'plan_tier' | 'vendor_outage' | 'byo_provider_required',
+  byo?: {
+    requiredVendor: string;
+    connectedVendors: readonly string[];
+    configuredProviders: readonly string[];
+    unresolvedReasons: Readonly<Record<string, string>>;
+  },
 ): ProxyResult {
   const vendor = vendorForModel(model);
+  // For the BYO reason, spell out the gap. `byo_provider_required` alone leaves the
+  // operator guessing which of "never connected" / "connected but unusable" they hit.
+  const byoSuffix = byo
+    ? ` It needs the '${byo.requiredVendor}' provider on your own account.`
+      + ` ${byo.connectedVendors.length ? `Usable this request: ${byo.connectedVendors.join(', ')}.` : 'No provider resolved to a usable credential this request.'}`
+      + `${byo.configuredProviders.length
+        ? ` Connected: ${byo.configuredProviders.map((p) => (byo.unresolvedReasons[p] ? `${p} (unusable: ${byo.unresolvedReasons[p]})` : `${p} (ok)`)).join(', ')}.`
+        : ' No provider is connected on this workspace.'}`
+    : '';
   const body = JSON.stringify({
-    error: `Strict-pin: model '${model}' is unavailable (${reason}).`,
+    error: `Strict-pin: model '${model}' is unavailable (${reason}).${byoSuffix}`,
     code: 'model_unavailable',
     // Top-level `vendor` + `model` so SDK consumers' per-vendor rollups pick
     // up strict-pin 503s without parsing the model id prefix. `details`
     // retains `requestedModel` for backward compat.
     vendor,
     model,
-    details: { requestedModel: model, reason },
+    details: {
+      requestedModel: model,
+      reason,
+      ...(byo ? {
+        requiredVendor: byo.requiredVendor,
+        connectedVendors: [...byo.connectedVendors],
+        configuredProviders: [...byo.configuredProviders],
+        unresolvedReasons: { ...byo.unresolvedReasons },
+      } : {}),
+    },
   });
   return {
     response: new Response(body, {
@@ -2584,20 +2792,82 @@ function strictUnavailableResult(
   };
 }
 
-/** Fail-closed envelope when BYO is configured but none of its credentials can
- * serve the request. This is deliberately a 503, not a shared-pool fallback. */
-function byoUnavailableResult(model: string): ProxyResult {
+/** Everything a fail-closed BYO 503 needs to explain itself. Built at the one call
+ *  site in {@link LlmProxyService.complete}; every field is diagnostics, never routing. */
+interface ByoUnavailableContext {
+  /** Every model id the gateway CONSIDERED for this request, in the order it would
+   *  have walked them (the composed seed). Empty means the seed itself came out empty
+   *  — which is itself the finding, and `connectedVendors` says whether that was
+   *  "nothing connected" or "connected, but no flagship survived". */
+  attempted: readonly string[];
+  /** Gateway vendor ids that RESOLVED to a usable credential this call. */
+  connectedVendors: readonly string[];
+  /** Model ids dropped from the chain because they were on cooldown. */
+  cooled: readonly string[];
+  /** Providers with a stored credential row — what the UI calls "connected". */
+  configuredProviders: readonly string[];
+  /** provider → why it produced no usable credential this call. */
+  unresolvedReasons: Readonly<Record<string, string>>;
+}
+
+/**
+ * Fail-closed envelope when BYO is required but no connected credential can serve the
+ * request. Deliberately a 503, not a shared-pool fallback.
+ *
+ * The message NAMES what was tried. The previous flat wording ("no configured provider
+ * is currently usable") was, from the operator's seat, false: the Provider-priority UI
+ * showed four connected accounts, so the sentence read as the gateway not seeing them,
+ * when the real state was "four rows stored, zero resolved to a usable credential" or
+ * "resolved fine, but every flagship was filtered out of the chain". Those are different
+ * bugs with different fixes, and the old envelope could not tell them apart — it carried
+ * no model list, and it finalized with an EMPTY candidate chain, so the cloud loop's
+ * ` · chain: …` suffix was blank too. Both are fixed here and at the call site.
+ */
+function byoUnavailableResult(model: string, ctx: ByoUnavailableContext): ProxyResult {
   const vendor = vendorForModel(model);
+  const { attempted, connectedVendors, cooled, configuredProviders, unresolvedReasons } = ctx;
+  // Lead with the discriminating fact — "configured but none resolved" vs "resolved but
+  // the chain composed empty" — because that is the sentence that tells the operator
+  // whether to go repair a credential or go look at model/vendor filtering.
+  const headline = connectedVendors.length === 0
+    ? (configuredProviders.length > 0
+      ? `BYO execution is required. ${configuredProviders.length} provider(s) are connected but NONE resolved to a usable credential this request — reconnect or repair the credential.`
+      : 'BYO execution is required, but no provider is connected on this workspace — connect a provider.')
+    : `BYO execution is required. ${connectedVendors.length} provider(s) resolved, but every candidate model was filtered out of the chain before dispatch — no request was sent upstream.`;
+  const detail: string[] = [];
+  if (configuredProviders.length) {
+    detail.push(`connected: ${configuredProviders
+      .map((p) => (unresolvedReasons[p] ? `${p} (unusable: ${unresolvedReasons[p]})` : `${p} (ok)`))
+      .join(', ')}`);
+  }
+  if (connectedVendors.length) detail.push(`usable vendors: ${connectedVendors.join(', ')}`);
+  // The list the operator actually asked for: EVERY model considered, not just the one
+  // the envelope happens to be labelled with.
+  detail.push(attempted.length
+    ? `models tried: ${attempted.join(' → ')}`
+    : 'models tried: none — the candidate chain composed empty');
+  if (cooled.length) detail.push(`on cooldown: ${cooled.join(', ')}`);
   return {
     response: new Response(JSON.stringify({
-      error: 'BYO execution is required, but no configured provider is currently usable. Reconnect or repair the provider credential.',
+      error: `${headline} ${detail.join(' · ')}`,
       code: 'byo_unavailable',
+      details: {
+        attemptedModels: [...attempted],
+        connectedVendors: [...connectedVendors],
+        configuredProviders: [...configuredProviders],
+        unresolvedReasons: { ...unresolvedReasons },
+        cooledModels: [...cooled],
+      },
     }), { status: 503, headers: { 'content-type': 'application/json' } }),
     resolvedModel: model,
     resolvedVendor: vendor,
     retries: 0,
     failovers: [],
     outcome: 'byo_unavailable',
+    // The chain the gateway WOULD have walked — stamped so `finalize` doesn't overwrite
+    // it and every consumer (cloud-run error text, superadmin trace, tool_audit detail)
+    // reports the same list instead of an empty one.
+    candidateChain: [...attempted],
     attempts: [],
   };
 }

@@ -16,7 +16,7 @@ const signedOff: SignoffGateResult = {
 };
 const notSignedOff: SignoffGateResult = {
   satisfied: false, reason: 'outstanding_signoffs', requiredCount: 2, satisfiedCount: 1,
-  outstanding: [{ roleKey: 'qa-tester', roleName: 'QA Tester', stageKey: 'in_review', state: 'assigned', assigneeName: 'QA Bot', assigneeRef: 'a1', assigneeKind: 'agent' }],
+  outstanding: [{ roleKey: 'qa-tester', roleName: 'QA Tester', stageKey: 'in_review', state: 'assigned', responsibility: 'reviewer', assigneeName: 'QA Bot', assigneeRef: 'a1', assigneeKind: 'agent' }],
   detail: 'Waiting on 1 of 2 required sign-offs: QA Tester.',
 };
 

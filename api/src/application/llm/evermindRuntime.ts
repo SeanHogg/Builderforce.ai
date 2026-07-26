@@ -127,18 +127,19 @@ export interface EvermindCoherenceAssessment {
 }
 
 /**
- * Benchmark a head's FITNESS TO SERVE CHAT by generating from a few neutral probe
- * prompts and scoring each for coherence (`looksLikeCoherentText` + the min-length
- * bar). This is the gate the promote-to-inference path consults so a degraded head
- * (the one that answered users in gibberish) can never be marked inference-enabled.
- * CPU-only, reuses the same R2 loader + per-isolate memo as generation.
+ * Score an ALREADY-LOADED head's fitness to serve chat: generate from the neutral
+ * probe prompts and grade each for coherence (`looksLikeCoherentText` + the
+ * min-length bar). Pure + synchronous (no R2, no DB), so it serves BOTH callers —
+ * the R2-backed {@link assessEvermindCoherence} used by the promote-to-inference
+ * gate, and the learning coordinator, which already holds the freshly-merged model
+ * in memory and must re-grade it before that version is allowed to answer anyone.
+ * Deterministic seeds keep the verdict reproducible.
  */
-export async function assessEvermindCoherence(
-  store: ArtifactStore,
-  ref: string,
+export function assessLMCoherence(
+  lm: EvermindLM,
+  tok: BPETokenizer,
   opts: { minPassRate?: number } = {},
-): Promise<EvermindCoherenceAssessment> {
-  const { lm, tok } = await loadEvermindModel(store, ref);
+): EvermindCoherenceAssessment {
   const samples = COHERENCE_PROBE_PROMPTS.map((prompt, i) => {
     const text = lm.generateText(messagesToPrompt([{ role: 'user', content: prompt }]), tok, {
       maxNewTokens: 80,
@@ -151,6 +152,22 @@ export async function assessEvermindCoherence(
   const passRate = samples.length ? samples.filter((s) => s.coherent).length / samples.length : 0;
   // Majority must be coherent by default — one lucky sample isn't fitness to serve.
   return { ready: passRate >= (opts.minPassRate ?? 0.5), passRate, samples };
+}
+
+/**
+ * Benchmark a head's FITNESS TO SERVE CHAT by loading it from R2 and running
+ * {@link assessLMCoherence}. This is the gate the promote-to-inference path consults
+ * so a degraded head (the one that answered users in gibberish) can never be marked
+ * inference-enabled. CPU-only, reuses the same R2 loader + per-isolate memo as
+ * generation.
+ */
+export async function assessEvermindCoherence(
+  store: ArtifactStore,
+  ref: string,
+  opts: { minPassRate?: number } = {},
+): Promise<EvermindCoherenceAssessment> {
+  const { lm, tok } = await loadEvermindModel(store, ref);
+  return assessLMCoherence(lm, tok, opts);
 }
 
 /** Run generation for a published Evermind model and return text + token usage. */

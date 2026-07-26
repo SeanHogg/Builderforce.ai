@@ -170,6 +170,17 @@ function PrecedencePanel({
  * `--warning-*` triple with literal fallbacks so it reads in light AND dark, and
  * wraps freely so it doesn't overflow a 360px viewport.
  */
+/** Failure reason → its remediation copy key. Typed as an exhaustive record so adding a
+ *  reason to {@link ProviderAuthAlert} is a compile error until copy exists for it — the
+ *  alternative (interpolating the reason into the key) silently renders a raw key the day
+ *  the API grows a new one, and the reasons are snake_case while the catalog is camel. */
+const ALERT_COPY_KEY: Record<ProviderAuthAlert['reason'], string> = {
+  not_entitled: 'authAlert.notEntitled',
+  rejected: 'authAlert.rejected',
+  capacity: 'authAlert.capacity',
+  unresolved: 'authAlert.unresolved',
+};
+
 function AuthAlertNotice({ alert, t }: { alert: ProviderAuthAlert; t: TFn }) {
   return (
     <div
@@ -190,13 +201,46 @@ function AuthAlertNotice({ alert, t }: { alert: ProviderAuthAlert; t: TFn }) {
       }}
     >
       <strong style={{ fontWeight: 700 }}>{t('authAlert.title')}</strong>
-      <span style={{ minWidth: 0 }}>
-        {alert.reason === 'not_entitled'
-          ? t('authAlert.notEntitled', { status: alert.status })
-          : t('authAlert.rejected', { status: alert.status })}
-      </span>
+      <span style={{ minWidth: 0 }}>{t(ALERT_COPY_KEY[alert.reason], { status: alert.status })}</span>
     </div>
   );
+}
+
+/**
+ * THE connection-status chip — grid card and details drawer both render this one
+ * component, so they cannot disagree about whether an account is working.
+ *
+ * It deliberately reports HEALTH, not configuration. Both surfaces previously coloured
+ * themselves green off "a credential is stored", which is why the Integrations page could
+ * show five healthy-looking cards while Test connection failed on one of them: a lapsed
+ * subscription, a rotated key and an out-of-credit account all keep a stored credential
+ * that decrypts perfectly. When the daily sweep (or a dispatch, or the Test button) has
+ * recorded an alert, this reads "needs attention" in warning colour instead — the chip
+ * decides that itself from the alert, rather than taking a `healthy` prop a caller could
+ * forget to pass.
+ */
+function ProviderStatusChip({
+  label, subscription, authType, alert, t, style,
+}: {
+  label: string;
+  /** Subscription display name, for the OAuth wording. */
+  subscription: string;
+  authType: ProviderAuthType | null;
+  alert?: ProviderAuthAlert;
+  t: TFn;
+  style?: React.CSSProperties;
+}) {
+  // The "needs attention" wording names the ACCOUNT, not the connected sentence: an
+  // account that is stored but refused is not meaningfully "connected", and splicing the
+  // two ("… connected — needs attention") reads as a contradiction.
+  const text = authType === null ? t('status.notConnected')
+    : alert ? t('status.needsAttention', { label: authType === 'oauth' ? subscription : label })
+    : authType === 'oauth' ? t('status.connected', { subscription })
+    : t('status.keyConfigured', { label });
+  const color = authType === null ? 'var(--text-muted)'
+    : alert ? 'var(--warning-text, #b45309)'
+    : 'rgba(34,197,94,0.9)';
+  return <span style={{ fontSize: 12, fontWeight: 650, color, ...style }}>{text}</span>;
 }
 
 /**
@@ -208,11 +252,14 @@ function ProviderConnectionCard({
   config,
   authType,
   onChange,
+  onHealthChange,
   t,
 }: {
   config: ProviderConfig;
   authType: ProviderAuthType | null; // null = nothing configured
   onChange: (authType: ProviderAuthType | null) => void;
+  /** Report a fresh health verdict (from a probe) up so the grid repaints too. */
+  onHealthChange: (alert: ProviderAuthAlert | null) => void;
   t: TFn;
 }) {
   const [draft, setDraft] = useState('');
@@ -245,6 +292,10 @@ function ProviderConnectionCard({
         : result.error ?? t('diagnostic.failedFallback', { status: stateLabel(result.status) });
       setTestResult({ message, ok: result.ok });
       if (!result.ok) toast.error(message, { title: t('diagnostic.failedTitle', { label: config.label }) });
+      // Repaint the whole page's health from THIS verdict — the probe just wrote (or
+      // cleared) the alert server-side, so the grid behind the drawer would otherwise keep
+      // showing the stale colour until its next full refresh.
+      onHealthChange(result.authAlert ?? null);
       await loadDiagnostic();
     } catch (e) {
       const message = e instanceof Error ? e.message : t('diagnostic.failedGeneric');
@@ -319,19 +370,17 @@ function ProviderConnectionCard({
     }
   };
 
-  const statusLabel =
-    authType === 'oauth' ? t('status.connected', { subscription })
-    : authType === 'api_key' ? t('status.keyConfigured', { label: config.label })
-    : t('status.notConnected');
-
   return (
     <div style={cardStyle}>
       <div style={sectionTitle}>{config.label}</div>
       <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>{blurb}</p>
 
       <div style={{ padding: 12, marginBottom: 14, borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: diagnostic?.usable ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+          {/* `usable` alone would paint this green for a credential that decrypts and then
+              403s on every call, so an outstanding alert downgrades it the same way it
+              downgrades the chip below. */}
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: diagnostic?.authAlert ? 'var(--warning-text, #b45309)' : diagnostic?.usable ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)' }}>
             {t('diagnostic.currentStatus', { status: diagnostic?.status ? stateLabel(diagnostic.status) : t('diagnostic.checking') })}
           </span>
           <button type="button" onClick={testConnection} disabled={testing || !configured} style={{ ...buttonPrimary, opacity: testing || !configured ? 0.5 : 1 }}>
@@ -361,8 +410,14 @@ function ProviderConnectionCard({
 
       {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{t('errorPrefix', { message: error })}</div>}
 
-      <div style={{ fontSize: 12, fontWeight: 600, color: configured ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span>{statusLabel}</span>
+      <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <ProviderStatusChip
+          label={config.label}
+          subscription={subscription || config.label}
+          authType={authType}
+          {...(diagnostic?.authAlert ? { alert: diagnostic.authAlert } : {})}
+          t={t}
+        />
         {configured && (
           <button type="button" onClick={remove} disabled={busy} style={{ ...buttonDanger, padding: '2px 10px' }}>
             {authType === 'oauth' ? t('disconnect') : t('remove')}
@@ -533,11 +588,14 @@ export function ProviderKeysSettings({
                     />
                   )}
                 </div>
-                <span style={{ fontSize: 12, fontWeight: 650, color: authByProvider[p.id] ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                  {authByProvider[p.id] === 'oauth'
-                    ? t('status.connected', { subscription: p.supportsOauth ? t(`provider.${p.id}.subscription`) : p.label })
-                    : authByProvider[p.id] === 'api_key' ? t('status.keyConfigured', { label: p.label }) : t('status.notConnected')}
-                </span>
+                <ProviderStatusChip
+                  label={p.label}
+                  subscription={p.supportsOauth ? t(`provider.${p.id}.subscription`) : p.label}
+                  authType={authByProvider[p.id] ?? null}
+                  {...(alertByProvider[p.id] ? { alert: alertByProvider[p.id]! } : {})}
+                  t={t}
+                  style={{ whiteSpace: 'normal' }}
+                />
               </button>
             ))}
           </div>
@@ -547,12 +605,25 @@ export function ProviderKeysSettings({
             return (
               <SlideOutPanel open onClose={() => setActiveProvider(null)} title={p.label}>
                 <div style={{ padding: 20 }}>
-                  <ProviderConnectionCard config={p} authType={authByProvider[p.id] ?? null} t={t} onChange={(authType) => {
-                    setAuthByProvider((prev) => { const next = { ...prev }; if (authType === null) delete next[p.id]; else next[p.id] = authType; return next; });
-                    syncOrder(p.id, authType);
-                    const nextOrder = authType === null ? order.filter((id) => id !== p.id) : order.includes(p.id) ? order : [...order, p.id];
-                    onPriorityChange?.(nextOrder);
-                  }} />
+                  <ProviderConnectionCard
+                    config={p}
+                    authType={authByProvider[p.id] ?? null}
+                    t={t}
+                    onHealthChange={(alert) => setAlertByProvider((prev) => {
+                      const next = { ...prev };
+                      if (alert) next[p.id] = alert; else delete next[p.id];
+                      return next;
+                    })}
+                    onChange={(authType) => {
+                      setAuthByProvider((prev) => { const next = { ...prev }; if (authType === null) delete next[p.id]; else next[p.id] = authType; return next; });
+                      // A reconnect/removal clears the server-side alert, so drop the local
+                      // one too rather than leaving the card warning about work just done.
+                      setAlertByProvider((prev) => { const next = { ...prev }; delete next[p.id]; return next; });
+                      syncOrder(p.id, authType);
+                      const nextOrder = authType === null ? order.filter((id) => id !== p.id) : order.includes(p.id) ? order : [...order, p.id];
+                      onPriorityChange?.(nextOrder);
+                    }}
+                  />
                 </div>
               </SlideOutPanel>
             );
