@@ -41,6 +41,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { managerSystemicFindings, tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
 import type { StallCause } from './stallTriage';
 import type { StallCensus, CensusCohort } from './stallCensus';
@@ -294,7 +295,7 @@ export async function raiseSystemicFindings(
       const now = new Date();
       await db.update(managerSystemicFindings)
         .set({ status: 'resolved', resolvedAt: now, updatedAt: now })
-        .where(inArray(managerSystemicFindings.id, stale))
+        .where(scopedToTenant(managerSystemicFindings, tenantId, inArray(managerSystemicFindings.id, stale)))
         .catch(() => undefined);
       out.resolved = stale.length;
     }
@@ -307,7 +308,7 @@ export async function raiseSystemicFindings(
         // and spend NO model call and NO ticket — this is the idempotent steady state.
         await db.update(managerSystemicFindings)
           .set({ ticketCount: cohort.count, lastSeenAt: new Date(), updatedAt: new Date() })
-          .where(eq(managerSystemicFindings.id, existingId))
+          .where(scopedToTenant(managerSystemicFindings, tenantId, eq(managerSystemicFindings.id, existingId)))
           .catch(() => undefined);
         continue;
       }

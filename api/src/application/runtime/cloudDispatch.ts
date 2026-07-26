@@ -142,6 +142,25 @@ export function parseCloudAgentRef(payload: string | undefined): string | undefi
  *  a role-attributed producer stamps `actAsRole`. Drives manifest attribution at finalize
  *  and the approvals→sign-off bridge (a human approving a role's gate records that role's
  *  sign-off). Null when the run carries no role stamp. */
+/**
+ * True when a run was dispatched to fulfil a specific ROLE on a lane — a reviewer asked
+ * for a verdict, or a producer asked for this stage's deliverable.
+ *
+ * Such a run must NOT move the ticket's lane when it completes. It runs against an
+ * already-open ticket to answer a question; the answer (a recorded sign-off) is what
+ * advances the stage, and the run merely finishing is not the answer. Without this,
+ * `RuntimeService.update` fell through to the ordinary COMPLETED→next-lane path and the
+ * reviewer's own completion pushed the ticket onward regardless of its verdict —
+ * measured on task 387: a `manager:signoff-request` run completed in 20 seconds and the
+ * lane moved 1.5 seconds later.
+ *
+ * Shares this module with {@link parseActAsRole} because it is the same payload contract:
+ * `reviewRole` (a judgement) or `actAsRole` (a production) both mark a role-attributed run.
+ */
+export function isRoleAttributedRun(payload: string | null | undefined): boolean {
+  return parseActAsRole(payload) !== undefined;
+}
+
 export function parseActAsRole(payload: string | null | undefined): string | undefined {
   if (!payload) return undefined;
   try {

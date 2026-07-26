@@ -60,9 +60,9 @@ import { assignTicketOwner } from './assignOwner';
 import { resolveSignoffGate } from '../kanban/signoffGate';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness } from './evaluateTicketReadiness';
-import { runStallTriage, MAX_TRIAGE_DISPATCHES_PER_RUN } from './triageStage';
+import { runStallTriage, loadBulkSignals, MAX_TRIAGE_DISPATCHES_PER_RUN } from './triageStage';
 import { isActionExhausted } from './stallTriage';
-import { invalidateStallCensus } from './stallCensus';
+import { computeStallCensus, invalidateStallCensus } from './stallCensus';
 import { raiseSystemicFindings } from './systemicDiagnosis';
 import { mergeRecordedPullRequest, updateRecordedPullRequestBranch } from '../repos/mergeRecordedPr';
 import { pollPrCiStatus } from '../repos/pollPrCiStatus';
@@ -1066,6 +1066,65 @@ export async function runManagerForProject(
     }
   }
 
+  // 3.5 CENSUS + SYSTEMIC DIAGNOSIS — full-coverage measurement, deliberately EARLY. ---
+  //
+  // WHY IT RUNS HERE AND NOT AT THE END. It was originally the last stage, after triage,
+  // which is where it logically belongs — and it never executed once. A manager pass runs
+  // inside a Worker invocation with a hard time budget, and on a real project (11: 673
+  // tickets, 354 open PRs) the pass is EVICTED partway through: `manager_actions` shows
+  // triage journalling every few minutes, while the `manager.pass` activity row that
+  // closes a pass has not been written since 2026-07-13 and `lastRunAt` sat 6 hours
+  // stale. Everything positioned after the PR/merge loop was in a dead zone.
+  //
+  // So the ordering rule is: MEASUREMENT before EXPENSIVE ACTION. This stage is pure
+  // diagnosis — a handful of set-based queries and at most two model calls — and it is
+  // the stage that answers "what is actually wrong with this project", so it must not be
+  // the first thing starved by a slow merge loop. It also has no dependency on anything
+  // stage 4+ produces (unlike triage, which needs `conductedTaskIds`).
+  //
+  // The bulk signals it loads are handed to triage below, so paying for them early costs
+  // nothing overall — the same reads, just earlier in the pass.
+  const censusSignals = await loadBulkSignals(db, runtimeService, {
+    tenantId, projectId, taskIds: managed.map((t) => t.id),
+  }).catch(() => null);
+  {
+    const census = censusSignals
+      ? await computeStallCensus(db, {
+        tenantId, projectId, tasks: managed, shared: censusSignals,
+      }).catch(() => null)
+      : null;
+
+    if (census) {
+      summary.censusStalled = census.stalled;
+      summary.censusTopCause = census.cohorts[0]?.cause ?? null;
+
+      const systemic = await raiseSystemicFindings(env, db, runtimeService, {
+        tenantId, projectId, census,
+        personaDirective: identity.personaDirective,
+        // ONE ticket-creation path for the whole manager — the same primitive the
+        // coaching route uses, so a systemic ticket is staffed, keyed and dispatched
+        // exactly like any other manager-created work.
+        createTicket: (directive, title) => createManagerCoachingTask(env, db, runtimeService, {
+          tenantId, projectId, directive, title,
+          // Groups with the diagnostics engine's existing platform-gap tickets rather
+          // than looking like ordinary feature work.
+          taskType: 'gap',
+          submittedBy: `manager:systemic:${policy.managerRef ?? 'system'}`,
+        }),
+      });
+
+      summary.systemicFindings = systemic.findings.length;
+      summary.systemicTicketsCreated = systemic.ticketsCreated;
+      for (const entry of systemic.journal) {
+        await recordManagerAction(db, {
+          tenantId, projectId, taskId: entry.taskId, runTaskId,
+          actionType: 'systemic', summary: entry.summary, detail: entry.detail,
+        });
+      }
+      await invalidateStallCensus(env, tenantId, projectId).catch(() => undefined);
+    }
+  }
+
   // 4. PR — conduct (open) PRs for finished work, then merge/close per policy. ---
   // Records which tickets it acted on so the TRIAGE stage below can diagnose them
   // without re-applying a remedy the review pass just applied.
@@ -1173,12 +1232,12 @@ export async function runManagerForProject(
   // whether it worked — an ineffective fix escalates instead of repeating, which is
   // the generalised cure for the 4058:1 sync-to-merge livelock. See stallTriage.ts.
   //
-  // The stage also returns the FULL-COVERAGE census (stage 8 consumes it), computed from
-  // the bulk signals it has already loaded.
-  let triageCensus: Awaited<ReturnType<typeof runStallTriage>>['census'] = null;
+  // Reuses the bulk signals stage 3.5 already loaded, so its full-project measurement is
+  // paid for once per pass rather than once per stage.
   {
     const triage = await runStallTriage(env, db, runtimeService, {
       tenantId, projectId, managed, conductedTaskIds,
+      ...(censusSignals ? { signals: censusSignals } : {}),
       // Same dispatch-ownership rule step 5 follows: on the cron path the autonomous
       // executor is the single dispatcher, so triage staffs and coordinates but does
       // not race it to start a run it would start anyway.
@@ -1192,7 +1251,6 @@ export async function runManagerForProject(
       },
     }).catch(() => null);
     if (triage) {
-      triageCensus = triage.census;
       summary.stalled = triage.stalled;
       summary.unstuck = triage.unstuck;
       summary.escalated = triage.escalated;
@@ -1226,57 +1284,6 @@ export async function runManagerForProject(
           },
         });
       }
-    }
-  }
-
-  // 8. CENSUS + SYSTEMIC DIAGNOSIS — the step above per-ticket triage. --------------
-  //
-  // Stage 7 is bounded to MAX_TRIAGE_PER_RUN tickets per pass because deep diagnosis is
-  // expensive. That bound was also, silently, the bound on what the manager KNEW:
-  // measured 2026-07-26 on tenant 1, 755 tickets were stalled and the register held 44
-  // rows, so `byCause` — the number a human reads to decide what to fix — was a sample
-  // of twelve-at-a-time. Its top cause read `unknown`; the truth was 313 tickets sharing
-  // `unassigned`.
-  //
-  // The census classifies EVERY managed ticket in bulk (set-based, reusing the same pure
-  // `diagnoseStall` stage 7 uses, so the two cannot disagree), and a cause that crosses
-  // the materiality threshold stops being ticket work: the manager asks a model to name
-  // the underlying defect and files ONE platform ticket for it. Bounded by a per-pass
-  // ceiling and a unique open-finding index, so a re-observed cohort refreshes instead
-  // of re-filing. See stallCensus.ts / systemicDiagnosis.ts.
-  {
-    // Computed by the triage stage, which already paid for the bulk signals it needs —
-    // recomputing here would re-issue those reads once per project per tick.
-    const census = triageCensus;
-
-    if (census) {
-      summary.censusStalled = census.stalled;
-      summary.censusTopCause = census.cohorts[0]?.cause ?? null;
-
-      const systemic = await raiseSystemicFindings(env, db, runtimeService, {
-        tenantId, projectId, census,
-        personaDirective: identity.personaDirective,
-        // ONE ticket-creation path for the whole manager — the same primitive the
-        // coaching route uses, so a systemic ticket is staffed, keyed and dispatched
-        // exactly like any other manager-created work.
-        createTicket: (directive, title) => createManagerCoachingTask(env, db, runtimeService, {
-          tenantId, projectId, directive, title,
-          // Groups with the diagnostics engine's existing platform-gap tickets rather
-          // than looking like ordinary feature work.
-          taskType: 'gap',
-          submittedBy: `manager:systemic:${policy.managerRef ?? 'system'}`,
-        }),
-      });
-
-      summary.systemicFindings = systemic.findings.length;
-      summary.systemicTicketsCreated = systemic.ticketsCreated;
-      for (const entry of systemic.journal) {
-        await recordManagerAction(db, {
-          tenantId, projectId, taskId: entry.taskId, runTaskId,
-          actionType: 'systemic', summary: entry.summary, detail: entry.detail,
-        });
-      }
-      await invalidateStallCensus(env, tenantId, projectId).catch(() => undefined);
     }
   }
 

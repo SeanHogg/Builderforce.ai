@@ -6643,7 +6643,19 @@
     "analyzeApplyCta": "修复选中的 {count} 项",
     "analyzeApplying": "修复中…",
     "analyzeApplied": "已修复：更正 {corrected} 条，遗忘 {forgotten} 条。模型当前为 v{version}。",
-    "analyzeSkipped": "有 {count} 项无法应用。"
+    "analyzeSkipped": "有 {count} 项无法应用。",
+    "tabsLabel": "Evermind 控制项",
+    "tabTeach": "教学",
+    "tabTest": "测试",
+    "tabCheck": "检查",
+    "tabMaintain": "维护",
+    "diagnosticsTitle": "诊断信息",
+    "diagnosticsHint": "复制此面板上的全部内容——模型状态、实际生成的输出、已学到的知识以及发现的问题——生成可粘贴给技术支持或 AI 助手的文本。",
+    "diagnosticsCta": "复制诊断信息",
+    "diagnosticsCopied": "已复制到剪贴板。",
+    "diagnosticsShow": "显示报告",
+    "diagnosticsHide": "隐藏报告",
+    "diagnosticsManualHint": "此处无法自动复制——报告已在下方选中，请按 Ctrl/Cmd+C 复制。"
   },
   "topbar": {
     "cart": "购物车",

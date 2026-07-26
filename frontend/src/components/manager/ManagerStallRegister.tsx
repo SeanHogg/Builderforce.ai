@@ -5,6 +5,7 @@ import { useTranslations, useFormatter } from 'next-intl';
 import Link from 'next/link';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { managerApi, type StallRegister, type StallWatchRow } from '@/lib/builderforceApi';
+import { ticketHref } from '@/lib/ticketHref';
 import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
 } from '@/components/dataTableStyles';
@@ -194,7 +195,7 @@ export function ManagerStallRegister({ projectId }: ManagerStallRegisterProps) {
                     <tr key={row.taskId} style={trStyle}>
                       <td style={tdStyle}>
                         <Link
-                          href={`/tasks/${row.taskId}`}
+                          href={ticketHref(row.taskId)}
                           style={{ color: 'var(--accent, #2563eb)', fontWeight: 600, textDecoration: 'none' }}
                         >
                           {row.title}

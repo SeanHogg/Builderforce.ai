@@ -31,3 +31,25 @@ describe('decideCoordinatedAdvance', () => {
     ], lanes, 'validation')).toEqual({ nextStatus: null, outstanding: ['Developer'] });
   });
 });
+
+describe('decideCoordinatedAdvance — parked lanes', () => {
+  const seed = [
+    { key: 'in_progress', isTerminal: false },
+    { key: 'in_review', isTerminal: false },
+    { key: 'blocked', isTerminal: false },
+    { key: 'done', isTerminal: true },
+  ];
+
+  it('never advances a satisfied stage into the parked lane', () => {
+    // The managed-board twin of the resolveNextLaneKey trap: `blocked` sits between the
+    // last working lane and Done on the default layout, so a satisfied review stage was
+    // advanced into the one lane autonomy refuses to scan.
+    const manifest = [{ required: true, stageKey: 'in_review', state: 'completed', roleName: 'QA' }];
+    expect(decideCoordinatedAdvance(manifest, seed, 'in_review').nextStatus).not.toBe('blocked');
+  });
+
+  it('skips the parked lane to reach the real next stage', () => {
+    const manifest = [{ required: true, stageKey: 'in_progress', state: 'completed', roleName: 'Dev' }];
+    expect(decideCoordinatedAdvance(manifest, seed, 'in_progress').nextStatus).toBe('in_review');
+  });
+});

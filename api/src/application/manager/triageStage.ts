@@ -48,7 +48,6 @@ import { assignTicketOwner } from './assignOwner';
 import { reconcilePullRequestState } from '../repos/reconcilePullRequestState';
 import { diagnoseStall, isManagerActionable, stageSignoffFor, STALL_AFTER_MS, type StallInput } from './stallTriage';
 import { loadOpenStalls, gradeStall, recordStall, resolveStalls } from './stallWatch';
-import { computeStallCensus, type StallCensus } from './stallCensus';
 
 /**
  * How many stalled tickets one pass diagnoses in depth. Each costs several reads
@@ -180,20 +179,9 @@ export interface TriageOutcome {
   deferred: number;
   /** Journal lines for the manager feed — one per ticket ACTED ON, never per observation. */
   journal: Array<{ taskId: number; summary: string; detail: Record<string, unknown> }>;
-  /**
-   * The FULL-COVERAGE census over every managed ticket — not just the {@link
-   * MAX_TRIAGE_PER_RUN} this pass diagnosed in depth.
-   *
-   * Computed HERE rather than by the caller because this stage has already paid for the
-   * signals it needs ({@link loadBulkSignals} loads the last-move, ever-ran and live-run
-   * sets for the whole project). Computing it outside would re-issue those reads once per
-   * project per tick — up to 200 projects on a five-minute cadence, on a database budget
-   * that is already the subject of a gap-register entry. Null if it could not be built.
-   */
-  census: StallCensus | null;
 }
 
-interface BulkSignals {
+export interface BulkSignals {
   lastMovedAt: Map<number, Date>;
   everRan: Set<number>;
   prByTask: Map<number, { id: string; number: number | null; repoId: string | null; status: string | null; buildStatus: string | null; updatedAt: Date }>;
@@ -205,7 +193,7 @@ interface BulkSignals {
  * once. Doing this per ticket would be the N+1 the caching rules forbid, and at 200
  * projects a tick it would dominate the sweep.
  */
-async function loadBulkSignals(
+export async function loadBulkSignals(
   db: Db,
   runtimeService: RuntimeService,
   args: { tenantId: number; projectId: number; taskIds: number[] },
@@ -289,18 +277,25 @@ export async function runStallTriage(
      * executor to start a run that the executor will start anyway.
      */
     ownsDispatch: boolean;
+    /**
+     * Bulk signals the CENSUS stage already loaded this pass. Reused rather than
+     * re-queried: both need the same last-move / ever-ran / live-run sets for the whole
+     * project, and the census now runs EARLIER in the pass (ManagerService stage 3.5), so
+     * loading them twice would double the cost on every project on every tick.
+     */
+    signals?: BulkSignals;
   },
 ): Promise<TriageOutcome> {
   const { tenantId, projectId, managed, policy } = ctx;
   const out: TriageOutcome = {
-    stalled: 0, unstuck: 0, escalated: 0, resolved: 0, dispatched: 0, deferred: 0, journal: [], census: null,
+    stalled: 0, unstuck: 0, escalated: 0, resolved: 0, dispatched: 0, deferred: 0, journal: [],
   };
   if (managed.length === 0) return out;
 
   const now = Date.now();
   const taskIds = managed.map((t) => t.id);
   const [signals, openStalls] = await Promise.all([
-    loadBulkSignals(db, runtimeService, { tenantId, projectId, taskIds }),
+    ctx.signals ?? loadBulkSignals(db, runtimeService, { tenantId, projectId, taskIds }),
     loadOpenStalls(db, projectId).catch(() => new Map()),
   ]);
 
@@ -328,17 +323,6 @@ export async function runStallTriage(
   if (toResolve.length) {
     out.resolved = await resolveStalls(env, db, { tenantId, projectId, taskIds: toResolve });
   }
-
-  // CENSUS — classify EVERY managed ticket, not just the batch below.
-  //
-  // The deep loop that follows is capped for cost, and that cap was silently also the
-  // cap on what the manager KNEW: measured 2026-07-26, 755 stalled tickets against a
-  // 44-row register, so the register's own cause summary was a sample of a dozen at a
-  // time. This reuses `signals` — already loaded above for the whole project — so full
-  // coverage costs a few set-based queries rather than one per ticket.
-  out.census = await computeStallCensus(db, {
-    tenantId, projectId, tasks: managed, shared: signals, now,
-  }).catch(() => null);
 
   // Worst-first: the longest-stalled ticket is always diagnosed, whatever the cap.
   candidates.sort((a, b) => b.idleMs - a.idleMs);
