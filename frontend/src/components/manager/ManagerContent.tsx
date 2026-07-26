@@ -15,6 +15,7 @@ import {
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { ManagerStallRegister } from '@/components/manager/ManagerStallRegister';
 import { ManagerStallCensus } from '@/components/manager/ManagerStallCensus';
+import { ManagerCopyDiagnostics } from '@/components/manager/ManagerCopyDiagnostics';
 import {
   managerApi,
   agentHosts,
@@ -77,6 +78,7 @@ const ACTION_ICON: Record<ManagerActionType, string> = {
   merge_blocked: '✋',
   triage: '🚧',
   escalate: '🔔',
+  systemic: '🧩',
 };
 
 /**
@@ -384,16 +386,25 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
             {stats.lastRunAt ? t('lastManaged', { when: relative(stats.lastRunAt) }) : t('neverManaged')}
           </p>
         </div>
-        <RoleGate capability="manager.manage">
-          <button
-            type="button"
-            style={{ ...primaryBtn, opacity: running ? 0.7 : 1 }}
-            disabled={running}
-            onClick={runNow}
-          >
-            {running ? t('running') : t('runNow')}
-          </button>
-        </RoleGate>
+        {/* Run, then capture why nothing changed — the two actions a person alternates
+            between. Copy diagnostics used to live inside the Stuck panel, reachable from
+            one sub-tab, even though most of what it reports (policy tiers, pass outcomes,
+            autonomy health, the decision feed) lives on the others. It is not role-gated:
+            reading the state is not managing it, and the person diagnosing a dead board is
+            often not the one who may run a pass. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {projectId != null && <ManagerCopyDiagnostics projectId={projectId} overview={data} />}
+          <RoleGate capability="manager.manage">
+            <button
+              type="button"
+              style={{ ...primaryBtn, opacity: running ? 0.7 : 1 }}
+              disabled={running}
+              onClick={runNow}
+            >
+              {running ? t('running') : t('runNow')}
+            </button>
+          </RoleGate>
+        </div>
       </div>
 
       {error && data && (
@@ -745,7 +756,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
               whole picture — which is exactly how a 313-ticket cohort stayed invisible
               behind a 44-row register. Scale and root cause first, then the detail. */}
           <ManagerStallCensus projectId={projectId} />
-          <ManagerStallRegister projectId={projectId} overview={data} />
+          <ManagerStallRegister projectId={projectId} />
         </div>
       )}
 

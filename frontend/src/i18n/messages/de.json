@@ -6896,7 +6896,8 @@
       "schedule": "Terminiert",
       "merge_blocked": "Merge verweigert",
       "triage": "Triagiert",
-      "escalate": "Eskaliert"
+      "escalate": "Eskaliert",
+      "systemic": "Plattform-Befund"
     },
     "runTasks": {
       "title": "Manager-Aufgaben",

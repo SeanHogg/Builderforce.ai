@@ -1879,7 +1879,12 @@ export type ManagerActionType =
   /** A stalled ticket was diagnosed and its remedy applied (0367 stall triage). */
   | 'triage'
   /** The manager's own remedy stopped working, so the ticket went to a human (0367). */
-  | 'escalate';
+  | 'escalate'
+  /**
+   * A whole COHORT of tickets stalled for one reason was judged a platform defect, and
+   * the manager filed a ticket for the root cause rather than remediating each one (0373).
+   */
+  | 'systemic';
 
 /** Persisted manager configuration for a project (null until first configured). */
 export interface ManagerConfig {

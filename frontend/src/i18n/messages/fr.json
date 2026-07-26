@@ -6896,7 +6896,8 @@
       "schedule": "Planifié",
       "merge_blocked": "Fusion refusée",
       "triage": "Trié",
-      "escalate": "Escaladé"
+      "escalate": "Escaladé",
+      "systemic": "Constat plateforme"
     },
     "runTasks": {
       "title": "Tâches du manager",
