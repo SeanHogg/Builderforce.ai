@@ -358,7 +358,21 @@ async function ensureTaskPrd(
   taskId: number,
   agentLabel: string,
   model: string | undefined,
+  /**
+   * REHEARSAL: read an existing PRD, never create one.
+   *
+   * Without this a rehearsal would draft a PRD (paid LLM call), persist a `specs`
+   * row, COMMIT `PRD.md` to the real ticket branch, record a `task_file_changes`
+   * row and notify the execution stream — four escaping effects, before the shadow
+   * provider has intercepted anything. The shadow decorator wraps the LOOP; prep runs
+   * before it, so the read-only decision has to be made here.
+   */
+  readOnly = false,
 ): Promise<string> {
+  if (readOnly) {
+    const existing = await findTaskPrimarySpec(db, taskId).catch(() => null);
+    return existing?.prd?.trim() ?? '';
+  }
   // Shared generate→persist→link core (reused by the on-demand endpoint + swimlane gate).
   const ensured = await ensureTaskPrdRecord(db, env, { taskId, tenantId, projectId, title: taskRow.title, description: taskRow.description, agentLabel, model });
   if (!ensured) return '';
