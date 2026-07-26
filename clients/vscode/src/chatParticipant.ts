@@ -147,7 +147,8 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
       // Self-heal: if the server says this chat isn't bound to a project but the IDE has
       // an active one, adopt it so the NEXT turn trains that project's Evermind (parity
       // with the webview's adopt-on-open — the native participant otherwise leaves a chat
-      // created before a project was selected permanently project-less).
+      // created before a project was selected permanently project-less). Both are gated on
+      // an ACTIVE project: with none selected there is nothing to adopt.
       if (outcome?.reason === "not-attached" && activeProject) {
         await updateBrainChatProject(ctx.secrets, brainChatId, activeProject.id);
       }

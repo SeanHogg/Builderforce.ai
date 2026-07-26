@@ -199,6 +199,174 @@ const CAPABILITIES: ReadonlyArray<{
   { key: 'autoSchedule', label: 'auto-scheduling', deficit: 'undated', deficitLabel: 'undated', counter: null },
 ];
 
+/**
+ * Remedies whose whole effect is to START a run. Mirrors the api's
+ * `DISPATCHING_REMEDIES` — a stuck row carrying one of these at attempts=0 has never
+ * actually had anything tried on it, which reads identically to "the manager is on it"
+ * unless the report says otherwise.
+ */
+const RUN_STARTING_REMEDIES: ReadonlySet<string> = new Set([
+  'dispatch', 'reset_breaker', 'drive_signoff', 'resolve_conflict',
+]);
+
+/**
+ * How long a register row may sit at attempts=0 before "the manager is still trying" is
+ * not a credible reading of it. Three days is well past the 24h stall threshold AND past
+ * any plausible per-pass cap backlog, so anything older has been passed over, not queued.
+ */
+export const NEVER_ATTEMPTED_AFTER_MS = 3 * 86_400_000;
+
+/** Tolerant parse of an action's `detail` JSON blob — never throws, never guesses. */
+export function parseActionDetail(detail: string | null | undefined): Record<string, unknown> | null {
+  if (!detail) return null;
+  try {
+    const parsed: unknown = JSON.parse(detail);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+/** One outstanding required sign-off slot, as journalled by the manager. */
+interface OutstandingSlotRow {
+  roleName: string;
+  state: string;
+  assigneeKind: string | null;
+  assigneeName: string | null;
+}
+
+/**
+ * What the sign-off gate is actually waiting on, across the decisions in this window.
+ *
+ * This is the block whose absence made the report unable to answer the question an
+ * operator asks first: the feed says "waiting on 10 of 10 required sign-offs" while the
+ * ticket shows no assignee, and BOTH are true — a required participation slot is not the
+ * ticket's owner. Until the report separated agent-owed slots from human-owed and
+ * unstaffed ones, there was no way to tell "an agent was asked and has not answered"
+ * from "nobody has ever been on this ticket".
+ */
+export interface SignoffRollup {
+  /** Decisions in this window where the gate held a ticket. */
+  heldTickets: number;
+  /** Of those, how many actually dispatched a role to sign off. */
+  askedTickets: number;
+  requiredTotal: number;
+  satisfiedTotal: number;
+  /** Outstanding slots by who owes them. Counted only from rows that report ownership. */
+  unstaffed: number;
+  humanOwed: number;
+  dispatchable: number;
+  /** Roles seen outstanding with no assignee at all, most frequent first. */
+  unassignedRoles: Array<{ role: string; count: number }>;
+  /** People a sign-off is waiting on, most frequent first. */
+  waitingOnPeople: Array<{ who: string; count: number }>;
+  /**
+   * False when EVERY row predates the manager reporting slot ownership. The counts
+   * above are then structurally zero and must not be read as "nothing is unstaffed".
+   */
+  hasOwnership: boolean;
+}
+
+export function summarizeSignoffs(actions: readonly ManagerAction[]): SignoffRollup {
+  const roles = new Map<string, number>();
+  const people = new Map<string, number>();
+  const out: SignoffRollup = {
+    heldTickets: 0, askedTickets: 0, requiredTotal: 0, satisfiedTotal: 0,
+    unstaffed: 0, humanOwed: 0, dispatchable: 0,
+    unassignedRoles: [], waitingOnPeople: [], hasOwnership: false,
+  };
+  for (const a of actions) {
+    const d = parseActionDetail(a.detail);
+    if (!d || typeof d.signoffGate !== 'string') continue;
+    out.heldTickets += 1;
+    out.requiredTotal += num(d.requiredCount) ?? 0;
+    out.satisfiedTotal += num(d.satisfiedCount) ?? 0;
+    if (Array.isArray(d.dispatchedTo) && d.dispatchedTo.length > 0) out.askedTickets += 1;
+
+    // Per-ticket ownership counters (newer rows). Absent on rows written before the
+    // manager journalled them — tracked so the report can say which it is.
+    const unstaffed = num(d.unstaffedCount);
+    const humanOwed = num(d.humanOwedCount);
+    const dispatchable = num(d.dispatchableCount);
+    if (unstaffed != null || humanOwed != null || dispatchable != null) {
+      out.hasOwnership = true;
+      out.unstaffed += unstaffed ?? 0;
+      out.humanOwed += humanOwed ?? 0;
+      out.dispatchable += dispatchable ?? 0;
+    }
+
+    if (!Array.isArray(d.outstanding)) continue;
+    for (const raw of d.outstanding as unknown[]) {
+      if (!raw || typeof raw !== 'object') continue;
+      const slot = raw as Partial<OutstandingSlotRow>;
+      const role = typeof slot.roleName === 'string' ? slot.roleName : null;
+      if (!role) continue;
+      // `assigneeKind` present at all means this row carries ownership per slot.
+      if ('assigneeKind' in slot) {
+        out.hasOwnership = true;
+        if (!slot.assigneeKind) roles.set(role, (roles.get(role) ?? 0) + 1);
+        else if (slot.assigneeKind !== 'agent') {
+          const who = `${role} → ${slot.assigneeName ?? 'unnamed'}`;
+          people.set(who, (people.get(who) ?? 0) + 1);
+        }
+      }
+    }
+  }
+  const rank = <T extends string>(m: Map<T, number>) =>
+    [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  out.unassignedRoles = rank(roles).map(([role, count]) => ({ role, count }));
+  out.waitingOnPeople = rank(people).map(([who, count]) => ({ who, count }));
+  return out;
+}
+
+/**
+ * The per-pass ceilings the manager reported for itself, and whether the pass owned
+ * dispatch. These are as load-bearing as the policy toggles — a capability that is ON in
+ * policy still does nothing to ticket #400 if the pass stops at 10 — and none of them
+ * were anywhere in this report, so "enabled: yes" read as "it will get to everything".
+ *
+ * Read from what the passes JOURNALLED rather than hardcoded here, so the report can
+ * never claim a limit the running server does not actually use.
+ */
+export interface PassLimits {
+  triageDispatchCap: number | null;
+  remediationCap: number | null;
+  /** False when the autonomous executor, not the manager, is the single dispatcher. */
+  ownsDispatch: boolean | null;
+  stalledSeen: number | null;
+  unstuck: number | null;
+  deferred: number | null;
+  remediationDeferred: number | null;
+}
+
+export function summarizePassLimits(actions: readonly ManagerAction[]): PassLimits {
+  const out: PassLimits = {
+    triageDispatchCap: null, remediationCap: null, ownsDispatch: null,
+    stalledSeen: null, unstuck: null, deferred: null, remediationDeferred: null,
+  };
+  // Newest-first feed: the first row carrying each field is the most recent answer.
+  for (const a of actions) {
+    const d = parseActionDetail(a.detail);
+    if (!d) continue;
+    if (a.actionType === 'triage') {
+      out.triageDispatchCap ??= num(d.dispatchCap);
+      out.stalledSeen ??= num(d.stalled);
+      out.unstuck ??= num(d.unstuck);
+      out.deferred ??= num(d.deferred);
+      if (out.ownsDispatch == null && typeof d.ownsDispatch === 'boolean') out.ownsDispatch = d.ownsDispatch;
+    }
+    if (a.actionType === 'coordinate' && d.cap != null) {
+      out.remediationCap ??= num(d.cap);
+      out.remediationDeferred ??= num(d.deferred);
+    }
+  }
+  return out;
+}
+
 /** Group the activity feed by (type, summary) — the shape a retry loop makes. */
 interface RepeatedAction {
   actionType: string;
@@ -361,6 +529,25 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
         text: `${livelocked.length} ticket${livelocked.length === 1 ? ' is' : 's are'} at or past the ${stalls.maxAttempts}-attempt ceiling without being escalated — the same remedy is being re-applied to a ticket it has already failed to move.`,
       });
     }
+    // The OPPOSITE failure, and the harder one to see: a row nothing has ever been
+    // tried on. `attempts` only advances when a remedy actually ran, so a remedy the
+    // pass keeps skipping leaves the row at 0 forever — it never reaches the
+    // escalation ceiling either, so it is neither worked nor handed to a human. On the
+    // surface it is indistinguishable from a ticket the manager picked up this minute.
+    const neverAttempted = stalls.rows.filter(
+      (r) => r.attempts === 0 && !r.escalatedAt
+        && RUN_STARTING_REMEDIES.has(r.remedy) && r.idleMs > NEVER_ATTEMPTED_AFTER_MS,
+    );
+    if (neverAttempted.length > 0) {
+      const byRemedy = new Map<string, number>();
+      for (const r of neverAttempted) byRemedy.set(r.remedy, (byRemedy.get(r.remedy) ?? 0) + 1);
+      const oldest = neverAttempted.reduce((a, b) => (b.idleMs > a.idleMs ? b : a));
+      critical.push({
+        severity: 'critical',
+        code: 'remedy_never_attempted',
+        text: `${neverAttempted.length} stuck ticket${neverAttempted.length === 1 ? ' has' : 's have'} a remedy that has NEVER been attempted (attempts=0), the longest idle ${formatAge(oldest.idleMs)} — ${[...byRemedy.entries()].map(([k, n]) => `${k} ×${n}`).join(', ')}. Each of these remedies has to start a run, and every pass has skipped them: because an attempt that never happened cannot fail, the ${stalls.maxAttempts}-attempt escalation ceiling is never reached either, so nothing is worked AND nothing is handed to a human.`,
+      });
+    }
   }
 
   // ── 6. Policy gates that HOLD finished work (a full backlog with nothing shipping) ──
@@ -372,12 +559,55 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
     });
   }
   const awaitingSignoff = stalls?.byCause.find((c) => c.cause === 'awaiting_signoff')?.count ?? 0;
-  if (policy.requireSignoffToComplete && awaitingSignoff > 0) {
+  const signoffs = summarizeSignoffs(actions);
+  if (policy.requireSignoffToComplete && (awaitingSignoff > 0 || signoffs.heldTickets > 0)) {
     warning.push({
       severity: 'warning',
       code: 'signoff_gate',
-      text: `${awaitingSignoff} ticket${awaitingSignoff === 1 ? ' is' : 's are'} waiting on role sign-off and the effective policy requires UNANIMOUS sign-off before a ticket can complete or merge. Every unfilled role on a ticket is a hard stop, so an unstaffed role blocks the ticket indefinitely.`,
+      // The register counts tickets whose STALL cause is awaiting_signoff; the feed
+      // counts tickets the gate held this window. They routinely disagree by an order
+      // of magnitude (a ticket held every pass is not necessarily idle long enough to
+      // be "stalled"), and reporting only the first made the gate look marginal.
+      text: `The effective policy requires UNANIMOUS sign-off before a ticket can complete or merge. ${awaitingSignoff} ticket${awaitingSignoff === 1 ? ' is' : 's are'} on the stuck register for it, and the gate held ${signoffs.heldTickets} ticket${signoffs.heldTickets === 1 ? '' : 's'} in the last ${actions.length} decisions. Every unfilled role on a ticket is a hard stop.`,
     });
+  }
+  // Every finding below is conditioned on the gate being ON: with
+  // requireSignoffToComplete off, an outstanding slot is advisory and is not what is
+  // holding the ticket, so reporting it as a cause would send the reader after the
+  // wrong thing. A pattern claim also needs more than one decision to stand on —
+  // hence the two-ticket floor on the "never" findings, which are about a WINDOW.
+  if (policy.requireSignoffToComplete) {
+  // THE contradiction operators hit: the feed says "waiting on N required sign-offs"
+  // while the ticket shows no assignee. Both are true — a required participation slot
+  // is not the ticket's owner — and only this finding says so.
+  if (signoffs.unstaffed > 0) {
+    critical.push({
+      severity: 'critical',
+      code: 'signoff_roles_unstaffed',
+      text: `${signoffs.unstaffed} required sign-off slot${signoffs.unstaffed === 1 ? '' : 's'} across the held tickets have NO assignee at all${signoffs.unassignedRoles.length ? ` (${signoffs.unassignedRoles.map((r) => `${r.role} ×${r.count}`).join(', ')})` : ''}. This is why a ticket can read "waiting on 10 of 10 sign-offs" while its assignee column is empty: the manifest slot is a required ROLE, not the ticket's owner, and an unstaffed role is a hard stop no agent can clear. Staff the role (project roster / role assignments) or waive the slot — nothing else moves these.`,
+    });
+  }
+  if (signoffs.humanOwed > 0) {
+    warning.push({
+      severity: 'warning',
+      code: 'signoff_owed_by_human',
+      text: `${signoffs.humanOwed} required sign-off slot${signoffs.humanOwed === 1 ? ' is' : 's are'} owed by a PERSON, not an agent${signoffs.waitingOnPeople.length ? ` (${signoffs.waitingOnPeople.map((p) => `${p.who} ×${p.count}`).join(', ')})` : ''}. The manager can only dispatch agents, so it cannot drive these — they wait until the named person signs off on the ticket's Sign-off & Accountability tab.`,
+    });
+  }
+  if (signoffs.heldTickets >= 2 && signoffs.askedTickets === 0) {
+    critical.push({
+      severity: 'critical',
+      code: 'signoff_never_asked',
+      text: `The gate held ${signoffs.heldTickets} tickets in this window and dispatched NOBODY to sign off on any of them. Holding without asking is a closed loop: the tickets are re-evaluated every pass, the same roles stay outstanding, and no verdict can ever arrive.`,
+    });
+  }
+  if (signoffs.heldTickets >= 2 && signoffs.requiredTotal > 0 && signoffs.satisfiedTotal === 0) {
+    critical.push({
+      severity: 'critical',
+      code: 'signoff_never_satisfied',
+      text: `Across the held tickets, ${signoffs.requiredTotal} required sign-off slots have been counted and ZERO are satisfied. A gate that has never once opened is not a gate that is close to opening — check that reviewers are recording verdicts against the ticket's LANE (a verdict recorded with no lane matches no lane-scoped slot).`,
+    });
+  }
   }
   if (stats.flagged > 0) {
     warning.push({
@@ -442,6 +672,60 @@ function formatPolicy(policy: ManagerPolicy, config: ManagerConfig | null, tenan
     // produced it — the whole point is to see WHICH tier turned something off.
     `${tri(policy[key])}   [project: ${config ? tri(config[key]) : 'no row'} · workspace: ${tri(tenantPolicy[key])}]`,
   ));
+}
+
+/**
+ * The sign-off gate: what it is waiting on, and — the part that decides whether a human
+ * or the manager has to act — WHO owes each outstanding slot.
+ */
+function formatSignoffs(rollup: SignoffRollup, actionCount: number): string[] {
+  if (rollup.heldTickets === 0) {
+    return [`(the gate held no ticket in the last ${actionCount} decisions)`];
+  }
+  const out: string[] = [];
+  out.push(line('tickets held by the gate', rollup.heldTickets));
+  out.push(line('of those, a role was actually asked to sign off', rollup.askedTickets));
+  out.push(line('required slots counted', rollup.requiredTotal));
+  out.push(line('satisfied', `${rollup.satisfiedTotal}${rollup.requiredTotal > 0 ? ` of ${rollup.requiredTotal}` : ''}`));
+  out.push('');
+  if (!rollup.hasOwnership) {
+    out.push('slot ownership: NOT REPORTED by these decisions (they predate the manager');
+    out.push('  journalling who owes each slot). The zeros below are "unknown", not "none" —');
+    out.push('  open the ticket\'s Sign-off & Accountability tab for the per-slot truth.');
+    return out;
+  }
+  out.push('who owes the outstanding slots:');
+  out.push(line('  agent-owed (the manager can ask)', rollup.dispatchable));
+  out.push(line('  owed by a person', rollup.humanOwed));
+  out.push(line('  NOBODY assigned', rollup.unstaffed));
+  if (rollup.unassignedRoles.length) {
+    out.push('');
+    out.push('roles outstanding with no assignee (this is what "nobody is assigned" means');
+    out.push('on a ticket the manager says is awaiting sign-off):');
+    for (const r of rollup.unassignedRoles) out.push(`  ${r.role}: ${r.count}`);
+  }
+  if (rollup.waitingOnPeople.length) {
+    out.push('');
+    out.push('waiting on a person:');
+    for (const p of rollup.waitingOnPeople) out.push(`  ${p.who}: ${p.count}`);
+  }
+  return out;
+}
+
+/** The per-pass ceilings and dispatch ownership, as the passes themselves reported. */
+function formatLimits(limits: PassLimits): string[] {
+  const out: string[] = [];
+  const show = (label: string, v: number | boolean | null) =>
+    out.push(line(label, v == null ? '(not reported by these decisions)' : String(v)));
+  show('ownsDispatch (this pass starts runnable work itself)', limits.ownsDispatch);
+  show('triage dispatch cap (billable runs per pass)', limits.triageDispatchCap);
+  show('coverage remediation cap (flagged tickets per pass)', limits.remediationCap);
+  out.push('');
+  show('stalled tickets seen last triage', limits.stalledSeen);
+  show('unstuck last triage', limits.unstuck);
+  show('deferred to the next pass (triage)', limits.deferred);
+  show('deferred to the next pass (coverage)', limits.remediationDeferred);
+  return out;
 }
 
 /** The pass table: every management pass, what happened to it, and its counters. */
@@ -602,6 +886,24 @@ export function buildManagerDiagnosticsReport(
   out.push('expresses no opinion; the authority gates resolve MOST-RESTRICTIVE-wins, not');
   out.push('nearest-tier-wins, so an effective "no" can come from either tier.');
   out.push(...formatPolicy(policy, config, tenantPolicy));
+  out.push('');
+
+  out.push('-- Operating limits (as the passes themselves reported) --');
+  out.push('The policy above says what the manager MAY do; these say how much of it fits in');
+  out.push('one pass. A capability that is enabled still leaves a 600-ticket backlog untouched');
+  out.push('if every pass stops at its cap, and a remedy that must start a run does nothing at');
+  out.push('all on a pass that does not own dispatch. Read from the journalled decisions, so an');
+  out.push('unreported value means these decisions did not carry it — not that it is unlimited.');
+  out.push(...formatLimits(summarizePassLimits(actions)));
+  out.push('');
+
+  out.push('-- Sign-off gate --');
+  out.push('requireSignoffToComplete gates completion AND merge on every REQUIRED role slot');
+  out.push('being satisfied. A role slot is not the ticket\'s assignee: a ticket can show an');
+  out.push('empty assignee column and still owe ten sign-offs. What matters for whether the');
+  out.push('manager can do anything is WHO owes each slot — an agent it can dispatch, a person');
+  out.push('it cannot, or nobody at all (which no dispatch can ever clear).');
+  out.push(...formatSignoffs(summarizeSignoffs(actions), actions.length));
   out.push('');
 
   out.push('-- Autonomy health (tenant-wide) --');
