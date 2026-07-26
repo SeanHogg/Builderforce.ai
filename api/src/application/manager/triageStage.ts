@@ -527,6 +527,14 @@ async function applyRemedy(
         {
           taskId: task.id, tenantId, payload: JSON.stringify(payload),
           submittedBy: `${by}:breaker-reset`,
+          // THE OVERRIDE, without which this remedy is a no-op: `dispatchCloudRunForTask`
+          // enforces the very breaker being reset, so an unforced call was refused every
+          // time and returned null. `applied` then stayed false, the attempt counter never
+          // advanced off zero, and the escalation ceiling that hands the ticket to a human
+          // was therefore unreachable — measured: 11 tickets halted 25+ days at "0 of 3
+          // tries", none escalated. Bounded exactly like the human Run-now it mirrors:
+          // MAX_REMEDY_ATTEMPTS fresh runs across as many passes, then escalation.
+          force: true,
         },
       ).catch(() => null);
       await Promise.allSettled(deferred);

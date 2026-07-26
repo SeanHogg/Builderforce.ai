@@ -104,6 +104,9 @@ body {
  * Narrow panels are the norm here, so the allowance readout is the first thing
  * to drop and the chip itself never forces the header to overflow.
  */
+/* The account-tier chip. It rides the composer footer next to the model and
+   Evermind chips, so its pill matches their height rather than the (smaller)
+   header metrics it was originally sized for. */
 .bf-plan-badge {
   display: inline-flex;
   align-items: center;
@@ -111,8 +114,8 @@ body {
   flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
-  padding: 1px 7px;
-  font-size: 9px;
+  padding: 3px 9px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -133,7 +136,7 @@ body {
 }
 
 /* The allowance readout is supporting detail: lower contrast, and the first
-   thing to go when the panel is too narrow to hold the whole header. */
+   thing to go when the panel is too narrow to hold the whole footer row. */
 .bf-plan-badge__meter {
   font-weight: 600;
   text-transform: none;

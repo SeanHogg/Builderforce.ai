@@ -21,8 +21,8 @@
  * lane's STAFFING (`swimlane_agent_assignments`), resolved by the shared, documented
  * precedence in {@link resolveLaneApprovers} — see `laneApprover.ts` for the whole rule
  * and why the fall-through remains fail-closed. Both sources converge on the SAME
- * round-trip contract ({@link buildSignoffRequestPayload}), so a board with a template
- * and a board with only staffing produce the same accountability record.
+ * round-trip contract ({@link requestRoleRun}), so a board with a template and a board
+ * with only staffing produce the same accountability record.
  */
 import { and, asc, eq } from 'drizzle-orm';
 import {
@@ -37,29 +37,15 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import type { TicketAuditService } from '../audit/ticketAuditService';
-import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
 import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 import { normalizeRoleText } from '../kanban/roleMatch';
 import { roleDisplayName } from '../kanban/roleCatalog';
 import { resolveRoleCapableAgents } from '../kanban/roleCapability';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
 import { isParticipantSatisfied } from '../kanban/participantStates';
-import { buildProducerRequestPayload, buildSignoffRequestPayload } from '../kanban/signoffRequest';
-import { recordActivity, cloudAgentActor } from '../activity/activityLog';
+import { requestRoleRun } from '../kanban/requestRoleRun';
 import { findCanonicalBoard } from './canonicalBoard';
 import { decideLaneAgentApproval, laneApprovalOwed, resolveLaneApprovers, type StaffedLaneApprover } from './laneApprover';
-
-/** Emit the Coordinator hand-off signal: role R was dispatched to work the ticket. */
-async function emitRoleDispatched(env: Env, db: Db, a: { tenantId: number; projectId: number; taskId: number; roleKey: string; roleName: string; agentRef: string; responsibility: 'reviewer' | 'producer' }): Promise<void> {
-  await recordActivity(env, db, {
-    tenantId: a.tenantId, projectId: a.projectId,
-    actor: cloudAgentActor(a.agentRef, a.roleName),
-    verb: 'ticket.role.dispatched',
-    targetType: 'task', targetId: String(a.taskId), targetLabel: `#${a.taskId}`,
-    summary: `${a.roleName} dispatched as ${a.responsibility} for ticket #${a.taskId}`.slice(0, 300),
-    metadata: { roleKey: a.roleKey, responsibility: a.responsibility, agentRef: a.agentRef },
-  }).catch(() => {});
-}
 
 export interface LaneGateOutcome {
   /** Suppress the lane's normal auto-run this hop (a reviewer round-trip or producer
@@ -193,31 +179,20 @@ async function enforceLaneAgentApproval(
   const dispatchedReviewers: string[] = [];
   if (decided.ask) {
     const approver = decided.ask;
-    const payload = buildSignoffRequestPayload({
-      cloudAgentRef: approver.agentRef,
-      model: approver.model,
+    const execId = await requestRoleRun(env, db, runtimeService, participants, {
+      tenantId: args.tenantId,
+      projectId: args.projectId,
       taskId: args.taskId,
       taskTitle: args.taskTitle,
       roleKey: approver.roleKey,
       roleName: approver.roleName,
+      agentRef: approver.agentRef,
+      model: approver.model,
       laneKey: args.status,
-    });
-    const deferred: Promise<unknown>[] = [];
-    const execId = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
-      taskId: args.taskId,
-      tenantId: args.tenantId,
-      payload,
+      kind: 'reviewer',
       submittedBy: composeDispatcherLabel(args.submittedBy, 'lane-approver', approver.roleKey),
-    }).catch(() => null);
-    await Promise.allSettled(deferred);
-    if (execId != null) {
-      await participants.markRoleInProgress(env, args.tenantId, args.taskId, approver.roleKey, args.status, execId).catch(() => {});
-      await emitRoleDispatched(env, db, {
-        tenantId: args.tenantId, projectId: args.projectId, taskId: args.taskId,
-        roleKey: approver.roleKey, roleName: approver.roleName, agentRef: approver.agentRef, responsibility: 'reviewer',
-      });
-      dispatchedReviewers.push(approver.roleKey);
-    }
+    });
+    if (execId != null) dispatchedReviewers.push(approver.roleKey);
   }
 
   return {
@@ -337,25 +312,23 @@ export async function enforceLaneRequirements(
         // hand-written string this replaced never told the agent to pass `laneKey`, so
         // its verdict landed in the ledger keyed to no lane and matched no manifest slot
         // — see `kanban/signoffRequest.ts`.
-        const payload = buildSignoffRequestPayload({
-          cloudAgentRef: agentRef,
+        // Attribution (§5.6) + the activity row are the shared primitive's job, and it
+        // performs BOTH only when a run actually started.
+        const execId = await requestRoleRun(env, db, runtimeService, participants, {
+          tenantId: args.tenantId,
+          projectId: args.projectId,
           taskId: args.taskId,
           taskTitle: taskRow?.title ?? null,
           roleKey: req.ref,
           roleName: roleName(req.ref),
+          agentRef,
           laneKey: args.status,
-        });
-        const deferred: Promise<unknown>[] = [];
-        const execId = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
-          taskId: args.taskId,
-          tenantId: args.tenantId,
-          payload,
+          kind: 'reviewer',
           submittedBy: composeDispatcherLabel(args.submittedBy, 'reviewer', req.ref),
-        }).catch(() => null);
-        await Promise.allSettled(deferred);
-        // Attribution (§5.6): record the reviewer is now engaged (execution-linked).
-        if (execId != null) await participants.markRoleInProgress(env, args.tenantId, args.taskId, req.ref, args.status, execId).catch(() => {});
-        await emitRoleDispatched(env, db, { tenantId: args.tenantId, projectId: args.projectId, taskId: args.taskId, roleKey: req.ref, roleName: roleName(req.ref), agentRef, responsibility: 'reviewer' });
+        });
+        // A REFUSED dispatch is not an ask: leave the reviewer selectable next hop rather
+        // than reporting a round-trip that never started.
+        if (execId == null) continue;
         dispatchedReviewers.push(req.ref);
         break; // one reviewer per hop — keeps the round-trip serial and loop-safe
       }
@@ -378,24 +351,19 @@ export async function enforceLaneRequirements(
         // ONE shared contract with the reviewer paths. The string this replaced named
         // neither the `kanban.signoff` tool nor `laneKey`, so a producer that finished
         // real work still left its slot unsatisfied — see `kanban/signoffRequest.ts`.
-        const payload = buildProducerRequestPayload({
-          cloudAgentRef: agentRef,
+        const execId = await requestRoleRun(env, db, runtimeService, participants, {
+          tenantId: args.tenantId,
+          projectId: args.projectId,
           taskId: args.taskId,
           taskTitle: taskRow?.title ?? null,
           roleKey: req.ref,
           roleName: roleName(req.ref),
+          agentRef,
           laneKey: args.status,
-        });
-        const deferred: Promise<unknown>[] = [];
-        const execId = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
-          taskId: args.taskId,
-          tenantId: args.tenantId,
-          payload,
+          kind: 'producer',
           submittedBy: composeDispatcherLabel(args.submittedBy, 'producer', req.ref),
-        }).catch(() => null);
-        await Promise.allSettled(deferred);
-        if (execId != null) await participants.markRoleInProgress(env, args.tenantId, args.taskId, req.ref, args.status, execId).catch(() => {});
-        await emitRoleDispatched(env, db, { tenantId: args.tenantId, projectId: args.projectId, taskId: args.taskId, roleKey: req.ref, roleName: roleName(req.ref), agentRef, responsibility: 'producer' });
+        });
+        if (execId == null) continue;
         dispatchedProducers.push(req.ref);
       }
     }

@@ -18,9 +18,9 @@ export type { PlanSnapshot };
  * member with a small allowance and no card looks, from inside the panel,
  * identical to a broken install — right up until a turn dies on a 402 telling
  * them to "add a card in Settings ▸ Billing", a place the panel never offered to
- * open. This module supplies both halves: a persistent tier chip in the header,
- * and the shared navigation the chip and the error banner both use, so they can
- * never send the user somewhere different for the same problem.
+ * open. This module supplies both halves: a persistent tier chip in the composer
+ * footer, and the shared navigation the chip and the error banner both use, so
+ * they can never send the user somewhere different for the same problem.
  */
 
 /**
@@ -91,7 +91,7 @@ function planLabel(key: string): string {
 }
 
 /**
- * The account-tier chip in the chat header. Self-gating and self-navigating: it
+ * The account-tier chip in the composer footer. Self-gating and self-navigating: it
  * fetches its own plan, renders nothing until it knows one (never a misleading
  * "Free" while loading), and clicking it opens the page that changes the tier.
  *
