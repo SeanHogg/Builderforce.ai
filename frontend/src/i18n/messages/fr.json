@@ -10289,7 +10289,7 @@
     "memberDisplayName": "Nom affiché",
     "memberRef": "Référence du membre",
     "memberRefPlaceholder": "u:123 / contact:abc / c:acme",
-    "memberRefHelp": "Référencez un utilisateur de la plateforme (u:<id>), un contact professionnel (contact:<id>) ou une entreprise (c:<slug>).",
+    "memberRefHelp": "Référencez un utilisateur de la plateforme (u:'<id>'), un contact professionnel (contact:'<id>') ou une entreprise (c:'<slug>').",
     "addMember": "Ajouter un membre",
     "removeMember": "Retirer le membre",
     "rotationName": "Nom",

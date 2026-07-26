@@ -11,3 +11,6 @@ tsconfig.json
 node_modules/**
 .github/**
 **/.DS_Store
+harness/**
+vitest.config.ts
+out/harness.cjs

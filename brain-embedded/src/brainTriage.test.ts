@@ -5,6 +5,7 @@ import {
   detectAnnouncedButUnmadeToolCall,
   detectUnbackedTicketClaim,
   detectUnbackedWriteClaim,
+  formatBrainDiagnostics,
   isFailedToolResult,
   type BrainTraceEvent,
 } from './brainTriage';
@@ -212,5 +213,85 @@ describe('buildBrainTriageReport', () => {
     });
     expect(report).toContain('anthropic (other-workspace)');
     expect(report).toContain('connected this account in a DIFFERENT workspace');
+  });
+});
+
+describe('tool exposure + stall handling signals', () => {
+  /** One `llm` turn as the run loop records it. */
+  const turn = (step: number, args: Record<string, unknown>): BrainTraceEvent => ({
+    ts: `2026-06-13T00:00:0${step}.000Z`,
+    category: 'llm',
+    label: 'llm.complete',
+    args: { model: 'x', requestedModel: 'x', step, toolCalls: 0, ...args },
+    result: 'ok',
+  });
+
+  it('reports how many tools each turn was actually offered, not the catalog total', () => {
+    const d = computeBrainDiagnostics([
+      turn(0, { advertisedTools: 40, catalogTools: 317 }),
+      turn(1, { advertisedTools: 64, catalogTools: 317 }),
+    ]);
+    expect(d.advertisedToolsLastTurn).toBe(64);
+    expect(d.advertisedToolsMin).toBe(40);
+    expect(d.catalogTools).toBe(317);
+    expect(formatBrainDiagnostics(d).join('\n')).toContain('Tools advertised per turn: 40–64 (of 317 in the catalog)');
+  });
+
+  it('blames the catalog, not the model, when a turn was handed zero tools', () => {
+    const d = computeBrainDiagnostics(
+      [turn(0, { advertisedTools: 0, catalogTools: 0 })],
+      undefined,
+      [{ id: 1, role: 'assistant', content: "I'll call the tool now.", metadata: null, seq: 1, createdAt: '' }],
+    );
+    expect(d.likelyCause).toBe('no-tools-advertised');
+    expect(formatBrainDiagnostics(d).join('\n')).toContain('Switching models will not help.');
+  });
+
+  it('names a tool the selection dropped instead of blaming the model for not calling it', () => {
+    const d = computeBrainDiagnostics(
+      [turn(0, { advertisedTools: 12, catalogTools: 317, narratedUnadvertised: ['builtin_chats_list_tickets'] })],
+      undefined,
+      [{ id: 1, role: 'assistant', content: 'I will call builtin_chats_list_tickets now.', metadata: null, seq: 1, createdAt: '' }],
+    );
+    expect(d.narratedUnadvertisedTools).toEqual(['builtin_chats_list_tickets']);
+    expect(d.likelyCause).toBe('tool-not-advertised');
+    const text = formatBrainDiagnostics(d).join('\n');
+    expect(text).toContain('TOOL NOT ADVERTISED');
+    expect(text).toContain('Narrated but never advertised: builtin_chats_list_tickets');
+  });
+
+  it('counts the loop re-prompts and model swaps, so a stalled run shows what was tried', () => {
+    const d = computeBrainDiagnostics([
+      turn(0, { advertisedTools: 20 }),
+      { ts: '2026-06-13T00:00:01.000Z', category: 'message', label: 'loop.recover_announced_tool_call', result: 'x' },
+      { ts: '2026-06-13T00:00:02.000Z', category: 'message', label: 'loop.recover_announced_tool_call', result: 'x' },
+      { ts: '2026-06-13T00:00:03.000Z', category: 'message', label: 'loop.model_failover', result: 'x' },
+      { ts: '2026-06-13T00:00:04.000Z', category: 'error', label: 'loop.stall_unrecovered', result: 'x', isError: true },
+    ]);
+    expect(d.stallRecoveries).toBe(2);
+    expect(d.modelFailovers).toBe(1);
+    expect(d.stallUnrecovered).toBe(true);
+    expect(formatBrainDiagnostics(d).join('\n')).toContain('Stall handling: 2 re-prompt(s) · 1 model failover(s) · GAVE UP');
+  });
+
+  it('does not count the loop\u2019s OWN deliberate model failover as a gateway downgrade', () => {
+    // After a failover every turn differs from the run's original ask. Comparing against
+    // that ask made a run the loop successfully RESCUED report "context exhaustion".
+    const d = computeBrainDiagnostics(
+      [
+        turn(0, { model: 'grok', requestedModel: 'grok', advertisedTools: 20 }),
+        turn(1, { model: 'sonnet', requestedModel: 'sonnet', advertisedTools: 20, toolCalls: 1 }),
+      ],
+      'grok',
+    );
+    expect(d.downgradeEvents).toBe(0);
+  });
+
+  it('still flags a real gateway downgrade — resolved differs from what THAT turn asked for', () => {
+    const d = computeBrainDiagnostics(
+      [turn(0, { model: 'gpt-4o-mini', requestedModel: 'sonnet', advertisedTools: 20 })],
+      'sonnet',
+    );
+    expect(d.downgradeEvents).toBe(1);
   });
 });

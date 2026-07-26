@@ -99,12 +99,13 @@ export function parseStepMessage(metadata: string | null): { step: PersistedStep
  * RESULT payload is lossy (capped at `STEP_RESULT_CAP` in the stored copy).
  */
 export function traceWithPersistedSteps(messages: BrainMessage[], trace: BrainTraceEvent[]): BrainTraceEvent[] {
-  // `message` is the only category never persisted (the durable assistant turn
-  // already carries that text), so everything else can have a durable twin.
+  // EVERY category is seeded, including `message`. Most `message` events (narration,
+  // `tools.selected`) stay in-memory, but the loop's own self-diagnosis steps —
+  // `loop.recover_announced_tool_call`, `loop.model_failover` — are persisted so a
+  // reopened chat can still report that the run stalled and how it responded. Seeding
+  // only the non-`message` categories double-counted those against their live twins.
   const seen = new Set<string>();
-  for (const ev of trace) {
-    if (ev.category !== 'message') seen.add(stepSig(ev.category, ev.label, ev.ts));
-  }
+  for (const ev of trace) seen.add(stepSig(ev.category, ev.label, ev.ts));
 
   const fromMessages: BrainTraceEvent[] = [];
   for (const message of messages) {

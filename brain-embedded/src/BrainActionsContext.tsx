@@ -16,6 +16,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { BrainToolSpec } from './streamChatCompletion';
+import { toolSpecsFor } from './toolSpecs';
 
 /** A capability a consumer exposes to the Brain (the MCP extension unit). */
 export interface BrainAction<A = unknown, R = unknown> {
@@ -102,14 +103,7 @@ export function BrainActionsProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const toolSpecs = useMemo<BrainToolSpec[]>(() => {
-    return [...registry.current.values()].map(({ action }) => ({
-      type: 'function' as const,
-      function: {
-        name: action.name,
-        description: action.description,
-        parameters: action.parameters,
-      },
-    }));
+    return toolSpecsFor([...registry.current.values()].map((e) => e.action));
     // `version` is the intentional recompute trigger; the ref itself is stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version]);

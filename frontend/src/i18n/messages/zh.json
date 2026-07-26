@@ -10289,7 +10289,7 @@
     "memberDisplayName": "显示名称",
     "memberRef": "成员引用",
     "memberRefPlaceholder": "u:123 / contact:abc / c:acme",
-    "memberRefHelp": "引用平台用户 (u:<id>)、业务联系人 (contact:<id>) 或公司 (c:<slug>)。",
+    "memberRefHelp": "引用平台用户 (u:'<id>')、业务联系人 (contact:'<id>') 或公司 (c:'<slug>')。",
     "addMember": "添加成员",
     "removeMember": "移除成员",
     "rotationName": "名称",

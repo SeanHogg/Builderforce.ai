@@ -2,6 +2,13 @@ import { useEffect, useState } from 'react';
 import type { AuthedFetch } from './authedFetch';
 import type { ChatDiagnosticsMeter } from '@seanhogg/builderforce-brain-embedded';
 import { post } from './vscodeBridge';
+import { cachedPlanSnapshot, fetchPlanSnapshot, invalidatePlanSnapshot, type PlanSnapshot } from './planSnapshot';
+
+// The plan snapshot + its shared cache live in `./planSnapshot` (React-free, so the
+// headless probe can read the same one). Re-exported here because every existing
+// caller imports them from this module.
+export { fetchPlanSnapshot, invalidatePlanSnapshot };
+export type { PlanSnapshot };
 
 /**
  * The tenant's account tier, and the ONE place the VSIX decides where an "upgrade"
@@ -15,14 +22,6 @@ import { post } from './vscodeBridge';
  * and the shared navigation the chip and the error banner both use, so they can
  * never send the user somewhere different for the same problem.
  */
-
-/** `GET /api/consumption` — plan + month-to-date allowance per metered resource.
- *  Open to any tenant-scoped JWT (no role gate), so the VSIX token can read it. */
-export interface PlanSnapshot {
-  period: { start: string; resetsAt: string };
-  plan: { effective: string; billingStatus: string };
-  meters: ChatDiagnosticsMeter[];
-}
 
 /**
  * Where an upgrade-ish click goes. `/pricing` IS the billing console in the web
@@ -51,48 +50,9 @@ export function openUpgrade(target: UpgradeTarget): void {
   post('open.web', { path: UPGRADE_PATHS[target] });
 }
 
-/**
- * Read-through cache for the plan snapshot. Every mounted surface (the header
- * chip, the diagnostics copy) shares ONE fetch rather than each hitting the
- * endpoint: the plan changes on a billing event, not per render. The server
- * caches it for 60s, so this mirrors that TTL and invalidates by simply expiring.
- */
-const PLAN_TTL_MS = 60_000;
-let planCache: { ts: number; data: PlanSnapshot | null } | null = null;
-let planInFlight: Promise<PlanSnapshot | null> | null = null;
-
-export function fetchPlanSnapshot(apiReq: AuthedFetch, forceRefresh = false): Promise<PlanSnapshot | null> {
-  if (!forceRefresh && planCache && Date.now() - planCache.ts < PLAN_TTL_MS) {
-    return Promise.resolve(planCache.data);
-  }
-  // Coalesce concurrent callers (header chip + a diagnostics copy in the same tick)
-  // onto a single request.
-  if (!forceRefresh && planInFlight) return planInFlight;
-  planInFlight = apiReq<PlanSnapshot>('/api/consumption')
-    .then((data) => {
-      planCache = { ts: Date.now(), data };
-      return data;
-    })
-    .catch(() => {
-      // A failed read must not pin a "no plan" answer for a minute — leave the
-      // cache alone so the next mount retries.
-      return null;
-    })
-    .finally(() => {
-      planInFlight = null;
-    });
-  return planInFlight;
-}
-
-/** Drop the cached plan so the next read re-fetches — call after an upgrade click,
- *  since the user may come back on a different tier. */
-export function invalidatePlanSnapshot(): void {
-  planCache = null;
-}
-
 /** Subscribe a component to the shared plan snapshot. */
 export function usePlanSnapshot(apiReq: AuthedFetch): PlanSnapshot | null {
-  const [plan, setPlan] = useState<PlanSnapshot | null>(planCache?.data ?? null);
+  const [plan, setPlan] = useState<PlanSnapshot | null>(cachedPlanSnapshot());
   useEffect(() => {
     let alive = true;
     void fetchPlanSnapshot(apiReq).then((p) => { if (alive) setPlan(p); });

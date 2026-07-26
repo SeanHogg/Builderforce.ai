@@ -1399,6 +1399,10 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       ? [...selection.tools, ...routerToolSpecs(allTools?.length ?? 0)]
       : selection.tools;
     const tools = advertised.length > 0 ? advertised : undefined;
+    // What the model could actually call THIS turn. Kept as a set so the turn can
+    // answer, at the only point that knows both halves, "did it narrate a tool it was
+    // never shown?" — see `narratedUnadvertised` below.
+    const advertisedNames = new Set(advertised.map((t) => t.function.name));
     if (selection.trimmed) {
       pushTrace(c, {
         ts: nowIso(),
@@ -1451,6 +1455,17 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) — a smaller context window can truncate long transcripts.`,
       });
     }
+    // Tool names this turn WROTE OUT as prose while emitting no structured call, that
+    // were never advertised to it. Computed here because this is the only place that
+    // holds BOTH the turn's text and the exact set the turn was offered — after the
+    // fact a reader can only see the catalog total, which is why "the model is broken,
+    // pick another one" was the standing (and sometimes wrong) verdict for a run whose
+    // real fault was that the tool it was told to call had been selected away. Cheap:
+    // a handful of strings, and empty on every healthy turn.
+    const narratedUnadvertised =
+      result.toolCalls.length === 0
+        ? toolNamesMentionedIn(result.text).filter((n) => !advertisedNames.has(n))
+        : [];
     // DURABLE, not just live: an `llm` turn carries the token usage, finish reason
     // and resolved model the A-vs-B triage runs on. Kept in memory only, a chat
     // copied after a reload reported `Turns: 0` / "Tokens: not reported" and could
@@ -1476,6 +1491,13 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         // connected Claude account (expired?)" apart from "nothing connected".
         account: result.account,
         byoUnresolved: result.byoUnresolved,
+        // How many tools the turn was actually OFFERED, out of the whole catalog.
+        // A zero here is the difference between "the model refused to act" and "it had
+        // nothing to act with" — previously unanswerable from a copied report, which
+        // only ever carried the registry-wide total.
+        advertisedTools: advertised.length,
+        catalogTools: allTools?.length ?? 0,
+        ...(narratedUnadvertised.length ? { narratedUnadvertised } : {}),
       },
       // Structured diagnostics fields — the A-vs-B triage reads these directly.
       usage: result.usage,
@@ -1656,11 +1678,14 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       }
       convo.push({ role: 'assistant', content: result.text });
       convo.push({ role: 'user', content: stallRecoveryNudge(lastChance) });
-      pushTrace(c, {
+      // Durable: "the loop caught this and re-prompted" is a fact a triage report must
+      // still carry after a reload. Live-only, a reopened chat showed nine narrating
+      // turns and no sign the loop had ever fought back.
+      pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
         category: 'message',
         label: 'loop.recover_announced_tool_call',
-        args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES },
+        args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES, advertisedTools: advertised.length },
         result: `Model announced a tool call without making one — re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`,
       });
       c.streamingText = '';
@@ -1698,7 +1723,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       const next = modelFailovers < MAX_MODEL_FAILOVERS ? pickFallbackModel?.(triedModels) : undefined;
       if (next) {
         modelFailovers += 1;
-        pushTrace(c, {
+        pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: 'message',
           label: 'loop.model_failover',
@@ -1715,11 +1740,11 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         continue;
       }
       const notice = stallExhaustedNotice(resolved, triedModels);
-      pushTrace(c, {
+      pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
         category: 'error',
         label: 'loop.stall_unrecovered',
-        args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: triedModels },
+        args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: triedModels, advertisedTools: advertised.length },
         result: notice,
         isError: true,
       });
