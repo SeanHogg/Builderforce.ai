@@ -96,7 +96,18 @@ export async function coordinateTicket(
   env: Env,
   db: Db,
   runtimeService: RuntimeService,
-  args: { tenantId: number; taskId: number },
+  args: {
+    tenantId: number; taskId: number;
+    /**
+     * A HUMAN clicked "Dispatch reviewers" (POST /coordinate is manager-gated). The role
+     * asks then override the failure breaker + re-run cooldown, exactly as "Run now"
+     * does — without it the button is inert on precisely the tickets it exists for: one
+     * whose last runs failed has its reviewer dispatch refused, so the click reports
+     * "dispatched: false" and no reviewer can ever be asked. Autonomous callers (the
+     * manager's coordinate remedy, the sign-off route) leave it unset.
+     */
+    force?: boolean;
+  },
 ): Promise<CoordinateResult> {
   const [task] = await db
     .select({ projectId: tasks.projectId, status: tasks.status })
@@ -130,6 +141,7 @@ export async function coordinateTicket(
         const dispatched = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
           tenantId: args.tenantId, projectId: task.projectId, taskId: args.taskId,
           status: earliest.stageKey, originLaneKey: task.status, submittedBy: 'system:coordinator',
+          ...(args.force ? { force: true } : {}),
         }).catch(() => false);
         return { ok: true, status: earliest.stageKey, dispatched, requiredOutstanding };
       }
@@ -154,6 +166,7 @@ export async function coordinateTicket(
     taskId: args.taskId,
     status: task.status,
     submittedBy: 'system:coordinator',
+    ...(args.force ? { force: true } : {}),
   }).catch(() => false);
 
   return { ok: true, status: task.status, dispatched, requiredOutstanding };

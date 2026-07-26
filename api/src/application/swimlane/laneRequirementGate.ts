@@ -115,7 +115,12 @@ async function enforceLaneAgentApproval(
   db: Db,
   runtimeService: RuntimeService,
   participants: TicketParticipantsService,
-  args: { tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string; taskTitle: string | null },
+  args: {
+    tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string;
+    taskTitle: string | null;
+    /** Human-initiated tick — see the same field on {@link enforceLaneRequirements}. */
+    force?: boolean;
+  },
   lane: { id: string; requirementGate: string; isTerminal: boolean },
 ): Promise<LaneGateOutcome> {
   const none: LaneGateOutcome = { blocked: false, flagged: false, dispatchedReviewers: [], dispatchedProducers: [] };
@@ -191,6 +196,7 @@ async function enforceLaneAgentApproval(
       laneKey: args.status,
       kind: 'reviewer',
       submittedBy: composeDispatcherLabel(args.submittedBy, 'lane-approver', approver.roleKey),
+      ...(args.force ? { force: true } : {}),
     });
     if (execId != null) dispatchedReviewers.push(approver.roleKey);
   }
@@ -215,7 +221,18 @@ export async function enforceLaneRequirements(
   db: Db,
   runtimeService: RuntimeService,
   auditService: TicketAuditService,
-  args: { tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string },
+  args: {
+    tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string;
+    /**
+     * A HUMAN asked for this tick ("Dispatch reviewers"), so the role asks override the
+     * failure breaker and the re-run cooldown exactly as "Run now" does. Without it the
+     * button is inert on the tickets that need it most: a ticket whose last runs failed
+     * has its reviewer dispatch refused, so the click reports "dispatched: false" and
+     * the operator has no way to ask a reviewer at all. Autonomous callers leave it
+     * unset — the breaker is what stops them re-asking a failing ticket forever.
+     */
+    force?: boolean;
+  },
 ): Promise<LaneGateOutcome> {
   const none: LaneGateOutcome = { blocked: false, flagged: false, dispatchedReviewers: [], dispatchedProducers: [] };
   const participants = new TicketParticipantsService(db);
@@ -325,6 +342,7 @@ export async function enforceLaneRequirements(
           laneKey: args.status,
           kind: 'reviewer',
           submittedBy: composeDispatcherLabel(args.submittedBy, 'reviewer', req.ref),
+          ...(args.force ? { force: true } : {}),
         });
         // A REFUSED dispatch is not an ask: leave the reviewer selectable next hop rather
         // than reporting a round-trip that never started.
@@ -362,6 +380,7 @@ export async function enforceLaneRequirements(
           laneKey: args.status,
           kind: 'producer',
           submittedBy: composeDispatcherLabel(args.submittedBy, 'producer', req.ref),
+          ...(args.force ? { force: true } : {}),
         });
         if (execId == null) continue;
         dispatchedProducers.push(req.ref);

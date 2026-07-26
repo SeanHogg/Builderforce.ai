@@ -85,6 +85,13 @@ export async function maybeAutoRunOnLaneEntry(
     originLaneKey?: string;
     /** Pre-resolved workspace token verdict (the sweep resolves one per tenant). */
     tenantTokens?: TenantTokenVerdict;
+    /**
+     * A HUMAN asked for this tick. Passed to the lane requirement gate so an explicitly
+     * requested ROLE dispatch overrides the failure breaker / re-run cooldown, exactly as
+     * "Run now" does. It deliberately does NOT relax the lane's own auto-run decision
+     * below — that stays the evaluator's call.
+     */
+    force?: boolean;
   },
 ): Promise<boolean> {
   try {
@@ -123,6 +130,7 @@ export async function maybeAutoRunOnLaneEntry(
       taskId:      args.taskId,
       status:      lane,
       submittedBy: args.submittedBy,
+      ...(args.force ? { force: true } : {}),
     });
     if (gate.blocked) {
       // INSTRUMENT THE BLOCK. This was the one non-run path in the whole trigger that

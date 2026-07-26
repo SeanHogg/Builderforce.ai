@@ -58,5 +58,30 @@ export function looksLikeCoherentText(text: string): boolean {
   for (const c of freq.values()) if (c > maxCount) maxCount = c;
   if (maxCount >= 5 && maxCount / words.length > 0.15) return false;
 
+  // 4) Orphaned closing delimiters. The checks above key on REPETITION, so they miss
+  //    the other failure mode of an under-trained byte-BPE head: fluent-shaped text made
+  //    of invented words, each different ("…oredionisiing chats code related tot, bound
+  //    reposea this inatic exie. The cainstiel.ts, ore). …"). What that text does emit is
+  //    punctuation it never opened — it learned that `)` and `.` follow tokens, not that a
+  //    bracket has to be opened first. Structural, language-agnostic, and cheap: real
+  //    prose and real code balance their delimiters. The floor of TWO spares a legitimate
+  //    stray paren or an emoticon.
+  if (unmatchedClosers(t) >= 2) return false;
+
   return true;
+}
+
+/** How many closing brackets appear with no opener before them. Pure counting — a
+ *  balanced or over-opened text scores 0. Shared by {@link looksLikeCoherentText}. */
+function unmatchedClosers(text: string): number {
+  let depth = 0;
+  let orphans = 0;
+  for (const ch of text) {
+    if (ch === '(' || ch === '[' || ch === '{') depth++;
+    else if (ch === ')' || ch === ']' || ch === '}') {
+      if (depth > 0) depth--;
+      else orphans++;
+    }
+  }
+  return orphans;
 }

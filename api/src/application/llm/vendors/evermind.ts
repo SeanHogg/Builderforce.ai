@@ -30,6 +30,10 @@ export const evermindModule: VendorModule = {
   catalog: [],
   // Never auto-selected into the FREE/PRO failover pools.
   autoRoute: false,
+  // The SSM generates raw text — it has NO function-calling machinery and cannot
+  // emit structured `tool_calls`. Declared here (the one place callers read via
+  // `modelSupportsTools`) so no surface pins Evermind onto a tool-driven run.
+  supportsTools: false,
   // No external key. A non-empty sentinel makes the gateway's key-bound gate pass
   // (the "key" is local compute, not a credential).
   apiKeyFrom: () => 'local',
@@ -41,6 +45,22 @@ export const evermindModule: VendorModule = {
       // The dispatch path didn't thread the R2 binding — a server misconfig, not
       // a retryable upstream error. Surface it as fatal (no cooldown, no failover).
       throw new VendorFatalError('evermind', 500, 'R2 artifact store not bound; cannot load .evermind model');
+    }
+    // Tool-bearing request: REFUSE rather than answer in prose. Ignoring `tools`
+    // here is what let a pinned Evermind run an agent loop that could never call a
+    // tool — every turn came back as narration ("I'll call builtin_…") while zero
+    // work happened. A 400 `VendorFatalError` advances the cascade (registry
+    // `dispatchInternal` treats 400/422 as "try the next candidate"), so a soft pin
+    // lands on a tool-capable model; a HARD pin surfaces this message instead of
+    // silently doing nothing. Callers should not get here — `modelSupportsTools`
+    // is the up-front gate — so this is the backstop that makes the contract real.
+    if (Array.isArray(params.tools) && params.tools.length > 0) {
+      throw new VendorFatalError(
+        'evermind',
+        400,
+        'Evermind has no tool-calling: it generates text and cannot emit tool_calls. '
+        + 'Run tool-driven work on a tool-capable model (the project Evermind still learns from the run).',
+      );
     }
     // `params.model` has already had the `evermind/` prefix stripped by dispatch,
     // leaving the R2 ref of the published artifact.

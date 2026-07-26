@@ -616,18 +616,39 @@ export async function recordEvermindServeOutcome(
   if (!row) return;
 
   if (row.streak >= QUARANTINE_FAILURE_STREAK) {
-    await db
-      .update(projectEvermind)
-      .set({
-        inferenceEnabled: false,
-        quarantinedAt: new Date(),
-        quarantineReason: `Auto-quarantined after ${row.streak} consecutive incoherent replies — the model is producing gibberish. Retrain/re-seed and re-enable, or set a frontier teacher.`,
-        updatedAt: new Date(),
-      })
-      .where(where)
-      .catch(() => { /* best-effort */ });
+    await quarantineProjectEvermind(
+      env, db, tenantId, projectId,
+      `Auto-quarantined after ${row.streak} consecutive incoherent replies — the model is producing gibberish. Retrain/re-seed and re-enable, or set a frontier teacher.`,
+    );
   }
   await bumpCacheVersion(env, versionKey(tenantId, projectId));
+}
+
+/**
+ * Force a head OUT of service: disable inference and stamp the operator-facing reason.
+ * The ONE place quarantine is written, shared by both detectors — the serve-path
+ * failure streak ({@link recordEvermindServeOutcome}) and the post-merge fitness
+ * re-benchmark in the learning coordinator — so "how a head is taken out of service"
+ * cannot drift between them. Best-effort: never throws (it sits on background paths).
+ */
+export async function quarantineProjectEvermind(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  reason: string,
+): Promise<void> {
+  await db
+    .update(projectEvermind)
+    .set({
+      inferenceEnabled: false,
+      quarantinedAt: new Date(),
+      quarantineReason: reason,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(projectEvermind.tenantId, tenantId), eq(projectEvermind.projectId, projectId)))
+    .catch(() => { /* best-effort */ });
+  await bumpCacheVersion(env, versionKey(tenantId, projectId)).catch(() => { /* best-effort */ });
 }
 
 /**

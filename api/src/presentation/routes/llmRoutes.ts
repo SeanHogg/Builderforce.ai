@@ -18,7 +18,6 @@ import {
   resolveStrictPin,
   estimateRequestTokens,
   isPremiumModelSelection,
-  byoAutoSeedModels,
   CODING_BACKSTOP_MODELS,
   FREE_MODEL_POOL,
   PRO_MODEL_POOL,
@@ -32,7 +31,7 @@ import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../
 import { USAGE_KIND } from '../../application/llm/usageSource';
 import { logTrace, backfillTraceUsage } from '../../application/llm/traceLogger';
 import { recordUsageRow, type UsageAttribution, type RecordUsageRow, type UsageSurface } from '../../application/llm/usageLedger';
-import { pickUsage, vendorForModel, getCatalog } from '../../application/llm/vendors';
+import { pickUsage, vendorForModel } from '../../application/llm/vendors';
 import {
   dispatchEmbeddingVendor,
   EmbeddingCascadeExhaustedError,
@@ -75,10 +74,7 @@ import {
   setTenantProviderPriority,
   deleteTenantProviderKey,
   isSupportedProvider,
-  byoVendorIdFor,
   byoVendorIdsFromCredentials,
-  byoVendorIdsFromSummaries,
-  resolvedAuthTypeFor,
   providersFromCredentials,
   formatByoUnresolvedHeader,
   providersConnectedInOtherWorkspaces,
@@ -91,8 +87,10 @@ import { CAPACITY_LIMIT_MARKER } from '../../application/llm/vendors/types';
 import {
   clearProviderAuthAlert,
   loadProviderAuthAlert,
-  recordProviderAuthAlerts,
 } from '../../application/llm/providerAuthAlerts';
+import { raiseProviderAuthAlertsFromFailovers } from '../../application/llm/byoCredentialAlerting';
+import { probeByoProvider } from '../../application/llm/byoCredentialHealth';
+import { byoModelsFor } from '../../application/llm/byoModelRouting';
 import {
   generatePkce,
   generateState,
@@ -117,7 +115,7 @@ import {
   type AnthropicMessagesRequest,
 } from '../../application/llm/anthropicMessagesBridge';
 import { resolveKeyCached, jwtMembershipHash, type ResolvedKey } from '../../infrastructure/auth/keyResolutionCache';
-import type { FailoverEvent } from '../../application/llm/LlmProxyService';
+import type { FailoverEvent, ByoDiagnostics } from '../../application/llm/LlmProxyService';
 import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
 import { hashSecret } from '../../infrastructure/auth/HashService';
 import { TenantRole, TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
@@ -172,19 +170,23 @@ function logFailovers(
 }
 
 /**
- * Record any AUTH-class failover as a per-tenant "reconnect this account" alert,
- * fire-and-forget alongside {@link logFailovers}.
+ * Record any AUTH-class failover as a per-tenant "reconnect this account" alert AND
+ * email the workspace's admins the first time it breaks — fire-and-forget alongside
+ * {@link logFailovers}.
  *
  * This is the seam that makes a rejected BYO credential VISIBLE. The cascade
  * already handles it correctly — cool the vendor, fail over, succeed elsewhere —
  * which is exactly why nothing ever reached the operator: the request looks fine
  * and `llm_failover_log` persists only `model` + `errorCode` (no tenant, no kind),
  * so the signal died at the DB boundary. Writing it here, where tenant identity is
- * in scope and the typed `FailoverEvent` still carries `kind`/`detail`, is the
- * last point at which the alert can be attributed to the account that needs fixing.
+ * in scope and the typed `FailoverEvent` still carries its `detail`, is the last
+ * point at which the alert can be attributed to the account that needs fixing.
  *
- * `authAlertsFromFailovers` no-ops for a cascade with no auth attempts, so the
- * common path costs one array scan and zero writes.
+ * Notification lives in `raiseProviderAuthAlertsFromFailovers` rather than here so a
+ * mid-day breakage observed by a LIVE RUN reaches the owner immediately, on exactly the
+ * same transition rule the daily sweep uses — instead of waiting up to 24h for the next
+ * sweep to rediscover it. `authAlertsFromFailovers` no-ops for a cascade with no
+ * owner-actionable failure, so the common path costs one array scan and zero writes.
  */
 function logProviderAuthAlerts(
   env: HonoEnv['Bindings'],
@@ -193,7 +195,7 @@ function logProviderAuthAlerts(
   failovers: ReadonlyArray<FailoverEvent>,
 ): void {
   if (failovers.length === 0) return;
-  const promise = recordProviderAuthAlerts(env, tenantId, failovers)
+  const promise = raiseProviderAuthAlertsFromFailovers(env, tenantId, failovers)
     .catch(() => { /* advisory — never let alerting fail the request */ });
   if (ctx) ctx.waitUntil(promise); else void promise;
 }
@@ -247,35 +249,6 @@ function resolveUsageSurface(c: Context<HonoEnv>, access: TenantAccess): UsageSu
   // hints (web/cloud/sdk) are still honored for accurate attribution.
   if (isKnown && hinted !== 'on_prem' && hinted !== 'vsix') return hinted as UsageSurface;
   return 'web';
-}
-
-/** Convert a catalog entry into the canonical route that uses the tenant's key.
- *  Prefixing every model as `<vendor>/<id>` is incorrect:
- *   - `anthropic/...` is OpenRouter's namespace, while direct Anthropic catalog
- *     ids are bare (`claude-sonnet-5`);
- *   - factory-built OpenAI-compatible vendors require `direct/<vendor>/...`;
- *   - Google AI owns the bespoke `googleai/...` prefix.
- *  Keep this projection at the provider boundary so the picker and connection
- *  test cannot drift onto an operator-funded or unrecognised route. */
-function byoModelRef(entry: { id: string; vendor: string }): string {
-  if (entry.vendor === 'anthropic') return entry.id;
-  if (entry.vendor === 'googleai') return `googleai/${entry.id}`;
-  if (entry.vendor === 'openai-codex') return `openai-codex/${entry.id}`;
-  if (entry.vendor === 'xai-oauth') return `xai-oauth/${entry.id}`;
-  return `direct/${entry.vendor}/${entry.id}`;
-}
-
-/** A tenant's connected-provider rows → the pinnable models served through that
- *  provider's canonical tenant-keyed route. Takes the SUMMARIES (not bare provider
- *  ids) because the route depends on how the provider authenticates: a connected
- *  ChatGPT/SuperGrok subscription serves `openai-codex/…` / `xai-oauth/…` models,
- *  NOT the `direct/<vendor>/…` api-key ones the tenant has no key for. */
-export function byoModelsFor(summaries: readonly ProviderKeySummary[]): Array<{ id: string; vendor: string; tier: string; contextWindow?: number }> {
-  const vendorIds = byoVendorIdsFromSummaries(summaries);
-  if (vendorIds.size === 0) return [];
-  return getCatalog()
-    .filter((e) => vendorIds.has(e.vendor))
-    .map((e) => ({ id: byoModelRef(e), vendor: e.vendor, tier: e.tier, ...(e.contextWindow ? { contextWindow: e.contextWindow } : {}) }));
 }
 
 /**
@@ -969,7 +942,7 @@ function proxyForCompletion(
   env: Env,
   access: TenantAccess,
   body: ChatCompletionRequest,
-  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; byoVendorPriority?: readonly string[]; byoRequired?: boolean },
+  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; byoVendorPriority?: readonly string[]; byoRequired?: boolean; byoDiagnostics?: ByoDiagnostics },
 ): ReturnType<typeof llmProxyForPlan> {
   return llmProxyForPlan(env, access.effectivePlan, access.premiumOverride, {
     disablePaidOverflow: opts.disablePaidOverflow,
@@ -980,6 +953,9 @@ function proxyForCompletion(
     ...(opts.tenantVendorKeys ? { tenantVendorKeys: opts.tenantVendorKeys } : {}),
     ...(opts.byoVendorPriority?.length ? { byoVendorPriority: opts.byoVendorPriority } : {}),
     ...(opts.byoRequired ? { byoRequired: true } : {}),
+    // Diagnostics only — so a fail-closed BYO 503 names the connected providers and
+    // why each was unusable, matching `x-builderforce-byo-unresolved`.
+    ...(opts.byoDiagnostics ? { byoDiagnostics: opts.byoDiagnostics } : {}),
   });
 }
 
@@ -1160,77 +1136,33 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     });
   });
 
-  // Make one tiny, strict-pinned request through the same routing path as chat.
+  // Make one tiny, strict-pinned request through the same routing path as chat. The probe
+  // itself — model choice, dispatch, failure classification, and the alert write/clear that
+  // keeps the Integrations card honest — lives in `probeByoProvider`, because the DAILY
+  // sweep (runByoCredentialHealthCron) must reach the identical verdict this button does.
+  // When they disagreed, the page showed five green cards next to a failing test.
   router.post('/provider-keys/:provider/test', async (c) => {
     let access: TenantAccess;
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
     const provider = c.req.param('provider');
     if (!isSupportedProvider(provider)) return c.json({ error: 'unsupported provider' }, 400);
-    const creds = await resolveTenantLlmCredentials(c.env, access.tenantId);
-    if (!providersFromCredentials(creds).includes(provider)) {
-      const status = creds.unresolvedReasons[provider] ?? 'not_connected';
-      return c.json({
-        ok: false,
-        status,
-        error: `${provider} connection test could not run: ${status.replaceAll('_', ' ')}.`,
-      });
+    const probe = await probeByoProvider(c.env, access.tenantId, provider);
+    if (probe.ok) {
+      return c.json({ ok: true, status: probe.status, model: probe.model, testedAt: probe.checkedAt });
     }
-    // Test the model this account actually LEADS with (the same BYO flagship routing
-    // seeds), on the route its auth type dispatches through — so a green test means
-    // "the credential the cascade will use works", not "some catalog id worked".
-    const authType = resolvedAuthTypeFor(provider, creds);
-    const model = byoAutoSeedModels(new Set([byoVendorIdFor(provider, authType)]), { agentic: false })[0]
-      ?? byoModelsFor([{ provider, authType, priority: null }])[0]?.id;
-    if (!model) {
-      return c.json({
-        ok: false,
-        status: 'no_test_model',
-        error: `${provider} connection test could not run because no current test model is configured.`,
-      });
-    }
-    // 64 rather than a handful: the OpenAI Responses surface rejects a
-    // `max_output_tokens` under 16, and a reasoning model spends its first
-    // tokens on reasoning, so too small a budget fails a healthy credential.
-    const body: ChatCompletionRequest = {
-      model, modelStrict: true, max_tokens: 64,
-      messages: [{ role: 'user', content: 'Reply OK.' }],
-    };
-    const service = proxyForCompletion(c.env, access, body, {
-      disablePaidOverflow: true,
-      anthropicOAuthToken: creds.anthropicOAuthToken,
-      openaiCodexAuth: creds.openaiCodexAuth,
-      xaiOAuthToken: creds.xaiOAuthToken,
-      tenantVendorKeys: creds.vendorKeys,
-      byoVendorPriority: creds.vendorPriority,
+    return c.json({
+      ok: false,
+      status: probe.status,
+      error: probe.error
+        ? `${provider} connection test failed: ${probe.error}`
+        : `${provider} connection test could not run: ${probe.status.replaceAll('_', ' ')}.`,
+      code: 'provider_test_failed',
+      testedAt: probe.checkedAt,
+      // Echo the alert the probe just persisted so the card repaints from THIS response
+      // instead of waiting for the status read's 60s read-through window to lapse.
+      ...(probe.alert ? { authAlert: probe.alert } : {}),
+      details: { provider, model: probe.model, upstreamStatus: probe.upstreamStatus },
     });
-    const result = await service.complete(body, undefined, newTraceId());
-    if (result.response.status >= 400) {
-      const payload = await result.response.clone().text();
-      let upstreamMessage = payload.slice(0, 1000);
-      // A 400/422 carries the upstream's own diagnostic verbatim, but a
-      // retryable failure (401/403/429/5xx) collapses into the gateway's
-      // cascade summary — which reads as a bare "failed" to the operator.
-      // Append the per-attempt upstream status so the reason is actionable.
-      try {
-        const parsed = JSON.parse(payload) as { error?: { message?: string } | string; message?: string };
-        upstreamMessage = typeof parsed.error === 'string' ? parsed.error : parsed.error?.message ?? parsed.message ?? upstreamMessage;
-      } catch { /* retain bounded raw response */ }
-      const attemptDetail = result.failovers
-        ?.map((f) => `${f.vendor}/${f.model} → HTTP ${f.code}`)
-        .join('; ');
-      const error = [
-        `${provider} connection test failed: ${upstreamMessage || `upstream HTTP ${result.response.status}`}`,
-        attemptDetail ? `(${attemptDetail})` : '',
-      ].filter(Boolean).join(' ');
-      return c.json({
-        ok: false,
-        status: 'failed',
-        error,
-        code: 'provider_test_failed',
-        details: { provider, model, upstreamStatus: result.response.status, attempts: result.failovers ?? [] },
-      });
-    }
-    return c.json({ ok: true, status: 'ready', model: result.resolvedModel, testedAt: new Date().toISOString() });
   });
 
   // Set the BYO precedence — the ordered provider list (most-preferred first) the
@@ -2007,7 +1939,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // a plain chat keeps the general pool. Reuses the credentials resolved above so
     // any direct-Claude resolution rides the tenant subscription and BYO vendors
     // serve from the tenant's own account.
-    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, tenantVendorKeys, byoVendorPriority: tenantCreds.vendorPriority, byoRequired: tenantCreds.configuredProviders.length > 0 });
+    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, tenantVendorKeys, byoVendorPriority: tenantCreds.vendorPriority, byoRequired: tenantCreds.configuredProviders.length > 0, byoDiagnostics: { configuredProviders: tenantCreds.configuredProviders, unresolvedReasons: tenantCreds.unresolvedReasons as Record<string, string> } });
     // Context-fit seeding: estimate the turn's tokens so the proxy drops
     // small-window models from the first-pass seed. This is the preventive half
     // of the Brain "dies after several executions" fix — the reactive 413

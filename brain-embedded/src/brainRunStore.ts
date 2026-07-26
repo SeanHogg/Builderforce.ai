@@ -1218,11 +1218,19 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // learned question we spend zero model tokens. Opt-in + best-effort — a host that
   // doesn't inject `answer`, a non-project chat, or a miss falls straight through to the
   // normal loop below. Only attempted on the run's FIRST turn (no tool results yet).
+  //
+  // `toolsAvailable` is passed through HONESTLY (it is what this run can actually
+  // call) because it decides how far memory is allowed to pre-empt the model: with
+  // tools in play the server may only replay a cached answer, never generate a fresh
+  // one from the Evermind SSM — the SSM cannot call a tool, so letting it answer
+  // stranded any request whose answer lives behind one.
   if (evermind?.answer && !c.abort?.signal.aborted) {
     const query = latestUserText(convo);
     if (query) {
       let memAnswer: MemoryFirstAnswer | null = null;
-      try { memAnswer = await evermind.answer(query); } catch { memAnswer = null; }
+      try {
+        memAnswer = await evermind.answer(query, { toolsAvailable: !!allTools && allTools.length > 0 });
+      } catch { memAnswer = null; }
       const finalText = memAnswer?.text.trim();
       if (finalText) {
         convo.push({ role: 'assistant', content: finalText });
@@ -1239,6 +1247,10 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
             source: memAnswer!.source,
             skippedLlm: true,
             ...(memAnswer!.evermindVersion != null ? { version: memAnswer!.evermindVersion } : {}),
+            // WHICH head served it — a project can target several, so without this a
+            // memory hit from a sibling IDE build's Evermind is indistinguishable from
+            // the chat project's own.
+            ...(memAnswer!.evermindProjectId != null ? { evermindProjectId: memAnswer!.evermindProjectId } : {}),
           },
         });
         emit(c);

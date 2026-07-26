@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { anthropicOutputCap } from './vendors/anthropic';
 import { CODEX_AUTH_MARKER } from './vendors/openaiCodex';
+import { CAPACITY_LIMIT_MARKER } from './vendors';
 import {
   DEMOTE_STREAK_THRESHOLD,
   _resetMemoryVendorHealth,
@@ -66,41 +67,50 @@ describe('provider auth alerts', () => {
 
   it('classifies a Codex 403 as an ENTITLEMENT problem, not a bad credential', () => {
     const [alert] = authAlertsFromFailovers([
-      { vendor: 'openai-codex', code: 403, kind: 'auth', detail: `${CODEX_AUTH_MARKER} (upstream 403): forbidden` },
+      { vendor: 'openai-codex', code: 403, detail: `${CODEX_AUTH_MARKER} (upstream 403): forbidden` },
     ]);
     expect(alert).toMatchObject({ provider: 'openai', reason: 'not_entitled', status: 403, vendor: 'openai-codex' });
   });
 
   it('classifies a 401 as a rejected credential (reconnect the same account)', () => {
     const [alert] = authAlertsFromFailovers([
-      { vendor: 'anthropic', code: 401, kind: 'auth', detail: 'auth 401: token expired' },
+      { vendor: 'anthropic', code: 401, detail: 'auth 401: token expired' },
     ]);
     expect(alert).toMatchObject({ provider: 'anthropic', reason: 'rejected', status: 401 });
   });
 
-  it('ignores non-auth failures — a 429 or 502 must never prompt a reconnect', () => {
+  it('ignores transient failures — a plain 429 or a 502 must never prompt a reconnect', () => {
     expect(authAlertsFromFailovers([
-      { vendor: 'openai-codex', code: 429, kind: 'rate_limit' },
-      { vendor: 'meta', code: 502, kind: 'server_error' },
-      { vendor: 'anthropic', code: 400, kind: 'client_error' },
+      { vendor: 'openai-codex', code: 429 },
+      { vendor: 'meta', code: 502 },
+      { vendor: 'anthropic', code: 400 },
     ])).toEqual([]);
   });
 
+  it('classifies an out-of-budget 429 as CAPACITY — the credential is fine, the wallet is not', () => {
+    // Rides on a 429, so it is only distinguishable by the marker. Telling the owner to
+    // reconnect a working account would be actively wrong advice here.
+    const [alert] = authAlertsFromFailovers([
+      { vendor: 'openai', code: 429, detail: `${CAPACITY_LIMIT_MARKER}: insufficient_quota` },
+    ]);
+    expect(alert).toMatchObject({ provider: 'openai', reason: 'capacity', status: 429 });
+  });
+
   it('ignores auth failures on vendors a tenant cannot connect', () => {
-    expect(authAlertsFromFailovers([{ vendor: 'openrouter', code: 401, kind: 'auth' }])).toEqual([]);
+    expect(authAlertsFromFailovers([{ vendor: 'openrouter', code: 401 }])).toEqual([]);
   });
 
   it('keeps the FIRST auth failure per provider — the highest-precedence account', () => {
     const alerts = authAlertsFromFailovers([
-      { vendor: 'openai-codex', code: 403, kind: 'auth' },
-      { vendor: 'openai', code: 401, kind: 'auth' },
+      { vendor: 'openai-codex', code: 403 },
+      { vendor: 'openai', code: 401 },
     ]);
     expect(alerts).toHaveLength(1);
     expect(alerts[0]!.vendor).toBe('openai-codex');
   });
 
   it('round-trips an alert through the store and clears it on reconnect', async () => {
-    await recordProviderAuthAlerts(env, 7, [{ vendor: 'openai-codex', code: 403, kind: 'auth' }]);
+    await recordProviderAuthAlerts(env, 7, [{ vendor: 'openai-codex', code: 403 }]);
     expect(await loadProviderAuthAlert(env, 7, 'openai')).toMatchObject({ reason: 'not_entitled' });
     // Scoped per tenant — one tenant's lapsed plan says nothing about another's.
     expect(await loadProviderAuthAlert(env, 8, 'openai')).toBeNull();
@@ -109,7 +119,7 @@ describe('provider auth alerts', () => {
   });
 
   it('writes nothing when a cascade had no auth failures', async () => {
-    await recordProviderAuthAlerts(env, 7, [{ vendor: 'meta', code: 502, kind: 'server_error' }]);
+    await recordProviderAuthAlerts(env, 7, [{ vendor: 'meta', code: 502 }]);
     expect(await loadProviderAuthAlert(env, 7, 'meta')).toBeNull();
   });
 });

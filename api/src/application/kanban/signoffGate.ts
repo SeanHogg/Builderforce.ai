@@ -43,6 +43,13 @@ export interface OutstandingSlot {
   roleName: string;
   stageKey: string | null;
   state: string;
+  /**
+   * Owner/contributor (must PRODUCE the stage's deliverable) vs reviewer (must JUDGE it).
+   * Carried because the ask is a different instruction for each — the drive used to send
+   * every slot the reviewer contract, so a stage's producer was told to "review the
+   * delivered work and record a verdict" for work that did not exist yet.
+   */
+  responsibility: string;
   /** Who owes it, when the slot has a resolved assignee. */
   assigneeName: string | null;
   assigneeRef: string | null;
@@ -132,6 +139,7 @@ export function decideSignoffGate(participants: readonly ManifestParticipant[]):
       roleName: p.roleName,
       stageKey: p.stageKey,
       state: p.state,
+      responsibility: p.responsibility,
       assigneeName: p.assigneeName,
       assigneeRef: p.assigneeRef,
       assigneeKind: p.assigneeKind,
@@ -170,6 +178,23 @@ export function decideSignoffGate(participants: readonly ManifestParticipant[]):
 }
 
 /**
+ * Slots belonging to ONE stage — the ticket's current lane — plus stage-less slots.
+ * PURE.
+ *
+ * TWO DIFFERENT QUESTIONS share this manifest and must not share an answer:
+ *   • "may this ticket COMPLETE?" — every required slot, every stage (the gate above).
+ *   • "who should be ASKED right now?" — only the stage the ticket is actually in.
+ *
+ * Conflating them is why the manager drove sign-offs from `in_review` alone: an unscoped
+ * ask on an earlier lane would have told the QA reviewer to judge a Requirements-stage
+ * ticket. Scoping the ASK is what makes it safe to drive on every lane, which is what the
+ * lane gate's "re-asking is the AI Manager's job" comment always assumed.
+ */
+export function slotsForStage(outstanding: readonly OutstandingSlot[], stageKey: string | null): OutstandingSlot[] {
+  return outstanding.filter((s) => s.stageKey == null || s.stageKey === stageKey);
+}
+
+/**
  * Load the ticket's manifest and decide the gate. Reads through
  * `TicketParticipantsService.listParticipants`, which is version-token cached AND
  * self-derives the template slots on first access — so a ticket that has never been
@@ -181,12 +206,31 @@ export function decideSignoffGate(participants: readonly ManifestParticipant[]):
 export async function resolveSignoffGate(
   env: Env,
   db: Db,
-  args: { tenantId: number; taskId: number },
+  args: {
+    tenantId: number; taskId: number;
+    /**
+     * Scope the gate to ONE stage — see {@link slotsForStage}. Callers asking "who do I
+     * ask now" pass the ticket's current lane; callers asking "may this complete" (the
+     * manager's conduct pass, which owns merge authority) must NOT pass it, or a ticket
+     * would complete with earlier stages unsigned.
+     */
+    stageKey?: string | null;
+  },
 ): Promise<SignoffGateResult> {
   try {
     const participants = await new TicketParticipantsService(db)
       .listParticipants(env, args.tenantId, args.taskId);
-    return decideSignoffGate(participants);
+    const gate = decideSignoffGate(participants);
+    if (args.stageKey === undefined) return gate;
+    const outstanding = slotsForStage(gate.outstanding, args.stageKey);
+    if (outstanding.length === gate.outstanding.length) return gate;
+    return {
+      ...gate,
+      outstanding,
+      detail: outstanding.length
+        ? `Waiting on ${outstanding.length} required sign-off${outstanding.length === 1 ? '' : 's'} for this stage: ${outstanding.map((o) => o.roleName).join(', ')}.`
+        : `No required role owes anything at this stage (${gate.outstanding.length} outstanding on later stages).`,
+    };
   } catch {
     return {
       satisfied: false,

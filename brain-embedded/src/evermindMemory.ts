@@ -54,6 +54,14 @@ export interface MemoryFirstAnswer {
   source: 'qa-cache' | 'evermind';
   /** Evermind head version, when `source === 'evermind'`. */
   evermindVersion?: number;
+  /**
+   * WHICH Evermind answered (project id), when `source === 'evermind'`. A project can
+   * target several heads (its own plus the IDE builds grouped under it), so without
+   * this the timeline could not say which one served — and a chat whose OWN project
+   * reports inference OFF could still be answered by a sibling head with no way to
+   * tell. Recorded on the trace step so a memory hit is triageable.
+   */
+  evermindProjectId?: number;
 }
 
 /**
@@ -67,8 +75,17 @@ export interface MemoryFirstAnswer {
 export interface EvermindRunHooks {
   /** Recall the project's learned memories most relevant to `query`. */
   recall(query: string): Promise<EvermindRecallResult | null>;
-  /** Try to answer `query` from memory WITHOUT the LLM; null → run the model. */
-  answer?(query: string): Promise<MemoryFirstAnswer | null>;
+  /**
+   * Try to answer `query` from memory WITHOUT the LLM; null → run the model.
+   *
+   * `opts.toolsAvailable` tells the resolver whether THIS run can call tools. It must
+   * be honest: the Evermind SSM has no tool-calling, so when tools are available the
+   * server serves only the Q&A cache (a replay of an answer a real model produced) and
+   * never a fresh SSM generation — otherwise a request whose answer lives behind a tool
+   * call ("which tickets are in the backlog?") gets answered from stale weights while
+   * the tools that could answer it are never called.
+   */
+  answer?(query: string, opts: { toolsAvailable: boolean }): Promise<MemoryFirstAnswer | null>;
   /** Remember a (question → answer) pair so an exact repeat short-circuits next time. */
   cacheAnswer?(query: string, answer: string): void | Promise<void>;
 }

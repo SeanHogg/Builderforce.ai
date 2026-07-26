@@ -68,6 +68,10 @@ async function rememberCore(env: Env, db: Db, tenantId: number, projectId: numbe
  * when memory can't confidently answer, so the caller runs its normal loop. The cheap path
  * is cached; the Evermind path is bounded by the `inferenceEnabled` opt-in and is followed
  * by a write-through to the Q&A cache (the caller's cache step), so repeats become O(1).
+ *
+ * `?tools=0` declares a caller with NO tools available — the only case where the Evermind
+ * leg may pre-empt the model (it cannot call a tool, so it must never short-circuit a run
+ * that could fetch the real answer). Absent/anything else = tools available = cache only.
  */
 async function resolveAnswerCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
@@ -84,7 +88,11 @@ async function resolveAnswerCore(env: Env, db: Db, tenantId: number, projectId: 
         }
       }
     : undefined;
-  const answer = await resolveMemoryAnswer(env, db, tenantId, projectId, question, { ...(runEvermind ? { runEvermind } : {}) });
+  const toolsAvailable = c.req.query('tools') !== '0';
+  const answer = await resolveMemoryAnswer(env, db, tenantId, projectId, question, {
+    ...(runEvermind ? { runEvermind } : {}),
+    toolsAvailable,
+  });
   return json({ answer });
 }
 

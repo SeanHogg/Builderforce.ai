@@ -44,6 +44,7 @@ import { approvals, chatTicketLinks, projectManagerConfigs } from '../../infrast
 import { agentPurchases, ideAgents, llmUsageLog, taskFileChanges } from '../../infrastructure/database/schema';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { resolveProjectInferenceModel } from '../../application/llm/projectEvermind';
+import { modelSupportsTools } from '../../application/llm/vendors';
 import { executionTokenGate } from './executionTokenGate';
 import { authorizeManagedTaskExecution } from '../../application/kanban/managedExecutionGuard';
 
@@ -521,9 +522,27 @@ async function startDispatchedExecution(
   // it to the gateway (which routes it to the evermind vendor). Precedence:
   // payload pin > agent.baseModel > project Evermind > gateway default. Off/unseeded →
   // undefined → today's behaviour. [[evermind-learning-architecture]]
-  const projectEvermindPin = agent.baseModel
+  //
+  // TOOL-CAPABILITY GATE: an agent run is tool-driven by construction (it reads
+  // files, edits code, opens PRs). A model with no function-calling handed `tools`
+  // does not fail — it answers in prose — so pinning one made the agent NARRATE
+  // every call and do zero work. `modelSupportsTools` is the shared declaration
+  // (vendors/registry), so a tool-less head is simply not emitted as the run's
+  // model and the normal coding-pool selection applies. The project's Evermind
+  // still LEARNS from the run and still grounds it through the lessons block —
+  // only the inference pin is withheld.
+  const resolvedInferencePin = agent.baseModel
     ? undefined
     : await resolveProjectInferenceModel(env as Env, db, tenantId, taskRow.projectId);
+  const projectEvermindPin = resolvedInferencePin && !modelSupportsTools(resolvedInferencePin)
+    ? undefined
+    : resolvedInferencePin;
+  if (resolvedInferencePin && !projectEvermindPin) {
+    console.warn(
+      `[evermind] project ${taskRow.projectId} is inference-enabled but ${resolvedInferencePin} has no tool-calling; `
+      + 'running this agent task on the coding pool instead (learning is unaffected)',
+    );
+  }
   const effectivePayload = withDefaultModel(payload, agent.baseModel ?? projectEvermindPin);
 
   const message: DispatchMessage = {

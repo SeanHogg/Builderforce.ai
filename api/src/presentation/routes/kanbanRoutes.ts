@@ -307,6 +307,9 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
     const result = await coordinateTicket(env(c), db, buildRuntimeService(env(c), db), {
       tenantId: c.get('tenantId') as number, taskId: Number(c.req.param('taskId')),
+      // An explicit manager click IS the approval — the role asks override the failure
+      // breaker the same way "Run now" does, so the button works on a halted ticket.
+      force: true,
     });
     return c.json({ result });
   });

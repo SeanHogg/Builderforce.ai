@@ -35,6 +35,7 @@
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
 import { CODEX_AUTH_MARKER } from './vendors/openaiCodex';
+import { CAPACITY_LIMIT_MARKER } from './vendors';
 import { PROVIDER_VENDOR_MAP, isSupportedProvider, type LlmProvider } from './tenantProviderKeyService';
 
 /** Just the slice of `Env` this module needs — mirrors `CooldownEnv`'s narrowing so
@@ -58,16 +59,21 @@ const ALERT_TTL_SECONDS = 7 * 24 * 60 * 60;
  *  read while still surfacing a fresh rejection within a page refresh or two. */
 const ALERT_READ_TTL_SECONDS = 60;
 
-export type ProviderAuthAlertReason = 'not_entitled' | 'rejected';
+export type ProviderAuthAlertReason = 'not_entitled' | 'rejected' | 'capacity' | 'unresolved';
 
 export interface ProviderAuthAlert {
   provider: LlmProvider;
   /** Which remediation to show. `not_entitled` = the account authenticated but the
    *  plan doesn't cover this surface (the Codex 403 case) — reconnecting a DIFFERENT
    *  account or upgrading the plan is the fix. `rejected` = the credential itself was
-   *  refused (401, expired/revoked token, rotated key) — reconnect the same account. */
+   *  refused (401, expired/revoked token, rotated key) — reconnect the same account.
+   *  `capacity` = the credential is valid but the ACCOUNT is out of budget (spend cap /
+   *  no credits) — top up, don't reconnect. `unresolved` = the stored credential could
+   *  not even be decrypted or refreshed ({@link ByoUnresolvedReason}), so nothing was
+   *  ever sent upstream; only the daily probe can observe this. */
   reason: ProviderAuthAlertReason;
-  /** Upstream HTTP status that produced the alert (401 / 403). */
+  /** Upstream HTTP status that produced the alert (401 / 403 / 429-capacity), or `0`
+   *  when the credential failed before any request was made (`unresolved`). */
   status: number;
   /** The gateway vendor that was rejected — `openai-codex` vs `openai` matters to
    *  the operator ("your ChatGPT subscription" vs "your OpenAI API key"). */
@@ -100,32 +106,67 @@ export function providerForVendor(vendorId: string): LlmProvider | null {
 }
 
 /** Minimal shape this module reads off a `FailoverEvent` — declared structurally so
- *  the alert layer doesn't drag the whole proxy result type into route code. */
+ *  the alert layer doesn't drag the whole proxy result type into route code. The
+ *  normalised `kind` is deliberately NOT read: {@link providerAlertFromFailure} keys off
+ *  the raw status + detail so a capacity failure (which arrives as a rate-limit kind)
+ *  isn't filtered out before it can be classified. */
 export interface AuthFailoverLike {
   vendor: string;
   code: number;
-  kind?: string;
   detail?: string;
 }
 
 /**
- * Project a cascade's failover events onto the BYO providers that need reconnecting.
+ * THE classifier: does one upstream failure mean the tenant's connected account needs
+ * attention, and which remediation? `null` = no, don't prompt.
  *
- * PURE — no I/O, no env — so the classification is unit-testable without KV or a
- * live upstream, and so route code can decide whether a write is needed at all
- * before paying for one.
+ * PURE — no I/O, no env — so it is unit-testable without KV or a live upstream, and so
+ * callers can decide whether a write is needed at all before paying for one. Shared by
+ * the dispatch-observed path ({@link authAlertsFromFailovers}) and the daily/on-demand
+ * credential probe ({@link probeByoProvider}), so a failure classified as "broken" in a
+ * background run is classified identically when a request hits it, and the settings page
+ * can never disagree with the email.
  *
  * Rules:
- *  - only `kind === 'auth'` attempts count (401/403; `kindForStatus` already
- *    normalised the status into that class), so a 429 or 5xx never prompts a
- *    pointless reconnect;
  *  - only vendors that map to a CONNECTABLE provider count — an operator-pool key
  *    failing auth is our problem, not something the tenant can fix from settings;
- *  - a Codex entitlement 403 ({@link CODEX_AUTH_MARKER}) is distinguished from a
- *    plain credential rejection, because the remediation differs;
- *  - deduped per provider, keeping the FIRST occurrence — the cascade walks the
- *    tenant's accounts in precedence order, so the first auth failure is the
- *    highest-precedence account, i.e. the one worth naming.
+ *  - a spend-cap / out-of-credits failure ({@link CAPACITY_LIMIT_MARKER}) is `capacity`:
+ *    the credential is fine, so telling the owner to reconnect would be wrong advice.
+ *    It is checked FIRST because it rides on a 429/400 that the gates below would
+ *    otherwise misroute (mirrors `cooldownStore.classifyFailure`);
+ *  - a Codex entitlement 403 ({@link CODEX_AUTH_MARKER}) — or any 403 — is
+ *    `not_entitled`: the account authenticated but isn't allowed on this surface;
+ *  - a 401 is `rejected`: the credential itself was refused;
+ *  - everything else (429 without the capacity marker, 5xx, timeouts, 400 schema
+ *    errors) returns `null`. A transient blip must never nag an owner to reconnect a
+ *    working account, and it must never fire the "your integration stopped working"
+ *    email — that is the same email-quiet rule the vendor-health cron follows.
+ */
+export function providerAlertFromFailure(
+  vendor: string,
+  status: number,
+  detail?: string,
+  now: number = Date.now(),
+): ProviderAuthAlert | null {
+  const provider = providerForVendor(vendor);
+  if (!provider) return null;
+  const text = (detail ?? '').toLowerCase();
+  const reason: ProviderAuthAlertReason | null =
+    text.includes(CAPACITY_LIMIT_MARKER.toLowerCase()) ? 'capacity'
+    : text.includes(CODEX_AUTH_MARKER) || status === 403 ? 'not_entitled'
+    : status === 401 ? 'rejected'
+    : null;
+  if (!reason) return null;
+  return { provider, reason, status, vendor, at: now };
+}
+
+/**
+ * Project a cascade's failover events onto the BYO providers that need attention.
+ *
+ * Deduped per provider, keeping the FIRST occurrence — the cascade walks the tenant's
+ * accounts in precedence order, so the first failure is the highest-precedence account,
+ * i.e. the one worth naming. Classification itself lives in
+ * {@link providerAlertFromFailure}; this function is only the projection + dedupe.
  */
 export function authAlertsFromFailovers(
   failovers: ReadonlyArray<AuthFailoverLike>,
@@ -133,17 +174,9 @@ export function authAlertsFromFailovers(
 ): ProviderAuthAlert[] {
   const byProvider = new Map<LlmProvider, ProviderAuthAlert>();
   for (const f of failovers) {
-    if (f.kind !== 'auth') continue;
-    const provider = providerForVendor(f.vendor);
-    if (!provider || byProvider.has(provider)) continue;
-    const notEntitled = (f.detail ?? '').toLowerCase().includes(CODEX_AUTH_MARKER) || f.code === 403;
-    byProvider.set(provider, {
-      provider,
-      reason: notEntitled ? 'not_entitled' : 'rejected',
-      status: f.code,
-      vendor: f.vendor,
-      at: now,
-    });
+    const alert = providerAlertFromFailure(f.vendor, f.code, f.detail, now);
+    if (!alert || byProvider.has(alert.provider)) continue;
+    byProvider.set(alert.provider, alert);
   }
   return [...byProvider.values()];
 }
@@ -177,17 +210,32 @@ export async function recordProviderAuthAlerts(
 ): Promise<void> {
   const alerts = authAlertsFromFailovers(failovers);
   if (alerts.length === 0) return;
-  await Promise.all(alerts.map(async (alert) => {
-    const key = alertKey(tenantId, alert.provider);
-    memoryAlerts.set(key, { alert, until: alert.at + ALERT_TTL_SECONDS * 1000 });
-    // Drop the read-through entry so the settings page reflects a fresh rejection
-    // on its next poll instead of serving a cached "healthy" for up to a minute.
-    await invalidateCached(env as unknown as Env, key).catch(() => { /* advisory */ });
-    if (!env.AUTH_CACHE_KV) return;
-    try {
-      await env.AUTH_CACHE_KV.put(key, JSON.stringify(alert), { expirationTtl: ALERT_TTL_SECONDS });
-    } catch { /* alerting is advisory — never surface a storage failure */ }
-  }));
+  await Promise.all(alerts.map((alert) => recordProviderAuthAlert(env, tenantId, alert)));
+}
+
+/**
+ * Persist ONE alert. The single write path — {@link recordProviderAuthAlerts} (the
+ * dispatch-observed cascade) and the credential probe (`probeByoProvider`, on-demand and
+ * from the daily cron) both land here, so the settings page reads one shape regardless of
+ * which surface noticed the breakage.
+ *
+ * Never throws: alerting is advisory and must not fail a request that already succeeded
+ * elsewhere, nor abort a cron sweep partway through a tenant list.
+ */
+export async function recordProviderAuthAlert(
+  env: ProviderAuthAlertEnv,
+  tenantId: number,
+  alert: ProviderAuthAlert,
+): Promise<void> {
+  const key = alertKey(tenantId, alert.provider);
+  memoryAlerts.set(key, { alert, until: alert.at + ALERT_TTL_SECONDS * 1000 });
+  // Drop the read-through entry so the settings page reflects a fresh rejection
+  // on its next poll instead of serving a cached "healthy" for up to a minute.
+  await invalidateCached(env as unknown as Env, key).catch(() => { /* advisory */ });
+  if (!env.AUTH_CACHE_KV) return;
+  try {
+    await env.AUTH_CACHE_KV.put(key, JSON.stringify(alert), { expirationTtl: ALERT_TTL_SECONDS });
+  } catch { /* alerting is advisory — never surface a storage failure */ }
 }
 
 /**

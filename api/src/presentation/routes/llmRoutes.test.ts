@@ -50,7 +50,11 @@ vi.mock('../../application/llm/tenantProviderKeyService', async (orig) => ({
 }));
 
 // Imports must follow the vi.mock calls above so the mocks are in place.
-const { requireTenantAccess, byoModelsFor } = await import('./llmRoutes');
+const { requireTenantAccess } = await import('./llmRoutes');
+// `byoModelsFor` lives in the application layer (byoModelRouting) so the model picker,
+// the credential probe and the daily sweep share ONE projection — an application-layer
+// probe importing it from a route module would have been a layering inversion.
+const { byoModelsFor } = await import('../../application/llm/byoModelRouting');
 const { vendorForModel } = await import('../../application/llm/vendors');
 const { sanitizeToolName, restoreToolName, sanitizeToolCallId, sanitizeRequestToolCalls, restoreResponseToolNames, StreamingToolNameRestorer } =
   await import('../../application/llm/toolNameSanitizer');

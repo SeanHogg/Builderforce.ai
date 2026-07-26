@@ -114,6 +114,29 @@ export interface EmailCopy {
     failedModels: string;
     reviewLine: string;
   };
+  /** Daily BYO credential sweep — a CUSTOMER-facing alert that a connected model
+   *  provider stopped working. Localized subject included (unlike llmHealth, whose
+   *  subject stays machine-shaped for ops routing). */
+  byoCredential: {
+    /** `{{Providers}}` is substituted by fill(). */
+    subject: string;
+    /** `{{Count}}` is substituted by fill(). */
+    intro: string;
+    impact: string;
+    /** `{{Timestamp}}` is substituted by fill(). */
+    checkedAt: string;
+    columnProvider: string;
+    columnObserved: string;
+    columnAction: string;
+    /** Remediation sentence per `ProviderAuthAlertReason` — the whole point of
+     *  classifying the failure instead of saying "reconnect" to everyone. */
+    remedyRejected: string;
+    remedyNotEntitled: string;
+    remedyCapacity: string;
+    remedyUnresolved: string;
+    cta: string;
+    quietNote: string;
+  };
   report: {
     /** `{{ReportType}}` is substituted by render(). */
     intro: string;
@@ -269,6 +292,21 @@ const en: EmailCopy = {
     failedModels: 'failed models:',
     reviewLine: 'Review the per-model breakdown at',
   },
+  byoCredential: {
+    subject: 'Action needed: your {{Providers}} connection stopped working',
+    intro: 'Our daily check found <strong>{{Count}}</strong> connected model provider(s) in your workspace that are no longer working.',
+    impact: 'Until this is fixed, work that should run on your own account is falling back to other models — or not running at all.',
+    checkedAt: 'Checked at {{Timestamp}}',
+    columnProvider: 'Provider',
+    columnObserved: 'What we saw',
+    columnAction: 'What to do',
+    remedyRejected: 'The credential was refused. Reconnect this account or paste a new API key.',
+    remedyNotEntitled: 'The account signed in, but its plan does not cover this model surface. Upgrade the plan or connect a different account.',
+    remedyCapacity: 'The credential is fine, but the account is out of budget. Top up credits or raise the spend limit — no need to reconnect.',
+    remedyUnresolved: 'The stored credential could not be used at all (revoked, expired, or saved in another workspace). Reconnect it here.',
+    cta: 'Fix it in Settings → Integrations',
+    quietNote: 'We only email the first time a provider breaks — you will not get this again until it recovers and breaks anew.',
+  },
   report: {
     intro: 'Your scheduled <strong>{{ReportType}}</strong> report is ready.',
     noData: 'No data for this period.',
@@ -406,6 +444,21 @@ const zh: EmailCopy = {
     okOfProbed: '{{Ok}} / {{Probed}} 正常',
     failedModels: '失败的模型：',
     reviewLine: '查看各模型的详细情况：',
+  },
+  byoCredential: {
+    subject: '需要处理：您的 {{Providers}} 连接已失效',
+    intro: '我们的每日检查发现，您工作区中有 <strong>{{Count}}</strong> 个已连接的模型服务商已无法正常工作。',
+    impact: '在修复之前，本应在您自己账户上运行的任务会退回到其他模型，或者根本无法运行。',
+    checkedAt: '检查时间：{{Timestamp}}',
+    columnProvider: '服务商',
+    columnObserved: '检测到的问题',
+    columnAction: '处理方式',
+    remedyRejected: '凭据被拒绝。请重新连接该账户或粘贴新的 API 密钥。',
+    remedyNotEntitled: '账户已登录，但其套餐不包含该模型能力。请升级套餐或改连其他账户。',
+    remedyCapacity: '凭据本身没有问题，但账户额度已用尽。请充值或提高消费上限——无需重新连接。',
+    remedyUnresolved: '存储的凭据完全无法使用（已吊销、已过期，或保存在其他工作区）。请在此重新连接。',
+    cta: '前往「设置 → 集成」修复',
+    quietNote: '我们仅在服务商首次出现故障时发送邮件——在其恢复并再次出现故障之前，您不会重复收到此提醒。',
   },
   report: {
     intro: '您的定期<strong>{{ReportType}}</strong>报告已生成。',
@@ -554,6 +607,21 @@ const es: EmailCopy = {
     okOfProbed: '{{Ok}} / {{Probed}} correctos',
     failedModels: 'modelos fallidos:',
     reviewLine: 'Consulta el desglose por modelo en',
+  },
+  byoCredential: {
+    subject: 'Acción necesaria: tu conexión con {{Providers}} ha dejado de funcionar',
+    intro: 'Nuestra comprobación diaria ha detectado <strong>{{Count}}</strong> proveedor(es) de modelos conectados en tu espacio de trabajo que ya no funcionan.',
+    impact: 'Hasta que se resuelva, el trabajo que debería ejecutarse en tu propia cuenta recurre a otros modelos, o directamente no se ejecuta.',
+    checkedAt: 'Comprobado a las {{Timestamp}}',
+    columnProvider: 'Proveedor',
+    columnObserved: 'Qué hemos detectado',
+    columnAction: 'Qué hacer',
+    remedyRejected: 'La credencial fue rechazada. Vuelve a conectar esta cuenta o pega una nueva clave de API.',
+    remedyNotEntitled: 'La cuenta se autenticó, pero su plan no cubre esta superficie de modelos. Mejora el plan o conecta otra cuenta.',
+    remedyCapacity: 'La credencial es correcta, pero la cuenta se ha quedado sin saldo. Recarga créditos o sube el límite de gasto: no hace falta reconectar.',
+    remedyUnresolved: 'La credencial guardada no se pudo usar en absoluto (revocada, caducada o guardada en otro espacio de trabajo). Vuelve a conectarla aquí.',
+    cta: 'Solucionarlo en Ajustes → Integraciones',
+    quietNote: 'Solo enviamos un correo la primera vez que un proveedor falla: no volverás a recibir este aviso hasta que se recupere y vuelva a fallar.',
   },
   report: {
     intro: 'Tu informe programado de <strong>{{ReportType}}</strong> está listo.',
@@ -705,6 +773,21 @@ const fr: EmailCopy = {
     okOfProbed: '{{Ok}} / {{Probed}} OK',
     failedModels: 'modèles en échec :',
     reviewLine: 'Consultez le détail par modèle sur',
+  },
+  byoCredential: {
+    subject: 'Action requise : votre connexion {{Providers}} ne fonctionne plus',
+    intro: 'Notre vérification quotidienne a détecté <strong>{{Count}}</strong> fournisseur(s) de modèles connecté(s) dans votre espace de travail qui ne fonctionnent plus.',
+    impact: 'Tant que ce n’est pas corrigé, les tâches qui devraient s’exécuter sur votre propre compte basculent vers d’autres modèles, voire ne s’exécutent pas du tout.',
+    checkedAt: 'Vérifié à {{Timestamp}}',
+    columnProvider: 'Fournisseur',
+    columnObserved: 'Ce que nous avons constaté',
+    columnAction: 'Que faire',
+    remedyRejected: 'L’identifiant a été refusé. Reconnectez ce compte ou collez une nouvelle clé d’API.',
+    remedyNotEntitled: 'Le compte s’est authentifié, mais son offre ne couvre pas cette famille de modèles. Passez à une offre supérieure ou connectez un autre compte.',
+    remedyCapacity: 'L’identifiant est valide, mais le compte n’a plus de budget. Rechargez des crédits ou relevez la limite de dépense — inutile de reconnecter.',
+    remedyUnresolved: 'L’identifiant enregistré n’a pas pu être utilisé du tout (révoqué, expiré ou enregistré dans un autre espace de travail). Reconnectez-le ici.',
+    cta: 'Corriger dans Paramètres → Intégrations',
+    quietNote: 'Nous n’envoyons un e-mail qu’à la première défaillance d’un fournisseur : vous ne le recevrez plus tant qu’il n’aura pas été rétabli puis de nouveau défaillant.',
   },
   report: {
     intro: 'Votre rapport programmé <strong>{{ReportType}}</strong> est prêt.',
@@ -858,6 +941,21 @@ const de: EmailCopy = {
     okOfProbed: '{{Ok}} / {{Probed}} OK',
     failedModels: 'fehlgeschlagene Modelle:',
     reviewLine: 'Die Aufschlüsselung je Modell finden Sie unter',
+  },
+  byoCredential: {
+    subject: 'Handlungsbedarf: Ihre {{Providers}}-Verbindung funktioniert nicht mehr',
+    intro: 'Unsere tägliche Prüfung hat <strong>{{Count}}</strong> verbundene Modellanbieter in Ihrem Workspace gefunden, die nicht mehr funktionieren.',
+    impact: 'Bis das behoben ist, weichen Aufgaben, die über Ihr eigenes Konto laufen sollten, auf andere Modelle aus – oder laufen gar nicht.',
+    checkedAt: 'Geprüft um {{Timestamp}}',
+    columnProvider: 'Anbieter',
+    columnObserved: 'Was wir festgestellt haben',
+    columnAction: 'Was zu tun ist',
+    remedyRejected: 'Die Zugangsdaten wurden abgelehnt. Verbinden Sie das Konto neu oder fügen Sie einen neuen API-Schlüssel ein.',
+    remedyNotEntitled: 'Das Konto hat sich angemeldet, aber sein Tarif deckt diese Modellkategorie nicht ab. Tarif upgraden oder ein anderes Konto verbinden.',
+    remedyCapacity: 'Die Zugangsdaten sind in Ordnung, aber das Konto hat kein Guthaben mehr. Guthaben aufladen oder das Ausgabenlimit erhöhen – ein Neuverbinden ist nicht nötig.',
+    remedyUnresolved: 'Die gespeicherten Zugangsdaten waren überhaupt nicht nutzbar (widerrufen, abgelaufen oder in einem anderen Workspace gespeichert). Bitte hier neu verbinden.',
+    cta: 'In Einstellungen → Integrationen beheben',
+    quietNote: 'Wir senden nur beim ersten Ausfall eines Anbieters eine E-Mail – Sie erhalten diese erst wieder, wenn er sich erholt hat und erneut ausfällt.',
   },
   report: {
     intro: 'Ihr geplanter <strong>{{ReportType}}</strong>-Bericht ist fertig.',

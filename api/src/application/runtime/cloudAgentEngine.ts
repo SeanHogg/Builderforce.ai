@@ -63,6 +63,7 @@ import type { ActionModelRankStat } from '../llm/LlmProxyService';
 import { resolveTenantModel } from '../llm/tenantModelService';
 import { reasoningParamsForModel } from '../llm/reasoningCapability';
 import { contributeTextToProjectEverminds, buildEvermindLessonsBlock } from '../llm/projectEvermind';
+import { modelSupportsTools } from '../llm/vendors';
 import { buildProjectFactsBlock } from '../llm/projectFacts';
 import { scoreRunOutcome, finalizeLearnWeight } from './scoreRunOutcome';
 import { recordCloudToolEvent } from './cloudToolEvents';
@@ -975,7 +976,12 @@ async function recordCloudLlmTurn(
       detail: { model: resolvedModel, provider: result.resolvedVendor, byo: result.byoFunded ?? false, keySource: result.byoFunded ? 'byo' : 'builderforce-managed', traceId: result.traceId ?? null, status: result.response.status, step: opts.step, outcome: result.outcome ?? null, candidateChain: result.candidateChain ?? null },
       result: `gateway ${result.response.status} on '${resolvedModel}' (${result.outcome ?? 'error'})`, durationMs,
     });
-    return { ok: false, error: `Gateway ${result.response.status} on model '${resolvedModel}'${chain}: ${text.slice(0, 300)}`, resolvedModel };
+    // 600, not 300: a fail-closed BYO 503 spends its body naming the providers that
+    // were connected, which of them resolved, and every model the chain walked. At 300
+    // that list was cut off mid-sentence and the lifecycle report showed only the
+    // generic headline — the exact reason "no configured provider is usable" read as a
+    // lie next to four connected accounts.
+    return { ok: false, error: `Gateway ${result.response.status} on model '${resolvedModel}'${chain}: ${text.slice(0, 600)}`, resolvedModel };
   }
   const { content, toolCalls } = parseLlmChoice(await result.response.json().catch(() => null));
   await recordCloudToolEvent(rc.db, {
@@ -1616,9 +1622,27 @@ export async function runCloudToolLoop(
   // id, so it must bypass the coding-pool `pickCloudModel` selection and hard-pin: the
   // in-process evermind vendor (uploads-threaded) serves it, and a toy-model failure
   // cascades to the coding backstop (graceful). [[evermind-learning-architecture]]
-  const projectInferenceModel = typeof effectiveModel === 'string' && effectiveModel.startsWith('evermind/')
+  //
+  // GUARDED by tool capability. This loop is tool-driven on EVERY turn (`cloudTools`
+  // below), and a backend with no function-calling handed `tools` answers in prose
+  // rather than failing — so hard-pinning one (`strict: true`, no cascade) made the
+  // agent narrate calls it could never emit while doing zero work. `modelSupportsTools`
+  // is the shared declaration; a tool-less pin is refused here and the normal
+  // coding-pool selection runs instead. The dispatcher already withholds such a pin,
+  // so this covers the remaining route: an agent explicitly configured with a
+  // tool-less `base_model`.
+  const requestedInferenceModel = typeof effectiveModel === 'string' && effectiveModel.startsWith('evermind/')
     ? effectiveModel
     : undefined;
+  const projectInferenceModel = requestedInferenceModel && modelSupportsTools(requestedInferenceModel)
+    ? requestedInferenceModel
+    : undefined;
+  if (requestedInferenceModel && !projectInferenceModel) {
+    console.warn(
+      `[evermind] refusing to pin ${requestedInferenceModel} for a tool-driven agent run (no tool-calling); `
+      + 'selecting from the coding pool instead',
+    );
+  }
 
   // The PRD (committed to the ticket branch during prep) is part of this task's
   // single PR. Seed it into writtenPaths on the first tick so the finalize opens a

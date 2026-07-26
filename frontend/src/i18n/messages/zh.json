@@ -8521,7 +8521,8 @@
     "status": {
       "connected": "● 已连接 {subscription}",
       "keyConfigured": "● 已配置 {label} API 密钥",
-      "notConnected": "○ 未连接"
+      "notConnected": "○ 未连接",
+      "needsAttention": "▲ {label} — 需要处理"
     },
     "disconnect": "断开连接",
     "remove": "移除",
@@ -8614,7 +8615,9 @@
     "authAlert": {
       "title": "未被使用",
       "notEntitled": "该账户已成功登录，但服务商拒绝了请求（{status}），因为当前套餐不包含此功能。请改用套餐包含该功能的账户重新连接，或升级套餐。",
-      "rejected": "服务商拒绝了此凭据（{status}）。它可能已过期、被吊销，或已在别处轮换——请重新连接该账户。"
+      "rejected": "服务商拒绝了此凭据（{status}）。它可能已过期、被吊销，或已在别处轮换——请重新连接该账户。",
+      "capacity": "凭据本身有效，但账户额度已用尽（{status}）——可能是消费上限或余额为零。请充值或提高上限，无需重新连接。",
+      "unresolved": "存储的凭据完全无法使用——它已被吊销、已过期，或保存在其他工作区。请在此重新连接。"
     }
   },
   "modelSelect": {

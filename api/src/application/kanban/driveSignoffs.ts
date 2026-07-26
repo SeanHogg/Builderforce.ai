@@ -75,6 +75,18 @@ export function pickSignoffCandidate(ownership: SignoffOwnership): SignoffOwners
 }
 
 /**
+ * Which contract the slot's agent gets. PURE.
+ *
+ * An owner/contributor slot must BUILD the stage's deliverable; only a reviewer judges
+ * one. Every slot used to receive the reviewer instruction, which on a pre-review lane
+ * asked the producer to "review the delivered work" that it had not written yet — an ask
+ * it can only answer by approving nothing or doing nothing.
+ */
+export function contractFor(responsibility: string): 'reviewer' | 'producer' {
+  return responsibility === 'reviewer' ? 'reviewer' : 'producer';
+}
+
+/**
  * Dispatch one outstanding agent-assigned role to record its verdict.
  * Never throws — a failed dispatch leaves the slot outstanding for the next pass.
  */
@@ -117,7 +129,7 @@ export async function driveOutstandingSignoffs(
       roleName: candidate.roleName,
       agentRef: candidate.assigneeRef,
       laneKey: candidate.stageKey ?? args.task.status,
-      kind: 'reviewer',
+      kind: contractFor(candidate.responsibility),
       submittedBy: `manager:signoff-request:${args.managerRef ?? 'system'}`,
       prUrl: args.task.githubPrUrl,
     });
