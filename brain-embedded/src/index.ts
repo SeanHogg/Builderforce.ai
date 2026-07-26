@@ -70,6 +70,18 @@ export type { BrainAction, BrainActionsContextValue } from './BrainActionsContex
 // Bridge server-side (tenant-registered) MCP extensions into the client loop.
 export { useMcpExtensions } from './useMcpExtensions';
 export type { UseMcpExtensionsOptions, McpToolResultInfo } from './useMcpExtensions';
+// …and the React-free half, so a headless runner (the VS Code probe / scenario
+// harness) builds the SAME tool list the hook does instead of a second copy.
+export { fetchMcpToolEntries, mcpActionsFrom } from './mcpCatalog';
+export type { McpToolEntry } from './mcpCatalog';
+// Action → advertised tool spec. The single mapping, so a headless runner shows the
+// model exactly what the React registry would.
+export { toolSpecsFor } from './toolSpecs';
+// The inline tool-call dialect filter the streaming client runs over every content
+// delta. Exported so a harness standing in for the gateway applies the SAME lifting,
+// rather than testing a transport that is kinder than the real one.
+export { XmlToolCallFilter, extractXmlToolCalls } from './xmlToolCalls';
+export type { ParsedXmlToolCall } from './xmlToolCalls';
 
 // Ambient page context
 export {
@@ -106,6 +118,9 @@ export {
   getRunTrace,
   clearRunError,
   resolveRunConfirm,
+  // Teardown only — a headless harness reuses one chat id across scenarios, and the
+  // store is a module-level singleton keyed by it.
+  resetBrainRunStore,
 } from './brainRunStore';
 export type { BrainRunRequest, BrainRunSnapshot } from './brainRunStore';
 
@@ -126,8 +141,13 @@ export {
   formatBrainProvenance,
   computeBrainDiagnostics,
   formatBrainDiagnostics,
+  stallRecoveriesInTrace,
+  modelFailoversInTrace,
+  stallUnrecoveredInTrace,
+  toolExposureInTrace,
+  narratedUnadvertisedInTrace,
 } from './brainTriage';
-export type { BrainTraceEvent, BuildBrainTriageOptions, BrainDiagnostics, ByoUnresolvedEntry } from './brainTriage';
+export type { BrainTraceEvent, BuildBrainTriageOptions, BrainDiagnostics, ByoUnresolvedEntry, ToolExposure } from './brainTriage';
 
 // Durable tool/memory STEP rows — the reader for what the run loop persisted, so a
 // reopened chat's timeline AND its triage diagnostics both see the steps the live

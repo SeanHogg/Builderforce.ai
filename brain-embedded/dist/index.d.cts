@@ -696,7 +696,34 @@ declare function useBrainActions(): BrainActionsContextValue;
  */
 declare function useRegisterBrainActions(actions: BrainAction[]): void;
 
-/** What a tool call resolved to — handed to {@link UseMcpExtensionsOptions.onToolResult}. */
+/**
+ * The gateway MCP catalog — fetching it, and turning it into callable actions.
+ *
+ * A tenant registers MCP servers in the portal; the gateway advertises their tools at
+ * `GET /llm/v1/mcp/tools` and relays calls at `POST /llm/v1/mcp/call` (server-to-server,
+ * so the MCP secret never reaches the client). This is the whole of that logic, with NO
+ * React in it.
+ *
+ * It lives apart from {@link useMcpExtensions} — which is now a thin hook over it —
+ * because the catalog is the single largest determinant of whether the Brain can answer
+ * anything at all, and it therefore has to be reachable from places React is not: the
+ * headless VS Code probe that reproduces a chat run from a terminal, and the offline
+ * scenario harness that asserts on what a run was offered. Two copies of "how do we
+ * build the tool list" would be two copies of the thing most worth testing.
+ */
+
+/** One tool as the gateway advertises it. */
+interface McpToolEntry {
+    extensionId: string;
+    tool: string;
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+    /** Whether the tool writes. Drives the confirm-before-mutate gate. Undefined
+     *  (external MCP servers don't advertise it) ⇒ treated as mutating (fail safe). */
+    mutates?: boolean;
+}
+/** What a tool call resolved to — handed to the caller's `onToolResult`. */
 interface McpToolResultInfo {
     /** Flat advertised name the model called (e.g. `builtin_tasks_create`). */
     name: string;
@@ -708,6 +735,27 @@ interface McpToolResultInfo {
     /** True when the relay call succeeded (no transport error / `{error}` result). */
     ok: boolean;
 }
+/**
+ * Fetch the tenant's advertised MCP tools.
+ *
+ * THROWS on any failure rather than resolving to an empty list. That is deliberate: a
+ * silent empty catalog leaves the Brain with zero data tools, so every answer degrades
+ * to "I don't have that data" — indistinguishable, from the outside, from a weak model.
+ * Callers record the reason (the hook publishes it to `mcpToolStatus`; the probe prints
+ * it) so a zero is always explained.
+ *
+ * @param skipExtensionIds extensions the host already registers natively, so the Brain
+ * doesn't get the same capability twice.
+ */
+declare function fetchMcpToolEntries(transport: Pick<BrainTransport, 'baseUrl' | 'getToken'>, skipExtensionIds?: readonly string[]): Promise<McpToolEntry[]>;
+/**
+ * Turn advertised catalog entries into {@link BrainAction}s whose `run()` posts the call
+ * through the gateway relay. Pure over its inputs (module-level create-dedupe aside), so
+ * the React hook, the headless probe and the offline harness all produce byte-identical
+ * tool behaviour.
+ */
+declare function mcpActionsFrom(entries: readonly McpToolEntry[], transport: Pick<BrainTransport, 'baseUrl' | 'getToken'>, onToolResult?: (info: McpToolResultInfo) => void): BrainAction[];
+
 interface UseMcpExtensionsOptions {
     /**
      * Extension ids to drop from the fetched tool list. A host that already
@@ -729,6 +777,85 @@ declare function useMcpExtensions(options?: UseMcpExtensionsOptions): {
     loading: boolean;
     toolCount: number;
     error: string | null;
+};
+
+/**
+ * The one conversion from a registered {@link BrainAction} to the OpenAI `tools[]` entry
+ * the model is shown.
+ *
+ * It lived inline in the React actions registry, which was fine while the registry was
+ * the only thing that ever needed it. It no longer is: a headless runner (the VS Code
+ * probe, the offline scenario harness) assembles the same action list and must advertise
+ * it identically — a second copy of this mapping would be a second definition of what
+ * the model can see, which is the single fact those runners exist to reproduce.
+ *
+ * Type-only import of `BrainAction`, so nothing here pulls React into a Node process.
+ */
+
+/** Advertise these actions to the model. Order is preserved. */
+declare function toolSpecsFor(actions: readonly BrainAction[]): BrainToolSpec[];
+
+/**
+ * Streaming parser for tool calls a model writes inline in its *text* output.
+ *
+ * Some models (and weaker gateway-routed ones) don't emit native OpenAI
+ * `tool_calls` deltas — they write the call into the content stream as markup.
+ * There is no single convention, so this handles every dialect seen in the wild:
+ *
+ *   <tool_call>delete_task<arg_key>id</arg_key><arg_value>75</arg_value></tool_call>
+ *   <function_call>{"name":"delete_task","arguments":{"id":75}}</function_call>
+ *   <tool_use>delete_task {"id":75}</tool_use>
+ *   <invoke name="delete_task"><parameter name="id">75</parameter></invoke>
+ *   <function=delete_task>{"id":75}</function>
+ *
+ * Left untouched that markup (a) renders as literal tags in the chat bubble — the
+ * "garbled reply" symptom — and (b), worse, means the call NEVER executes, because
+ * the agent loop only runs structured `toolCalls`. This filter lifts every dialect
+ * into the same `AssembledToolCall` shape the native path produces AND strips the
+ * markup from the visible text so only clean narration reaches the UI.
+ *
+ * It is a streaming filter: deltas arrive in arbitrary chunks (a tag can split
+ * across two reads), so it holds back any text that is — or might be the start of —
+ * an opening tag, emitting only text that is safe to display.
+ *
+ * Deliberately NOT handled: a bare ```json fenced block. A fenced block is far more
+ * often legitimate content (the model showing the user a payload) than a call, and
+ * swallowing those would eat real answers.
+ */
+/** A tool call lifted out of text, in the native `AssembledToolCall` shape. */
+interface ParsedXmlToolCall {
+    id: string;
+    name: string;
+    /** Raw JSON argument string (parse with `JSON.parse`). */
+    args: string;
+}
+/**
+ * Stateful streaming filter. Feed `push(delta)`; it returns the clean text safe
+ * to display now (markup withheld). Call `flush()` once at end-of-stream.
+ */
+declare class XmlToolCallFilter {
+    private buf;
+    private inside;
+    private insideName;
+    private innerBuf;
+    private clean;
+    private calls;
+    private seq;
+    /** Close the call currently being accumulated and record it. */
+    private commit;
+    /** Feed a content delta; returns clean (markup-free) text to emit now. */
+    push(delta: string): string;
+    /** End of stream: flush held-back text and close any unterminated call. */
+    flush(): string;
+    /** The full clean text accumulated so far. */
+    cleanText(): string;
+    /** Tool calls lifted out of the text. */
+    toolCalls(): ParsedXmlToolCall[];
+}
+/** One-shot convenience for non-streamed content (the no-reader fallback). */
+declare function extractXmlToolCalls(raw: string): {
+    text: string;
+    toolCalls: ParsedXmlToolCall[];
 };
 
 interface BrainPageContext {
@@ -1066,6 +1193,44 @@ declare function detectUnbackedTicketClaim(events: BrainTraceEvent[], messages: 
  * identically.
  */
 declare function detectAnnouncedButUnmadeToolCall(events: BrainTraceEvent[], messages: BrainMessage[]): boolean;
+/** How many times this run re-prompted a model that announced a call without making one. */
+declare function stallRecoveriesInTrace(events: BrainTraceEvent[]): number;
+/** How many times this run switched MODELS because one wouldn't emit tool calls. */
+declare function modelFailoversInTrace(events: BrainTraceEvent[]): number;
+/** True when the stall survived every recovery AND every failover this run. */
+declare function stallUnrecoveredInTrace(events: BrainTraceEvent[]): boolean;
+/** Tool-catalog exposure for a run, read off the `llm` turns the loop records. */
+interface ToolExposure {
+    /** Tools advertised on the LAST measured turn (what the model could call at the end). */
+    lastTurn: number | null;
+    /** Fewest tools advertised on any measured turn — a zero here explains everything. */
+    min: number | null;
+    /** Size of the whole registered catalog the selection drew from. */
+    catalog: number | null;
+}
+/**
+ * How many tools the model was actually OFFERED, per turn, versus how many exist.
+ *
+ * The chat-diagnostics header can only report the registry-wide total and the per-turn
+ * CEILING (`up to 64 advertised`). That is not the same question: a turn that was handed
+ * ZERO tools and a turn that was handed sixty-four and ignored them produce byte-identical
+ * reports, and only one of them is the model's fault. The loop now records the real
+ * per-turn number, and this reads it back. Nulls when the run predates the field.
+ */
+declare function toolExposureInTrace(events: BrainTraceEvent[]): ToolExposure;
+/**
+ * Tools the model WROTE OUT by name on a turn that made no call, which it had never been
+ * advertised — recorded per-turn by the run loop (only it holds both halves).
+ *
+ * This is the signal that separates two failures the old report collapsed into one
+ * "the model won't emit tool calls, try another":
+ *   - the model narrated a tool it COULD see  ⇒ genuinely a model/provider fault;
+ *   - the model narrated a tool it could NOT see ⇒ our per-turn tool selection dropped
+ *     the tool the prompt told it to call, and no model can emit a call for a function
+ *     it was never given. Swapping models does nothing.
+ * De-duplicated, first-seen order.
+ */
+declare function narratedUnadvertisedInTrace(events: BrainTraceEvent[]): string[];
 /**
  * An `evermind/…` (or project-/tenant-pinned) model id means a tenant's own
  * Evermind artifact answered the turn rather than a stock pool model. Matches the
@@ -1173,6 +1338,24 @@ interface BrainDiagnostics {
      * ever executes. See {@link detectAnnouncedButUnmadeToolCall}.
      */
     announcedUnmadeToolCall: boolean;
+    /** How many times the loop re-prompted a model that announced a call without making one. */
+    stallRecoveries: number;
+    /** How many times the loop switched MODELS after one burned its whole stall budget. */
+    modelFailovers: number;
+    /** True when the stall survived every recovery and every failover — the run gave up. */
+    stallUnrecovered: boolean;
+    /** How many tools the model was offered on the last measured turn (null ⇒ not recorded). */
+    advertisedToolsLastTurn: number | null;
+    /** Fewest tools offered on any measured turn — a 0 explains a whole run by itself. */
+    advertisedToolsMin: number | null;
+    /** Size of the registered catalog the per-turn selection drew from. */
+    catalogTools: number | null;
+    /**
+     * Tools the model named in prose on a call-less turn that it was never advertised.
+     * Non-empty means the request was impossible as framed — see
+     * {@link narratedUnadvertisedInTrace}.
+     */
+    narratedUnadvertisedTools: string[];
     /**
      * True when tool steps were RECOVERED from durable history but no `llm` turn
      * covers them — i.e. the chat predates durable turn records (or was reopened),
@@ -1189,8 +1372,12 @@ interface BrainDiagnostics {
      *
      * `tool-calls-not-emitted` outranks the rest: a run that narrated its calls did
      * nothing at all, and every other signal on it reads clean.
+     *
+     * `no-tools-advertised` and `tool-not-advertised` outrank even that, because they are
+     * OUR fault rather than the model's, and the remedy ("pick a different model") that
+     * `tool-calls-not-emitted` prescribes is actively wrong for them.
      */
-    likelyCause: 'tool-calls-not-emitted' | 'context-exhaustion' | 'model-degradation' | 'inconclusive' | 'healthy';
+    likelyCause: 'no-tools-advertised' | 'tool-not-advertised' | 'tool-calls-not-emitted' | 'context-exhaustion' | 'model-degradation' | 'inconclusive' | 'healthy';
 }
 /**
  * Derive {@link BrainDiagnostics} from a recorded trace. Pure — no clock, no I/O
@@ -1583,6 +1770,11 @@ interface GlobalRunState {
     running: number[];
     awaiting: number[];
 }
+/**
+ * Drop all run state. For tests/teardown only — there's no per-chat eviction in
+ * normal operation (transcripts are session-lived grounding, as before).
+ */
+declare function resetBrainRunStore(): void;
 /**
  * Subscribe to ANY run-state change across all chats (a run starting, finishing,
  * or pausing on a confirm — in any chat, mounted or not). Returns an unsubscribe
@@ -2358,4 +2550,4 @@ declare function handleRouterCall(catalog: BrainToolSpec[], name: string, args: 
     };
 };
 
-export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AllowanceState, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, ChatErrorAction, type ChatInputAttachment, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, type ModelFallbackSurface, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type PersistedStep, type PreparedImage, type ProvenanceAccount, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolSelection, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, allowanceState, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, effortProfile, fetchApiVersionVia, filterMentionCandidates, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mentionRecipient, modelsUsedInTrace, nextFallbackModel, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parseStepMessage, prepareImageDataUrl, reasoningForRun, resolveRecipient, resolveRunConfirm, routerToolSpecs, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, traceWithPersistedSteps, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AllowanceState, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, ChatErrorAction, type ChatInputAttachment, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, type ModelFallbackSurface, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PersistedStep, type PreparedImage, type ProvenanceAccount, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolExposure, type ToolSelection, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, allowanceState, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mcpActionsFrom, mentionRecipient, modelFailoversInTrace, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parseStepMessage, prepareImageDataUrl, reasoningForRun, resetBrainRunStore, resolveRecipient, resolveRunConfirm, routerToolSpecs, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolExposureInTrace, toolSpecsFor, traceWithPersistedSteps, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };

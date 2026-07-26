@@ -1,0 +1,21 @@
+{
+  "//": "The headless harness spans BOTH halves of the extension: the extension-host tool definitions (../src) and the webview's system prompt + transcript serializer (../webview/src). Neither of the existing projects covers that span, so it gets its own — otherwise `pnpm typecheck` would silently skip the code that validates everything else.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "ignoreDeprecations": "6.0",
+    "types": ["react", "react-dom", "node"],
+    "paths": {
+      "@builderforce/agent-tools": ["../../../packages/agent-tools/src/index.ts"],
+      "@builderforce/agent-tools/*": ["../../../packages/agent-tools/src/*"]
+    }
+  },
+  "include": ["**/*.ts", "../vitest.config.ts"]
+}
