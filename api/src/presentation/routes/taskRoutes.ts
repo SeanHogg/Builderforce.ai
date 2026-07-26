@@ -19,6 +19,8 @@ import { ensureTaskPrdRecord, linkSpecToTask } from '../../application/prd/taskP
 import { recordStatusTransition } from '../../application/task/taskLifecycle';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { buildTicketLifecycle } from '../../application/activity/ticketLifecycleLedger';
+import { buildTicketContext } from '../../application/task/ticketContext';
+import { pmoVersionKey } from './pmoRoutes';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
@@ -471,6 +473,36 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
         return { epic: epic.toPlain(), children: children.map((t) => t.toPlain()) };
       },
     );
+    return c.json(payload);
+  });
+
+  // GET /api/tasks/:id/context — the ticket drawer's HEADER read: this ticket's
+  // %-complete (and what that number is made of), the Epic it belongs to with the
+  // Epic's own rollup, its outstanding sign-offs, and the objective(s) it serves
+  // with the ticket's share of each. Answers "why does this matter / how far along
+  // is it" without leaving the ticket for /pmo or the Sign-off tab.
+  //
+  // Cached on a COMPOSITE version token, because the payload spans three write
+  // surfaces that invalidate independently: the task tree (create/move/decompose),
+  // the participant manifest (a sign-off), and PMO (an objective/KR edit). Any one
+  // of them bumping orphans the entry.
+  router.get('/:id/context', async (c) => {
+    const id = Number(c.req.param('id'));
+    const tenantId = c.get('tenantId');
+    const env = c.env as Env;
+    const row = await loadTenantTask(id, tenantId);
+    if (!row) return c.json({ error: 'Task not found' }, 404);
+    const [treeVer, signoffVer, pmoVer] = await Promise.all([
+      getCacheVersion(env, `task-tree-version:project:${row.projectId}`),
+      getCacheVersion(env, `participants:task:${id}`),
+      getCacheVersion(env, pmoVersionKey(tenantId)),
+    ]);
+    const payload = await getOrSetCached(
+      env,
+      `task-context:task:${id}:v:${treeVer}.${signoffVer}.${pmoVer}`,
+      () => buildTicketContext(db, env, { tenantId, taskId: id }),
+    );
+    if (!payload) return c.json({ error: 'Task not found' }, 404);
     return c.json(payload);
   });
 

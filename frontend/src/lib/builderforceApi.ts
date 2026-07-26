@@ -1684,6 +1684,81 @@ export interface TicketLifecycle {
   gate: LifecycleGateSnapshot | null;
 }
 
+// ---------------------------------------------------------------------------
+// Ticket context — the drawer header's "why does this matter / how far along" read
+// ---------------------------------------------------------------------------
+
+/** One contributing signal behind a ticket's headline %-complete. */
+export interface CompletionBasis {
+  kind: 'lane' | 'signoff' | 'children';
+  percent: number;
+  /** Weight this signal carried in the headline number (0..1). */
+  weight: number;
+  done: number;
+  total: number;
+}
+
+export interface TicketCompletion {
+  percent: number;
+  laneKey: string;
+  /** 0-based index of this ticket's lane among the board's ordered lanes (-1 = unplaceable). */
+  laneIndex: number;
+  laneCount: number;
+  isTerminal: boolean;
+  basis: CompletionBasis[];
+}
+
+/** A parent Epic (or this ticket's own children when IT is the Epic). */
+export interface TicketEpicRollup {
+  id: number;
+  key: string;
+  title: string;
+  status: string;
+  total: number;
+  done: number;
+  percent: number;
+}
+
+export interface TicketKeyResult {
+  id: string;
+  title: string;
+  status: string;
+  unit: string | null;
+  currentValue: number;
+  targetValue: number;
+  percent: number;
+}
+
+export interface TicketObjective {
+  id: string;
+  title: string;
+  status: string;
+  period: string | null;
+  /** 0..100 — mean attainment of the objective's key results. */
+  percent: number;
+  /** How this ticket reaches the objective (nearest link wins). */
+  via: 'task' | 'epic' | 'project' | 'initiative';
+  /** Human anchor for `via`: the Epic's title, the initiative's name, etc. */
+  viaLabel: string | null;
+  keyResults: TicketKeyResult[];
+  linkedTaskCount: number;
+  linkedTaskDone: number;
+  /** This ticket's share of the objective's linked delivery, 0..100 (0 = inherited scope). */
+  sharePercent: number;
+}
+
+export interface TicketContext {
+  taskId: number;
+  projectId: number;
+  completion: TicketCompletion;
+  signoff: { completed: number; required: number; percent: number; gaps: number; outstandingRoles: string[] };
+  /** The Epic this ticket belongs to, with ITS rollup. Null when top-level. */
+  epic: TicketEpicRollup | null;
+  /** This ticket's own children rollup — set only when the ticket IS an Epic. */
+  children: TicketEpicRollup | null;
+  objectives: TicketObjective[];
+}
+
 /** The three work-item types you can convert between across the board ⇄ OKR boundary. */
 export type WorkItemKind = 'task' | 'epic' | 'objective';
 /** Result of a {@link tasksApi.convertType} / objectives convert-type call. */
@@ -1783,6 +1858,11 @@ export const tasksApi = {
    *  custody, plus the verdict on whether autonomy or a human moved it. */
   lifecycle: (id: number): Promise<TicketLifecycle> =>
     request<TicketLifecycle>(`/api/tasks/${id}/lifecycle`),
+
+  /** CONTEXT: %-complete (and what it's made of), the parent Epic's rollup, the
+   *  outstanding sign-offs, and the objective(s) this ticket serves. */
+  context: (id: number): Promise<TicketContext> =>
+    request<TicketContext>(`/api/tasks/${id}/context`),
 
   /** Triage: dispatch the ticket's owner / first-capable lane agent now,
    *  overriding the lane gate (an explicit human click is the approval). */

@@ -19,10 +19,7 @@ import { getOrSetCached, invalidateCached, projectScoreCacheKey, tenantRollupCac
 import { bumpWorkforceMetricsVersion } from '../metrics/workforceMetrics';
 import { releaseWorkItemWebhook } from '../seams/workItemWebhook';
 import { TaskStatus } from '../../domain/shared/types';
-
-/** Lane keys that mean "done". Mirrors reportRoutes.DONE_CLASS_STATUSES; also
- *  any swimlane flagged `isTerminal` is treated as done-class at runtime. */
-const DONE_CLASS = new Set<string>([TaskStatus.DONE]);
+import { DONE_CLASS, isDoneLane } from '../../domain/shared/doneClass';
 
 /**
  * Lane keys whose work is JUDGING work someone else already did.
@@ -45,8 +42,8 @@ export function isReviewLane(status: string | null | undefined): boolean {
   return !!status && REVIEW_CLASS.has(status);
 }
 
-type LaneInfo = { position: number; isTerminal: boolean };
-type OrdinalMap = Record<string, LaneInfo>;
+export type LaneInfo = { position: number; isTerminal: boolean };
+export type OrdinalMap = Record<string, LaneInfo>;
 
 function ordinalsCacheKey(projectId: number): string {
   return `swimlane-ordinals:project:${projectId}`;
@@ -54,8 +51,12 @@ function ordinalsCacheKey(projectId: number): string {
 
 /** Per-project lane-key → {position, isTerminal} map, cached (board layout is
  *  slow-changing). Empty object when the project has no board yet (free-form
- *  status with no swimlane → direction undeterminable, recorded as null). */
-async function loadOrdinals(env: Env, db: Db, projectId: number): Promise<OrdinalMap> {
+ *  status with no swimlane → direction undeterminable, recorded as null).
+ *
+ *  Exported because "where is this ticket in its board's sequence" is the same
+ *  question the ticket-context read asks (lane N of M ⇒ %-complete); sharing the
+ *  loader keeps both answers on one cached board layout instead of two. */
+export async function loadLaneOrdinals(env: Env, db: Db, projectId: number): Promise<OrdinalMap> {
   return getOrSetCached(env, ordinalsCacheKey(projectId), async () => {
     const rows = await db
       .select({ key: swimlanes.key, position: swimlanes.position, isTerminal: swimlanes.isTerminal })
@@ -73,9 +74,7 @@ export async function invalidateSwimlaneOrdinals(env: Env, projectId: number): P
   await invalidateCached(env, ordinalsCacheKey(projectId));
 }
 
-function isDoneClass(status: string, ordinals: OrdinalMap): boolean {
-  return DONE_CLASS.has(status) || ordinals[status]?.isTerminal === true;
-}
+const isDoneClass = (status: string, ordinals: OrdinalMap): boolean => isDoneLane(status, ordinals);
 
 export interface RecordTransitionInput {
   tenantId: number;
@@ -97,7 +96,7 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
   const { tenantId, projectId, taskId, fromStatus, toStatus, actorUserId } = input;
   if (fromStatus === toStatus) return;
 
-  const ordinals = await loadOrdinals(env, db, projectId);
+  const ordinals = await loadLaneOrdinals(env, db, projectId);
   const fromPos = fromStatus != null ? ordinals[fromStatus]?.position : undefined;
   const toPos = ordinals[toStatus]?.position;
   const isBackward = fromPos != null && toPos != null ? toPos < fromPos : null;
@@ -186,7 +185,7 @@ export async function completeTaskOnMerge(
     .where(eq(tasks.id, input.taskId))
     .limit(1);
   if (!t) return;
-  const ordinals = await loadOrdinals(env, db, t.projectId);
+  const ordinals = await loadLaneOrdinals(env, db, t.projectId);
   if (isDoneClass(t.status, ordinals)) return; // already complete — nothing to do
   await db.update(tasks).set({ status: TaskStatus.DONE, updatedAt: new Date() }).where(eq(tasks.id, input.taskId));
   await recordStatusTransition(env, db, {

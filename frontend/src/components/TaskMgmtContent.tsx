@@ -55,6 +55,8 @@ import { AgentTab } from './agent/AgentTab';
 import { TaskChangesPanel } from './agent/TaskChangesPanel';
 import { TaskPrdTab } from './task/TaskPrdTab';
 import { AccountabilityTab } from './task/AccountabilityTab';
+import { TaskBadges } from './task/TaskBadges';
+import { TicketContextStrip } from './task/TicketContextStrip';
 import { TicketLifecyclePanel } from './task/TicketLifecyclePanel';
 import { RunTaskButton } from './task/RunTaskButton';
 import { ApprovalResolveControl } from './humanRequests/ApprovalResolveControl';
@@ -266,6 +268,15 @@ export function TaskMgmtContent({
     setDrawerTab(tab);
     setDrawerTask(t);
   }, []);
+
+  // Swap the drawer to a ticket's parent Epic. The Epic is usually already in the
+  // loaded board, but it can sit outside the active filter (or on a collapsed
+  // lane), so fall back to fetching it rather than making the link a dead end.
+  const openEpic = useCallback((epicId: number) => {
+    const known = tasks.find((t) => t.id === epicId);
+    if (known) { openTask(known); return; }
+    tasksApi.get(epicId).then(openTask).catch(() => {});
+  }, [tasks, openTask]);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -988,101 +999,12 @@ export function TaskMgmtContent({
             flexWrap: 'wrap',
           }}
         >
-          <span style={{ fontFamily: 'var(--font-mono)' }}>{task.key}</span>
-          <span
-            className={PRIORITY_CLASS[task.priority]}
-            style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, textTransform: 'capitalize' }}
-          >
-            {task.priority}
-          </span>
-          {taskTypeBadgeClass(task.taskType) && (
-            <span
-              className={taskTypeBadgeClass(task.taskType)!}
-              style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4 }}
-            >
-              {tCommon(taskTypeLabelKey(task.taskType))}
-            </span>
-          )}
-          {task.reviewCount ? (
-            <span
-              title={
-                task.lastReviewVerdict === 'complete'
-                  ? tCommon('reviewComplete')
-                  : task.lastReviewVerdict === 'gaps'
-                    ? tCommon('reviewGaps')
-                    : undefined
-              }
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 3,
-                fontSize: 10,
-                padding: '2px 6px',
-                borderRadius: 4,
-                background: 'var(--bg-elevated)',
-                color:
-                  task.lastReviewVerdict === 'gaps'
-                    ? '#f59e0b'
-                    : task.lastReviewVerdict === 'complete'
-                      ? '#22c55e'
-                      : 'var(--text-secondary)',
-                fontWeight: 600,
-              }}
-            >
-              {task.lastReviewVerdict === 'complete'
-                ? '✓'
-                : task.lastReviewVerdict === 'gaps'
-                  ? '⚠'
-                  : '↻'}{' '}
-              {tCommon('reviewedTimes', { count: task.reviewCount })}
-            </span>
-          ) : null}
-          {flaggedIds.has(task.id) && (
-            <span
-              title={tBoard('audit.flaggedTitle')}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10,
-                padding: '2px 6px', borderRadius: 4, background: 'var(--danger-bg, #fee2e2)',
-                color: 'var(--danger-text, #991b1b)', fontWeight: 700,
-              }}
-            >
-              ⚑ {tBoard('audit.flagged')}
-            </span>
-          )}
-          {(() => {
-            const prog = participantProgress.get(task.id);
-            if (!prog || prog.required === 0) return null;
-            const complete = prog.percent >= 100;
-            return (
-              <span
-                title={tBoard('audit.participantsTitle')}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10,
-                  padding: '2px 6px', borderRadius: 4, fontWeight: 700,
-                  background: complete ? 'var(--success-bg, #dcfce7)' : 'var(--bg-deep, #eef2ff)',
-                  color: complete ? 'var(--success-text, #166534)' : 'var(--text-secondary, #475569)',
-                }}
-              >
-                ✅ {prog.completed}/{prog.required}
-              </span>
-            );
-          })()}
-          {task.businessValue != null && (
-            <span
-              title={task.businessValueRationale ?? tBoard('businessValue.badgeTitle')}
-              style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--surface-interactive, var(--bg-elevated))', color: 'var(--text-secondary)', fontWeight: 700 }}
-            >
-              {tBoard('businessValue.badge', { value: task.businessValue })}
-            </span>
-          )}
-          {task.specCount ? (
-            <span
-              title={`${task.specCount} linked PRD${task.specCount > 1 ? 's' : ''}`}
-              style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
-            >
-              📄 PRD{task.specCount > 1 ? ` ×${task.specCount}` : ''}
-            </span>
-          ) : null}
+          <TaskBadges
+            task={task}
+            showKey
+            flagged={flaggedIds.has(task.id)}
+            participants={participantProgress.get(task.id) ?? null}
+          />
           {runs.length > 0 ? (
             // One chip per agent that has touched this task, newest run first, so
             // history reads left-to-right: a freshly-queued agent (Bob · pending)
@@ -1758,25 +1680,13 @@ export function TaskMgmtContent({
                         )}
                       </td>
                       <td style={{ padding: '10px 12px' }}>
-                        <span
-                          className={PRIORITY_CLASS[task.priority]}
-                          style={{
-                            fontSize: 10,
-                            padding: '2px 6px',
-                            borderRadius: 4,
-                            textTransform: 'capitalize',
-                          }}
-                        >
-                          {task.priority}
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <TaskBadges
+                            task={task}
+                            flagged={flaggedIds.has(task.id)}
+                            participants={participantProgress.get(task.id) ?? null}
+                          />
                         </span>
-                        {task.businessValue != null && (
-                          <span
-                            title={task.businessValueRationale ?? tBoard('businessValue.badgeTitle')}
-                            style={{ marginLeft: 6, fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--surface-interactive, var(--bg-elevated))', color: 'var(--text-secondary)', fontWeight: 700 }}
-                          >
-                            {tBoard('businessValue.badge', { value: task.businessValue })}
-                          </span>
-                        )}
                       </td>
                       {!projectId && (
                         <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>
@@ -2327,7 +2237,24 @@ export function TaskMgmtContent({
                     {drawerTask.priority}
                   </span>
                 )}
+                {/* The SAME badges the board card carries. Opening a ticket used to
+                    drop them (the flag, the sign-off rollup, the PRD count), so the
+                    card said more than the ticket did. One shared component now. */}
+                <TaskBadges
+                  task={drawerTask}
+                  showPriority={false}
+                  flagged={flaggedIds.has(drawerTask.id)}
+                  participants={participantProgress.get(drawerTask.id) ?? null}
+                />
               </div>
+              {/* Epic / %-complete / objective alignment + the blockers that hold it
+                  up — above the fold, so none of it needs a trip to another tab. */}
+              <TicketContextStrip
+                taskId={drawerTask.id}
+                onOpenEpic={openEpic}
+                onOpenTab={setDrawerTab}
+                onChanged={() => load({ background: true })}
+              />
               {(drawerTask.gitBranch || drawerTask.githubPrUrl) && (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>{tTask('branchAndPr')}</div>

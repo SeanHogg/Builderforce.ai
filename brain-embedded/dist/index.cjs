@@ -36,6 +36,9 @@ __export(src_exports, {
   PROVENANCE_META_KEY: () => PROVENANCE_META_KEY,
   STEP_MESSAGE_ROLE: () => STEP_MESSAGE_ROLE,
   TICKET_RECORDING_TOOLS: () => TICKET_RECORDING_TOOLS,
+  TOOL_ROUTER_DESCRIBE: () => TOOL_ROUTER_DESCRIBE,
+  TOOL_ROUTER_FIND: () => TOOL_ROUTER_FIND,
+  TOOL_ROUTER_INVOKE: () => TOOL_ROUTER_INVOKE,
   accountUsedInTrace: () => accountUsedInTrace,
   activeMentionToken: () => activeMentionToken,
   allowanceState: () => allowanceState,
@@ -55,12 +58,14 @@ __export(src_exports, {
   consolidationMetadata: () => consolidationMetadata,
   countReconciledMemories: () => countReconciledMemories,
   deriveChatTitle: () => deriveChatTitle,
+  describeTool: () => describeTool,
   detectAnnouncedButUnmadeToolCall: () => detectAnnouncedButUnmadeToolCall,
   detectUnbackedTicketClaim: () => detectUnbackedTicketClaim,
   detectUnbackedWriteClaim: () => detectUnbackedWriteClaim,
   effortProfile: () => effortProfile,
   fetchApiVersionVia: () => fetchApiVersionVia,
   filterMentionCandidates: () => filterMentionCandidates,
+  findTools: () => findTools,
   formatBrainDiagnostics: () => formatBrainDiagnostics,
   formatBrainProvenance: () => formatBrainProvenance,
   formatChatDiagnostics: () => formatChatDiagnostics,
@@ -71,6 +76,7 @@ __export(src_exports, {
   getMcpToolStatus: () => getMcpToolStatus,
   getRunSnapshot: () => getRunSnapshot,
   getRunTrace: () => getRunTrace,
+  handleRouterCall: () => handleRouterCall,
   isCodeChangeTool: () => isCodeChangeTool,
   isConnectedAccountUnused: () => isConnectedAccountUnused,
   isConsolidationMarker: () => isConsolidationMarker,
@@ -78,6 +84,7 @@ __export(src_exports, {
   isEffort: () => isEffort,
   isEvermindModel: () => isEvermindModel,
   isFailedToolResult: () => isFailedToolResult,
+  isRouterTool: () => isRouterTool,
   isRunning: () => isRunning,
   isStepMessage: () => isStepMessage,
   isTicketRecordingTool: () => isTicketRecordingTool,
@@ -95,6 +102,7 @@ __export(src_exports, {
   reasoningForRun: () => reasoningForRun,
   resolveRecipient: () => resolveRecipient,
   resolveRunConfirm: () => resolveRunConfirm,
+  routerToolSpecs: () => routerToolSpecs,
   runBrainLoop: () => startRun,
   savePendingPrompt: () => savePendingPrompt,
   scopeToConsolidation: () => scopeToConsolidation,
@@ -1324,6 +1332,9 @@ var ANNOUNCE_FILLER = "(?:\\s+(?:now|then|first|next|quickly|briefly|just|also|a
 var ANNOUNCE_VERB = "(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|see|walk|trace|map)";
 var ANNOUNCE_GERUND = "(?:searching|fetching|retrieving|querying|loading|checking|looking|scanning|reading|listing|gathering|pulling|examining|inspecting|reviewing|analy[sz]ing)";
 var TOOL_IDENT = "(?:builtin_[a-z0-9]+(?:_[a-z0-9]+)+|mcp__[a-z0-9_]+)";
+function toolNamesMentionedIn(text) {
+  return [...new Set(text.match(new RegExp(TOOL_IDENT, "gi")) ?? [])];
+}
 var PSEUDO_CALL = [
   // "call builtin_x", "run tool builtin_x", "invoke the function mcp__srv__x"
   `(?:call|run|invoke|execute)\\s+(?:the\\s+)?(?:tool\\s+|function\\s+)?${TOOL_IDENT}`,
@@ -1819,6 +1830,7 @@ function selectToolsForTurn(tools, options) {
   if (!tools || available <= limit) {
     return { tools: tools ?? [], trimmed: false, available };
   }
+  const required = new Set(options.required ?? []);
   const pinned = new Set(options.pinned ?? []);
   const queryStems = new Set(tokenize(options.query).map(stem));
   const chosen = [];
@@ -1829,6 +1841,10 @@ function selectToolsForTurn(tools, options) {
     taken.add(name);
     chosen.push(tool);
   };
+  for (const tool of tools) {
+    if (chosen.length >= limit) break;
+    if (required.has(tool.function?.name ?? "")) take(tool);
+  }
   for (const tool of tools) {
     if (chosen.length >= limit) break;
     if (pinned.has(tool.function?.name ?? "")) take(tool);
@@ -1843,6 +1859,114 @@ function selectToolsForTurn(tools, options) {
     take(tool);
   }
   return { tools: chosen, trimmed: true, available };
+}
+
+// src/toolRouter.ts
+var TOOL_ROUTER_FIND = "builtin_tools_find";
+var TOOL_ROUTER_DESCRIBE = "builtin_tools_describe";
+var TOOL_ROUTER_INVOKE = "builtin_tools_invoke";
+function isRouterTool(name) {
+  return name === TOOL_ROUTER_FIND || name === TOOL_ROUTER_DESCRIBE || name === TOOL_ROUTER_INVOKE;
+}
+var FIND_LIMIT = 25;
+function routerToolSpecs(catalogSize) {
+  const preamble = `This conversation has ${catalogSize} platform tools available in total, but only the most relevant ones are listed directly on each turn.`;
+  return [
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_FIND,
+        description: `${preamble} Search ALL of them by keyword and get back their names and descriptions. Use this FIRST whenever the tool you want is not in your visible list \u2014 do NOT assume a capability is missing, and never write a tool call as plain text.`,
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: 'Keywords, e.g. "tickets backlog status" or "pull request".' }
+          },
+          required: ["query"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_DESCRIBE,
+        description: `${preamble} Get the exact parameter schema for one tool by name, so you can build its arguments before calling it with ${TOOL_ROUTER_INVOKE}.`,
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: `Exact tool name, e.g. "builtin_chats_list_tickets".` }
+          },
+          required: ["name"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_INVOKE,
+        description: `${preamble} Call ANY of them by name, including ones not listed on this turn. This is a real call and it really executes \u2014 use it instead of describing what you would call.`,
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Exact tool name to call." },
+            args: { type: "object", description: "Arguments object for that tool." }
+          },
+          required: ["name"]
+        }
+      }
+    }
+  ];
+}
+function words(text) {
+  return text.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+}
+function findTools(catalog, query, limit = FIND_LIMIT) {
+  const terms = words(query);
+  if (terms.length === 0) return [];
+  const scored = [];
+  catalog.forEach((tool, index) => {
+    const name = tool.function?.name ?? "";
+    if (!name) return;
+    const description = tool.function?.description ?? "";
+    const haystackName = name.toLowerCase();
+    const haystackDesc = description.toLowerCase();
+    let score = 0;
+    for (const t of terms) {
+      if (haystackName.includes(t)) score += 10;
+      else if (haystackDesc.includes(t)) score += 1;
+    }
+    if (score > 0) scored.push({ m: { name, description }, score, index });
+  });
+  return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.m);
+}
+function describeTool(catalog, name) {
+  return catalog.find((t) => t.function?.name === name) ?? null;
+}
+function handleRouterCall(catalog, name, args) {
+  const a = args ?? {};
+  if (name === TOOL_ROUTER_FIND) {
+    const query = typeof a.query === "string" ? a.query : "";
+    const matches = findTools(catalog, query);
+    return {
+      result: matches.length ? { matches, note: `Call one with ${TOOL_ROUTER_INVOKE}, or ${TOOL_ROUTER_DESCRIBE} first for its arguments.` } : { matches: [], note: `No tool matches "${query}". Try broader keywords; ${catalog.length} tools exist.` }
+    };
+  }
+  if (name === TOOL_ROUTER_DESCRIBE) {
+    const target2 = typeof a.name === "string" ? a.name : "";
+    const spec = describeTool(catalog, target2);
+    return {
+      result: spec ? { name: target2, description: spec.function?.description ?? "", parameters: spec.function?.parameters ?? {} } : { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
+    };
+  }
+  const target = typeof a.name === "string" ? a.name : "";
+  if (!target) return { result: { error: `${TOOL_ROUTER_INVOKE} requires a "name".` } };
+  if (isRouterTool(target)) {
+    return { result: { error: `${target} cannot be invoked through the router.` } };
+  }
+  if (!describeTool(catalog, target)) {
+    return { result: { error: `Unknown tool "${target}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
+  }
+  return { dispatch: { name: target, args: a.args ?? {} } };
 }
 
 // src/chatWorkLinking.ts
@@ -2548,6 +2672,8 @@ ${chatWorkLinkingDirective(chatId)}`;
   let activeModel = model;
   const triedModels = [];
   let modelFailovers = 0;
+  const requestQuery = (req.userTurn !== void 0 ? latestUserText([{ role: "user", content: req.userTurn }]) : "") || latestUserText(convo) || "";
+  const promptNamedTools = toolNamesMentionedIn(systemPrompt);
   const emitEvermindLearnReconcile = (assistantMsg, finalText) => {
     const learn = assistantMsg?.evermindLearn;
     if (learn?.learned) {
@@ -2594,10 +2720,26 @@ ${chatWorkLinkingDirective(chatId)}`;
     let firstTokenAt;
     let result;
     const selection = selectToolsForTurn(allTools, {
-      query: latestUserText(working) ?? latestUserText(convo) ?? "",
-      pinned: usedTools
+      // The REQUEST, captured once before the loop — never "the latest user message".
+      // The loop pushes its own `role:'user'` turns (the stall-recovery nudge, the
+      // tool-budget close-out), so reading the newest one re-rolled the advertised
+      // set from text WE wrote: after one recovery the query became "…made zero tool
+      // calls… answer using its result…", which scores `key_results`/`dashboards`/
+      // `incidents` and drops the ticket tools the user actually asked for. The tool
+      // the model was told to call then genuinely did not exist, and it narrated.
+      // Holding the request steady also keeps the advertised set STABLE across turns
+      // — a tool must not vanish between one turn and the next.
+      query: requestQuery,
+      pinned: usedTools,
+      // Tools the SYSTEM PROMPT instructs the model to call (e.g. the chat↔ticket
+      // directive names `builtin_chats_list_tickets`) are never optional: telling a
+      // model to call a tool we then decline to advertise is the exact contradiction
+      // that produces a narrated call. Derived from the prompt text, so a directive
+      // edit can never silently desync from this list.
+      required: promptNamedTools
     });
-    const tools = selection.tools.length > 0 ? selection.tools : void 0;
+    const advertised = selection.trimmed ? [...selection.tools, ...routerToolSpecs(allTools?.length ?? 0)] : selection.tools;
+    const tools = advertised.length > 0 ? advertised : void 0;
     if (selection.trimmed) {
       pushTrace(c, {
         ts: nowIso(),
@@ -2693,7 +2835,30 @@ ${chatWorkLinkingDirective(chatId)}`;
       }
       c.streamingText = "";
       emit(c);
-      for (const tc of result.toolCalls) {
+      for (const rawCall of result.toolCalls) {
+        let tc = rawCall;
+        if (isRouterTool(tc.name)) {
+          const routed = handleRouterCall(allTools ?? [], tc.name, parseArgs(tc.args));
+          if ("result" in routed) {
+            convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(routed.result) });
+            pushDurableStep(c, chatId, persistence, {
+              ts: nowIso(),
+              category: "tool",
+              label: tc.name,
+              args: parseArgs(tc.args),
+              result: routed.result
+            });
+            continue;
+          }
+          tc = { ...tc, name: routed.dispatch.name, args: JSON.stringify(routed.dispatch.args ?? {}) };
+          pushTrace(c, {
+            ts: nowIso(),
+            category: "message",
+            label: "tools.routed",
+            args: { step: iter, via: rawCall.name },
+            result: `Called ${tc.name} through the tool router (it was not advertised directly this turn).`
+          });
+        }
         const args = parseArgs(tc.args);
         if (needsConfirm && needsConfirm({ name: tc.name, args })) {
           const ok = await new Promise((resolve) => {
@@ -3530,6 +3695,9 @@ function formatChatDiagnostics(d) {
   PROVENANCE_META_KEY,
   STEP_MESSAGE_ROLE,
   TICKET_RECORDING_TOOLS,
+  TOOL_ROUTER_DESCRIBE,
+  TOOL_ROUTER_FIND,
+  TOOL_ROUTER_INVOKE,
   accountUsedInTrace,
   activeMentionToken,
   allowanceState,
@@ -3549,12 +3717,14 @@ function formatChatDiagnostics(d) {
   consolidationMetadata,
   countReconciledMemories,
   deriveChatTitle,
+  describeTool,
   detectAnnouncedButUnmadeToolCall,
   detectUnbackedTicketClaim,
   detectUnbackedWriteClaim,
   effortProfile,
   fetchApiVersionVia,
   filterMentionCandidates,
+  findTools,
   formatBrainDiagnostics,
   formatBrainProvenance,
   formatChatDiagnostics,
@@ -3565,6 +3735,7 @@ function formatChatDiagnostics(d) {
   getMcpToolStatus,
   getRunSnapshot,
   getRunTrace,
+  handleRouterCall,
   isCodeChangeTool,
   isConnectedAccountUnused,
   isConsolidationMarker,
@@ -3572,6 +3743,7 @@ function formatChatDiagnostics(d) {
   isEffort,
   isEvermindModel,
   isFailedToolResult,
+  isRouterTool,
   isRunning,
   isStepMessage,
   isTicketRecordingTool,
@@ -3589,6 +3761,7 @@ function formatChatDiagnostics(d) {
   reasoningForRun,
   resolveRecipient,
   resolveRunConfirm,
+  routerToolSpecs,
   runBrainLoop,
   savePendingPrompt,
   scopeToConsolidation,

@@ -48,7 +48,8 @@ import {
   activityLog, executions, taskStatusTransitions, tasks, toolAuditEvents,
 } from '../../infrastructure/database/schema';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { ExecutionStatus, TaskStatus } from '../../domain/shared/types';
+import { ExecutionStatus } from '../../domain/shared/types';
+import { isDoneStatus } from '../../domain/shared/doneClass';
 import {
   autoRunReasonEvaluationText, EVALUATED_AUTO_RUN_REASONS,
   type AutoRunEvaluation, type AutoRunReason, type TenantTokenVerdict,
@@ -225,9 +226,8 @@ export interface TicketAutonomyVerdict extends TicketAutonomySignals {
   stallText: string | null;
 }
 
-/** Lane keys that mean "finished". Mirrors taskLifecycle.DONE_CLASS; a swimlane
- *  flagged `is_terminal` is resolved by the caller and passed via `isTerminal`. */
-const DONE_CLASS = new Set<string>([TaskStatus.DONE]);
+// "Finished" is the shared lane class (domain/shared/doneClass); a swimlane flagged
+// `is_terminal` is resolved by the caller and passed via `isTerminal`.
 
 /**
  * Both spellings a ticket activity row may carry. The HTTP writer always used the
@@ -287,7 +287,7 @@ export function reconcileStallReason(s: TicketAutonomySignals): AutoRunReason | 
  * runs also happened. That strictness is what makes a "yes" trustworthy.
  */
 export function classifyTicketAutonomy(s: TicketAutonomySignals): TicketAutonomyVerdict {
-  const reachedTerminal = s.isTerminal || DONE_CLASS.has(s.currentStatus);
+  const reachedTerminal = s.isTerminal || isDoneStatus(s.currentStatus);
   const progressedAutonomously = s.autonomousHops > 0;
   const fullyAutonomous = reachedTerminal && s.humanHops === 0 && progressedAutonomously;
   // Stalled = not finished and nothing is running. A ticket with a live run is
