@@ -5,6 +5,8 @@ import { TenantService } from '../../application/tenant/TenantService';
 import { TenantRole, TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { requirePermission } from '../middleware/requirePermission';
+import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
@@ -297,7 +299,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   });
 
   // GET /api/tenants/:id/subscription
-  router.get('/:id/subscription', async (c) => {
+  router.get('/:id/subscription', requirePermission(PERMISSIONS.BILLING_READ), async (c) => {
     const tenantId = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
@@ -321,7 +323,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
    *   successUrl          string                 optional (defaults to /pricing?success=1)
    *   cancelUrl           string                 optional (defaults to /pricing?cancelled=1)
    */
-  router.post('/:id/subscription/checkout', requireRole(TenantRole.MANAGER), async (c) => {
+  router.post('/:id/subscription/checkout', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.BILLING_MANAGE), async (c) => {
     const tenantId = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
@@ -491,7 +493,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   });
 
   // POST /api/tenants/:id/subscription/free
-  router.post('/:id/subscription/free', requireRole(TenantRole.MANAGER), async (c) => {
+  router.post('/:id/subscription/free', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.BILLING_MANAGE), async (c) => {
     const tenantId = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
@@ -779,7 +781,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   });
 
   // POST /api/tenants/:id/members
-  router.post('/:id/members', requireRole(TenantRole.MANAGER), async (c) => {
+  router.post('/:id/members', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.MEMBER_INVITE), async (c) => {
     const id   = Number(c.req.param('id'));
     const body = await c.req.json<{ newUserId: string; role: TenantRole }>();
     const actorUserId = c.get('userId') as string;
@@ -799,7 +801,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   // Existing account → add as a member immediately (status 'added'). No account
   // yet → record a pending invitation (status 'pending') that auto-converts to a
   // membership the first time they log in with that email (see GET /mine).
-  router.post('/:id/invite-by-email', requireRole(TenantRole.MANAGER), async (c) => {
+  router.post('/:id/invite-by-email', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.MEMBER_INVITE), async (c) => {
     const id          = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
     if (id !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
@@ -947,7 +949,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   });
 
   // DELETE /api/tenants/:id/members/:userId
-  router.delete('/:id/members/:userId', requireRole(TenantRole.MANAGER), async (c) => {
+  router.delete('/:id/members/:userId', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.MEMBER_REMOVE), async (c) => {
     const id           = Number(c.req.param('id'));
     const targetUserId = c.req.param('userId');
     const actorUserId  = c.get('userId') as string;
@@ -959,7 +961,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   });
 
   // PATCH /api/tenants/:id/members/:userId/role — change an existing member's role.
-  router.patch('/:id/members/:userId/role', requireRole(TenantRole.MANAGER), async (c) => {
+  router.patch('/:id/members/:userId/role', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.MEMBER_PROMOTE), async (c) => {
     const id           = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
     if (id !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);

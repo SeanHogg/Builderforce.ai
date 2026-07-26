@@ -4,35 +4,15 @@
  *   • /api/insights/snapshots  annual-calendar cadence (lens review snapshots)
  *   • /api/workforce/plan      blended human + agent capacity-vs-WIP plan
  *
- * Reuses the shared tenant-JWT auth primitives from `./auth` (same contract as
- * builderforceApi's request()) so the token / 401 / 402 handling never drifts.
+ * Calls go through the shared transport (`apiClient.apiRequest`) rather than a
+ * local fetch wrapper. This module previously carried its own copy of `request`
+ * with a comment claiming the handling "never drifts" — it had already drifted,
+ * dropping `dispatchApiError` (so failures here raised no toast), the emulation
+ * token, and the locale header.
  */
 
-import {
-  AUTH_API_URL,
-  checkUnauthorizedAndRedirect,
-  getStoredTenantToken,
-} from './auth';
-import { planLimitErrorFromResponse } from './planLimitError';
+import { apiRequest as request } from './apiClient';
 import type { Persona, Lens } from './lensPersona';
-
-async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const token = getStoredTenantToken();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${AUTH_API_URL}${path}`, {
-    ...opts,
-    headers: { ...headers, ...(opts.headers as Record<string, string>) },
-  });
-  checkUnauthorizedAndRedirect(res, !!token);
-  if (res.status === 402) throw await planLimitErrorFromResponse(res);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error || res.statusText || `Request failed (${res.status})`);
-  }
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
-}
 
 // ── Member personas ─────────────────────────────────────────────────────────
 

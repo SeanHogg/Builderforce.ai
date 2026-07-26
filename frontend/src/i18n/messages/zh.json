@@ -397,7 +397,8 @@
       "marketplace": "市场",
       "incidents": "事件",
       "monitoring": "监控",
-      "reliability": "可靠性"
+      "reliability": "可靠性",
+      "agentOps": "智能体运维"
     },
     "tab": {
       "projects": "项目",
@@ -476,7 +477,10 @@
       "reporting": "报告",
       "rfp": "RFP 响应",
       "feedback": "反馈",
-      "autonomy": "自主"
+      "autonomy": "自主",
+      "coordination": "协同",
+      "memory": "记忆",
+      "rehearsal": "预演"
     },
     "primaryAria": "主导航"
   },
@@ -8312,7 +8316,14 @@
     },
     "permissions": {
       "title": "角色与权限",
-      "colPermission": "权限"
+      "colPermission": "权限",
+      "enforced": "已强制",
+      "advisory": "仅供参考",
+      "granted": "已授予",
+      "denied": "已拒绝",
+      "enforcedHint": "每次请求都会校验此权限，覆盖设置将立即生效。",
+      "advisoryHint": "此权限尚未在请求时校验——该路由仅由角色层级把关，因此修改此行只会改变本表格的显示。",
+      "enforcementNote": "标记为“已强制”的行会在每次请求时校验，覆盖设置立即生效。标记为“仅供参考”的行仅由角色层级把关：修改它们只会改变本表格，不会改变成员的实际权限。"
     },
     "modules": {
       "title": "平台模块",
@@ -11409,6 +11420,92 @@
       "epic": "经由史诗",
       "project": "项目目标",
       "initiative": "举措目标"
+    }
+  },
+  "agentOps": {
+    "loading": "加载中…",
+    "close": "关闭",
+    "genericError": "出现了问题。",
+    "coordination": {
+      "title": "协同",
+      "subtitle": "多个智能体可以同时处理同一个工单并共用一个分支。这里显示当前谁占用了哪些文件，以及它们互相留下的说明。",
+      "ticketLabel": "工单编号",
+      "ticketPlaceholder": "例如 412",
+      "inspect": "查看工单",
+      "empty": "输入工单编号，即可查看其智能体占用了哪些文件以及彼此的说明。",
+      "leasesTitle": "当前被占用的文件",
+      "noLeases": "该工单上没有智能体占用任何文件。",
+      "notesTitle": "共享工作区",
+      "noNotes": "该工单上没有智能体留下说明。",
+      "resource": "文件",
+      "holder": "占用者",
+      "mode": "锁类型",
+      "reason": "原因",
+      "exclusive": "独占",
+      "shared": "共享",
+      "release": "强制释放",
+      "releaseTitle": "强制释放该文件？",
+      "releaseConfirm": "{holder} 仍占用 {resource}。释放后其他智能体可立即写入该文件——只有在确认占用者已停止时才这样做。"
+    },
+    "memory": {
+      "title": "记忆",
+      "subtitle": "智能体所相信的全部事实，包括其传播范围、来源以及何时失效。按当前项目范围显示——正是此处运行的智能体能够回忆到的内容。",
+      "tableTitle": "已记住的事实",
+      "empty": "智能体尚未在此范围内存储任何事实。",
+      "key": "键",
+      "fact": "事实",
+      "scope": "范围",
+      "origin": "来源",
+      "expiry": "过期时间",
+      "durable": "永不",
+      "lapsed": "已失效",
+      "fromRun": "运行 #{id}",
+      "scopeTenant": "整个工作区",
+      "scopeProject": "本项目",
+      "scopeTicket": "工单 #{id}",
+      "forget": "忘记",
+      "forgetTitle": "忘记该事实？",
+      "forgetConfirm": "智能体将不再回忆「{key}」。如果存在同名的更大范围版本，该版本将重新可见。",
+      "purge": "清理已失效",
+      "purgeTitle": "清理已失效的事实？",
+      "purgeConfirm": "删除已过期的事实。它们失效时智能体就已停止回忆，因此对运行没有任何影响。",
+      "statTotal": "范围内事实",
+      "statTotalHint": "此处运行的智能体可回忆的内容。",
+      "statScoped": "窄范围",
+      "statScopedHint": "仅限本项目或单个工单内的事实。",
+      "statExpiring": "设有过期时间",
+      "statExpiringHint": "将自动失效的限时事实。",
+      "statLapsed": "已失效",
+      "statLapsedHint": "不再被回忆，等待清理。"
+    },
+    "rehearsal": {
+      "title": "预演",
+      "subtitle": "针对工单真实运行智能体，但抑制所有副作用——不提交、不开合并请求、不写记忆、不呼叫任何人——然后查看它本会做什么。",
+      "startTitle": "运行预演",
+      "kind": "类型",
+      "kindDryRun": "空跑",
+      "kindReplay": "回放",
+      "kindTrial": "试验",
+      "ticket": "工单",
+      "ticketPlaceholder": "例如 412",
+      "agent": "智能体",
+      "agentPlaceholder": "留空则使用该工单指派的智能体",
+      "startHint": "预演会消耗模型令牌，因此限制为短时运行。试验会让同一智能体在本项目最近更新的若干工单上依次预演。",
+      "start": "运行预演",
+      "running": "运行中…",
+      "historyTitle": "历史预演",
+      "empty": "尚无预演。在修改提示词、策略包或模型固定之前先运行一次。",
+      "wouldWrite": "本会写入",
+      "stepCount": "{count} 项副作用",
+      "outcome": "结果",
+      "finished": "已完成",
+      "unfinished": "步数用尽",
+      "failed": "失败",
+      "viewReport": "报告",
+      "reportTitle": "智能体本会做的事",
+      "frozenAt": "读取代码库的版本",
+      "suppressedTitle": "被抑制的副作用",
+      "noSteps": "智能体没有产生任何副作用——既未写代码，也未存储任何内容。"
     }
   }
 }

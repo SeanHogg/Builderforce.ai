@@ -150,6 +150,22 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    // Agent Ops: the three things you do to a FLEET rather than to one agent —
+    // watch concurrent agents contend for files (Coordination), govern what they
+    // remember and for how long (Memory), and test an agent against a ticket with
+    // every effect suppressed before it touches real work (Rehearsal). Kept out of
+    // Workforce deliberately: that destination is the roster (who exists), this one
+    // is the operating posture (what they are doing to each other right now).
+    id: 'agentops', labelKey: 'group.agentOps', icon: '🧬', href: '/agent-ops',
+    match: ['/agent-ops'],
+    tabKind: 'query', basePath: '/agent-ops',
+    tabs: [
+      { id: '', labelKey: 'tab.coordination', icon: '🔗' },
+      { id: 'memory', labelKey: 'tab.memory', icon: '🧠' },
+      { id: 'rehearsal', labelKey: 'tab.rehearsal', icon: '🎬' },
+    ],
+  },
+  {
     id: 'quality', labelKey: 'group.quality', icon: '🐞', href: '/quality',
     match: ['/quality'],
     tabKind: 'query', basePath: '/quality',

@@ -84,8 +84,17 @@ const staleAllowlist = [...allowlist].filter((p) => !collidingPrefixes.has(p));
 const SANCTIONED_DIRS = ['api/migrations', 'api/transactional-migrations'];
 /** Directories that legitimately hold .sql fixtures/scripts that are NOT migrations. */
 const IGNORED_DIRS = new Set(['node_modules', '.git', '.next', 'dist', '.wrangler', 'build', 'out']);
-/** One-off operational SQL that is deliberately NOT a migration (run by hand). */
-const ALLOWED_SQL_FILES = new Set(['api/scripts/rollback-0078-claw-rename.sql']);
+/**
+ * SQL that is deliberately NOT an api migration. Each entry needs a reason —
+ * "it was already there" is how a stray file becomes permanent.
+ */
+const ALLOWED_SQL_FILES = new Set([
+  // Hand-run rollback for the claw→builderforce rename; never auto-applied.
+  'api/scripts/rollback-0078-claw-rename.sql',
+  // The standalone `worker/` package owns its own schema and applies it with
+  // worker/scripts/migrate.ts — a different database and a different runner.
+  'worker/schema.sql',
+]);
 
 function collectSql(dir, out = []) {
   let entries;

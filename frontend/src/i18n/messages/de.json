@@ -397,7 +397,8 @@
       "marketplace": "Marktplatz",
       "incidents": "Vorfälle",
       "monitoring": "Überwachung",
-      "reliability": "Zuverlässigkeit"
+      "reliability": "Zuverlässigkeit",
+      "agentOps": "Agenten-Betrieb"
     },
     "tab": {
       "projects": "Projekte",
@@ -476,7 +477,10 @@
       "reporting": "Berichte",
       "rfp": "RFP",
       "feedback": "Feedback",
-      "autonomy": "Autonomie"
+      "autonomy": "Autonomie",
+      "coordination": "Koordination",
+      "memory": "Gedächtnis",
+      "rehearsal": "Probelauf"
     },
     "primaryAria": "Primär"
   },
@@ -8312,7 +8316,14 @@
     },
     "permissions": {
       "title": "Rollen & Berechtigungen",
-      "colPermission": "Berechtigung"
+      "colPermission": "Berechtigung",
+      "enforced": "Durchgesetzt",
+      "advisory": "Hinweisend",
+      "granted": "Gewährt",
+      "denied": "Verweigert",
+      "enforcedHint": "Diese Berechtigung wird bei jeder Anfrage geprüft. Ausnahmen wirken sofort.",
+      "advisoryHint": "Diese Berechtigung wird noch nicht zur Laufzeit geprüft — die Route ist nur durch die Rollenstufe geschützt, daher ändert das Bearbeiten dieser Zeile lediglich die Anzeige dieser Tabelle.",
+      "enforcementNote": "Zeilen mit „Durchgesetzt“ werden bei jeder Anfrage geprüft, eine Ausnahme wirkt daher sofort. Zeilen mit „Hinweisend“ sind nur durch die Rollenstufe geschützt: Sie zu bearbeiten ändert nur diese Tabelle, nicht das, was ein Mitglied tatsächlich tun kann."
     },
     "modules": {
       "title": "Plattform-Module",
@@ -11409,6 +11420,92 @@
       "epic": "Über das Epic",
       "project": "Projektziel",
       "initiative": "Initiativenziel"
+    }
+  },
+  "agentOps": {
+    "loading": "Wird geladen…",
+    "close": "Schließen",
+    "genericError": "Etwas ist schiefgelaufen.",
+    "coordination": {
+      "title": "Koordination",
+      "subtitle": "Mehrere Agenten können gleichzeitig an einem Ticket arbeiten und teilen sich einen Branch. Hier steht, wer gerade welche Dateien hält und welche Notizen sie einander hinterlassen.",
+      "ticketLabel": "Ticketnummer",
+      "ticketPlaceholder": "z. B. 412",
+      "inspect": "Ticket prüfen",
+      "empty": "Geben Sie eine Ticketnummer ein, um zu sehen, welche Dateien dessen Agenten halten und was sie einander mitgeteilt haben.",
+      "leasesTitle": "Aktuell gehaltene Dateien",
+      "noLeases": "Kein Agent hält eine Datei dieses Tickets.",
+      "notesTitle": "Gemeinsamer Arbeitsbereich",
+      "noNotes": "Kein Agent hat eine Notiz zu diesem Ticket hinterlassen.",
+      "resource": "Datei",
+      "holder": "Gehalten von",
+      "mode": "Sperre",
+      "reason": "Grund",
+      "exclusive": "Exklusiv",
+      "shared": "Geteilt",
+      "release": "Zwangsweise freigeben",
+      "releaseTitle": "Diese Datei zwangsweise freigeben?",
+      "releaseConfirm": "{holder} hält {resource} noch. Nach der Freigabe kann ein anderer Agent die Datei sofort schreiben – tun Sie das nur, wenn Sie wissen, dass der Halter gestoppt ist."
+    },
+    "memory": {
+      "title": "Gedächtnis",
+      "subtitle": "Alles, was Ihre Agenten für wahr halten – mit der Reichweite jeder Überzeugung, ihrer Herkunft und dem Zeitpunkt, an dem sie nicht mehr gilt. Angezeigt für den aktuellen Projektbereich: genau das, woran sich ein hier laufender Agent erinnern würde.",
+      "tableTitle": "Gespeicherte Fakten",
+      "empty": "Ihre Agenten haben in diesem Bereich noch keine Fakten gespeichert.",
+      "key": "Schlüssel",
+      "fact": "Fakt",
+      "scope": "Bereich",
+      "origin": "Herkunft",
+      "expiry": "Läuft ab",
+      "durable": "Nie",
+      "lapsed": "Abgelaufen",
+      "fromRun": "Lauf #{id}",
+      "scopeTenant": "Gesamter Arbeitsbereich",
+      "scopeProject": "Dieses Projekt",
+      "scopeTicket": "Ticket #{id}",
+      "forget": "Vergessen",
+      "forgetTitle": "Diesen Fakt vergessen?",
+      "forgetConfirm": "Agenten erinnern sich nicht mehr an „{key}“. Existiert eine weiter gefasste Version desselben Schlüssels, wird diese wieder sichtbar.",
+      "purge": "Abgelaufene löschen",
+      "purgeTitle": "Abgelaufene Fakten löschen?",
+      "purgeConfirm": "Löscht Fakten, deren Ablauf bereits vorbei ist. Agenten haben sie seit dem Ablauf ohnehin nicht mehr erinnert – für einen Lauf ändert sich nichts.",
+      "statTotal": "Fakten im Bereich",
+      "statTotalHint": "Woran sich ein hier laufender Agent erinnern kann.",
+      "statScoped": "Eng begrenzt",
+      "statScopedHint": "Fakten, die dieses Projekt oder ein Ticket nicht verlassen.",
+      "statExpiring": "Mit Ablauf",
+      "statExpiringHint": "Befristete Fakten, die von selbst ablaufen.",
+      "statLapsed": "Bereits abgelaufen",
+      "statLapsedHint": "Werden nicht mehr erinnert; warten auf die Bereinigung."
+    },
+    "rehearsal": {
+      "title": "Probelauf",
+      "subtitle": "Lassen Sie einen Agenten wirklich an einem Ticket arbeiten, aber mit unterdrückten Auswirkungen – kein Commit, kein Pull Request, kein Gedächtnis-Eintrag, niemand wird gerufen – und lesen Sie dann, was er getan hätte.",
+      "startTitle": "Probelauf starten",
+      "kind": "Art",
+      "kindDryRun": "Trockenlauf",
+      "kindReplay": "Wiederholung",
+      "kindTrial": "Erprobung",
+      "ticket": "Ticket",
+      "ticketPlaceholder": "z. B. 412",
+      "agent": "Agent",
+      "agentPlaceholder": "Leer lassen, um den dem Ticket zugewiesenen Agenten zu verwenden",
+      "startHint": "Ein Probelauf verbraucht Modell-Tokens und ist deshalb auf einen kurzen Lauf begrenzt. Eine Erprobung lässt denselben Agenten die zuletzt aktualisierten Tickets dieses Projekts durchlaufen.",
+      "start": "Probelauf starten",
+      "running": "Läuft…",
+      "historyTitle": "Frühere Probeläufe",
+      "empty": "Noch keine Probeläufe. Führen Sie einen aus, bevor Sie einen Prompt, ein Policy-Pack oder ein festgelegtes Modell ändern.",
+      "wouldWrite": "Hätte geschrieben",
+      "stepCount": "{count} Auswirkungen",
+      "outcome": "Ergebnis",
+      "finished": "Abgeschlossen",
+      "unfinished": "Schritte aufgebraucht",
+      "failed": "Fehlgeschlagen",
+      "viewReport": "Bericht",
+      "reportTitle": "Was der Agent getan hätte",
+      "frozenAt": "Repository gelesen bei",
+      "suppressedTitle": "Unterdrückte Auswirkungen",
+      "noSteps": "Der Agent hat überhaupt keine Auswirkungen erzeugt – weder Code geschrieben noch etwas gespeichert."
     }
   }
 }

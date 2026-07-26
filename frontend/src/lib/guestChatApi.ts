@@ -11,7 +11,8 @@
  * same visitorId, so their lead carries over.
  */
 
-import { AUTH_API_URL } from './auth';
+
+import { apiRequestStream } from './apiClient';
 import { getVisitorId, getFirstTouch } from './visitor';
 
 const GUEST_TOKEN_KEY = 'bf_guest_token';
@@ -59,10 +60,12 @@ export async function mintGuestSession(): Promise<GuestUsage | null> {
   if (!visitorId) return null;
   const touch = getFirstTouch();
   try {
-    const res = await fetch(`${AUTH_API_URL}/api/guest/session`, {
+    const res = await apiRequestStream('/api/guest/session', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      auth: 'none',
       body: JSON.stringify({ visitorId, touch }),
+      // A guest with no quota left is an expected outcome, not a fault.
+      expectedErrors: [400, 401, 403, 404, 429],
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { token: string; expiresInSeconds: number; remaining: number; limit: number };
@@ -89,7 +92,10 @@ export async function getGuestUsage(): Promise<GuestUsage | null> {
   const visitorId = getVisitorId();
   if (!visitorId) return null;
   try {
-    const res = await fetch(`${AUTH_API_URL}/api/guest/usage/${encodeURIComponent(visitorId)}`);
+    const res = await apiRequestStream(`/api/guest/usage/${encodeURIComponent(visitorId)}`, {
+      auth: 'none',
+      expectedErrors: [400, 401, 403, 404, 429],
+    });
     if (!res.ok) return null;
     const data = (await res.json()) as { remaining: number; limit: number; enabled: boolean };
     return { remaining: data.remaining, limit: data.limit, enabled: data.enabled };

@@ -12,6 +12,7 @@ import { lt } from 'drizzle-orm';
 import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { llmTraces, llmFailoverLog, llmHealthProbes, qaJourneyEvents, errorEvents, managerActions, toolAuditEvents, demoEvents } from '../../infrastructure/database/schema';
+import { purgeExpiredMemories } from '../memory/memoryService';
 
 /** Days of history kept per table before older rows are purged. */
 const RETENTION_DAYS = {
@@ -59,6 +60,10 @@ export async function runRetentionPurge(env: Env, now: number = Date.now()): Pro
     { name: 'manager_actions',   run: () => db.delete(managerActions).where(lt(managerActions.createdAt, cutoff(now, RETENTION_DAYS.managerActions))) },
     { name: 'tool_audit_events', run: () => db.delete(toolAuditEvents).where(lt(toolAuditEvents.createdAt, cutoff(now, RETENTION_DAYS.toolAuditEvents))) },
     { name: 'demo_events',       run: () => db.delete(demoEvents).where(lt(demoEvents.createdAt, cutoff(now, RETENTION_DAYS.demoEvents))) },
+    // Lapsed agent memories (0371). NOT an age-based purge like the rest of this
+    // file — a fact expires when its own author said it would, so the policy lives
+    // on the row, and this only reclaims what recall already stopped returning.
+    { name: 'expired_memories',  run: () => purgeExpiredMemories(env, db) },
   ];
   for (const t of targets) {
     try {
