@@ -51,7 +51,7 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
     void this.view?.webview.postMessage({ type: "refresh" });
   }
 
-  private async onMessage(msg: { type?: string; id?: string; path?: string; absorbedKeys?: string[]; version?: number }): Promise<void> {
+  private async onMessage(msg: { type?: string; id?: string; path?: string; absorbedKeys?: string[]; version?: number; text?: string }): Promise<void> {
     switch (msg.type) {
       case "ready":
         await this.sendInit();
@@ -75,6 +75,27 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
       case "evermind.compactMemory":
         await this.compactMemory(msg.id, msg.path, msg.absorbedKeys, msg.version);
         break;
+      // Diagnostics export. The clipboard write happens on the HOST because a webview is
+      // not reliably granted the Clipboard API — `vscode.env.clipboard` always works,
+      // and a copy button that silently fails is worse than none (the operator walks
+      // away believing they have the report).
+      case "evermind.copyText":
+        await this.copyText(msg.id, msg.text);
+        break;
+    }
+  }
+
+  /** Put the diagnostics report on the system clipboard and confirm it in the editor. */
+  private async copyText(id: string | undefined, text?: string): Promise<void> {
+    try {
+      if (!text) { this.respond(id, false, undefined, "nothing to copy"); return; }
+      await vscode.env.clipboard.writeText(text);
+      // A toast as well as the in-panel confirmation: the sidebar is narrow and the
+      // status line can sit below the fold.
+      void vscode.window.setStatusBarMessage(vscode.l10n.t("Evermind diagnostics copied to the clipboard."), 4000);
+      this.respond(id, true, null);
+    } catch (e) {
+      this.respond(id, false, undefined, e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -283,6 +304,21 @@ function buildEvermindLabels(): Record<string, string> {
     "ev.analyzeSelectAll": t("Select all"),
     "ev.analyzeSelectNone": t("Clear selection"),
     "ev.analyzeApplying": t("Fixing…"),
+    // Tabs — the console's four working surfaces.
+    "ev.tabsLabel": t("Evermind controls"),
+    "ev.tabTeach": t("Teach"),
+    "ev.tabTest": t("Test"),
+    "ev.tabCheck": t("Check"),
+    "ev.tabMaintain": t("Maintain"),
+    // Diagnostics export. The report BODY is a technical artifact and is deliberately
+    // not localized (see diagnosticsReport.ts); only these controls are.
+    "ev.diagnosticsTitle": t("Diagnostics"),
+    "ev.diagnosticsHint": t("Copy everything on this panel — the model’s state, what it actually produced, what it has learned and any problems found — as text you can paste to support or to an AI assistant."),
+    "ev.diagnosticsCta": t("Copy diagnostics"),
+    "ev.diagnosticsCopied": t("Copied to your clipboard."),
+    "ev.diagnosticsShow": t("Show report"),
+    "ev.diagnosticsHide": t("Hide report"),
+    "ev.diagnosticsManualHint": t("Copying automatically was blocked here — the report is selected below, press Ctrl/Cmd+C to copy it."),
     "ev.refresh": t("Refresh"),
     "ev.errorGeneric": t("Something went wrong. Try again."),
   };
