@@ -65,6 +65,15 @@ The only measurement of autonomy was production-observed (0.7% reach Done), beca
 
 **Surface.** `/api/agent-ops/*` (member reads, MANAGER+ writes) and a new `/agent-ops` destination with Coordination / Memory / Rehearsal tabs, localized in all five catalogs, theme-token-driven and fluid to 360px. New `application/shared/dbHandle.ts` gives the presentation layer an application-owned `DbHandle` type, so a correctly-layered NEW route can exist at all (the layering ratchet matched even a type-only infrastructure import).
 
+**Four defects found and fixed in a second review pass the same day** — each is the kind that only shows up when you re-read the seam rather than the feature:
+
+- **A rehearsal's FIRST ACT was a real commit.** `shadowProvider` decorates the tool LOOP, but `prepareCloudRun` runs above it and is not read-only: on a ticket with no PRD it drafted one (a paid LLM call), persisted a `specs` row, committed `PRD.md` to the real ticket branch, recorded a `task_file_changes` row and notified the execution stream. Four escaping effects the shadow decorator could never see. `prepareCloudRun` gained `opts.readOnly`, which makes `ensureTaskPrd` read an existing PRD and never reach the generate→persist→commit core, and skips the personality-application event so a probe cannot skew the telemetry that describes the real agent. `ensureTaskPrdReadOnly.test.ts` (6 tests) pins it.
+- **The lock was the wrong SIZE — keyed on (repo, path) when the shared resource is the BRANCH.** Every ticket works its own branch and reconciles through its own PR, so two agents on two different tickets editing the same file were never in conflict — yet they would have serialized, producing refusals for work that never collided and getting worse the busier the repo. The key is now `repo:<slug>:<branch>:<path>` (branch case-SENSITIVE, since git refs are), with `resourcePathFromKey` as the one place a key is taken apart.
+- **A finished CONTAINER run left every file it wrote locked for 15 minutes.** The container drives its own loop and never reaches the durable loop's terminal release, so its leases only lapsed by TTL — blocking a peer agent on the same ticket for no reason. Its `finalize` op now releases them.
+- **Memory recall could serve facts up to 5 minutes stale.** The governed recall unions two stores that are invalidated independently: this module bumps `mem:ver:<tenant>`, while `project_facts` has four other writers (Brain, VS Code, the MCP tool, `projectFactsRoutes`) that bump only the project-facts token. The cache key now COMPOSES both tokens, so either write invalidates the union — with no cross-module bump and therefore no import cycle.
+
+Also corrected: `rehearsals.created_by` was declared `INTEGER` against `users.id`, which is `VARCHAR(36)` — an unimplementable FK; and force-release no longer accepts a client-supplied repo slug, resolving the target lease from the ticket's own scope instead.
+
 ---
 
 ## 2026-07-26 — ✅ RESOLVED: deploy-breaking FK type mismatch in 0372, and the CI hole that let it through

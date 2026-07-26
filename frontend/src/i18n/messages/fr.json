@@ -6961,6 +6961,36 @@
         "unknown": "Non classé"
       },
       "copyDiagnosticsAria": "Copier le diagnostic complet du Manager IA : niveaux de politique, état de l’autonomie, compteurs du backlog, chaque passe de gestion, chaque décision et chaque ticket bloqué"
+    },
+    "census": {
+      "title": "Recensement des blocages",
+      "caption": "Tous les tickets de ce projet, classés selon ce qui les bloque — pas seulement ceux que le manager a diagnostiqués en profondeur.",
+      "loading": "Comptage des blocages…",
+      "empty": "Rien n’est bloqué : tous les tickets avancent ou sont terminés.",
+      "error": "Impossible de charger le recensement des blocages.",
+      "retry": "Réessayer",
+      "coverageNote": "{stalled} tickets sont bloqués ; {diagnosed} ont été diagnostiqués en profondeur à ce jour. Les autres sont comptés ici mais pas encore examinés individuellement.",
+      "computedAt": "Compté {when}.",
+      "stat": {
+        "managed": "Tickets actifs",
+        "stalled": "Bloqués",
+        "moving": "En mouvement",
+        "deepDiagnosed": "Diagnostiqués en profondeur"
+      },
+      "cohorts": {
+        "title": "Ce qui bloque le travail, sur l’ensemble des tickets",
+        "aria": "Tickets bloqués regroupés par cause"
+      },
+      "findings": {
+        "title": "Constats plateforme",
+        "caption": "Quand de nombreux tickets se bloquent pour la même raison, il s’agit d’un seul défaut et non de multiples problèmes de tickets. Le manager le diagnostique et ouvre un ticket pour le corriger.",
+        "headline": "{count} tickets bloqués sur « {cause} »",
+        "remediation": "Correctif :",
+        "sourceAi": "diagnostiqué par le modèle",
+        "sourceHeuristic": "diagnostiqué à partir des mesures",
+        "openTicket": "Ouvrir {key}",
+        "raised": "Signalé {when}"
+      }
     }
   },
   "project360": {

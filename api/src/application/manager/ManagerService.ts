@@ -61,6 +61,9 @@ import { resolveSignoffGate } from '../kanban/signoffGate';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness } from './evaluateTicketReadiness';
 import { runStallTriage, MAX_TRIAGE_DISPATCHES_PER_RUN } from './triageStage';
+import { isActionExhausted } from './stallTriage';
+import { invalidateStallCensus } from './stallCensus';
+import { raiseSystemicFindings } from './systemicDiagnosis';
 import { mergeRecordedPullRequest, updateRecordedPullRequestBranch } from '../repos/mergeRecordedPr';
 import { pollPrCiStatus } from '../repos/pollPrCiStatus';
 import { dispatchTaskFinalize } from '../../presentation/routes/taskRoutes';
@@ -125,6 +128,23 @@ export interface ManagerRunSummary {
   stallsResolved: number;
   /** Orphaned "backlog management pass" cards this pass closed (see {@link reapStaleManagerRunTasks}). */
   staleRunTasksClosed: number;
+  /**
+   * Stalled tickets across the WHOLE project, from the bulk census — not the bounded
+   * `stalled` count above.
+   *
+   * Both are reported because they answer different questions and conflating them is
+   * what hid the problem: `stalled` is how many the deep stage diagnosed this pass (max
+   * 12), `censusStalled` is how many there actually are. When the second is an order of
+   * magnitude larger than the first, per-ticket remediation cannot keep up — which is
+   * precisely the condition the systemic stage exists to detect.
+   */
+  censusStalled: number;
+  /** The largest stall cohort's cause — "what is holding up the most work". */
+  censusTopCause: string | null;
+  /** Systemic findings raised this pass (a cohort judged a platform defect). */
+  systemicFindings: number;
+  /** Platform-fix tickets those findings opened. */
+  systemicTicketsCreated: number;
 }
 
 // ── config store ────────────────────────────────────────────────────────────
@@ -579,7 +599,19 @@ export async function createManagerCoachingTask(
   env: Env,
   db: Db,
   runtimeService: RuntimeService,
-  args: { tenantId: number; projectId: number; directive: string; createdBy?: string | null; submittedBy?: string },
+  args: {
+    tenantId: number; projectId: number; directive: string;
+    createdBy?: string | null; submittedBy?: string;
+    /** Explicit title. Defaults to the directive's first line (the coaching behaviour). */
+    title?: string;
+    /**
+     * `tasks.task_type`. The systemic-findings path files `'gap'` so a platform defect
+     * groups with the diagnostics engine's existing gap tickets instead of looking like
+     * ordinary feature work. Defaults to `'task'` — the column default, i.e. exactly the
+     * coaching behaviour before this parameter existed.
+     */
+    taskType?: 'task' | 'gap';
+  },
 ): Promise<number | null> {
   const { tenantId, projectId } = args;
   const directive = args.directive.trim();
@@ -595,7 +627,7 @@ export async function createManagerCoachingTask(
     const policy = await getEffectiveManagerPolicy(db, tenantId, projectId, env);
     const assignee = resolveManagerAssignee(policy.managerRef);
     const baseSeq = await nextProjectKeySeqBase(db, projectId);
-    const title = (directive.split('\n', 1)[0] ?? directive).trim().slice(0, 120) || 'Manager task';
+    const title = (args.title ?? directive.split('\n', 1)[0] ?? directive).trim().slice(0, 120) || 'Manager task';
     const now = new Date();
 
     let taskId: number | null = null;
@@ -612,6 +644,7 @@ export async function createManagerCoachingTask(
             // A REAL, dispatchable work item (NOT source='manager', which is non-runnable),
             // owned by the manager so autonomy executes it once.
             source: COACHING_TASK_SOURCE,
+            taskType: args.taskType ?? 'task',
             assignedUserId: assignee.assignedUserId,
             assignedAgentRef: assignee.assignedAgentRef,
             assignedAgentHostId: assignee.assignedAgentHostId,
@@ -736,6 +769,8 @@ interface ManagedTaskRow {
   /** Needed by the review evaluation to answer "was this supposed to produce code?". */
   taskType: string | null;
   actionType: string | null;
+  /** Read by the stall census to recognise a non-executable or unapproved-feedback ticket. */
+  source: string | null;
 }
 
 async function loadManagedTasks(db: Db, projectId: number): Promise<ManagedTaskRow[]> {
@@ -747,6 +782,7 @@ async function loadManagedTasks(db: Db, projectId: number): Promise<ManagedTaskR
       assignedUserId: tasks.assignedUserId, assignedAgentRef: tasks.assignedAgentRef,
       assignedAgentHostId: tasks.assignedAgentHostId, gitBranch: tasks.gitBranch, githubPrUrl: tasks.githubPrUrl,
       createdAt: tasks.createdAt, taskType: tasks.taskType, actionType: tasks.actionType,
+      source: tasks.source,
     })
     .from(tasks)
     .where(and(
@@ -826,6 +862,7 @@ export async function runManagerForProject(
     projectId, skipped: false, scored: 0, ranked: 0, scheduled: 0, assigned: 0, prsConducted: 0, prsMerged: 0, dispatched: 0,
     audited: 0, flagged: 0, remediated: 0, remediationDeferred: 0,
     stalled: 0, unstuck: 0, escalated: 0, stallsResolved: 0, staleRunTasksClosed: 0,
+    censusStalled: 0, censusTopCause: null, systemicFindings: 0, systemicTicketsCreated: 0,
   };
 
   const policy = await getEffectiveManagerPolicy(db, tenantId, projectId, env);
@@ -1135,6 +1172,10 @@ export async function runManagerForProject(
   // for noticing. Every remedy applied here is RECORDED so the next pass can grade
   // whether it worked — an ineffective fix escalates instead of repeating, which is
   // the generalised cure for the 4058:1 sync-to-merge livelock. See stallTriage.ts.
+  //
+  // The stage also returns the FULL-COVERAGE census (stage 8 consumes it), computed from
+  // the bulk signals it has already loaded.
+  let triageCensus: Awaited<ReturnType<typeof runStallTriage>>['census'] = null;
   {
     const triage = await runStallTriage(env, db, runtimeService, {
       tenantId, projectId, managed, conductedTaskIds,
@@ -1151,6 +1192,7 @@ export async function runManagerForProject(
       },
     }).catch(() => null);
     if (triage) {
+      triageCensus = triage.census;
       summary.stalled = triage.stalled;
       summary.unstuck = triage.unstuck;
       summary.escalated = triage.escalated;
@@ -1184,6 +1226,57 @@ export async function runManagerForProject(
           },
         });
       }
+    }
+  }
+
+  // 8. CENSUS + SYSTEMIC DIAGNOSIS — the step above per-ticket triage. --------------
+  //
+  // Stage 7 is bounded to MAX_TRIAGE_PER_RUN tickets per pass because deep diagnosis is
+  // expensive. That bound was also, silently, the bound on what the manager KNEW:
+  // measured 2026-07-26 on tenant 1, 755 tickets were stalled and the register held 44
+  // rows, so `byCause` — the number a human reads to decide what to fix — was a sample
+  // of twelve-at-a-time. Its top cause read `unknown`; the truth was 313 tickets sharing
+  // `unassigned`.
+  //
+  // The census classifies EVERY managed ticket in bulk (set-based, reusing the same pure
+  // `diagnoseStall` stage 7 uses, so the two cannot disagree), and a cause that crosses
+  // the materiality threshold stops being ticket work: the manager asks a model to name
+  // the underlying defect and files ONE platform ticket for it. Bounded by a per-pass
+  // ceiling and a unique open-finding index, so a re-observed cohort refreshes instead
+  // of re-filing. See stallCensus.ts / systemicDiagnosis.ts.
+  {
+    // Computed by the triage stage, which already paid for the bulk signals it needs —
+    // recomputing here would re-issue those reads once per project per tick.
+    const census = triageCensus;
+
+    if (census) {
+      summary.censusStalled = census.stalled;
+      summary.censusTopCause = census.cohorts[0]?.cause ?? null;
+
+      const systemic = await raiseSystemicFindings(env, db, runtimeService, {
+        tenantId, projectId, census,
+        personaDirective: identity.personaDirective,
+        // ONE ticket-creation path for the whole manager — the same primitive the
+        // coaching route uses, so a systemic ticket is staffed, keyed and dispatched
+        // exactly like any other manager-created work.
+        createTicket: (directive, title) => createManagerCoachingTask(env, db, runtimeService, {
+          tenantId, projectId, directive, title,
+          // Groups with the diagnostics engine's existing platform-gap tickets rather
+          // than looking like ordinary feature work.
+          taskType: 'gap',
+          submittedBy: `manager:systemic:${policy.managerRef ?? 'system'}`,
+        }),
+      });
+
+      summary.systemicFindings = systemic.findings.length;
+      summary.systemicTicketsCreated = systemic.ticketsCreated;
+      for (const entry of systemic.journal) {
+        await recordManagerAction(db, {
+          tenantId, projectId, taskId: entry.taskId, runTaskId,
+          actionType: 'systemic', summary: entry.summary, detail: entry.detail,
+        });
+      }
+      await invalidateStallCensus(env, tenantId, projectId).catch(() => undefined);
     }
   }
 
@@ -1227,7 +1320,12 @@ export async function runManagerForProject(
         `${summary.stalled ? `, stuck ${summary.stalled}` : ''}` +
         `${summary.unstuck ? ` (unstuck ${summary.unstuck})` : ''}` +
         `${summary.escalated ? `, escalated ${summary.escalated}` : ''}` +
-        `${summary.stallsResolved ? `, cleared ${summary.stallsResolved}` : ''}.`,
+        `${summary.stallsResolved ? `, cleared ${summary.stallsResolved}` : ''}` +
+        // The census figure is stated whenever it EXCEEDS what the pass diagnosed, which
+        // is the honest reading of a bounded stage: "I looked at 12 of 313" must never
+        // render as "12 are stuck".
+        `${summary.censusStalled > summary.stalled ? `, ${summary.censusStalled} stalled in total (top cause: ${summary.censusTopCause ?? 'unknown'})` : ''}` +
+        `${summary.systemicTicketsCreated ? `, opened ${summary.systemicTicketsCreated} platform ${summary.systemicTicketsCreated === 1 ? 'ticket' : 'tickets'}` : ''}.`,
       metadata: {
         scored: summary.scored, ranked: summary.ranked, scheduled: summary.scheduled, assigned: summary.assigned,
         dispatched: summary.dispatched, prsConducted: summary.prsConducted,
@@ -1235,6 +1333,8 @@ export async function runManagerForProject(
         remediated: summary.remediated, remediationDeferred: summary.remediationDeferred,
         stalled: summary.stalled, unstuck: summary.unstuck, escalated: summary.escalated,
         stallsResolved: summary.stallsResolved, staleRunTasksClosed: summary.staleRunTasksClosed,
+        censusStalled: summary.censusStalled, censusTopCause: summary.censusTopCause,
+        systemicFindings: summary.systemicFindings, systemicTicketsCreated: summary.systemicTicketsCreated,
         trigger: submittedBy, managerType: policy.managerType, coachingApplied: coachingDirectives.length,
       },
     });
@@ -1445,14 +1545,50 @@ async function coordinatePullRequests(
     : [];
   const activePrTaskIds = new Set<number>(activePrRuns.map((e) => e.taskId as unknown as number));
 
+  // ── THE SYNC CEILING ────────────────────────────────────────────────────────────
+  // How many times each open PR has ALREADY been synced with its base without ever
+  // merging. Syncing a stale branch is a correct action; syncing the same branch
+  // forever is the platform's largest measured livelock — 40,580 `sync_pr` actions
+  // against 10 merges all-time, and re-measured on 2026-07-26 still running at
+  // 13,549/week with ZERO merges in the window. The remedy was never wrong; nothing
+  // ever asked whether it worked.
+  //
+  // So the sync obeys the SAME exhaustion rule every stall remedy obeys
+  // ({@link isActionExhausted}), read from the action log the loop already writes —
+  // no new table, one extra grouped SELECT for the whole project. Past the ceiling the
+  // PR is reported once as blocked and left alone for a human, instead of being
+  // re-synced every five minutes indefinitely.
+  const syncAttempts = new Map<number, number>();
+  {
+    const syncTaskIds = openPrs.flatMap((pr) => (pr.taskId == null ? [] : [pr.taskId]));
+    if (syncTaskIds.length) {
+      const rows = await db
+        .select({ taskId: managerActions.taskId, n: sql<number>`count(*)::int` })
+        .from(managerActions)
+        .where(and(
+          eq(managerActions.tenantId, tenantId),
+          eq(managerActions.actionType, 'sync_pr'),
+          inArray(managerActions.taskId, syncTaskIds),
+        ))
+        .groupBy(managerActions.taskId)
+        .catch(() => []);
+      for (const r of rows) if (r.taskId != null) syncAttempts.set(r.taskId, Number(r.n) || 0);
+    }
+  }
+
   // MERGE AUTHORITY (0363) is withheld by default, so "this PR is ready but I may not
   // merge it" is a STATE that persists across passes, not an event. Journalling it every
   // five minutes for every open PR would bury the feed and inflate a table that is
   // already a storage concern, so — same reasoning as the 0344 flag dedupe — load the
   // PRs already reported and write once per PR. One extra SELECT, and zero writes on the
   // steady-state pass where nothing changed.
+  //
+  // Loaded UNCONDITIONALLY (it used to be gated on `!allowAutoMerge`): the sync ceiling
+  // above reports through the same action type and needs the same dedupe, and a
+  // workspace WITH auto-merge enabled is exactly where a PR that never merges is worth
+  // reporting once rather than every pass.
   const alreadyReportedBlocked = new Set<number>();
-  if (!policy.allowAutoMerge) {
+  {
     const blockedTaskIds = openPrs.flatMap((pr) => (pr.taskId == null ? [] : [pr.taskId]));
     if (blockedTaskIds.length) {
       const prior = await db
@@ -1472,6 +1608,22 @@ async function coordinatePullRequests(
     try {
       // A previous conflict-resolution run owns this branch until it finishes.
       if (pr.taskId != null && activePrTaskIds.has(pr.taskId)) continue;
+
+      // Exhausted sync: this PR has been brought up to date with its base
+      // MAX_REMEDY_ATTEMPTS times and still has not merged, so a further sync is not a
+      // fix in progress — it is the livelock. Report it once (the `merge_blocked` dedupe
+      // below is the same "state, not event" rule) and leave it for a human.
+      if (pr.taskId != null && isActionExhausted(syncAttempts.get(pr.taskId) ?? 0)) {
+        if (!alreadyReportedBlocked.has(pr.taskId)) {
+          await recordManagerAction(db, {
+            tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: MERGE_BLOCKED_ACTION,
+            summary: `PR #${pr.number ?? '?'} has been synced with its base ${syncAttempts.get(pr.taskId)} times without merging — stopping the sync loop and handing it to a human.`,
+            detail: { reason: 'sync_exhausted', syncAttempts: syncAttempts.get(pr.taskId) },
+          });
+          alreadyReportedBlocked.add(pr.taskId);
+        }
+        continue;
+      }
 
       // Always integrate the latest base first. This prevents a queue of agent PRs
       // from all being merged against the same stale main revision.

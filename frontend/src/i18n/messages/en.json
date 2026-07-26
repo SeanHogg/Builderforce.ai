@@ -6961,6 +6961,36 @@
         "unknown": "Unclassified"
       },
       "copyDiagnosticsAria": "Copy the full AI Manager diagnostics — policy tiers, autonomy health, backlog counts, every management pass, every decision and every stuck ticket"
+    },
+    "census": {
+      "title": "Stall census",
+      "caption": "Every ticket in this project, classified by what is holding it up — not only the ones the manager has diagnosed in depth.",
+      "loading": "Counting what is stuck…",
+      "empty": "Nothing is stalled — every ticket is moving or finished.",
+      "error": "Could not load the stall census.",
+      "retry": "Try again",
+      "coverageNote": "{stalled} tickets are stalled; {diagnosed} have been diagnosed in depth so far. The rest are counted here but not yet individually investigated.",
+      "computedAt": "Counted {when}.",
+      "stat": {
+        "managed": "Active tickets",
+        "stalled": "Stalled",
+        "moving": "Moving",
+        "deepDiagnosed": "Diagnosed in depth"
+      },
+      "cohorts": {
+        "title": "What is holding work up, across every ticket",
+        "aria": "Stalled tickets grouped by cause"
+      },
+      "findings": {
+        "title": "Platform findings",
+        "caption": "When many tickets stall for the same reason, that is one defect rather than many ticket problems. The manager diagnoses it and opens a ticket to fix it.",
+        "headline": "{count} tickets stalled on “{cause}”",
+        "remediation": "Fix:",
+        "sourceAi": "diagnosed by model",
+        "sourceHeuristic": "diagnosed from measurements",
+        "openTicket": "Open {key}",
+        "raised": "Raised {when}"
+      }
     }
   },
   "project360": {

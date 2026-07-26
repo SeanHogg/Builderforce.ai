@@ -57,6 +57,12 @@ export interface ManagerSweepResult {
   stallsResolved: number;
   /** Orphaned "backlog management pass" cards closed by the per-pass reaper. */
   staleRunTasksClosed: number;
+  /** Stalled tickets across every swept project — the full census, not the diagnosed sample. */
+  censusStalled: number;
+  /** Systemic findings raised (a stall cohort judged a platform defect, 0373). */
+  systemicFindings: number;
+  /** Platform-fix tickets those findings opened. */
+  systemicTicketsCreated: number;
   tokenBlockedTenants: number;
 }
 
@@ -100,6 +106,7 @@ export async function runManagerSweep(
     projects: managed.length, managed: 0, scored: 0, ranked: 0, scheduled: 0, assigned: 0,
     prsConducted: 0, prsMerged: 0, dispatched: 0, remediated: 0, remediationDeferred: 0,
     stalled: 0, unstuck: 0, escalated: 0, stallsResolved: 0, staleRunTasksClosed: 0,
+    censusStalled: 0, systemicFindings: 0, systemicTicketsCreated: 0,
     tokenBlockedTenants: 0,
   };
 
@@ -145,6 +152,9 @@ export async function runManagerSweep(
       result.escalated += s.escalated;
       result.stallsResolved += s.stallsResolved;
       result.staleRunTasksClosed += s.staleRunTasksClosed;
+      result.censusStalled += s.censusStalled;
+      result.systemicFindings += s.systemicFindings;
+      result.systemicTicketsCreated += s.systemicTicketsCreated;
     } catch (err) {
       console.error(`[cron:manager] project=${p.projectId} tenant=${p.tenantId} failed`, err);
     }

@@ -29,6 +29,8 @@ import {
   getTenantManagerDefaults, upsertTenantManagerDefaults, type TenantManagerDefaultsPatch,
 } from '../../application/manager/ManagerService';
 import { getStallRegister } from '../../application/manager/stallWatch';
+import { getStallCensus } from '../../application/manager/stallCensus';
+import { listSystemicFindings } from '../../application/manager/systemicDiagnosis';
 import {
   normalizePrMergePolicy, resolveTenantManagerDefaults, DEFAULT_MANAGER_POLICY,
   AGENT_REASSIGN_IDLE_HOURS_RANGE, AGENT_REASSIGN_MAX_PER_SESSION_RANGE,
@@ -408,6 +410,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
             projectId, skipped: !ok, scored: 0, ranked: 0, scheduled: 0, assigned: 0,
             prsConducted: 0, prsMerged: 0, dispatched: 0, audited: 0, flagged: 0, remediated: 0, remediationDeferred: 0,
             stalled: 0, unstuck: 0, escalated: 0, stallsResolved: 0, staleRunTasksClosed: 0,
+            censusStalled: 0, censusTopCause: null, systemicFindings: 0, systemicTicketsCreated: 0,
           },
         });
       }
@@ -539,6 +542,32 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     }
     const register = await getStallRegister(c.env as Env, db, { tenantId, projectId });
     return c.json(register);
+  });
+
+  // GET /api/manager/:projectId/census — the FULL-COVERAGE stall census (0373).
+  //
+  // /stalls is the per-ticket register, and it is bounded by what the deep triage stage
+  // has had budget to diagnose (max 12 tickets per project per pass). That bound made
+  // the register's own `byCause` summary a sample rather than a census — measured on one
+  // tenant, 755 stalled tickets against 44 register rows, with the sample's top cause
+  // reading `unknown` while the true largest cohort was 313 tickets sharing one cause.
+  //
+  // This endpoint answers the question the register cannot: across EVERY ticket, what is
+  // stuck and what do they share? Plus the systemic findings the manager has raised from
+  // it — a cohort it judged a platform defect, with the ticket it filed. Read-only and
+  // served through the shared read-through cache (the manager pass invalidates it), so a
+  // polled panel never reaches the database.
+  router.get('/:projectId/census', async (c) => {
+    const tenantId = c.get('tenantId');
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    const [census, findings] = await Promise.all([
+      getStallCensus(c.env as Env, db, { tenantId, projectId }),
+      listSystemicFindings(db, { tenantId, projectId }),
+    ]);
+    return c.json({ ...census, findings });
   });
 
   return router;

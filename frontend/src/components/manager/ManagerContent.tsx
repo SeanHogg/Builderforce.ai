@@ -14,6 +14,7 @@ import {
 } from '@/components/manager/ManagerAutonomyControls';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { ManagerStallRegister } from '@/components/manager/ManagerStallRegister';
+import { ManagerStallCensus } from '@/components/manager/ManagerStallCensus';
 import {
   managerApi,
   agentHosts,
@@ -738,7 +739,14 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           the policy tiers, autonomy health, pass cards and decision feed that live here,
           and re-fetching the same endpoint in the child would be a pure duplicate. */}
       {activeSub === 'stuck' && projectId != null && (
-        <ManagerStallRegister projectId={projectId} overview={data} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* The census leads: the register below is per-ticket and bounded by what deep
+              triage has diagnosed, so reading it FIRST invites mistaking a sample for the
+              whole picture — which is exactly how a 313-ticket cohort stayed invisible
+              behind a 44-row register. Scale and root cause first, then the detail. */}
+          <ManagerStallCensus projectId={projectId} />
+          <ManagerStallRegister projectId={projectId} overview={data} />
+        </div>
       )}
 
       {activeSub === 'activity' && (

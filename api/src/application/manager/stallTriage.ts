@@ -416,6 +416,22 @@ export function stageSignoffFor(
  * A diagnosis that is already `escalate_human` is returned unchanged: escalating an
  * escalation is not a state.
  */
+/**
+ * Has a repeated corrective action stopped being a fix and become a livelock? PURE.
+ *
+ * The ceiling was born inside {@link escalateIfIneffective}, reachable only by a
+ * REGISTERED per-ticket remedy. That left the platform's largest measured livelock
+ * outside it: the merge loop's `sync_pr` is not a stall remedy, so it never passed
+ * through here — 40,580 syncs against 10 merges, still running at 13,549/week with zero
+ * merges in the window when this was re-measured on 2026-07-26. The rule is the same
+ * rule wherever it applies ("N identical attempts that changed nothing is not an N+1th
+ * attempt"), so it lives in one predicate that BOTH the stall remedies and the merge
+ * loop consult, rather than being re-implemented for each.
+ */
+export function isActionExhausted(priorAttempts: number, maxAttempts: number = MAX_REMEDY_ATTEMPTS): boolean {
+  return priorAttempts >= maxAttempts;
+}
+
 export function escalateIfIneffective(
   diagnosis: StallDiagnosis,
   priorAttempts: number,
@@ -423,7 +439,7 @@ export function escalateIfIneffective(
 ): StallDiagnosis {
   if (!diagnosis.stalled) return diagnosis;
   if (diagnosis.remedy === 'escalate_human') return { ...diagnosis, escalated: true };
-  if (priorAttempts < maxAttempts) return diagnosis;
+  if (!isActionExhausted(priorAttempts, maxAttempts)) return diagnosis;
   return {
     ...diagnosis,
     remedy: 'escalate_human',
