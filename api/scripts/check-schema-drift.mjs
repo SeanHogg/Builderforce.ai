@@ -20,24 +20,12 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseDrizzleTables } from './lib/drizzleSchema.mjs';
 
 const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const srcDir = resolve(here, '../src');
 const migrationsDir = resolve(here, '../migrations');
 const allowlistFile = resolve(here, '.schema-drift-allowlist.txt');
-
-/** Every .ts file under src/ — pgTable() declarations are NOT confined to
- *  schema.ts: finopsTables.ts, devexSurveys.ts and recommendationsEngine.ts each
- *  declare their own domain tables. Scanning only schema.ts made those tables
- *  invisible to BOTH directions of this check. */
-function collectSourceFiles(dir, out = []) {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = resolve(dir, entry.name);
-    if (entry.isDirectory()) collectSourceFiles(full, out);
-    else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) out.push(full);
-  }
-  return out;
-}
 
 // Pre-existing drift captured when this script first landed — mostly tables
 // created by an early `drizzle-kit push` that was never converted to a tracked
@@ -54,40 +42,14 @@ const allowlist = existsSync(allowlistFile)
 
 // ── Parse Drizzle schema ────────────────────────────────────────────────────
 //
-// Capture every block of the form:
-//   export const fooBar = pgTable('foo_bar', {
-//     col_a: integer('col_a'),
-//     col_b: varchar('col_b', { ... }),
-//     ...
-//   });
+// Shared with check-migrations.mjs (which needs the column TYPES to verify foreign
+// keys) — see scripts/lib/drizzleSchema.mjs. One parser so the two guards can never
+// disagree about what the schema declares.
 
-const schemaText = collectSourceFiles(srcDir)
-  .map((f) => readFileSync(f, 'utf8'))
-  .join('\n');
-
-const drizzleTables = []; // [{ table, cols: Set<string> }]
-// The column object closes with a `}` at column 0 (start of line). A table with
-// no second argument closes the pgTable() call immediately: `\n})`. A table that
-// passes a constraints/indexes callback closes the object with a comma first:
-// `\n}, (t) => [ ... ])`. Match either form (`}` followed by `)` or `,`) so the
-// non-greedy capture stops at THIS table's object and does not bleed into the
-// next table's declaration. (Nested inline config objects are always indented,
-// so their closing braces never sit at column 0 and cannot terminate the match.)
-const tableRe = /pgTable\(\s*'([^']+)'\s*,\s*\{([\s\S]*?)\n\}\s*[,)]/g;
-
-for (const match of schemaText.matchAll(tableRe)) {
-  const table = match[1];
-  const block = match[2];
-  const cols = new Set();
-  // Look for the SQL column name, which is always the first string literal
-  // inside the column-builder call: e.g. `varchar('foo_bar', ...)`.
-  // The trailing `\w*Enum` alternative matches NAMED pgEnum builders
-  // (`taskStatusEnum('status')`, `agentTypeEnum('type')`, …) — without it, enum
-  // columns were silently invisible to the drift check [1316].
-  const colRe = /(?:integer|varchar|text|boolean|timestamp|serial|uuid|json|jsonb|customType|pgEnum|\w*Enum)\s*\(\s*'([^']+)'/g;
-  for (const colMatch of block.matchAll(colRe)) cols.add(colMatch[1]);
-  drizzleTables.push({ table, cols });
-}
+const drizzleTables = [...parseDrizzleTables(srcDir)].map(([table, cols]) => ({
+  table,
+  cols: new Set(cols.keys()),
+}));
 
 // ── Parse all migrations ────────────────────────────────────────────────────
 

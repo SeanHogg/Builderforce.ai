@@ -12,7 +12,10 @@ vi.mock('./leaseService', () => ({
 
 const { guardRepoWrite } = await import('./coordinationCapability');
 
-const holder = { tenantId: 1, executionId: 10, label: 'Ada', taskId: 5, repoSlug: 'acme/web', scopeKey: 'ticket:5' };
+// `branch` is part of the lease IDENTITY, not decoration: two agents on the same
+// ticket branch are exactly the collision these guards exist to prevent, so the
+// fixture has to carry the branch the run commits to.
+const holder = { tenantId: 1, executionId: 10, label: 'Ada', taskId: 5, repoSlug: 'acme/web', branch: 'ticket/5', scopeKey: 'ticket:5' };
 const env = {} as never;
 const db = {} as never;
 
