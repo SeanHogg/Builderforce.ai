@@ -58,7 +58,9 @@ CREATE TABLE IF NOT EXISTS rehearsals (
   finished_ok        BOOLEAN,
   summary            TEXT,
   error_message      TEXT,
-  created_by         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  -- users.id is VARCHAR(36), not an integer — an INTEGER column here makes the FK
+  -- unimplementable ("incompatible types: integer and character varying").
+  created_by         VARCHAR(36) REFERENCES users(id) ON DELETE SET NULL,
   created_at         TIMESTAMP NOT NULL DEFAULT NOW(),
   started_at         TIMESTAMP,
   completed_at       TIMESTAMP

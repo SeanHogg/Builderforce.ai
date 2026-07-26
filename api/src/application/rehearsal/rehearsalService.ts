@@ -55,7 +55,8 @@ export interface StartRehearsalInput {
   agentRef?: string;
   /** Model override, e.g. to A/B a pin. Defaults to the run's normal selection. */
   model?: string;
-  createdBy?: number | null;
+  /** The user who started it — a `users.id`, which is a VARCHAR(36) string, NOT a number. */
+  createdBy?: string | null;
   /** trial: how many recent tickets to cover (clamped to {@link TRIAL_MAX_TICKETS}). */
   ticketCount?: number;
 }
@@ -261,7 +262,7 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
 export async function runTrial(
   env: Env,
   db: Db,
-  input: { tenantId: number; projectId?: number | null; agentRef: string; model?: string; ticketCount?: number; createdBy?: number | null },
+  input: { tenantId: number; projectId?: number | null; agentRef: string; model?: string; ticketCount?: number; createdBy?: string | null },
 ): Promise<string[]> {
   const limit = Math.min(Math.max(1, Math.trunc(input.ticketCount ?? 3)), TRIAL_MAX_TICKETS);
   const recent = await db
