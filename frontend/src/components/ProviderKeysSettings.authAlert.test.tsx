@@ -70,6 +70,33 @@ describe('ProviderKeysSettings — rejected-account prompt', () => {
     expect(screen.queryByText('providerKeys.authAlert.title')).not.toBeInTheDocument();
   });
 
+  it('names an out-of-budget account as CAPACITY, not as a credential to reconnect', async () => {
+    // The remediation differs: telling an owner whose key is fine to "reconnect" sends
+    // them to redo work that cannot fix anything.
+    mockApi([{ provider: 'openai', authType: 'api_key', priority: 0, authAlert: alert({ reason: 'capacity', status: 429, vendor: 'openai' }) }]);
+    render(<ProviderKeysSettings />);
+    expect(await screen.findByText(/providerKeys.authAlert.capacity 429/)).toBeInTheDocument();
+    expect(screen.queryByText(/providerKeys.authAlert.rejected/)).not.toBeInTheDocument();
+  });
+
+  it('does NOT report a broken account as connected — the chip follows health, not storage', async () => {
+    // The whole reason this page could show five green cards next to a failing Test
+    // connection: the chip coloured itself off "a credential is stored", which stays true
+    // for a lapsed subscription. An outstanding alert must downgrade the chip itself, not
+    // merely add a notice below it.
+    mockApi([{ provider: 'openai', authType: 'oauth', priority: 0, authAlert: alert() }]);
+    render(<ProviderKeysSettings />);
+    expect(await screen.findByText(/providerKeys.status.needsAttention/)).toBeInTheDocument();
+    expect(screen.queryByText(/providerKeys.status.connected/)).not.toBeInTheDocument();
+  });
+
+  it('still reports a healthy connected account as connected', async () => {
+    mockApi([{ provider: 'openai', authType: 'oauth', priority: 0 }]);
+    render(<ProviderKeysSettings />);
+    expect(await screen.findByText(/providerKeys.status.connected/)).toBeInTheDocument();
+    expect(screen.queryByText(/providerKeys.status.needsAttention/)).not.toBeInTheDocument();
+  });
+
   it('is announced to assistive tech rather than being colour-only', async () => {
     mockApi([{ provider: 'openai', authType: 'oauth', priority: 0, authAlert: alert() }]);
     render(<ProviderKeysSettings />);

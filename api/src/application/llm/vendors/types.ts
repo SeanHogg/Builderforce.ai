@@ -273,6 +273,19 @@ export interface VendorModule {
    */
   autoRoute?: boolean;
   /**
+   * Whether this vendor can execute FUNCTION/TOOL CALLING at all. Default `true`.
+   *
+   * Set `false` for a backend that has no tool-call machinery whatsoever (our own
+   * `evermind` SSM: it generates raw text and cannot emit structured `tool_calls`).
+   * A tool-less vendor that is handed `tools` does not fail — it just answers in
+   * prose — so an agent loop pinned to it NARRATES the calls it can never make and
+   * silently does no work. That is not a model quirk to diagnose after the fact; it
+   * is a routing error, so this flag is the ONE declaration every caller consults
+   * via {@link import('./registry').modelSupportsTools} before pinning a model onto
+   * a tool-driven run, and the vendor itself hard-rejects a tool-bearing request.
+   */
+  supportsTools?: boolean;
+  /**
    * Per-vendor JSON-Schema dialect compatibility. When set, the gateway strips
    * `stripKeywords` from a consumer-supplied `response_format.json_schema.schema`
    * before forwarding to this vendor — because the vendor's strict-mode validator

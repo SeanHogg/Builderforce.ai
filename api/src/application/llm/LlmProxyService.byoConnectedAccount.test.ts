@@ -7,7 +7,7 @@ import { _resetMemoryCooldowns, recordFailure } from '../../infrastructure/auth/
 //
 // Reproduces exactly how BrainService.agentReply builds its proxy: a FREE plan
 // tenant with a connected Claude subscription (`anthropicOAuthToken`), codingOnly,
-// no explicit model — so the connected flagship (claude-opus-4-8) is auto-seeded at
+// no explicit model — so the connected flagship (claude-opus-5) is auto-seeded at
 // the head of the cascade. Vendor HTTP is mocked via global fetch so we prove, through
 // the real complete() → dispatch() → anthropic-vendor code, that:
 //   1. a WORKING connected account actually serves the turn ($0, byo), and
@@ -64,7 +64,7 @@ const request = {
 };
 
 describe('connected account — happy path serves the turn (real dispatch)', () => {
-  it('auto-seeds claude-opus-4-8 and RESOLVES on the connected Anthropic account ($0/byo)', async () => {
+  it('auto-seeds claude-opus-5 and RESOLVES on the connected Anthropic account ($0/byo)', async () => {
     const seen: string[] = [];
     const fetchSpy = vi.fn(async (input: string | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
@@ -79,10 +79,10 @@ describe('connected account — happy path serves the turn (real dispatch)', () 
 
     expect(result.response.status).toBe(200);
     expect(result.resolvedVendor).toBe('anthropic');
-    expect(result.resolvedModel).toBe('claude-opus-4-8');
+    expect(result.resolvedModel).toBe('claude-opus-5');
     // The connected account was the FIRST (and only) thing tried — no shadowing by a
     // free @cf/* coder, no cascade to the shared pool.
-    expect(seen[0]).toBe('anthropic:claude-opus-4-8');
+    expect(seen[0]).toBe('anthropic:claude-opus-5');
     // The auth header proves the subscription (OAuth) token was used, not an api key.
     const h = fetchSpy.mock.calls[0]![1]?.headers as Record<string, string>;
     expect(h['authorization']).toBe('Bearer sk-ant-oat-test-token');
@@ -90,7 +90,7 @@ describe('connected account — happy path serves the turn (real dispatch)', () 
 });
 
 describe('connected account — a non-BYO caller model does NOT shadow the connected flagship', () => {
-  it('a request carrying a NON-BYO model (e.g. the Brain default coder) still auto-seeds claude-opus-4-8', async () => {
+  it('a request carrying a NON-BYO model (e.g. the Brain default coder) still auto-seeds claude-opus-5', async () => {
     // The exact VS Code Brain regression: a tenant with a connected Claude account whose
     // request carries a non-Anthropic default `model` (a stale/free coder) must NOT let
     // that model shadow the connected flagship — otherwise the turn silently runs the weak
@@ -113,9 +113,9 @@ describe('connected account — a non-BYO caller model does NOT shadow the conne
 
     expect(result.response.status).toBe(200);
     expect(result.resolvedVendor).toBe('anthropic');
-    expect(result.resolvedModel).toBe('claude-opus-4-8');
+    expect(result.resolvedModel).toBe('claude-opus-5');
     // Opus led the cascade despite the non-BYO caller model.
-    expect(seen[0]).toBe('anthropic:claude-opus-4-8');
+    expect(seen[0]).toBe('anthropic:claude-opus-5');
   });
 });
 
@@ -187,7 +187,7 @@ describe('MULTIPLE connected accounts fail over to each other', () => {
   }
 
   it('a PINNED BYO model that fails hands off to the tenant\'s OTHER connected account', async () => {
-    // The measured production stall: a cloud run pins `claude-opus-4-8` (its own BYO
+    // The measured production stall: a cloud run pins `claude-opus-5` (its own BYO
     // model, so it legitimately leads) while xAI/OpenAI/Meta are ALSO connected. Before
     // the fix the pin was the entire BYO chain, so one bad Anthropic call ended the run
     // with `byo_unavailable` and the other accounts were never tried.
@@ -201,7 +201,7 @@ describe('MULTIPLE connected accounts fail over to each other', () => {
     });
     (globalThis as { fetch: typeof fetch }).fetch = fetchSpy as unknown as typeof fetch;
 
-    const result = await twoAccountProxy().complete({ ...request, model: 'claude-opus-4-8' });
+    const result = await twoAccountProxy().complete({ ...request, model: 'claude-opus-5' });
 
     expect(result.response.status).toBe(200);
     expect(result.resolvedVendor).toBe('xai-oauth');
@@ -217,7 +217,7 @@ describe('MULTIPLE connected accounts fail over to each other', () => {
     // Every connected candidate is benched, so the chain composes empty. Failing closed
     // here is what converted a ≤90s cooldown into a permanently stalled ticket (autonomy
     // halts after 3 consecutive failures), so the owner's own account gets one probe.
-    await recordFailure(env, 'anthropic', 'claude-opus-4-8', 500);
+    await recordFailure(env, 'anthropic', 'claude-opus-5', 500);
 
     const fetchSpy = vi.fn(async (input: string | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
@@ -229,7 +229,7 @@ describe('MULTIPLE connected accounts fail over to each other', () => {
     const result = await connectedProxy().complete(request);
 
     expect(result.response.status).toBe(200);
-    expect(result.resolvedModel).toBe('claude-opus-4-8');
+    expect(result.resolvedModel).toBe('claude-opus-5');
     expect(fetchSpy).toHaveBeenCalled();
   });
 });
@@ -247,6 +247,84 @@ describe('configured but unresolved BYO account', () => {
 
     expect(result.response.status).toBe(503);
     expect(result.outcome).toBe('byo_unavailable');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  // The reported complaint: with four accounts visible in the Provider-priority UI, a
+  // 503 reading "no configured provider is currently usable" is indistinguishable from
+  // the gateway not seeing them at all, and it named neither the providers nor a single
+  // model. The envelope must carry BOTH — the providers (with the per-provider reason
+  // each was unusable) and every model the chain walked.
+  it('NAMES the configured providers, why each was unusable, and every model it tried', async () => {
+    const fetchSpy = vi.fn(async () => openaiOk('must not be used'));
+    (globalThis as { fetch: typeof fetch }).fetch = fetchSpy as unknown as typeof fetch;
+    const proxy = llmProxyForPlan(env, 'free', false, {
+      codingOnly: true,
+      byoRequired: true,
+      byoDiagnostics: {
+        configuredProviders: ['xai', 'openai', 'anthropic', 'meta'],
+        unresolvedReasons: { xai: 'revoked', openai: 'expired', anthropic: 'undecryptable', meta: 'undecryptable' },
+      },
+    });
+
+    const result = await proxy.complete(request);
+    const body = await result.response.clone().json() as {
+      error: string;
+      code: string;
+      details: { attemptedModels: string[]; configuredProviders: string[]; unresolvedReasons: Record<string, string>; connectedVendors: string[] };
+    };
+
+    expect(result.response.status).toBe(503);
+    expect(body.code).toBe('byo_unavailable');
+    // The discriminating sentence: connected ≠ resolved. Never "no provider is connected".
+    expect(body.error).toContain('4 provider(s) are connected but NONE resolved');
+    // Every provider, each with WHY it was unusable — the actionable half.
+    for (const [p, reason] of Object.entries({ xai: 'revoked', openai: 'expired', anthropic: 'undecryptable' })) {
+      expect(body.error).toContain(`${p} (unusable: ${reason})`);
+      expect(body.details.unresolvedReasons[p]).toBe(reason);
+    }
+    expect(body.details.configuredProviders).toEqual(['xai', 'openai', 'anthropic', 'meta']);
+    expect(body.details.connectedVendors).toEqual([]);
+    // The models — the operator's explicit ask. Both the prose and the structured field.
+    expect(body.error).toContain('models tried:');
+    expect(Array.isArray(body.details.attemptedModels)).toBe(true);
+    // …and the SAME list rides `candidateChain`, so the cloud loop's ` · chain: …`
+    // suffix, the superadmin trace and the tool_audit detail all agree instead of
+    // reporting an empty chain.
+    expect(result.candidateChain).toEqual(body.details.attemptedModels);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('says "no provider is connected" only when nothing is actually configured', async () => {
+    const fetchSpy = vi.fn(async () => openaiOk('must not be used'));
+    (globalThis as { fetch: typeof fetch }).fetch = fetchSpy as unknown as typeof fetch;
+    const proxy = llmProxyForPlan(env, 'free', false, { codingOnly: true, byoRequired: true });
+
+    const body = await (await proxy.complete(request)).response.json() as { error: string };
+
+    expect(body.error).toContain('no provider is connected on this workspace');
+    expect(body.error).not.toContain('resolved to a usable credential this request —');
+  });
+
+  it('a strict pin on an unconnected vendor names the vendor it needs and what IS usable', async () => {
+    const fetchSpy = vi.fn(async () => openaiOk('must not be used'));
+    (globalThis as { fetch: typeof fetch }).fetch = fetchSpy as unknown as typeof fetch;
+    const proxy = llmProxyForPlan(env, 'free', false, {
+      codingOnly: true,
+      anthropicOAuthToken: 'sk-ant-oat-test-token',   // anthropic resolves…
+      byoDiagnostics: { configuredProviders: ['anthropic', 'openai'], unresolvedReasons: { openai: 'revoked' } },
+    });
+
+    // …but the pin is on OpenAI, which is connected yet unusable.
+    const result = await proxy.complete({ ...request, model: 'direct/openai/gpt-4.1', modelStrict: true });
+    const body = await result.response.json() as { code: string; details: { requiredVendor: string; connectedVendors: string[] }; error: string };
+
+    expect(result.response.status).toBe(503);
+    expect(body.code).toBe('model_unavailable');
+    expect(body.details.requiredVendor).toBe('openai');
+    expect(body.details.connectedVendors).toContain('anthropic');
+    expect(body.error).toContain("needs the 'openai' provider");
+    expect(body.error).toContain('openai (unusable: revoked)');
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

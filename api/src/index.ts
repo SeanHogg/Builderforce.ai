@@ -185,6 +185,7 @@ import {
   OPENAPI_DESCRIPTION,
 } from './openapi/schema';
 import { runVendorHealthCron } from './application/llm/vendorHealthCron';
+import { runByoCredentialHealthCron } from './application/llm/byoCredentialHealthCron';
 import { runRetentionPurge } from './application/maintenance/retentionPurge';
 import { runEvalDriftSweep } from './application/eval/runEvalDriftSweep';
 import { runAlertSweep } from './application/alerts/runAlertSweep';
@@ -720,7 +721,8 @@ export default {
   /**
    * Cloudflare scheduled() handler — fires on cron triggers declared in
    * api/wrangler.toml `[triggers] crons`:
-   *   - `0 9 * * *`  daily LLM vendor health probe (change-detected, email-quiet).
+   *   - `0 9 * * *`  daily LLM vendor health probe (change-detected, email-quiet) +
+   *     daily per-tenant BYO credential sweep (emails a workspace's admins on breakage).
    *   - `0 16 * * 5` weekly release-notes marketing digest (consent-gated).
    *   - every-5-min tick: workflow-trigger sweep — fire due schedule + rss
    *     triggers, then advance any pending cloud-runtime workflows.
@@ -742,6 +744,22 @@ export default {
         runRetentionPurge(env).catch((err) => {
           console.error('[cron:retention] failed', err);
         }),
+      );
+      // Daily BYO credential sweep — probe every tenant's CONNECTED model providers on
+      // their own credential and email the workspace's owners/managers the first time one
+      // breaks. Without it, credential health was only ever observed as a side effect of
+      // traffic, so a lapsed subscription or a rotated key showed "● connected" on the
+      // Integrations page indefinitely while every run quietly failed over.
+      ctx.waitUntil(
+        runByoCredentialHealthCron(env)
+          .then((r) => {
+            if (r.newlyBroken > 0 || r.recovered > 0) {
+              console.log(`[cron:byo-health] newlyBroken=${r.newlyBroken} recovered=${r.recovered} emailed=${r.emailed}`);
+            }
+          })
+          .catch((err) => {
+            console.error('[cron:byo-health] failed', err);
+          }),
       );
       // Daily semantic-eval drift sweep — flag per-(action_type, model) quality
       // regressions over the persisted faithfulness/relevance scores (Layer 6).

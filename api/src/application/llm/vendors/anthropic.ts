@@ -77,7 +77,7 @@ const DEFAULT_MAX_TOKENS = 16_000;
 const MAX_OUTPUT_TOKENS = 32_000;
 /**
  * Output ceiling for the STREAMING `callStream()` path — the model's own 128K
- * per-response maximum (both catalog entries, Sonnet 5 and Opus 4.8, cap there).
+ * per-response maximum (every catalog entry — Sonnet 5, Opus 5, Opus 4.8 — caps there).
  *
  * The vendor timeout that forces the conservative non-streaming floor above does
  * NOT apply here: `fetchWithVendorTimeout` bounds the time to RESPONSE HEADERS,
@@ -103,8 +103,18 @@ export function anthropicOutputCap(requested: number | undefined, stream: boolea
 // Model ids are the exact Anthropic API strings (no date suffix). These are the
 // reliability floor, ordered cheapest-first in the fallback chain: Sonnet first,
 // Opus only if Sonnet is also down.
+//
+// SUPERSEDED ids stay in the catalog on purpose. Anthropic keeps a superseded model
+// dispatchable for a deprecation window, and dropping the entry the day a successor
+// ships is what turns a *routing* problem into an *outage*: `isDispatchableSeed`
+// silently filters an unknown id out of the BYO flagship seed, which empties the
+// connected-account chain and surfaces as "no configured provider is currently
+// usable" — a message that names neither the model nor the provider. Keep the old
+// entry, lead with the successor, and let {@link SUPERSEDED_MODEL_IDS} rewrite any
+// stored pin. Retire an entry only once Anthropic actually 404s it.
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'claude-sonnet-5',   tier: 'PREMIUM', label: 'Claude Sonnet 5 (Anthropic direct)',   brand: 'Anthropic', capabilities: ['tools', 'structured_output', 'vision'] },
+  { id: 'claude-opus-5',     tier: 'ULTRA',   label: 'Claude Opus 5 (Anthropic direct)',     brand: 'Anthropic', capabilities: ['tools', 'structured_output', 'vision'] },
   { id: 'claude-opus-4-8',   tier: 'ULTRA',   label: 'Claude Opus 4.8 (Anthropic direct)',   brand: 'Anthropic', capabilities: ['tools', 'structured_output', 'vision'] },
 ];
 
@@ -407,6 +417,10 @@ function prepareAnthropicRequest(
   // and 400s, so depth rides on `output_config.effort` instead of a token budget.
   // `{type:'disabled'}` remains valid on both and stays the continuation-turn default.
   const thinking: Record<string, unknown> = enableThinking ? { type: 'adaptive' } : { type: 'disabled' };
+  // INVARIANT — effort rides ONLY the enabled branch. On Opus 5 `{type:'disabled'}` is
+  // accepted at effort `high` or below and 400s at `xhigh`/`max`; leaving effort unset on
+  // the disabled branch takes the server default (`high`), which is always valid. Do not
+  // "simplify" this by hoisting thinkingEffort out of the conditional.
   const thinkingEffort = enableThinking
     ? ((params.extraBody ?? {}).thinkingEffort as string | undefined)
     : undefined;

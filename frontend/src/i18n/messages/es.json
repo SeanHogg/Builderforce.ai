@@ -8521,7 +8521,8 @@
     "status": {
       "connected": "● {subscription} conectada",
       "keyConfigured": "● Clave de API de {label} configurada",
-      "notConnected": "○ Sin conectar"
+      "notConnected": "○ Sin conectar",
+      "needsAttention": "▲ {label} — requiere atención"
     },
     "disconnect": "Desconectar",
     "remove": "Eliminar",
@@ -8614,7 +8615,9 @@
     "authAlert": {
       "title": "No se está usando",
       "notEntitled": "Esta cuenta inició sesión correctamente, pero el proveedor rechazó la solicitud ({status}) porque el plan no la cubre. Vuelve a conectar una cuenta cuyo plan la incluya, o mejora el plan.",
-      "rejected": "El proveedor rechazó esta credencial ({status}). Es probable que haya caducado, se haya revocado o se haya rotado en otro lugar: vuelve a conectar la cuenta."
+      "rejected": "El proveedor rechazó esta credencial ({status}). Es probable que haya caducado, se haya revocado o se haya rotado en otro lugar: vuelve a conectar la cuenta.",
+      "capacity": "La credencial funciona, pero la cuenta se ha quedado sin saldo ({status}): un límite de gasto o un saldo de créditos vacío. Recarga o sube el límite; no hace falta reconectar.",
+      "unresolved": "La credencial guardada no se pudo usar en absoluto: ha sido revocada, ha caducado o se guardó en otro espacio de trabajo. Vuelve a conectarla aquí."
     }
   },
   "modelSelect": {

@@ -15,6 +15,8 @@ import {
   byoAutoSeedModels,
   isDispatchableSeed,
   explicitModelPreemptsByo,
+  canonicalModelId,
+  SUPERSEDED_MODEL_IDS,
   type ActionModelRankStat,
 } from './LlmProxyService';
 import { catalogEntry, vendorForModel, autoRoutableModelsByTier, modelsByTier, tierForModel } from './vendors';
@@ -136,8 +138,12 @@ describe('plan-aware coding routing', () => {
 });
 
 describe('direct-Anthropic coding floor', () => {
-  it('claude-sonnet-5 and claude-opus-4-8 are real catalog ids owned by the anthropic vendor', () => {
-    for (const id of ['claude-sonnet-5', 'claude-opus-4-8']) {
+  // The SUPERSEDED id stays catalogued on purpose (see the Anthropic CATALOG note):
+  // dropping it the day a successor ships makes `isDispatchableSeed` filter it out of
+  // the BYO flagship seed, which empties the connected chain and surfaces as a bare
+  // `byo_unavailable`. It stays recognisable; SUPERSEDED_MODEL_IDS changes what we send.
+  it('claude-sonnet-5, claude-opus-5 and the superseded claude-opus-4-8 are all real catalog ids owned by the anthropic vendor', () => {
+    for (const id of ['claude-sonnet-5', 'claude-opus-5', 'claude-opus-4-8']) {
       expect(catalogEntry(id), `${id} must be a catalog model`).not.toBeNull();
       expect(vendorForModel(id)).toBe('anthropic');
     }
@@ -147,23 +153,97 @@ describe('direct-Anthropic coding floor', () => {
     for (const plan of ['free', 'pro', 'teams'] as const) {
       const picker = codingModelsForPlan(plan);
       expect(picker).not.toContain('claude-sonnet-5');
+      expect(picker).not.toContain('claude-opus-5');
       expect(picker).not.toContain('claude-opus-4-8');
     }
+    expect(autoRoutableModelsByTier('PREMIUM', 'ULTRA')).not.toContain('claude-opus-5');
     expect(autoRoutableModelsByTier('PREMIUM', 'ULTRA')).not.toContain('claude-opus-4-8');
   });
 
   it('is a recognised coder (not flagged as a non-coder degradation)', () => {
     expect(CODING_MODEL_POOL).toContain('claude-sonnet-5');
+    expect(CODING_MODEL_POOL).toContain('claude-opus-5');
+    // The superseded id stays recognised so a run that landed on it historically is not
+    // retro-classified as "degraded onto a non-coder".
     expect(CODING_MODEL_POOL).toContain('claude-opus-4-8');
   });
 
   it('the direct-Anthropic floor is tried LAST — after the Cloudflare + OpenRouter paid coders', () => {
     const cf = CODING_PREMIUM_FALLBACK_MODELS.indexOf('@cf/qwen/qwen3-30b-a3b-fp8');
     const sonnetDirect = CODING_PREMIUM_FALLBACK_MODELS.indexOf('claude-sonnet-5');
-    const opusDirect = CODING_PREMIUM_FALLBACK_MODELS.indexOf('claude-opus-4-8');
+    const opusDirect = CODING_PREMIUM_FALLBACK_MODELS.indexOf('claude-opus-5');
     expect(cf).toBeGreaterThanOrEqual(0);
     expect(cf).toBeLessThan(sonnetDirect);   // Cloudflare surfaces before direct Claude
     expect(sonnetDirect).toBeLessThan(opusDirect);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Model supersession — a pinned id is durable state and outlives the model it names.
+// The map is the ONE place a version bump lands: every stored pin, gate and dispatch
+// must follow it, because a stale id that reaches dispatch does NOT fail loudly — it
+// gets filtered out of the BYO flagship seed as "not dispatchable" and surfaces as a
+// generic "no configured provider is usable", naming neither the model nor the vendor.
+// ---------------------------------------------------------------------------
+describe('canonicalModelId (superseded → live successor)', () => {
+  it('rewrites a superseded Anthropic id to its live successor', () => {
+    expect(canonicalModelId('claude-opus-4-8')).toBe('claude-opus-5');
+    expect(canonicalModelId('claude-opus-4-6')).toBe('claude-opus-5');
+    expect(canonicalModelId('claude-sonnet-4-6')).toBe('claude-sonnet-5');
+  });
+
+  it('leaves a live id, an unknown id and a blank value untouched', () => {
+    // The premium OpenRouter long tail is off our catalog by definition — rewriting or
+    // dropping an unrecognised id here would silently break every premium pin.
+    expect(canonicalModelId('claude-opus-5')).toBe('claude-opus-5');
+    expect(canonicalModelId('some-vendor/brand-new-model')).toBe('some-vendor/brand-new-model');
+    expect(canonicalModelId(undefined)).toBe('');
+    expect(canonicalModelId('   ')).toBe('');
+  });
+
+  it('trims, and follows a multi-hop chain to the final successor', () => {
+    expect(canonicalModelId('  claude-opus-4-8  ')).toBe('claude-opus-5');
+    // 4-1 → 5 directly today; the assertion holds however many hops are added later,
+    // which is the point of chaining (a bump never rewrites the earlier entries).
+    expect(canonicalModelId('claude-opus-4-1')).toBe('claude-opus-5');
+  });
+
+  it('every successor is itself a live, dispatchable catalog id', () => {
+    // Guards the map against pointing at a typo or an id that was never catalogued —
+    // which would swap one undispatchable pin for another.
+    for (const successor of Object.values(SUPERSEDED_MODEL_IDS)) {
+      expect(isDispatchableSeed(successor), `${successor} must be dispatchable`).toBe(true);
+    }
+  });
+
+  it('never maps across vendor namespaces — a silent vendor swap is worse than a 404', () => {
+    // Compare the ID NAMESPACE, not `vendorForModel(from)`: a fully-retired source id is
+    // (correctly) absent from the catalog, and `vendorForModel` then falls back to
+    // OpenRouter for it — so asserting on the source's resolved vendor would demand that
+    // every stale id map to an OpenRouter model, the exact swap this guards against.
+    // A bare `claude-*` must map to a bare `claude-*`; `anthropic/x` to `anthropic/y`.
+    const namespaceOf = (id: string) => (id.includes('/') ? id.slice(0, id.indexOf('/')) : '');
+    for (const [from, to] of Object.entries(SUPERSEDED_MODEL_IDS)) {
+      expect(namespaceOf(to), `${from} → ${to} must stay in one namespace`).toBe(namespaceOf(from));
+      expect(to.split('/').pop()!.split('-')[1], `${from} → ${to} must stay in one model family`)
+        .toBe(from.split('/').pop()!.split('-')[1]);
+    }
+  });
+
+  it('rewrites a fully-retired id that is no longer in the catalog at all', () => {
+    // This is the case the rewrite exists for. An uncatalogued id resolves to the
+    // OpenRouter fallback vendor and fails `isKnownModel`, so without the rewrite a pin
+    // on it is silently dropped (or dispatched at the wrong vendor) with no signal.
+    expect(isKnownModel('claude-opus-4-7')).toBe(false);
+    expect(canonicalModelId('claude-opus-4-7')).toBe('claude-opus-5');
+    expect(isKnownModel(canonicalModelId('claude-opus-4-7'))).toBe(true);
+  });
+
+  it('a stale stored pin is dispatched as the successor, and stays strict', () => {
+    // The failure this closes: an agent pinned months ago on `claude-opus-4-8` would
+    // otherwise ride a retired id all the way to dispatch.
+    expect(pickCloudModel('claude-opus-4-8', 'pro', false, { byoVendors: new Set(['anthropic']) }))
+      .toEqual({ model: 'claude-opus-5', strict: true });
   });
 });
 
@@ -186,7 +266,7 @@ describe('byoAutoSeedModels (connected-account auto seed)', () => {
 
   it('Anthropic connected → Opus for agentic tool-loops, Sonnet for plain chat', () => {
     const s = new Set(['anthropic']);
-    expect(byoAutoSeedModels(s, { agentic: true })).toEqual(['claude-opus-4-8']);
+    expect(byoAutoSeedModels(s, { agentic: true })).toEqual(['claude-opus-5']);
     expect(byoAutoSeedModels(s, { agentic: false })).toEqual(['claude-sonnet-5']);
   });
 
@@ -209,7 +289,7 @@ describe('byoAutoSeedModels (connected-account auto seed)', () => {
     const seeds = byoAutoSeedModels(new Set(['googleai', 'openai', 'anthropic']), { agentic: true });
     // One flagship per connected provider — the owner's OWN premium frontier models.
     expect([...seeds].sort()).toEqual(
-      ['claude-opus-4-8', 'direct/openai/gpt-4.1', 'googleai/gemini-2.5-pro'].sort(),
+      ['claude-opus-5', 'direct/openai/gpt-4.1', 'googleai/gemini-2.5-pro'].sort(),
     );
     // Ordered strongest-tier-first from catalog data: Opus (ULTRA) leads; every id
     // sorts by its catalog tier, so the ordering is monotonic and vendor-agnostic.
@@ -217,7 +297,7 @@ describe('byoAutoSeedModels (connected-account auto seed)', () => {
     const rank: Record<string, number> = { ULTRA: 0, PREMIUM: 1, STANDARD: 2, FREE: 3 };
     const ranks = tiers.map((t) => rank[t] ?? 4);
     expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
-    expect(seeds[0]).toBe('claude-opus-4-8'); // ULTRA leads
+    expect(seeds[0]).toBe('claude-opus-5'); // ULTRA leads
   });
 
   it('every seed output is dispatchable (prefix-stripped id is a real catalog entry)', () => {
@@ -258,7 +338,7 @@ describe('explicitModelPreemptsByo (explicit-vs-connected-account rule)', () => 
   });
 
   it('connected account + explicit model ON that account → preempts (a deliberate BYO pick)', () => {
-    expect(explicitModelPreemptsByo('claude-opus-4-8', new Set(['anthropic']))).toBe(true);
+    expect(explicitModelPreemptsByo('claude-opus-5', new Set(['anthropic']))).toBe(true);
     expect(explicitModelPreemptsByo('direct/openai/gpt-4.1', new Set(['openai']))).toBe(true);
     expect(explicitModelPreemptsByo('googleai/gemini-2.5-pro', new Set(['googleai']))).toBe(true);
   });
@@ -268,9 +348,9 @@ describe('pickCloudModel with a connected BYO account', () => {
   it('no explicit pin + Anthropic connected → soft Opus seed, even on the free plan', () => {
     const byoVendors = new Set(['anthropic']);
     const free = pickCloudModel(undefined, 'free', false, { byoVendors });
-    expect(free).toEqual({ model: 'claude-opus-4-8', strict: false });
+    expect(free).toEqual({ model: 'claude-opus-5', strict: false });
     const pro = pickCloudModel(undefined, 'pro', false, { byoVendors });
-    expect(pro.model).toBe('claude-opus-4-8');
+    expect(pro.model).toBe('claude-opus-5');
     expect(pro.strict).toBe(false);
   });
 
@@ -284,13 +364,13 @@ describe('pickCloudModel with a connected BYO account', () => {
     // must NOT win; the connected Opus flagship leads instead of the empty-turning coder.
     const byoVendors = new Set(['anthropic']);
     const pick = pickCloudModel('@cf/qwen/qwen3-30b-a3b-fp8', 'pro', false, { byoVendors });
-    expect(pick).toEqual({ model: 'claude-opus-4-8', strict: false });
+    expect(pick).toEqual({ model: 'claude-opus-5', strict: false });
   });
 
   it('a deliberate BYO-served pin still wins over the auto seed', () => {
     const byoVendors = new Set(['anthropic']);
-    expect(pickCloudModel('claude-opus-4-8', 'pro', false, { byoVendors }))
-      .toEqual({ model: 'claude-opus-4-8', strict: true });
+    expect(pickCloudModel('claude-opus-5', 'pro', false, { byoVendors }))
+      .toEqual({ model: 'claude-opus-5', strict: true });
   });
 
   it('a non-BYO explicit pin on a Pro tenant with NO connected account is still honored (no regression)', () => {
@@ -306,7 +386,7 @@ describe('BYO precedence — tenant-set provider priority (byoAutoSeedModels)', 
   it('with NO precedence set, still orders by catalog tier (backward compatible)', () => {
     // Anthropic (Opus = PREMIUM) outranks Meta MUSE (STANDARD) on tier alone.
     const seeds = byoAutoSeedModels(new Set(['anthropic', 'meta']), { agentic: true });
-    expect(seeds[0]).toBe('claude-opus-4-8');
+    expect(seeds[0]).toBe('claude-opus-5');
   });
 
   it('vendorPriority leads with the tenant-chosen provider (Meta first) over a stronger tier', () => {
@@ -315,7 +395,7 @@ describe('BYO precedence — tenant-set provider priority (byoAutoSeedModels)', 
       vendorPriority: ['meta', 'anthropic'],
     });
     expect(seeds[0]).toBe('direct/meta/muse-spark-1.1'); // Meta leads despite lower tier
-    expect(seeds[1]).toBe('claude-opus-4-8');            // then Anthropic (next in precedence)
+    expect(seeds[1]).toBe('claude-opus-5');            // then Anthropic (next in precedence)
     expect(seeds[2]).toBe('direct/openai/gpt-4.1');      // un-ranked → after ranked, by tier
   });
 
@@ -324,7 +404,7 @@ describe('BYO precedence — tenant-set provider priority (byoAutoSeedModels)', 
       agentic: true,
       vendorPriority: ['meta'], // only Meta ranked; Anthropic un-ranked
     });
-    expect(seeds).toEqual(['direct/meta/muse-spark-1.1', 'claude-opus-4-8']);
+    expect(seeds).toEqual(['direct/meta/muse-spark-1.1', 'claude-opus-5']);
   });
 
   it('pickCloudModel threads byoVendorPriority so the cloud pin leads with Meta', () => {

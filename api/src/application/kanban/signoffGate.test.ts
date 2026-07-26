@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  classifySignoffOwnership, decideSignoffGate, describeSignoffOwnership, type OutstandingSlot,
+  classifySignoffOwnership, decideSignoffGate, describeSignoffOwnership, slotsForStage,
+  type OutstandingSlot,
 } from './signoffGate';
 import {
   SATISFIED_PARTICIPANT_STATES, OPEN_PARTICIPANT_STATES,
@@ -165,6 +166,7 @@ describe('participantStates — the shared classification', () => {
 describe('classifySignoffOwnership — who actually owes the sign-off', () => {
   const out = (over: Partial<OutstandingSlot> = {}): OutstandingSlot => ({
     roleKey: 'architect', roleName: 'Architect', stageKey: 'in_review', state: 'assigned',
+    responsibility: 'reviewer',
     assigneeName: 'Arch Agent', assigneeRef: 'agent-9', assigneeKind: 'agent', ...over,
   });
 
@@ -198,5 +200,30 @@ describe('classifySignoffOwnership — who actually owes the sign-off', () => {
     ]));
     expect(detail).toContain('1 with nobody assigned (Architect)');
     expect(detail).toContain('1 owed by a person (Product Owner → Sean)');
+  });
+});
+
+describe('slotsForStage — scoping the ASK to the lane the ticket is on', () => {
+  const at = (stageKey: string | null, roleKey: string): OutstandingSlot => ({
+    roleKey, roleName: roleKey, stageKey, state: 'assigned', responsibility: 'reviewer',
+    assigneeName: 'Bot', assigneeRef: 'agent-1', assigneeKind: 'agent',
+  });
+
+  /**
+   * The completion gate must see EVERY stage (or a ticket completes with earlier stages
+   * unsigned); the ASK must see only the current one (or a Requirements-stage ticket
+   * would be sent to its QA reviewer). Same manifest, two questions.
+   */
+  it('keeps the current stage and drops later ones', () => {
+    const scoped = slotsForStage(
+      [at('requirements', 'business-analyst'), at('in_review', 'qa-tester'), at('design', 'architect')],
+      'requirements',
+    );
+    expect(scoped.map((s) => s.roleKey)).toEqual(['business-analyst']);
+  });
+
+  it('always keeps a stage-less slot — it belongs to the ticket, not to a lane', () => {
+    const scoped = slotsForStage([at(null, 'product-owner'), at('in_review', 'qa-tester')], 'requirements');
+    expect(scoped.map((s) => s.roleKey)).toEqual(['product-owner']);
   });
 });
