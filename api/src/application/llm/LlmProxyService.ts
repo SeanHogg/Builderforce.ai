@@ -1546,7 +1546,9 @@ export class LlmProxyService {
    * failed on the way to it were just recorded as faults by `applyCooldowns`.
    */
   private async clearVendorHealth(vendor: VendorId): Promise<void> {
-    await recordVendorUpstreamSuccess(this.env, vendor).catch(() => { /* advisory */ });
+    await recordVendorUpstreamSuccess(this.env, vendor).catch((error) => { /* advisory */ 
+      console.error('[suppressed-error] application/llm/LlmProxyService.ts:1549 clearVendorHealth', { error });
+    });
   }
 }
 

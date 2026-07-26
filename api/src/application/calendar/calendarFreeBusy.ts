@@ -70,7 +70,9 @@ export async function loadExternalBusy(
       const list = out.get(conn.userId) ?? [];
       list.push(...intervals);
       out.set(conn.userId, list);
-    } catch { /* best-effort per connection */ }
+    } catch (error) { /* best-effort per connection */ 
+      console.error('[suppressed-error] application/calendar/calendarFreeBusy.ts:73 loadExternalBusy', { error });
+    }
   }));
 
   return out;

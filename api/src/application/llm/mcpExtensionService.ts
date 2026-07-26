@@ -237,8 +237,10 @@ export async function listToolsForTenant(
               parameters: t.parameters ?? { type: 'object', properties: {} },
             });
           }
-        } catch {
+        } catch (error) {
           /* skip unreachable / malformed extension */
+        
+          console.error('[suppressed-error] application/llm/mcpExtensionService.ts:240 load', { error });
         }
       }),
     );

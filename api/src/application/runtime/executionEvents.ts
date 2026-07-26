@@ -82,8 +82,10 @@ export function notifyExecutionSubscribers(executionId: number, event: Execution
   for (const socket of set) {
     try {
       socket.send(payload);
-    } catch {
+    } catch (error) {
       // ignore broken sockets; close handlers clean up subscriptions.
+    
+      console.error('[suppressed-error] application/runtime/executionEvents.ts:85 notifyExecutionSubscribers', { error });
     }
   }
 }

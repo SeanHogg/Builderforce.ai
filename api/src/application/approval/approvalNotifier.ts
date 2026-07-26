@@ -24,7 +24,9 @@ export async function sendSlackNotification(webhookUrl: string, text: string): P
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
-  }).catch(() => { /* best-effort */ });
+  }).catch((error) => { /* best-effort */ 
+    console.error('[suppressed-error] application/approval/approvalNotifier.ts:23 sendSlackNotification', { error });
+  });
 }
 
 /**
@@ -49,7 +51,9 @@ export async function sendTeamsNotification(
       title,
       text,
     }),
-  }).catch(() => { /* best-effort */ });
+  }).catch((error) => { /* best-effort */ 
+    console.error('[suppressed-error] application/approval/approvalNotifier.ts:41 sendTeamsNotification', { error });
+  });
 }
 
 export async function sendEmailNotification(
@@ -63,7 +67,9 @@ export async function sendEmailNotification(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ from, to, subject, html }),
-  }).catch(() => { /* best-effort */ });
+  }).catch((error) => { /* best-effort */ 
+    console.error('[suppressed-error] application/approval/approvalNotifier.ts:62 sendEmailNotification', { error });
+  });
 }
 
 /** Manager/owner email addresses for a tenant — the notification recipients. */

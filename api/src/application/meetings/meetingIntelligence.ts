@@ -79,7 +79,9 @@ export async function postMeetingChatLine(
       seq: (last?.seq ?? 0) + 1,
     });
     await db.update(brainChats).set({ updatedAt: new Date() }).where(eq(brainChats.id, chatId));
-  } catch { /* the meeting chat is a nice-to-have; never fail the turn on it */ }
+  } catch (error) { /* the meeting chat is a nice-to-have; never fail the turn on it */ 
+    console.error('[suppressed-error] application/meetings/meetingIntelligence.ts:82 postMeetingChatLine', { error });
+  }
 }
 
 /** Persist a transcript line + fan it out to live clients as a caption. */

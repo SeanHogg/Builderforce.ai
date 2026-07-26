@@ -46,7 +46,9 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name, ownerUserId: userId });
-    await provisionBuiltinAgents(db, tenant.id).catch(() => {});   // seed Validator + Security
+    await provisionBuiltinAgents(db, tenant.id).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/vscodeRoutes.ts:49 createVscodeRoutes', { error });
+    });   // seed Validator + Security
     return c.json(tenant.toPlain(), 201);
   });
 

@@ -261,7 +261,9 @@ function kvBackend(kv: KVNamespace): CooldownBackend {
     },
     async writeVendorFailures(vendor, ring) {
       if (ring.length === 0) {
-        await kv.delete(vendorFailuresKey(vendor)).catch(() => { /* absorb */ });
+        await kv.delete(vendorFailuresKey(vendor)).catch((error) => { /* absorb */ 
+          console.error('[suppressed-error] infrastructure/auth/cooldownStore.ts:264 writeVendorFailures', { error });
+        });
         return;
       }
       await kv.put(

@@ -165,7 +165,9 @@ export function logTrace(env: Env, ctx: ExecutionContext, input: TraceInput): vo
     buildTransactionalDatabase(env)
       .insert(llmTraces)
       .values(row)
-      .catch(() => { /* tracing must never fail the request */ }),
+      .catch((error) => { /* tracing must never fail the request */ 
+        console.error('[suppressed-error] application/llm/traceLogger.ts:165 logTrace', { error });
+      }),
   );
 }
 
@@ -194,6 +196,8 @@ export function backfillTraceUsage(
         totalTokens:      usage.totalTokens ?? 0,
       })
       .where(eq(llmTraces.traceId, traceId))
-      .catch(() => { /* tracing must never fail the request */ }),
+      .catch((error) => { /* tracing must never fail the request */ 
+        console.error('[suppressed-error] application/llm/traceLogger.ts:189 backfillTraceUsage', { error });
+      }),
   );
 }

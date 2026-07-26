@@ -207,7 +207,9 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
           expiresAt:   body.expiresAt,
           status,
         }),
-      })).catch(() => { /* best-effort */ });
+      })).catch((error) => { /* best-effort */ 
+        console.error('[suppressed-error] presentation/routes/approvalRoutes.ts:198 createApprovalRoutes', { error });
+      });
     }
 
     // Slack + email fan-out for new pending requests (skip if auto-approved).
@@ -401,8 +403,12 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
             contribution: existing.executionId ? { executionId: existing.executionId } : undefined,
           });
           const participants = new TicketParticipantsService(db);
-          await participants.syncStates(env, tenantId, bridgeTaskId).catch(() => {});
-          await participants.invalidate(env, bridgeTaskId).catch(() => {});
+          await participants.syncStates(env, tenantId, bridgeTaskId).catch((error) => {
+            console.error('[suppressed-error] presentation/routes/approvalRoutes.ts:404 createApprovalRoutes', { error });
+          });
+          await participants.invalidate(env, bridgeTaskId).catch((error) => {
+            console.error('[suppressed-error] presentation/routes/approvalRoutes.ts:405 createApprovalRoutes', { error });
+          });
           await recordActivity(env, db, {
             tenantId, projectId: null,
             actor: await resolveHumanActor(env, db, tenantId, userId),
@@ -410,8 +416,12 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
             targetType: 'task', targetId: String(bridgeTaskId), targetLabel: `#${bridgeTaskId}`,
             summary: `${roleKey} ${body.status === 'approved' ? 'approved' : 'changes requested'} via human approval`.slice(0, 300),
             metadata: { roleKey, via: 'approval', verdict: body.status },
-          }).catch(() => {});
-        } catch { /* best-effort bridge — never block the approval resolve */ }
+          }).catch((error) => {
+            console.error('[suppressed-error] presentation/routes/approvalRoutes.ts:406 createApprovalRoutes', { error });
+          });
+        } catch (error) { /* best-effort bridge — never block the approval resolve */ 
+          console.error('[suppressed-error] presentation/routes/approvalRoutes.ts:414 createApprovalRoutes', { error });
+        }
       }
     }
 
@@ -429,7 +439,9 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
           responseText,
           reviewedBy:   userId,
         }),
-      })).catch(() => { /* best-effort */ });
+      })).catch((error) => { /* best-effort */ 
+        console.error('[suppressed-error] presentation/routes/approvalRoutes.ts:423 createApprovalRoutes', { error });
+      });
     }
 
     // Slack notification on decision

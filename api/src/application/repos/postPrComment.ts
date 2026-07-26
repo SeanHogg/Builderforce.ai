@@ -236,7 +236,7 @@ export async function postPrReviewComments(
  * Convenience for the common caller shape: "I know the repo row and the PR
  * number, put this on the PR." Resolves the App-first credential itself and
  * swallows every failure into a tagged result, so a call site can be a plain
- * best-effort `await …catch(() => {})` without a resolution dance.
+ * best-effort await with explicit error logging, without a resolution dance.
  */
 export async function postRepoPrComment(
   env: Env,

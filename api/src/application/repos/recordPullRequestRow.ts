@@ -117,8 +117,10 @@ async function recordMergeDeployment(db: Db, pr: { id: string; tenantId: number;
       externalRef: pr.id,
       deployedAt: new Date(),
     });
-  } catch {
+  } catch (error) {
     // best-effort — a missing deployment row only undercounts DORA frequency.
+  
+    console.error('[suppressed-error] application/repos/recordPullRequestRow.ts:120 recordMergeDeployment', { error });
   }
 }
 
@@ -236,7 +238,9 @@ export async function setPullRequestBuildStatus(db: Db, id: string, buildStatus:
         .set({ restoredAt: new Date() })
         .where(and(eq(deploymentEvents.externalRef, id), eq(deploymentEvents.isFailure, true), isNull(deploymentEvents.restoredAt)));
     }
-  } catch {
+  } catch (error) {
     // best-effort — DORA change-failure/MTTR self-heals on the next build event.
+  
+    console.error('[suppressed-error] application/repos/recordPullRequestRow.ts:239 setPullRequestBuildStatus', { error });
   }
 }

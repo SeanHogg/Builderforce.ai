@@ -94,6 +94,8 @@ export async function semanticStore(
   const current = ((await kv.get(key, 'json').catch(() => null)) as SemanticEntry[] | null) ?? [];
   const next = [{ e: embedding, r: response, t: Date.now() }, ...current].slice(0, MAX_ENTRIES_PER_PARTITION);
 
-  await kv.put(key, JSON.stringify(next)).catch(() => { /* best-effort */ });
+  await kv.put(key, JSON.stringify(next)).catch((error) => { /* best-effort */ 
+    console.error('[suppressed-error] application/llm/semanticCache.ts:97 semanticStore', { error });
+  });
   await invalidateCached(env, key);
 }

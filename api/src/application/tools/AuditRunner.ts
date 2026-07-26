@@ -210,7 +210,9 @@ export class AuditRunner {
       title: `${audit.name} ready`,
       body: `${ctx.projectName}: ${result.headline}`,
       ref: `/projects?project=${args.projectId}&panel=diagnostics&audit=${encodeURIComponent(audit.id)}`,
-    }).catch(() => {});
+    }).catch((error) => {
+      console.error('[suppressed-error] application/tools/AuditRunner.ts:206 runAudit', { error });
+    });
 
     // Best-effort: file the remediation ticket(s) for the audit agent. Left
     // unassigned — the board's lane-autorun trigger + owner-agent fallback
@@ -258,8 +260,10 @@ export class AuditRunner {
         }, args.tenantId);
         agentTasks.push({ taskId: Number(task.id), status: task.status });
       }
-    } catch {
+    } catch (error) {
       // No board/agent available — the deterministic report already landed.
+    
+      console.error('[suppressed-error] application/tools/AuditRunner.ts:261 runAudit', { error });
     }
 
     const agentTask = agentTasks[0];

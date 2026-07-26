@@ -195,8 +195,10 @@ export async function evaluateResponse(
           method: 'llm',
         };
       }
-    } catch {
+    } catch (error) {
       // fall through to lexical
+    
+      console.error('[suppressed-error] application/eval/semanticEval.ts:198 evaluateResponse', { error });
     }
   }
   return lexicalEval(m);

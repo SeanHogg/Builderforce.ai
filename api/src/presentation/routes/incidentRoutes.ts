@@ -183,7 +183,9 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
       affectedSystem: b.affectedSystem ?? null, projectId: b.projectId ?? null, escalationPolicyId: b.escalationPolicyId ?? null,
       openWarRoom: b.openWarRoom === true, actorRef: `u:${c.get('userId') as string | undefined ?? 'system'}`,
     });
-    if (b.page && res.created) await new EscalationService(db).pageInitial(c.env, tenantId, res.incidentId).catch(() => {});
+    if (b.page && res.created) await new EscalationService(db).pageInitial(c.env, tenantId, res.incidentId).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/incidentRoutes.ts:186 createIncidentRoutes', { error });
+    });
     await invalidate(c, tenantId);
     return c.json(res, res.created ? 201 : 200);
   });

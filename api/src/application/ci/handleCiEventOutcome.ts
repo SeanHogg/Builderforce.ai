@@ -80,9 +80,13 @@ export async function handleCiEventOutcome(
             // in `ingestRepoCiEvent` reads it back off these rows.
             args: JSON.stringify({ taskId: intent.taskId, attempt: intent.attempt, source, sha: intent.sha, statusKey: intent.statusKey ?? null }),
             result: `auto-fix run dispatched (attempt ${intent.attempt})`, ts: new Date(),
-          }).catch(() => { /* telemetry best-effort */ });
+          }).catch((error) => { /* telemetry best-effort */ 
+            console.error('[suppressed-error] application/ci/handleCiEventOutcome.ts:75 handleCiEventOutcome', { error });
+          });
         }
-      } catch { /* webhook stays 200 — never let a dispatch failure retry the hook */ }
+      } catch (error) { /* webhook stays 200 — never let a dispatch failure retry the hook */ 
+        console.error('[suppressed-error] application/ci/handleCiEventOutcome.ts:85 handleCiEventOutcome', { error });
+      }
     })());
     return { ...res, autoFixDispatched: true };
   }
@@ -104,7 +108,9 @@ export async function handleCiEventOutcome(
       args: JSON.stringify({ source, branch: evt.branch, sha: evt.sha, eventType: evt.eventType, reason: res.reason }),
       result: `build failed but no auto-fix dispatched — ${res.reason}`.slice(0, 300),
       ts: new Date(),
-    }).catch(() => { /* telemetry best-effort */ });
+    }).catch((error) => { /* telemetry best-effort */ 
+      console.error('[suppressed-error] application/ci/handleCiEventOutcome.ts:101 handleCiEventOutcome', { error });
+    });
   }
 
   return { ...res, autoFixDispatched: false };

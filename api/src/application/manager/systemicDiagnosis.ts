@@ -365,7 +365,9 @@ export async function raiseSystemicFindings(
         },
       });
     }
-  } catch { /* a systemic finding must never fail the manager pass */ }
+  } catch (error) { /* a systemic finding must never fail the manager pass */ 
+    console.error('[suppressed-error] application/manager/systemicDiagnosis.ts:368 raiseSystemicFindings', { error });
+  }
 
   return out;
 }

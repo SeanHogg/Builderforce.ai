@@ -146,7 +146,9 @@ export class WorkDeltaService {
       if (input.chatId != null) {
         await this.chatTickets
           .linkTicket(tenantId, input.chatId, userId, { kind: 'task', ref: String(taskId), linkType: 'created', createdBy })
-          .catch(() => { /* best-effort lineage; never fail the delta on a link error */ });
+          .catch((error) => { /* best-effort lineage; never fail the delta on a link error */ 
+            console.error('[suppressed-error] application/delta/WorkDeltaService.ts:147 record', { error });
+          });
       }
     }
 
@@ -181,7 +183,9 @@ export class WorkDeltaService {
         summary: `${kind}: ${summary.slice(0, 200)}`,
         metadata: { kind, modality, files: files ?? [], deltaId: row!.id, taskKey },
       });
-    } catch { /* audit is best-effort — never fail the delta on it */ }
+    } catch (error) { /* audit is best-effort — never fail the delta on it */ 
+      console.error('[suppressed-error] application/delta/WorkDeltaService.ts:184 record', { error });
+    }
 
     return { deltaId: row!.id, kind, taskId, taskKey };
   }

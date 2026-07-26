@@ -166,6 +166,8 @@ function extractProviderMessage(text: string): string {
   try {
     const body = JSON.parse(text) as { message?: unknown };
     if (typeof body.message === 'string') return body.message.trim().slice(0, 200);
-  } catch { /* non-JSON provider response */ }
+  } catch (error) { /* non-JSON provider response */ 
+    console.error('[suppressed-error] application/repos/mergePullRequest.ts:169 extractProviderMessage', { error });
+  }
   return text.trim().slice(0, 200);
 }

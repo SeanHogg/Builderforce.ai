@@ -113,7 +113,9 @@ export class RoleAssignmentService {
         summary: `Assigned ${body.assigneeName?.trim() || assigneeRef} to ${roleKey}`,
         metadata: { assigneeKind: body.assigneeKind, assigneeRef, projectId },
       });
-    } catch { /* best-effort audit */ }
+    } catch (error) { /* best-effort audit */ 
+      console.error('[suppressed-error] application/kanban/roleAssignmentService.ts:116 create', { error });
+    }
     return { id, roleKey, assigneeKind: body.assigneeKind, assigneeRef, assigneeName: body.assigneeName?.trim() || null, projectId };
   }
 

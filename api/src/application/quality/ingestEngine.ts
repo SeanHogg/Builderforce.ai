@@ -149,15 +149,19 @@ export async function ingestErrorEvents(
   if (eventRows.length > 0) {
     try {
       await db.insert(errorEvents).values(eventRows);
-    } catch {
+    } catch (error) {
       // The groups were already upserted; losing the raw event rows only affects
       // the meter/trend, never the dashboard's group view. Best-effort.
+    
+      console.error('[suppressed-error] application/quality/ingestEngine.ts:152 ingestErrorEvents', { error });
     }
     await bumpGroupUserCounts(db, userPairs, now);
     // A collector-less source (id: null — e.g. a manual "Report error") has no
     // collector row whose last-event timestamp to touch.
     if (collector.id != null) {
-      await db.update(errorCollectors).set({ lastEventAt: now }).where(eq(errorCollectors.id, collector.id)).catch(() => {});
+      await db.update(errorCollectors).set({ lastEventAt: now }).where(eq(errorCollectors.id, collector.id)).catch((error) => {
+        console.error('[suppressed-error] application/quality/ingestEngine.ts:162 ingestErrorEvents', { error });
+      });
     }
     for (const projectId of touchedProjects) await bumpCacheVersion(env, qualityGroupsVersionKey(projectId));
     await bumpCacheVersion(env, qualityGroupsTenantVersionKey(collector.tenantId));
@@ -194,8 +198,10 @@ async function bumpGroupUserCounts(
         .set({ userCount: sql`${errorGroups.userCount} + ${delta}` })
         .where(eq(errorGroups.id, groupId));
     }
-  } catch {
+  } catch (error) {
     // Affected-user count is non-critical; never fail the ingest over it.
+  
+    console.error('[suppressed-error] application/quality/ingestEngine.ts:197 bumpGroupUserCounts', { error });
   }
 }
 

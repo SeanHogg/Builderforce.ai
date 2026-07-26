@@ -16,8 +16,10 @@ export function background(c: Context<HonoEnv>, work: Promise<unknown> | Promise
   const swallowed = promise.then(() => undefined).catch(() => undefined);
   try {
     c.executionCtx.waitUntil(swallowed);
-  } catch {
+  } catch (error) {
     // No execution context available — the promise still runs, it just isn't
     // kept alive past the response. Correct for tests and local invocation.
+  
+    console.error('[suppressed-error] presentation/middleware/background.ts:19 background', { error });
   }
 }

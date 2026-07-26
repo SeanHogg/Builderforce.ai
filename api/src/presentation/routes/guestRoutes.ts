@@ -34,7 +34,9 @@ export function createGuestRoutes(guest: GuestChatService): Hono<HonoEnv> {
     const visitorId = body.visitorId;
 
     // Record the lead now (don't block the response on it).
-    c.executionCtx.waitUntil(guest.ensureLead(visitorId, body.touch).catch(() => {}));
+    c.executionCtx.waitUntil(guest.ensureLead(visitorId, body.touch).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/guestRoutes.ts:37 createGuestRoutes', { error });
+    }));
 
     const token = await signGuestToken(visitorId, c.env.JWT_SECRET, GUEST_TOKEN_TTL_SECONDS);
     const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null;

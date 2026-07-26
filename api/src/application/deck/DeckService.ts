@@ -83,7 +83,9 @@ export async function generateDeck(db: Db, env: Env, input: GenerateDeckInput): 
         customMetadata: { tenantId: String(input.tenantId), deckId },
       });
       await db.update(generatedDecks).set({ r2Key }).where(eq(generatedDecks.id, deckId));
-    } catch { /* download still works from the returned bytes */ }
+    } catch (error) { /* download still works from the returned bytes */ 
+      console.error('[suppressed-error] application/deck/DeckService.ts:86 generateDeck', { error });
+    }
   }
 
   const filename = `${slugify(template.name)}-${quarter}.pptx`;

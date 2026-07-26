@@ -82,8 +82,10 @@ export async function recordCatalogAdoption(
       actorId: input.actorId ?? null,
     });
     await bumpCacheVersion(env, catalogAnalyticsVersionKey(input.tenantId));
-  } catch {
+  } catch (error) {
     // Telemetry write — swallow.
+  
+    console.error('[suppressed-error] application/insights/catalogAnalytics.ts:85 recordCatalogAdoption', { error });
   }
 }
 

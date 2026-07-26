@@ -128,8 +128,12 @@ interface BuiltinCtx {
  *  No-op when the caller didn't thread the Worker env. */
 async function bumpPmo(ctx: BuiltinCtx): Promise<void> {
   if (!ctx.env) return;
-  await bumpCacheVersion(ctx.env, pmoVersionKey(ctx.tenantId)).catch(() => {});
-  await invalidateProjectsList(ctx.env, ctx.tenantId).catch(() => {});
+  await bumpCacheVersion(ctx.env, pmoVersionKey(ctx.tenantId)).catch((error) => {
+    console.error('[suppressed-error] application/llm/builtinMcpService.ts:131 bumpPmo', { error });
+  });
+  await invalidateProjectsList(ctx.env, ctx.tenantId).catch((error) => {
+    console.error('[suppressed-error] application/llm/builtinMcpService.ts:132 bumpPmo', { error });
+  });
 }
 
 /** Guard a legal-document WRITE: the rows are platform-global, so only a verified
@@ -147,9 +151,13 @@ async function assertLegalWrite(ctx: BuiltinCtx): Promise<void> {
  *  the caller didn't thread the Worker env. */
 async function invalidateRoadmap(ctx: BuiltinCtx, segmentId: string, projectId: number | null): Promise<void> {
   if (!ctx.env) return;
-  await invalidateCached(ctx.env, trackerCacheKey('roadmap', ctx.tenantId, segmentId)).catch(() => {});
+  await invalidateCached(ctx.env, trackerCacheKey('roadmap', ctx.tenantId, segmentId)).catch((error) => {
+    console.error('[suppressed-error] application/llm/builtinMcpService.ts:150 invalidateRoadmap', { error });
+  });
   if (projectId != null) {
-    await invalidateCached(ctx.env, trackerCacheKey('roadmap', ctx.tenantId, segmentId, projectId)).catch(() => {});
+    await invalidateCached(ctx.env, trackerCacheKey('roadmap', ctx.tenantId, segmentId, projectId)).catch((error) => {
+      console.error('[suppressed-error] application/llm/builtinMcpService.ts:152 invalidateRoadmap', { error });
+    });
   }
   // Roadmap items are a link-picker ticket kind — refresh its typeahead cache.
   await bumpTicketSearchVersion(ctx.env, ctx.tenantId);
@@ -787,7 +795,9 @@ const CATALOG: BuiltinTool[] = [
           summary,
           gaps,
           reviewerRef: a.reviewerRef != null ? str(a.reviewerRef) : (ctx.userId ?? null),
-        }).catch(() => { /* best-effort */ });
+        }).catch((error) => { /* best-effort */ 
+          console.error('[suppressed-error] application/llm/builtinMcpService.ts:785 CATALOG', { error });
+        });
       }
       return result;
     },
@@ -2723,7 +2733,9 @@ async function fireAgentAssignmentHandoff(ctx: BuiltinCtx, task: Task, previousA
   if (!newRef || newRef === (previousAgentRef ?? null)) return null;
   const joinChats = new ChatTicketService(ctx.db, env)
     .onTicketAgentAssigned(ctx.tenantId, taskLinkKind(task), String(plain.id), newRef)
-    .catch(() => {});
+    .catch((error) => {
+      console.error('[suppressed-error] application/llm/builtinMcpService.ts:2724 joinChats', { error });
+    });
   if (ctx.executionCtx) ctx.executionCtx.waitUntil(joinChats);
   const outcome = await evaluateAndDispatch(ctx, env, plain, ctx.userId ?? 'system:agent-assign');
   if (!ctx.executionCtx) await joinChats;
@@ -2966,7 +2978,9 @@ async function emitBuiltinToolActivity(env: Env, db: Db, tenantId: number, userI
       summary: `${tool}${label ? `: ${label}` : ''}`.slice(0, 300),
       metadata: { via: 'mcp', tool },
     });
-  } catch { /* best-effort audit */ }
+  } catch (error) { /* best-effort audit */ 
+    console.error('[suppressed-error] application/llm/builtinMcpService.ts:2969 emitBuiltinToolActivity', { error });
+  }
 }
 
 /** Run one built-in tool in-process, tenant-scoped. Throws on unknown tool. */
@@ -2981,13 +2995,17 @@ export async function callBuiltinTool(
   // Unified audit stream: record any mutating tool run (best-effort, off the result).
   if (entry.mutates && args.env) {
     const emit = emitBuiltinToolActivity(args.env, db, args.tenantId, args.userId, args.tool, result);
-    if (args.executionCtx?.waitUntil) args.executionCtx.waitUntil(emit); else await emit.catch(() => {});
+    if (args.executionCtx?.waitUntil) args.executionCtx.waitUntil(emit); else await emit.catch((error) => {
+      console.error('[suppressed-error] application/llm/builtinMcpService.ts:2986 callBuiltinTool', { error });
+    });
     // task/spec/from-delta writes change what the chat↔ticket link picker can find but
     // (unlike the pmo/roadmap/project tools) don't route through invalidateProjectsList /
     // bumpPmo / invalidateRoadmap — so orphan the typeahead cache here for those.
     if (args.tool.startsWith('tasks.') || args.tool.startsWith('specs.') || args.tool === 'tickets.from_delta') {
       const bump = bumpTicketSearchVersion(args.env, args.tenantId);
-      if (args.executionCtx?.waitUntil) args.executionCtx.waitUntil(bump); else await bump.catch(() => {});
+      if (args.executionCtx?.waitUntil) args.executionCtx.waitUntil(bump); else await bump.catch((error) => {
+        console.error('[suppressed-error] application/llm/builtinMcpService.ts:2992 callBuiltinTool', { error });
+      });
     }
     // A tasks.* write also changes the board task-tree + projects-list reads, which the
     // HTTP task routes invalidate (bumpTreeVersion + invalidateProjectsList). Mirror that
@@ -2996,8 +3014,12 @@ export async function callBuiltinTool(
     if (args.tool.startsWith('tasks.')) {
       const projectId = typeof (result as { projectId?: unknown } | null)?.projectId === 'number'
         ? (result as { projectId: number }).projectId : null;
-      const jobs: Promise<unknown>[] = [invalidateProjectsList(args.env, args.tenantId).catch(() => {})];
-      if (projectId != null) jobs.push(bumpCacheVersion(args.env, `task-tree-version:project:${projectId}`).catch(() => {}));
+      const jobs: Promise<unknown>[] = [invalidateProjectsList(args.env, args.tenantId).catch((error) => {
+        console.error('[suppressed-error] application/llm/builtinMcpService.ts:3001 jobs', { error });
+      })];
+      if (projectId != null) jobs.push(bumpCacheVersion(args.env, `task-tree-version:project:${projectId}`).catch((error) => {
+        console.error('[suppressed-error] application/llm/builtinMcpService.ts:3002 callBuiltinTool', { error });
+      }));
       const all = Promise.all(jobs);
       if (args.executionCtx?.waitUntil) args.executionCtx.waitUntil(all); else await all;
     }

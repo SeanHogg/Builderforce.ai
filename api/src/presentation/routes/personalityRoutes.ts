@@ -303,7 +303,9 @@ export function createPersonalityRoutes(db: Db): Hono<HonoEnv> {
         try {
           const d = JSON.parse(r.deltas) as Record<string, number>;
           for (const [dim, v] of Object.entries(d)) priorAppliedThisPeriod[dim] = (priorAppliedThisPeriod[dim] ?? 0) + (Number(v) || 0);
-        } catch { /* skip malformed */ }
+        } catch (error) { /* skip malformed */ 
+          console.error('[suppressed-error] presentation/routes/personalityRoutes.ts:306 payload', { error });
+        }
       }
 
       const proposal: TraitReinforcementProposal = proposeTraitReinforcement(vector, signals, { priorAppliedThisPeriod });
@@ -523,13 +525,21 @@ export function createPersonalityRoutes(db: Db): Hono<HonoEnv> {
 
 /** Bump the per-agent cache token and the cross-surface caches a vector change touches. */
 async function invalidateAfterWrite(env: Env, tenantId: number, agentRef: string): Promise<void> {
-  await bumpCacheVersion(env, personalityVersionKey(tenantId, agentRef)).catch(() => {});
+  await bumpCacheVersion(env, personalityVersionKey(tenantId, agentRef)).catch((error) => {
+    console.error('[suppressed-error] presentation/routes/personalityRoutes.ts:528 invalidateAfterWrite', { error });
+  });
   // A personality change alters the public listing, the assignee hovercard, and what
   // the runtime reads for this tenant's hired agents.
   await Promise.all([
-    invalidateCached(env, PUBLIC_LIST_CACHE_KEY).catch(() => {}),
-    invalidateCached(env, assigneeProfilesCacheKey(tenantId)).catch(() => {}),
-    invalidateCached(env, runtimeHiredAgentsCacheKey(tenantId)).catch(() => {}),
+    invalidateCached(env, PUBLIC_LIST_CACHE_KEY).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/personalityRoutes.ts:532 invalidateAfterWrite', { error });
+    }),
+    invalidateCached(env, assigneeProfilesCacheKey(tenantId)).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/personalityRoutes.ts:533 invalidateAfterWrite', { error });
+    }),
+    invalidateCached(env, runtimeHiredAgentsCacheKey(tenantId)).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/personalityRoutes.ts:534 invalidateAfterWrite', { error });
+    }),
   ]);
 }
 

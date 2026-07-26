@@ -991,11 +991,15 @@ export async function executeChatCompletionStream(args: {
   const [peek, pass] = resp.body.tee();
   const reader = peek.getReader();
   const { value: firstChunk } = await reader.read();
-  reader.cancel().catch(() => { /* ignore */ });
+  reader.cancel().catch((error) => { /* ignore */ 
+    console.error('[suppressed-error] application/llm/vendors/types.ts:994 executeChatCompletionStream', { error });
+  });
   const firstText = firstChunk ? new TextDecoder().decode(firstChunk) : '';
 
   if (isChunkError(firstText)) {
-    await pass.cancel().catch(() => { /* ignore */ });
+    await pass.cancel().catch((error) => { /* ignore */ 
+      console.error('[suppressed-error] application/llm/vendors/types.ts:998 executeChatCompletionStream', { error });
+    });
     // Schema-too-complex can also surface as a first-chunk embedded error on the
     // streaming surface — classify it the same way so the cascade tags it
     // `schema` (terminal-eligible) rather than a generic embedded failure.

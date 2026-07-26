@@ -288,8 +288,10 @@ export class BrainService {
       if (existing) return;
       await this.db.insert(chatMembers)
         .values({ chatId, tenantId, userId, status: 'active', role: 'participant' });
-    } catch {
+    } catch (error) {
       /* audience tracking is non-critical — never fail a post over it */
+    
+      console.error('[suppressed-error] application/brain/BrainService.ts:291 ensureMembership', { error });
     }
   }
 
@@ -457,8 +459,10 @@ export class BrainService {
           list.push({ ref: m.userId, kind: 'human', name: m.name || m.email || undefined });
           byChat.set(m.chatId, list);
         }
-      } catch {
+      } catch (error) {
         /* participants are non-critical — the chat list must survive their absence */
+      
+        console.error('[suppressed-error] application/brain/BrainService.ts:460 attachParticipants', { error });
       }
     }
     return rows.map((r) => ({ ...r, participants: byChat.get(r.id) ?? [] }));
@@ -1118,7 +1122,9 @@ export class BrainService {
         // ran — a cascade-away isn't the SSM's output). N incoherent serves in a row
         // auto-disable inference so a broken head stops answering in gibberish.
         if (evRan) {
-          await recordEvermindServeOutcome(env, this.db, tenantId, projectHint, evCoherent).catch(() => { /* best-effort */ });
+          await recordEvermindServeOutcome(env, this.db, tenantId, projectHint, evCoherent).catch((error) => { /* best-effort */ 
+            console.error('[suppressed-error] application/brain/BrainService.ts:1125 agentReply', { error });
+          });
         }
         if (evCoherent) {
           text = evChoice.content;
@@ -1232,7 +1238,9 @@ export class BrainService {
     await learnFromPersistedTurns(
       env, this.db, chatId, tenantId, [{ role: 'assistant', content: text }],
       (p) => { if (opts?.executionCtx) opts.executionCtx.waitUntil(p); },
-    ).catch(() => { /* never fail the reply */ });
+    ).catch((error) => { /* never fail the reply */ 
+      console.error('[suppressed-error] application/brain/BrainService.ts:1236 agentReply', { error });
+    });
 
     return posted ?? { error: 'Failed to post reply' as const };
   }

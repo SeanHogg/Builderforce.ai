@@ -130,7 +130,9 @@ export async function dispatchSecurityAudit(
     return auditId;
   } catch {
     // Best-effort — a dispatch failure marks the run failed but never throws.
-    await audits.finishAudit(params.tenantId, auditId, { status: 'failed', summary: 'Audit dispatch failed.' }).catch(() => {});
+    await audits.finishAudit(params.tenantId, auditId, { status: 'failed', summary: 'Audit dispatch failed.' }).catch((error) => {
+      console.error('[suppressed-error] application/security/securityDispatch.ts:133 dispatchSecurityAudit', { error });
+    });
     return null;
   }
 }
