@@ -27,8 +27,10 @@ import {
   getProjectEvermindHead,
   putProjectEvermindVersion,
   recordProjectEvermindMerge,
+  quarantineProjectEvermind,
   projectEvermindRef,
 } from '../../application/llm/projectEvermind';
+import { assessLMCoherence } from '../../application/llm/evermindRuntime';
 import { mergeCheckpointDiffs } from '../../application/llm/evermindMerge';
 import { buildEvermindTrainingText, resolveEvermindTeacherModel } from '../../application/llm/evermindTeacher';
 import type { EffectiveTeacher, TeacherSkipReason } from '../../application/llm/evermindTeacher';
@@ -683,6 +685,34 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       // Verify the new version is the one we wrote (a concurrent merge is impossible
       // — single DO — but a forward-only DB guard means we trust the row).
       void projectEvermindRef(tenantId, projectId, nextVersion);
+
+      // ── Post-merge fitness re-benchmark ────────────────────────────────────
+      // Promotion to `inferenceEnabled` is benchmark-gated, but EVERY merge changes the
+      // weights — so a head that passed the probe at version N can degrade into
+      // gibberish by version N+k with nothing re-checking it, and the serve path picks
+      // up the new ref immediately. That is how a head ended up answering users in
+      // invented words. Re-grade the JUST-MERGED model here (the coordinator alarm, off
+      // the request path, with the model already in memory — no R2 reload) using the
+      // same probe + the same `looksLikeCoherentText` bar the enable gate uses, and
+      // quarantine it through the same shared writer if it is no longer fit to serve.
+      // Only for a head that is actually serving; best-effort, never fails the merge.
+      if (isLM && head.inferenceEnabled) {
+        try {
+          const fitness = assessLMCoherence(lm, tok);
+          if (!fitness.ready) {
+            await quarantineProjectEvermind(
+              this.env, this.db, tenantId, projectId,
+              `Auto-quarantined at v${nextVersion}: the merged model failed the coherence probe `
+              + `(${Math.round(fitness.passRate * 100)}% of samples readable). Learning continues; `
+              + 're-enable inference once it passes, or pin a frontier teacher to distil into it.',
+            );
+            console.warn(
+              `[evermind] quarantined tenant=${tenantId} project=${projectId} v=${nextVersion} `
+              + `passRate=${fitness.passRate.toFixed(2)} — merged model is not fit to serve`,
+            );
+          }
+        } catch { /* best-effort: a probe failure must never wedge the merge */ }
+      }
       // Embed each text memory with the JUST-MERGED model so semantic recall (Validate)
       // only has to embed the query later — the vector is computed once, here, off the
       // recall path. isLM is guaranteed when any text entry exists (tok is loaded then).

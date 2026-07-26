@@ -45,7 +45,7 @@ import { decideTicketReadiness } from './evaluateTicketReadiness';
 import { coordinateTicket } from './coordinateTicket';
 import { assignTicketOwner } from './assignOwner';
 import { reconcilePullRequestState } from '../repos/reconcilePullRequestState';
-import { diagnoseStall, isManagerActionable, STALL_AFTER_MS, type StallInput } from './stallTriage';
+import { diagnoseStall, isManagerActionable, stageSignoffFor, STALL_AFTER_MS, type StallInput } from './stallTriage';
 import { loadOpenStalls, gradeStall, recordStall, resolveStalls } from './stallWatch';
 
 /**
@@ -335,7 +335,10 @@ export async function runStallTriage(
         conflicted = state.conflicted;
       }
 
-      // The review question set applies only to a ticket in review.
+      // The review question set applies only to a ticket in review. Off the review lane
+      // the gate is still evaluated, SCOPED TO THE CURRENT STAGE, because the manager is
+      // the documented retry owner for a stage whose role was asked once and never
+      // answered — and it could not be that on any lane but this one.
       let readiness: StallInput['readiness'] = null;
       let signoff = null;
       if (task.status === TaskStatus.IN_REVIEW) {
@@ -351,7 +354,12 @@ export async function runStallTriage(
           requireSignoff: policy.requireSignoffToComplete,
           requireGreenBuild: policy.prMergePolicy === 'on_green',
         }).action;
+      } else {
+        signoff = await resolveSignoffGate(env, db, { tenantId, taskId: task.id, stageKey: task.status });
       }
+      // Off the review lane the gate IS the stage's own owed roles, so it doubles as the
+      // diagnosis input and as what `drive_signoff` asks — one resolution, no second read.
+      const stageOwnership = signoff ? classifySignoffOwnership(signoff.outstanding) : null;
 
       const diagnosis = diagnoseStall({
         status: task.status,
@@ -363,7 +371,9 @@ export async function runStallTriage(
         readiness,
         // Null (not false) when no gate was evaluated — "unknown" must never read as
         // "no agent can sign off", which escalates.
-        signoffDispatchable: signoff ? classifySignoffOwnership(signoff.outstanding).dispatchable.length > 0 : null,
+        signoffDispatchable: stageOwnership ? stageOwnership.dispatchable.length > 0 : null,
+        // The non-review half of the same question: this stage's owed roles.
+        stageSignoff: stageSignoffFor(task.status, signoff, stageOwnership, TaskStatus.IN_REVIEW),
         pr: prRow ? { open: prRow.status === 'open', providerClosed, conflicted } : null,
         mergeWithheld: !policy.allowAutoMerge && prRow?.status === 'open' && readiness === 'complete',
       });
@@ -452,8 +462,13 @@ export async function runStallTriage(
  * platform uses for that action — triage decides WHAT to do and never reimplements
  * HOW, so a ticket unstuck by the manager follows the identical path as one driven by
  * a human clicking the equivalent button.
+ *
+ * Exported for `triageStage.remedy.test.ts`: which dispatcher each remedy calls, and
+ * WITH WHAT — `reset_breaker` passing `force` is the whole difference between a breaker
+ * that resets and one the dispatcher refuses — is behaviour a caller cannot observe from
+ * `runStallTriage`'s aggregate counters.
  */
-async function applyRemedy(
+export async function applyRemedy(
   env: Env,
   db: Db,
   runtimeService: RuntimeService,

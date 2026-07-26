@@ -8521,7 +8521,8 @@
     "status": {
       "connected": "● {subscription} connecté",
       "keyConfigured": "● Clé d'API {label} configurée",
-      "notConnected": "○ Non connecté"
+      "notConnected": "○ Non connecté",
+      "needsAttention": "▲ {label} — nécessite une action"
     },
     "disconnect": "Déconnecter",
     "remove": "Supprimer",
@@ -8614,7 +8615,9 @@
     "authAlert": {
       "title": "Non utilisé",
       "notEntitled": "Ce compte s’est bien connecté, mais le fournisseur a refusé la requête ({status}) car l’offre ne la couvre pas. Reconnectez un compte dont l’offre l’inclut, ou passez à une offre supérieure.",
-      "rejected": "Le fournisseur a rejeté cet identifiant ({status}). Il a probablement expiré, été révoqué ou renouvelé ailleurs — reconnectez le compte."
+      "rejected": "Le fournisseur a rejeté cet identifiant ({status}). Il a probablement expiré, été révoqué ou renouvelé ailleurs — reconnectez le compte.",
+      "capacity": "L’identifiant fonctionne, mais le compte n’a plus de budget ({status}) — plafond de dépense atteint ou solde de crédits vide. Rechargez ou relevez la limite ; inutile de reconnecter.",
+      "unresolved": "L’identifiant enregistré n’a pas pu être utilisé du tout : il a été révoqué, a expiré, ou a été enregistré dans un autre espace de travail. Reconnectez-le ici."
     }
   },
   "modelSelect": {

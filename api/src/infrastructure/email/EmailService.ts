@@ -585,6 +585,101 @@ export async function sendLlmHealthAlertEmail(
 }
 
 // ---------------------------------------------------------------------------
+// BYO credential alert — sent by the daily credential sweep
+// (byoCredentialHealthCron) to a WORKSPACE's owners/managers the first time one of
+// their connected model providers stops working. Distinct from the vendor-health
+// mail above in both audience and meaning: that one tells OUR on-call that an
+// upstream we operate is degraded; this one tells a CUSTOMER that the account they
+// connected is no longer serving their runs, and what to do about it.
+//
+// TRANSACTIONAL: it reports the state of a credential the recipient's workspace
+// configured. There is no opt-out that leaves the integration working, so offering
+// one would only produce silently-broken workspaces.
+// ---------------------------------------------------------------------------
+
+/** One newly-broken provider, as classified by `providerAlertFromFailure`. */
+export interface ByoCredentialAlertRow {
+  provider: string;
+  /** `rejected` | `not_entitled` | `capacity` | `unresolved` — selects the remediation
+   *  sentence, so the mail says "top up your account" instead of "reconnect" when the
+   *  credential is fine and the BUDGET is not. */
+  reason: string;
+  /** Upstream HTTP status, or 0 when the stored credential never resolved. */
+  status: number;
+  /** Gateway vendor that was rejected — distinguishes "your ChatGPT subscription"
+   *  (`openai-codex`) from "your OpenAI API key" (`openai`) on the same card. */
+  vendor: string;
+  /** Upstream's own diagnostic, already bounded by the probe. */
+  detail: string;
+}
+
+export async function sendByoCredentialAlertEmail(
+  env: EmailEnv,
+  to: string,
+  rows: ByoCredentialAlertRow[],
+  timestampIso: string,
+  locale: EmailLocale = DEFAULT_EMAIL_LOCALE,
+): Promise<void> {
+  const copy = emailCopy(locale);
+
+  const remediationFor = (reason: string): string =>
+    reason === 'not_entitled' ? copy.byoCredential.remedyNotEntitled
+    : reason === 'capacity' ? copy.byoCredential.remedyCapacity
+    : reason === 'unresolved' ? copy.byoCredential.remedyUnresolved
+    : copy.byoCredential.remedyRejected;
+
+  const tableRows = rows.map((r) => {
+    // `status: 0` means the stored credential failed before any request went out, so
+    // printing "HTTP 0" would be a lie — show the vendor alone in that case.
+    const observed = r.status > 0 ? `${escapeHtml(r.vendor)} — HTTP ${r.status}` : escapeHtml(r.vendor);
+    const detail = r.detail
+      ? `<br><span style="font-size:12px;color:#64748b">${escapeHtml(r.detail.slice(0, 300))}</span>`
+      : '';
+    return `
+      <tr>
+        <td style="${TD}"><strong>${escapeHtml(r.provider)}</strong></td>
+        <td style="${TD}">${observed}${detail}</td>
+        <td style="${TD}">${escapeHtml(remediationFor(r.reason))}</td>
+      </tr>`;
+  }).join('');
+
+  const headers = [copy.byoCredential.columnProvider, copy.byoCredential.columnObserved, copy.byoCredential.columnAction]
+    .map((h) => `<th style="text-align:left;padding:8px 12px;border-bottom:1px solid #e2e8f0">${escapeHtml(h)}</th>`)
+    .join('');
+
+  const body = p(fill(copy.byoCredential.intro, { Count: rows.length }))
+    + p(copy.byoCredential.impact)
+    + p(escapeHtml(fill(copy.byoCredential.checkedAt, { Timestamp: timestampIso })), 'font-size:12px;color:#64748b')
+    + `
+      <table style="border-collapse:collapse;width:100%;margin-top:12px">
+        <thead>
+          <tr style="background:#f8fafc">${headers}</tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>`
+    + p(
+      `<a href="https://builderforce.ai/settings/integrations">${escapeHtml(copy.byoCredential.cta)}</a>`,
+      'margin-top:20px',
+    )
+    + p(escapeHtml(copy.byoCredential.quietNote), 'font-size:12px;color:#64748b');
+
+  // Localized subject, unlike the vendor-health ops alert: this one goes to a customer
+  // in their own language, and nothing routes or dedupes on it.
+  const subject = fill(copy.byoCredential.subject, {
+    Providers: rows.map((r) => r.provider).join(', '),
+  });
+
+  await deliver(env, {
+    to,
+    subject,
+    body,
+    locale,
+    copy,
+    vars: { Email: to },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Scheduled report digest — sent by the report-schedule dispatcher (runDueReports)
 // for each due report_schedules row. TRANSACTIONAL: the recipient (or their admin)
 // configured this schedule; it stops by deleting the schedule, not by unsubscribing.

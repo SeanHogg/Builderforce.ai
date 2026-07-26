@@ -175,6 +175,25 @@ export function tierForModel(modelId: string): AiModelTier {
   return MODULES_BY_ID[vendorId].tierFor(modelId);
 }
 
+/**
+ * Can this model id do FUNCTION/TOOL CALLING at all? Reads the ONE declaration
+ * ({@link VendorModule.supportsTools}) off the vendor the id routes to, so every
+ * caller that is about to pin a model onto a TOOL-DRIVEN run asks the same
+ * question in the same place.
+ *
+ * Why this exists: a tool-less backend handed `tools` does not error — it answers
+ * in prose — so an agent loop pinned to it narrates the calls it can never emit
+ * and silently does no work (observed with a project-Evermind hard pin on a cloud
+ * agent run). Callers use this to REFUSE the pin up front; the vendor additionally
+ * hard-rejects a tool-bearing request as a backstop.
+ *
+ * Defaults to `true` for every vendor that does not opt out, so adding a vendor
+ * never silently marks it tool-less.
+ */
+export function modelSupportsTools(modelId: string): boolean {
+  return MODULES_BY_ID[vendorForModel(modelId)].supportsTools !== false;
+}
+
 export function catalogEntry(modelId: string): (VendorModelEntry & { vendor: VendorId }) | null {
   const hit = INDEX.get(modelId);
   if (!hit) return null;

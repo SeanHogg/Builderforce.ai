@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  diagnoseStall, escalateIfIneffective, isManagerActionable,
+  diagnoseStall, escalateIfIneffective, isManagerActionable, stageSignoffFor,
   MAX_REMEDY_ATTEMPTS, STALL_AFTER_MS, STALL_CAUSE_LABEL,
   type StallInput,
 } from './stallTriage';
@@ -220,5 +220,102 @@ describe('diagnoseStall — a sign-off no agent can give', () => {
     // looked. Both the omitted and the explicit-null spellings behave the same.
     expect(inReview().remedy).toBe('drive_signoff');
     expect(inReview({ signoffDispatchable: null }).remedy).toBe('drive_signoff');
+  });
+});
+
+describe('diagnoseStall — a stage whose roles owe work, on ANY lane', () => {
+  /**
+   * The hole this closes: the lane gate asks each role once per stage and delegates
+   * re-asking to the manager, but the manager could only drive sign-offs for `in_review`
+   * tickets. A stage whose one ask was refused — or whose reviewer finished without
+   * recording a verdict — fell through to "Unclassified → re-coordinate", and
+   * coordinating re-runs the same gate that will not ask again.
+   */
+  it('asks the stage\'s owed roles instead of re-coordinating', () => {
+    const d = diagnoseStall(base({
+      status: 'requirements', everRan: true, autoRunReason: 'same_lane_reentry',
+      stageSignoff: { roleNames: ['Business Analyst', 'Architect'], dispatchable: true },
+    }));
+    expect(d).toMatchObject({ stalled: true, cause: 'awaiting_signoff', remedy: 'drive_signoff' });
+    expect(d.detail).toContain('Business Analyst, Architect');
+  });
+
+  it('escalates when the stage\'s roles are unstaffed or human-owed', () => {
+    const d = diagnoseStall(base({
+      status: 'requirements', everRan: true, autoRunReason: 'same_lane_reentry',
+      stageSignoff: { roleNames: ['Product Owner'], dispatchable: false },
+    }));
+    expect(d).toMatchObject({ cause: 'awaiting_signoff', remedy: 'escalate_human', escalated: true });
+  });
+
+  /**
+   * The ordering the measured failure turns on. `evaluateTaskAutoRun` does not model the
+   * lane requirement gate, so it answers `will_run` for a ticket the gate then declines —
+   * and re-dispatching that ticket only re-runs the gate that has already asked this
+   * stage. Asking the owed role has to win, or the remedy applies nothing forever.
+   */
+  it('outranks the will_run fall-through for a ticket that has already run', () => {
+    const d = diagnoseStall(base({
+      status: 'requirements', everRan: true, autoRunReason: 'will_run',
+      stageSignoff: { roleNames: ['Architect'], dispatchable: true },
+    }));
+    expect(d.remedy).toBe('drive_signoff');
+  });
+
+  /** Precedence: every stronger diagnosis still wins. */
+  it('never displaces a stronger diagnosis', () => {
+    const owed = { roleNames: ['Architect'], dispatchable: true };
+    expect(diagnoseStall(base({
+      autoRunReason: 'run_cap_exhausted', everRan: true, stageSignoff: owed,
+    })).remedy).toBe('reset_breaker');
+    expect(diagnoseStall(base({
+      autoRunReason: 'no_agent', everRan: true, stageSignoff: owed,
+    })).remedy).toBe('assign');
+    expect(diagnoseStall(base({
+      autoRunReason: 'same_lane_reentry', everRan: true, stageSignoff: owed,
+      pr: { open: true, providerClosed: false, conflicted: true },
+    })).remedy).toBe('resolve_conflict');
+    expect(diagnoseStall(base({
+      autoRunReason: 'same_lane_reentry', everRan: false, stageSignoff: owed,
+    })).remedy).toBe('dispatch');
+  });
+
+  it('still reports the unclassified fall-through when no stage role is owed', () => {
+    const d = diagnoseStall(base({
+      everRan: true, autoRunReason: 'same_lane_reentry',
+      stageSignoff: { roleNames: [], dispatchable: false },
+    }));
+    expect(d).toMatchObject({ cause: 'unknown', remedy: 'coordinate' });
+  });
+});
+
+describe('stageSignoffFor — the wiring between the stage gate and the diagnosis', () => {
+  const gate = (...roleNames: string[]) => ({ outstanding: roleNames.map((roleName) => ({ roleName })) });
+  const owned = (n: number) => ({ dispatchable: Array.from({ length: n }, (_, i) => i) });
+
+  it('names the stage\'s owed roles once each, and whether an agent can be asked', () => {
+    expect(stageSignoffFor('requirements', gate('Architect', 'Architect', 'BA'), owned(1), 'in_review'))
+      .toEqual({ roleNames: ['Architect', 'BA'], dispatchable: true });
+    expect(stageSignoffFor('requirements', gate('Product Owner'), owned(0), 'in_review'))
+      .toEqual({ roleNames: ['Product Owner'], dispatchable: false });
+  });
+
+  /** In review, `readiness` already carries the whole-ticket gate and owns the
+   *  diagnosis — answering twice would let the weaker branch win. */
+  it('stays null for an in-review ticket', () => {
+    expect(stageSignoffFor('in_review', gate('QA'), owned(1), 'in_review')).toBeNull();
+  });
+
+  it('stays null when no gate was resolved — unknown must never read as "owed"', () => {
+    expect(stageSignoffFor('requirements', null, owned(1), 'in_review')).toBeNull();
+    expect(stageSignoffFor('requirements', gate('QA'), null, 'in_review')).toBeNull();
+  });
+
+  it('produces an EMPTY role list when the stage owes nothing, so the branch stays shut', () => {
+    const owedNothing = stageSignoffFor('requirements', gate(), owned(0), 'in_review');
+    expect(owedNothing).toEqual({ roleNames: [], dispatchable: false });
+    expect(diagnoseStall(base({
+      everRan: true, autoRunReason: 'same_lane_reentry', stageSignoff: owedNothing,
+    })).remedy).toBe('coordinate');
   });
 });

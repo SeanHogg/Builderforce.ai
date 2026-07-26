@@ -2967,9 +2967,13 @@ export interface ProviderAuthAlert {
   provider: LlmProvider;
   /** `not_entitled` — the account authenticated but the plan doesn't cover this
    *  surface (reconnect a different account, or upgrade the plan). `rejected` — the
-   *  credential itself was refused (expired/revoked/rotated; reconnect the same one). */
-  reason: 'not_entitled' | 'rejected';
-  /** Upstream status that produced the alert (401 / 403). */
+   *  credential itself was refused (expired/revoked/rotated; reconnect the same one).
+   *  `capacity` — the credential is valid but the ACCOUNT is out of budget (top up;
+   *  reconnecting would be wrong advice). `unresolved` — the stored secret could not
+   *  be decrypted or refreshed, so nothing was ever sent upstream. */
+  reason: 'not_entitled' | 'rejected' | 'capacity' | 'unresolved';
+  /** Upstream status that produced the alert (401 / 403 / 429), or `0` when the
+   *  credential failed before any request was made. */
   status: number;
   /** The gateway vendor that was rejected — `openai-codex` (a ChatGPT subscription)
    *  reads differently to the operator than `openai` (an API key). */
@@ -3004,6 +3008,9 @@ export interface ProviderConnectionTestResult {
   testedAt?: string;
   error?: string;
   code?: string;
+  /** The alert the probe just persisted, echoed so the card can repaint from THIS
+   *  response instead of waiting out the status read's cache window. */
+  authAlert?: ProviderAuthAlert;
   /** `attempts` is the per-model failover breakdown — the only place the real
    *  upstream status survives when the gateway collapses a retryable failure
    *  into its cascade summary. */

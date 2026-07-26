@@ -1353,6 +1353,21 @@ function narratedUnadvertisedInTrace(events) {
   }
   return seen;
 }
+function memoryAnswersInTrace(events) {
+  const out = [];
+  for (const ev of events) {
+    if (ev.category !== "recall") continue;
+    if (ev.label !== "evermind.answer" && ev.label !== "memory.answer") continue;
+    const r = ev.result;
+    if (r?.skippedLlm !== true) continue;
+    out.push({
+      source: r.source === "evermind" ? "evermind" : "qa-cache",
+      ...typeof r.version === "number" ? { version: r.version } : {},
+      ...typeof r.evermindProjectId === "number" ? { projectId: r.evermindProjectId } : {}
+    });
+  }
+  return out;
+}
 function cap(s, n = 2e3) {
   const str = typeof s === "string" ? s : JSON.stringify(s ?? "");
   return str.length > n ? str.slice(0, n) + `\u2026 (+${str.length - n} chars)` : str;
@@ -1480,6 +1495,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = []) {
   }
   const modelsUsed = modelsUsedInTrace(events);
   const evermindUsed = modelsUsed.filter(isEvermindModel);
+  const memoryAnswers = memoryAnswersInTrace(events);
   const recoveredToolEvents = toolEvents.filter((e) => e.recovered).length;
   const recoveredTurns = llm.filter((e) => e.recovered).length;
   const turnCoveragePartial = recoveredToolEvents > 0 && recoveredTurns === 0;
@@ -1493,8 +1509,9 @@ function computeBrainDiagnostics(events, requestedModel, messages = []) {
   const exposure = toolExposureInTrace(events);
   const narratedUnadvertisedTools = narratedUnadvertisedInTrace(events);
   const noToolsAdvertised = exposure.min === 0 && toolEvents.length === 0;
+  const memoryOnlyRun = memoryAnswers.length > 0 && llm.length === 0;
   const healthy = errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal && !announcedUnmadeToolCall && didWork;
-  const likelyCause = noToolsAdvertised ? "no-tools-advertised" : narratedUnadvertisedTools.length > 0 ? "tool-not-advertised" : announcedUnmadeToolCall ? "tool-calls-not-emitted" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : healthy ? "healthy" : "inconclusive";
+  const likelyCause = memoryOnlyRun ? "memory-answered" : noToolsAdvertised ? "no-tools-advertised" : narratedUnadvertisedTools.length > 0 ? "tool-not-advertised" : announcedUnmadeToolCall ? "tool-calls-not-emitted" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : healthy ? "healthy" : "inconclusive";
   return {
     turns: llm.length,
     toolCalls: toolEvents.length,
@@ -1519,6 +1536,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = []) {
     advertisedToolsMin: exposure.min,
     catalogTools: exposure.catalog,
     narratedUnadvertisedTools,
+    memoryAnswers,
     turnCoveragePartial,
     likelyCause
   };
@@ -1527,7 +1545,8 @@ function kb(bytes) {
   return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
 }
 function formatBrainDiagnostics(d) {
-  const verdict = d.likelyCause === "no-tools-advertised" ? 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.' : d.likelyCause === "tool-not-advertised" ? `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.` : d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.' : d.likelyCause === "context-exhaustion" ? "Likely CONTEXT EXHAUSTION (case A) \u2014 the transcript outgrew the model window." : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
+  const evermindAnswers = d.memoryAnswers?.filter((m) => m.source === "evermind") ?? [];
+  const verdict = d.likelyCause === "memory-answered" ? `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.` : d.likelyCause === "no-tools-advertised" ? 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.' : d.likelyCause === "tool-not-advertised" ? `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.` : d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.' : d.likelyCause === "context-exhaustion" ? "Likely CONTEXT EXHAUSTION (case A) \u2014 the transcript outgrew the model window." : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
   const lines = ["--- Diagnostics ---", `Likely cause: ${verdict}`];
   const scope = d.turnCoveragePartial ? " (this session)" : "";
   lines.push(`Turns${scope}: ${d.turns} \xB7 Tool calls: ${d.toolCalls} \xB7 Errors: ${d.errors}${d.loopExhausted ? " \xB7 LOOP EXHAUSTED" : ""}`);
@@ -1565,6 +1584,11 @@ function formatBrainDiagnostics(d) {
   if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
   if (d.emptyOrLengthFinishes > 0) lines.push(`Degenerate turns: ${d.emptyOrLengthFinishes} ended on \`length\` or returned empty text.`);
   if (d.evermindUsed.length) lines.push(`Evermind/SSM answered: ${d.evermindUsed.join(", ")}`);
+  if (d.memoryAnswers?.length) {
+    lines.push(
+      `Answered from memory (LLM skipped): ${d.memoryAnswers.length} turn(s) \u2014 ` + d.memoryAnswers.map((m) => m.source === "evermind" ? `Evermind SSM${m.projectId != null ? ` (project #${m.projectId}` : ""}${m.version != null ? `${m.projectId != null ? ", " : " ("}v${m.version}` : ""}${m.projectId != null || m.version != null ? ")" : ""}` : "Q&A cache").join(", ")
+    );
+  }
   return lines;
 }
 function buildBrainTriageReport(opts) {
@@ -2526,7 +2550,7 @@ ${block}`;
     if (query) {
       let memAnswer = null;
       try {
-        memAnswer = await evermind.answer(query);
+        memAnswer = await evermind.answer(query, { toolsAvailable: !!allTools && allTools.length > 0 });
       } catch {
         memAnswer = null;
       }
@@ -2544,7 +2568,11 @@ ${block}`;
           result: {
             source: memAnswer.source,
             skippedLlm: true,
-            ...memAnswer.evermindVersion != null ? { version: memAnswer.evermindVersion } : {}
+            ...memAnswer.evermindVersion != null ? { version: memAnswer.evermindVersion } : {},
+            // WHICH head served it — a project can target several, so without this a
+            // memory hit from a sibling IDE build's Evermind is indistinguishable from
+            // the chat project's own.
+            ...memAnswer.evermindProjectId != null ? { evermindProjectId: memAnswer.evermindProjectId } : {}
           }
         });
         emit(c);
