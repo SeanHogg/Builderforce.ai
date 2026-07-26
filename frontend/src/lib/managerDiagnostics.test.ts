@@ -351,6 +351,21 @@ describe('parsePassCounters', () => {
     expect(parsePassCounters('The AI Manager is grooming this backlog…')).toBeNull();
     expect(parsePassCounters(null)).toBeNull();
   });
+
+  it('reads the stages a TRUNCATED pass deferred', () => {
+    // The pass budget's whole point: a bounded pass that says so beats a silent one. The
+    // pass was evicted mid-PR-loop for two weeks and read exactly like a clean pass.
+    const parsed = parsePassCounters(
+      'Backlog management pass complete. Scored 3 · ranked 0 · assigned 2 · PRs 20 · dispatched 0 · audited 0 · deferred: pr_merge, triage.',
+    );
+    expect(parsed?.deferred).toEqual(['pr_merge', 'triage']);
+    expect(parsed?.prs).toBe(20);
+  });
+
+  it('leaves `deferred` absent on a pass that reached every stage', () => {
+    expect(parsePassCounters('Backlog management pass complete. Scored 3 · ranked 1 · assigned 0 · PRs 0 · dispatched 0 · audited 0.')?.deferred)
+      .toBeUndefined();
+  });
 });
 
 describe('classifyPass', () => {

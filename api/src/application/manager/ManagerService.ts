@@ -88,6 +88,59 @@ const MAX_AI_SCORES_PER_RUN = 8;   // LLM calls — the rest fall back to the fr
 const MAX_RANKED = 300;
 const MAX_ASSIGNMENTS_PER_RUN = 15;
 const MAX_PR_ACTIONS_PER_RUN = 20;
+
+/**
+ * Wall-clock the whole pass may spend before it starts shedding OPTIONAL work to
+ * guarantee it reaches its own closing journal.
+ *
+ * THE FAILURE THIS CLOSES. A pass runs inside ONE Worker invocation, and on a real
+ * project (11: 673 tickets, 354 open PRs) it was being evicted partway through:
+ * `manager_actions` showed triage journalling every few minutes while the `manager.pass`
+ * activity row that CLOSES a pass had not been written since **2026-07-13**, and
+ * `lastRunAt` sat 6 hours stale against a 5-minute cadence. Every stage after PR
+ * coordination was in a dead zone, and — worse than the lost work — the pass never
+ * recorded that it had been cut short. A truncated pass and a clean pass were
+ * indistinguishable, so the manager reported health it had not verified.
+ *
+ * The census stage was moved ahead of the PR loop as a mitigation (see stage 3.5), but
+ * reordering only decides WHO gets starved. This budget is the actual fix: past the
+ * deadline the pass stops starting new optional work, records exactly which stage it
+ * stopped at and why, and still writes its closing row. A short honest pass beats a long
+ * silent one — and because the cadence is 5 minutes, the deferred work is picked up
+ * almost immediately.
+ *
+ * 20s against a Worker CPU/wall ceiling comfortably above it: the point is to leave
+ * room for the closing journal, not to run to the edge.
+ */
+export const MANAGER_PASS_BUDGET_MS = 20_000;
+
+/**
+ * The pass's time budget. `over()` is checked BETWEEN units of optional work, never
+ * mid-write — a stage that has started a mutation always finishes it, so the budget can
+ * shed work but never leave a half-applied action.
+ */
+export interface PassBudget {
+  over: () => boolean;
+  elapsedMs: () => number;
+  /** Stages that were skipped or cut short, in order — journalled on the closing row. */
+  truncated: string[];
+  /** Record that `stage` was shed, once per stage. Returns true the first time. */
+  shed: (stage: string) => boolean;
+}
+
+export function createPassBudget(startedAt: number, budgetMs = MANAGER_PASS_BUDGET_MS): PassBudget {
+  const truncated: string[] = [];
+  return {
+    over: () => Date.now() - startedAt >= budgetMs,
+    elapsedMs: () => Date.now() - startedAt,
+    truncated,
+    shed: (stage: string) => {
+      if (truncated.includes(stage)) return false;
+      truncated.push(stage);
+      return true;
+    },
+  };
+}
 const MAX_DISPATCHES_PER_RUN = 12;
 const MAX_AUDITS_PER_RUN = 40;
 /** Coordinator ticks per pass — each can rewind a lane + start a run, so pace them. */
@@ -145,6 +198,17 @@ export interface ManagerRunSummary {
   systemicFindings: number;
   /** Platform-fix tickets those findings opened. */
   systemicTicketsCreated: number;
+  /**
+   * Stages this pass SHED because it ran out of wall-clock (see MANAGER_PASS_BUDGET_MS).
+   * Empty on a complete pass.
+   *
+   * This field exists because a truncated pass and a complete one used to be
+   * indistinguishable: the pass was evicted mid-PR-loop for two weeks, and because the
+   * closing row was never written at all, nothing anywhere said so. Reporting an honest
+   * "I did not get to triage" is the difference between a manager that is behind and a
+   * manager that appears to have found nothing wrong.
+   */
+  truncated: string[];
 }
 
 // ── config store ────────────────────────────────────────────────────────────
@@ -563,7 +627,11 @@ export async function finalizeManagerRunTask(
     const line =
       `Scored ${summary.scored} · ranked ${summary.ranked} · assigned ${summary.assigned} · ` +
       `PRs ${summary.prsConducted + summary.prsMerged} · dispatched ${summary.dispatched} · ` +
-      `audited ${summary.audited}${summary.flagged ? ` (${summary.flagged} flagged)` : ''}.`;
+      `audited ${summary.audited}${summary.flagged ? ` (${summary.flagged} flagged)` : ''}` +
+      // A pass that shed stages says WHICH, on the run card itself. The diagnostics
+      // report parses this line, so the truncation reaches the operator on the same
+      // surface that used to show a bounded pass as a clean one.
+      `${summary.truncated?.length ? ` · deferred: ${summary.truncated.join(', ')}` : ''}.`;
     await db
       .update(tasks)
       .set({
@@ -863,6 +931,7 @@ export async function runManagerForProject(
     audited: 0, flagged: 0, remediated: 0, remediationDeferred: 0,
     stalled: 0, unstuck: 0, escalated: 0, stallsResolved: 0, staleRunTasksClosed: 0,
     censusStalled: 0, censusTopCause: null, systemicFindings: 0, systemicTicketsCreated: 0,
+    truncated: [],
   };
 
   const policy = await getEffectiveManagerPolicy(db, tenantId, projectId, env);
@@ -900,6 +969,9 @@ export async function runManagerForProject(
       .join('\n\n') || null;
 
   const now = Date.now();
+  // The pass's wall-clock budget, established AFTER policy resolution (a disabled
+  // project returns before it) and before the first stage. See MANAGER_PASS_BUDGET_MS.
+  const budget = createPassBudget(now);
   let managed = await loadManagedTasks(db, projectId);
 
   // 1. VALUE — backfill business value on unscored, non-manual tickets. ---------
@@ -1128,8 +1200,11 @@ export async function runManagerForProject(
   // 4. PR — conduct (open) PRs for finished work, then merge/close per policy. ---
   // Records which tickets it acted on so the TRIAGE stage below can diagnose them
   // without re-applying a remedy the review pass just applied.
+  // This is the stage that evicts the pass: each PR does provider round-trips, and 354
+  // of them will not fit in one invocation however high MAX_PR_ACTIONS_PER_RUN is set.
+  // It now stops at the budget instead of running until the isolate dies.
   const conductedTaskIds = new Set<number>();
-  await coordinatePullRequests(env, db, runtimeService, { tenantId, projectId, policy, managed, summary, runTaskId, conductedTaskIds });
+  await coordinatePullRequests(env, db, runtimeService, { tenantId, projectId, policy, managed, summary, runTaskId, conductedTaskIds, budget });
 
   // 5. DISPATCH — kick the top-ranked runnable tickets NOW, in priority order. ---
   // Skipped on the cron path (the autonomous executor sweep owns dispatch there — see
@@ -1234,7 +1309,17 @@ export async function runManagerForProject(
   //
   // Reuses the bulk signals stage 3.5 already loaded, so its full-project measurement is
   // paid for once per pass rather than once per stage.
-  {
+  if (budget.over()) {
+    // Triage is the most valuable stage AND the most expensive, so it is the one that
+    // must never be silently dropped. Say so explicitly on the register rather than
+    // letting a truncated pass read as "nothing was stuck".
+    budget.shed('triage');
+    await recordManagerAction(db, {
+      tenantId, projectId, runTaskId, actionType: 'triage',
+      summary: `Stall triage skipped this pass — the ${Math.round(MANAGER_PASS_BUDGET_MS / 1000)}s pass budget was spent on PR coordination. It runs first on the next pass.`,
+      detail: { budgetMs: MANAGER_PASS_BUDGET_MS, elapsedMs: budget.elapsedMs(), truncated: budget.truncated },
+    }).catch(() => undefined);
+  } else {
     const triage = await runStallTriage(env, db, runtimeService, {
       tenantId, projectId, managed, conductedTaskIds,
       ...(censusSignals ? { signals: censusSignals } : {}),
@@ -1304,10 +1389,16 @@ export async function runManagerForProject(
   // per scored ticket) keeps the audit trail meaningful, not flooded. Attributed to
   // the actual manager agent when one is designated, else the system "AI Manager".
   // Best-effort (recordActivity never throws). Skipped on an idle pass (nothing done).
+  //
+  // A TRUNCATED pass always journals, even if it achieved nothing else: "I ran out of
+  // time before triage" is the single most important thing this row can say, and it is
+  // exactly what was missing for the two weeks the pass was being evicted here.
+  summary.truncated = budget.truncated;
   const didSomething =
     summary.scored || summary.ranked || summary.scheduled || summary.assigned ||
     summary.dispatched || summary.prsConducted || summary.prsMerged || summary.flagged ||
-    summary.stalled || summary.unstuck || summary.escalated || summary.staleRunTasksClosed;
+    summary.stalled || summary.unstuck || summary.escalated || summary.staleRunTasksClosed ||
+    summary.truncated.length > 0;
   if (didSomething) {
     const actor = identity.agentRef
       ? cloudAgentActor(identity.agentRef, identity.label || 'AI Manager')
@@ -1332,7 +1423,11 @@ export async function runManagerForProject(
         // is the honest reading of a bounded stage: "I looked at 12 of 313" must never
         // render as "12 are stuck".
         `${summary.censusStalled > summary.stalled ? `, ${summary.censusStalled} stalled in total (top cause: ${summary.censusTopCause ?? 'unknown'})` : ''}` +
-        `${summary.systemicTicketsCreated ? `, opened ${summary.systemicTicketsCreated} platform ${summary.systemicTicketsCreated === 1 ? 'ticket' : 'tickets'}` : ''}.`,
+        `${summary.systemicTicketsCreated ? `, opened ${summary.systemicTicketsCreated} platform ${summary.systemicTicketsCreated === 1 ? 'ticket' : 'tickets'}` : ''}` +
+        // A pass that ran out of budget must SAY so. A truncated pass that reads
+        // identically to a complete one is how the manager reported health it had not
+        // verified for two weeks.
+        `${summary.truncated.length ? ` — pass budget spent after ${Math.round(budget.elapsedMs() / 1000)}s, deferred: ${summary.truncated.join(', ')}` : ''}.`,
       metadata: {
         scored: summary.scored, ranked: summary.ranked, scheduled: summary.scheduled, assigned: summary.assigned,
         dispatched: summary.dispatched, prsConducted: summary.prsConducted,
@@ -1342,6 +1437,7 @@ export async function runManagerForProject(
         stallsResolved: summary.stallsResolved, staleRunTasksClosed: summary.staleRunTasksClosed,
         censusStalled: summary.censusStalled, censusTopCause: summary.censusTopCause,
         systemicFindings: summary.systemicFindings, systemicTicketsCreated: summary.systemicTicketsCreated,
+        truncated: summary.truncated, passMs: budget.elapsedMs(), passBudgetMs: MANAGER_PASS_BUDGET_MS,
         trigger: submittedBy, managerType: policy.managerType, coachingApplied: coachingDirectives.length,
       },
     });
@@ -1378,9 +1474,11 @@ async function coordinatePullRequests(
     managed: ManagedTaskRow[]; summary: ManagerRunSummary; runTaskId: number | null;
     /** Populated with every ticket this stage acted on, so TRIAGE does not double-act. */
     conductedTaskIds: Set<number>;
+    /** The pass's wall-clock budget — checked between tickets, never mid-write. */
+    budget: PassBudget;
   },
 ): Promise<void> {
-  const { tenantId, projectId, policy, managed, summary, runTaskId, conductedTaskIds } = ctx;
+  const { tenantId, projectId, policy, managed, summary, runTaskId, conductedTaskIds, budget } = ctx;
 
   // CONDUCT: complete review-ready tickets and open their PRs (skip under 'queue').
   //
@@ -1423,6 +1521,9 @@ async function coordinatePullRequests(
     for (const r of reviewPrBuild) if (r.taskId != null) buildByTask.set(r.taskId, r.buildStatus);
 
     for (const t of reviewReady) {
+      // BETWEEN tickets, never mid-ticket: a conduct/merge already begun always
+      // completes, so shedding work can never leave a half-applied action.
+      if (budget.over()) { budget.shed('pr_conduct'); break; }
       try {
         // THE EVALUATION. Four questions, one verdict, one recorded action — see
         // `evaluateTicketReadiness`. Every outcome is journalled, including the ones
@@ -1612,6 +1713,10 @@ async function coordinatePullRequests(
   }
 
   for (const pr of openPrs) {
+    // The eviction point. Each iteration does provider round-trips (sync, poll, merge),
+    // so this loop is where the pass dies on a project with hundreds of open PRs. Stop
+    // at the budget, between PRs, and let the closing journal say so.
+    if (budget.over()) { budget.shed('pr_merge'); break; }
     try {
       // A previous conflict-resolution run owns this branch until it finishes.
       if (pr.taskId != null && activePrTaskIds.has(pr.taskId)) continue;
