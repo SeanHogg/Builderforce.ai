@@ -6,6 +6,7 @@ import {
   stallRecoveryNudge,
   stallExhaustedNotice,
   modelFailoverNotice,
+  toolNamesMentionedIn,
   MAX_ANNOUNCEMENT_RECOVERIES,
   MAX_MODEL_FAILOVERS,
 } from './index';
@@ -229,6 +230,35 @@ describe('stallExhaustedNotice', () => {
 
   it('does not list the current model as one it failed over FROM', () => {
     expect(stallExhaustedNotice('coder-1', ['coder-1'])).toContain('pick a different model');
+  });
+});
+
+/**
+ * Same pattern, two consumers: the stall detector recognises a call written as prose,
+ * and the per-turn tool SELECTOR uses this to find the tools a system prompt tells the
+ * model to call. If those drifted, the selector could drop a tool the prompt promises
+ * and the loop would spend its recovery budget on a stall the selector itself caused.
+ */
+describe('toolNamesMentionedIn', () => {
+  it('pulls the tools a system-prompt directive instructs the model to call', () => {
+    const directive = 'Always call builtin_chats_list_tickets first, then builtin_tasks_update, '
+      + 'and link via builtin_chats_link_ticket. External servers use mcp__github__list_prs.';
+    expect(toolNamesMentionedIn(directive)).toEqual([
+      'builtin_chats_list_tickets',
+      'builtin_tasks_update',
+      'builtin_chats_link_ticket',
+      'mcp__github__list_prs',
+    ]);
+  });
+
+  it('de-duplicates, because a directive names the same tool more than once', () => {
+    expect(toolNamesMentionedIn('builtin_tasks_create … then builtin_tasks_create again'))
+      .toEqual(['builtin_tasks_create']);
+  });
+
+  it('finds nothing in prose that names no tool', () => {
+    expect(toolNamesMentionedIn('Answer the user politely and cite your sources.')).toEqual([]);
+    expect(toolNamesMentionedIn('')).toEqual([]);
   });
 });
 

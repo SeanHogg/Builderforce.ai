@@ -86,6 +86,12 @@ export interface SelectToolsOptions {
    * multi-step task cannot lose a tool it is mid-way through using.
    */
   pinned?: Iterable<string>;
+  /**
+   * Tool names the SYSTEM PROMPT instructs the model to call. Kept ahead of
+   * everything else, because advertising less than the prompt promises is a
+   * contradiction the model can only resolve by narrating a call it cannot make.
+   */
+  required?: Iterable<string>;
 }
 
 export interface ToolSelection {
@@ -115,6 +121,7 @@ export function selectToolsForTurn(
     return { tools: tools ?? [], trimmed: false, available };
   }
 
+  const required = new Set(options.required ?? []);
   const pinned = new Set(options.pinned ?? []);
   const queryStems = new Set(tokenize(options.query).map(stem));
 
@@ -127,6 +134,14 @@ export function selectToolsForTurn(
     taken.add(name);
     chosen.push(tool);
   };
+
+  // 0. Tools the system prompt NAMES. These outrank even continuity: a prompt that
+  //    says "call builtin_chats_list_tickets" while the tool is absent leaves the
+  //    model no honest move, and it narrates the call instead of making it.
+  for (const tool of tools) {
+    if (chosen.length >= limit) break;
+    if (required.has(tool.function?.name ?? '')) take(tool);
+  }
 
   // 1. Tools this run already used — never drop one mid-task.
   for (const tool of tools) {
