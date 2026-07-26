@@ -6896,7 +6896,8 @@
       "schedule": "Planificado",
       "merge_blocked": "Fusión denegada",
       "triage": "Triado",
-      "escalate": "Escalado"
+      "escalate": "Escalado",
+      "systemic": "Hallazgo de plataforma"
     },
     "runTasks": {
       "title": "Tareas del manager",
