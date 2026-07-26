@@ -1,4 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('../kanban/managedLaneRoles', () => ({ resolveManagedProducer: vi.fn() }));
 import {
   classifyResolvedAutoRun,
   parseRequiredCapabilities,
@@ -9,9 +11,8 @@ import {
   AUTO_RUN_REASON_TEXT,
   EVALUATED_AUTO_RUN_REASONS,
   evaluateTaskAutoRun,
-  pickManifestProducer,
-  type ManifestSlot,
 } from './evaluateAutoRun';
+import { resolveManagedProducer } from '../kanban/managedLaneRoles';
 import type { Db } from '../../infrastructure/database/connection';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { isReviewLane } from '../task/taskLifecycle';
@@ -78,6 +79,22 @@ describe('classifyResolvedAutoRun', () => {
   it('the loop guard outranks a live run, so a re-entry never reports a phantom execution', () => {
     expect(classifyResolvedAutoRun({ ...base, sameLaneReentry: true, hasLiveExecution: true }).reason)
       .toBe('same_lane_reentry');
+  });
+
+  // A managed stage with no role-attributed producer is a STRICTLY more specific answer
+  // than `no_agent`, and it must outrank it: `no_agent` tells the operator to assign an
+  // owner, which on a managed board does nothing at all (the assignee is the Coordinator).
+  it('reports managed_no_role rather than the generic no_agent on a managed stage', () => {
+    expect(classifyResolvedAutoRun({ ...base, decisionAutoRun: false, managedNoRole: true }))
+      .toEqual({ reason: 'managed_no_role', canRunNow: false });
+  });
+
+  it('never lets a managed stage with no role report will_run', () => {
+    expect(classifyResolvedAutoRun({ ...base, managedNoRole: true }).canRunNow).toBe(false);
+  });
+
+  it('a human gate still outranks it — an operator gate is not a configuration defect', () => {
+    expect(classifyResolvedAutoRun({ ...base, gate: 'human', managedNoRole: true }).reason).toBe('human_gate');
   });
 });
 
@@ -166,53 +183,9 @@ describe('parseRequiredCapabilities', () => {
   });
 });
 
-describe('pickManifestProducer — the per-stage executor on a lifecycle-managed board', () => {
-  const slot = (over: Partial<ManifestSlot> = {}): ManifestSlot => ({
-    assigneeRef: 'john-coder',
-    responsibility: 'owner',
-    state: 'pending',
-    ...over,
-  });
-
-  it('picks an agent-resolved owner slot that still owes work', () => {
-    expect(pickManifestProducer([slot()])).toBe('john-coder');
-  });
-
-  it('accepts a contributor as a producer', () => {
-    expect(pickManifestProducer([slot({ responsibility: 'contributor', assigneeRef: 'bob-dev' })])).toBe('bob-dev');
-  });
-
-  it('never picks a reviewer — a reviewer is not the stage producer', () => {
-    expect(pickManifestProducer([slot({ responsibility: 'reviewer' })])).toBeNull();
-  });
-
-  it('skips slots whose work is already finished, waived or skipped', () => {
-    for (const state of ['completed', 'waived', 'skipped']) {
-      expect(pickManifestProducer([slot({ state })])).toBeNull();
-    }
-  });
-
-  it('re-dispatches a slot that had changes requested', () => {
-    expect(pickManifestProducer([slot({ state: 'changes_requested' })])).toBe('john-coder');
-  });
-
-  it('ignores an unresolved slot (no assignee yet)', () => {
-    expect(pickManifestProducer([slot({ assigneeRef: null })])).toBeNull();
-  });
-
-  it('prefers the first open producer when several slots exist', () => {
-    const rows = [
-      slot({ responsibility: 'reviewer', assigneeRef: 'validator-t1' }),
-      slot({ state: 'completed', assigneeRef: 'kevin-pm' }),
-      slot({ assigneeRef: 'john-coder' }),
-    ];
-    expect(pickManifestProducer(rows)).toBe('john-coder');
-  });
-
-  it('is null for an empty manifest — which correctly reads as no_agent', () => {
-    expect(pickManifestProducer([])).toBeNull();
-  });
-});
+// The per-stage producer pick moved to `kanban/managedLaneRoles` (and gained the
+// authorised-role check the guard enforces) — see `managedLaneRoles.test.ts`. It lives
+// with the guard's resolver now precisely so the two cannot drift apart again.
 
 /**
  * The guardrail that makes the auto-gated `in_review` lane (0369) safe.
@@ -342,5 +315,93 @@ describe('evaluateTaskAutoRun — the lane comes from the ROW, not the caller', 
     const e = await evaluateTaskAutoRun(stubDb([[], []]), noRuns, args);
     expect(e.status).toBe(TaskStatus.IN_PROGRESS);
     expect(e.reason).toBe('no_board');
+  });
+});
+
+/**
+ * A LIFECYCLE-MANAGED board: the verdict must name a ROLE, or there is no verdict.
+ *
+ * MEASURED FAILURE (project 11). The evaluator resolved "which agent" and stopped there,
+ * so it answered `will_run` for a ticket whose dispatch the guard then refused — the
+ * throw happened before an execution row existed, so no failure was recorded, the breaker
+ * never engaged, and the refusal repeated on every sweep for weeks. The gate snapshot
+ * printed "Nothing is gating this ticket" the whole time.
+ */
+describe('evaluateTaskAutoRun — a lifecycle-managed board', () => {
+  function stubDb(results: unknown[][]): Db {
+    const queue = [...results];
+    const builder = (): Record<string, unknown> => {
+      const self: Record<string, unknown> = {};
+      for (const m of ['from', 'where', 'orderBy', 'limit', 'innerJoin', 'leftJoin']) self[m] = () => self;
+      self.then = (resolve: (v: unknown) => unknown) => Promise.resolve(queue.shift() ?? []).then(resolve);
+      return self;
+    };
+    return { select: () => builder() } as unknown as Db;
+  }
+
+  const noRuns = { listByTask: async () => [] } as unknown as RuntimeService;
+
+  /** Query order: task row → board → lane → lane staffing. (The managed branch resolves
+   *  its producer through the mocked `resolveManagedProducer`, not through this db.) */
+  const rows = (status: string) => [
+    [{ assignedAgentRef: 'coordinator-1', source: null, status, taskType: 'task', actionType: null }],
+    [{ id: 'b1', projectId: 11, tenantId: 1, lifecycleManaged: true }],
+    [{ id: 'lane-1', gate: 'auto', isTerminal: false }],
+    [{ agentRef: 'lane-agent', model: null, requiredCapabilities: null }],
+  ];
+
+  const args = {
+    tenantId: 1, projectId: 11, taskId: 1032, status: TaskStatus.TODO,
+    tenantTokens: {
+      hasTokens: true, reason: null, usageToday: 0, dailyLimit: -1,
+      usageMonth: 0, monthlyLimit: -1, effectivePlan: 'free' as const,
+    },
+  };
+
+  it('dispatches AS the resolved role, not as an arbitrary staffed agent', async () => {
+    vi.mocked(resolveManagedProducer).mockResolvedValue({
+      producer: { roleKey: 'developer', agentRef: 'bob-dev', model: null, source: 'manifest' },
+      authority: { roleKeys: ['developer', 'architect'], approvers: [], tier: 'requirements' },
+    });
+
+    const e = await evaluateTaskAutoRun(stubDb(rows(TaskStatus.TODO)), noRuns, args);
+
+    expect(e.canRunNow).toBe(true);
+    expect(e.reason).toBe('will_run');
+    expect(e.lifecycleManaged).toBe(true);
+    expect(e.managedRole).toMatchObject({ roleKey: 'developer', agentRef: 'bob-dev', source: 'manifest' });
+    // The candidate is the ROLE's agent — never `lane-agent`, which the guard would refuse.
+    expect(e.decision.agentRef).toBe('bob-dev');
+    // Reported so the gate snapshot can say WHICH roles the stage authorises.
+    expect(e.managedRole?.authorizedRoleKeys).toEqual(['developer', 'architect']);
+  });
+
+  // The lie this fix removes: a staffed lane on a managed board used to read `will_run`.
+  it('reports managed_no_role — NOT will_run — when no authorised role resolves, even on a staffed lane', async () => {
+    vi.mocked(resolveManagedProducer).mockResolvedValue({
+      producer: null,
+      authority: { roleKeys: ['architect'], approvers: [], tier: 'requirements' },
+    });
+
+    const e = await evaluateTaskAutoRun(stubDb(rows(TaskStatus.TODO)), noRuns, args);
+
+    expect(e.canRunNow).toBe(false);
+    expect(e.reason).toBe('managed_no_role');
+    expect(e.managedRole).toBeNull();
+    // The lane IS staffed — which is exactly why `no_agent` would have been misleading.
+    expect(e.staffedAgentRefs).toEqual(['lane-agent']);
+    // And Run-now cannot force it either: there is no role-attributed run to force.
+    expect(e.candidate).toBeNull();
+  });
+
+  // The no-self-review guarantee, preserved: a review lane's reviewer round-trip belongs
+  // to the requirement gate, never to the manifest producer (which is usually the author).
+  it('never resolves a manifest producer on a REVIEW lane', async () => {
+    vi.mocked(resolveManagedProducer).mockClear();
+    const e = await evaluateTaskAutoRun(stubDb(rows(TaskStatus.IN_REVIEW)), noRuns, { ...args, status: TaskStatus.IN_REVIEW });
+
+    expect(resolveManagedProducer).not.toHaveBeenCalled();
+    expect(e.managedRole).toBeNull();
+    expect(e.reason).toBe('managed_no_role');
   });
 });

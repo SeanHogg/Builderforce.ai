@@ -1405,6 +1405,11 @@ export type AutoRunReason =
   | 'terminal_lane'
   | 'human_gate'
   | 'no_agent'
+  /** LIFECYCLE-MANAGED board: every run must be attributed to a role the stage
+   *  authorizes, and none resolves to an agent here. Distinct from `no_agent`
+   *  because the fix is different — assigning an owner does nothing on a managed
+   *  board, where the assignee is the Coordinator rather than an executor. */
+  | 'managed_no_role'
   | 'capability_mismatch'
   /** A live (pending/submitted/running/paused) run exists on the ticket. */
   | 'already_running'
@@ -1560,6 +1565,13 @@ export interface LifecycleGateSnapshot {
    *  and exhausted, every ticket the tenant owns is paused, which is why a ticket can
    *  show an open lane gate and a qualified agent and still never dispatch. */
   tenantTokens: LifecycleTenantTokens | null;
+  /** The board is lifecycle-managed, so a run must be role-attributed — which makes
+   *  `staffedAgentRefs` / `assignedAgentRef` insufficient to answer "can this run". */
+  lifecycleManaged: boolean;
+  /** Roles this stage authorizes for this ticket. Empty on a managed board = nothing runs. */
+  authorizedRoleKeys: string[];
+  /** The role-attributed run that would go out, when one resolves. */
+  managedRole: { roleKey: string; agentRef: string; source: 'manifest' | 'lane_agent' } | null;
 }
 
 /** Workspace token budget as the lifecycle report needs it: blocked or not, which
@@ -2194,6 +2206,7 @@ export const managerApi = {
 /** Why a ticket is not moving — mirrors the API's `StallCause`. */
 export type StallCause =
   | 'live' | 'cooling_down' | 'moving' | 'never_started' | 'unassigned'
+  | 'managed_no_role'
   | 'capability_gap' | 'human_gate' | 'failure_breaker' | 'missing_deliverable'
   | 'build_failed' | 'awaiting_signoff' | 'pr_conflict' | 'pr_unreconciled'
   | 'merge_withheld' | 'blocked' | 'unknown';

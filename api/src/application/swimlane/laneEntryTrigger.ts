@@ -39,6 +39,10 @@ import { evaluateExecutionApprovalGate } from '../runtime/executionApprovalGate'
 import { evaluateTaskAutoRun, type TenantTokenVerdict } from './evaluateAutoRun';
 import { enforceLaneRequirements } from './laneRequirementGate';
 import { TicketAuditService } from '../audit/ticketAuditService';
+import { TicketParticipantsService } from '../kanban/ticketParticipants';
+import { buildRoleRunPayload, requestRoleRun, type RoleRunRequest } from '../kanban/requestRoleRun';
+import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
+import { roleDisplayName } from '../kanban/roleCatalog';
 import { signalPendingWork } from '../runtime/cronWorkSignal';
 
 /**
@@ -259,12 +263,42 @@ export async function maybeAutoRunOnLaneEntry(
     if (evaln.decision.agentRef) payloadObj.cloudAgentRef = evaln.decision.agentRef;
     if (evaln.decision.model) payloadObj.model = evaln.decision.model;
 
+    // ── ROLE ATTRIBUTION ON A LIFECYCLE-MANAGED BOARD ────────────────────────────
+    // A managed board refuses any dispatch whose payload carries no role
+    // (`authorizeManagedTaskExecution`), and the bare payload above never carried one —
+    // so on a managed board this trigger could never dispatch AT ALL. It threw at the
+    // dispatcher, the catch below wrote `auto_run_error`, and because the throw preceded
+    // the execution row there was no failure to count: the breaker and the cooldown never
+    // engaged and the refusal repeated every sweep forever. See `managedLaneRoles.ts`.
+    //
+    // The evaluator now resolves the role AND the agent together from the SAME authority
+    // the guard enforces, so the payload built here is accepted by construction. The run
+    // goes out through `requestRoleRun`, which additionally marks the manifest slot
+    // `in_progress` — the record that this stage was asked, and what lets the lane's
+    // sign-off round-trip proceed on the next hop.
+    const roleRun: RoleRunRequest | null = evaln.managedRole
+      ? {
+        tenantId: args.tenantId,
+        projectId: args.projectId,
+        taskId: args.taskId,
+        roleKey: evaln.managedRole.roleKey,
+        roleName: roleDisplayName(evaln.managedRole.roleKey),
+        agentRef: evaln.managedRole.agentRef,
+        model: evaln.decision.model ?? null,
+        laneKey: lane,
+        kind: 'producer',
+        submittedBy: composeDispatcherLabel(args.submittedBy, 'producer', evaln.managedRole.roleKey),
+      }
+      : null;
+
     // Collect the dispatcher's deferred executor kickoff (`orchestrate()`) and AWAIT
     // it here instead of letting it re-register on the (already-closed) request
     // `executionCtx`. We are off the response path, so awaiting the kickoff costs
     // nothing the user waits on — but it guarantees the run is actually started
     // rather than created-then-dropped. See this function's header for the why.
-    const payload = Object.keys(payloadObj).length > 0 ? JSON.stringify(payloadObj) : undefined;
+    const payload = roleRun
+      ? buildRoleRunPayload(roleRun)
+      : (Object.keys(payloadObj).length > 0 ? JSON.stringify(payloadObj) : undefined);
 
     // GOVERNANCE APPROVAL GATE — the autonomous path used to bypass this entirely.
     // The gate was route-private in `runtimeRoutes`, so only HTTP submits were held
@@ -304,14 +338,23 @@ export async function maybeAutoRunOnLaneEntry(
       }
     }
 
-    const deferred: Promise<unknown>[] = [];
-    await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
-      taskId: args.taskId,
-      tenantId: args.tenantId,
-      payload,
-      submittedBy: args.submittedBy,
-    });
-    await Promise.allSettled(deferred);
+    if (roleRun) {
+      // `requestRoleRun` owns dispatch + slot attribution + the activity row, and returns
+      // null when the dispatcher refused (cap, breaker, cooldown) — which it has already
+      // recorded as a skip. A refusal is NOT a dispatch, so say so and return false
+      // rather than reporting a run that never started.
+      const executionId = await requestRoleRun(env, db, runtimeService, new TicketParticipantsService(db), roleRun);
+      if (executionId == null) return false;
+    } else {
+      const deferred: Promise<unknown>[] = [];
+      await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
+        taskId: args.taskId,
+        tenantId: args.tenantId,
+        payload,
+        submittedBy: args.submittedBy,
+      });
+      await Promise.allSettled(deferred);
+    }
 
     // Autonomy TOOK this hop. Every REFUSAL above is recorded, but a success used to
     // leave only an `executions` row — so "did autonomy advance this ticket, or did a
@@ -327,8 +370,16 @@ export async function maybeAutoRunOnLaneEntry(
       sessionKey:    `task:${args.taskId}`,
       toolName:      'auto_run_dispatched',
       category:      'planning',
-      detail:        { taskId: args.taskId, lane, reason: 'will_run', agentRef: evaln.decision.agentRef ?? null, submittedBy: args.submittedBy },
-      result:        `Auto-run dispatched for task ${args.taskId} on lane '${lane}'${evaln.decision.agentRef ? ` as ${evaln.decision.agentRef}` : ''}.`.slice(0, 300),
+      detail:        {
+        taskId: args.taskId, lane, reason: 'will_run',
+        agentRef: evaln.decision.agentRef ?? null, submittedBy: args.submittedBy,
+        // The ROLE the run was attributed to, on a managed board. Without it the ledger
+        // cannot tell a Coordinator-issued stage run from a generic lane dispatch.
+        ...(evaln.managedRole ? { roleKey: evaln.managedRole.roleKey, roleSource: evaln.managedRole.source } : {}),
+      },
+      result:        (`Auto-run dispatched for task ${args.taskId} on lane '${lane}'`
+        + `${evaln.decision.agentRef ? ` as ${evaln.decision.agentRef}` : ''}`
+        + `${evaln.managedRole ? ` acting as '${evaln.managedRole.roleKey}'` : ''}.`).slice(0, 300),
     }).catch(() => { /* best-effort telemetry — never block the trigger */ });
     return true;
   } catch (err) {
@@ -343,16 +394,25 @@ export async function maybeAutoRunOnLaneEntry(
     const message = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack ?? null : null;
     console.error(`[auto_run_error] task ${args.taskId} lane '${args.status}':`, err);
-    await recordCloudToolEvent(db, {
-      tenantId:      args.tenantId,
-      cloudAgentRef: args.submittedBy,
-      executionId:   null,
-      sessionKey:    `task:${args.taskId}`,
-      toolName:      'auto_run_error',
-      category:      'error',
-      detail:        { taskId: args.taskId, lane: args.status, error: message, stack },
-      result:        `Auto-run failed with an error for task ${args.taskId} on lane '${args.status}': ${message}`.slice(0, 300),
-    }).catch(() => { /* telemetry is best-effort — never rethrow out of the trigger */ });
+    // STATE-GATED, like every skip beside it. An error is not exempt from the write
+    // amplification rule: the sweep re-evaluates a broken ticket every few minutes, and
+    // a recurring exception (a managed refusal before it became a first-class skip, a
+    // persistent DB blip) wrote the identical row forever — after the skip paths were
+    // gated this was the LAST unbounded writer in the trigger. The state includes the
+    // message, so a DIFFERENT error is still recorded immediately, and the ledger's
+    // `DISTINCT ON (session_key) ORDER BY ts DESC` read is unaffected either way.
+    if (await claimAutoRunSkipState(env, args.tenantId, args.taskId, autoRunSkipState(args.status, `error:${message}`))) {
+      await recordCloudToolEvent(db, {
+        tenantId:      args.tenantId,
+        cloudAgentRef: args.submittedBy,
+        executionId:   null,
+        sessionKey:    `task:${args.taskId}`,
+        toolName:      'auto_run_error',
+        category:      'error',
+        detail:        { taskId: args.taskId, lane: args.status, error: message, stack },
+        result:        `Auto-run failed with an error for task ${args.taskId} on lane '${args.status}': ${message}`.slice(0, 300),
+      }).catch(() => { /* telemetry is best-effort — never rethrow out of the trigger */ });
+    }
     return false;
   }
 }

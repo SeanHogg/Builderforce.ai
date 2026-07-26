@@ -296,8 +296,30 @@ export function decideLaneAgentApproval(input: {
  * rather than burning a run dispatching an agent that no longer exists.
  */
 export async function loadLaneStaffedAgents(db: Db, tenantId: number, swimlaneId: string): Promise<LaneStaffedAgent[]> {
+  return (await loadStaffedAgentsForLanes(db, tenantId, [swimlaneId])).get(swimlaneId) ?? [];
+}
+
+/**
+ * The same load for MANY lanes at once, still in exactly TWO queries total — the
+ * assignments across every lane, then ONE batched `ide_agents` read.
+ *
+ * The bulk caller is the stall census, which classifies every ticket in a project and
+ * therefore needs a whole board's staffing: doing that lane-by-lane through the
+ * single-lane wrapper would be 2×lanes round-trips per census. Both entry points share
+ * this one body so capability resolution can never drift between them.
+ */
+export async function loadStaffedAgentsForLanes(
+  db: Db,
+  tenantId: number,
+  swimlaneIds: readonly string[],
+): Promise<Map<string, LaneStaffedAgent[]>> {
+  const out = new Map<string, LaneStaffedAgent[]>();
+  for (const id of swimlaneIds) out.set(id, []);
+  if (swimlaneIds.length === 0) return out;
+
   const rows = await db
     .select({
+      swimlaneId: swimlaneAgentAssignments.swimlaneId,
       agentRef: swimlaneAgentAssignments.agentRef,
       name: swimlaneAgentAssignments.name,
       role: swimlaneAgentAssignments.role,
@@ -305,10 +327,13 @@ export async function loadLaneStaffedAgents(db: Db, tenantId: number, swimlaneId
       position: swimlaneAgentAssignments.position,
     })
     .from(swimlaneAgentAssignments)
-    .where(and(eq(swimlaneAgentAssignments.tenantId, tenantId), eq(swimlaneAgentAssignments.swimlaneId, swimlaneId)));
+    .where(and(
+      eq(swimlaneAgentAssignments.tenantId, tenantId),
+      inArray(swimlaneAgentAssignments.swimlaneId, [...swimlaneIds]),
+    ));
 
   const refs = [...new Set(rows.flatMap((r) => (r.agentRef ? [r.agentRef] : [])))];
-  if (refs.length === 0) return [];
+  if (refs.length === 0) return out;
 
   const agentRows = await db
     .select({
@@ -319,18 +344,19 @@ export async function loadLaneStaffedAgents(db: Db, tenantId: number, swimlaneId
     .where(and(eq(ideAgents.tenantId, tenantId), eq(ideAgents.status, 'active'), inArray(ideAgents.id, refs)));
   const byId = new Map(agentRows.map((a) => [a.id, a]));
 
-  return rows.flatMap((r) => {
-    if (!r.agentRef) return [];
+  for (const r of rows) {
+    if (!r.agentRef) continue;
     const agent = byId.get(r.agentRef);
-    return [{
+    out.get(r.swimlaneId)?.push({
       agentRef: r.agentRef,
       agentName: r.name ?? agent?.name ?? null,
       declaredRole: r.role ?? null,
       model: r.model ?? null,
       position: r.position,
       capableRoleKeys: agent ? [...agentRoleKeys(agent)] : [],
-    }];
-  });
+    });
+  }
+  return out;
 }
 
 /**

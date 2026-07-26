@@ -456,6 +456,20 @@ export interface LifecycleGateSnapshot {
    * custody simply stops, and every other field here keeps saying the ticket is ready.
    */
   tenantTokens: TenantTokenVerdict | null;
+  /**
+   * LIFECYCLE-MANAGED board — the fact that changes what every field above MEANS.
+   *
+   * On a managed board a run must be attributed to a role the stage authorizes, so
+   * `staffedAgentRefs` and `assignedAgentRef` do not answer "can this run": a lane can be
+   * staffed and an owner assigned while no dispatch is possible at all. A gate snapshot
+   * that omitted this printed "canRunNow: yes / nothing is gating this ticket" for a
+   * ticket the dispatcher had been refusing every five minutes for weeks.
+   */
+  lifecycleManaged: boolean;
+  /** Roles this stage authorizes for THIS ticket. Empty on a managed board = nothing can run. */
+  authorizedRoleKeys: string[];
+  /** The role-attributed run that WOULD go out: the role, its agent, and where it came from. */
+  managedRole: { roleKey: string; agentRef: string; source: 'manifest' | 'lane_agent' } | null;
 }
 
 /** Cap on the execution ids listed per failure group — an id list is a pointer,
@@ -576,6 +590,11 @@ export function toGateSnapshot(e: AutoRunEvaluation): LifecycleGateSnapshot {
     failureBreakerAt: e.failureBreakerAt,
     cooldownRemainingMs: e.cooldownRemainingMs,
     tenantTokens: e.tenantTokens,
+    lifecycleManaged: e.lifecycleManaged,
+    authorizedRoleKeys: e.managedRole?.authorizedRoleKeys ?? [],
+    managedRole: e.managedRole
+      ? { roleKey: e.managedRole.roleKey, agentRef: e.managedRole.agentRef, source: e.managedRole.source }
+      : null,
   };
 }
 
