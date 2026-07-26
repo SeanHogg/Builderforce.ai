@@ -10486,12 +10486,24 @@
     "addedBadge": "新增",
     "gaps": {
       "title": "{count} 项问责缺口",
+      "outstandingTitle": "{count} 个角色尚未签核",
       "kind": {
         "unsigned": "未签核",
         "unstaffed": "资源缺口",
         "no_contribution": "无贡献记录",
         "waived": "已豁免",
         "changes_requested": "要求修改"
+      },
+      "detail": {
+        "unsigned": "所需角色尚未签核。",
+        "pending": "尚未开始。",
+        "assigned": "已分配，工作尚未开始。",
+        "in_progress": "工作进行中，尚未记录签核。",
+        "unstaffed": "没有可胜任该必需角色的资源。",
+        "changes_requested": "已要求修改，尚未解决。",
+        "no_contribution": "批准时未关联任何工作成果——存在走过场的风险。",
+        "waived": "已豁免：{reason}",
+        "waived_no_reason": "已豁免但未记录理由。"
       }
     },
     "table": {

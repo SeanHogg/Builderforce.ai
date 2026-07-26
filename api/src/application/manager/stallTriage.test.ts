@@ -195,3 +195,30 @@ describe('taxonomy completeness', () => {
     expect(isManagerActionable('reconcile_pr')).toBe(true);
   });
 });
+
+describe('diagnoseStall — a sign-off no agent can give', () => {
+  const inReview = (over: Partial<StallInput> = {}) =>
+    diagnoseStall(base({ status: 'in_review', readiness: 'drive_signoff', everRan: true, ...over }));
+
+  it('escalates immediately when no outstanding role is agent-owed', () => {
+    // "Asking the owing roles to review" is not a remedy when there is nobody to ask.
+    // Left as drive_signoff it was re-diagnosed every pass, applied never, and so never
+    // counted an attempt — the register row that sat 24 days at attempts=0.
+    const d = inReview({ signoffDispatchable: false });
+    expect(d).toMatchObject({ cause: 'awaiting_signoff', remedy: 'escalate_human', escalated: true });
+    expect(d.detail).toMatch(/unstaffed or held by a person/);
+  });
+
+  it('still drives the sign-off when an agent owes one', () => {
+    expect(inReview({ signoffDispatchable: true })).toMatchObject({
+      cause: 'awaiting_signoff', remedy: 'drive_signoff', escalated: false,
+    });
+  });
+
+  it('treats an unevaluated gate as unknown, never as "nobody can sign"', () => {
+    // Null must not escalate: an escalation is a claim about staffing, and we have not
+    // looked. Both the omitted and the explicit-null spellings behave the same.
+    expect(inReview().remedy).toBe('drive_signoff');
+    expect(inReview({ signoffDispatchable: null }).remedy).toBe('drive_signoff');
+  });
+});

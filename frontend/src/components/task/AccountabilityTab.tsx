@@ -3,8 +3,9 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { kanbanApi } from '@/lib/builderforceApi';
-import type { AccountabilityReport, ManifestParticipant, JobRole } from '@/lib/kanban';
+import { slotKey, type AccountabilityGap, type AccountabilityReport, type ManifestParticipant, type JobRole } from '@/lib/kanban';
 import { usePermission } from '@/lib/rbac';
+import { taskStatusLabel } from '@/lib/taskStatus';
 import { Select } from '@/components/Select';
 import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
@@ -36,6 +37,57 @@ function StateChip({ state, label }: { state: string; label: string }) {
     <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, background: tone.bg, color: tone.fg, whiteSpace: 'nowrap' }}>
       {label}
     </span>
+  );
+}
+
+/**
+ * The label a gap line leads with — the SAME words the row's State chip uses, because
+ * a banner that says "Unsigned" above a row that says "In progress" reads as two
+ * disagreeing sources. Only genuinely-wrong gaps keep their own kind label.
+ */
+function gapLabelKey(g: AccountabilityGap): string {
+  return g.kind === 'unsigned' && g.state ? `state.${g.state}` : `gaps.kind.${g.kind}`;
+}
+
+/** The sentence under it, derived from the slot's real state rather than one catch-all string. */
+function gapDetailKey(g: AccountabilityGap): string {
+  if (g.kind === 'waived') return g.reason ? 'gaps.detail.waived' : 'gaps.detail.waived_no_reason';
+  if (g.kind !== 'unsigned') return `gaps.detail.${g.kind}`;
+  return g.state === 'pending' || g.state === 'assigned' || g.state === 'in_progress'
+    ? `gaps.detail.${g.state}`
+    : 'gaps.detail.unsigned';
+}
+
+const GAP_TONE = {
+  blocking: { border: 'var(--danger-border, #fecaca)', bg: 'var(--danger-bg, #fef2f2)', fg: 'var(--danger-text, #991b1b)' },
+  advisory: { border: 'var(--warning-border, #fed7aa)', bg: 'var(--warning-bg, #fffbeb)', fg: 'var(--warning-text, #854d0e)' },
+} as const;
+
+/**
+ * One bucket of gaps. Rendered twice — blocking (red) and advisory (amber) — instead of
+ * one red list, so "this role has not signed off yet" stops being reported as an error
+ * next to a table showing that role happily in progress.
+ */
+function GapList({ gaps, tone, title }: { gaps: AccountabilityGap[]; tone: keyof typeof GAP_TONE; title: string }) {
+  const t = useTranslations('accountability');
+  if (gaps.length === 0) return null;
+  const c = GAP_TONE[tone];
+  const tr = (key: string, values?: Record<string, string>) => (t.has(key as never) ? t(key as never, values as never) : key);
+  return (
+    <div style={{ border: `1px solid ${c.border}`, background: c.bg, borderRadius: 10, padding: '10px 12px' }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: c.fg, marginBottom: 6 }}>{title}</div>
+      <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {gaps.map((g, i) => (
+          <li key={`${g.stageKey ?? ''}:${g.roleKey}:${g.kind}:${i}`} style={{ fontSize: 12, color: c.fg }}>
+            <strong>{g.roleName}</strong>
+            {g.responsibility ? ` · ${tr(`responsibility.${g.responsibility}`)}` : ''}
+            {g.stageKey ? ` · ${taskStatusLabel(g.stageKey)}` : ''}
+            {' — '}
+            {tr(gapLabelKey(g))}: {tr(gapDetailKey(g), g.reason ? { reason: g.reason } : undefined)}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -94,7 +146,7 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
 
   const signoffBySlot = useMemo(() => {
     const m = new Map<string, AccountabilityReport['signoffs'][number]>();
-    for (const s of report?.signoffs ?? []) m.set(`${s.laneKey ?? ''}:${s.roleKey}`, s);
+    for (const s of report?.signoffs ?? []) m.set(slotKey(s.laneKey, s.roleKey), s);
     return m;
   }, [report]);
 
@@ -145,6 +197,8 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
   if (!report) return null;
 
   const required = report.participants.filter((p) => p.required);
+  const blocking = report.gaps.filter((g) => g.severity === 'blocking');
+  const advisory = report.gaps.filter((g) => g.severity !== 'blocking');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 4 }}>
@@ -159,19 +213,9 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>{report.percentComplete}%</div>
       </div>
 
-      {/* Gaps */}
-      {report.gaps.length > 0 && (
-        <div style={{ border: '1px solid var(--danger-border, #fecaca)', background: 'var(--danger-bg, #fef2f2)', borderRadius: 10, padding: '10px 12px' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--danger-text, #991b1b)', marginBottom: 6 }}>{t('gaps.title', { count: report.gaps.length })}</div>
-          <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {report.gaps.map((g, i) => (
-              <li key={i} style={{ fontSize: 12, color: 'var(--danger-text, #991b1b)' }}>
-                <strong>{g.roleName}</strong> — {t.has(`gaps.kind.${g.kind}` as never) ? t(`gaps.kind.${g.kind}` as never) : g.kind}: {g.detail}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* Gaps — real problems first, then work simply not done yet. */}
+      <GapList gaps={blocking} tone="blocking" title={t('gaps.title', { count: blocking.length })} />
+      <GapList gaps={advisory} tone="advisory" title={t('gaps.outstandingTitle', { count: advisory.length })} />
 
       {/* Sign-off & Accountability table */}
       <div>
@@ -195,7 +239,7 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
                 <tr style={trStyle}><td style={tdMutedStyle} colSpan={8}>{t('table.empty')}</td></tr>
               )}
               {required.map((p) => {
-                const so = signoffBySlot.get(`${p.stageKey ?? ''}:${p.roleKey}`);
+                const so = signoffBySlot.get(slotKey(p.stageKey, p.roleKey));
                 const open = signing?.roleKey === p.roleKey && signing.laneKey === (p.stageKey ?? null);
                 // A slot already satisfied needs no action; everything else is signable.
                 const outstanding = p.state !== 'completed' && p.state !== 'waived' && p.state !== 'skipped';

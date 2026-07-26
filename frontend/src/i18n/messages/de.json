@@ -10486,12 +10486,24 @@
     "addedBadge": "hinzugefügt",
     "gaps": {
       "title": "{count} Verantwortlichkeitslücke(n)",
+      "outstandingTitle": "{count} Rolle(n) mit ausstehender Freigabe",
       "kind": {
         "unsigned": "Nicht freigegeben",
         "unstaffed": "Ressourcenlücke",
         "no_contribution": "Kein Beitrag",
         "waived": "Erlassen",
         "changes_requested": "Änderungen angefordert"
+      },
+      "detail": {
+        "unsigned": "Die erforderliche Rolle hat noch nicht freigegeben.",
+        "pending": "Noch nicht begonnen.",
+        "assigned": "Zugewiesen; die Arbeit hat noch nicht begonnen.",
+        "in_progress": "Arbeit läuft; Freigabe noch nicht erfasst.",
+        "unstaffed": "Für diese erforderliche Rolle ist keine geeignete Ressource verfügbar.",
+        "changes_requested": "Änderungen wurden angefordert und sind noch nicht erledigt.",
+        "no_contribution": "Ohne verknüpften Beitrag freigegeben — Gefahr einer bloßen Alibi-Freigabe.",
+        "waived": "Erlassen: {reason}",
+        "waived_no_reason": "Ohne erfassten Grund erlassen."
       }
     },
     "table": {

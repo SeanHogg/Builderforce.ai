@@ -138,6 +138,19 @@ export interface StallInput {
    * ticket that is not in review (the readiness questions do not apply to backlog).
    */
   readiness: ReadinessAction | null;
+  /**
+   * Whether ANY outstanding required sign-off is owed by an agent the manager can
+   * dispatch. Null when the question does not apply (no gate evaluated).
+   *
+   * Load-bearing: `drive_signoff` is only a remedy the manager can perform when there
+   * is an agent to ask. On a ticket whose outstanding roles are unstaffed or owed by a
+   * person, "asking the owing roles to review" is a no-op that was re-diagnosed every
+   * five minutes and never counted as an attempt — so it never reached the escalation
+   * ceiling either. Measured: register rows sitting 24+ days at attempts=0. When this
+   * is false the diagnosis hands the ticket to a human immediately, which is the true
+   * answer rather than a remedy that cannot run.
+   */
+  signoffDispatchable?: boolean | null;
   /** PR state, when the ticket has one. */
   pr: {
     /** Our stored row says it is open. */
@@ -261,10 +274,19 @@ export function diagnoseStall(input: StallInput): StallDiagnosis {
           `Stuck ${age}: the pull request build is failing — returning it to implementation to fix.`,
         );
       case 'drive_signoff':
-        return stalled(
-          'awaiting_signoff', 'drive_signoff',
-          `Stuck ${age} waiting on required sign-offs — asking the owing roles to review.`,
-        );
+        // Only a remedy when there is an agent to ask; otherwise a person owes it.
+        return input.signoffDispatchable === false
+          ? {
+            stalled: true,
+            cause: 'awaiting_signoff',
+            remedy: 'escalate_human',
+            detail: `Stuck ${age} waiting on required sign-offs that no agent can give — the owing roles are unstaffed or held by a person, so a human must sign off or staff them.`,
+            escalated: true,
+          }
+          : stalled(
+            'awaiting_signoff', 'drive_signoff',
+            `Stuck ${age} waiting on required sign-offs — asking the owing roles to review.`,
+          );
       case 'wait_for_build':
         return stalled(
           'build_failed', 'escalate_human',

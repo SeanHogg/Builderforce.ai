@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { AccountabilityTab } from './AccountabilityTab';
 import { kanbanApi } from '@/lib/builderforceApi';
-import type { AccountabilityReport, ManifestParticipant } from '@/lib/kanban';
+import type { AccountabilityGap, AccountabilityReport, ManifestParticipant } from '@/lib/kanban';
 
 vi.mock('@/lib/builderforceApi', () => ({
   kanbanApi: {
@@ -34,10 +34,71 @@ function report(over: Partial<AccountabilityReport> = {}): AccountabilityReport 
   };
 }
 
+function gap(over: Partial<AccountabilityGap> = {}): AccountabilityGap {
+  return {
+    kind: 'unsigned', severity: 'advisory', roleKey: 'product-owner', roleName: 'Product Owner',
+    stageKey: 'in_review', responsibility: 'reviewer', state: 'in_progress', reason: null,
+    detail: 'Work is in progress; sign-off not recorded yet.',
+    ...over,
+  };
+}
+
 beforeEach(() => {
   mockAccountability.mockReset();
   mockSignoff.mockReset();
   vi.mocked(kanbanApi.listRoles).mockResolvedValue([]);
+});
+
+describe('AccountabilityTab gap banner', () => {
+  /**
+   * The reported bug: the banner listed every required role as an error while the
+   * table below showed those same roles as `Assigned` / `In progress`. Outstanding
+   * work now sits in its own advisory list, and its label is the row's state.
+   */
+  it('lists outstanding roles under the advisory heading, using their State wording', async () => {
+    mockAccountability.mockResolvedValue(report({ gaps: [gap()] }));
+    render(<AccountabilityTab taskId={169} />);
+
+    expect(await screen.findByText(/accountability\.gaps\.outstandingTitle 1/)).toBeInTheDocument();
+    expect(screen.queryByText(/accountability\.gaps\.title/)).not.toBeInTheDocument();
+    // The gap line says what the row's chip says ("In progress"), not a blanket
+    // "Unsigned" — so the phrase appears twice: once in the banner, once in the chip.
+    expect(screen.getAllByText(/accountability\.state\.in_progress/)).toHaveLength(2);
+  });
+
+  it('keeps genuinely-wrong gaps in the blocking banner', async () => {
+    mockAccountability.mockResolvedValue(report({
+      gaps: [gap({ kind: 'unstaffed', severity: 'blocking', state: 'unstaffed', detail: 'x' })],
+    }));
+    render(<AccountabilityTab taskId={169} />);
+
+    expect(await screen.findByText(/accountability\.gaps\.title 1/)).toBeInTheDocument();
+    expect(screen.queryByText(/accountability\.gaps\.outstandingTitle/)).not.toBeInTheDocument();
+  });
+
+  /** Two identical "Architect" lines were unmatchable to the two Architect rows. */
+  it('qualifies each gap by responsibility and lane so duplicate roles are distinguishable', async () => {
+    mockAccountability.mockResolvedValue(report({
+      gaps: [
+        gap({ roleKey: 'architect', roleName: 'Architect', responsibility: 'owner', stageKey: 'in_progress' }),
+        gap({ roleKey: 'architect', roleName: 'Architect', responsibility: 'reviewer', stageKey: 'in_review' }),
+      ],
+    }));
+    render(<AccountabilityTab taskId={169} />);
+
+    await screen.findByText(/accountability\.gaps\.outstandingTitle 2/);
+    // Lane rendered through the shared status label, not the raw `in_review` key.
+    expect(screen.getByText(/accountability\.responsibility\.owner · In Progress/)).toBeInTheDocument();
+    expect(screen.getByText(/accountability\.responsibility\.reviewer · In Review/)).toBeInTheDocument();
+  });
+
+  it('renders no banner at all when there is nothing to report', async () => {
+    mockAccountability.mockResolvedValue(report());
+    render(<AccountabilityTab taskId={169} />);
+
+    await screen.findByText('Product Owner');
+    expect(screen.queryByText(/accountability\.gaps\./)).not.toBeInTheDocument();
+  });
 });
 
 describe('AccountabilityTab sign-off', () => {

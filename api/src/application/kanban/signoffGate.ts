@@ -61,6 +61,61 @@ export interface SignoffGateResult {
 }
 
 /**
+ * WHO owes each outstanding sign-off, split by whether the manager can do anything
+ * about it. This is the distinction the whole "waiting on sign-off" story turns on,
+ * and nothing used to draw it: `driveOutstandingSignoffs` silently skipped any slot
+ * it could not dispatch, so a ticket blocked on roles that are UNSTAFFED or owed by a
+ * PERSON produced the identical journal line as one whose agent was asked and ignored
+ * it — "waiting on 10 of 10 required sign-offs" forever, with nobody ever told.
+ *
+ * The three buckets need three different responses, which is why they are three:
+ *   • `dispatchable` — an agent owes it; the manager asks it to record a verdict.
+ *   • `humanOwed`    — a person owes it; no dispatch exists that can clear this, so the
+ *                      only honest move is to escalate rather than "keep trying".
+ *   • `unstaffed`    — no resolved assignee at all; the ticket needs staffing first.
+ *                      This is the state a reader means by "nobody is assigned".
+ */
+export interface SignoffOwnership {
+  dispatchable: OutstandingSlot[];
+  humanOwed: OutstandingSlot[];
+  unstaffed: OutstandingSlot[];
+}
+
+/** Split the outstanding slots by who owes them. PURE. */
+export function classifySignoffOwnership(outstanding: readonly OutstandingSlot[]): SignoffOwnership {
+  const out: SignoffOwnership = { dispatchable: [], humanOwed: [], unstaffed: [] };
+  for (const slot of outstanding) {
+    if (!slot.assigneeRef) out.unstaffed.push(slot);
+    else if (slot.assigneeKind === 'agent') out.dispatchable.push(slot);
+    else out.humanOwed.push(slot);
+  }
+  return out;
+}
+
+/**
+ * One clause naming what is holding the gate, for the manager feed and the register.
+ * Empty string when an agent CAN be asked — the caller says what it asked instead.
+ */
+export function describeSignoffOwnership(o: SignoffOwnership): string {
+  if (o.dispatchable.length > 0) return '';
+  const parts: string[] = [];
+  if (o.unstaffed.length) {
+    parts.push(`${o.unstaffed.length} with nobody assigned (${roleList(o.unstaffed)})`);
+  }
+  if (o.humanOwed.length) {
+    parts.push(`${o.humanOwed.length} owed by a person (${ownerList(o.humanOwed)})`);
+  }
+  if (!parts.length) return '';
+  return `No agent can clear this: ${parts.join(', ')}.`;
+}
+
+const roleList = (slots: readonly OutstandingSlot[]): string =>
+  [...new Set(slots.map((s) => s.roleName))].join(', ');
+
+const ownerList = (slots: readonly OutstandingSlot[]): string =>
+  [...new Set(slots.map((s) => `${s.roleName} → ${s.assigneeName ?? s.assigneeRef ?? 'unnamed'}`))].join(', ');
+
+/**
  * Decide the gate from a ticket's manifest. PURE.
  *
  * Only `required` slots count — an optional participant is advisory and must never
