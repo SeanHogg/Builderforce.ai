@@ -946,7 +946,10 @@ export const rehearsals = pgTable('rehearsals', {
   finishedOk:        boolean('finished_ok'),
   summary:           text('summary'),
   errorMessage:      text('error_message'),
-  createdBy:         integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+  /** The user who started the rehearsal. `users.id` is a VARCHAR(36), so this column
+   *  must be too — an `integer` here is not merely a mismatch, it makes the FK
+   *  unimplementable in Postgres and the migration fails outright. */
+  createdBy:         varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   startedAt:         timestamp('started_at'),
   completedAt:       timestamp('completed_at'),
