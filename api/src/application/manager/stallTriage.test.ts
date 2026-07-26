@@ -7,6 +7,8 @@ import {
 
 const DAY = 86_400_000;
 
+const diagnose = (over: Partial<StallInput> = {}) => diagnoseStall(base(over));
+
 /** A ticket that has been idle for three days with nothing running it. */
 const base = (over: Partial<StallInput> = {}): StallInput => ({
   status: 'todo',
@@ -57,6 +59,21 @@ describe('diagnoseStall — dispatch-side stalls', () => {
   it('staffs a ticket no agent can run', () => {
     const d = diagnoseStall(base({ autoRunReason: 'no_agent' }));
     expect(d).toMatchObject({ stalled: true, cause: 'unassigned', remedy: 'assign' });
+  });
+
+  // Its own cause AND its own remedy. `assign` writes a ticket owner, and on a managed
+  // board the owner is the Coordinator — it cannot move the ticket, so the manager would
+  // "fix" it every pass forever without anything changing.
+  it('coordinates a managed stage with no role-capable participant — never assigns an owner', () => {
+    const d = diagnose({ autoRunReason: 'managed_no_role' });
+    expect(d.cause).toBe('managed_no_role');
+    expect(d.remedy).toBe('coordinate');
+    expect(d.detail).toContain('lifecycle-managed');
+  });
+
+  it('keeps it DISTINCT from unassigned, so the census cohort splits by what actually fixes it', () => {
+    expect(diagnose({ autoRunReason: 'no_agent' }).cause).toBe('unassigned');
+    expect(diagnose({ autoRunReason: 'managed_no_role' }).cause).toBe('managed_no_role');
   });
 
   it('escalates a capability gap — the manager cannot conjure a capable agent', () => {

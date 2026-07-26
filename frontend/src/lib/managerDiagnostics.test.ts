@@ -645,3 +645,57 @@ describe('the stall census in the diagnostics report', () => {
       .toContain('census_unavailable');
   });
 });
+
+/**
+ * THE REGRESSION DETECTOR for the platform's largest measured autonomy defect: on a
+ * lifecycle-managed board every run must be role-attributed, and when no authorised role
+ * resolves nothing can dispatch at all. That state used to be invisible — reported as a
+ * generic staffing problem by a census that did not model the dispatcher's own gate.
+ *
+ * On a healthy managed board this finding's count is ZERO.
+ */
+describe('managed dispatch — the finding that must read zero', () => {
+  const withCohorts = (cohorts: StallCensusResponse["cohorts"]): ManagerDiagnosticsInput => ({
+    ...input,
+    census: {
+      projectId: 11, managed: 690, stalled: 675, moving: 15, deepDiagnosed: 12,
+      computedAt: iso(MIN), cohorts, findings: [],
+    },
+  });
+
+  it('raises a CRITICAL naming the cohort, the reason assigning owners will not help, and examples', () => {
+    const f = managerFindings(withCohorts([
+      { cause: 'managed_no_role', count: 300, sampleTaskIds: [1032, 1033], maxIdleMs: 20 * DAY },
+      { cause: 'awaiting_signoff', count: 181, sampleTaskIds: [58], maxIdleMs: 47 * DAY },
+    ]), now);
+
+    const found = f.find((x) => x.code === 'managed_dispatch_refused');
+    expect(found?.severity).toBe('critical');
+    expect(found?.text).toContain('300 tickets');
+    expect(found?.text).toContain('Assigning owners will NOT fix it');
+    expect(found?.text).toContain('1032, 1033');
+  });
+
+  it('is ABSENT on a board with no managed-dispatch cohort — the post-fix steady state', () => {
+    const f = managerFindings(withCohorts([{ cause: 'awaiting_signoff', count: 20, sampleTaskIds: [58], maxIdleMs: 2 * DAY }]), now);
+    expect(f.some((x) => x.code === 'managed_dispatch_refused')).toBe(false);
+  });
+});
+
+/**
+ * The server renders the pass summary as PROSE and this module parses it back. That is a
+ * cross-boundary contract, so it is tested against the EXACT sentence the server writes
+ * (`finalizeManagerRunTask`) rather than a hand-written approximation.
+ */
+describe('the truncated-pass contract with the server', () => {
+  it('reads back the stages a budget-limited pass shed', () => {
+    const serverLine = 'Backlog management pass complete. Scored 3 · ranked 300 · assigned 1 · '
+      + 'PRs 0 · dispatched 2 · audited 40 (5 flagged) · deferred: pr_conduct, audit, triage.';
+    expect(parsePassCounters(serverLine)?.deferred).toEqual(['pr_conduct', 'audit', 'triage']);
+  });
+
+  it('reports NO deferral for a complete pass, so the two remain distinguishable', () => {
+    const serverLine = 'Backlog management pass complete. Scored 3 · ranked 300 · assigned 1 · PRs 0 · dispatched 2 · audited 40.';
+    expect(parsePassCounters(serverLine)?.deferred).toBeUndefined();
+  });
+});
