@@ -281,12 +281,17 @@ export async function buildTicketContext(
       completed: accountability?.completedCount ?? 0,
       required: accountability?.requiredCount ?? 0,
       percent: accountability?.percentComplete ?? 100,
-      gaps: accountability?.gaps.length ?? 0,
+      // `gaps` counts only BLOCKING gaps (unstaffed / changes requested / rubber-stamped
+      // approval / unreasoned waiver). Slots merely not signed off yet are already
+      // reported by `completed`/`required` and by `outstandingRoles` — counting them
+      // here too made every in-flight ticket read as if something had gone wrong.
+      gaps: (accountability?.gaps ?? []).filter((g) => g.severity === 'blocking').length,
       // The roles actually holding the ticket up — the drawer lists them inline so
-      // "who am I waiting on" needs no trip to the Sign-off tab.
-      outstandingRoles: (accountability?.gaps ?? [])
+      // "who am I waiting on" needs no trip to the Sign-off tab. Deduped: the same role
+      // can hold two slots (owner + reviewer) and listing it twice reads as a bug.
+      outstandingRoles: [...new Set((accountability?.gaps ?? [])
         .filter((g) => g.kind === 'unsigned' || g.kind === 'unstaffed' || g.kind === 'changes_requested')
-        .map((g) => g.roleName),
+        .map((g) => g.roleName))],
     },
     epic: parent
       ? { id: parent.id, key: parent.key, title: parent.title, status: parent.status, ...parentRollup }

@@ -10486,12 +10486,24 @@
     "addedBadge": "añadido",
     "gaps": {
       "title": "{count} brecha(s) de responsabilidad",
+      "outstandingTitle": "{count} rol(es) pendiente(s) de aprobar",
       "kind": {
         "unsigned": "Sin aprobar",
         "unstaffed": "Falta de recurso",
         "no_contribution": "Sin contribución",
         "waived": "Exento",
         "changes_requested": "Cambios solicitados"
+      },
+      "detail": {
+        "unsigned": "El rol requerido aún no ha aprobado.",
+        "pending": "Aún no ha comenzado.",
+        "assigned": "Asignado; el trabajo aún no ha comenzado.",
+        "in_progress": "Trabajo en curso; la aprobación aún no se ha registrado.",
+        "unstaffed": "No hay ningún recurso capacitado disponible para este rol requerido.",
+        "changes_requested": "Se solicitaron cambios y aún no se han resuelto.",
+        "no_contribution": "Aprobado sin ninguna contribución vinculada: riesgo de aprobación de trámite.",
+        "waived": "Exento: {reason}",
+        "waived_no_reason": "Exento sin un motivo registrado."
       }
     },
     "table": {

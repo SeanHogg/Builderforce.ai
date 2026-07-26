@@ -10486,12 +10486,24 @@
     "addedBadge": "ajouté",
     "gaps": {
       "title": "{count} lacune(s) de responsabilité",
+      "outstandingTitle": "{count} rôle(s) restant à valider",
       "kind": {
         "unsigned": "Non validé",
         "unstaffed": "Manque de ressource",
         "no_contribution": "Aucune contribution",
         "waived": "Dispensé",
         "changes_requested": "Modifications demandées"
+      },
+      "detail": {
+        "unsigned": "Le rôle requis n'a pas encore validé.",
+        "pending": "Pas encore commencé.",
+        "assigned": "Attribué ; le travail n'a pas encore commencé.",
+        "in_progress": "Travail en cours ; validation pas encore enregistrée.",
+        "unstaffed": "Aucune ressource compétente n'est disponible pour ce rôle requis.",
+        "changes_requested": "Des modifications ont été demandées et ne sont pas encore résolues.",
+        "no_contribution": "Approuvé sans contribution liée — risque d'approbation de complaisance.",
+        "waived": "Dispensé : {reason}",
+        "waived_no_reason": "Dispensé sans motif enregistré."
       }
     },
     "table": {

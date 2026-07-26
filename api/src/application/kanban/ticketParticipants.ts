@@ -29,6 +29,7 @@ import { resolveRoleCapableAgents } from './roleCapability';
 import { projectRoleAssignments } from '../../infrastructure/database/schema';
 import { requirementApplies, type Responsibility } from './types';
 import { ADVANCEABLE_PARTICIPANT_STATES, blocksCompletion, isParticipantSatisfied } from './participantStates';
+import { computeAccountabilityGaps, slotKey, type AccountabilityGapSeverity } from './accountabilityGaps';
 import type { SignoffContribution } from '../audit/ticketAuditService';
 import { TaskStatus } from '../../domain/shared/types';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
@@ -84,10 +85,36 @@ export interface AccountabilitySignoff {
 }
 
 export type AccountabilityGapKind = 'unsigned' | 'unstaffed' | 'no_contribution' | 'waived' | 'changes_requested';
+
+/**
+ * Severity of a gap — the reason the report can no longer paint every line red.
+ *
+ * `blocking` is something actually WRONG (nobody can do the role, changes were
+ * requested and left unresolved, an approval with no evidence behind it).
+ * `advisory` is a slot that simply has not got there yet, or a recorded, reasoned
+ * waiver. Rendering the second bucket as an error contradicted the table right
+ * below it, which showed those same slots as "Assigned" / "In progress".
+ *
+ * The classification itself lives in `accountabilityGaps` (pure + unit-tested).
+ */
+export type { AccountabilityGapSeverity };
+
 export interface AccountabilityGap {
   kind: AccountabilityGapKind;
+  severity: AccountabilityGapSeverity;
   roleKey: string;
   roleName: string;
+  /**
+   * SLOT identity, not just role identity. A ticket routinely carries the same role
+   * twice (Architect as owner AND as reviewer), so a gap keyed on `roleKey` alone
+   * rendered as two identical lines that matched no particular table row.
+   */
+  stageKey: string | null;
+  responsibility: Responsibility | null;
+  /** The slot's participant state, so the gap line can say the same thing its row's State chip does. */
+  state: ParticipantState | null;
+  /** Free text for gaps that carry one (a waiver's reason). Localized copy is derived from `kind`/`state`. */
+  reason: string | null;
   detail: string;
 }
 
@@ -442,7 +469,7 @@ export class TicketParticipantsService {
     // FALLBACK only; an exact lane match always wins.
     const latestByRole = new Map<string, { id: string; verdict: string }>();
     for (const s of signoffs) {
-      latestBySlot.set(`${s.laneKey ?? ''}:${s.roleKey}`, { id: s.id, verdict: s.verdict });
+      latestBySlot.set(slotKey(s.laneKey, s.roleKey), { id: s.id, verdict: s.verdict });
       if (s.laneKey == null) latestByRole.set(s.roleKey, { id: s.id, verdict: s.verdict });
     }
 
@@ -455,7 +482,7 @@ export class TicketParticipantsService {
     }
 
     for (const r of rows) {
-      const so = latestBySlot.get(`${r.stageKey ?? ''}:${r.roleKey}`) ?? latestByRole.get(r.roleKey);
+      const so = latestBySlot.get(slotKey(r.stageKey, r.roleKey)) ?? latestByRole.get(r.roleKey);
       // PRESERVE `in_progress`. It is written by run ATTRIBUTION
       // (`recordRunAttribution`, i.e. "a run for this role/stage finalized"), which is
       // evidence this function cannot re-derive from the ledger or the child task — so
@@ -539,7 +566,10 @@ export class TicketParticipantsService {
   async getAccountability(env: Env, tenantId: number, taskId: number): Promise<AccountabilityReport> {
     const participants = await this.listParticipants(env, tenantId, taskId);
     const version = await getCacheVersion(env, versionKey(taskId));
-    return getOrSetCached(env, `participants:accountability:${taskId}:v:${version}`, async () => {
+    // `s2` = report SHAPE version. Gaps gained `severity`/slot identity, and a cached
+    // pre-`severity` payload would be read as "nothing blocking" by the UI's filter —
+    // so the key changes with the shape rather than relying on entries expiring.
+    return getOrSetCached(env, `participants:accountability:s2:${taskId}:v:${version}`, async () => {
       const soRows = await this.db
         .select()
         .from(ticketRoleSignoffs)
@@ -559,23 +589,15 @@ export class TicketParticipantsService {
         createdAt: s.createdAt.toISOString(),
       }));
       const latestBySlot = new Map<string, AccountabilitySignoff>();
-      for (const s of signoffs) latestBySlot.set(`${s.laneKey ?? ''}:${s.roleKey}`, s);
+      for (const s of signoffs) latestBySlot.set(slotKey(s.laneKey, s.roleKey), s);
 
       const required = participants.filter((p) => p.required);
       const completedCount = required.filter((p) => isParticipantSatisfied(p.state)).length;
       const percentComplete = required.length === 0 ? 100 : Math.round((completedCount / required.length) * 100);
 
-      const gaps: AccountabilityGap[] = [];
-      for (const p of required) {
-        if (p.state === 'unstaffed') gaps.push({ kind: 'unstaffed', roleKey: p.roleKey, roleName: p.roleName, detail: 'No capable resource is available for this required role.' });
-        else if (p.state === 'changes_requested') gaps.push({ kind: 'changes_requested', roleKey: p.roleKey, roleName: p.roleName, detail: 'Changes were requested and not yet resolved.' });
-        else if (!isParticipantSatisfied(p.state)) gaps.push({ kind: 'unsigned', roleKey: p.roleKey, roleName: p.roleName, detail: 'Required role has not signed off.' });
-      }
-      for (const s of latestBySlot.values()) {
-        const hasContribution = s.contribution && Object.values(s.contribution).some((v) => v != null && (!Array.isArray(v) || v.length > 0));
-        if ((s.verdict === 'approved') && !hasContribution) gaps.push({ kind: 'no_contribution', roleKey: s.roleKey, roleName: s.roleName, detail: 'Approved with no linked contribution/interaction — a rubber-stamp risk.' });
-        if (s.verdict === 'waived') gaps.push({ kind: 'waived', roleKey: s.roleKey, roleName: s.roleName, detail: s.waiveReason ? `Waived: ${s.waiveReason}` : 'Waived without a recorded reason.' });
-      }
+      // Every gap names the SLOT it came from (lane + responsibility + state) so the
+      // banner and the table below it are two views of one list, not two lists.
+      const gaps = computeAccountabilityGaps(participants, [...latestBySlot.values()]);
 
       return { taskId, requiredCount: required.length, completedCount, percentComplete, participants, signoffs, gaps };
     });

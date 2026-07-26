@@ -41,6 +41,7 @@ import {
   type BrainTimelineLabels,
 } from '@seanhogg/builderforce-brain-ui';
 import { createChatTicketsAdapter } from './chatTicketsAdapter';
+import { adoptChatProject } from './adoptChatProject';
 import { EvermindStatusBadge } from './EvermindStatusBadge';
 import { PlanBadge, fetchPlanSnapshot, invalidatePlanSnapshot, openUpgrade } from './accountPlan';
 import {
@@ -802,17 +803,29 @@ function Chat({ init }: { init: InitData }) {
   // a resolved project and the open chat is project-less, adopt it onto the chat so its
   // turns actually train the project's Evermind and the panel's claim becomes true.
   // One-shot per chat (guarded), best-effort — a failure just leaves it unscoped.
+  //
+  // The chat's project is read with `getChat`, NOT looked up in `chats`. That list is
+  // fetched with `?projectId=<active>`, and the server filters it as
+  // `brain_chats.project_id = <active>` — which EXCLUDES a project-less chat. So a
+  // project-LESS chat is never in the list, `chats.find` came back undefined, and the
+  // effect bailed on `!chat` — meaning this self-heal could never fire for exactly the
+  // chats it exists to heal. (Reported on chat #85: the IDE had BuilderForce.AI
+  // selected and Evermind showed "connected", while every turn reported
+  // "isn't attached to a project".) The Sessions tree filters client-side, so a chat
+  // absent from this list is still openable — the two must not be conflated.
   const adoptedProjectRef = useRef<Set<number>>(new Set());
   useEffect(() => {
     const pid = init.project?.id;
     if (chatId == null || pid == null || adoptedProjectRef.current.has(chatId)) return;
-    const chat = chats.find((c) => c.id === chatId);
-    if (!chat || chat.projectId != null) return;
     adoptedProjectRef.current.add(chatId);
-    void persistence.updateChat(chatId, { projectId: pid })
-      .then(() => reloadChats())
-      .catch(() => { adoptedProjectRef.current.delete(chatId); });
-  }, [chatId, chats, init.project?.id, persistence, reloadChats]);
+    // The decision lives in `adoptChatProject` (unit-tested); this effect only supplies
+    // the ids and reacts to the outcome.
+    void adoptChatProject(persistence, chatId, pid).then((outcome) => {
+      if (outcome === 'adopted') reloadChats();
+      // Let a transient read/write failure be retried the next time it is opened.
+      else if (outcome === 'failed') adoptedProjectRef.current.delete(chatId);
+    });
+  }, [chatId, init.project?.id, persistence, reloadChats]);
 
   const evermind = useMemo(() => {
     if (evermindProjectId == null) return undefined;

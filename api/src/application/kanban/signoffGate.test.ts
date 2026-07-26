@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { decideSignoffGate } from './signoffGate';
+import {
+  classifySignoffOwnership, decideSignoffGate, describeSignoffOwnership, type OutstandingSlot,
+} from './signoffGate';
 import {
   SATISFIED_PARTICIPANT_STATES, OPEN_PARTICIPANT_STATES,
   isParticipantSatisfied, isParticipantOpen, blocksCompletion,
@@ -157,5 +159,44 @@ describe('participantStates — the shared classification', () => {
   it('tolerates an unknown state string without claiming it is satisfied', () => {
     expect(isParticipantSatisfied('some_future_state')).toBe(false);
     expect(blocksCompletion({ required: true, state: 'some_future_state' })).toBe(true);
+  });
+});
+
+describe('classifySignoffOwnership — who actually owes the sign-off', () => {
+  const out = (over: Partial<OutstandingSlot> = {}): OutstandingSlot => ({
+    roleKey: 'architect', roleName: 'Architect', stageKey: 'in_review', state: 'assigned',
+    assigneeName: 'Arch Agent', assigneeRef: 'agent-9', assigneeKind: 'agent', ...over,
+  });
+
+  it('splits agent-owed, human-owed and nobody-owed slots', () => {
+    const o = classifySignoffOwnership([
+      out(),
+      out({ roleKey: 'product-owner', roleName: 'Product Owner', assigneeKind: 'human', assigneeRef: 'u:sean', assigneeName: 'Sean' }),
+      out({ roleKey: 'qa-tester', roleName: 'QA / Tester', assigneeKind: null, assigneeRef: null, assigneeName: null }),
+    ]);
+    expect(o.dispatchable.map((s) => s.roleKey)).toEqual(['architect']);
+    expect(o.humanOwed.map((s) => s.roleKey)).toEqual(['product-owner']);
+    expect(o.unstaffed.map((s) => s.roleKey)).toEqual(['qa-tester']);
+  });
+
+  it('treats a slot with NO assignee ref as unstaffed even when its state says "assigned"', () => {
+    // The exact shape behind "the manager says awaiting sign-off but nobody is on the
+    // ticket": a stale state column must never imply someone is working the slot.
+    const o = classifySignoffOwnership([out({ state: 'assigned', assigneeRef: null, assigneeKind: 'agent' })]);
+    expect(o.dispatchable).toHaveLength(0);
+    expect(o.unstaffed).toHaveLength(1);
+  });
+
+  it('says nothing when an agent CAN be asked — the caller reports what it asked', () => {
+    expect(describeSignoffOwnership(classifySignoffOwnership([out()]))).toBe('');
+  });
+
+  it('names the blocker, the roles and the people when no agent can clear it', () => {
+    const detail = describeSignoffOwnership(classifySignoffOwnership([
+      out({ assigneeKind: null, assigneeRef: null, assigneeName: null }),
+      out({ roleKey: 'product-owner', roleName: 'Product Owner', assigneeKind: 'human', assigneeRef: 'u:sean', assigneeName: 'Sean' }),
+    ]));
+    expect(detail).toContain('1 with nobody assigned (Architect)');
+    expect(detail).toContain('1 owed by a person (Product Owner → Sean)');
   });
 });

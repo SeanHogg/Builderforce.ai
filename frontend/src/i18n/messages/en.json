@@ -10486,12 +10486,24 @@
     "addedBadge": "added",
     "gaps": {
       "title": "{count} accountability gap(s)",
+      "outstandingTitle": "{count} role(s) still to sign off",
       "kind": {
         "unsigned": "Unsigned",
         "unstaffed": "Resource gap",
         "no_contribution": "No contribution",
         "waived": "Waived",
         "changes_requested": "Changes requested"
+      },
+      "detail": {
+        "unsigned": "Required role has not signed off.",
+        "pending": "Not started yet.",
+        "assigned": "Assigned; work has not started yet.",
+        "in_progress": "Work in progress; sign-off not recorded yet.",
+        "unstaffed": "No capable resource is available for this required role.",
+        "changes_requested": "Changes were requested and not yet resolved.",
+        "no_contribution": "Approved with no linked contribution — a rubber-stamp risk.",
+        "waived": "Waived: {reason}",
+        "waived_no_reason": "Waived without a recorded reason."
       }
     },
     "table": {

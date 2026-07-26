@@ -39,7 +39,7 @@ import { TaskStatus } from '../../domain/shared/types';
 import { evaluateTaskAutoRun } from '../swimlane/evaluateAutoRun';
 import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
 import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
-import { resolveSignoffGate } from '../kanban/signoffGate';
+import { classifySignoffOwnership, resolveSignoffGate } from '../kanban/signoffGate';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness } from './evaluateTicketReadiness';
 import { coordinateTicket } from './coordinateTicket';
@@ -74,6 +74,68 @@ export const MAX_TRIAGE_DISPATCHES_PER_RUN = 3;
 
 /** Remedies whose whole effect is to START a run — the ones the dispatch cap governs. */
 const DISPATCHING_REMEDIES = new Set(['dispatch', 'reset_breaker', 'drive_signoff', 'resolve_conflict']);
+
+/**
+ * Remedies that start work the AUTONOMOUS EXECUTOR would start anyway, and which the
+ * manager therefore must not race on the cron path.
+ *
+ * This is a strictly smaller set than {@link DISPATCHING_REMEDIES}, and conflating the
+ * two was the bug. `reset_breaker`, `drive_signoff` and `resolve_conflict` all start a
+ * run, but each is a MANAGER-OWNED recovery the executor will never perform: the
+ * executor does not clear a tripped breaker, does not ask a reviewer for a verdict, and
+ * does not hand a conflicting branch back with a resolution brief. Suppressing them
+ * because "the executor owns dispatch" meant that on the cron path — i.e. on every
+ * scheduled pass — those three remedies silently returned `nothing`. And because an
+ * un-run remedy correctly does not count as an attempt, the affected tickets never
+ * advanced toward the escalation ceiling either. Measured on project 11: 8 of 13
+ * register rows sat at attempts=0 for 24+ days, re-diagnosed every five minutes,
+ * remedied never.
+ */
+const EXECUTOR_OWNED_REMEDIES = new Set(['dispatch']);
+
+/** What this pass may do about one diagnosed remedy. PURE — see {@link decideRemedyExecution}. */
+export interface RemedyExecution {
+  /** Run the remedy now. */
+  act: boolean;
+  /** Counted as "waiting for the next pass" rather than acted on or ignored. */
+  deferred: boolean;
+  /** The remedy may start a manager-owned recovery run (billable-cap permitting). */
+  mayStartRun: boolean;
+  /** The remedy may additionally start ordinary work the executor also dispatches. */
+  mayRaceExecutor: boolean;
+}
+
+/**
+ * Decide whether this pass performs a remedy, defers it, or leaves it alone. PURE.
+ *
+ * TWO INDEPENDENT CEILINGS, applied to different things:
+ *   • the billable-run cap ({@link MAX_TRIAGE_DISPATCHES_PER_RUN}) governs every remedy
+ *     that starts a run, manager-owned or not;
+ *   • dispatch OWNERSHIP governs only {@link EXECUTOR_OWNED_REMEDIES} — plain work the
+ *     autonomous executor is the single dispatcher for.
+ *
+ * A remedy blocked by either is DEFERRED (counted, surfaced) rather than attempted and
+ * silently no-op'd, so the pass summary can never claim it looked at a ticket it did
+ * nothing about.
+ */
+export function decideRemedyExecution(input: {
+  remedy: string;
+  actionable: boolean;
+  alreadyConducted: boolean;
+  ownsDispatch: boolean;
+  budgetLeft: boolean;
+}): RemedyExecution {
+  const idle: RemedyExecution = { act: false, deferred: false, mayStartRun: false, mayRaceExecutor: false };
+  if (!input.actionable || input.alreadyConducted) return idle;
+  if (!DISPATCHING_REMEDIES.has(input.remedy)) {
+    // Costs no run — `coordinate`, `assign`, `return_to_implementation`, `reconcile_pr`.
+    // These still take the optional "and start it" step only when nothing owns dispatch.
+    return { act: true, deferred: false, mayStartRun: false, mayRaceExecutor: input.ownsDispatch && input.budgetLeft };
+  }
+  if (!input.budgetLeft) return { ...idle, deferred: true };
+  if (EXECUTOR_OWNED_REMEDIES.has(input.remedy) && !input.ownsDispatch) return { ...idle, deferred: true };
+  return { act: true, deferred: false, mayStartRun: true, mayRaceExecutor: input.ownsDispatch };
+}
 
 /** The ticket shape triage needs — structurally satisfied by the manager's own rows. */
 export interface TriageTask {
@@ -299,6 +361,9 @@ export async function runStallTriage(
         autoRunReason: autoRun.reason,
         hasLiveRun: signals.liveTaskIds.has(task.id) || autoRun.liveExecution != null,
         readiness,
+        // Null (not false) when no gate was evaluated — "unknown" must never read as
+        // "no agent can sign off", which escalates.
+        signoffDispatchable: signoff ? classifySignoffOwnership(signoff.outstanding).dispatchable.length > 0 : null,
         pr: prRow ? { open: prRow.status === 'open', providerClosed, conflicted } : null,
         mergeWithheld: !policy.allowAutoMerge && prRow?.status === 'open' && readiness === 'complete',
       });
@@ -319,31 +384,29 @@ export async function runStallTriage(
       const alreadyConducted = ctx.conductedTaskIds.has(task.id);
       let applied = false;
       let outcomeNote = '';
-      let deferred = false;
 
-      if (isManagerActionable(verdict.remedy) && !alreadyConducted) {
-        // Two independent ceilings guard a remedy that STARTS work: this pass's own
-        // billable-run cap, and (on the cron path) the rule that the autonomous
-        // executor is the single dispatcher. Diagnosis and the register are never
-        // gated by either — a ticket the manager cannot act on this pass is still
-        // recorded as stuck, which is the whole point.
-        const startsRun = DISPATCHING_REMEDIES.has(verdict.remedy);
-        const budgetLeft = out.dispatched < MAX_TRIAGE_DISPATCHES_PER_RUN;
-        if (startsRun && (!budgetLeft || (!ctx.ownsDispatch && verdict.remedy === 'dispatch'))) {
-          deferred = true;
-        } else {
-          const acted = await applyRemedy(env, db, runtimeService, {
-            tenantId, projectId, task, policy, remedy: verdict.remedy, signoff, prRow,
-            // An `assign` that cannot also start the ticket still assigns: staffing is
-            // exactly what unblocks the executor's next tick.
-            mayStartRun: ctx.ownsDispatch && budgetLeft,
-          });
-          applied = acted.applied;
-          outcomeNote = acted.note;
-          if (acted.startedRun) out.dispatched += 1;
-        }
+      // Diagnosis and the register are never gated — a ticket the manager cannot act
+      // on this pass is still recorded as stuck, which is the whole point.
+      const plan = decideRemedyExecution({
+        remedy: verdict.remedy,
+        actionable: isManagerActionable(verdict.remedy),
+        alreadyConducted,
+        ownsDispatch: ctx.ownsDispatch,
+        budgetLeft: out.dispatched < MAX_TRIAGE_DISPATCHES_PER_RUN,
+      });
+      if (plan.act) {
+        const acted = await applyRemedy(env, db, runtimeService, {
+          tenantId, projectId, task, policy, remedy: verdict.remedy, signoff, prRow,
+          mayStartRun: plan.mayStartRun,
+          // An `assign` that cannot also start the ticket still assigns: staffing is
+          // exactly what unblocks the executor's next tick.
+          mayRaceExecutor: plan.mayRaceExecutor,
+        });
+        applied = acted.applied;
+        outcomeNote = acted.note;
+        if (acted.startedRun) out.dispatched += 1;
       }
-      if (deferred) out.deferred += 1;
+      if (plan.deferred) out.deferred += 1;
 
       await recordStall(env, db, {
         tenantId, projectId, taskId: task.id, status: task.status, idleMs,
@@ -402,8 +465,10 @@ async function applyRemedy(
     remedy: string;
     signoff: Awaited<ReturnType<typeof resolveSignoffGate>> | null;
     prRow: { id: string; number: number | null } | null;
-    /** False when this pass has no billable-run budget left, or does not own dispatch. */
+    /** May start a MANAGER-OWNED recovery run (billable budget remains). */
     mayStartRun: boolean;
+    /** May additionally start ordinary work the autonomous executor also dispatches. */
+    mayRaceExecutor: boolean;
   },
 ): Promise<{ applied: boolean; startedRun: boolean; note: string }> {
   const { tenantId, projectId, task, policy } = args;
@@ -420,7 +485,7 @@ async function applyRemedy(
       // Staffing alone IS a fix: an owned ticket is what the autonomous executor
       // needs to pick it up on its next tick. Starting it here as well is an
       // optimisation, taken only when this pass owns dispatch and has budget.
-      const started = args.mayStartRun
+      const started = args.mayRaceExecutor
         ? await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
           tenantId, projectId, taskId: task.id, status: task.status, submittedBy: by,
         }).catch(() => false)
@@ -486,7 +551,7 @@ async function applyRemedy(
       await db.update(tasks)
         .set({ status: TaskStatus.IN_PROGRESS, completedAt: null, updatedAt: new Date() })
         .where(and(eq(tasks.id, task.id), eq(tasks.status, task.status)));
-      const restarted = args.mayStartRun
+      const restarted = args.mayRaceExecutor
         ? await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
           tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS, submittedBy: by,
         }).catch(() => false)
@@ -499,12 +564,12 @@ async function applyRemedy(
 
     case 'drive_signoff': {
       if (!args.signoff || !args.mayStartRun) return nothing;
-      const asked = await driveOutstandingSignoffs(env, db, runtimeService, {
+      const drive = await driveOutstandingSignoffs(env, db, runtimeService, {
         tenantId, projectId, task, signoff: args.signoff, managerRef: policy.managerRef,
       });
       return {
-        applied: asked.length > 0, startedRun: asked.length > 0,
-        note: asked.length ? ` Asked ${asked.join(', ')} to sign off.` : '',
+        applied: drive.asked.length > 0, startedRun: drive.asked.length > 0,
+        note: drive.asked.length ? ` Asked ${drive.asked.join(', ')} to sign off.` : ` ${drive.blockedDetail}`.trimEnd(),
       };
     }
 

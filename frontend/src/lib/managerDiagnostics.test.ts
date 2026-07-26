@@ -3,8 +3,11 @@ import {
   buildManagerDiagnosticsReport,
   classifyPass,
   managerFindings,
+  parseActionDetail,
   parsePassCounters,
   repeatedActions,
+  summarizePassLimits,
+  summarizeSignoffs,
   STALL_WINDOW_HEAD,
   STALL_WINDOW_TAIL,
   type ManagerDiagnosticsInput,
@@ -371,5 +374,187 @@ describe('repeatedActions', () => {
   it('labels first/last by TIMESTAMP, not by arrival order in a newest-first feed', () => {
     const [top] = repeatedActions(actions);
     expect(Date.parse(top.firstAt)).toBeLessThan(Date.parse(top.lastAt));
+  });
+});
+
+/**
+ * The block that answers the question this report previously could not: the manager
+ * says a ticket is awaiting sign-off, the ticket shows nobody assigned, and BOTH are
+ * true — a required participation slot is a ROLE, not the ticket's owner. Unless the
+ * report says who owes each outstanding slot, the reader is left with a contradiction
+ * and no way to tell "an agent was asked and has not answered" from "nobody has ever
+ * been on this ticket", which need opposite responses.
+ */
+const heldAction = (over: Partial<ManagerAction> = {}): ManagerAction => ({
+  id: 'h1', taskId: 280, ticketKey: '1-UNTITLED-280', ticketTitle: 'Link to each item',
+  actionType: 'flag',
+  summary: 'Held "Link to each item" in review — Waiting on 3 of 3 required sign-offs.',
+  detail: JSON.stringify({
+    action: 'drive_signoff', signoffGate: 'outstanding_signoffs',
+    requiredCount: 3, satisfiedCount: 0,
+    unstaffedCount: 1, humanOwedCount: 1, dispatchableCount: 1,
+    dispatchedTo: [],
+    outstanding: [
+      { roleKey: 'architect', roleName: 'Architect', state: 'assigned', assigneeKind: null, assigneeName: null },
+      { roleKey: 'product-owner', roleName: 'Product Owner', state: 'assigned', assigneeKind: 'human', assigneeName: 'Sean' },
+      { roleKey: 'developer', roleName: 'Developer', state: 'in_progress', assigneeKind: 'agent', assigneeName: 'Dev Agent' },
+    ],
+  }),
+  createdAt: iso(5 * MIN),
+  ...over,
+});
+
+describe('summarizeSignoffs', () => {
+  it('splits the outstanding slots by who owes them', () => {
+    const r = summarizeSignoffs([heldAction(), heldAction({ id: 'h2', taskId: 281 })]);
+    expect(r).toMatchObject({
+      heldTickets: 2, askedTickets: 0, requiredTotal: 6, satisfiedTotal: 0,
+      unstaffed: 2, humanOwed: 2, dispatchable: 2, hasOwnership: true,
+    });
+    expect(r.unassignedRoles).toEqual([{ role: 'Architect', count: 2 }]);
+    expect(r.waitingOnPeople).toEqual([{ who: 'Product Owner → Sean', count: 2 }]);
+  });
+
+  it('counts a ticket as ASKED only when a role was actually dispatched', () => {
+    const asked = heldAction({
+      detail: JSON.stringify({
+        signoffGate: 'outstanding_signoffs', requiredCount: 3, satisfiedCount: 0,
+        dispatchedTo: ['Architect'],
+      }),
+    });
+    expect(summarizeSignoffs([asked]).askedTickets).toBe(1);
+  });
+
+  it('reports ownership as UNKNOWN for rows written before the manager journalled it', () => {
+    // The zeros must not be readable as "nothing is unstaffed" — that false-clean
+    // reading is exactly what this report exists to prevent.
+    const old = heldAction({ detail: '{"signoffGate":"outstanding_signoffs","requiredCount":10,"satisfiedCount":0}' });
+    const r = summarizeSignoffs([old]);
+    expect(r.hasOwnership).toBe(false);
+    expect(r.heldTickets).toBe(1);
+    expect(r.unstaffed).toBe(0);
+  });
+
+  it('survives malformed or absent detail without throwing', () => {
+    expect(summarizeSignoffs([heldAction({ detail: 'not json' }), heldAction({ detail: null })]).heldTickets).toBe(0);
+    expect(parseActionDetail('[1,2]')).toBeNull();
+  });
+});
+
+describe('summarizePassLimits', () => {
+  const triage = (over: Record<string, unknown> = {}): ManagerAction => ({
+    id: 't1', taskId: null, ticketKey: null, ticketTitle: null, actionType: 'triage',
+    summary: 'Unstuck 0 of 12 stalled tickets this pass',
+    detail: JSON.stringify({ stalled: 12, unstuck: 0, deferred: 5, dispatchCap: 3, ownsDispatch: false, ...over }),
+    createdAt: iso(MIN),
+  });
+
+  it('reads the caps and dispatch ownership the passes journalled', () => {
+    const coord: ManagerAction = {
+      id: 'c1', taskId: null, ticketKey: null, ticketTitle: null, actionType: 'coordinate',
+      summary: 'Coordinated 10 flagged tickets this pass',
+      detail: '{"remediated":10,"deferred":5,"cap":10}',
+      createdAt: iso(2 * MIN),
+    };
+    expect(summarizePassLimits([triage(), coord])).toEqual({
+      triageDispatchCap: 3, remediationCap: 10, ownsDispatch: false,
+      stalledSeen: 12, unstuck: 0, deferred: 5, remediationDeferred: 5,
+    });
+  });
+
+  it('keeps the MOST RECENT answer from a newest-first feed', () => {
+    expect(summarizePassLimits([triage({ dispatchCap: 3 }), triage({ dispatchCap: 99 })]).triageDispatchCap).toBe(3);
+  });
+
+  it('leaves an unreported limit null rather than inventing a default', () => {
+    expect(summarizePassLimits([])).toMatchObject({ triageDispatchCap: null, ownsDispatch: null });
+  });
+});
+
+describe('managerFindings — sign-off ownership and untried remedies', () => {
+  const held = (extra: ManagerAction[]) => ({ ...input, overview: { ...overview, actions: extra } });
+
+  it('names unstaffed sign-off roles as the reason a ticket shows no assignee', () => {
+    const f = managerFindings(held([heldAction(), heldAction({ id: 'h2' })]), now)
+      .find((x) => x.code === 'signoff_roles_unstaffed');
+    expect(f?.severity).toBe('critical');
+    expect(f?.text).toContain('Architect ×2');
+    expect(f?.text).toContain('assignee column is empty');
+  });
+
+  it('names the person a sign-off is waiting on', () => {
+    const f = managerFindings(held([heldAction()]), now).find((x) => x.code === 'signoff_owed_by_human');
+    expect(f?.text).toContain('Product Owner → Sean');
+  });
+
+  it('says nothing about sign-offs when the policy does not require them', () => {
+    const found = codes({
+      overview: {
+        ...overview,
+        policy: { ...policy, requireSignoffToComplete: false },
+        actions: [heldAction(), heldAction({ id: 'h2' })],
+      },
+    });
+    expect(found.filter((c) => c.startsWith('signoff_'))).toEqual([]);
+  });
+
+  it('flags a gate that holds tickets and asks nobody', () => {
+    const found = codes({ overview: { ...overview, actions: [heldAction(), heldAction({ id: 'h2' })] } });
+    expect(found).toContain('signoff_never_asked');
+    expect(found).toContain('signoff_never_satisfied');
+  });
+
+  it('flags stuck rows whose remedy has never once been attempted', () => {
+    const f = managerFindings({
+      ...input,
+      stalls: {
+        ...stalls,
+        rows: [
+          stallRow({ taskId: 1, attempts: 0, remedy: 'reset_breaker', idleMs: 25 * DAY }),
+          stallRow({ taskId: 2, attempts: 0, remedy: 'drive_signoff', idleMs: 24 * DAY }),
+          // Attempted once — the manager IS working this one.
+          stallRow({ taskId: 3, attempts: 1, remedy: 'dispatch', idleMs: 24 * DAY }),
+          // Recent: still plausibly queued behind a per-pass cap.
+          stallRow({ taskId: 4, attempts: 0, remedy: 'dispatch', idleMs: 2 * HOUR }),
+          // Not a run-starting remedy, so attempts=0 means something else.
+          stallRow({ taskId: 5, attempts: 0, remedy: 'reconcile_pr', idleMs: 25 * DAY }),
+        ],
+      },
+    }, now).find((x) => x.code === 'remedy_never_attempted');
+    expect(f?.severity).toBe('critical');
+    expect(f?.text).toContain('2 stuck tickets');
+    expect(f?.text).toContain('reset_breaker ×1');
+    expect(f?.text).toContain('drive_signoff ×1');
+  });
+});
+
+describe('buildManagerDiagnosticsReport — the new sections', () => {
+  const full = buildManagerDiagnosticsReport(
+    { ...input, overview: { ...overview, actions: [heldAction(), ...actions] } },
+    ctx,
+  );
+
+  it('reports the per-pass ceilings next to the policy that says what is allowed', () => {
+    expect(full).toContain('-- Operating limits (as the passes themselves reported) --');
+    expect(full.indexOf('-- Effective policy')).toBeLessThan(full.indexOf('-- Operating limits'));
+  });
+
+  it('spells out who owes each outstanding sign-off', () => {
+    expect(full).toContain('-- Sign-off gate --');
+    expect(full).toContain('NOBODY assigned');
+    expect(full).toContain('Architect: 1');
+    expect(full).toContain('Product Owner → Sean: 1');
+  });
+
+  it('still prints every effective policy field', () => {
+    for (const key of [
+      'enabled', 'autoBusinessValue', 'autoPrioritize', 'autoAssign', 'autoSchedule',
+      'requireSignoffToComplete', 'allowAutoMerge', 'prMergePolicy',
+      'allowUnattendedCeremonies', 'allowAgentReassignment',
+      'agentReassignIdleHours', 'agentReassignMaxPerSession',
+    ]) {
+      expect(full, key).toContain(`${key}: `);
+    }
+    expect(full).toContain('managerType: general');
   });
 });
