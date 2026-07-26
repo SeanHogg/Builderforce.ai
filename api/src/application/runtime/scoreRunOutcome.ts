@@ -418,7 +418,11 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
             : {}),
         })
         .where(eq(runModelOutcomes.executionId, args.executionId))
-        .catch(() => { /* best-effort */ });
+        .catch((error) => console.error('[run-outcome] evaluation score persistence failed', {
+          tenantId: exec.tenantId,
+          executionId: args.executionId,
+          error,
+        }));
       return;
     }
 

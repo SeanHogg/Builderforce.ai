@@ -4,6 +4,65 @@
 
 ---
 
+## 2026-07-26 — ✅ RESOLVED: a lifecycle-managed board could never dispatch, and the gate said nothing was wrong (api 2026.7.163 · frontend 2026.7.128)
+
+**The defect.** On a lifecycle-managed board every execution must be role-attributed — `authorizeManagedTaskExecution` refuses any payload without an `actAsRole`/`reviewRole`. The lane trigger never built one: it sent `{cloudAgentRef, model, laneKey}` straight to the dispatcher. So `maybeAutoRunOnLaneEntry` — the funnel every autonomous dispatcher goes through (cron sweep, `system:lane-auto`, the manager's stage-5 dispatch, its triage remedies, ceremonies, the MCP task tools, a board drag) — **could not dispatch anything at all on a managed board**. Only `requestRoleRun` callers ever passed. The validator, security and incident dispatchers send role-less payloads too and were silently refused the same way.
+
+Three properties made it invisible for weeks:
+- the refusal **threw before the execution row existed**, so no failure was recorded → the 3-strike breaker and the re-run cooldown never engaged → the refusal repeated every sweep, forever;
+- `evaluateTaskAutoRun` did not model the guard, so it kept answering `will_run`, and the lifecycle report printed *"Nothing is gating this ticket"* for a ticket the platform had been refusing every five minutes;
+- the bulk census inherited the same blind spot, so the cohort surfaced as a generic `unassigned` staffing problem — which is what remediation was aimed at.
+
+Measured on project 11: task 1032, a manager systemic-finding ticket, was filed, dispatched, refused and recorded as `autorun_error` within two seconds — the report that started this. The `unassigned: 300` / `never_started: 65` cohorts are substantially the same defect.
+
+**The fix — one resolver both sides read.** New `application/kanban/managedLaneRoles.ts` answers "which roles does this stage authorise for this ticket, and who can act as one", with the per-ticket decision PURE (`decideManagedLaneAuthority`, `pickManagedProducer`) and three IO shapes around it: single-lane for the guard/evaluator, and a board-wide bulk load for the census (a 675-ticket census costs four round-trips, not one per ticket). `authorizeManagedTaskExecution` now enforces that set instead of deriving its own; `evaluateTaskAutoRun` picks its producer from it and reports `managedRole`; the trigger dispatches through `requestRoleRun(kind:'producer')`. **The guard cannot refuse what the trigger sends, because the trigger only sends what the guard's own resolver authorised** — the asymmetry was the bug class, the same shape that had already emptied the sign-off ledger.
+
+**`managed_no_role` — the honest verdict.** New `AutoRunReason` + `StallCause`, ranked under the human gate and above `no_agent`, because the two demand opposite actions: `no_agent` says assign an owner, and on a managed board that does nothing (the assignee is the Coordinator). Its remedy is `coordinate`, never `assign`. Threaded through the evaluator, `diagnoseStall`, the bulk census ladder, the frontend unions, the triage tone map and all five i18n catalogs.
+
+**A refusal is a decision, not an exception.** The managed refusal moved out of `throw` into the state-gated skip ledger alongside the cloud-run cap and the re-run backoff, and the trigger's `auto_run_error` emit — after the skip paths were gated in a6ea68ad, the last unbounded writer in the trigger — is now state-gated on the error message too.
+
+**Manager filing policy.** `createManagerCoachingTask` gained `autoDispatch`; the systemic-findings path passes `false`. A platform-defect ticket is a diagnosis, not a work order, and firing the trigger at creation is what made the failure so loud. The diagnosis prompt now forbids proposing that a safety limit be relaxed — measured: its remediation for the failure-breaker cohort was "raise the retry limit to 10–15 and re-dispatch", i.e. remove the guard catching the failures, filed as a ticket an agent may act on.
+
+**Pass budget through every stage.** `budget.over()` guarded only triage / `pr_conduct` / `pr_merge`; stage 6 (AUDIT + REMEDIATE — 40 audits plus coordinator ticks that start runs) sat between the two guarded regions unguarded, as did VALUE (up to 8 LLM calls), ASSIGN, the systemic diagnosis (2 model calls) and DISPATCH. All now shed to the budget, so the promise the budget exists to keep — the pass always reaches its closing journal — holds from any stage.
+
+**Evidence in the reports** (the part that makes this verifiable in production, not just in CI):
+- manager report: new critical **`managed_dispatch_refused`** — on a healthy managed board its count is ZERO, which makes it the regression detector for this whole class;
+- the census cohort SPLITS, so the managed share is no longer hidden inside `unassigned`;
+- ticket lifecycle report: the gate block now prints `lifecycleManaged`, the stage's `authorizedRoleKeys` and the `managedRole` that would go out — the three facts whose absence let it print "nothing is gating this ticket".
+
+**Tests (+51).** `managedExecutionGuard` and the trigger's dispatch limb had ZERO coverage — the one existing trigger test stubs `canRunNow:false` specifically to avoid reaching dispatch, which is how this shipped. New: `managedLaneRoles.test.ts` (14), `managedExecutionGuard.test.ts` (8, including the **evaluator↔guard contract test** — one fixture, both sides — which is the cheapest test that would have caught the original defect and was unwritable before the shared resolver existed), `laneEntryTrigger.managed.test.ts` (5, the limb no test had ever executed), plus evaluator/census/taxonomy/systemic-IO/pass-budget coverage and a cross-boundary test that the server's truncated-pass sentence parses back on the frontend.
+
+Files: `api/src/application/kanban/{managedLaneRoles,managedExecutionGuard,requestRoleRun}.ts`, `api/src/application/swimlane/{evaluateAutoRun,laneEntryTrigger,laneApprover}.ts`, `api/src/application/manager/{stallTriage,stallCensus,systemicDiagnosis,ManagerService}.ts`, `api/src/application/activity/ticketLifecycleLedger.ts`, `api/src/presentation/routes/runtimeRoutes.ts`, `frontend/src/lib/{builderforceApi,autonomyApi,managerDiagnostics,lifecycleDiagnostics}.ts`, `frontend/src/components/board/SwimlaneTriageButton.tsx`, all five message catalogs. No migration.
+
+---
+
+## 2026-07-26 — ✅ RESOLVED: an operator can force a cron tick and see the work-gate, and the floor interval is tunable (api 2026.7.162 · frontend 2026.7.127)
+
+Two register items under §15 Platform, both closed. The blocker on the first was named as *an operator decision* — a new superadmin capability — and the operator took it.
+
+**1 · The cron path had exactly one caller, so it could not be observed.** Cloudflare delivers cron triggers to `scheduled()`, never to a URL, and nothing in the product re-entered that path: no route called `runManagerSweep` / `runAutonomousExecutionSweep`, and the `CRON_SECRET`-guarded endpoint that once existed had been deleted (correctly — nothing called it) with no replacement. So any change to a cron-path sweep took up to the work-gate's floor interval to observe, and could not be observed at all without `wrangler tail`. The wait was worse than the 5-minute trigger suggests: the tick is KV-gated and `signalPendingWork` only fires when a ticket actually PASSES its gates, so a board of stalled tickets signals almost nothing and falls through to the 30-minute floor. Measured consequence: the platform's own diagnostics reported "no manager pass has completed since 2026-07-13" and there was no way to force one and watch. The manual "Run manager now" button is not a substitute — it takes the `shouldDispatch = true` branch, a different path from the cron one.
+
+The fix is a **registry, not a second call path** — the distinction that matters, because a parallel force-run handler would have started drifting from `scheduled()` the day after it shipped. New `api/src/cronSweeps.ts` declares each of the 26 sweeps ONCE (key, cadence, whether it dispatches billable runs, how to summarise what it did); `application/runtime/cronSweepRunner.ts` owns the invocation semantics. Two consumers, neither able to drift: `scheduled()` selects by cadence (`cadenceForCron`) and dispatches fire-and-forget, and the new `POST /api/admin/cron/:target` awaits the same entries. `scheduled()` lost ~200 lines of `waitUntil`/`catch`/conditional-log boilerplate and now owns only its two real decisions — which cadence, and whether the gate opens. Adding a sweep is one entry; the operator control picks it up for free. (It paid for itself immediately: the previously-unwired `exec-events` lifecycle-outbox sweep is now registered rather than dead.)
+
+Design calls worth recording:
+- **A forced run does NOT touch the gate's KV state.** Stamping the floor there would push the next real floor sweep out by a full interval — the diagnostic would delay the work it was run to observe.
+- **Therefore "Signal pending work" is a separate control.** The force-run deliberately bypasses the gate, so it can never tell you whether the *gate* works. Arming the KV flag and watching the next real tick is the only thing that can.
+- **A deadline never cancels work.** Each sweep races a per-sweep timeout so the request always answers, and the still-running promise goes to the request's `waitUntil`. `timedOut` means "not finished when we answered", never "aborted" — the alternative would truncate real cross-tenant work on a diagnostic click.
+- **One shared `TickDispatchBudget` per forced run**, exactly as a real tick has, so a force-run cannot hand a tenant a second full allowance.
+- **The panel explains an idle gate rather than just reporting it**, because "idle" reads as healthy and actually means "nothing signalled" — the non-obvious half of the original finding. Sweeps that start billable runs are flagged in the registry and confirmed through `useConfirm` before firing; the confirmation names how many of the selected sweeps dispatch.
+
+Surface: `GET /api/admin/cron` (sweeps + live gate decision — deliberately uncached: KV-only, and a cache would hide the state it exists to reveal), `POST /api/admin/cron/signal`, `POST /api/admin/cron/:target` where target is a sweep key, a cadence group, or `all`. Both writes are superadmin-gated and audited (`CRON_FORCE_RUN`, `CRON_SIGNAL_WORK`). New Overview → **Scheduled sweeps** admin sub-view (`CronPanel`), localized in all five catalogs, theme-token colours, `auto-fit` grid + scrolling table.
+
+**2 · The floor interval is no longer a hardcoded constant.** `FLOOR_INTERVAL_MS` (30 min) encodes a COST decision — idle wake-ups/day against the Neon Free compute ceiling — not a correctness one, so an optional `CRON_FLOOR_INTERVAL_MS` now overrides it, clamped to [5 min, 6 h] (below the tick the floor fires every tick and the gate stops gating; past 6 h a missed signal could strand work for most of a day). A non-numeric value falls back to the default rather than throwing: a mistyped var must never break the cron path. `evaluateCronGate` also now returns `lastFloorMs` + the effective interval so the panel can show when the last floor sweep ran and when the next is due, and the override is surfaced as a badge so a tuned platform doesn't read as a broken one.
+
+**Also fixed in passing:** `cloudSelfHeal.test.ts` had 2 failures on `main` — the once-only requeue guard reads `.returning({ id })` off the UPDATE and the test's fake db chain never grew that method. The double now supports both shapes (awaitable AND `.returning()`).
+
+**Files:** `api/src/cronSweeps.ts`, `api/src/application/runtime/cronSweepRunner.ts` (+ tests), `cronWorkSignal.ts` (+ tests), `env.ts`, `index.ts`, `adminRoutes.ts`; `frontend/src/components/admin/panels/CronPanel.tsx` (+ tests), `adminApi.ts`, `adminGroups.ts`, `app/admin/page.tsx`, five message catalogs.
+
+**Verified:** 40 new api tests + 9 new frontend tests green; api suite 3,771 passing, frontend i18n parity green, `tsgo --noEmit` clean for every file touched.
+
+---
+
 ## 2026-07-26 — ✅ RESOLVED: the five register items the census raised — the empty sign-off ledger, the retired reviewer model, the write amplification, the evicted pass, and the flaky test (api 2026.7.161 · frontend 2026.7.126)
 
 Five items were logged the same day and closed the same day. Four were real defects with a single code cause each; the fifth was fixed by the Evermind console rewrite and is confirmed here by measurement.

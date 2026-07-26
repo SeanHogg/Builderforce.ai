@@ -149,7 +149,8 @@ export async function resolveCloudAgent(
     const runtimeSupport = typeof rows[0]?.runtimeSupport === 'string' ? rows[0].runtimeSupport : undefined;
     const preferredRuntime = rows[0]?.preferredRuntime ?? null;
     return { engine, label, ref, runtimeSurface, baseModel, runtimeSupport, preferredRuntime };
-  } catch {
+  } catch (error) {
+    console.error('[cloud-agent] agent resolution failed; using runtime defaults', { tenantId, ref, error });
     return DEFAULT;
   }
 }
@@ -173,7 +174,8 @@ export async function loadAgentPsychometric(
       .where(and(eq(ideAgents.id, ref), eq(ideAgents.tenantId, tenantId)))
       .limit(1);
     return typeof rows[0]?.psychometric === 'string' ? rows[0].psychometric : null;
-  } catch {
+  } catch (error) {
+    console.error('[cloud-agent] psychometric profile load failed', { tenantId, ref, error });
     return null;
   }
 }
@@ -198,7 +200,9 @@ async function loadGovernanceContext(db: Db, tenantId: number, projectId: number
       .orderBy(desc(specs.updatedAt))
       .limit(1);
     if (spec?.archSpec?.trim()) parts.push(`## Architecture Spec\n\n${spec.archSpec.trim()}`);
-  } catch { /* skip */ }
+  } catch (error) {
+    console.error('[cloud-context] architecture spec load failed', { tenantId, projectId, error });
+  }
   try {
     const [proj] = await db
       .select({ governance: projects.governance })
@@ -206,7 +210,9 @@ async function loadGovernanceContext(db: Db, tenantId: number, projectId: number
       .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
       .limit(1);
     if (proj?.governance?.trim()) parts.push(`## Project Rules / Governance (must be followed)\n\n${proj.governance.trim()}`);
-  } catch { /* skip */ }
+  } catch (error) {
+    console.error('[cloud-context] project governance load failed', { tenantId, projectId, error });
+  }
   // Per-agent governance (project_agents.governance) — the rules configured for THIS
   // agent specifically. Previously written via PUT /project-agents/:id/governance but
   // never consumed at execution; now folded in so a per-agent policy actually binds the
@@ -226,7 +232,9 @@ async function loadGovernanceContext(db: Db, tenantId: number, projectId: number
       if (chosen?.governance?.trim()) {
         parts.push(`## Agent Rules / Governance (specific to you — must be followed)\n\n${chosen.governance.trim()}`);
       }
-    } catch { /* skip */ }
+    } catch (error) {
+      console.error('[cloud-context] agent governance load failed', { tenantId, projectId, cloudAgentRef, error });
+    }
   }
   return parts.join('\n\n');
 }
@@ -254,7 +262,9 @@ async function recordTaskFileChange(
 ): Promise<void> {
   try {
     await db.insert(taskFileChanges).values({ tenantId, taskId, executionId, path, change, agent });
-  } catch { /* best-effort */ }
+  } catch (error) {
+    console.error('[cloud-run] task file-change persistence failed', { tenantId, taskId, executionId, path, change, error });
+  }
 }
 
 /** Resolve the credential secret for git operations (mirrors agentHost routes). */
@@ -334,7 +344,8 @@ async function loadWorkspaceContext(
       truncated,
       priorChanges: diff.ok ? diff.files : [],
     };
-  } catch {
+  } catch (error) {
+    console.error('[cloud-context] repository snapshot load failed', { error });
     return empty;
   }
 }
@@ -427,7 +438,7 @@ async function landPrdChange(
     await db.update(tasks)
       .set({ gitBranch: committed.branch, updatedAt: new Date() })
       .where(eq(tasks.id, args.taskId))
-      .catch(() => { /* best-effort */ });
+      .catch((error) => console.error('[cloud-prd] task branch update failed', { tenantId: args.tenantId, taskId: args.taskId, executionId: args.executionId, error }));
   } else {
     // The DB PRD copy (specs.prd) stands but the repo PRD.md commit failed — the 3 copies
     // have DIVERGED. Surface it on the audit trail (a reconcile signal) instead of silently
@@ -438,7 +449,7 @@ async function landPrdChange(
       targetType: 'task', targetId: String(args.taskId), targetLabel: `#${args.taskId}`,
       summary: `PRD repo commit failed (${committed.reason ?? 'unknown'}) — the DB PRD and repo PRD.md have diverged; re-land needed`.slice(0, 300),
       metadata: { reason: committed.reason ?? null, executionId: args.executionId },
-    }).catch(() => { /* best-effort — telemetry must not block the run */ });
+    }).catch((error) => console.error('[cloud-prd] divergence activity append failed', { tenantId: args.tenantId, taskId: args.taskId, executionId: args.executionId, error }));
   }
 
   notifyExecutionSubscribers(args.executionId, {
@@ -652,7 +663,7 @@ export async function resolveLearnedRoutingInputs(
       await db.update(tasks)
         .set({ actionType: verdict.actionType, actionTypeConfidence: verdict.confidence, allocationCategory, allocationCategorySource: 'derived' })
         .where(eq(tasks.id, args.taskRow.id))
-        .catch(() => { /* best-effort: classification is a cache, not a gate */ });
+        .catch((error) => console.error('[cloud-routing] task classification cache update failed', { tenantId: args.tenantId, taskId: args.taskRow.id, error }));
     }
 
     // 2. Finest scope with signal → its ranked stats for this action.
@@ -667,7 +678,12 @@ export async function resolveLearnedRoutingInputs(
       if (scopeHasSignal(stats)) return { actionType, actionStats: stats };
     }
     return { actionType };
-  } catch {
+  } catch (error) {
+    console.error('[cloud-routing] learned routing resolution failed; using default action', {
+      tenantId: args.tenantId,
+      taskId: args.taskRow.id,
+      error,
+    });
     return { actionType: 'other' };
   }
 }
@@ -782,7 +798,14 @@ export async function recordCloudUsage(
       outputTokens,
       contextTokens: inputTokens + outputTokens,
     });
-  } catch { /* best-effort */ }
+  } catch (error) {
+    console.error('[cloud-usage] execution usage snapshot failed', {
+      tenantId: args.tenantId,
+      executionId: args.executionId,
+      model: args.model,
+      error,
+    });
+  }
   await recordUsageRow(db, env, {
     tenantId:   args.tenantId,
     userId:     null,
@@ -853,7 +876,8 @@ async function resolveCloudRouting(env: Env, tenantId: number): Promise<CloudRou
       cardValidated: r.cardValidated,
     });
     return { effectivePlan: r.effectivePlan, premiumOverride: r.premiumOverride, premiumEntitled: premium.entitled };
-  } catch {
+  } catch (error) {
+    console.error('[cloud-routing] tenant plan resolution failed; using free routing', { tenantId, error });
     return { effectivePlan: 'free', premiumOverride: false, premiumEntitled: false };
   }
 }
@@ -914,8 +938,13 @@ export async function loadContainerRunContext(env: Env, db: Db, executionId: num
         loadAgentPsychometric(env, exec.tenantId, agent.ref),
       ]);
       execParams = (await loadCapabilityContext(env, db, artifacts, agentPsychometric)).execParams;
-    } catch {
-      /* best-effort — personality temperature is an enhancement, not run-critical */
+    } catch (error) {
+      console.error('[cloud-container] execution personality context load failed', {
+        tenantId: exec.tenantId,
+        executionId,
+        taskId: exec.taskId,
+        error,
+      });
     }
     return {
       tenantId: exec.tenantId, taskId: exec.taskId, projectId: task.projectId,
@@ -934,7 +963,10 @@ async function isExecutionCancelled(db: Db, executionId: number): Promise<boolea
   try {
     const [row] = await db.select({ status: executions.status }).from(executions).where(eq(executions.id, executionId)).limit(1);
     return row?.status === 'cancelled';
-  } catch { return false; }
+  } catch (error) {
+    console.error('[cloud-run] cancellation status check failed', { executionId, error });
+    return false;
+  }
 }
 
 /** Parse the assistant turn (content + tool calls) off a gateway chat-completion
@@ -1035,7 +1067,8 @@ async function recordCloudLlmTurn(
  * busy container mid-build. ONE writer so the `llm` op and the dedicated `heartbeat`
  * op agree. Best-effort — a missed beat is covered by the next one. */
 async function heartbeatExecution(db: Db, executionId: number): Promise<void> {
-  await db.update(executions).set({ updatedAt: new Date() }).where(eq(executions.id, executionId)).catch(() => { /* best-effort */ });
+  await db.update(executions).set({ updatedAt: new Date() }).where(eq(executions.id, executionId))
+    .catch((error) => console.error('[cloud-container] execution heartbeat failed', { executionId, error }));
 }
 
 /**
@@ -1283,7 +1316,7 @@ export async function handleContainerOp(
           tenantId, cloudAgentRef, executionId,
           toolName: 'coordination.refused', category: 'tool',
           detail: { path: p, heldBy }, result: `write to '${p}' refused — held by ${heldBy}`,
-        }).catch(() => {});
+        }).catch((error) => console.error('[cloud-container] coordination refusal telemetry failed', { tenantId, executionId, taskId, path: p, error }));
       },
     });
     if (blocked) return { status: 200, body: { ok: false, error: blocked } };
@@ -1312,13 +1345,14 @@ export async function handleContainerOp(
     await releaseAllForExecution(env, db, tenantId, executionId, coordinationScopeKey(taskId));
     const fin = await finalizeCloudRun(env, db, { tenantId, cloudAgentRef, executionId, taskRow, agentLabel, repoCtx, repoMiss, writtenPaths, finalOutput, cancelled });
     if (!cancelled) {
-      await runtimeService.update(executionId, fin.ok ? { status: ExecutionStatus.COMPLETED, result: fin.output } : { status: ExecutionStatus.FAILED, errorMessage: fin.output }).catch(() => { /* terminal already */ });
+      await runtimeService.update(executionId, fin.ok ? { status: ExecutionStatus.COMPLETED, result: fin.output } : { status: ExecutionStatus.FAILED, errorMessage: fin.output })
+        .catch((error) => console.warn('[cloud-container] terminal transition rejected', { tenantId, executionId, error }));
       const updated = await runtimeService.getExecution(executionId).catch(() => null);
       if (updated) notifyExecutionSubscribers(executionId, { type: 'done', executionId, status: updated.status, execution: updated.toPlain(), ts: new Date().toISOString() });
     }
     // Learned Model Routing: container-surface terminal chokepoint (covers the
     // cancelled finalize too — the row is already CANCELLED). Idempotent/best-effort.
-    await scoreRunOutcome(env, db, { executionId }).catch(() => { /* best-effort */ });
+    await scoreRunOutcome(env, db, { executionId }).catch((error) => console.error('[cloud-container] terminal outcome scoring failed', { tenantId, executionId, error }));
     return { status: 200, body: { ok: fin.ok, output: fin.output } };
   }
 
@@ -1337,10 +1371,10 @@ export async function handleContainerOp(
       // uses (never the default branch, never under an open PR, never a branch
       // carrying commits this run did not author). Best-effort.
       await teardownCrashedRunArtifacts(env, db, { executionId, secret: gitSecret(env) })
-        .catch(() => { /* a sweep must never mask the real crash */ });
+        .catch((error) => console.error('[cloud-container] crashed-run artifact teardown failed', { tenantId, executionId, error }));
       // Terminal (no self-heal requeue) — score the failed run. A requeue defers
       // scoring to the durable surface's terminal chokepoint instead.
-      await scoreRunOutcome(env, db, { executionId }).catch(() => { /* best-effort */ });
+      await scoreRunOutcome(env, db, { executionId }).catch((error) => console.error('[cloud-container] failed-run outcome scoring failed', { tenantId, executionId, error }));
     }
     return { status: 200, body: { ok: true, recovered: outcome === 'requeued' } };
   }
@@ -1637,7 +1671,7 @@ function buildCloudProvider(args: {
           toolName: 'coordination.refused', category: 'tool',
           detail: { path, heldBy },
           result: `write to '${path}' refused — held by ${heldBy}`,
-        }).catch(() => {});
+        }).catch((error) => console.error('[cloud-run] coordination refusal telemetry failed', { tenantId, executionId, path, error }));
       },
     }),
     staticCheck: {
@@ -2081,7 +2115,17 @@ export async function runCloudToolLoop(
     for (const tc of toolCalls) {
       const name = tc.function?.name ?? 'unknown';
       let parsed: Record<string, unknown> = {};
-      try { parsed = tc.function?.arguments ? (JSON.parse(tc.function.arguments) as Record<string, unknown>) : {}; } catch { /* leave empty */ }
+      try {
+        parsed = tc.function?.arguments ? (JSON.parse(tc.function.arguments) as Record<string, unknown>) : {};
+      } catch (error) {
+        console.warn('[cloud-run] malformed tool arguments; invoking with empty object', {
+          tenantId,
+          executionId,
+          toolCallId: tc.id,
+          toolName: name,
+          error,
+        });
+      }
       const tStart = Date.now();
 
       // Governance gate (compile-primitive policy modality): enforce BEFORE dispatch,
@@ -2225,7 +2269,11 @@ export async function runCloudToolLoop(
     // Stop the cancel watcher (and let it settle) so its timer can't outlive the run.
     watcherDone = true;
     abortController.abort();
-    await cancelWatcher.catch(() => { /* ignore */ });
+    await cancelWatcher.catch((error) => {
+      if (!(error instanceof Error) || error.name !== 'AbortError') {
+        console.error('[cloud-run] cancellation watcher failed', { tenantId, executionId, error });
+      }
+    });
   }
 
   // The ONE snapshot of everything the next durable tick must resume from. Both
@@ -2407,7 +2455,7 @@ export async function recordLimbicState(
     category: 'context',
     detail: { state, params },
     result: `affective state: ${directives.length} directive(s)`,
-  }).catch(() => { /* never block the run on telemetry */ });
+  }).catch((error) => console.error('[cloud-run] limbic-state telemetry failed', { tenantId: args.tenantId, executionId: args.executionId, error }));
 }
 
 /**
@@ -2480,7 +2528,10 @@ export async function finalizeCloudRun(
     }).catch(() => ({ ok: false as const, code: 'provider_error' as const, reason: 'pr failed' }));
     prOpened = pr.ok;
     // Release the claim on a failed create so a later finalize can re-attempt.
-    if (!pr.ok) { noPrReason = pr.reason; await releaseTaskPrClaim(db, taskRow.id).catch(() => {}); }
+    if (!pr.ok) {
+      noPrReason = pr.reason;
+      await releaseTaskPrClaim(db, taskRow.id).catch((error) => console.error('[cloud-finalize] failed PR-claim release failed', { tenantId, executionId, taskId: taskRow.id, error }));
+    }
 
     const autoMerge = cloudAutoMergeEnabled(env);
 
@@ -2506,7 +2557,7 @@ export async function finalizeCloudRun(
     await db.update(tasks)
       .set({ gitBranch: repoCtx.branch, ...(pr.ok ? { githubPrUrl: pr.url, githubPrNumber: pr.number } : {}), updatedAt: new Date() })
       .where(eq(tasks.id, taskRow.id))
-      .catch(() => { /* best-effort */ });
+      .catch((error) => console.error('[cloud-finalize] task PR metadata update failed', { tenantId, executionId, taskId: taskRow.id, error }));
 
     if (!autoMerge) {
       // Approval-gated default: open the PR and stop. A human merges in-product.
@@ -2533,7 +2584,8 @@ export async function finalizeCloudRun(
       // Stamp the merge SHA so the post-merge deploy-branch build correlates back
       // to this task (build validation + auto-fix loop).
       if (m.ok && prRowId) {
-        await markPullRequestMergedById(db, prRowId, tenantId, { mergeSha: m.sha ?? null }).catch(() => { /* best-effort */ });
+        await markPullRequestMergedById(db, prRowId, tenantId, { mergeSha: m.sha ?? null })
+          .catch((error) => console.error('[cloud-finalize] merged PR persistence failed', { tenantId, executionId, prRowId, error }));
       }
       mergeNote = m.ok
         ? ` and auto-merged to \`${repoCtx.base}\` (deploy triggered)`
@@ -2571,7 +2623,7 @@ export async function finalizeCloudRun(
       await teardownRunBranch(env, db, {
         tenantId, executionId, taskId: taskRow.id, repoCtx,
         writtenPaths: [...writtenPaths], cloudAgentRef, agentLabel,
-      }).catch(() => { /* teardown is a sweep — never fail a run over it */ });
+      }).catch((error) => console.error('[cloud-finalize] run branch teardown failed', { tenantId, executionId, taskId: taskRow.id, error }));
     } else {
       await recordRunRollbackSnapshot(db, {
         tenantId, executionId, taskId: taskRow.id, repoCtx,
@@ -2624,7 +2676,8 @@ export async function finalizeCloudRun(
     // Fan out to EVERY live Evermind this project targets (its own head + the IDE builds
     // grouped under it), not just the one projectId — the same resolver the chat learn
     // gate uses, so a cloud run contributes to all the project's Everminds. Best-effort.
-    await contributeTextToProjectEverminds(env, db, tenantId, repoCtx.projectId, output, learnWeight, taskRow.title).catch(() => { /* best-effort */ });
+    await contributeTextToProjectEverminds(env, db, tenantId, repoCtx.projectId, output, learnWeight, taskRow.title)
+      .catch((error) => console.error('[cloud-finalize] Evermind contribution failed', { tenantId, executionId, projectId: repoCtx.projectId, error }));
   }
 
   // Publish this run's outcome onto the PR itself so a reviewer on github.com
@@ -2646,7 +2699,7 @@ export async function finalizeCloudRun(
       summary: output + unverifiedNote,
       filesChanged: [...writtenPaths],
       appBaseUrl: resolveAppBaseUrl(env),
-    }).catch(() => { /* best-effort */ });
+    }).catch((error) => console.error('[cloud-finalize] GitHub check publication failed', { tenantId, executionId, prNumber: openedPrNumber, error }));
   }
 
   // The check run above answers "green or red" in the merge box; it cannot carry
@@ -2669,7 +2722,7 @@ export async function finalizeCloudRun(
       env, db, tenantId, repoCtx.repoId, openedPrNumber,
       `### 🤖 ${agentLabel} — task #${taskRow.id}\n\n${output}${fileBlock}${unverifiedNote}${runUrl}`,
       { kind: 'agent-run', scope: executionId },
-    ).catch(() => { /* best-effort */ });
+    ).catch((error) => console.error('[cloud-finalize] PR summary comment failed', { tenantId, executionId, prNumber: openedPrNumber, error }));
   }
 
   return { ok: !autoMergeFailed, output: output + unverifiedNote };
@@ -2774,7 +2827,7 @@ export async function prepareCloudRun(
     });
     if (application) {
       await recordPersonalityEvent(env, db, tenantId, { agentRef: cloudAgentRef, executionId, ...application })
-        .catch(() => { /* telemetry only — never block the run */ });
+        .catch((error) => console.error('[cloud-run] personality telemetry failed', { tenantId, executionId, cloudAgentRef, error }));
     }
   }
 
@@ -2897,7 +2950,8 @@ export async function markCloudExecutionRunning(runtimeService: RuntimeService, 
   let running: Awaited<ReturnType<RuntimeService['update']>>;
   try {
     running = await runtimeService.update(executionId, { status: ExecutionStatus.RUNNING });
-  } catch {
+  } catch (error) {
+    console.warn('[cloud-run] running transition rejected', { executionId, error });
     return; // already non-pending (cancelled/terminal) — leave it
   }
   notifyExecutionSubscribers(executionId, {

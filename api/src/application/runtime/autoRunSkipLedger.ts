@@ -74,13 +74,18 @@ export async function claimAutoRunSkipState(env: Env, tenantId: number, taskId: 
   const key = markerKey(tenantId, taskId);
   try {
     if ((await store.get(key)) === state) return false;
-  } catch {
+  } catch (error) {
+    console.error('[auto-run-skip] suppression marker read failed; emitting fail-open', {
+      tenantId,
+      taskId,
+      error,
+    });
     return true; // a KV read blip must not hide a stalled ticket
   }
   try {
     await store.put(key, state, { expirationTtl: SKIP_REAFFIRM_TTL_SECONDS });
-  } catch {
-    /* a lost marker only costs the next duplicate row */
+  } catch (error) {
+    console.error('[auto-run-skip] suppression marker write failed', { tenantId, taskId, error });
   }
   return true;
 }
@@ -96,7 +101,12 @@ export async function emitAutoRunSkip(db: Db, args: Omit<AutoRunSkipArgs, 'reaso
     category: 'planning',
     detail: args.detail,
     result: args.result.slice(0, 300),
-  }).catch(() => { /* best-effort telemetry — never block the caller */ });
+  }).catch((error) => console.error('[auto-run-skip] telemetry append failed', {
+    tenantId: args.tenantId,
+    taskId: args.taskId,
+    toolName: 'auto_run_skipped',
+    error,
+  }));
 }
 
 /**
@@ -127,7 +137,7 @@ export async function clearAutoRunSkip(env: Env, tenantId: number, taskId: numbe
   if (!store) return;
   try {
     await store.delete(markerKey(tenantId, taskId));
-  } catch {
-    /* best-effort */
+  } catch (error) {
+    console.error('[auto-run-skip] suppression marker clear failed', { tenantId, taskId, error });
   }
 }

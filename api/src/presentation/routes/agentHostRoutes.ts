@@ -1193,7 +1193,12 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
         capabilitiesJson = JSON.stringify(caps);
       }
       machineProfile = normalizeMachineProfile(body.machineProfile);
-    } catch { /* body may be empty — fine */ }
+    } catch (error) {
+      console.warn('[agent-host] optional request body could not be parsed', {
+        agentHostId: id,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
+    }
 
     await db
       .update(agentHosts)
@@ -1857,7 +1862,11 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
           description: body.description,
           expiresAt:   body.expiresAt,
         }),
-      })).catch(() => { /* best-effort */ });
+      })).catch((error) => console.error('[agent-host] approval relay notification failed', {
+        agentHostId,
+        approvalId,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      }));
     }
 
     return c.json({ ok: true, approvalId }, 201);

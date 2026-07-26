@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { RuntimeService } from './RuntimeService';
 import { Execution } from '../../domain/execution/Execution';
 import { Task } from '../../domain/task/Task';
@@ -48,7 +48,14 @@ function buildExecution(payload: string | null, status = ExecutionStatus.RUNNING
 
 type Captured = { status: string; originLaneKey?: string } | null;
 
-function makeService(opts: { taskStatus: string; payload: string | null; nextStatus?: string | null; managedToStatus?: string }) {
+function makeService(opts: {
+  taskStatus: string;
+  payload: string | null;
+  nextStatus?: string | null;
+  managedToStatus?: string;
+  taskSyncFailures?: number;
+  laneEntryFailures?: number;
+}) {
   let stored = buildTask(opts.taskStatus);
   const exec = buildExecution(opts.payload);
   const executions = {
@@ -63,8 +70,16 @@ function makeService(opts: { taskStatus: string; payload: string | null; nextSta
   const audit = { save: async () => undefined } as unknown as IAuditRepository;
 
   let captured: Captured = null;
+  let taskSyncCalls = 0;
+  let laneEntryCalls = 0;
   const onLaneEntry = async (info: { status: string; originLaneKey?: string }) => {
+    laneEntryCalls += 1;
+    if (laneEntryCalls <= (opts.laneEntryFailures ?? 0)) throw new Error('lane dispatcher unavailable');
     captured = { status: info.status, originLaneKey: info.originLaneKey };
+  };
+  const onTaskStatusSync = async () => {
+    taskSyncCalls += 1;
+    if (taskSyncCalls <= (opts.taskSyncFailures ?? 0)) throw new Error('metrics unavailable');
   };
   // When a nextStatus is provided the service is wired WITH the config-driven
   // resolver (mimicking the board having a next swimlane); otherwise it is left
@@ -75,8 +90,14 @@ function makeService(opts: { taskStatus: string; payload: string | null; nextSta
   const onManagedRunStatus = opts.managedToStatus !== undefined
     ? async () => ({ managed: true, toStatus: opts.managedToStatus! })
     : undefined;
-  const svc = new RuntimeService(executions, tasks, agents, audit, undefined, undefined, undefined, onLaneEntry, resolveNextStatus, undefined, undefined, onManagedRunStatus);
-  return { svc, getCaptured: () => captured, getStored: () => stored };
+  const svc = new RuntimeService(executions, tasks, agents, audit, undefined, onTaskStatusSync, undefined, onLaneEntry, resolveNextStatus, undefined, undefined, onManagedRunStatus);
+  return {
+    svc,
+    getCaptured: () => captured,
+    getStored: () => stored,
+    getTaskSyncCalls: () => taskSyncCalls,
+    getLaneEntryCalls: () => laneEntryCalls,
+  };
 }
 
 describe('RuntimeService lane chaining', () => {
@@ -181,5 +202,54 @@ describe('RuntimeService lane chaining', () => {
     });
     await svc.update(EXEC_ID, { status: ExecutionStatus.RUNNING });
     expect(getStored().status).toBe('ready');
+  });
+
+  it('retries a transient side-effect failure and still runs later lifecycle effects', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { svc, getCaptured, getTaskSyncCalls } = makeService({
+      taskStatus: TaskStatus.IN_PROGRESS,
+      payload: JSON.stringify({ laneKey: 'in_progress' }),
+      taskSyncFailures: 1,
+    });
+
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'done' });
+
+    expect(getTaskSyncCalls()).toBe(2);
+    expect(getCaptured()).toEqual({ status: TaskStatus.IN_REVIEW, originLaneKey: 'in_progress' });
+    expect(errorSpy).toHaveBeenCalledWith(
+      '[runtime-effect] failed',
+      expect.objectContaining({ effect: 'task_status_sync', attempt: 1, executionId: EXEC_ID }),
+    );
+    errorSpy.mockRestore();
+  });
+
+  it('records a permanently failed effect without suppressing the remaining chain', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { svc, getCaptured, getTaskSyncCalls } = makeService({
+      taskStatus: TaskStatus.IN_PROGRESS,
+      payload: JSON.stringify({ laneKey: 'in_progress' }),
+      taskSyncFailures: 99,
+    });
+
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'done' });
+
+    expect(getTaskSyncCalls()).toBe(3);
+    expect(getCaptured()).toEqual({ status: TaskStatus.IN_REVIEW, originLaneKey: 'in_progress' });
+    errorSpy.mockRestore();
+  });
+
+  it('retries lane dispatch with the same idempotent transition context', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { svc, getCaptured, getLaneEntryCalls } = makeService({
+      taskStatus: TaskStatus.IN_PROGRESS,
+      payload: JSON.stringify({ laneKey: 'in_progress' }),
+      laneEntryFailures: 2,
+    });
+
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'done' });
+
+    expect(getLaneEntryCalls()).toBe(3);
+    expect(getCaptured()).toEqual({ status: TaskStatus.IN_REVIEW, originLaneKey: 'in_progress' });
+    errorSpy.mockRestore();
   });
 });

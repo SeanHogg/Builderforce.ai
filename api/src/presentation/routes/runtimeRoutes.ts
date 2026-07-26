@@ -505,7 +505,7 @@ async function startDispatchedExecution(
             .limit(1)).length > 0;
     if (valid) {
       await db.update(tasks).set({ explicitRepoId: repoId, updatedAt: new Date() })
-        .where(eq(tasks.id, taskRow.id)).catch(() => { /* best-effort */ });
+        .where(eq(tasks.id, taskRow.id)).catch((error) => console.error('[runtime-dispatch] task repo pin update failed', { tenantId, taskId: taskRow.id, error }));
     }
   }
 
@@ -535,12 +535,12 @@ async function startDispatchedExecution(
     await Promise.all([
       unowned
         ? db.update(tasks).set({ assignedAgentRef: agent.ref, updatedAt: new Date() })
-            .where(eq(tasks.id, taskRow.id)).catch(() => { /* best-effort */ })
+            .where(eq(tasks.id, taskRow.id)).catch((error) => console.error('[runtime-dispatch] unowned task claim failed', { tenantId, taskId: taskRow.id, agentRef: agent.ref, error }))
         : Promise.resolve(),
       // Always stamp the EXECUTION with the agent that ran it, so its logs/telemetry
       // stay scoped to THIS run even when ownership stays with someone else.
       db.update(executions).set({ cloudAgentRef: agent.ref })
-        .where(eq(executions.id, execution.id)).catch(() => { /* best-effort */ }),
+        .where(eq(executions.id, execution.id)).catch((error) => console.error('[runtime-dispatch] execution attribution update failed', { tenantId, executionId: execution.id, agentRef: agent.ref, error })),
     ]);
   }
 
@@ -609,7 +609,7 @@ async function startDispatchedExecution(
       toolName: 'runtime.route', category: 'planning',
       detail: { reason: 'agent runtime_support=cloud; pinned host ignored', pinnedHostId, ranOn: 'cloud' },
       result: `Agent "${agent.label ?? agent.ref ?? 'cloud agent'}" is cloud-only (runtime_support=cloud); the pinned On-Prem host was not used — running in the cloud.`,
-    }).catch(() => { /* best-effort telemetry */ });
+    }).catch((error) => console.error('[runtime-dispatch] route telemetry failed', { tenantId, executionId: execution.id, error }));
   }
   const delivered = pinnedHostId != null && hostAllowed
     ? (await Promise.all(hostTargets.map((targetId) => dispatchToAgentHost(env as RuntimeHonoEnv['Bindings'], targetId, message).catch(() => false)))).some(Boolean)
@@ -647,8 +647,8 @@ async function startDispatchedExecution(
         toolName: 'runtime.route', category: 'planning',
         detail: { reason: 'cloud_run_limit_exceeded', used: cloudGate.used, limit: cloudGate.limit, plan: cloudGate.effectivePlan },
         result: msg,
-      }).catch(() => { /* best-effort telemetry */ });
-      await runtimeService.update(execution.id, { status: ExecutionStatus.FAILED, errorMessage: msg }).catch(() => { /* terminal already */ });
+      }).catch((error) => console.error('[runtime-dispatch] cloud-cap telemetry failed', { tenantId, executionId: execution.id, error }));
+      await runtimeService.update(execution.id, { status: ExecutionStatus.FAILED, errorMessage: msg }).catch((error) => console.warn('[runtime-dispatch] cloud-cap terminal transition rejected', { tenantId, executionId: execution.id, error }));
       await notifyDone();
       return runtimeService.getExecution(execution.id).then((e) => e.toPlain()).catch(() => ({ id: execution.id, status: ExecutionStatus.FAILED }));
     }
@@ -680,14 +680,14 @@ async function startDispatchedExecution(
       await runtimeService.update(execution.id, {
         status: ExecutionStatus.FAILED,
         errorMessage: msg,
-      }).catch(() => { /* already terminal/cancelled */ });
+      }).catch((error) => console.warn('[runtime-dispatch] unavailable-runtime terminal transition rejected', { tenantId, executionId: execution.id, error }));
       await recordCloudToolEvent(db, {
         tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
         toolName: 'run.failed', category: 'error',
         detail: { reason, phase: 'durable_kickoff' },
         result: msg,
-      }).catch(() => { /* best-effort telemetry */ });
-      await notifyDone().catch(() => { /* best-effort live update */ });
+      }).catch((error) => console.error('[runtime-dispatch] unavailable-runtime telemetry failed', { tenantId, executionId: execution.id, error }));
+      await notifyDone().catch((error) => console.error('[runtime-dispatch] unavailable-runtime live notification failed', { tenantId, executionId: execution.id, error }));
     };
     /**
      * Queue the run onto the repo's GitHub Actions runners.
@@ -718,7 +718,7 @@ async function startDispatchedExecution(
         toolName: 'runtime.queued', category: 'planning',
         detail: { surface: 'github_actions' },
         result: 'Queued on GitHub Actions — waiting for a runner to be scheduled.',
-      }).catch(() => { /* best-effort telemetry */ });
+      }).catch((error) => console.error('[runtime-dispatch] GitHub Actions dispatch telemetry failed', { tenantId, executionId: execution.id, error }));
     };
 
     const startDurable = async () => {
@@ -840,7 +840,7 @@ async function startDispatchedExecution(
         ? effectivePayload
         : withExecutor(effectivePayload, executor);
       await db.update(executions).set({ payload: dispatchPayload })
-        .where(eq(executions.id, execution.id)).catch(() => { /* best-effort — reaper falls back to the long-lived ceiling on an unstamped payload */ });
+        .where(eq(executions.id, execution.id)).catch((error) => console.error('[runtime-dispatch] executor payload stamp failed', { tenantId, executionId: execution.id, executor, error }));
 
       await recordCloudToolEvent(db, {
         tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
@@ -889,7 +889,7 @@ async function startDispatchedExecution(
         const current = await runtimeService.getExecution(execution.id);
         if (isTerminalExecutionStatus(current.status)) return;
         const msg = `Cloud dispatch failed before any executor took the run: ${err instanceof Error ? err.message : String(err)}`;
-        await runtimeService.update(execution.id, { status: ExecutionStatus.FAILED, errorMessage: msg }).catch(() => { /* terminal already */ });
+        await runtimeService.update(execution.id, { status: ExecutionStatus.FAILED, errorMessage: msg }).catch((transitionError) => console.warn('[runtime-dispatch] orchestration failure transition rejected', { tenantId, executionId: execution.id, transitionError }));
         await recordCloudToolEvent(db, {
           tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
           toolName: 'run.failed', category: 'error',
@@ -897,7 +897,13 @@ async function startDispatchedExecution(
           result: msg,
         });
         await notifyDone();
-      } catch { /* best-effort — the stale-execution reaper remains the backstop */ }
+      } catch (recoveryError) {
+        console.error('[runtime-dispatch] orchestration recovery failed; stale reaper is the backstop', {
+          tenantId,
+          executionId: execution.id,
+          recoveryError,
+        });
+      }
     }));
   }
 
@@ -1702,7 +1708,9 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
           .from(ideAgents)
           .where(and(eq(ideAgents.tenantId, tenantId), inArray(ideAgents.id, namedRefs)));
         for (const n of named) nameByRef.set(String(n.id), n.name);
-      } catch { /* names are cosmetic — fall back to the ref */ }
+      } catch (error) {
+        console.warn('[runtime-tool-audit] agent display-name resolution failed; using refs', { tenantId, agentRefs: namedRefs, error });
+      }
     }
 
     const agents = [
@@ -1851,7 +1859,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ executionId: id }),
-      }).catch(() => { /* best effort; status is already CANCELLED */ });
+      }).catch((error) => console.error('[runtime-cancel] host relay cancellation failed after status transition', { tenantId: c.get('tenantId'), executionId: id, error }));
     }
 
     notifyExecutionSubscribers(execution.id, {
@@ -1953,7 +1961,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ executionId: id, text }),
-        }).catch(() => { /* best effort; the loop still drains the persisted steer */ });
+        }).catch((error) => console.error('[runtime-steer] durable runner wake-up failed; persisted steer remains queued', { tenantId, executionId: id, error }));
       }
 
       notifyExecutionSubscribers(id, { type: 'message', executionId: id, role: 'user', text, ts: new Date().toISOString() });

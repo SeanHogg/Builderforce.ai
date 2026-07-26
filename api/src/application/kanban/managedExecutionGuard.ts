@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { swimlanes, tasks } from '../../infrastructure/database/schema';
+import { projects, swimlanes, tasks } from '../../infrastructure/database/schema';
 import { parseActAsRole, parseCloudAgentRef } from '../runtime/cloudDispatch';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { isAgentRefRoleCapable } from './roleCapability';
@@ -22,7 +22,10 @@ export async function authorizeManagedTaskExecution(
   db: Db, tenantId: number, taskId: number, payload: string | undefined,
 ): Promise<ManagedExecutionDecision> {
   const [task] = await db.select({ projectId: tasks.projectId, status: tasks.status, taskType: tasks.taskType, actionType: tasks.actionType })
-    .from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .where(and(eq(projects.tenantId, tenantId), eq(tasks.id, taskId)))
+    .limit(1);
   if (!task) return { allowed: false, managed: false, reason: 'task not found' };
   const board = await findCanonicalBoard(db, task.projectId, tenantId);
   if (!board?.lifecycleManaged) return { allowed: true, managed: false };
@@ -33,11 +36,19 @@ export async function authorizeManagedTaskExecution(
     return { allowed: false, managed: true, reason: 'This ticket is lifecycle-managed. Use the Coordinator to dispatch a required role; the assignee is not an executor.' };
   }
   const [lane] = await db.select({ id: swimlanes.id }).from(swimlanes)
-    .where(and(eq(swimlanes.boardId, board.id), eq(swimlanes.key, task.status))).limit(1);
+    .where(and(eq(swimlanes.tenantId, tenantId), eq(swimlanes.boardId, board.id), eq(swimlanes.key, task.status))).limit(1);
   if (!lane) return { allowed: false, managed: true, reason: `No coordinated stage exists for status '${task.status}'.` };
 
   const authority = await resolveManagedLaneAuthority(db, { tenantId, swimlaneId: lane.id, task })
-    .catch(() => ({ roleKeys: [] as string[], approvers: [], tier: 'none' as const }));
+    .catch((error) => {
+      console.error('[managed-execution-guard] lane authority resolution failed', {
+        tenantId,
+        taskId,
+        swimlaneId: lane.id,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
+      return { roleKeys: [] as string[], approvers: [], tier: 'none' as const };
+    });
   if (!authority.roleKeys.includes(roleKey)) {
     return { allowed: false, managed: true, reason: `Role '${roleKey}' is not required in stage '${task.status}'.` };
   }

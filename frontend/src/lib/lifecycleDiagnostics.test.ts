@@ -72,6 +72,9 @@ const lifecycle: TicketLifecycle = {
     assignedAgentRef: 'fdbbd9af',
     staffedAgentRefs: [],
     candidateAgentRef: 'fdbbd9af',
+    lifecycleManaged: false,
+    authorizedRoleKeys: [],
+    managedRole: null,
     liveExecution: null,
     capabilityMismatches: [{ agentRef: 'a11ce', missing: ['coding-agent'] }],
     consecutiveFailures: 134,
@@ -284,5 +287,54 @@ describe('formatEventSection', () => {
     const many = Array.from({ length: 200 }, (_, i) => evt(i, { actorName: `agent-${i}` }));
     const elided = 200 - EVENT_WINDOW_HEAD - EVENT_WINDOW_TAIL;
     expect(formatEventSection(many).join('\n')).toContain(`… ${elided} rows elided`);
+  });
+});
+
+/**
+ * THE MANAGED FACTS in the gate block.
+ *
+ * Without them the report printed "canRunNow: yes / nothing is gating this ticket" for a
+ * ticket whose every dispatch the platform had been refusing for weeks — because on a
+ * lifecycle-managed board `staffedAgentRefs` and `assignedAgentRef` do not answer whether
+ * anything can run. They only answer it once a ROLE resolves.
+ */
+describe('the gate block on a lifecycle-managed board', () => {
+  const managed = (over: Record<string, unknown>) => ({
+    ...lifecycle,
+    gate: { ...lifecycle.gate!, lifecycleManaged: true, ...over },
+  });
+
+  it('names the authorised roles and the role-attributed run that would go out', () => {
+    const text = buildLifecycleDiagnosticsReport(managed({
+      canRunNow: true,
+      reason: 'will_run',
+      authorizedRoleKeys: ['developer', 'architect'],
+      managedRole: { roleKey: 'developer', agentRef: 'bob-dev', source: 'manifest' },
+    }) as never, ctx);
+
+    expect(text).toContain('lifecycleManaged');
+    expect(text).toContain('developer, architect');
+    expect(text).toContain('developer as bob-dev');
+    expect(text).toContain("ticket's participation manifest");
+  });
+
+  it('shows an EMPTY managed role when nothing resolves — the state that reads as "cannot run at all"', () => {
+    const text = buildLifecycleDiagnosticsReport(managed({
+      canRunNow: false,
+      reason: 'managed_no_role',
+      authorizedRoleKeys: ['architect'],
+      managedRole: null,
+    }) as never, ctx);
+
+    expect(text).toContain('managedRole (the role-attributed run that would go out): (none)');
+  });
+
+  it('says nothing about roles on an UNMANAGED board — no noise for the ordinary case', () => {
+    // The raw JSON payload still carries the fields; what must stay absent is the
+    // human block telling a reader to go and staff a role, on a board where roles do
+    // not gate anything.
+    const text = buildLifecycleDiagnosticsReport(lifecycle, ctx);
+    expect(text).not.toContain('lifecycleManaged: yes');
+    expect(text).not.toContain('authorizedRoleKeys (this stage, this ticket)');
   });
 });

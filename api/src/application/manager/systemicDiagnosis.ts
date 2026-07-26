@@ -103,7 +103,7 @@ export function selectSystemicCohorts(census: StallCensus, min = SYSTEMIC_COHORT
     .sort((a, b) => b.count - a.count);
 }
 
-const SYSTEM_PROMPT =
+export const SYSTEMIC_DIAGNOSIS_PROMPT =
   'You are the engineering manager of an autonomous software-delivery platform. '
   + 'You are shown ONE measured fact: a number of tickets in a single project that are all stuck for the SAME reason. '
   + 'These are not independent ticket problems — a cohort this large means one underlying platform or configuration defect. '
@@ -199,8 +199,8 @@ export async function diagnoseSystemicCohort(
       + 'Name the single underlying defect and the remediation that would clear this whole cohort.';
 
     const systemContent = ctx.personaDirective?.trim()
-      ? `${SYSTEM_PROMPT}\n\nYou are diagnosing AS this manager — let your persona shape the judgement:\n${ctx.personaDirective.trim()}`
-      : SYSTEM_PROMPT;
+      ? `${SYSTEMIC_DIAGNOSIS_PROMPT}\n\nYou are diagnosing AS this manager — let your persona shape the judgement:\n${ctx.personaDirective.trim()}`
+      : SYSTEMIC_DIAGNOSIS_PROMPT;
 
     const result = await ideProxy(env).complete({
       messages: [

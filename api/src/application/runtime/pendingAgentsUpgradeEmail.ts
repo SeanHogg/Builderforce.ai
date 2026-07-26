@@ -93,7 +93,8 @@ export async function sendPendingAgentsUpgradeEmail(env: Env, db: Db, args: Pend
 
   if (kv) {
     // Expire the flag shortly after UTC midnight so tomorrow's block re-nudges.
-    await kv.put(key, '1', { expirationTtl: 60 * 60 * 26 }).catch(() => { /* best-effort */ });
+    await kv.put(key, '1', { expirationTtl: 60 * 60 * 26 })
+      .catch((error) => console.error('[pending-agents-email] dedupe marker write failed', { tenantId: args.tenantId, key, error }));
   }
   return true;
 }

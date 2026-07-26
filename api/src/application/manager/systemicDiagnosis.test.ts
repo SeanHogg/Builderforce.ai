@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  selectSystemicCohorts, heuristicFinding, buildFindingDirective,
-  SYSTEMIC_COHORT_MIN, type SystemicFinding,
+  selectSystemicCohorts, heuristicFinding, buildFindingDirective, raiseSystemicFindings,
+  SYSTEMIC_COHORT_MIN, MAX_FINDINGS_PER_PASS, SYSTEMIC_DIAGNOSIS_PROMPT, type SystemicFinding,
 } from './systemicDiagnosis';
 import type { StallCensus, CensusCohort } from './stallCensus';
 
@@ -86,5 +86,108 @@ describe('buildFindingDirective', () => {
 
   it('tells the reader how to verify the fix', () => {
     expect(buildFindingDirective(f, 11)).toMatch(/census.*collapse/is);
+  });
+});
+
+/**
+ * The IO path had NO coverage — only its three pure helpers did. So the bounds that stop
+ * an automated ticket-filer from spamming a board (refresh-not-refile, the per-pass
+ * ceiling, resolve-on-shrink) were asserted nowhere, on the one subsystem where an
+ * unbounded writer creates BOARD ROWS rather than log lines.
+ */
+describe('raiseSystemicFindings — the bounds that stop an automated ticket-filer', () => {
+  type Op = { kind: 'select' | 'update' | 'insert'; values?: Record<string, unknown> };
+
+  /** Records what the pass wrote; `open` seeds the existing open findings. */
+  function stubDb(open: Array<{ id: string; cause: string }>) {
+    const ops: Op[] = [];
+    const chain = (result: unknown): Record<string, unknown> => {
+      const self: Record<string, unknown> = {};
+      for (const m of ['from', 'where', 'set', 'values', 'onConflictDoUpdate', 'returning', 'limit']) {
+        self[m] = (arg?: unknown) => {
+          if (m === 'values' && arg && typeof arg === 'object') {
+            ops[ops.length - 1]!.values = arg as Record<string, unknown>;
+          }
+          return self;
+        };
+      }
+      self.then = (resolve: (v: unknown) => unknown) => Promise.resolve(result).then(resolve);
+      self.catch = () => self;
+      return self;
+    };
+    const db = {
+      select: () => { ops.push({ kind: 'select' }); return chain(open); },
+      update: () => { ops.push({ kind: 'update' }); return chain([]); },
+      insert: () => { ops.push({ kind: 'insert' }); return chain([]); },
+    } as unknown as Parameters<typeof raiseSystemicFindings>[1];
+    return { db, ops };
+  }
+
+  const env = {} as Parameters<typeof raiseSystemicFindings>[0];
+  const runtime = {} as Parameters<typeof raiseSystemicFindings>[2];
+
+  const run = async (
+    cohorts: CensusCohort[],
+    open: Array<{ id: string; cause: string }> = [],
+  ) => {
+    const { db, ops } = stubDb(open);
+    const created: string[] = [];
+    const out = await raiseSystemicFindings(env, db, runtime, {
+      tenantId: 1, projectId: 11, census: census(cohorts),
+      createTicket: async (_directive, title) => { created.push(title); return 900 + created.length; },
+    });
+    return { out, ops, created };
+  };
+
+  it('files ONE ticket per newly-observed cohort', async () => {
+    const { out, created } = await run([cohort({ cause: 'unassigned', count: 300 })]);
+    expect(created).toHaveLength(1);
+    expect(created[0]).toContain('300 tickets stalled on "unassigned"');
+    expect(out.ticketsCreated).toBe(1);
+  });
+
+  // The idempotent steady state. Without it the manager files the same platform ticket
+  // every five minutes, forever — strictly worse than not filing at all.
+  it('REFRESHES an already-open finding instead of filing a second ticket', async () => {
+    const { out, created, ops } = await run(
+      [cohort({ cause: 'unassigned', count: 320 })],
+      [{ id: 'f1', cause: 'unassigned' }],
+    );
+    expect(created).toEqual([]);
+    expect(out.ticketsCreated).toBe(0);
+    expect(ops.some((o) => o.kind === 'update')).toBe(true);
+    expect(ops.some((o) => o.kind === 'insert')).toBe(false);
+  });
+
+  it('never exceeds the per-pass ceiling, taking the LARGEST cohorts first', async () => {
+    const { created } = await run([
+      cohort({ cause: 'unassigned', count: 300 }),
+      cohort({ cause: 'awaiting_signoff', count: 180 }),
+      cohort({ cause: 'failure_breaker', count: 120 }),
+    ]);
+    expect(created).toHaveLength(MAX_FINDINGS_PER_PASS);
+    expect(created[0]).toContain('unassigned');
+    expect(created[1]).toContain('awaiting_signoff');
+  });
+
+  it('RESOLVES a finding whose cohort fell below the threshold, so a recurrence files fresh prose', async () => {
+    const { out } = await run(
+      [cohort({ cause: 'unassigned', count: 300 })],
+      [{ id: 'f1', cause: 'unassigned' }, { id: 'f2', cause: 'failure_breaker' }],
+    );
+    expect(out.resolved).toBe(1);
+  });
+});
+
+describe('the systemic diagnosis prompt', () => {
+  // MEASURED: the model's remediation for the failure-breaker cohort was "increase the
+  // retry limit to 10 or 15, then re-dispatch" — i.e. remove the guard that stops a retry
+  // storm — and that text is filed as a ticket an agent may pick up and act on.
+  it('forbids proposing that a safety limit be relaxed', () => {
+    expect(SYSTEMIC_DIAGNOSIS_PROMPT).toContain('NEVER propose raising, relaxing or disabling a safety limit');
+  });
+
+  it('explains WHY, so the constraint survives a prompt edit', () => {
+    expect(SYSTEMIC_DIAGNOSIS_PROMPT).toContain('evidence of the underlying failure');
   });
 });

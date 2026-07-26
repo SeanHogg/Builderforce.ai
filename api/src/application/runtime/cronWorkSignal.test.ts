@@ -1,0 +1,131 @@
+import { describe, it, expect } from 'vitest';
+import {
+  evaluateCronGate,
+  floorIntervalMs,
+  FLOOR_INTERVAL_MS,
+  MAX_FLOOR_INTERVAL_MS,
+  MIN_FLOOR_INTERVAL_MS,
+  openCronTick,
+  signalPendingWork,
+} from './cronWorkSignal';
+import type { Env } from '../../env';
+
+/** Minimal in-memory KV double — the gate only uses get/put/delete. */
+function fakeKv(seed: Record<string, string> = {}) {
+  const store = new Map(Object.entries(seed));
+  return {
+    kv: {
+      get: async (k: string) => store.get(k) ?? null,
+      put: async (k: string, v: string) => { store.set(k, v); },
+      delete: async (k: string) => { store.delete(k); },
+    } as unknown as KVNamespace,
+    store,
+  };
+}
+
+const envWith = (kv?: KVNamespace, over: Partial<Env> = {}): Env =>
+  ({ AUTH_CACHE_KV: kv, ...over } as Env);
+
+describe('floorIntervalMs', () => {
+  it('defaults to the 30-minute constant when unset', () => {
+    expect(floorIntervalMs(envWith())).toBe(FLOOR_INTERVAL_MS);
+  });
+
+  it('honours a valid CRON_FLOOR_INTERVAL_MS override', () => {
+    expect(floorIntervalMs(envWith(undefined, { CRON_FLOOR_INTERVAL_MS: '600000' }))).toBe(600_000);
+  });
+
+  /** The floor must never fall below the tick itself, or the gate stops gating. */
+  it('clamps an override that is too short or too long', () => {
+    expect(floorIntervalMs(envWith(undefined, { CRON_FLOOR_INTERVAL_MS: '1000' }))).toBe(MIN_FLOOR_INTERVAL_MS);
+    expect(floorIntervalMs(envWith(undefined, { CRON_FLOOR_INTERVAL_MS: '99999999' }))).toBe(MAX_FLOOR_INTERVAL_MS);
+  });
+
+  /** A mistyped var must never be able to break the cron path. */
+  it('falls back to the default on a non-numeric or zero value', () => {
+    expect(floorIntervalMs(envWith(undefined, { CRON_FLOOR_INTERVAL_MS: 'thirty minutes' }))).toBe(FLOOR_INTERVAL_MS);
+    expect(floorIntervalMs(envWith(undefined, { CRON_FLOOR_INTERVAL_MS: '0' }))).toBe(FLOOR_INTERVAL_MS);
+  });
+});
+
+describe('evaluateCronGate', () => {
+  it('fails OPEN when KV is unbound — the gate may slow a tick, never hide work', async () => {
+    const decision = await evaluateCronGate(envWith(), 1_000);
+    expect(decision).toMatchObject({ run: true, reason: 'kv-unavailable', floorDue: true });
+  });
+
+  it('runs on a pending-work signal', async () => {
+    const { kv } = fakeKv({ 'cron:work-pending': '1', 'cron:last-floor-sweep': '1000' });
+    const decision = await evaluateCronGate(envWith(kv), 1_000 + 60_000);
+    expect(decision.run).toBe(true);
+    expect(decision.reason).toBe('signal');
+    expect(decision.floorDue).toBe(false);
+  });
+
+  it('skips when nothing signalled and the floor is not due', async () => {
+    const { kv } = fakeKv({ 'cron:last-floor-sweep': '1000' });
+    const decision = await evaluateCronGate(envWith(kv), 1_000 + 60_000);
+    expect(decision).toMatchObject({ run: false, reason: 'idle', floorDue: false, lastFloorMs: 1_000 });
+  });
+
+  it('runs on the floor once the interval has elapsed', async () => {
+    const { kv } = fakeKv({ 'cron:last-floor-sweep': '1000' });
+    const decision = await evaluateCronGate(envWith(kv), 1_000 + FLOOR_INTERVAL_MS);
+    expect(decision).toMatchObject({ run: true, reason: 'floor', floorDue: true });
+  });
+
+  /** The override is the whole point of the env var: a tighter floor wakes sooner. */
+  it('uses the override rather than the constant to decide the floor', async () => {
+    const { kv } = fakeKv({ 'cron:last-floor-sweep': '1000' });
+    const env = envWith(kv, { CRON_FLOOR_INTERVAL_MS: String(MIN_FLOOR_INTERVAL_MS) });
+    const nowJustPastOverride = 1_000 + MIN_FLOOR_INTERVAL_MS;
+    const decision = await evaluateCronGate(env, nowJustPastOverride);
+    expect(decision).toMatchObject({ run: true, reason: 'floor', floorIntervalMs: MIN_FLOOR_INTERVAL_MS });
+    // The default constant would still have skipped at this instant.
+    await expect(evaluateCronGate(envWith(kv), nowJustPastOverride)).resolves.toMatchObject({ run: false });
+  });
+
+  /** A never-stamped floor reads as "immediately due" at any real wall-clock time. */
+  it('reports lastFloorMs as null and runs the floor when never stamped', async () => {
+    const { kv } = fakeKv();
+    const decision = await evaluateCronGate(envWith(kv), Date.parse('2026-07-26T12:00:00Z'));
+    expect(decision).toMatchObject({ run: true, reason: 'floor', floorDue: true, lastFloorMs: null });
+  });
+
+  /** Inspecting the gate (e.g. from the admin panel) must not consume the signal. */
+  it('is read-only — evaluating twice does not clear the signal', async () => {
+    const { kv, store } = fakeKv({ 'cron:work-pending': '1' });
+    await evaluateCronGate(envWith(kv), 1_000);
+    await evaluateCronGate(envWith(kv), 1_000);
+    expect(store.get('cron:work-pending')).toBe('1');
+  });
+});
+
+describe('openCronTick', () => {
+  it('consumes the signal and stamps the floor when the floor is due', async () => {
+    const { kv, store } = fakeKv({ 'cron:work-pending': '1' });
+    await openCronTick(envWith(kv), 4_242, true);
+    expect(store.has('cron:work-pending')).toBe(false);
+    expect(store.get('cron:last-floor-sweep')).toBe('4242');
+  });
+
+  it('leaves the floor timestamp alone when this run does not satisfy the floor', async () => {
+    const { kv, store } = fakeKv({ 'cron:work-pending': '1', 'cron:last-floor-sweep': '1000' });
+    await openCronTick(envWith(kv), 4_242, false);
+    expect(store.get('cron:last-floor-sweep')).toBe('1000');
+  });
+});
+
+describe('signalPendingWork', () => {
+  it('arms the gate so the next tick runs', async () => {
+    const { kv } = fakeKv({ 'cron:last-floor-sweep': '1000' });
+    const env = envWith(kv);
+    await expect(evaluateCronGate(env, 1_000 + 60_000)).resolves.toMatchObject({ run: false });
+    await signalPendingWork(env);
+    await expect(evaluateCronGate(env, 1_000 + 60_000)).resolves.toMatchObject({ run: true, reason: 'signal' });
+  });
+
+  it('is a no-op (not a throw) when KV is unbound', async () => {
+    await expect(signalPendingWork(envWith())).resolves.toBeUndefined();
+  });
+});

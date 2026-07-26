@@ -42,7 +42,6 @@ application/insights/lifecycleInsights.ts:1
 application/insights/projectDeliverySignals.ts:1
 application/kanban/attributeRunToManifest.ts:2
 application/kanban/kanbanTemplateService.ts:8
-application/kanban/managedExecutionGuard.ts:2
 application/kanban/rosterService.ts:1
 application/kanban/ticketParticipants.ts:8
 application/knowledge/knowledgeMarket.ts:1
@@ -77,11 +76,11 @@ application/reports/runDueReports.ts:2
 application/repos/recordPullRequestRow.ts:4
 application/runtime/autonomousExecutionSweep.ts:1
 application/runtime/cloudAgentEngine.ts:2
-application/runtime/cloudSelfHeal.ts:3
+application/runtime/cloudSelfHeal.ts:1
+application/runtime/executionLifecycleOutbox.ts:1
 application/runtime/executionSteering.ts:5
-application/runtime/githubActionsReconcile.ts:1
-application/runtime/runRollback.ts:5
-application/runtime/scoreRunOutcome.ts:5
+application/runtime/runRollback.ts:1
+application/runtime/scoreRunOutcome.ts:4
 application/runtime/staleExecutionReaper.ts:5
 application/seams/burnRateService.ts:1
 application/seams/validationEngagementsService.ts:1
@@ -110,8 +109,8 @@ application/workflow/triggerSync.ts:2
 application/workforce/liveMemberNames.ts:2
 application/workitem/convertWorkItemType.ts:1
 buildRuntimeService.ts:1
-infrastructure/relay/AnalysisRunnerDO.ts:13
-infrastructure/relay/CloudRunnerDO.ts:3
+infrastructure/relay/AnalysisRunnerDO.ts:12
+infrastructure/relay/CloudRunnerDO.ts:1
 infrastructure/repositories/AgentHostRepository.ts:4
 presentation/middleware/emulationMiddleware.ts:3
 presentation/routes/activityRoutes.ts:12
@@ -146,7 +145,7 @@ presentation/routes/qualityIngestRoutes.ts:1
 presentation/routes/qualityRoutes.ts:7
 presentation/routes/releasesRoutes.ts:1
 presentation/routes/repoRoutes.ts:1
-presentation/routes/runtimeRoutes.ts:6
+presentation/routes/runtimeRoutes.ts:4
 presentation/routes/seamRoutes.ts:3
 presentation/routes/skillAssignmentRoutes.ts:1
 presentation/routes/specRoutes.ts:1

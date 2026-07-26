@@ -153,7 +153,7 @@ export function pickManagedProducer(
 }
 
 /** Requirement rows for one lane, unfiltered (applicability is a per-ticket decision). */
-async function loadLaneRequirements(db: Db, swimlaneId: string): Promise<LaneAuthorityInputs['requirements']> {
+async function loadLaneRequirements(db: Db, tenantId: number, swimlaneId: string): Promise<LaneAuthorityInputs['requirements']> {
   return db
     .select({
       kind: swimlaneRequirements.kind,
@@ -162,7 +162,11 @@ async function loadLaneRequirements(db: Db, swimlaneId: string): Promise<LaneAut
       condition: swimlaneRequirements.condition,
     })
     .from(swimlaneRequirements)
-    .where(and(eq(swimlaneRequirements.swimlaneId, swimlaneId), eq(swimlaneRequirements.isRequired, true)));
+    .where(and(
+      eq(swimlaneRequirements.tenantId, tenantId),
+      eq(swimlaneRequirements.swimlaneId, swimlaneId),
+      eq(swimlaneRequirements.isRequired, true),
+    ));
 }
 
 /** A managed stage's authority for one ticket — the single-lane (guard / evaluator) path. */
@@ -170,7 +174,7 @@ export async function resolveManagedLaneAuthority(
   db: Db,
   args: { tenantId: number; swimlaneId: string; task: ManagedTaskScope },
 ): Promise<ManagedLaneAuthority> {
-  const requirements = await loadLaneRequirements(db, args.swimlaneId);
+  const requirements = await loadLaneRequirements(db, args.tenantId, args.swimlaneId);
   // Staffing is only read when no requirement applies — `decideLaneApprovers` short-
   // circuits tier (a), so a templated lane costs exactly one query.
   const applies = requirements.some((r) => (r.kind === 'role' || r.kind === 'review')
@@ -233,7 +237,7 @@ export async function loadBoardLaneAuthorities(
   const laneRows = await db
     .select({ id: swimlanes.id })
     .from(swimlanes)
-    .where(eq(swimlanes.boardId, args.boardId));
+    .where(and(eq(swimlanes.tenantId, args.tenantId), eq(swimlanes.boardId, args.boardId)));
   const laneIds = laneRows.map((l) => l.id);
   const out = new Map<string, LaneAuthorityInputs>();
   if (laneIds.length === 0) return out;
@@ -249,9 +253,27 @@ export async function loadBoardLaneAuthorities(
         condition: swimlaneRequirements.condition,
       })
       .from(swimlaneRequirements)
-      .where(and(inArray(swimlaneRequirements.swimlaneId, laneIds), eq(swimlaneRequirements.isRequired, true)))
-      .catch(() => []),
-    loadStaffedAgentsForLanes(db, args.tenantId, laneIds).catch(() => new Map<string, LaneStaffedAgent[]>()),
+      .where(and(
+        eq(swimlaneRequirements.tenantId, args.tenantId),
+        inArray(swimlaneRequirements.swimlaneId, laneIds),
+        eq(swimlaneRequirements.isRequired, true),
+      ))
+      .catch((error) => {
+        console.error('[managed-lane-roles] board requirement load failed', {
+          tenantId: args.tenantId,
+          boardId: args.boardId,
+          error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        });
+        return [];
+      }),
+    loadStaffedAgentsForLanes(db, args.tenantId, laneIds).catch((error) => {
+      console.error('[managed-lane-roles] board staffing load failed', {
+        tenantId: args.tenantId,
+        boardId: args.boardId,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
+      return new Map<string, LaneStaffedAgent[]>();
+    }),
   ]);
 
   for (const r of requirementRows) {

@@ -69,7 +69,11 @@ export function notifyExecutionSubscribers(executionId: number, event: Execution
   // Board-level fan-out runs FIRST and unconditionally — it must fire even when no
   // one holds this execution's per-run socket, so a card's agent chip advances on
   // the board for someone who never opened the drawer. Best-effort; never throws.
-  try { executionBoardSink?.(event); } catch { /* best-effort board push */ }
+  try {
+    executionBoardSink?.(event);
+  } catch (error) {
+    console.error('[execution-events] board broadcast failed', { executionId, eventType: event.type, error });
+  }
 
   const set = executionSubscribers.get(executionId);
   if (!set || set.size === 0) return;

@@ -347,6 +347,8 @@ describe('toGateSnapshot', () => {
     consecutiveFailures: 134,
     failureBreakerAt: 3,
     tenantTokens: null,
+    lifecycleManaged: false,
+    managedRole: null,
   };
 
   it('carries the EVIDENCE behind the reason, not just the reason', () => {
