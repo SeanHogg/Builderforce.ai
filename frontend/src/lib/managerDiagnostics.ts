@@ -30,6 +30,7 @@ import type {
   ManagerOverview,
   ManagerPolicy,
   ManagerRunTask,
+  StallCensusResponse,
   StallRegister,
   StallWatchRow,
 } from './builderforceApi';
@@ -83,6 +84,18 @@ export interface ManagerDiagnosticsInput {
   stalls: StallRegister | null;
   /** The error the register load failed with, when it did. */
   stallsError?: string | null;
+  /**
+   * The FULL-COVERAGE stall census and the systemic findings raised from it (0373).
+   *
+   * The single most important thing this report gained, because the register above is
+   * bounded by what deep triage has diagnosed and this is not. Without it the report
+   * carried the same 5.8%-coverage sample that made eight rounds of remediation aim at
+   * the wrong cohort — and, worse, presented it with no indication it was a sample.
+   * `null` when it could not be loaded: STATED, never rendered as a healthy zero.
+   */
+  census?: StallCensusResponse | null;
+  /** The error the census load failed with, when it did. */
+  censusError?: string | null;
 }
 
 export type FindingSeverity = 'critical' | 'warning' | 'info';
@@ -550,6 +563,66 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
     }
   }
 
+  // ── 5b. Does the manager actually SEE its whole problem? ──
+  //
+  // These are the findings that judge the manager's own execution rather than the
+  // backlog's health. The failure they exist to catch is the one that hid for weeks: a
+  // register that looked complete, ranked the wrong cause first, and had no field
+  // anywhere saying how much of the problem it had actually looked at.
+  const census = input.census ?? null;
+  if (census == null) {
+    warning.push({
+      severity: 'warning',
+      code: 'census_unavailable',
+      text: `The full-coverage stall census could not be loaded${input.censusError ? ` (${input.censusError})` : ''}. Everything said about stall causes below therefore comes from the stuck register ALONE, which is bounded by what deep triage has diagnosed — treat its cause ranking as a sample, not a count.`,
+    });
+  } else {
+    // Coverage: the register is a sample of the census, and the report must say by how
+    // much before anyone reasons about the cause ranking.
+    if (census.stalled > 0 && census.deepDiagnosed < census.stalled) {
+      const pct = Math.round((census.deepDiagnosed / census.stalled) * 100);
+      const severe = pct < 25;
+      (severe ? critical : warning).push({
+        severity: severe ? 'critical' : 'warning',
+        code: 'triage_coverage_gap',
+        text: `${census.stalled} tickets are stalled but only ${census.deepDiagnosed} (${pct}%) have been diagnosed in depth — the stuck register below is a SAMPLE of that size. Deep triage is capped per project per pass, so at this ratio the register's cause ranking can disagree with reality: rank causes from the census block, not from the register.`,
+      });
+    }
+    // The concentration finding — the one that reframes remediation entirely.
+    const top = census.cohorts[0];
+    if (top && census.stalled > 0 && top.count >= census.stalled / 2) {
+      critical.push({
+        severity: 'critical',
+        code: 'stall_cause_concentrated',
+        text: `${top.count} of ${census.stalled} stalled tickets (${Math.round((top.count / census.stalled) * 100)}%) share ONE cause: ${top.cause}. A cohort that size is a single platform or configuration defect, not N independent ticket problems — per-ticket remedies cannot clear it, because the cohort outruns the per-pass budget every pass. Fix the shared cause; example tickets: ${top.sampleTaskIds.join(', ')}.`,
+      });
+    }
+    // Did the manager DO the thing it is supposed to do about a large cohort?
+    const systemicWorthy = census.cohorts.filter((c) => c.count >= 12);
+    if (systemicWorthy.length > 0 && census.findings.length === 0) {
+      critical.push({
+        severity: 'critical',
+        code: 'systemic_never_raised',
+        text: `${systemicWorthy.length} stall cohort${systemicWorthy.length === 1 ? ' is' : 's are'} large enough to be a platform defect (${systemicWorthy.map((c) => `${c.cause} ×${c.count}`).join(', ')}), but the manager has raised NO systemic finding. The stage that turns a cohort into a root cause and a ticket is either not running or failing silently — check for 'systemic' rows in the decision feed.`,
+      });
+    }
+    for (const f of census.findings) {
+      if (f.createdTaskId == null) {
+        warning.push({
+          severity: 'warning',
+          code: 'systemic_finding_unticketed',
+          text: `The manager diagnosed a platform defect (${f.cause}, ${f.ticketCount} tickets) but could NOT open a ticket for it, so the finding has no owner and no place on the board. Its remediation: ${capText(f.remediation, 200)}`,
+        });
+        continue;
+      }
+      info.push({
+        severity: 'info',
+        code: 'systemic_finding_open',
+        text: `Platform finding open: ${f.ticketCount} tickets stalled on ${f.cause} → ticket ${f.createdTaskKey ?? `#${f.createdTaskId}`} (${f.source === 'ai' ? 'model-diagnosed' : 'measured fallback'}). Root cause: ${capText(f.summary, 220)}`,
+      });
+    }
+  }
+
   // ── 6. Policy gates that HOLD finished work (a full backlog with nothing shipping) ──
   if (!policy.allowAutoMerge && stats.openPullRequests > 0) {
     warning.push({
@@ -752,6 +825,44 @@ function formatPasses(runTasks: readonly ManagerRunTask[], nowMs: number | null)
   return out;
 }
 
+/**
+ * The full-coverage census: what is stuck across EVERY ticket, and the platform findings
+ * the manager raised from it.
+ *
+ * Printed BEFORE the stuck register on purpose. The register is the sample; this is the
+ * count. Reading them the other way round is exactly how a 313-ticket cohort stayed
+ * invisible behind a 44-row register whose top cause read "unknown".
+ */
+function formatCensus(census: StallCensusResponse): string[] {
+  const out: string[] = [];
+  out.push(line('managed (active tickets)', census.managed));
+  out.push(line('stalled', share(census.stalled, census.managed)));
+  out.push(line('moving', census.moving));
+  out.push(line('confirmed by deep triage', census.stalled > 0
+    ? `${share(census.deepDiagnosed, census.stalled)} of the stalled set`
+    : String(census.deepDiagnosed)));
+  out.push(line('computedAt', census.computedAt));
+  out.push('');
+  out.push('cohorts (every stalled ticket, grouped by cause — largest first):');
+  if (census.cohorts.length === 0) out.push('  (none — nothing is stalled)');
+  for (const c of census.cohorts) {
+    out.push(`  ${c.cause}: ${c.count}  longest-idle=${formatAge(c.maxIdleMs)}  examples=${c.sampleTaskIds.join(', ') || '—'}`);
+  }
+  out.push('');
+  out.push(`platform findings (${census.findings.length} open):`);
+  if (census.findings.length === 0) {
+    out.push('  (none raised — a cohort must cross the materiality threshold before the');
+    out.push('   manager treats it as one defect rather than as ticket work)');
+  }
+  for (const f of census.findings) {
+    out.push(`  - ${f.cause} ×${f.ticketCount}  ticket=${f.createdTaskKey ?? (f.createdTaskId != null ? `#${f.createdTaskId}` : 'NOT CREATED')}`
+      + `  source=${f.source}  firstSeen=${f.firstSeenAt}  lastSeen=${f.lastSeenAt}`);
+    out.push(`      root cause: ${capText(f.summary, 400)}`);
+    out.push(`      remediation: ${capText(f.remediation, 400)}`);
+  }
+  return out;
+}
+
 /** The stuck register: the counts, the causes, then the rows. */
 function formatStalls(stalls: StallRegister, nowMs: number | null): string[] {
   const out: string[] = [];
@@ -929,7 +1040,20 @@ export function buildManagerDiagnosticsReport(
   out.push(...formatPasses(runTasks, nowMs));
   out.push('');
 
-  out.push('-- Stuck register --');
+  out.push('-- Stall census (EVERY ticket) + platform findings --');
+  out.push('The count, not a sample. The stuck register below is bounded by what deep triage');
+  out.push('has had budget to diagnose (capped per project per pass), so its cause ranking can');
+  out.push('disagree with this block — when they differ, THIS one is the distribution. A cohort');
+  out.push('far larger than the per-pass budget cannot be cleared ticket-by-ticket at all, which');
+  out.push('is why a large one is raised as a platform finding with its own ticket.');
+  if (input.census == null) {
+    out.push(`(unavailable${input.censusError ? `: ${input.censusError}` : ''} — this is NOT the same as "nothing is stalled")`);
+  } else {
+    out.push(...formatCensus(input.census));
+  }
+  out.push('');
+
+  out.push('-- Stuck register (the per-ticket sample deep triage has worked) --');
   if (stalls == null) {
     out.push(`(unavailable${input.stallsError ? `: ${input.stallsError}` : ''} — this is NOT the same as "nothing is stuck")`);
   } else {
@@ -955,7 +1079,7 @@ export function buildManagerDiagnosticsReport(
   // payload and are all rendered above, so they are what gets dropped when keeping them
   // would push the WHOLE report past the budget — every computed block survives.
   const body = out.join('\n');
-  const payload = { projectId: input.projectId, overview, stalls };
+  const payload = { projectId: input.projectId, overview, stalls, census: input.census ?? null };
   out.push(...jsonAppendix(body.length, payload, {
     note: `(rows elided: the full report would exceed ${REPORT_BUDGET_CHARS} characters. Every computed block above is intact.)`,
     compact: () => ({
@@ -969,6 +1093,9 @@ export function buildManagerDiagnosticsReport(
         ...stalls,
         rows: `<elided: ${stalls.rows.length} stuck tickets — see the stuck register above, or re-fetch GET /api/manager/${input.projectId}/stalls>`,
       },
+      // The census survives compaction WHOLE: it is small (one row per CAUSE, not per
+      // ticket) and it is the block a reader most needs when everything else is trimmed.
+      census: input.census ?? null,
     }),
   }));
 
