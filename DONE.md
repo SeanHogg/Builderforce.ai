@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-07-26 — ✅ RESOLVED: the xAI Responses vendor silently dropped `tool_choice` — a forced tool ran as `auto` on Grok
+
+**The defect:** `vendors/xaiOAuth.ts` built its Responses body by hand and never read `params.toolChoice`. A caller that pinned a specific function (`{type:'function',function:{name}}`) or forced `tool_choice:'required'` got plain `auto` on Grok, with no error anywhere — one more way a tool-calling turn comes back as prose. The sibling Responses vendor `openaiCodex.ts` translated it correctly, so the two had drifted on the one field that decides whether a forced-tool turn is forced at all.
+
+**The root cause was the duplication, not the missing line.** Both vendors hand-rolled the *entire* chat-completions ⇄ Responses translation — `instructions`, `input` (incl. `function_call_output` / `function_call` items), the flattened `tools`, and the response normalization back to the chat-completion shape. Two copies of one contract is why only one of them learned about `tool_choice`.
+
+**The fix is one shared translator.** New `vendors/responsesApi.ts` owns `buildResponsesBody(params, opts)` + `normalizeResponsesPayload(raw)` + the `ResponsesPayload` type, alongside the existing shared `pseudoStream` (the other half of the Responses path). It sits next to `buildOpenAIChatBody` in intent: the shape lives in ONE place and per-vendor quirks ride a small `opts` — Codex passes `extra: { stream: true, include: ['reasoning.encrypted_content'] }`, the two fields only that private backend requires. `tool_choice` is translated once: string forms (`auto`/`none`/`required`) pass through, the pinned-function form is flattened to Responses' `{type:'function',name}`, and the previously Codex-only `MIN_OUTPUT_TOKENS = 16` floor now protects both vendors (the Responses surface rejects a smaller cap, which would fail a healthy credential's connection probe). `xaiOAuth.ts` dropped from 55 to 33 lines; `openaiCodex.ts` shed ~60 lines of copy and its local `ResponsesPayload`.
+
+**Files:** `api/src/application/llm/vendors/responsesApi.ts` (new), `vendors/xaiOAuth.ts`, `vendors/openaiCodex.ts`. Tests: 4 new cases in `vendors/xaiOAuth.test.ts` (flattened pinned tool + normalized `tool_calls`/`finish_reason`, `'required'` passthrough, the token floor, system-turn → `instructions` with non-string content serialized); existing `openaiCodex.test.ts` unchanged and green. No migration.
+
+---
+
 ## 2026-07-26 — ✅ RESOLVED: the Integrations page showed five green "connected" cards while Test connection failed — BYO credential health was never observed, only hoped for
 
 **The report:** Settings ▸ Integrations, every model provider reading `● connected`. Clicking **Test connection** on OpenAI returned:

@@ -1,6 +1,7 @@
 import { parseSseDataFrames } from '../sseFrames';
-import { AUTH_STATUSES, VendorFatalError, VendorRetryableError, pickUsage, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
+import { AUTH_STATUSES, VendorFatalError, VendorRetryableError, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
 import { pseudoStreamFromCall } from './pseudoStream';
+import { buildResponsesBody, normalizeResponsesPayload, type ResponsesPayload } from './responsesApi';
 
 const ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses';
 
@@ -24,11 +25,6 @@ const ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses';
 const BETA_HEADER = 'responses=experimental';
 const ORIGINATOR = 'codex_cli_rs';
 
-/** The Responses API rejects `max_output_tokens` below this. The connection
- *  test asks for a handful of tokens, so it must be floored rather than passed
- *  through verbatim. */
-const MIN_OUTPUT_TOKENS = 16;
-
 /**
  * Stable marker embedded in the error a Codex 401/403 raises, so the failure is
  * machine-recognisable downstream instead of being one more opaque status.
@@ -48,63 +44,14 @@ function unpack(value: string): PackedAuth {
   return auth;
 }
 
+/**
+ * The shared Responses body plus the two fields ONLY this backend requires: the CLI's
+ * mandatory `stream: true`, and `include: ['reasoning.encrypted_content']` so a
+ * reasoning model carries its own state across turns without server-side storage.
+ */
 function requestBody(params: VendorCallParams): Record<string, unknown> {
-  const tools = params.tools?.map((raw) => {
-    const tool = raw as { type?: string; function?: { name?: string; description?: string; parameters?: unknown } };
-    return tool.type === 'function' && tool.function ? { type: 'function', ...tool.function } : raw;
-  });
-  const instructions = params.messages
-    .filter((message) => message['role'] === 'system' || message['role'] === 'developer')
-    .map((message) => typeof message['content'] === 'string' ? message['content'] : JSON.stringify(message['content'] ?? ''))
-    .filter(Boolean)
-    .join('\n\n') || 'You are a helpful assistant.';
-  const input = params.messages
-    .filter((message) => message['role'] !== 'system' && message['role'] !== 'developer')
-    .flatMap((message) => {
-    const role = String(message['role'] ?? 'user');
-    if (role === 'tool') {
-      return [{ type: 'function_call_output', call_id: String(message['tool_call_id'] ?? ''), output: typeof message['content'] === 'string' ? message['content'] : JSON.stringify(message['content'] ?? '') }];
-    }
-    const items: Array<Record<string, unknown>> = [];
-    if (message['content'] !== undefined && message['content'] !== null && message['content'] !== '') {
-      const content = typeof message['content'] === 'string'
-        ? [{ type: role === 'assistant' ? 'output_text' : 'input_text', text: message['content'] }]
-        : message['content'];
-      items.push({ role, content });
-    }
-    if (role === 'assistant' && Array.isArray(message['tool_calls'])) {
-      for (const raw of message['tool_calls']) {
-        const call = raw as { id?: string; function?: { name?: string; arguments?: string } };
-        items.push({ type: 'function_call', call_id: call.id ?? '', name: call.function?.name ?? '', arguments: call.function?.arguments ?? '{}' });
-      }
-    }
-    return items;
-  });
-  const rawChoice = params.toolChoice as { type?: string; function?: { name?: string } } | string | undefined;
-  const toolChoice = rawChoice && typeof rawChoice === 'object' && rawChoice.type === 'function'
-    ? { type: 'function', name: rawChoice.function?.name }
-    : rawChoice;
-  const maxOutputTokens = params.maxTokens ? Math.max(params.maxTokens, MIN_OUTPUT_TOKENS) : undefined;
-  return {
-    model: params.model,
-    instructions,
-    input,
-    store: false,
-    stream: true,
-    include: ['reasoning.encrypted_content'],
-    ...(tools ? { tools } : {}),
-    ...(toolChoice ? { tool_choice: toolChoice } : {}),
-    ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}),
-  };
+  return buildResponsesBody(params, { extra: { stream: true, include: ['reasoning.encrypted_content'] } });
 }
-
-type ResponsesPayload = {
-  id?: string;
-  output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }>; name?: string; arguments?: string; call_id?: string }>;
-  output_text?: string;
-  usage?: unknown;
-  error?: { message?: string } | string;
-};
 
 /**
  * Collapse the Codex SSE stream into the single terminal `response` object.
@@ -213,12 +160,7 @@ async function callResponses(params: VendorCallParams): Promise<VendorCallResult
     if (response.status === 400 || response.status === 422) throw new VendorFatalError('openai-codex', response.status, message);
     throw new VendorRetryableError('openai-codex', params.model, response.status, message);
   }
-  const raw = await readPayload(response, params.model);
-  const content = raw.output_text ?? raw.output?.flatMap((item) => item.content ?? []).filter((c) => c.type === 'output_text').map((c) => c.text ?? '').join('') ?? '';
-  const toolCalls = raw.output?.filter((item) => item.type === 'function_call').map((item, index) => ({ id: item.call_id ?? `call_${index}`, type: 'function', function: { name: item.name ?? '', arguments: item.arguments ?? '{}' } })) ?? [];
-  const usage = pickUsage(raw.usage);
-  const chatRaw = { id: raw.id ?? `chatcmpl_${crypto.randomUUID()}`, object: 'chat.completion', choices: [{ index: 0, message: { role: 'assistant', content, ...(toolCalls.length ? { tool_calls: toolCalls } : {}) }, finish_reason: toolCalls.length ? 'tool_calls' : 'stop' }], usage };
-  return { raw: chatRaw, content, usage };
+  return normalizeResponsesPayload(await readPayload(response, params.model));
 }
 
 export const openAiCodexModule: VendorModule = {
