@@ -29,25 +29,32 @@ export interface EvermindTestBenchProps {
   disabled: boolean;
   /** Runs a probe; `undefined` prompt = the fixed readiness suite. */
   onProbe: (prompt?: string) => Promise<EvermindProbeResult>;
+  /**
+   * The last run, OWNED BY THE CONSOLE. Lifted out of this component because the result
+   * outlives the tab: the diagnostics export has to include output produced on a tab the
+   * operator has since left, and a failed readiness check has to keep flagging itself
+   * from the other tabs. Local state would be destroyed on every tab switch.
+   */
+  result: EvermindProbeResult | null;
+  onResult: (result: EvermindProbeResult | null) => void;
 }
 
-export function EvermindTestBench({ t, disabled, onProbe }: EvermindTestBenchProps) {
+export function EvermindTestBench({ t, disabled, onProbe, result, onResult }: EvermindTestBenchProps) {
   const [prompt, setPrompt] = useState('');
   const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<EvermindProbeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const run = useCallback(async (withPrompt: boolean) => {
     setRunning(true); setError(null);
     try {
-      setResult(await onProbe(withPrompt ? prompt.trim() : undefined));
+      onResult(await onProbe(withPrompt ? prompt.trim() : undefined));
     } catch (err) {
-      setResult(null);
+      onResult(null);
       setError(err instanceof Error ? err.message : t.errorGeneric);
     } finally {
       setRunning(false);
     }
-  }, [onProbe, prompt, t.errorGeneric]);
+  }, [onProbe, onResult, prompt, t.errorGeneric]);
 
   const busy = disabled || running;
   const canRunPrompt = prompt.trim().length >= 3;
