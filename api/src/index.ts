@@ -266,7 +266,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
       const project = await projectRepo.findById(asProjectId(projectId));
       if (!project) return;
       const result = await addDependency(db, project.tenantId as number, successorTaskId, predecessorTaskId);
-      if (result.ok) await bumpCacheVersion(env, `task-deps-version:project:${projectId}`).catch(() => {});
+      if (result.ok) await bumpCacheVersion(env, `task-deps-version:project:${projectId}`).catch((error) => {
+        console.error('[suppressed-error] index.ts:269 taskService', { error });
+      });
     });
   const tenantService   = new TenantService(tenantRepo, paymentProvider);
   const toolService     = new ToolService(db);
@@ -762,7 +764,9 @@ export default {
         let text = '';
         try {
           if (message.raw) text = await new Response(message.raw as ReadableStream).text();
-        } catch { /* best-effort body read */ }
+        } catch (error) { /* best-effort body read */ 
+          console.error('[suppressed-error] index.ts:765 email', { error });
+        }
         const result = await handleInboundEmail(env, {
           to: message.to,
           from: message.from,

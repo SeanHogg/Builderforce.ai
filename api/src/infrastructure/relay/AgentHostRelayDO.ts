@@ -158,7 +158,9 @@ export class AgentHostRelayDO implements DurableObject {
   private attachUpstream(ws: WebSocket) {
     // Close any existing upstream connection
     if (this.upstreamSocket) {
-      try { this.upstreamSocket.close(1001, "replaced"); } catch { /* ignore */ }
+      try { this.upstreamSocket.close(1001, "replaced"); } catch (error) { /* ignore */ 
+        console.error('[suppressed-error] infrastructure/relay/AgentHostRelayDO.ts:161 attachUpstream', { error });
+      }
     }
     this.upstreamSocket = ws;
     this.schedulePings();
@@ -180,7 +182,12 @@ export class AgentHostRelayDO implements DurableObject {
       }
     });
 
-    ws.addEventListener("error", () => { /* close follows */ });
+    ws.addEventListener("error", (error) => {
+      console.error('[agent-host-relay] upstream websocket error; awaiting close event', {
+        executionId: this.executionId,
+        error,
+      });
+    });
 
     // Tell the agentHost it is connected
     ws.send(JSON.stringify({ type: "relay_connected" }));
@@ -269,7 +276,9 @@ export class AgentHostRelayDO implements DurableObject {
         this.currentSessionKey = session;
         this.appendAndPersistMessage({ role: "user", content: msg.message });
       }
-    } catch { /* ignore non-JSON */ }
+    } catch (error) { /* ignore non-JSON */ 
+      console.error('[suppressed-error] infrastructure/relay/AgentHostRelayDO.ts:272 handleClientMessage', { error });
+    }
   }
 
   /** Persist complete chat messages from upstream. Deltas are skipped. */
@@ -387,7 +396,9 @@ export class AgentHostRelayDO implements DurableObject {
       this.emitLog("info", `[chat] ${msg.role}: ${msg.text}`);
 
       this.appendAndPersistMessage({ role: msg.role, content: msg.text });
-    } catch { /* ignore non-JSON or non-message events */ }
+    } catch (error) { /* ignore non-JSON or non-message events */ 
+      console.error('[suppressed-error] infrastructure/relay/AgentHostRelayDO.ts:390 handleUpstreamMessage', { error });
+    }
   }
 
   /** Add to in-memory history and persist asynchronously. */
@@ -442,7 +453,9 @@ export class AgentHostRelayDO implements DurableObject {
           }),
         },
       );
-    } catch { /* best-effort; do not crash the relay */ }
+    } catch (error) { /* best-effort; do not crash the relay */ 
+      console.error('[suppressed-error] infrastructure/relay/AgentHostRelayDO.ts:445 persistMessage', { error });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -481,7 +494,9 @@ export class AgentHostRelayDO implements DurableObject {
           }),
         },
       );
-    } catch { /* best-effort */ }
+    } catch (error) { /* best-effort */ 
+      console.error('[suppressed-error] infrastructure/relay/AgentHostRelayDO.ts:484 persistRemoteResult', { error });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -510,7 +525,9 @@ export class AgentHostRelayDO implements DurableObject {
           body: JSON.stringify(msg),
         },
       );
-    } catch { /* best-effort */ }
+    } catch (error) { /* best-effort */ 
+      console.error('[suppressed-error] infrastructure/relay/AgentHostRelayDO.ts:513 persistUsageSnapshot', { error });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -541,7 +558,9 @@ export class AgentHostRelayDO implements DurableObject {
           body: JSON.stringify(msg),
         },
       );
-    } catch { /* best-effort */ }
+    } catch (error) { /* best-effort */ 
+      console.error('[suppressed-error] infrastructure/relay/AgentHostRelayDO.ts:544 persistToolAuditEvent', { error });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -570,7 +589,9 @@ export class AgentHostRelayDO implements DurableObject {
           body: JSON.stringify(msg),
         },
       );
-    } catch { /* best-effort */ }
+    } catch (error) { /* best-effort */ 
+      console.error('[suppressed-error] infrastructure/relay/AgentHostRelayDO.ts:573 persistFileChange', { error });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -597,7 +618,9 @@ export class AgentHostRelayDO implements DurableObject {
           body: JSON.stringify(msg),
         },
       );
-    } catch { /* best-effort */ }
+    } catch (error) { /* best-effort */ 
+      console.error('[suppressed-error] infrastructure/relay/AgentHostRelayDO.ts:600 persistApprovalRequest', { error });
+    }
   }
 
   // ---------------------------------------------------------------------------

@@ -145,8 +145,10 @@ export class ToolService {
         list.push({ title: r.title, status: r.status, githubPrUrl: r.githubPrUrl });
         byProject.set(r.projectId, list);
       }
-    } catch {
+    } catch (error) {
       // Task read failed — diagnostics still score, remediation just shows 'none'.
+    
+      console.error('[suppressed-error] application/tools/ToolService.ts:148 remediationTasksByProject', { error });
     }
     return byProject;
   }

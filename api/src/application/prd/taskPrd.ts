@@ -56,7 +56,9 @@ export async function draftTaskPrd(
     if (gen.response.status < 400) {
       return stripPrdMarkdownFence((await readProxyChoice(gen)).content);
     }
-  } catch { /* generation failed — caller treats '' as "no PRD" */ }
+  } catch (error) { /* generation failed — caller treats '' as "no PRD" */ 
+    console.error('[suppressed-error] application/prd/taskPrd.ts:59 draftTaskPrd', { error });
+  }
   return '';
 }
 
@@ -128,7 +130,9 @@ export async function linkSpecToTask(
     } else {
       await upsert;
     }
-  } catch { /* best-effort */ }
+  } catch (error) { /* best-effort */ 
+    console.error('[suppressed-error] application/prd/taskPrd.ts:131 linkSpecToTask', { error });
+  }
 }
 
 export type EnsureTaskPrdResult = { specId: string; prd: string; status: 'reused' | 'created' | 'updated' };
@@ -192,7 +196,9 @@ export async function ensureTaskPrdRecord(
       .insert(specs)
       .values({ id: specId, tenantId: args.tenantId, projectId: args.projectId, goal: args.title, status: 'draft', prd, createdAt: now, updatedAt: now })
       .onConflictDoUpdate({ target: [specs.id], set: { prd, goal: args.title, updatedAt: now } });
-  } catch { /* persistence failed — still return the PRD for use as context */ }
+  } catch (error) { /* persistence failed — still return the PRD for use as context */ 
+    console.error('[suppressed-error] application/prd/taskPrd.ts:195 ensureTaskPrdRecord', { error });
+  }
 
   await linkSpecToTask(db, { taskId: args.taskId, specId, tenantId: args.tenantId, isPrimary: true });
   return { specId, prd, status: existing?.id ? 'updated' : 'created' };

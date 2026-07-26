@@ -80,7 +80,9 @@ async function readArchitectureRoster(db: Db, tenantId: number, projectId: numbe
     const latest = new Map<string, Record<string, unknown>>();
     for (const r of rows) {
       if (latest.has(r.kind) || !r.dataJson) continue;
-      try { latest.set(r.kind, JSON.parse(r.dataJson) as Record<string, unknown>); } catch { /* skip */ }
+      try { latest.set(r.kind, JSON.parse(r.dataJson) as Record<string, unknown>); } catch (error) { /* skip */ 
+        console.error('[suppressed-error] application/rfp/rfpService.ts:83 readArchitectureRoster', { error });
+      }
     }
     const business = latest.get('business');
     const diagnostic = latest.get('diagnostic');
@@ -142,7 +144,9 @@ async function ensureFreshScan(
     for (const d of score.diagnostics) {
       if (!lastScanAt || d.createdAt > lastScanAt) lastScanAt = d.createdAt;
     }
-  } catch { /* no prior scans */ }
+  } catch (error) { /* no prior scans */ 
+    console.error('[suppressed-error] application/rfp/rfpService.ts:145 ensureFreshScan', { error });
+  }
 
   const ageMs = lastScanAt ? now - new Date(lastScanAt).getTime() : null;
   const ageDays = ageMs == null ? null : Math.floor(ageMs / (24 * 60 * 60 * 1000));
@@ -158,7 +162,9 @@ async function ensureFreshScan(
           tenantId, projectId, auditId: audit.id, userId, secret: deps.secret,
         });
         refreshed = true;
-      } catch { /* one audit failing must not block the proposal */ }
+      } catch (error) { /* one audit failing must not block the proposal */ 
+        console.error('[suppressed-error] application/rfp/rfpService.ts:161 ensureFreshScan', { error });
+      }
     }
   }
 
@@ -252,7 +258,9 @@ export async function matchPortfolio(
         .slice(0, 5);
       if (matches.length) return matches;
     }
-  } catch { /* fall through to keyword ranking */ }
+  } catch (error) { /* fall through to keyword ranking */ 
+    console.error('[suppressed-error] application/rfp/rfpService.ts:255 matchPortfolio', { error });
+  }
 
   return seeded.filter((s) => s.score > 0).slice(0, 5);
 }
@@ -270,7 +278,9 @@ async function blendedWeeklyRateUsd(db: Db, tenantId: number): Promise<number> {
     if (Number.isFinite(centsPerHour) && centsPerHour > 0) {
       return Math.round((centsPerHour / 100) * 40); // 40h week
     }
-  } catch { /* default below */ }
+  } catch (error) { /* default below */ 
+    console.error('[suppressed-error] application/rfp/rfpService.ts:273 blendedWeeklyRateUsd', { error });
+  }
   return RFP_COST_DEFAULTS.blendedWeeklyRateUsd;
 }
 
@@ -285,7 +295,9 @@ async function estimateAgenticCostUsd(db: Db, tenantId: number, projectId: numbe
         .from(llmUsageLog)
         .where(and(eq(llmUsageLog.tenantId, tenantId), eq(llmUsageLog.projectId, projectId)));
       historicalUsd = (Number(row?.total) || 0) / MILLICENTS_PER_USD;
-    } catch { /* default below */ }
+    } catch (error) { /* default below */ 
+      console.error('[suppressed-error] application/rfp/rfpService.ts:288 estimateAgenticCostUsd', { error });
+    }
   }
   const floor = effortWeeks * 200; // a build of this size will burn at least this in agentic spend
   return Math.round(Math.max(historicalUsd, floor));

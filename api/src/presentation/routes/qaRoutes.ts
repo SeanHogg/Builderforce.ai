@@ -183,7 +183,9 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       await db.insert(qaJourneyEvents).values(rows);
       // New interactions move the heatmap — bump the per-tenant version token so
       // the next /heatmap read recomputes instead of serving a stale ranking.
-      void bumpCacheVersion(c.env as Env, QA_HEAT_VERSION_KEY(tenantId)).catch(() => {});
+      void bumpCacheVersion(c.env as Env, QA_HEAT_VERSION_KEY(tenantId)).catch((error) => {
+        console.error('[suppressed-error] presentation/routes/qaRoutes.ts:186 createQaRoutes', { error });
+      });
     }
     return c.json({ inserted: rows.length }, 201);
   });
@@ -724,8 +726,10 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
         await onTaskLandedInLane(env, db, {
           tenantId, projectId, taskId, status: laneKey, submittedBy: 'system:qa-autoroute', runtimeService,
         });
-      } catch {
+      } catch (error) {
         // One finding's routing failure must not abort the rest of the batch.
+      
+        console.error('[suppressed-error] presentation/routes/qaRoutes.ts:727 autoRouteFindings', { error });
       }
     }
   }
@@ -963,7 +967,9 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
           heat: qaFindings.heat, taskId: qaFindings.taskId, fingerprint: qaFindings.fingerprint,
         });
       // A new finding moves the quality trend — invalidate the cached rollup.
-      void bumpCacheVersion(c.env as Env, QA_QUALITY_VERSION_KEY(tenantId)).catch(() => {});
+      void bumpCacheVersion(c.env as Env, QA_QUALITY_VERSION_KEY(tenantId)).catch((error) => {
+        console.error('[suppressed-error] presentation/routes/qaRoutes.ts:968 createQaRoutes', { error });
+      });
     }
 
     // Refresh the rolled-up count from the source of truth.

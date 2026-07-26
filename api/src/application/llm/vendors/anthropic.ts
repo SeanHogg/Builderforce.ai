@@ -605,7 +605,9 @@ function streamAnthropicToOpenAi(body: ReadableStream<Uint8Array>, model: string
         if (emitted) return; // yield to the consumer; pull() is called again for more
       }
     },
-    cancel() { reader.cancel().catch(() => { /* ignore */ }); },
+    cancel() { reader.cancel().catch((error) => { /* ignore */ 
+      console.error('[suppressed-error] application/llm/vendors/anthropic.ts:608 cancel', { error });
+    }); },
   });
 }
 

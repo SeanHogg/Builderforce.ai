@@ -104,7 +104,9 @@ export async function requestRoleRun(
 
   await participants
     .markRoleInProgress(env, req.tenantId, req.taskId, req.roleKey, req.laneKey, executionId)
-    .catch(() => { /* attribution is observability — never fail the dispatch on it */ });
+    .catch((error) => { /* attribution is observability — never fail the dispatch on it */ 
+      console.error('[suppressed-error] application/kanban/requestRoleRun.ts:105 requestRoleRun', { error });
+    });
   await recordActivity(env, db, {
     tenantId: req.tenantId,
     projectId: req.projectId,
@@ -115,6 +117,8 @@ export async function requestRoleRun(
     targetLabel: `#${req.taskId}`,
     summary: `${req.roleName} dispatched as ${req.kind} for ticket #${req.taskId}`.slice(0, 300),
     metadata: { roleKey: req.roleKey, responsibility: req.kind, agentRef: req.agentRef },
-  }).catch(() => {});
+  }).catch((error) => {
+    console.error('[suppressed-error] application/kanban/requestRoleRun.ts:108 requestRoleRun', { error });
+  });
   return executionId;
 }

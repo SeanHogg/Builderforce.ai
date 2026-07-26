@@ -370,14 +370,20 @@ export async function ingestActivityEvents(
 
   // Refresh derived metrics once per affected (contributor, day).
   for (const { contributorId, day } of touched.values()) {
-    await aggregateDailyMetrics(db, tenantId, contributorId, day).catch(() => {});
+    await aggregateDailyMetrics(db, tenantId, contributorId, day).catch((error) => {
+      console.error('[suppressed-error] application/contributors/activityIngest.ts:373 ingestActivityEvents', { error });
+    });
   }
 
   // Invalidate the read-through caches that read this stream so the owner's rollup
   // and the engagement scores reflect the new activity (and any auto-created person).
   if (inserted > 0) {
-    await bumpTenantActivityVersion(env, tenantId).catch(() => {});
-    await bumpWorkforceMetricsVersion(env, tenantId).catch(() => {});
+    await bumpTenantActivityVersion(env, tenantId).catch((error) => {
+      console.error('[suppressed-error] application/contributors/activityIngest.ts:379 ingestActivityEvents', { error });
+    });
+    await bumpWorkforceMetricsVersion(env, tenantId).catch((error) => {
+      console.error('[suppressed-error] application/contributors/activityIngest.ts:380 ingestActivityEvents', { error });
+    });
   }
 
   return { inserted, skipped };

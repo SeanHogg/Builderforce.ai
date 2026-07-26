@@ -58,8 +58,10 @@ export function createBoardWebhookRoutes(db: Db): Hono<HonoEnv> {
         if (probe && typeof probe.challenge === 'string') {
           return c.json({ challenge: probe.challenge });
         }
-      } catch {
+      } catch (error) {
         /* fall through to normal signed handling */
+      
+        console.error('[suppressed-error] presentation/routes/boardWebhookRoutes.ts:61 createBoardWebhookRoutes', { error });
       }
     }
 

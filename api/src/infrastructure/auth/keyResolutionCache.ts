@@ -86,8 +86,10 @@ export async function resolveKeyCached(
       });
       return cached as ResolvedKey;
     }
-  } catch {
+  } catch (error) {
     // KV read errors should never fail the request — fall through to DB.
+  
+    console.error('[suppressed-error] infrastructure/auth/keyResolutionCache.ts:89 resolveKeyCached', { error });
   }
 
   const fresh = await loader();
@@ -109,8 +111,10 @@ export async function invalidateKeyCache(env: Env, keyType: 'bfk' | 'clk' | 'jwt
   const cacheKey = `auth:${keyType}:${hash}`;
   try {
     await kv.put(cacheKey, JSON.stringify({ revoked: true }), { expirationTtl: TOMBSTONE_TTL_SECONDS });
-  } catch {
+  } catch (error) {
     // Cache invalidation failures degrade to "wait for the existing TTL to expire" — acceptable.
+  
+    console.error('[suppressed-error] infrastructure/auth/keyResolutionCache.ts:112 invalidateKeyCache', { error });
   }
 }
 

@@ -94,5 +94,7 @@ export async function attributeRunToManifest(env: Env, db: Db, info: RunFinalize
       executionId: info.executionId,
       ...(prUrl ? { prUrl } : {}),
     });
-  } catch { /* best-effort: attribution must never break the run */ }
+  } catch (error) { /* best-effort: attribution must never break the run */ 
+    console.error('[suppressed-error] application/kanban/attributeRunToManifest.ts:97 attributeRunToManifest', { error });
+  }
 }

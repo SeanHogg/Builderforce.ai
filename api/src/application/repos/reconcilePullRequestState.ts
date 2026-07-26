@@ -82,7 +82,9 @@ export async function reconcilePullRequestState(
     if (isResolveError(resolved)) return UNCHECKED;
 
     const versionToken = pr.updatedAt instanceof Date ? pr.updatedAt.toISOString() : String(pr.updatedAt);
-    if (opts.forceFresh) await invalidatePullRequestDetail(env, pr.id, versionToken).catch(() => {});
+    if (opts.forceFresh) await invalidatePullRequestDetail(env, pr.id, versionToken).catch((error) => {
+      console.error('[suppressed-error] application/repos/reconcilePullRequestState.ts:85 reconcilePullRequestState', { error });
+    });
 
     const detail = await getPullRequestDetail(env, pr.id, versionToken, {
       provider: resolved.repo.provider, host: resolved.repo.host,

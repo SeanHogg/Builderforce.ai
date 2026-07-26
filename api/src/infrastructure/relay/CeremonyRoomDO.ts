@@ -48,7 +48,9 @@ export class CeremonyRoomDO implements DurableObject {
         try {
           const body = await request.text();
           if (body) frame = body;
-        } catch { /* keep default */ }
+        } catch (error) { /* keep default */ 
+          console.error('[suppressed-error] infrastructure/relay/CeremonyRoomDO.ts:51 fetch', { error });
+        }
         this.broadcast(frame, null);
         return new Response(null, { status: 204 });
       }
@@ -68,7 +70,9 @@ export class CeremonyRoomDO implements DurableObject {
     server.addEventListener('close', () => this.onClose(peer));
     server.addEventListener('error', () => this.onClose(peer));
 
-    try { server.send(JSON.stringify({ type: 'hello', id })); } catch { /* ignore */ }
+    try { server.send(JSON.stringify({ type: 'hello', id })); } catch (error) { /* ignore */ 
+      console.error('[suppressed-error] infrastructure/relay/CeremonyRoomDO.ts:71 fetch', { error });
+    }
 
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -89,7 +93,9 @@ export class CeremonyRoomDO implements DurableObject {
       // Send the joiner the current roster, then announce them to everyone else.
       try {
         peer.ws.send(JSON.stringify({ type: 'roster', peers: this.roster() }));
-      } catch { /* ignore */ }
+      } catch (error) { /* ignore */ 
+        console.error('[suppressed-error] infrastructure/relay/CeremonyRoomDO.ts:92 onMessage', { error });
+      }
       this.broadcast(
         JSON.stringify({ type: 'presence', action: 'join', peer: this.publicPeer(peer) }),
         peer.ws,

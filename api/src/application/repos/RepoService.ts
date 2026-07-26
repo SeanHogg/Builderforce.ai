@@ -219,7 +219,9 @@ export class RepoService {
         eq(pullRequests.branchName, message.branchName),
         isNull(pullRequests.number),
       ))
-      .catch(() => { /* best-effort cleanup — never block the new dispatch record */ });
+      .catch((error) => { /* best-effort cleanup — never block the new dispatch record */ 
+        console.error('[suppressed-error] application/repos/RepoService.ts:214 dispatchPrCreation', { error });
+      });
 
     // Record the pull request as 'open' (the agentHost later calls recordPrResult).
     const [prRow] = await this.db

@@ -223,7 +223,9 @@ async function revertGitlab(input: RevertMergedPrInput): Promise<RevertMergedPrR
     // residue this whole subsystem exists to avoid.
     await fetch(`${projectBase}/repository/branches/${encodeURIComponent(input.revertBranch)}`, {
       method: 'DELETE', headers: headers(token),
-    }).catch(() => { /* best-effort */ });
+    }).catch((error) => { /* best-effort */ 
+      console.error('[suppressed-error] application/repos/revertMergedPullRequest.ts:224 revertGitlab', { error });
+    });
     const text = String(revert?.body ?? 'network');
     // GitLab's conflict answer is prose, not a code: "Sorry, we cannot revert this
     // commit automatically… a more recent commit may have updated some of its

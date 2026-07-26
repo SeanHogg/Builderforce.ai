@@ -214,7 +214,9 @@ export async function publishReviewToPr(
           : `Acceptance review found ${review.gaps.length} gap(s)`,
       summary: review.summary ?? 'Acceptance review completed.',
       annotations: annotationsFrom(inline, review.gaps),
-    }).catch(() => { /* best-effort — the review comment below is the primary surface */ });
+    }).catch((error) => { /* best-effort — the review comment below is the primary surface */ 
+      console.error('[suppressed-error] application/validation/publishReviewToPr.ts:206 publishReviewToPr', { error });
+    });
 
     const posted = await postPrReviewComments(target.auth, target.prNumber, target.headSha, inline, {
       body: bodyText,
@@ -293,7 +295,9 @@ export async function publishSignoffToPr(
       conclusion,
       title: `${label[signoff.verdict]}${who} (${signoff.roleKey})`,
       summary: signoff.summary ?? `Ticket sign-off recorded: ${label[signoff.verdict]}.`,
-    }).catch(() => { /* best-effort */ });
+    }).catch((error) => { /* best-effort */ 
+      console.error('[suppressed-error] application/validation/publishReviewToPr.ts:289 publishSignoffToPr', { error });
+    });
 
     const comment = await postRepoPrComment(
       env, db, tenantId, target.auth.repo.id, target.prNumber, body,

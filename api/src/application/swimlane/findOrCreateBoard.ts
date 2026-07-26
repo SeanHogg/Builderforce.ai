@@ -107,7 +107,9 @@ export async function findOrCreateBoard(
       await db.insert(swimlanes).values(buildDefaultLaneRows(input.tenantId, segmentId, created.id, now));
     } catch (e) {
       // Lane seed failed — roll the board back so no empty board lingers.
-      await db.delete(boards).where(eq(boards.id, created.id)).catch(() => { /* best-effort */ });
+      await db.delete(boards).where(eq(boards.id, created.id)).catch((error) => { /* best-effort */ 
+        console.error('[suppressed-error] application/swimlane/findOrCreateBoard.ts:110 findOrCreateBoard', { error });
+      });
       throw e;
     }
   }

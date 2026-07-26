@@ -562,7 +562,9 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
         summary: `Merged ${pr?.number != null ? `PR #${pr.number}` : 'a pull request'}`,
         metadata: { taskId: pr?.taskId ?? null, sha: result.sha ?? null },
       });
-    })().catch(() => {}));
+    })().catch((error) => {
+      console.error('[suppressed-error] presentation/routes/repoRoutes.ts:552 createRepoRoutes', { error });
+    }));
     return c.json({ ok: true, merged: result.merged, sha: result.sha, pullRequest: result.pullRequest });
   });
 

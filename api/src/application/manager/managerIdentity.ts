@@ -43,7 +43,9 @@ function parseProfile(raw: string | null): { vector?: Record<string, number>; en
   try {
     const o = JSON.parse(raw) as Record<string, unknown>;
     if (o && typeof o === 'object') return o as { vector?: Record<string, number>; enneagramType?: number };
-  } catch { /* ignore */ }
+  } catch (error) { /* ignore */ 
+    console.error('[suppressed-error] application/manager/managerIdentity.ts:46 parseProfile', { error });
+  }
   return undefined;
 }
 

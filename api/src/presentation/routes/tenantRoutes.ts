@@ -62,7 +62,9 @@ function emitMemberActivity(
       summary: o.summary,
       metadata: o.metadata ?? null,
     });
-  })().catch(() => {}));
+  })().catch((error) => {
+    console.error('[suppressed-error] presentation/routes/tenantRoutes.ts:53 emitMemberActivity', { error });
+  }));
 }
 
 type SourceControlProvider = 'github' | 'bitbucket';
@@ -170,9 +172,11 @@ async function acceptPendingInvitations(
         .where(eq(tenantInvitations.id, invite.id));
       await invalidateTaskAssignees(env, invite.tenantId);
       await invalidateInvitations(env, invite.tenantId);
-    } catch {
+    } catch (error) {
       // A transient error on one tenant must not block the user's login or the
       // other tenants' invites — leave the row pending so it retries next visit.
+    
+      console.error('[suppressed-error] presentation/routes/tenantRoutes.ts:173 acceptPendingInvitations', { error });
     }
   }
 }
@@ -215,7 +219,9 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const body   = await c.req.json<{ name: string }>();
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name: body.name, ownerUserId: userId });
-    await provisionBuiltinAgents(db, tenant.id).catch(() => {});   // seed Validator + Security
+    await provisionBuiltinAgents(db, tenant.id).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/tenantRoutes.ts:220 createTenantRoutes', { error });
+    });   // seed Validator + Security
     return c.json(tenant.toPlain(), 201);
   });
 
@@ -776,7 +782,9 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const body   = await c.req.json<{ name: string }>();
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name: body.name, ownerUserId: userId });
-    await provisionBuiltinAgents(db, tenant.id).catch(() => {});   // seed Validator + Security
+    await provisionBuiltinAgents(db, tenant.id).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/tenantRoutes.ts:781 createTenantRoutes', { error });
+    });   // seed Validator + Security
     return c.json(tenant.toPlain(), 201);
   });
 
@@ -793,7 +801,9 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const tenant = await tenantService.addMember(id, actorUserId, body.newUserId, body.role);
     await invalidateTaskAssignees(c.env as Env, id);
     // New membership must resolve at the gateway immediately, not after the 60s TTL.
-    await invalidateJwtMembershipCache(c.env as Env, id, body.newUserId).catch(() => {});
+    await invalidateJwtMembershipCache(c.env as Env, id, body.newUserId).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/tenantRoutes.ts:798 createTenantRoutes', { error });
+    });
     return c.json(tenant.toPlain());
   });
 
@@ -829,7 +839,9 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     if (found) {
       const tenant = await tenantService.addMember(id, actorUserId, found.id, role);
       await invalidateTaskAssignees(c.env as Env, id);
-      await invalidateJwtMembershipCache(c.env as Env, id, found.id).catch(() => {});
+      await invalidateJwtMembershipCache(c.env as Env, id, found.id).catch((error) => {
+        console.error('[suppressed-error] presentation/routes/tenantRoutes.ts:834 createTenantRoutes', { error });
+      });
       emitMemberActivity(c, db, 'member.added', {
         targetId: found.id, targetLabel: found.email,
         summary: `Added ${found.email} as ${role}`, metadata: { role, userId: found.id },
@@ -956,7 +968,9 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const tenant = await tenantService.removeMember(id, actorUserId, targetUserId);
     await invalidateTaskAssignees(c.env as Env, id);
     // Revoke the removed member's gateway access at once (not after the 60s TTL).
-    await invalidateJwtMembershipCache(c.env as Env, id, targetUserId).catch(() => {});
+    await invalidateJwtMembershipCache(c.env as Env, id, targetUserId).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/tenantRoutes.ts:961 createTenantRoutes', { error });
+    });
     return c.json(tenant.toPlain());
   });
 
@@ -976,7 +990,9 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const tenant = await tenantService.changeMemberRole(id, actorUserId, targetUserId, body.role);
     await invalidateTaskAssignees(c.env as Env, id);
     // The role rides in the member's next JWT mint; clear the cached membership now.
-    await invalidateJwtMembershipCache(c.env as Env, id, targetUserId).catch(() => {});
+    await invalidateJwtMembershipCache(c.env as Env, id, targetUserId).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/tenantRoutes.ts:981 createTenantRoutes', { error });
+    });
     return c.json(tenant.toPlain());
   });
 

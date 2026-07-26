@@ -154,7 +154,9 @@ async function fetchFollowingRedirects(
       throw new Error(`Too many redirects fetching ${startUrl} (>${MAX_REDIRECTS}).`);
     }
     // Discard the redirect body and resolve the next hop (Location may be relative).
-    await res.body?.cancel().catch(() => {});
+    await res.body?.cancel().catch((error) => {
+      console.error('[suppressed-error] application/web/webFetch.ts:157 fetchFollowingRedirects', { error });
+    });
     current = new URL(location, current).toString();
   }
 }
@@ -219,7 +221,9 @@ async function readCapped(res: Response, maxBytes: number): Promise<string> {
     total += value.byteLength;
     out += decoder.decode(value, { stream: true });
     if (total >= maxBytes) {
-      await reader.cancel().catch(() => {});
+      await reader.cancel().catch((error) => {
+        console.error('[suppressed-error] application/web/webFetch.ts:222 readCapped', { error });
+      });
       break;
     }
   }

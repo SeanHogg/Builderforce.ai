@@ -129,7 +129,9 @@ export class SecurityTicketAccessService {
           updatedBy: updatedBy ?? undefined,
         },
       });
-    if (this.env) await invalidateCached(this.env, cacheKey(tenantId)).catch(() => {});
+    if (this.env) await invalidateCached(this.env, cacheKey(tenantId)).catch((error) => {
+      console.error('[suppressed-error] application/security/SecurityTicketAccessService.ts:132 setConfig', { error });
+    });
     return next;
   }
 

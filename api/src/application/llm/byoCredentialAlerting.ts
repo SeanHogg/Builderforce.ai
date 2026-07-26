@@ -93,7 +93,9 @@ export async function raiseProviderAuthAlertsFromFailovers(
   // parallel raises against the same tenant would each build their own DB handle.
   for (const alert of alerts) {
     const detail = failovers.find((f) => f.vendor === alert.vendor)?.detail ?? '';
-    await raiseProviderAuthAlert(env, tenantId, alert, detail).catch(() => { /* advisory */ });
+    await raiseProviderAuthAlert(env, tenantId, alert, detail).catch((error) => { /* advisory */ 
+      console.error('[suppressed-error] application/llm/byoCredentialAlerting.ts:96 raiseProviderAuthAlertsFromFailovers', { error });
+    });
   }
 }
 
@@ -122,7 +124,9 @@ export async function notifyBrokenProviders(
       ({ locale }) => sendByoCredentialAlertEmail(env, to, [...rows], checkedAt, locale),
       // No request in scope on a cron tick, and the gateway path is fire-and-forget —
       // locale resolves from the recipient's stored preference either way.
-    ).catch(() => { /* one undeliverable address must not suppress the others */ })));
+    ).catch((error) => { /* one undeliverable address must not suppress the others */ 
+      console.error('[suppressed-error] application/llm/byoCredentialAlerting.ts:118 notifyBrokenProviders', { error });
+    })));
     return recipients;
   } catch {
     return []; // never let notification failure propagate into a request or a sweep

@@ -136,8 +136,10 @@ export function validateWorkspaceContent(path: string, content: string): Content
       if (parsed !== null && typeof parsed === 'object') {
         return { ok: false, reason: `${path} looks like JSON data, not ${ext.toUpperCase()} source` };
       }
-    } catch {
+    } catch (error) {
       /* not JSON → real source → fine */
+    
+      console.error('[suppressed-error] application/ide/workspaceStore.ts:139 validateWorkspaceContent', { error });
     }
   }
 

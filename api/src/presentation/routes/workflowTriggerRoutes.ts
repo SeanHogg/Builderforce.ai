@@ -90,8 +90,10 @@ export function createWorkflowTriggerRoutes(db: Db): Hono<HonoEnv> {
     let payload: unknown = rawBody;
     try {
       payload = rawBody ? JSON.parse(rawBody) : {};
-    } catch {
+    } catch (error) {
       /* non-JSON body — pass the raw string through as payload */
+    
+      console.error('[suppressed-error] presentation/routes/workflowTriggerRoutes.ts:93 createWorkflowTriggerRoutes', { error });
     }
 
     const result = await fireAddressedTrigger(db, row, payload, `webhook:${row.nodeId}`);

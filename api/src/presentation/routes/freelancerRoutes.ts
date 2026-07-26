@@ -670,7 +670,9 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
             discipline: inferDiscipline(`${parsed.headline ?? ''} ${skills.join(' ')}`),
           } satisfies ResumeSuggestions);
         }
-      } catch { /* not our native shape */ }
+      } catch (error) { /* not our native shape */ 
+        console.error('[suppressed-error] presentation/routes/freelancerRoutes.ts:673 createFreelancerRoutes', { error });
+      }
     }
     return c.json(empty);
   });
@@ -996,7 +998,9 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
         summary: status === 'active' ? `Hired external talent (${status})` : `Invited external talent (${status})`,
         metadata: { engagementId: id, freelancerUserId: b.freelancerUserId, status, projectId },
       });
-    })().catch(() => {}));
+    })().catch((error) => {
+      console.error('[suppressed-error] presentation/routes/freelancerRoutes.ts:988 createEngagementRoutes', { error });
+    }));
     return c.json({ id, status }, 201);
   });
 
@@ -1038,7 +1042,9 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     let reason: string | null = null;
-    try { const b = await c.req.json<{ reason?: string }>(); reason = b.reason ?? null; } catch { /* body optional */ }
+    try { const b = await c.req.json<{ reason?: string }>(); reason = b.reason ?? null; } catch (error) { /* body optional */ 
+      console.error('[suppressed-error] presentation/routes/freelancerRoutes.ts:1041 createEngagementRoutes', { error });
+    }
     const rows = await db.update(freelancerEngagements).set({
       terminatedAt: sql`NOW()`,
       terminatedReason: reason,

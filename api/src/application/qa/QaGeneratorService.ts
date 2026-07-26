@@ -146,7 +146,7 @@ export function fallbackSpec(input: GenerateInput): string {
       lines.push(`  await expect(page.locator('body')).toBeVisible();`);
       emitted = true;
     } else if (step.action === 'click' && step.selector) {
-      lines.push(`  await page.locator(${JSON.stringify(step.selector)}).first().click().catch(() => {});`);
+      lines.push(`  await page.locator(${JSON.stringify(step.selector)}).first().click().catch((error) => console.error('[generated-qa] optional click failed', { error }));`);
     }
   }
   if (!emitted) {

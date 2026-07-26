@@ -267,7 +267,9 @@ async function meterSynthesis(
       metadata: JSON.stringify({ cloneId, durationMs }),
       costUsdMillicents,
     });
-  } catch {
+  } catch (error) {
     /* metering must never fail the synthesis request */
+  
+    console.error('[suppressed-error] application/studio/voiceCloneService.ts:270 meterSynthesis', { error });
   }
 }

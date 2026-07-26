@@ -32,7 +32,9 @@ async function reportToQuality(env: Env, err: Error, method: string, path: strin
       release: API_VERSION,
     });
     await quality.captureException(err, { tags: { surface: 'api', method, path } });
-  } catch { /* never let self-reporting mask the real error response */ }
+  } catch (error) { /* never let self-reporting mask the real error response */ 
+    console.error('[suppressed-error] presentation/middleware/errorHandler.ts:35 reportToQuality', { error });
+  }
 }
 
 /**
@@ -66,7 +68,9 @@ export async function errorHandler(err: Error, c: Context): Promise<Response> {
           stack,
         });
       }
-    } catch { /* never let logging failures mask the real error response */ }
+    } catch (error) { /* never let logging failures mask the real error response */ 
+      console.error('[suppressed-error] presentation/middleware/errorHandler.ts:69 errorHandler', { error });
+    }
 
     // Dogfood: ship this 500 to our own Product Quality pillar (keyed SDK path).
     await reportToQuality(c.env as Env, err, c.req.method, new URL(c.req.url).pathname);

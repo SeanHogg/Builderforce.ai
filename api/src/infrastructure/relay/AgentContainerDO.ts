@@ -51,7 +51,9 @@ export class AgentContainerDO extends Container<Env> {
           await this.ctx.storage.put(EXEC_KEY, body.executionId);
         }
       }
-    } catch { /* attribution is best-effort */ }
+    } catch (error) { /* attribution is best-effort */ 
+      console.error('[suppressed-error] infrastructure/relay/AgentContainerDO.ts:54 fetch', { error });
+    }
     return super.fetch(request);
   }
 

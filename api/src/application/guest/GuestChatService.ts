@@ -136,7 +136,9 @@ export class GuestChatService {
       const current = await this.ipCountToday(env, ip);
       await kv
         .put(ipCounterKey(ip), String(current + 1), { expirationTtl: secondsUntilUtcMidnight() })
-        .catch(() => { /* best-effort backstop — never fail the request */ });
+        .catch((error) => { /* best-effort backstop — never fail the request */ 
+          console.error('[suppressed-error] application/guest/GuestChatService.ts:137 consumeMessage', { error });
+        });
     }
 
     const used = await this.visitorCountToday(visitorId);
@@ -154,6 +156,8 @@ export class GuestChatService {
       .update(marketingSessions)
       .set({ guestChatTokens: sql`${marketingSessions.guestChatTokens} + ${Math.round(totalTokens)}` })
       .where(eq(marketingSessions.visitorId, visitorId))
-      .catch(() => { /* usage accounting is best-effort */ });
+      .catch((error) => { /* usage accounting is best-effort */ 
+        console.error('[suppressed-error] application/guest/GuestChatService.ts:153 addTokens', { error });
+      });
   }
 }

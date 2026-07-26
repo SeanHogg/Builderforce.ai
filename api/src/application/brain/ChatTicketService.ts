@@ -511,7 +511,9 @@ export class ChatTicketService {
       try {
         const [t] = await this.db.select({ agentRef: tasks.assignedAgentRef }).from(tasks).where(eq(tasks.id, Number(input.ref))).limit(1);
         if (t?.agentRef) await this.onTicketAgentAssigned(tenantId, input.kind, input.ref, t.agentRef, { chatId });
-      } catch { /* best-effort: a handoff failure must never break linking */ }
+      } catch (error) { /* best-effort: a handoff failure must never break linking */ 
+        console.error('[suppressed-error] application/brain/ChatTicketService.ts:514 linkTicket', { error });
+      }
     }
 
     const health = await this.ticketHealthBatch(tenantId, [{ kind: input.kind, ref: input.ref }]);

@@ -448,8 +448,10 @@ export async function recordManagerAction(
       summary: a.summary.slice(0, 500),
       detail: a.detail !== undefined ? JSON.stringify(a.detail).slice(0, 4000) : null,
     });
-  } catch {
+  } catch (error) {
     /* the audit feed is best-effort — a write miss must not fail the pass */
+  
+    console.error('[suppressed-error] application/manager/ManagerService.ts:451 recordManagerAction', { error });
   }
 }
 
@@ -605,8 +607,10 @@ export async function createManagerRunTask(
           })
           .returning({ id: tasks.id });
         return row?.id ?? null;
-      } catch {
+      } catch (error) {
         /* likely a unique-key collision — try the next sequence number */
+      
+        console.error('[suppressed-error] application/manager/ManagerService.ts:608 createManagerRunTask', { error });
       }
     }
     return null;
@@ -644,8 +648,10 @@ export async function finalizeManagerRunTask(
         updatedAt: now,
       })
       .where(eq(tasks.id, taskId));
-  } catch {
+  } catch (error) {
     /* best-effort */
+  
+    console.error('[suppressed-error] application/manager/ManagerService.ts:647 finalizeManagerRunTask', { error });
   }
 }
 
@@ -735,7 +741,9 @@ export async function createManagerCoachingTask(
           .returning({ id: tasks.id });
         taskId = row?.id ?? null;
         break;
-      } catch { /* likely a unique-key collision — try the next sequence number */ }
+      } catch (error) { /* likely a unique-key collision — try the next sequence number */ 
+        console.error('[suppressed-error] application/manager/ManagerService.ts:738 createManagerCoachingTask', { error });
+      }
     }
     if (taskId == null) return null;
 
@@ -747,7 +755,9 @@ export async function createManagerCoachingTask(
           tenantId, projectId, taskId, status: TaskStatus.TODO,
           submittedBy: args.submittedBy ?? `coach:${args.createdBy ?? 'human'}`,
         });
-      } catch { /* dispatch is best-effort; autonomy still picks it up */ }
+      } catch (error) { /* dispatch is best-effort; autonomy still picks it up */ 
+        console.error('[suppressed-error] application/manager/ManagerService.ts:750 createManagerCoachingTask', { error });
+      }
     }
     return taskId;
   } catch {
@@ -807,7 +817,9 @@ export async function syncManagerRosterRole(
         roleKey: nextRoleKey, assigneeKind: nextAssignee.kind, assigneeRef: nextAssignee.ref, projectId,
       });
     }
-  } catch { /* roster sync is best-effort */ }
+  } catch (error) { /* roster sync is best-effort */ 
+    console.error('[suppressed-error] application/manager/ManagerService.ts:810 syncManagerRosterRole', { error });
+  }
 }
 
 // ── the pass ────────────────────────────────────────────────────────────────
@@ -827,7 +839,9 @@ async function flushBatched(db: Db, ops: unknown[], chunkSize = 50): Promise<voi
     try {
       await db.batch(chunk as unknown as Parameters<typeof db.batch>[0]);
     } catch {
-      for (const op of chunk) { try { await (op as Promise<unknown>); } catch { /* skip this write */ } }
+      for (const op of chunk) { try { await (op as Promise<unknown>); } catch (error) { /* skip this write */ 
+        console.error('[suppressed-error] application/manager/ManagerService.ts:830 flushBatched', { error });
+      } }
     }
   }
 }
@@ -1039,7 +1053,9 @@ export async function runManagerForProject(
         // Reflect locally so ranking below sees the fresh score.
         t.businessValue = value.score;
         summary.scored += 1;
-      } catch { /* skip this ticket */ }
+      } catch (error) { /* skip this ticket */ 
+        console.error('[suppressed-error] application/manager/ManagerService.ts:1042 runManagerForProject', { error });
+      }
     }
     await flushBatched(db, writeOps);
   }
@@ -1132,7 +1148,9 @@ export async function runManagerForProject(
             },
           });
         }
-      } catch { /* scheduling is best-effort; the rest of the pass stands */ }
+      } catch (error) { /* scheduling is best-effort; the rest of the pass stands */ 
+        console.error('[suppressed-error] application/manager/ManagerService.ts:1135 runManagerForProject', { error });
+      }
     }
   }
 
@@ -1156,7 +1174,9 @@ export async function runManagerForProject(
           summary: `Assigned "${t.title}" to ${pick.label}.`,
           detail: { memberKind: pick.memberKind, memberRef: pick.memberRef },
         });
-      } catch { /* skip */ }
+      } catch (error) { /* skip */ 
+        console.error('[suppressed-error] application/manager/ManagerService.ts:1159 runManagerForProject', { error });
+      }
     }
   }
 
@@ -1265,7 +1285,9 @@ export async function runManagerForProject(
           summary: `Started work on ticket #${t.id} (rank ${t.managerRank ?? '—'}).`,
         });
       }
-    } catch { /* skip */ }
+    } catch (error) { /* skip */ 
+      console.error('[suppressed-error] application/manager/ManagerService.ts:1268 runManagerForProject', { error });
+    }
   }
   }
 
@@ -1322,7 +1344,9 @@ export async function runManagerForProject(
             requiredOutstanding: outcome.requiredOutstanding,
           },
         });
-      } catch { /* skip this ticket */ }
+      } catch (error) { /* skip this ticket */ 
+        console.error('[suppressed-error] application/manager/ManagerService.ts:1325 runManagerForProject', { error });
+      }
     }
     // Say so when the cap bit. One row per pass (not per deferred ticket) keeps the
     // pacing visible without recreating the flood this whole change removed.
@@ -1486,7 +1510,9 @@ export async function runManagerForProject(
   await db.update(projectManagerConfigs)
     .set({ lastRunAt: new Date() })
     .where(and(eq(projectManagerConfigs.tenantId, tenantId), eq(projectManagerConfigs.projectId, projectId)))
-    .catch(() => {});
+    .catch((error) => {
+      console.error('[suppressed-error] application/manager/ManagerService.ts:1510 runManagerForProject', { error });
+    });
 
   return summary;
 }
@@ -1673,7 +1699,9 @@ async function coordinatePullRequests(
             openedPr: canOpenPr,
           },
         });
-      } catch { /* skip */ }
+      } catch (error) { /* skip */ 
+        console.error('[suppressed-error] application/manager/ManagerService.ts:1676 coordinatePullRequests', { error });
+      }
     }
   }
 
@@ -1895,7 +1923,9 @@ async function coordinatePullRequests(
         summary: `Merged & closed PR #${pr.number ?? '?'}${result.merged ? '' : ' (already up to date)'} — ticket done.`,
         detail: { sha: result.sha },
       });
-    } catch { /* skip */ }
+    } catch (error) { /* skip */ 
+      console.error('[suppressed-error] application/manager/ManagerService.ts:1898 coordinatePullRequests', { error });
+    }
   }
 }
 

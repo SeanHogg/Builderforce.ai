@@ -218,7 +218,9 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
           await recordActivity(c.env as Env, db, {
             tenantId, actor, verb: 'comment.added',
             targetType: l.kind, targetId: l.ref, summary, metadata: { chatId: id },
-          }).catch(() => {});
+          }).catch((error) => {
+            console.error('[suppressed-error] presentation/routes/brainRoutes.ts:218 createBrainRoutes', { error });
+          });
         }
       })());
     }
@@ -231,7 +233,9 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       try {
         const a = (JSON.parse(m.metadata) as { addressedTo?: { kind?: string; ref?: string } }).addressedTo;
         if (a?.kind === 'human' && a.ref) mentioned.add(a.ref);
-      } catch { /* not directed */ }
+      } catch (error) { /* not directed */ 
+        console.error('[suppressed-error] presentation/routes/brainRoutes.ts:234 createBrainRoutes', { error });
+      }
     }
     if (mentioned.size > 0) {
       c.executionCtx.waitUntil((async () => {
@@ -243,7 +247,9 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
               body: 'A teammate addressed you in a Builderforce chat.',
               ref: String(id),
             });
-          } catch { /* best-effort */ }
+          } catch (error) { /* best-effort */ 
+            console.error('[suppressed-error] presentation/routes/brainRoutes.ts:246 createBrainRoutes', { error });
+          }
         }
       })());
     }
@@ -290,7 +296,9 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const body = await c.req.json<{ events?: BrainTraceEventInput[] }>().catch(() => ({} as { events?: BrainTraceEventInput[] }));
     const result = await brainService.appendTrace(id, body.events ?? []);
     // Invalidate the cached read so the next GET reflects these events.
-    await bumpCacheVersion(c.env as Env, traceVersionKey(id)).catch(() => {});
+    await bumpCacheVersion(c.env as Env, traceVersionKey(id)).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/brainRoutes.ts:297 createBrainRoutes', { error });
+    });
     return c.json(result, 201);
   });
 
@@ -496,7 +504,9 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
               { headers: headerHints(c.req) },
             );
           }
-        } catch { /* delivery is best-effort */ }
+        } catch (error) { /* delivery is best-effort */ 
+          console.error('[suppressed-error] presentation/routes/brainRoutes.ts:499 createBrainRoutes', { error });
+        }
       })());
     }
     return c.json(result, 201);
@@ -571,7 +581,9 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     // Meter every fetch that actually hit the wire (success OR upstream error) —
     // the outbound cost is the request, not the response. Best-effort; never fail
     // the read over a metering write.
-    c.executionCtx.waitUntil(recordOutboundFetch(db, tenantId, result.url).catch(() => {}));
+    c.executionCtx.waitUntil(recordOutboundFetch(db, tenantId, result.url).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/brainRoutes.ts:580 createBrainRoutes', { error });
+    }));
     if (result.status >= 400) {
       return c.json({ error: `The URL returned HTTP ${result.status}.`, url: result.url, status: result.status }, 502);
     }
@@ -756,7 +768,9 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
           body: JSON.stringify(payload),
         }));
         if (res.ok) dispatched++;
-      } catch { /* swallow — agentHost may be offline */ }
+      } catch (error) { /* swallow — agentHost may be offline */ 
+        console.error('[suppressed-error] presentation/routes/brainRoutes.ts:759 createBrainRoutes', { error });
+      }
     }
 
     return c.json({ ok: true, dispatched, total: hostRows.length });

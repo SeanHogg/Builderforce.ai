@@ -180,8 +180,10 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
       WHERE NOT EXISTS (
         SELECT 1 FROM ${qaTargets}
         WHERE ${qaTargets.projectId} = ${projectId} AND ${qaTargets.isDefault} = true)`);
-  } catch {
+  } catch (error) {
     /* target auto-provisioning is best-effort; publish still succeeded */
+  
+    console.error('[suppressed-error] application/ide/publishStaticSite.ts:183 publishStaticSite', { error });
   }
 
   return {

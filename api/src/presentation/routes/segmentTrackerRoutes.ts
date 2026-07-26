@@ -100,7 +100,9 @@ function maybeEmit(
   const { tenantId, segmentId } = scope(c);
   const eventId = typeof row.id === 'string' || typeof row.id === 'number' ? String(row.id) : crypto.randomUUID();
   waitUntil(
-    emitWebhookEvent(db, { tenantId, segmentId, eventType: e.event, eventId, data: row }).catch(() => { /* best-effort */ }),
+    emitWebhookEvent(db, { tenantId, segmentId, eventType: e.event, eventId, data: row }).catch((error) => { /* best-effort */ 
+      console.error('[suppressed-error] presentation/routes/segmentTrackerRoutes.ts:103 maybeEmit', { error });
+    }),
   );
 }
 

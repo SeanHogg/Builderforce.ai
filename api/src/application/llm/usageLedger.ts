@@ -247,7 +247,9 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
         const catalog = await getCatalogCached(env);
         const pricing = catalog.find((m) => m.id === row.model)?.pricing;
         costUsdMillicents = computeCostMillicents(pricing, usage);
-      } catch { /* pricing unavailable — record tokens with cost 0 */ }
+      } catch (error) { /* pricing unavailable — record tokens with cost 0 */ 
+        console.error('[suppressed-error] application/llm/usageLedger.ts:250 recordUsageRow', { error });
+      }
       // Premium (any-paid-OpenRouter) selection: add the flat per-request surcharge on
       // top of the metered token cost so the tenant is billed "OpenRouter cost + 1¢".
       if (row.premiumSurcharge) costUsdMillicents += PREMIUM_REQUEST_SURCHARGE_MILLICENTS;
@@ -285,5 +287,7 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       byoProvider:         row.byo ? (row.byoProvider ?? null) : null,
       surface:             row.surface ?? 'web',
     });
-  } catch { /* never let usage logging fail the request */ }
+  } catch (error) { /* never let usage logging fail the request */ 
+    console.error('[suppressed-error] application/llm/usageLedger.ts:288 recordUsageRow', { error });
+  }
 }

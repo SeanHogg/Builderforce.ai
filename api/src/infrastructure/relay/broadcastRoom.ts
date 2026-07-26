@@ -19,8 +19,10 @@ export async function broadcastRoom(
       method: 'POST',
       ...(frame ? { body: frame } : {}),
     });
-  } catch {
+  } catch (error) {
     /* best-effort; the surface still works without live push */
+  
+    console.error('[suppressed-error] infrastructure/relay/broadcastRoom.ts:22 broadcastRoom', { error });
   }
 }
 

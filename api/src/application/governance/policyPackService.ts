@@ -106,7 +106,9 @@ function resolutionKey(scope: PolicyScope, version: string): string {
 
 /** Orphan every cached resolution for a tenant. Call from EVERY pack/gate write. */
 export async function invalidatePolicyCache(env: Env, tenantId: number): Promise<void> {
-  await bumpCacheVersion(env, policyVersionKey(tenantId)).catch(() => {});
+  await bumpCacheVersion(env, policyVersionKey(tenantId)).catch((error) => {
+    console.error('[suppressed-error] application/governance/policyPackService.ts:109 invalidatePolicyCache', { error });
+  });
 }
 
 const isBlank = (v: string | null | undefined): boolean => !v || v.trim().length === 0;

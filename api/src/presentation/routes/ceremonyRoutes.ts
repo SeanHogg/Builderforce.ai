@@ -335,7 +335,9 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
         to: body.attendance,
         note: body.note?.trim().slice(0, 280) ?? null,
       },
-    }).catch(() => { /* the timeline is best-effort — never fail the correction */ });
+    }).catch((error) => { /* the timeline is best-effort — never fail the correction */ 
+      console.error('[suppressed-error] presentation/routes/ceremonyRoutes.ts:317 createCeremonyRoutes', { error });
+    });
 
     return c.json(await hydrate(tenantId, segmentId, id));
   });
@@ -494,7 +496,9 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
       updatedAt: new Date(),
     }).returning();
     if (!schedule) return c.json({ error: 'Failed to create schedule' }, 500);
-    await invalidateCached(c.env as Env, schedulesCacheKey(tenantId, segmentId, body.projectId)).catch(() => {});
+    await invalidateCached(c.env as Env, schedulesCacheKey(tenantId, segmentId, body.projectId)).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/ceremonyRoutes.ts:497 createCeremonyRoutes', { error });
+    });
     return c.json({ schedule }, 201);
   });
 
@@ -536,7 +540,9 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(ceremonySchedules.id, id), eq(ceremonySchedules.tenantId, tenantId)))
       .returning();
     if (!schedule) return c.json({ error: 'Not found' }, 404);
-    await invalidateCached(c.env as Env, schedulesCacheKey(tenantId, segmentId, existing.projectId)).catch(() => {});
+    await invalidateCached(c.env as Env, schedulesCacheKey(tenantId, segmentId, existing.projectId)).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/ceremonyRoutes.ts:539 createCeremonyRoutes', { error });
+    });
     return c.json({ schedule });
   });
 
@@ -546,7 +552,9 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(ceremonySchedules.id, c.req.param('id')), eq(ceremonySchedules.tenantId, tenantId), eq(ceremonySchedules.segmentId, segmentId)))
       .returning({ projectId: ceremonySchedules.projectId });
     if (!schedule) return c.json({ error: 'Not found' }, 404);
-    await invalidateCached(c.env as Env, schedulesCacheKey(tenantId, segmentId, schedule.projectId)).catch(() => {});
+    await invalidateCached(c.env as Env, schedulesCacheKey(tenantId, segmentId, schedule.projectId)).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/ceremonyRoutes.ts:549 createCeremonyRoutes', { error });
+    });
     return c.json({ deleted: true });
   });
 

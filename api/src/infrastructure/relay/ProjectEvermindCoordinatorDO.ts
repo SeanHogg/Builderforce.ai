@@ -792,7 +792,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
               + `passRate=${fitness.passRate.toFixed(2)} — merged model is not fit to serve`,
             );
           }
-        } catch { /* best-effort: a probe failure must never wedge the merge */ }
+        } catch (error) { /* best-effort: a probe failure must never wedge the merge */ 
+          console.error('[suppressed-error] infrastructure/relay/ProjectEvermindCoordinatorDO.ts:795 drain', { error });
+        }
       }
       // Embed each text memory with the JUST-MERGED model so semantic recall (Validate)
       // only has to embed the query later — the vector is computed once, here, off the
@@ -804,7 +806,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           if (!src) continue;
           try {
             m.emb = packVec(embedTokens(lm, tok.encode(src).slice(0, EMBED_MAX_TOKENS)));
-          } catch { /* best-effort: a failed embed just falls back to lexical recall */ }
+          } catch (error) { /* best-effort: a failed embed just falls back to lexical recall */ 
+            console.error('[suppressed-error] infrastructure/relay/ProjectEvermindCoordinatorDO.ts:807 drain', { error });
+          }
         }
       }
       // Cache the freshly-merged model for recall on this isolate (its ref is the new
@@ -849,7 +853,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           if (fresh.length > 0) {
             await this.state.storage.put(EVAL_KEY, [...fresh, ...evalSet].slice(0, EVAL_MAX));
           }
-        } catch { /* best-effort: never fail the merge over an eval point */ }
+        } catch (error) { /* best-effort: never fail the merge over an eval point */ 
+          console.error('[suppressed-error] infrastructure/relay/ProjectEvermindCoordinatorDO.ts:852 drain', { error });
+        }
       }
       return { merged: mergedMeta.length, newVersion: nextVersion };
     } finally {
@@ -860,7 +866,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       if (faultEvents.length > 0) {
         try {
           await ingestErrorEvents(this.db, this.env, { id: null, tenantId, projectId, defaultProjectId: projectId }, faultEvents);
-        } catch { /* best-effort: the console.warn above is the fallback record */ }
+        } catch (error) { /* best-effort: the console.warn above is the fallback record */ 
+          console.error('[suppressed-error] infrastructure/relay/ProjectEvermindCoordinatorDO.ts:863 drain', { error });
+        }
       }
       // Clear only what we consumed; anything that arrived mid-merge OR was deferred
       // past the per-alarm fit cap stays queued, and we re-arm to fold it in next.

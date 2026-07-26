@@ -383,7 +383,9 @@ export class TaskService {
         const successorId = idByIndex.get(index);
         const predecessorId = idByIndex.get(predIndex);
         if (successorId == null || predecessorId == null) continue;
-        await this.linkDependency(task.projectId as number, predecessorId, successorId).catch(() => {});
+        await this.linkDependency(task.projectId as number, predecessorId, successorId).catch((error) => {
+          console.error('[suppressed-error] application/task/TaskService.ts:386 decomposeEpic', { error });
+        });
       }
     }
 

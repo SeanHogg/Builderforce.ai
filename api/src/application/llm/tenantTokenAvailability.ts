@@ -207,8 +207,10 @@ export async function resolveSuperadminUnlimited(
         .where(eq(users.id, opts.actingUserId))
         .limit(1);
       if (u?.isSuperadmin === true) return true;
-    } catch {
+    } catch (error) {
       /* fall through to the tenant-membership check */
+    
+      console.error('[suppressed-error] application/llm/tenantTokenAvailability.ts:210 resolveSuperadminUnlimited', { error });
     }
   }
   return tenantHasSuperadminMember(db, tenantId, env);

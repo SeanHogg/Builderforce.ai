@@ -160,6 +160,8 @@ export async function recordPersonalityEvent(
 
   // Age out the per-agent read-through cache so the panel reflects the new row. A used
   // personality changes no vector, so the cross-surface profile caches stay warm.
-  await bumpCacheVersion(env, personalityVersionKey(tenantId, agentRef)).catch(() => {});
+  await bumpCacheVersion(env, personalityVersionKey(tenantId, agentRef)).catch((error) => {
+    console.error('[suppressed-error] application/persona/recordPersonalityEvent.ts:163 recordPersonalityEvent', { error });
+  });
   return inserted?.id ?? null;
 }

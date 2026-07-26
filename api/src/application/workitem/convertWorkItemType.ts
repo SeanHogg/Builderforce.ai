@@ -74,9 +74,15 @@ export class ConvertError extends Error {}
 async function invalidateCaches(env: Env | undefined, tenantId: number, projectId: number | null): Promise<void> {
   if (!env) return;
   await Promise.all([
-    projectId != null ? bumpCacheVersion(env, `task-tree-version:project:${projectId}`).catch(() => {}) : Promise.resolve(),
-    invalidateProjectsList(env, tenantId).catch(() => {}),
-    bumpCacheVersion(env, pmoVersionKey(tenantId)).catch(() => {}),
+    projectId != null ? bumpCacheVersion(env, `task-tree-version:project:${projectId}`).catch((error) => {
+      console.error('[suppressed-error] application/workitem/convertWorkItemType.ts:77 invalidateCaches', { error });
+    }) : Promise.resolve(),
+    invalidateProjectsList(env, tenantId).catch((error) => {
+      console.error('[suppressed-error] application/workitem/convertWorkItemType.ts:78 invalidateCaches', { error });
+    }),
+    bumpCacheVersion(env, pmoVersionKey(tenantId)).catch((error) => {
+      console.error('[suppressed-error] application/workitem/convertWorkItemType.ts:79 invalidateCaches', { error });
+    }),
   ]);
 }
 

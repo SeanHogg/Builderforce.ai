@@ -249,7 +249,9 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
         if (!('error' in resolved)) {
           await db.update(meetings).set({ chatId: resolved.id as number, updatedAt: new Date() }).where(eq(meetings.id, meeting.id));
         }
-      } catch { /* team chat is a nice-to-have on a meeting; never block creation */ }
+      } catch (error) { /* team chat is a nice-to-have on a meeting; never block creation */ 
+        console.error('[suppressed-error] presentation/routes/meetingRoutes.ts:252 createMeetingRoutes', { error });
+      }
     }
 
     // Organizer is always attendee #0 (host, auto-accepted). De-dupe by ref.
@@ -465,7 +467,9 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     await db.update(meetings).set({ status: 'ended', endedAt: now, updatedAt: now }).where(eq(meetings.id, res.meeting.id));
     // Auto-generate minutes from the transcript (best-effort: never block ending).
     if (!res.meeting.summary) {
-      try { await summarizeMeeting(db, c.env as Env, { ...res.meeting, status: 'ended', endedAt: now }); } catch { /* honest no-op */ }
+      try { await summarizeMeeting(db, c.env as Env, { ...res.meeting, status: 'ended', endedAt: now }); } catch (error) { /* honest no-op */ 
+        console.error('[suppressed-error] presentation/routes/meetingRoutes.ts:468 createMeetingRoutes', { error });
+      }
     }
     return c.json(await hydrate(tenantId, res.meeting.id));
   });

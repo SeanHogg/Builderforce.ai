@@ -206,8 +206,10 @@ export async function resolveEvermindTeacherModel(
     if (byoConnected) return { model };
     const availability = await getTenantTokenAvailability(db, tenantId, undefined, env);
     if (!availability.hasTokens) return { model: null, reason: 'budget_exhausted' };
-  } catch {
+  } catch (error) {
     /* fail open — keep the teacher */
+  
+    console.error('[suppressed-error] application/llm/evermindTeacher.ts:209 resolveEvermindTeacherModel', { error });
   }
   return { model };
 }

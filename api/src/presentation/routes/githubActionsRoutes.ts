@@ -196,7 +196,9 @@ export function createGitHubActionsRoutes(db: Db, runtimeService: RuntimeService
       // ours ever reaches the runner.
       const repo = await resolveTicketRepoContext(db, gitSecret(env), ctx.tenantId, ctx.taskId);
 
-      await markCloudExecutionRunning(runtimeService, body.executionId).catch(() => {});
+      await markCloudExecutionRunning(runtimeService, body.executionId).catch((error) => {
+        console.error('[suppressed-error] presentation/routes/githubActionsRoutes.ts:199 createGitHubActionsRoutes', { error });
+      });
 
       return c.json({
         systemPrompt,

@@ -584,7 +584,9 @@ export function createNotificationRoutes(): Hono<HonoEnv> {
     const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     let ids: number[] | null = null;
-    try { const b = await c.req.json<{ ids?: number[] }>(); ids = Array.isArray(b.ids) ? b.ids.map(Number).filter(Number.isFinite) : null; } catch { /* mark all */ }
+    try { const b = await c.req.json<{ ids?: number[] }>(); ids = Array.isArray(b.ids) ? b.ids.map(Number).filter(Number.isFinite) : null; } catch (error) { /* mark all */ 
+      console.error('[suppressed-error] presentation/routes/jobRoutes.ts:587 createNotificationRoutes', { error });
+    }
     if (ids && ids.length > 0) {
       await db
         .update(freelancerNotifications)

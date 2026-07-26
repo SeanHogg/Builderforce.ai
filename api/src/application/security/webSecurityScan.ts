@@ -229,7 +229,9 @@ export async function runWebScan(
       `Scanned ${scan.origin}. ${scorePhrase} ${scan.findings.length} issue(s) found` +
       (deduped ? `, ${taskIds.length} newly filed (${deduped} already tracked)` : `, ${taskIds.length} filed`) +
       (scan.server ? `. Server: ${scan.server}.` : '.'),
-  }).catch(() => {});
+  }).catch((error) => {
+    console.error('[suppressed-error] application/security/webSecurityScan.ts:225 runWebScan', { error });
+  });
 
   return {
     ok: true,

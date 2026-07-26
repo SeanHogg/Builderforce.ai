@@ -182,7 +182,9 @@ export async function dispatchBrainLearn(
   // the others or the reply.
   await Promise.all(
     gate.contributedProjectIds.map((pid) =>
-      dispatchProjectEvermindLearnText(env, tenantId, pid, gate.assistant!, undefined, prompt).catch(() => { /* per-target best-effort */ }),
+      dispatchProjectEvermindLearnText(env, tenantId, pid, gate.assistant!, undefined, prompt).catch((error) => { /* per-target best-effort */ 
+        console.error('[suppressed-error] application/brain/brainEvermindLearning.ts:185 dispatchBrainLearn', { error });
+      }),
     ),
   );
 }
@@ -209,6 +211,8 @@ export async function learnFromPersistedTurns(
   const gate: BrainLearnGate = await evaluateBrainLearnGate(env, db, chatId, tenantId, inserted).catch(
     () => ({ outcome: { learned: false, version: 0, reason: null }, projectId: null, contributedProjectIds: [], assistant: null }),
   );
-  schedule(dispatchBrainLearn(env, db, chatId, tenantId, inserted, gate).catch(() => { /* never fail the write */ }));
+  schedule(dispatchBrainLearn(env, db, chatId, tenantId, inserted, gate).catch((error) => { /* never fail the write */ 
+    console.error('[suppressed-error] application/brain/brainEvermindLearning.ts:212 learnFromPersistedTurns', { error });
+  }));
   return gate.outcome;
 }

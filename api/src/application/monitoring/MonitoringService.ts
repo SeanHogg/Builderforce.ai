@@ -296,15 +296,21 @@ export class MonitoringService {
         sourceIncidentId: opened.incidentId,
         match: { severity: monitor.severity, affectedSystem: monitor.affectedSystem ?? null, monitorType: monitor.monitorType },
       });
-    } catch { /* event-trigger dispatch is best-effort */ }
+    } catch (error) { /* event-trigger dispatch is best-effort */ 
+      console.error('[suppressed-error] application/monitoring/MonitoringService.ts:299 breach', { error });
+    }
 
     // Page on-call + dispatch the Incident Manager to triage (best-effort).
     if (opened.created) {
-      await new EscalationService(this.db).pageInitial(env, tenantId, opened.incidentId).catch(() => {});
+      await new EscalationService(this.db).pageInitial(env, tenantId, opened.incidentId).catch((error) => {
+        console.error('[suppressed-error] application/monitoring/MonitoringService.ts:305 breach', { error });
+      });
       const detail = await incidents.getIncident(tenantId, opened.incidentId);
       await dispatchIncidentTriage(env, this.db, {
         tenantId, incidentId: opened.incidentId, boardTaskId: detail?.incident.boardTaskId ?? null, incidentRef,
-      }).catch(() => {});
+      }).catch((error) => {
+        console.error('[suppressed-error] application/monitoring/MonitoringService.ts:307 breach', { error });
+      });
     }
   }
 

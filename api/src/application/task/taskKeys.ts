@@ -49,8 +49,10 @@ export async function withDirectTaskKey<T>(
   for (let attempt = 0; attempt < KEY_COLLISION_ATTEMPTS; attempt++) {
     try {
       return await insert(formatTaskKey(projectKey, baseSeq + attempt));
-    } catch {
+    } catch (error) {
       /* likely a unique-key collision — try the next sequence number */
+    
+      console.error('[suppressed-error] application/task/taskKeys.ts:52 withDirectTaskKey', { error });
     }
   }
   return null;

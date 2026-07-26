@@ -130,7 +130,9 @@ export async function mergeRecordedPullRequest(
     env,
     args.prId,
     row.updatedAt instanceof Date ? row.updatedAt.toISOString() : String(row.updatedAt),
-  ).catch(() => { /* cache miss is fine */ });
+  ).catch((error) => { /* cache miss is fine */ 
+    console.error('[suppressed-error] application/repos/mergeRecordedPr.ts:129 mergeRecordedPullRequest', { error });
+  });
 
   // Merge → ticket complete: the ONE place every merge path funnels through, so the
   // human "Approve & Merge", the AI Manager sweep and the green-CI auto-merge all
@@ -141,7 +143,9 @@ export async function mergeRecordedPullRequest(
       tenantId: args.tenantId,
       taskId: row.taskId,
       actorUserId: args.mergedBy && !args.mergedBy.startsWith('manager:') ? args.mergedBy : null,
-    }).catch(() => { /* completion is best-effort; the merge itself succeeded */ });
+    }).catch((error) => { /* completion is best-effort; the merge itself succeeded */ 
+      console.error('[suppressed-error] application/repos/mergeRecordedPr.ts:140 mergeRecordedPullRequest', { error });
+    });
   }
 
   return { ok: true, merged: result.merged, branchUpdated, sha: result.sha, pullRequest: updated ?? row };

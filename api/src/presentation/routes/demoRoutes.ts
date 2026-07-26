@@ -121,7 +121,9 @@ export function createDemoRoutes(): Hono<HonoEnv> {
         persona: target.persona,
         kind: 'demo_start',
         path: target.entryPath,
-      }).then(() => undefined).catch(() => {}),
+      }).then(() => undefined).catch((error) => {
+        console.error('[suppressed-error] presentation/routes/demoRoutes.ts:119 createDemoRoutes', { error });
+      }),
     );
 
     return c.json({
