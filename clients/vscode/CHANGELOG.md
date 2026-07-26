@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.109] — The Evermind panel is now tabbed, and you can send its diagnostics to someone
+
+- **The Evermind panel's four jobs are now four tabs — Teach, Test, Check and Maintain.** They used to be stacked one under the other, which turned the sidebar into a scroll marathon: "Replace the model" sat a page and a half below the state it was meant to repair. Each tab is now one job, and the things that are always true — the version, what it has learned, whether it is serving replies, and any quarantine warning — stay pinned above the tabs, so you can never replace a model without seeing why it stopped working. Arrow keys move between tabs.
+- **New: Copy diagnostics.** When the model produces nonsense there was no way to hand the evidence to anyone — a screenshot loses the exact output, which is the whole point. One button (in the panel header, and again under Maintain) copies the full picture as text you can paste to support or an AI assistant: the model's state, every Evermind under the project, the last test-bench run *with its raw output verbatim* and the reason it was refused, the last knowledge check, and the tail of the learn log. It works even when the panel failed to load — that failure is often exactly what needs sending.
+- **A failed readiness check and outstanding knowledge findings now follow you between tabs**, marked on the tab itself, and your results stay put when you switch away and back — so a knowledge check you paid frontier tokens for is never thrown away by a tab click.
+
 ## [2026.7.67] — Keep typing while the assistant works — your follow-ups now wait their turn
 
 - **You no longer have to sit on your hands while a run is going.** Previously, once the assistant started working the composer went read-only — anything you typed was ignored until it finished, so a follow-up thought had to wait (and was easy to lose). Now you can keep composing and send while a run is in flight: your message joins a queue and goes out automatically the moment the current run finishes. Queue several and they send one at a time, each as its own turn, so you can line up "then do X, then check Y" without babysitting the run. Queued messages show as removable chips above the box, so you can see exactly what's pending and cancel anything you change your mind about before it sends.
