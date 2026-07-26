@@ -87,8 +87,8 @@ export async function signalPendingWork(env: Env): Promise<void> {
   if (!store) return;
   try {
     await store.put(WORK_SIGNAL_KEY, '1', { expirationTtl: SIGNAL_TTL_SECONDS });
-  } catch {
-    /* best-effort — the floor sweep is the correctness backstop */
+  } catch (error) {
+    console.error('[cron-work-signal] pending-work signal write failed; floor sweep remains active', { error });
   }
 }
 
@@ -127,7 +127,8 @@ export async function evaluateCronGate(env: Env, nowMs: number): Promise<CronGat
     if (sig != null) return { run: true, reason: 'signal', floorDue, lastFloorMs, floorIntervalMs: interval };
     if (floorDue) return { run: true, reason: 'floor', floorDue: true, lastFloorMs, floorIntervalMs: interval };
     return { run: false, reason: 'idle', floorDue: false, lastFloorMs, floorIntervalMs: interval };
-  } catch {
+  } catch (error) {
+    console.error('[cron-work-signal] gate read failed; running fan-out fail-open', { nowMs, error });
     // A KV blip must never strand work — run the fan-out this tick.
     return { run: true, reason: 'kv-unavailable', floorDue: true, lastFloorMs: null, floorIntervalMs: interval };
   }
@@ -149,7 +150,7 @@ export async function openCronTick(env: Env, nowMs: number, floorDue: boolean): 
       store.delete(WORK_SIGNAL_KEY),
       floorDue ? store.put(FLOOR_TS_KEY, String(nowMs)) : Promise.resolve(),
     ]);
-  } catch {
-    /* best-effort — a missed consume only costs one extra non-idle tick */
+  } catch (error) {
+    console.error('[cron-work-signal] tick signal consume failed', { nowMs, floorDue, error });
   }
 }

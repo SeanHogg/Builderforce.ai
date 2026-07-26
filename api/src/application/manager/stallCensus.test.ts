@@ -16,6 +16,7 @@ const facts = (over: Partial<CensusTicketFacts> = {}): CensusTicketFacts => ({
   hasLiveRun: false,
   consecutiveFailures: 0,
   lane: { gate: 'auto', isTerminal: false, staffed: false },
+  managedProducerResolvable: null,
   stageOwedRoles: [],
   ...over,
 });
@@ -52,6 +53,29 @@ describe('classifyBulkAutoRunReason', () => {
 
     const unstaffedAndFailing = facts({ consecutiveFailures: 9 });
     expect(classifyBulkAutoRunReason(unstaffedAndFailing)).toBe('no_agent');
+  });
+
+  // The census must model the same gate the DISPATCHER enforces, or it re-describes a
+  // configuration defect as a staffing problem. Measured: a managed board's tickets read
+  // `will_run` while every dispatch was being refused.
+  it('reports managed_no_role on a managed stage with no resolvable role — even when the lane IS staffed', () => {
+    const staffed = { gate: 'auto', isTerminal: false, staffed: true };
+    expect(classifyBulkAutoRunReason(facts({ lane: staffed, managedProducerResolvable: false })))
+      .toBe('managed_no_role');
+  });
+
+  it('lets a managed stage WITH a resolvable role fall through the normal ladder', () => {
+    const staffed = { gate: 'auto', isTerminal: false, staffed: true };
+    expect(classifyBulkAutoRunReason(facts({ lane: staffed, managedProducerResolvable: true })))
+      .toBe('will_run');
+    expect(classifyBulkAutoRunReason(facts({ lane: staffed, managedProducerResolvable: true, hasLiveRun: true })))
+      .toBe('already_running');
+  });
+
+  it('ranks the human gate above it, exactly as the evaluator does', () => {
+    const humanGated = { gate: 'human', isTerminal: false, staffed: true };
+    expect(classifyBulkAutoRunReason(facts({ lane: humanGated, managedProducerResolvable: false })))
+      .toBe('human_gate');
   });
 
   it('reports the breaker and live runs on a staffed lane', () => {

@@ -216,7 +216,8 @@ async function gitTool(proc, name, parsed, headBranch) {
     if (r.exitCode === 3 || /MERGE_CONFLICT/.test(r.output)) {
       return { ok: false, error: 'merge conflict — the base branch has changes that conflict with your branch; the merge was aborted (working tree is clean). Resolve the conflicting files and retry, or ask a human.', output: r.output.slice(0, 4000) };
     }
-    await op('event', { toolName: 'git_sync_latest', category: 'tool', result: r.output.slice(0, 300) }).catch(() => {});
+    await op('event', { toolName: 'git_sync_latest', category: 'tool', result: r.output.slice(0, 300) })
+      .catch((error) => console.error('[bf-runner] git_sync_latest telemetry failed', error));
     return clip(r);
   }
 
@@ -235,7 +236,8 @@ async function gitTool(proc, name, parsed, headBranch) {
     if (r.exitCode === 4 || /\\bDIRTY\\b/.test(r.output)) {
       return { ok: false, error: 'you have uncommitted changes — commit or discard them before ' + name + ' (it refuses to discard uncommitted work).' };
     }
-    await op('event', { toolName: name, category: 'tool', result: r.output.slice(0, 300) }).catch(() => {});
+    await op('event', { toolName: name, category: 'tool', result: r.output.slice(0, 300) })
+      .catch((error) => console.error('[bf-runner] git history telemetry failed', error));
     return clip(r);
   }
 
@@ -267,7 +269,12 @@ async function execTool(writtenPaths, name, parsed, proc, headBranch) {
     if (!path || !content) return { ok: false, error: 'path and content are both required' };
     const isNew = !writtenPaths.has(path);
     // Mirror to the checkout so run_command builds against the new code.
-    try { await mkdir(dirname(join(WORKDIR, path)), { recursive: true }); await writeFile(join(WORKDIR, path), content); } catch { /* non-fatal; the commit is the source of truth */ }
+    try {
+      await mkdir(dirname(join(WORKDIR, path)), { recursive: true });
+      await writeFile(join(WORKDIR, path), content);
+    } catch (error) {
+      console.error('[bf-runner] local checkout mirror write failed; remote commit remains source of truth', { path, error });
+    }
     const r = await op('write', { path, content, summary: parsed.summary, isNew });
     if (r.ok) writtenPaths.add(path);
     return r;
@@ -277,7 +284,8 @@ async function execTool(writtenPaths, name, parsed, proc, headBranch) {
     if (!command) return { ok: false, error: 'command is required' };
     const t0 = Date.now();
     const { exitCode, output } = await runShell(command, WORKDIR, proc);
-    await op('event', { toolName: 'run_command', category: 'tool', detail: { command, exitCode }, result: output.slice(0, 300), durationMs: Date.now() - t0 }).catch(() => {});
+    await op('event', { toolName: 'run_command', category: 'tool', detail: { command, exitCode }, result: output.slice(0, 300), durationMs: Date.now() - t0 })
+      .catch((error) => console.error('[bf-runner] run_command telemetry failed', error));
     return { ok: exitCode === 0, exitCode, output: output.slice(0, 20000) };
   }
   if (name.startsWith('git_')) {
@@ -322,7 +330,7 @@ async function runLoop() {
           if (proc.current) proc.current.kill('SIGKILL');
         }
       })
-      .catch(() => { /* a missed beat is covered by the next */ });
+      .catch((error) => console.error('[bf-runner] heartbeat failed; next interval will retry', error));
   }, HEARTBEAT_MS);
   if (typeof heartbeat.unref === 'function') heartbeat.unref();
 
@@ -342,7 +350,7 @@ async function runLoop() {
       category: 'planning',
       detail: { workdir: WORKDIR, branch: headBranch },
       result: 'using the GitHub Actions checkout at ' + WORKDIR,
-    }).catch(() => {});
+    }).catch((error) => console.error('[bf-runner] checkout telemetry failed', error));
 
     const messages = [
       { role: 'system', content: spec.systemPrompt },
@@ -384,7 +392,11 @@ async function runLoop() {
       for (const tc of toolCalls) {
         const name = (tc.function && tc.function.name) || 'unknown';
         let parsed = {};
-        try { parsed = tc.function && tc.function.arguments ? JSON.parse(tc.function.arguments) : {}; } catch { /* empty */ }
+        try {
+          parsed = tc.function && tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
+        } catch (error) {
+          console.error('[bf-runner] malformed tool arguments; invoking with empty object', { toolName: name, toolCallId: tc.id, error });
+        }
         let result;
         if (name === 'finish') {
           finalOutput = typeof parsed.summary === 'string' ? parsed.summary : finalOutput;
@@ -412,9 +424,10 @@ async function runLoop() {
     // one is left for the Worker's reaper, which is a much worse outcome than a
     // reported failure.
     if (crashed) {
-      await op('fail', { error: crashed }).catch(() => {});
+      await op('fail', { error: crashed }).catch((error) => console.error('[bf-runner] terminal fail callback failed', error));
     } else {
-      await op('finalize', { writtenPaths: [...writtenPaths], finalOutput, cancelled }).catch(() => {});
+      await op('finalize', { writtenPaths: [...writtenPaths], finalOutput, cancelled })
+        .catch((error) => console.error('[bf-runner] terminal finalize callback failed', error));
     }
   }
   return crashed;

@@ -1,4 +1,4 @@
-import { and, eq, inArray, lte } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, lte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { activityLog, executionLifecycleOutbox } from '../../infrastructure/database/schema';
 import type { Env } from '../../env';
@@ -70,6 +70,10 @@ export async function drainExecutionLifecycleOutbox(
   const limit = Math.max(1, Math.min(opts.limit ?? 100, 500));
   const now = new Date();
   const filters = [
+    // This is the deliberate cross-tenant cron scan. Requiring a tenant value
+    // keeps global/platform rows out; every subsequent mutation also matches the
+    // tenant copied from the claimed row.
+    isNotNull(executionLifecycleOutbox.tenantId),
     inArray(executionLifecycleOutbox.status, ['pending', 'retry']),
     lte(executionLifecycleOutbox.nextAttemptAt, now),
   ];
@@ -91,6 +95,7 @@ export async function drainExecutionLifecycleOutbox(
       .set({ status: 'processing', updatedAt: now })
       .where(and(
         eq(executionLifecycleOutbox.id, row.id),
+        eq(executionLifecycleOutbox.tenantId, row.tenantId),
         inArray(executionLifecycleOutbox.status, ['pending', 'retry']),
       ))
       .returning({ id: executionLifecycleOutbox.id });
@@ -126,7 +131,10 @@ export async function drainExecutionLifecycleOutbox(
 
       await db.update(executionLifecycleOutbox)
         .set({ status: 'done', processedAt: new Date(), lastError: null, updatedAt: new Date() })
-        .where(eq(executionLifecycleOutbox.id, row.id));
+        .where(and(
+          eq(executionLifecycleOutbox.id, row.id),
+          eq(executionLifecycleOutbox.tenantId, row.tenantId),
+        ));
       touchedTenants.add(row.tenantId);
       result.projected += 1;
     } catch (error) {
@@ -150,7 +158,10 @@ export async function drainExecutionLifecycleOutbox(
           lastError: message,
           updatedAt: new Date(),
         })
-        .where(eq(executionLifecycleOutbox.id, row.id));
+        .where(and(
+          eq(executionLifecycleOutbox.id, row.id),
+          eq(executionLifecycleOutbox.tenantId, row.tenantId),
+        ));
       if (dead) result.dead += 1;
       else result.retried += 1;
     }

@@ -51,8 +51,8 @@ export function makeExecutionBoardSink(env: Env, db: Db): ExecutionBoardSink {
           projectRefByTask.set(taskId, ref);
         }
         await broadcastProjectChanged(env.SESSION_ROOM, ref.tenantId, ref.projectId);
-      } catch {
-        /* best-effort; the board still reconciles via its fallback poll */
+      } catch (error) {
+        console.error('[execution-board] project change broadcast failed', { taskId, error });
       }
     })();
   };
