@@ -1390,7 +1390,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       tenantId,
       metadata: { from: before?.prev ?? null, to: updated.tokenDailyLimitOverride },
       ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
-    }).catch(() => {});
+    }).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/adminRoutes.ts:1389 createAdminRoutes', { error });
+    });
 
     return c.json({ id: updated.id, tokenDailyLimitOverride: updated.tokenDailyLimitOverride });
   });
@@ -1434,7 +1436,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       tenantId,
       metadata: { from: before?.prev ?? null, to: updated.paidOverflowDailyCap },
       ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
-    }).catch(() => {});
+    }).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/adminRoutes.ts:1433 createAdminRoutes', { error });
+    });
 
     return c.json({ id: updated.id, paidOverflowDailyCap: updated.paidOverflowDailyCap });
   });
@@ -1476,7 +1480,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       tenantId,
       metadata: { from: before?.prev ?? null, to: updated.imageCreditsDailyLimit },
       ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
-    }).catch(() => {});
+    }).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/adminRoutes.ts:1475 createAdminRoutes', { error });
+    });
 
     return c.json({ id: updated.id, imageCreditsDailyLimit: updated.imageCreditsDailyLimit });
   });
@@ -1511,7 +1517,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       tenantId,
       metadata: { from: before?.prev ?? null, to: updated.premiumOverride },
       ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
-    }).catch(() => {});
+    }).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/adminRoutes.ts:1510 createAdminRoutes', { error });
+    });
 
     return c.json({ id: updated.id, premiumOverride: updated.premiumOverride });
   });
@@ -1570,7 +1578,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       await db.execute(sql`SELECT 1`);
       dbLatencyMs = Date.now() - t0;
       dbOk = true;
-    } catch { /* dbOk stays false */ }
+    } catch (error) { /* dbOk stays false */ 
+      console.error('[suppressed-error] presentation/routes/adminRoutes.ts:1573 createAdminRoutes', { error });
+    }
 
     // Platform counts
     const [counts] = (await db.execute(sql`
@@ -3109,7 +3119,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await db.update(tenantMembers).set({ role: body.role as 'viewer' | 'developer' | 'manager' | 'owner' }).where(eq(tenantMembers.id, row.id));
     // Bust the gateway's JWT→membership cache so the new role takes effect at once
     // (otherwise a demote keeps elevated gateway access until the 60s TTL lapses).
-    await invalidateJwtMembershipCache(c.env as Env, tenantId, userId).catch(() => {});
+    await invalidateJwtMembershipCache(c.env as Env, tenantId, userId).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/adminRoutes.ts:3114 createAdminRoutes', { error });
+    });
     await writeAudit(db, 'USER_PERSONA_CHANGED', actorId, {
       targetUserId: userId,
       tenantId,

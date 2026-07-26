@@ -284,7 +284,9 @@ export class IncidentService {
         sourceIncidentId: incidentId,
         match: { severity, affectedSystem: affectedSystem ?? null, incidentSource: source },
       });
-    } catch { /* event-trigger dispatch is best-effort */ }
+    } catch (error) { /* event-trigger dispatch is best-effort */ 
+      console.error('[suppressed-error] application/incident/IncidentService.ts:287 openIncident', { error });
+    }
 
     return { incidentId, boardTaskId, warRoomChatId, created: true };
   }
@@ -373,7 +375,9 @@ export class IncidentService {
         if (patch.status === 'resolved') {
           await fireEventTriggers(this.db, { tenantId, eventType: 'incident-resolved', payload, sourceIncidentId: incidentId, match });
         }
-      } catch { /* event-trigger dispatch is best-effort */ }
+      } catch (error) { /* event-trigger dispatch is best-effort */ 
+        console.error('[suppressed-error] application/incident/IncidentService.ts:376 updateIncident', { error });
+      }
     }
   }
 

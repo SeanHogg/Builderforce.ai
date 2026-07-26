@@ -137,15 +137,21 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
   await db.update(tasks).set(patch).where(and(eq(tasks.id, taskId), eq(tasks.projectId, projectId)));
 
   // Invalidate the workforce scorecard / DORA caches for this tenant.
-  await bumpWorkforceMetricsVersion(env, tenantId).catch(() => {});
+  await bumpWorkforceMetricsVersion(env, tenantId).catch((error) => {
+    console.error('[suppressed-error] application/task/taskLifecycle.ts:140 recordStatusTransition', { error });
+  });
 
   // A status transition (a manual PATCH, an agent advance, OR a PR-merge completion via
   // completeTaskOnMerge) can flip a remediation ticket's badge — so drop the diagnostics
   // project-score + tenant-rollup caches that carry it, instead of letting the badge lag
   // the transition by the read-through TTL. Over-invalidation is cheap (300s recompute).
   await Promise.all([
-    invalidateCached(env, projectScoreCacheKey(tenantId, projectId)).catch(() => {}),
-    invalidateCached(env, tenantRollupCacheKey(tenantId)).catch(() => {}),
+    invalidateCached(env, projectScoreCacheKey(tenantId, projectId)).catch((error) => {
+      console.error('[suppressed-error] application/task/taskLifecycle.ts:147 recordStatusTransition', { error });
+    }),
+    invalidateCached(env, tenantRollupCacheKey(tenantId)).catch((error) => {
+      console.error('[suppressed-error] application/task/taskLifecycle.ts:148 recordStatusTransition', { error });
+    }),
   ]);
 
   // A work item FIRST reaching a released/done lane fans out `workitem.released`
@@ -153,14 +159,18 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
   // spec 05 §4.3). Segment-gated + best-effort: a no-op for single-mode tenants
   // (no segment) or when nothing subscribed; never blocks the metrics path.
   if (nowDone && !wasDone) {
-    await releaseWorkItemWebhook(db, { tenantId, taskId }).catch(() => {});
+    await releaseWorkItemWebhook(db, { tenantId, taskId }).catch((error) => {
+      console.error('[suppressed-error] application/task/taskLifecycle.ts:156 recordStatusTransition', { error });
+    });
     // FAST Validator review: the moment work is Done, kick an acceptance review (if the
     // tenant has a Validator) instead of waiting for the daily sweep. Dynamic import
     // breaks the taskLifecycle → validationDispatch → runtimeRoutes → taskLifecycle
     // cycle; best-effort (the review run is non-mutating, so no completion loop).
     await import('../validation/validationDispatch')
       .then((m) => m.triggerFastValidatorReview(env, db, { tenantId, taskId }))
-      .catch(() => {});
+      .catch((error) => {
+        console.error('[suppressed-error] application/task/taskLifecycle.ts:161 recordStatusTransition', { error });
+      });
   }
 }
 
@@ -195,7 +205,9 @@ export async function completeTaskOnMerge(
     fromStatus: t.status,
     toStatus: TaskStatus.DONE,
     actorUserId: input.actorUserId ?? null,
-  }).catch(() => { /* metrics are best-effort; completion already persisted */ });
+  }).catch((error) => { /* metrics are best-effort; completion already persisted */ 
+    console.error('[suppressed-error] application/task/taskLifecycle.ts:191 completeTaskOnMerge', { error });
+  });
 }
 
 /**
@@ -207,7 +219,9 @@ export async function completeTaskOnMerge(
  */
 export async function stampLastWorked(env: Env, db: Db, tenantId: number, taskId: number): Promise<void> {
   await db.update(tasks).set({ lastWorkedAt: new Date() }).where(eq(tasks.id, taskId));
-  await bumpWorkforceMetricsVersion(env, tenantId).catch(() => {});
+  await bumpWorkforceMetricsVersion(env, tenantId).catch((error) => {
+    console.error('[suppressed-error] application/task/taskLifecycle.ts:210 stampLastWorked', { error });
+  });
 }
 
 /** Info for {@link syncExecutionTaskLifecycle} — one execution→task status sync. */

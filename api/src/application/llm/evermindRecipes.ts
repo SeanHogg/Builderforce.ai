@@ -160,7 +160,9 @@ export async function applyEvermindRecipe(
     if (input.teacherModel?.trim()) {
       await setProjectEvermindTeacher(env, db, tenantId, projectId, input.teacherModel.trim());
     }
-  } catch {
+  } catch (error) {
     /* best-effort: project creation must succeed even if Evermind provisioning fails */
+  
+    console.error('[suppressed-error] application/llm/evermindRecipes.ts:163 applyEvermindRecipe', { error });
   }
 }

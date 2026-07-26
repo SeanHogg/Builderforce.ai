@@ -145,7 +145,9 @@ export async function submitFeedback(
     await db.update(feedbackCollectors)
       .set({ lastSubmissionAt: now })
       .where(eq(feedbackCollectors.id, target.collectorId))
-      .catch(() => {});
+      .catch((error) => {
+        console.error('[suppressed-error] application/feedback/feedbackEngine.ts:145 submitFeedback', { error });
+      });
   }
   await bumpFeedbackCaches(env, target.tenantId, target.projectId);
 

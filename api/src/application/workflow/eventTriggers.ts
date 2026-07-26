@@ -129,7 +129,9 @@ export async function fireEventTriggers(db: Db, params: FireEventTriggersParams)
       await db.update(workflowTriggers)
         .set({ lastRunAt: now, lastStatus: status.slice(0, 32), updatedAt: now })
         .where(eq(workflowTriggers.id, row.id));
-    } catch { /* best-effort bookkeeping */ }
+    } catch (error) { /* best-effort bookkeeping */ 
+      console.error('[suppressed-error] application/workflow/eventTriggers.ts:132 fireEventTriggers', { error });
+    }
   }
 
   return result;

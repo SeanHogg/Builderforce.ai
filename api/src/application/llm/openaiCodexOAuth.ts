@@ -46,7 +46,9 @@ export function parseOpenAICodexCallback(input: string): { code: string; state: 
   try {
     const url = new URL(value);
     return { code: url.searchParams.get('code') ?? '', state: url.searchParams.get('state') };
-  } catch { /* code or code#state */ }
+  } catch (error) { /* code or code#state */ 
+    console.error('[suppressed-error] application/llm/openaiCodexOAuth.ts:49 parseOpenAICodexCallback', { error });
+  }
   const [code, state] = value.split('#', 2);
   return { code: code ?? '', state: state || null };
 }

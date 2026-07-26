@@ -129,7 +129,9 @@ async function priorAutofixDispatches(db: Db, taskId: number, tenantId: number):
     try {
       const sha = (JSON.parse(r.args ?? '{}') as { sha?: unknown }).sha;
       if (typeof sha === 'string' && sha) shas.add(sha);
-    } catch { /* pre-sha rows (and malformed args) just don't contribute a sha */ }
+    } catch (error) { /* pre-sha rows (and malformed args) just don't contribute a sha */ 
+      console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:132 priorAutofixDispatches', { error });
+    }
   }
   return { attempts: rows.length, shas };
 }
@@ -192,7 +194,9 @@ async function applyBuildOutcome(
   }
 
   // Persist on the PR row so the in-product Pull Request tab renders status + reason.
-  await setPullRequestBuildStatus(db, pr.id, outcome, buildError).catch(() => {});
+  await setPullRequestBuildStatus(db, pr.id, outcome, buildError).catch((error) => {
+    console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:197 applyBuildOutcome', { error });
+  });
 
   await db.insert(toolAuditEvents).values({
     tenantId, agentHostId: null, cloudAgentRef: agentRef,
@@ -201,7 +205,9 @@ async function applyBuildOutcome(
     args: JSON.stringify({ phase, branch: evt.branch, sha: evt.sha, runId: evt.runId, url: evt.targetUrl }),
     result: `${phaseLabel} ${outcome}${evt.targetUrl ? ` · ${evt.targetUrl}` : ''}`.slice(0, 300),
     ts: new Date(),
-  }).catch(() => {});
+  }).catch((error) => {
+    console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:199 applyBuildOutcome', { error });
+  });
 
   if (outcome === 'success') {
     return { processed: true, taskId, tenantId, executionId: execId, buildStatus: 'success' };
@@ -239,7 +245,9 @@ async function applyBuildOutcome(
       toolName: 'build.needs_human', category: 'ci',
       args: JSON.stringify({ phase, sha: evt.sha, attempts: priorAttempts }),
       result: `auto-fix exhausted after ${priorAttempts} attempt(s) — needs human`, ts: new Date(),
-    }).catch(() => {});
+    }).catch((error) => {
+      console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:238 applyBuildOutcome', { error });
+    });
     return { processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix attempts exhausted' };
   }
 
@@ -252,7 +260,9 @@ async function applyBuildOutcome(
   if (evt.sha) {
     await setCached(env, autofixClaimKey(tenantId, taskId, evt.sha), { statusKey: evt.statusKey ?? null }, {
       kvTtlSeconds: 3600, l1TtlMs: 3600_000,
-    }).catch(() => { /* claim is an optimization — the dispatch events are the record */ });
+    }).catch((error) => { /* claim is an optimization — the dispatch events are the record */ 
+      console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:255 applyBuildOutcome', { error });
+    });
   }
   return {
     processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure',
@@ -328,7 +338,9 @@ async function ingestDesignerEvent(
     }
   }
 
-  await setPullRequestBuildStatus(db, pr.id, outcome, buildError).catch(() => {});
+  await setPullRequestBuildStatus(db, pr.id, outcome, buildError).catch((error) => {
+    console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:333 ingestDesignerEvent', { error });
+  });
 
   await db.insert(toolAuditEvents).values({
     tenantId: project.tenantId, agentHostId: null, cloudAgentRef: null,
@@ -337,7 +349,9 @@ async function ingestDesignerEvent(
     args: JSON.stringify({ branch: evt.branch, sha: evt.sha, projectId }),
     result: (outcome === 'success' ? 'PR-branch build passed' : (buildError ?? 'PR-branch build failed')).slice(0, 300),
     ts: new Date(),
-  }).catch(() => { /* telemetry best-effort */ });
+  }).catch((error) => { /* telemetry best-effort */ 
+    console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:335 ingestDesignerEvent', { error });
+  });
 
   return { processed: true, tenantId: project.tenantId, buildStatus: outcome };
 }
@@ -362,7 +376,9 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
     category: 'ci',
     args: JSON.stringify({ branch: evt.branch, sha: evt.sha, state: evt.rawState, url: evt.targetUrl }),
     result: result.slice(0, 300), ts: new Date(),
-  }).catch(() => { /* telemetry best-effort */ });
+  }).catch((error) => { /* telemetry best-effort */ 
+    console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:360 ingestPreMergeEvent', { error });
+  });
 
   // Stamp the build outcome + REASON on the agent's open PR row (so the ticket shows
   // WHY CI is red before merge) and, on an authoritative failure, dispatch an auto-fix
@@ -398,9 +414,13 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
         merged = mr.ok;
         // Stamp the merge SHA so the resulting deploy-branch build correlates back.
         if (mr.ok) {
-          await markPullRequestMergedByTask(db, task.tenantId, taskId, { mergeSha: mr.sha ?? null }).catch(() => {});
+          await markPullRequestMergedByTask(db, task.tenantId, taskId, { mergeSha: mr.sha ?? null }).catch((error) => {
+            console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:403 ingestPreMergeEvent', { error });
+          });
           // Merge on green → ticket complete (same completion path as the human/manager merge).
-          await completeTaskOnMerge(env, db, { tenantId: task.tenantId, taskId }).catch(() => {});
+          await completeTaskOnMerge(env, db, { tenantId: task.tenantId, taskId }).catch((error) => {
+            console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:405 ingestPreMergeEvent', { error });
+          });
         }
       }
     }
@@ -436,7 +456,9 @@ async function ingestPostMergeEvent(db: Db, env: Env, secret: string, evt: RepoC
   // earlier merge path already completed it). A deploy FAILURE leaves it open and
   // drives auto-fix below.
   if (evt.outcome === 'success') {
-    await completeTaskOnMerge(env, db, { tenantId, taskId }).catch(() => {});
+    await completeTaskOnMerge(env, db, { tenantId, taskId }).catch((error) => {
+      console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:441 ingestPostMergeEvent', { error });
+    });
   }
 
   // Post-merge always allows auto-fix (a deploy failure is authoritative even without

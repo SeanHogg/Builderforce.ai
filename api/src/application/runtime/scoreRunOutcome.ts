@@ -200,8 +200,10 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
       // views are stale — orphan them (best-effort, same fold gate as routing).
       await bumpOutcomesVersion(env, tenantId);
     }
-  } catch {
+  } catch (error) {
     // Never let outcome reporting fail the caller.
+  
+    console.error('[suppressed-error] application/runtime/scoreRunOutcome.ts:203 recordClientRunOutcome', { error });
   }
 }
 
@@ -442,7 +444,9 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       // Orphan the tenant's SFT/DPO datasets + variant-eval views (see client path).
       await bumpOutcomesVersion(env, exec.tenantId);
     }
-  } catch {
+  } catch (error) {
     // Never let scoring fail a run.
+  
+    console.error('[suppressed-error] application/runtime/scoreRunOutcome.ts:445 scoreRunOutcome', { error });
   }
 }

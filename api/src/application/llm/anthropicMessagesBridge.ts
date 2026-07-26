@@ -351,6 +351,8 @@ export function pipeOpenAiSseToAnthropic(
         if (outSse) controller.enqueue(textEnc.encode(outSse));
       }
     },
-    cancel() { void reader.cancel().catch(() => { /* already closed */ }); },
+    cancel() { void reader.cancel().catch((error) => { /* already closed */ 
+      console.error('[suppressed-error] application/llm/anthropicMessagesBridge.ts:354 cancel', { error });
+    }); },
   });
 }

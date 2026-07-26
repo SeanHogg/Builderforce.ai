@@ -231,11 +231,15 @@ export async function recordProviderAuthAlert(
   memoryAlerts.set(key, { alert, until: alert.at + ALERT_TTL_SECONDS * 1000 });
   // Drop the read-through entry so the settings page reflects a fresh rejection
   // on its next poll instead of serving a cached "healthy" for up to a minute.
-  await invalidateCached(env as unknown as Env, key).catch(() => { /* advisory */ });
+  await invalidateCached(env as unknown as Env, key).catch((error) => { /* advisory */ 
+    console.error('[suppressed-error] application/llm/providerAuthAlerts.ts:234 recordProviderAuthAlert', { error });
+  });
   if (!env.AUTH_CACHE_KV) return;
   try {
     await env.AUTH_CACHE_KV.put(key, JSON.stringify(alert), { expirationTtl: ALERT_TTL_SECONDS });
-  } catch { /* alerting is advisory — never surface a storage failure */ }
+  } catch (error) { /* alerting is advisory — never surface a storage failure */ 
+    console.error('[suppressed-error] application/llm/providerAuthAlerts.ts:238 recordProviderAuthAlert', { error });
+  }
 }
 
 /**
@@ -264,7 +268,9 @@ export async function loadProviderAuthAlert(
             if (isSupportedProvider(parsed.provider)) return parsed;
           }
           return null;
-        } catch { /* fall through to the in-memory copy */ }
+        } catch (error) { /* fall through to the in-memory copy */ 
+          console.error('[suppressed-error] application/llm/providerAuthAlerts.ts:267 loadProviderAuthAlert', { error });
+        }
       }
       const local = memoryAlerts.get(key);
       if (!local) return null;
@@ -287,7 +293,11 @@ export async function clearProviderAuthAlert(
 ): Promise<void> {
   const key = alertKey(tenantId, provider);
   memoryAlerts.delete(key);
-  await invalidateCached(env as unknown as Env, key).catch(() => { /* advisory */ });
+  await invalidateCached(env as unknown as Env, key).catch((error) => { /* advisory */ 
+    console.error('[suppressed-error] application/llm/providerAuthAlerts.ts:294 clearProviderAuthAlert', { error });
+  });
   if (!env.AUTH_CACHE_KV) return;
-  try { await env.AUTH_CACHE_KV.delete(key); } catch { /* advisory */ }
+  try { await env.AUTH_CACHE_KV.delete(key); } catch (error) { /* advisory */ 
+    console.error('[suppressed-error] application/llm/providerAuthAlerts.ts:292 clearProviderAuthAlert', { error });
+  }
 }

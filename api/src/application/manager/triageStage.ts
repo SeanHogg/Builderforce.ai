@@ -465,7 +465,9 @@ export async function runStallTriage(
           },
         });
       }
-    } catch { /* one bad ticket must never abort the triage */ }
+    } catch (error) { /* one bad ticket must never abort the triage */ 
+      console.error('[suppressed-error] application/manager/triageStage.ts:468 runStallTriage', { error });
+    }
   }
 
   return out;

@@ -60,7 +60,9 @@ export async function releaseTaskPrClaim(db: Db, taskId: number): Promise<void> 
     .update(tasks)
     .set({ prOpeningAt: null })
     .where(and(eq(tasks.id, taskId), isNull(tasks.githubPrUrl)))
-    .catch(() => { /* best-effort — a stale claim only blocks an auto-retry, never data */ });
+    .catch((error) => { /* best-effort — a stale claim only blocks an auto-retry, never data */ 
+      console.error('[suppressed-error] application/repos/openTaskPullRequest.ts:59 releaseTaskPrClaim', { error });
+    });
 }
 
 export async function openTaskPullRequest(

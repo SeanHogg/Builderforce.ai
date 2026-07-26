@@ -167,7 +167,9 @@ export function createSecurityReviewRoutes(db: Db): Hono<HonoEnv> {
       return c.json({ error: result.reason, code: result.code }, status);
     }
     // Persist the just-scanned URL as the project's target when it came in via `url`.
-    if (body.url?.trim()) await setProjectScanTarget(db, tenantId, projectId, result.targetUrl).catch(() => {});
+    if (body.url?.trim()) await setProjectScanTarget(db, tenantId, projectId, result.targetUrl).catch((error) => {
+      console.error('[suppressed-error] presentation/routes/securityReviewRoutes.ts:170 createSecurityReviewRoutes', { error });
+    });
     return c.json(result, 201);
   });
 

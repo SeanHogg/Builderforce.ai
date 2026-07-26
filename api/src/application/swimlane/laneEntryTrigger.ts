@@ -333,7 +333,9 @@ export async function maybeAutoRunOnLaneEntry(
           category:      'planning',
           detail:        { taskId: args.taskId, lane, approvalId: gate.approvalId, reason: gate.reason },
           result:        `Auto-run held for approval (${gate.reason}) on task ${args.taskId}, lane '${lane}'.`.slice(0, 300),
-        }).catch(() => { /* best-effort telemetry — never block the trigger */ });
+        }).catch((error) => { /* best-effort telemetry — never block the trigger */ 
+          console.error('[suppressed-error] application/swimlane/laneEntryTrigger.ts:327 maybeAutoRunOnLaneEntry', { error });
+        });
         return false;
       }
     }
@@ -380,7 +382,9 @@ export async function maybeAutoRunOnLaneEntry(
       result:        (`Auto-run dispatched for task ${args.taskId} on lane '${lane}'`
         + `${evaln.decision.agentRef ? ` as ${evaln.decision.agentRef}` : ''}`
         + `${evaln.managedRole ? ` acting as '${evaln.managedRole.roleKey}'` : ''}.`).slice(0, 300),
-    }).catch(() => { /* best-effort telemetry — never block the trigger */ });
+    }).catch((error) => { /* best-effort telemetry — never block the trigger */ 
+      console.error('[suppressed-error] application/swimlane/laneEntryTrigger.ts:366 maybeAutoRunOnLaneEntry', { error });
+    });
     return true;
   } catch (err) {
     // Best-effort: the status change already succeeded; an autonomous-run failure
@@ -411,7 +415,9 @@ export async function maybeAutoRunOnLaneEntry(
         category:      'error',
         detail:        { taskId: args.taskId, lane: args.status, error: message, stack },
         result:        `Auto-run failed with an error for task ${args.taskId} on lane '${args.status}': ${message}`.slice(0, 300),
-      }).catch(() => { /* telemetry is best-effort — never rethrow out of the trigger */ });
+      }).catch((error) => { /* telemetry is best-effort — never rethrow out of the trigger */ 
+        console.error('[suppressed-error] application/swimlane/laneEntryTrigger.ts:405 maybeAutoRunOnLaneEntry', { error });
+      });
     }
     return false;
   }

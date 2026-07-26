@@ -213,12 +213,16 @@ export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
     try {
       const p = await verifyWebJwt(token, c.env.JWT_SECRET);
       if (p.sub && p.sub === row.freelancerUserId) authorized = true;
-    } catch { /* not a web token */ }
+    } catch (error) { /* not a web token */ 
+      console.error('[suppressed-error] presentation/routes/freelancerMessagingRoutes.ts:216 createFreelancerMessagingRoutes', { error });
+    }
     if (!authorized) {
       try {
         const p = await verifyJwt(token, c.env.JWT_SECRET);
         if (p.tid != null && Number(p.tid) === Number(row.tenantId)) authorized = true;
-      } catch { /* not a tenant token */ }
+      } catch (error) { /* not a tenant token */ 
+        console.error('[suppressed-error] presentation/routes/freelancerMessagingRoutes.ts:221 createFreelancerMessagingRoutes', { error });
+      }
     }
     if (!authorized) return c.json({ error: 'Forbidden' }, 403);
     const obj = await c.env.UPLOADS.get(row.attachmentKey);

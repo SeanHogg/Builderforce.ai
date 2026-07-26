@@ -267,7 +267,9 @@ export async function contributeTextToProjectEverminds(
   const targets = (await resolveEvermindTargets(env, db, tenantId, projectId)).filter(isLiveLearnTarget);
   await Promise.all(
     targets.map((h) =>
-      dispatchProjectEvermindLearnText(env, tenantId, h.projectId, text, weight, prompt).catch(() => { /* per-target best-effort */ }),
+      dispatchProjectEvermindLearnText(env, tenantId, h.projectId, text, weight, prompt).catch((error) => { /* per-target best-effort */ 
+        console.error('[suppressed-error] application/llm/projectEvermind.ts:270 contributeTextToProjectEverminds', { error });
+      }),
     ),
   );
   return targets.map((h) => ({ projectId: h.projectId, ref: h.ref, version: h.version, name: h.name }));
@@ -492,8 +494,10 @@ export async function provisionDefaultProjectEvermind(
   try {
     if (!env.UPLOADS) return; // no artifact storage → nothing to seed
     await ensureProjectEvermindSeeded(env, db, env.UPLOADS, tenantId, projectId, name);
-  } catch {
+  } catch (error) {
     /* best-effort: project creation must succeed even if seeding fails */
+  
+    console.error('[suppressed-error] application/llm/projectEvermind.ts:495 provisionDefaultProjectEvermind', { error });
   }
 }
 
@@ -709,8 +713,12 @@ export async function quarantineProjectEvermind(
       updatedAt: new Date(),
     })
     .where(and(eq(projectEvermind.tenantId, tenantId), eq(projectEvermind.projectId, projectId)))
-    .catch(() => { /* best-effort */ });
-  await bumpCacheVersion(env, versionKey(tenantId, projectId)).catch(() => { /* best-effort */ });
+    .catch((error) => { /* best-effort */ 
+      console.error('[suppressed-error] application/llm/projectEvermind.ts:705 quarantineProjectEvermind', { error });
+    });
+  await bumpCacheVersion(env, versionKey(tenantId, projectId)).catch((error) => { /* best-effort */ 
+    console.error('[suppressed-error] application/llm/projectEvermind.ts:715 quarantineProjectEvermind', { error });
+  });
 }
 
 /**

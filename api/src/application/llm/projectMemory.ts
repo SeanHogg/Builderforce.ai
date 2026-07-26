@@ -156,7 +156,9 @@ export async function resolveMemoryAnswer(
       // inference on that head so it stops serving (and wasting a call). A null text
       // is a transport miss (not the model's fault) → don't penalise it.
       if (text != null) {
-        await recordEvermindServeOutcome(env, db, tenantId, head.projectId, coherent).catch(() => { /* best-effort */ });
+        await recordEvermindServeOutcome(env, db, tenantId, head.projectId, coherent).catch((error) => { /* best-effort */ 
+          console.error('[suppressed-error] application/llm/projectMemory.ts:159 resolveMemoryAnswer', { error });
+        });
       }
       if (coherent) {
         return { text: (text as string).trim(), source: 'evermind', evermindVersion: head.version, evermindProjectId: head.projectId };
@@ -186,7 +188,9 @@ export async function cacheProjectAnswer(
   // Never cache garbage: an incoherent answer must not be replayed O(1) on the next
   // repeat (it would pin the gibberish permanently under the Q&A key).
   if (!q || !isServableText(a, { context: q }).coherent || !Number.isInteger(projectId) || projectId <= 0) return;
-  await upsertProjectFact(env, db, tenantId, projectId, qaCacheKey(q), a, QA_CACHE_SOURCE).catch(() => {
+  await upsertProjectFact(env, db, tenantId, projectId, qaCacheKey(q), a, QA_CACHE_SOURCE).catch((error) => {
     /* best-effort — caching never breaks a reply */
+  
+    console.error('[suppressed-error] application/llm/projectMemory.ts:189 cacheProjectAnswer', { error });
   });
 }

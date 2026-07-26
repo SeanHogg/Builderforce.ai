@@ -467,7 +467,9 @@ async function recordFindings(
     summary: `Ingested ${taskIds.length} open GitHub security alert(s) from ${agentRef}` +
       (deduped ? ` (${deduped} already tracked)` : ''),
     status: 'complete',
-  }).catch(() => {});
+  }).catch((error) => {
+    console.error('[suppressed-error] application/security/githubAlerts.ts:466 recordFindings', { error });
+  });
 
   return { ok: true, ingested: taskIds.length, deduped, auditId, taskIds };
 }

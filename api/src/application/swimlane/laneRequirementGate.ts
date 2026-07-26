@@ -247,7 +247,9 @@ export async function enforceLaneRequirements(
     if (!lane) return none;
 
     // Always compute the audit so entering any lane refreshes coverage / the flag.
-    await auditService.computeAudit(env, args.tenantId, args.taskId).catch(() => {});
+    await auditService.computeAudit(env, args.tenantId, args.taskId).catch((error) => {
+      console.error('[suppressed-error] application/swimlane/laneRequirementGate.ts:250 enforceLaneRequirements', { error });
+    });
 
     if (lane.requirementGate === 'off') return none;
 
