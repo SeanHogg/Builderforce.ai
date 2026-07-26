@@ -56,7 +56,7 @@ import { validateJsonSchema } from './jsonSchemaValidator';
 import { parseClientReasoningIntent } from './reasoningCapability';
 import { estimateTokensFromChars } from './tokenUsage';
 import type { ActionType } from './actionTypes';
-import { PROVIDER_VENDOR_MAP, type TenantVendorKeys } from './tenantProviderKeyService';
+import { PROVIDER_VENDOR_MAP, byoVendorIdsFromCredentials, type TenantVendorKeys } from './tenantProviderKeyService';
 import {
   loadDemotedVendors,
   recordVendorUpstreamFault,
@@ -298,7 +298,7 @@ function frontierTierRank(model: string): number {
  * free/paid pool model. It is a SOFT seed: the plan pool stays behind the list as fallback.
  *
  * `byoVendors` is the gateway VENDOR-id set the tenant can serve from their own
- * account (see `byoVendorIdSet` / the proxy's connected set). Returns `[]` when
+ * account (see `byoVendorIdsFromCredentials` / the proxy's connected set). Returns `[]` when
  * nothing is connected — plan routing is then unchanged. Single source both the
  * gateway completion seed ({@link LlmProxyService.complete}) and the cloud-agent pin
  * ({@link pickCloudModel}, which leads with `[0]`) use, so the surfaces never diverge.
@@ -1050,15 +1050,18 @@ export class LlmProxyService {
   }
 
   /** Gateway vendor ids the tenant can serve from their OWN connected account this
-   *  request — a BYO api-key (any provider, populated into {@link tenantFundedVendors}
-   *  by the constructor) OR a connected Anthropic subscription (OAuth). Drives the
-   *  auto-select BYO flagship seed in {@link complete} via {@link byoAutoSeedModels}. */
+   *  request — a BYO api-key (any provider) OR a connected subscription (Anthropic /
+   *  ChatGPT-Codex / SuperGrok) on its OAuth vendor. Derived through the SHARED
+   *  {@link byoVendorIdsFromCredentials} so the ids the gateway SEEDS
+   *  ({@link byoAutoSeedModels}) can never disagree with the ids the BYO boundary
+   *  filter in {@link buildCandidateChain} keeps. */
   private get connectedByoVendors(): Set<string> {
-    const set = new Set<string>(this.tenantFundedVendors);
-    if (this.anthropicOAuthToken) set.add('anthropic');
-    if (this.openaiCodexAuth) set.add('openai-codex');
-    if (this.xaiOAuthToken) set.add('xai-oauth');
-    return set;
+    return byoVendorIdsFromCredentials({
+      anthropicOAuthToken: this.anthropicOAuthToken,
+      openaiCodexAuth: this.openaiCodexAuth,
+      xaiOAuthToken: this.xaiOAuthToken,
+      vendorKeys: this.tenantVendorKeys,
+    });
   }
 
   /** Vendors whose call was served with a tenant's OWN BYO credential this
@@ -1200,17 +1203,27 @@ export class LlmProxyService {
     // A shadowed hint still joins the pool just BEHIND the flagship, so it's the first
     // failover after the connected account rather than being dropped.
     const hasCallerModel = typeof callerModel === 'string' && callerModel.length > 0;
-    const callerLeads = hasCallerModel && explicitModelPreemptsByo(callerModel as string, this.connectedByoVendors);
+    const connectedByo = this.connectedByoVendors;
+    const callerLeads = hasCallerModel && explicitModelPreemptsByo(callerModel as string, connectedByo);
     // Demote any connected vendor on a 5xx streak out of the LEAD position (it stays
-    // in the seed — see `byoAutoSeedModels`). Only read when there is something to
-    // reorder, so the non-BYO path issues no extra lookups.
-    const demotedVendors = callerLeads ? undefined : await loadDemotedVendors(this.env, this.connectedByoVendors);
-    const byoSeeds = callerLeads ? [] : byoAutoSeedModels(this.connectedByoVendors, {
+    // in the seed — see `byoAutoSeedModels`). Returns an empty set and issues no reads
+    // when nothing is connected, so the non-BYO path is untouched.
+    const demotedVendors = await loadDemotedVendors(this.env, connectedByo);
+    const byoSeeds = byoAutoSeedModels(connectedByo, {
       agentic: this.codingOnly,
       vendorPriority: this.byoVendorPriority,
-      ...(demotedVendors?.size ? { demotedVendors } : {}),
+      ...(demotedVendors.size ? { demotedVendors } : {}),
     });
-    const seedHead: readonly string[] = callerLeads ? [callerModel as string] : byoSeeds;
+    // An honoured caller model LEADS, but it never stands alone: the tenant's OTHER
+    // connected accounts follow it as failover. BYO is an execution boundary — the
+    // chain composer below drops every operator-funded model — so a lead-only head
+    // means a single cooled/faulting provider ends the request with `byo_unavailable`
+    // while three other connected accounts sit unused. (The measured stall: a cloud run
+    // pinned `claude-opus-4-8` with Anthropic, xAI, OpenAI AND Meta connected and never
+    // tried the other three.) Dedup keeps the lead's position when it IS a flagship.
+    const seedHead: readonly string[] = callerLeads
+      ? [callerModel as string, ...byoSeeds.filter((m) => m !== callerModel)]
+      : byoSeeds;
     const basePool: readonly string[] = (hasCallerModel && !callerLeads && !fittedPool.includes(callerModel as string))
       ? [callerModel as string, ...fittedPool]
       : fittedPool;
@@ -1254,6 +1267,20 @@ export class LlmProxyService {
     const candidates = this.buildCandidateChain(seed, cooledSet, cooledVendors, pinnedHint, seedHead);
     if (candidates.length === 0) {
       if (this.byoStrict) {
+        // Nothing composed — but "every connected model is COOLED" is not the same as
+        // "the tenant has no usable provider", and only the latter deserves a 503.
+        // Cooldown protects OUR shared keys from being hammered by fan-out; the owner's
+        // own account gets at most this one attempt per request, and failing closed here
+        // is what turned a transient bench into a permanently stalled ticket (autonomy's
+        // failure breaker trips after 3). So probe the connected flagships once, ignoring
+        // per-model cooldown, and surface the REAL upstream error if they still fail.
+        const probe = seedHead.filter((m) => connectedByo.has(vendorForModel(m)));
+        if (probe.length > 0) {
+          const probed = await this.dispatch(probe, body, requestHeaders, { signal });
+          probed.paidOverflow = false; // BYO-only chain — always the tenant's own account.
+          return this.finalize(probed, tid, startedAt, probe, probed.response.status < 400 ? 'success' : undefined);
+        }
+        // Genuinely nothing to try: BYO is required but no credential resolved.
         return this.finalize(
           byoUnavailableResult(seed[0] ?? 'byo-required'),
           tid, startedAt, [], 'byo_unavailable',

@@ -32,8 +32,7 @@ import {
 } from './LlmProxyService';
 import {
   resolveTenantLlmCredentials,
-  byoVendorIdSet,
-  providersFromCredentials,
+  byoVendorIdsFromCredentials,
   type TenantVendorKeys,
 } from './tenantProviderKeyService';
 import { recordProxyUsage } from './usageLedger';
@@ -91,7 +90,10 @@ export async function tenantProxyForPlan(
     })),
   ]);
 
-  const byoVendors = byoVendorIdSet(providersFromCredentials(creds));
+  // The DISPATCH vendor ids (a subscription rides `openai-codex` / `xai-oauth`, not the
+  // api-key vendor) — the same set the proxy's BYO boundary enforces, so a gated model
+  // can't name a vendor the proxy would then filter out.
+  const byoVendors = byoVendorIdsFromCredentials(creds);
 
   const proxy = llmProxyForPlan(env, plan.effectivePlan, plan.premiumOverride, {
     ...(opts?.codingOnly ? { codingOnly: true, backstopModels: CODING_BACKSTOP_MODELS } : {}),

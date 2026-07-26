@@ -72,7 +72,7 @@ import {
   taskStatusLabel,
   taskStatusBadgeClass,
 } from '@/lib/taskStatus';
-import { taskTypeBadgeClass, taskTypeLabelKey } from '@/lib/taskType';
+import { TASK_PRIORITIES, taskPriorityBadgeClass } from '@/lib/taskPriority';
 
 type TaskView = 'board' | 'table' | 'calendar' | 'gantt';
 
@@ -83,13 +83,7 @@ interface BoardColumn {
   label: string;
   agents: SwimlaneAgent[];
 }
-const PRIORITIES: TaskPriority[] = ['low', 'medium', 'high', 'urgent'];
-const PRIORITY_CLASS: Record<TaskPriority, string> = {
-  low: 'badge-gray',
-  medium: 'badge-blue',
-  high: 'badge-yellow',
-  urgent: 'badge-red',
-};
+const PRIORITIES = TASK_PRIORITIES;
 
 export interface TaskMgmtContentProps {
   /** When set, tasks are scoped to this project and project filter is hidden. */
@@ -2231,7 +2225,7 @@ export function TaskMgmtContent({
                     onClick={() => setEditingField('priority')}
                     onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('priority'); }}
                     title={tTask('changePriorityTitle')}
-                    className={PRIORITY_CLASS[drawerTask.priority]}
+                    className={taskPriorityBadgeClass(drawerTask.priority)}
                     style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, cursor: 'pointer' }}
                   >
                     {drawerTask.priority}
