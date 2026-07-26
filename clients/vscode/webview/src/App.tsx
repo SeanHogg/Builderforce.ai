@@ -1292,7 +1292,7 @@ function Chat({ init }: { init: InitData }) {
       // Plan + month-to-date quota. Open to any tenant-scoped JWT (no role gate), so a
       // brand-new free member can produce a report that states their own tier and
       // allowance instead of one that looks like an unexplained capability failure.
-      // Shared read-through cache — the same snapshot the header's PlanBadge shows,
+      // Shared read-through cache — the same snapshot the footer's PlanBadge shows,
       // so the report and the chip can't disagree (and it's usually already loaded).
       fetchPlanSnapshot(apiReq),
       // Which BUILD produced this capture. `/health` is public; it rides the gateway
@@ -1466,10 +1466,6 @@ function Chat({ init }: { init: InitData }) {
         {associatedProject
           ? <span className="bf-header__brand">BuilderForce</span>
           : <span className="bf-header__beta">{t('app.beta', 'beta')}</span>}
-        {/* Account tier, always visible: which plan is funding this chat and (on a
-            metered plan) what allowance is left. Click opens the web app to change
-            it. Self-gating — renders nothing until it knows the plan. */}
-        <PlanBadge apiReq={apiReq} t={t} />
         <div className="bf-header__spacer" />
         {renaming ? (
           <input
@@ -1860,6 +1856,26 @@ function Chat({ init }: { init: InitData }) {
             <span>{t('app.autoMode', 'Auto mode')}</span>
           </button>
 
+          {/* Per-chat memory switch — when off, this chat neither recalls from nor
+              contributes back to the project's Evermind (web BrainPanel parity).
+              Sits with Auto mode because both are per-chat modes the user sets
+              BEFORE typing; only shown when there's a project Evermind to gate. */}
+          {evermindProjectId != null && (
+            <button
+              type="button"
+              className={`bf-toggle${memoryEnabled ? ' is-on' : ''}`}
+              title={memoryEnabled
+                ? t('app.memoryOnHint', 'Memory on — this chat recalls and learns from the project Evermind')
+                : t('app.memoryOffHint', 'Memory off — this chat is a scratch space (no recall, no learning)')}
+              aria-label={t('app.memory', 'Memory')}
+              aria-pressed={memoryEnabled}
+              onClick={() => toggleMemory(!memoryEnabled)}
+            >
+              <IconBrain />
+              <span>{t('app.memory', 'Memory')}</span>
+            </button>
+          )}
+
           {/* Consolidate: compress the chat into a summary marker the rest of the
               conversation builds on. Fork: branch that summary into a new chat. */}
           <button
@@ -1887,24 +1903,13 @@ function Chat({ init }: { init: InitData }) {
 
           <div className="bf-header__spacer" />
 
-          {/* Per-chat memory switch — when off, this chat neither recalls from nor
-              contributes back to the project's Evermind (web BrainPanel parity).
-              Only shown when there's a project Evermind to gate. */}
-          {evermindProjectId != null && (
-            <button
-              type="button"
-              className={`bf-toggle${memoryEnabled ? ' is-on' : ''}`}
-              title={memoryEnabled
-                ? t('app.memoryOnHint', 'Memory on — this chat recalls and learns from the project Evermind')
-                : t('app.memoryOffHint', 'Memory off — this chat is a scratch space (no recall, no learning)')}
-              aria-label={t('app.memory', 'Memory')}
-              aria-pressed={memoryEnabled}
-              onClick={() => toggleMemory(!memoryEnabled)}
-            >
-              <IconBrain />
-              <span>{t('app.memory', 'Memory')}</span>
-            </button>
-          )}
+          {/* Account tier, always visible: which plan is funding this chat and (on a
+              metered plan) what allowance is left. Click opens the web app to change
+              it. It lives here rather than in the header because it belongs with the
+              other "what will this turn cost / who runs it" chips (Evermind posture,
+              the model in force). Self-gating — renders nothing until it knows the
+              plan. */}
+          <PlanBadge apiReq={apiReq} t={t} />
 
           {/* Evermind posture for the active project — parity with the web Brain
               composer. Self-gates (renders nothing until a seeded Evermind). */}
