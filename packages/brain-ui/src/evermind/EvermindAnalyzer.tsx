@@ -15,7 +15,7 @@
  * every row is individually checkable, because a correction is a judgement call and the
  * operator is the one accountable for the model's knowledge.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   EvermindConsoleLabels,
   EvermindKnowledgeAnalysis,
@@ -36,6 +36,13 @@ export interface EvermindAnalyzerProps {
   onApply?: (findings: EvermindKnowledgeFinding[]) => Promise<EvermindKnowledgeRepair>;
   /** Called after a successful repair so the host can refresh its stats. */
   onRepaired?: () => void;
+  /**
+   * The current audit, OWNED BY THE CONSOLE — an audit is expensive (it spends frontier
+   * tokens), so losing it to a tab switch would mean paying for it twice. It also has to
+   * survive the tab for the diagnostics export, which reports what was found.
+   */
+  analysis: EvermindKnowledgeAnalysis | null;
+  onAnalysis: (analysis: EvermindKnowledgeAnalysis | null) => void;
 }
 
 /** How severely each verdict reads. `redundant` is tidy-up, not a defect. */
@@ -48,28 +55,33 @@ const TONE: Record<EvermindKnowledgeVerdict, 'ok' | 'warn' | 'bad'> = {
   redundant: 'warn',
 };
 
-export function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired }: EvermindAnalyzerProps) {
-  const [analysis, setAnalysis] = useState<EvermindKnowledgeAnalysis | null>(null);
+export function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysis, onAnalysis }: EvermindAnalyzerProps) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [running, setRunning] = useState(false);
   const [applying, setApplying] = useState(false);
   const [repair, setRepair] = useState<EvermindKnowledgeRepair | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Default to "fix everything that's wrong" — the common intent — whenever a new audit
+  // arrives. This has to be an effect rather than a line in `run`, because the audit now
+  // outlives this component: an operator who tabs away and back gets the SAME findings
+  // remounted, and a selection that didn't come back with them would leave the apply
+  // button reading "Fix 0 selected" over a list of visible problems.
+  useEffect(() => {
+    setSelected(new Set(analysis?.findings.map((f) => f.id) ?? []));
+  }, [analysis]);
+
   const run = useCallback(async () => {
     setRunning(true); setError(null); setRepair(null);
     try {
-      const result = await onAnalyze();
-      setAnalysis(result);
-      // Default to "fix everything that's wrong" — the common intent.
-      setSelected(new Set(result.findings.map((f) => f.id)));
+      onAnalysis(await onAnalyze());
     } catch (err) {
-      setAnalysis(null);
+      onAnalysis(null);
       setError(err instanceof Error ? err.message : t.errorGeneric);
     } finally {
       setRunning(false);
     }
-  }, [onAnalyze, t.errorGeneric]);
+  }, [onAnalyze, onAnalysis, t.errorGeneric]);
 
   const apply = useCallback(async () => {
     if (!onApply || !analysis) return;
@@ -80,15 +92,14 @@ export function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired }
       setRepair(await onApply(picked));
       // The repaired memories are gone from the ring, so the stale audit must not
       // linger offering to fix them again.
-      setAnalysis(null);
-      setSelected(new Set());
+      onAnalysis(null);
       onRepaired?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : t.errorGeneric);
     } finally {
       setApplying(false);
     }
-  }, [analysis, onApply, onRepaired, selected, t.errorGeneric]);
+  }, [analysis, onAnalysis, onApply, onRepaired, selected, t.errorGeneric]);
 
   const toggle = useCallback((id: number) => {
     setSelected((cur) => {

@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-26 — ✅ RESOLVED: the Evermind console is tabbed, and its state can finally leave the panel (brain-ui 2026.7.39 · frontend 2026.7.125 · vsix 2026.7.109)
+
+Two gaps the operator hit immediately after the operate surface shipped: **there was no way to share what the panel showed**, and the four new sections were a stack, not tabs.
+
+**1 · Diagnostics export — the missing door.** The console could show that a model was emitting gibberish and name the signal that refused it, but a screenshot loses the exact bytes, and the exact bytes ARE the evidence (broken token markers, replacement characters, where it stopped). So the fault reached whoever could fix it as a *description* of the symptom. New `diagnosticsReport.ts` builds one pasteable markdown document — head state, every Evermind under the project, the last test-bench run **with raw output verbatim** plus its refusal reason, the last knowledge audit with proposed corrections, and the tail of the learn log — all capped so it stays pasteable, with truncation marked (an early stop is itself a symptom, so a silent cut would be misleading).
+
+Design calls worth recording:
+- **The report body is deliberately NOT localized.** It is a technical artifact — the same category as a stack trace — read by whoever debugs the model. The controls around it are localized in all five catalogs. (Logged in ROADMAP so the choice is not mistaken for an oversight.)
+- **It is offered twice** — console header and Maintain tab — because the moment you want it is the moment something is broken, and an affordance you have to go tab-hunting for at that moment is one people conclude does not exist. Both press the same action: `useDiagnosticsCopy` owns the state once, so the two surfaces cannot disagree about whether the copy landed, and there is exactly ONE confirmation (in the header, so it is seen whichever button was pressed).
+- **It survives a failed load.** When `loadData` rejects there are no tabs at all — and that failure is often precisely what needs sending, so the header button is the only way out and is why it lives there.
+- **Copy order is host-first:** `adapter.copyText` (VS Code's `env.clipboard`, which works even when the webview lacks Clipboard API permission) → `navigator.clipboard` → reveal-and-preselect. A copy button that can silently fail is worse than none, because the operator walks away believing they have the report.
+
+**2 · Four tabs, not a stack** — Teach / Test / Check / Maintain. Stacked, "Replace the model" sat a page and a half below the state it was meant to repair. The always-true state (version, learned count, the inference/learning switches, the quarantine badge) stays OUTSIDE the strip: hiding it behind a tab would let someone replace a model without seeing why it stopped. Each tab self-gates on what the host implements — a host with no `probe` is never offered an empty Test tab. Full ARIA tab semantics with roving arrow-key focus.
+
+**The tab-switch bug fixed on the way in:** the probe result and the knowledge audit lived in the tab components, so a tab click destroyed them. That would have meant an audit costing frontier tokens being thrown away by a stray click, and a failed readiness check becoming invisible the moment you left the tab that found it. Both are now owned by the console — which is also what lets the export include evidence produced on a tab the operator has since left — and each tab carries a badge (`!` for a refusal, a count for findings, the queue depth on Teach) so a problem follows you. The analyzer's default selection had to move from `run()` into an effect keyed on the audit, or a remounted list of visible problems would have read "Fix 0 selected".
+
+**Files:** `packages/brain-ui/src/evermind/` — `diagnosticsReport.ts` + `.test.ts` (new, 9 tests), `EvermindDiagnostics.tsx` (new), `ConsoleTabs.tsx` (new), `EvermindConsole.tsx`, `EvermindTestBench.tsx`, `EvermindAnalyzer.tsx`, `types.ts`; `frontend/src/components/ide/ProjectEvermindPanel.tsx` + `EvermindConsole.operate.test.tsx` (25 tests); `frontend/src/i18n/messages/{en,zh,es,fr,de}.json` (12 keys × 5, real translations, parity verified); `clients/vscode/src/evermindView.ts` (host clipboard bridge + labels), `clients/vscode/webview/src/EvermindScreen.tsx`. Green: brain-ui 36 tests, frontend 618 tests / 65 files, vscode 21 tests, tsgo clean on frontend + extension + webview. VSIX packaged.
+
+---
+
 ## 2026-07-26 — ✅ RESOLVED: Six autonomous-lifecycle defects the census exposed, and the census stage that could never run (api 2026.7.160 · frontend 2026.7.124)
 
 The manager's new Copy-diagnostics report immediately failed its own first test: it fired `systemic_never_raised` — four cohorts large enough to be platform defects, zero findings raised. That was correct, and the bug it found was mine.

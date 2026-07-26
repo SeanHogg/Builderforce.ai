@@ -310,6 +310,12 @@ export interface EvermindConsoleAdapter {
   analyze?(): Promise<EvermindKnowledgeAnalysis>;
   /** OPTIONAL — apply an audit's findings: forget bad knowledge, re-teach corrections. */
   applyFindings?(findings: EvermindKnowledgeFinding[]): Promise<EvermindKnowledgeRepair>;
+  /**
+   * OPTIONAL — write to the HOST's clipboard, for the diagnostics export. Tried before
+   * `navigator.clipboard`, which a VS Code webview may not be permitted to use; a host
+   * that omits it falls back to the browser API and then to manual selection.
+   */
+  copyText?(text: string): Promise<void>;
 }
 
 /** Every visible string. Parametric ones are functions the host localizes. */
@@ -480,6 +486,21 @@ export interface EvermindConsoleLabels {
   analyzeApplying: string;
   analyzeApplied: (corrected: number, forgotten: number, version: number) => string;
   analyzeSkipped: (count: number) => string;
+  // Tabs — the console's four working surfaces (state stays outside the strip).
+  tabsLabel: string;
+  tabTeach: string;
+  tabTest: string;
+  tabCheck: string;
+  tabMaintain: string;
+  // Diagnostics export (the report BODY is deliberately unlocalized — see
+  // diagnosticsReport.ts; only these controls are).
+  diagnosticsTitle: string;
+  diagnosticsHint: string;
+  diagnosticsCta: string;
+  diagnosticsCopied: string;
+  diagnosticsShow: string;
+  diagnosticsHide: string;
+  diagnosticsManualHint: string;
   // Misc
   refresh: string;
   errorGeneric: string;
@@ -654,6 +675,19 @@ export const DEFAULT_EVERMIND_LABELS: EvermindConsoleLabels = {
   analyzeApplied: (corrected, forgotten, version) =>
     `Fixed: ${corrected} corrected, ${forgotten} forgotten. Model is now at v${version}.`,
   analyzeSkipped: (count) => `${count} could not be applied.`,
+  tabsLabel: 'Evermind controls',
+  tabTeach: 'Teach',
+  tabTest: 'Test',
+  tabCheck: 'Check',
+  tabMaintain: 'Maintain',
+  diagnosticsTitle: 'Diagnostics',
+  diagnosticsHint:
+    'Copy everything on this panel — the model’s state, what it actually produced, what it has learned and any problems found — as text you can paste to support or to an AI assistant.',
+  diagnosticsCta: 'Copy diagnostics',
+  diagnosticsCopied: 'Copied to your clipboard.',
+  diagnosticsShow: 'Show report',
+  diagnosticsHide: 'Hide report',
+  diagnosticsManualHint: 'Copying automatically was blocked here — the report is selected below, press Ctrl/Cmd+C to copy it.',
   refresh: 'Refresh',
   errorGeneric: 'Something went wrong. Try again.',
 };

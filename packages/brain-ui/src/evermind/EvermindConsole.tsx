@@ -12,13 +12,15 @@
  * disabled (not hidden) when `canManage` is false, mirroring the web RoleGate.
  * See [[evermind-learning-architecture]].
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   DEFAULT_EVERMIND_LABELS,
   type EvermindConsoleAdapter,
   type EvermindConsoleData,
   type EvermindConsoleLabels,
   type EvermindEvalPoint,
+  type EvermindKnowledgeAnalysis,
+  type EvermindProbeResult,
   type EvermindRecentEntry,
   type EvermindSeedModel,
   type EvermindTarget,
@@ -29,6 +31,9 @@ import { evermindLearnedStatus } from './learnedStatus';
 import { EvermindTestBench } from './EvermindTestBench';
 import { EvermindMaintenance } from './EvermindMaintenance';
 import { EvermindAnalyzer } from './EvermindAnalyzer';
+import { EvermindDiagnostics, useDiagnosticsCopy } from './EvermindDiagnostics';
+import { ConsoleTabs, type ConsoleTab } from './ConsoleTabs';
+import { buildEvermindDiagnostics } from './diagnosticsReport';
 import {
   C, italic, fieldLabel, fieldTitle, fieldHint, select, optionStyle, sectionBlock,
   primaryBtn, secondaryBtn, ghostBtn, linkBtn, pill, tag, warnBox,
@@ -62,9 +67,13 @@ export interface EvermindConsoleProps {
    *  the recall result to a companion surface (e.g. highlight the matched memories
    *  on the web Studio's Knowledge Map). The console also renders the result inline. */
   onValidate?: (result: EvermindValidateResult | null) => void;
+  /** Which surface is rendering — stamped into the diagnostics export, because the two
+   *  hosts fail differently and "which one was this?" is the first question asked of a
+   *  pasted report. Default 'web'. */
+  host?: 'web' | 'vscode';
 }
 
-export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate }: EvermindConsoleProps) {
+export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate, host = 'web' }: EvermindConsoleProps) {
   const t = useMemo<EvermindConsoleLabels>(() => ({ ...DEFAULT_EVERMIND_LABELS, ...(labels ?? {}) }), [labels]);
 
   const [data, setData] = useState<EvermindConsoleData | null>(null);
@@ -83,6 +92,15 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  // Which working surface is open. Teach first: it is the only one an operator uses
+  // on a healthy model, and the other three are things you go looking for.
+  const [tab, setTab] = useState('teach');
+  // The last test-bench run and knowledge audit, lifted OUT of their tabs. Two reasons
+  // they can't stay local: the diagnostics export has to include evidence produced on a
+  // tab the operator has since left, and a failing readiness check has to keep showing
+  // on the Test tab's badge from the other three.
+  const [probeResult, setProbeResult] = useState<EvermindProbeResult | null>(null);
+  const [analysis, setAnalysis] = useState<EvermindKnowledgeAnalysis | null>(null);
   // A load FAILURE is distinct from a genuinely-unseeded model: without this, a 404 /
   // expired token / wrong project id would fall through to `seeded === false` and render
   // the exact same "Not set up" UI as a real unseeded project — actively misleading.
@@ -171,6 +189,26 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
     }
   }, [reload, t.errorGeneric]);
 
+  // Namespaces the tab/panel ids so two consoles on one page (the web IDE can show a
+  // project's and a build's side by side) never generate colliding aria-controls.
+  const panelId = useId();
+
+  // The diagnostics payload is assembled ON DEMAND from whatever the console is holding
+  // at that moment — nothing is serialised until the operator asks for it.
+  const buildReport = useCallback(() => buildEvermindDiagnostics({
+    data, projectName, host, targets, probe: probeResult, analysis, error, now: Date.now(),
+  }), [data, projectName, host, targets, probeResult, analysis, error]);
+
+  // ONE copy action behind both the header button and the Maintain tab's panel — the
+  // state lives here so the two surfaces can never disagree about whether the copy
+  // landed. When the clipboard is refused the report is revealed in the panel, so the
+  // header press has to open the tab holding it; otherwise the fallback is invisible.
+  const diagnostics = useDiagnosticsCopy({
+    buildReport,
+    onCopy: adapter.copyText,
+    onManualFallback: () => setTab('maintain'),
+  });
+
   if (!loaded) return <Section aria-busy><p style={{ margin: 0, color: C.text2, fontSize: '0.82rem' }}>{t.loading}</p></Section>;
 
   const seeded = !!data?.seeded;
@@ -197,9 +235,34 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
       {!loadFailed && quarantined && (
         <span style={quarantinePill} title={t.quarantinedHint(quarantineReason)}>⚠ {t.quarantinedBadge}</span>
       )}
-      {showHeaderRefresh && (
-        <button type="button" onClick={() => void reload()} disabled={busy} style={ghostBtn} title={t.refresh} aria-label={t.refresh}>↻</button>
+      {/* The export sits in the HEADER as well as in the Maintain tab, deliberately.
+          The moment you want to hand this to someone is the moment something is wrong,
+          and an affordance you have to go tab-hunting for at that moment is one people
+          conclude does not exist. Both press the same action (see useDiagnosticsCopy),
+          and it stays available even when the load FAILED — that failure is itself the
+          most useful thing to be able to send. */}
+      {/* The ONE confirmation, and it lives in the header rather than beside either
+          button: the copy can be pressed from either surface, and a confirmation that
+          only appears on the tab you happened to press from would be missed from the
+          other. `aria-label` stays the CTA — a button that renames itself to its own
+          success message stops saying what it does. */}
+      {diagnostics.copied && (
+        <span role="status" style={{ fontSize: '0.72rem', color: C.accent }}>{t.diagnosticsCopied}</span>
       )}
+      <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <button
+          type="button"
+          onClick={() => void diagnostics.copy()}
+          style={{ ...ghostBtn, marginLeft: 0, fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+          title={t.diagnosticsCta}
+          aria-label={t.diagnosticsCta}
+        >
+          <span aria-hidden>{diagnostics.copied ? '✓' : '⧉'}</span>{t.diagnosticsTitle}
+        </button>
+        {showHeaderRefresh && (
+          <button type="button" onClick={() => void reload()} disabled={busy} style={{ ...ghostBtn, marginLeft: 0 }} title={t.refresh} aria-label={t.refresh}>↻</button>
+        )}
+      </span>
     </header>
   );
 
@@ -212,6 +275,176 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
         <button type="button" onClick={() => void reload()} disabled={busy} style={primaryBtn(busy)}>{t.refresh}</button>
       </Section>
     );
+  }
+
+  /* ── The four working surfaces ────────────────────────────────────────────────
+     Each is a separate JOB on the same model, not a step of one, which is why they
+     are tabs rather than a stack. Each self-gates on what the host implements and on
+     the viewer's role, so a tab with nothing behind it is never offered — an empty
+     tab is a worse affordance than a missing one. */
+  const tabs: ConsoleTab[] = [];
+  if (data && seeded && !inherited) {
+    const head = data;
+
+    tabs.push({
+      id: 'teach',
+      label: t.tabTeach,
+      // The queue depth belongs here: "3 waiting" is a prompt to press Learn now, and
+      // it is the one number that changes while you are on another tab.
+      ...(head.pending > 0 ? { badge: String(head.pending), badgeTone: 'info' as const } : {}),
+      content: (
+        <>
+          <TeacherPicker
+            t={t} canManage={canManage} busy={busy} opts={teacherOpts}
+            value={head.teacherModel ?? ''}
+            onChange={(m) => run(() => adapter.setTeacher(m || null))}
+          />
+
+          <TeachBox
+            t={t} busy={busy} validating={validating} teacherModel={head.teacherModel ?? ''}
+            prompt={teachPrompt} text={teachText}
+            onPrompt={setTeachPrompt} onText={setTeachText}
+            onTeach={() => run(
+              async () => {
+                const task = teachPrompt.trim();
+                const body = teachText.trim();
+                // With a teacher pinned you teach a TASK: the teacher answers it and the
+                // model learns (task → ideal answer), so send the task as both text + prompt.
+                if (head.teacherModel && body.length < 20 && task.length >= 20) {
+                  await adapter.teach(task, task);
+                } else {
+                  await adapter.teach(body, task || undefined);
+                }
+                setTeachText(''); setTeachPrompt('');
+              },
+              t.taught,
+            )}
+            // Validate the SAME task the user would teach: the pinned-teacher task prompt,
+            // else the transcript's task prompt, else the transcript body itself.
+            onValidate={() => runValidate(head.teacherModel ? teachPrompt : (teachPrompt.trim() || teachText))}
+          />
+
+          {validateResult && (
+            <ValidateResults t={t} result={validateResult} onClear={clearValidate} />
+          )}
+
+          {canManage && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                disabled={busy || frozen}
+                onClick={() => run(async () => {
+                  const r = await adapter.flush();
+                  setNotice(r.merged > 0 ? t.flushedN(r.merged, r.version) : t.flushedNone);
+                }, undefined)}
+                style={primaryBtn(busy || frozen)}
+              >
+                {busy ? t.flushing : t.flushCta}
+              </button>
+              {head.pending > 0 && (
+                <span style={{ fontSize: '0.74rem', color: C.text2 }}>{t.pendingLabel}: {head.pending}</span>
+              )}
+            </div>
+          )}
+
+          {/* Import from builderforce-memory — only when the host implements the file
+              op (VS Code). The shared component decides its own visibility, so the web
+              app (no adapter.importMemory) simply never renders it. */}
+          {canManage && adapter.importMemory && (
+            <ImportBox
+              t={t} busy={busy} frozen={frozen}
+              onImport={() => run(async () => {
+                const report = await adapter.importMemory!();
+                if (!report) return; // user cancelled the picker — no notice
+                setNotice(
+                  report.absorbed > 0
+                    ? t.importDone(report.absorbed, report.version, report.compacted, (report.bytesSaved / 1024).toFixed(1))
+                    : t.importNothing,
+                );
+              })}
+            />
+          )}
+        </>
+      ),
+    });
+
+    // TEST — "what will this model actually produce?". Offered to every viewer (reading
+    // what the model writes is not a privileged act); the endpoint is manager-gated, so
+    // a non-manager sees the controls disabled rather than a button that 403s.
+    if (adapter.probe) {
+      const refused = probeResult ? !probeResult.ready : false;
+      tabs.push({
+        id: 'test',
+        label: t.tabTest,
+        // A failed readiness check follows you to the other tabs. A refusal you can only
+        // see while standing on the tab that found it is a refusal you forget.
+        ...(refused ? { badge: '!', badgeTone: 'bad' as const } : {}),
+        content: (
+          <EvermindTestBench
+            t={t} disabled={!canManage || busy}
+            onProbe={(p) => adapter.probe!(p)}
+            result={probeResult}
+            onResult={setProbeResult}
+          />
+        ),
+      });
+    }
+
+    // CHECK — audit what was learned, then repair it.
+    if (canManage && adapter.analyze) {
+      const issues = analysis?.findings.length ?? 0;
+      tabs.push({
+        id: 'check',
+        label: t.tabCheck,
+        ...(issues > 0 ? { badge: String(issues), badgeTone: 'bad' as const } : {}),
+        content: (
+          <EvermindAnalyzer
+            t={t} disabled={busy}
+            onAnalyze={() => adapter.analyze!()}
+            {...(adapter.applyFindings ? { onApply: (f) => adapter.applyFindings!(f) } : {})}
+            onRepaired={() => void reload()}
+            analysis={analysis}
+            onAnalysis={setAnalysis}
+          />
+        ),
+      });
+    }
+
+    // MAINTAIN — repair the model, and export the evidence. Diagnostics lives here for
+    // every viewer, not just managers: describing a broken model is not a privileged
+    // act, and the person who can fix it is often not the person who can manage it.
+    tabs.push({
+      id: 'maintain',
+      label: t.tabMaintain,
+      content: (
+        <>
+          {canManage && (
+            <EvermindMaintenance
+              t={t} disabled={busy} seedModels={seedModels}
+              {...(adapter.reseed ? {
+                onReseed: (slug?: string) => run(async () => {
+                  const r = await adapter.reseed!(slug);
+                  setNotice(t.reseedDone(r.version));
+                }),
+              } : {})}
+              {...(adapter.reindex ? {
+                onReindex: () => run(async () => {
+                  const r = await adapter.reindex!();
+                  setNotice(t.reindexDone(r.reindexed));
+                }),
+              } : {})}
+              {...(adapter.cleanup ? {
+                onCleanup: () => run(async () => {
+                  const r = await adapter.cleanup!();
+                  setNotice(t.cleanupDone(r.discarded, r.cachedAnswers));
+                }),
+              } : {})}
+            />
+          )}
+          <EvermindDiagnostics t={t} disabled={busy} copy={diagnostics} />
+        </>
+      ),
+    });
   }
 
   return (
@@ -251,6 +484,9 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
         />
       ) : (
         <>
+          {/* The always-true state stays OUTSIDE the tabs: it is the context every tab
+              is read against. Putting the quarantine badge or the inference switch
+              behind a tab would let someone replace a model without seeing why. */}
           <StatRow t={t} data={data!} />
 
           <ToggleRow
@@ -266,123 +502,13 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
             onToggle={() => run(() => adapter.setMode(frozen ? 'connected' : 'offline-frozen'))}
           />
 
-          <TeacherPicker
-            t={t} canManage={canManage} busy={busy} opts={teacherOpts}
-            value={data?.teacherModel ?? ''}
-            onChange={(m) => run(() => adapter.setTeacher(m || null))}
+          <ConsoleTabs
+            tabs={tabs}
+            activeId={tabs.some((x) => x.id === tab) ? tab : (tabs[0]?.id ?? 'teach')}
+            onSelect={setTab}
+            label={t.tabsLabel}
+            idPrefix={`ev${panelId}`}
           />
-
-          <TeachBox
-            t={t} busy={busy} validating={validating} teacherModel={data?.teacherModel ?? ''}
-            prompt={teachPrompt} text={teachText}
-            onPrompt={setTeachPrompt} onText={setTeachText}
-            onTeach={() => run(
-              async () => {
-                const task = teachPrompt.trim();
-                const body = teachText.trim();
-                // With a teacher pinned you teach a TASK: the teacher answers it and the
-                // model learns (task → ideal answer), so send the task as both text + prompt.
-                if (data?.teacherModel && body.length < 20 && task.length >= 20) {
-                  await adapter.teach(task, task);
-                } else {
-                  await adapter.teach(body, task || undefined);
-                }
-                setTeachText(''); setTeachPrompt('');
-              },
-              t.taught,
-            )}
-            // Validate the SAME task the user would teach: the pinned-teacher task prompt,
-            // else the transcript's task prompt, else the transcript body itself.
-            onValidate={() => runValidate(data?.teacherModel ? teachPrompt : (teachPrompt.trim() || teachText))}
-          />
-
-          {validateResult && (
-            <ValidateResults t={t} result={validateResult} onClear={clearValidate} />
-          )}
-
-          {canManage && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                disabled={busy || frozen}
-                onClick={() => run(async () => {
-                  const r = await adapter.flush();
-                  setNotice(r.merged > 0 ? t.flushedN(r.merged, r.version) : t.flushedNone);
-                }, undefined)}
-                style={primaryBtn(busy || frozen)}
-              >
-                {busy ? t.flushing : t.flushCta}
-              </button>
-              {(data?.pending ?? 0) > 0 && (
-                <span style={{ fontSize: '0.74rem', color: C.text2 }}>{t.pendingLabel}: {data?.pending}</span>
-              )}
-            </div>
-          )}
-
-          {/* Import from builderforce-memory — only when the host implements the file
-              op (VS Code). The shared component decides its own visibility, so the web
-              app (no adapter.importMemory) simply never renders it. */}
-          {canManage && adapter.importMemory && (
-            <ImportBox
-              t={t} busy={busy} frozen={frozen}
-              onImport={() => run(async () => {
-                const report = await adapter.importMemory!();
-                if (!report) return; // user cancelled the picker — no notice
-                setNotice(
-                  report.absorbed > 0
-                    ? t.importDone(report.absorbed, report.version, report.compacted, (report.bytesSaved / 1024).toFixed(1))
-                    : t.importNothing,
-                );
-              })}
-            />
-          )}
-
-          {/* TEST BENCH — "what will this model actually produce?". Rendered for every
-              viewer (reading what the model writes is not a privileged action); the
-              underlying endpoint is manager-gated, so a non-manager sees the section
-              disabled rather than a control that 403s. */}
-          {adapter.probe && (
-            <EvermindTestBench
-              t={t} disabled={!canManage || busy}
-              onProbe={(p) => adapter.probe!(p)}
-            />
-          )}
-
-          {/* KNOWLEDGE ANALYZER — audit what was learned, then repair it. */}
-          {canManage && adapter.analyze && (
-            <EvermindAnalyzer
-              t={t} disabled={busy}
-              onAnalyze={() => adapter.analyze!()}
-              {...(adapter.applyFindings ? { onApply: (f) => adapter.applyFindings!(f) } : {})}
-              onRepaired={() => void reload()}
-            />
-          )}
-
-          {/* MAINTENANCE — replace / rebuild index / clean up. Each control appears only
-              when its host implements it; the section hides itself when none do. */}
-          {canManage && (
-            <EvermindMaintenance
-              t={t} disabled={busy} seedModels={seedModels}
-              {...(adapter.reseed ? {
-                onReseed: (slug?: string) => run(async () => {
-                  const r = await adapter.reseed!(slug);
-                  setNotice(t.reseedDone(r.version));
-                }),
-              } : {})}
-              {...(adapter.reindex ? {
-                onReindex: () => run(async () => {
-                  const r = await adapter.reindex!();
-                  setNotice(t.reindexDone(r.reindexed));
-                }),
-              } : {})}
-              {...(adapter.cleanup ? {
-                onCleanup: () => run(async () => {
-                  const r = await adapter.cleanup!();
-                  setNotice(t.cleanupDone(r.discarded, r.cachedAnswers));
-                }),
-              } : {})}
-            />
-          )}
 
           {showRecent && <RecentList t={t} entries={data?.recent ?? []} />}
         </>

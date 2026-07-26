@@ -234,6 +234,21 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     analyzeApplying: t('analyzeApplying'),
     analyzeApplied: (corrected, forgotten, version) => t('analyzeApplied', { corrected, forgotten, version }),
     analyzeSkipped: (count) => t('analyzeSkipped', { count }),
+    // Tabs
+    tabsLabel: t('tabsLabel'),
+    tabTeach: t('tabTeach'),
+    tabTest: t('tabTest'),
+    tabCheck: t('tabCheck'),
+    tabMaintain: t('tabMaintain'),
+    // Diagnostics export (the report BODY is an unlocalized technical artifact —
+    // see diagnosticsReport.ts; these controls are localized like everything else).
+    diagnosticsTitle: t('diagnosticsTitle'),
+    diagnosticsHint: t('diagnosticsHint'),
+    diagnosticsCta: t('diagnosticsCta'),
+    diagnosticsCopied: t('diagnosticsCopied'),
+    diagnosticsShow: t('diagnosticsShow'),
+    diagnosticsHide: t('diagnosticsHide'),
+    diagnosticsManualHint: t('diagnosticsManualHint'),
     refresh: t('refresh'),
     errorGeneric: t('errorGeneric'),
   }), [t, format]);

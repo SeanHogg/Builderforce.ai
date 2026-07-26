@@ -1128,6 +1128,12 @@ interface EvermindConsoleAdapter {
     analyze?(): Promise<EvermindKnowledgeAnalysis>;
     /** OPTIONAL — apply an audit's findings: forget bad knowledge, re-teach corrections. */
     applyFindings?(findings: EvermindKnowledgeFinding[]): Promise<EvermindKnowledgeRepair>;
+    /**
+     * OPTIONAL — write to the HOST's clipboard, for the diagnostics export. Tried before
+     * `navigator.clipboard`, which a VS Code webview may not be permitted to use; a host
+     * that omits it falls back to the browser API and then to manual selection.
+     */
+    copyText?(text: string): Promise<void>;
 }
 /** Every visible string. Parametric ones are functions the host localizes. */
 interface EvermindConsoleLabels {
@@ -1280,6 +1286,18 @@ interface EvermindConsoleLabels {
     analyzeApplying: string;
     analyzeApplied: (corrected: number, forgotten: number, version: number) => string;
     analyzeSkipped: (count: number) => string;
+    tabsLabel: string;
+    tabTeach: string;
+    tabTest: string;
+    tabCheck: string;
+    tabMaintain: string;
+    diagnosticsTitle: string;
+    diagnosticsHint: string;
+    diagnosticsCta: string;
+    diagnosticsCopied: string;
+    diagnosticsShow: string;
+    diagnosticsHide: string;
+    diagnosticsManualHint: string;
     refresh: string;
     errorGeneric: string;
 }
@@ -1329,8 +1347,12 @@ interface EvermindConsoleProps {
      *  the recall result to a companion surface (e.g. highlight the matched memories
      *  on the web Studio's Knowledge Map). The console also renders the result inline. */
     onValidate?: (result: EvermindValidateResult | null) => void;
+    /** Which surface is rendering — stamped into the diagnostics export, because the two
+     *  hosts fail differently and "which one was this?" is the first question asked of a
+     *  pasted report. Default 'web'. */
+    host?: 'web' | 'vscode';
 }
-declare function EvermindConsole({ adapter, canManage, labels, refreshMs, projectName, showRecent, showHeaderRefresh, refreshSignal, onValidate }: EvermindConsoleProps): React__default.JSX.Element;
+declare function EvermindConsole({ adapter, canManage, labels, refreshMs, projectName, showRecent, showHeaderRefresh, refreshSignal, onValidate, host }: EvermindConsoleProps): React__default.JSX.Element;
 
 /**
  * Derive what a learned-memory row should SAY about its own provenance — the single

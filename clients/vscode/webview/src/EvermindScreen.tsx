@@ -74,6 +74,10 @@ function evLabels(labels: LabelBundle): Partial<EvermindConsoleLabels> {
     'cleanupLabel', 'cleanupHint', 'cleanupCta', 'cleanupConfirm',
     'analyzeTitle', 'analyzeHint', 'analyzeCta', 'analyzing', 'analyzeCorrectionLabel',
     'analyzeSelectAll', 'analyzeSelectNone', 'analyzeApplying',
+    // Tabs + the diagnostics export controls.
+    'tabsLabel', 'tabTeach', 'tabTest', 'tabCheck', 'tabMaintain',
+    'diagnosticsTitle', 'diagnosticsHint', 'diagnosticsCta', 'diagnosticsCopied',
+    'diagnosticsShow', 'diagnosticsHide', 'diagnosticsManualHint',
   ];
   for (const k of keys) {
     const v = s(k);
@@ -175,6 +179,10 @@ export function EvermindScreen({ init }: { init: InitData }) {
       // Knowledge audit + repair.
       analyze: () => req(`${base}/analyze`, { method: 'POST', body: JSON.stringify({}) }),
       applyFindings: (findings) => req(`${base}/analyze`, { method: 'POST', body: JSON.stringify({ apply: true, findings }) }),
+      // Diagnostics export goes through the HOST clipboard: a webview is not reliably
+      // granted the Clipboard API, and the console's own fallback (reveal + select the
+      // report) is a worse experience than `vscode.env.clipboard`, which always works.
+      copyText: (text) => request<null>('evermind.copyText', { text }).then(() => undefined),
       // Import: host reads the snapshot (fs) → gateway absorbs the entries → host compacts
       // the absorbed ones to stubs. The three steps split by capability (fs on the host,
       // authed fetch in the webview), so no single layer needs powers it lacks.
@@ -249,6 +257,9 @@ export function EvermindScreen({ init }: { init: InitData }) {
           canManage={!!init.canManage}
           projectName={selected?.name}
           labels={labels}
+          // Stamped into the diagnostics export — the two surfaces fail differently, and
+          // "which one was this from?" is the first question asked of a pasted report.
+          host="vscode"
           // The inline `↻` moved to the VS Code view title bar; drive reloads from there.
           showHeaderRefresh={false}
           refreshSignal={refreshSignal}
