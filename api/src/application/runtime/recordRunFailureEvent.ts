@@ -43,7 +43,11 @@ export async function recordRunFailureEvent(db: Db, e: Execution): Promise<void>
       result:        e.errorMessage ?? 'Run failed',
       ts:            new Date(),
     });
-  } catch {
-    /* telemetry is best-effort — never break a status transition on it */
+  } catch (error) {
+    console.error('[run-failure-event] telemetry append failed', {
+      tenantId: Number(e.tenantId),
+      executionId: Number(e.id),
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    });
   }
 }

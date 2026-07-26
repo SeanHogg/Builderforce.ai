@@ -150,8 +150,19 @@ export async function recordActivity(env: Env | undefined, db: Db, input: Activi
       occurredAt: input.occurredAt ?? new Date(),
     });
     await bumpCacheVersion(env as Env, activityLogVersionKey(input.tenantId));
-  } catch {
-    // Best-effort — audit failures must not break the mutation.
+  } catch (error) {
+    // Best-effort — audit failures must not break the mutation, but they must be
+    // diagnosable. Never include the free-form metadata because it may contain
+    // tenant-sensitive content.
+    console.error('[activity-log] append failed', {
+      tenantId: input.tenantId,
+      projectId: input.projectId ?? null,
+      verb: input.verb,
+      targetType: input.targetType ?? null,
+      targetId: input.targetId ?? null,
+      actorType: input.actor.type,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    });
   }
 }
 

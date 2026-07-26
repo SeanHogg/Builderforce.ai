@@ -137,7 +137,11 @@ export class CloudRunnerDO implements DurableObject {
     await this.db.update(executions)
       .set({ updatedAt: new Date() })
       .where(eq(executions.id, cursor.executionId))
-      .catch(() => { /* best-effort */ });
+      .catch((error) => console.error('[cloud-runner] heartbeat write failed', {
+        executionId: cursor.executionId,
+        tenantId: cursor.tenantId,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      }));
 
     try {
       if (cursor.stage === 'prep') {
@@ -202,7 +206,11 @@ export class CloudRunnerDO implements DurableObject {
         await this.db.update(executions)
           .set({ status: 'paused', updatedAt: new Date() })
           .where(eq(executions.id, cursor.executionId))
-          .catch(() => { /* best-effort */ });
+          .catch((error) => console.error('[cloud-runner] pause transition failed', {
+            executionId: cursor.executionId,
+            tenantId: cursor.tenantId,
+            error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+          }));
         // Narrate the pause — WITH the question — into the ticket's linked Brain
         // chats, so the human driving the conversation sees what the agent needs
         // (Slack/email via approvalNotifier are the only other channels). Keyed by
@@ -227,7 +235,11 @@ export class CloudRunnerDO implements DurableObject {
         result.ok
           ? { status: ExecutionStatus.COMPLETED, result: result.output }
           : { status: ExecutionStatus.FAILED, errorMessage: result.output },
-      ).catch(() => { /* already terminal/cancelled — leave it */ });
+      ).catch((error) => console.warn('[cloud-runner] terminal transition was rejected', {
+        executionId: cursor.executionId,
+        tenantId: cursor.tenantId,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      }));
       await this.cleanup(cursor.executionId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -247,7 +259,11 @@ export class CloudRunnerDO implements DurableObject {
       // runner within minutes — the machinery that already exists for a dropped run.
       // Either way we must NOT cleanup(): that deletes the cursor this run resumes from.
       if (isInfrastructureEviction(message)) {
-        await this.persistAndArm(cursor).catch(() => { /* isolate going away — the reaper picks it up */ });
+        await this.persistAndArm(cursor).catch((error) => console.error('[cloud-runner] crash cursor persistence failed; reaper must recover', {
+          executionId: cursor.executionId,
+          tenantId: cursor.tenantId,
+          error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        }));
         return;
       }
 
@@ -256,7 +272,11 @@ export class CloudRunnerDO implements DurableObject {
         await this.runtimeService.update(cursor.executionId, {
           status: ExecutionStatus.FAILED,
           errorMessage: message,
-        }).catch(() => { /* already terminal/cancelled — leave it */ });
+        }).catch((error) => console.warn('[cloud-runner] crash failure transition was rejected', {
+          executionId: cursor.executionId,
+          tenantId: cursor.tenantId,
+          error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        }));
       }
       await this.cleanup(cursor.executionId);
     }
@@ -289,7 +309,10 @@ export class CloudRunnerDO implements DurableObject {
       // Learned Model Routing: the single durable-surface terminal chokepoint —
       // every DO terminal path (finish, cancel, error) routes through cleanup, so
       // scoring here covers them all. Idempotent + best-effort (never blocks).
-      await scoreRunOutcome(this.env, this.db, { executionId }).catch(() => { /* best-effort */ });
+      await scoreRunOutcome(this.env, this.db, { executionId }).catch((error) => console.error('[cloud-runner] outcome scoring failed', {
+        executionId,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      }));
     }
     await this.state.storage.delete(CURSOR_KEY);
     await this.state.storage.deleteAlarm();

@@ -145,6 +145,18 @@ function formatGate(gate: LifecycleGateSnapshot): string[] {
   out.push(line('assignedAgentRef (ticket owner)', gate.assignedAgentRef));
   out.push(line('staffedAgentRefs (on the lane)', gate.staffedAgentRefs.length ? gate.staffedAgentRefs.join(', ') : null));
   out.push(line('candidateAgentRef (what "Run now" would dispatch)', gate.candidateAgentRef));
+  // THE MANAGED FACTS. On a lifecycle-managed board a run must be attributed to a role
+  // the stage authorises, so the three lines above do NOT answer "can this run": a lane
+  // can be staffed and an owner assigned while every dispatch is refused. Omitting this
+  // is how a report printed "nothing is gating this ticket" for a ticket the dispatcher
+  // had been refusing every five minutes for weeks.
+  if (gate.lifecycleManaged) {
+    out.push(line('lifecycleManaged', 'yes — a run MUST be attributed to a role this stage authorises; the assignee is the Coordinator, not an executor'));
+    out.push(line('authorizedRoleKeys (this stage, this ticket)', gate.authorizedRoleKeys.length ? gate.authorizedRoleKeys.join(', ') : null));
+    out.push(line('managedRole (the role-attributed run that would go out)', gate.managedRole
+      ? `${gate.managedRole.roleKey} as ${gate.managedRole.agentRef} (resolved from the ${gate.managedRole.source === 'manifest' ? "ticket's participation manifest" : "lane's staffing"})`
+      : null));
+  }
   out.push(line('liveExecution', gate.liveExecution ? `#${gate.liveExecution.id} (${gate.liveExecution.status})` : null));
   for (const m of gate.capabilityMismatches) {
     out.push(line('capabilityMismatch', `${m.agentRef} is missing: ${m.missing.join(', ')}`));

@@ -13,14 +13,14 @@
  * precisely the condition the trigger evaluates.
  */
 import { and, asc, eq } from 'drizzle-orm';
-import { boards, swimlanes, swimlaneAgentAssignments, swimlaneRequirements, tasks, ticketParticipants } from '../../infrastructure/database/schema';
+import { swimlanes, swimlaneAgentAssignments, swimlaneRequirements, tasks } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';
 import { isInfrastructureEviction } from '../runtime/orphanReasons';
 import { resolveArtifacts } from '../artifact/resolveArtifacts';
 import { isAgentRefRoleCapable } from '../kanban/roleCapability';
-import { isParticipantOpen } from '../kanban/participantStates';
+import { resolveManagedProducer } from '../kanban/managedLaneRoles';
 import { decideLaneAutoRun, withOwnerAgentFallback, type LaneAgentLike, type LaneAutoRunDecision } from './laneAutoRun';
 import { findCanonicalBoard } from './canonicalBoard';
 import { isUnapprovedFeedbackTask } from '../feedback/feedbackSpec';
@@ -48,6 +48,7 @@ export type AutoRunReason =
   | 'terminal_lane'       // Done / terminal lane — finalized, never auto-run
   | 'human_gate'          // the lane gate is 'human' — waits for explicit approval / Run now
   | 'no_agent'            // no lane-staffed agent AND no owner agent — nothing to run as
+  | 'managed_no_role'     // LIFECYCLE-MANAGED board: no role this stage authorizes resolves to an agent, and a managed run must be role-attributed
   | 'capability_mismatch' // every candidate agent lacks the lane's required capabilities
   | 'already_running'     // a live (pending/submitted/running/paused) run already exists on the ticket
   | 'same_lane_reentry'   // the run that just finished already SERVED this lane — the loop guard suppressed an immediate re-dispatch into it
@@ -77,6 +78,7 @@ export const AUTO_RUN_REASON_TEXT: Record<AutoRunReason, string> = {
   terminal_lane: 'No run: the ticket is in a terminal (Done) lane, which never auto-runs.',
   human_gate: 'No run: this lane is human-gated — a person must approve it or use Run now.',
   no_agent: 'No run: the lane has no staffed agent and the ticket owner is not eligible to execute this stage. Staff the lane, or dispatch explicitly with Run now.',
+  managed_no_role: 'No run: this board is lifecycle-managed, so every run must be attributed to a role the stage authorizes — and no authorized role resolves to an agent here. The ticket\'s assignee is the Coordinator, never the executor, so assigning someone does NOT fix this: staff the lane, pin the role, or let the Coordinator resolve the stage\'s participant.',
   capability_mismatch: 'No run: every candidate agent lacks the capabilities this lane requires.',
   already_running: 'No new run: this ticket already has a live execution. If that run is PAUSED it is waiting on an answer to an agent question — it holds the ticket until answered (or until the 72-hour paused deadline releases it), so answering it is what unblocks the ticket.',
   same_lane_reentry: 'No new run: the run that just finished already served this lane, so the loop guard suppressed an immediate re-dispatch into the same lane. Nothing is executing right now.',
@@ -107,8 +109,8 @@ export const AUTO_RUN_REASON_TEXT: Record<AutoRunReason, string> = {
  */
 export const EVALUATED_AUTO_RUN_REASONS: ReadonlySet<AutoRunReason> = new Set<AutoRunReason>([
   'will_run', 'no_board', 'no_lane', 'terminal_lane', 'human_gate', 'no_agent',
-  'capability_mismatch', 'already_running', 'same_lane_reentry', 'run_cap_exhausted',
-  'cooldown_active', 'not_executable', 'pending_approval', 'tenant_token_limit',
+  'managed_no_role', 'capability_mismatch', 'already_running', 'same_lane_reentry',
+  'run_cap_exhausted', 'cooldown_active', 'not_executable', 'pending_approval', 'tenant_token_limit',
 ]);
 
 /**
@@ -284,57 +286,23 @@ export function assessRerunBackoff(execs: readonly ExecTiming[], nowMs: number):
 // (`kanban/participantStates`) — a completed/waived/skipped producer must not be
 // re-dispatched for the same stage.
 
-/** A ticket-participation manifest slot, as far as producer selection cares. */
-export interface ManifestSlot {
-  assigneeRef: string | null;
-  responsibility: string;
-  state: string;
-}
-
 /**
- * Pick the PRODUCER slot from a stage's manifest rows: an owner/contributor
- * responsibility, resolved to an agent, still owing work. Pure — unit-tested
- * directly, with the query kept in {@link manifestProducerRef}.
- */
-export function pickManifestProducer(rows: ReadonlyArray<ManifestSlot>): string | null {
-  const producer = rows.find((r) =>
-    (r.responsibility === 'owner' || r.responsibility === 'contributor')
-    && !!r.assigneeRef
-    && isParticipantOpen(r.state));
-  return producer?.assigneeRef ?? null;
-}
-
-/**
- * The AGENT that the ticket's participation manifest names as the producer of THIS
- * stage — a required owner/contributor slot for the lane, resolved to a cloud agent
- * and not yet completed.
+ * The role-attributed run a lifecycle-managed stage would start.
  *
- * On a lifecycle-managed board the Assignee is the Coordinator, never the per-stage
- * executor (PRD §5.5), so the manifest is the only thing that knows who should
- * actually do the work in this lane. Reading it here is what lets an unstaffed lane
- * dispatch the right producer instead of stalling at `no_agent`.
- *
- * `stageKey` is the swimlane key (see `TicketParticipantsService.deriveManifest`),
- * so the lane's status key matches it directly. Null when the manifest has no open
- * agent-resolved producer for the stage — which correctly reads as `no_agent`.
+ * On a managed board the Assignee is the Coordinator, never the per-stage executor
+ * (PRD §5.5), and the dispatcher REFUSES any payload without a role. So "which agent"
+ * is not a sufficient answer here — the verdict has to carry the role too, and it has
+ * to be a role `authorizeManagedTaskExecution` will accept. Both sides read the same
+ * resolver (`kanban/managedLaneRoles.ts`), which is what makes that guaranteed rather
+ * than hoped for.
  */
-async function manifestProducerRef(db: Db, tenantId: number, taskId: number, stageKey: string): Promise<string | null> {
-  const rows = await db
-    .select({
-      assigneeRef: ticketParticipants.assigneeRef,
-      responsibility: ticketParticipants.responsibility,
-      state: ticketParticipants.state,
-    })
-    .from(ticketParticipants)
-    .where(and(
-      eq(ticketParticipants.tenantId, tenantId),
-      eq(ticketParticipants.taskId, taskId),
-      eq(ticketParticipants.stageKey, stageKey),
-      eq(ticketParticipants.required, true),
-      eq(ticketParticipants.assigneeKind, 'agent'),
-    ));
-
-  return pickManifestProducer(rows);
+export interface ManagedRoleAttribution {
+  roleKey: string;
+  agentRef: string;
+  /** Whether the ticket's own manifest named the producer, or the lane's staffing did. */
+  source: 'manifest' | 'lane_agent';
+  /** Every role this stage authorizes for this ticket — reported for the gate snapshot. */
+  authorizedRoleKeys: string[];
 }
 
 export interface AutoRunEvaluation {
@@ -404,6 +372,21 @@ export interface AutoRunEvaluation {
    * Reporting it here is what turns that silence into an answer.
    */
   tenantTokens: TenantTokenVerdict | null;
+  /**
+   * TRUE when the ticket sits on a lifecycle-managed board — the fact that decides
+   * whether a dispatch must be role-attributed. Reported even when it did not change the
+   * verdict, because a gate snapshot that omits it cannot explain why an apparently
+   * staffed, auto-gated ticket never ran.
+   */
+  lifecycleManaged: boolean;
+  /**
+   * The role-attributed run a managed stage would start, or null when none resolves
+   * (which is exactly `managed_no_role`). Always null on an unmanaged board.
+   *
+   * The TRIGGER reads this to dispatch through `requestRoleRun` instead of the bare
+   * dispatcher — the whole point of the verdict on a managed board.
+   */
+  managedRole: ManagedRoleAttribution | null;
 }
 
 /** The workspace token verdict as a ticket-level reader needs it: blocked or not,
@@ -430,12 +413,22 @@ export function classifyResolvedAutoRun(input: {
   hasCapabilityMismatch: boolean;
   sameLaneReentry: boolean;
   hasLiveExecution: boolean;
+  /**
+   * LIFECYCLE-MANAGED board with no role-attributed producer for this stage. Ranked
+   * directly under the human gate and ABOVE `no_agent`, because it is a strictly more
+   * specific answer: `no_agent` tells an operator to staff the lane or assign an owner,
+   * and on a managed board assigning an owner does nothing at all (the assignee is the
+   * Coordinator). Reporting the generic reason is what made 675 tickets look like a
+   * staffing problem while the real one was that no dispatch could be attributed.
+   */
+  managedNoRole?: boolean;
   /** Consecutive most-recent FAILED runs on the ticket (see {@link trailingFailureStreak}). */
   consecutiveFailures?: number;
   /** Cooldown still owed since the last failed run (see {@link autoRunCooldownRemainingMs}). */
   cooldownRemainingMs?: number;
 }): { reason: AutoRunReason; canRunNow: boolean } {
   if (input.gate === 'human') return { reason: 'human_gate', canRunNow: false };
+  if (input.managedNoRole) return { reason: 'managed_no_role', canRunNow: false };
   if (!input.decisionAutoRun) return { reason: input.hasCapabilityMismatch ? 'capability_mismatch' : 'no_agent', canRunNow: false };
   // The loop guard and the live-run guard are DIFFERENT facts and now say so. Both
   // used to report `already_running`, which made a report claiming a live run while
@@ -484,7 +477,12 @@ export async function evaluateTaskAutoRun(
   },
 ): Promise<AutoRunEvaluation> {
   const [taskRow] = await db
-    .select({ assignedAgentRef: tasks.assignedAgentRef, source: tasks.source, status: tasks.status })
+    .select({
+      assignedAgentRef: tasks.assignedAgentRef, source: tasks.source, status: tasks.status,
+      // Scope for a managed stage's requirement applicability — the same one query, so
+      // resolving the authorized role set costs no extra round-trip here.
+      taskType: tasks.taskType, actionType: tasks.actionType,
+    })
     .from(tasks)
     .where(eq(tasks.id, args.taskId))
     .limit(1);
@@ -509,6 +507,8 @@ export async function evaluateTaskAutoRun(
     consecutiveFailures: 0,
     failureBreakerAt: MAX_CONSECUTIVE_AUTORUN_FAILURES,
     tenantTokens: null,
+    lifecycleManaged: false,
+    managedRole: null,
     ...over,
   });
 
@@ -602,6 +602,53 @@ export async function evaluateTaskAutoRun(
   // capable of that role. A Product Manager owner must never auto-run an Implementation
   // stage as the coder; suppressing the fallback surfaces the lane as `no_agent` so the
   // Coordinator/manager resolves the right producer instead of burning failing runs.
+  // ── LIFECYCLE-MANAGED BOARD: the verdict must name a ROLE, or there is no verdict ──
+  //
+  // A managed dispatch is refused unless its payload carries a role the stage authorizes
+  // (`authorizeManagedTaskExecution`). Resolving "which agent" alone therefore produced a
+  // verdict the dispatcher could only throw on — `will_run` followed by an `auto_run_error`
+  // every sweep, with no execution row, so no failure, so no breaker, forever. The role
+  // and the agent are resolved TOGETHER here, from the same authority the guard enforces.
+  //
+  // A review lane is excluded deliberately: the reviewer round-trip belongs to the lane
+  // requirement gate (which dispatches it AS a role and blocks this path), and letting the
+  // manifest producer run here would be the author grading its own homework — the same
+  // no-self-review guarantee the owner fallback has always had.
+  let managedRole: ManagedRoleAttribution | null = null;
+  if (board.lifecycleManaged && !isReviewLane(status)) {
+    const resolved = await resolveManagedProducer(db, {
+      tenantId: args.tenantId,
+      taskId: args.taskId,
+      swimlaneId: lane.id,
+      stageKey: status,
+      task: { taskType: taskRow?.taskType ?? null, actionType: taskRow?.actionType ?? null },
+    }).catch(() => null);
+    if (resolved?.producer) {
+      managedRole = {
+        roleKey: resolved.producer.roleKey,
+        agentRef: resolved.producer.agentRef,
+        source: resolved.producer.source,
+        authorizedRoleKeys: resolved.authority.roleKeys,
+      };
+    }
+  }
+
+  if (board.lifecycleManaged) {
+    // The ONLY dispatch a managed board authorizes is the role-attributed one above, so
+    // the candidate set is exactly that agent — never an arbitrary lane-staffed agent the
+    // guard would refuse. The staffed entry is preferred when it exists so the lane's
+    // capability requirement and pinned model still apply.
+    const staffedEntry = managedRole ? laneAgents.find((a) => a.agentRef === managedRole.agentRef) : undefined;
+    const managedAgents: LaneAgentLike[] = managedRole
+      ? [staffedEntry ?? { agentRef: managedRole.agentRef, model: null, requiredCapabilities: [] }]
+      : [];
+    return finishEvaluation({
+      db, runtimeService, args, status, assignedAgentRef, gate, staffedAgentRefs,
+      agents: managedAgents, managedNoRole: !managedRole,
+      lifecycleManaged: true, managedRole,
+    });
+  }
+
   let ownerFallbackRef: string | null = assignedAgentRef;
   if (isReviewLane(status)) {
     // NO SELF-REVIEW. On a review lane the owner is (almost always) the agent that
@@ -614,21 +661,44 @@ export async function evaluateTaskAutoRun(
     // This is the guardrail that makes the auto-gated `in_review` lane (0369) safe:
     // the gate opening lets a REVIEWER run, never the author again.
     ownerFallbackRef = null;
-  } else if (board.lifecycleManaged) {
-    // Lifecycle-managed board (PRD §5.5): the Assignee IS the Coordinator and is
-    // NEVER the default per-stage executor. The per-stage PRODUCER is the ticket's
-    // own participation manifest slot for this stage — so read it, rather than
-    // dropping the fallback outright. The old `null` meant an unstaffed lane simply
-    // stalled at `no_agent` forever: assigning a coder to a ticket did nothing, and
-    // nothing ever resolved the producer the manifest had already named.
-    ownerFallbackRef = await manifestProducerRef(db, args.tenantId, args.taskId, status);
   } else if (assignedAgentRef && producerRoleKey) {
     if (!(await isAgentRefRoleCapable(db, args.tenantId, assignedAgentRef, producerRoleKey, args.projectId))) {
       ownerFallbackRef = null;
     }
   }
 
-  const agents = withOwnerAgentFallback(qualifiedLaneAgents, { agentRef: ownerFallbackRef });
+  return finishEvaluation({
+    db, runtimeService, args, status, assignedAgentRef, gate, staffedAgentRefs,
+    agents: withOwnerAgentFallback(qualifiedLaneAgents, { agentRef: ownerFallbackRef }),
+    managedNoRole: false, lifecycleManaged: false, managedRole: null,
+  });
+}
+
+/**
+ * The tail every resolved-lane verdict shares: the autonomy decision, the Run-now
+ * candidate, the live run, the breaker/cooldown backpressure and the workspace token
+ * gate.
+ *
+ * Extracted when the managed path gained its own candidate resolution. Duplicating it
+ * would have been the same class of bug this whole change fixes — two paths deriving the
+ * same verdict independently — so the managed and unmanaged branches differ ONLY in how
+ * they choose `agents`, and agree on everything after by construction.
+ */
+async function finishEvaluation(input: {
+  db: Db;
+  runtimeService: RuntimeService;
+  args: { tenantId: number; taskId: number; originLaneKey?: string; tenantTokens?: TenantTokenVerdict; env?: Env };
+  status: string;
+  assignedAgentRef: string | null;
+  gate: 'auto' | 'human';
+  staffedAgentRefs: string[];
+  agents: LaneAgentLike[];
+  managedNoRole: boolean;
+  lifecycleManaged: boolean;
+  managedRole: ManagedRoleAttribution | null;
+}): Promise<AutoRunEvaluation> {
+  const { db, runtimeService, args, status, gate, agents } = input;
+
   const decision = decideLaneAutoRun(agents, gate);
   // The agent a manual Run-now would use: the same pick, but gate-blind (a human
   // click overrides a 'human' gate). decideLaneAutoRun(_, 'auto') never returns a
@@ -659,6 +729,7 @@ export async function evaluateTaskAutoRun(
     hasLiveExecution: !!liveExecution,
     consecutiveFailures,
     cooldownRemainingMs,
+    managedNoRole: input.managedNoRole,
   });
 
   // WORKSPACE TOKEN GATE — last, and only for a ticket that would otherwise run.
@@ -689,11 +760,11 @@ export async function evaluateTaskAutoRun(
 
   return {
     status,
-    assignedAgentRef,
+    assignedAgentRef: input.assignedAgentRef,
     laneResolved: true,
     isTerminalLane: false,
     laneGate: gate,
-    staffedAgentRefs,
+    staffedAgentRefs: input.staffedAgentRefs,
     decision,
     candidate,
     liveExecution,
@@ -703,6 +774,8 @@ export async function evaluateTaskAutoRun(
     consecutiveFailures,
     failureBreakerAt: MAX_CONSECUTIVE_AUTORUN_FAILURES,
     tenantTokens,
+    lifecycleManaged: input.lifecycleManaged,
+    managedRole: input.managedRole,
   };
 }
 
