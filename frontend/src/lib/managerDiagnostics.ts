@@ -124,6 +124,16 @@ export interface PassCounters {
   dispatched?: number;
   audited?: number;
   flagged?: number;
+  /**
+   * Stages the pass SHED because it ran out of its wall-clock budget, e.g.
+   * `['pr_merge', 'triage']`. Present only on a truncated pass.
+   *
+   * A bounded pass used to be indistinguishable from a complete one — the pass was being
+   * evicted mid-PR-loop and never wrote its closing row at all, so for two weeks the
+   * surface reported health nobody had verified. The server now names what it deferred
+   * on the run card; this reads it back.
+   */
+  deferred?: string[];
 }
 
 const COUNTER_NAMES = ['scored', 'ranked', 'assigned', 'prs', 'dispatched', 'audited'] as const;
@@ -140,6 +150,11 @@ export function parsePassCounters(summary: string | null | undefined): PassCount
   }
   const flagged = /\((\d+)\s+flagged\)/i.exec(summary);
   if (flagged) { out.flagged = Number(flagged[1]); matched = true; }
+  const deferred = /·\s*deferred:\s*([^.·]+)/i.exec(summary);
+  if (deferred?.[1]) {
+    const stages = deferred[1].split(',').map((s) => s.trim()).filter(Boolean);
+    if (stages.length) { out.deferred = stages; matched = true; }
+  }
   return matched ? out : null;
 }
 
@@ -486,6 +501,19 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
       severity: 'critical',
       code: 'pass_never_completed',
       text: `${died.length} management pass card${died.length === 1 ? ' is' : 's are'} still "in progress" past the ${formatAge(STALE_RUN_TASK_MS)} reap threshold — the oldest (${oldest.task.key}) has been open ${age == null ? 'an unknown time' : formatAge(age)}. A pass cannot legitimately run that long: the Worker was evicted mid-pass and never ran the block that closes the card, so the work of that pass was NOT finished.`,
+    });
+  }
+  // A pass that COMPLETED but shed stages. Distinct from `died`/`ended_early`: this pass
+  // finished honestly and said what it could not reach, which is the outcome the pass
+  // budget was added to produce. Worth a warning, never a critical — the deferred work is
+  // picked up on the next 5-minute pass.
+  const truncated = passes.filter((p) => (parsePassCounters(p.task.summary)?.deferred?.length ?? 0) > 0);
+  if (truncated.length > 0) {
+    const stages = [...new Set(truncated.flatMap((p) => parsePassCounters(p.task.summary)?.deferred ?? []))];
+    warning.push({
+      severity: 'warning',
+      code: 'passes_truncated',
+      text: `${truncated.length} of the last ${passes.length} passes ran out of their wall-clock budget and deferred ${stages.join(', ')} to the next pass. The pass still completed and journalled honestly, but a project whose PR coordination consistently consumes the whole budget is starving the stages behind it — bound the PR work (or split the pass) rather than letting the backlog behind it go ungroomed.`,
     });
   }
   if (endedEarly.length > 0) {
