@@ -60,7 +60,12 @@ import {
   DEFAULT_ROLE_PERMISSIONS,
   resolveRolePermissions,
   resolveEffectivePermissions,
+  ENFORCED_PERMISSIONS,
 } from '../../domain/permissions/permissionRegistry';
+import {
+  invalidateMemberPermissions,
+  invalidateRolePermissions,
+} from '../../application/rbac/effectivePermissions';
 import {
   adminPoolProxy,
   FREE_MODEL_POOL,
@@ -331,7 +336,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     }
     const body = await c.req.json<{ version: string; title?: string; content: string }>();
     try {
-      const document = await publishLegalDoc(db, docType, body, actorUserId);
+      const document = await publishLegalDoc(db, docType, body, actorUserId, c.env);
       return c.json({ document }, 201);
     } catch (e) {
       if (e instanceof LegalDocError) return c.json({ error: e.message }, e.status as 400);
@@ -352,7 +357,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const actorUserId = c.get('userId') as string;
     const body = await c.req.json<{ version?: string; title?: string; content: string }>();
     try {
-      const document = await amendActiveLegalDoc(db, docType, body, actorUserId);
+      const document = await amendActiveLegalDoc(db, docType, body, actorUserId, c.env);
       return c.json({ document });
     } catch (e) {
       if (e instanceof LegalDocError) return c.json({ error: e.message }, e.status as 400);
@@ -2641,6 +2646,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       roles,
       permissions: ALL_PERMISSIONS,
       matrix,
+      // Which rows are backed by a real request-time gate. Without this the
+      // screen implied every override took effect; most are still advisory
+      // because the route is gated by the role ladder alone.
+      enforced: [...ENFORCED_PERMISSIONS],
       overrides: overrides.map((o) => ({ tenantId: null, role: o.role, permission: o.permission, granted: o.granted })),
     });
   });
@@ -2672,6 +2681,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       metadata: { role, overrides: body.overrides },
       ipAddress: c.req.header('CF-Connecting-IP') ?? null,
     });
+
+    // The gate resolves this set from cache on every request — a matrix edit
+    // that skipped this would keep applying the OLD permissions until the TTL.
+    await invalidateRolePermissions(c.env, role);
 
     const updated = await db.select().from(rolePermissionOverrides).where(eq(rolePermissionOverrides.role, role));
     return c.json({ role, permissions: resolveRolePermissions(role, updated) });
@@ -2792,6 +2805,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await db.insert(tenantMemberModules).values({
       tenantId, userId, moduleId: body.moduleId, grantedBy: actorId,
     }).onConflictDoNothing();
+    await invalidateMemberPermissions(c.env, tenantId, userId);
     await writeAudit(db, 'MODULE_ASSIGNED', actorId, { targetUserId: userId, tenantId, metadata: { moduleId: body.moduleId } });
     return c.json({ ok: true });
   });
@@ -2806,6 +2820,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await db.delete(tenantMemberModules).where(
       and(eq(tenantMemberModules.tenantId, tenantId), eq(tenantMemberModules.userId, userId), eq(tenantMemberModules.moduleId, moduleId))
     );
+    await invalidateMemberPermissions(c.env, tenantId, userId);
     await writeAudit(db, 'MODULE_REMOVED', actorId, { targetUserId: userId, tenantId, metadata: { moduleId } });
     return c.json({ ok: true });
   });
@@ -2928,6 +2943,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
           set: { granted: o.granted, expiresAt: o.expiresAt ? new Date(o.expiresAt) : null },
         });
     }
+    await invalidateMemberPermissions(c.env, body.tenantId, targetId);
     await writeAudit(db, 'USER_PERMISSION_OVERRIDE', actorId, {
       targetUserId: targetId,
       tenantId: body.tenantId,

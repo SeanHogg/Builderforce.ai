@@ -6,6 +6,7 @@ import { resolveTicketRepoContext } from '../../application/repos/commitFileAsPe
 import { readRepoFile } from '../../application/repos/readRepoContents';
 import { importRepoContents } from '../../application/repos/importRepoContents';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { liveExecution } from '../../application/rehearsal/executionMode';
 import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import {
@@ -1268,6 +1269,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   router.get('/active', async (c) => {
     const tenantId = c.get('tenantId');
     const limit = Math.min(Number(c.req.query('limit') ?? '200'), 500);
+    // `liveExecution()` — a rehearsal (0372) drives a real execution row but is a
+    // probe rather than fleet activity, so it must not appear on the active-runs board.
     const rows = await db
       .select({
         id: executions.id,
@@ -1282,7 +1285,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       })
       .from(executions)
       .innerJoin(tasks, eq(tasks.id, executions.taskId))
-      .where(and(eq(executions.tenantId, tenantId), inArray(executions.status, ['pending', 'submitted', 'running'])))
+      .where(and(eq(executions.tenantId, tenantId), inArray(executions.status, ['pending', 'submitted', 'running']), liveExecution()))
       .orderBy(desc(executions.createdAt))
       .limit(limit);
 
@@ -1323,7 +1326,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const LIMIT = 500;
 
     // 1) Every non-terminal execution for the tenant (optionally one project), with its task.
-    const execWhere = [eq(executions.tenantId, tenantId), inArray(executions.status, ['pending', 'submitted', 'running', 'paused'])];
+    const execWhere = [eq(executions.tenantId, tenantId), inArray(executions.status, ['pending', 'submitted', 'running', 'paused']), liveExecution()];
     if (projectId != null && Number.isFinite(projectId)) execWhere.push(eq(tasks.projectId, projectId));
     const execRows = await db
       .select({ id: executions.id, taskId: executions.taskId, status: executions.status })

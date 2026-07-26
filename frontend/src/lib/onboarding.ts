@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { apiRequest } from './apiClient';
 import { useAuth } from './AuthContext';
 import { AUTH_API_URL, checkUnauthorizedAndRedirect, createTenant, getMe, getMyTenants, type OnboardingProgress } from './auth';
 import { createProject, fetchProjects } from './api';
@@ -119,34 +120,22 @@ export interface OnboardingState {
 }
 
 export async function fetchTermsStatus(webToken: string): Promise<TermsStatus> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/legal/terms/status`, {
+  return apiRequest<TermsStatus>('/api/auth/legal/terms/status', {
+    auth: 'none',
     headers: { Authorization: `Bearer ${webToken}` },
   });
-  checkUnauthorizedAndRedirect(res, true);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? 'Failed to load terms status');
-  }
-  return (await res.json()) as TermsStatus;
 }
 
 export async function acceptActiveTerms(
   webToken: string,
   version: string,
 ): Promise<void> {
-  const res = await fetch(`${AUTH_API_URL}/api/auth/legal/terms/accept`, {
+  await apiRequest('/api/auth/legal/terms/accept', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${webToken}`,
-    },
+    auth: 'none',
+    headers: { Authorization: `Bearer ${webToken}` },
     body: JSON.stringify({ version }),
   });
-  checkUnauthorizedAndRedirect(res, true);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? 'Failed to accept terms');
-  }
 }
 
 /**

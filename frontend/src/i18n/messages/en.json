@@ -397,7 +397,8 @@
       "marketplace": "Marketplace",
       "incidents": "Incidents",
       "monitoring": "Monitoring",
-      "reliability": "Reliability"
+      "reliability": "Reliability",
+      "agentOps": "Agent Ops"
     },
     "tab": {
       "projects": "Projects",
@@ -476,7 +477,10 @@
       "reporting": "Reporting",
       "rfp": "RFP",
       "feedback": "Feedback",
-      "autonomy": "Autonomy"
+      "autonomy": "Autonomy",
+      "coordination": "Coordination",
+      "memory": "Memory",
+      "rehearsal": "Rehearsal"
     },
     "primaryAria": "Primary"
   },
@@ -8312,7 +8316,14 @@
     },
     "permissions": {
       "title": "Roles & Permissions",
-      "colPermission": "Permission"
+      "colPermission": "Permission",
+      "enforced": "Enforced",
+      "advisory": "Advisory",
+      "granted": "Granted",
+      "denied": "Denied",
+      "enforcedHint": "This permission is checked on every request. Overrides take effect immediately.",
+      "advisoryHint": "This permission is not yet checked at request time — the route is gated by the role tier alone, so editing this row changes only what this table shows.",
+      "enforcementNote": "Rows marked Enforced are checked on every request, so an override takes effect immediately. Rows marked Advisory are gated by the role tier alone: editing them changes this table only, not what a member can actually do."
     },
     "modules": {
       "title": "Platform Modules",
@@ -11409,6 +11420,92 @@
       "epic": "Via epic",
       "project": "Project goal",
       "initiative": "Initiative goal"
+    }
+  },
+  "agentOps": {
+    "loading": "Loading…",
+    "close": "Close",
+    "genericError": "Something went wrong.",
+    "coordination": {
+      "title": "Coordination",
+      "subtitle": "Several agents can work one ticket at the same time and share a single branch. This is who currently holds which files, and the notes they are leaving each other.",
+      "ticketLabel": "Ticket number",
+      "ticketPlaceholder": "e.g. 412",
+      "inspect": "Inspect ticket",
+      "empty": "Enter a ticket number to see which files its agents hold and what they have told each other.",
+      "leasesTitle": "Files held right now",
+      "noLeases": "No agent is holding a file on this ticket.",
+      "notesTitle": "Shared workspace",
+      "noNotes": "No agent has posted a note on this ticket.",
+      "resource": "File",
+      "holder": "Held by",
+      "mode": "Lock",
+      "reason": "Why",
+      "exclusive": "Exclusive",
+      "shared": "Shared",
+      "release": "Force release",
+      "releaseTitle": "Force-release this file?",
+      "releaseConfirm": "{holder} still holds {resource}. Releasing it lets another agent write the file immediately — do this only when you know the holder has stopped."
+    },
+    "memory": {
+      "title": "Memory",
+      "subtitle": "Everything your agents believe, with how far each belief travels, where it came from, and when it stops being true. Shown for the current project scope — exactly what an agent running here would recall.",
+      "tableTitle": "Remembered facts",
+      "empty": "Your agents have not stored any facts in this scope yet.",
+      "key": "Key",
+      "fact": "Fact",
+      "scope": "Scope",
+      "origin": "Came from",
+      "expiry": "Expires",
+      "durable": "Never",
+      "lapsed": "Lapsed",
+      "fromRun": "run #{id}",
+      "scopeTenant": "Whole workspace",
+      "scopeProject": "This project",
+      "scopeTicket": "Ticket #{id}",
+      "forget": "Forget",
+      "forgetTitle": "Forget this fact?",
+      "forgetConfirm": "Agents will stop recalling \"{key}\". If a broader version of the same key exists, that one becomes visible again.",
+      "purge": "Clear lapsed",
+      "purgeTitle": "Clear lapsed facts?",
+      "purgeConfirm": "Deletes facts whose expiry has already passed. Agents stopped recalling them when they lapsed, so nothing changes for a run.",
+      "statTotal": "Facts in scope",
+      "statTotalHint": "What an agent running here can recall.",
+      "statScoped": "Narrowly scoped",
+      "statScopedHint": "Facts that stay inside this project or one ticket.",
+      "statExpiring": "With an expiry",
+      "statExpiringHint": "Time-bound facts that will lapse on their own.",
+      "statLapsed": "Already lapsed",
+      "statLapsedHint": "No longer recalled; waiting to be swept."
+    },
+    "rehearsal": {
+      "title": "Rehearsal",
+      "subtitle": "Run an agent for real against a ticket with every effect suppressed — no commit, no pull request, no memory write, nobody paged — then read what it would have done.",
+      "startTitle": "Run a rehearsal",
+      "kind": "Kind",
+      "kindDryRun": "Dry run",
+      "kindReplay": "Replay",
+      "kindTrial": "Trial",
+      "ticket": "Ticket",
+      "ticketPlaceholder": "e.g. 412",
+      "agent": "Agent",
+      "agentPlaceholder": "Leave blank to use the ticket's assigned agent",
+      "startHint": "A rehearsal spends model tokens, so it is bounded to a short run. A trial rehearses the same agent across the most recently updated tickets in this project.",
+      "start": "Run rehearsal",
+      "running": "Running…",
+      "historyTitle": "Past rehearsals",
+      "empty": "No rehearsals yet. Run one before changing a prompt, a policy pack or a model pin.",
+      "wouldWrite": "Would write",
+      "stepCount": "{count} effects",
+      "outcome": "Outcome",
+      "finished": "Finished",
+      "unfinished": "Ran out of steps",
+      "failed": "Failed",
+      "viewReport": "Report",
+      "reportTitle": "What the agent would have done",
+      "frozenAt": "Read the repository at",
+      "suppressedTitle": "Suppressed effects",
+      "noSteps": "The agent produced no effects at all — it neither wrote code nor stored anything."
     }
   }
 }
