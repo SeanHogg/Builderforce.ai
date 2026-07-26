@@ -1,6 +1,6 @@
 {
   "name": "builderforce-api",
-  "version": "2026.7.159",
+  "version": "2026.7.160",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
@@ -18,8 +18,9 @@
     "check:tenant-scope": "node scripts/check-tenant-scope.mjs",
     "check:tracks": "node scripts/check-track-manifest.mjs --check",
     "check:source": "node scripts/check-source-text.mjs",
-    "test": "npm run check:schema && npm run check:db-access && npm run check:migrations && npm run check:layering && npm run check:tenant-scope && npm run check:tracks && npm run check:source && vitest run",
-    "typecheck:native": "tsgo --noEmit"
+    "test": "npm run check:schema && npm run check:db-access && npm run check:version && npm run check:migrations && npm run check:layering && npm run check:tenant-scope && npm run check:tracks && npm run check:source && vitest run",
+    "typecheck:native": "tsgo --noEmit",
+    "check:version": "node scripts/check-version-sync.mjs"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",

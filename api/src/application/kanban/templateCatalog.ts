@@ -56,7 +56,7 @@ const STANDARD_SWE: KanbanTemplate = {
     lane({ key: 'in_progress', name: 'In Progress', position: 3, requirementGate: 'off', requirements: [
       { kind: 'role', ref: 'developer', responsibility: 'owner', isRequired: true, position: 0 },
     ] }),
-    lane({ key: 'in_review', name: 'Review & Test', position: 4, gate: 'human', requirementGate: 'soft', requirements: [
+    lane({ key: 'in_review', name: 'Review & Test', position: 4, requirementGate: 'soft', requirements: [
       { kind: 'review', ref: 'code-reviewer', responsibility: 'reviewer', isRequired: true, position: 0,
         description: 'Code review of the diff for correctness and standards.' },
       { kind: 'review', ref: 'architect', responsibility: 'reviewer', isRequired: true, position: 1,
@@ -97,7 +97,7 @@ const LEAN_STARTUP: KanbanTemplate = {
     lane({ key: 'in_progress', name: 'Building', position: 2, requirementGate: 'off', requirements: [
       { kind: 'role', ref: 'developer', responsibility: 'owner', isRequired: true, position: 0 },
     ] }),
-    lane({ key: 'in_review', name: 'Review', position: 3, gate: 'human', requirementGate: 'soft', requirements: [
+    lane({ key: 'in_review', name: 'Review', position: 3, requirementGate: 'soft', requirements: [
       { kind: 'review', ref: 'code-reviewer', responsibility: 'reviewer', isRequired: true, position: 0 },
     ] }),
     lane({ key: 'done', name: 'Shipped', position: 4, isTerminal: true, requirementGate: 'off' }),
@@ -128,7 +128,7 @@ const BUG_TRIAGE: KanbanTemplate = {
     lane({ key: 'in_progress', name: 'Fixing', position: 2, requirementGate: 'off', requirements: [
       { kind: 'role', ref: 'developer', responsibility: 'owner', isRequired: true, position: 0 },
     ] }),
-    lane({ key: 'in_review', name: 'Verify', position: 3, gate: 'human', requirementGate: 'soft', requirements: [
+    lane({ key: 'in_review', name: 'Verify', position: 3, requirementGate: 'soft', requirements: [
       { kind: 'review', ref: 'code-reviewer', responsibility: 'reviewer', isRequired: true, position: 0 },
       { kind: 'review', ref: 'security', responsibility: 'reviewer', isRequired: false, position: 1,
         description: 'Security review for a security-tagged fix.' },
@@ -178,7 +178,7 @@ const STANDARD_SWE_V2: KanbanTemplate = {
       { kind: 'role', ref: 'architect', responsibility: 'contributor', isRequired: false, position: 1 },
     ] }),
     // Implementation Review (hard): 2-of-3 reviewers + a security review for security tickets.
-    lane({ key: 'in_review', name: 'Implementation Review', position: 3, gate: 'human', requirementGate: 'hard', requirements: [
+    lane({ key: 'in_review', name: 'Implementation Review', position: 3, requirementGate: 'hard', requirements: [
       { kind: 'review', ref: 'code-reviewer', responsibility: 'reviewer', isRequired: true, position: 0, quorum: 2, description: 'Code review of the diff.' },
       { kind: 'review', ref: 'architect', responsibility: 'reviewer', isRequired: true, position: 1, quorum: 2, description: 'Architecture review vs the PRD.' },
       { kind: 'review', ref: 'team-lead', responsibility: 'reviewer', isRequired: true, position: 2, quorum: 2, description: 'Team-lead review (quorum: 2 of 3).' },

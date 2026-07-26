@@ -47,6 +47,7 @@ import {
   executions, managerStallWatch, swimlaneAgentAssignments, swimlanes, tasks, ticketParticipants,
 } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskStatus, ExecutionStatus } from '../../domain/shared/types';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { isUnapprovedFeedbackTask } from '../feedback/feedbackSpec';
@@ -246,13 +247,13 @@ export async function loadCensusFacts(
   const [laneRows, staffRows, streakRows, owedRoles, shared] = await Promise.all([
     board
       ? db.select({ id: swimlanes.id, key: swimlanes.key, gate: swimlanes.gate, isTerminal: swimlanes.isTerminal })
-        .from(swimlanes).where(eq(swimlanes.boardId, board.id)).catch(() => [])
+        .from(swimlanes).where(scopedToTenant(swimlanes, args.tenantId, eq(swimlanes.boardId, board.id))).catch(() => [])
       : Promise.resolve([] as Array<{ id: string; key: string; gate: string; isTerminal: boolean }>),
     board
       ? db.selectDistinct({ swimlaneId: swimlaneAgentAssignments.swimlaneId })
         .from(swimlaneAgentAssignments)
         .innerJoin(swimlanes, eq(swimlanes.id, swimlaneAgentAssignments.swimlaneId))
-        .where(eq(swimlanes.boardId, board.id)).catch(() => [])
+        .where(scopedToTenant(swimlaneAgentAssignments, args.tenantId, eq(swimlanes.boardId, board.id))).catch(() => [])
       : Promise.resolve([] as Array<{ swimlaneId: string }>),
     // Trailing failure streak per ticket, in ONE window query: the count of leading
     // `failed` rows before the first run that is not a failure. Doing this per ticket
@@ -270,7 +271,7 @@ export async function loadCensusFacts(
       FROM ranked GROUP BY task_id
     `).catch(() => ({ rows: [] as Array<Record<string, unknown>> })),
     loadOwedRoles(db, args.tenantId, taskIds).catch(() => new Map<string, string[]>()),
-    args.shared ? Promise.resolve(args.shared) : loadFallbackSignals(db, taskIds),
+    args.shared ? Promise.resolve(args.shared) : loadFallbackSignals(db, args.tenantId, taskIds),
   ]);
 
   const laneByKey = new Map<string, { gate: string; isTerminal: boolean; staffed: boolean }>();
@@ -329,12 +330,12 @@ async function loadOwedRoles(db: Db, tenantId: number, taskIds: number[]): Promi
 }
 
 /** Signals the manager pass already has; loaded here only for the standalone read path. */
-async function loadFallbackSignals(db: Db, taskIds: number[]): Promise<SharedCensusSignals> {
+async function loadFallbackSignals(db: Db, tenantId: number, taskIds: number[]): Promise<SharedCensusSignals> {
   const [ran, live] = await Promise.all([
     db.selectDistinct({ taskId: executions.taskId }).from(executions)
-      .where(inArray(executions.taskId, taskIds)).catch(() => []),
+      .where(scopedToTenant(executions, tenantId, inArray(executions.taskId, taskIds))).catch(() => []),
     db.selectDistinct({ taskId: executions.taskId }).from(executions)
-      .where(and(
+      .where(scopedToTenant(executions, tenantId,
         inArray(executions.taskId, taskIds),
         inArray(executions.status, [
           ExecutionStatus.PENDING, ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING, ExecutionStatus.PAUSED,
@@ -364,7 +365,7 @@ export async function computeStallCensus(
   const deepDiagnosed = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(managerStallWatch)
-    .where(and(eq(managerStallWatch.projectId, args.projectId), isNull(managerStallWatch.resolvedAt)))
+    .where(scopedToTenant(managerStallWatch, args.tenantId, eq(managerStallWatch.projectId, args.projectId), isNull(managerStallWatch.resolvedAt)))
     .then((r) => Number(r[0]?.n ?? 0))
     .catch(() => 0);
   return summarizeCensus(args.projectId, rows, deepDiagnosed, args.now ? new Date(args.now) : new Date());

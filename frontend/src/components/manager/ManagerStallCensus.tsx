@@ -5,6 +5,7 @@ import { useTranslations, useFormatter } from 'next-intl';
 import Link from 'next/link';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { managerApi, type StallCensusResponse } from '@/lib/builderforceApi';
+import { ticketHref } from '@/lib/ticketHref';
 
 /**
  * The AI Manager's STALL CENSUS and the systemic findings it raised from it.
@@ -198,7 +199,7 @@ export function ManagerStallCensus({ projectId }: ManagerStallCensusProps) {
               <div style={{ marginTop: 10, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                 {f.createdTaskId != null && (
                   <Link
-                    href={`/tasks/${f.createdTaskId}`}
+                    href={ticketHref(f.createdTaskId)}
                     style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent, #2563eb)' }}
                   >
                     {t('findings.openTicket', { key: f.createdTaskKey ?? `#${f.createdTaskId}` })}

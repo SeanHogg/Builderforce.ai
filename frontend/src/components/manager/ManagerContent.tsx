@@ -16,6 +16,7 @@ import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { ManagerStallRegister } from '@/components/manager/ManagerStallRegister';
 import { ManagerStallCensus } from '@/components/manager/ManagerStallCensus';
 import { ManagerCopyDiagnostics } from '@/components/manager/ManagerCopyDiagnostics';
+import { ticketHref } from '@/lib/ticketHref';
 import {
   managerApi,
   agentHosts,
@@ -939,7 +940,7 @@ function ActivityRow({ action, typeLabel, when }: { action: ManagerAction; typeL
       <div style={{ flex: 1, minWidth: 0 }}>
         {action.taskId != null && (
           <Link
-            href={`/projects?tab=tasks&task=${action.taskId}`}
+            href={ticketHref(action.taskId)}
             style={{ display: 'inline-block', marginBottom: 3, color: 'var(--accent, #2563eb)', fontSize: '0.78rem', fontWeight: 700, textDecoration: 'none' }}
           >
             {action.ticketKey ?? `#${action.taskId}`}{action.ticketTitle ? ` · ${action.ticketTitle}` : ''}
