@@ -6643,7 +6643,19 @@
     "analyzeApplyCta": "{count} ausgewählte beheben",
     "analyzeApplying": "Behebe…",
     "analyzeApplied": "Behoben: {corrected} korrigiert, {forgotten} vergessen. Modell ist jetzt v{version}.",
-    "analyzeSkipped": "{count} konnten nicht angewendet werden."
+    "analyzeSkipped": "{count} konnten nicht angewendet werden.",
+    "tabsLabel": "Evermind-Steuerung",
+    "tabTeach": "Beibringen",
+    "tabTest": "Testen",
+    "tabCheck": "Prüfen",
+    "tabMaintain": "Warten",
+    "diagnosticsTitle": "Diagnose",
+    "diagnosticsHint": "Kopiere alles aus diesem Bereich – den Zustand des Modells, was es tatsächlich erzeugt hat, was es gelernt hat und alle gefundenen Probleme – als Text, den du an den Support oder einen KI-Assistenten weitergeben kannst.",
+    "diagnosticsCta": "Diagnose kopieren",
+    "diagnosticsCopied": "In die Zwischenablage kopiert.",
+    "diagnosticsShow": "Bericht anzeigen",
+    "diagnosticsHide": "Bericht ausblenden",
+    "diagnosticsManualHint": "Das automatische Kopieren wurde hier blockiert – der Bericht ist unten markiert, drücke Strg/Cmd+C zum Kopieren."
   },
   "topbar": {
     "cart": "Warenkorb",

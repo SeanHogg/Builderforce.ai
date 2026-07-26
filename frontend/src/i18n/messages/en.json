@@ -6643,7 +6643,19 @@
     "analyzeApplyCta": "Fix {count} selected",
     "analyzeApplying": "Fixing…",
     "analyzeApplied": "Fixed: {corrected} corrected, {forgotten} forgotten. Model is now at v{version}.",
-    "analyzeSkipped": "{count} could not be applied."
+    "analyzeSkipped": "{count} could not be applied.",
+    "tabsLabel": "Evermind controls",
+    "tabTeach": "Teach",
+    "tabTest": "Test",
+    "tabCheck": "Check",
+    "tabMaintain": "Maintain",
+    "diagnosticsTitle": "Diagnostics",
+    "diagnosticsHint": "Copy everything on this panel — the model’s state, what it actually produced, what it has learned and any problems found — as text you can paste to support or to an AI assistant.",
+    "diagnosticsCta": "Copy diagnostics",
+    "diagnosticsCopied": "Copied to your clipboard.",
+    "diagnosticsShow": "Show report",
+    "diagnosticsHide": "Hide report",
+    "diagnosticsManualHint": "Copying automatically was blocked here — the report is selected below, press Ctrl/Cmd+C to copy it."
   },
   "topbar": {
     "cart": "Shopping cart",

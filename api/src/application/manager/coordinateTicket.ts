@@ -18,6 +18,7 @@ import { TicketParticipantsService } from '../kanban/ticketParticipants';
 import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { blocksCompletion } from '../kanban/participantStates';
+import { isParkedLane } from '../swimlane/nextLane';
 
 export interface CoordinateResult {
   ok: boolean;
@@ -44,7 +45,18 @@ export function decideCoordinatedAdvance(
     .map((p) => p.roleName);
   if (stageOutstanding.length) return { nextStatus: null, outstanding: stageOutstanding };
   const current = lanes.findIndex((l) => l.key === fromStatus);
-  const next = current >= 0 ? lanes[current + 1] : null;
+  // Skip PARKED lanes (blocked / on-hold / cancelled) exactly as `resolveNextLaneKey`
+  // does — they sit mid-order on the default board, and advancing a satisfied stage into
+  // one is the trap described in {@link ../swimlane/nextLane.PARKED_LANE_KEYS}.
+  let next: { key: string; isTerminal: boolean } | null = null;
+  if (current >= 0) {
+    for (let i = current + 1; i < lanes.length; i += 1) {
+      const cand = lanes[i];
+      if (!cand || isParkedLane(cand.key)) continue;
+      next = cand;
+      break;
+    }
+  }
   if (!next) return { nextStatus: null, outstanding: [] };
   if (next.isTerminal) {
     const allOutstanding = manifest.filter(blocksCompletion).map((p) => p.roleName);
@@ -131,8 +143,23 @@ export async function coordinateTicket(
       .from(swimlanes).where(eq(swimlanes.boardId, board.id)).orderBy(asc(swimlanes.position));
     const position = new Map(lanes.map((lane) => [lane.key, lane.position]));
     const currentPosition = position.get(task.status);
+    // ── THE REWIND, AND WHY IT IS NOW BOUNDED ────────────────────────────────────
+    // Rewinding to the earliest unmet stage is right for a ticket that genuinely
+    // skipped a stage. It is catastrophic for a ticket whose slots can never be
+    // satisfied — and platform-wide, `ticket_role_signoffs` holds ZERO rows, so no
+    // reviewer slot has ever completed. Every managed ticket therefore has an open
+    // slot at its earliest stage, forever, and the rewind fired every pass: measured
+    // 131 `in_review → ready` moves across 31 tickets in ~30 hours, each preceded by a
+    // `manager:signoff-request` run, with 299 tickets currently eligible.
+    //
+    // A slot the manager has ALREADY ASKED (`in_progress` — the marker `requestRoleRun`
+    // writes on dispatch) is not evidence the stage was skipped; it is evidence the ask
+    // is outstanding. Dragging the ticket backwards does not make that verdict arrive,
+    // it just undoes the work in front of it. So only a stage that has never been
+    // engaged at all (`assigned`/`unstaffed`) justifies a rewind.
+    const neverEngaged = (state: string): boolean => state !== 'in_progress';
     const earliest = manifest
-      .filter((p) => p.stageKey && blocksCompletion(p) && position.has(p.stageKey))
+      .filter((p) => p.stageKey && blocksCompletion(p) && neverEngaged(p.state) && position.has(p.stageKey))
       .sort((a, b) => position.get(a.stageKey!)! - position.get(b.stageKey!)!)[0];
     if (earliest?.stageKey && currentPosition != null && position.get(earliest.stageKey)! < currentPosition) {
       const moved = await db.update(tasks).set({ status: earliest.stageKey, updatedAt: new Date() })

@@ -6643,7 +6643,19 @@
     "analyzeApplyCta": "Corriger {count} sélectionnés",
     "analyzeApplying": "Correction…",
     "analyzeApplied": "Corrigé : {corrected} corrigés, {forgotten} oubliés. Le modèle est désormais en v{version}.",
-    "analyzeSkipped": "{count} n’ont pas pu être appliqués."
+    "analyzeSkipped": "{count} n’ont pas pu être appliqués.",
+    "tabsLabel": "Commandes Evermind",
+    "tabTeach": "Enseigner",
+    "tabTest": "Tester",
+    "tabCheck": "Vérifier",
+    "tabMaintain": "Entretenir",
+    "diagnosticsTitle": "Diagnostic",
+    "diagnosticsHint": "Copiez tout ce que contient ce panneau — l’état du modèle, ce qu’il a réellement produit, ce qu’il a appris et les problèmes détectés — sous forme de texte à coller au support ou à un assistant IA.",
+    "diagnosticsCta": "Copier le diagnostic",
+    "diagnosticsCopied": "Copié dans le presse-papiers.",
+    "diagnosticsShow": "Afficher le rapport",
+    "diagnosticsHide": "Masquer le rapport",
+    "diagnosticsManualHint": "La copie automatique a été bloquée ici — le rapport est sélectionné ci-dessous, appuyez sur Ctrl/Cmd+C pour le copier."
   },
   "topbar": {
     "cart": "Panier",
