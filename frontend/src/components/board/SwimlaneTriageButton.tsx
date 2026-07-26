@@ -40,6 +40,10 @@ const REASON_TONE: Record<AutoRunReason, 'ok' | 'warn' | 'muted' | 'info'> = {
   tenant_token_limit: 'warn',
   cooldown_active: 'info',
   no_agent: 'muted',
+  // A CONFIGURATION defect, not a quiet "nothing staffed": on a managed board this
+  // means no dispatch is possible at all until the stage gets a role-capable
+  // participant, so it must not read as muted the way `no_agent` does.
+  managed_no_role: 'warn',
   no_board: 'muted',
   no_lane: 'muted',
   terminal_lane: 'muted',

@@ -304,7 +304,14 @@ async function failStrandedDispatch(db: Db, row: StrandedRow, reason: string): P
       inArray(executions.status, [ExecutionStatus.PENDING, ExecutionStatus.SUBMITTED]),
     ))
     .returning({ id: executions.id })
-    .catch(() => []);
+    .catch((error) => {
+      console.error('[github-actions-reconcile] stranded execution transition failed', {
+        tenantId: row.tenantId,
+        executionId: row.id,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
+      return [];
+    });
   if (updated.length === 0) return false;
 
   await db.insert(toolAuditEvents).values({
@@ -317,7 +324,11 @@ async function failStrandedDispatch(db: Db, row: StrandedRow, reason: string): P
     category: 'error',
     result: reason,
     ts: new Date(),
-  }).catch(() => { /* telemetry is best-effort — never break the sweep on it */ });
+  }).catch((error) => console.error('[github-actions-reconcile] failure telemetry append failed', {
+    tenantId: row.tenantId,
+    executionId: row.id,
+    error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+  }));
 
   return true;
 }

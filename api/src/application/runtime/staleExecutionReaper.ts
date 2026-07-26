@@ -247,8 +247,13 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
         result: r.error_message ?? 'Run failed',
         ts: sql`now()`,
       });
-    } catch {
-      /* telemetry is best-effort — never break the reap sweep on it */
+    } catch (error) {
+      console.error('[execution-reaper] failure telemetry append failed', {
+        tenantId: r.tenant_id,
+        executionId: r.id,
+        toolName,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
     }
   }));
 
@@ -316,8 +321,11 @@ async function narrateReapedRuns(env: Env, db: Db, rows: ReapedRow[]): Promise<v
       executionId: r.id,
       errorMessage: r.error_message,
     })));
-  } catch {
-    /* narration is best-effort — never break the reap sweep on it */
+  } catch (error) {
+    console.error('[execution-reaper] chat narration failed', {
+      executionIds: withTask.map((r) => r.id),
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    });
   }
 }
 
@@ -390,8 +398,12 @@ async function requeueCloudRun(env: Env, db: Db, row: CloudCandidateRow): Promis
       result: 'Orphaned cloud run re-queued once on the durable executor (CloudRunnerDO) to run to completion.',
       ts: sql`now()`,
     });
-  } catch {
-    /* telemetry is best-effort */
+  } catch (error) {
+    console.error('[execution-reaper] requeue telemetry append failed', {
+      tenantId: row.tenant_id,
+      executionId: row.id,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    });
   }
   return true;
 }

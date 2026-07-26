@@ -42,6 +42,29 @@ const FLOOR_TS_KEY = 'cron:last-floor-sweep';
  */
 export const FLOOR_INTERVAL_MS = 30 * 60 * 1000;
 
+/** Bounds on the `CRON_FLOOR_INTERVAL_MS` override — see {@link floorIntervalMs}. */
+export const MIN_FLOOR_INTERVAL_MS = 5 * 60 * 1000;
+export const MAX_FLOOR_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Effective floor interval: the optional `CRON_FLOOR_INTERVAL_MS` var, clamped,
+ * else {@link FLOOR_INTERVAL_MS}. Tunable because the constant encodes a COST
+ * decision (idle wake-ups/day against the Neon Free compute ceiling), not a
+ * correctness one — an operator on a paid Neon plan wants it tighter, and one
+ * pinned under the free ceiling wants it looser, neither of which should need a
+ * redeploy of new code.
+ *
+ * Clamped both ways: below the 5-minute tick the floor would fire every tick and
+ * defeat the gate entirely, and past 6h a missed signal could strand work for
+ * most of a day. A garbage value falls back to the default rather than throwing —
+ * a mistyped var must never be able to break the cron path.
+ */
+export function floorIntervalMs(env: Env): number {
+  const raw = Number(env.CRON_FLOOR_INTERVAL_MS);
+  if (!Number.isFinite(raw) || raw <= 0) return FLOOR_INTERVAL_MS;
+  return Math.min(Math.max(Math.floor(raw), MIN_FLOOR_INTERVAL_MS), MAX_FLOOR_INTERVAL_MS);
+}
+
 /**
  * TTL on the pending-work flag. Generous so a real backlog paced across ticks is
  * never expired mid-drain; it is normally consumed explicitly at tick open. Acts
@@ -76,6 +99,10 @@ export interface CronGateDecision {
   reason: 'signal' | 'floor' | 'idle' | 'kv-unavailable';
   /** True when this run also satisfies the periodic floor (stamp the floor ts). */
   floorDue: boolean;
+  /** Epoch-ms of the last floor sweep, or null when never stamped / KV is down. */
+  lastFloorMs: number | null;
+  /** Effective floor interval in force for this decision. */
+  floorIntervalMs: number;
 }
 
 /**
@@ -84,21 +111,25 @@ export interface CronGateDecision {
  * KV is unavailable so the gate can never hide work.
  */
 export async function evaluateCronGate(env: Env, nowMs: number): Promise<CronGateDecision> {
+  const interval = floorIntervalMs(env);
   const store = kv(env);
-  if (!store) return { run: true, reason: 'kv-unavailable', floorDue: true };
+  if (!store) {
+    return { run: true, reason: 'kv-unavailable', floorDue: true, lastFloorMs: null, floorIntervalMs: interval };
+  }
   try {
     const [sig, lastFloorRaw] = await Promise.all([
       store.get(WORK_SIGNAL_KEY),
       store.get(FLOOR_TS_KEY),
     ]);
     const last = lastFloorRaw ? Number(lastFloorRaw) : 0;
-    const floorDue = !Number.isFinite(last) || nowMs - last >= FLOOR_INTERVAL_MS;
-    if (sig != null) return { run: true, reason: 'signal', floorDue };
-    if (floorDue) return { run: true, reason: 'floor', floorDue: true };
-    return { run: false, reason: 'idle', floorDue: false };
+    const floorDue = !Number.isFinite(last) || nowMs - last >= interval;
+    const lastFloorMs = Number.isFinite(last) && last > 0 ? last : null;
+    if (sig != null) return { run: true, reason: 'signal', floorDue, lastFloorMs, floorIntervalMs: interval };
+    if (floorDue) return { run: true, reason: 'floor', floorDue: true, lastFloorMs, floorIntervalMs: interval };
+    return { run: false, reason: 'idle', floorDue: false, lastFloorMs, floorIntervalMs: interval };
   } catch {
     // A KV blip must never strand work — run the fan-out this tick.
-    return { run: true, reason: 'kv-unavailable', floorDue: true };
+    return { run: true, reason: 'kv-unavailable', floorDue: true, lastFloorMs: null, floorIntervalMs: interval };
   }
 }
 

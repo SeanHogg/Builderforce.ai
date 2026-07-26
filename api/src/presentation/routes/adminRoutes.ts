@@ -10,6 +10,9 @@
  * GET  /api/admin/errors               — recent API error log (last 200 entries)
  * GET  /api/admin/feedback             — cross-tenant product feedback roll-up
  * POST /api/admin/impersonate          — issue a tenant JWT for any user+tenant pair
+ * GET  /api/admin/cron                 — scheduled sweeps + live KV work-gate state
+ * POST /api/admin/cron/signal          — set the pending-work flag for the next tick
+ * POST /api/admin/cron/:target         — force-run a sweep / cadence group / all
  */
 import { Hono } from 'hono';
 import { and, desc, eq, gt, ilike, inArray, isNull, sql } from 'drizzle-orm';
@@ -109,6 +112,15 @@ import { magicLinkTokens } from '../../infrastructure/database/schema';
 import { sendAdminPasswordResetEmail } from '../../infrastructure/email/EmailService';
 import { sendTransactionalEmail } from '../../application/email/sendEmail';
 import { runRetentionPurge } from '../../application/maintenance/retentionPurge';
+import { CRON_SWEEPS } from '../../cronSweeps';
+import {
+  CADENCE_BY_CRON,
+  CRON_CADENCES,
+  resolveCronTarget,
+  runCronSweeps,
+} from '../../application/runtime/cronSweepRunner';
+import { evaluateCronGate, signalPendingWork } from '../../application/runtime/cronWorkSignal';
+import { createTickDispatchBudget } from '../../application/runtime/tickDispatchBudget';
 import { API_VERSION } from '../../version';
 
 /**
@@ -1679,6 +1691,136 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       metadata: { target: body.target, table: body.table ?? null }, ipAddress: c.req.header('cf-connecting-ip') ?? null,
     });
     return c.json({ ok: true, action: body.action, target: body.target, table: body.table ?? null });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/cron — what the platform has scheduled, plus the LIVE state of
+  // the KV work-gate that decides whether the every-5-minute tick runs at all.
+  //
+  // Deliberately NOT cached (contra the default for read endpoints): it reads KV
+  // only — no Neon round-trip, so there is no cost to serve — and its entire
+  // purpose is to show the CURRENT gate decision. A cache would hide exactly the
+  // state it exists to reveal.
+  // -------------------------------------------------------------------------
+  router.get('/cron', async (c) => {
+    const env = c.env as Env;
+    const nowMs = Date.now();
+    // Read-only: evaluateCronGate never writes, so inspecting the gate cannot
+    // consume a pending-work signal or move the floor timestamp.
+    const gate = await evaluateCronGate(env, nowMs);
+    return c.json({
+      now: new Date(nowMs).toISOString(),
+      gate: {
+        /** What the next frequent tick would do if it fired right now. */
+        wouldRun: gate.run,
+        reason: gate.reason,
+        floorDue: gate.floorDue,
+        floorIntervalMs: gate.floorIntervalMs,
+        floorIntervalOverridden: Boolean(env.CRON_FLOOR_INTERVAL_MS),
+        lastFloorSweepAt: gate.lastFloorMs ? new Date(gate.lastFloorMs).toISOString() : null,
+        nextFloorDueAt: gate.lastFloorMs
+          ? new Date(gate.lastFloorMs + gate.floorIntervalMs).toISOString()
+          : null,
+        /** Unbound KV = the gate fails open and every tick runs the fan-out. */
+        kvBound: Boolean(env.AUTH_CACHE_KV),
+      },
+      cadences: CRON_CADENCES.map((cadence) => ({
+        cadence,
+        cron: Object.entries(CADENCE_BY_CRON).find(([, v]) => v === cadence)?.[0] ?? null,
+        sweeps: CRON_SWEEPS.filter((s) => s.cadence === cadence).length,
+      })),
+      sweeps: CRON_SWEEPS.map((s) => ({
+        key: s.key,
+        cadence: s.cadence,
+        description: s.description,
+        dispatches: Boolean(s.dispatches),
+        available: s.available ? s.available(env) : true,
+      })),
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/admin/cron/signal — set the KV pending-work flag so the NEXT real
+  // cron tick runs the Postgres fan-out instead of skipping. This exercises the
+  // gate itself (the force-run below deliberately bypasses it), which is the only
+  // way to confirm end-to-end that a signalled tick actually wakes and dispatches.
+  //
+  // MUST stay registered before `/cron/:target` so the static path wins the match.
+  // -------------------------------------------------------------------------
+  router.post('/cron/signal', async (c) => {
+    const env = c.env as Env;
+    if (!env.AUTH_CACHE_KV) {
+      return c.json({ error: 'AUTH_CACHE_KV is not bound — the work-gate fails open and every tick already runs.' }, 409);
+    }
+    await signalPendingWork(env);
+    const gate = await evaluateCronGate(env, Date.now());
+    await writeAdminAudit(buildDatabase(c.env), 'CRON_SIGNAL_WORK', (c.get('userId') as string | undefined) ?? null, {
+      ipAddress: c.req.header('cf-connecting-ip') ?? null,
+    });
+    return c.json({ ok: true, gate: { wouldRun: gate.run, reason: gate.reason } });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/admin/cron/:target — force-run scheduled work NOW. `:target` is a
+  // sweep key, a cadence group (frequent | daily | weekly-mon | weekly-fri), or
+  // `all`. Body: { timeoutMs? }.
+  //
+  // WHY: Cloudflare delivers crons to scheduled(), never to a URL, so before this
+  // route a change to any cron-path sweep could only be observed by waiting out
+  // the work-gate — and the wait is worse than the 5-minute trigger suggests,
+  // because signalPendingWork only fires when a ticket actually passes its gates,
+  // so a board of stalled tickets signals nothing and falls through to the
+  // 30-minute floor. The manual "Run manager now" button is not a substitute: it
+  // takes the shouldDispatch = true branch, a different path from the cron one.
+  //
+  // The sweeps invoked are the SAME registry entries scheduled() dispatches, with
+  // one shared per-tenant dispatch budget, exactly as a real tick has. It does NOT
+  // touch the gate's KV state: stamping the floor here would push the next real
+  // floor sweep out by a full interval, i.e. the diagnostic would delay the work
+  // it was run to observe. Audited.
+  // -------------------------------------------------------------------------
+  router.post('/cron/:target', async (c) => {
+    const env = c.env as Env;
+    const target = c.req.param('target');
+    const resolved = resolveCronTarget(CRON_SWEEPS, target);
+    if (!resolved) {
+      return c.json({
+        error: `Unknown cron target '${target}'. Use a sweep key, a cadence (${CRON_CADENCES.join(' | ')}), or 'all'.`,
+        sweeps: CRON_SWEEPS.map((s) => s.key),
+      }, 404);
+    }
+    if (resolved.sweeps.length === 0) {
+      return c.json({ error: `No sweeps are registered for '${target}'.` }, 404);
+    }
+    const body = await c.req.json<{ timeoutMs?: number }>().catch(() => ({} as { timeoutMs?: number }));
+    const budget = createTickDispatchBudget();
+    const started = Date.now();
+    const results = await runCronSweeps(resolved.sweeps, { env, budget }, {
+      timeoutMs: body.timeoutMs,
+      // A sweep past its deadline keeps running after we answer; without this the
+      // isolate would cancel it when the request ends and the force-run would
+      // silently truncate real work.
+      keepAlive: (p) => c.executionCtx.waitUntil(p),
+    });
+    await writeAdminAudit(buildDatabase(c.env), 'CRON_FORCE_RUN', (c.get('userId') as string | undefined) ?? null, {
+      metadata: {
+        target,
+        kind: resolved.kind,
+        sweeps: resolved.sweeps.map((s) => s.key),
+        failed: results.filter((r) => !r.ok).map((r) => r.key),
+        timedOut: results.filter((r) => r.timedOut).map((r) => r.key),
+      },
+      ipAddress: c.req.header('cf-connecting-ip') ?? null,
+    });
+    return c.json({
+      target,
+      kind: resolved.kind,
+      ranAt: new Date(started).toISOString(),
+      totalMs: Date.now() - started,
+      /** Billable runs this forced pass actually started, across all tenants. */
+      dispatchesReserved: budget.total(),
+      results,
+    });
   });
 
   // -------------------------------------------------------------------------

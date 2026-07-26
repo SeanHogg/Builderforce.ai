@@ -16,6 +16,7 @@
  */
 import {
   bigint,
+  bigserial,
   boolean,
   index,
   integer,
@@ -383,11 +384,49 @@ export const executions = pgTable('executions', {
    *  Never filter on this literal: use `liveExecution()` from
    *  application/rehearsal/executionMode.ts so the predicate exists in one place. */
   mode:         varchar('mode', { length: 16 }).notNull().default('live'),
+  /** Monotonic lifecycle transition number. Maintained by the database trigger
+   * that appends execution_lifecycle_outbox rows. */
+  lifecycleVersion: integer('lifecycle_version').notNull().default(1),
   startedAt:    timestamp('started_at'),
   completedAt:  timestamp('completed_at'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 });
+
+/**
+ * Transactional execution-lifecycle outbox. Database triggers append to this
+ * table in the SAME transaction as every executions insert/status transition,
+ * including legacy/direct SQL writers that bypass RuntimeService.
+ */
+export const executionLifecycleOutbox = pgTable('execution_lifecycle_outbox', {
+  id:               bigserial('id', { mode: 'number' }).primaryKey(),
+  eventKey:         varchar('event_key', { length: 160 }).notNull(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  executionId:      integer('execution_id').notNull().references(() => executions.id, { onDelete: 'cascade' }),
+  taskId:           integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  lifecycleVersion: integer('lifecycle_version').notNull(),
+  eventType:        varchar('event_type', { length: 64 }).notNull(),
+  fromStatus:       varchar('from_status', { length: 32 }),
+  toStatus:         varchar('to_status', { length: 32 }).notNull(),
+  submittedBy:      varchar('submitted_by', { length: 128 }).notNull(),
+  agentHostId:      integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
+  cloudAgentRef:    varchar('cloud_agent_ref', { length: 64 }),
+  mode:             varchar('mode', { length: 16 }).notNull().default('live'),
+  payload:          jsonb('payload'),
+  status:           varchar('status', { length: 16 }).notNull().default('pending'),
+  attempts:         integer('attempts').notNull().default(0),
+  nextAttemptAt:    timestamp('next_attempt_at').notNull().defaultNow(),
+  lastError:        text('last_error'),
+  processedAt:      timestamp('processed_at'),
+  occurredAt:       timestamp('occurred_at').notNull().defaultNow(),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('idx_execution_lifecycle_outbox_event_key').on(t.eventKey),
+  index('idx_execution_lifecycle_outbox_due').on(t.status, t.nextAttemptAt),
+  index('idx_execution_lifecycle_outbox_execution').on(t.tenantId, t.executionId, t.id),
+]);
 
 
 /**

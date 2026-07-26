@@ -71,7 +71,7 @@ export const MAX_FINDINGS_PER_PASS = 2;
  * defect ticket against a policy someone set on purpose is noise, not insight.
  */
 const SYSTEMIC_CAUSES: ReadonlySet<StallCause> = new Set<StallCause>([
-  'unassigned', 'capability_gap', 'never_started', 'awaiting_signoff',
+  'unassigned', 'managed_no_role', 'capability_gap', 'never_started', 'awaiting_signoff',
   'failure_breaker', 'human_gate', 'missing_deliverable', 'pr_conflict',
   'pr_unreconciled', 'build_failed', 'unknown',
 ]);
@@ -110,6 +110,14 @@ const SYSTEM_PROMPT =
   + 'Name that defect and the remediation. Be concrete and specific to the cause given; do not restate the count. '
   + 'summary: one or two sentences naming the most likely root cause. '
   + 'remediation: the concrete change that would clear the whole cohort, as an instruction an engineer can act on. '
+  // SAFETY LIMITS ARE NOT THE DEFECT. Measured on the failure-breaker cohort: the model's
+  // remediation was "raise the retry limit to 10-15 and re-dispatch", i.e. remove the one
+  // guard that stops a retry storm — and this text is filed as a ticket an agent may work.
+  // A breaker that keeps tripping is evidence of the thing it is catching.
+  + 'NEVER propose raising, relaxing or disabling a safety limit (a failure breaker, a retry cap, a rate limit, '
+  + 'an approval gate) as the remediation. A guard that keeps firing is evidence of the underlying failure, not its cause: '
+  + 'diagnose what makes the runs fail. If you genuinely believe a limit is mis-set, say what evidence would justify changing it '
+  + 'rather than instructing anyone to change it. '
   + 'Reply with JSON only.';
 
 const RESPONSE_SCHEMA = {
@@ -137,6 +145,7 @@ const RESPONSE_SCHEMA = {
  */
 const CAUSE_BRIEF: Record<string, string> = {
   unassigned: 'No agent is staffed on these tickets\' lanes and the tickets have no owner agent, so no dispatcher can ever pick them up.',
+  managed_no_role: 'The board is lifecycle-managed, so every run must be attributed to a role the stage authorizes — and on these tickets no authorized role resolves to an agent. Assigning an owner does not help: on a managed board the assignee is the Coordinator, never the executor. Either the stage declares no requirement rows and its lane has no role-capable staffed agent, or the participation manifest named a role nobody can act as.',
   capability_gap: 'Candidate agents exist but none holds the capabilities the lane requires.',
   never_started: 'These tickets have never had a single execution — nothing has ever attempted them.',
   awaiting_signoff: 'A required role sign-off for the current stage was asked for but never recorded, so the stage gate never opens.',

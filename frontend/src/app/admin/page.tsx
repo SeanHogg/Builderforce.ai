@@ -10,6 +10,7 @@ import { resolveAdminRoute } from '@/lib/adminGroups';
 import { TenantApiKeysAdminTab } from '@/components/admin/TenantApiKeysAdminTab';
 import { LlmTracesPanel } from './LlmTracesPanel';
 import HealthPanel from '@/components/admin/panels/HealthPanel';
+import CronPanel from '@/components/admin/panels/CronPanel';
 import BillingPanel from '@/components/admin/panels/BillingPanel';
 import UsagePanel from '@/components/admin/panels/UsagePanel';
 import UsersPanel from '@/components/admin/panels/UsersPanel';
@@ -46,6 +47,7 @@ import FeedbackPanel from '@/components/admin/panels/FeedbackPanel';
 // ADMIN_GROUP_META), so one flat registry covers every sub-view.
 const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   health: HealthPanel,
+  cron: CronPanel,
   directory: UsersPanel,
   sessions: GuestSessionsPanel,
   security: SecurityPanel,

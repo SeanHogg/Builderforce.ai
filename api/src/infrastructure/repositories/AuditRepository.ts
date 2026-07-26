@@ -6,6 +6,7 @@ import { activityLog } from '../database/schema';
 import { recordActivity, resolveHumanActor, SYSTEM_ACTOR, type ActorIdentity } from '../../application/activity/activityLog';
 import type { Env } from '../../env';
 import type { Db } from '../database/connection';
+import { drainExecutionLifecycleOutbox } from '../../application/runtime/executionLifecycleOutbox';
 
 /**
  * Audit repository — now an ADAPTER over the ONE unified `activity_log` stream
@@ -30,6 +31,26 @@ export class AuditRepository implements IAuditRepository {
   async save(event: AuditEvent): Promise<AuditEvent> {
     const p = event.toPlain();
     const tenantId = p.tenantId != null ? Number(p.tenantId) : null;
+
+    // Execution lifecycle is captured atomically by the executions-table outbox
+    // trigger. Drain that durable row instead of appending a second, non-idempotent
+    // activity event here. Direct SQL writers are drained by the frequent sweep.
+    if (p.resourceType === 'execution' && p.resourceId && /^\d+$/.test(p.resourceId)) {
+      try {
+        await drainExecutionLifecycleOutbox(this.env, this.db, {
+          executionId: Number(p.resourceId),
+          limit: 20,
+        });
+      } catch (error) {
+        console.error('[audit-repository] execution lifecycle outbox drain failed', {
+          tenantId,
+          executionId: Number(p.resourceId),
+          eventType: p.eventType,
+          error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        });
+      }
+      return event;
+    }
 
     let actor: ActorIdentity;
     if (p.userId && tenantId != null) actor = await resolveHumanActor(this.env, this.db, tenantId, p.userId);

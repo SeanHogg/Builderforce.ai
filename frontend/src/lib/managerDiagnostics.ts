@@ -631,6 +631,24 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
         text: `${census.stalled} tickets are stalled but only ${census.deepDiagnosed} (${pct}%) have been diagnosed in depth — the stuck register below is a SAMPLE of that size. Deep triage is capped per project per pass, so at this ratio the register's cause ranking can disagree with reality: rank causes from the census block, not from the register.`,
       });
     }
+    // ── THE MANAGED-DISPATCH CONTRACT ────────────────────────────────────────────
+    // On a lifecycle-managed board every run must be attributed to a role the stage
+    // authorises. When no authorised role resolves to an agent, NOTHING can dispatch —
+    // and for weeks that state was reported as a generic staffing problem (`no_agent` /
+    // `will_run`), because neither the gate nor the census modelled it. Measured on
+    // project 11: every autonomous dispatcher was being refused, the refusal threw
+    // before an execution row existed so no failure was ever counted, and the breaker
+    // never engaged. This finding is the regression detector for that: on a healthy
+    // managed board its count is ZERO.
+    const managedCohort = census.cohorts.find((c) => c.cause === 'managed_no_role');
+    if (managedCohort && managedCohort.count > 0) {
+      critical.push({
+        severity: 'critical',
+        code: 'managed_dispatch_refused',
+        text: `${managedCohort.count} ticket${managedCohort.count === 1 ? '' : 's'} on this lifecycle-managed board cannot dispatch at all: their stage authorises roles, but none resolves to an agent, so no run can be role-attributed and the dispatcher refuses every attempt. Assigning owners will NOT fix it — on a managed board the assignee is the Coordinator, never the executor. Staff the stage's lane with a role-capable agent, or pin the role in the project roster. Example tickets: ${managedCohort.sampleTaskIds.join(', ')}.`,
+      });
+    }
+
     // The concentration finding — the one that reframes remediation entirely.
     const top = census.cohorts[0];
     if (top && census.stalled > 0 && top.count >= census.stalled * CONCENTRATED_COHORT_SHARE) {

@@ -184,6 +184,58 @@ export class RuntimeService {
   ) {}
 
   /**
+   * Run one idempotent lifecycle side effect in isolation. A failure is retried,
+   * logged with correlation fields, and recorded as a tenant audit event without
+   * preventing later effects from running.
+   */
+  private async runEffect<T>(
+    name: string,
+    context: { tenantId: number; executionId: number; taskId?: number; projectId?: number },
+    effect: () => Promise<T>,
+    fallback: T,
+  ): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        return await effect();
+      } catch (error) {
+        lastError = error;
+        console.error('[runtime-effect] failed', {
+          effect: name,
+          attempt,
+          maxAttempts: 3,
+          ...context,
+          error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        });
+      }
+    }
+
+    try {
+      await this.audit.save(AuditEvent.create({
+        tenantId: asTenantId(context.tenantId),
+        userId: null,
+        eventType: 'execution_effect_failed' as AuditEventType,
+        resourceType: 'execution_effect',
+        resourceId: String(context.executionId),
+        metadata: JSON.stringify({
+          effect: name,
+          attempts: 3,
+          taskId: context.taskId ?? null,
+          projectId: context.projectId ?? null,
+          error: lastError instanceof Error ? `${lastError.name}: ${lastError.message}` : String(lastError),
+        }),
+      }));
+    } catch (auditError) {
+      console.error('[runtime-effect] failure audit write threw', {
+        effect: name,
+        ...context,
+        error: auditError instanceof Error ? `${auditError.name}: ${auditError.message}` : String(auditError),
+      });
+    }
+    return fallback;
+  }
+
+  /**
    * Stamp the effective governance gates onto a dispatch payload. Returns the
    * payload unchanged when nothing resolves, when the resolver is unwired, or when
    * the caller ALREADY carried gates (a `deploy()`-and-dispatch run compiles its
@@ -208,7 +260,12 @@ export class RuntimeService {
       if (gates.length === 0) return payload;
       obj.policyGates = gates;
       return JSON.stringify(obj);
-    } catch {
+    } catch (error) {
+      console.error('[runtime-policy] policy gate resolution failed; dispatch continues ungated', {
+        tenantId,
+        projectId,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
       return payload; // never block a dispatch on governance resolution
     }
   }
@@ -238,7 +295,14 @@ export class RuntimeService {
         questionText: opts?.questionText ?? null,
         eventNonce: opts?.eventNonce ?? null,
       });
-    } catch { /* best-effort: never block the direct write */ }
+    } catch (error) {
+      console.error('[runtime-milestone] lifecycle milestone failed', {
+        executionId: Number(execution.id),
+        tenantId: Number(execution.tenantId),
+        phase,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
+    }
   }
 
   /**
@@ -255,7 +319,13 @@ export class RuntimeService {
     try {
       const e = await this.executions.findById(asExecutionId(executionId));
       if (e) await this.postLifecycleMilestone(e, phase, opts);
-    } catch { /* best-effort */ }
+    } catch (error) {
+      console.error('[runtime-milestone] lifecycle milestone lookup failed', {
+        executionId,
+        phase,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
+    }
   }
 
   async submit(dto: SubmitTaskDto): Promise<Execution> {
@@ -414,7 +484,13 @@ export class RuntimeService {
         if ((await this.onCloudOrphan(e)) === 'requeued') {
           return (await this.executions.findById(asExecutionId(e.id))) ?? e;
         }
-      } catch { /* fall through to fail */ }
+      } catch (error) {
+        console.error('[runtime-orphan] cloud self-heal threw; marking run failed', {
+          executionId: Number(e.id),
+          tenantId: Number(e.tenantId),
+          error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        });
+      }
     }
     try {
       const failed = e.markFailed(this.orphanReason(e));
@@ -434,7 +510,13 @@ export class RuntimeService {
       // (run:{id}:failed), so racing the cron reaper's own narration is harmless.
       await this.postLifecycleMilestone(saved, 'failed', { errorMessage: this.orphanReason(e) });
       return saved;
-    } catch {
+    } catch (error) {
+      console.error('[runtime-orphan] failed to persist orphan transition', {
+        executionId: Number(e.id),
+        tenantId: Number(e.tenantId),
+        priorStatus: e.status,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
       return e; // best-effort — never block a read on the repair
     }
   }
@@ -523,20 +605,29 @@ export class RuntimeService {
         const isRoleRun = isRoleAttributedRun(execution.payload);
         // All three classes run against an already-open ticket and hold its lane.
         const holdsLane = isReviewRun || isIncidentTriageRun || isRoleRun;
-        const managedResult = !holdsLane && (dto.status === ExecutionStatus.RUNNING || terminal)
-          ? await this.onManagedRunStatus?.({
-              tenantId, taskId: Number(execution.taskId), projectId, executionId: Number(saved.id),
+        const effectContext = {
+          tenantId, taskId: Number(execution.taskId), projectId, executionId: Number(saved.id),
+        };
+        const managedResult = !holdsLane && this.onManagedRunStatus
+          && (dto.status === ExecutionStatus.RUNNING || terminal)
+          ? await this.runEffect('managed_run_status', effectContext, () => this.onManagedRunStatus!({
+              ...effectContext,
               status: dto.status === ExecutionStatus.RUNNING ? 'running' : dto.status === ExecutionStatus.COMPLETED ? 'completed' : 'failed',
               fromStatus, actAsRole: parseActAsRole(execution.payload) ?? null,
               laneServed: parseLaneKey(execution.payload) ?? fromStatus,
-            }).catch(() => ({ managed: false, toStatus: fromStatus }))
+            }), { managed: false, toStatus: fromStatus })
           : undefined;
         const coordinatorOwnsTransition = managedResult?.managed === true;
         if (coordinatorOwnsTransition) toStatus = managedResult.toStatus;
 
         if (!coordinatorOwnsTransition && !holdsLane && dto.status === ExecutionStatus.RUNNING && fromStatus !== TaskStatus.IN_PROGRESS) {
           toStatus = TaskStatus.IN_PROGRESS;
-          await this.tasks.update(task.update({ status: TaskStatus.IN_PROGRESS }));
+          await this.runEffect(
+            'task_status_running',
+            effectContext,
+            () => this.tasks.update(task.update({ status: TaskStatus.IN_PROGRESS })),
+            task,
+          );
         }
         if (!coordinatorOwnsTransition && !holdsLane && dto.status === ExecutionStatus.COMPLETED) {
           const resultText = dto.result ?? '';
@@ -549,25 +640,46 @@ export class RuntimeService {
           if (resultText.includes('[auto-approve]')) {
             newStatus = TaskStatus.DONE;
           } else {
-            const nextKey = await this.resolveNextStatus?.({ projectId, fromStatus }).catch(() => null);
+            const nextKey = this.resolveNextStatus
+              ? await this.runEffect(
+                  'resolve_next_status',
+                  effectContext,
+                  () => this.resolveNextStatus!({ projectId, fromStatus }),
+                  null,
+                )
+              : null;
             if (nextKey) newStatus = nextKey;
           }
           toStatus = newStatus;
-          await this.tasks.update(task.update({ status: newStatus }));
+          await this.runEffect(
+            'task_status_completed',
+            effectContext,
+            () => this.tasks.update(task.update({ status: newStatus })),
+            task,
+          );
         }
 
-        await this.onTaskStatusSync?.({ tenantId, taskId: Number(execution.taskId), projectId, fromStatus, toStatus, terminal });
+        if (this.onTaskStatusSync) {
+          await this.runEffect(
+            'task_status_sync',
+            effectContext,
+            () => this.onTaskStatusSync!({ tenantId, taskId: Number(execution.taskId), projectId, fromStatus, toStatus, terminal }),
+            undefined,
+          );
+        }
 
         // Manifest attribution (PRD §5.6): a terminal run records that the role it ran
         // AS participated on the ticket (linked to this execution), and — with producer
         // evidence — completes that role's manifest slot. Best-effort, never blocks.
         if (terminal && !coordinatorOwnsTransition) {
-          await this.onRunFinalized?.({
-            tenantId, taskId: Number(execution.taskId), projectId, executionId: Number(saved.id),
-            status: dto.status === ExecutionStatus.COMPLETED ? 'completed' : 'failed',
-            actAsRole: parseActAsRole(execution.payload) ?? null,
-            laneServed: parseLaneKey(execution.payload) ?? fromStatus,
-          }).catch(() => {});
+          if (this.onRunFinalized) {
+            await this.runEffect('run_finalized', effectContext, () => this.onRunFinalized!({
+              ...effectContext,
+              status: dto.status === ExecutionStatus.COMPLETED ? 'completed' : 'failed',
+              actAsRole: parseActAsRole(execution.payload) ?? null,
+              laneServed: parseLaneKey(execution.payload) ?? fromStatus,
+            }), undefined);
+          }
         }
 
         // Autonomous chaining: this agent just advanced the ticket into a NEW
@@ -577,10 +689,12 @@ export class RuntimeService {
         // the RUNNING→in_progress move is the lane the CURRENT run already owns, so
         // both are excluded here (the trigger also dedupes/no-ops defensively).
         if (!coordinatorOwnsTransition && !holdsLane && dto.status === ExecutionStatus.COMPLETED && toStatus !== fromStatus && toStatus !== TaskStatus.DONE) {
-          await this.onLaneEntry?.({
-            tenantId, taskId: Number(execution.taskId), projectId, status: toStatus,
-            originLaneKey: parseLaneKey(execution.payload),
-          });
+          if (this.onLaneEntry) {
+            await this.runEffect('lane_entry_dispatch', effectContext, () => this.onLaneEntry!({
+              tenantId, taskId: Number(execution.taskId), projectId, status: toStatus,
+              originLaneKey: parseLaneKey(execution.payload),
+            }), undefined);
+          }
         }
 
         // Narrate the run's progress back into the ticket's linked Brain chats (started ▸
@@ -598,17 +712,25 @@ export class RuntimeService {
             : dto.status === ExecutionStatus.COMPLETED ? 'completed' as const
             : dto.status === ExecutionStatus.FAILED ? 'failed' as const : null;
           if (phase) {
-            await this.onRunMilestone?.({
-              tenantId, taskId: Number(execution.taskId), projectId,
-              taskType: ticketKindForTaskType(taskType),
-              agentRef: execution.cloudAgentRef, executionId: Number(saved.id), phase,
-              toStatus, resultText: dto.result ?? null, errorMessage: dto.errorMessage ?? null,
-            });
+            if (this.onRunMilestone) {
+              await this.runEffect('run_milestone', effectContext, () => this.onRunMilestone!({
+                tenantId, taskId: Number(execution.taskId), projectId,
+                taskType: ticketKindForTaskType(taskType),
+                agentRef: execution.cloudAgentRef, executionId: Number(saved.id), phase,
+                toStatus, resultText: dto.result ?? null, errorMessage: dto.errorMessage ?? null,
+              }), undefined);
+            }
           }
         }
       }
-    } catch {
-      // ignore task sync errors to avoid blocking runtime flow
+    } catch (error) {
+      console.error('[runtime-update] lifecycle orchestration failed outside an isolated effect', {
+        executionId: Number(saved.id),
+        tenantId: Number(execution.tenantId),
+        taskId: Number(execution.taskId),
+        status: dto.status,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
     }
 
     const auditType = dto.status === ExecutionStatus.RUNNING

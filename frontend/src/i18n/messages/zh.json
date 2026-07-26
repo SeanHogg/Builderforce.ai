@@ -2410,6 +2410,7 @@
         "terminal_lane": "工单位于终止（完成）泳道，永不自动运行。",
         "human_gate": "该泳道需人工把关——须有人批准或点击“立即运行”。",
         "no_agent": "该泳道未配置智能体，且负责人无法执行此阶段。请为泳道配置智能体，或用“立即运行”显式派发。",
+        "managed_no_role": "该看板由生命周期管理，因此每次运行都必须归属于该阶段授权的角色——而此处没有任何已授权角色能解析到智能体。指派负责人无济于事：负责人是协调者，而非执行者。请为泳道配置人员、固定角色，或让协调者解析该阶段的参与者。",
         "capability_mismatch": "所有候选智能体都缺少该泳道要求的技能。",
         "already_running": "工单已有正在进行的运行，因此未派发新的运行。",
         "run_cap_exhausted": "最近连续多次运行均失败，自主执行已停止重新派发。人工“立即运行”可覆盖。",
@@ -6296,6 +6297,7 @@
         "cloud_run_limit": "本月云端运行额度已用完 — 升级后可继续运行",
         "cooldown_active": "上次运行失败后正在冷却——稍后自动重试",
         "no_agent": "未分配智能体",
+        "managed_no_role": "没有角色可执行此阶段",
         "no_board": "未配置看板",
         "no_lane": "泳道未配置",
         "terminal_lane": "已完成 — 无需运行",
@@ -7904,7 +7906,8 @@
       "feedback": "反馈",
       "releaseNotes": "更新日志",
       "demoFunnel": "演示漏斗",
-      "salesLeads": "销售线索"
+      "salesLeads": "销售线索",
+      "cron": "定时任务"
     },
     "common": {
       "loading": "加载中…",
@@ -8610,6 +8613,71 @@
         "pmo": "PMO 指挥中心",
         "talent": "人才与市场",
         "governance": "安全、架构与治理"
+      }
+    },
+    "cron": {
+      "title": "定时任务",
+      "subtitle": "Cloudflare 只把定时触发器发送给 Worker，而不会发送到某个 URL。可在此直接强制执行，无需等待工作闸门。",
+      "forceNote": "在此执行会绕过 KV 工作闸门，且不会重置底线计时器，因此强制执行绝不会延迟下一次真实的定时触发。若要测试闸门本身，请使用“标记待处理工作”。",
+      "gate": {
+        "heading": "KV 工作闸门",
+        "checkedAt": "检查时间：{at}",
+        "wouldRun": "下一次触发将执行数据库扫描",
+        "wouldSkip": "下一次触发将跳过 —— Postgres 保持休眠",
+        "reason": {
+          "signal": "有写入操作标记了待处理工作",
+          "floor": "已达到底线间隔",
+          "idle": "没有任何标记，且底线尚未到期",
+          "kv-unavailable": "KV 不可用，闸门按放行处理"
+        },
+        "floorInterval": "底线间隔",
+        "overridden": "已被覆盖",
+        "lastFloor": "上次底线扫描",
+        "nextFloor": "下次底线扫描",
+        "never": "从未",
+        "asap": "下一次触发",
+        "explainIdle": "闸门空闲并不代表没有待处理的工作。只有当工单真正通过其闸门时才会发出标记，所以一块全是停滞工单的看板不会发出任何标记，只能等待底线扫描。",
+        "kvUnbound": "未绑定 AUTH_CACHE_KV，闸门按放行处理，因此每次触发都会执行扫描。",
+        "signalled": "已标记待处理工作 —— 下一次定时触发将执行扫描。"
+      },
+      "actions": {
+        "runFrequent": "▶ 执行 5 分钟触发",
+        "signal": "⚑ 标记待处理工作",
+        "run": "执行",
+        "runGroup": "▶ 执行整组",
+        "running": "执行中…"
+      },
+      "cadence": {
+        "frequent": "高频触发",
+        "daily": "每日",
+        "weekly-mon": "每周（周一）",
+        "weekly-fri": "每周（周五）",
+        "everyFiveMinutes": "每 5 分钟（受工作闸门控制）"
+      },
+      "table": {
+        "sweep": "任务",
+        "description": "作用",
+        "lastRun": "上次强制执行"
+      },
+      "badge": {
+        "dispatches": "会启动智能体运行",
+        "unavailable": "在此环境中已禁用"
+      },
+      "outcome": {
+        "ok": "成功，耗时 {ms} 毫秒",
+        "noop": "无事可做",
+        "failed": "失败",
+        "timedOut": "已超过 {ms} 毫秒仍在运行 —— 请查看日志获取结果",
+        "skipped": "已跳过（已禁用）"
+      },
+      "result": {
+        "heading": "已强制执行 {target}：",
+        "summary": "{total} 个任务中有 {ok} 个完成，耗时 {ms} 毫秒 · 启动了 {dispatched} 次智能体运行"
+      },
+      "confirm": {
+        "title": "要强制执行定时任务吗？",
+        "dispatch": "执行“{target}”会在所有工作区启动真实的智能体运行（所选任务中有 {count} 个会派发工作）。这会消耗额度，并非演练。",
+        "confirmLabel": "立即执行"
       }
     }
   },

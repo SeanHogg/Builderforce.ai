@@ -2410,6 +2410,7 @@
         "terminal_lane": "Das Ticket liegt in einer Endspalte (Fertig), die niemals automatisch läuft.",
         "human_gate": "Die Spalte ist menschlich freizugeben – jemand muss zustimmen oder „Jetzt ausführen“ drücken.",
         "no_agent": "Die Spalte hat keinen zugewiesenen Agenten und die verantwortliche Person kann diese Phase nicht ausführen. Besetze die Spalte, oder starte ausdrücklich mit „Jetzt ausführen“.",
+        "managed_no_role": "Dieses Board ist lifecycle-verwaltet, daher muss jeder Lauf einer Rolle zugeordnet sein, die die Phase autorisiert — und hier lässt sich keine autorisierte Rolle zu einem Agenten auflösen. Eine verantwortliche Person zuzuweisen hilft nicht: Die zugewiesene Person ist die Koordination, nie die ausführende Instanz. Besetze die Spalte, fixiere die Rolle, oder lass die Koordination die Phasenbeteiligung auflösen.",
         "capability_mismatch": "Allen möglichen Agenten fehlen die von dieser Spalte verlangten Fähigkeiten.",
         "already_running": "Auf dem Ticket läuft bereits eine Ausführung, daher wurde keine neue gestartet.",
         "run_cap_exhausted": "Die letzten Läufe scheiterten hintereinander, daher startet die Autonomie keine weiteren. Ein menschliches „Jetzt ausführen“ setzt das außer Kraft.",
@@ -6296,6 +6297,7 @@
         "cloud_run_limit": "Monatliches Cloud-Lauf-Kontingent aufgebraucht — Upgrade für weitere Läufe",
         "cooldown_active": "Abkühlphase nach einem fehlgeschlagenen Lauf — erneuter Versuch in Kürze",
         "no_agent": "Kein Agent zugewiesen",
+        "managed_no_role": "Keine Rolle kann diese Phase ausführen",
         "no_board": "Kein Board konfiguriert",
         "no_lane": "Spur nicht konfiguriert",
         "terminal_lane": "Fertig — kein Lauf nötig",
@@ -7904,7 +7906,8 @@
       "feedback": "Feedback",
       "releaseNotes": "Neuerungen",
       "demoFunnel": "Demo-Funnel",
-      "salesLeads": "Sales-Leads"
+      "salesLeads": "Sales-Leads",
+      "cron": "Geplante Läufe"
     },
     "common": {
       "loading": "Wird geladen…",
@@ -8610,6 +8613,71 @@
         "pmo": "PMO-Kommandozentrale",
         "talent": "Talente & Marktplatz",
         "governance": "Sicherheit, Architektur & Governance"
+      }
+    },
+    "cron": {
+      "title": "Geplante Läufe",
+      "subtitle": "Cloudflare liefert Cron-Trigger an den Worker, nie an eine URL. Erzwinge hier einen Lauf, statt auf das Arbeits-Gate zu warten.",
+      "forceNote": "Ein Lauf von hier umgeht das KV-Arbeits-Gate und verschiebt den Mindestintervall-Timer nicht – ein erzwungener Lauf verzögert also nie den nächsten echten Tick. Um das Gate selbst zu testen, nutze „Ausstehende Arbeit signalisieren“.",
+      "gate": {
+        "heading": "KV-Arbeits-Gate",
+        "checkedAt": "Geprüft {at}",
+        "wouldRun": "Der nächste Tick würde den Datenbank-Durchlauf ausführen",
+        "wouldSkip": "Der nächste Tick würde übersprungen – Postgres bleibt schlafend",
+        "reason": {
+          "signal": "ein Schreibvorgang hat ausstehende Arbeit signalisiert",
+          "floor": "das Mindestintervall ist abgelaufen",
+          "idle": "nichts signalisiert und das Mindestintervall ist nicht fällig",
+          "kv-unavailable": "KV ist nicht erreichbar, das Gate lässt daher durch"
+        },
+        "floorInterval": "Mindestintervall",
+        "overridden": "überschrieben",
+        "lastFloor": "Letzter Mindest-Durchlauf",
+        "nextFloor": "Nächster Mindest-Durchlauf",
+        "never": "Nie",
+        "asap": "Nächster Tick",
+        "explainIdle": "Ein untätiges Gate bedeutet nicht, dass nichts aussteht. Das Signal wird nur gesetzt, wenn ein Ticket seine Gates tatsächlich passiert – ein Board voller blockierter Tickets signalisiert also nichts und wartet auf den Mindest-Durchlauf.",
+        "kvUnbound": "AUTH_CACHE_KV ist nicht gebunden – das Gate lässt durch und jeder Tick führt den Durchlauf aus.",
+        "signalled": "Ausstehende Arbeit signalisiert – der nächste geplante Tick führt den Durchlauf aus."
+      },
+      "actions": {
+        "runFrequent": "▶ 5-Minuten-Tick ausführen",
+        "signal": "⚑ Ausstehende Arbeit signalisieren",
+        "run": "Ausführen",
+        "runGroup": "▶ Gruppe ausführen",
+        "running": "Läuft…"
+      },
+      "cadence": {
+        "frequent": "Häufiger Tick",
+        "daily": "Täglich",
+        "weekly-mon": "Wöchentlich (Montag)",
+        "weekly-fri": "Wöchentlich (Freitag)",
+        "everyFiveMinutes": "alle 5 Minuten (mit Arbeits-Gate)"
+      },
+      "table": {
+        "sweep": "Lauf",
+        "description": "Aufgabe",
+        "lastRun": "Letzter erzwungener Lauf"
+      },
+      "badge": {
+        "dispatches": "startet Agenten-Läufe",
+        "unavailable": "in dieser Umgebung deaktiviert"
+      },
+      "outcome": {
+        "ok": "OK in {ms} ms",
+        "noop": "nichts zu tun",
+        "failed": "Fehlgeschlagen",
+        "timedOut": "Läuft nach {ms} ms noch – Ergebnis in den Logs prüfen",
+        "skipped": "Übersprungen (deaktiviert)"
+      },
+      "result": {
+        "heading": "{target} erzwungen:",
+        "summary": "{ok} von {total} Läufen in {ms} ms abgeschlossen · {dispatched} Agenten-Läufe gestartet"
+      },
+      "confirm": {
+        "title": "Geplanten Lauf erzwingen?",
+        "dispatch": "„{target}“ auszuführen startet echte Agenten-Läufe in allen Workspaces ({count} der ausgewählten Läufe verteilen Arbeit). Das verbraucht Tokens und ist kein Probelauf.",
+        "confirmLabel": "Jetzt ausführen"
       }
     }
   },

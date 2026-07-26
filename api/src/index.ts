@@ -129,7 +129,7 @@ import { createContributorRoutes }  from './presentation/routes/contributorRoute
 import { runRepoActivitySweep }      from './application/contributors/runRepoActivitySweep';
 import { createDevTeamRoutes }      from './presentation/routes/devTeamRoutes';
 import { createTeamRoutes }         from './presentation/routes/teamRoutes';
-import { createReportRoutes, buildScheduledReport } from './presentation/routes/reportRoutes';
+import { createReportRoutes } from './presentation/routes/reportRoutes';
 import { createAnalyticsRoutes }    from './presentation/routes/analyticsRoutes';
 import { createPromptLibraryRoutes } from './presentation/routes/promptLibraryRoutes';
 import { createBrainRoutes }       from './presentation/routes/brainRoutes';
@@ -185,35 +185,20 @@ import {
   OPENAPI_TITLE,
   OPENAPI_DESCRIPTION,
 } from './openapi/schema';
-import { runVendorHealthCron } from './application/llm/vendorHealthCron';
-import { runByoCredentialHealthCron } from './application/llm/byoCredentialHealthCron';
-import { runRetentionPurge } from './application/maintenance/retentionPurge';
-import { runEvalDriftSweep } from './application/eval/runEvalDriftSweep';
-import { runAlertSweep } from './application/alerts/runAlertSweep';
-import { runDueTriggers } from './application/workflow/runDueTriggers';
-import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
-import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
 import { evaluateCronGate, openCronTick } from './application/runtime/cronWorkSignal';
-import { reconcileGithubActionsRuns } from './application/runtime/githubActionsReconcile';
-import { runAutonomousExecutionSweep } from './application/runtime/autonomousExecutionSweep';
 import { createTickDispatchBudget } from './application/runtime/tickDispatchBudget';
-import { runManagerSweep } from './application/manager/runManagerSweep';
-import { runWebhookRetrySweep } from './application/seams/webhookService';
-import { runBoardSyncSweep } from './application/boardsync/runBoardSyncSweep';
-import { runParkedWorkflowSweep } from './application/swimlane/resumeParkedWorkflows';
-import { runQaExplorationSweep } from './application/qa/runQaExplorationSweep';
-import { runValidatorReviewSweep } from './application/validation/validationDispatch';
-import { demoAccountsEnabled, reseedDemoTenants } from './application/demo/demoSeedService';
-import { runWebScanSweep } from './application/security/webSecurityScan';
-import { runSecurityAuditSweep } from './application/security/securityDispatch';
-import { runEscalationSweep } from './application/incident/runEscalationSweep';
-import { runApprovalExpirySweep } from './application/approvals/runApprovalExpirySweep';
+// Every scheduled sweep is declared ONCE in cronSweeps.ts and invoked through the
+// shared runner, so the cron handler below and the superadmin force-run route
+// (POST /api/admin/cron/:target) can never drift. See cronSweepRunner.ts.
+import { CRON_SWEEPS } from './cronSweeps';
+import {
+  cadenceForCron,
+  dispatchCronSweeps,
+  sweepsForCadence,
+} from './application/runtime/cronSweepRunner';
 import { createIncidentRoutes } from './presentation/routes/incidentRoutes';
-import { runMonitorSweep } from './application/monitoring/runMonitorSweep';
 import { createMonitoringRoutes } from './presentation/routes/monitoringRoutes';
 import { createMonitorWebhookRoutes } from './presentation/routes/monitorWebhookRoutes';
-import { runDueReports } from './application/reports/runDueReports';
-import { runDueCeremonies, runCeremonyReaper } from './application/ceremony/runDueCeremonies';
 import { handleInboundEmail } from './application/workflow/inboundEmail';
 // ── Insights-everywhere + enterprise-lens extensions (integration batch) ──
 import { createCatalogAnalyticsRoutes } from './presentation/routes/catalogAnalyticsRoutes';
@@ -222,7 +207,6 @@ import { createPromptAnalyzerRoutes } from './presentation/routes/promptAnalyzer
 import { createMemberPersonaRoutes } from './presentation/routes/memberPersonaRoutes';
 import { createLensSnapshotRoutes } from './presentation/routes/lensSnapshotRoutes';
 import { createWorkforcePlanRoutes } from './presentation/routes/workforcePlanRoutes';
-import { dueSnapshots } from './application/reports/lensSnapshots';
 import { createEmpFeatureRoutes } from './presentation/routes/empFeatureRoutes';
 import { createReleasesRoutes } from './presentation/routes/releasesRoutes';
 import { createPulseRoutes } from './presentation/routes/pulseRoutes';
@@ -722,134 +706,26 @@ function optionCorsAllowOrigin(origin: string | null, corsOrigins: string | unde
 
 export default {
   /**
-   * Cloudflare scheduled() handler — fires on cron triggers declared in
-   * api/wrangler.toml `[triggers] crons`:
-   *   - `0 9 * * *`  daily LLM vendor health probe (change-detected, email-quiet) +
-   *     daily per-tenant BYO credential sweep (emails a workspace's admins on breakage).
-   *   - `0 16 * * 5` weekly release-notes marketing digest (consent-gated).
-   *   - every-5-min tick: workflow-trigger sweep — fire due schedule + rss
-   *     triggers, then advance any pending cloud-runtime workflows.
+   * Cloudflare scheduled() handler — fires on the cron triggers declared in
+   * api/wrangler.toml `[triggers] crons`. It owns exactly two decisions:
    *
-   * Each branch is isolated so a failure in one can't poison the others. We key
-   * off `event.cron` so the expensive vendor probe only runs on the daily tick.
+   *   1. WHICH sweeps this tick runs — `event.cron` maps to a cadence group over
+   *      the shared CRON_SWEEPS registry, so the expensive daily/weekly work never
+   *      runs on the every-5-minute tick.
+   *   2. WHETHER the frequent tick runs at all — the KV work-gate that lets Neon
+   *      compute autosuspend.
+   *
+   * Everything else — per-sweep isolation, log lines, the shared dispatch budget —
+   * belongs to the runner, so the superadmin force-run route
+   * (POST /api/admin/cron/:target) executes the identical set of sweeps BY
+   * CONSTRUCTION instead of keeping a second copy of this fan-out in step.
    */
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    if (event.cron === '0 9 * * *') {
-      ctx.waitUntil(
-        runVendorHealthCron(env).catch((err) => {
-          console.error('[cron:llm-health] failed', err);
-        }),
-      );
-      // Daily retention purge of unbounded diagnostic/telemetry log tables
-      // (llm_traces, llm_failover_log, llm_health_probes, qa_journey_events,
-      // error_events, manager_actions, tool_audit_events — see PURGE_TARGETS).
-      ctx.waitUntil(
-        runRetentionPurge(env).catch((err) => {
-          console.error('[cron:retention] failed', err);
-        }),
-      );
-      // Daily BYO credential sweep — probe every tenant's CONNECTED model providers on
-      // their own credential and email the workspace's owners/managers the first time one
-      // breaks. Without it, credential health was only ever observed as a side effect of
-      // traffic, so a lapsed subscription or a rotated key showed "● connected" on the
-      // Integrations page indefinitely while every run quietly failed over.
-      ctx.waitUntil(
-        runByoCredentialHealthCron(env)
-          .then((r) => {
-            if (r.newlyBroken > 0 || r.recovered > 0) {
-              console.log(`[cron:byo-health] newlyBroken=${r.newlyBroken} recovered=${r.recovered} emailed=${r.emailed}`);
-            }
-          })
-          .catch((err) => {
-            console.error('[cron:byo-health] failed', err);
-          }),
-      );
-      // Daily semantic-eval drift sweep — flag per-(action_type, model) quality
-      // regressions over the persisted faithfulness/relevance scores (Layer 6).
-      ctx.waitUntil(
-        runEvalDriftSweep(env).catch((err) => {
-          console.error('[cron:eval-drift] failed', err);
-        }),
-      );
-      // Daily threshold-alert sweep — evaluate every enabled alert rule and fire
-      // (Slack/email + alert_event) the ones that trip, respecting cooldown.
-      ctx.waitUntil(
-        runAlertSweep(env).catch((err) => {
-          console.error('[cron:alerts] failed', err);
-        }),
-      );
-      // Daily Validator review sweep — for every tenant that has a Validator agent,
-      // (re)review its Done items against the codebase so each item accrues multiple
-      // review passes over time and any gaps become GAP tasks. No-op for tenants
-      // without a Validator.
-      ctx.waitUntil(
-        runValidatorReviewSweep(env)
-          .then((r) => {
-            if (r.dispatched > 0) console.log(`[cron:validator] tenantsWithValidator=${r.tenantsWithValidator} dispatched=${r.dispatched}`);
-          })
-          .catch((err) => {
-            console.error('[cron:validator] failed', err);
-          }),
-      );
-      // Nightly demo-account reseed — backstop for the deploy-hook reseed so a
-      // visitor-mutated demo tenant never stays dirty longer than a day.
-      if (demoAccountsEnabled(env)) {
-        ctx.waitUntil(
-          reseedDemoTenants(env)
-            .then((r) => console.log(`[cron:demo-reseed] personas=${r.personas.length}`))
-            .catch((err) => {
-              console.error('[cron:demo-reseed] failed', err);
-            }),
-        );
-      }
-    }
-    // Weekly Security-agent SOC 2 audit sweep — for every tenant that has a Security
-    // agent and no audit in flight, dispatch one audit against its most-recently-active
-    // repo-linked project. Findings become access-restricted SECURITY tasks. No-op for
-    // tenants without a Security agent.
-    if (event.cron === '0 8 * * 1') {
-      ctx.waitUntil(
-        runSecurityAuditSweep(env)
-          .then((r) => {
-            if (r.dispatched > 0) console.log(`[cron:security] tenantsWithSecurityAgent=${r.tenantsWithSecurityAgent} dispatched=${r.dispatched}`);
-          })
-          .catch((err) => {
-            console.error('[cron:security] failed', err);
-          }),
-      );
-      // Re-scan every project with a configured website target so posture drift is
-      // caught without anyone clicking Run (findings dedupe + resolved auto-close).
-      ctx.waitUntil(
-        runWebScanSweep(env)
-          .then((r) => {
-            if (r.scanned > 0 || r.skippedOverCap > 0) {
-              console.log(`[cron:webscan] projectsWithTarget=${r.projectsWithTarget} scanned=${r.scanned} findingsFiled=${r.findingsFiled} skippedOverCap=${r.skippedOverCap}`);
-            }
-          })
-          .catch((err) => {
-            console.error('[cron:webscan] failed', err);
-          }),
-      );
-    }
-    // Weekly release-notes marketing digest (Fri 16:00 UTC) — mail every published
-    // release note not yet emailed to consenting users (product_updates lifecycle
-    // category, per-recipient consent + unsubscribe handled by sendLifecycleEmail),
-    // then stamp the notes `emailed_at`. A week with nothing new sends nothing.
-    if (event.cron === '0 16 * * 5') {
-      ctx.waitUntil(
-        runReleaseDigest(env)
-          .then((r) => {
-            if (r.notes > 0) console.log(`[cron:release-digest] notes=${r.notes} sent=${r.sent} suppressed=${r.suppressed} failed=${r.failed}`);
-          })
-          .catch((err) => {
-            console.error('[cron:release-digest] failed', err);
-          }),
-      );
-    }
-    // Trigger sweep + cloud executor run on the frequent tick. (Also run when no
-    // cron string is supplied, e.g. a manual `wrangler` invocation.) The daily and
-    // weekly ticks are handled above, so exclude them here.
-    if (event.cron !== '0 9 * * *' && event.cron !== '0 8 * * 1' && event.cron !== '0 16 * * 5') {
+    const cadence = cadenceForCron(event.cron);
+    const sweeps = sweepsForCadence(CRON_SWEEPS, cadence);
+    if (sweeps.length === 0) return;
+
+    if (cadence === 'frequent') {
       // KV work-gate — the single change that lets Neon compute autosuspend.
       // Reads KV ONLY (no Postgres): SKIP the whole DB fan-out below on an idle
       // platform so the endpoint scales to zero, RUN it when a write signalled
@@ -862,184 +738,16 @@ export default {
         return;
       }
       // Consume the signal + stamp the floor BEFORE firing sweeps, so a paced
-      // backlog re-signalled mid-tick survives to keep the next tick hot.
+      // backlog re-signalled mid-tick survives the consume and keeps the next
+      // tick hot.
       await openCronTick(env, tickNowMs, gate.floorDue);
-      ctx.waitUntil(
-        runDueTriggers(env)
-          .then(() => processPendingCloudWorkflows(env))
-          .catch((err) => {
-            console.error('[cron:wf-triggers] failed', err);
-          }),
-      );
-      // Fail executions stranded in running/pending by a crashed host or dropped
-      // dispatch, so stuck rows can't accumulate (no heartbeat timeout exists).
-      ctx.waitUntil(
-        reapStaleExecutions(env).catch((err) => {
-          console.error('[cron:exec-reaper] failed', err);
-        }),
-      );
-      // GitHub Actions reconcile — `workflow_dispatch` returns 204 meaning "queued",
-      // never "started", so a dispatch GitHub never scheduled (Actions disabled,
-      // spending limit, no trigger on the default branch) is invisible until the
-      // reaper above fails it with a generic silence message ~20 min later. Ask
-      // GitHub whether a run exists and fail the ones it never scheduled with the
-      // real cause. Runs BEFORE nothing and after everything — it deliberately acts
-      // only inside the window the reaper has not yet reached.
-      ctx.waitUntil(
-        reconcileGithubActionsRuns(env)
-          .then((r) => { if (r.failed > 0) console.log(`[cron:gh-actions-reconcile] checked=${r.checked} failed=${r.failed} stillQueued=${r.stillQueued}`); })
-          .catch((err) => { console.error('[cron:gh-actions-reconcile] failed', err); }),
-      );
-      // Approval expiry — move pending approvals past their deadline to `expired`
-      // and alert. Replaces the never-called GET /api/approvals/escalate endpoint
-      // (Cloudflare crons invoke scheduled(), not a URL). Frequent tick so an
-      // unanswered agent `ask_human` question escalates promptly after its 24h
-      // expiry, well before the 72h paused-run reaper frees the ticket.
-      ctx.waitUntil(
-        runApprovalExpirySweep(env, buildDatabase(env))
-          .then((r) => {
-            if (r.escalated > 0) {
-              console.log(`[cron:approval-expiry] escalated=${r.escalated} tenants=${r.tenants}`);
-            }
-          })
-          .catch((err) => {
-            console.error('[cron:approval-expiry] failed', err);
-          }),
-      );
-      // Incident escalation sweep — for every still-open (unacknowledged) incident,
-      // fire the next escalation tier whose timer has elapsed (Teams/Slack/email).
-      // Frequent tick so time-based escalation has sub-daily granularity. Distinct
-      // from the approval expiry above: that expires stale approvals, this pages
-      // on-call for live incidents.
-      ctx.waitUntil(
-        runEscalationSweep(env)
-          .then((r) => { if (r.escalated > 0) console.log(`[cron:escalation] open=${r.openIncidents} escalated=${r.escalated}`); })
-          .catch((err) => { console.error('[cron:escalation] failed', err); }),
-      );
-      // Active-monitoring sweep — evaluate heartbeat/http-check/metric monitors; a
-      // breach opens an incident + pages on-call. 5-min tick, like escalation.
-      ctx.waitUntil(
-        runMonitorSweep(env)
-          .then((r) => { if (r.breached > 0 || r.recovered > 0) console.log(`[cron:monitors] evaluated=${r.evaluated} breached=${r.breached} recovered=${r.recovered}`); })
-          .catch((err) => { console.error('[cron:monitors] failed', err); }),
-      );
-      // Always-on autonomous executor — across ALL tenants/projects, start every
-      // agent-owned, non-terminal ticket that has no live run (token-gated; a tenant
-      // out of budget is skipped + nudged to upgrade). This is the server-side
-      // backstop that makes "agents work continuously in the cloud" true even when
-      // the live lane-entry trigger's kickoff was dropped or a ticket was created
-      // into a staffed lane while nothing was watching.
-      // ONE per-tenant dispatch ceiling for this whole tick, shared by every sweep
-      // below that can start a billable run. Each sweep used to enforce its own
-      // private 25/tenant, so the ceilings never composed and a tenant could take
-      // 25 from the executor plus more from the manager in the same five minutes.
-      const tickBudget = createTickDispatchBudget();
-      ctx.waitUntil(
-        runAutonomousExecutionSweep(env, tickBudget)
-          .then((r) => {
-            if (r.dispatched > 0 || r.tokenBlockedTenants > 0) {
-              console.log(`[cron:auto-exec] dispatched=${r.dispatched} candidates=${r.candidates} tokenBlockedTenants=${r.tokenBlockedTenants} pendingUnderBlocked=${r.pendingUnderBlockedTenants} upgradeEmails=${r.upgradeEmailsSent}`);
-            }
-          })
-          .catch((err) => {
-            console.error('[cron:auto-exec] failed', err);
-          }),
-      );
-      // AI Manager pass: the judgement layer on top of the mechanical executor.
-      // Every managed project gets its backlog value-scored + priority-ranked, its
-      // unowned work assigned, and its finished work's PRs conducted/merged/closed —
-      // so the team (human + agent) always works the highest-value, most-urgent
-      // tickets first and PRs don't pile up waiting on a human.
-      ctx.waitUntil(
-        runManagerSweep(env, tickBudget)
-          .then((r) => {
-            if (r.managed > 0) {
-              console.log(`[cron:manager] projects=${r.projects} managed=${r.managed} scored=${r.scored} ranked=${r.ranked} assigned=${r.assigned} prsConducted=${r.prsConducted} prsMerged=${r.prsMerged} dispatched=${r.dispatched} remediated=${r.remediated} remediationDeferred=${r.remediationDeferred} tokenBlocked=${r.tokenBlockedTenants}`);
-            }
-          })
-          .catch((err) => {
-            console.error('[cron:manager] failed', err);
-          }),
-      );
-      // Redeliver failed outbound webhook deliveries with capped exponential
-      // backoff (at-least-once semantics for the cross-domain seam events).
-      ctx.waitUntil(
-        runWebhookRetrySweep(env).catch((err) => {
-          console.error('[cron:webhook-retry] failed', err);
-        }),
-      );
-      // Poll active external board connections whose interval has elapsed +
-      // drain their reverse-sync outbox (inbound polling + reliable writeback).
-      ctx.waitUntil(
-        runBoardSyncSweep(env).catch((err) => {
-          console.error('[cron:board-sync] failed', err);
-        }),
-      );
-      // Resume tickets parked on a run_workflow lane action whose spawned
-      // workflow has now settled (advance on success / needs_attention on fail).
-      ctx.waitUntil(
-        runParkedWorkflowSweep(env).catch((err) => {
-          console.error('[cron:wf-gate] failed', err);
-        }),
-      );
-      // Agentic Tester scheduler — enqueue a heatmap-derived exploration for
-      // every due qa_schedules row (the platform-native "run QA on a schedule"
-      // surface; a runner claims the queued exploration).
-      ctx.waitUntil(
-        runQaExplorationSweep(env).catch((err) => {
-          console.error('[cron:qa-sweep] failed', err);
-        }),
-      );
-      // Engineering-activity producer — poll each connected repo's commits / PRs /
-      // reviews into activity_events (backfills history on first sync, then
-      // incremental), so the consolidation + rollup surfaces are fed with zero
-      // per-repo webhook setup.
-      ctx.waitUntil(
-        runRepoActivitySweep(env).catch((err) => {
-          console.error('[cron:repo-activity] failed', err);
-        }),
-      );
-      // Scheduled report digests — generate + email every due report_schedules row
-      // (standup / code-review / executive / portfolio rollup), advancing each
-      // row's next_run_at. buildScheduledReport is injected so the sweep stays a
-      // pure application-layer consumer (no presentation import).
-      ctx.waitUntil(
-        runDueReports(env, (db, s, now) =>
-          buildScheduledReport(db, s.reportType, s.tenantId, s.segmentId ?? '', now),
-        ).catch((err) => {
-          console.error('[cron:reports] failed', err);
-        }),
-      );
-      // Annual-calendar cadence — capture the rolling month/quarter/year lens
-      // snapshots per tenant (freezes at period close). Same sweep pattern as
-      // runDueReports; bounded + staleness-gated so it's safe on every tick.
-      ctx.waitUntil(
-        dueSnapshots(env).catch((err) => {
-          console.error('[cron:lens-snapshots] failed', err);
-        }),
-      );
-      // Ceremony cadence — open a standup/planning session (roster pre-seeded from
-      // the existing member-metrics readers) for every due ceremony_schedules row,
-      // then re-arm next_run_at from its cron. Bounded to 25 schedules/tick and
-      // dispatches NO LLM work: agents are seated as participants, and any actual
-      // agent execution happens later on session completion via the token-gated
-      // lane-entry path. Same due-then-re-arm shape as runDueTriggers/runDueReports.
-      ctx.waitUntil(
-        runDueCeremonies(env)
-          .then((r) => { if (r.opened > 0 || r.errors > 0) console.log(`[cron:ceremonies] due=${r.due} opened=${r.opened} skipped=${r.skipped} errors=${r.errors}`); })
-          .catch((err) => { console.error('[cron:ceremonies] failed', err); }),
-      );
-      // The other half of the cadence (0365): CLOSE sessions nobody closed. Without
-      // this a scheduled ceremony never ends — one live session per board+kind is
-      // allowed, so the first standup left open blocks every future one on that board.
-      // Concludes through the SAME path a human's Complete click uses, so whether an
-      // empty room may be conducted is decided once, by the manager policy fold.
-      ctx.waitUntil(
-        runCeremonyReaper(env, buildDatabase(env))
-          .then((r) => { if (r.due > 0) console.log(`[cron:ceremonies:reap] due=${r.due} completed=${r.completed} abandoned=${r.abandoned} errors=${r.errors}`); })
-          .catch((err) => { console.error('[cron:ceremonies:reap] failed', err); }),
-      );
     }
+
+    // ONE per-tenant dispatch ceiling for this whole tick, shared by every sweep
+    // that can start a billable run. Each sweep used to enforce its own private
+    // 25/tenant, so the ceilings never composed and a tenant could take 25 from
+    // the executor plus more from the manager in the same five minutes.
+    dispatchCronSweeps(sweeps, { env, budget: createTickDispatchBudget() }, (p) => ctx.waitUntil(p));
   },
 
   /**

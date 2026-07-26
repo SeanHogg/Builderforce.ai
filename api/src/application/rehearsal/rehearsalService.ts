@@ -252,7 +252,13 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
       .update(executions)
       .set({ status: 'failed', errorMessage: message.slice(0, 2000), completedAt: new Date() })
       .where(scopedToTenant(executions, tenantId, eq(executions.id, executionId)))
-      .catch(() => { /* the rehearsal row already carries the failure */ });
+      .catch((writeError) => console.error('[rehearsal] execution failure transition failed', {
+        rehearsalId,
+        executionId,
+        tenantId,
+        originalError: message,
+        writeError: writeError instanceof Error ? `${writeError.name}: ${writeError.message}` : String(writeError),
+      }));
   }
 
   return rehearsalId;

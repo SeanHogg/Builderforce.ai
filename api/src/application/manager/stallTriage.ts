@@ -61,6 +61,17 @@ export type StallCause =
   | 'never_started'
   /** No agent (lane staffing or owner) can run it. */
   | 'unassigned'
+  /**
+   * LIFECYCLE-MANAGED board: the stage authorizes roles, but none resolves to an agent,
+   * so no run can be attributed and none can start.
+   *
+   * Deliberately NOT folded into `unassigned`, even though both mean "nobody can run
+   * this". They demand opposite actions: `unassigned` is fixed by giving the ticket an
+   * owner, and on a managed board that does nothing at all (the assignee is the
+   * Coordinator). Folding them is what let a 300-ticket cohort read as a staffing problem
+   * for weeks while the real defect was that no dispatch could be role-attributed.
+   */
+  | 'managed_no_role'
   /** Candidate agents exist but none holds the lane's required capabilities. */
   | 'capability_gap'
   /** The lane gate is 'human' — autonomy is waiting on an approval nobody gave. */
@@ -238,6 +249,15 @@ export function diagnoseStall(input: StallInput): StallDiagnosis {
       return stalled(
         'unassigned', 'assign',
         `Stuck ${age}: no agent is staffed on this lane and the ticket has no owner, so nothing can run it — staffing it.`,
+      );
+    case 'managed_no_role':
+      // Its own cause AND its own remedy. `assign` — the `unassigned` remedy — writes a
+      // ticket owner, and on a lifecycle-managed board the owner is the Coordinator, not
+      // an executor: it cannot move this ticket. `coordinate` rewinds to the earliest
+      // unmet stage and resolves its participant, which is the only action that can.
+      return stalled(
+        'managed_no_role', 'coordinate',
+        `Stuck ${age}: this board is lifecycle-managed and this stage has no role-capable participant, so no run can be attributed to a role — coordinating the ticket to staff the stage. Assigning an owner will NOT help; the assignee is the Coordinator.`,
       );
     case 'capability_mismatch':
       return stalled(
@@ -457,6 +477,7 @@ export const STALL_CAUSE_LABEL: Record<StallCause, string> = {
   moving: 'In motion',
   never_started: 'Never started',
   unassigned: 'Nobody assigned',
+  managed_no_role: 'No role can execute this stage',
   capability_gap: 'No capable agent',
   human_gate: 'Awaiting human approval',
   failure_breaker: 'Halted after repeated failures',

@@ -53,6 +53,10 @@ import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { isUnapprovedFeedbackTask } from '../feedback/feedbackSpec';
 import { isReviewLane } from '../task/taskLifecycle';
 import { isParticipantOpen } from '../kanban/participantStates';
+import {
+  decideManagedLaneAuthority, loadBoardLaneAuthorities, pickManagedProducer,
+  type LaneAuthorityInputs, type ManagedProducerSlot,
+} from '../kanban/managedLaneRoles';
 import { MAX_CONSECUTIVE_AUTORUN_FAILURES, type AutoRunReason } from '../swimlane/evaluateAutoRun';
 import { diagnoseStall, STALL_AFTER_MS, type StallCause } from './stallTriage';
 
@@ -75,6 +79,18 @@ export interface CensusTicketFacts {
   consecutiveFailures: number;
   /** This ticket's lane, when its status matches one on the board. */
   lane: { gate: string; isTerminal: boolean; staffed: boolean } | null;
+  /**
+   * LIFECYCLE-MANAGED board: whether this ticket's current stage resolves a
+   * role-attributed producer.
+   *
+   * Null on an unmanaged board (the question does not apply). FALSE is the census's
+   * reading of `managed_no_role` — the stage authorizes roles nobody can act as, so no
+   * dispatch is possible however well staffed the lane looks. Without it the census
+   * classified a managed lane WITH staffing as `will_run` and the cohort surfaced as a
+   * generic staffing problem, which is precisely the misdiagnosis that let the defect
+   * run: the census must model the same gate the dispatcher enforces.
+   */
+  managedProducerResolvable: boolean | null;
   /**
    * Required manifest roles for the CURRENT stage that still owe work.
    *
@@ -130,6 +146,11 @@ export function classifyBulkAutoRunReason(f: CensusTicketFacts): AutoRunReason {
 
   // Resolved-lane ladder (classifyResolvedAutoRun's order).
   if (f.lane.gate === 'human') return 'human_gate';
+  // MANAGED BOARD, ranked exactly where the evaluator ranks it: under the human gate and
+  // above staffing. A managed dispatch must be role-attributed, so "is the lane staffed"
+  // is the wrong question — the right one is whether an authorized role resolves to an
+  // agent, which is what this fact answers.
+  if (f.managedProducerResolvable === false) return 'managed_no_role';
   // Staffing. The owner fallback is suppressed on a review-class lane exactly as the
   // evaluator suppresses it — otherwise the census would report a review lane as
   // staffed by the very agent that authored the work.
@@ -220,6 +241,9 @@ export interface CensusTask {
   source?: string | null;
   createdAt: Date;
   assignedAgentRef: string | null;
+  /** Scope for a managed stage's requirement applicability (see `managedLaneRoles`). */
+  taskType?: string | null;
+  actionType?: string | null;
 }
 
 /** Signals `triageStage` has already loaded, reused rather than re-queried. */
@@ -244,7 +268,7 @@ export async function loadCensusFacts(
 
   const board = await findCanonicalBoard(db, args.projectId, args.tenantId);
 
-  const [laneRows, staffRows, streakRows, owedRoles, shared] = await Promise.all([
+  const [laneRows, staffRows, streakRows, owedRoles, shared, laneAuthorities, producerSlots] = await Promise.all([
     board
       ? db.select({ id: swimlanes.id, key: swimlanes.key, gate: swimlanes.gate, isTerminal: swimlanes.isTerminal })
         .from(swimlanes).where(scopedToTenant(swimlanes, args.tenantId, eq(swimlanes.boardId, board.id))).catch(() => [])
@@ -272,12 +296,23 @@ export async function loadCensusFacts(
     `).catch(() => ({ rows: [] as Array<Record<string, unknown>> })),
     loadOwedRoles(db, args.tenantId, taskIds).catch(() => new Map<string, string[]>()),
     args.shared ? Promise.resolve(args.shared) : loadFallbackSignals(db, args.tenantId, taskIds),
+    // MANAGED AUTHORITY, board-wide and per-ticket, in a fixed number of queries: the
+    // lane authorities are loaded ONCE for the whole board and the per-ticket decision is
+    // made in memory, and the manifest slots come from the same single read `loadOwedRoles`
+    // already performs. Resolving this per ticket would be the N+1 the caching rules
+    // forbid on a 675-ticket census.
+    board?.lifecycleManaged
+      ? loadBoardLaneAuthorities(db, { tenantId: args.tenantId, boardId: board.id }).catch(() => new Map())
+      : Promise.resolve(new Map()),
+    board?.lifecycleManaged
+      ? loadProducerSlots(db, args.tenantId, taskIds).catch(() => new Map<string, ManagedProducerSlot[]>())
+      : Promise.resolve(new Map<string, ManagedProducerSlot[]>()),
   ]);
 
-  const laneByKey = new Map<string, { gate: string; isTerminal: boolean; staffed: boolean }>();
+  const laneByKey = new Map<string, { id: string; gate: string; isTerminal: boolean; staffed: boolean }>();
   const staffedLaneIds = new Set((staffRows as Array<{ swimlaneId: string }>).map((s) => s.swimlaneId));
   for (const l of laneRows as Array<{ id: string; key: string; gate: string; isTerminal: boolean }>) {
-    laneByKey.set(l.key, { gate: l.gate, isTerminal: l.isTerminal, staffed: staffedLaneIds.has(l.id) });
+    laneByKey.set(l.key, { id: l.id, gate: l.gate, isTerminal: l.isTerminal, staffed: staffedLaneIds.has(l.id) });
   }
 
   const streakByTask = new Map<number, number>();
@@ -286,8 +321,22 @@ export async function loadCensusFacts(
     if (Number.isFinite(id)) streakByTask.set(id, Number(r.streak) || 0);
   }
 
+  const managed = !!board?.lifecycleManaged;
   return args.tasks.map((t): CensusTicketFacts => {
     const last = shared.lastMovedAt.get(t.id) ?? t.createdAt;
+    const lane = laneByKey.get(t.status) ?? null;
+    // The SAME pure pick the evaluator and the guard use, applied to bulk-loaded inputs —
+    // so the census cannot disagree with the dispatcher about whether a managed stage has
+    // a runnable role.
+    let managedProducerResolvable: boolean | null = null;
+    if (managed && lane && !lane.isTerminal && !isReviewLane(t.status)) {
+      const inputs = (laneAuthorities as Map<string, LaneAuthorityInputs>).get(lane.id);
+      const authority = inputs
+        ? decideManagedLaneAuthority(inputs, { taskType: t.taskType ?? null, actionType: t.actionType ?? null })
+        : { roleKeys: [], approvers: [], tier: 'none' as const };
+      const slots = (producerSlots as Map<string, ManagedProducerSlot[]>).get(`${t.id}:${t.status}`) ?? [];
+      managedProducerResolvable = pickManagedProducer(authority, slots) != null;
+    }
     return {
       taskId: t.id,
       status: t.status,
@@ -297,10 +346,50 @@ export async function loadCensusFacts(
       everRan: shared.everRan.has(t.id),
       hasLiveRun: shared.liveTaskIds.has(t.id),
       consecutiveFailures: streakByTask.get(t.id) ?? 0,
-      lane: laneByKey.get(t.status) ?? null,
+      lane: lane ? { gate: lane.gate, isTerminal: lane.isTerminal, staffed: lane.staffed } : null,
+      managedProducerResolvable,
       stageOwedRoles: (owedRoles as Map<string, string[]>).get(`${t.id}:${t.status}`) ?? [],
     };
   });
+}
+
+/** Manifest producer slots for many tickets at once, keyed `taskId:stageKey`. */
+async function loadProducerSlots(
+  db: Db,
+  tenantId: number,
+  taskIds: number[],
+): Promise<Map<string, ManagedProducerSlot[]>> {
+  const rows = await db
+    .select({
+      taskId: ticketParticipants.taskId,
+      stageKey: ticketParticipants.stageKey,
+      roleKey: ticketParticipants.roleKey,
+      responsibility: ticketParticipants.responsibility,
+      state: ticketParticipants.state,
+      assigneeKind: ticketParticipants.assigneeKind,
+      assigneeRef: ticketParticipants.assigneeRef,
+    })
+    .from(ticketParticipants)
+    .where(and(
+      eq(ticketParticipants.tenantId, tenantId),
+      inArray(ticketParticipants.taskId, taskIds),
+      eq(ticketParticipants.required, true),
+    ));
+  const out = new Map<string, ManagedProducerSlot[]>();
+  for (const r of rows) {
+    if (!r.stageKey) continue;
+    const key = `${r.taskId}:${r.stageKey}`;
+    const list = out.get(key) ?? [];
+    list.push({
+      roleKey: r.roleKey,
+      responsibility: r.responsibility,
+      state: r.state,
+      assigneeKind: r.assigneeKind,
+      assigneeRef: r.assigneeRef,
+    });
+    out.set(key, list);
+  }
+  return out;
 }
 
 /** Roles that still OWE work, keyed `taskId:stageKey` → role keys. */
@@ -389,6 +478,7 @@ export async function getStallCensus(
         .select({
           id: tasks.id, status: tasks.status, source: tasks.source,
           createdAt: tasks.createdAt, assignedAgentRef: tasks.assignedAgentRef,
+          taskType: tasks.taskType, actionType: tasks.actionType,
         })
         .from(tasks)
         // `tasks` is scoped by project, not tenant (it carries no tenant_id column);
