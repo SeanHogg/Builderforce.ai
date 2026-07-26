@@ -19,15 +19,25 @@
  * allowlist entry (a prefix that no longer collides) is reported so the list can be
  * trimmed as the historical debt is paid down.
  *
+ * SECOND GUARD — stray migration directories. `scripts/migrate.mjs` only ever
+ * reads `api/migrations` (and `api/transactional-migrations`), so a `.sql` written
+ * anywhere else is invisible to every environment: it never applies, and its number
+ * gets handed out again to a DIFFERENT migration. That is exactly what happened to
+ * `api/api/migrations/0197_tasks_action_type.sql` + `0198_run_model_outcomes.sql`
+ * (a generator run from the wrong cwd) — both orphaned while the real 0197/0198
+ * shipped other work. This guard fails the build on any `.sql` outside the two
+ * sanctioned directories so the mistake cannot recur silently.
+ *
  * Run via `npm run check:migrations` and wired into `npm test` so CI catches any
  * new collision before it ships.
  */
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { resolve, relative, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const migrationsDir = resolve(here, '../migrations');
+const repoRoot = resolve(here, '../..');
 const allowlistFile = resolve(migrationsDir, '.migration-collisions-allowlist.txt');
 
 const allowlist = existsSync(allowlistFile)
@@ -65,7 +75,60 @@ for (const [prefix, group] of byPrefix) {
 // Allowlist hygiene: an entry that no longer collides is dead weight.
 const staleAllowlist = [...allowlist].filter((p) => !collidingPrefixes.has(p));
 
+// ---------------------------------------------------------------------------
+// Stray migration directories — a .sql outside the two directories migrate.mjs
+// reads is dead on arrival, and burns a number a real migration will reuse.
+// ---------------------------------------------------------------------------
+
+/** The only directories `scripts/migrate.mjs` applies from, repo-root-relative. */
+const SANCTIONED_DIRS = ['api/migrations', 'api/transactional-migrations'];
+/** Directories that legitimately hold .sql fixtures/scripts that are NOT migrations. */
+const IGNORED_DIRS = new Set(['node_modules', '.git', '.next', 'dist', '.wrangler', 'build', 'out']);
+/** One-off operational SQL that is deliberately NOT a migration (run by hand). */
+const ALLOWED_SQL_FILES = new Set(['api/scripts/rollback-0078-claw-rename.sql']);
+
+function collectSql(dir, out = []) {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith('.') && entry.name !== '.github') continue;
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (IGNORED_DIRS.has(entry.name)) continue;
+      collectSql(full, out);
+    } else if (entry.name.endsWith('.sql')) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+const strays = [];
+for (const file of collectSql(repoRoot)) {
+  const rel = relative(repoRoot, file).split('\\').join('/');
+  if (ALLOWED_SQL_FILES.has(rel)) continue;
+  if (SANCTIONED_DIRS.some((d) => rel.startsWith(d + '/'))) continue;
+  strays.push(rel);
+}
+
 let failed = false;
+
+if (strays.length > 0) {
+  failed = true;
+  console.error(`❌  Migration .sql files outside the applied directories (${strays.length}):\n`);
+  for (const s of strays) console.error(`      - ${s}`);
+  console.error(
+    `\n   scripts/migrate.mjs only applies ${SANCTIONED_DIRS.join(' and ')}.` +
+      '\n   A .sql anywhere else NEVER runs, and its number gets reissued to another' +
+      '\n   migration (see api/api/migrations/0197+0198, deleted 2026-07-26). Move the' +
+      '\n   file into api/migrations with a free number from your track\'s band, or — if' +
+      '\n   it is a hand-run operational script — add it to ALLOWED_SQL_FILES here.\n',
+  );
+}
 
 if (newCollisions.length > 0) {
   failed = true;
@@ -99,5 +162,5 @@ const allowed = [...collidingPrefixes].filter((p) => allowlist.has(p));
 console.log(
   `✅  Migration sequence OK — ${files.length} files, no new duplicate prefixes` +
     (allowed.length ? ` (${allowed.length} grandfathered: ${allowed.sort().join(', ')})` : '') +
-    '.',
+    `; no stray .sql outside ${SANCTIONED_DIRS.join(' / ')}.`,
 );

@@ -23,6 +23,7 @@ import { zipSync, type Zippable } from 'fflate';
 import {
   EVERMIND_MODEL_ROOT,
   evermindGenerate,
+  evermindGenerateWithTools,
   evermindGenerateMedia,
   buildEvermindCompletion,
   benchmarkEvermind,
@@ -30,6 +31,11 @@ import {
   EXPORT_FORMATS,
   type ExportFormat,
 } from '../../application/llm/evermindRuntime';
+import {
+  normalizeEvermindTools,
+  resolveEvermindToolChoice,
+  TOOL_CHOICE_MIN_MARGIN,
+} from '../../application/llm/evermindToolCall';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 
 const EVERMIND_PIN_PREFIX = 'evermind/';
@@ -132,9 +138,16 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
 
   /**
    * POST /api/studio/models/:slug/test
-   * Body: { prompt? | messages?, maxTokens?, temperature? }
+   * Body: { prompt? | messages?, tools?, tool_choice?, maxTokens?, temperature? }
    * → runs the published Evermind model and returns an OpenAI-compatible completion
    *   (the same shape the gateway returns — so "test" mirrors "call").
+   *
+   * `tools` is honoured here for the same reason the shape is: the bench is where an
+   * operator decides whether a head is fit to serve, and since the gateway now
+   * tool-calls (constrained decoding — application/llm/evermindToolCall), a bench that
+   * silently ignored `tools` would answer a question the gateway never asked.
+   * `toolChoiceMargin` rides alongside the completion so the confidence the vendor
+   * GATES on is visible here rather than only inferable from a 400 in production.
    */
   router.post('/:slug/test', async (c) => {
     const tenantId = c.get('tenantId') as number;
@@ -147,8 +160,9 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
     }
     const ref = tm.baseModel.slice(EVERMIND_PIN_PREFIX.length);
 
-    const body = (await c.req.json<{ prompt?: unknown; messages?: unknown; maxTokens?: unknown; temperature?: unknown }>().catch(() => ({}))) as {
+    const body = (await c.req.json<Record<string, unknown>>().catch(() => ({}))) as {
       prompt?: unknown; messages?: unknown; maxTokens?: unknown; temperature?: unknown;
+      tools?: unknown; tool_choice?: unknown;
     };
     const messages = Array.isArray(body.messages)
       ? (body.messages as Array<{ role?: unknown; content?: unknown }>)
@@ -157,11 +171,27 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
       return c.json({ error: 'prompt or messages is required' }, 400);
     }
 
+    const genOpts = {
+      ...(typeof body.maxTokens === 'number' ? { maxTokens: body.maxTokens } : {}),
+      ...(typeof body.temperature === 'number' ? { temperature: body.temperature } : {}),
+    };
+
     try {
-      const gen = await evermindGenerate(c.env.UPLOADS, ref, messages, {
-        ...(typeof body.maxTokens === 'number' ? { maxTokens: body.maxTokens } : {}),
-        ...(typeof body.temperature === 'number' ? { temperature: body.temperature } : {}),
-      });
+      // Same normalization the vendor applies, from the same shared module, so the
+      // bench and the gateway can't disagree about what was offered.
+      const tools = normalizeEvermindTools(Array.isArray(body.tools) ? body.tools : undefined);
+      const choice = resolveEvermindToolChoice(body.tool_choice, tools);
+      if (tools.length > 0 && choice.mode !== 'none') {
+        const planned = await evermindGenerateWithTools(c.env.UPLOADS, ref, messages, tools, choice, genOpts);
+        return c.json({
+          ...buildEvermindCompletion({ content: planned.content, usage: planned.usage }, tm.baseModel, Date.now(), planned.call),
+          // Unlike the gateway, the bench REPORTS the margin instead of refusing on it:
+          // an operator testing a head needs to see how close to the bar it landed.
+          toolChoiceMargin: Number.isFinite(planned.margin) ? planned.margin : null,
+          toolChoiceMinMargin: TOOL_CHOICE_MIN_MARGIN,
+        });
+      }
+      const gen = await evermindGenerate(c.env.UPLOADS, ref, messages, genOpts);
       return c.json(buildEvermindCompletion(gen, tm.baseModel));
     } catch (err) {
       return c.json({ error: 'Evermind generation failed', detail: err instanceof Error ? err.message : String(err) }, 502);
