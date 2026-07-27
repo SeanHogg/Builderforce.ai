@@ -64,6 +64,7 @@ import { decideTicketReadiness } from './evaluateTicketReadiness';
 import { runStallTriage, loadBulkSignals, MAX_TRIAGE_DISPATCHES_PER_RUN } from './triageStage';
 import { isActionExhausted } from './stallTriage';
 import { computeStallCensus, invalidateStallCensus } from './stallCensus';
+import { invalidateDailyDigest } from './dailyDigest';
 import { raiseSystemicFindings } from './systemicDiagnosis';
 import { mergeRecordedPullRequest, updateRecordedPullRequestBranch } from '../repos/mergeRecordedPr';
 import { pollPrCiStatus } from '../repos/pollPrCiStatus';
@@ -1598,6 +1599,11 @@ export async function runManagerForProject(
     .catch((error) => {
       reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "runManagerForProject" });
     });
+
+  // A pass IS the manager's half of "what did you accomplish today" — every decision it
+  // just journalled belongs in today's digest, so drop the cached answer rather than
+  // making a human wait out its TTL to see the run they triggered.
+  await invalidateDailyDigest(env, tenantId, projectId).catch(() => undefined);
 
   return summary;
 }
