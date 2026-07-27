@@ -20,7 +20,7 @@ async function persistToDatabase(
   if (!env.NEON_DATABASE_URL) return;
   const db = buildTransactionalDatabase(env);
   await db.insert(apiErrorLog).values({
-    tenantId: runtime.tenantId,
+    scopeTenantId: runtime.tenantId,
     method: (runtime.method ?? (record.handled ? 'CAUGHT' : 'ERROR')).slice(0, 10),
     path: (runtime.path ?? `${record.source}#${record.operation}`).slice(0, 500),
     source: record.source.slice(0, 500),
