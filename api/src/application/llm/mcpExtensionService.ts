@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Tenant MCP extension service — the server side of the Brain's extension
  * contract.
@@ -240,7 +241,7 @@ export async function listToolsForTenant(
         } catch (error) {
           /* skip unreachable / malformed extension */
         
-          console.error('[suppressed-error] application/llm/mcpExtensionService.ts:240 load', { error });
+          reportCaughtError(error, { source: "application/llm/mcpExtensionService.ts", operation: "load" });
         }
       }),
     );

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
@@ -63,7 +64,7 @@ function emitMemberActivity(
       metadata: o.metadata ?? null,
     });
   })().catch((error) => {
-    console.error('[suppressed-error] presentation/routes/tenantRoutes.ts:53 emitMemberActivity', { error });
+    reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "emitMemberActivity" });
   }));
 }
 
@@ -176,7 +177,7 @@ async function acceptPendingInvitations(
       // A transient error on one tenant must not block the user's login or the
       // other tenants' invites — leave the row pending so it retries next visit.
     
-      console.error('[suppressed-error] presentation/routes/tenantRoutes.ts:173 acceptPendingInvitations', { error });
+      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "acceptPendingInvitations" });
     }
   }
 }
@@ -220,7 +221,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name: body.name, ownerUserId: userId });
     await provisionBuiltinAgents(db, tenant.id).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/tenantRoutes.ts:220 createTenantRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
     });   // seed Validator + Security
     return c.json(tenant.toPlain(), 201);
   });
@@ -783,7 +784,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name: body.name, ownerUserId: userId });
     await provisionBuiltinAgents(db, tenant.id).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/tenantRoutes.ts:781 createTenantRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
     });   // seed Validator + Security
     return c.json(tenant.toPlain(), 201);
   });
@@ -802,7 +803,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     await invalidateTaskAssignees(c.env as Env, id);
     // New membership must resolve at the gateway immediately, not after the 60s TTL.
     await invalidateJwtMembershipCache(c.env as Env, id, body.newUserId).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/tenantRoutes.ts:798 createTenantRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
     });
     return c.json(tenant.toPlain());
   });
@@ -840,7 +841,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       const tenant = await tenantService.addMember(id, actorUserId, found.id, role);
       await invalidateTaskAssignees(c.env as Env, id);
       await invalidateJwtMembershipCache(c.env as Env, id, found.id).catch((error) => {
-        console.error('[suppressed-error] presentation/routes/tenantRoutes.ts:834 createTenantRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
       });
       emitMemberActivity(c, db, 'member.added', {
         targetId: found.id, targetLabel: found.email,
@@ -909,7 +910,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         { headers: headerHints(c.req) },
       );
     } catch (err) {
-      console.error('[invite-by-email] notification failed (invite still recorded):', err);
+      reportCaughtError(err, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes", context: { logMessage: '[invite-by-email] notification failed (invite still recorded):', details: err } });
     }
 
     return c.json({ ok: true, status: 'pending', email });
@@ -969,7 +970,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     await invalidateTaskAssignees(c.env as Env, id);
     // Revoke the removed member's gateway access at once (not after the 60s TTL).
     await invalidateJwtMembershipCache(c.env as Env, id, targetUserId).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/tenantRoutes.ts:961 createTenantRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
     });
     return c.json(tenant.toPlain());
   });
@@ -991,7 +992,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     await invalidateTaskAssignees(c.env as Env, id);
     // The role rides in the member's next JWT mint; clear the cached membership now.
     await invalidateJwtMembershipCache(c.env as Env, id, targetUserId).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/tenantRoutes.ts:981 createTenantRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
     });
     return c.json(tenant.toPlain());
   });

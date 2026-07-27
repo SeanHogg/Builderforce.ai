@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * TemplateLibraryService — the deck-template catalog. Template binaries live in
  * the UPLOADS R2 bucket under `templates/{tenantId}/{id}.pptx`; metadata + the
@@ -147,7 +148,7 @@ export async function deleteTemplate(db: Db, env: Env, tenantId: number, id: str
     .returning({ id: deckTemplates.id, r2Key: deckTemplates.r2Key })) as Array<{ id: string; r2Key: string | null }>;
   if (!rows[0]) return false;
   if (rows[0].r2Key && env.UPLOADS) await env.UPLOADS.delete(rows[0].r2Key).catch((error) => { /* best-effort */ 
-    console.error('[suppressed-error] application/deck/TemplateLibraryService.ts:149 deleteTemplate', { error });
+    reportCaughtError(error, { source: "application/deck/TemplateLibraryService.ts", operation: "deleteTemplate" });
   });
   await invalidateCached(env, cacheKey(tenantId));
   return true;

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * ChatTicketService — the single source of logic for tying Brain chats to work
  * items, computing a chat's ticket health, tracing chat↔ticket lineage, and
@@ -512,7 +513,7 @@ export class ChatTicketService {
         const [t] = await this.db.select({ agentRef: tasks.assignedAgentRef }).from(tasks).where(eq(tasks.id, Number(input.ref))).limit(1);
         if (t?.agentRef) await this.onTicketAgentAssigned(tenantId, input.kind, input.ref, t.agentRef, { chatId });
       } catch (error) { /* best-effort: a handoff failure must never break linking */ 
-        console.error('[suppressed-error] application/brain/ChatTicketService.ts:514 linkTicket', { error });
+        reportCaughtError(error, { source: "application/brain/ChatTicketService.ts", operation: "linkTicket" });
       }
     }
 
@@ -805,11 +806,11 @@ export class ChatTicketService {
         }, `run:${key}`)));
     } catch (error) {
       // Narration remains best-effort, but delivery failures must be observable.
-      console.error('[brain:run-milestone] publish failed', {
+      reportCaughtError(error, { source: "application/brain/ChatTicketService.ts", operation: "postRunMilestone", context: { logMessage: '[brain:run-milestone] publish failed', details: {
         tenantId, executionId: input.executionId, phase: input.phase,
         ticketKind: input.kind, ticketRef: input.ref,
         error: error instanceof Error ? error.message : String(error),
-      });
+      } } });
     }
   }
 }

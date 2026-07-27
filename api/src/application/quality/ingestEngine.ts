@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Quality ingest engine — the one write path every source funnels into.
  *
@@ -153,14 +154,14 @@ export async function ingestErrorEvents(
       // The groups were already upserted; losing the raw event rows only affects
       // the meter/trend, never the dashboard's group view. Best-effort.
     
-      console.error('[suppressed-error] application/quality/ingestEngine.ts:152 ingestErrorEvents', { error });
+      reportCaughtError(error, { source: "application/quality/ingestEngine.ts", operation: "ingestErrorEvents" });
     }
     await bumpGroupUserCounts(db, userPairs, now);
     // A collector-less source (id: null — e.g. a manual "Report error") has no
     // collector row whose last-event timestamp to touch.
     if (collector.id != null) {
       await db.update(errorCollectors).set({ lastEventAt: now }).where(eq(errorCollectors.id, collector.id)).catch((error) => {
-        console.error('[suppressed-error] application/quality/ingestEngine.ts:162 ingestErrorEvents', { error });
+        reportCaughtError(error, { source: "application/quality/ingestEngine.ts", operation: "ingestErrorEvents" });
       });
     }
     for (const projectId of touchedProjects) await bumpCacheVersion(env, qualityGroupsVersionKey(projectId));
@@ -201,7 +202,7 @@ async function bumpGroupUserCounts(
   } catch (error) {
     // Affected-user count is non-critical; never fail the ingest over it.
   
-    console.error('[suppressed-error] application/quality/ingestEngine.ts:197 bumpGroupUserCounts', { error });
+    reportCaughtError(error, { source: "application/quality/ingestEngine.ts", operation: "bumpGroupUserCounts" });
   }
 }
 

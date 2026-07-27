@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Studio voice-clone routes (Voice PRD #1994): `/api/studio/voice-clones/*`.
  *
@@ -109,7 +110,7 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
         const parsed = JSON.parse(embeddingRaw);
         if (Array.isArray(parsed)) embedding = parsed.map(Number);
       } catch (error) { /* ignore malformed embedding — reference path still works */ 
-        console.error('[suppressed-error] presentation/routes/studioVoiceCloneRoutes.ts:111 createStudioVoiceCloneRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/studioVoiceCloneRoutes.ts", operation: "createStudioVoiceCloneRoutes" });
       }
     }
 
@@ -318,14 +319,14 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
     // cascade removes their bookkeeping.
     if (env.UPLOADS) {
       if (clone.referenceKey) await env.UPLOADS.delete(clone.referenceKey).catch((error) => {
-        console.error('[suppressed-error] presentation/routes/studioVoiceCloneRoutes.ts:320 createStudioVoiceCloneRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/studioVoiceCloneRoutes.ts", operation: "createStudioVoiceCloneRoutes" });
       });
       const voiceovers = await db
         .select({ audioKey: studioVoiceovers.audioKey })
         .from(studioVoiceovers)
         .where(eq(studioVoiceovers.cloneId, cloneId));
       await Promise.all(voiceovers.map((v) => env.UPLOADS!.delete(v.audioKey).catch((error) => {
-        console.error('[suppressed-error] presentation/routes/studioVoiceCloneRoutes.ts:325 createStudioVoiceCloneRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/studioVoiceCloneRoutes.ts", operation: "createStudioVoiceCloneRoutes" });
       })));
     }
 

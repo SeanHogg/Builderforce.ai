@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * voiceCloneService — the synthesis spine for Voice PRD #1994.
  *
@@ -270,6 +271,6 @@ async function meterSynthesis(
   } catch (error) {
     /* metering must never fail the synthesis request */
   
-    console.error('[suppressed-error] application/studio/voiceCloneService.ts:270 meterSynthesis', { error });
+    reportCaughtError(error, { source: "application/studio/voiceCloneService.ts", operation: "meterSynthesis" });
   }
 }

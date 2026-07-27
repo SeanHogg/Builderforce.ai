@@ -219,6 +219,15 @@ import { addCorsToResponse, corsMiddleware, EXPOSED_HEADERS, ALLOWED_REQUEST_HEA
 import { errorHandler }   from './presentation/middleware/errorHandler';
 import { rateLimitMiddleware } from './presentation/middleware/rateLimitMiddleware';
 import { emulationMiddleware } from './presentation/middleware/emulationMiddleware';
+import {
+  reportCaughtError,
+  reportUnhandledError,
+  configureCaughtErrorReporter,
+  runWithCaughtErrorContext,
+} from './application/observability/caughtErrorReporter';
+import { persistCaughtError } from './infrastructure/observability/persistCaughtError';
+
+configureCaughtErrorReporter(persistCaughtError);
 
 // Durable Objects (must be re-exported so the Workers runtime can instantiate them)
 export { AgentHostRelayDO } from './infrastructure/relay/AgentHostRelayDO';
@@ -267,7 +276,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
       if (!project) return;
       const result = await addDependency(db, project.tenantId as number, successorTaskId, predecessorTaskId);
       if (result.ok) await bumpCacheVersion(env, `task-deps-version:project:${projectId}`).catch((error) => {
-        console.error('[suppressed-error] index.ts:269 taskService', { error });
+        reportCaughtError(error, { source: "index.ts", operation: "taskService" });
       });
     });
   const tenantService   = new TenantService(tenantRepo, paymentProvider);
@@ -294,6 +303,13 @@ export function buildApp(env: Env): Hono<HonoEnv> {
 
   // --- Presentation ---
   const app = new Hono<HonoEnv>();
+
+  app.use('*', (c, next) => runWithCaughtErrorContext({
+    env: c.env,
+    method: c.req.method,
+    path: new URL(c.req.url).pathname,
+    waitUntil: (task) => c.executionCtx.waitUntil(task),
+  }, next));
 
   app.use('*', corsMiddleware);
 
@@ -721,35 +737,42 @@ export default {
    * belongs to the runner, so the superadmin force-run route
    * (POST /api/admin/cron/:target) executes the identical set of sweeps BY
    * CONSTRUCTION instead of keeping a second copy of this fan-out in step.
-   */
+  */
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    const cadence = cadenceForCron(event.cron);
-    const sweeps = sweepsForCadence(CRON_SWEEPS, cadence);
-    if (sweeps.length === 0) return;
+    return runWithCaughtErrorContext({
+      env,
+      method: 'CRON',
+      path: `cron:${event.cron}`,
+      waitUntil: (task) => ctx.waitUntil(task),
+    }, async () => {
+      const cadence = cadenceForCron(event.cron);
+      const sweeps = sweepsForCadence(CRON_SWEEPS, cadence);
+      if (sweeps.length === 0) return;
 
-    if (cadence === 'frequent') {
-      // KV work-gate — the single change that lets Neon compute autosuspend.
-      // Reads KV ONLY (no Postgres): SKIP the whole DB fan-out below on an idle
-      // platform so the endpoint scales to zero, RUN it when a write signalled
-      // pending work (dispatch within 5 min) or the floor interval elapsed
-      // (safety net for a missed signal). Fails open. See cronWorkSignal.ts.
-      const tickNowMs = Date.now();
-      const gate = await evaluateCronGate(env, tickNowMs);
-      if (!gate.run) {
-        // Nothing pending and the floor is not due — leave Postgres asleep.
-        return;
+      if (cadence === 'frequent') {
+        // KV work-gate — the single change that lets Neon compute autosuspend.
+        // Reads KV ONLY (no Postgres): SKIP the whole DB fan-out below on an idle
+        // platform so the endpoint scales to zero, RUN it when a write signalled
+        // pending work (dispatch within 5 min) or the floor interval elapsed
+        // (safety net for a missed signal). Fails open. See cronWorkSignal.ts.
+        const tickNowMs = Date.now();
+        const gate = await evaluateCronGate(env, tickNowMs);
+        if (!gate.run) {
+          // Nothing pending and the floor is not due — leave Postgres asleep.
+          return;
+        }
+        // Consume the signal + stamp the floor BEFORE firing sweeps, so a paced
+        // backlog re-signalled mid-tick survives the consume and keeps the next
+        // tick hot.
+        await openCronTick(env, tickNowMs, gate.floorDue);
       }
-      // Consume the signal + stamp the floor BEFORE firing sweeps, so a paced
-      // backlog re-signalled mid-tick survives the consume and keeps the next
-      // tick hot.
-      await openCronTick(env, tickNowMs, gate.floorDue);
-    }
 
-    // ONE per-tenant dispatch ceiling for this whole tick, shared by every sweep
-    // that can start a billable run. Each sweep used to enforce its own private
-    // 25/tenant, so the ceilings never composed and a tenant could take 25 from
-    // the executor plus more from the manager in the same five minutes.
-    dispatchCronSweeps(sweeps, { env, budget: createTickDispatchBudget() }, (p) => ctx.waitUntil(p));
+      // ONE per-tenant dispatch ceiling for this whole tick, shared by every sweep
+      // that can start a billable run. Each sweep used to enforce its own private
+      // 25/tenant, so the ceilings never composed and a tenant could take 25 from
+      // the executor plus more from the manager in the same five minutes.
+      dispatchCronSweeps(sweeps, { env, budget: createTickDispatchBudget() }, (p) => ctx.waitUntil(p));
+    });
   },
 
   /**
@@ -757,15 +780,20 @@ export default {
    * `inbound-email` workflow triggers (local-part = trigger token). Requires the
    * Email Routing binding to be provisioned (see Gap Register). Typed loosely so
    * the build doesn't depend on the email-types being present.
-   */
+  */
   async email(message: ForwardableEmailLike, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(
-      (async () => {
+    return runWithCaughtErrorContext({
+      env,
+      method: 'EMAIL',
+      path: `email:${message.to}`,
+      waitUntil: (task) => ctx.waitUntil(task),
+    }, async () => {
+      ctx.waitUntil((async () => {
         let text = '';
         try {
           if (message.raw) text = await new Response(message.raw as ReadableStream).text();
         } catch (error) { /* best-effort body read */ 
-          console.error('[suppressed-error] index.ts:765 email', { error });
+          reportCaughtError(error, { source: "index.ts", operation: "email" });
         }
         const result = await handleInboundEmail(env, {
           to: message.to,
@@ -774,8 +802,11 @@ export default {
           text,
         });
         if (!result.ok) console.warn('[email:wf-trigger] not dispatched:', result.error);
-      })().catch((err) => console.error('[email:wf-trigger] failed', err)),
-    );
+      })().catch((error) => reportCaughtError(error, {
+        source: 'index.ts',
+        operation: 'email workflow trigger',
+      })));
+    });
   },
   async fetch(rawRequest: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     // Normalize the same-origin gateway path (builderforce.ai/gateway/*) → the bare
@@ -814,7 +845,14 @@ export default {
     try {
       return await buildApp(env).fetch(request, env, ctx);
     } catch (err) {
-      console.error('[fetch:top-level] app construction or dispatch threw', err);
+      await reportUnhandledError(err, {
+        source: 'index.ts',
+        operation: 'top-level fetch',
+      }, {
+        env,
+        method: request.method,
+        path: new URL(request.url).pathname,
+      });
       const origin = request.headers.get('Origin');
       const allow = optionCorsAllowOrigin(origin, env.CORS_ORIGINS);
       const message = err instanceof Error ? err.message : String(err);

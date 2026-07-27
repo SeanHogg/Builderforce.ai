@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Generic segment-scoped tracker CRUD — the single factory behind every simple
  * tracker surface (governance compliance tools, product-management trackers, …).
@@ -101,7 +102,7 @@ function maybeEmit(
   const eventId = typeof row.id === 'string' || typeof row.id === 'number' ? String(row.id) : crypto.randomUUID();
   waitUntil(
     emitWebhookEvent(db, { tenantId, segmentId, eventType: e.event, eventId, data: row }).catch((error) => { /* best-effort */ 
-      console.error('[suppressed-error] presentation/routes/segmentTrackerRoutes.ts:103 maybeEmit', { error });
+      reportCaughtError(error, { source: "presentation/routes/segmentTrackerRoutes.ts", operation: "maybeEmit" });
     }),
   );
 }

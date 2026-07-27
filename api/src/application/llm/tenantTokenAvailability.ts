@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * tenantTokenAvailability — context-free answer to "does this tenant have token
  * budget left right now, and if not, why". THE single check the autonomous
@@ -210,7 +211,7 @@ export async function resolveSuperadminUnlimited(
     } catch (error) {
       /* fall through to the tenant-membership check */
     
-      console.error('[suppressed-error] application/llm/tenantTokenAvailability.ts:210 resolveSuperadminUnlimited', { error });
+      reportCaughtError(error, { source: "application/llm/tenantTokenAvailability.ts", operation: "resolveSuperadminUnlimited" });
     }
   }
   return tenantHasSuperadminMember(db, tenantId, env);

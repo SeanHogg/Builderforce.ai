@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Bidirectional tool-call sanitizer — the SINGLE place the gateway makes
  * OpenAI-shape tool calls safe for strict vendors. It normalizes two fields
@@ -362,7 +363,7 @@ export function restoreStreamToolNames(source: ReadableStream<Uint8Array>): Read
   });
 
   source.pipeTo(writable).catch((error) => { /* stream may be cancelled by client */ 
-    console.error('[suppressed-error] application/llm/toolNameSanitizer.ts:364 restoreStreamToolNames', { error });
+    reportCaughtError(error, { source: "application/llm/toolNameSanitizer.ts", operation: "restoreStreamToolNames" });
   });
   return readable;
 }

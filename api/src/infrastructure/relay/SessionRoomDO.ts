@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * SessionRoomDO — a minimal WebSocket fan-out relay for collaborative sessions
  * (planning poker, retrospectives). One DO instance per room (keyed by
@@ -30,7 +31,7 @@ export class SessionRoomDO implements DurableObject {
           const body = await request.text();
           if (body) frame = body;
         } catch (error) { /* keep default */ 
-          console.error('[suppressed-error] infrastructure/relay/SessionRoomDO.ts:32 fetch', { error });
+          reportCaughtError(error, { source: "infrastructure/relay/SessionRoomDO.ts", operation: "fetch" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
         }
         this.broadcast(frame);
         return new Response(null, { status: 204 });
@@ -44,7 +45,7 @@ export class SessionRoomDO implements DurableObject {
     server.addEventListener('close', () => this.clients.delete(server));
     server.addEventListener('error', () => this.clients.delete(server));
     try { server.send('{"type":"connected"}'); } catch (error) { /* ignore */ 
-      console.error('[suppressed-error] infrastructure/relay/SessionRoomDO.ts:44 fetch', { error });
+      reportCaughtError(error, { source: "infrastructure/relay/SessionRoomDO.ts", operation: "fetch" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
     }
 
     return new Response(null, { status: 101, webSocket: client });

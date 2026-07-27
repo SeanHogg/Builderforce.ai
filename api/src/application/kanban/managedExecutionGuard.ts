@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { projects, swimlanes, tasks } from '../../infrastructure/database/schema';
@@ -41,12 +42,12 @@ export async function authorizeManagedTaskExecution(
 
   const authority = await resolveManagedLaneAuthority(db, { tenantId, swimlaneId: lane.id, task })
     .catch((error) => {
-      console.error('[managed-execution-guard] lane authority resolution failed', {
+      reportCaughtError(error, { source: "application/kanban/managedExecutionGuard.ts", operation: "authority", context: { logMessage: '[managed-execution-guard] lane authority resolution failed', details: {
         tenantId,
         taskId,
         swimlaneId: lane.id,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      });
+      } } });
       return { roleKeys: [] as string[], approvers: [], tier: 'none' as const };
     });
   if (!authority.roleKeys.includes(roleKey)) {

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * runMonitorSweep — the frequent-tick (every 5 min) cron that evaluates sweep-driven
  * monitors: heartbeat staleness, HTTP checks, and metric thresholds. Webhook/manual
@@ -46,7 +47,7 @@ export async function runMonitorSweep(env: Env): Promise<MonitorSweepResult> {
       if (result === 'ok' && m.status === 'breached') out.recovered += 1;
       await svc.applyResult(m.tenantId, m, result, env);
     } catch (err) {
-      console.error('[cron:monitors] monitor', m.id, err);
+      reportCaughtError(err, { source: "application/monitoring/runMonitorSweep.ts", operation: "evaluateOne", context: { logMessage: '[cron:monitors] monitor', details: m.id } });
     }
   };
 

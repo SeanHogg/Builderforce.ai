@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * runEscalationSweep — the frequent-tick cron that drives time-based escalation.
  *
@@ -26,7 +27,7 @@ export async function runEscalationSweep(env: Env): Promise<EscalationSweepResul
     try {
       if (await svc.evaluateIncident(env, inc.tenantId, inc)) escalated += 1;
     } catch (err) {
-      console.error('[cron:escalation] incident', inc.id, err);
+      reportCaughtError(err, { source: "application/incident/runEscalationSweep.ts", operation: "runEscalationSweep", context: { logMessage: '[cron:escalation] incident', details: inc.id } });
     }
   }
   return { openIncidents: open.length, escalated };

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Task key allocation for the DIRECT-INSERT paths.
  *
@@ -52,7 +53,7 @@ export async function withDirectTaskKey<T>(
     } catch (error) {
       /* likely a unique-key collision — try the next sequence number */
     
-      console.error('[suppressed-error] application/task/taskKeys.ts:52 withDirectTaskKey', { error });
+      reportCaughtError(error, { source: "application/task/taskKeys.ts", operation: "withDirectTaskKey" });
     }
   }
   return null;

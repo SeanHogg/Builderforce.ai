@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { eq } from 'drizzle-orm';
 import { boards, swimlanes } from '../../infrastructure/database/schema';
 import { DEFAULT_SWIMLANES } from './defaultSwimlanes';
@@ -108,7 +109,7 @@ export async function findOrCreateBoard(
     } catch (e) {
       // Lane seed failed — roll the board back so no empty board lingers.
       await db.delete(boards).where(eq(boards.id, created.id)).catch((error) => { /* best-effort */ 
-        console.error('[suppressed-error] application/swimlane/findOrCreateBoard.ts:110 findOrCreateBoard', { error });
+        reportCaughtError(error, { source: "application/swimlane/findOrCreateBoard.ts", operation: "findOrCreateBoard" });
       });
       throw e;
     }

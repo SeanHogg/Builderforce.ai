@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Scheduler sweep — the cron-driven half of trigger activation. Fires every
  * `schedule` and `rss` trigger whose `next_run_at` is due, instantiates a run on
@@ -181,7 +182,7 @@ export async function runDueTriggers(env: SchedulerEnv): Promise<SweepResult> {
       else fired++;
     } catch (e) {
       errors++;
-      console.error(`[cron:wf-triggers] trigger ${row.id} failed`, e);
+      reportCaughtError(e, { source: "application/workflow/runDueTriggers.ts", operation: "runDueTriggers", context: { logMessage: `[cron:wf-triggers] trigger ${row.id} failed`, details: e } });
     }
   }
 

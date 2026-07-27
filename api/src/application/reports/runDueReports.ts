@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Scheduled report dispatcher — the cron consumer that makes report_schedules
  * actually fire. For each due schedule it generates the report via an injected
@@ -93,7 +94,7 @@ export async function runDueReports(env: Env, generate: ScheduledReportGenerator
         }
       }
     } catch (err) {
-      console.error('[cron:reports] generate/send failed', s.id, err);
+      reportCaughtError(err, { source: "application/reports/runDueReports.ts", operation: "runDueReports", context: { logMessage: '[cron:reports] generate/send failed', details: s.id } });
     }
     // Advance the watermark regardless of success so a failing schedule paces out
     // (it retries on its next cadence, not every tick).
@@ -103,7 +104,7 @@ export async function runDueReports(env: Env, generate: ScheduledReportGenerator
         .set({ lastRunAt: now, nextRunAt: computeNextRun(s.schedule, s.deliveryHour, now), updatedAt: now })
         .where(eq(reportSchedules.id, s.id));
     } catch (err) {
-      console.error('[cron:reports] watermark update failed', s.id, err);
+      reportCaughtError(err, { source: "application/reports/runDueReports.ts", operation: "runDueReports", context: { logMessage: '[cron:reports] watermark update failed', details: s.id } });
     }
   }
 

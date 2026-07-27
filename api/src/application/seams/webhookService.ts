@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Outbound webhook emitter for the cross-domain (channel-3) seams (spec 05 §4.3).
  *
@@ -205,7 +206,7 @@ export async function emitWebhookEvent(db: Db, input: EmitInput, deps: EmitDeps 
       } catch (err) {
         await recordDeliveryFailure(db, delivery.id, 1, timestamp, err)
           .catch((error) => { /* never let bookkeeping throw into the emit path */ 
-            console.error('[suppressed-error] application/seams/webhookService.ts:206 emitWebhookEvent', { error });
+            reportCaughtError(error, { source: "application/seams/webhookService.ts", operation: "emitWebhookEvent" });
           });
       }
     }),
@@ -267,7 +268,7 @@ export async function runWebhookRetrySweep(env: Env, nowMs: number = Date.now(),
         .set({ nextRetryAt: null, lastError: !row.active ? 'subscription inactive' : 'no stored payload' })
         .where(eq(webhookDeliveries.id, row.id))
         .catch((error) => { /* bookkeeping best-effort */ 
-          console.error('[suppressed-error] application/seams/webhookService.ts:263 runWebhookRetrySweep', { error });
+          reportCaughtError(error, { source: "application/seams/webhookService.ts", operation: "runWebhookRetrySweep" });
         });
       continue;
     }
@@ -297,7 +298,7 @@ export async function runWebhookRetrySweep(env: Env, nowMs: number = Date.now(),
     } catch (err) {
       await recordDeliveryFailure(db, row.id, attempts, nowSec, err)
         .catch((error) => { /* never let bookkeeping throw into the sweep */ 
-          console.error('[suppressed-error] application/seams/webhookService.ts:294 runWebhookRetrySweep', { error });
+          reportCaughtError(error, { source: "application/seams/webhookService.ts", operation: "runWebhookRetrySweep" });
         });
     }
   }

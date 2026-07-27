@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * PMO tier — /api/pmo/*
  *
@@ -322,7 +323,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
     await bumpCacheVersion(c.env as Env, pmoVersionKey(tenantId));
     // A task/initiative link changes the project's linkedGoalCount → refresh the 360.
     await invalidateProjectsList(c.env as Env, tenantId).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/pmoRoutes.ts:324 createPmoRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/pmoRoutes.ts", operation: "createPmoRoutes" });
     });
     return c.json(rows[0], 201);
   });
@@ -335,7 +336,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
     if (!rows[0]) return c.json({ error: 'not found' }, 404);
     await bumpCacheVersion(c.env as Env, pmoVersionKey(tenantId));
     await invalidateProjectsList(c.env as Env, tenantId).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/pmoRoutes.ts:335 createPmoRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/pmoRoutes.ts", operation: "createPmoRoutes" });
     });
     return c.json({ deleted: rows[0].id });
   });
@@ -371,7 +372,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
       { tenantId, projectId: body.projectId ?? undefined },
     );
     await bumpCacheVersion(c.env as Env, pmoVersionKey(tenantId)).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/pmoRoutes.ts:369 createPmoRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/pmoRoutes.ts", operation: "createPmoRoutes" });
     });
     return c.json(result);
   });

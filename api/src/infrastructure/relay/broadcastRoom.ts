@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * broadcastRoom — push a frame to everyone watching a realtime room so clients
  * re-fetch (no polling). Shared by the poker/retro surfaces and the ceremony
@@ -22,7 +23,7 @@ export async function broadcastRoom(
   } catch (error) {
     /* best-effort; the surface still works without live push */
   
-    console.error('[suppressed-error] infrastructure/relay/broadcastRoom.ts:22 broadcastRoom', { error });
+    reportCaughtError(error, { source: "infrastructure/relay/broadcastRoom.ts", operation: "broadcastRoom" });
   }
 }
 

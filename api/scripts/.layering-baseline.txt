@@ -3,7 +3,6 @@
 # Regenerate with: node scripts/check-layering.mjs --update
 presentation/middleware/authMiddleware.ts
 presentation/middleware/emulationMiddleware.ts
-presentation/middleware/errorHandler.ts
 presentation/middleware/featureGate.ts
 presentation/middleware/planLimitsGuard.ts
 presentation/middleware/rateLimitMiddleware.ts

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * stallWatch — the persistence half of the AI Manager's stuck-ticket accountability.
  *
@@ -202,7 +203,7 @@ export async function recordStall(
   } catch (error) {
     /* the register is observability — never let it fail the manager pass */
   
-    console.error('[suppressed-error] application/manager/stallWatch.ts:202 recordStall', { error });
+    reportCaughtError(error, { source: "application/manager/stallWatch.ts", operation: "recordStall" });
   }
 }
 

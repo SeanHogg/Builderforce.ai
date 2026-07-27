@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Activity + timecard routes.
  *
@@ -607,7 +608,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const id = c.req.param('id');
     let reason: string | null = null;
     try { const b = await c.req.json<{ reason?: string }>(); reason = b.reason ?? null; } catch (error) { /* optional */ 
-      console.error('[suppressed-error] presentation/routes/activityRoutes.ts:609 createTimecardRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/activityRoutes.ts", operation: "createTimecardRoutes" });
     }
     const db = buildDatabase(c.env);
     const rows = await db

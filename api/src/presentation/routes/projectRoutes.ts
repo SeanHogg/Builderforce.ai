@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono, type Context } from 'hono';
 import { and, count, eq, inArray, max, min, sql } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
@@ -694,7 +695,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       await new KanbanTemplateService(db)
         .applyToProject(c.env as Env, tenantId, plain.id, templateId, plain.name)
         .catch((error) => {
-          console.error('[suppressed-error] presentation/routes/projectRoutes.ts:694 createProjectRoutes', { error });
+          reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
         });
     }
     // Give the project a DEFAULT Evermind so it always has a self-learning model to
@@ -702,7 +703,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     // Best-effort (never blocks creation); inference stays OFF until opted in.
     await provisionDefaultProjectEvermind(c.env as Env, db, tenantId, project.toPlain().id, name);
     await invalidateProjectsList(c.env as Env, tenantId).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/projectRoutes.ts:702 createProjectRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
     });
     return c.json(project.toPlain(), 201);
   });
@@ -761,7 +762,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         tenantId,
       );
       await invalidateProjectsList(c.env as Env, tenantId).catch((error) => {
-        console.error('[suppressed-error] presentation/routes/projectRoutes.ts:759 createProjectRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
       });
       return c.json({ action: 'updated', project: updated.toPlain() });
     }
@@ -783,7 +784,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     // Default Evermind for every newly-created project (see POST / above).
     await provisionDefaultProjectEvermind(c.env as Env, db, tenantId, created.toPlain().id, name);
     await invalidateProjectsList(c.env as Env, tenantId).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/projectRoutes.ts:779 createProjectRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
     });
     return c.json({ action: 'created', project: created.toPlain() }, 201);
   });
@@ -848,14 +849,14 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       githubRepoUrl: assignment.value.githubRepoUrl,
     }, tenantId);
     await invalidateProjectsList(c.env as Env, tenantId).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/projectRoutes.ts:842 createProjectRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
     });
     // A Project Key change re-keys every task (`<oldKey>-NNN` → `<newKey>-NNN`) in
     // updateProject; bust the cached Epic trees for this project so they don't
     // serve stale keys. Task-list reads are uncached, so they reflect it already.
     if (project.key !== existing.key) {
       await bumpCacheVersion(c.env as Env, `task-tree-version:project:${existing.id}`).catch((error) => {
-        console.error('[suppressed-error] presentation/routes/projectRoutes.ts:847 createProjectRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
       });
     }
     return c.json(project.toPlain());
@@ -952,7 +953,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       : await projectService.updateProject(project.id, { status: ProjectStatus.ACTIVE }, tenantId);
 
     await invalidateProjectsList(c.env as Env, tenantId).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/projectRoutes.ts:942 createProjectRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
     });
     return c.json({
       project: finalProject.toPlain(),
@@ -970,7 +971,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     const project = await projectService.getProject(c.req.param('id'), tenantId);
     await projectService.deleteProject(project.id, tenantId);
     await invalidateProjectsList(c.env as Env, tenantId).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/projectRoutes.ts:958 createProjectRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
     });
     return c.body(null, 204);
   });

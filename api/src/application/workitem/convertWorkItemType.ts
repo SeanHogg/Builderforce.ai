@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Convert a work-item's TYPE across the board ⇄ OKR boundary — the single place
  * that turns a board task into an Epic, an Epic into an OKR Objective, or an
@@ -75,13 +76,13 @@ async function invalidateCaches(env: Env | undefined, tenantId: number, projectI
   if (!env) return;
   await Promise.all([
     projectId != null ? bumpCacheVersion(env, `task-tree-version:project:${projectId}`).catch((error) => {
-      console.error('[suppressed-error] application/workitem/convertWorkItemType.ts:77 invalidateCaches', { error });
+      reportCaughtError(error, { source: "application/workitem/convertWorkItemType.ts", operation: "invalidateCaches" });
     }) : Promise.resolve(),
     invalidateProjectsList(env, tenantId).catch((error) => {
-      console.error('[suppressed-error] application/workitem/convertWorkItemType.ts:78 invalidateCaches', { error });
+      reportCaughtError(error, { source: "application/workitem/convertWorkItemType.ts", operation: "invalidateCaches" });
     }),
     bumpCacheVersion(env, pmoVersionKey(tenantId)).catch((error) => {
-      console.error('[suppressed-error] application/workitem/convertWorkItemType.ts:79 invalidateCaches', { error });
+      reportCaughtError(error, { source: "application/workitem/convertWorkItemType.ts", operation: "invalidateCaches" });
     }),
   ]);
 }

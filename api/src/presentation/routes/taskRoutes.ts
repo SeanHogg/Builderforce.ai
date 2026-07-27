@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono, type Context } from 'hono';
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import { TaskService, type UpdateTaskDto } from '../../application/task/TaskService';
@@ -114,7 +115,7 @@ export async function dispatchTaskFinalize(
         }),
       });
     } catch (error) { /* host offline / relay miss — branch can be finalized manually */ 
-      console.error('[suppressed-error] presentation/routes/taskRoutes.ts:116 dispatchTaskFinalize', { error });
+      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "dispatchTaskFinalize" });
     }
     return;
   }
@@ -146,7 +147,7 @@ export async function dispatchTaskFinalize(
         });
       }
     } catch (error) { /* best-effort — PR can be opened manually from the pushed branch */ 
-      console.error('[suppressed-error] presentation/routes/taskRoutes.ts:146 dispatchTaskFinalize', { error });
+      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "dispatchTaskFinalize" });
     }
   }
 }
@@ -182,7 +183,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       const board = await findCanonicalBoard(db, info.projectId, tenantId).catch(() => null);
       if (board?.lifecycleManaged) {
         await coordinateTicket(c.env as Env, db, runtimeService, { tenantId, taskId: info.taskId }).catch((error) => {
-          console.error('[suppressed-error] presentation/routes/taskRoutes.ts:184 fireLaneAutoRun', { error });
+          reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "fireLaneAutoRun" });
         });
         return;
       }
@@ -217,7 +218,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
         metadata:   o.metadata ?? null,
       });
     })().catch((error) => {
-      console.error('[suppressed-error] presentation/routes/taskRoutes.ts:203 emitTaskActivity', { error });
+      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "emitTaskActivity" });
     }));
   };
 
@@ -228,7 +229,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     projectId == null
       ? Promise.resolve()
       : bumpCacheVersion(env, `task-tree-version:project:${projectId}`).catch((error) => {
-        console.error('[suppressed-error] presentation/routes/taskRoutes.ts:226 bumpTreeVersion', { error });
+        reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "bumpTreeVersion" });
       });
 
   // Parse a positive-int ?project= param, else undefined.
@@ -323,7 +324,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const row = await deleteDependency(db, c.get('tenantId'), edgeId);
     if (!row) return c.json({ error: 'not found' }, 404);
     await bumpCacheVersion(c.env as Env, `task-deps-version:project:${row.projectId}`).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/taskRoutes.ts:319 createTaskRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
     });
     return c.body(null, 204);
   });
@@ -537,7 +538,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const result = await addDependency(db, c.get('tenantId'), successorTaskId, predecessorTaskId, body.depType);
     if (!result.ok) return c.json({ error: result.error }, result.status);
     await bumpCacheVersion(c.env as Env, `task-deps-version:project:${result.edge.projectId}`).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/taskRoutes.ts:531 createTaskRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
     });
     return c.json(result.edge, 201);
   });
@@ -581,12 +582,12 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     await bumpTreeVersion(c.env as Env, epic.toPlain().projectId);
     // New child tasks change the project's task counts → bust the projects-list cache.
     await invalidateProjectsList(c.env as Env, c.get('tenantId')).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/taskRoutes.ts:573 createTaskRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
     });
     // Fan-out writes precedence edges, so the project's dependency read-through cache
     // is stale the moment this returns.
     await bumpCacheVersion(c.env as Env, `task-deps-version:project:${epic.toPlain().projectId}`).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/taskRoutes.ts:576 createTaskRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
     });
     return c.json({ epic: epic.toPlain(), children: children.map(t => t.toPlain()) }, 201);
   });
@@ -613,7 +614,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     await bumpTreeVersion(c.env as Env, created.projectId);
     // A new task changes the project's task counts/dates → bust the projects-list cache.
     await invalidateProjectsList(c.env as Env, c.get('tenantId')).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/taskRoutes.ts:601 createTaskRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
     });
     // Push the new card to everyone watching this project's live board.
     c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, c.get('tenantId'), created.projectId));
@@ -686,7 +687,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     await bumpTreeVersion(c.env as Env, task.toPlain().projectId);
     // status/dueDate/startDate/archived all feed the projects-list aggregates → bust it.
     await invalidateProjectsList(c.env as Env, c.get('tenantId')).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/taskRoutes.ts:672 createTaskRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
     });
     // Live board: push the edit (status move, reassignment, field change) to every
     // client viewing this project so cards/lane chips update without a reload. The
@@ -699,11 +700,11 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // per-tenant cache token. Best-effort — a stale rollup self-heals on the KV TTL.
     if (body.status !== undefined) {
       await invalidateCompletedByAssignee(c.env as Env, c.get('tenantId')).catch((error) => {
-        console.error('[suppressed-error] presentation/routes/taskRoutes.ts:683 createTaskRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
       });
       // ROI time metrics (completed count, cycle time, throughput) move with status.
       await bumpCacheVersion(c.env as Env, `roi-version:tenant:${c.get('tenantId')}`).catch((error) => {
-        console.error('[suppressed-error] presentation/routes/taskRoutes.ts:685 createTaskRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
       });
     }
 
@@ -719,7 +720,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
           toStatus:    body.status,
           actorUserId: (c as any).get('userId') ?? null,
         }).catch((error) => {
-          console.error('[suppressed-error] presentation/routes/taskRoutes.ts:692 createTaskRoutes', { error });
+          reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
         }),
       );
 
@@ -756,7 +757,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
         new ChatTicketService(db, c.env as Env)
           .onTicketAgentAssigned(c.get('tenantId'), kind, String(id), newAgentRef)
           .catch((error) => {
-            console.error('[suppressed-error] presentation/routes/taskRoutes.ts:732 createTaskRoutes', { error });
+            reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
           }),
       );
     }
@@ -806,7 +807,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     await bumpTreeVersion(c.env as Env, body.projectId);
     // The task count shifts between two projects → bust the projects-list cache.
     await invalidateProjectsList(c.env as Env, c.get('tenantId')).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/taskRoutes.ts:782 createTaskRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
     });
     // The card leaves one project's board and joins another's — push both.
     c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, c.get('tenantId'), before?.projectId));
@@ -830,7 +831,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     await bumpTreeVersion(c.env as Env, before?.projectId);
     // Deleting a task changes the project's task counts → bust the projects-list cache.
     await invalidateProjectsList(c.env as Env, c.get('tenantId')).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/taskRoutes.ts:804 createTaskRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
     });
     // Drop the card from every client viewing this project's live board.
     c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, c.get('tenantId'), before?.projectId));
@@ -972,7 +973,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
           toStatus: TaskStatus.IN_PROGRESS,
           actorUserId: null,
         }).catch((error) => {
-          console.error('[suppressed-error] presentation/routes/taskRoutes.ts:937 createTaskRoutes', { error });
+          reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
         }),
       );
     }

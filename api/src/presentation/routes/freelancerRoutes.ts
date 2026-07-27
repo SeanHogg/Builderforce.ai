@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Freelancer marketplace routes — /api/freelancers/* and /api/engagements/*.
  *
@@ -671,7 +672,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
           } satisfies ResumeSuggestions);
         }
       } catch (error) { /* not our native shape */ 
-        console.error('[suppressed-error] presentation/routes/freelancerRoutes.ts:673 createFreelancerRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/freelancerRoutes.ts", operation: "createFreelancerRoutes" });
       }
     }
     return c.json(empty);
@@ -999,7 +1000,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
         metadata: { engagementId: id, freelancerUserId: b.freelancerUserId, status, projectId },
       });
     })().catch((error) => {
-      console.error('[suppressed-error] presentation/routes/freelancerRoutes.ts:988 createEngagementRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/freelancerRoutes.ts", operation: "createEngagementRoutes" });
     }));
     return c.json({ id, status }, 201);
   });
@@ -1043,7 +1044,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     const id = c.req.param('id');
     let reason: string | null = null;
     try { const b = await c.req.json<{ reason?: string }>(); reason = b.reason ?? null; } catch (error) { /* body optional */ 
-      console.error('[suppressed-error] presentation/routes/freelancerRoutes.ts:1041 createEngagementRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/freelancerRoutes.ts", operation: "createEngagementRoutes" });
     }
     const rows = await db.update(freelancerEngagements).set({
       terminatedAt: sql`NOW()`,

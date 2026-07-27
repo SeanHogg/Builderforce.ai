@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * ingestRepoCiEvent — feed a target repo's CI/deploy result back to the cloud
  * execution that produced the change, and validate the POST-MERGE build.
@@ -130,7 +131,7 @@ async function priorAutofixDispatches(db: Db, taskId: number, tenantId: number):
       const sha = (JSON.parse(r.args ?? '{}') as { sha?: unknown }).sha;
       if (typeof sha === 'string' && sha) shas.add(sha);
     } catch (error) { /* pre-sha rows (and malformed args) just don't contribute a sha */ 
-      console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:132 priorAutofixDispatches', { error });
+      reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "priorAutofixDispatches" });
     }
   }
   return { attempts: rows.length, shas };
@@ -195,7 +196,7 @@ async function applyBuildOutcome(
 
   // Persist on the PR row so the in-product Pull Request tab renders status + reason.
   await setPullRequestBuildStatus(db, pr.id, outcome, buildError).catch((error) => {
-    console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:197 applyBuildOutcome', { error });
+    reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "applyBuildOutcome" });
   });
 
   await db.insert(toolAuditEvents).values({
@@ -206,7 +207,7 @@ async function applyBuildOutcome(
     result: `${phaseLabel} ${outcome}${evt.targetUrl ? ` · ${evt.targetUrl}` : ''}`.slice(0, 300),
     ts: new Date(),
   }).catch((error) => {
-    console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:199 applyBuildOutcome', { error });
+    reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "applyBuildOutcome" });
   });
 
   if (outcome === 'success') {
@@ -246,7 +247,7 @@ async function applyBuildOutcome(
       args: JSON.stringify({ phase, sha: evt.sha, attempts: priorAttempts }),
       result: `auto-fix exhausted after ${priorAttempts} attempt(s) — needs human`, ts: new Date(),
     }).catch((error) => {
-      console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:238 applyBuildOutcome', { error });
+      reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "applyBuildOutcome" });
     });
     return { processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix attempts exhausted' };
   }
@@ -261,7 +262,7 @@ async function applyBuildOutcome(
     await setCached(env, autofixClaimKey(tenantId, taskId, evt.sha), { statusKey: evt.statusKey ?? null }, {
       kvTtlSeconds: 3600, l1TtlMs: 3600_000,
     }).catch((error) => { /* claim is an optimization — the dispatch events are the record */ 
-      console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:255 applyBuildOutcome', { error });
+      reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "applyBuildOutcome" });
     });
   }
   return {
@@ -339,7 +340,7 @@ async function ingestDesignerEvent(
   }
 
   await setPullRequestBuildStatus(db, pr.id, outcome, buildError).catch((error) => {
-    console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:333 ingestDesignerEvent', { error });
+    reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestDesignerEvent" });
   });
 
   await db.insert(toolAuditEvents).values({
@@ -350,7 +351,7 @@ async function ingestDesignerEvent(
     result: (outcome === 'success' ? 'PR-branch build passed' : (buildError ?? 'PR-branch build failed')).slice(0, 300),
     ts: new Date(),
   }).catch((error) => { /* telemetry best-effort */ 
-    console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:335 ingestDesignerEvent', { error });
+    reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestDesignerEvent" });
   });
 
   return { processed: true, tenantId: project.tenantId, buildStatus: outcome };
@@ -377,7 +378,7 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
     args: JSON.stringify({ branch: evt.branch, sha: evt.sha, state: evt.rawState, url: evt.targetUrl }),
     result: result.slice(0, 300), ts: new Date(),
   }).catch((error) => { /* telemetry best-effort */ 
-    console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:360 ingestPreMergeEvent', { error });
+    reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestPreMergeEvent" });
   });
 
   // Stamp the build outcome + REASON on the agent's open PR row (so the ticket shows
@@ -415,11 +416,11 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
         // Stamp the merge SHA so the resulting deploy-branch build correlates back.
         if (mr.ok) {
           await markPullRequestMergedByTask(db, task.tenantId, taskId, { mergeSha: mr.sha ?? null }).catch((error) => {
-            console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:403 ingestPreMergeEvent', { error });
+            reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestPreMergeEvent" });
           });
           // Merge on green → ticket complete (same completion path as the human/manager merge).
           await completeTaskOnMerge(env, db, { tenantId: task.tenantId, taskId }).catch((error) => {
-            console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:405 ingestPreMergeEvent', { error });
+            reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestPreMergeEvent" });
           });
         }
       }
@@ -457,7 +458,7 @@ async function ingestPostMergeEvent(db: Db, env: Env, secret: string, evt: RepoC
   // drives auto-fix below.
   if (evt.outcome === 'success') {
     await completeTaskOnMerge(env, db, { tenantId, taskId }).catch((error) => {
-      console.error('[suppressed-error] application/ci/ingestRepoCiEvent.ts:441 ingestPostMergeEvent', { error });
+      reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestPostMergeEvent" });
     });
   }
 
