@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Calendar connections — /api/calendar/*
  *
@@ -111,7 +112,7 @@ export function createCalendarRoutes(db: Db): Hono<HonoEnv> {
         const info = await fetch(provider.accountInfoUrl, { headers: { Authorization: `Bearer ${tok.access_token}` } });
         if (info.ok) accountEmail = provider.parseAccountEmail(await info.json() as Record<string, unknown>);
       } catch (error) { /* email is best-effort */ 
-        console.error('[suppressed-error] presentation/routes/calendarRoutes.ts:113 createCalendarRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/calendarRoutes.ts", operation: "createCalendarRoutes" });
       }
 
       const expiresAt = tok.expires_in ? new Date(Date.now() + tok.expires_in * 1000) : null;
@@ -178,7 +179,7 @@ export function createCalendarRoutes(db: Db): Hono<HonoEnv> {
         const events = await provider.listUpcoming(token, conn.calendarId, { maxResults: 25, timeMinISO, timeMaxISO });
         for (const e of events) all.push({ ...e, provider: conn.provider as CalendarProviderName });
       } catch (error) { /* skip a failing provider, still return the rest */ 
-        console.error('[suppressed-error] presentation/routes/calendarRoutes.ts:178 createCalendarRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/calendarRoutes.ts", operation: "createCalendarRoutes" });
       }
     }
     all.sort((a, b) => a.startISO.localeCompare(b.startISO));

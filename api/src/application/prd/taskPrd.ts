@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Shared task-PRD helpers — the single source of truth for drafting a task's
  * PRD and linking PRDs to tasks. Used by BOTH the cloud-execution path
@@ -57,7 +58,7 @@ export async function draftTaskPrd(
       return stripPrdMarkdownFence((await readProxyChoice(gen)).content);
     }
   } catch (error) { /* generation failed — caller treats '' as "no PRD" */ 
-    console.error('[suppressed-error] application/prd/taskPrd.ts:59 draftTaskPrd', { error });
+    reportCaughtError(error, { source: "application/prd/taskPrd.ts", operation: "draftTaskPrd" });
   }
   return '';
 }
@@ -131,7 +132,7 @@ export async function linkSpecToTask(
       await upsert;
     }
   } catch (error) { /* best-effort */ 
-    console.error('[suppressed-error] application/prd/taskPrd.ts:131 linkSpecToTask', { error });
+    reportCaughtError(error, { source: "application/prd/taskPrd.ts", operation: "linkSpecToTask" });
   }
 }
 
@@ -197,7 +198,7 @@ export async function ensureTaskPrdRecord(
       .values({ id: specId, tenantId: args.tenantId, projectId: args.projectId, goal: args.title, status: 'draft', prd, createdAt: now, updatedAt: now })
       .onConflictDoUpdate({ target: [specs.id], set: { prd, goal: args.title, updatedAt: now } });
   } catch (error) { /* persistence failed — still return the PRD for use as context */ 
-    console.error('[suppressed-error] application/prd/taskPrd.ts:195 ensureTaskPrdRecord', { error });
+    reportCaughtError(error, { source: "application/prd/taskPrd.ts", operation: "ensureTaskPrdRecord" });
   }
 
   await linkSpecToTask(db, { taskId: args.taskId, specId, tenantId: args.tenantId, isPrimary: true });

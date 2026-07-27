@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../observability/caughtErrorReporter';
 /**
  * Vendor UPSTREAM-HEALTH tracking — an ORDERING signal for the BYO seed.
  *
@@ -102,7 +103,7 @@ async function readRecord(env: VendorHealthEnv, vendorId: string): Promise<Healt
       const raw = await env.AUTH_CACHE_KV.get(key);
       return raw ? (JSON.parse(raw) as HealthRecord) : null;
     } catch (error) { /* fall through to the in-memory copy */ 
-      console.error('[suppressed-error] application/llm/vendors/vendorHealth.ts:104 readRecord', { error });
+      reportCaughtError(error, { source: "application/llm/vendors/vendorHealth.ts", operation: "readRecord" });
     }
   }
   const local = memoryHealth.get(key);
@@ -115,13 +116,13 @@ async function writeRecord(env: VendorHealthEnv, vendorId: string, record: Healt
   const key = healthKey(vendorId);
   memoryHealth.set(key, { record, until: record.at + HEALTH_TTL_SECONDS * 1000 });
   await invalidateCached(env as unknown as Env, key).catch((error) => { /* advisory */ 
-    console.error('[suppressed-error] application/llm/vendors/vendorHealth.ts:117 writeRecord', { error });
+    reportCaughtError(error, { source: "application/llm/vendors/vendorHealth.ts", operation: "writeRecord" });
   });
   if (!env.AUTH_CACHE_KV) return;
   try {
     await env.AUTH_CACHE_KV.put(key, JSON.stringify(record), { expirationTtl: HEALTH_TTL_SECONDS });
   } catch (error) { /* advisory — health is a hint, never a correctness requirement */ 
-    console.error('[suppressed-error] application/llm/vendors/vendorHealth.ts:119 writeRecord', { error });
+    reportCaughtError(error, { source: "application/llm/vendors/vendorHealth.ts", operation: "writeRecord" });
   }
 }
 
@@ -153,11 +154,11 @@ export async function recordVendorUpstreamSuccess(
   const key = healthKey(vendorId);
   memoryHealth.delete(key);
   await invalidateCached(env as unknown as Env, key).catch((error) => { /* advisory */ 
-    console.error('[suppressed-error] application/llm/vendors/vendorHealth.ts:153 recordVendorUpstreamSuccess', { error });
+    reportCaughtError(error, { source: "application/llm/vendors/vendorHealth.ts", operation: "recordVendorUpstreamSuccess" });
   });
   if (!env.AUTH_CACHE_KV) return;
   try { await env.AUTH_CACHE_KV.delete(key); } catch (error) { /* advisory */ 
-    console.error('[suppressed-error] application/llm/vendors/vendorHealth.ts:151 recordVendorUpstreamSuccess', { error });
+    reportCaughtError(error, { source: "application/llm/vendors/vendorHealth.ts", operation: "recordVendorUpstreamSuccess" });
   }
 }
 

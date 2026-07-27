@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * BYO credential ALERTING — the single place a broken connected account gets both
  * recorded and COMMUNICATED.
@@ -94,7 +95,7 @@ export async function raiseProviderAuthAlertsFromFailovers(
   for (const alert of alerts) {
     const detail = failovers.find((f) => f.vendor === alert.vendor)?.detail ?? '';
     await raiseProviderAuthAlert(env, tenantId, alert, detail).catch((error) => { /* advisory */ 
-      console.error('[suppressed-error] application/llm/byoCredentialAlerting.ts:96 raiseProviderAuthAlertsFromFailovers', { error });
+      reportCaughtError(error, { source: "application/llm/byoCredentialAlerting.ts", operation: "raiseProviderAuthAlertsFromFailovers" });
     });
   }
 }
@@ -125,7 +126,7 @@ export async function notifyBrokenProviders(
       // No request in scope on a cron tick, and the gateway path is fire-and-forget —
       // locale resolves from the recipient's stored preference either way.
     ).catch((error) => { /* one undeliverable address must not suppress the others */ 
-      console.error('[suppressed-error] application/llm/byoCredentialAlerting.ts:118 notifyBrokenProviders', { error });
+      reportCaughtError(error, { source: "application/llm/byoCredentialAlerting.ts", operation: "notifyBrokenProviders" });
     })));
     return recipients;
   } catch {

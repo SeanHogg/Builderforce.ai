@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Per-tenant API rate limiting middleware.
  *
@@ -121,7 +122,7 @@ export const rateLimitMiddleware: MiddlewareHandler<RateLimitHonoEnv> = async (c
   } catch (error) {
     // DO unavailable — allow request through
   
-    console.error('[suppressed-error] presentation/middleware/rateLimitMiddleware.ts:121 rateLimitMiddleware', { error });
+    reportCaughtError(error, { source: "presentation/middleware/rateLimitMiddleware.ts", operation: "rateLimitMiddleware" });
   }
 
   return next();

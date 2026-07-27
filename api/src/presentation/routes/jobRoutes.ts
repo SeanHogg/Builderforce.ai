@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Job postings + proposals (the bidding side of the freelance marketplace) and the
  * in-app notification feed.
@@ -585,7 +586,7 @@ export function createNotificationRoutes(): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     let ids: number[] | null = null;
     try { const b = await c.req.json<{ ids?: number[] }>(); ids = Array.isArray(b.ids) ? b.ids.map(Number).filter(Number.isFinite) : null; } catch (error) { /* mark all */ 
-      console.error('[suppressed-error] presentation/routes/jobRoutes.ts:587 createNotificationRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/jobRoutes.ts", operation: "createNotificationRoutes" });
     }
     if (ids && ids.length > 0) {
       await db

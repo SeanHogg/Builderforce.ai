@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * laneEntryTrigger — the ONE funnel every writer that lands a ticket in a lane
  * goes through.
@@ -334,7 +335,7 @@ export async function maybeAutoRunOnLaneEntry(
           detail:        { taskId: args.taskId, lane, approvalId: gate.approvalId, reason: gate.reason },
           result:        `Auto-run held for approval (${gate.reason}) on task ${args.taskId}, lane '${lane}'.`.slice(0, 300),
         }).catch((error) => { /* best-effort telemetry — never block the trigger */ 
-          console.error('[suppressed-error] application/swimlane/laneEntryTrigger.ts:327 maybeAutoRunOnLaneEntry', { error });
+          reportCaughtError(error, { source: "application/swimlane/laneEntryTrigger.ts", operation: "maybeAutoRunOnLaneEntry" });
         });
         return false;
       }
@@ -383,7 +384,7 @@ export async function maybeAutoRunOnLaneEntry(
         + `${evaln.decision.agentRef ? ` as ${evaln.decision.agentRef}` : ''}`
         + `${evaln.managedRole ? ` acting as '${evaln.managedRole.roleKey}'` : ''}.`).slice(0, 300),
     }).catch((error) => { /* best-effort telemetry — never block the trigger */ 
-      console.error('[suppressed-error] application/swimlane/laneEntryTrigger.ts:366 maybeAutoRunOnLaneEntry', { error });
+      reportCaughtError(error, { source: "application/swimlane/laneEntryTrigger.ts", operation: "maybeAutoRunOnLaneEntry" });
     });
     return true;
   } catch (err) {
@@ -397,7 +398,7 @@ export async function maybeAutoRunOnLaneEntry(
     // original dropped-dispatch bug, so the error gets its own distinct event.
     const message = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack ?? null : null;
-    console.error(`[auto_run_error] task ${args.taskId} lane '${args.status}':`, err);
+    reportCaughtError(err, { source: "application/swimlane/laneEntryTrigger.ts", operation: "maybeAutoRunOnLaneEntry", context: { logMessage: `[auto_run_error] task ${args.taskId} lane '${args.status}':`, details: err } });
     // STATE-GATED, like every skip beside it. An error is not exempt from the write
     // amplification rule: the sweep re-evaluates a broken ticket every few minutes, and
     // a recurring exception (a managed refusal before it became a first-class skip, a
@@ -416,7 +417,7 @@ export async function maybeAutoRunOnLaneEntry(
         detail:        { taskId: args.taskId, lane: args.status, error: message, stack },
         result:        `Auto-run failed with an error for task ${args.taskId} on lane '${args.status}': ${message}`.slice(0, 300),
       }).catch((error) => { /* telemetry is best-effort — never rethrow out of the trigger */ 
-        console.error('[suppressed-error] application/swimlane/laneEntryTrigger.ts:405 maybeAutoRunOnLaneEntry', { error });
+        reportCaughtError(error, { source: "application/swimlane/laneEntryTrigger.ts", operation: "maybeAutoRunOnLaneEntry" });
       });
     }
     return false;
@@ -480,7 +481,7 @@ export async function onTaskLandedInLane(env: Env, db: Db, signal: LaneEntrySign
   } catch (err) {
     // The trigger instruments its OWN throws; this catch only covers the resolution
     // step above, which must never break the writer that produced the ticket.
-    console.error(`[lane-entry] resolve failed for task ${signal.taskId}`, err);
+    reportCaughtError(err, { source: "application/swimlane/laneEntryTrigger.ts", operation: "onTaskLandedInLane", context: { logMessage: `[lane-entry] resolve failed for task ${signal.taskId}`, details: err } });
     return false;
   }
 }

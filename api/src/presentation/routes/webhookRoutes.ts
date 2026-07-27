@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * POST /api/webhooks/payment
  *
@@ -40,7 +41,7 @@ export function createWebhookRoutes(
     try {
       event = await paymentProvider.parseWebhook(rawBody, signatureHeader);
     } catch (err) {
-      console.error('[webhook] signature verification failed:', err);
+      reportCaughtError(err, { source: "presentation/routes/webhookRoutes.ts", operation: "createWebhookRoutes", context: { logMessage: '[webhook] signature verification failed:', details: err } });
       return c.json({ error: 'Invalid signature' }, 401);
     }
 
@@ -75,7 +76,7 @@ export function createWebhookRoutes(
             try {
               await paymentProvider.detachCards({ paymentMethodId: outcome.replacedPaymentMethodId });
             } catch (detachErr) {
-              console.warn('[webhook] replaced card detach failed (orphaned at provider):', detachErr);
+              reportCaughtError(detachErr, { source: "presentation/routes/webhookRoutes.ts", operation: "createWebhookRoutes", level: 'warning', context: { logMessage: '[webhook] replaced card detach failed (orphaned at provider):', details: detachErr } });
             }
           }
         } else {
@@ -86,7 +87,7 @@ export function createWebhookRoutes(
         }
         return c.json({ received: true, processed: known });
       } catch (err) {
-        console.error('[webhook] card validation update failed:', err);
+        reportCaughtError(err, { source: "presentation/routes/webhookRoutes.ts", operation: "createWebhookRoutes", context: { logMessage: '[webhook] card validation update failed:', details: err } });
         return c.json({ error: 'Processing failed' }, 500);
       }
     }
@@ -94,7 +95,7 @@ export function createWebhookRoutes(
     try {
       await tenantService.handleWebhookEvent(event);
     } catch (err) {
-      console.error('[webhook] handleWebhookEvent failed:', err);
+      reportCaughtError(err, { source: "presentation/routes/webhookRoutes.ts", operation: "createWebhookRoutes", context: { logMessage: '[webhook] handleWebhookEvent failed:', details: err } });
       // Return 500 so the provider retries
       return c.json({ error: 'Processing failed' }, 500);
     }
@@ -121,7 +122,7 @@ export function createWebhookRoutes(
           await paymentProvider.detachCards({ paymentMethodId: clearedPaymentMethodId });
         }
       } catch (err) {
-        console.warn('[webhook] card release on subscription end failed:', err);
+        reportCaughtError(err, { source: "presentation/routes/webhookRoutes.ts", operation: "createWebhookRoutes", level: 'warning', context: { logMessage: '[webhook] card release on subscription end failed:', details: err } });
       }
     }
 

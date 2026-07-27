@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Evermind recipes — the one-click starting points a user picks when creating an
  * LLM ("Evermind") project. A recipe is a create-time CONFIGURATOR: it decides how
@@ -163,6 +164,6 @@ export async function applyEvermindRecipe(
   } catch (error) {
     /* best-effort: project creation must succeed even if Evermind provisioning fails */
   
-    console.error('[suppressed-error] application/llm/evermindRecipes.ts:163 applyEvermindRecipe', { error });
+    reportCaughtError(error, { source: "application/llm/evermindRecipes.ts", operation: "applyEvermindRecipe" });
   }
 }

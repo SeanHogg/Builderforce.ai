@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Meetings — /api/meetings/*
  *
@@ -250,7 +251,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
           await db.update(meetings).set({ chatId: resolved.id as number, updatedAt: new Date() }).where(eq(meetings.id, meeting.id));
         }
       } catch (error) { /* team chat is a nice-to-have on a meeting; never block creation */ 
-        console.error('[suppressed-error] presentation/routes/meetingRoutes.ts:252 createMeetingRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/meetingRoutes.ts", operation: "createMeetingRoutes" });
       }
     }
 
@@ -350,7 +351,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
         });
       }
     } catch (err) {
-      console.error(`[meeting:join] ceremony presence write-through failed meeting=${id}`, err);
+      reportCaughtError(err, { source: "presentation/routes/meetingRoutes.ts", operation: "createMeetingRoutes", context: { logMessage: `[meeting:join] ceremony presence write-through failed meeting=${id}`, details: err } });
     }
 
     return c.json({ roomKey: m.roomKey, videoEnabled: m.videoEnabled, iceServers: await iceServers(env), meeting: await hydrate(tenantId, id) });
@@ -468,7 +469,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     // Auto-generate minutes from the transcript (best-effort: never block ending).
     if (!res.meeting.summary) {
       try { await summarizeMeeting(db, c.env as Env, { ...res.meeting, status: 'ended', endedAt: now }); } catch (error) { /* honest no-op */ 
-        console.error('[suppressed-error] presentation/routes/meetingRoutes.ts:468 createMeetingRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/meetingRoutes.ts", operation: "createMeetingRoutes" });
       }
     }
     return c.json(await hydrate(tenantId, res.meeting.id));

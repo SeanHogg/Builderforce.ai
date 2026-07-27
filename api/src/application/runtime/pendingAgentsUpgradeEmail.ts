@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * pendingAgentsUpgradeEmail — the "you have agents waiting but you're out of
  * tokens" nudge sent by {@link runAutonomousExecutionSweep} when a tenant's
@@ -94,7 +95,7 @@ export async function sendPendingAgentsUpgradeEmail(env: Env, db: Db, args: Pend
   if (kv) {
     // Expire the flag shortly after UTC midnight so tomorrow's block re-nudges.
     await kv.put(key, '1', { expirationTtl: 60 * 60 * 26 })
-      .catch((error) => console.error('[pending-agents-email] dedupe marker write failed', { tenantId: args.tenantId, key, error }));
+      .catch((error) => reportCaughtError(error, { source: "application/runtime/pendingAgentsUpgradeEmail.ts", operation: "sendPendingAgentsUpgradeEmail", context: { logMessage: '[pending-agents-email] dedupe marker write failed', details: { tenantId: args.tenantId, key, error } } }));
   }
   return true;
 }

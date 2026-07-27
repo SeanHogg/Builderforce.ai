@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * cloudToolEvents — the tool-audit emitter for cloud runs.
  *
@@ -53,13 +54,13 @@ export async function recordCloudToolEvent(
   } catch (error) {
     // Telemetry remains non-blocking, but a missing tool record can no longer be
     // silent—the correlation fields are enough to find the affected run.
-    console.error('[cloud-tool-event] append failed', {
+    reportCaughtError(error, { source: "application/runtime/cloudToolEvents.ts", operation: "recordCloudToolEvent", context: { logMessage: '[cloud-tool-event] append failed', details: {
       tenantId: args.tenantId,
       executionId: args.executionId,
       cloudAgentRef: args.cloudAgentRef ?? null,
       toolName: args.toolName,
       toolCallId: args.toolCallId ?? null,
       error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-    });
+    } } });
   }
 }

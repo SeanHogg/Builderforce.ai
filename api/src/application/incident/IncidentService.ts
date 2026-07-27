@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * IncidentService — the write + read path for incident management.
  *
@@ -285,7 +286,7 @@ export class IncidentService {
         match: { severity, affectedSystem: affectedSystem ?? null, incidentSource: source },
       });
     } catch (error) { /* event-trigger dispatch is best-effort */ 
-      console.error('[suppressed-error] application/incident/IncidentService.ts:287 openIncident', { error });
+      reportCaughtError(error, { source: "application/incident/IncidentService.ts", operation: "openIncident" });
     }
 
     return { incidentId, boardTaskId, warRoomChatId, created: true };
@@ -376,7 +377,7 @@ export class IncidentService {
           await fireEventTriggers(this.db, { tenantId, eventType: 'incident-resolved', payload, sourceIncidentId: incidentId, match });
         }
       } catch (error) { /* event-trigger dispatch is best-effort */ 
-        console.error('[suppressed-error] application/incident/IncidentService.ts:376 updateIncident', { error });
+        reportCaughtError(error, { source: "application/incident/IncidentService.ts", operation: "updateIncident" });
       }
     }
   }

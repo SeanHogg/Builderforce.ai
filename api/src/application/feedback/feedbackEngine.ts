@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Feedback engine — the ONE write path a product feedback request takes, whatever
  * channel it arrived on (public snippet POST, or the signed-in in-app panel).
@@ -146,7 +147,7 @@ export async function submitFeedback(
       .set({ lastSubmissionAt: now })
       .where(eq(feedbackCollectors.id, target.collectorId))
       .catch((error) => {
-        console.error('[suppressed-error] application/feedback/feedbackEngine.ts:145 submitFeedback', { error });
+        reportCaughtError(error, { source: "application/feedback/feedbackEngine.ts", operation: "submitFeedback" });
       });
   }
   await bumpFeedbackCaches(env, target.tenantId, target.projectId);

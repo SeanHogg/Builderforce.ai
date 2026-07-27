@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import type { Context } from 'hono';
 import type { HonoEnv } from '../../env';
 
@@ -20,6 +21,6 @@ export function background(c: Context<HonoEnv>, work: Promise<unknown> | Promise
     // No execution context available — the promise still runs, it just isn't
     // kept alive past the response. Correct for tests and local invocation.
   
-    console.error('[suppressed-error] presentation/middleware/background.ts:19 background', { error });
+    reportCaughtError(error, { source: "presentation/middleware/background.ts", operation: "background" });
   }
 }

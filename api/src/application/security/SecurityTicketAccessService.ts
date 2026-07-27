@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * SecurityTicketAccessService — the ONE place that decides who may see the
  * access-restricted SECURITY tickets the Security agent files, and the ONE filter
@@ -130,7 +131,7 @@ export class SecurityTicketAccessService {
         },
       });
     if (this.env) await invalidateCached(this.env, cacheKey(tenantId)).catch((error) => {
-      console.error('[suppressed-error] application/security/SecurityTicketAccessService.ts:132 setConfig', { error });
+      reportCaughtError(error, { source: "application/security/SecurityTicketAccessService.ts", operation: "setConfig" });
     });
     return next;
   }

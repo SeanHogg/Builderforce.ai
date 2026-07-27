@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * requestRoleRun — THE one way to ask an agent to work (or review) a ticket AS a role.
  *
@@ -105,7 +106,7 @@ export async function requestRoleRun(
   await participants
     .markRoleInProgress(env, req.tenantId, req.taskId, req.roleKey, req.laneKey, executionId)
     .catch((error) => { /* attribution is observability — never fail the dispatch on it */ 
-      console.error('[suppressed-error] application/kanban/requestRoleRun.ts:105 requestRoleRun', { error });
+      reportCaughtError(error, { source: "application/kanban/requestRoleRun.ts", operation: "requestRoleRun" });
     });
   await recordActivity(env, db, {
     tenantId: req.tenantId,
@@ -118,7 +119,7 @@ export async function requestRoleRun(
     summary: `${req.roleName} dispatched as ${req.kind} for ticket #${req.taskId}`.slice(0, 300),
     metadata: { roleKey: req.roleKey, responsibility: req.kind, agentRef: req.agentRef },
   }).catch((error) => {
-    console.error('[suppressed-error] application/kanban/requestRoleRun.ts:108 requestRoleRun', { error });
+    reportCaughtError(error, { source: "application/kanban/requestRoleRun.ts", operation: "requestRoleRun" });
   });
   return executionId;
 }

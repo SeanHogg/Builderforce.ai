@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * runStallTriage — the AI Manager's pass over tickets that have STOPPED MOVING.
  *
@@ -466,7 +467,7 @@ export async function runStallTriage(
         });
       }
     } catch (error) { /* one bad ticket must never abort the triage */ 
-      console.error('[suppressed-error] application/manager/triageStage.ts:468 runStallTriage', { error });
+      reportCaughtError(error, { source: "application/manager/triageStage.ts", operation: "runStallTriage" });
     }
   }
 

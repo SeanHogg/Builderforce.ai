@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * repoBridge — connects the Designer's R2 workspace to a real git repo.
  *
@@ -194,14 +195,14 @@ export async function commitWorkspaceToRepo(
         tenantId, segmentId: repo.segmentId ?? null, repoId: repo.id, taskId: null,
         name: branch, baseBranch: base, createdBy: 'designer', createdAt: now,
       }).catch((error) => { /* best-effort */ 
-        console.error('[suppressed-error] application/ide/repoBridge.ts:193 commitWorkspaceToRepo', { error });
+        reportCaughtError(error, { source: "application/ide/repoBridge.ts", operation: "commitWorkspaceToRepo" });
       });
       await db.insert(pullRequests).values({
         tenantId, segmentId: repo.segmentId ?? null, projectId, repoId: repo.id, taskId: null,
         provider: repo.provider, branchName: branch, baseBranch: base, status: 'open',
         number: prNumber, url: prUrl, createdAt: now, updatedAt: now,
       }).catch((error) => { /* best-effort */ 
-        console.error('[suppressed-error] application/ide/repoBridge.ts:197 commitWorkspaceToRepo', { error });
+        reportCaughtError(error, { source: "application/ide/repoBridge.ts", operation: "commitWorkspaceToRepo" });
       });
     }
   }

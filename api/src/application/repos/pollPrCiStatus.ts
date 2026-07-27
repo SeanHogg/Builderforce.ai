@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * pollPrCiStatus — actively fetch a recorded PR's live CI verdict from the provider
  * and persist it to `pull_requests.build_status`.
@@ -60,7 +61,7 @@ export async function pollPrCiStatus(env: Env, db: Db, tenantId: number, pr: Pol
     const live = detail.checks ?? (detail.checksTotal === 0 ? 'success' : null);
     if (live && live !== pr.buildStatus) {
       await setPullRequestBuildStatus(db, pr.id, live).catch((error) => {
-        console.error('[suppressed-error] application/repos/pollPrCiStatus.ts:62 pollPrCiStatus', { error });
+        reportCaughtError(error, { source: "application/repos/pollPrCiStatus.ts", operation: "pollPrCiStatus" });
       });
     }
     return live ?? pr.buildStatus;

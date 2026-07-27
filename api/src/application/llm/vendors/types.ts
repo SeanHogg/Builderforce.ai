@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../observability/caughtErrorReporter';
 /**
  * Multi-vendor LLM gateway — type system, error classes, and shared transport.
  *
@@ -992,13 +993,13 @@ export async function executeChatCompletionStream(args: {
   const reader = peek.getReader();
   const { value: firstChunk } = await reader.read();
   reader.cancel().catch((error) => { /* ignore */ 
-    console.error('[suppressed-error] application/llm/vendors/types.ts:994 executeChatCompletionStream', { error });
+    reportCaughtError(error, { source: "application/llm/vendors/types.ts", operation: "executeChatCompletionStream" });
   });
   const firstText = firstChunk ? new TextDecoder().decode(firstChunk) : '';
 
   if (isChunkError(firstText)) {
     await pass.cancel().catch((error) => { /* ignore */ 
-      console.error('[suppressed-error] application/llm/vendors/types.ts:998 executeChatCompletionStream', { error });
+      reportCaughtError(error, { source: "application/llm/vendors/types.ts", operation: "executeChatCompletionStream" });
     });
     // Schema-too-complex can also surface as a first-chunk embedded error on the
     // streaming surface — classify it the same way so the cascade tags it

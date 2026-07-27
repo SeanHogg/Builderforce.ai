@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Incident-agent dispatch — kicks the Incident Manager agent off to triage an open
  * incident: read the ticket, confirm which SYSTEM it pertains to (incidents.classify),
@@ -68,7 +69,7 @@ export async function dispatchIncidentTriage(
     await Promise.allSettled(deferred);
     return true;
   } catch (err) {
-    console.error('[incident] triage dispatch failed', params.incidentId, err);
+    reportCaughtError(err, { source: "application/incident/incidentDispatch.ts", operation: "dispatchIncidentTriage", context: { logMessage: '[incident] triage dispatch failed', details: params.incidentId } });
     return false;
   }
 }

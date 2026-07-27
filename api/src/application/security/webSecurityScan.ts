@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * webSecurityScan — runs {@link scanWebTarget} against a project's configured
  * website and files each finding through the SAME SecurityAuditService pipeline the
@@ -200,7 +201,7 @@ export async function runWebScan(
       });
       taskIds.push(rec.taskId);
     } catch (e) {
-      console.warn(`[webSecurityScan] failed to record ${f.marker}: ${(e as Error).message}`);
+      reportCaughtError(e, { source: "application/security/webSecurityScan.ts", operation: "runWebScan", level: 'warning', context: { logMessage: `[webSecurityScan] failed to record ${f.marker}: ${(e as Error).message}` } });
     }
   }
 
@@ -230,7 +231,7 @@ export async function runWebScan(
       (deduped ? `, ${taskIds.length} newly filed (${deduped} already tracked)` : `, ${taskIds.length} filed`) +
       (scan.server ? `. Server: ${scan.server}.` : '.'),
   }).catch((error) => {
-    console.error('[suppressed-error] application/security/webSecurityScan.ts:225 runWebScan', { error });
+    reportCaughtError(error, { source: "application/security/webSecurityScan.ts", operation: "runWebScan" });
   });
 
   return {
@@ -290,7 +291,7 @@ export async function runWebScanSweep(env: Env): Promise<WebScanSweepResult> {
       });
       if (res.ok) { out.scanned += 1; out.findingsFiled += res.recorded; }
     } catch (e) {
-      console.warn(`[webScanSweep] project ${row.id} scan failed: ${(e as Error).message}`);
+      reportCaughtError(e, { source: "application/security/webSecurityScan.ts", operation: "runWebScanSweep", level: 'warning', context: { logMessage: `[webScanSweep] project ${row.id} scan failed: ${(e as Error).message}` } });
     }
   }
   return out;

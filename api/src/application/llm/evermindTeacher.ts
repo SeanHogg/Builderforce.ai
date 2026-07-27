@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Evermind teacher-distillation — turn ANY frontier LLM into a teacher whose
  * exemplar answers train a project's self-learning Evermind.
@@ -209,7 +210,7 @@ export async function resolveEvermindTeacherModel(
   } catch (error) {
     /* fail open — keep the teacher */
   
-    console.error('[suppressed-error] application/llm/evermindTeacher.ts:209 resolveEvermindTeacherModel', { error });
+    reportCaughtError(error, { source: "application/llm/evermindTeacher.ts", operation: "resolveEvermindTeacherModel" });
   }
   return { model };
 }

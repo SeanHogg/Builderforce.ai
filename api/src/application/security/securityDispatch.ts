@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Security-agent dispatch — kicks off the Security agent to run a SOC 2 audit of a
  * project's codebase, and the recurring sweep that audits each tenant on a cadence.
@@ -131,7 +132,7 @@ export async function dispatchSecurityAudit(
   } catch {
     // Best-effort — a dispatch failure marks the run failed but never throws.
     await audits.finishAudit(params.tenantId, auditId, { status: 'failed', summary: 'Audit dispatch failed.' }).catch((error) => {
-      console.error('[suppressed-error] application/security/securityDispatch.ts:133 dispatchSecurityAudit', { error });
+      reportCaughtError(error, { source: "application/security/securityDispatch.ts", operation: "dispatchSecurityAudit" });
     });
     return null;
   }
