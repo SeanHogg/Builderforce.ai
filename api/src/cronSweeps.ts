@@ -315,8 +315,10 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     cadence: 'frequent',
     description: "Poll each connected repo's commits / PRs / reviews into activity_events.",
     run: async ({ env }) => {
-      await runRepoActivitySweep(env);
-      return null;
+      const r = await runRepoActivitySweep(env);
+      return r.due > 0 || r.errors > 0
+        ? `due=${r.due} synced=${r.synced} inserted=${r.inserted} errors=${r.errors}`
+        : null;
     },
   },
   {

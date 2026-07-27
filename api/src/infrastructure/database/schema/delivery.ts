@@ -67,7 +67,7 @@ export const releaseNotes = pgTable('release_notes', {
 
 export const apiErrorLog = pgTable('api_error_log', {
   id:        serial('id').primaryKey(),
-  tenantId:  integer('tenant_id'),
+  scopeTenantId: integer('tenant_id'),
   method:    varchar('method', { length: 10 }),
   path:      varchar('path', { length: 500 }),
   source:    varchar('source', { length: 500 }),
@@ -78,7 +78,7 @@ export const apiErrorLog = pgTable('api_error_log', {
   stack:     text('stack'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => ({
-  tenantCreatedIdx: index('idx_api_error_log_tenant_created').on(table.tenantId, table.createdAt),
+  tenantCreatedIdx: index('idx_api_error_log_tenant_created').on(table.scopeTenantId, table.createdAt),
   sourceOperationIdx: index('idx_api_error_log_source_operation').on(table.source, table.operation, table.createdAt),
 }));
 

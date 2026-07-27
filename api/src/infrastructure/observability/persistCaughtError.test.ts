@@ -46,7 +46,7 @@ describe('persistCaughtError', () => {
     });
 
     expect(values).toHaveBeenCalledWith(expect.objectContaining({
-      tenantId: 7,
+      scopeTenantId: 7,
       source: 'application/cache',
       operation: 'invalidate',
       handled: true,
