@@ -552,7 +552,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
     }, args.tenantId);
     return { id: Number(child.id) };
   }));
-  app.route('/api/manager',  createManagerRoutes(db, runtimeService));
+  // The Manager surface owns an accountability CHAT (0376), so it needs the Brain
+  // service — the chat is an ordinary Brain chat and the manager answers through the
+  // ordinary addressed-agent reply loop, rather than a second conversation system.
+  app.route('/api/manager',  createManagerRoutes(db, runtimeService, brainService));
   app.route('/api/vscode',   createVscodeRoutes(db, tenantService));
   app.route('/api/members',  createMemberRoutes(db));
   app.route('/api/tenants',  createTenantRoutes(tenantService, db));

@@ -6778,7 +6778,8 @@
       "backlog": "Backlog",
       "activity": "Activity",
       "policy": "Policy",
-      "stuck": "Stuck"
+      "stuck": "Stuck",
+      "ask": "Ask"
     },
     "insightNudge": "{unscored} tickets still need a business value and {unranked} aren’t ranked — run the manager to catch them up.",
     "coverageNudge": "{flagged} tickets are missing a required role or reviewer — the manager staffs these automatically on its next pass.",
@@ -7059,6 +7060,28 @@
     "health": {
       "title": "Backlog health",
       "caption": "The standing state of the board — what still needs a value, a rank, dates or an owner."
+    },
+    "ask": {
+      "title": "Ask the manager",
+      "caption": "Put it to the manager directly. It reads its own record — what finished, what it decided, what is stuck and what it was actually permitted to do — before it answers.",
+      "loading": "Opening the conversation…",
+      "error": "The manager could not answer just now.",
+      "empty": "Nothing asked yet. Start with one of the questions below.",
+      "placeholder": "Ask about today, a ticket, or why something has not moved…",
+      "send": "Ask",
+      "sending": "Asking…",
+      "you": "You",
+      "fallbackName": "the manager",
+      "thinking": "{name} is checking the record…",
+      "answeredBy": "Answered by {name}",
+      "answeredByDesignated": "Answered by {name}, this project’s designated manager",
+      "noAgent": "No manager agent is set up in this workspace yet, so nobody can answer here. Designate a manager under Policy, and the conversation opens up.",
+      "compactPrompt": "Not the day you wanted? Ask {name} about it.",
+      "starter": {
+        "today": "What did you and the team accomplish today?",
+        "blocked": "Why did so little get done — what is blocking the work?",
+        "plan": "What will you do next to unblock it?"
+      }
     }
   },
   "project360": {
