@@ -10,6 +10,8 @@ import { eq } from 'drizzle-orm';
 import { checkTermsAcceptance } from '../../application/legal/termsAcceptance';
 import { assertActiveToken, findActiveToken, lastSeenWrites } from '../../application/auth/sessionRevocation';
 import { background } from './background';
+import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
+import type { TransitionActorInput } from '../../application/task/taskLifecycle';
 import { updateCaughtErrorContext } from '../../application/observability/caughtErrorReporter';
 
 /**
@@ -65,11 +67,13 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   const db = buildDatabase(c.env);
   c.set('db', db);
 
-  // Machine tokens (sub `agentHost:<id>`) are minted by the API-key exchange and
-  // carry a jti but intentionally have no `authTokens`/session row — their
-  // userId FK would not resolve to a real user. Skip the jti-revocation check for
-  // them; they are already bounded by a short TTL and gated on an active API key.
-  const isMachineToken = payload.sub.startsWith('agentHost:');
+  // Machine tokens (sub `agentHost:<id>` / `embed:<keyId>`) are minted server-to-server
+  // and intentionally have no `authTokens`/session row — their userId FK would not
+  // resolve to a real user. Skip the jti-revocation and terms checks for them; they are
+  // already bounded by a short TTL and gated on an active API key. Decoded through the
+  // ONE machine-subject parser so every consumer agrees on which subs are machines.
+  const machineActor = parseMachineSubject(payload.sub);
+  const isMachineToken = machineActor !== null;
   const checksSessionVersion = typeof payload.sv === 'number';
   const checksRevocation = !!payload.jti && !isMachineToken;
 
@@ -120,6 +124,10 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   c.set('userId',   payload.sub);
   c.set('tenantId', payload.tid);
   c.set('role',     payload.role);
+  // Machine callers keep `userId` (every tenant-scoped read still needs a subject) but
+  // ALSO publish their machine identity, so a write that records WHO did something can
+  // tell an on-prem agent host from a person instead of filing it under a fake user id.
+  if (machineActor) c.set('machineActor', machineActor);
   updateCaughtErrorContext({ tenantId: payload.tid, userId: payload.sub });
   if (payload.sid) c.set('sessionId', payload.sid);
 
@@ -141,6 +149,24 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
  */
 export function isManager(c: Context<HonoEnv>): boolean {
   return hasMinRole(c.get('role') as TenantRole, TenantRole.MANAGER);
+}
+
+/**
+ * The request's caller as a lifecycle ACTOR — the one place a route turns "who is
+ * authenticated" into "who did this".
+ *
+ * A machine caller's `userId` is its service subject (`agentHost:5`), not a person, so
+ * handing it to a writer as `actorUserId` files an agent's work under a user id that
+ * does not exist. This returns the machine identity instead when there is one, and the
+ * plain user id otherwise — so `resolveTransitionActor` can classify it correctly
+ * without every route re-learning the token shapes.
+ */
+export function requestActor(c: Context<HonoEnv>): TransitionActorInput {
+  const machine = c.get('machineActor');
+  if (machine) {
+    return { actorUserId: null, actorAgentHostId: machine.agentHostId };
+  }
+  return { actorUserId: c.get('userId') ?? null };
 }
 
 /**

@@ -118,6 +118,7 @@ import {
 import { resolveKeyCached, jwtMembershipHash, type ResolvedKey } from '../../infrastructure/auth/keyResolutionCache';
 import type { FailoverEvent, ByoDiagnostics } from '../../application/llm/LlmProxyService';
 import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
+import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import { hashSecret } from '../../infrastructure/auth/HashService';
 import { TenantRole, TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { getLimits, resolveImageCreditsDailyLimit, GUEST_CHAT_LIMITS } from '../../domain/tenant/PlanLimits';
@@ -817,10 +818,9 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
 
   // Service tokens carry no real user: agentHost instances (`agentHost:*`) and short-lived
   // embed-session tokens (`embed:*`) minted server-to-server from a bfk_* key.
-  // Neither has a tenant_members row, so both skip the membership check.
-  const isAgentHostToken = payload.sub.startsWith('agentHost:');
-  const isEmbedToken = payload.sub.startsWith('embed:');
-  const isServiceToken = isAgentHostToken || isEmbedToken;
+  // Neither has a tenant_members row, so both skip the membership check. Decoded through
+  // the ONE machine-subject parser rather than re-spelling the prefixes here.
+  const isServiceToken = parseMachineSubject(payload.sub) !== null;
   // Join `users.isSuperadmin` into the membership check so we don't depend on
   // the JWT carrying `sa: true`. Old JWTs minted before the `sa` claim was
   // added still grant superadmin bypass — no re-login required. New JWTs that

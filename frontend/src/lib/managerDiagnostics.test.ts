@@ -13,6 +13,7 @@ import {
   type ManagerDiagnosticsInput,
 } from './managerDiagnostics';
 import type {
+  ManagerDailyDigest,
   ManagerAction,
   ManagerOverview,
   ManagerPolicy,
@@ -744,5 +745,136 @@ describe('the truncated-pass contract with the server', () => {
   it('reports NO deferral for a complete pass, so the two remain distinguishable', () => {
     const serverLine = 'Backlog management pass complete. Scored 3 · ranked 300 · assigned 1 · PRs 0 · dispatched 2 · audited 40.';
     expect(parsePassCounters(serverLine)?.deferred).toBeUndefined();
+  });
+});
+
+/**
+ * TODAY's THROUGHPUT — the block that measures MOVEMENT.
+ *
+ * Every other section of this report describes state, and state cannot distinguish a
+ * large-but-healthy backlog from a stopped one. These tests hold the two properties that
+ * make the block trustworthy: a zero is only ever reported against yesterday's number
+ * (so "quiet" and "dead" stay distinguishable), and a FAILED fetch never becomes a zero
+ * — inventing "nothing shipped" out of a network error would be the most alarming and
+ * most unfounded line in the report.
+ */
+const digest = (over: Partial<ManagerDailyDigest['team']> & {
+  decisionsToday?: number;
+  passes?: number;
+  escalations?: number;
+} = {}): ManagerDailyDigest => ({
+  projectId: 2,
+  dayStart: '2026-07-25T00:00:00.000Z',
+  dayEnd: '2026-07-26T00:00:00.000Z',
+  manager: {
+    passes: over.passes ?? 2,
+    decisions: { today: over.decisionsToday ?? 12, yesterday: 40 },
+    byType: [{ actionType: 'prioritize', count: 9 }, { actionType: 'assign', count: 3 }],
+    lastRunAt: iso(22 * MIN),
+  },
+  team: {
+    shipped: { today: 2, yesterday: 3 },
+    opened: { today: 5, yesterday: 4 },
+    laneMoves: { forward: 6, backward: 1, byHuman: 2, byAgent: 4 },
+    runs: { completed: 7, failed: 1 },
+    prs: { merged: { today: 1, yesterday: 2 }, opened: 3 },
+    contributors: [{ id: 'cloud_agent:a1', kind: 'cloud_agent', name: 'Ada', shipped: 2, runs: 7, moves: 0 }],
+    ...over,
+  },
+  shipped: [{
+    id: 9, key: 'ENG-9', title: 'Fix the login redirect', completedAt: iso(2 * HOUR),
+    ownerName: 'Ada', ownerKind: 'cloud_agent', businessValue: 71,
+  }],
+  needsAttention: { escalatedToday: 0, openEscalations: over.escalations ?? 0, items: [] },
+  computedAt: CAPTURED_AT,
+});
+
+const QUIET_TEAM: Partial<ManagerDailyDigest['team']> = {
+  shipped: { today: 0, yesterday: 0 },
+  laneMoves: { forward: 0, backward: 0, byHuman: 0, byAgent: 0 },
+  runs: { completed: 0, failed: 0 },
+  prs: { merged: { today: 0, yesterday: 0 }, opened: 0 },
+};
+
+describe('today’s throughput in the diagnostics report', () => {
+  it('prints movement ABOVE state — the backlog is unreadable until you know if it moves', () => {
+    const r = buildManagerDiagnosticsReport({ ...input, digest: digest() }, ctx);
+    expect(r.indexOf('-- Today (throughput')).toBeLessThan(r.indexOf('-- Backlog health'));
+  });
+
+  it('states every headline number against yesterday, so a zero is legible', () => {
+    const r = buildManagerDiagnosticsReport({ ...input, digest: digest() }, ctx);
+    expect(r).toContain('tickets finished: 2   [yesterday: 3]');
+    expect(r).toContain('pull requests merged: 1   [yesterday: 2]');
+    expect(r).toContain('decisions journalled: 12   [yesterday: 40]');
+  });
+
+  it('splits lane movement by human vs agent and names what finished', () => {
+    const r = buildManagerDiagnosticsReport({ ...input, digest: digest() }, ctx);
+    expect(r).toContain('by people: 2 · by agents: 4');
+    expect(r).toContain('ENG-9');
+    expect(r).toContain('owner=Ada');
+  });
+
+  it('never sums a contributor’s three counts into a score', () => {
+    const r = buildManagerDiagnosticsReport({ ...input, digest: digest() }, ctx);
+    expect(r).toContain('Ada (cloud_agent): finished=2 runs=7 moves=0');
+  });
+
+  it('says the digest was UNAVAILABLE rather than rendering it as a zero', () => {
+    const r = buildManagerDiagnosticsReport(
+      { ...input, digest: null, digestError: 'network error' }, ctx,
+    );
+    expect(r).toContain('unavailable: network error');
+    expect(r).toContain('NOT the same as "nothing got done"');
+    expect(codes({ digest: null, digestError: 'network error' })).toContain('digest_unavailable');
+    // …and specifically NOT the catastrophic finding a zeroed digest would produce.
+    expect(codes({ digest: null })).not.toContain('no_throughput_two_days');
+  });
+});
+
+describe('managerFindings — throughput', () => {
+  it('escalates to CRITICAL only when yesterday was empty too', () => {
+    expect(codes({ digest: digest(QUIET_TEAM) })).toContain('no_throughput_two_days');
+    // Same empty day, but yesterday produced — a stopped morning, not a stopped loop.
+    const yesterdayWorked = digest({
+      ...QUIET_TEAM,
+      shipped: { today: 0, yesterday: 4 },
+      prs: { merged: { today: 0, yesterday: 2 }, opened: 0 },
+    });
+    const c = codes({ digest: yesterdayWorked });
+    expect(c).toContain('no_throughput_today');
+    expect(c).not.toContain('no_throughput_two_days');
+  });
+
+  it('separates "work is moving but nothing lands" from "nothing is happening"', () => {
+    const movingNotLanding = digest({
+      shipped: { today: 0, yesterday: 4 },
+      prs: { merged: { today: 0, yesterday: 2 }, opened: 3 },
+    });
+    const c = codes({ digest: movingNotLanding });
+    expect(c).toContain('throughput_dropped');
+    expect(c).not.toContain('no_throughput_today');
+  });
+
+  it('calls out a day where every run that finished FAILED', () => {
+    expect(codes({ digest: digest({ runs: { completed: 0, failed: 4 } }) }))
+      .toContain('all_runs_failed_today');
+  });
+
+  it('reports the manager’s OWN idleness separately from the team’s', () => {
+    // The fixture backlog carries 300 unscored/undated/unowned tickets and managing is on.
+    expect(codes({ digest: digest({ decisionsToday: 0 }) })).toContain('manager_idle_today');
+    expect(codes({ digest: digest() })).not.toContain('manager_idle_today');
+  });
+
+  it('flags a board that only PEOPLE are moving — autonomy contributing nothing', () => {
+    const humanOnly = digest({ laneMoves: { forward: 5, backward: 0, byHuman: 5, byAgent: 0 } });
+    expect(codes({ digest: humanOnly })).toContain('movement_all_human');
+    expect(codes({ digest: digest() })).not.toContain('movement_all_human');
+  });
+
+  it('lists what is waiting on a person right now', () => {
+    expect(codes({ digest: digest({ escalations: 3 }) })).toContain('escalations_today');
   });
 });
