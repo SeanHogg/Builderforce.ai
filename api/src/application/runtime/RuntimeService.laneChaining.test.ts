@@ -217,8 +217,18 @@ describe('RuntimeService lane chaining', () => {
     expect(getTaskSyncCalls()).toBe(2);
     expect(getCaptured()).toEqual({ status: TaskStatus.IN_REVIEW, originLaneKey: 'in_progress' });
     expect(errorSpy).toHaveBeenCalledWith(
-      '[runtime-effect] failed',
-      expect.objectContaining({ effect: 'task_status_sync', attempt: 1, executionId: EXEC_ID }),
+      '[caught-error]',
+      expect.objectContaining({
+        source: 'application/runtime/RuntimeService.ts',
+        operation: 'runEffect',
+        context: expect.objectContaining({
+          details: expect.objectContaining({
+            effect: 'task_status_sync',
+            attempt: 1,
+            executionId: EXEC_ID,
+          }),
+        }),
+      }),
     );
     errorSpy.mockRestore();
   });

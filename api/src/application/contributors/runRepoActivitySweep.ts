@@ -15,7 +15,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * Each repo is independent so one bad credential / unreachable host can't stall the
  * rest; bounded per tick so the sweep stays within the subrequest budget.
  */
-import { and, asc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -92,7 +92,13 @@ export async function runRepoActivitySweep(env: Env): Promise<RepoActivitySweepR
       sql`${projectRepositories.credentialId} is not null`,
       or(isNull(projectRepositories.lastActivitySyncedAt), lt(projectRepositories.lastActivitySyncedAt, cutoff)),
     ))
-    .orderBy(asc(sql`${projectRepositories.lastActivitySyncedAt} nulls first`))
+    // ORDER BY direction and null placement must be ONE sql fragment in the right
+    // order (`asc nulls first`). Wrapping the fragment in drizzle's `asc()` appends
+    // the direction AFTER the null clause — `... nulls first asc` — which Postgres
+    // rejects with `syntax error at or near "asc"`, so this sweep threw on its
+    // FIRST query on every tick and never ingested an activity event. Matches the
+    // idiom every other null-ordered query here uses (see ManagerService, TaskRepository).
+    .orderBy(sql`${projectRepositories.lastActivitySyncedAt} asc nulls first`)
     .limit(MAX_REPOS_PER_TICK);
 
   let synced = 0;
@@ -111,6 +117,8 @@ export async function runRepoActivitySweep(env: Env): Promise<RepoActivitySweepR
     }
   }
 
-  console.log(`[cron:repo-activity] due=${due.length} synced=${synced} inserted=${inserted} errors=${errors}`);
+  // NOT logged here: the cron runner owns the `[cron:<key>]` line and only emits it
+  // when there was something to say (see cronSweeps.ts). This used to print on every
+  // tick, 288 times a day, whether or not a repo was due.
   return { due: due.length, synced, inserted, errors };
 }
