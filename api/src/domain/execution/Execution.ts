@@ -24,6 +24,17 @@ export interface ExecutionProps {
 }
 
 /**
+ * The statuses from which no further transition is legal. Declared once so the
+ * transition guards, `cancel()` and callers deciding whether a run is already
+ * concluded all agree on what "terminal" means.
+ */
+export const TERMINAL_EXECUTION_STATUSES: readonly ExecutionStatus[] = [
+  ExecutionStatus.COMPLETED,
+  ExecutionStatus.FAILED,
+  ExecutionStatus.CANCELLED,
+];
+
+/**
  * Execution aggregate root.
  *
  * Tracks the lifecycle of a single Task being executed by an Agent.
@@ -123,6 +134,16 @@ export class Execution {
     });
   }
 
+  /**
+   * True once the run has concluded. A caller holding a stale view of the run
+   * (a retried Durable Object alarm, an at-least-once agent report, the orphan
+   * sweep) should check this and skip rather than attempt a transition that can
+   * only fail — re-asserting a terminal state would also clobber a cancellation.
+   */
+  get isTerminal(): boolean {
+    return TERMINAL_EXECUTION_STATUSES.includes(this.props.status);
+  }
+
   /** Cancels the execution if it has not yet finished. */
   cancel(): Execution {
     if (
@@ -142,12 +163,7 @@ export class Execution {
   // -----------------------------------------------------------------------
 
   private assertNotTerminal(action: string): void {
-    const terminal: ExecutionStatus[] = [
-      ExecutionStatus.COMPLETED,
-      ExecutionStatus.FAILED,
-      ExecutionStatus.CANCELLED,
-    ];
-    if (terminal.includes(this.props.status)) {
+    if (this.isTerminal) {
       throw new ValidationError(
         `Cannot ${action} an execution in status '${this.props.status}'`,
       );

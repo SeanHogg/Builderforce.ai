@@ -18,10 +18,10 @@ export default function BillingPanel() {
   const reload = useCallback(() => {
     setLoading(true);
     setError('');
-    Promise.all([adminApi.tenants(), adminApi.errors()])
+    Promise.all([adminApi.tenants(), adminApi.errors({ limit: 20 })])
       .then(([t, e]) => {
         setTenants(t);
-        setErrors(e);
+        setErrors(e.errors);
       })
       .catch((e) => setError(errText(e)))
       .finally(() => setLoading(false));

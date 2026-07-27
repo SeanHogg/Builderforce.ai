@@ -12,7 +12,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { lt } from 'drizzle-orm';
 import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { llmTraces, llmFailoverLog, llmHealthProbes, qaJourneyEvents, errorEvents, managerActions, toolAuditEvents, demoEvents } from '../../infrastructure/database/schema';
+import { llmTraces, llmFailoverLog, llmHealthProbes, qaJourneyEvents, errorEvents, managerActions, toolAuditEvents, demoEvents, apiErrorLog } from '../../infrastructure/database/schema';
 import { purgeExpiredMemories } from '../memory/memoryService';
 
 /** Days of history kept per table before older rows are purged. */
@@ -39,6 +39,12 @@ const RETENTION_DAYS = {
   // visitor interaction — swept on the same 90d window as the other event streams;
   // the admin funnel panel only looks back 30d.
   demoEvents: 90,
+  // The platform's OWN caught/unhandled exception stream (persistCaughtError).
+  // Append-only and previously unswept despite its own migration promising a
+  // 30-day policy — and its write rate rose sharply when every handled catch in
+  // the API started reporting here, so it is now one of the fastest-growing
+  // tables. 30d matches the superadmin Logs page, which never looks further back.
+  apiErrorLog: 30,
 } as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -56,6 +62,8 @@ export async function runRetentionPurge(env: Env, now: number = Date.now()): Pro
     { name: 'llm_traces',        run: () => transactionalDb.delete(llmTraces).where(lt(llmTraces.createdAt, cutoff(now, RETENTION_DAYS.llmTraces))) },
     { name: 'llm_failover_log',  run: () => transactionalDb.delete(llmFailoverLog).where(lt(llmFailoverLog.createdAt, cutoff(now, RETENTION_DAYS.llmFailoverLog))) },
     { name: 'llm_health_probes', run: () => transactionalDb.delete(llmHealthProbes).where(lt(llmHealthProbes.createdAt, cutoff(now, RETENTION_DAYS.llmHealthProbes))) },
+    // Operational DB: persistCaughtError writes here, so the purge must too.
+    { name: 'api_error_log',     run: () => transactionalDb.delete(apiErrorLog).where(lt(apiErrorLog.createdAt, cutoff(now, RETENTION_DAYS.apiErrorLog))) },
     { name: 'qa_journey_events', run: () => db.delete(qaJourneyEvents).where(lt(qaJourneyEvents.ts, cutoff(now, RETENTION_DAYS.qaJourneyEvents))) },
     { name: 'error_events',      run: () => db.delete(errorEvents).where(lt(errorEvents.createdAt, cutoff(now, RETENTION_DAYS.errorEvents))) },
     { name: 'manager_actions',   run: () => db.delete(managerActions).where(lt(managerActions.createdAt, cutoff(now, RETENTION_DAYS.managerActions))) },
