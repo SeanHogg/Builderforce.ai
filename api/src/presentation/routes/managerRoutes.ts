@@ -15,6 +15,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  *   GET   /api/manager/:projectId/activity  the decision audit feed
  *   GET   /api/manager/:projectId/stalls    the stuck-ticket register (0367)
  *   GET   /api/manager/:projectId/digest    what you + the team accomplished today
+ *   GET   /api/manager/:projectId/chat      the manager's accountability chat + who answers
  */
 import { Hono } from 'hono';
 import { and, eq, sql, asc, desc, inArray } from 'drizzle-orm';
@@ -33,6 +34,8 @@ import {
 import { getStallRegister } from '../../application/manager/stallWatch';
 import { getStallCensus } from '../../application/manager/stallCensus';
 import { getDailyDigest } from '../../application/manager/dailyDigest';
+import { resolveManagerVoice } from '../../application/manager/managerChat';
+import type { BrainService } from '../../application/brain/BrainService';
 import { listSystemicFindings } from '../../application/manager/systemicDiagnosis';
 import {
   normalizePrMergePolicy, resolveTenantManagerDefaults, DEFAULT_MANAGER_POLICY,
@@ -52,7 +55,11 @@ const NON_TERMINAL: string[] = [
   TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW, TaskStatus.BLOCKED,
 ];
 
-export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hono<HonoEnv> {
+export function createManagerRoutes(
+  db: Db,
+  runtimeService: RuntimeService,
+  brainService: BrainService,
+): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
@@ -606,6 +613,47 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       lastRunAt: config?.lastRunAt ?? null,
     });
     return c.json(digest);
+  });
+
+  // GET /api/manager/:projectId/chat — ASK THE MANAGER.
+  //
+  // Resolves (creating on first access) the project's ONE manager chat and says WHO
+  // answers in it. The client then drives the conversation through the ordinary Brain
+  // chat endpoints — post a message, request the addressed agent's reply, read the
+  // transcript — because this IS an ordinary Brain chat. Nothing about holding the
+  // manager to account needs a second messaging stack, and building one would have
+  // meant a second transcript, a second reply loop and a second tool trace to keep in
+  // step with the first.
+  //
+  // NOT role-gated. Asking what got done is reading, not managing, and the person who
+  // most needs the answer is often not the one who may run a pass — the same reasoning
+  // that keeps "Copy diagnostics" ungated. The manager answers with the caller's OWN
+  // permissions (agentReply executes tools under the triggering user's token), so it can
+  // never surface work the asker could not already see.
+  router.get('/:projectId/chat', async (c) => {
+    const tenantId = c.get('tenantId');
+    const userId = (c as { get(k: 'userId'): string | undefined }).get('userId') ?? null;
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+
+    const [chat, voice] = await Promise.all([
+      brainService.getOrCreateManagerChat(tenantId, userId, projectId),
+      resolveManagerVoice(c.env as Env, db, { tenantId, projectId }),
+    ]);
+    if ('error' in chat) return c.json({ error: chat.error }, 404);
+
+    // A voice of null means this tenant has no manager agent at all and provisioning
+    // could not repair it. Return the chat anyway rather than 500-ing: the transcript is
+    // still readable, and the client renders an explicit "nobody can answer yet" state
+    // instead of an input box whose Send button would silently do nothing.
+    return c.json({
+      chatId: chat.id,
+      agentRef: voice?.agentRef ?? null,
+      agentName: voice?.name ?? null,
+      designated: voice?.designated ?? false,
+    });
   });
 
   return router;

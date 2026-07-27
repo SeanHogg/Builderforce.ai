@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Select } from '@/components/Select';
 import { RoleGate } from '@/components/RoleGate';
 import PillTabs, { type PillTab } from '@/components/PillTabs';
@@ -17,6 +17,7 @@ import { ManagerStallRegister } from '@/components/manager/ManagerStallRegister'
 import { ManagerStallCensus } from '@/components/manager/ManagerStallCensus';
 import { ManagerCopyDiagnostics } from '@/components/manager/ManagerCopyDiagnostics';
 import { ManagerTodayDigest } from '@/components/manager/ManagerTodayDigest';
+import { ManagerChatPanel } from '@/components/manager/ManagerChatPanel';
 import { ticketHref } from '@/lib/ticketHref';
 import { managerActionIcon } from '@/lib/managerActions';
 import {
@@ -125,7 +126,13 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   const { allowed: canManage } = usePermission('manager.manage');
   // Sub-view is URL state (`?sub=`), not local state, so every view is
   // deep-linkable and the back button works — same convention as /settings.
-  const sub = useSearchParams().get('sub') ?? '';
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const sub = searchParams.get('sub') ?? '';
+  // A question handed over from the Overview's starter row (`?q=`). URL state, not a
+  // prop drilled through the sub-view switch, so the deep link is shareable and a
+  // reload re-asks rather than landing on an empty chat.
+  const askQuestion = searchParams.get('q');
 
   const [data, setData] = useState<ManagerOverview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -354,6 +361,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
     { id: '', label: t('subnav.overview'), icon: '📊', href: href('') },
     { id: 'backlog', label: t('subnav.backlog'), icon: '📋', href: href('backlog') },
     { id: 'stuck', label: t('subnav.stuck'), icon: '🚧', href: href('stuck') },
+    { id: 'ask', label: t('subnav.ask'), icon: '💬', href: href('ask') },
     { id: 'activity', label: t('subnav.activity'), icon: '📡', href: href('activity') },
     ...(canManage ? [{ id: 'policy', label: t('subnav.policy'), icon: '⚙️', href: href('policy') }] : []),
   ];
@@ -442,6 +450,18 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           SECOND one, so it now sits underneath the day's accomplishments rather than
           in front of them. */}
       <ManagerTodayDigest projectId={projectId} />
+
+      {/* The question those numbers provoke, one click from the numbers themselves.
+          A starter navigates to the Ask view carrying the question, which the chat
+          panel puts to the manager on arrival — so "why didn't anything ship?" is a
+          click, not something a person has to think to type. */}
+      <div style={panelStyle}>
+        <ManagerChatPanel
+          projectId={projectId}
+          compact
+          onAsk={(question) => router.push(`${href('ask')}&q=${encodeURIComponent(question)}`)}
+        />
+      </div>
 
       {/* ── Backlog health: stats tiles + priority chart ── */}
       <div style={{ ...sectionTitleStyle, marginTop: 4 }}>{t('health.title')}</div>
@@ -740,6 +760,11 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           </div>
         )}
       </div>
+      )}
+
+      {/* ── Ask: hold the manager to account, in its own conversation ── */}
+      {activeSub === 'ask' && projectId != null && (
+        <ManagerChatPanel projectId={projectId} initialQuestion={askQuestion} />
       )}
 
       {/* ── Stuck: what the manager cannot finish, and what it has tried ── */}

@@ -27,8 +27,13 @@ export const BRAIN_ORIGIN = 'brainstorm';
 /** The always-there team GROUP chat (migration 0294): reuses the whole Brain chat
  *  stack, one per (tenant, projectId), projectId NULL = tenant-wide. */
 export const TEAM_ORIGIN = 'team';
+/** The AI Manager's accountability chat (migration 0376): one per (tenant, project),
+ *  where a person asks the manager what the team got done and why not more. Same
+ *  singleton shape as the team chat, and reachable through the same endpoints — the
+ *  manager answers via the ordinary addressed-agent reply loop. */
+export const MANAGER_ORIGIN = 'manager';
 /** Origins reachable through the shared chat access/message endpoints. */
-export const ACCESSIBLE_ORIGINS = [BRAIN_ORIGIN, TEAM_ORIGIN] as const;
+export const ACCESSIBLE_ORIGINS = [BRAIN_ORIGIN, TEAM_ORIGIN, MANAGER_ORIGIN] as const;
 
 /** The user's email, lower-cased (for pending-invite matching). */
 export async function getUserEmail(db: Db, userId: string): Promise<string | null> {

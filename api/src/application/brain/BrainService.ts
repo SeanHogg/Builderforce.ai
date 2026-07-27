@@ -30,7 +30,7 @@ import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agen
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from '../llm/builtinMcpService';
 import { shouldRecoverStalledTurn, isExhaustedStall, stallRecoveryNudge, stallExhaustedNotice, MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS } from '@builderforce/agent-stall';
 import {
-  BRAIN_ORIGIN, TEAM_ORIGIN, ACCESSIBLE_ORIGINS,
+  BRAIN_ORIGIN, TEAM_ORIGIN, MANAGER_ORIGIN, ACCESSIBLE_ORIGINS,
   resolveChatAccess, syncPendingMemberships as syncPendingMembershipsShared,
 } from './chatAccess';
 import { markChatRead } from './chatReadState';
@@ -137,6 +137,36 @@ function normalizeCapability(v: string | null | undefined): string | null {
   if (v == null) return null;
   const s = String(v).trim();
   return /^[a-z0-9_-]{1,64}$/i.test(s) ? s : null;
+}
+
+/**
+ * The standard the AI Manager is held to in its own accountability chat (0376).
+ *
+ * A person opens this chat to ask one thing — "what did you and the team get done, and
+ * why not more?" — and the failure mode of an agent facing that question is well known:
+ * it apologises, promises to do better, and says nothing checkable. Three instructions
+ * are what turn that into an answer.
+ *
+ *   1. READ THE RECORD FIRST. The tools exist and are on the allowlist; an agent that
+ *      does not call them is guessing about its own work.
+ *   2. NAME THE GATE. The true cause of a dead board is almost never "I didn't try" —
+ *      it is a withheld merge authority, an unstaffed lane, an exhausted token budget,
+ *      a sign-off nobody gave. Those live in `manager.policy` and the census, and every
+ *      one of them is actionable by the person asking.
+ *   3. NEVER DRESS A ZERO AS PROGRESS. The digest reports yesterday alongside today
+ *      precisely so a quiet day and a stopped board are distinguishable; a manager that
+ *      blurs them has destroyed the only signal the page exists to carry.
+ *
+ * `projectId` is interpolated because every manager tool takes it and the model has no
+ * other way to learn it.
+ */
+function accountabilityFraming(projectId: number): string {
+  return [
+    `This is the AI MANAGER's accountability chat for project #${projectId}: the user is asking you to account for what the team — and you — actually got done, and why more did not. `,
+    `Before answering ANY question about outcomes, read your own record with the tools: manager.digest (projectId=${projectId}) for what finished today and yesterday, manager.decisions (projectId=${projectId}) for what you actually decided, manager.census (projectId=${projectId}) for what is stuck across every ticket, and manager.policy (projectId=${projectId}) for what you were PERMITTED to do and whether autonomy was paused. Use autonomy.wiring_audit when the question is whether work can complete unattended at all, and tickets.lifecycle for why one specific ticket is stuck. `,
+    `Answer with those numbers and cite the tickets by key. Never claim work you cannot point at. `,
+    `If little or nothing got done, say so plainly in the first sentence, then name the SPECIFIC gate that held the work (an unstaffed lane, merge authority withheld from you, an exhausted token budget, a sign-off nobody gave, a failure breaker) and the ONE change that would unblock it. Do not apologise instead of explaining, and never describe a stalled board as progress. `,
+  ].join('');
 }
 
 export interface AppendMessagesDto {
@@ -502,18 +532,75 @@ export class BrainService {
    *  index means a concurrent create just re-selects the winner. `userId` may be null
    *  (an unattended agent resolving it). */
   private async findTeamChat(tenantId: number, scope: TeamChatScope) {
+    return this.findScopedChat(tenantId, TEAM_ORIGIN, scope);
+  }
+
+  /**
+   * The live (non-archived) chat that IS a given scope, for any singleton-chat origin.
+   *
+   * Shared by the team chat (0294) and the manager chat (0376) because they are the
+   * same shape — one canonical conversation per (tenant, origin, scope), backed by a
+   * partial unique index and resolved by get-or-create. Duplicating the lookup is how
+   * two "always-there" chats drift into disagreeing about what "already exists" means,
+   * and a forked singleton chat loses half its transcript on the next read.
+   */
+  private async findScopedChat(tenantId: number, origin: string, scope: TeamChatScope) {
     const [row] = await this.db
       .select(chatDetailColumns)
       .from(brainChats)
       .where(and(
         eq(brainChats.tenantId, tenantId),
-        eq(brainChats.origin, TEAM_ORIGIN),
+        eq(brainChats.origin, origin),
         eq(brainChats.isArchived, false),
         scope.projectId != null ? eq(brainChats.projectId, scope.projectId) : isNull(brainChats.projectId),
         scope.teamId != null ? eq(brainChats.teamId, scope.teamId) : isNull(brainChats.teamId),
       ))
       .limit(1);
     return row ?? null;
+  }
+
+  /**
+   * Resolve the ONE MANAGER chat for a project, creating it on first access (0376).
+   *
+   * This is where a person holds the AI Manager to account — "what did you and the team
+   * get done today, and why not more?" — so it is deliberately a real Brain chat rather
+   * than a bespoke Q&A log: it inherits the transcript, the members, the agent
+   * participants, the addressed-agent reply loop and the tool trace, and the manager
+   * answers through the SAME path any other agent teammate answers through.
+   *
+   * `visibility: 'shared'` because the manager's account of the team's day belongs to
+   * the team, not to whoever opened the page first. Race-safe via `uq_manager_chat_scope`.
+   */
+  async getOrCreateManagerChat(tenantId: number, userId: string | null, projectId: number) {
+    const proj = await this.verifyProjectInTenant(projectId, tenantId);
+    if (!proj) return { error: 'Project not found in tenant' as const };
+
+    let chat = await this.findScopedChat(tenantId, MANAGER_ORIGIN, { projectId });
+    if (!chat) {
+      try {
+        const [created] = await this.db
+          .insert(brainChats)
+          .values({
+            tenantId, userId: userId ?? null, origin: MANAGER_ORIGIN, projectId,
+            title: `${proj.name} — Manager`, visibility: 'shared',
+          })
+          .returning(chatDetailColumns);
+        chat = created ?? null;
+      } catch {
+        // Lost the create race (unique index) — the winner is now selectable.
+        chat = await this.findScopedChat(tenantId, MANAGER_ORIGIN, { projectId });
+      }
+    }
+    if (!chat) return { error: 'Chat not found' as const };
+
+    const { ownerId, ...rest } = chat as unknown as Record<string, unknown> & { ownerId: string | null };
+    return {
+      ...rest,
+      id: (chat as unknown as { id: number }).id,
+      isOwner: ownerId != null && ownerId === userId,
+      visibility: (rest as { visibility?: string }).visibility ?? 'shared',
+      isManagerChat: true as const,
+    };
   }
 
   private async verifyTeamInTenant(teamId: number, tenantId: number) {
@@ -828,7 +915,12 @@ export class BrainService {
     env: Env,
     opts?: { role?: string; authToken?: string | null; executionCtx?: ExecutionContext },
   ) {
-    const chat = await this.canAccessChat(chatId, tenantId, userId);
+    // `origin` is read alongside the access check because the MANAGER chat (0376) asks a
+    // different KIND of question than a team chat does — see `accountabilityFraming`.
+    const chat = await this.canAccessChat(chatId, tenantId, userId, {
+      projectId: brainChats.projectId,
+      origin: brainChats.origin,
+    });
     if (!chat) return { error: 'Chat not found' as const };
     const apiKey = env.OPENROUTER_API_KEY;
     if (!apiKey) return { error: 'LLM not configured' as const };
@@ -866,9 +958,16 @@ export class BrainService {
       .join('\n\n');
 
     const projectHint = (chat as unknown as { projectId?: number | null }).projectId ?? null;
+    const isManagerChat = (chat as unknown as { origin?: string | null }).origin === MANAGER_ORIGIN;
     const systemPrompt = [
       persona,
       `You have been addressed directly in this multi-party team chat${projectHint != null ? ` (project #${projectHint})` : ''}. `,
+      // The MANAGER chat's framing (0376). It lives here rather than only in the built-in
+      // Manager agent's persona because a tenant may designate its OWN cloud agent to run
+      // the backlog, and that agent's persona knows nothing about being accountable for
+      // it. The standard has to attach to the CONVERSATION, not to one agent row, or the
+      // answer quality would silently depend on who was designated.
+      ...(isManagerChat && projectHint != null ? [accountabilityFraming(projectHint)] : []),
       `Reply AS ${agentName} — first person, concise, helpful, no preamble and no "${agentName}:" label. `,
       `You may use the provided tools to read or update the team's work (projects, tasks, specs, OKRs, knowledge) when it helps answer or act on the request. After using tools, summarise what you found or did. `,
       // The agent IS a participant in this chat (chatId is known here, not to the model) —

@@ -2212,7 +2212,29 @@ export const managerApi = {
    */
   digest: (projectId: number): Promise<ManagerDailyDigest> =>
     request<ManagerDailyDigest>(`/api/manager/${projectId}/digest?tz=${-new Date().getTimezoneOffset()}`),
+
+  /**
+   * Resolve (creating on first access) the project's manager ACCOUNTABILITY chat, and
+   * who answers in it.
+   *
+   * The conversation itself runs on the ordinary Brain chat endpoints — `brain.getMessages`,
+   * `brain.sendMessages`, `brain.requestAgentReply` — because it IS an ordinary Brain chat.
+   * This call only says which chat and which agent.
+   */
+  chat: (projectId: number): Promise<ManagerChatHandle> =>
+    request<ManagerChatHandle>(`/api/manager/${projectId}/chat`),
 };
+
+/** GET /api/manager/:projectId/chat — where to talk to the manager, and who replies. */
+export interface ManagerChatHandle {
+  chatId: number;
+  /** `ide_agents.id` to address. Null when this workspace has no manager agent at all —
+   *  the transcript still reads, but nobody can answer, and the UI must say so. */
+  agentRef: string | null;
+  agentName: string | null;
+  /** True when this is the project's DESIGNATED manager rather than the built-in one. */
+  designated: boolean;
+}
 
 /** A digest number that carries its own trend, so a headline is never a bare count. */
 export interface DigestDelta {
