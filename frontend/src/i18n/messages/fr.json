@@ -6963,6 +6963,7 @@
         "moving": "En mouvement",
         "never_started": "Jamais démarré",
         "unassigned": "Personne d’assigné",
+        "managed_no_role": "Aucun rôle ne peut exécuter cette étape",
         "capability_gap": "Aucun agent compétent",
         "human_gate": "En attente d’une approbation humaine",
         "failure_breaker": "Arrêté après des échecs répétés",

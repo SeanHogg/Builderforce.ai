@@ -6963,6 +6963,7 @@
         "moving": "En movimiento",
         "never_started": "Nunca se inició",
         "unassigned": "Sin responsable",
+        "managed_no_role": "Ningún rol puede ejecutar esta etapa",
         "capability_gap": "Ningún agente capaz",
         "human_gate": "Esperando aprobación humana",
         "failure_breaker": "Detenido tras fallos repetidos",

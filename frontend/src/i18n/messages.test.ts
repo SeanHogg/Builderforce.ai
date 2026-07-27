@@ -63,6 +63,13 @@ const tagsFor = (message: string): Record<string, (chunks: unknown) => unknown> 
 describe('message catalogs', () => {
   const enPaths = leaves(en as Record<string, unknown>).map((l) => l.path);
 
+  it.each(LOCALES)('%s has the managed-no-role stall label in the manager namespace', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale] });
+    expect(t('manager.stalls.cause.managed_no_role' as never)).not.toBe(
+      'manager.stalls.cause.managed_no_role',
+    );
+  });
+
   it.each(LOCALES.filter((l) => l !== DEFAULT_LOCALE))('%s has exactly the keys en has', (locale) => {
     const paths = new Set(leaves(CATALOGS[locale]).map((l) => l.path));
     const missing = enPaths.filter((p) => !paths.has(p));
