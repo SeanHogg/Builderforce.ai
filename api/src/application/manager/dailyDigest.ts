@@ -40,7 +40,8 @@
  * Pure summarisers are exported separately from the IO so the verdict is unit-testable
  * without a database.
  */
-import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, sql, type SQL } from 'drizzle-orm';
+import type { PgColumn } from 'drizzle-orm/pg-core';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
@@ -285,6 +286,19 @@ export async function computeDailyDigest(
 ): Promise<DigestComputation> {
   const { tenantId, projectId, window: w } = args;
 
+  /**
+   * `[from, to)` on a timestamp column, as an SQL chunk fit for a `filter (where …)`.
+   *
+   * Built from drizzle's typed operators rather than interpolating the Date directly:
+   * a bare `${date}` inside a `sql` template is bound with NO encoder, so it reaches
+   * the driver as a raw JS Date and its wire format stops being this module's business.
+   * `gte`/`lt` apply the COLUMN's own encoder, which is what makes the comparison mean
+   * the same thing as every other timestamp predicate in the codebase.
+   */
+  const between = (col: PgColumn, from: Date, to: Date): SQL => sql`${gte(col, from)} and ${lt(col, to)}`;
+  const today = (col: PgColumn): SQL => between(col, w.start, w.end);
+  const yesterday = (col: PgColumn): SQL => between(col, w.prevStart, w.start);
+
   const [
     ticketCounts, shippedRows, moveRows, execRows, prRow, decisionRows,
     passRow, ownerRows, stallRow, attentionRows,
@@ -292,10 +306,10 @@ export async function computeDailyDigest(
     // 1. Ticket throughput, both windows, in ONE aggregate.
     db
       .select({
-        shippedToday: sql<number>`count(*) filter (where ${tasks.completedAt} >= ${w.start} and ${tasks.completedAt} < ${w.end})::int`,
-        shippedPrev: sql<number>`count(*) filter (where ${tasks.completedAt} >= ${w.prevStart} and ${tasks.completedAt} < ${w.start})::int`,
-        openedToday: sql<number>`count(*) filter (where ${tasks.createdAt} >= ${w.start} and ${tasks.createdAt} < ${w.end})::int`,
-        openedPrev: sql<number>`count(*) filter (where ${tasks.createdAt} >= ${w.prevStart} and ${tasks.createdAt} < ${w.start})::int`,
+        shippedToday: sql<number>`count(*) filter (where ${today(tasks.completedAt)})::int`,
+        shippedPrev: sql<number>`count(*) filter (where ${yesterday(tasks.completedAt)})::int`,
+        openedToday: sql<number>`count(*) filter (where ${today(tasks.createdAt)})::int`,
+        openedPrev: sql<number>`count(*) filter (where ${yesterday(tasks.createdAt)})::int`,
       })
       .from(tasks)
       // `tasks` carries no tenant_id; the caller has already proven the project belongs
@@ -358,8 +372,11 @@ export async function computeDailyDigest(
         eq(tasks.projectId, projectId),
         liveExecution(),
         inArray(executions.status, [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED]),
-        sql`coalesce(${executions.completedAt}, ${executions.updatedAt}) >= ${w.start}`,
-        sql`coalesce(${executions.completedAt}, ${executions.updatedAt}) < ${w.end}`,
+        // `sql.param` with the column as encoder, for the same reason `between` above
+        // exists: the coalesce needs raw SQL, but the bound Date must still be encoded
+        // the way a timestamp comparison in this schema is encoded everywhere else.
+        sql`coalesce(${executions.completedAt}, ${executions.updatedAt}) >= ${sql.param(w.start, executions.completedAt)}`,
+        sql`coalesce(${executions.completedAt}, ${executions.updatedAt}) < ${sql.param(w.end, executions.completedAt)}`,
       ))
       .groupBy(executions.cloudAgentRef, executions.agentHostId)
       .catch(() => []),
@@ -367,9 +384,9 @@ export async function computeDailyDigest(
     // 5. Pull requests — the only signal that says code left the workspace.
     db
       .select({
-        mergedToday: sql<number>`count(*) filter (where ${pullRequests.mergedAt} >= ${w.start} and ${pullRequests.mergedAt} < ${w.end})::int`,
-        mergedPrev: sql<number>`count(*) filter (where ${pullRequests.mergedAt} >= ${w.prevStart} and ${pullRequests.mergedAt} < ${w.start})::int`,
-        openedToday: sql<number>`count(*) filter (where ${pullRequests.createdAt} >= ${w.start} and ${pullRequests.createdAt} < ${w.end})::int`,
+        mergedToday: sql<number>`count(*) filter (where ${today(pullRequests.mergedAt)})::int`,
+        mergedPrev: sql<number>`count(*) filter (where ${yesterday(pullRequests.mergedAt)})::int`,
+        openedToday: sql<number>`count(*) filter (where ${today(pullRequests.createdAt)})::int`,
       })
       .from(pullRequests)
       .where(scopedToTenant(pullRequests, tenantId, eq(pullRequests.projectId, projectId)))
@@ -379,8 +396,8 @@ export async function computeDailyDigest(
     db
       .select({
         actionType: managerActions.actionType,
-        today: sql<number>`count(*) filter (where ${managerActions.createdAt} >= ${w.start} and ${managerActions.createdAt} < ${w.end})::int`,
-        prev: sql<number>`count(*) filter (where ${managerActions.createdAt} >= ${w.prevStart} and ${managerActions.createdAt} < ${w.start})::int`,
+        today: sql<number>`count(*) filter (where ${today(managerActions.createdAt)})::int`,
+        prev: sql<number>`count(*) filter (where ${yesterday(managerActions.createdAt)})::int`,
       })
       .from(managerActions)
       .where(scopedToTenant(
@@ -423,7 +440,7 @@ export async function computeDailyDigest(
     // 9. Escalation pressure: raised today, and the standing total still owed a human.
     db
       .select({
-        today: sql<number>`count(*) filter (where ${managerStallWatch.escalatedAt} >= ${w.start} and ${managerStallWatch.escalatedAt} < ${w.end})::int`,
+        today: sql<number>`count(*) filter (where ${today(managerStallWatch.escalatedAt)})::int`,
         open: sql<number>`count(*)::int`,
       })
       .from(managerStallWatch)
