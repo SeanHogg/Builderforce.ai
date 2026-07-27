@@ -7007,6 +7007,58 @@
         "openTicket": "Abrir {key}",
         "raised": "Detectado {when}"
       }
+    },
+    "today": {
+      "title": "Hoy",
+      "loading": "Leyendo el trabajo de hoy…",
+      "error": "No se pudo cargar el resumen de hoy.",
+      "retry": "Reintentar",
+      "updated": "actualizado {when}",
+      "lastPass": "Última pasada de gestión {when}.",
+      "viewActivity": "Ver todas las decisiones",
+      "headline": {
+        "team": "El equipo terminó {shipped, plural, =0 {nada} one {1 ticket} other {# tickets}} y fusionó {merged, plural, =0 {ninguna pull request} one {1 pull request} other {# pull requests}}, con {runs, plural, =0 {ninguna ejecución de agente completada} one {1 ejecución de agente completada} other {# ejecuciones de agente completadas}}.",
+        "manager": "Ejecutaste {passes, plural, =0 {ninguna pasada de gestión} one {1 pasada de gestión} other {# pasadas de gestión}} y tomaste {decisions, plural, =0 {ninguna decisión} one {1 decisión} other {# decisiones}}.",
+        "quiet": "Hoy todavía no se ha movido nada.",
+        "quietYesterday": "Ayer: {shipped, plural, =0 {ningún ticket} one {1 ticket} other {# tickets}} terminados, {merged, plural, =0 {ninguna pull request} one {1 pull request} other {# pull requests}} fusionadas, {decisions, plural, =0 {ninguna decisión del gestor} one {1 decisión del gestor} other {# decisiones del gestor}}."
+      },
+      "stat": {
+        "shipped": "Terminados hoy",
+        "shippedSub": "{opened} creados hoy",
+        "merged": "PR fusionadas",
+        "mergedSub": "{opened} abiertas hoy",
+        "runs": "Ejecuciones completadas",
+        "runsSub": "{failed} fallidas",
+        "moves": "Avances de fase",
+        "movesSub": "{human} por personas · {agent} por agentes",
+        "decisions": "Decisiones del gestor",
+        "decisionsSub": "{passes, plural, =0 {ninguna pasada} one {1 pasada} other {# pasadas}} hoy"
+      },
+      "shipped": {
+        "title": "Terminados hoy",
+        "empty": "Hoy todavía ningún ticket ha llegado a una fase de finalizado.",
+        "unowned": "Sin asignar",
+        "more": "+{n} más"
+      },
+      "decisions": {
+        "title": "Qué decidió el gestor",
+        "empty": "El gestor todavía no ha tomado ninguna decisión hoy.",
+        "aria": "Decisiones del gestor de hoy, por tipo"
+      },
+      "contributors": {
+        "title": "Quién movió el trabajo hoy",
+        "caption": "Personas y agentes en una sola lista. Los tres recuentos se muestran por separado porque un ticket terminado, una ejecución completada y un avance de fase no son la misma unidad de trabajo.",
+        "metrics": "{shipped} terminados · {runs} ejecuciones · {moves} avances"
+      },
+      "attention": {
+        "title": "{open, plural, one {1 elemento espera a una persona} other {# elementos esperan a una persona}} · {today} escalados hoy",
+        "since": "escalado {when}",
+        "open": "Abrir el registro de bloqueos"
+      }
+    },
+    "health": {
+      "title": "Salud del backlog",
+      "caption": "El estado permanente del tablero: qué sigue sin valor, sin orden, sin fechas o sin responsable."
     }
   },
   "project360": {

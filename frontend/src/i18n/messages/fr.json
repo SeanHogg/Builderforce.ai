@@ -7007,6 +7007,58 @@
         "openTicket": "Ouvrir {key}",
         "raised": "Signalé {when}"
       }
+    },
+    "today": {
+      "title": "Aujourd’hui",
+      "loading": "Lecture du travail du jour…",
+      "error": "Impossible de charger le résumé du jour.",
+      "retry": "Réessayer",
+      "updated": "mis à jour {when}",
+      "lastPass": "Dernière passe de gestion {when}.",
+      "viewActivity": "Voir toutes les décisions",
+      "headline": {
+        "team": "L’équipe a terminé {shipped, plural, =0 {aucun ticket} one {1 ticket} other {# tickets}} et fusionné {merged, plural, =0 {aucune pull request} one {1 pull request} other {# pull requests}}, sur {runs, plural, =0 {aucune exécution d’agent terminée} one {1 exécution d’agent terminée} other {# exécutions d’agent terminées}}.",
+        "manager": "Vous avez lancé {passes, plural, =0 {aucune passe de gestion} one {1 passe de gestion} other {# passes de gestion}} et pris {decisions, plural, =0 {aucune décision} one {1 décision} other {# décisions}}.",
+        "quiet": "Rien n’a encore bougé aujourd’hui.",
+        "quietYesterday": "Hier : {shipped, plural, =0 {aucun ticket} one {1 ticket} other {# tickets}} terminés, {merged, plural, =0 {aucune pull request} one {1 pull request} other {# pull requests}} fusionnées, {decisions, plural, =0 {aucune décision du gestionnaire} one {1 décision du gestionnaire} other {# décisions du gestionnaire}}."
+      },
+      "stat": {
+        "shipped": "Terminés aujourd’hui",
+        "shippedSub": "{opened} créés aujourd’hui",
+        "merged": "PR fusionnées",
+        "mergedSub": "{opened} ouvertes aujourd’hui",
+        "runs": "Exécutions terminées",
+        "runsSub": "{failed} en échec",
+        "moves": "Avancées d’étape",
+        "movesSub": "{human} par des personnes · {agent} par des agents",
+        "decisions": "Décisions du gestionnaire",
+        "decisionsSub": "{passes, plural, =0 {aucune passe} one {1 passe} other {# passes}} aujourd’hui"
+      },
+      "shipped": {
+        "title": "Terminés aujourd’hui",
+        "empty": "Aucun ticket n’a encore atteint une étape terminale aujourd’hui.",
+        "unowned": "Non assigné",
+        "more": "+{n} de plus"
+      },
+      "decisions": {
+        "title": "Ce que le gestionnaire a décidé",
+        "empty": "Le gestionnaire n’a encore pris aucune décision aujourd’hui.",
+        "aria": "Décisions du gestionnaire aujourd’hui, par type"
+      },
+      "contributors": {
+        "title": "Qui a fait avancer le travail aujourd’hui",
+        "caption": "Personnes et agents dans une seule liste. Les trois compteurs restent séparés : un ticket terminé, une exécution achevée et une avancée d’étape ne sont pas la même unité de travail.",
+        "metrics": "{shipped} terminés · {runs} exécutions · {moves} avancées"
+      },
+      "attention": {
+        "title": "{open, plural, one {1 élément attend une personne} other {# éléments attendent une personne}} · {today} remontés aujourd’hui",
+        "since": "remonté {when}",
+        "open": "Ouvrir le registre des blocages"
+      }
+    },
+    "health": {
+      "title": "Santé du backlog",
+      "caption": "L’état permanent du tableau — ce qui n’a toujours ni valeur, ni rang, ni dates, ni responsable."
     }
   },
   "project360": {

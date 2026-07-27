@@ -7007,6 +7007,58 @@
         "openTicket": "{key} öffnen",
         "raised": "Erfasst {when}"
       }
+    },
+    "today": {
+      "title": "Heute",
+      "loading": "Die heutige Arbeit wird gelesen…",
+      "error": "Die heutige Zusammenfassung konnte nicht geladen werden.",
+      "retry": "Erneut versuchen",
+      "updated": "aktualisiert {when}",
+      "lastPass": "Letzter Verwaltungsdurchlauf {when}.",
+      "viewActivity": "Alle Entscheidungen ansehen",
+      "headline": {
+        "team": "Das Team hat {shipped, plural, =0 {nichts} one {1 Ticket} other {# Tickets}} abgeschlossen und {merged, plural, =0 {keine Pull Requests} one {1 Pull Request} other {# Pull Requests}} zusammengeführt, bei {runs, plural, =0 {keinen abgeschlossenen Agentenläufen} one {1 abgeschlossenen Agentenlauf} other {# abgeschlossenen Agentenläufen}}.",
+        "manager": "Du hast {passes, plural, =0 {keine Verwaltungsdurchläufe} one {1 Verwaltungsdurchlauf} other {# Verwaltungsdurchläufe}} ausgeführt und {decisions, plural, =0 {keine Entscheidungen} one {1 Entscheidung} other {# Entscheidungen}} getroffen.",
+        "quiet": "Heute hat sich noch nichts bewegt.",
+        "quietYesterday": "Gestern: {shipped, plural, =0 {keine Tickets} one {1 Ticket} other {# Tickets}} abgeschlossen, {merged, plural, =0 {keine Pull Requests} one {1 Pull Request} other {# Pull Requests}} zusammengeführt, {decisions, plural, =0 {keine Manager-Entscheidungen} one {1 Manager-Entscheidung} other {# Manager-Entscheidungen}}."
+      },
+      "stat": {
+        "shipped": "Heute abgeschlossen",
+        "shippedSub": "{opened} heute erstellt",
+        "merged": "Zusammengeführte PRs",
+        "mergedSub": "{opened} heute geöffnet",
+        "runs": "Abgeschlossene Läufe",
+        "runsSub": "{failed} fehlgeschlagen",
+        "moves": "Vorwärtsschritte",
+        "movesSub": "{human} von Menschen · {agent} von Agenten",
+        "decisions": "Manager-Entscheidungen",
+        "decisionsSub": "heute {passes, plural, =0 {keine Durchläufe} one {1 Durchlauf} other {# Durchläufe}}"
+      },
+      "shipped": {
+        "title": "Heute abgeschlossen",
+        "empty": "Heute hat noch kein Ticket eine Abschlussspalte erreicht.",
+        "unowned": "Nicht zugewiesen",
+        "more": "+{n} weitere"
+      },
+      "decisions": {
+        "title": "Was der Manager entschieden hat",
+        "empty": "Der Manager hat heute noch keine Entscheidung getroffen.",
+        "aria": "Manager-Entscheidungen heute, nach Typ"
+      },
+      "contributors": {
+        "title": "Wer heute Arbeit bewegt hat",
+        "caption": "Menschen und Agenten in einer Liste. Die drei Zahlen bleiben getrennt, weil ein abgeschlossenes Ticket, ein fertiger Lauf und ein Spaltenwechsel nicht dieselbe Arbeitseinheit sind.",
+        "metrics": "{shipped} abgeschlossen · {runs} Läufe · {moves} Schritte"
+      },
+      "attention": {
+        "title": "{open, plural, one {1 Vorgang wartet auf einen Menschen} other {# Vorgänge warten auf einen Menschen}} · {today} heute eskaliert",
+        "since": "eskaliert {when}",
+        "open": "Blockade-Register öffnen"
+      }
+    },
+    "health": {
+      "title": "Backlog-Zustand",
+      "caption": "Der Dauerzustand des Boards — was noch keinen Wert, keinen Rang, keine Termine oder keinen Verantwortlichen hat."
     }
   },
   "project360": {

@@ -7007,6 +7007,58 @@
         "openTicket": "Open {key}",
         "raised": "Raised {when}"
       }
+    },
+    "today": {
+      "title": "Today",
+      "loading": "Reading today’s work…",
+      "error": "Could not load today’s summary.",
+      "retry": "Try again",
+      "updated": "updated {when}",
+      "lastPass": "Last management pass {when}.",
+      "viewActivity": "See every decision",
+      "headline": {
+        "team": "The team finished {shipped, plural, =0 {nothing} one {1 ticket} other {# tickets}} and merged {merged, plural, =0 {no pull requests} one {1 pull request} other {# pull requests}}, across {runs, plural, =0 {no completed agent runs} one {1 completed agent run} other {# completed agent runs}}.",
+        "manager": "You ran {passes, plural, =0 {no management passes} one {1 management pass} other {# management passes}} and took {decisions, plural, =0 {no decisions} one {1 decision} other {# decisions}}.",
+        "quiet": "Nothing has moved yet today.",
+        "quietYesterday": "Yesterday: {shipped, plural, =0 {no tickets} one {1 ticket} other {# tickets}} finished, {merged, plural, =0 {no pull requests} one {1 pull request} other {# pull requests}} merged, {decisions, plural, =0 {no manager decisions} one {1 manager decision} other {# manager decisions}}."
+      },
+      "stat": {
+        "shipped": "Finished today",
+        "shippedSub": "{opened} opened today",
+        "merged": "PRs merged",
+        "mergedSub": "{opened} opened today",
+        "runs": "Agent runs done",
+        "runsSub": "{failed} failed",
+        "moves": "Forward moves",
+        "movesSub": "{human} by people · {agent} by agents",
+        "decisions": "Manager decisions",
+        "decisionsSub": "{passes, plural, =0 {no passes} one {1 pass} other {# passes}} today"
+      },
+      "shipped": {
+        "title": "Finished today",
+        "empty": "No ticket has reached a done lane yet today.",
+        "unowned": "Unassigned",
+        "more": "+{n} more"
+      },
+      "decisions": {
+        "title": "What the manager decided",
+        "empty": "The manager has not taken a decision yet today.",
+        "aria": "Manager decisions today, by type"
+      },
+      "contributors": {
+        "title": "Who moved work today",
+        "caption": "People and agents on one list. The three counts are kept separate because a finished ticket, a completed run and a lane move are not the same unit of work.",
+        "metrics": "{shipped} finished · {runs} runs · {moves} moves"
+      },
+      "attention": {
+        "title": "{open, plural, one {1 item is waiting on a person} other {# items are waiting on a person}} · {today} raised today",
+        "since": "escalated {when}",
+        "open": "Open the stuck register"
+      }
+    },
+    "health": {
+      "title": "Backlog health",
+      "caption": "The standing state of the board — what still needs a value, a rank, dates or an owner."
     }
   },
   "project360": {

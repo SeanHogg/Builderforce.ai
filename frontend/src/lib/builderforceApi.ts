@@ -2201,7 +2201,99 @@ export const managerApi = {
    */
   census: (projectId: number): Promise<StallCensusResponse> =>
     request<StallCensusResponse>(`/api/manager/${projectId}/census`),
+
+  /**
+   * TODAY's digest — what the manager and the team actually accomplished.
+   *
+   * The offset is sent so "today" is the READER's day: the server cuts the window on
+   * the caller's midnight rather than UTC's, which is otherwise wrong for most of the
+   * world for most of the day. `getTimezoneOffset` returns minutes to SUBTRACT from
+   * local to reach UTC, so it is negated into the "minutes to add to UTC" the API takes.
+   */
+  digest: (projectId: number): Promise<ManagerDailyDigest> =>
+    request<ManagerDailyDigest>(`/api/manager/${projectId}/digest?tz=${-new Date().getTimezoneOffset()}`),
 };
+
+/** A digest number that carries its own trend, so a headline is never a bare count. */
+export interface DigestDelta {
+  today: number;
+  yesterday: number;
+}
+
+/** Who owns a piece of work — the audit timeline's actor vocabulary. */
+export type DigestOwnerKind = 'human' | 'hire' | 'cloud_agent' | 'host_agent' | 'system' | 'unassigned';
+
+/** One ticket that reached a done lane today. */
+export interface DigestShippedTicket {
+  id: number;
+  key: string;
+  title: string;
+  completedAt: string;
+  /** Resolved owner label ('' when it finished with nobody assigned). */
+  ownerName: string;
+  ownerKind: DigestOwnerKind;
+  businessValue: number | null;
+}
+
+/**
+ * One person or agent who moved work today.
+ *
+ * The three metrics are deliberately NOT summed by the API and must not be summed
+ * here: a finished ticket, a completed run and a lane hop are different units, and a
+ * total would be a score the data does not support.
+ */
+export interface DigestContributor {
+  id: string;
+  kind: Exclude<DigestOwnerKind, 'unassigned'>;
+  name: string;
+  shipped: number;
+  runs: number;
+  moves: number;
+}
+
+/** One class of decision the manager took today. */
+export interface DigestManagerDecision {
+  actionType: ManagerActionType | string;
+  count: number;
+}
+
+/** Work autonomy has handed back to a person. */
+export interface DigestAttentionItem {
+  taskId: number;
+  key: string | null;
+  title: string | null;
+  reason: 'escalated';
+  since: string | null;
+}
+
+/** GET /api/manager/:projectId/digest — the answer to "what got done today?". */
+export interface ManagerDailyDigest {
+  projectId: number;
+  /** The reader's local day as absolute instants. */
+  dayStart: string;
+  dayEnd: string;
+  manager: {
+    passes: number;
+    decisions: DigestDelta;
+    byType: DigestManagerDecision[];
+    lastRunAt: string | null;
+  };
+  team: {
+    shipped: DigestDelta;
+    opened: DigestDelta;
+    laneMoves: { forward: number; backward: number; byHuman: number; byAgent: number };
+    runs: { completed: number; failed: number };
+    prs: { merged: DigestDelta; opened: number };
+    contributors: DigestContributor[];
+  };
+  shipped: DigestShippedTicket[];
+  needsAttention: {
+    escalatedToday: number;
+    openEscalations: number;
+    items: DigestAttentionItem[];
+  };
+  computedAt: string;
+}
 
 /** Why a ticket is not moving — mirrors the API's `StallCause`. */
 export type StallCause =

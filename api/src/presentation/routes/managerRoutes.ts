@@ -14,6 +14,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  *   POST  /api/manager/:projectId/run       run the manager pass now (MANAGER)
  *   GET   /api/manager/:projectId/activity  the decision audit feed
  *   GET   /api/manager/:projectId/stalls    the stuck-ticket register (0367)
+ *   GET   /api/manager/:projectId/digest    what you + the team accomplished today
  */
 import { Hono } from 'hono';
 import { and, eq, sql, asc, desc, inArray } from 'drizzle-orm';
@@ -31,6 +32,7 @@ import {
 } from '../../application/manager/ManagerService';
 import { getStallRegister } from '../../application/manager/stallWatch';
 import { getStallCensus } from '../../application/manager/stallCensus';
+import { getDailyDigest } from '../../application/manager/dailyDigest';
 import { listSystemicFindings } from '../../application/manager/systemicDiagnosis';
 import {
   normalizePrMergePolicy, resolveTenantManagerDefaults, DEFAULT_MANAGER_POLICY,
@@ -574,6 +576,36 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       listSystemicFindings(db, { tenantId, projectId }),
     ]);
     return c.json({ ...census, findings });
+  });
+
+  // GET /api/manager/:projectId/digest — WHAT DID YOU AND THE TEAM ACCOMPLISH TODAY.
+  //
+  // The counters on the rest of this surface describe the BOARD's standing state
+  // (679 tickets, 373 coverage gaps) — properties that barely move day to day and
+  // answer no question a person actually arrives with. This endpoint answers the one
+  // they do: what finished, who finished it, what the manager itself decided, and what
+  // it handed back. See `dailyDigest` for how the six unjoined sources combine.
+  //
+  // `tz` is the caller's UTC offset in MINUTES (`-new Date().getTimezoneOffset()`), so
+  // "today" is the reader's day rather than UTC's. Read-only, served through the shared
+  // read-through cache keyed by that day boundary; the manager pass invalidates it.
+  router.get('/:projectId/digest', async (c) => {
+    const tenantId = c.get('tenantId');
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    // A missing/garbage offset degrades to UTC inside dayWindow rather than 400-ing:
+    // a digest for the wrong midnight is still a digest, and refusing to answer would
+    // be a worse failure than a few hours of skew.
+    const tz = Number(c.req.query('tz'));
+    const config = await getManagerConfigRow(db, tenantId, projectId).catch(() => null);
+    const digest = await getDailyDigest(c.env as Env, db, {
+      tenantId, projectId,
+      tzOffsetMinutes: Number.isFinite(tz) ? tz : 0,
+      lastRunAt: config?.lastRunAt ?? null,
+    });
+    return c.json(digest);
   });
 
   return router;

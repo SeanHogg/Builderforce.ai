@@ -16,7 +16,9 @@ import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { ManagerStallRegister } from '@/components/manager/ManagerStallRegister';
 import { ManagerStallCensus } from '@/components/manager/ManagerStallCensus';
 import { ManagerCopyDiagnostics } from '@/components/manager/ManagerCopyDiagnostics';
+import { ManagerTodayDigest } from '@/components/manager/ManagerTodayDigest';
 import { ticketHref } from '@/lib/ticketHref';
+import { managerActionIcon } from '@/lib/managerActions';
 import {
   managerApi,
   agentHosts,
@@ -25,7 +27,6 @@ import {
   type ManagerOverview,
   type ManagerConfigPatch,
   type ManagerAction,
-  type ManagerActionType,
   type ManagerBacklogItem,
   type ManagerRunTask,
   type AgentHost,
@@ -66,21 +67,6 @@ import {
  */
 
 const PRIORITIES = TASK_PRIORITIES_DESC;
-const ACTION_ICON: Record<ManagerActionType, string> = {
-  prioritize: '📊',
-  schedule: '📅',
-  assign: '👤',
-  score_value: '💎',
-  dispatch: '🚀',
-  sync_pr: '🔄',
-  merge_pr: '🔀',
-  flag: '🚩',
-  coordinate: '🧭',
-  merge_blocked: '✋',
-  triage: '🚧',
-  escalate: '🔔',
-  systemic: '🧩',
-};
 
 /**
  * Translate a patch from the shared (tri-state) control set into the project config patch
@@ -449,7 +435,17 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
 
       {activeSub === '' && (
       <>
-      {/* ── Stats tiles + priority chart ── */}
+      {/* ── TODAY leads. ──
+          The tiles below describe the board's standing STATE — 679 tickets, 373
+          coverage gaps — which barely moves day to day and answers no question a
+          person actually arrives with. Backlog health is a real question; it is the
+          SECOND one, so it now sits underneath the day's accomplishments rather than
+          in front of them. */}
+      <ManagerTodayDigest projectId={projectId} />
+
+      {/* ── Backlog health: stats tiles + priority chart ── */}
+      <div style={{ ...sectionTitleStyle, marginTop: 4 }}>{t('health.title')}</div>
+      <div style={{ ...mutedStyle, marginTop: -8 }}>{t('health.caption')}</div>
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
         <StatTile label={t('stat.total')} value={stats.total} />
         <StatTile label={t('stat.unscored')} value={stats.unscored} tone={stats.unscored > 0 ? 'warn' : undefined} />
@@ -936,7 +932,7 @@ function RunTaskRow({ task, statusLabel, owner, systemOwnerLabel, when }: {
 function ActivityRow({ action, typeLabel, when }: { action: ManagerAction; typeLabel: string; when: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-      <span aria-hidden style={{ flexShrink: 0, fontSize: '1rem', lineHeight: '1.3rem' }}>{ACTION_ICON[action.actionType] ?? '•'}</span>
+      <span aria-hidden style={{ flexShrink: 0, fontSize: '1rem', lineHeight: '1.3rem' }}>{managerActionIcon(action.actionType)}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         {action.taskId != null && (
           <Link

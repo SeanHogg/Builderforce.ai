@@ -73,6 +73,27 @@ export function buildInsightDelta(
 }
 
 /**
+ * Build an InsightStat delta chip from TWO periods rather than a series — the
+ * "today vs yesterday" shape, where there is no window to average over and
+ * {@link seriesDelta} has nothing to work with.
+ *
+ * The label is the absolute CHANGE, not a percentage: on the small counts a single
+ * day produces ("2 shipped, 1 yesterday"), a percentage reads as +100% and lands as
+ * a claim the data cannot carry. Returns null when the two periods are equal, so a
+ * caller omits the chip instead of rendering a meaningless "→ 0".
+ */
+export function buildPeriodDelta(
+  current: number,
+  previous: number,
+  goodWhenUp?: boolean | null,
+): { label: string; direction: DeltaDirection; tone: DeltaTone } | null {
+  const diff = current - previous;
+  if (!Number.isFinite(diff) || diff === 0) return null;
+  const direction: DeltaDirection = diff > 0 ? 'up' : 'down';
+  return { label: String(Math.abs(diff)), direction, tone: deltaTone(direction, goodWhenUp) };
+}
+
+/**
  * Colour a trend delta by the metric's polarity. `goodWhenUp` true → rising is
  * good (merge rate); false → rising is bad (errors, spend); null/undefined →
  * neutral (no inherent direction). A flat trend is always neutral.
