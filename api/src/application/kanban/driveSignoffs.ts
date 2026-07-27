@@ -141,7 +141,7 @@ export async function driveOutstandingSignoffs(
     if (executionId == null) {
       return {
         ...result,
-        blockedDetail: `${result.blockedDetail} The dispatcher refused to start ${candidate.roleName}'s review — the ticket's failure breaker, re-run cooldown or the workspace's cloud-run allowance is blocking it.`.trim(),
+        blockedDetail: `${result.blockedDetail} The dispatcher refused to start ${candidate.roleName}'s review — the ticket's failure breaker, re-run cooldown, the workspace's cloud-run allowance or a lifecycle stage that does not authorise this role is blocking it.`.trim(),
       };
     }
     return { ...result, asked: [candidate.roleName] };

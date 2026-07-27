@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
-  createPassBudget, finalizeManagerRunTask, MANAGER_PASS_BUDGET_MS, type ManagerRunSummary,
+  createPassBudget, finalizeManagerRunTask, MANAGER_PASS_BUDGET_MS, MANAGER_TRIAGE_RESERVE_MS,
+  type ManagerRunSummary,
 } from './ManagerService';
 
 /**
@@ -20,7 +21,7 @@ describe('createPassBudget', () => {
   it('is under budget at the start and over it once the window elapses', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-26T12:00:00Z'));
-    const budget = createPassBudget(Date.now(), 20_000);
+    const budget = createPassBudget(Date.now(), 20_000, 0);
     expect(budget.over()).toBe(false);
     vi.advanceTimersByTime(19_999);
     expect(budget.over()).toBe(false);
@@ -47,6 +48,54 @@ describe('createPassBudget', () => {
 
   it('starts with nothing truncated, so a complete pass reports an empty list', () => {
     expect(createPassBudget(Date.now()).truncated).toEqual([]);
+  });
+
+  /**
+   * THE STARVATION. A plain deadline does not decide WHETHER a stage is shed, only WHICH
+   * one — and the answer was always the last stage. Triage runs seventh, so on project 11
+   * every observed pass truncated it, and its 12 stuck-register remedies sat at
+   * `attempts=0` for 26 days. Worse than no triage: an attempt that never happens cannot
+   * fail, so the 3-attempt escalation ceiling is never reached either and nothing is ever
+   * handed to a human. The skip journal even promised "it runs first on the next pass" —
+   * a rotation that did not exist, because every pass restarts at stage 1.
+   */
+  describe('the triage reservation', () => {
+    it('stops the discretionary stages EARLY so the reserved stage still has room', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-26T12:00:00Z'));
+      const budget = createPassBudget(Date.now(), 20_000, 6_000);
+      vi.advanceTimersByTime(14_000);
+      // Stages 1-6 are done for this pass...
+      expect(budget.over()).toBe(true);
+      // ...but triage, which checks the absolute deadline, still runs. This single
+      // divergence is the whole fix.
+      expect(budget.exhausted()).toBe(false);
+    });
+
+    it('still stops triage once the WHOLE budget including the reserve is gone', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-26T12:00:00Z'));
+      const budget = createPassBudget(Date.now(), 20_000, 6_000);
+      vi.advanceTimersByTime(20_000);
+      expect(budget.exhausted()).toBe(true);
+    });
+
+    it('reserves a real slice of a real budget — a zero reserve would restore the starvation', () => {
+      expect(MANAGER_TRIAGE_RESERVE_MS).toBeGreaterThan(0);
+      expect(MANAGER_TRIAGE_RESERVE_MS).toBeLessThan(MANAGER_PASS_BUDGET_MS);
+    });
+
+    it('cannot invert the two deadlines when the reserve exceeds the budget', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-26T12:00:00Z'));
+      // A misconfiguration must not make `over()` true before the pass has started, which
+      // would shed every stage on every pass.
+      const budget = createPassBudget(Date.now(), 5_000, 30_000);
+      expect(budget.over()).toBe(true);
+      expect(budget.exhausted()).toBe(false);
+      vi.advanceTimersByTime(5_000);
+      expect(budget.exhausted()).toBe(true);
+    });
   });
 
   it('leaves headroom for the closing journal rather than running to the Worker ceiling', () => {
