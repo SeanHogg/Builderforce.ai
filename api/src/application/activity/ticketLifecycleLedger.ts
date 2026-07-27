@@ -114,8 +114,9 @@ export type LifecycleEventKind =
   | 'run_lifecycle'
   | 'role_event';
 
-/** Who drove one event. 'system' covers agents + automation (the `actor_kind` the
- *  transitions table records for every non-human lane write). */
+/** Who drove one event. 'system' is identity-less automation only — an agent that can
+ *  be named reports as 'cloud_agent'/'host_agent', including on lane moves, which the
+ *  transitions table now attributes ({@link resolveTransitionActor}). */
 export type LifecycleActorKind = 'human' | 'hire' | 'cloud_agent' | 'host_agent' | 'system' | 'unknown';
 
 /** One ordered, provenance-tagged fact in a ticket's lifecycle. */
@@ -329,8 +330,15 @@ export function classifyTicketOrigin(
   }
 }
 
-/** Map an `activity_log.actor_type` onto the ledger's actor vocabulary. */
-function actorKindFromActivity(actorType: string | null): LifecycleActorKind {
+/**
+ * Map a stored actor-kind column onto the ledger's vocabulary.
+ *
+ * ONE mapper for both writers, because they now use the same words: `activity_log
+ * .actor_type` and `task_status_transitions.actor_kind` are both the (kind, ref)
+ * convention. An unrecognised value degrades to 'unknown' rather than being asserted
+ * into the union.
+ */
+function normalizeActorKind(actorType: string | null): LifecycleActorKind {
   switch (actorType) {
     case 'human':       return 'human';
     case 'hire':        return 'hire';
@@ -745,7 +753,7 @@ export async function buildTicketLifecycle(
     events.push({
       at: (r.occurredAt as Date).toISOString(),
       kind: isCreate ? 'created' : 'role_event',
-      actorKind: actorKindFromActivity(r.actorType),
+      actorKind: normalizeActorKind(r.actorType),
       actorName: r.actorName,
       detail: r.summary ?? r.verb,
       source: 'activity_log',
@@ -753,6 +761,11 @@ export async function buildTicketLifecycle(
   }
 
   // 2. Lane moves — the autonomy evidence (`actor_kind`).
+  //
+  // The kind is carried through verbatim rather than collapsed to human/system: a hop
+  // now names the agent that made it, and "an agent advanced this" is a different fact
+  // from "a cron did", which is the distinction a stall report is read for. The
+  // human/autonomous split below is unchanged — every agent kind is still not-human.
   let autonomousHops = 0;
   let humanHops = 0;
   let backwardHops = 0;
@@ -763,8 +776,9 @@ export async function buildTicketLifecycle(
     events.push({
       at: (r.occurredAt as Date).toISOString(),
       kind: 'lane_moved',
-      actorKind: human ? 'human' : 'system',
+      actorKind: normalizeActorKind(r.actorKind),
       actorName: r.actorRef ?? null,
+      agentRef: human ? null : r.actorRef ?? null,
       fromStatus: r.fromStatus,
       toStatus: r.toStatus,
       isBackward: r.isBackward,
