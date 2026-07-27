@@ -437,10 +437,6 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       {/* ── Secondary nav (shared pill bar, same as /settings) ── */}
       <PillTabs tabs={subTabs} activeId={activeSub} ariaLabel={t('subnav.label')} style={{ marginBottom: 0 }} />
 
-      {/* The run pulse animation is declared once at the root so it survives a
-          sub-view switch (it is consumed by the Activity view's live badge). */}
-      <style>{'@keyframes bf-pulse{0%,100%{opacity:.35}50%{opacity:1}}'}</style>
-
       {activeSub === '' && (
       <>
       {/* ── TODAY leads. ──
