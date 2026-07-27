@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Learned Model Routing (PRD 13 §6.4) — the OUTCOME scorer.
  *
@@ -203,7 +204,7 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
   } catch (error) {
     // Never let outcome reporting fail the caller.
   
-    console.error('[suppressed-error] application/runtime/scoreRunOutcome.ts:203 recordClientRunOutcome', { error });
+    reportCaughtError(error, { source: "application/runtime/scoreRunOutcome.ts", operation: "recordClientRunOutcome" });
   }
 }
 
@@ -420,11 +421,11 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
             : {}),
         })
         .where(eq(runModelOutcomes.executionId, args.executionId))
-        .catch((error) => console.error('[run-outcome] evaluation score persistence failed', {
+        .catch((error) => reportCaughtError(error, { source: "application/runtime/scoreRunOutcome.ts", operation: "scoreRunOutcome", context: { logMessage: '[run-outcome] evaluation score persistence failed', details: {
           tenantId: exec.tenantId,
           executionId: args.executionId,
           error,
-        }));
+        } } }));
       return;
     }
 
@@ -447,6 +448,6 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
   } catch (error) {
     // Never let scoring fail a run.
   
-    console.error('[suppressed-error] application/runtime/scoreRunOutcome.ts:445 scoreRunOutcome', { error });
+    reportCaughtError(error, { source: "application/runtime/scoreRunOutcome.ts", operation: "scoreRunOutcome" });
   }
 }

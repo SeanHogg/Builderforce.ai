@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono } from 'hono';
 import type { Env, HonoEnv } from '../../env';
 import { isValidVisitorId, type MarketingTouch } from '../../application/marketing/MarketingService';
@@ -35,7 +36,7 @@ export function createGuestRoutes(guest: GuestChatService): Hono<HonoEnv> {
 
     // Record the lead now (don't block the response on it).
     c.executionCtx.waitUntil(guest.ensureLead(visitorId, body.touch).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/guestRoutes.ts:37 createGuestRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/guestRoutes.ts", operation: "createGuestRoutes" });
     }));
 
     const token = await signGuestToken(visitorId, c.env.JWT_SECRET, GUEST_TOKEN_TTL_SECONDS);

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Concrete board-level fan-out for execution lifecycle events.
  *
@@ -52,7 +53,7 @@ export function makeExecutionBoardSink(env: Env, db: Db): ExecutionBoardSink {
         }
         await broadcastProjectChanged(env.SESSION_ROOM, ref.tenantId, ref.projectId);
       } catch (error) {
-        console.error('[execution-board] project change broadcast failed', { taskId, error });
+        reportCaughtError(error, { source: "application/runtime/executionBoardBroadcast.ts", operation: "makeExecutionBoardSink", context: { logMessage: '[execution-board] project change broadcast failed', details: { taskId, error } } });
       }
     })();
   };

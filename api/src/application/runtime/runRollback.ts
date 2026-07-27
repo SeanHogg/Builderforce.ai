@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * runRollback — the undo story for an autonomous cloud run.
  *
@@ -310,11 +311,11 @@ export async function teardownRunBranch(
   // Drop the task's branch pin so a re-run starts clean instead of resolving to a
   // branch that no longer exists.
   await db.update(tasks).set({ gitBranch: null, updatedAt: new Date() })
-    .where(eq(tasks.id, args.taskId)).catch((error) => console.error('[run-rollback] task branch reset failed', { tenantId: args.tenantId, executionId: args.executionId, taskId: args.taskId, error }));
+    .where(eq(tasks.id, args.taskId)).catch((error) => reportCaughtError(error, { source: "application/runtime/runRollback.ts", operation: "teardownRunBranch", context: { logMessage: '[run-rollback] task branch reset failed', details: { tenantId: args.tenantId, executionId: args.executionId, taskId: args.taskId, error } } }));
   await db.update(executionRollbacks)
     .set({ status: 'torn_down', revertedAt: new Date() })
     .where(and(eq(executionRollbacks.executionId, args.executionId), eq(executionRollbacks.status, 'active')))
-    .catch((error) => console.error('[run-rollback] teardown snapshot update failed', { tenantId: args.tenantId, executionId: args.executionId, error }));
+    .catch((error) => reportCaughtError(error, { source: "application/runtime/runRollback.ts", operation: "teardownRunBranch", context: { logMessage: '[run-rollback] teardown snapshot update failed', details: { tenantId: args.tenantId, executionId: args.executionId, error } } }));
 
   return { deleted: true, branch: decision.branch, commits: decision.commits.length };
 }
@@ -461,7 +462,7 @@ export async function revertRun(
     await db.update(executionRollbacks)
       .set({ refusalCode: decision.refusal, refusalReason: decision.reason })
       .where(eq(executionRollbacks.id, snapshot.id))
-      .catch((error) => console.error('[run-rollback] refusal persistence failed', { tenantId: args.tenantId, executionId: args.executionId, rollbackId: snapshot.id, error }));
+      .catch((error) => reportCaughtError(error, { source: "application/runtime/runRollback.ts", operation: "revertRun", context: { logMessage: '[run-rollback] refusal persistence failed', details: { tenantId: args.tenantId, executionId: args.executionId, rollbackId: snapshot.id, error } } }));
     await emitRollbackEvent(env, db, {
       ...eventBase,
       outcome: `Revert refused — ${decision.reason}`,
@@ -499,7 +500,7 @@ export async function revertRun(
     }
     prClosed = true;
     if (prRow) await markPullRequestClosedById(db, prRow.id, args.tenantId)
-      .catch((error) => console.error('[run-rollback] PR close persistence failed', { tenantId: args.tenantId, executionId: args.executionId, prId: prRow.id, error }));
+      .catch((error) => reportCaughtError(error, { source: "application/runtime/runRollback.ts", operation: "revertRun", context: { logMessage: '[run-rollback] PR close persistence failed', details: { tenantId: args.tenantId, executionId: args.executionId, prId: prRow.id, error } } }));
   }
 
   const del = await deleteBranch({
@@ -530,7 +531,7 @@ export async function revertRun(
   await db.update(tasks)
     .set({ gitBranch: null, githubPrUrl: null, githubPrNumber: null, updatedAt: new Date() })
     .where(eq(tasks.id, snapshot.taskId))
-    .catch((error) => console.error('[run-rollback] reverted task metadata reset failed', { tenantId: args.tenantId, executionId: args.executionId, taskId: snapshot.taskId, error }));
+    .catch((error) => reportCaughtError(error, { source: "application/runtime/runRollback.ts", operation: "revertRun", context: { logMessage: '[run-rollback] reverted task metadata reset failed', details: { tenantId: args.tenantId, executionId: args.executionId, taskId: snapshot.taskId, error } } }));
 
   await emitRollbackEvent(env, db, {
     ...eventBase,
@@ -595,7 +596,7 @@ async function revertMergedWork(
     await db.update(executionRollbacks)
       .set({ refusalCode: refusal, refusalReason: result.reason })
       .where(eq(executionRollbacks.id, args.rollbackId))
-      .catch((error) => console.error('[run-rollback] merged-refusal persistence failed', { tenantId: args.eventBase.tenantId, rollbackId: args.rollbackId, error }));
+      .catch((error) => reportCaughtError(error, { source: "application/runtime/runRollback.ts", operation: "revertMergedWork", context: { logMessage: '[run-rollback] merged-refusal persistence failed', details: { tenantId: args.eventBase.tenantId, rollbackId: args.rollbackId, error } } }));
     await emitRollbackEvent(env, db, {
       ...args.eventBase,
       outcome: `Revert refused — pull request #${prNumber} is merged and could not be reversed: ${result.reason}`,
@@ -607,7 +608,7 @@ async function revertMergedWork(
   await db.update(executionRollbacks)
     .set({ status: 'revert_pr', refusalCode: null, refusalReason: null })
     .where(eq(executionRollbacks.id, args.rollbackId))
-    .catch((error) => console.error('[run-rollback] revert-PR status persistence failed', { tenantId: args.eventBase.tenantId, rollbackId: args.rollbackId, error }));
+    .catch((error) => reportCaughtError(error, { source: "application/runtime/runRollback.ts", operation: "revertMergedWork", context: { logMessage: '[run-rollback] revert-PR status persistence failed', details: { tenantId: args.eventBase.tenantId, rollbackId: args.rollbackId, error } } }));
 
   await emitRollbackEvent(env, db, {
     ...args.eventBase,

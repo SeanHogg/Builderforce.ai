@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * githubActionsRoutes — the GitHub Actions agent execution surface.
  *
@@ -197,7 +198,7 @@ export function createGitHubActionsRoutes(db: Db, runtimeService: RuntimeService
       const repo = await resolveTicketRepoContext(db, gitSecret(env), ctx.tenantId, ctx.taskId);
 
       await markCloudExecutionRunning(runtimeService, body.executionId).catch((error) => {
-        console.error('[suppressed-error] presentation/routes/githubActionsRoutes.ts:199 createGitHubActionsRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/githubActionsRoutes.ts", operation: "createGitHubActionsRoutes" });
       });
 
       return c.json({

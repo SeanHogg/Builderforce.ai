@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * concludeCeremonySession — THE one way a ceremony ends.
  *
@@ -133,7 +134,7 @@ async function applyReassignments(
         agentName: r.to.memberName, idleHours: r.idleHours,
       });
     } catch (err) {
-      console.error(`[ceremony:conclude] reassignment failed task=${r.taskId}`, err);
+      reportCaughtError(err, { source: "application/ceremony/concludeCeremony.ts", operation: "applyReassignments", context: { logMessage: `[ceremony:conclude] reassignment failed task=${r.taskId}`, details: err } });
     }
   }
   return applied;
@@ -164,7 +165,7 @@ async function loadPtoAt(
       out.set(profile.memberRef, isOnPtoAt(parsePtoBlocks(profile.pto), at));
     }
   } catch (err) {
-    console.error(`[ceremony:conclude] PTO lookup failed tenant=${tenantId}`, err);
+    reportCaughtError(err, { source: "application/ceremony/concludeCeremony.ts", operation: "loadPtoAt", context: { logMessage: `[ceremony:conclude] PTO lookup failed tenant=${tenantId}`, details: err } });
   }
   return out;
 }
@@ -324,7 +325,7 @@ export async function concludeCeremonySession(
         projectId: session.projectId,
         sessionId: session.id,
       }).catch((err) => {
-        console.error('[ceremony:conclude] dispatch failed', err);
+        reportCaughtError(err, { source: "application/ceremony/concludeCeremony.ts", operation: "result", context: { logMessage: '[ceremony:conclude] dispatch failed', details: err } });
         return { candidates: 0, dispatched: 0 };
       });
       dispatched = result.dispatched;
@@ -352,7 +353,7 @@ export async function concludeCeremonySession(
   // forever and every "upcoming meetings" list — which filters on exactly that status —
   // keeps showing yesterday's standup as still running.
   await endCeremonyMeeting(db, session.meetingId, now).catch((err) => {
-    console.error(`[ceremony:conclude] could not end companion meeting session=${session.id}`, err);
+    reportCaughtError(err, { source: "application/ceremony/concludeCeremony.ts", operation: "concludeCeremonySession", context: { logMessage: `[ceremony:conclude] could not end companion meeting session=${session.id}`, details: err } });
   });
 
   // The close itself is journalled last so the history detail reads in causal order.

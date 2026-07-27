@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Event-trigger dispatch — the synchronous, internal-event half of trigger
  * activation (the sibling of runDueTriggers' cron sweep and the addressed
@@ -77,7 +78,7 @@ export async function fireEventTriggers(db: Db, params: FireEventTriggersParams)
       eq(workflowTriggers.enabled, true),
     ));
   } catch (e) {
-    console.error(`[wf-event-triggers] lookup failed for ${params.eventType}`, e);
+    reportCaughtError(e, { source: "application/workflow/eventTriggers.ts", operation: "fireEventTriggers", context: { logMessage: `[wf-event-triggers] lookup failed for ${params.eventType}`, details: e } });
     return result;
   }
 
@@ -130,7 +131,7 @@ export async function fireEventTriggers(db: Db, params: FireEventTriggersParams)
         .set({ lastRunAt: now, lastStatus: status.slice(0, 32), updatedAt: now })
         .where(eq(workflowTriggers.id, row.id));
     } catch (error) { /* best-effort bookkeeping */ 
-      console.error('[suppressed-error] application/workflow/eventTriggers.ts:132 fireEventTriggers', { error });
+      reportCaughtError(error, { source: "application/workflow/eventTriggers.ts", operation: "fireEventTriggers" });
     }
   }
 

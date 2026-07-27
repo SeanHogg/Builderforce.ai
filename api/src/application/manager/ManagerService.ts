@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * ManagerService — the AI Manager's per-project coordination pass.
  *
@@ -451,7 +452,7 @@ export async function recordManagerAction(
   } catch (error) {
     /* the audit feed is best-effort — a write miss must not fail the pass */
   
-    console.error('[suppressed-error] application/manager/ManagerService.ts:451 recordManagerAction', { error });
+    reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "recordManagerAction" });
   }
 }
 
@@ -610,7 +611,7 @@ export async function createManagerRunTask(
       } catch (error) {
         /* likely a unique-key collision — try the next sequence number */
       
-        console.error('[suppressed-error] application/manager/ManagerService.ts:608 createManagerRunTask', { error });
+        reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "createManagerRunTask" });
       }
     }
     return null;
@@ -651,7 +652,7 @@ export async function finalizeManagerRunTask(
   } catch (error) {
     /* best-effort */
   
-    console.error('[suppressed-error] application/manager/ManagerService.ts:647 finalizeManagerRunTask', { error });
+    reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "finalizeManagerRunTask" });
   }
 }
 
@@ -742,7 +743,7 @@ export async function createManagerCoachingTask(
         taskId = row?.id ?? null;
         break;
       } catch (error) { /* likely a unique-key collision — try the next sequence number */ 
-        console.error('[suppressed-error] application/manager/ManagerService.ts:738 createManagerCoachingTask', { error });
+        reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "createManagerCoachingTask" });
       }
     }
     if (taskId == null) return null;
@@ -756,7 +757,7 @@ export async function createManagerCoachingTask(
           submittedBy: args.submittedBy ?? `coach:${args.createdBy ?? 'human'}`,
         });
       } catch (error) { /* dispatch is best-effort; autonomy still picks it up */ 
-        console.error('[suppressed-error] application/manager/ManagerService.ts:750 createManagerCoachingTask', { error });
+        reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "createManagerCoachingTask" });
       }
     }
     return taskId;
@@ -818,7 +819,7 @@ export async function syncManagerRosterRole(
       });
     }
   } catch (error) { /* roster sync is best-effort */ 
-    console.error('[suppressed-error] application/manager/ManagerService.ts:810 syncManagerRosterRole', { error });
+    reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "syncManagerRosterRole" });
   }
 }
 
@@ -840,7 +841,7 @@ async function flushBatched(db: Db, ops: unknown[], chunkSize = 50): Promise<voi
       await db.batch(chunk as unknown as Parameters<typeof db.batch>[0]);
     } catch {
       for (const op of chunk) { try { await (op as Promise<unknown>); } catch (error) { /* skip this write */ 
-        console.error('[suppressed-error] application/manager/ManagerService.ts:830 flushBatched', { error });
+        reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "flushBatched" });
       } }
     }
   }
@@ -1054,7 +1055,7 @@ export async function runManagerForProject(
         t.businessValue = value.score;
         summary.scored += 1;
       } catch (error) { /* skip this ticket */ 
-        console.error('[suppressed-error] application/manager/ManagerService.ts:1042 runManagerForProject', { error });
+        reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "runManagerForProject" });
       }
     }
     await flushBatched(db, writeOps);
@@ -1149,7 +1150,7 @@ export async function runManagerForProject(
           });
         }
       } catch (error) { /* scheduling is best-effort; the rest of the pass stands */ 
-        console.error('[suppressed-error] application/manager/ManagerService.ts:1135 runManagerForProject', { error });
+        reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "runManagerForProject" });
       }
     }
   }
@@ -1175,7 +1176,7 @@ export async function runManagerForProject(
           detail: { memberKind: pick.memberKind, memberRef: pick.memberRef },
         });
       } catch (error) { /* skip */ 
-        console.error('[suppressed-error] application/manager/ManagerService.ts:1159 runManagerForProject', { error });
+        reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "runManagerForProject" });
       }
     }
   }
@@ -1286,7 +1287,7 @@ export async function runManagerForProject(
         });
       }
     } catch (error) { /* skip */ 
-      console.error('[suppressed-error] application/manager/ManagerService.ts:1268 runManagerForProject', { error });
+      reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "runManagerForProject" });
     }
   }
   }
@@ -1345,7 +1346,7 @@ export async function runManagerForProject(
           },
         });
       } catch (error) { /* skip this ticket */ 
-        console.error('[suppressed-error] application/manager/ManagerService.ts:1325 runManagerForProject', { error });
+        reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "runManagerForProject" });
       }
     }
     // Say so when the cap bit. One row per pass (not per deferred ticket) keeps the
@@ -1511,7 +1512,7 @@ export async function runManagerForProject(
     .set({ lastRunAt: new Date() })
     .where(and(eq(projectManagerConfigs.tenantId, tenantId), eq(projectManagerConfigs.projectId, projectId)))
     .catch((error) => {
-      console.error('[suppressed-error] application/manager/ManagerService.ts:1510 runManagerForProject', { error });
+      reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "runManagerForProject" });
     });
 
   return summary;
@@ -1700,7 +1701,7 @@ async function coordinatePullRequests(
           },
         });
       } catch (error) { /* skip */ 
-        console.error('[suppressed-error] application/manager/ManagerService.ts:1676 coordinatePullRequests', { error });
+        reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "coordinatePullRequests" });
       }
     }
   }
@@ -1924,7 +1925,7 @@ async function coordinatePullRequests(
         detail: { sha: result.sha },
       });
     } catch (error) { /* skip */ 
-      console.error('[suppressed-error] application/manager/ManagerService.ts:1898 coordinatePullRequests', { error });
+      reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "coordinatePullRequests" });
     }
   }
 }

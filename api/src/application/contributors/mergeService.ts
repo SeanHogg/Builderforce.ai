@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Contributor consolidation (migration 0205) — merge duplicate contributor
  * profiles that activity ingestion created when it couldn't auto-link the same
@@ -276,10 +277,10 @@ export async function mergeContributors(
   await recomputeContributorDailyMetrics(db, tenantId, targetId, target.segmentId);
 
   await bumpWorkforceMetricsVersion(env, tenantId).catch((error) => {
-    console.error('[suppressed-error] application/contributors/mergeService.ts:278 mergeContributors', { error });
+    reportCaughtError(error, { source: "application/contributors/mergeService.ts", operation: "mergeContributors" });
   });
   await bumpTenantActivityVersion(env, tenantId).catch((error) => {
-    console.error('[suppressed-error] application/contributors/mergeService.ts:279 mergeContributors', { error });
+    reportCaughtError(error, { source: "application/contributors/mergeService.ts", operation: "mergeContributors" });
   });
 
   return { mergeId, movedActivityCount: actCountRow[0]?.n ?? 0, movedIdentityCount: moveIds.length };
@@ -374,10 +375,10 @@ export async function unmergeContributors(
   await recomputeContributorDailyMetrics(db, tenantId, targetId, record.segmentId);
 
   await bumpWorkforceMetricsVersion(env, tenantId).catch((error) => {
-    console.error('[suppressed-error] application/contributors/mergeService.ts:372 unmergeContributors', { error });
+    reportCaughtError(error, { source: "application/contributors/mergeService.ts", operation: "unmergeContributors" });
   });
   await bumpTenantActivityVersion(env, tenantId).catch((error) => {
-    console.error('[suppressed-error] application/contributors/mergeService.ts:373 unmergeContributors', { error });
+    reportCaughtError(error, { source: "application/contributors/mergeService.ts", operation: "unmergeContributors" });
   });
 
   return { reverted: true, sourceId, targetId };

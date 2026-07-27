@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * AnalysisRunnerDO — drives a Digital-Transformation / Architect repo analysis
  * across Durable Object alarm() ticks. Each tick is a fresh Worker invocation
@@ -528,12 +529,12 @@ export class AnalysisRunnerDO implements DurableObject {
     // Record the run as a tracked project diagnostic so it contributes to the
     // project's rating (which rolls up to the tenant). Best-effort — a scoring
     // failure must not fail the analysis run.
-    if (ok) await this.recordArchitectureDiagnostic(cursor).catch((error) => console.error('[analysis-runner] diagnostic persistence failed', {
+    if (ok) await this.recordArchitectureDiagnostic(cursor).catch((error) => reportCaughtError(error, { source: "infrastructure/relay/AnalysisRunnerDO.ts", operation: "tickDone", context: { logMessage: '[analysis-runner] diagnostic persistence failed', details: {
       runId: cursor.runId,
       executionId: cursor.executionId ?? null,
       tenantId: cursor.tenantId,
       error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-    }));
+    } } }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) }));
 
     await this.state.storage.delete(CURSOR_KEY);
     await this.state.storage.deleteAlarm();
@@ -586,26 +587,26 @@ export class AnalysisRunnerDO implements DurableObject {
         .update(executions)
         .set({ status: execStatus, completedAt: now, updatedAt: now })
         .where(eq(executions.id, cursor.executionId))
-        .catch((error) => console.error('[analysis-runner] terminal execution transition failed', {
+        .catch((error) => reportCaughtError(error, { source: "infrastructure/relay/AnalysisRunnerDO.ts", operation: "closeTaskAndExecution", context: { logMessage: '[analysis-runner] terminal execution transition failed', details: {
           runId: cursor.runId,
           executionId: cursor.executionId,
           tenantId: cursor.tenantId,
           status: execStatus,
           error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-        }));
+        } } }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) }));
     }
     if (cursor.taskId != null) {
       await this.db
         .update(tasks)
         .set({ status: taskStatus, updatedAt: now })
         .where(eq(tasks.id, cursor.taskId))
-        .catch((error) => console.error('[analysis-runner] terminal task transition failed', {
+        .catch((error) => reportCaughtError(error, { source: "infrastructure/relay/AnalysisRunnerDO.ts", operation: "closeTaskAndExecution", context: { logMessage: '[analysis-runner] terminal task transition failed', details: {
           runId: cursor.runId,
           taskId: cursor.taskId,
           tenantId: cursor.tenantId,
           status: taskStatus,
           error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-        }));
+        } } }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) }));
     }
   }
 
@@ -729,13 +730,13 @@ export class AnalysisRunnerDO implements DurableObject {
         totalTokens: art.tokens,
         useCase: `repo_analysis_${art.kind}`,
       })
-      .catch((error) => console.error('[analysis-runner] usage metering failed', {
+      .catch((error) => reportCaughtError(error, { source: "infrastructure/relay/AnalysisRunnerDO.ts", operation: "meterUsage", context: { logMessage: '[analysis-runner] usage metering failed', details: {
         runId: cursor.runId,
         executionId: cursor.executionId ?? null,
         tenantId: cursor.tenantId,
         model: art.model,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      }));
+      } } }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) }));
   }
 
   private async failRun(cursor: Cursor, message: string): Promise<void> {

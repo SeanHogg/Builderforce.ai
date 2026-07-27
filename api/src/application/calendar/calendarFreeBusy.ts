@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * External-calendar free/busy for the meeting scheduler. The "find a time" solver
  * already intersects each attendee's declared availability windows and their in-app
@@ -71,7 +72,7 @@ export async function loadExternalBusy(
       list.push(...intervals);
       out.set(conn.userId, list);
     } catch (error) { /* best-effort per connection */ 
-      console.error('[suppressed-error] application/calendar/calendarFreeBusy.ts:73 loadExternalBusy', { error });
+      reportCaughtError(error, { source: "application/calendar/calendarFreeBusy.ts", operation: "loadExternalBusy" });
     }
   }));
 

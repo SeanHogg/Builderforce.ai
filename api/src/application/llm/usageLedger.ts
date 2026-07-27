@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Canonical writer for `llm_usage_log` — the single insert site shared by every
  * usage-producing surface (the gateway chat/image routes via `logUsage`, and the
@@ -248,7 +249,7 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
         const pricing = catalog.find((m) => m.id === row.model)?.pricing;
         costUsdMillicents = computeCostMillicents(pricing, usage);
       } catch (error) { /* pricing unavailable — record tokens with cost 0 */ 
-        console.error('[suppressed-error] application/llm/usageLedger.ts:250 recordUsageRow', { error });
+        reportCaughtError(error, { source: "application/llm/usageLedger.ts", operation: "recordUsageRow" });
       }
       // Premium (any-paid-OpenRouter) selection: add the flat per-request surcharge on
       // top of the metered token cost so the tenant is billed "OpenRouter cost + 1¢".
@@ -288,6 +289,6 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       surface:             row.surface ?? 'web',
     });
   } catch (error) { /* never let usage logging fail the request */ 
-    console.error('[suppressed-error] application/llm/usageLedger.ts:288 recordUsageRow', { error });
+    reportCaughtError(error, { source: "application/llm/usageLedger.ts", operation: "recordUsageRow" });
   }
 }

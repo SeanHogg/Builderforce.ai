@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Ticket-lifecycle recording — the write half of the metrics layer (migrations
  * 0117/0118). Called from PATCH /api/tasks/:id whenever a task changes status
@@ -138,7 +139,7 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
 
   // Invalidate the workforce scorecard / DORA caches for this tenant.
   await bumpWorkforceMetricsVersion(env, tenantId).catch((error) => {
-    console.error('[suppressed-error] application/task/taskLifecycle.ts:140 recordStatusTransition', { error });
+    reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "recordStatusTransition" });
   });
 
   // A status transition (a manual PATCH, an agent advance, OR a PR-merge completion via
@@ -147,10 +148,10 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
   // the transition by the read-through TTL. Over-invalidation is cheap (300s recompute).
   await Promise.all([
     invalidateCached(env, projectScoreCacheKey(tenantId, projectId)).catch((error) => {
-      console.error('[suppressed-error] application/task/taskLifecycle.ts:147 recordStatusTransition', { error });
+      reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "recordStatusTransition" });
     }),
     invalidateCached(env, tenantRollupCacheKey(tenantId)).catch((error) => {
-      console.error('[suppressed-error] application/task/taskLifecycle.ts:148 recordStatusTransition', { error });
+      reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "recordStatusTransition" });
     }),
   ]);
 
@@ -160,7 +161,7 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
   // (no segment) or when nothing subscribed; never blocks the metrics path.
   if (nowDone && !wasDone) {
     await releaseWorkItemWebhook(db, { tenantId, taskId }).catch((error) => {
-      console.error('[suppressed-error] application/task/taskLifecycle.ts:156 recordStatusTransition', { error });
+      reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "recordStatusTransition" });
     });
     // FAST Validator review: the moment work is Done, kick an acceptance review (if the
     // tenant has a Validator) instead of waiting for the daily sweep. Dynamic import
@@ -169,7 +170,7 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
     await import('../validation/validationDispatch')
       .then((m) => m.triggerFastValidatorReview(env, db, { tenantId, taskId }))
       .catch((error) => {
-        console.error('[suppressed-error] application/task/taskLifecycle.ts:161 recordStatusTransition', { error });
+        reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "recordStatusTransition" });
       });
   }
 }
@@ -206,7 +207,7 @@ export async function completeTaskOnMerge(
     toStatus: TaskStatus.DONE,
     actorUserId: input.actorUserId ?? null,
   }).catch((error) => { /* metrics are best-effort; completion already persisted */ 
-    console.error('[suppressed-error] application/task/taskLifecycle.ts:191 completeTaskOnMerge', { error });
+    reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "completeTaskOnMerge" });
   });
 }
 
@@ -220,7 +221,7 @@ export async function completeTaskOnMerge(
 export async function stampLastWorked(env: Env, db: Db, tenantId: number, taskId: number): Promise<void> {
   await db.update(tasks).set({ lastWorkedAt: new Date() }).where(eq(tasks.id, taskId));
   await bumpWorkforceMetricsVersion(env, tenantId).catch((error) => {
-    console.error('[suppressed-error] application/task/taskLifecycle.ts:210 stampLastWorked', { error });
+    reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "stampLastWorked" });
   });
 }
 

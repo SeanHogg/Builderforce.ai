@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { IProjectRepository } from '../../domain/project/IProjectRepository';
 import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { Project } from '../../domain/project/Project';
@@ -207,7 +208,7 @@ function parseGithubUrl(
   } catch (error) {
     // fall through
   
-    console.error('[suppressed-error] application/project/ProjectService.ts:207 parseGithubUrl', { error });
+    reportCaughtError(error, { source: "application/project/ProjectService.ts", operation: "parseGithubUrl" });
   }
   return { githubRepoOwner: null, githubRepoName: null };
 }

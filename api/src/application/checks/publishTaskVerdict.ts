@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * publishTaskVerdict — turn a platform verdict about a TASK into a visible
  * signal on that task's GitHub PR.
@@ -110,7 +111,7 @@ export async function resolveTaskPrTarget(
   // whole failure mode.
   const versionToken = String(Date.now());
   await invalidatePullRequestDetail(env, pr.id, versionToken).catch((error) => {
-    console.error('[suppressed-error] application/checks/publishTaskVerdict.ts:112 resolveTaskPrTarget', { error });
+    reportCaughtError(error, { source: "application/checks/publishTaskVerdict.ts", operation: "resolveTaskPrTarget" });
   });
   const detail = await getPullRequestDetail(env, pr.id, versionToken, {
     provider: auth.auth.repo.provider,

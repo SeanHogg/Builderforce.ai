@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Workforce member routes — /api/members
  *
@@ -149,12 +150,12 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
       .returning();
 
     await invalidateCached(c.env as Env, profilesCacheKey(tenantId)).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/memberRoutes.ts:151 createMemberRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
     });
     // A profile change (capacity / availability / skills) alters assignee
     // recommendations + scorecards, so bust the version-token caches too.
     await bumpWorkforceMetricsVersion(c.env as Env, tenantId).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/memberRoutes.ts:154 createMemberRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
     });
     return c.json({ profile: row });
   });
@@ -198,10 +199,10 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
     const result = await syncMemberCalendar(c.env as Env, db, { tenantId, memberRef: ref, calendarId, credential });
     if (result.ok) {
       await invalidateCached(c.env as Env, profilesCacheKey(tenantId)).catch((error) => {
-        console.error('[suppressed-error] presentation/routes/memberRoutes.ts:196 createMemberRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
       });
       await bumpWorkforceMetricsVersion(c.env as Env, tenantId).catch((error) => {
-        console.error('[suppressed-error] presentation/routes/memberRoutes.ts:197 createMemberRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
       });
     }
     return c.json(result, result.ok ? 200 : 502);
@@ -224,7 +225,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
     // Snapshot into member_metrics_period (best-effort) so the table is the
     // queryable history behind sprint retros, not just an on-the-fly read.
     c.executionCtx.waitUntil(snapshotMetrics(db, tenantId, days, scorecards).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/memberRoutes.ts:218 createMemberRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
     }));
     const byDiscipline = rollupByDiscipline(scorecards);
     const members = discipline ? scorecards.filter((m) => (m.discipline ?? null) === discipline) : scorecards;
@@ -269,7 +270,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
     // Snapshot into member_metrics_period (best-effort) so the composite score has
     // trend history, mirroring the scorecard snapshot on the members read.
     c.executionCtx.waitUntil(persistTenantEngagement(db, tenantId, days, members).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/memberRoutes.ts:261 createMemberRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
     }));
     return c.json({ windowDays: days, members });
   });
@@ -304,7 +305,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
       })
       .returning();
     await bumpWorkforceMetricsVersion(c.env as Env, tenantId).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/memberRoutes.ts:294 createMemberRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
     });
     c.executionCtx.waitUntil((async () => {
       const actor = await resolveActorFromContext(c.env as Env, db, c);
@@ -321,7 +322,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
         metadata: { environment: body.environment ?? 'production', status: row?.status, taskId: body.taskId ?? null, externalRef: body.externalRef ?? null },
       });
     })().catch((error) => {
-      console.error('[suppressed-error] presentation/routes/memberRoutes.ts:295 createMemberRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
     }));
     return c.json({ deployment: row }, 201);
   });

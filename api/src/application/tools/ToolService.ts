@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq, desc, isNotNull, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -148,7 +149,7 @@ export class ToolService {
     } catch (error) {
       // Task read failed — diagnostics still score, remediation just shows 'none'.
     
-      console.error('[suppressed-error] application/tools/ToolService.ts:148 remediationTasksByProject', { error });
+      reportCaughtError(error, { source: "application/tools/ToolService.ts", operation: "remediationTasksByProject" });
     }
     return byProject;
   }

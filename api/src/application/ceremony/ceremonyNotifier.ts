@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * ceremonyNotifier — tell the humans a ceremony is LIVE and they should join.
  *
@@ -60,7 +61,7 @@ async function ptoRefs(
       if (isOnPtoAt(parsePtoBlocks(profile.pto), at)) out.add(profile.memberRef);
     }
   } catch (err) {
-    console.error(`[ceremony:notify] PTO lookup failed tenant=${tenantId}`, err);
+    reportCaughtError(err, { source: "application/ceremony/ceremonyNotifier.ts", operation: "ptoRefs", context: { logMessage: `[ceremony:notify] PTO lookup failed tenant=${tenantId}`, details: err } });
   }
   return out;
 }
@@ -143,7 +144,7 @@ export async function notifyCeremonyOpened(
       notified += 1;
     } catch (err) {
       // Per-recipient isolation: one bad user row must not cost everyone else their invite.
-      console.error(`[ceremony:notify] invite failed session=${args.sessionId} user=${h.memberRef}`, err);
+      reportCaughtError(err, { source: "application/ceremony/ceremonyNotifier.ts", operation: "notifyCeremonyOpened", context: { logMessage: `[ceremony:notify] invite failed session=${args.sessionId} user=${h.memberRef}`, details: err } });
     }
   }
 
@@ -192,6 +193,6 @@ export async function notifyReassignedAway(
       `Take it back any time: ${ceremonyLink(env, args.projectId)}`,
     ref: args.sessionId,
   }).catch((err) => {
-    console.error(`[ceremony:notify] reassignment notice failed user=${args.userId}`, err);
+    reportCaughtError(err, { source: "application/ceremony/ceremonyNotifier.ts", operation: "notifyReassignedAway", context: { logMessage: `[ceremony:notify] reassignment notice failed user=${args.userId}`, details: err } });
   });
 }

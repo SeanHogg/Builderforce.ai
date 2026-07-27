@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /** xAI SuperGrok OAuth (OIDC discovery + authorization-code PKCE). */
 
 const DISCOVERY_URL = 'https://auth.x.ai/.well-known/openid-configuration';
@@ -40,7 +41,7 @@ export function parseXaiCallback(input: string): { code: string; state: string |
     const url = new URL(value);
     return { code: url.searchParams.get('code') ?? '', state: url.searchParams.get('state') };
   } catch (error) { /* code#state fallback */ 
-    console.error('[suppressed-error] application/llm/xaiOAuth.ts:42 parseXaiCallback', { error });
+    reportCaughtError(error, { source: "application/llm/xaiOAuth.ts", operation: "parseXaiCallback" });
   }
   const [code, state] = value.split('#', 2);
   return { code: code ?? '', state: state || null };

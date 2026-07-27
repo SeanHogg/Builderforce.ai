@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * BuilderForce Agents instance routes – /api/agent-hosts
  *
@@ -1194,10 +1195,10 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       }
       machineProfile = normalizeMachineProfile(body.machineProfile);
     } catch (error) {
-      console.warn('[agent-host] optional request body could not be parsed', {
+      reportCaughtError(error, { source: "presentation/routes/agentHostRoutes.ts", operation: "createAgentHostRoutes", level: 'warning', context: { logMessage: '[agent-host] optional request body could not be parsed', details: {
         agentHostId: id,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      });
+      } } });
     }
 
     await db
@@ -1862,11 +1863,11 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
           description: body.description,
           expiresAt:   body.expiresAt,
         }),
-      })).catch((error) => console.error('[agent-host] approval relay notification failed', {
+      })).catch((error) => reportCaughtError(error, { source: "presentation/routes/agentHostRoutes.ts", operation: "createAgentHostRoutes", context: { logMessage: '[agent-host] approval relay notification failed', details: {
         agentHostId,
         approvalId,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      }));
+      } } }));
     }
 
     return c.json({ ok: true, approvalId }, 201);

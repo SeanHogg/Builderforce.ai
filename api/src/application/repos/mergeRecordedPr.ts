@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * mergeRecordedPullRequest — the server-side "merge + close a recorded PR" core,
  * shared by the in-product "Approve & Merge" route AND the AI Manager's autonomous
@@ -131,7 +132,7 @@ export async function mergeRecordedPullRequest(
     args.prId,
     row.updatedAt instanceof Date ? row.updatedAt.toISOString() : String(row.updatedAt),
   ).catch((error) => { /* cache miss is fine */ 
-    console.error('[suppressed-error] application/repos/mergeRecordedPr.ts:129 mergeRecordedPullRequest', { error });
+    reportCaughtError(error, { source: "application/repos/mergeRecordedPr.ts", operation: "mergeRecordedPullRequest" });
   });
 
   // Merge → ticket complete: the ONE place every merge path funnels through, so the
@@ -144,7 +145,7 @@ export async function mergeRecordedPullRequest(
       taskId: row.taskId,
       actorUserId: args.mergedBy && !args.mergedBy.startsWith('manager:') ? args.mergedBy : null,
     }).catch((error) => { /* completion is best-effort; the merge itself succeeded */ 
-      console.error('[suppressed-error] application/repos/mergeRecordedPr.ts:140 mergeRecordedPullRequest', { error });
+      reportCaughtError(error, { source: "application/repos/mergeRecordedPr.ts", operation: "mergeRecordedPullRequest" });
     });
   }
 

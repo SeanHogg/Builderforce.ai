@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * In-platform messaging for the freelance marketplace — /api/conversations/*.
  *
@@ -214,14 +215,14 @@ export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
       const p = await verifyWebJwt(token, c.env.JWT_SECRET);
       if (p.sub && p.sub === row.freelancerUserId) authorized = true;
     } catch (error) { /* not a web token */ 
-      console.error('[suppressed-error] presentation/routes/freelancerMessagingRoutes.ts:216 createFreelancerMessagingRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/freelancerMessagingRoutes.ts", operation: "createFreelancerMessagingRoutes" });
     }
     if (!authorized) {
       try {
         const p = await verifyJwt(token, c.env.JWT_SECRET);
         if (p.tid != null && Number(p.tid) === Number(row.tenantId)) authorized = true;
       } catch (error) { /* not a tenant token */ 
-        console.error('[suppressed-error] presentation/routes/freelancerMessagingRoutes.ts:221 createFreelancerMessagingRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/freelancerMessagingRoutes.ts", operation: "createFreelancerMessagingRoutes" });
       }
     }
     if (!authorized) return c.json({ error: 'Forbidden' }, 403);

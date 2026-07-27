@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * mergePullRequest — merge an OPEN pull request via the provider's PR-merge API,
  * server-side with the tenant's decrypted token. This is the "Approve & Merge"
@@ -167,7 +168,7 @@ function extractProviderMessage(text: string): string {
     const body = JSON.parse(text) as { message?: unknown };
     if (typeof body.message === 'string') return body.message.trim().slice(0, 200);
   } catch (error) { /* non-JSON provider response */ 
-    console.error('[suppressed-error] application/repos/mergePullRequest.ts:169 extractProviderMessage', { error });
+    reportCaughtError(error, { source: "application/repos/mergePullRequest.ts", operation: "extractProviderMessage" });
   }
   return text.trim().slice(0, 200);
 }

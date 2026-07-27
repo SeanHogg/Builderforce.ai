@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Parked-workflow resume sweep — the back-edge that makes a `run_workflow` lane
  * action genuinely GATE on its downstream workflow.
@@ -74,7 +75,7 @@ export async function runParkedWorkflowSweep(env: ResumeParkedEnv): Promise<Resu
       if (updated) result.resumed++;
     } catch (e) {
       result.errors++;
-      console.error(`[cron:wf-gate] resume for workflow ${row.workflowId} failed`, e);
+      reportCaughtError(e, { source: "application/swimlane/resumeParkedWorkflows.ts", operation: "runParkedWorkflowSweep", context: { logMessage: `[cron:wf-gate] resume for workflow ${row.workflowId} failed`, details: e } });
     }
   }
 

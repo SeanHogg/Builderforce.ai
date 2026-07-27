@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Cloud agent EXECUTION ENGINE — "run a cloud agent against a ticket", extracted
  * from the runtime HTTP routes so the route file is thin wiring and this owns ONE
@@ -150,7 +151,7 @@ export async function resolveCloudAgent(
     const preferredRuntime = rows[0]?.preferredRuntime ?? null;
     return { engine, label, ref, runtimeSurface, baseModel, runtimeSupport, preferredRuntime };
   } catch (error) {
-    console.error('[cloud-agent] agent resolution failed; using runtime defaults', { tenantId, ref, error });
+    reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "resolveCloudAgent", context: { logMessage: '[cloud-agent] agent resolution failed; using runtime defaults', details: { tenantId, ref, error } } });
     return DEFAULT;
   }
 }
@@ -175,7 +176,7 @@ export async function loadAgentPsychometric(
       .limit(1);
     return typeof rows[0]?.psychometric === 'string' ? rows[0].psychometric : null;
   } catch (error) {
-    console.error('[cloud-agent] psychometric profile load failed', { tenantId, ref, error });
+    reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "loadAgentPsychometric", context: { logMessage: '[cloud-agent] psychometric profile load failed', details: { tenantId, ref, error } } });
     return null;
   }
 }
@@ -201,7 +202,7 @@ async function loadGovernanceContext(db: Db, tenantId: number, projectId: number
       .limit(1);
     if (spec?.archSpec?.trim()) parts.push(`## Architecture Spec\n\n${spec.archSpec.trim()}`);
   } catch (error) {
-    console.error('[cloud-context] architecture spec load failed', { tenantId, projectId, error });
+    reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "loadGovernanceContext", context: { logMessage: '[cloud-context] architecture spec load failed', details: { tenantId, projectId, error } } });
   }
   try {
     const [proj] = await db
@@ -211,7 +212,7 @@ async function loadGovernanceContext(db: Db, tenantId: number, projectId: number
       .limit(1);
     if (proj?.governance?.trim()) parts.push(`## Project Rules / Governance (must be followed)\n\n${proj.governance.trim()}`);
   } catch (error) {
-    console.error('[cloud-context] project governance load failed', { tenantId, projectId, error });
+    reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "loadGovernanceContext", context: { logMessage: '[cloud-context] project governance load failed', details: { tenantId, projectId, error } } });
   }
   // Per-agent governance (project_agents.governance) — the rules configured for THIS
   // agent specifically. Previously written via PUT /project-agents/:id/governance but
@@ -233,7 +234,7 @@ async function loadGovernanceContext(db: Db, tenantId: number, projectId: number
         parts.push(`## Agent Rules / Governance (specific to you — must be followed)\n\n${chosen.governance.trim()}`);
       }
     } catch (error) {
-      console.error('[cloud-context] agent governance load failed', { tenantId, projectId, cloudAgentRef, error });
+      reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "loadGovernanceContext", context: { logMessage: '[cloud-context] agent governance load failed', details: { tenantId, projectId, cloudAgentRef, error } } });
     }
   }
   return parts.join('\n\n');
@@ -263,7 +264,7 @@ async function recordTaskFileChange(
   try {
     await db.insert(taskFileChanges).values({ tenantId, taskId, executionId, path, change, agent });
   } catch (error) {
-    console.error('[cloud-run] task file-change persistence failed', { tenantId, taskId, executionId, path, change, error });
+    reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "recordTaskFileChange", context: { logMessage: '[cloud-run] task file-change persistence failed', details: { tenantId, taskId, executionId, path, change, error } } });
   }
 }
 
@@ -345,7 +346,7 @@ async function loadWorkspaceContext(
       priorChanges: diff.ok ? diff.files : [],
     };
   } catch (error) {
-    console.error('[cloud-context] repository snapshot load failed', { error });
+    reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "loadWorkspaceContext", context: { logMessage: '[cloud-context] repository snapshot load failed', details: { error } } });
     return empty;
   }
 }
@@ -438,7 +439,7 @@ async function landPrdChange(
     await db.update(tasks)
       .set({ gitBranch: committed.branch, updatedAt: new Date() })
       .where(eq(tasks.id, args.taskId))
-      .catch((error) => console.error('[cloud-prd] task branch update failed', { tenantId: args.tenantId, taskId: args.taskId, executionId: args.executionId, error }));
+      .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "landPrdChange", context: { logMessage: '[cloud-prd] task branch update failed', details: { tenantId: args.tenantId, taskId: args.taskId, executionId: args.executionId, error } } }));
   } else {
     // The DB PRD copy (specs.prd) stands but the repo PRD.md commit failed — the 3 copies
     // have DIVERGED. Surface it on the audit trail (a reconcile signal) instead of silently
@@ -449,7 +450,7 @@ async function landPrdChange(
       targetType: 'task', targetId: String(args.taskId), targetLabel: `#${args.taskId}`,
       summary: `PRD repo commit failed (${committed.reason ?? 'unknown'}) — the DB PRD and repo PRD.md have diverged; re-land needed`.slice(0, 300),
       metadata: { reason: committed.reason ?? null, executionId: args.executionId },
-    }).catch((error) => console.error('[cloud-prd] divergence activity append failed', { tenantId: args.tenantId, taskId: args.taskId, executionId: args.executionId, error }));
+    }).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "landPrdChange", context: { logMessage: '[cloud-prd] divergence activity append failed', details: { tenantId: args.tenantId, taskId: args.taskId, executionId: args.executionId, error } } }));
   }
 
   notifyExecutionSubscribers(args.executionId, {
@@ -663,7 +664,7 @@ export async function resolveLearnedRoutingInputs(
       await db.update(tasks)
         .set({ actionType: verdict.actionType, actionTypeConfidence: verdict.confidence, allocationCategory, allocationCategorySource: 'derived' })
         .where(eq(tasks.id, args.taskRow.id))
-        .catch((error) => console.error('[cloud-routing] task classification cache update failed', { tenantId: args.tenantId, taskId: args.taskRow.id, error }));
+        .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "resolveLearnedRoutingInputs", context: { logMessage: '[cloud-routing] task classification cache update failed', details: { tenantId: args.tenantId, taskId: args.taskRow.id, error } } }));
     }
 
     // 2. Finest scope with signal → its ranked stats for this action.
@@ -679,11 +680,11 @@ export async function resolveLearnedRoutingInputs(
     }
     return { actionType };
   } catch (error) {
-    console.error('[cloud-routing] learned routing resolution failed; using default action', {
+    reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "resolveLearnedRoutingInputs", context: { logMessage: '[cloud-routing] learned routing resolution failed; using default action', details: {
       tenantId: args.tenantId,
       taskId: args.taskRow.id,
       error,
-    });
+    } } });
     return { actionType: 'other' };
   }
 }
@@ -799,12 +800,12 @@ export async function recordCloudUsage(
       contextTokens: inputTokens + outputTokens,
     });
   } catch (error) {
-    console.error('[cloud-usage] execution usage snapshot failed', {
+    reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "recordCloudUsage", context: { logMessage: '[cloud-usage] execution usage snapshot failed', details: {
       tenantId: args.tenantId,
       executionId: args.executionId,
       model: args.model,
       error,
-    });
+    } } });
   }
   await recordUsageRow(db, env, {
     tenantId:   args.tenantId,
@@ -877,7 +878,7 @@ async function resolveCloudRouting(env: Env, tenantId: number): Promise<CloudRou
     });
     return { effectivePlan: r.effectivePlan, premiumOverride: r.premiumOverride, premiumEntitled: premium.entitled };
   } catch (error) {
-    console.error('[cloud-routing] tenant plan resolution failed; using free routing', { tenantId, error });
+    reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "resolveCloudRouting", context: { logMessage: '[cloud-routing] tenant plan resolution failed; using free routing', details: { tenantId, error } } });
     return { effectivePlan: 'free', premiumOverride: false, premiumEntitled: false };
   }
 }
@@ -939,12 +940,12 @@ export async function loadContainerRunContext(env: Env, db: Db, executionId: num
       ]);
       execParams = (await loadCapabilityContext(env, db, artifacts, agentPsychometric)).execParams;
     } catch (error) {
-      console.error('[cloud-container] execution personality context load failed', {
+      reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "loadContainerRunContext", context: { logMessage: '[cloud-container] execution personality context load failed', details: {
         tenantId: exec.tenantId,
         executionId,
         taskId: exec.taskId,
         error,
-      });
+      } } });
     }
     return {
       tenantId: exec.tenantId, taskId: exec.taskId, projectId: task.projectId,
@@ -964,7 +965,7 @@ async function isExecutionCancelled(db: Db, executionId: number): Promise<boolea
     const [row] = await db.select({ status: executions.status }).from(executions).where(eq(executions.id, executionId)).limit(1);
     return row?.status === 'cancelled';
   } catch (error) {
-    console.error('[cloud-run] cancellation status check failed', { executionId, error });
+    reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "isExecutionCancelled", context: { logMessage: '[cloud-run] cancellation status check failed', details: { executionId, error } } });
     return false;
   }
 }
@@ -1068,7 +1069,7 @@ async function recordCloudLlmTurn(
  * op agree. Best-effort — a missed beat is covered by the next one. */
 async function heartbeatExecution(db: Db, executionId: number): Promise<void> {
   await db.update(executions).set({ updatedAt: new Date() }).where(eq(executions.id, executionId))
-    .catch((error) => console.error('[cloud-container] execution heartbeat failed', { executionId, error }));
+    .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "heartbeatExecution", context: { logMessage: '[cloud-container] execution heartbeat failed', details: { executionId, error } } }));
 }
 
 /**
@@ -1316,7 +1317,7 @@ export async function handleContainerOp(
           tenantId, cloudAgentRef, executionId,
           toolName: 'coordination.refused', category: 'tool',
           detail: { path: p, heldBy }, result: `write to '${p}' refused — held by ${heldBy}`,
-        }).catch((error) => console.error('[cloud-container] coordination refusal telemetry failed', { tenantId, executionId, taskId, path: p, error }));
+        }).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "blocked", context: { logMessage: '[cloud-container] coordination refusal telemetry failed', details: { tenantId, executionId, taskId, path: p, error } } }));
       },
     });
     if (blocked) return { status: 200, body: { ok: false, error: blocked } };
@@ -1346,13 +1347,13 @@ export async function handleContainerOp(
     const fin = await finalizeCloudRun(env, db, { tenantId, cloudAgentRef, executionId, taskRow, agentLabel, repoCtx, repoMiss, writtenPaths, finalOutput, cancelled });
     if (!cancelled) {
       await runtimeService.update(executionId, fin.ok ? { status: ExecutionStatus.COMPLETED, result: fin.output } : { status: ExecutionStatus.FAILED, errorMessage: fin.output })
-        .catch((error) => console.warn('[cloud-container] terminal transition rejected', { tenantId, executionId, error }));
+        .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "handleContainerOp", level: 'warning', context: { logMessage: '[cloud-container] terminal transition rejected', details: { tenantId, executionId, error } } }));
       const updated = await runtimeService.getExecution(executionId).catch(() => null);
       if (updated) notifyExecutionSubscribers(executionId, { type: 'done', executionId, status: updated.status, execution: updated.toPlain(), ts: new Date().toISOString() });
     }
     // Learned Model Routing: container-surface terminal chokepoint (covers the
     // cancelled finalize too — the row is already CANCELLED). Idempotent/best-effort.
-    await scoreRunOutcome(env, db, { executionId }).catch((error) => console.error('[cloud-container] terminal outcome scoring failed', { tenantId, executionId, error }));
+    await scoreRunOutcome(env, db, { executionId }).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "handleContainerOp", context: { logMessage: '[cloud-container] terminal outcome scoring failed', details: { tenantId, executionId, error } } }));
     return { status: 200, body: { ok: fin.ok, output: fin.output } };
   }
 
@@ -1371,10 +1372,10 @@ export async function handleContainerOp(
       // uses (never the default branch, never under an open PR, never a branch
       // carrying commits this run did not author). Best-effort.
       await teardownCrashedRunArtifacts(env, db, { executionId, secret: gitSecret(env) })
-        .catch((error) => console.error('[cloud-container] crashed-run artifact teardown failed', { tenantId, executionId, error }));
+        .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "handleContainerOp", context: { logMessage: '[cloud-container] crashed-run artifact teardown failed', details: { tenantId, executionId, error } } }));
       // Terminal (no self-heal requeue) — score the failed run. A requeue defers
       // scoring to the durable surface's terminal chokepoint instead.
-      await scoreRunOutcome(env, db, { executionId }).catch((error) => console.error('[cloud-container] failed-run outcome scoring failed', { tenantId, executionId, error }));
+      await scoreRunOutcome(env, db, { executionId }).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "handleContainerOp", context: { logMessage: '[cloud-container] failed-run outcome scoring failed', details: { tenantId, executionId, error } } }));
     }
     return { status: 200, body: { ok: true, recovered: outcome === 'requeued' } };
   }
@@ -1671,7 +1672,7 @@ function buildCloudProvider(args: {
           toolName: 'coordination.refused', category: 'tool',
           detail: { path, heldBy },
           result: `write to '${path}' refused — held by ${heldBy}`,
-        }).catch((error) => console.error('[cloud-run] coordination refusal telemetry failed', { tenantId, executionId, path, error }));
+        }).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "buildCloudProvider", context: { logMessage: '[cloud-run] coordination refusal telemetry failed', details: { tenantId, executionId, path, error } } }));
       },
     }),
     staticCheck: {
@@ -2118,13 +2119,13 @@ export async function runCloudToolLoop(
       try {
         parsed = tc.function?.arguments ? (JSON.parse(tc.function.arguments) as Record<string, unknown>) : {};
       } catch (error) {
-        console.warn('[cloud-run] malformed tool arguments; invoking with empty object', {
+        reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "runCloudToolLoop", level: 'warning', context: { logMessage: '[cloud-run] malformed tool arguments; invoking with empty object', details: {
           tenantId,
           executionId,
           toolCallId: tc.id,
           toolName: name,
           error,
-        });
+        } } });
       }
       const tStart = Date.now();
 
@@ -2271,7 +2272,7 @@ export async function runCloudToolLoop(
     abortController.abort();
     await cancelWatcher.catch((error) => {
       if (!(error instanceof Error) || error.name !== 'AbortError') {
-        console.error('[cloud-run] cancellation watcher failed', { tenantId, executionId, error });
+        reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "runCloudToolLoop", context: { logMessage: '[cloud-run] cancellation watcher failed', details: { tenantId, executionId, error } } });
       }
     });
   }
@@ -2455,7 +2456,7 @@ export async function recordLimbicState(
     category: 'context',
     detail: { state, params },
     result: `affective state: ${directives.length} directive(s)`,
-  }).catch((error) => console.error('[cloud-run] limbic-state telemetry failed', { tenantId: args.tenantId, executionId: args.executionId, error }));
+  }).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "recordLimbicState", context: { logMessage: '[cloud-run] limbic-state telemetry failed', details: { tenantId: args.tenantId, executionId: args.executionId, error } } }));
 }
 
 /**
@@ -2530,7 +2531,7 @@ export async function finalizeCloudRun(
     // Release the claim on a failed create so a later finalize can re-attempt.
     if (!pr.ok) {
       noPrReason = pr.reason;
-      await releaseTaskPrClaim(db, taskRow.id).catch((error) => console.error('[cloud-finalize] failed PR-claim release failed', { tenantId, executionId, taskId: taskRow.id, error }));
+      await releaseTaskPrClaim(db, taskRow.id).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] failed PR-claim release failed', details: { tenantId, executionId, taskId: taskRow.id, error } } }));
     }
 
     const autoMerge = cloudAutoMergeEnabled(env);
@@ -2557,7 +2558,7 @@ export async function finalizeCloudRun(
     await db.update(tasks)
       .set({ gitBranch: repoCtx.branch, ...(pr.ok ? { githubPrUrl: pr.url, githubPrNumber: pr.number } : {}), updatedAt: new Date() })
       .where(eq(tasks.id, taskRow.id))
-      .catch((error) => console.error('[cloud-finalize] task PR metadata update failed', { tenantId, executionId, taskId: taskRow.id, error }));
+      .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] task PR metadata update failed', details: { tenantId, executionId, taskId: taskRow.id, error } } }));
 
     if (!autoMerge) {
       // Approval-gated default: open the PR and stop. A human merges in-product.
@@ -2585,7 +2586,7 @@ export async function finalizeCloudRun(
       // to this task (build validation + auto-fix loop).
       if (m.ok && prRowId) {
         await markPullRequestMergedById(db, prRowId, tenantId, { mergeSha: m.sha ?? null })
-          .catch((error) => console.error('[cloud-finalize] merged PR persistence failed', { tenantId, executionId, prRowId, error }));
+          .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] merged PR persistence failed', details: { tenantId, executionId, prRowId, error } } }));
       }
       mergeNote = m.ok
         ? ` and auto-merged to \`${repoCtx.base}\` (deploy triggered)`
@@ -2623,7 +2624,7 @@ export async function finalizeCloudRun(
       await teardownRunBranch(env, db, {
         tenantId, executionId, taskId: taskRow.id, repoCtx,
         writtenPaths: [...writtenPaths], cloudAgentRef, agentLabel,
-      }).catch((error) => console.error('[cloud-finalize] run branch teardown failed', { tenantId, executionId, taskId: taskRow.id, error }));
+      }).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] run branch teardown failed', details: { tenantId, executionId, taskId: taskRow.id, error } } }));
     } else {
       await recordRunRollbackSnapshot(db, {
         tenantId, executionId, taskId: taskRow.id, repoCtx,
@@ -2677,7 +2678,7 @@ export async function finalizeCloudRun(
     // grouped under it), not just the one projectId — the same resolver the chat learn
     // gate uses, so a cloud run contributes to all the project's Everminds. Best-effort.
     await contributeTextToProjectEverminds(env, db, tenantId, repoCtx.projectId, output, learnWeight, taskRow.title)
-      .catch((error) => console.error('[cloud-finalize] Evermind contribution failed', { tenantId, executionId, projectId: repoCtx.projectId, error }));
+      .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] Evermind contribution failed', details: { tenantId, executionId, projectId: repoCtx.projectId, error } } }));
   }
 
   // Publish this run's outcome onto the PR itself so a reviewer on github.com
@@ -2699,7 +2700,7 @@ export async function finalizeCloudRun(
       summary: output + unverifiedNote,
       filesChanged: [...writtenPaths],
       appBaseUrl: resolveAppBaseUrl(env),
-    }).catch((error) => console.error('[cloud-finalize] GitHub check publication failed', { tenantId, executionId, prNumber: openedPrNumber, error }));
+    }).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] GitHub check publication failed', details: { tenantId, executionId, prNumber: openedPrNumber, error } } }));
   }
 
   // The check run above answers "green or red" in the merge box; it cannot carry
@@ -2722,7 +2723,7 @@ export async function finalizeCloudRun(
       env, db, tenantId, repoCtx.repoId, openedPrNumber,
       `### 🤖 ${agentLabel} — task #${taskRow.id}\n\n${output}${fileBlock}${unverifiedNote}${runUrl}`,
       { kind: 'agent-run', scope: executionId },
-    ).catch((error) => console.error('[cloud-finalize] PR summary comment failed', { tenantId, executionId, prNumber: openedPrNumber, error }));
+    ).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] PR summary comment failed', details: { tenantId, executionId, prNumber: openedPrNumber, error } } }));
   }
 
   return { ok: !autoMergeFailed, output: output + unverifiedNote };
@@ -2827,7 +2828,7 @@ export async function prepareCloudRun(
     });
     if (application) {
       await recordPersonalityEvent(env, db, tenantId, { agentRef: cloudAgentRef, executionId, ...application })
-        .catch((error) => console.error('[cloud-run] personality telemetry failed', { tenantId, executionId, cloudAgentRef, error }));
+        .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "prepareCloudRun", context: { logMessage: '[cloud-run] personality telemetry failed', details: { tenantId, executionId, cloudAgentRef, error } } }));
     }
   }
 
@@ -2951,7 +2952,7 @@ export async function markCloudExecutionRunning(runtimeService: RuntimeService, 
   try {
     running = await runtimeService.update(executionId, { status: ExecutionStatus.RUNNING });
   } catch (error) {
-    console.warn('[cloud-run] running transition rejected', { executionId, error });
+    reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "markCloudExecutionRunning", level: 'warning', context: { logMessage: '[cloud-run] running transition rejected', details: { executionId, error } } });
     return; // already non-pending (cancelled/terminal) — leave it
   }
   notifyExecutionSubscribers(executionId, {

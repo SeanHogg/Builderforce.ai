@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Effective permissions — the ONE resolution of "what may this member actually do?".
  *
@@ -153,7 +154,7 @@ export async function invalidateMemberPermissions(
   await Promise.all(
     ['viewer', 'developer', 'manager', 'owner'].map((role) =>
       invalidateCached(env, memberCacheKey(tenantId, userId, role)).catch((error) => {
-        console.error('[suppressed-error] application/rbac/effectivePermissions.ts:155 invalidateMemberPermissions', { error });
+        reportCaughtError(error, { source: "application/rbac/effectivePermissions.ts", operation: "invalidateMemberPermissions" });
       }),
     ),
   );
@@ -170,6 +171,6 @@ export async function invalidateMemberPermissions(
 export async function invalidateRolePermissions(env: Env | undefined, role: string): Promise<void> {
   if (!env) return;
   await invalidateCached(env, roleCacheKey(role)).catch((error) => {
-    console.error('[suppressed-error] application/rbac/effectivePermissions.ts:170 invalidateRolePermissions', { error });
+    reportCaughtError(error, { source: "application/rbac/effectivePermissions.ts", operation: "invalidateRolePermissions" });
   });
 }

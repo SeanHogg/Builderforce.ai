@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * CeremonyRoomDO — a live multiplayer relay for a standup/planning "ceremony"
  * (the round-table surface). One DO instance per room, keyed `ceremony:<projectId>`
@@ -49,7 +50,7 @@ export class CeremonyRoomDO implements DurableObject {
           const body = await request.text();
           if (body) frame = body;
         } catch (error) { /* keep default */ 
-          console.error('[suppressed-error] infrastructure/relay/CeremonyRoomDO.ts:51 fetch', { error });
+          reportCaughtError(error, { source: "infrastructure/relay/CeremonyRoomDO.ts", operation: "fetch" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
         }
         this.broadcast(frame, null);
         return new Response(null, { status: 204 });
@@ -71,7 +72,7 @@ export class CeremonyRoomDO implements DurableObject {
     server.addEventListener('error', () => this.onClose(peer));
 
     try { server.send(JSON.stringify({ type: 'hello', id })); } catch (error) { /* ignore */ 
-      console.error('[suppressed-error] infrastructure/relay/CeremonyRoomDO.ts:71 fetch', { error });
+      reportCaughtError(error, { source: "infrastructure/relay/CeremonyRoomDO.ts", operation: "fetch" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
     }
 
     return new Response(null, { status: 101, webSocket: client });
@@ -94,7 +95,7 @@ export class CeremonyRoomDO implements DurableObject {
       try {
         peer.ws.send(JSON.stringify({ type: 'roster', peers: this.roster() }));
       } catch (error) { /* ignore */ 
-        console.error('[suppressed-error] infrastructure/relay/CeremonyRoomDO.ts:92 onMessage', { error });
+        reportCaughtError(error, { source: "infrastructure/relay/CeremonyRoomDO.ts", operation: "onMessage" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
       }
       this.broadcast(
         JSON.stringify({ type: 'presence', action: 'join', peer: this.publicPeer(peer) }),

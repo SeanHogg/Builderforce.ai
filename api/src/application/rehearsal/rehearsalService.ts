@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * rehearsalService — start, run and read rehearsals.
  *
@@ -252,13 +253,13 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
       .update(executions)
       .set({ status: 'failed', errorMessage: message.slice(0, 2000), completedAt: new Date() })
       .where(scopedToTenant(executions, tenantId, eq(executions.id, executionId)))
-      .catch((writeError) => console.error('[rehearsal] execution failure transition failed', {
+      .catch((writeError) => reportCaughtError(writeError, { source: "application/rehearsal/rehearsalService.ts", operation: "runRehearsal", context: { logMessage: '[rehearsal] execution failure transition failed', details: {
         rehearsalId,
         executionId,
         tenantId,
         originalError: message,
         writeError: writeError instanceof Error ? `${writeError.name}: ${writeError.message}` : String(writeError),
-      }));
+      } } }));
   }
 
   return rehearsalId;

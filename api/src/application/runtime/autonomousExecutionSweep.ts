@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * autonomousExecutionSweep — the always-on, server-side executor for the board's
  * autonomous agents.
@@ -198,7 +199,7 @@ export async function runAutonomousExecutionSweep(
           });
           if (sent) result.upgradeEmailsSent += 1;
         } catch (err) {
-          console.error(`[cron:auto-exec] upgrade-email failed tenant=${tenantId}`, err);
+          reportCaughtError(err, { source: "application/runtime/autonomousExecutionSweep.ts", operation: "runAutonomousExecutionSweep", context: { logMessage: `[cron:auto-exec] upgrade-email failed tenant=${tenantId}`, details: err } });
         }
         continue;
       }
@@ -253,12 +254,12 @@ export async function runAutonomousExecutionSweep(
             dispatchedForTenant += 1;
           }
         } catch (err) {
-          console.error(`[cron:auto-exec] dispatch failed tenant=${tenantId} task=${c.taskId}`, err);
+          reportCaughtError(err, { source: "application/runtime/autonomousExecutionSweep.ts", operation: "runAutonomousExecutionSweep", context: { logMessage: `[cron:auto-exec] dispatch failed tenant=${tenantId} task=${c.taskId}`, details: err } });
         }
       }
       result.dispatched += dispatchedForTenant;
     } catch (err) {
-      console.error(`[cron:auto-exec] tenant=${tenantId} failed`, err);
+      reportCaughtError(err, { source: "application/runtime/autonomousExecutionSweep.ts", operation: "runAutonomousExecutionSweep", context: { logMessage: `[cron:auto-exec] tenant=${tenantId} failed`, details: err } });
     }
   }
 

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Terms-of-service acceptance — the ONE place that answers "must this user accept
  * new terms before we serve them?".
@@ -132,7 +133,7 @@ export async function checkTermsAcceptance(
 export async function invalidateActiveTermsVersion(env: Env | undefined): Promise<void> {
   if (!env) return;
   await invalidateCached(env, ACTIVE_TERMS_KEY).catch((error) => {
-    console.error('[suppressed-error] application/legal/termsAcceptance.ts:134 invalidateActiveTermsVersion', { error });
+    reportCaughtError(error, { source: "application/legal/termsAcceptance.ts", operation: "invalidateActiveTermsVersion" });
   });
 }
 
@@ -140,6 +141,6 @@ export async function invalidateActiveTermsVersion(env: Env | undefined): Promis
 export async function invalidateAcceptedTermsVersion(env: Env | undefined, userId: string): Promise<void> {
   if (!env) return;
   await invalidateCached(env, acceptedTermsKey(userId)).catch((error) => {
-    console.error('[suppressed-error] application/legal/termsAcceptance.ts:140 invalidateAcceptedTermsVersion', { error });
+    reportCaughtError(error, { source: "application/legal/termsAcceptance.ts", operation: "invalidateAcceptedTermsVersion" });
   });
 }

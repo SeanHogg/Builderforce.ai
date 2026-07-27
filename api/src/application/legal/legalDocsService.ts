@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Legal documents service — the SINGLE source of truth for reading, amending,
  * publishing and AI-enhancing the platform's Terms of Use / Privacy Policy.
@@ -72,7 +73,7 @@ async function recordLegalVersion(
   } catch (error) {
     // History is an audit convenience; never fail the legal write over it.
   
-    console.error('[suppressed-error] application/legal/legalDocsService.ts:72 recordLegalVersion', { error });
+    reportCaughtError(error, { source: "application/legal/legalDocsService.ts", operation: "recordLegalVersion" });
   }
 }
 

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Agentic QA routes — /api/qa
  *
@@ -184,7 +185,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       // New interactions move the heatmap — bump the per-tenant version token so
       // the next /heatmap read recomputes instead of serving a stale ranking.
       void bumpCacheVersion(c.env as Env, QA_HEAT_VERSION_KEY(tenantId)).catch((error) => {
-        console.error('[suppressed-error] presentation/routes/qaRoutes.ts:186 createQaRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/qaRoutes.ts", operation: "createQaRoutes" });
       });
     }
     return c.json({ inserted: rows.length }, 201);
@@ -729,7 +730,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       } catch (error) {
         // One finding's routing failure must not abort the rest of the batch.
       
-        console.error('[suppressed-error] presentation/routes/qaRoutes.ts:727 autoRouteFindings', { error });
+        reportCaughtError(error, { source: "presentation/routes/qaRoutes.ts", operation: "autoRouteFindings" });
       }
     }
   }
@@ -968,7 +969,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
         });
       // A new finding moves the quality trend — invalidate the cached rollup.
       void bumpCacheVersion(c.env as Env, QA_QUALITY_VERSION_KEY(tenantId)).catch((error) => {
-        console.error('[suppressed-error] presentation/routes/qaRoutes.ts:968 createQaRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/qaRoutes.ts", operation: "createQaRoutes" });
       });
     }
 

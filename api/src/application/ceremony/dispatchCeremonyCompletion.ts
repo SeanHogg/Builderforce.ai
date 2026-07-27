@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Server-side "dispatch agent work when a ceremony completes".
  *
@@ -67,7 +68,7 @@ export async function dispatchCeremonyCompletion(
       });
       if (started) dispatched += 1;
     } catch (err) {
-      console.error(`[ceremony:complete] dispatch failed task=${t.id}`, err);
+      reportCaughtError(err, { source: "application/ceremony/dispatchCeremonyCompletion.ts", operation: "dispatchCeremonyCompletion", context: { logMessage: `[ceremony:complete] dispatch failed task=${t.id}`, details: err } });
     }
   }
 

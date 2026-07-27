@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Resume a paused cloud run with a human's answer.
  *
@@ -55,11 +56,11 @@ export async function resumePausedExecution(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ approvalId: args.approvalId ?? null }),
-    }).catch((error) => console.error('[execution-resume] durable runner wake-up failed', {
+    }).catch((error) => reportCaughtError(error, { source: "application/runtime/executionResume.ts", operation: "resumePausedExecution", context: { logMessage: '[execution-resume] durable runner wake-up failed', details: {
       executionId: args.executionId,
       tenantId: args.tenantId,
       approvalId: args.approvalId ?? null,
       error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-    }));
+    } } }));
   }
 }

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Per-seat AI spend caps — the owner-configured dollar ceiling on each Teams seat's
  * month-to-date AI spend, and the budget/spend notifications that ride it.
@@ -243,7 +244,7 @@ export async function maybeEmitSpendNotification(
       });
     }
   } catch (err) {
-    console.warn('[memberSpend] notify failed:', (err as Error)?.message);
+    reportCaughtError(err, { source: "application/consumption/memberSpend.ts", operation: "maybeEmitSpendNotification", level: 'warning', context: { logMessage: '[memberSpend] notify failed:', details: (err as Error)?.message } });
   }
 }
 

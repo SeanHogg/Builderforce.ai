@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /** OpenAI Codex / ChatGPT subscription OAuth for tenant-owned credentials. */
 
 const CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
@@ -47,7 +48,7 @@ export function parseOpenAICodexCallback(input: string): { code: string; state: 
     const url = new URL(value);
     return { code: url.searchParams.get('code') ?? '', state: url.searchParams.get('state') };
   } catch (error) { /* code or code#state */ 
-    console.error('[suppressed-error] application/llm/openaiCodexOAuth.ts:49 parseOpenAICodexCallback', { error });
+    reportCaughtError(error, { source: "application/llm/openaiCodexOAuth.ts", operation: "parseOpenAICodexCallback" });
   }
   const [code, state] = value.split('#', 2);
   return { code: code ?? '', state: state || null };

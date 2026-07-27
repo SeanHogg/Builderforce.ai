@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * githubActionsReconcile — close the loop on a dispatch GitHub never turned into a run.
  *
@@ -305,11 +306,11 @@ async function failStrandedDispatch(db: Db, row: StrandedRow, reason: string): P
     ))
     .returning({ id: executions.id })
     .catch((error) => {
-      console.error('[github-actions-reconcile] stranded execution transition failed', {
+      reportCaughtError(error, { source: "application/runtime/githubActionsReconcile.ts", operation: "updated", context: { logMessage: '[github-actions-reconcile] stranded execution transition failed', details: {
         tenantId: row.tenantId,
         executionId: row.id,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      });
+      } } });
       return [];
     });
   if (updated.length === 0) return false;
@@ -324,11 +325,11 @@ async function failStrandedDispatch(db: Db, row: StrandedRow, reason: string): P
     category: 'error',
     result: reason,
     ts: new Date(),
-  }).catch((error) => console.error('[github-actions-reconcile] failure telemetry append failed', {
+  }).catch((error) => reportCaughtError(error, { source: "application/runtime/githubActionsReconcile.ts", operation: "failStrandedDispatch", context: { logMessage: '[github-actions-reconcile] failure telemetry append failed', details: {
     tenantId: row.tenantId,
     executionId: row.id,
     error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-  }));
+  } } }));
 
   return true;
 }

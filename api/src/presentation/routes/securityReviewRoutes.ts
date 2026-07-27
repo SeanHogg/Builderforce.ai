@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Security routes – /api/security
  *
@@ -168,7 +169,7 @@ export function createSecurityReviewRoutes(db: Db): Hono<HonoEnv> {
     }
     // Persist the just-scanned URL as the project's target when it came in via `url`.
     if (body.url?.trim()) await setProjectScanTarget(db, tenantId, projectId, result.targetUrl).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/securityReviewRoutes.ts:170 createSecurityReviewRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/securityReviewRoutes.ts", operation: "createSecurityReviewRoutes" });
     });
     return c.json(result, 201);
   });

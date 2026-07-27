@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Static-site publish core — the ONE implementation of "put a built app live at
  * a subdomain", shared by both publish paths.
@@ -183,7 +184,7 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
   } catch (error) {
     /* target auto-provisioning is best-effort; publish still succeeded */
   
-    console.error('[suppressed-error] application/ide/publishStaticSite.ts:183 publishStaticSite', { error });
+    reportCaughtError(error, { source: "application/ide/publishStaticSite.ts", operation: "publishStaticSite" });
   }
 
   return {

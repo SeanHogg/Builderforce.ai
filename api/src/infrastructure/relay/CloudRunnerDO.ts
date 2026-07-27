@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * CloudRunnerDO — the **durable** cloud surface for V2 agents. Runs the cloud
  * agent loop fully in the cloud across Durable Object `alarm()` ticks: ONE LLM
@@ -137,11 +138,11 @@ export class CloudRunnerDO implements DurableObject {
     await this.db.update(executions)
       .set({ updatedAt: new Date() })
       .where(eq(executions.id, cursor.executionId))
-      .catch((error) => console.error('[cloud-runner] heartbeat write failed', {
+      .catch((error) => reportCaughtError(error, { source: "infrastructure/relay/CloudRunnerDO.ts", operation: "alarm", context: { logMessage: '[cloud-runner] heartbeat write failed', details: {
         executionId: cursor.executionId,
         tenantId: cursor.tenantId,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      }));
+      } } }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) }));
 
     try {
       if (cursor.stage === 'prep') {
@@ -206,11 +207,11 @@ export class CloudRunnerDO implements DurableObject {
         await this.db.update(executions)
           .set({ status: 'paused', updatedAt: new Date() })
           .where(eq(executions.id, cursor.executionId))
-          .catch((error) => console.error('[cloud-runner] pause transition failed', {
+          .catch((error) => reportCaughtError(error, { source: "infrastructure/relay/CloudRunnerDO.ts", operation: "alarm", context: { logMessage: '[cloud-runner] pause transition failed', details: {
             executionId: cursor.executionId,
             tenantId: cursor.tenantId,
             error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-          }));
+          } } }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) }));
         // Narrate the pause — WITH the question — into the ticket's linked Brain
         // chats, so the human driving the conversation sees what the agent needs
         // (Slack/email via approvalNotifier are the only other channels). Keyed by
@@ -235,11 +236,11 @@ export class CloudRunnerDO implements DurableObject {
         result.ok
           ? { status: ExecutionStatus.COMPLETED, result: result.output }
           : { status: ExecutionStatus.FAILED, errorMessage: result.output },
-      ).catch((error) => console.warn('[cloud-runner] terminal transition was rejected', {
+      ).catch((error) => reportCaughtError(error, { source: "infrastructure/relay/CloudRunnerDO.ts", operation: "alarm", level: 'warning', context: { logMessage: '[cloud-runner] terminal transition was rejected', details: {
         executionId: cursor.executionId,
         tenantId: cursor.tenantId,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      }));
+      } } }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) }));
       await this.cleanup(cursor.executionId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -259,11 +260,11 @@ export class CloudRunnerDO implements DurableObject {
       // runner within minutes — the machinery that already exists for a dropped run.
       // Either way we must NOT cleanup(): that deletes the cursor this run resumes from.
       if (isInfrastructureEviction(message)) {
-        await this.persistAndArm(cursor).catch((error) => console.error('[cloud-runner] crash cursor persistence failed; reaper must recover', {
+        await this.persistAndArm(cursor).catch((error) => reportCaughtError(error, { source: "infrastructure/relay/CloudRunnerDO.ts", operation: "alarm", context: { logMessage: '[cloud-runner] crash cursor persistence failed; reaper must recover', details: {
           executionId: cursor.executionId,
           tenantId: cursor.tenantId,
           error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-        }));
+        } } }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) }));
         return;
       }
 
@@ -272,11 +273,11 @@ export class CloudRunnerDO implements DurableObject {
         await this.runtimeService.update(cursor.executionId, {
           status: ExecutionStatus.FAILED,
           errorMessage: message,
-        }).catch((error) => console.warn('[cloud-runner] crash failure transition was rejected', {
+        }).catch((error) => reportCaughtError(error, { source: "infrastructure/relay/CloudRunnerDO.ts", operation: "alarm", level: 'warning', context: { logMessage: '[cloud-runner] crash failure transition was rejected', details: {
           executionId: cursor.executionId,
           tenantId: cursor.tenantId,
           error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-        }));
+        } } }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) }));
       }
       await this.cleanup(cursor.executionId);
     }
@@ -309,10 +310,10 @@ export class CloudRunnerDO implements DurableObject {
       // Learned Model Routing: the single durable-surface terminal chokepoint —
       // every DO terminal path (finish, cancel, error) routes through cleanup, so
       // scoring here covers them all. Idempotent + best-effort (never blocks).
-      await scoreRunOutcome(this.env, this.db, { executionId }).catch((error) => console.error('[cloud-runner] outcome scoring failed', {
+      await scoreRunOutcome(this.env, this.db, { executionId }).catch((error) => reportCaughtError(error, { source: "infrastructure/relay/CloudRunnerDO.ts", operation: "cleanup", context: { logMessage: '[cloud-runner] outcome scoring failed', details: {
         executionId,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      }));
+      } } }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) }));
     }
     await this.state.storage.delete(CURSOR_KEY);
     await this.state.storage.deleteAlarm();

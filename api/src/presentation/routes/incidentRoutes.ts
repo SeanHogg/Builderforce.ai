@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Incident-management routes — /api/incidents
  *
@@ -184,7 +185,7 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
       openWarRoom: b.openWarRoom === true, actorRef: `u:${c.get('userId') as string | undefined ?? 'system'}`,
     });
     if (b.page && res.created) await new EscalationService(db).pageInitial(c.env, tenantId, res.incidentId).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/incidentRoutes.ts:186 createIncidentRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/incidentRoutes.ts", operation: "createIncidentRoutes" });
     });
     await invalidate(c, tenantId);
     return c.json(res, res.created ? 201 : 200);

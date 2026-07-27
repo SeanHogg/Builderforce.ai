@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Marketplace notifications.
  *
@@ -36,10 +37,7 @@ export async function notify(db: Db, env: Pick<Env, 'NOTIFY_EMAIL_URL' | 'NOTIFY
     // Deliberately non-fatal (see docblock), but the drop must not be silent:
     // this row IS the durable feed, so losing it means the recipient never learns
     // of the event by any channel. Log enough to identify which one was lost.
-    console.error(
-      `[notify] in-app notification LOST kind=${input.kind} user=${input.userId}:`,
-      (err as Error)?.message,
-    );
+    reportCaughtError(err, { source: "application/notifications/notify.ts", operation: "notify", context: { logMessage: `[notify] in-app notification LOST kind=${input.kind} user=${input.userId}:`, details: (err as Error)?.message } });
   }
   if (env.NOTIFY_EMAIL_URL) {
     try {
@@ -56,7 +54,7 @@ export async function notify(db: Db, env: Pick<Env, 'NOTIFY_EMAIL_URL' | 'NOTIFY
         });
       }
     } catch (err) {
-      console.warn(`[notify] email failed kind=${input.kind} user=${input.userId}:`, (err as Error)?.message);
+      reportCaughtError(err, { source: "application/notifications/notify.ts", operation: "notify", level: 'warning', context: { logMessage: `[notify] email failed kind=${input.kind} user=${input.userId}:`, details: (err as Error)?.message } });
     }
   }
 }

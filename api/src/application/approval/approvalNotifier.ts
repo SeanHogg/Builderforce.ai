@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Approval/question notification fan-out — the single place that tells humans an
  * agent has bubbled something up.
@@ -25,7 +26,7 @@ export async function sendSlackNotification(webhookUrl: string, text: string): P
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
   }).catch((error) => { /* best-effort */ 
-    console.error('[suppressed-error] application/approval/approvalNotifier.ts:23 sendSlackNotification', { error });
+    reportCaughtError(error, { source: "application/approval/approvalNotifier.ts", operation: "sendSlackNotification" });
   });
 }
 
@@ -52,7 +53,7 @@ export async function sendTeamsNotification(
       text,
     }),
   }).catch((error) => { /* best-effort */ 
-    console.error('[suppressed-error] application/approval/approvalNotifier.ts:41 sendTeamsNotification', { error });
+    reportCaughtError(error, { source: "application/approval/approvalNotifier.ts", operation: "sendTeamsNotification" });
   });
 }
 
@@ -68,7 +69,7 @@ export async function sendEmailNotification(
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ from, to, subject, html }),
   }).catch((error) => { /* best-effort */ 
-    console.error('[suppressed-error] application/approval/approvalNotifier.ts:62 sendEmailNotification', { error });
+    reportCaughtError(error, { source: "application/approval/approvalNotifier.ts", operation: "sendEmailNotification" });
   });
 }
 

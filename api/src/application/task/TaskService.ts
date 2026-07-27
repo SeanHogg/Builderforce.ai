@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { IProjectRepository } from '../../domain/project/IProjectRepository';
 import { Task } from '../../domain/task/Task';
@@ -384,7 +385,7 @@ export class TaskService {
         const predecessorId = idByIndex.get(predIndex);
         if (successorId == null || predecessorId == null) continue;
         await this.linkDependency(task.projectId as number, predecessorId, successorId).catch((error) => {
-          console.error('[suppressed-error] application/task/TaskService.ts:386 decomposeEpic', { error });
+          reportCaughtError(error, { source: "application/task/TaskService.ts", operation: "decomposeEpic" });
         });
       }
     }

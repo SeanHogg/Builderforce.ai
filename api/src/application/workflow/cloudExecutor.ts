@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Cloud workflow executor — runs `runtime='cloud'` workflows on the
  * builderforce-hosted runtime, instead of a self-hosted agentHost polling and
@@ -146,7 +147,7 @@ async function executeCloudNode(env: CloudExecutorEnv, node: NodeInput, inputTex
       } catch (error) {
         /* non-JSON payload — fall through to passthrough */
       
-        console.error('[suppressed-error] application/workflow/cloudExecutor.ts:146 executeCloudNode', { error });
+        reportCaughtError(error, { source: "application/workflow/cloudExecutor.ts", operation: "executeCloudNode" });
       }
       return { output: inputText };
     }

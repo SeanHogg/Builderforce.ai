@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * runManagerSweep — the always-on driver that runs the AI Manager pass for every
  * managed project, every tick. This is what "keeps the agents and team members
@@ -156,7 +157,7 @@ export async function runManagerSweep(
       result.systemicFindings += s.systemicFindings;
       result.systemicTicketsCreated += s.systemicTicketsCreated;
     } catch (err) {
-      console.error(`[cron:manager] project=${p.projectId} tenant=${p.tenantId} failed`, err);
+      reportCaughtError(err, { source: "application/manager/runManagerSweep.ts", operation: "runManagerSweep", context: { logMessage: `[cron:manager] project=${p.projectId} tenant=${p.tenantId} failed`, details: err } });
     }
   }
 

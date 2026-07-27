@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../observability/caughtErrorReporter';
 /**
  * Embeddings-vendor registry — single source of truth for which vendor owns
  * which embedding model and how to walk the failover cascade. Mirrors the chat
@@ -186,9 +187,7 @@ export async function dispatchEmbeddingVendor(params: EmbeddingDispatchParams): 
     } catch (err) {
       if (err instanceof VendorRetryableError) {
         attempts.push({ vendor, model: candidateModel, status: err.status, error: err.message });
-        console.warn(
-          `[embeddingVendors] ${vendor}/${candidateModel} returned ${err.status}; failing over (${attempts.length}/${candidates.length} failed)`,
-        );
+        reportCaughtError(err, { source: "application/llm/embeddingVendors/registry.ts", operation: "dispatchEmbeddingVendor", level: 'warning', context: { logMessage: `[embeddingVendors] ${vendor}/${candidateModel} returned ${err.status}; failing over (${attempts.length}/${candidates.length} failed)` } });
         continue;
       }
       throw err; // VendorFatalError bubbles

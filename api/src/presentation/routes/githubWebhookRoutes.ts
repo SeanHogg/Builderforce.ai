@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * GitHub webhook handler — /api/webhooks/github
  *
@@ -339,7 +340,7 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
       const issuePayload = JSON.parse(rawBody) as Record<string, unknown>;
       await ingestGithubActivity(c.env as Env, db, repository.full_name, issueEvents(issuePayload));
     } catch (error) { /* activity ingest is best-effort; never block dispatch */ 
-      console.error('[suppressed-error] presentation/routes/githubWebhookRoutes.ts:341 createGitHubWebhookRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/githubWebhookRoutes.ts", operation: "createGitHubWebhookRoutes" });
     }
 
     // Only dispatch on 'opened' or when a dispatch label is added

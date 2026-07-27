@@ -10,6 +10,7 @@ import { eq } from 'drizzle-orm';
 import { checkTermsAcceptance } from '../../application/legal/termsAcceptance';
 import { assertActiveToken, findActiveToken, lastSeenWrites } from '../../application/auth/sessionRevocation';
 import { background } from './background';
+import { updateCaughtErrorContext } from '../../application/observability/caughtErrorReporter';
 
 /**
  * JWT authentication middleware.
@@ -119,6 +120,7 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   c.set('userId',   payload.sub);
   c.set('tenantId', payload.tid);
   c.set('role',     payload.role);
+  updateCaughtErrorContext({ tenantId: payload.tid, userId: payload.sub });
   if (payload.sid) c.set('sessionId', payload.sid);
 
   // Resolve the active segment (the isolation tier below the tenant). For a

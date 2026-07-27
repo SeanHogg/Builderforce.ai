@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * recordPullRequestRow — the single place that inserts a `pull_requests` row.
  *
@@ -120,7 +121,7 @@ async function recordMergeDeployment(db: Db, pr: { id: string; tenantId: number;
   } catch (error) {
     // best-effort — a missing deployment row only undercounts DORA frequency.
   
-    console.error('[suppressed-error] application/repos/recordPullRequestRow.ts:120 recordMergeDeployment', { error });
+    reportCaughtError(error, { source: "application/repos/recordPullRequestRow.ts", operation: "recordMergeDeployment" });
   }
 }
 
@@ -241,6 +242,6 @@ export async function setPullRequestBuildStatus(db: Db, id: string, buildStatus:
   } catch (error) {
     // best-effort — DORA change-failure/MTTR self-heals on the next build event.
   
-    console.error('[suppressed-error] application/repos/recordPullRequestRow.ts:239 setPullRequestBuildStatus', { error });
+    reportCaughtError(error, { source: "application/repos/recordPullRequestRow.ts", operation: "setPullRequestBuildStatus" });
   }
 }

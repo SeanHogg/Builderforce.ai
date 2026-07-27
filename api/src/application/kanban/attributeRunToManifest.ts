@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Attribute a finalized run to the role it ran AS on the ticket's participation
  * manifest (PRD-coordinated-role-participation.md §5.6). Wired at the composition
@@ -95,6 +96,6 @@ export async function attributeRunToManifest(env: Env, db: Db, info: RunFinalize
       ...(prUrl ? { prUrl } : {}),
     });
   } catch (error) { /* best-effort: attribution must never break the run */ 
-    console.error('[suppressed-error] application/kanban/attributeRunToManifest.ts:97 attributeRunToManifest', { error });
+    reportCaughtError(error, { source: "application/kanban/attributeRunToManifest.ts", operation: "attributeRunToManifest" });
   }
 }

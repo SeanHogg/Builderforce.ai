@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * cronWorkSignal — the KV gate that lets Neon compute autosuspend.
  *
@@ -88,7 +89,7 @@ export async function signalPendingWork(env: Env): Promise<void> {
   try {
     await store.put(WORK_SIGNAL_KEY, '1', { expirationTtl: SIGNAL_TTL_SECONDS });
   } catch (error) {
-    console.error('[cron-work-signal] pending-work signal write failed; floor sweep remains active', { error });
+    reportCaughtError(error, { source: "application/runtime/cronWorkSignal.ts", operation: "signalPendingWork", context: { logMessage: '[cron-work-signal] pending-work signal write failed; floor sweep remains active', details: { error } } });
   }
 }
 
@@ -128,7 +129,7 @@ export async function evaluateCronGate(env: Env, nowMs: number): Promise<CronGat
     if (floorDue) return { run: true, reason: 'floor', floorDue: true, lastFloorMs, floorIntervalMs: interval };
     return { run: false, reason: 'idle', floorDue: false, lastFloorMs, floorIntervalMs: interval };
   } catch (error) {
-    console.error('[cron-work-signal] gate read failed; running fan-out fail-open', { nowMs, error });
+    reportCaughtError(error, { source: "application/runtime/cronWorkSignal.ts", operation: "evaluateCronGate", context: { logMessage: '[cron-work-signal] gate read failed; running fan-out fail-open', details: { nowMs, error } } });
     // A KV blip must never strand work — run the fan-out this tick.
     return { run: true, reason: 'kv-unavailable', floorDue: true, lastFloorMs: null, floorIntervalMs: interval };
   }
@@ -151,6 +152,6 @@ export async function openCronTick(env: Env, nowMs: number, floorDue: boolean): 
       floorDue ? store.put(FLOOR_TS_KEY, String(nowMs)) : Promise.resolve(),
     ]);
   } catch (error) {
-    console.error('[cron-work-signal] tick signal consume failed', { nowMs, floorDue, error });
+    reportCaughtError(error, { source: "application/runtime/cronWorkSignal.ts", operation: "openCronTick", context: { logMessage: '[cron-work-signal] tick signal consume failed', details: { nowMs, floorDue, error } } });
   }
 }

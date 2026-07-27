@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * AuditRunner — runs a system-level audit against a project and produces a
  * tracked diagnostic + a notification.
@@ -211,7 +212,7 @@ export class AuditRunner {
       body: `${ctx.projectName}: ${result.headline}`,
       ref: `/projects?project=${args.projectId}&panel=diagnostics&audit=${encodeURIComponent(audit.id)}`,
     }).catch((error) => {
-      console.error('[suppressed-error] application/tools/AuditRunner.ts:206 runAudit', { error });
+      reportCaughtError(error, { source: "application/tools/AuditRunner.ts", operation: "runAudit" });
     });
 
     // Best-effort: file the remediation ticket(s) for the audit agent. Left
@@ -263,7 +264,7 @@ export class AuditRunner {
     } catch (error) {
       // No board/agent available — the deterministic report already landed.
     
-      console.error('[suppressed-error] application/tools/AuditRunner.ts:261 runAudit', { error });
+      reportCaughtError(error, { source: "application/tools/AuditRunner.ts", operation: "runAudit" });
     }
 
     const agentTask = agentTasks[0];

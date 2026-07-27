@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Server-side web fetch for the Brain — lets the co-pilot read an external
  * URL/file/website the user pastes (e.g. a GitHub ROADMAP.md, a docs page).
@@ -155,7 +156,7 @@ async function fetchFollowingRedirects(
     }
     // Discard the redirect body and resolve the next hop (Location may be relative).
     await res.body?.cancel().catch((error) => {
-      console.error('[suppressed-error] application/web/webFetch.ts:157 fetchFollowingRedirects', { error });
+      reportCaughtError(error, { source: "application/web/webFetch.ts", operation: "fetchFollowingRedirects" });
     });
     current = new URL(location, current).toString();
   }
@@ -222,7 +223,7 @@ async function readCapped(res: Response, maxBytes: number): Promise<string> {
     out += decoder.decode(value, { stream: true });
     if (total >= maxBytes) {
       await reader.cancel().catch((error) => {
-        console.error('[suppressed-error] application/web/webFetch.ts:222 readCapped', { error });
+        reportCaughtError(error, { source: "application/web/webFetch.ts", operation: "readCapped" });
       });
       break;
     }

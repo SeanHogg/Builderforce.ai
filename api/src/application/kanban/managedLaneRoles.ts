@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * managedLaneRoles — THE answer to "which roles may execute this stage of this ticket,
  * and who can act as one", on a lifecycle-managed board.
@@ -259,19 +260,19 @@ export async function loadBoardLaneAuthorities(
         eq(swimlaneRequirements.isRequired, true),
       ))
       .catch((error) => {
-        console.error('[managed-lane-roles] board requirement load failed', {
+        reportCaughtError(error, { source: "application/kanban/managedLaneRoles.ts", operation: "[requirementRows, staffed]", context: { logMessage: '[managed-lane-roles] board requirement load failed', details: {
           tenantId: args.tenantId,
           boardId: args.boardId,
           error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-        });
+        } } });
         return [];
       }),
     loadStaffedAgentsForLanes(db, args.tenantId, laneIds).catch((error) => {
-      console.error('[managed-lane-roles] board staffing load failed', {
+      reportCaughtError(error, { source: "application/kanban/managedLaneRoles.ts", operation: "[requirementRows, staffed]", context: { logMessage: '[managed-lane-roles] board staffing load failed', details: {
         tenantId: args.tenantId,
         boardId: args.boardId,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      });
+      } } });
       return new Map<string, LaneStaffedAgent[]>();
     }),
   ]);

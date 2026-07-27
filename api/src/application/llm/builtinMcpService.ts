@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * First-party (built-in) MCP server — exposes the platform's OWN capabilities
  * (projects, tasks, …) as MCP tools through the same gateway endpoints that
@@ -129,10 +130,10 @@ interface BuiltinCtx {
 async function bumpPmo(ctx: BuiltinCtx): Promise<void> {
   if (!ctx.env) return;
   await bumpCacheVersion(ctx.env, pmoVersionKey(ctx.tenantId)).catch((error) => {
-    console.error('[suppressed-error] application/llm/builtinMcpService.ts:131 bumpPmo', { error });
+    reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "bumpPmo" });
   });
   await invalidateProjectsList(ctx.env, ctx.tenantId).catch((error) => {
-    console.error('[suppressed-error] application/llm/builtinMcpService.ts:132 bumpPmo', { error });
+    reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "bumpPmo" });
   });
 }
 
@@ -152,11 +153,11 @@ async function assertLegalWrite(ctx: BuiltinCtx): Promise<void> {
 async function invalidateRoadmap(ctx: BuiltinCtx, segmentId: string, projectId: number | null): Promise<void> {
   if (!ctx.env) return;
   await invalidateCached(ctx.env, trackerCacheKey('roadmap', ctx.tenantId, segmentId)).catch((error) => {
-    console.error('[suppressed-error] application/llm/builtinMcpService.ts:150 invalidateRoadmap', { error });
+    reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "invalidateRoadmap" });
   });
   if (projectId != null) {
     await invalidateCached(ctx.env, trackerCacheKey('roadmap', ctx.tenantId, segmentId, projectId)).catch((error) => {
-      console.error('[suppressed-error] application/llm/builtinMcpService.ts:152 invalidateRoadmap', { error });
+      reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "invalidateRoadmap" });
     });
   }
   // Roadmap items are a link-picker ticket kind — refresh its typeahead cache.
@@ -796,7 +797,7 @@ const CATALOG: BuiltinTool[] = [
           gaps,
           reviewerRef: a.reviewerRef != null ? str(a.reviewerRef) : (ctx.userId ?? null),
         }).catch((error) => { /* best-effort */ 
-          console.error('[suppressed-error] application/llm/builtinMcpService.ts:785 CATALOG', { error });
+          reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "CATALOG" });
         });
       }
       return result;
@@ -2734,7 +2735,7 @@ async function fireAgentAssignmentHandoff(ctx: BuiltinCtx, task: Task, previousA
   const joinChats = new ChatTicketService(ctx.db, env)
     .onTicketAgentAssigned(ctx.tenantId, taskLinkKind(task), String(plain.id), newRef)
     .catch((error) => {
-      console.error('[suppressed-error] application/llm/builtinMcpService.ts:2724 joinChats', { error });
+      reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "joinChats" });
     });
   if (ctx.executionCtx) ctx.executionCtx.waitUntil(joinChats);
   const outcome = await evaluateAndDispatch(ctx, env, plain, ctx.userId ?? 'system:agent-assign');
@@ -2979,7 +2980,7 @@ async function emitBuiltinToolActivity(env: Env, db: Db, tenantId: number, userI
       metadata: { via: 'mcp', tool },
     });
   } catch (error) { /* best-effort audit */ 
-    console.error('[suppressed-error] application/llm/builtinMcpService.ts:2969 emitBuiltinToolActivity', { error });
+    reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "emitBuiltinToolActivity" });
   }
 }
 
@@ -2996,7 +2997,7 @@ export async function callBuiltinTool(
   if (entry.mutates && args.env) {
     const emit = emitBuiltinToolActivity(args.env, db, args.tenantId, args.userId, args.tool, result);
     if (args.executionCtx?.waitUntil) args.executionCtx.waitUntil(emit); else await emit.catch((error) => {
-      console.error('[suppressed-error] application/llm/builtinMcpService.ts:2986 callBuiltinTool', { error });
+      reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "callBuiltinTool" });
     });
     // task/spec/from-delta writes change what the chat↔ticket link picker can find but
     // (unlike the pmo/roadmap/project tools) don't route through invalidateProjectsList /
@@ -3004,7 +3005,7 @@ export async function callBuiltinTool(
     if (args.tool.startsWith('tasks.') || args.tool.startsWith('specs.') || args.tool === 'tickets.from_delta') {
       const bump = bumpTicketSearchVersion(args.env, args.tenantId);
       if (args.executionCtx?.waitUntil) args.executionCtx.waitUntil(bump); else await bump.catch((error) => {
-        console.error('[suppressed-error] application/llm/builtinMcpService.ts:2992 callBuiltinTool', { error });
+        reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "callBuiltinTool" });
       });
     }
     // A tasks.* write also changes the board task-tree + projects-list reads, which the
@@ -3015,10 +3016,10 @@ export async function callBuiltinTool(
       const projectId = typeof (result as { projectId?: unknown } | null)?.projectId === 'number'
         ? (result as { projectId: number }).projectId : null;
       const jobs: Promise<unknown>[] = [invalidateProjectsList(args.env, args.tenantId).catch((error) => {
-        console.error('[suppressed-error] application/llm/builtinMcpService.ts:3001 jobs', { error });
+        reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "jobs" });
       })];
       if (projectId != null) jobs.push(bumpCacheVersion(args.env, `task-tree-version:project:${projectId}`).catch((error) => {
-        console.error('[suppressed-error] application/llm/builtinMcpService.ts:3002 callBuiltinTool', { error });
+        reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "callBuiltinTool" });
       }));
       const all = Promise.all(jobs);
       if (args.executionCtx?.waitUntil) args.executionCtx.waitUntil(all); else await all;

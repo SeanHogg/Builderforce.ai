@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Eval drift sweep (Layer 6) — the scheduled half of quality monitoring.
  *
@@ -68,11 +69,11 @@ export async function runEvalDriftSweep(env: Env): Promise<void> {
             notifiedEmail: notified.email,
           });
         } catch (alertErr) {
-          console.error(`[cron:eval-drift] tenant=${tenantId} alert raise failed`, alertErr);
+          reportCaughtError(alertErr, { source: "application/eval/runEvalDriftSweep.ts", operation: "runEvalDriftSweep", context: { logMessage: `[cron:eval-drift] tenant=${tenantId} alert raise failed`, details: alertErr } });
         }
       }
     } catch (err) {
-      console.error(`[cron:eval-drift] tenant=${tenantId} failed`, err);
+      reportCaughtError(err, { source: "application/eval/runEvalDriftSweep.ts", operation: "runEvalDriftSweep", context: { logMessage: `[cron:eval-drift] tenant=${tenantId} failed`, details: err } });
     }
   }
 }

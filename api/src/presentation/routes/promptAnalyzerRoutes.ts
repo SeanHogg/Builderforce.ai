@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Prompt Analyzer — /api/prompt-analyzer
  *
@@ -31,7 +32,7 @@ function extractJson(raw: string): { suggestion?: string; rationale?: string } |
     const end = candidate.lastIndexOf('}');
     if (start >= 0 && end > start) {
       try { return JSON.parse(candidate.slice(start, end + 1)); } catch (error) { /* fall through */ 
-        console.error('[suppressed-error] presentation/routes/promptAnalyzerRoutes.ts:33 extractJson', { error });
+        reportCaughtError(error, { source: "presentation/routes/promptAnalyzerRoutes.ts", operation: "extractJson" });
       }
     }
     return null;

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Knowledge Management — SOPs, processes & documents (migration 0227).
  *
@@ -557,7 +558,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
         metadata: { versionNumber: nextVersion, changeNote: body.changeNote?.trim() || null },
       });
     })().catch((error) => {
-      console.error('[suppressed-error] presentation/routes/knowledgeRoutes.ts:547 createKnowledgeRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/knowledgeRoutes.ts", operation: "createKnowledgeRoutes" });
     }));
     return c.json(await loadDoc(tenantId, id));
   });

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * projectMemory — the ONE shared "answer from memory, skip the LLM" capability.
  *
@@ -157,7 +158,7 @@ export async function resolveMemoryAnswer(
       // is a transport miss (not the model's fault) → don't penalise it.
       if (text != null) {
         await recordEvermindServeOutcome(env, db, tenantId, head.projectId, coherent).catch((error) => { /* best-effort */ 
-          console.error('[suppressed-error] application/llm/projectMemory.ts:159 resolveMemoryAnswer', { error });
+          reportCaughtError(error, { source: "application/llm/projectMemory.ts", operation: "resolveMemoryAnswer" });
         });
       }
       if (coherent) {
@@ -191,6 +192,6 @@ export async function cacheProjectAnswer(
   await upsertProjectFact(env, db, tenantId, projectId, qaCacheKey(q), a, QA_CACHE_SOURCE).catch((error) => {
     /* best-effort — caching never breaks a reply */
   
-    console.error('[suppressed-error] application/llm/projectMemory.ts:189 cacheProjectAnswer', { error });
+    reportCaughtError(error, { source: "application/llm/projectMemory.ts", operation: "cacheProjectAnswer" });
   });
 }

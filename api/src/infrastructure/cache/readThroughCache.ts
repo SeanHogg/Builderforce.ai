@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Canonical read-through cache: L1 in-isolate Map + L2 Workers KV.
  *
@@ -59,7 +60,7 @@ export async function getOrSetCached<T>(
     } catch (error) {
       // KV read failures never fail the request — fall through to the loader.
     
-      console.error('[suppressed-error] infrastructure/cache/readThroughCache.ts:59 getOrSetCached', { error });
+      reportCaughtError(error, { source: "infrastructure/cache/readThroughCache.ts", operation: "getOrSetCached" });
     }
   }
 
@@ -73,7 +74,7 @@ export async function getOrSetCached<T>(
     } catch (error) {
       // Best-effort write — a miss next time is acceptable.
     
-      console.error('[suppressed-error] infrastructure/cache/readThroughCache.ts:71 getOrSetCached', { error });
+      reportCaughtError(error, { source: "infrastructure/cache/readThroughCache.ts", operation: "getOrSetCached" });
     }
   }
   return fresh;
@@ -103,7 +104,7 @@ export async function peekCached<T>(env: Env, key: string): Promise<T | null> {
     } catch (error) {
       // KV read failure → treat as a miss.
     
-      console.error('[suppressed-error] infrastructure/cache/readThroughCache.ts:99 peekCached', { error });
+      reportCaughtError(error, { source: "infrastructure/cache/readThroughCache.ts", operation: "peekCached" });
     }
   }
   return null;
@@ -131,7 +132,7 @@ export async function setCached<T>(
     } catch (error) {
       // Best-effort — a miss next read just triggers a reconcile.
     
-      console.error('[suppressed-error] infrastructure/cache/readThroughCache.ts:125 setCached', { error });
+      reportCaughtError(error, { source: "infrastructure/cache/readThroughCache.ts", operation: "setCached" });
     }
   }
 }
@@ -199,7 +200,7 @@ export function ticketSearchVersionKey(tenantId: number): string {
  *  Best-effort (never throws) so it can be fire-and-forget on a write path. */
 export async function bumpTicketSearchVersion(env: Env, tenantId: number): Promise<void> {
   await bumpCacheVersion(env, ticketSearchVersionKey(tenantId)).catch((error) => {
-    console.error('[suppressed-error] infrastructure/cache/readThroughCache.ts:201 bumpTicketSearchVersion', { error });
+    reportCaughtError(error, { source: "infrastructure/cache/readThroughCache.ts", operation: "bumpTicketSearchVersion" });
   });
 }
 
@@ -218,7 +219,7 @@ export function outcomesVersionKey(tenantId: number): string {
  *  scorer alongside the learned-routing fold. Best-effort (never throws). */
 export async function bumpOutcomesVersion(env: Env, tenantId: number): Promise<void> {
   await bumpCacheVersion(env, outcomesVersionKey(tenantId)).catch((error) => {
-    console.error('[suppressed-error] infrastructure/cache/readThroughCache.ts:218 bumpOutcomesVersion', { error });
+    reportCaughtError(error, { source: "infrastructure/cache/readThroughCache.ts", operation: "bumpOutcomesVersion" });
   });
 }
 
@@ -233,7 +234,7 @@ export async function invalidateCached(env: Env, key: string): Promise<void> {
     } catch (error) {
       // Invalidation failure degrades to "wait for the KV TTL" — acceptable.
     
-      console.error('[suppressed-error] infrastructure/cache/readThroughCache.ts:221 invalidateCached', { error });
+      reportCaughtError(error, { source: "infrastructure/cache/readThroughCache.ts", operation: "invalidateCached" });
     }
   }
 }

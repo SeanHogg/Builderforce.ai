@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * handleCiEventOutcome — the PROVIDER-INDEPENDENT half of the CI feedback loop.
  *
@@ -81,11 +82,11 @@ export async function handleCiEventOutcome(
             args: JSON.stringify({ taskId: intent.taskId, attempt: intent.attempt, source, sha: intent.sha, statusKey: intent.statusKey ?? null }),
             result: `auto-fix run dispatched (attempt ${intent.attempt})`, ts: new Date(),
           }).catch((error) => { /* telemetry best-effort */ 
-            console.error('[suppressed-error] application/ci/handleCiEventOutcome.ts:75 handleCiEventOutcome', { error });
+            reportCaughtError(error, { source: "application/ci/handleCiEventOutcome.ts", operation: "handleCiEventOutcome" });
           });
         }
       } catch (error) { /* webhook stays 200 — never let a dispatch failure retry the hook */ 
-        console.error('[suppressed-error] application/ci/handleCiEventOutcome.ts:85 handleCiEventOutcome', { error });
+        reportCaughtError(error, { source: "application/ci/handleCiEventOutcome.ts", operation: "handleCiEventOutcome" });
       }
     })());
     return { ...res, autoFixDispatched: true };
@@ -109,7 +110,7 @@ export async function handleCiEventOutcome(
       result: `build failed but no auto-fix dispatched — ${res.reason}`.slice(0, 300),
       ts: new Date(),
     }).catch((error) => { /* telemetry best-effort */ 
-      console.error('[suppressed-error] application/ci/handleCiEventOutcome.ts:101 handleCiEventOutcome', { error });
+      reportCaughtError(error, { source: "application/ci/handleCiEventOutcome.ts", operation: "handleCiEventOutcome" });
     });
   }
 

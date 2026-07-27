@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Manager routes — /api/manager
  *
@@ -177,7 +178,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       summary: `Updated the workspace AI Manager defaults (merge authority: ${payload.policy.allowAutoMerge ? 'granted' : 'withheld'}).`,
       metadata: { patch },
     }).catch((error) => { /* the timeline is best-effort — never fail the write */ 
-      console.error('[suppressed-error] presentation/routes/managerRoutes.ts:172 createManagerRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/managerRoutes.ts", operation: "createManagerRoutes" });
     });
 
     return c.json(payload);
@@ -400,7 +401,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
         /* the pass is best-effort + idempotent; a failure just means the next run
            (manual or cron) resumes where this left off. */
       
-        console.error('[suppressed-error] presentation/routes/managerRoutes.ts:397 createManagerRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/managerRoutes.ts", operation: "createManagerRoutes" });
       }
       if (runTaskId != null) {
         await finalizeManagerRunTask(db, {

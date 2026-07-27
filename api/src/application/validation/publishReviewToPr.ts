@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * publishReviewToPr — put an acceptance review on the pull request it is about.
  *
@@ -215,7 +216,7 @@ export async function publishReviewToPr(
       summary: review.summary ?? 'Acceptance review completed.',
       annotations: annotationsFrom(inline, review.gaps),
     }).catch((error) => { /* best-effort — the review comment below is the primary surface */ 
-      console.error('[suppressed-error] application/validation/publishReviewToPr.ts:206 publishReviewToPr', { error });
+      reportCaughtError(error, { source: "application/validation/publishReviewToPr.ts", operation: "publishReviewToPr" });
     });
 
     const posted = await postPrReviewComments(target.auth, target.prNumber, target.headSha, inline, {
@@ -296,7 +297,7 @@ export async function publishSignoffToPr(
       title: `${label[signoff.verdict]}${who} (${signoff.roleKey})`,
       summary: signoff.summary ?? `Ticket sign-off recorded: ${label[signoff.verdict]}.`,
     }).catch((error) => { /* best-effort */ 
-      console.error('[suppressed-error] application/validation/publishReviewToPr.ts:289 publishSignoffToPr', { error });
+      reportCaughtError(error, { source: "application/validation/publishReviewToPr.ts", operation: "publishSignoffToPr" });
     });
 
     const comment = await postRepoPrComment(

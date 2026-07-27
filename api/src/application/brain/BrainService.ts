@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { eq, and, or, desc, isNull, inArray, sql } from 'drizzle-orm';
 import {
   brainChats,
@@ -291,7 +292,7 @@ export class BrainService {
     } catch (error) {
       /* audience tracking is non-critical — never fail a post over it */
     
-      console.error('[suppressed-error] application/brain/BrainService.ts:291 ensureMembership', { error });
+      reportCaughtError(error, { source: "application/brain/BrainService.ts", operation: "ensureMembership" });
     }
   }
 
@@ -462,7 +463,7 @@ export class BrainService {
       } catch (error) {
         /* participants are non-critical — the chat list must survive their absence */
       
-        console.error('[suppressed-error] application/brain/BrainService.ts:460 attachParticipants', { error });
+        reportCaughtError(error, { source: "application/brain/BrainService.ts", operation: "attachParticipants" });
       }
     }
     return rows.map((r) => ({ ...r, participants: byChat.get(r.id) ?? [] }));
@@ -1123,7 +1124,7 @@ export class BrainService {
         // auto-disable inference so a broken head stops answering in gibberish.
         if (evRan) {
           await recordEvermindServeOutcome(env, this.db, tenantId, projectHint, evCoherent).catch((error) => { /* best-effort */ 
-            console.error('[suppressed-error] application/brain/BrainService.ts:1125 agentReply', { error });
+            reportCaughtError(error, { source: "application/brain/BrainService.ts", operation: "agentReply" });
           });
         }
         if (evCoherent) {
@@ -1239,7 +1240,7 @@ export class BrainService {
       env, this.db, chatId, tenantId, [{ role: 'assistant', content: text }],
       (p) => { if (opts?.executionCtx) opts.executionCtx.waitUntil(p); },
     ).catch((error) => { /* never fail the reply */ 
-      console.error('[suppressed-error] application/brain/BrainService.ts:1236 agentReply', { error });
+      reportCaughtError(error, { source: "application/brain/BrainService.ts", operation: "agentReply" });
     });
 
     return posted ?? { error: 'Failed to post reply' as const };

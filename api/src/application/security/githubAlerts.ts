@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * githubAlerts — GitHub code-scanning (CodeQL) + Dependabot alerts → SECURITY tickets.
  *
@@ -459,7 +460,7 @@ async function recordFindings(
       taskIds.push(rec.taskId);
     } catch (e) {
       // One bad finding must not abandon the rest (or the audit row).
-      console.warn(`[githubAlerts] failed to record ${f.marker}: ${(e as Error).message}`);
+      reportCaughtError(e, { source: "application/security/githubAlerts.ts", operation: "recordFindings", level: 'warning', context: { logMessage: `[githubAlerts] failed to record ${f.marker}: ${(e as Error).message}` } });
     }
   }
 
@@ -468,7 +469,7 @@ async function recordFindings(
       (deduped ? ` (${deduped} already tracked)` : ''),
     status: 'complete',
   }).catch((error) => {
-    console.error('[suppressed-error] application/security/githubAlerts.ts:466 recordFindings', { error });
+    reportCaughtError(error, { source: "application/security/githubAlerts.ts", operation: "recordFindings" });
   });
 
   return { ok: true, ingested: taskIds.length, deduped, auditId, taskIds };

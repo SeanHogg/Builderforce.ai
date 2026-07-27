@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * builderforceLLM routes — OpenAI-compatible LLM proxy.
  *
@@ -166,7 +167,7 @@ function logFailovers(
       .insert(llmFailoverLog)
       .values(failovers.map(f => ({ model: f.model, errorCode: f.code })))
       .catch((error) => { /* never let logging fail the request */ 
-        console.error('[suppressed-error] presentation/routes/llmRoutes.ts:165 logFailovers', { error });
+        reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "logFailovers" });
       }),
   );
 }
@@ -199,7 +200,7 @@ function logProviderAuthAlerts(
   if (failovers.length === 0) return;
   const promise = raiseProviderAuthAlertsFromFailovers(env, tenantId, failovers)
     .catch((error) => { /* advisory — never let alerting fail the request */ 
-      console.error('[suppressed-error] presentation/routes/llmRoutes.ts:198 promise', { error });
+      reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "promise" });
     });
   if (ctx) ctx.waitUntil(promise); else void promise;
 }
@@ -532,7 +533,7 @@ async function enforceTokenCaps(
       // Ping the seat + owners as they cross 50/80/100% — off the hot path.
       const notifyPromise = maybeEmitSpendNotification(db, c.env as Env, access.tenantId, access.userId, spend);
       try { c.executionCtx.waitUntil(notifyPromise); } catch { void notifyPromise.catch((error) => {
-        console.error('[suppressed-error] presentation/routes/llmRoutes.ts:530 enforceTokenCaps', { error });
+        reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "enforceTokenCaps" });
       }); }
       if (!spend.hasBudget) {
         const capUsd = millicentsToUsd(spend.capMillicents).toFixed(2);
@@ -691,7 +692,7 @@ async function loadTenantApiKeyByHash(env: HonoEnv['Bindings'], keyHash: string)
       const parsed = JSON.parse(r.allowedOrigins);
       if (Array.isArray(parsed)) allowlist = parsed.filter((s) => typeof s === 'string');
     } catch (error) { /* malformed → server-only */ 
-      console.error('[suppressed-error] presentation/routes/llmRoutes.ts:687 loadTenantApiKeyByHash', { error });
+      reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "loadTenantApiKeyByHash" });
     }
   }
   return { ok: true, payload: { id: r.id, tenantId: r.tenantId, allowedOrigins: allowlist, scopes: deserializeScopes(r.scopes), isSuperadmin: r.creatorIsSuperadmin === true } };
@@ -791,7 +792,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
         .set({ lastUsedAt: new Date() })
         .where(eq(tenantApiKeys.id, keyId))
         .catch((error) => { /* never let bookkeeping fail the request */ 
-          console.error('[suppressed-error] presentation/routes/llmRoutes.ts:783 requireTenantAccess', { error });
+          reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "requireTenantAccess" });
         }),
     );
 
@@ -917,7 +918,7 @@ function wrapStreamForUsage(
               });
             }
           } catch (error) { /* ignore parse errors */ 
-            console.error('[suppressed-error] presentation/routes/llmRoutes.ts:909 transform', { error });
+            reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "transform" });
           }
         }
       }
@@ -926,7 +927,7 @@ function wrapStreamForUsage(
   });
 
   source.pipeTo(writable).catch((error) => { /* stream may be cancelled by client */ 
-    console.error('[suppressed-error] presentation/routes/llmRoutes.ts:920 wrapStreamForUsage', { error });
+    reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "wrapStreamForUsage" });
   });
   return readable;
 }
@@ -1259,7 +1260,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
     // Single-use verifier — drop it whether or not the store succeeds.
     await kv.delete(pkceKvKey).catch((error) => { /* best effort */ 
-      console.error('[suppressed-error] presentation/routes/llmRoutes.ts:1251 createLlmRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
     });
     await setTenantProviderOAuth(c.env, access.tenantId, 'anthropic', tokens, access.userId);
     await clearProviderAuthAlert(c.env, access.tenantId, 'anthropic');
@@ -1298,7 +1299,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       // "reconnect your ChatGPT account" prompt the previous 403 raised.
       await clearProviderAuthAlert(c.env, access.tenantId, 'openai');
       await kv.delete(key).catch((error) => {
-        console.error('[suppressed-error] presentation/routes/llmRoutes.ts:1288 createLlmRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
       });
       return c.json({ ok: true, provider: 'openai', authType: 'oauth' });
     } catch (e) {
@@ -1341,7 +1342,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       await setTenantProviderOAuth(c.env, access.tenantId, 'xai', tokens, access.userId);
       await clearProviderAuthAlert(c.env, access.tenantId, 'xai');
       await kv.delete(key).catch((error) => {
-        console.error('[suppressed-error] presentation/routes/llmRoutes.ts:1329 createLlmRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
       });
       return c.json({ ok: true, provider: 'xai', authType: 'oauth' });
     } catch (e) {
@@ -1496,7 +1497,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             byo: true, byoProvider: 'anthropic', surface: resolveUsageSurface(c, access),
           });
         } catch (error) { /* metering is best-effort */ 
-          console.error('[suppressed-error] presentation/routes/llmRoutes.ts:1478 createLlmRoutes', { error });
+          reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
         }
       })());
       return new Response(toClient, {
@@ -1897,7 +1898,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             });
           }
         } catch (error) { /* KV miss/error → fall through to the no-op guard */ 
-          console.error('[suppressed-error] presentation/routes/llmRoutes.ts:1877 createLlmRoutes', { error });
+          reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
         }
       }
       const tenMinAgo = new Date(Date.now() - 10 * 60_000);
@@ -2236,7 +2237,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             JSON.stringify({ status: responseStatus, body: responseEnvelope }),
             { expirationTtl: 600 },
           ).catch((error) => { /* cache write is best-effort */ 
-            console.error('[suppressed-error] presentation/routes/llmRoutes.ts:2218 createLlmRoutes', { error });
+            reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
           }),
         );
       }
@@ -3043,7 +3044,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           } catch (error) {
             /* controller already closed */
           
-            console.error('[suppressed-error] presentation/routes/llmRoutes.ts:3017 emit', { error });
+            reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "emit" });
           }
         };
 
@@ -3076,7 +3077,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         } catch (error) {
           /* already closed */
         
-          console.error('[suppressed-error] presentation/routes/llmRoutes.ts:3048 start', { error });
+          reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "start" });
         }
       },
     });

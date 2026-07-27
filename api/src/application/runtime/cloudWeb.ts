@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Cloud (Worker/DO) `web` capability — the Worker-safe backing for the shared
  * `@builderforce/agent-tools` `web_fetch` tool. Same tool contract as every other
@@ -246,7 +247,7 @@ export async function readCapped(res: Response): Promise<{ text: string; truncat
       total += value.byteLength;
     }
   } finally {
-    await reader.cancel().catch((error) => console.warn('[cloud-web] response reader cancellation failed', { error }));
+    await reader.cancel().catch((error) => reportCaughtError(error, { source: "application/runtime/cloudWeb.ts", operation: "readCapped", level: 'warning', context: { logMessage: '[cloud-web] response reader cancellation failed', details: { error } } }));
   }
   const joined = new Uint8Array(total);
   let offset = 0;
@@ -360,7 +361,7 @@ export function buildCloudWebCapability(args: { env: Env; search?: CloudWebSearc
         const r = await vendor.search(query, apiKey);
         if (r.ok && meter) {
           await recordOutboundFetch(meter.db, meter.tenantId, vendor.endpoint)
-            .catch((error) => console.error('[cloud-web] search usage ledger write failed', { tenantId: meter.tenantId, vendor: vendor.id, error }));
+            .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudWeb.ts", operation: "result", context: { logMessage: '[cloud-web] search usage ledger write failed', details: { tenantId: meter.tenantId, vendor: vendor.id, error } } }));
         }
         return r;
       }, {
@@ -370,7 +371,7 @@ export function buildCloudWebCapability(args: { env: Env; search?: CloudWebSearc
       // A vendor blip (or a cap that resets) must be retryable on the next step, never
       // pinned for the TTL — same rule as a failed fetch.
       if (!result.ok) await invalidateCached(env, key)
-        .catch((error) => console.error('[cloud-web] failed-search cache invalidation failed', { vendor: vendor.id, key, error }));
+        .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudWeb.ts", operation: "search", context: { logMessage: '[cloud-web] failed-search cache invalidation failed', details: { vendor: vendor.id, key, error } } }));
       return result;
     },
   };
@@ -390,6 +391,6 @@ async function fetchCached(env: Env, rawUrl: string): Promise<WebFetchResult> {
   // Never pin a failure for the TTL — a transient 502/timeout must be retryable on
   // the agent's very next step.
   if (!result.ok) await invalidateCached(env, key)
-    .catch((error) => console.error('[cloud-web] failed-fetch cache invalidation failed', { key, error }));
+    .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudWeb.ts", operation: "fetchCached", context: { logMessage: '[cloud-web] failed-fetch cache invalidation failed', details: { key, error } } }));
   return result;
 }

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Ticket role/diagnostic audit engine — pillar 1.
  *
@@ -103,7 +104,7 @@ export class TicketAuditService {
         summary: input.summary ?? null,
         reviewerName: input.memberName ?? null,
       }).catch((error) => {
-        console.error('[suppressed-error] application/audit/ticketAuditService.ts:100 recordSignoff', { error });
+        reportCaughtError(error, { source: "application/audit/ticketAuditService.ts", operation: "recordSignoff" });
       });
     }
 

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * autoRunSkipLedger — ONE writer for the `auto_run_skipped` Observability event, with a
  * KV state-change gate in front of it.
@@ -75,17 +76,17 @@ export async function claimAutoRunSkipState(env: Env, tenantId: number, taskId: 
   try {
     if ((await store.get(key)) === state) return false;
   } catch (error) {
-    console.error('[auto-run-skip] suppression marker read failed; emitting fail-open', {
+    reportCaughtError(error, { source: "application/runtime/autoRunSkipLedger.ts", operation: "claimAutoRunSkipState", context: { logMessage: '[auto-run-skip] suppression marker read failed; emitting fail-open', details: {
       tenantId,
       taskId,
       error,
-    });
+    } } });
     return true; // a KV read blip must not hide a stalled ticket
   }
   try {
     await store.put(key, state, { expirationTtl: SKIP_REAFFIRM_TTL_SECONDS });
   } catch (error) {
-    console.error('[auto-run-skip] suppression marker write failed', { tenantId, taskId, error });
+    reportCaughtError(error, { source: "application/runtime/autoRunSkipLedger.ts", operation: "claimAutoRunSkipState", context: { logMessage: '[auto-run-skip] suppression marker write failed', details: { tenantId, taskId, error } } });
   }
   return true;
 }
@@ -101,12 +102,12 @@ export async function emitAutoRunSkip(db: Db, args: Omit<AutoRunSkipArgs, 'reaso
     category: 'planning',
     detail: args.detail,
     result: args.result.slice(0, 300),
-  }).catch((error) => console.error('[auto-run-skip] telemetry append failed', {
+  }).catch((error) => reportCaughtError(error, { source: "application/runtime/autoRunSkipLedger.ts", operation: "emitAutoRunSkip", context: { logMessage: '[auto-run-skip] telemetry append failed', details: {
     tenantId: args.tenantId,
     taskId: args.taskId,
     toolName: 'auto_run_skipped',
     error,
-  }));
+  } } }));
 }
 
 /**
@@ -138,6 +139,6 @@ export async function clearAutoRunSkip(env: Env, tenantId: number, taskId: numbe
   try {
     await store.delete(markerKey(tenantId, taskId));
   } catch (error) {
-    console.error('[auto-run-skip] suppression marker clear failed', { tenantId, taskId, error });
+    reportCaughtError(error, { source: "application/runtime/autoRunSkipLedger.ts", operation: "clearAutoRunSkip", context: { logMessage: '[auto-run-skip] suppression marker clear failed', details: { tenantId, taskId, error } } });
   }
 }

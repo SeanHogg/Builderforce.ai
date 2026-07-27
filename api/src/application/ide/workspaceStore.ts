@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * workspaceStore — THE canonical access layer for a project's IDE workspace in R2.
  *
@@ -139,7 +140,7 @@ export function validateWorkspaceContent(path: string, content: string): Content
     } catch (error) {
       /* not JSON → real source → fine */
     
-      console.error('[suppressed-error] application/ide/workspaceStore.ts:139 validateWorkspaceContent', { error });
+      reportCaughtError(error, { source: "application/ide/workspaceStore.ts", operation: "validateWorkspaceContent" });
     }
   }
 

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * runDueCeremonies — the scheduler half of Ceremonies.
  *
@@ -271,7 +272,7 @@ async function openScheduledCeremony(
       meetingId: null,
     });
   } catch (err) {
-    console.error(`[cron:ceremonies] companion meeting failed session=${session.id}`, err);
+    reportCaughtError(err, { source: "application/ceremony/runDueCeremonies.ts", operation: "openScheduledCeremony", context: { logMessage: `[cron:ceremonies] companion meeting failed session=${session.id}`, details: err } });
   }
 
   // Invite the humans. Best-effort, and likewise after the roster insert.
@@ -289,7 +290,7 @@ async function openScheduledCeremony(
       kind: s.kind,
     });
   } catch (err) {
-    console.error(`[cron:ceremonies] invite fan-out failed session=${session.id}`, err);
+    reportCaughtError(err, { source: "application/ceremony/runDueCeremonies.ts", operation: "openScheduledCeremony", context: { logMessage: `[cron:ceremonies] invite fan-out failed session=${session.id}`, details: err } });
   }
 
   return { sessionId: session.id, status: 'opened' };
@@ -335,7 +336,7 @@ export async function runDueCeremonies(env: Env): Promise<CeremonySweepResult> {
     } catch (err) {
       status = 'error';
       result.errors += 1;
-      console.error(`[cron:ceremonies] schedule ${s.id} failed`, err);
+      reportCaughtError(err, { source: "application/ceremony/runDueCeremonies.ts", operation: "runDueCeremonies", context: { logMessage: `[cron:ceremonies] schedule ${s.id} failed`, details: err } });
     }
 
     // Advance the watermark regardless of outcome so a failing schedule paces out
@@ -352,7 +353,7 @@ export async function runDueCeremonies(env: Env): Promise<CeremonySweepResult> {
         })
         .where(eq(ceremonySchedules.id, s.id));
     } catch (err) {
-      console.error(`[cron:ceremonies] watermark update failed ${s.id}`, err);
+      reportCaughtError(err, { source: "application/ceremony/runDueCeremonies.ts", operation: "runDueCeremonies", context: { logMessage: `[cron:ceremonies] watermark update failed ${s.id}`, details: err } });
     }
   }
 
@@ -419,7 +420,7 @@ export async function runCeremonyReaper(env: Env, db: Db, now = new Date()): Pro
       else result.abandoned += 1;
     } catch (err) {
       result.errors += 1;
-      console.error(`[cron:ceremonies] reap failed session=${session.id}`, err);
+      reportCaughtError(err, { source: "application/ceremony/runDueCeremonies.ts", operation: "runCeremonyReaper", context: { logMessage: `[cron:ceremonies] reap failed session=${session.id}`, details: err } });
     }
   }
 

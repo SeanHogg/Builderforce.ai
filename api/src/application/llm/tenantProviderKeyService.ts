@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * BYO LLM provider keys — a tenant stores its own vendor credential so the
  * gateway can proxy model calls with the tenant's auth and meter usage.
@@ -422,7 +423,7 @@ export async function resolveTenantVendorKeys(env: Env, tenantId: number): Promi
     try {
       out[row.provider] = await decryptSecretFromStorage(row.key_enc, credentialSecret(env), { tenantId, legacySecret: env.JWT_SECRET });
     } catch (error) { /* skip an undecryptable row — never fail the batch */ 
-      console.error('[suppressed-error] application/llm/tenantProviderKeyService.ts:424 resolveTenantVendorKeys', { error });
+      reportCaughtError(error, { source: "application/llm/tenantProviderKeyService.ts", operation: "resolveTenantVendorKeys" });
     }
   }
   return out;

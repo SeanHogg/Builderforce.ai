@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * WorkDeltaService — the single, modality-agnostic path for turning "a chat turn
  * changed code" into VISIBLE work.
@@ -147,7 +148,7 @@ export class WorkDeltaService {
         await this.chatTickets
           .linkTicket(tenantId, input.chatId, userId, { kind: 'task', ref: String(taskId), linkType: 'created', createdBy })
           .catch((error) => { /* best-effort lineage; never fail the delta on a link error */ 
-            console.error('[suppressed-error] application/delta/WorkDeltaService.ts:147 record', { error });
+            reportCaughtError(error, { source: "application/delta/WorkDeltaService.ts", operation: "record" });
           });
       }
     }
@@ -184,7 +185,7 @@ export class WorkDeltaService {
         metadata: { kind, modality, files: files ?? [], deltaId: row!.id, taskKey },
       });
     } catch (error) { /* audit is best-effort — never fail the delta on it */ 
-      console.error('[suppressed-error] application/delta/WorkDeltaService.ts:184 record', { error });
+      reportCaughtError(error, { source: "application/delta/WorkDeltaService.ts", operation: "record" });
     }
 
     return { deltaId: row!.id, kind, taskId, taskKey };

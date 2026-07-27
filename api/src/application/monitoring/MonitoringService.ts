@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * MonitoringService — active monitoring: diagram boards, monitor pins, and the
  * breach → incident bridge.
@@ -297,19 +298,19 @@ export class MonitoringService {
         match: { severity: monitor.severity, affectedSystem: monitor.affectedSystem ?? null, monitorType: monitor.monitorType },
       });
     } catch (error) { /* event-trigger dispatch is best-effort */ 
-      console.error('[suppressed-error] application/monitoring/MonitoringService.ts:299 breach', { error });
+      reportCaughtError(error, { source: "application/monitoring/MonitoringService.ts", operation: "breach" });
     }
 
     // Page on-call + dispatch the Incident Manager to triage (best-effort).
     if (opened.created) {
       await new EscalationService(this.db).pageInitial(env, tenantId, opened.incidentId).catch((error) => {
-        console.error('[suppressed-error] application/monitoring/MonitoringService.ts:305 breach', { error });
+        reportCaughtError(error, { source: "application/monitoring/MonitoringService.ts", operation: "breach" });
       });
       const detail = await incidents.getIncident(tenantId, opened.incidentId);
       await dispatchIncidentTriage(env, this.db, {
         tenantId, incidentId: opened.incidentId, boardTaskId: detail?.incident.boardTaskId ?? null, incidentRef,
       }).catch((error) => {
-        console.error('[suppressed-error] application/monitoring/MonitoringService.ts:307 breach', { error });
+        reportCaughtError(error, { source: "application/monitoring/MonitoringService.ts", operation: "breach" });
       });
     }
   }

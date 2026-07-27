@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../observability/caughtErrorReporter';
 /**
  * Vendor registry — single source of truth for which vendor owns which model,
  * how to classify a model's tier, and how to walk a multi-vendor cascade.
@@ -451,16 +452,12 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
           model, vendor: vendorId, status: 422, error: err.message, durationMs,
           kind: 'schema', reason: SCHEMA_TOO_COMPLEX_REASON, upstreamStatus: err.status,
         });
-        console.warn(
-          `[vendors] ${cfg.logTag}${vendorId}/${model} rejected json_schema as too complex (upstream ${err.status}); trying next vendor (${attempts.length}/${modelChain.length})`,
-        );
+        reportCaughtError(err, { source: "application/llm/vendors/registry.ts", operation: "dispatchInternal", level: 'warning', context: { logMessage: `[vendors] ${cfg.logTag}${vendorId}/${model} rejected json_schema as too complex (upstream ${err.status}); trying next vendor (${attempts.length}/${modelChain.length})` } });
         continue;
       }
       if (err instanceof VendorRetryableError) {
         attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message) });
-        console.warn(
-          `[vendors] ${cfg.logTag}${vendorId}/${model} returned ${err.status}; trying next in chain (${attempts.length}/${modelChain.length} failed)`,
-        );
+        reportCaughtError(err, { source: "application/llm/vendors/registry.ts", operation: "dispatchInternal", level: 'warning', context: { logMessage: `[vendors] ${cfg.logTag}${vendorId}/${model} returned ${err.status}; trying next in chain (${attempts.length}/${modelChain.length} failed)` } });
         continue;
       }
       // Request-error (400/422) VendorFatalError: the payload is bad for THIS
@@ -471,9 +468,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
       // a misleading 429). recordFailure no-ops request_error, so no model cools.
       if (err instanceof VendorFatalError && (err.status === 400 || err.status === 422)) {
         attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message) });
-        console.warn(
-          `[vendors] ${cfg.logTag}${vendorId}/${model} returned ${err.status} (request error); trying next vendor (${attempts.length}/${modelChain.length})`,
-        );
+        reportCaughtError(err, { source: "application/llm/vendors/registry.ts", operation: "dispatchInternal", level: 'warning', context: { logMessage: `[vendors] ${cfg.logTag}${vendorId}/${model} returned ${err.status} (request error); trying next vendor (${attempts.length}/${modelChain.length})` } });
         continue;
       }
       throw err; // other VendorFatalError (or anything else) — bubble up

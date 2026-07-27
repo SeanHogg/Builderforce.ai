@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { isValidatorReviewPayload } from '../validation/validatorReviewMarker';
 import { isIncidentTriagePayload } from '../incident/incidentTriageMarker';
 import { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
@@ -200,13 +201,13 @@ export class RuntimeService {
         return await effect();
       } catch (error) {
         lastError = error;
-        console.error('[runtime-effect] failed', {
+        reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "runEffect", context: { logMessage: '[runtime-effect] failed', details: {
           effect: name,
           attempt,
           maxAttempts: 3,
           ...context,
           error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-        });
+        } } });
       }
     }
 
@@ -226,11 +227,11 @@ export class RuntimeService {
         }),
       }));
     } catch (auditError) {
-      console.error('[runtime-effect] failure audit write threw', {
+      reportCaughtError(auditError, { source: "application/runtime/RuntimeService.ts", operation: "runEffect", context: { logMessage: '[runtime-effect] failure audit write threw', details: {
         effect: name,
         ...context,
         error: auditError instanceof Error ? `${auditError.name}: ${auditError.message}` : String(auditError),
-      });
+      } } });
     }
     return fallback;
   }
@@ -261,11 +262,11 @@ export class RuntimeService {
       obj.policyGates = gates;
       return JSON.stringify(obj);
     } catch (error) {
-      console.error('[runtime-policy] policy gate resolution failed; dispatch continues ungated', {
+      reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "withPolicyGates", context: { logMessage: '[runtime-policy] policy gate resolution failed; dispatch continues ungated', details: {
         tenantId,
         projectId,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      });
+      } } });
       return payload; // never block a dispatch on governance resolution
     }
   }
@@ -296,12 +297,12 @@ export class RuntimeService {
         eventNonce: opts?.eventNonce ?? null,
       });
     } catch (error) {
-      console.error('[runtime-milestone] lifecycle milestone failed', {
+      reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "postLifecycleMilestone", context: { logMessage: '[runtime-milestone] lifecycle milestone failed', details: {
         executionId: Number(execution.id),
         tenantId: Number(execution.tenantId),
         phase,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      });
+      } } });
     }
   }
 
@@ -320,11 +321,11 @@ export class RuntimeService {
       const e = await this.executions.findById(asExecutionId(executionId));
       if (e) await this.postLifecycleMilestone(e, phase, opts);
     } catch (error) {
-      console.error('[runtime-milestone] lifecycle milestone lookup failed', {
+      reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "postLifecycleMilestoneById", context: { logMessage: '[runtime-milestone] lifecycle milestone lookup failed', details: {
         executionId,
         phase,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      });
+      } } });
     }
   }
 
@@ -485,11 +486,11 @@ export class RuntimeService {
           return (await this.executions.findById(asExecutionId(e.id))) ?? e;
         }
       } catch (error) {
-        console.error('[runtime-orphan] cloud self-heal threw; marking run failed', {
+        reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "reapIfOrphaned", context: { logMessage: '[runtime-orphan] cloud self-heal threw; marking run failed', details: {
           executionId: Number(e.id),
           tenantId: Number(e.tenantId),
           error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-        });
+        } } });
       }
     }
     try {
@@ -511,12 +512,12 @@ export class RuntimeService {
       await this.postLifecycleMilestone(saved, 'failed', { errorMessage: this.orphanReason(e) });
       return saved;
     } catch (error) {
-      console.error('[runtime-orphan] failed to persist orphan transition', {
+      reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "reapIfOrphaned", context: { logMessage: '[runtime-orphan] failed to persist orphan transition', details: {
         executionId: Number(e.id),
         tenantId: Number(e.tenantId),
         priorStatus: e.status,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      });
+      } } });
       return e; // best-effort — never block a read on the repair
     }
   }
@@ -724,13 +725,13 @@ export class RuntimeService {
         }
       }
     } catch (error) {
-      console.error('[runtime-update] lifecycle orchestration failed outside an isolated effect', {
+      reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "update", context: { logMessage: '[runtime-update] lifecycle orchestration failed outside an isolated effect', details: {
         executionId: Number(saved.id),
         tenantId: Number(execution.tenantId),
         taskId: Number(execution.taskId),
         status: dto.status,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      });
+      } } });
     }
 
     const auditType = dto.status === ExecutionStatus.RUNNING

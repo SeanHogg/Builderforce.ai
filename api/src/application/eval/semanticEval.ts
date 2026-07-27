@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Semantic evaluation — the "did the answer actually stay grounded and on-topic"
  * layer the platform was missing (observability tracked WHAT ran, not HOW GOOD it
@@ -198,7 +199,7 @@ export async function evaluateResponse(
     } catch (error) {
       // fall through to lexical
     
-      console.error('[suppressed-error] application/eval/semanticEval.ts:198 evaluateResponse', { error });
+      reportCaughtError(error, { source: "application/eval/semanticEval.ts", operation: "evaluateResponse" });
     }
   }
   return lexicalEval(m);

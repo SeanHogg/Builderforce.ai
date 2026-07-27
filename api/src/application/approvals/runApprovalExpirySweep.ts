@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * runApprovalExpirySweep — expire pending approvals past their deadline and alert.
  *
@@ -70,7 +71,7 @@ export async function runApprovalExpirySweep(env: Env, db: Db): Promise<Approval
         env.SLACK_APPROVAL_WEBHOOK_URL,
         `:warning: *${list.length} approval request(s) expired without review:*\n${lines}`,
       ).catch((error) => { /* notification is advisory; expiry already persisted */ 
-        console.error('[suppressed-error] application/approvals/runApprovalExpirySweep.ts:69 runApprovalExpirySweep', { error });
+        reportCaughtError(error, { source: "application/approvals/runApprovalExpirySweep.ts", operation: "runApprovalExpirySweep" });
       });
     }
   }

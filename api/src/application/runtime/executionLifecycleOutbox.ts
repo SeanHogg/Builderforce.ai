@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq, inArray, isNotNull, lte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { activityLog, executionLifecycleOutbox } from '../../infrastructure/database/schema';
@@ -141,7 +142,7 @@ export async function drainExecutionLifecycleOutbox(
       const attempts = row.attempts + 1;
       const message = errorMessage(error).slice(0, 4_000);
       const dead = attempts >= MAX_ATTEMPTS;
-      console.error('[execution-lifecycle-outbox] projection failed', {
+      reportCaughtError(error, { source: "application/runtime/executionLifecycleOutbox.ts", operation: "drainExecutionLifecycleOutbox", context: { logMessage: '[execution-lifecycle-outbox] projection failed', details: {
         outboxId: row.id,
         eventKey: row.eventKey,
         tenantId: row.tenantId,
@@ -149,7 +150,7 @@ export async function drainExecutionLifecycleOutbox(
         attempts,
         dead,
         error: message,
-      });
+      } } });
       await db.update(executionLifecycleOutbox)
         .set({
           status: dead ? 'dead' : 'retry',
@@ -171,10 +172,10 @@ export async function drainExecutionLifecycleOutbox(
     try {
       await bumpCacheVersion(env as Env, activityLogVersionKey(tenantId));
     } catch (error) {
-      console.error('[execution-lifecycle-outbox] cache-version bump failed', {
+      reportCaughtError(error, { source: "application/runtime/executionLifecycleOutbox.ts", operation: "drainExecutionLifecycleOutbox", context: { logMessage: '[execution-lifecycle-outbox] cache-version bump failed', details: {
         tenantId,
         error: errorMessage(error),
-      });
+      } } });
     }
   }));
   return result;

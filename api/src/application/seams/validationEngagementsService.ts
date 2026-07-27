@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Validation-engagements proxy (BuilderForce → host, spec 05 §4.2 PM-4).
  *
@@ -50,7 +51,7 @@ function readHostBi(settingsRaw: string | null | undefined): HostBiConfig | null
   } catch (error) {
     /* fall through */
   
-    console.error('[suppressed-error] application/seams/validationEngagementsService.ts:50 readHostBi', { error });
+    reportCaughtError(error, { source: "application/seams/validationEngagementsService.ts", operation: "readHostBi" });
   }
   return null;
 }

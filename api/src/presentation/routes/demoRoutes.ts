@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono } from 'hono';
 import type { MiddlewareHandler } from 'hono';
 import type { Env, HonoEnv } from '../../env';
@@ -122,7 +123,7 @@ export function createDemoRoutes(): Hono<HonoEnv> {
         kind: 'demo_start',
         path: target.entryPath,
       }).then(() => undefined).catch((error) => {
-        console.error('[suppressed-error] presentation/routes/demoRoutes.ts:119 createDemoRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/demoRoutes.ts", operation: "createDemoRoutes" });
       }),
     );
 

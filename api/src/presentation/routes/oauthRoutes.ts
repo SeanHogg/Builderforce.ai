@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono, type Context } from 'hono';
 import { and, eq, sql } from 'drizzle-orm';
 import { resolveAppBaseUrl, type HonoEnv, type Env } from '../../env';
@@ -335,7 +336,7 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
         const linkPayload = await verifyWebJwt(linkToken, c.env.JWT_SECRET);
         linkUserId = linkPayload.sub;
       } catch (error) { /* invalid token — fall through to normal login flow */ 
-        console.error('[suppressed-error] presentation/routes/oauthRoutes.ts:337 createOAuthRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/oauthRoutes.ts", operation: "createOAuthRoutes" });
       }
     }
 

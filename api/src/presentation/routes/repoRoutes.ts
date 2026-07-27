@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Repo routes – /api/repos
  *
@@ -563,7 +564,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
         metadata: { taskId: pr?.taskId ?? null, sha: result.sha ?? null },
       });
     })().catch((error) => {
-      console.error('[suppressed-error] presentation/routes/repoRoutes.ts:552 createRepoRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/repoRoutes.ts", operation: "createRepoRoutes" });
     }));
     return c.json({ ok: true, merged: result.merged, sha: result.sha, pullRequest: result.pullRequest });
   });

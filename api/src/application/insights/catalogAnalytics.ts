@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Catalog adoption analytics — the shared compute behind /api/catalog-analytics.
  *
@@ -85,7 +86,7 @@ export async function recordCatalogAdoption(
   } catch (error) {
     // Telemetry write — swallow.
   
-    console.error('[suppressed-error] application/insights/catalogAnalytics.ts:85 recordCatalogAdoption', { error });
+    reportCaughtError(error, { source: "application/insights/catalogAnalytics.ts", operation: "recordCatalogAdoption" });
   }
 }
 

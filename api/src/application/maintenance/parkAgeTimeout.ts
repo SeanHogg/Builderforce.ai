@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Park-age timeout sweep — the fallback edge for tickets parked on a spawned
  * `run_workflow` lane action (lifecycle 'awaiting_workflow', migration 0171).
@@ -116,7 +117,7 @@ export async function runParkAgeTimeoutSweep(
 
       result.unparked++;
     } catch (e) {
-      console.error(`[cron:park-age] unpark of ticket_run ${row.id} failed`, e);
+      reportCaughtError(e, { source: "application/maintenance/parkAgeTimeout.ts", operation: "runParkAgeTimeoutSweep", context: { logMessage: `[cron:park-age] unpark of ticket_run ${row.id} failed`, details: e } });
     }
   }
 

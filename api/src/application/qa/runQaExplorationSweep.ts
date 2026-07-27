@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * runQaExplorationSweep — the scheduler half of the Agentic Tester.
  *
@@ -95,7 +96,7 @@ export async function runQaExplorationSweep(env: Env): Promise<{ enqueued: numbe
       }
     } catch (err) {
       lastStatus = 'error';
-      console.error(`[qa-sweep] schedule ${s.id} failed`, err);
+      reportCaughtError(err, { source: "application/qa/runQaExplorationSweep.ts", operation: "runQaExplorationSweep", context: { logMessage: `[qa-sweep] schedule ${s.id} failed`, details: err } });
     }
 
     // Re-arm from the cron expression so a malformed cron can't wedge the row.

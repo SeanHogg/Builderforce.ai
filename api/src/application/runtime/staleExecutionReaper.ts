@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Stale-execution reaper.
  *
@@ -248,12 +249,12 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
         ts: sql`now()`,
       });
     } catch (error) {
-      console.error('[execution-reaper] failure telemetry append failed', {
+      reportCaughtError(error, { source: "application/runtime/staleExecutionReaper.ts", operation: "reapStaleExecutions", context: { logMessage: '[execution-reaper] failure telemetry append failed', details: {
         tenantId: r.tenant_id,
         executionId: r.id,
         toolName,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      });
+      } } });
     }
   }));
 
@@ -273,7 +274,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
   try {
     parkAge = await runParkAgeTimeoutSweep(env, nowMs);
   } catch (err) {
-    console.error('[cron:park-age] sweep failed', err);
+    reportCaughtError(err, { source: "application/runtime/staleExecutionReaper.ts", operation: "reapStaleExecutions", context: { logMessage: '[cron:park-age] sweep failed', details: err } });
   }
 
   return {
@@ -322,10 +323,10 @@ async function narrateReapedRuns(env: Env, db: Db, rows: ReapedRow[]): Promise<v
       errorMessage: r.error_message,
     })));
   } catch (error) {
-    console.error('[execution-reaper] chat narration failed', {
+    reportCaughtError(error, { source: "application/runtime/staleExecutionReaper.ts", operation: "narrateReapedRuns", context: { logMessage: '[execution-reaper] chat narration failed', details: {
       executionIds: withTask.map((r) => r.id),
       error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-    });
+    } } });
   }
 }
 
@@ -399,11 +400,11 @@ async function requeueCloudRun(env: Env, db: Db, row: CloudCandidateRow): Promis
       ts: sql`now()`,
     });
   } catch (error) {
-    console.error('[execution-reaper] requeue telemetry append failed', {
+    reportCaughtError(error, { source: "application/runtime/staleExecutionReaper.ts", operation: "requeueCloudRun", context: { logMessage: '[execution-reaper] requeue telemetry append failed', details: {
       tenantId: row.tenant_id,
       executionId: row.id,
       error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-    });
+    } } });
   }
   return true;
 }

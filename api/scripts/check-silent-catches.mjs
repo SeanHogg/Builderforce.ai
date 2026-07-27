@@ -54,6 +54,28 @@ for (const filePath of sourceFiles) {
       }
     }
 
+    if (
+      !filePath.endsWith(path.join('application', 'observability', 'caughtErrorReporter.ts'))
+      && ts.isCallExpression(node)
+      && ts.isPropertyAccessExpression(node.expression)
+      && node.expression.expression.getText(sourceFile) === 'console'
+      && (node.expression.name.text === 'error' || node.expression.name.text === 'warn')
+    ) {
+      for (let current = node.parent; current; current = current.parent) {
+        const inCatchClause = ts.isCatchClause(current);
+        const inPromiseCatch = (
+          (ts.isArrowFunction(current) || ts.isFunctionExpression(current))
+          && ts.isCallExpression(current.parent)
+          && ts.isPropertyAccessExpression(current.parent.expression)
+          && current.parent.expression.name.text === 'catch'
+        );
+        if (inCatchClause || inPromiseCatch) {
+          violations.push(`${location(sourceFile, node)} caught error bypasses reportCaughtError`);
+          break;
+        }
+      }
+    }
+
     ts.forEachChild(node, visit);
   }
 

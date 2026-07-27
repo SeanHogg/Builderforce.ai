@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Ceremonies — /api/agile/ceremonies.
  *
@@ -196,7 +197,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
     // after the roster so the meeting's guest list matches. Best-effort: a ceremony
     // without its shell still records attendance perfectly well.
     await ensureCeremonyMeeting(db, session).catch((err) => {
-      console.error(`[ceremony:start] companion meeting failed session=${session.id}`, err);
+      reportCaughtError(err, { source: "presentation/routes/ceremonyRoutes.ts", operation: "createCeremonyRoutes", context: { logMessage: `[ceremony:start] companion meeting failed session=${session.id}`, details: err } });
     });
 
     return c.json(await hydrate(tenantId, segmentId, session.id), 201);
@@ -336,7 +337,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
         note: body.note?.trim().slice(0, 280) ?? null,
       },
     }).catch((error) => { /* the timeline is best-effort — never fail the correction */ 
-      console.error('[suppressed-error] presentation/routes/ceremonyRoutes.ts:317 createCeremonyRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/ceremonyRoutes.ts", operation: "createCeremonyRoutes" });
     });
 
     return c.json(await hydrate(tenantId, segmentId, id));
@@ -497,7 +498,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
     }).returning();
     if (!schedule) return c.json({ error: 'Failed to create schedule' }, 500);
     await invalidateCached(c.env as Env, schedulesCacheKey(tenantId, segmentId, body.projectId)).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/ceremonyRoutes.ts:497 createCeremonyRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/ceremonyRoutes.ts", operation: "createCeremonyRoutes" });
     });
     return c.json({ schedule }, 201);
   });
@@ -541,7 +542,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
       .returning();
     if (!schedule) return c.json({ error: 'Not found' }, 404);
     await invalidateCached(c.env as Env, schedulesCacheKey(tenantId, segmentId, existing.projectId)).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/ceremonyRoutes.ts:539 createCeremonyRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/ceremonyRoutes.ts", operation: "createCeremonyRoutes" });
     });
     return c.json({ schedule });
   });
@@ -553,7 +554,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
       .returning({ projectId: ceremonySchedules.projectId });
     if (!schedule) return c.json({ error: 'Not found' }, 404);
     await invalidateCached(c.env as Env, schedulesCacheKey(tenantId, segmentId, schedule.projectId)).catch((error) => {
-      console.error('[suppressed-error] presentation/routes/ceremonyRoutes.ts:549 createCeremonyRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/ceremonyRoutes.ts", operation: "createCeremonyRoutes" });
     });
     return c.json({ deleted: true });
   });

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Lane requirement gating — pillar 2 of the Agentic Workforce Kanban.
  *
@@ -248,7 +249,7 @@ export async function enforceLaneRequirements(
 
     // Always compute the audit so entering any lane refreshes coverage / the flag.
     await auditService.computeAudit(env, args.tenantId, args.taskId).catch((error) => {
-      console.error('[suppressed-error] application/swimlane/laneRequirementGate.ts:250 enforceLaneRequirements', { error });
+      reportCaughtError(error, { source: "application/swimlane/laneRequirementGate.ts", operation: "enforceLaneRequirements" });
     });
 
     if (lane.requirementGate === 'off') return none;
