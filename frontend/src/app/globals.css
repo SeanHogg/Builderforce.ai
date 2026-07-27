@@ -2841,6 +2841,16 @@ textarea.input { resize: vertical; line-height: 1.5; }
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* "Something is working right now" — the soft pulse behind a live-activity dot
+   (a streaming manager pass, an agent composing a reply). Declared here rather
+   than inline in a component because two surfaces now animate against it, and a
+   keyframe that lives inside one component silently stops working the moment the
+   other renders without it. Colour comes from the call site; this is timing only. */
+@keyframes bf-pulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 1; }
+}
+
 /* ============================================================
    Marketing chrome — top header nav (logged-out) + wave hero
    ============================================================
