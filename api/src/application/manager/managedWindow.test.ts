@@ -27,10 +27,13 @@ const orderBy = (): string => {
 };
 
 describe('the manager\'s managed-ticket window', () => {
-  it('leads with grooming need, so ungroomed work is always INSIDE the window', () => {
+  it('carries open stall rows before grooming need, then puts ungroomed work first', () => {
     const clause = orderBy();
+    const stalls = clause.indexOf('manager_stall_watch');
     const unscored = clause.indexOf('business_value');
     const unowned = clause.indexOf('assigned_agent_ref');
+    expect(stalls, 'open remedies must stay inside the triage window').toBeGreaterThan(-1);
+    expect(unscored).toBeGreaterThan(stalls);
     expect(unscored, 'unscored tickets must sort first').toBeGreaterThan(-1);
     expect(unowned, 'unowned tickets must sort next').toBeGreaterThan(unscored);
   });
