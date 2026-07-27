@@ -48,7 +48,7 @@ import { coordinateTicket } from './coordinateTicket';
 import { assignTicketOwner } from './assignOwner';
 import { reconcilePullRequestState } from '../repos/reconcilePullRequestState';
 import { diagnoseStall, isManagerActionable, stageSignoffFor, STALL_AFTER_MS, type StallInput } from './stallTriage';
-import { loadOpenStalls, gradeStall, recordStall, resolveStalls } from './stallWatch';
+import { loadOpenStalls, gradeStall, recordStall, resolveStalls, type OpenStall } from './stallWatch';
 
 /**
  * How many stalled tickets one pass diagnoses in depth. Each costs several reads
@@ -57,6 +57,37 @@ import { loadOpenStalls, gradeStall, recordStall, resolveStalls } from './stallW
  * bounded. Worst-first ordering means the cap delays coverage, never denies it.
  */
 export const MAX_TRIAGE_PER_RUN = 12;
+
+/**
+ * Select the bounded deep-triage batch while preserving accountability and fairness.
+ * Open, non-escalated rows outrank new discoveries. Within that group, fewer attempts
+ * and the least-recent attempt go first, so the dispatch cap rotates across remedies.
+ * Escalated rows are observation-only and go last.
+ */
+export function selectTriageBatch<T extends { task: { id: number }; idleMs: number }>(
+  candidates: T[],
+  openStalls: ReadonlyMap<number, OpenStall>,
+  limit = MAX_TRIAGE_PER_RUN,
+): T[] {
+  const time = (d: Date | null | undefined) => d ? new Date(d).getTime() : 0;
+  return [...candidates]
+    .sort((a, b) => {
+      const ao = openStalls.get(a.task.id);
+      const bo = openStalls.get(b.task.id);
+      const aClass = ao ? (ao.escalatedAt ? 2 : 0) : 1;
+      const bClass = bo ? (bo.escalatedAt ? 2 : 0) : 1;
+      if (aClass !== bClass) return aClass - bClass;
+      if (aClass === 0) {
+        if ((ao?.attempts ?? 0) !== (bo?.attempts ?? 0)) {
+          return (ao?.attempts ?? 0) - (bo?.attempts ?? 0);
+        }
+        const attemptAge = time(ao?.lastAttemptAt) - time(bo?.lastAttemptAt);
+        if (attemptAge !== 0) return attemptAge;
+      }
+      return b.idleMs - a.idleMs;
+    })
+    .slice(0, Math.max(0, limit));
+}
 
 /**
  * How many BILLABLE runs one triage pass may start, whatever it diagnoses.
@@ -325,9 +356,7 @@ export async function runStallTriage(
     out.resolved = await resolveStalls(env, db, { tenantId, projectId, taskIds: toResolve });
   }
 
-  // Worst-first: the longest-stalled ticket is always diagnosed, whatever the cap.
-  candidates.sort((a, b) => b.idleMs - a.idleMs);
-  const batch = candidates.slice(0, MAX_TRIAGE_PER_RUN);
+  const batch = selectTriageBatch(candidates, openStalls);
 
   for (const { task, idleMs } of batch) {
     try {

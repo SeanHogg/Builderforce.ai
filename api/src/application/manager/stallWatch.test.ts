@@ -11,7 +11,7 @@ const unassigned: StallDiagnosis = diagnoseStall({
 
 const open = (over: Partial<OpenStall> = {}): OpenStall => ({
   id: 'row-1', taskId: 7, cause: 'unassigned', remedy: 'assign',
-  observedStatus: 'todo', attempts: 2, escalatedAt: null, ...over,
+  observedStatus: 'todo', attempts: 2, lastAttemptAt: null, escalatedAt: null, ...over,
 });
 
 describe('priorAttemptsFor — grading the previous attempt', () => {

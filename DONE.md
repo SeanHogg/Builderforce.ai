@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-07-27 — ✅ RESOLVED: deep triage grew its register while abandoning prior remedies (api 2026.7.165)
+
+The first healthy pass after 2026.7.164 proved scoring and assignment were moving again (`unscored 76 → 0`, `unowned 327 → 305`), but exposed a second window bug: deep triage reused the 300-ticket grooming window. With 305 unowned tickets ahead of previously groomed work, the 12 oldest breaker/sign-off remedies could fall outside that window forever. The pass diagnosed 12 NEW `managed_no_role` tickets while every prior `reset_breaker` / `drive_signoff` row remained at `attempts=0` — growing the register instead of honoring work it had already promised.
+
+Open, unresolved stall rows now lead the managed window, so previously diagnosed remedies remain visible until they move or escalate. The bounded triage batch also prioritizes open non-escalated rows before new discoveries, rotates first toward fewer/least-recent attempts so the three-run cap is fair across remedies, and leaves escalated observation-only rows last. The 12-ticket diagnosis cap and three-run storm guard are unchanged.
+
+Files: `api/src/application/manager/{ManagerService,triageStage,stallWatch}.ts`. Regression coverage renders the correlated open-stall ordering in `managedWindow.test.ts` and tests accountability, fair retry rotation, escalation ordering, and longest-idle fallback in `triageStage.batch.test.ts`.
+
+**Verified:** all API structural guard scripts green; manager suite `240 passed` (17 files); `tsgo --noEmit` clean. Post-deploy, the next passes should make the 12 `remedy_never_attempted` rows leave `attempts=0` in groups of at most three run-starting remedies per pass, then escalate any that remain ineffective at the existing three-attempt ceiling.
+
+---
+
 ## 2026-07-27 — ✅ RESOLVED: what the honest diagnostics then revealed — six defects the previous fix made visible (api 2026.7.164 · frontend 2026.7.129)
 
 The 2026-07-26 fix below made the managed-board reports truthful. Re-running both "Copy diagnostics" buttons on project 11 against the deployed build (api 2026.7.163) surfaced five distinct defects that the old, lying reports had been concealing. `managed_dispatch_refused` came back at **405** — the finding did its job as a regression detector; the number was real.

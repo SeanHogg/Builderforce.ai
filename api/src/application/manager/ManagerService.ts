@@ -35,7 +35,7 @@ import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import {
   tasks, boards, swimlanes, swimlaneAgentAssignments, pullRequests,
-  projectManagerConfigs, tenantManagerDefaults, managerActions, projects, featureScores,
+  projectManagerConfigs, tenantManagerDefaults, managerActions, managerStallWatch, projects, featureScores,
 } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { TaskStatus, TaskPriority } from '../../domain/shared/types';
@@ -922,11 +922,11 @@ interface ManagedTaskRow {
  * backlog; it could not SEE the part of the backlog that needed grooming. Two capabilities
  * (`autoBusinessValue`, `autoAssign`) reported healthy and did nothing for 14 days.
  *
- * So the window is ordered by GROOMING NEED first — unscored, then unowned — and only then
- * by least-recently-touched. Ungroomed work is therefore always inside the window and
- * drains (scoring writes `updated_at`, which drops the ticket to the back), after which
- * the ordering degenerates to a rotation that gives every ticket a turn at being audited
- * and triaged. `created_at asc` gave the tail no turn at all.
+ * Open stall-register rows come first because triage must grade remedies it already
+ * attempted before discovering more work. Without that carry-forward, a project with
+ * more unowned tickets than the window can exclude its oldest reset/sign-off remedies
+ * forever. After those accountability rows, the window is ordered by GROOMING NEED —
+ * unscored, then unowned — and only then by least-recently-touched.
  */
 export function managedTasksQuery(db: Db, projectId: number) {
   return db
@@ -946,6 +946,11 @@ export function managedTasksQuery(db: Db, projectId: number) {
       notSystemTask,
     ))
     .orderBy(
+      sql`case when exists (
+        select 1 from ${managerStallWatch}
+        where ${managerStallWatch.taskId} = ${tasks.id}
+          and ${managerStallWatch.resolvedAt} is null
+      ) then 0 else 1 end`,
       sql`case when ${tasks.businessValue} is null then 0 else 1 end`,
       sql`case when ${tasks.assignedUserId} is null and ${tasks.assignedAgentRef} is null and ${tasks.assignedAgentHostId} is null then 0 else 1 end`,
       asc(tasks.updatedAt),
