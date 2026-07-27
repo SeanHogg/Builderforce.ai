@@ -14,9 +14,10 @@
  *
  *   1. `tasks.completed_at`         — the REAL moment a ticket entered a done lane
  *                                     (0117), not the updated_at proxy.
- *   2. `task_status_transitions`    — every lane hop, stamped `actor_kind`
- *                                     ('human' with the user id, or 'system' for
- *                                     agents/automation) and `is_backward`.
+ *   2. `task_status_transitions`    — every lane hop, stamped with the MOVER's kind and
+ *                                     ref ('human', 'cloud_agent', 'host_agent', or
+ *                                     'system' for identity-less automation) and
+ *                                     `is_backward`.
  *   3. `executions`                 — the runs, with the agent that ran each one.
  *   4. `pull_requests`              — what actually shipped to a branch (merged_at).
  *   5. `manager_actions`            — what the MANAGER itself decided, by type.
@@ -106,7 +107,8 @@ export interface DigestContributor {
   shipped: number;
   /** Executions that finished today under this actor. */
   runs: number;
-  /** Forward lane moves this actor made today (humans only — see the merge note). */
+  /** Forward lane moves this actor made today. Backward hops are excluded — a redo is
+   *  not contribution. Covers people and agents alike; see the merge note. */
   moves: number;
 }
 
@@ -191,6 +193,26 @@ export function dayWindow(now: Date, tzOffsetMinutes: number): DayWindow {
 }
 
 // ── Pure summarisers ────────────────────────────────────────────────────────
+
+/**
+ * The contributor kind a stored `actor_kind` credits, or null when the row names no
+ * one. PURE.
+ *
+ * 'system' is the only kind deliberately dropped — it is automation with no identity,
+ * and inventing a "System" contributor would put a row on the leaderboard that nobody
+ * can act on. An unrecognised value is treated the same way rather than guessed at.
+ */
+export function contributorKind(actorKind: string | null | undefined): ActorType | null {
+  switch (actorKind) {
+    case 'human':
+    case 'hire':
+    case 'cloud_agent':
+    case 'host_agent':
+      return actorKind;
+    default:
+      return null;
+  }
+}
 
 /** Raw per-actor tallies, before names are resolved. */
 export interface ContributorTally {
@@ -336,8 +358,9 @@ export async function computeDailyDigest(
       .limit(SHIPPED_SAMPLE)
       .catch(() => []),
 
-    // 3. Lane movement, split by who drove it. `actor_kind` is the only column in the
-    //    schema that distinguishes a person's board drag from an agent's hop.
+    // 3. Lane movement, split by who drove it. (`actor_kind`, `actor_ref`) is the only
+    //    place in the schema that names the mover of a hop — a person's board drag, a
+    //    specific agent's advance, or anonymous automation.
     db
       .select({
         actorKind: taskStatusTransitions.actorKind,
@@ -475,11 +498,12 @@ export async function computeDailyDigest(
 
   // ── Contributors: merge the three attribution sources ──────────────────────
   //
-  // Lane moves contribute HUMANS only, and that is a property of the data rather than
-  // a choice made here: `taskLifecycle` stamps 'human' with the user id and 'system'
-  // with a null ref for everything else, so an agent's hops carry no identity to
-  // attribute. Agent contribution is therefore read from the two places that DO name
-  // the actor — the run it executed and the ticket it owned.
+  // Lane moves contribute PEOPLE AND AGENTS alike: `task_status_transitions` stamps the
+  // mover's kind and ref for all of them ({@link resolveTransitionActor}). Only
+  // identity-less automation — a cron sweep, a webhook — still writes ('system', null),
+  // and that stays out of the contributor table rather than being credited to a
+  // fictional member. The run and ticket-ownership sources remain, because they answer
+  // different questions: a hop is not a run and neither is a finished ticket.
   const tallies = new Map<string, ContributorTally>();
   const bump = (kind: ActorType, ref: string, patch: Partial<Pick<ContributorTally, 'shipped' | 'runs' | 'moves'>>) => {
     const id = `${kind}:${ref}`;
@@ -498,12 +522,12 @@ export async function computeDailyDigest(
     const b = Number(m.backward || 0);
     forward += f;
     backward += b;
-    if (m.actorKind === 'human') {
-      byHuman += f + b;
-      if (m.actorRef) bump('human', m.actorRef, { moves: f });
-    } else {
-      byAgent += f + b;
-    }
+    if (m.actorKind === 'human') byHuman += f + b; else byAgent += f + b;
+    // Only FORWARD hops are credited: a backward move is a redo, and counting it as
+    // contribution would reward churn. An actor kind the column does not name (bare
+    // 'system') has nobody to credit.
+    const kind = contributorKind(m.actorKind);
+    if (kind && m.actorRef && f > 0) bump(kind, m.actorRef, { moves: f });
   }
 
   let runsCompleted = 0; let runsFailed = 0;

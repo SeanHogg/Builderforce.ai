@@ -15,7 +15,8 @@ import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
 import { mergePullRequest, normalizeMergeMethod, type MergeMethod } from './mergePullRequest';
 import { markPullRequestMergedById } from './recordPullRequestRow';
 import { invalidatePullRequestDetail } from './getPullRequestDetail';
-import { completeTaskOnMerge } from '../task/taskLifecycle';
+import { completeTaskOnMerge, type TransitionActorInput } from '../task/taskLifecycle';
+import { resolveManagerAssignee } from '../manager/managerPolicy';
 import { updatePullRequestBranch } from './updatePullRequestBranch';
 
 export type UpdateRecordedPrBranchResult =
@@ -56,6 +57,31 @@ export async function updateRecordedPullRequestBranch(
     };
   }
   return result;
+}
+
+/**
+ * Decode `pull_requests.merged_by` into the lifecycle actor that completed the ticket.
+ *
+ * The AI manager stamps `manager:<managerRef>`, and that ref is the SAME `u:`/`c:`/`h:`
+ * designation the manager policy carries — so an auto-merge names the exact agent (or
+ * human manager) that took the decision. It used to be discarded as "not a user id",
+ * which is how every manager-driven completion landed in the log as anonymous automation.
+ * A `provider:*` marker (a reconcile that noticed an out-of-band merge) genuinely has no
+ * actor and stays that way.
+ */
+export function resolveMergeActor(mergedBy: string | null | undefined): TransitionActorInput {
+  const ref = mergedBy?.trim();
+  if (!ref) return {};
+  if (ref.startsWith('manager:')) {
+    const assignee = resolveManagerAssignee(ref.slice('manager:'.length));
+    return {
+      actorUserId: assignee.assignedUserId,
+      actorAgentRef: assignee.assignedAgentRef,
+      actorAgentHostId: assignee.assignedAgentHostId,
+    };
+  }
+  if (ref.startsWith('provider:')) return {};
+  return { actorUserId: ref };
 }
 
 export type MergeRecordedPrResult =
@@ -143,8 +169,8 @@ export async function mergeRecordedPullRequest(
     await completeTaskOnMerge(env, db, {
       tenantId: args.tenantId,
       taskId: row.taskId,
-      actorUserId: args.mergedBy && !args.mergedBy.startsWith('manager:') ? args.mergedBy : null,
-    }).catch((error) => { /* completion is best-effort; the merge itself succeeded */ 
+      ...resolveMergeActor(args.mergedBy),
+    }).catch((error) => { /* completion is best-effort; the merge itself succeeded */
       reportCaughtError(error, { source: "application/repos/mergeRecordedPr.ts", operation: "mergeRecordedPullRequest" });
     });
   }
