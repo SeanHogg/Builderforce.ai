@@ -26,6 +26,7 @@ import { releasePendingSteers } from '../../application/runtime/executionSteerin
 import { buildRuntimeService } from '../../buildRuntimeService';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { ExecutionStatus } from '../../domain/shared/types';
+import { TERMINAL_EXECUTION_STATUSES } from '../../domain/execution/Execution';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env } from '../../env';
 
@@ -114,8 +115,8 @@ export class CloudRunnerDO implements DurableObject {
     // one parser too many.
     const model = parseModel(body.payload);
 
-    // Already cancelled before we start → don't transition or spend.
-    if (await this.isCancelled(body.executionId)) return;
+    // Already concluded before we start (cancelled, or reaped) → don't transition or spend.
+    if (await this.isAlreadyConcluded(body.executionId)) return;
 
     const cursor: Cursor = { ...body, stage: 'prep', model };
     await this.state.storage.put(CURSOR_KEY, cursor);
@@ -127,9 +128,10 @@ export class CloudRunnerDO implements DurableObject {
     const cursor = (await this.state.storage.get<Cursor>(CURSOR_KEY)) ?? null;
     if (!cursor) return;
 
-    // Cross-tick cancel: the /cancel endpoint flipped the row to CANCELLED from
-    // another isolate. The row is already terminal — just stop and clean up.
-    if (await this.isCancelled(cursor.executionId)) {
+    // Cross-tick conclusion: the /cancel endpoint flipped the row to CANCELLED, or
+    // staleExecutionReaper failed it, from another isolate. Already terminal — just
+    // stop and clean up.
+    if (await this.isAlreadyConcluded(cursor.executionId)) {
       await this.cleanup(cursor.executionId);
       return;
     }
@@ -185,7 +187,7 @@ export class CloudRunnerDO implements DurableObject {
         { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription },
         cursor.cloudAgentRef, cursor.agentLabel, cursor.model,
         cursor.systemPrompt ?? '', cursor.userContent ?? '',
-        () => this.isCancelled(cursor.executionId),
+        () => this.isAlreadyConcluded(cursor.executionId),
         cursor.projectId,
         { resume: cursor.loop, maxSteps: 1, deferFinalize: true, routingBias: parseRoutingBias(cursor.payload), policyGates: parsePolicyGates(cursor.payload), ...(dynamicSystem ? { dynamicSystem } : {}), ...(cursor.execParams ? { execParams: cursor.execParams } : {}) },
       );
@@ -231,16 +233,20 @@ export class CloudRunnerDO implements DurableObject {
 
       // Terminal: mark the execution (canonical transition — moves the ticket to
       // In Review, records metrics/audit, and fires the next-lane agent) and stop.
-      await this.runtimeService.update(
-        cursor.executionId,
-        result.ok
-          ? { status: ExecutionStatus.COMPLETED, result: result.output }
-          : { status: ExecutionStatus.FAILED, errorMessage: result.output },
-      ).catch((error) => reportCaughtError(error, { source: "infrastructure/relay/CloudRunnerDO.ts", operation: "alarm", level: 'warning', context: { logMessage: '[cloud-runner] terminal transition was rejected', details: {
-        executionId: cursor.executionId,
-        tenantId: cursor.tenantId,
-        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      } } }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) }));
+      // Skip when the run already concluded (retried alarm, reaper, cancellation)
+      // — that transition can only be rejected, and would clobber a cancellation.
+      if (!(await this.isAlreadyConcluded(cursor.executionId))) {
+        await this.runtimeService.update(
+          cursor.executionId,
+          result.ok
+            ? { status: ExecutionStatus.COMPLETED, result: result.output }
+            : { status: ExecutionStatus.FAILED, errorMessage: result.output },
+        ).catch((error) => reportCaughtError(error, { source: "infrastructure/relay/CloudRunnerDO.ts", operation: "alarm", level: 'warning', context: { logMessage: '[cloud-runner] terminal transition was rejected', details: {
+          executionId: cursor.executionId,
+          tenantId: cursor.tenantId,
+          error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        } } }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) }));
+      }
       await this.cleanup(cursor.executionId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -268,8 +274,8 @@ export class CloudRunnerDO implements DurableObject {
         return;
       }
 
-      // Don't clobber a cancellation; otherwise fail the run so it isn't stuck.
-      if (!(await this.isCancelled(cursor.executionId))) {
+      // Don't clobber a run that already concluded; otherwise fail it so it isn't stuck.
+      if (!(await this.isAlreadyConcluded(cursor.executionId))) {
         await this.runtimeService.update(cursor.executionId, {
           status: ExecutionStatus.FAILED,
           errorMessage: message,
@@ -283,15 +289,35 @@ export class CloudRunnerDO implements DurableObject {
     }
   }
 
-  private async isCancelled(executionId: number): Promise<boolean> {
+  /**
+   * True when the run already reached a terminal state, so this tick must not
+   * attempt another transition.
+   *
+   * An alarm can legitimately arrive after the run is over: Cloudflare retries a
+   * failed alarm, a deploy re-runs an evicted one, `staleExecutionReaper` may
+   * have already failed the row, or a human cancelled mid-tick. In each case
+   * `RuntimeService.update` could only throw `Cannot complete an execution in
+   * status '<terminal>'` — and forcing it through would clobber a cancellation.
+   * Skipping is the correct outcome, not an error worth reporting.
+   *
+   * Fails OPEN (returns false) so a transient read error still lets the run
+   * conclude — the domain guard remains the backstop.
+   */
+  private async isAlreadyConcluded(executionId: number): Promise<boolean> {
     try {
       const [row] = await this.db
         .select({ status: executions.status })
         .from(executions)
         .where(eq(executions.id, executionId))
         .limit(1);
-      return row?.status === 'cancelled';
-    } catch {
+      return TERMINAL_EXECUTION_STATUSES.includes(row?.status as ExecutionStatus);
+    } catch (error) {
+      reportCaughtError(error, {
+        source: 'infrastructure/relay/CloudRunnerDO.ts',
+        operation: 'isAlreadyConcluded',
+        level: 'warning',
+        context: { executionId },
+      });
       return false;
     }
   }

@@ -147,12 +147,86 @@ export async function generateTeacherExemplar(
  * but the tenant is out of platform tokens — two very different fixes, so they must
  * never collapse into one reason. The rest are {@link TeacherFailureReason} verbatim.
  */
-export type TeacherSkipReason = 'not_pinned' | 'budget_exhausted' | TeacherFailureReason;
+export type TeacherSkipReason = 'not_pinned' | 'budget_exhausted' | 'cooling' | TeacherFailureReason;
+
+// ---------------------------------------------------------------------------
+// Fault breaker
+// ---------------------------------------------------------------------------
+
+/**
+ * How long a teacher that failed at the GATEWAY stands down before the next
+ * alarm retries it.
+ *
+ * Distillation is a background enrichment, not a user-facing request: retrying a
+ * dead teacher on every alarm buys nothing and costs a paid frontier call each
+ * time. Without this, one project pinned to an unroutable id produced ~1,977
+ * identical HTTP 503 faults in four days, one per alarm, none self-correcting.
+ * A single cooldown window turns that into at most a couple of probes an hour,
+ * and the pin still recovers on its own once the vendor does.
+ *
+ * Only `gateway_error` and `exception` cool: `input_too_short` and
+ * `empty_output` are properties of THAT entry, not of the teacher, so cooling on
+ * them would disable a perfectly healthy model.
+ */
+const TEACHER_FAULT_COOLDOWN_SECONDS = 30 * 60;
+
+function teacherFaultKey(tenantId: number, model: string): string {
+  return `evermind-teacher-fault:${tenantId}:${model}`;
+}
+
+/** Should this failure bench the teacher, or is it specific to one entry? */
+function coolsTeacher(reason: TeacherFailureReason): boolean {
+  return reason === 'gateway_error' || reason === 'exception';
+}
+
+/**
+ * Bench a teacher that just failed at the gateway. Best-effort: without
+ * AUTH_CACHE_KV there is no breaker and behaviour is unchanged (dev/test).
+ */
+export async function noteTeacherFault(
+  env: Env,
+  tenantId: number,
+  model: string,
+  reason: TeacherFailureReason,
+): Promise<void> {
+  const kv = env.AUTH_CACHE_KV;
+  if (!kv || !coolsTeacher(reason)) return;
+  try {
+    await kv.put(teacherFaultKey(tenantId, model), reason, {
+      expirationTtl: TEACHER_FAULT_COOLDOWN_SECONDS,
+    });
+  } catch (error) {
+    reportCaughtError(error, {
+      source: 'application/llm/evermindTeacher.ts',
+      operation: 'noteTeacherFault',
+      level: 'warning',
+      context: { tenantId, model, reason },
+    });
+  }
+}
+
+/** Is this teacher currently benched by a recent gateway fault? */
+async function isTeacherCooling(env: Env, tenantId: number, model: string): Promise<boolean> {
+  const kv = env.AUTH_CACHE_KV;
+  if (!kv) return false;
+  try {
+    return (await kv.get(teacherFaultKey(tenantId, model))) !== null;
+  } catch (error) {
+    // Fail OPEN: a KV blip must not disable learning.
+    reportCaughtError(error, {
+      source: 'application/llm/evermindTeacher.ts',
+      operation: 'isTeacherCooling',
+      level: 'warning',
+      context: { tenantId, model },
+    });
+    return false;
+  }
+}
 
 /** The effective teacher for an alarm: the model to use, or WHY there isn't one. */
 export type EffectiveTeacher =
   | { model: string }
-  | { model: null; reason: Extract<TeacherSkipReason, 'not_pinned' | 'budget_exhausted'> };
+  | { model: null; reason: Extract<TeacherSkipReason, 'not_pinned' | 'budget_exhausted' | 'cooling'> };
 
 export interface EvermindTrainingText {
   /** The text the coordinator adapts the SSM on. */
@@ -201,6 +275,9 @@ export async function resolveEvermindTeacherModel(
 ): Promise<EffectiveTeacher> {
   const model = (teacherModel ?? '').trim();
   if (!model) return { model: null, reason: 'not_pinned' };
+  // Benched by a recent gateway fault — skip the call entirely rather than
+  // spend another paid frontier request on a teacher that just failed.
+  if (await isTeacherCooling(env, tenantId, model)) return { model: null, reason: 'cooling' };
   try {
     // A connected BYO frontier account funds the teacher itself → never budget-gate it.
     const byoConnected = (await listTenantProviderKeys(env, tenantId).catch(() => [])).length > 0;
@@ -240,6 +317,9 @@ export async function buildEvermindTrainingText(
   const [input, mode] = prompt ? [prompt, 'answer' as const] : [runText, 'refine' as const];
   const result = await generateTeacherExemplar(env, tenantId, model, input, mode, opts?.signal);
   if (!result.ok) {
+    // Bench the teacher when the GATEWAY is what failed, so the next alarm skips
+    // it instead of re-spending on a model that is down or mis-pinned.
+    await noteTeacherFault(env, tenantId, model, result.reason);
     // A pinned teacher that produced nothing is an OPERATIONAL FAULT, not a normal
     // path — carry the reason + the model that failed so the console can say so
     // instead of silently presenting the un-distilled input as what was learned.

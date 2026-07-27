@@ -201,6 +201,28 @@ export function catalogEntry(modelId: string): (VendorModelEntry & { vendor: Ven
   return { ...hit.entry, vendor: hit.vendor };
 }
 
+/**
+ * Does this model id actually ROUTE somewhere — an explicit vendor prefix, or a
+ * catalog entry?
+ *
+ * {@link vendorForModel} can never answer this: it falls back to
+ * `DEFAULT_VENDOR` for anything unrecognised, so a typo'd id looks routable and
+ * is dispatched to a vendor that has never heard of it. That failure is silent
+ * and permanent — a project pinned its Evermind teacher to `xai/grok-4.5` (the
+ * routable forms are `direct/xai/…` and `xai-oauth/…`), which fell through to
+ * the default vendor and returned HTTP 503 on every coordinator alarm: ~1,977
+ * identical faults over four days, none of them self-correcting.
+ *
+ * Call this wherever a model id is ACCEPTED FROM A USER — pins, teacher
+ * selection, agent configuration — so an unroutable id is refused at the write
+ * instead of failing forever at dispatch.
+ */
+export function isRoutableModel(modelId: string): boolean {
+  const id = modelId.trim();
+  if (!id) return false;
+  return parseVendorPrefix(id) !== null || INDEX.has(id);
+}
+
 export function getCatalog(): ReadonlyArray<VendorModelEntry & { vendor: VendorId }> {
   return MODULES.flatMap((mod) =>
     mod.catalog.map((entry) => ({ ...entry, vendor: mod.id })),

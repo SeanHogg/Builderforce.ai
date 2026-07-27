@@ -17,7 +17,10 @@ async function persistToDatabase(
   record: CaughtErrorRecord,
   runtime: CaughtErrorRuntimeContext,
 ): Promise<void> {
-  if (!env.NEON_DATABASE_URL) return;
+  // api_error_log lives in the operational database. Guard on the URL that is
+  // actually used, including the primary-database fallback in
+  // buildTransactionalDatabase, so an operational-only binding still persists.
+  if (!env.NEON_TRANSACTIONAL_DATABASE_URL?.trim() && !env.NEON_DATABASE_URL) return;
   const db = buildTransactionalDatabase(env);
   await db.insert(apiErrorLog).values({
     scopeTenantId: runtime.tenantId,

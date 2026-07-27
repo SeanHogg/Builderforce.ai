@@ -254,11 +254,67 @@ export interface AdminPlatformRollup {
 
 export interface AdminError {
   id: number;
+  /** Scope hint written by the reporter — not an enforced foreign key. */
+  tenantId: number | null;
   method: string | null;
   path: string | null;
+  /** Reporting module, e.g. `application/llm/builtinMcpService.ts`. */
+  source: string | null;
+  /** Reporting function within that module. */
+  operation: string | null;
+  /** true = intentionally caught, false = surfaced as an HTTP 500. */
+  handled: boolean;
+  /** Sanitized, secret-redacted context supplied at the call site. */
+  context: Record<string, unknown>;
   message: string | null;
   stack: string | null;
   createdAt: string;
+}
+
+/** One source+operation fault in the error-log rollup. */
+export interface AdminErrorGroup {
+  source: string | null;
+  operation: string | null;
+  sampleMessage: string | null;
+  sampleId: number;
+  count: number;
+  handledCount: number;
+  unhandledCount: number;
+  tenantCount: number;
+  firstSeen: string;
+  lastSeen: string;
+}
+
+export interface AdminErrorSummary {
+  total: number;
+  unhandled: number;
+  handled: number;
+  distinctFaults: number;
+  windowHours: number | null;
+  groups: AdminErrorGroup[];
+}
+
+export interface AdminErrorFilters {
+  q?: string;
+  source?: string;
+  operation?: string;
+  path?: string;
+  handled?: boolean;
+  tenantId?: number;
+  sinceHours?: number;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AdminErrorPage {
+  errors: AdminError[];
+  total: number;
+  returned: number;
+  offset: number;
+  hasMore: boolean;
+  summary: AdminErrorSummary;
+  /** Distinct sources in the window — powers the source filter. */
+  sources: string[];
 }
 
 /** One row in the superadmin LLM trace list (summary columns only). */
@@ -862,9 +918,20 @@ export const adminApi = {
     return adminRequest('/api/admin/cron/signal', { method: 'POST', body: JSON.stringify({}) });
   },
 
-  async errors(): Promise<AdminError[]> {
-    const res = await adminRequest<{ errors: AdminError[] }>('/api/admin/errors');
-    return res.errors;
+  /** Filtered page of the platform error log, plus its answer-first rollup. */
+  async errors(filters: AdminErrorFilters = {}): Promise<AdminErrorPage> {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+    }
+    const query = params.toString();
+    return adminRequest<AdminErrorPage>(`/api/admin/errors${query ? `?${query}` : ''}`);
+  },
+
+  /** One error-log entry with its full stack trace. */
+  async errorDetail(id: number): Promise<AdminError> {
+    const res = await adminRequest<{ error: AdminError }>(`/api/admin/errors/${id}`);
+    return res.error;
   },
 
   /** Platform-wide historical trends (growth / LLM usage / errors) for the

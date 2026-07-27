@@ -21,7 +21,15 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 import { and, eq, desc, sql, type SQL } from 'drizzle-orm';
 import { type ToolSchema } from '@builderforce/agent-tools';
-import type { Db } from '../../infrastructure/database/connection';
+import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
+import {
+  clampErrorLogLimit,
+  getErrorLogEntry,
+  listErrorLogSources,
+  queryErrorLog,
+  summarizeErrorLog,
+  type ErrorLogFilters,
+} from '../observability/errorLogQuery';
 import { ProjectService } from '../project/ProjectService';
 import { TaskService } from '../task/TaskService';
 import { addManagerDirective } from '../manager/managerDirectives';
@@ -144,6 +152,33 @@ async function assertLegalWrite(ctx: BuiltinCtx): Promise<void> {
   if (!ctx.env) throw new Error('Legal documents can only be changed with the platform environment available.');
   const ok = await resolveIsSuperadmin(ctx.env, ctx.userId);
   if (!ok) throw new Error('Legal documents are platform-global — only a platform superadmin may change them.');
+}
+
+/** Guard an `errors.*` READ. api_error_log is a cross-tenant platform stream:
+ *  its messages, stacks and context carry other tenants' identifiers, so it is
+ *  superadmin-only in every direction — same rule the /admin Logs page enforces.
+ *  Returns the OPERATIONAL database, which is where persistCaughtError writes
+ *  (ctx.db is the primary one and holds no error rows). */
+async function errorLogDb(ctx: BuiltinCtx): Promise<Db> {
+  if (!ctx.env) throw new Error('The platform error log requires the worker environment and is unavailable in this context.');
+  const ok = await resolveIsSuperadmin(ctx.env, ctx.userId);
+  if (!ok) throw new Error('The platform error log spans every tenant — only a platform superadmin may read it.');
+  return buildTransactionalDatabase(ctx.env);
+}
+
+/** Shared filter parsing for the `errors.*` tools, so list and summary cannot
+ *  interpret the same argument differently. */
+function errorLogFilters(a: Json): ErrorLogFilters {
+  return {
+    q: a.q != null ? str(a.q) : undefined,
+    source: a.source != null ? str(a.source) : undefined,
+    operation: a.operation != null ? str(a.operation) : undefined,
+    path: a.path != null ? str(a.path) : undefined,
+    handled: typeof a.handled === 'boolean' ? a.handled : undefined,
+    tenantId: a.tenantId != null ? num(a.tenantId) : undefined,
+    sinceHours: a.sinceHours != null ? num(a.sinceHours) : undefined,
+    limit: clampErrorLogLimit(a.limit),
+  };
 }
 
 /** Invalidate the roadmap tracker cache (the portfolio `:all` key + the row's project
@@ -2589,6 +2624,48 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'meetings.schedule', mutates: true, description: 'Schedule a meeting — including a REVIEW (go over a gig worker’s effort/estimate/understanding before accepting a bid) or an INTERVIEW (for an FTE Job Posting candidate) — tracked against the exact work item, posting, or engagement. kind: standup|planning|retrospective|adhoc|direct|interview|review. Pass scheduledAt (ISO) for a future meeting and ONE of ticketId / jobId / engagementId to link it.', parameters: obj({ title: S, kind: S, scheduledAt: S, durationMinutes: N, ticketId: N, jobId: S, engagementId: S, projectId: N }, ['title']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/meetings', { title: str(a.title), kind: a.kind != null ? str(a.kind) : undefined, scheduledAt: a.scheduledAt != null ? str(a.scheduledAt) : undefined, durationMinutes: a.durationMinutes != null ? num(a.durationMinutes) : undefined, ticketId: a.ticketId != null ? num(a.ticketId) : undefined, jobId: a.jobId != null ? str(a.jobId) : undefined, engagementId: a.engagementId != null ? str(a.engagementId) : undefined, projectId: a.projectId != null ? num(a.projectId) : undefined }) },
   { tool: 'deliverables.evaluate', mutates: true, description: 'Use AI to evaluate a hired worker’s presented proposal/deliverable against the published requirements (same LLM-as-judge as proposals.evaluate). Caches a 0..100 overall and returns the scores.', parameters: obj({ deliverableId: S }, ['deliverableId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/deliverables/${encodeURIComponent(str(a.deliverableId))}/evaluate`, {}) },
   { tool: 'deliverables.set_status', mutates: true, description: 'Accept or request changes on a hired worker’s deliverable proposal. status: accepted|changes_requested.', parameters: obj({ deliverableId: S, status: S }, ['deliverableId', 'status']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/deliverables/${encodeURIComponent(str(a.deliverableId))}/status`, { status: str(a.status) }) },
+
+  // ---- Platform error log (api_error_log) ----
+  //  Builderforce's OWN caught + unhandled exceptions, written by
+  //  reportCaughtError/reportUnhandledError from every route and service. This is
+  //  the stream behind the superadmin Logs page; both surfaces share the
+  //  errorLogQuery read model so filters and rollups cannot drift.
+  //  NOT to be confused with `quality.*`/error_groups, which is the CUSTOMER's
+  //  own product telemetry. These rows are cross-tenant, so every tool is
+  //  superadmin-only (errorLogDb enforces it) and none is granted to an
+  //  unattended cloud agent.
+  {
+    tool: 'errors.summary', mutates: false,
+    description: 'Answer-first rollup of the platform error log: how many exceptions in the window, how many became HTTP 500s, and the loudest source+operation faults ranked by volume. START HERE when asked "what is broken / what errors are we seeing" — then use errors.list to pull the evidence for one fault. Optional filters: sinceHours (e.g. 24), source, operation, path, handled, tenantId, q (substring), limit. Superadmin only.',
+    parameters: obj({ sinceHours: N, source: S, operation: S, path: S, handled: B, tenantId: N, q: S, limit: N }),
+    run: async (ctx, a) => summarizeErrorLog(await errorLogDb(ctx), errorLogFilters(a)),
+  },
+  {
+    tool: 'errors.list', mutates: false,
+    description: 'List raw platform error-log entries, newest first, with message, source, operation, request path, handled flag and sanitized context (stack traces are omitted — use errors.get for one entry\'s full stack). Filter by sinceHours, source, operation, path, handled (false = became an HTTP 500), tenantId or q (substring over source/operation/path/message). Superadmin only.',
+    parameters: obj({ sinceHours: N, source: S, operation: S, path: S, handled: B, tenantId: N, q: S, limit: N, offset: N }),
+    run: async (ctx, a) => {
+      const page = await queryErrorLog(await errorLogDb(ctx), {
+        ...errorLogFilters(a),
+        offset: a.offset != null ? num(a.offset) : 0,
+      });
+      // Stacks are multi-KB each; sending 50 of them would blow the context for
+      // no gain. errors.get returns the full stack for the one that matters.
+      return { ...page, errors: page.errors.map(({ stack, ...rest }) => ({ ...rest, hasStack: Boolean(stack) })) };
+    },
+  },
+  {
+    tool: 'errors.get', mutates: false,
+    description: 'Get ONE platform error-log entry by id with its full stack trace and sanitized context — the drill-down after errors.summary/errors.list identifies the fault worth fixing. Superadmin only.',
+    parameters: obj({ id: N }, ['id']),
+    run: async (ctx, a) => getErrorLogEntry(await errorLogDb(ctx), num(a.id)),
+  },
+  {
+    tool: 'errors.sources', mutates: false,
+    description: 'List the distinct source modules present in the platform error log (optionally within the last sinceHours), so you can pick a valid `source` filter for errors.list / errors.summary. Superadmin only.',
+    parameters: obj({ sinceHours: N }),
+    run: async (ctx, a) => ({ sources: await listErrorLogSources(await errorLogDb(ctx), a.sinceHours != null ? num(a.sinceHours) : undefined) }),
+  },
 ];
 
 /** Assert the worker env was threaded (tools that decrypt credentials / reach

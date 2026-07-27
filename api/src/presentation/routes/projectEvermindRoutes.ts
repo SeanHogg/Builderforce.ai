@@ -38,6 +38,7 @@ import {
   type KnowledgeFinding,
 } from '../../application/llm/evermindAnalyzer';
 import { purgeProjectQaCache } from '../../application/llm/projectFacts';
+import { isRoutableModel } from '../../application/llm/vendors/registry';
 import {
   getProjectEvermindHead,
   resolveEvermindTargets,
@@ -408,6 +409,14 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     }
     const model = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : null;
     if (model) {
+      // Refuse an id that routes nowhere. Dispatch would silently fall back to the
+      // default vendor, which has never heard of it, so EVERY coordinator alarm
+      // would 503 forever with nothing to self-correct it (see isRoutableModel).
+      if (!isRoutableModel(model)) {
+        return c.json({
+          error: `'${model}' is not a routable model id. Use a catalog id or an explicit vendor prefix (e.g. 'direct/xai/grok-4.5', 'xai-oauth/grok-4.3').`,
+        }, 400);
+      }
       // Setting a frontier teacher IS frontier use — gate it on frontier access
       // (paid plan OR a connected BYO account OR superadmin). Clearing (model=null)
       // stays open so a downgraded tenant can always turn distillation off.

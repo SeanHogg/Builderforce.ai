@@ -32,6 +32,14 @@ import { countActiveSessionsAndTokens } from '../../application/security/session
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { computePlatformRollup } from '../../application/admin/platformRollup';
 import {
+  clampErrorLogLimit,
+  getErrorLogEntry,
+  listErrorLogSources,
+  queryErrorLog,
+  summarizeErrorLog,
+  type ErrorLogFilters,
+} from '../../application/observability/errorLogQuery';
+import {
   authTokens,
   authUserSessions,
   privacyRequests,
@@ -42,7 +50,6 @@ import {
   tenants,
   tenantMembers,
   agentHosts,
-  apiErrorLog,
   llmUsageLog,
   userMfaRecoveryCodes,
   projects,
@@ -1590,12 +1597,25 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         (SELECT COUNT(*)::int FROM tenants)                 AS "tenantCount",
         (SELECT COUNT(*)::int FROM agent_hosts)     AS "agentHostCount",
         (SELECT COUNT(*)::int FROM executions)              AS "executionCount",
-        (SELECT COUNT(*)::int FROM api_error_log)           AS "errorCount",
         (SELECT COUNT(*)::int FROM tenants WHERE plan = 'pro' AND billing_status = 'active') AS "paidTenantCount"
     `)).rows as Array<{
       userCount: number; tenantCount: number; agentHostCount: number;
-      executionCount: number; errorCount: number; paidTenantCount: number;
+      executionCount: number; paidTenantCount: number;
     }>;
+
+    // api_error_log lives in the operational database, not the primary one.
+    let errorCount = 0;
+    try {
+      const [row] = (await buildTransactionalDatabase(c.env)
+        .execute(sql`SELECT COUNT(*)::int AS "errorCount" FROM api_error_log`))
+        .rows as Array<{ errorCount: number }>;
+      errorCount = row?.errorCount ?? 0;
+    } catch (error) {
+      reportCaughtError(error, {
+        source: 'presentation/routes/adminRoutes.ts',
+        operation: 'health.errorCount',
+      });
+    }
 
     // LLM model pool — include both Free + Pro pools. Per-model availability
     // (cooldown / vendor-key / vendor-cooldown) is resolved inside the proxy
@@ -1614,7 +1634,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     return c.json({
       status:       dbOk ? 'ok' : 'degraded',
       db:           { ok: dbOk, latencyMs: dbLatencyMs },
-      platform:     counts,
+      platform:     { ...counts, errorCount },
       llm:          {
         pool:   modelPool.length,
         models: modelPool,
@@ -1836,17 +1856,57 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // -------------------------------------------------------------------------
   // GET /api/admin/errors
+  //   ?q&source&operation&path&handled&tenantId&sinceHours&limit&offset
+  //
+  // Answer-first: the rollup says which faults are loudest, the rows are the
+  // evidence. Reads the OPERATIONAL database — that is where persistCaughtError
+  // writes. Shares its read model with the built-in MCP `errors.*` tools.
   // -------------------------------------------------------------------------
   router.get('/errors', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = buildTransactionalDatabase(c.env);
+    const q = c.req.query();
 
-    const rows = await db
-      .select()
-      .from(apiErrorLog)
-      .orderBy(desc(apiErrorLog.createdAt))
-      .limit(200);
+    const handledParam = q.handled;
+    const filters: ErrorLogFilters = {
+      q: q.q || undefined,
+      source: q.source || undefined,
+      operation: q.operation || undefined,
+      path: q.path || undefined,
+      handled: handledParam === 'true' ? true : handledParam === 'false' ? false : undefined,
+      tenantId: q.tenantId ? Number(q.tenantId) : undefined,
+      sinceHours: q.sinceHours ? Number(q.sinceHours) : undefined,
+      limit: clampErrorLogLimit(q.limit),
+      offset: q.offset ? Number(q.offset) : 0,
+    };
 
-    return c.json({ errors: rows });
+    // Cache on the exact filter set: the log is append-only, so a short TTL is
+    // safe and the unfiltered first page (the common case) stops hitting Neon
+    // on every superadmin refresh.
+    const key = `admin:errors:${JSON.stringify(filters)}`;
+    const payload = await getOrSetCached(
+      c.env as Env,
+      key,
+      async () => {
+        const [page, summary, sources] = await Promise.all([
+          queryErrorLog(db, filters),
+          summarizeErrorLog(db, { ...filters, offset: 0 }),
+          listErrorLogSources(db, filters.sinceHours),
+        ]);
+        return { ...page, summary, sources };
+      },
+      { kvTtlSeconds: 30, l1TtlMs: 10_000 },
+    );
+
+    return c.json(payload);
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/errors/:id — one entry with full stack + context.
+  // -------------------------------------------------------------------------
+  router.get('/errors/:id', async (c) => {
+    const entry = await getErrorLogEntry(buildTransactionalDatabase(c.env), Number(c.req.param('id')));
+    if (!entry) return c.json({ error: 'Error log entry not found' }, 404);
+    return c.json({ error: entry });
   });
 
   // -------------------------------------------------------------------------
