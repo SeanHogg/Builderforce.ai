@@ -15,6 +15,7 @@ const open = (
   remedy: 'reset_breaker',
   observedStatus: 'ready',
   attempts,
+  lastSeenAt: new Date('2026-07-27T00:00:00Z'),
   lastAttemptAt,
   escalatedAt,
 });
@@ -34,6 +35,25 @@ describe('selectTriageBatch', () => {
       [3, open(3, 1, new Date('2026-07-27T00:00:00Z'))],
     ]);
     expect(selectTriageBatch(rows, stalls, 3).map((r) => r.task.id)).toEqual([2, 3, 1]);
+  });
+
+  it('rotates zero-attempt remedies after a refused action instead of starving the register', () => {
+    const rows = [candidate(1, 10), candidate(2, 10), candidate(3, 10)];
+    const recentlyObserved = {
+      ...open(1),
+      lastSeenAt: new Date('2026-07-27T02:00:00Z'),
+    };
+    const leastRecentlyObserved = {
+      ...open(2),
+      lastSeenAt: new Date('2026-07-27T00:00:00Z'),
+    };
+    const stalls = new Map<number, OpenStall>([
+      [1, recentlyObserved],
+      [2, leastRecentlyObserved],
+      [3, { ...open(3), lastSeenAt: new Date('2026-07-27T01:00:00Z') }],
+    ]);
+
+    expect(selectTriageBatch(rows, stalls, 2).map((r) => r.task.id)).toEqual([2, 3]);
   });
 
   it('places escalated observation-only rows behind new discoveries', () => {

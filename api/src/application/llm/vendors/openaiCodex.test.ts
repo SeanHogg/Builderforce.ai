@@ -9,7 +9,7 @@ describe('OpenAI Codex subscription vendor', () => {
     expect(byoAutoSeedModels(new Set(['anthropic', 'openai-codex']), {
       agentic: true,
       vendorPriority: ['openai-codex', 'anthropic'],
-    })[0]).toBe('openai-codex/gpt-5.3-codex');
+    })[0]).toBe('openai-codex/gpt-5.6-sol');
   });
 
   it('allows an xAI subscription credential to lead the same BYO seed', () => {

@@ -170,10 +170,16 @@ describe('pickManagedProducer', () => {
     expect(p).toMatchObject({ roleKey: 'developer', agentRef: 'bob-dev', source: 'manifest' });
   });
 
-  // The guard would refuse this dispatch, and a dispatch guaranteed to be refused is
-  // exactly the loop the whole change exists to end.
-  it('SKIPS a manifest slot whose role the stage does not authorise', () => {
-    expect(pickManagedProducer(authority(['architect']), [slot({ roleKey: 'developer' })])).toBeNull();
+  it('lets an open required manifest slot authorize its producer when the lane template is empty', () => {
+    const p = pickManagedProducer(authority([]), [slot()]);
+    expect(p).toMatchObject({ roleKey: 'developer', agentRef: 'bob-dev', source: 'manifest' });
+  });
+
+  // Ticket-specific lifecycle authority outranks the generic lane template. The guard
+  // applies this same rule through `slotAuthorizesRole`.
+  it('accepts an open manifest slot whose role is absent from the lane template', () => {
+    expect(pickManagedProducer(authority(['architect']), [slot({ roleKey: 'developer' })]))
+      .toMatchObject({ roleKey: 'developer', agentRef: 'bob-dev', source: 'manifest' });
   });
 
   it('never picks a reviewer slot — a reviewer is not the stage producer', () => {

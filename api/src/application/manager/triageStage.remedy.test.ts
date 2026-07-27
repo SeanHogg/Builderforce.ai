@@ -80,6 +80,28 @@ describe('applyRemedy — reset_breaker', () => {
     expect(payload).toMatchObject({ cloudAgentRef: 'agent-dev', model: 'claude-opus-5', laneKey: 'in_progress' });
   });
 
+  it('preserves the managed role attribution the execution guard requires', async () => {
+    mockEvaluate.mockResolvedValue({
+      candidate: { agentRef: 'agent-dev', model: 'claude-opus-5' },
+      managedRole: {
+        roleKey: 'developer',
+        agentRef: 'agent-dev',
+        source: 'manifest',
+        authorizedRoleKeys: ['developer'],
+      },
+      liveExecution: null,
+    } as never);
+
+    await run('reset_breaker');
+
+    const payload = JSON.parse(mockDispatch.mock.calls[0]![4].payload!);
+    expect(payload).toMatchObject({
+      cloudAgentRef: 'agent-dev',
+      actAsRole: 'developer',
+      laneKey: 'in_progress',
+    });
+  });
+
   it('reports NOT applied when the dispatcher still refuses — the attempt did not happen', async () => {
     mockDispatch.mockResolvedValue(null);
     expect(await run('reset_breaker')).toMatchObject({ applied: false, startedRun: false });

@@ -69,6 +69,7 @@ export interface OpenStall {
   remedy: string;
   observedStatus: string;
   attempts: number;
+  lastSeenAt: Date;
   lastAttemptAt: Date | null;
   escalatedAt: Date | null;
 }
@@ -86,6 +87,7 @@ export async function loadOpenStalls(db: Db, projectId: number): Promise<Map<num
       remedy: managerStallWatch.remedy,
       observedStatus: managerStallWatch.observedStatus,
       attempts: managerStallWatch.attempts,
+      lastSeenAt: managerStallWatch.lastSeenAt,
       lastAttemptAt: managerStallWatch.lastAttemptAt,
       escalatedAt: managerStallWatch.escalatedAt,
     })
