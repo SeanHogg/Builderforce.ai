@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Data-ingestion accounting — the non-token half of the consumption framework,
  * mirroring application/llm/tokenUsage.ts + usageLedger.ts.
@@ -43,7 +44,7 @@ export async function recordIngestion(db: Db, row: RecordIngestionRow): Promise<
       metadata:      row.metadata ? JSON.stringify(row.metadata) : null,
     });
   } catch (error) { /* never let ingestion logging fail the request */ 
-    console.error('[suppressed-error] application/ingestion/ingestionLedger.ts:45 recordIngestion', { error });
+    reportCaughtError(error, { source: "application/ingestion/ingestionLedger.ts", operation: "recordIngestion" });
   }
 }
 

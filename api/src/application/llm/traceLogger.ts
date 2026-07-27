@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * LLM diagnostic trace logger.
  *
@@ -166,7 +167,7 @@ export function logTrace(env: Env, ctx: ExecutionContext, input: TraceInput): vo
       .insert(llmTraces)
       .values(row)
       .catch((error) => { /* tracing must never fail the request */ 
-        console.error('[suppressed-error] application/llm/traceLogger.ts:165 logTrace', { error });
+        reportCaughtError(error, { source: "application/llm/traceLogger.ts", operation: "logTrace" });
       }),
   );
 }
@@ -197,7 +198,7 @@ export function backfillTraceUsage(
       })
       .where(eq(llmTraces.traceId, traceId))
       .catch((error) => { /* tracing must never fail the request */ 
-        console.error('[suppressed-error] application/llm/traceLogger.ts:189 backfillTraceUsage', { error });
+        reportCaughtError(error, { source: "application/llm/traceLogger.ts", operation: "backfillTraceUsage" });
       }),
   );
 }

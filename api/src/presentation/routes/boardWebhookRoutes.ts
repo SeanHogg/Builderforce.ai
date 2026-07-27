@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Board webhook routes — /api/board-webhooks
  *
@@ -61,7 +62,7 @@ export function createBoardWebhookRoutes(db: Db): Hono<HonoEnv> {
       } catch (error) {
         /* fall through to normal signed handling */
       
-        console.error('[suppressed-error] presentation/routes/boardWebhookRoutes.ts:61 createBoardWebhookRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/boardWebhookRoutes.ts", operation: "createBoardWebhookRoutes" });
       }
     }
 

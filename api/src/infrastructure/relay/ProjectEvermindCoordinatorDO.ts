@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * ProjectEvermindCoordinatorDO — the SINGLE WRITER for a project's Evermind.
  *
@@ -793,7 +794,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
             );
           }
         } catch (error) { /* best-effort: a probe failure must never wedge the merge */ 
-          console.error('[suppressed-error] infrastructure/relay/ProjectEvermindCoordinatorDO.ts:795 drain', { error });
+          reportCaughtError(error, { source: "infrastructure/relay/ProjectEvermindCoordinatorDO.ts", operation: "drain" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
         }
       }
       // Embed each text memory with the JUST-MERGED model so semantic recall (Validate)
@@ -807,7 +808,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           try {
             m.emb = packVec(embedTokens(lm, tok.encode(src).slice(0, EMBED_MAX_TOKENS)));
           } catch (error) { /* best-effort: a failed embed just falls back to lexical recall */ 
-            console.error('[suppressed-error] infrastructure/relay/ProjectEvermindCoordinatorDO.ts:807 drain', { error });
+            reportCaughtError(error, { source: "infrastructure/relay/ProjectEvermindCoordinatorDO.ts", operation: "drain" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
           }
         }
       }
@@ -854,7 +855,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
             await this.state.storage.put(EVAL_KEY, [...fresh, ...evalSet].slice(0, EVAL_MAX));
           }
         } catch (error) { /* best-effort: never fail the merge over an eval point */ 
-          console.error('[suppressed-error] infrastructure/relay/ProjectEvermindCoordinatorDO.ts:852 drain', { error });
+          reportCaughtError(error, { source: "infrastructure/relay/ProjectEvermindCoordinatorDO.ts", operation: "drain" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
         }
       }
       return { merged: mergedMeta.length, newVersion: nextVersion };
@@ -867,7 +868,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
         try {
           await ingestErrorEvents(this.db, this.env, { id: null, tenantId, projectId, defaultProjectId: projectId }, faultEvents);
         } catch (error) { /* best-effort: the console.warn above is the fallback record */ 
-          console.error('[suppressed-error] infrastructure/relay/ProjectEvermindCoordinatorDO.ts:863 drain', { error });
+          reportCaughtError(error, { source: "infrastructure/relay/ProjectEvermindCoordinatorDO.ts", operation: "drain" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
         }
       }
       // Clear only what we consumed; anything that arrived mid-merge OR was deferred

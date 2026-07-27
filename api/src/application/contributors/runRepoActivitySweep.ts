@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Repo activity sweep — the cron-driven producer that makes "connect a repo →
  * its activity is ingested" true with ZERO setup (no webhook required) and that
@@ -106,7 +107,7 @@ export async function runRepoActivitySweep(env: Env): Promise<RepoActivitySweepR
       inserted += n;
     } catch (e) {
       errors++;
-      console.error(`[cron:repo-activity] repo ${repo.id} (${repo.owner}/${repo.repo}) failed`, e);
+      reportCaughtError(e, { source: "application/contributors/runRepoActivitySweep.ts", operation: "runRepoActivitySweep", context: { logMessage: `[cron:repo-activity] repo ${repo.id} (${repo.owner}/${repo.repo}) failed`, details: e } });
     }
   }
 

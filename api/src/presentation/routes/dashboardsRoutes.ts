@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Custom Dashboards + AI-Powered Queries — /api/dashboards/*
  *
@@ -87,7 +88,7 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
         createdBy: createdBy ?? null,
       });
     } catch (error) { /* history is non-critical */ 
-      console.error('[suppressed-error] presentation/routes/dashboardsRoutes.ts:89 createDashboardsRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/dashboardsRoutes.ts", operation: "createDashboardsRoutes" });
     }
 
     return c.json(answer);

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Limbic gateway route.
  *
@@ -106,7 +107,7 @@ export function createLimbicRoutes(db: Db): Hono<HonoEnv> {
     } catch (error) {
       /* empty / non-JSON body → neutral appraisal, no profile */
     
-      console.error('[suppressed-error] presentation/routes/limbicRoutes.ts:106 createLimbicRoutes', { error });
+      reportCaughtError(error, { source: "presentation/routes/limbicRoutes.ts", operation: "createLimbicRoutes" });
     }
     const text = typeof body.text === 'string' ? body.text : '';
 

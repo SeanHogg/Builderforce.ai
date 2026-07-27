@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * systemicDiagnosis — the AI Manager's step up from "this ticket is stuck" to
  * "these 313 tickets are one platform defect, and here is the ticket to fix it".
@@ -366,7 +367,7 @@ export async function raiseSystemicFindings(
       });
     }
   } catch (error) { /* a systemic finding must never fail the manager pass */ 
-    console.error('[suppressed-error] application/manager/systemicDiagnosis.ts:368 raiseSystemicFindings', { error });
+    reportCaughtError(error, { source: "application/manager/systemicDiagnosis.ts", operation: "raiseSystemicFindings" });
   }
 
   return out;

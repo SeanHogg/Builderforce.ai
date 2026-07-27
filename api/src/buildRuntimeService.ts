@@ -1,3 +1,4 @@
+import { reportCaughtError } from './application/observability/caughtErrorReporter';
 /**
  * Composition-root factory for {@link RuntimeService}.
  *
@@ -73,7 +74,7 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
       toStatus: info.toStatus, resultText: info.resultText, errorMessage: info.errorMessage,
       questionText: info.questionText, eventNonce: info.eventNonce,
     }).catch((error) => {
-      console.error('[suppressed-error] buildRuntimeService.ts:70 buildRuntimeService', { error });
+      reportCaughtError(error, { source: "buildRuntimeService.ts", operation: "buildRuntimeService" });
     }),
     // Coordinated Role Participation attribution: a terminal run records that the role
     // it ran AS participated on the ticket's manifest (linked to the execution), and —

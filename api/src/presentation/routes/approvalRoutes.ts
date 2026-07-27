@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Approvals routes – /api/approvals
  *
@@ -208,7 +209,7 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
           status,
         }),
       })).catch((error) => { /* best-effort */ 
-        console.error('[suppressed-error] presentation/routes/approvalRoutes.ts:198 createApprovalRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/approvalRoutes.ts", operation: "createApprovalRoutes" });
       });
     }
 
@@ -404,10 +405,10 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
           });
           const participants = new TicketParticipantsService(db);
           await participants.syncStates(env, tenantId, bridgeTaskId).catch((error) => {
-            console.error('[suppressed-error] presentation/routes/approvalRoutes.ts:404 createApprovalRoutes', { error });
+            reportCaughtError(error, { source: "presentation/routes/approvalRoutes.ts", operation: "createApprovalRoutes" });
           });
           await participants.invalidate(env, bridgeTaskId).catch((error) => {
-            console.error('[suppressed-error] presentation/routes/approvalRoutes.ts:405 createApprovalRoutes', { error });
+            reportCaughtError(error, { source: "presentation/routes/approvalRoutes.ts", operation: "createApprovalRoutes" });
           });
           await recordActivity(env, db, {
             tenantId, projectId: null,
@@ -417,10 +418,10 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
             summary: `${roleKey} ${body.status === 'approved' ? 'approved' : 'changes requested'} via human approval`.slice(0, 300),
             metadata: { roleKey, via: 'approval', verdict: body.status },
           }).catch((error) => {
-            console.error('[suppressed-error] presentation/routes/approvalRoutes.ts:406 createApprovalRoutes', { error });
+            reportCaughtError(error, { source: "presentation/routes/approvalRoutes.ts", operation: "createApprovalRoutes" });
           });
         } catch (error) { /* best-effort bridge — never block the approval resolve */ 
-          console.error('[suppressed-error] presentation/routes/approvalRoutes.ts:414 createApprovalRoutes', { error });
+          reportCaughtError(error, { source: "presentation/routes/approvalRoutes.ts", operation: "createApprovalRoutes" });
         }
       }
     }
@@ -440,7 +441,7 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
           reviewedBy:   userId,
         }),
       })).catch((error) => { /* best-effort */ 
-        console.error('[suppressed-error] presentation/routes/approvalRoutes.ts:423 createApprovalRoutes', { error });
+        reportCaughtError(error, { source: "presentation/routes/approvalRoutes.ts", operation: "createApprovalRoutes" });
       });
     }
 

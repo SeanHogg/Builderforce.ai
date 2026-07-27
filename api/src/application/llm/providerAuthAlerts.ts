@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Per-tenant BYO credential AUTH ALERTS — the bridge that turns a buried cascade
  * failure into an operator-facing "reconnect this account" prompt.
@@ -232,13 +233,13 @@ export async function recordProviderAuthAlert(
   // Drop the read-through entry so the settings page reflects a fresh rejection
   // on its next poll instead of serving a cached "healthy" for up to a minute.
   await invalidateCached(env as unknown as Env, key).catch((error) => { /* advisory */ 
-    console.error('[suppressed-error] application/llm/providerAuthAlerts.ts:234 recordProviderAuthAlert', { error });
+    reportCaughtError(error, { source: "application/llm/providerAuthAlerts.ts", operation: "recordProviderAuthAlert" });
   });
   if (!env.AUTH_CACHE_KV) return;
   try {
     await env.AUTH_CACHE_KV.put(key, JSON.stringify(alert), { expirationTtl: ALERT_TTL_SECONDS });
   } catch (error) { /* alerting is advisory — never surface a storage failure */ 
-    console.error('[suppressed-error] application/llm/providerAuthAlerts.ts:238 recordProviderAuthAlert', { error });
+    reportCaughtError(error, { source: "application/llm/providerAuthAlerts.ts", operation: "recordProviderAuthAlert" });
   }
 }
 
@@ -269,7 +270,7 @@ export async function loadProviderAuthAlert(
           }
           return null;
         } catch (error) { /* fall through to the in-memory copy */ 
-          console.error('[suppressed-error] application/llm/providerAuthAlerts.ts:267 loadProviderAuthAlert', { error });
+          reportCaughtError(error, { source: "application/llm/providerAuthAlerts.ts", operation: "loadProviderAuthAlert" });
         }
       }
       const local = memoryAlerts.get(key);
@@ -294,10 +295,10 @@ export async function clearProviderAuthAlert(
   const key = alertKey(tenantId, provider);
   memoryAlerts.delete(key);
   await invalidateCached(env as unknown as Env, key).catch((error) => { /* advisory */ 
-    console.error('[suppressed-error] application/llm/providerAuthAlerts.ts:294 clearProviderAuthAlert', { error });
+    reportCaughtError(error, { source: "application/llm/providerAuthAlerts.ts", operation: "clearProviderAuthAlert" });
   });
   if (!env.AUTH_CACHE_KV) return;
   try { await env.AUTH_CACHE_KV.delete(key); } catch (error) { /* advisory */ 
-    console.error('[suppressed-error] application/llm/providerAuthAlerts.ts:292 clearProviderAuthAlert', { error });
+    reportCaughtError(error, { source: "application/llm/providerAuthAlerts.ts", operation: "clearProviderAuthAlert" });
   }
 }

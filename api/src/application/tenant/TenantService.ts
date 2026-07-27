@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { ITenantRepository } from '../../domain/tenant/ITenantRepository';
 import { Tenant } from '../../domain/tenant/Tenant';
 import {
@@ -319,7 +320,7 @@ export class TenantService {
     if (tenant.externalSubscriptionId) {
       await this.payment.cancelSubscription(tenant.externalSubscriptionId).catch((err) => {
         // Log but don't block — the local state downgrade still proceeds
-        console.error('[payment] cancelSubscription failed:', err);
+        reportCaughtError(err, { source: "application/tenant/TenantService.ts", operation: "downgradeToFree", context: { logMessage: '[payment] cancelSubscription failed:', details: err } });
       });
     }
 

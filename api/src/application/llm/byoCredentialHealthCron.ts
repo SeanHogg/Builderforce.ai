@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Daily BYO credential sweep — proactively verifies every tenant's connected model
  * provider and tells its admins the first time one stops working.
@@ -139,7 +140,7 @@ export async function runByoCredentialHealthCron(env: Env): Promise<ByoHealthSwe
 
   const results = await mapWithConcurrency(tenantIds, TENANT_CONCURRENCY, (tenantId) =>
     runByoCredentialHealthForTenant(env, tenantId).catch((err) => {
-      console.error(`[cron:byo-health] tenant=${tenantId} failed`, err);
+      reportCaughtError(err, { source: "application/llm/byoCredentialHealthCron.ts", operation: "results", context: { logMessage: `[cron:byo-health] tenant=${tenantId} failed`, details: err } });
       return { providersProbed: 0, newlyBroken: 0, recovered: 0, emailed: 0 };
     }));
 

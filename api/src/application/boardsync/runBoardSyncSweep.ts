@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Board-sync sweep — the cron-driven half of external board synchronization.
  *
@@ -121,7 +122,7 @@ export async function runBoardSyncSweep(env: BoardSyncSweepEnv): Promise<BoardSy
       drained += drainResult.succeeded;
     } catch (e) {
       errors++;
-      console.error(`[cron:board-sync] connection ${conn.id} failed`, e);
+      reportCaughtError(e, { source: "application/boardsync/runBoardSyncSweep.ts", operation: "runBoardSyncSweep", context: { logMessage: `[cron:board-sync] connection ${conn.id} failed`, details: e } });
     }
   }
 

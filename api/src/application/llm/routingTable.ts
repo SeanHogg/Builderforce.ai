@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Learned Model Routing (PRD 13, §4.1/§5.3) — the routing-table KV blob.
  *
@@ -238,7 +239,7 @@ export async function applyOutcomeToRoutingTable(
       } catch (error) {
         // Best-effort: the reconcile job repairs any dropped increment.
       
-        console.error('[suppressed-error] application/llm/routingTable.ts:238 applyOutcomeToRoutingTable', { error });
+        reportCaughtError(error, { source: "application/llm/routingTable.ts", operation: "applyOutcomeToRoutingTable" });
       }
     }),
   );

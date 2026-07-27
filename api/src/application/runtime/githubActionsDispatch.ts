@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * githubActionsDispatch — queue an agent run onto a repo's GitHub Actions runners.
  *
@@ -121,7 +122,7 @@ export async function ensureAgentWorkflow(
   // The presence cache would otherwise keep saying "absent" for up to 5 minutes
   // after the operator enabled the surface.
   await invalidateCached(env, workflowPresenceKey(tenantId, repoId))
-    .catch((error) => console.error('[github-actions-dispatch] workflow-presence cache invalidation failed', { tenantId, repoId, error }));
+    .catch((error) => reportCaughtError(error, { source: "application/runtime/githubActionsDispatch.ts", operation: "ensureAgentWorkflow", context: { logMessage: '[github-actions-dispatch] workflow-presence cache invalidation failed', details: { tenantId, repoId, error } } }));
   return { ok: true, created: !existing.ok };
 }
 

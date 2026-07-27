@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Shared (L2) semantic response cache — the cross-surface tier of the
  * SemanticCache in `@builderforce/memory`.
@@ -95,7 +96,7 @@ export async function semanticStore(
   const next = [{ e: embedding, r: response, t: Date.now() }, ...current].slice(0, MAX_ENTRIES_PER_PARTITION);
 
   await kv.put(key, JSON.stringify(next)).catch((error) => { /* best-effort */ 
-    console.error('[suppressed-error] application/llm/semanticCache.ts:97 semanticStore', { error });
+    reportCaughtError(error, { source: "application/llm/semanticCache.ts", operation: "semanticStore" });
   });
   await invalidateCached(env, key);
 }

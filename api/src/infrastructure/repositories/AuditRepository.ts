@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { and, desc, eq } from 'drizzle-orm';
 import { IAuditRepository, AuditQueryOptions } from '../../domain/audit/IAuditRepository';
 import { AuditEvent, AuditEventProps } from '../../domain/audit/AuditEvent';
@@ -42,12 +43,12 @@ export class AuditRepository implements IAuditRepository {
           limit: 20,
         });
       } catch (error) {
-        console.error('[audit-repository] execution lifecycle outbox drain failed', {
+        reportCaughtError(error, { source: "infrastructure/repositories/AuditRepository.ts", operation: "save", context: { logMessage: '[audit-repository] execution lifecycle outbox drain failed', details: {
           tenantId,
           executionId: Number(p.resourceId),
           eventType: p.eventType,
           error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-        });
+        } } });
       }
       return event;
     }

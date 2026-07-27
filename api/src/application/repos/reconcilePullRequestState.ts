@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * reconcilePullRequestState — make our `pull_requests` row agree with the provider.
  *
@@ -83,7 +84,7 @@ export async function reconcilePullRequestState(
 
     const versionToken = pr.updatedAt instanceof Date ? pr.updatedAt.toISOString() : String(pr.updatedAt);
     if (opts.forceFresh) await invalidatePullRequestDetail(env, pr.id, versionToken).catch((error) => {
-      console.error('[suppressed-error] application/repos/reconcilePullRequestState.ts:85 reconcilePullRequestState', { error });
+      reportCaughtError(error, { source: "application/repos/reconcilePullRequestState.ts", operation: "reconcilePullRequestState" });
     });
 
     const detail = await getPullRequestDetail(env, pr.id, versionToken, {

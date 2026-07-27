@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * policyPackService — the READ/WRITE path for governance policy packs, and the
  * one resolver that turns them into the `PolicyGate[]` the runtime enforces.
@@ -107,7 +108,7 @@ function resolutionKey(scope: PolicyScope, version: string): string {
 /** Orphan every cached resolution for a tenant. Call from EVERY pack/gate write. */
 export async function invalidatePolicyCache(env: Env, tenantId: number): Promise<void> {
   await bumpCacheVersion(env, policyVersionKey(tenantId)).catch((error) => {
-    console.error('[suppressed-error] application/governance/policyPackService.ts:109 invalidatePolicyCache', { error });
+    reportCaughtError(error, { source: "application/governance/policyPackService.ts", operation: "invalidatePolicyCache" });
   });
 }
 

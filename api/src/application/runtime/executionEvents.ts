@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Per-execution live event hub — the in-isolate WebSocket fan-out for a single
  * execution's stream (status changes, assistant/user messages, file changes).
@@ -72,7 +73,7 @@ export function notifyExecutionSubscribers(executionId: number, event: Execution
   try {
     executionBoardSink?.(event);
   } catch (error) {
-    console.error('[execution-events] board broadcast failed', { executionId, eventType: event.type, error });
+    reportCaughtError(error, { source: "application/runtime/executionEvents.ts", operation: "notifyExecutionSubscribers", context: { logMessage: '[execution-events] board broadcast failed', details: { executionId, eventType: event.type, error } } });
   }
 
   const set = executionSubscribers.get(executionId);
@@ -85,7 +86,7 @@ export function notifyExecutionSubscribers(executionId: number, event: Execution
     } catch (error) {
       // ignore broken sockets; close handlers clean up subscriptions.
     
-      console.error('[suppressed-error] application/runtime/executionEvents.ts:85 notifyExecutionSubscribers', { error });
+      reportCaughtError(error, { source: "application/runtime/executionEvents.ts", operation: "notifyExecutionSubscribers" });
     }
   }
 }

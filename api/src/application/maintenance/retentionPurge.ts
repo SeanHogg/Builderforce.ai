@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Retention purge — daily deletion of rows from append-only diagnostic/telemetry
  * tables that would otherwise grow unbounded. Run from the daily cron tick
@@ -69,7 +70,7 @@ export async function runRetentionPurge(env: Env, now: number = Date.now()): Pro
     try {
       await t.run();
     } catch (err) {
-      console.error(`[cron:retention] purge ${t.name} failed`, err);
+      reportCaughtError(err, { source: "application/maintenance/retentionPurge.ts", operation: "runRetentionPurge", context: { logMessage: `[cron:retention] purge ${t.name} failed`, details: err } });
     }
   }
 }

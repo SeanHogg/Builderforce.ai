@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../observability/caughtErrorReporter';
 /**
  * Direct Anthropic (Claude) vendor module — the last-resort reliability FLOOR for
  * cloud CODING runs. Calls Anthropic's native Messages API
@@ -606,7 +607,7 @@ function streamAnthropicToOpenAi(body: ReadableStream<Uint8Array>, model: string
       }
     },
     cancel() { reader.cancel().catch((error) => { /* ignore */ 
-      console.error('[suppressed-error] application/llm/vendors/anthropic.ts:608 cancel', { error });
+      reportCaughtError(error, { source: "application/llm/vendors/anthropic.ts", operation: "cancel" });
     }); },
   });
 }
@@ -636,9 +637,7 @@ export const anthropicModule: VendorModule = {
       // invalid-request throw). Log the EXACT cause server-side so a connected-account
       // failure is diagnosable from `wrangler tail` even when the UI failover plumbing
       // reduces it to "no response". Never logs the credential (only the message).
-      console.error(
-        `[vendors] anthropic/${params.model} ${isOAuth ? 'OAuth(subscription)' : 'api-key'} call THREW before any HTTP response: ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`,
-      );
+      reportCaughtError(err, { source: "application/llm/vendors/anthropic.ts", operation: "call", context: { logMessage: `[vendors] anthropic/${params.model} ${isOAuth ? 'OAuth(subscription)' : 'api-key'} call THREW before any HTTP response: ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}` } });
       throw err;
     }
     if (resp.ok) {

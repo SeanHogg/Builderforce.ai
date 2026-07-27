@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * BI burn-rate pull (BuilderForce → host, spec 05 §4.1).
  *
@@ -43,7 +44,7 @@ function readHostBi(settingsRaw: string | null | undefined): HostBiConfig | null
       return { baseUrl: baseUrl.replace(/\/+$/, ''), token };
     }
   } catch (error) { /* fall through */ 
-    console.error('[suppressed-error] application/seams/burnRateService.ts:45 readHostBi', { error });
+    reportCaughtError(error, { source: "application/seams/burnRateService.ts", operation: "readHostBi" });
   }
   return null;
 }

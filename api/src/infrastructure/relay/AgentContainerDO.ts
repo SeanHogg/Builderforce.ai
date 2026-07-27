@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * AgentContainerDO — the **long-lived Cloudflare Container** runtime for a
  * "Cloud Agent (Node/Container)". Unlike {@link CloudRunnerDO} (the durable
@@ -52,7 +53,7 @@ export class AgentContainerDO extends Container<Env> {
         }
       }
     } catch (error) { /* attribution is best-effort */ 
-      console.error('[suppressed-error] infrastructure/relay/AgentContainerDO.ts:54 fetch', { error });
+      reportCaughtError(error, { source: "infrastructure/relay/AgentContainerDO.ts", operation: "fetch" }, { env: this.env, waitUntil: (task) => this.ctx.waitUntil(task) });
     }
     return super.fetch(request);
   }
@@ -72,7 +73,7 @@ export class AgentContainerDO extends Container<Env> {
         await handleCloudRunCrash(this.env, buildDatabase(this.env), executionId, cloudCrashReason(detail));
       }
     } catch (e) {
-      console.error('[AgentContainerDO] crash report failed', e);
+      reportCaughtError(e, { source: "infrastructure/relay/AgentContainerDO.ts", operation: "onError", context: { logMessage: '[AgentContainerDO] crash report failed', details: e } }, { env: this.env, waitUntil: (task) => this.ctx.waitUntil(task) });
     }
     return error;
   }
