@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  decideManagedLaneAuthority, pickManagedProducer,
+  bindStaffedAgentsToRoles, decideManagedLaneAuthority, pickManagedProducer,
   type LaneAuthorityInputs, type ManagedLaneAuthority, type ManagedProducerSlot,
 } from './managedLaneRoles';
 import type { LaneStaffedAgent } from '../swimlane/laneApprover';
@@ -34,7 +34,81 @@ const inputs = (over: Partial<LaneAuthorityInputs> = {}): LaneAuthorityInputs =>
   ...over,
 });
 
+/**
+ * THE SECOND MEASURED FAILURE — the one that survived the first fix.
+ *
+ * `decideLaneApprovers` answers "who must APPROVE this lane?" and leaves `agentRef` null
+ * on tier (a) by design. Execution asks "who may ACT AS this required role?", and reading
+ * the first answer as the second meant a templated lane could never produce an agent. On
+ * project 11 that was 405 of 675 stalled tickets — the largest cohort on the board — every
+ * one of them on a stage that DID declare a required role and a lane that WAS staffed with
+ * an agent capable of it.
+ */
+describe('bindStaffedAgentsToRoles', () => {
+  const approver = (roleKey: string) =>
+    ({ roleKey, roleName: roleKey, agentRef: null, agentName: null, model: null });
+
+  it('gives a required role the lane agent capable of it — the 405-ticket cohort', () => {
+    const [bound] = bindStaffedAgentsToRoles([approver('developer')], [agent()]);
+    expect(bound?.agentRef).toBe('bob-dev');
+  });
+
+  it('leaves a role nobody on the lane is capable of UNBOUND rather than mis-binding it', () => {
+    const [bound] = bindStaffedAgentsToRoles([approver('architect')], [agent()]);
+    expect(bound?.agentRef).toBeNull();
+  });
+
+  it('never overwrites an agent the approver decision already resolved (tier b)', () => {
+    const staffed = { ...approver('developer'), agentRef: 'already-picked' };
+    const [bound] = bindStaffedAgentsToRoles([staffed], [agent({ agentRef: 'someone-else' })]);
+    expect(bound?.agentRef).toBe('already-picked');
+  });
+
+  it('prefers the agent whose DECLARED assignment role names this role over one merely capable', () => {
+    const [bound] = bindStaffedAgentsToRoles([approver('developer')], [
+      agent({ agentRef: 'generalist', declaredRole: 'Architect', capableRoleKeys: ['developer', 'architect'], position: 0 }),
+      agent({ agentRef: 'bob-dev', declaredRole: 'Developer', capableRoleKeys: ['developer'], position: 1 }),
+    ]);
+    expect(bound?.agentRef).toBe('bob-dev');
+  });
+
+  it('falls back to lane position when no declared role matches', () => {
+    const [bound] = bindStaffedAgentsToRoles([approver('developer')], [
+      agent({ agentRef: 'second', declaredRole: null, position: 2 }),
+      agent({ agentRef: 'first', declaredRole: null, position: 1 }),
+    ]);
+    expect(bound?.agentRef).toBe('first');
+  });
+
+  it('lets ONE agent serve several required roles — unlike approver resolution, which dedupes', () => {
+    const bound = bindStaffedAgentsToRoles(
+      [approver('developer'), approver('code-reviewer')],
+      [agent({ capableRoleKeys: ['developer', 'code-reviewer'] })],
+    );
+    expect(bound.map((b) => b.agentRef)).toEqual(['bob-dev', 'bob-dev']);
+  });
+
+  it('is a no-op on an unstaffed lane, so an unstaffed stage still fails closed', () => {
+    expect(bindStaffedAgentsToRoles([approver('developer')], [])).toEqual([approver('developer')]);
+  });
+});
+
 describe('decideManagedLaneAuthority', () => {
+  // The regression that matters: authority came back with roles but no agent, so
+  // `pickManagedProducer` returned null and the ticket classified `managed_no_role`.
+  it('binds staffing to requirement roles WITHOUT widening the authorised role set', () => {
+    const a = decideManagedLaneAuthority(inputs({
+      requirements: [{ kind: 'role', ref: 'developer', ticketType: null, condition: null }],
+      laneAgents: [agent(), agent({ agentRef: 'ada', declaredRole: 'Architect', capableRoleKeys: ['architect'], position: 1 })],
+    }), {});
+    // Staffing an Architect on the lane must NOT authorise the architect role…
+    expect(a.roleKeys).toEqual(['developer']);
+    expect(a.tier).toBe('requirements');
+    // …but the required Developer role is now dispatchable.
+    expect(a.approvers[0]?.agentRef).toBe('bob-dev');
+    expect(pickManagedProducer(a, [])).toMatchObject({ roleKey: 'developer', agentRef: 'bob-dev' });
+  });
+
   it('authorises the stage\'s applicable requirement roles', () => {
     const a = decideManagedLaneAuthority(inputs({
       requirements: [
@@ -123,6 +197,25 @@ describe('pickManagedProducer', () => {
       { roleKey: 'developer', roleName: 'Developer', agentRef: 'bob-dev', agentName: 'Bob', model: 'x' },
     ]);
     expect(pickManagedProducer(a, [])).toMatchObject({ roleKey: 'developer', agentRef: 'bob-dev', source: 'lane_agent', model: 'x' });
+  });
+
+  // Requirement order lists the reviewer first on plenty of real templates, and binding
+  // agents to required roles made both of them dispatchable — so the tiebreak now matters.
+  // Sending a Code Reviewer to write the code it is meant to judge is a run that can
+  // neither succeed nor be reviewed.
+  it('prefers a PRODUCING role over a reviewing one, whatever order they are authorised in', () => {
+    const a = authority(['code-reviewer', 'developer'], [
+      { roleKey: 'code-reviewer', roleName: 'Code Reviewer', agentRef: 'validator-t1', agentName: 'Validator', model: null },
+      { roleKey: 'developer', roleName: 'Developer', agentRef: 'bob-dev', agentName: 'Bob', model: null },
+    ]);
+    expect(pickManagedProducer(a, [])).toMatchObject({ roleKey: 'developer', agentRef: 'bob-dev' });
+  });
+
+  it('still dispatches a review-only stage rather than stalling it', () => {
+    const a = authority(['code-reviewer'], [
+      { roleKey: 'code-reviewer', roleName: 'Code Reviewer', agentRef: 'validator-t1', agentName: 'Validator', model: null },
+    ]);
+    expect(pickManagedProducer(a, [])).toMatchObject({ roleKey: 'code-reviewer', agentRef: 'validator-t1' });
   });
 
   // The `managed_no_role` leaf. Returning null here is what stops the trigger from

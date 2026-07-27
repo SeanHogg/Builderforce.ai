@@ -250,13 +250,39 @@ describe('managerFindings', () => {
     expect(f?.text).toContain('7d 00h');
   });
 
+  /**
+   * ONLY A MANUAL RUN FILES A PASS CARD — the 5-minute cron path files none, by design
+   * (288 board tickets per project per day otherwise). So the newest COMPLETED card can be
+   * weeks old, and its counters describe the backlog as it was THEN.
+   *
+   * Measured on project 11 on 2026-07-27: `scored 0 · assigned 0` from a card dated
+   * 2026-07-13 produced two CRITICAL "the pass is finishing and reporting success without
+   * changing the backlog" findings — a verdict delivered on 14-day-old evidence, aimed at
+   * a mechanism whose cron had run two minutes earlier.
+   */
+  const freshPass = (over: Partial<ManagerRunTask> = {}): ManagerRunTask => ({
+    ...runTasks[1]!, id: 999, key: '1-UNTITLED-999',
+    createdAt: iso(6 * MIN), completedAt: iso(5 * MIN), ...over,
+  });
+
   it('names a pass that completes and changes NOTHING (the silent no-op)', () => {
-    const f = managerFindings(input, now).find((x) => x.code === 'ineffective_autoBusinessValue');
+    const recent = { ...input, overview: { ...overview, runTasks: [freshPass(), ...runTasks] } };
+    const f = managerFindings(recent, now).find((x) => x.code === 'ineffective_autoBusinessValue');
     expect(f?.severity).toBe('critical');
     expect(f?.text).toContain('reported scored 0');
     expect(f?.text).toContain('300 of 300 (100%)');
     // autoPrioritize reported 300 ranked and has no deficit → must NOT be accused.
-    expect(codes()).not.toContain('ineffective_autoPrioritize');
+    expect(codes(recent)).not.toContain('ineffective_autoPrioritize');
+  });
+
+  it('will NOT convict a capability on a stale card — it says the evidence is too old', () => {
+    // The fixture's newest completed card is 14 days old.
+    expect(codes()).not.toContain('ineffective_autoBusinessValue');
+    const f = managerFindings(input, now).find((x) => x.code === 'unverified_autoBusinessValue');
+    expect(f?.severity).toBe('warning');
+    expect(f?.text).toContain('too old to judge it by');
+    // The deficit is still surfaced — silence would be the opposite failure.
+    expect(f?.text).toContain('300 of 300 (100%)');
   });
 
   it('separates "switched off" from "switched on and failing"', () => {
@@ -271,7 +297,28 @@ describe('managerFindings', () => {
   it('reports reaped passes as a share of recent passes', () => {
     expect(codes()).toContain('passes_ending_early');
     const f = managerFindings(input, now).find((x) => x.code === 'passes_ending_early');
-    expect(f?.text).toContain('2 of the last 4 passes (50%)');
+    expect(f?.text).toContain('2 of the last 4 pass cards (50%)');
+  });
+
+  /**
+   * A reaped card means "the pass died" ONLY when nothing proves otherwise. The cron pass
+   * files no card of its own but DOES reap whatever it finds open, so on a live project
+   * every manual card eventually reads as `ended_early`. Reported as critical, that is a
+   * false alarm aimed at a healthy mechanism — measured: 6 of 8 "passes ending early" on a
+   * project whose scheduled sweep had run two minutes before the capture.
+   */
+  it('downgrades reaped cards to a warning when lastRunAt proves the cron is alive', () => {
+    const f = managerFindings(input, now).find((x) => x.code === 'passes_ending_early');
+    expect(f?.severity).toBe('warning');
+    expect(f?.text).toContain('the scheduled sweep last ran');
+    expect(f?.text).toContain('not passes dying');
+  });
+
+  it('keeps it CRITICAL when the cron is NOT proven alive — the real dying-pass signal', () => {
+    const dead = { ...input, overview: { ...overview, stats: { ...overview.stats, lastRunAt: iso(9 * DAY) } } };
+    const f = managerFindings(dead, now).find((x) => x.code === 'passes_ending_early');
+    expect(f?.severity).toBe('critical');
+    expect(f?.text).toContain('its scoring/assignment/dispatch work never happened');
   });
 
   it('names the tenant token block, because it silently freezes every cron sweep', () => {

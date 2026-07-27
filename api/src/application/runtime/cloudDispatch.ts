@@ -174,6 +174,24 @@ export function parseActAsRole(payload: string | null | undefined): string | und
 }
 
 /**
+ * The LANE a role-attributed run serves, off its payload.
+ *
+ * A role run is dispatched against the accountability slot's OWN stage, which is not
+ * always the ticket's current status: an outstanding pre-review slot is asked for while
+ * the ticket already sits in `in_review`. Anything authorizing such a run has to measure
+ * it against THIS lane, not against `tasks.status` — see `authorizeManagedTaskExecution`.
+ */
+export function parseLaneKey(payload: string | null | undefined): string | undefined {
+  if (!payload) return undefined;
+  try {
+    const p = JSON.parse(payload) as { laneKey?: unknown };
+    return typeof p.laneKey === 'string' && p.laneKey.trim() ? p.laneKey.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Run-time repo selection off the payload. Returns:
  *   • a trimmed repo id  — pin this run to that repo,
  *   • ''                 — explicitly clear the pin (Auto-resolve),
