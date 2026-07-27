@@ -184,14 +184,10 @@ export interface ManagedProducer {
  *
  * Order, most-specific first:
  *  1. the ticket's OWN manifest — an open owner/contributor slot resolved to an agent,
- *     whose role the stage authorizes. This is the Coordinator's recorded intent for this
- *     ticket, so it beats a generic lane pick.
+ *     which is itself ticket-specific authority recorded by the Coordinator. It beats a
+ *     generic lane pick.
  *  2. the lane's staffing (tier b) — the operator staffed this agent to work this lane,
  *     and `decideLaneApprovers` already mapped it to a role it is genuinely capable of.
- *
- * A manifest slot whose role the stage does NOT authorize is deliberately skipped rather
- * than dispatched: the guard would refuse it, and a dispatch guaranteed to be refused is
- * exactly the loop this module exists to end.
  *
  * Null means no role-attributed run is possible here — read by the evaluator as
  * `managed_no_role`, never as permission to dispatch un-attributed.
@@ -200,14 +196,14 @@ export function pickManagedProducer(
   authority: ManagedLaneAuthority,
   slots: readonly ManagedProducerSlot[],
 ): ManagedProducer | null {
-  const authorized = new Set(authority.roleKeys);
-
+  // An open required manifest slot is ticket-specific lifecycle authority. The
+  // execution guard already accepts it even when the generic lane template names no
+  // role, so producer selection must apply the same rule.
   const slot = slots.find((s) =>
     (s.responsibility === 'owner' || s.responsibility === 'contributor')
     && s.assigneeKind === 'agent'
     && !!s.assigneeRef
-    && isParticipantOpen(s.state)
-    && authorized.has(s.roleKey));
+    && isParticipantOpen(s.state));
   if (slot?.assigneeRef) {
     const approver = authority.approvers.find((a) => a.roleKey === slot.roleKey);
     return { roleKey: slot.roleKey, agentRef: slot.assigneeRef, model: approver?.model ?? null, source: 'manifest' };
@@ -304,7 +300,15 @@ export async function resolveManagedProducer(
     resolveManagedLaneAuthority(db, { tenantId: args.tenantId, swimlaneId: args.swimlaneId, task: args.task }),
     loadStageProducerSlots(db, { tenantId: args.tenantId, taskId: args.taskId, stageKey: args.stageKey }),
   ]);
-  return { producer: pickManagedProducer(authority, slots), authority };
+  const producer = pickManagedProducer(authority, slots);
+  const effectiveRoleKeys = [...new Set([
+    ...authority.roleKeys,
+    ...slots.filter((slot) => isParticipantOpen(slot.state)).map((slot) => slot.roleKey),
+  ])];
+  const effectiveAuthority = effectiveRoleKeys.length === authority.roleKeys.length
+    ? authority
+    : { ...authority, roleKeys: effectiveRoleKeys };
+  return { producer, authority: effectiveAuthority };
 }
 
 /**

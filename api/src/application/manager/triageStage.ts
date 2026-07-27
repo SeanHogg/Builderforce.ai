@@ -81,8 +81,12 @@ export function selectTriageBatch<T extends { task: { id: number }; idleMs: numb
         if ((ao?.attempts ?? 0) !== (bo?.attempts ?? 0)) {
           return (ao?.attempts ?? 0) - (bo?.attempts ?? 0);
         }
-        const attemptAge = time(ao?.lastAttemptAt) - time(bo?.lastAttemptAt);
-        if (attemptAge !== 0) return attemptAge;
+        // A refused remedy is deliberately not counted as an attempt, but it WAS
+        // examined this pass. Fall back to lastSeenAt so the same zero-attempt rows
+        // cannot permanently monopolize the bounded batch.
+        const actionAge = time(ao?.lastAttemptAt ?? ao?.lastSeenAt)
+          - time(bo?.lastAttemptAt ?? bo?.lastSeenAt);
+        if (actionAge !== 0) return actionAge;
       }
       return b.idleMs - a.idleMs;
     })
@@ -577,11 +581,15 @@ export async function applyRemedy(
         tenantId, projectId, taskId: task.id, status: task.status, env,
       });
       if (!evaluation.candidate || evaluation.liveExecution) return nothing;
-      const payload: { cloudAgentRef: string; model?: string; laneKey: string } = {
+      const payload: { cloudAgentRef: string; model?: string; laneKey: string; actAsRole?: string } = {
         cloudAgentRef: evaluation.candidate.agentRef,
         laneKey: task.status,
       };
       if (evaluation.candidate.model) payload.model = evaluation.candidate.model;
+      // Managed dispatch is fail-closed unless the payload states which lifecycle
+      // role is being performed. Breaker recovery must preserve the evaluator's role
+      // just like the ordinary lane trigger does.
+      if (evaluation.managedRole) payload.actAsRole = evaluation.managedRole.roleKey;
       const deferred: Promise<unknown>[] = [];
       const executionId = await dispatchCloudRunForTask(
         env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); },
