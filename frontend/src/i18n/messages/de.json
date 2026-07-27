@@ -6778,7 +6778,8 @@
       "backlog": "Backlog",
       "activity": "Aktivität",
       "policy": "Richtlinie",
-      "stuck": "Blockiert"
+      "stuck": "Blockiert",
+      "ask": "Fragen"
     },
     "insightNudge": "{unscored} Tickets brauchen noch einen Geschäftswert und {unranked} sind nicht eingeordnet – führen Sie den Manager aus, um sie aufzuholen.",
     "coverageNudge": "{flagged} Tickets fehlt eine erforderliche Rolle oder ein Prüfer – der Manager besetzt sie beim nächsten Durchlauf automatisch.",
@@ -7059,6 +7060,28 @@
     "health": {
       "title": "Backlog-Zustand",
       "caption": "Der Dauerzustand des Boards — was noch keinen Wert, keinen Rang, keine Termine oder keinen Verantwortlichen hat."
+    },
+    "ask": {
+      "title": "Den Manager fragen",
+      "caption": "Fragen Sie den Manager direkt. Er liest zuerst seine eigenen Aufzeichnungen — was fertig wurde, was er entschieden hat, was feststeckt und was ihm überhaupt erlaubt war — und antwortet dann.",
+      "loading": "Unterhaltung wird geöffnet…",
+      "error": "Der Manager konnte gerade nicht antworten.",
+      "empty": "Noch nichts gefragt. Beginnen Sie mit einer der Fragen unten.",
+      "placeholder": "Fragen Sie nach dem heutigen Tag, einem Ticket oder danach, warum etwas nicht vorangeht…",
+      "send": "Fragen",
+      "sending": "Wird gefragt…",
+      "you": "Sie",
+      "fallbackName": "der Manager",
+      "thinking": "{name} prüft die Aufzeichnungen…",
+      "answeredBy": "Beantwortet von {name}",
+      "answeredByDesignated": "Beantwortet von {name}, dem benannten Manager dieses Projekts",
+      "noAgent": "In diesem Workspace ist noch kein Manager-Agent eingerichtet, daher kann hier niemand antworten. Benennen Sie unter „Richtlinie“ einen Manager, dann öffnet sich die Unterhaltung.",
+      "compactPrompt": "Nicht der Tag, den Sie sich erhofft haben? Fragen Sie {name} danach.",
+      "starter": {
+        "today": "Was haben Sie und das Team heute geschafft?",
+        "blocked": "Warum wurde so wenig fertig — was blockiert die Arbeit?",
+        "plan": "Was tun Sie als Nächstes, um das aufzulösen?"
+      }
     }
   },
   "project360": {

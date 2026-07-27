@@ -6778,7 +6778,8 @@
       "backlog": "Backlog",
       "activity": "Activité",
       "policy": "Politique",
-      "stuck": "Bloqués"
+      "stuck": "Bloqués",
+      "ask": "Demander"
     },
     "insightNudge": "{unscored} tickets ont encore besoin d’une valeur métier et {unranked} ne sont pas classés — lancez le manager pour les mettre à jour.",
     "coverageNudge": "{flagged} tickets n’ont pas de rôle ou de relecteur obligatoire — le manager les affectera automatiquement lors de son prochain passage.",
@@ -7059,6 +7060,28 @@
     "health": {
       "title": "Santé du backlog",
       "caption": "L’état permanent du tableau — ce qui n’a toujours ni valeur, ni rang, ni dates, ni responsable."
+    },
+    "ask": {
+      "title": "Interroger le gestionnaire",
+      "caption": "Posez la question directement au gestionnaire. Il consulte son propre relevé — ce qui a été terminé, ce qu’il a décidé, ce qui est bloqué et ce qu’il était réellement autorisé à faire — avant de répondre.",
+      "loading": "Ouverture de la conversation…",
+      "error": "Le gestionnaire n’a pas pu répondre pour le moment.",
+      "empty": "Aucune question pour l’instant. Commencez par l’une de celles ci-dessous.",
+      "placeholder": "Posez une question sur la journée, un ticket, ou sur ce qui n’avance pas…",
+      "send": "Demander",
+      "sending": "Envoi…",
+      "you": "Vous",
+      "fallbackName": "le gestionnaire",
+      "thinking": "{name} consulte le relevé…",
+      "answeredBy": "Réponse de {name}",
+      "answeredByDesignated": "Réponse de {name}, le gestionnaire désigné de ce projet",
+      "noAgent": "Aucun agent gestionnaire n’est encore configuré dans cet espace de travail : personne ne peut répondre ici. Désignez un gestionnaire dans Politique et la conversation s’ouvrira.",
+      "compactPrompt": "Pas la journée espérée ? Demandez-le à {name}.",
+      "starter": {
+        "today": "Qu’avez-vous accompli aujourd’hui, vous et l’équipe ?",
+        "blocked": "Pourquoi si peu de choses ont-elles avancé — qu’est-ce qui bloque le travail ?",
+        "plan": "Que ferez-vous ensuite pour débloquer la situation ?"
+      }
     }
   },
   "project360": {
