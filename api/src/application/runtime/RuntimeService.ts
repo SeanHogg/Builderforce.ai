@@ -85,10 +85,16 @@ export class RuntimeService {
      * the ticket-metrics layer ({@link syncExecutionTaskLifecycle}) so agent lane
      * moves record transitions exactly like a human PATCH and a terminal run
      * stamps the work-stopped signal. Best-effort by contract.
+     *
+     * Carries the RUNNING agent's identity (`actorAgentRef` / `actorAgentHostId`, from
+     * the execution row) so the transition log names WHICH agent hopped the lane. The
+     * execution has always known this; not passing it is why every agent move in the
+     * log read as an anonymous 'system' write.
      */
     private readonly onTaskStatusSync?: (info: {
       tenantId: number; taskId: number; projectId: number;
       fromStatus: string; toStatus: string; terminal: boolean;
+      actorAgentRef: string | null; actorAgentHostId: number | null;
     }) => Promise<void>,
     /**
      * Optional cloud-orphan self-heal. Invoked for a stale CLOUD run BEFORE it is
@@ -664,7 +670,13 @@ export class RuntimeService {
           await this.runEffect(
             'task_status_sync',
             effectContext,
-            () => this.onTaskStatusSync!({ tenantId, taskId: Number(execution.taskId), projectId, fromStatus, toStatus, terminal }),
+            () => this.onTaskStatusSync!({
+              tenantId, taskId: Number(execution.taskId), projectId, fromStatus, toStatus, terminal,
+              // WHO moved it: the agent this execution ran as. A cloud run carries its
+              // published/ide agent ref; an on-prem run carries its host id.
+              actorAgentRef: execution.cloudAgentRef,
+              actorAgentHostId: execution.agentHostId != null ? Number(execution.agentHostId) : null,
+            }),
             undefined,
           );
         }

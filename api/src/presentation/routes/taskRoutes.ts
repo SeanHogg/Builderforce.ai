@@ -5,7 +5,7 @@ import { TaskService, type UpdateTaskDto } from '../../application/task/TaskServ
 import { TaskPriority, AgentType, TaskStatus, TaskType } from '../../domain/shared/types';
 import { ConflictError } from '../../domain/shared/errors';
 import type { Env, HonoEnv } from '../../env';
-import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { authMiddleware, requestActor, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
@@ -718,7 +718,11 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
           taskId:      id,
           fromStatus:  prevStatus.status,
           toStatus:    body.status,
-          actorUserId: (c as any).get('userId') ?? null,
+          // `userId` alone is not the actor: an on-prem agent host authenticates as
+          // `agentHost:<id>`, so passing the raw subject filed its hops under a
+          // non-existent human. requestActor hands over whichever identity the caller
+          // actually holds.
+          ...requestActor(c),
         }).catch((error) => {
           reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
         }),
@@ -963,7 +967,9 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
         metadata: { claimed: true, status: task.status },
       });
       // dequeue moved the ticket ready → in_progress without a PATCH; record the
-      // lane transition so pickup-latency / cycle metrics see the claim.
+      // lane transition so pickup-latency / cycle metrics see the claim. The CLAIMANT is
+      // the actor — this endpoint is how an on-prem agent host picks up work, and its
+      // machine token names the host, so the claim is attributable rather than anonymous.
       c.executionCtx.waitUntil(
         recordStatusTransition(c.env as Env, db, {
           tenantId: c.get('tenantId'),
@@ -971,7 +977,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
           taskId: plain.id,
           fromStatus: TaskStatus.READY,
           toStatus: TaskStatus.IN_PROGRESS,
-          actorUserId: null,
+          ...requestActor(c),
         }).catch((error) => {
           reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
         }),

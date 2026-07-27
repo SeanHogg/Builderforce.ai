@@ -306,7 +306,7 @@ export async function stampLastWorked(env: Env, db: Db, tenantId: number, taskId
 }
 
 /** Info for {@link syncExecutionTaskLifecycle} — one execution→task status sync. */
-export interface ExecutionTaskSync {
+export interface ExecutionTaskSync extends TransitionActorInput {
   tenantId: number;
   taskId: number;
   projectId: number;
@@ -321,6 +321,11 @@ export interface ExecutionTaskSync {
  * RuntimeService so an agent moving a task (RUNNING→in_progress, COMPLETED→
  * in_review/done) records a transition exactly like a human PATCH, and a terminal
  * run stamps the work-stopped signal even when the lane doesn't change (FAILED).
+ *
+ * This is where MOST agent lane moves are written, and the execution row names the
+ * agent that made them (`cloud_agent_ref` / `agent_host_id`) — so the identity is
+ * forwarded rather than flattened to 'system'. It is what makes per-agent throughput
+ * readable straight off the transition log instead of inferred from run counts.
  */
 export async function syncExecutionTaskLifecycle(env: Env, db: Db, info: ExecutionTaskSync): Promise<void> {
   if (info.fromStatus !== info.toStatus) {
@@ -330,7 +335,8 @@ export async function syncExecutionTaskLifecycle(env: Env, db: Db, info: Executi
       taskId: info.taskId,
       fromStatus: info.fromStatus,
       toStatus: info.toStatus,
-      actorUserId: null, // agent/automation move ⇒ actor 'system'
+      actorAgentRef: info.actorAgentRef ?? null,
+      actorAgentHostId: info.actorAgentHostId ?? null,
     });
   }
   if (info.terminal) {
