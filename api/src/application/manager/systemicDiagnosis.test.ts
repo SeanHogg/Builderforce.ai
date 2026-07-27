@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   selectSystemicCohorts, heuristicFinding, buildFindingDirective, raiseSystemicFindings,
-  SYSTEMIC_COHORT_MIN, MAX_FINDINGS_PER_PASS, SYSTEMIC_DIAGNOSIS_PROMPT, type SystemicFinding,
+  SYSTEMIC_COHORT_MIN, MAX_FINDINGS_PER_PASS, SYSTEMIC_DIAGNOSIS_PROMPT,
+  proposesWeakeningSafetyLimit, type SystemicFinding,
 } from './systemicDiagnosis';
 import type { StallCensus, CensusCohort } from './stallCensus';
 
@@ -189,5 +190,53 @@ describe('the systemic diagnosis prompt', () => {
 
   it('explains WHY, so the constraint survives a prompt edit', () => {
     expect(SYSTEMIC_DIAGNOSIS_PROMPT).toContain('evidence of the underlying failure');
+  });
+});
+
+/**
+ * A PROMPT IS A REQUEST, NOT AN INVARIANT — and the prompt shipped a pass too late.
+ *
+ * Measured on project 11 the day after the prompt guard shipped: the failure-breaker
+ * finding was STILL advising "increase the retry limit from its current value to a higher
+ * threshold, such as 10 or 15, and then manually re-dispatch the stalled tickets". The
+ * refresh branch only ever updates the count, so a finding diagnosed before the guard kept
+ * its prose for as long as its cohort survived — indefinitely, for a cohort of 116.
+ */
+describe('proposesWeakeningSafetyLimit', () => {
+  it('catches the exact remediation production filed', () => {
+    expect(proposesWeakeningSafetyLimit(
+      'Adjust the "failure_breaker" configuration to increase the maximum number of consecutive '
+      + 'failures allowed before dispatching is halted. Specifically, increase the retry limit from '
+      + 'its current value to a higher threshold, such as 10 or 15, and then manually re-dispatch.',
+    )).toBe(true);
+  });
+
+  it.each([
+    'Disable the failure breaker for these tickets and re-run them.',
+    'Relax the retry cap so the cohort can drain.',
+    'Remove the approval gate blocking these stages.',
+    'Raise the rate limit on the dispatcher.',
+  ])('catches %s', (text) => {
+    expect(proposesWeakeningSafetyLimit(text)).toBe(true);
+  });
+
+  // A guard that fires on every remediation is a guard nobody can ship a diagnosis past.
+  // Both halves are required precisely so these stay clean.
+  it.each([
+    'Investigate why the runs fail before the breaker trips; fix the underlying build error.',
+    'Increase test coverage on the affected module.',
+    'The breaker is firing because the repo has no default branch configured — set one.',
+    'Staff the review lane with a role-capable agent so the sign-off can be recorded.',
+  ])('does NOT catch %s', (text) => {
+    expect(proposesWeakeningSafetyLimit(text)).toBe(false);
+  });
+
+  // The deterministic fallback is what a rejected diagnosis becomes, so it must itself
+  // never trip the check — otherwise a rejection loops.
+  it('never fires on the heuristic finding it falls back to', () => {
+    for (const cause of ['failure_breaker', 'managed_no_role', 'awaiting_signoff', 'human_gate']) {
+      const f = heuristicFinding(cohort({ cause: cause as CensusCohort['cause'] }), 11);
+      expect(proposesWeakeningSafetyLimit(f.remediation), cause).toBe(false);
+    }
   });
 });

@@ -116,12 +116,42 @@ const MAX_PR_ACTIONS_PER_RUN = 20;
 export const MANAGER_PASS_BUDGET_MS = 20_000;
 
 /**
+ * Wall-clock held back from the discretionary stages and kept for TRIAGE (stage 7).
+ *
+ * ── THE FAILURE THIS CLOSES ──────────────────────────────────────────────────────
+ * A plain deadline decides only WHO gets starved, and the answer was always the same
+ * stage: triage runs last, so on any project where stages 1–6 exceed the budget it is
+ * shed on EVERY pass, not occasionally. Measured on project 11 once the budget shipped —
+ * every observed pass truncated `triage`, and its 12 stuck-register remedies sat at
+ * `attempts=0` for 26 days. That is worse than no triage at all: because an attempt that
+ * never happens cannot fail, the 3-attempt escalation ceiling is never reached either, so
+ * nothing is worked AND nothing is handed to a human. The skip journal even promised "it
+ * runs first on the next pass" — a rotation that did not exist, and could not, because
+ * every pass restarts at stage 1.
+ *
+ * A reservation fixes it without a rotation cursor: the discretionary stages stop at
+ * `budgetMs - MANAGER_TRIAGE_RESERVE_MS`, so triage always gets its slice and always makes
+ * SOME progress. It is a floor, not a promise of completion — triage is itself bounded and
+ * paces across passes — but a floor is what turns `attempts=0` forever into progress.
+ */
+export const MANAGER_TRIAGE_RESERVE_MS = 6_000;
+
+/**
  * The pass's time budget. `over()` is checked BETWEEN units of optional work, never
  * mid-write — a stage that has started a mutation always finishes it, so the budget can
  * shed work but never leave a half-applied action.
  */
 export interface PassBudget {
+  /**
+   * True when the DISCRETIONARY stages must stop. Fires early by
+   * {@link MANAGER_TRIAGE_RESERVE_MS} so the reserved stage still has room to run.
+   */
   over: () => boolean;
+  /**
+   * True when the WHOLE budget is gone — the reserved stage's own deadline. Only triage
+   * checks this; everything else uses `over()`.
+   */
+  exhausted: () => boolean;
   elapsedMs: () => number;
   /** Stages that were skipped or cut short, in order — journalled on the closing row. */
   truncated: string[];
@@ -129,10 +159,18 @@ export interface PassBudget {
   shed: (stage: string) => boolean;
 }
 
-export function createPassBudget(startedAt: number, budgetMs = MANAGER_PASS_BUDGET_MS): PassBudget {
+export function createPassBudget(
+  startedAt: number,
+  budgetMs = MANAGER_PASS_BUDGET_MS,
+  reserveMs = MANAGER_TRIAGE_RESERVE_MS,
+): PassBudget {
   const truncated: string[] = [];
+  // Clamped so a caller-supplied budget smaller than the reserve cannot invert the two
+  // deadlines and make `over()` fire before the pass has started.
+  const discretionaryMs = Math.max(0, budgetMs - Math.min(reserveMs, budgetMs));
   return {
-    over: () => Date.now() - startedAt >= budgetMs,
+    over: () => Date.now() - startedAt >= discretionaryMs,
+    exhausted: () => Date.now() - startedAt >= budgetMs,
     elapsedMs: () => Date.now() - startedAt,
     truncated,
     shed: (stage: string) => {
@@ -872,7 +910,25 @@ interface ManagedTaskRow {
   source: string | null;
 }
 
-async function loadManagedTasks(db: Db, projectId: number): Promise<ManagedTaskRow[]> {
+/**
+ * The tickets one pass may groom, rank, audit and triage — capped at {@link MAX_RANKED}.
+ *
+ * ── WHY THE ORDER IS NOT `created_at asc` ────────────────────────────────────────
+ * It was, and a fixed cap over a fixed order is a window that never moves. On project 11
+ * (676 open tickets, cap 300) the SAME 300 oldest tickets were loaded every pass, forever:
+ * they were long since scored and owned, so every pass reported `scored 0 · assigned 0`
+ * and completed successfully — while 375 unscored and 339 unowned tickets sat outside the
+ * window with no path to ever entering it. The manager was not failing to groom the
+ * backlog; it could not SEE the part of the backlog that needed grooming. Two capabilities
+ * (`autoBusinessValue`, `autoAssign`) reported healthy and did nothing for 14 days.
+ *
+ * So the window is ordered by GROOMING NEED first — unscored, then unowned — and only then
+ * by least-recently-touched. Ungroomed work is therefore always inside the window and
+ * drains (scoring writes `updated_at`, which drops the ticket to the back), after which
+ * the ordering degenerates to a rotation that gives every ticket a turn at being audited
+ * and triaged. `created_at asc` gave the tail no turn at all.
+ */
+export function managedTasksQuery(db: Db, projectId: number) {
   return db
     .select({
       id: tasks.id, title: tasks.title, description: tasks.description, status: tasks.status,
@@ -889,8 +945,22 @@ async function loadManagedTasks(db: Db, projectId: number): Promise<ManagedTaskR
       // The manager never grooms/ranks/audits its OWN run tasks (source = 'manager').
       notSystemTask,
     ))
-    .orderBy(asc(tasks.createdAt))
+    .orderBy(
+      sql`case when ${tasks.businessValue} is null then 0 else 1 end`,
+      sql`case when ${tasks.assignedUserId} is null and ${tasks.assignedAgentRef} is null and ${tasks.assignedAgentHostId} is null then 0 else 1 end`,
+      asc(tasks.updatedAt),
+      asc(tasks.createdAt),
+    )
     .limit(MAX_RANKED);
+}
+
+/**
+ * Exported as a QUERY (not just its rows) so the window's ordering can be rendered with
+ * `.toSQL()` and asserted without a database. The defect it replaced was invisible in the
+ * result shape and visible only in the ORDER BY, so that is what the test has to read.
+ */
+async function loadManagedTasks(db: Db, projectId: number): Promise<ManagedTaskRow[]> {
+  return managedTasksQuery(db, projectId);
 }
 
 /**
@@ -1373,15 +1443,24 @@ export async function runManagerForProject(
   //
   // Reuses the bulk signals stage 3.5 already loaded, so its full-project measurement is
   // paid for once per pass rather than once per stage.
-  if (budget.over()) {
+  // `exhausted()`, not `over()`: triage owns the reserved tail of the budget, so it runs
+  // even on a pass whose discretionary stages were all shed. See
+  // MANAGER_TRIAGE_RESERVE_MS for why an always-last stage on a plain deadline is a stage
+  // that never runs at all.
+  if (budget.exhausted()) {
     // Triage is the most valuable stage AND the most expensive, so it is the one that
     // must never be silently dropped. Say so explicitly on the register rather than
-    // letting a truncated pass read as "nothing was stuck".
+    // letting a truncated pass read as "nothing was stuck". Reaching here means even the
+    // reserved slice was gone before the stage started — a genuinely overrun pass, not
+    // the routine starvation the reserve exists to prevent.
     budget.shed('triage');
     await recordManagerAction(db, {
       tenantId, projectId, runTaskId, actionType: 'triage',
-      summary: `Stall triage skipped this pass — the ${Math.round(MANAGER_PASS_BUDGET_MS / 1000)}s pass budget was spent on PR coordination. It runs first on the next pass.`,
-      detail: { budgetMs: MANAGER_PASS_BUDGET_MS, elapsedMs: budget.elapsedMs(), truncated: budget.truncated },
+      summary: `Stall triage skipped this pass — the whole ${Math.round(MANAGER_PASS_BUDGET_MS / 1000)}s pass budget, including the ${Math.round(MANAGER_TRIAGE_RESERVE_MS / 1000)}s reserved for triage, was already spent when it was reached.`,
+      detail: {
+        budgetMs: MANAGER_PASS_BUDGET_MS, reserveMs: MANAGER_TRIAGE_RESERVE_MS,
+        elapsedMs: budget.elapsedMs(), truncated: budget.truncated,
+      },
     }).catch(() => undefined);
   } else {
     const triage = await runStallTriage(env, db, runtimeService, {
