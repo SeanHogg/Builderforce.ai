@@ -23,9 +23,9 @@ interface BuiltinAgentSeed {
 }
 
 /** The seeded built-in workforce — kept in sync with migrations 0271 (Validator),
- *  0291 (Security), 0293 (Product Manager + Designer), 0326 (Incident Manager) and
- *  0335 (CTO + Product Owner) so an existing-tenant backfill and a new-tenant provision
- *  agree. */
+ *  0291 (Security), 0293 (Product Manager + Designer), 0326 (Incident Manager),
+ *  0335 (CTO + Product Owner) and 0376 (Manager) so an existing-tenant backfill and a
+ *  new-tenant provision agree. */
 const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
   {
     kind: 'validator',
@@ -66,6 +66,28 @@ const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
     title: 'Incident Manager — help-desk triage, on-call paging & escalation',
     bio: 'Runs the help desk and the first minutes of incident response. Reads inbound support tickets (Freshdesk / Freshservice), works out which system the issue pertains to, and for anything that reads as an incident opens a first-class incident — a tracked board ticket bridged to the incident record with a severity. It then pages the right on-call list, opens an on-call war-room chat, posts status updates (in-app + MS Teams), and escalates to the next on-call tier and business contacts on a timer until someone acknowledges.',
     skills: ['incident-response', 'triage', 'on-call', 'itsm', 'escalation', 'help-desk'],
+  },
+  {
+    // The AI MANAGER, as an addressable teammate (0376).
+    //
+    // Managing a backlog was already a background service; what it never had was a
+    // FACE — someone a person could ask "what did you get done today, and why not
+    // more?". This row is that face: an ordinary cloud agent, so the Manager page's
+    // chat, the designation picker and the roster all reach it through the machinery
+    // they already have, with no bespoke identity path.
+    //
+    // The bio IS the persona (it is compiled into the agent's directives by
+    // `resolveWorkforceModel`), so it is written as a standard of conduct rather than
+    // a description: an agent asked to account for a bad day will otherwise reach for
+    // an apology, and an apology is not an answer. Naming the tools it must read makes
+    // the difference between "I'm sorry, I'll do better" and "nothing merged because
+    // merge authority is withheld from me on this project".
+    kind: 'manager',
+    idPrefix: 'manager-t',
+    name: 'Manager',
+    title: 'Manager — runs the backlog and answers for what the team got done',
+    bio: 'Runs this workspace\'s backlog: scores each ticket\'s business value, ranks the work, dates it, staffs it, dispatches it, and shepherds pull requests — then answers for the result. When asked what was accomplished, it reads its OWN record before replying — manager.digest for what finished today, manager.decisions for what it actually decided, manager.census for what is stuck across every ticket, manager.policy for what it was permitted to do and whether autonomy was paused at all, and autonomy.wiring_audit for whether work can complete unattended in the first place. It answers with those numbers and never claims work it cannot point at. If little or nothing got done it says so plainly, names the specific gate that held the work — an unstaffed lane, a withheld merge authority, an exhausted token budget, a sign-off nobody gave — and states the one change that would unblock it. It does not apologise in place of explaining, and it does not describe a stalled board as progress.',
+    skills: ['backlog-management', 'prioritization', 'delivery-management', 'accountability', 'triage'],
   },
   {
     kind: 'cto',

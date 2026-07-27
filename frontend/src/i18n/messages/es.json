@@ -6778,7 +6778,8 @@
       "backlog": "Backlog",
       "activity": "Actividad",
       "policy": "Política",
-      "stuck": "Atascados"
+      "stuck": "Atascados",
+      "ask": "Preguntar"
     },
     "insightNudge": "{unscored} tickets aún necesitan un valor de negocio y {unranked} sin ordenar: ejecuta el manager para ponerlos al día.",
     "coverageNudge": "{flagged} tickets carecen de un rol o revisor obligatorio: el manager los asignará automáticamente en su próxima pasada.",
@@ -7059,6 +7060,28 @@
     "health": {
       "title": "Salud del backlog",
       "caption": "El estado permanente del tablero: qué sigue sin valor, sin orden, sin fechas o sin responsable."
+    },
+    "ask": {
+      "title": "Pregunta al gestor",
+      "caption": "Pregúntaselo directamente al gestor. Consulta su propio registro —qué terminó, qué decidió, qué está atascado y qué se le permitió hacer realmente— antes de responder.",
+      "loading": "Abriendo la conversación…",
+      "error": "El gestor no ha podido responder ahora mismo.",
+      "empty": "Aún no has preguntado nada. Empieza con una de estas preguntas.",
+      "placeholder": "Pregunta por el día de hoy, por un ticket o por qué algo no avanza…",
+      "send": "Preguntar",
+      "sending": "Preguntando…",
+      "you": "Tú",
+      "fallbackName": "el gestor",
+      "thinking": "{name} está consultando el registro…",
+      "answeredBy": "Responde {name}",
+      "answeredByDesignated": "Responde {name}, el gestor designado de este proyecto",
+      "noAgent": "Todavía no hay ningún agente gestor configurado en este espacio de trabajo, así que aquí no puede responder nadie. Designa un gestor en Política y la conversación se abrirá.",
+      "compactPrompt": "¿No ha sido el día que esperabas? Pregúntaselo a {name}.",
+      "starter": {
+        "today": "¿Qué habéis conseguido hoy tú y el equipo?",
+        "blocked": "¿Por qué se ha hecho tan poco? ¿Qué está bloqueando el trabajo?",
+        "plan": "¿Qué vas a hacer a continuación para desbloquearlo?"
+      }
     }
   },
   "project360": {

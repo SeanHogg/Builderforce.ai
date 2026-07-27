@@ -2532,6 +2532,106 @@ const CATALOG: BuiltinTool[] = [
       });
     },
   },
+  // ---- THE MANAGER'S ACCOUNTABILITY SURFACE ----------------------------------
+  //
+  // A human on the Manager page can now ask the manager, in its own chat, "what did
+  // you get done today?" and "why didn't you?". An agent that cannot READ its own
+  // record can only apologise, so these four tools are what turn that conversation
+  // from plausible narration into an answer with numbers behind it:
+  //
+  //   manager.digest   — WHAT happened today (and yesterday, to make a zero legible)
+  //   manager.census   — WHAT is stuck, across EVERY ticket (the register is a sample)
+  //   manager.decisions— WHAT the manager itself decided, verbatim, newest first
+  //   manager.policy   — WHAT IT IS ALLOWED TO DO, and whether autonomy is paused
+  //
+  // `manager.policy` is the load-bearing one. The single most common honest answer to
+  // "why did nothing merge?" is "because merge authority is withheld from me" or
+  // "because this workspace is out of tokens and the cron sweep is skipping" — facts
+  // that live in the effective policy and the token gate, not in the ticket data. Without
+  // it the manager is accountable for outcomes it was never permitted to produce.
+  //
+  // All four are `mutates: false`, for the reason the diagnostics above are: an account
+  // of what happened must never be able to change what happened. And all four call the
+  // application layer rather than replaying the HTTP route, because those routes are
+  // MANAGER-gated for humans while the manager answering for itself carries no role.
+  {
+    tool: 'manager.digest', mutates: false,
+    description: 'WHAT YOU AND THE TEAM ACCOMPLISHED TODAY for one project — the answer to "what got done?" and the evidence for "why not?". Returns, for the reader\'s local day AND the day before it (so a zero is legible as quiet vs stopped): tickets finished and opened, pull requests merged and opened, agent runs completed and failed, forward/backward lane moves split by human vs agent, the manager\'s own passes and decisions by type, the concrete tickets that closed with their owners, the top contributors (people and agents, counted separately — finished tickets, completed runs and lane moves are different units and must NOT be summed), and what has been escalated to a human. Pass `tzOffsetMinutes` (minutes to ADD to UTC, i.e. -getTimezoneOffset()) so "today" is the reader\'s day; omit it and the window is UTC. Use this FIRST when asked what happened today, and quote its numbers rather than counting tickets yourself.',
+    parameters: obj({ projectId: N, tzOffsetMinutes: N }, ['projectId']),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('the digest needs the platform environment');
+      const projectId = num(a.projectId);
+      await assertProjectInTenant(ctx, projectId);
+      const { getDailyDigest } = await import('../manager/dailyDigest');
+      const { getManagerConfigRow } = await import('../manager/ManagerService');
+      const config = await getManagerConfigRow(ctx.db, ctx.tenantId, projectId).catch(() => null);
+      return getDailyDigest(ctx.env, ctx.db, {
+        tenantId: ctx.tenantId, projectId,
+        tzOffsetMinutes: a.tzOffsetMinutes != null ? num(a.tzOffsetMinutes) : 0,
+        lastRunAt: config?.lastRunAt ?? null,
+      });
+    },
+  },
+  {
+    tool: 'manager.census', mutates: false,
+    description: 'THE FULL-COVERAGE STALL CENSUS for one project: every non-terminal ticket classified by what is holding it up, plus the SYSTEMIC findings the manager raised (a cause it judged one platform defect wearing many costumes, with the ticket it filed). Prefer this over manager.stalled_tickets when asked "what is holding work up?" — that register is bounded by what deep triage has had budget to diagnose, so its own cause ranking is a SAMPLE: measured on one workspace, 755 tickets were stalled while the register held 44 rows and named the wrong top cause. `deepDiagnosed` states how much of the census has been confirmed in depth; never present the rest as certain.',
+    parameters: obj({ projectId: N }, ['projectId']),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('the stall census needs the platform environment');
+      const projectId = num(a.projectId);
+      await assertProjectInTenant(ctx, projectId);
+      const { getStallCensus } = await import('../manager/stallCensus');
+      const { listSystemicFindings } = await import('../manager/systemicDiagnosis');
+      const [census, findings] = await Promise.all([
+        getStallCensus(ctx.env, ctx.db, { tenantId: ctx.tenantId, projectId }),
+        listSystemicFindings(ctx.db, { tenantId: ctx.tenantId, projectId }),
+      ]);
+      return { ...census, findings };
+    },
+  },
+  {
+    tool: 'manager.decisions', mutates: false,
+    description: 'THE MANAGER\'S OWN DECISION FEED for one project, newest first — every action it journalled (prioritize, schedule, assign, score_value, dispatch, sync_pr, merge_pr, merge_blocked, flag, coordinate, triage, escalate, systemic) with the ticket it was about and the reason it recorded. This is the manager\'s work log: cite it when accounting for what you did, and read it before claiming a decision you cannot point at. An EMPTY feed for a period is itself the answer — it means no pass ran or every pass was a no-op.',
+    parameters: obj({ projectId: N, limit: N }, ['projectId']),
+    run: async (ctx, a) => {
+      const projectId = num(a.projectId);
+      await assertProjectInTenant(ctx, projectId);
+      const { listManagerActions } = await import('../manager/ManagerService');
+      const limit = a.limit != null ? Math.min(200, Math.max(1, num(a.limit))) : 50;
+      return { actions: await listManagerActions(ctx.db, ctx.tenantId, projectId, limit) };
+    },
+  },
+  {
+    tool: 'manager.policy', mutates: false,
+    description: 'WHAT THE AI MANAGER IS PERMITTED TO DO on one project, and whether its autonomy is running at all. Returns the effective three-tier policy (managing enabled? auto-score value / auto-rank / auto-schedule / auto-assign? PR merge policy and whether merge authority is GRANTED or WITHHELD? does completion require a human sign-off?), who is designated as the manager and its type, the standing coaching directives it must honor, and the workspace autonomy health (`tokenBlocked` = the cron sweeps and the autonomous executor are SKIPPING this workspace because its token budget is exhausted, so only a manual "Run manager now" does anything). Read this BEFORE explaining an outcome: the honest answer to "why did nothing merge / nothing get assigned / nothing run?" is very often a permission that was withheld or an autonomy that was paused, not a failure to try.',
+    parameters: obj({ projectId: N }, ['projectId']),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('the manager policy needs the platform environment');
+      const projectId = num(a.projectId);
+      await assertProjectInTenant(ctx, projectId);
+      const { getEffectiveManagerPolicy: effective, getManagerConfigRow } = await import('../manager/ManagerService');
+      const { listManagerDirectives } = await import('../manager/managerDirectives');
+      const { getTenantTokenAvailability } = await import('./tenantTokenAvailability');
+      const [policy, config, directives, tokens] = await Promise.all([
+        effective(ctx.db, ctx.tenantId, projectId, ctx.env),
+        getManagerConfigRow(ctx.db, ctx.tenantId, projectId).catch(() => null),
+        listManagerDirectives(ctx.db, ctx.tenantId, projectId, 50).catch(() => []),
+        getTenantTokenAvailability(ctx.db, ctx.tenantId, undefined, ctx.env).catch(() => null),
+      ]);
+      return {
+        policy,
+        lastRunAt: config?.lastRunAt ?? null,
+        directives: directives.filter((d) => d.status === 'active'),
+        autonomy: {
+          // Fail OPEN (unknown ⇒ has budget) — the same contract the cron sweep uses,
+          // so this never invents a pause the machinery is not actually applying.
+          tokenBlocked: tokens ? !tokens.hasTokens : false,
+          reason: tokens?.reason ?? null,
+          effectivePlan: tokens?.effectivePlan ?? null,
+        },
+      };
+    },
+  },
   {
     tool: 'tickets.lifecycle', mutates: false,
     description: 'THE CHAIN OF CUSTODY for ONE ticket: every lifecycle event in order — created, auto-run decision (dispatched or the exact gate that declined it), run started/completed/failed, each lane move with who moved it — where every event names the source table it was read from, so it is evidence rather than narration. Plus a verdict: autonomous vs human lane hops, runs dispatched/completed/failed, whether it reached a terminal lane, whether it is stalled and the LIVE gate holding it right now. Use this to answer "why is THIS ticket stuck?" and to tell an agent-driven ticket from a human-driven one.',
@@ -2678,6 +2778,19 @@ function requireEnv(ctx: BuiltinCtx): Env {
 /** Persist an integration credential's connectivity-test result. */
 async function markTested(ctx: BuiltinCtx, credentialId: string, ok: boolean): Promise<void> {
   await ctx.db.update(integrationCredentials).set({ lastTestedAt: new Date(), lastTestOk: ok, updatedAt: new Date() }).where(and(eq(integrationCredentials.id, credentialId), eq(integrationCredentials.tenantId, ctx.tenantId)));
+}
+
+/**
+ * Assert a project belongs to the caller's tenant.
+ *
+ * The manager/diagnostic tools below call the APPLICATION layer directly rather than
+ * replaying an HTTP route (the routes are MANAGER-gated, and the caller answering for
+ * itself carries no role) — which means they also skip the route's own ownership check.
+ * This puts it back: without it a projectId is an unvalidated caller-supplied number
+ * against tables that are scoped by project, not by tenant.
+ */
+async function assertProjectInTenant(ctx: BuiltinCtx, projectId: number): Promise<void> {
+  await ctx.projects.getProject(projectId, ctx.tenantId); // throws Forbidden/NotFound on mismatch
 }
 
 /** Load a task and assert it belongs to the caller's tenant (services that take
@@ -2932,6 +3045,13 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // starts from the manager's own attempt history rather than repeating a remedy that
   // has provably not worked.
   'autonomy.wiring_audit', 'autonomy.summary', 'tickets.lifecycle', 'manager.stalled_tickets',
+  // The manager's ACCOUNTABILITY surface. A human can now ask the manager, in its own
+  // chat on the Manager page, "what did you get done today, and why not more?" — and an
+  // agent that cannot read its own record can only apologise. `manager.policy` is the
+  // one that makes the answer honest rather than merely contrite: the true reason
+  // nothing merged is usually that merge authority is withheld or the workspace is out
+  // of tokens, and neither fact is visible anywhere in the ticket data.
+  'manager.digest', 'manager.census', 'manager.decisions', 'manager.policy',
   // Security agent: file SOC 2 findings mid-run. NOT security.configure_access —
   // deciding who can see security tickets is an admin action, never an unattended
   // agent reconfiguring its own findings' visibility.
