@@ -39,10 +39,11 @@ import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { swimlaneRequirements, swimlanes, ticketParticipants } from '../../infrastructure/database/schema';
 import {
-  decideLaneApprovers, loadLaneStaffedAgents, loadStaffedAgentsForLanes,
+  builtinRoleKeyFromText, decideLaneApprovers, loadStaffedAgentsForLanes,
   type LaneApprover, type LaneApproverTier, type LaneStaffedAgent,
 } from '../swimlane/laneApprover';
 import { isParticipantOpen } from './participantStates';
+import { isReviewRole } from './roleCatalog';
 import { requirementApplies } from './types';
 
 /** The ticket facts a requirement's applicability is scoped by. */
@@ -71,12 +72,61 @@ export interface LaneAuthorityInputs {
 }
 
 /**
+ * Give each authorized role a concrete agent from the lane's staffing. PURE.
+ *
+ * ── WHY THIS EXISTS ──────────────────────────────────────────────────────────────
+ * `decideLaneApprovers` answers "who must APPROVE this lane?", and on tier (a) it
+ * deliberately leaves `agentRef` null: the approval gate resolves the agent for a
+ * required role through its own path, so the approver decision never needed one.
+ *
+ * Execution asks a DIFFERENT question — "who may ACT AS this required role?" — and it
+ * does need one. Reading the approver answer as if it were the execution answer meant a
+ * templated lane could never produce an agent, so {@link pickManagedProducer} always fell
+ * through to null and every ticket on such a lane classified `managed_no_role`. Measured
+ * on project 11 after the role-attribution fix shipped: 405 of 675 stalled tickets, the
+ * single largest cohort on the board — stages that DID declare a required role, on lanes
+ * that WERE staffed with an agent capable of it, refused because the two facts were never
+ * put together.
+ *
+ * The operator's staffing plus `agentRoleKeys` capability IS the answer to who may act as
+ * a required role, so the binding happens here rather than being a second opinion
+ * somewhere downstream. An unbound role stays unbound (`agentRef: null`): it remains
+ * authorized — the gate may still be satisfied by a human or a later assignment — but it
+ * cannot be dispatched, which is the honest fail-closed verdict.
+ *
+ * Sub-precedence per role, matching {@link approverRoleKeyForLaneAgent}: an agent whose
+ * DECLARED assignment role names this role beats one that is merely capable of it, then
+ * lane position. Unlike approver resolution this does NOT dedupe by agent — one agent
+ * staffed on a lane may legitimately act as several of its required roles.
+ */
+export function bindStaffedAgentsToRoles(
+  approvers: readonly LaneApprover[],
+  laneAgents: readonly LaneStaffedAgent[],
+): LaneApprover[] {
+  if (laneAgents.length === 0) return [...approvers];
+  const ordered = [...laneAgents].sort(
+    (a, b) => a.position - b.position || a.agentRef.localeCompare(b.agentRef),
+  );
+  return approvers.map((approver) => {
+    if (approver.agentRef) return approver;
+    const capable = ordered.filter((a) => a.capableRoleKeys.includes(approver.roleKey));
+    if (capable.length === 0) return approver;
+    const chosen = capable.find((a) => builtinRoleKeyFromText(a.declaredRole) === approver.roleKey) ?? capable[0]!;
+    return { ...approver, agentRef: chosen.agentRef, agentName: chosen.agentName, model: chosen.model };
+  });
+}
+
+/**
  * Decide a stage's authority for one ticket. PURE — the queries live in
  * {@link resolveManagedLaneAuthority} / {@link loadBoardLaneAuthorities}.
  *
  * Requirement rows are filtered by {@link requirementApplies} FIRST, so a requirement that
  * does not apply to this ticket (a security-only reviewer on a docs ticket) correctly
  * cannot suppress the lane-staffing tier — the same rule `decideLaneApprovers` documents.
+ *
+ * `roleKeys` — the set the guard enforces — is taken from the approver decision UNCHANGED.
+ * Only the agent binding is added on top (see {@link bindStaffedAgentsToRoles}), so this
+ * widens nothing: exactly the same roles are authorized, some of them now dispatchable.
  */
 export function decideManagedLaneAuthority(
   inputs: LaneAuthorityInputs,
@@ -89,9 +139,26 @@ export function decideManagedLaneAuthority(
   const decision = decideLaneApprovers({ requirementRoleKeys, laneAgents: inputs.laneAgents });
   return {
     roleKeys: decision.approvers.map((a) => a.roleKey),
-    approvers: decision.approvers,
+    approvers: bindStaffedAgentsToRoles(decision.approvers, inputs.laneAgents),
     tier: decision.tier,
   };
+}
+
+/**
+ * Does the ticket's OWN manifest authorize this role at this stage? PURE.
+ *
+ * A required participation slot is the lifecycle's recorded decision that this role owes
+ * work on this ticket at this stage — strictly more specific than the lane template, and
+ * created by the coordinator, not by the caller. So an open required slot authorizes its
+ * own role even when the ticket has since moved on to a lane whose template does not name
+ * it. Without this, an outstanding pre-review slot (Developer, Business Analyst) could
+ * never be asked once the ticket reached `in_review`: measured on project 11, the gate
+ * held 24 tickets and dispatched sign-off requests to exactly zero of them.
+ *
+ * Scoped to OPEN states, so a satisfied or waived slot grants nothing.
+ */
+export function slotAuthorizesRole(slots: readonly ManagedProducerSlot[], roleKey: string): boolean {
+  return slots.some((s) => s.roleKey === roleKey && isParticipantOpen(s.state));
 }
 
 /** A manifest slot, as far as producer selection cares. */
@@ -146,7 +213,13 @@ export function pickManagedProducer(
     return { roleKey: slot.roleKey, agentRef: slot.assigneeRef, model: approver?.model ?? null, source: 'manifest' };
   }
 
-  const staffed = authority.approvers.find((a) => !!a.agentRef);
+  // A PRODUCER builds the stage's deliverable, so a producing role is preferred over a
+  // reviewing one even when the reviewer is listed first: dispatching a Code Reviewer to
+  // write the code it is meant to judge is a run that cannot succeed and cannot be
+  // reviewed. Falls back to any bound role, because a stage whose only authorized role is
+  // a review role still needs SOMEBODY to act on it.
+  const bound = authority.approvers.filter((a) => !!a.agentRef);
+  const staffed = bound.find((a) => !isReviewRole(a.roleKey)) ?? bound[0];
   if (staffed?.agentRef) {
     return { roleKey: staffed.roleKey, agentRef: staffed.agentRef, model: staffed.model, source: 'lane_agent' };
   }
@@ -170,17 +243,30 @@ async function loadLaneRequirements(db: Db, tenantId: number, swimlaneId: string
     ));
 }
 
-/** A managed stage's authority for one ticket — the single-lane (guard / evaluator) path. */
+/**
+ * A managed stage's authority for one ticket — the single-lane (guard / evaluator) path.
+ *
+ * Staffing is read on EVERY path, including tier (a). It used to be skipped whenever a
+ * requirement applied ("a templated lane costs exactly one query"), which is precisely
+ * what left tier (a) with no agent to dispatch — see {@link bindStaffedAgentsToRoles}. The
+ * saving was one batched read on a path that then starts a billable LLM run; the cost was
+ * the largest stall cohort on the board.
+ *
+ * Deliberately NOT cached. This is dispatch-time authorization, not a read endpoint: the
+ * whole failure mode being fixed here is a stage refusing a dispatch it should allow, and
+ * a stale staffing entry would reintroduce exactly that from four separate write sites
+ * (boardRoutes, DrizzleCoordinatorStore, rosterService, QaFindingRouter). The bulk census
+ * path pays it once per board via {@link loadBoardLaneAuthorities}.
+ */
 export async function resolveManagedLaneAuthority(
   db: Db,
   args: { tenantId: number; swimlaneId: string; task: ManagedTaskScope },
 ): Promise<ManagedLaneAuthority> {
-  const requirements = await loadLaneRequirements(db, args.tenantId, args.swimlaneId);
-  // Staffing is only read when no requirement applies — `decideLaneApprovers` short-
-  // circuits tier (a), so a templated lane costs exactly one query.
-  const applies = requirements.some((r) => (r.kind === 'role' || r.kind === 'review')
-    && requirementApplies({ ticketType: r.ticketType, condition: r.condition }, args.task));
-  const laneAgents = applies ? [] : await loadLaneStaffedAgents(db, args.tenantId, args.swimlaneId);
+  const [requirements, staffed] = await Promise.all([
+    loadLaneRequirements(db, args.tenantId, args.swimlaneId),
+    loadStaffedAgentsForLanes(db, args.tenantId, [args.swimlaneId]),
+  ]);
+  const laneAgents = staffed.get(args.swimlaneId) ?? [];
   return decideManagedLaneAuthority({ requirements, laneAgents }, args.task);
 }
 

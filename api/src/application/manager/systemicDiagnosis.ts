@@ -146,7 +146,7 @@ const RESPONSE_SCHEMA = {
  */
 const CAUSE_BRIEF: Record<string, string> = {
   unassigned: 'No agent is staffed on these tickets\' lanes and the tickets have no owner agent, so no dispatcher can ever pick them up.',
-  managed_no_role: 'The board is lifecycle-managed, so every run must be attributed to a role the stage authorizes — and on these tickets no authorized role resolves to an agent. Assigning an owner does not help: on a managed board the assignee is the Coordinator, never the executor. Either the stage declares no requirement rows and its lane has no role-capable staffed agent, or the participation manifest named a role nobody can act as.',
+  managed_no_role: 'The board is lifecycle-managed, so every run must be attributed to a role the stage authorizes — and on these tickets no authorized role resolves to an agent. Assigning an owner does not help: on a managed board the assignee is the Coordinator, never the executor. The stage\'s authorized roles come from its requirement rows, or from its lane staffing when it declares none; either way an authorized role becomes dispatchable only when some agent staffed on that lane is CAPABLE of it. So the gap is a lane staffed with nobody who can act as the role the stage asks for.',
   capability_gap: 'Candidate agents exist but none holds the capabilities the lane requires.',
   never_started: 'These tickets have never had a single execution — nothing has ever attempted them.',
   awaiting_signoff: 'A required role sign-off for the current stage was asked for but never recorded, so the stage gate never opens.',
@@ -158,6 +158,29 @@ const CAUSE_BRIEF: Record<string, string> = {
   build_failed: 'These tickets\' pull-request builds are red.',
   unknown: 'The stall taxonomy could not name a cause — the tickets are stuck for a reason the platform does not model.',
 };
+
+/**
+ * Phrases that mean "make the guard weaker", paired with the guard they weaken.
+ *
+ * The prompt forbids this, but a prompt is a request, not an invariant — and the cost of
+ * it being ignored is high: the remediation text is filed as a TICKET, and an agent that
+ * works that ticket would be raising the retry ceiling on a platform whose runs are
+ * already failing. So it is also checked, deterministically, after the fact.
+ */
+const WEAKENING_VERBS = /\b(increas\w*|rais\w*|relax\w*|loosen\w*|disabl\w*|remov\w*|bypass\w*|turn(ing)? off|lift\w*|higher|lower\w*)\b/i;
+const SAFETY_LIMIT_NOUNS = /\b(breaker|retry limit|retry cap|retry threshold|max(imum)? (number of )?(consecutive )?(failures|retries|attempts)|failure (limit|cap|threshold|count)|rate limit|cooldown|approval gate|safety (limit|mechanism|threshold)|attempt (limit|cap|ceiling))\b/i;
+
+/**
+ * True when a remediation instructs someone to weaken a safety limit. PURE.
+ *
+ * Deliberately requires BOTH a weakening verb and a safety-limit noun, so "investigate why
+ * the breaker keeps tripping" and "increase test coverage" both pass. The check is coarse
+ * by design: a false positive costs one re-diagnosis, a false negative files a ticket that
+ * tells an agent to remove a guard.
+ */
+export function proposesWeakeningSafetyLimit(remediation: string): boolean {
+  return WEAKENING_VERBS.test(remediation) && SAFETY_LIMIT_NOUNS.test(remediation);
+}
 
 /** Deterministic finding from measured facts, when the model is unavailable. PURE. */
 export function heuristicFinding(cohort: CensusCohort, projectId: number): SystemicFinding {
@@ -221,6 +244,11 @@ export async function diagnoseSystemicCohort(
     const summary = typeof obj.summary === 'string' ? obj.summary.trim() : '';
     const remediation = typeof obj.remediation === 'string' ? obj.remediation.trim() : '';
     if (!summary || !remediation) return null;
+    // Fall back to the measured heuristic rather than file "raise the retry limit to 15"
+    // as a work instruction. Returning null is what hands the cohort to
+    // `heuristicFinding`, whose remediation is derived from CAUSE_BRIEF and can never
+    // propose removing a guard.
+    if (proposesWeakeningSafetyLimit(remediation)) return null;
 
     return {
       cause: cohort.cause,
@@ -288,7 +316,10 @@ export async function raiseSystemicFindings(
 
     // Existing OPEN findings, so a re-observed cohort refreshes rather than re-files.
     const open = await db
-      .select({ id: managerSystemicFindings.id, cause: managerSystemicFindings.cause })
+      .select({
+        id: managerSystemicFindings.id, cause: managerSystemicFindings.cause,
+        remediation: managerSystemicFindings.remediation, createdTaskId: managerSystemicFindings.createdTaskId,
+      })
       .from(managerSystemicFindings)
       .where(and(
         eq(managerSystemicFindings.tenantId, tenantId),
@@ -296,7 +327,7 @@ export async function raiseSystemicFindings(
         eq(managerSystemicFindings.status, 'open'),
       ))
       .catch(() => []);
-    const openByCause = new Map(open.map((r) => [r.cause, r.id]));
+    const openByCause = new Map(open.map((r) => [r.cause, r]));
 
     // A cohort that fell below the threshold is genuinely fixed (or drained) — close it,
     // so a later recurrence files a fresh finding instead of reviving stale prose.
@@ -312,14 +343,44 @@ export async function raiseSystemicFindings(
 
     let budget = MAX_FINDINGS_PER_PASS;
     for (const cohort of cohorts) {
-      const existingId = openByCause.get(cohort.cause);
-      if (existingId) {
+      const existing = openByCause.get(cohort.cause);
+      if (existing) {
         // Already reported. Refresh the count so the finding stays honest about scale,
         // and spend NO model call and NO ticket — this is the idempotent steady state.
+        //
+        // EXCEPT when the stored remediation tells an engineer to weaken a safety limit.
+        // The refresh branch never rewrites prose, so a finding diagnosed before
+        // `proposesWeakeningSafetyLimit` existed keeps instructing "raise the retry limit
+        // to 10 or 15" for as long as its cohort survives — which, for a cohort of 116
+        // breaker-tripped tickets, is indefinitely. Repair it in place from the measured
+        // heuristic: deterministic, no model call, and no second ticket.
+        const repair = proposesWeakeningSafetyLimit(existing.remediation ?? '')
+          ? heuristicFinding(cohort, projectId)
+          : null;
+        const now = new Date();
         await db.update(managerSystemicFindings)
-          .set({ ticketCount: cohort.count, lastSeenAt: new Date(), updatedAt: new Date() })
-          .where(scopedToTenant(managerSystemicFindings, tenantId, eq(managerSystemicFindings.id, existingId)))
+          .set({
+            ticketCount: cohort.count, lastSeenAt: now, updatedAt: now,
+            ...(repair ? { summary: repair.summary, remediation: repair.remediation, source: repair.source } : {}),
+          })
+          .where(scopedToTenant(managerSystemicFindings, tenantId, eq(managerSystemicFindings.id, existing.id)))
           .catch(() => undefined);
+        // The finding's TICKET carries the same instruction, and the ticket is the artifact
+        // an agent actually works — repairing only the row would leave the unsafe wording
+        // exactly where it can be acted on.
+        if (repair && existing.createdTaskId != null) {
+          await db.update(tasks)
+            .set({ description: buildFindingDirective(repair, projectId), updatedAt: now })
+            .where(eq(tasks.id, existing.createdTaskId))
+            .catch(() => undefined);
+        }
+        if (repair) {
+          out.journal.push({
+            taskId: existing.createdTaskId ?? null,
+            summary: `Rewrote the "${cohort.cause}" platform finding — its remediation proposed weakening a safety limit.`,
+            detail: { cause: cohort.cause, ticketCount: cohort.count, repaired: 'remediation', source: repair.source },
+          });
+        }
         continue;
       }
       if (budget <= 0) break;

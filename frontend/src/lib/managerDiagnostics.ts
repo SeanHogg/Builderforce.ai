@@ -516,19 +516,40 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
       text: `${truncated.length} of the last ${passes.length} passes ran out of their wall-clock budget and deferred ${stages.join(', ')} to the next pass. The pass still completed and journalled honestly, but a project whose PR coordination consistently consumes the whole budget is starving the stages behind it — bound the PR work (or split the pass) rather than letting the backlog behind it go ungroomed.`,
     });
   }
+  // ONLY A MANUAL RUN FILES A PASS CARD. `runManagerSweep` — the 5-minute cron path —
+  // calls `runManagerForProject` with no `runTaskId`, deliberately: a card per pass would
+  // be 288 board tickets per project per day. It DOES reap open cards at stage 0, so every
+  // manual card is eventually closed by a scheduled pass that filed nothing of its own.
+  //
+  // The table therefore describes manual runs only, and a FRESH `lastRunAt` is the proof
+  // that scheduled passes are running fine. Reading a reaped manual card as "the pass died"
+  // reported 6-of-8 passes ending early on a project whose cron had run 2 minutes earlier —
+  // a critical finding aimed at a healthy mechanism, which is the most expensive kind of
+  // false positive a diagnostic can emit.
+  const cronIsLive = lastRunAge != null && lastRunAge <= STALE_LAST_RUN_MS;
   if (endedEarly.length > 0) {
     const ratio = passes.length > 0 ? Math.round((endedEarly.length / passes.length) * 100) : 0;
-    // Half the recent passes dying is not a flaky run, it is the normal path.
-    const severe = endedEarly.length >= passes.length / 2;
+    // Half the recent passes dying is not a flaky run, it is the normal path — UNLESS the
+    // scheduled sweep is demonstrably alive, in which case these are stale manual cards.
+    const severe = !cronIsLive && endedEarly.length >= passes.length / 2;
     (severe ? critical : warning).push({
       severity: severe ? 'critical' : 'warning',
       code: 'passes_ending_early',
-      text: `${endedEarly.length} of the last ${passes.length} passes (${ratio}%) ended early or were closed by a newer pass without reporting completion. A pass that is reaped did not finish its backlog, so its scoring/assignment/dispatch work never happened — repeatedly, this alone is enough to leave the backlog ungroomed.`,
+      text: cronIsLive
+        ? `${endedEarly.length} of the last ${passes.length} pass cards (${ratio}%) were closed by a newer pass without reporting completion — but the scheduled sweep last ran ${formatAge(lastRunAge)} ago, so it is running. Only a MANUAL "Run manager now" files a pass card; the 5-minute cron pass files none (a card per pass would be ~288 board tickets per project per day) and reaps whatever card it finds open. These are stale manual cards being tidied up, not passes dying. Judge scheduled-pass health from lastRunAt and the decision feed, not from this table.`
+        : `${endedEarly.length} of the last ${passes.length} passes (${ratio}%) ended early or were closed by a newer pass without reporting completion. A pass that is reaped did not finish its backlog, so its scoring/assignment/dispatch work never happened — repeatedly, this alone is enough to leave the backlog ungroomed.`,
     });
   }
 
   // ── 4. Do the passes that DO complete change anything? ──
+  // Same caveat as block 3, and it bites harder here: the newest COMPLETED card can be a
+  // manual run from weeks ago, and its counters describe the backlog as it was THEN.
+  // Measured on project 11: `scored 0 · assigned 0` from a card dated 2026-07-13 was
+  // reported as two critical "the pass is finishing and reporting success without changing
+  // the backlog" findings on 2026-07-27 — a verdict on 14-day-old evidence.
   const lastCompleted = passes.find((p) => p.outcome === 'completed')?.task ?? null;
+  const lastCompletedAge = ageMs(lastCompleted?.completedAt ?? lastCompleted?.createdAt, nowMs);
+  const countersAreStale = lastCompletedAge != null && lastCompletedAge > STALE_LAST_RUN_MS;
   const counters = parsePassCounters(lastCompleted?.summary);
   for (const cap of CAPABILITIES) {
     const deficit = stats[cap.deficit];
@@ -542,13 +563,24 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
       continue;
     }
     const reported = cap.counter ? counters?.[cap.counter] : undefined;
-    if (reported === 0 && lastCompleted) {
-      critical.push({
-        severity: 'critical',
-        code: `ineffective_${cap.key}`,
-        text: `${cap.label} is ENABLED, but the last COMPLETED pass (${lastCompleted.key}, ${stampWithAge(lastCompleted.completedAt ?? lastCompleted.createdAt, nowMs)}) reported ${cap.counter} 0 while ${share(deficit, stats.total)} open tickets are still ${cap.deficitLabel}. The pass is finishing and reporting success without changing the backlog.`,
+    if (reported !== 0 || !lastCompleted) continue;
+    const stamp = stampWithAge(lastCompleted.completedAt ?? lastCompleted.createdAt, nowMs);
+    if (countersAreStale) {
+      // Say what is unknown rather than assert what is not evidenced. A stale card cannot
+      // convict a capability — but a deficit this size with no recent completed pass to
+      // read is still worth surfacing, because it means nobody can tell either way.
+      warning.push({
+        severity: 'warning',
+        code: `unverified_${cap.key}`,
+        text: `${cap.label} is ENABLED and ${share(deficit, stats.total)} open tickets are still ${cap.deficitLabel}, but the newest COMPLETED pass card (${lastCompleted.key}, ${stamp}) is too old to judge it by — its ${cap.counter} 0 describes the backlog as it was then. Scheduled passes file no card, so this cannot be confirmed from the pass table: check the decision feed for recent ${cap.counter} activity instead.`,
       });
+      continue;
     }
+    critical.push({
+      severity: 'critical',
+      code: `ineffective_${cap.key}`,
+      text: `${cap.label} is ENABLED, but the last COMPLETED pass (${lastCompleted.key}, ${stamp}) reported ${cap.counter} 0 while ${share(deficit, stats.total)} open tickets are still ${cap.deficitLabel}. The pass is finishing and reporting success without changing the backlog.`,
+    });
   }
 
   // ── 5. What the manager has given up on / cannot get past ──

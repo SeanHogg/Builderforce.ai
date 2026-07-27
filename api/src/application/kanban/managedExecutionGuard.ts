@@ -2,10 +2,10 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { projects, swimlanes, tasks } from '../../infrastructure/database/schema';
-import { parseActAsRole, parseCloudAgentRef } from '../runtime/cloudDispatch';
+import { parseActAsRole, parseCloudAgentRef, parseLaneKey } from '../runtime/cloudDispatch';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { isAgentRefRoleCapable } from './roleCapability';
-import { resolveManagedLaneAuthority } from './managedLaneRoles';
+import { loadStageProducerSlots, resolveManagedLaneAuthority, slotAuthorizesRole } from './managedLaneRoles';
 
 export interface ManagedExecutionDecision { allowed: boolean; managed: boolean; reason?: string }
 
@@ -36,22 +36,36 @@ export async function authorizeManagedTaskExecution(
   if (!roleKey || !agentRef) {
     return { allowed: false, managed: true, reason: 'This ticket is lifecycle-managed. Use the Coordinator to dispatch a required role; the assignee is not an executor.' };
   }
+  // THE STAGE BEING SERVED IS THE PAYLOAD'S, NOT THE TICKET'S CURRENT STATUS. A role run
+  // is dispatched against one accountability slot, and an outstanding slot routinely
+  // belongs to an EARLIER stage than the lane the ticket now sits in — that is what
+  // "waiting on 10 of 10 sign-offs in review" means. Measuring a Developer's outstanding
+  // `in_progress` slot against the ticket's `in_review` status refused it every time:
+  // measured on project 11, the gate held 24 tickets and asked exactly ZERO of the 227
+  // agent-owed slots to sign off, on every pass, forever.
+  const stageKey = parseLaneKey(payload) ?? task.status;
   const [lane] = await db.select({ id: swimlanes.id }).from(swimlanes)
-    .where(and(eq(swimlanes.tenantId, tenantId), eq(swimlanes.boardId, board.id), eq(swimlanes.key, task.status))).limit(1);
-  if (!lane) return { allowed: false, managed: true, reason: `No coordinated stage exists for status '${task.status}'.` };
+    .where(and(eq(swimlanes.tenantId, tenantId), eq(swimlanes.boardId, board.id), eq(swimlanes.key, stageKey))).limit(1);
+  if (!lane) return { allowed: false, managed: true, reason: `No coordinated stage exists for status '${stageKey}'.` };
 
-  const authority = await resolveManagedLaneAuthority(db, { tenantId, swimlaneId: lane.id, task })
-    .catch((error) => {
-      reportCaughtError(error, { source: "application/kanban/managedExecutionGuard.ts", operation: "authority", context: { logMessage: '[managed-execution-guard] lane authority resolution failed', details: {
-        tenantId,
-        taskId,
-        swimlaneId: lane.id,
-        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      } } });
-      return { roleKeys: [] as string[], approvers: [], tier: 'none' as const };
-    });
-  if (!authority.roleKeys.includes(roleKey)) {
-    return { allowed: false, managed: true, reason: `Role '${roleKey}' is not required in stage '${task.status}'.` };
+  const [authority, slots] = await Promise.all([
+    resolveManagedLaneAuthority(db, { tenantId, swimlaneId: lane.id, task })
+      .catch((error) => {
+        reportCaughtError(error, { source: "application/kanban/managedExecutionGuard.ts", operation: "authority", context: { logMessage: '[managed-execution-guard] lane authority resolution failed', details: {
+          tenantId,
+          taskId,
+          swimlaneId: lane.id,
+          error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        } } });
+        return { roleKeys: [] as string[], approvers: [], tier: 'none' as const };
+      }),
+    loadStageProducerSlots(db, { tenantId, taskId, stageKey }).catch(() => []),
+  ]);
+  // Either the lane TEMPLATE authorizes the role, or the ticket's OWN manifest does. The
+  // second is strictly more specific and was written by the coordinator, so a slot the
+  // lifecycle itself opened can always be worked — see `slotAuthorizesRole`.
+  if (!authority.roleKeys.includes(roleKey) && !slotAuthorizesRole(slots, roleKey)) {
+    return { allowed: false, managed: true, reason: `Role '${roleKey}' is not required in stage '${stageKey}'.` };
   }
   if (!(await isAgentRefRoleCapable(db, tenantId, agentRef, roleKey, task.projectId))) {
     return { allowed: false, managed: true, reason: `Agent '${agentRef}' is not capable of acting as role '${roleKey}'.` };
