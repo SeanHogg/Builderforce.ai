@@ -116,8 +116,18 @@ describe('execution lifecycle outbox', () => {
       lastError: 'Error: activity unavailable',
     });
     expect(errorSpy).toHaveBeenCalledWith(
-      '[execution-lifecycle-outbox] projection failed',
-      expect.objectContaining({ eventKey: dueRow.eventKey, executionId: 42, attempts: 1 }),
+      '[caught-error]',
+      expect.objectContaining({
+        source: 'application/runtime/executionLifecycleOutbox.ts',
+        operation: 'drainExecutionLifecycleOutbox',
+        context: expect.objectContaining({
+          details: expect.objectContaining({
+            eventKey: dueRow.eventKey,
+            executionId: 42,
+            attempts: 1,
+          }),
+        }),
+      }),
     );
     errorSpy.mockRestore();
   });
