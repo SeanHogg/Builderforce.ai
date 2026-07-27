@@ -27,6 +27,7 @@
 import type {
   ManagerAction,
   ManagerConfig,
+  ManagerDailyDigest,
   ManagerOverview,
   ManagerPolicy,
   ManagerRunTask,
@@ -96,6 +97,21 @@ export interface ManagerDiagnosticsInput {
   census?: StallCensusResponse | null;
   /** The error the census load failed with, when it did. */
   censusError?: string | null;
+  /**
+   * TODAY's THROUGHPUT — what the team and the manager actually produced, with
+   * yesterday alongside it.
+   *
+   * Every other block in this report describes STATE (what is configured, what is
+   * stuck, what is queued). None of them can distinguish a backlog that is large but
+   * moving from one that has produced nothing in two days, and that distinction is the
+   * first thing a reader wants. It is also the only block that makes a zero legible:
+   * "0 shipped" is a quiet morning if yesterday was 1 and a dead loop if yesterday was
+   * 14. `null` when it could not be loaded: STATED, never rendered as a zero, which
+   * would invent the most alarming finding in the report out of a failed fetch.
+   */
+  digest?: ManagerDailyDigest | null;
+  /** The error the digest load failed with, when it did. */
+  digestError?: string | null;
 }
 
 export type FindingSeverity = 'critical' | 'warning' | 'info';
@@ -716,6 +732,89 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
     }
   }
 
+  // ── 5c. Did anything actually get DONE? ──
+  //
+  // Every block above this one describes STATE. None of them can tell a large backlog
+  // that is moving from one that has produced nothing in two days — which is the first
+  // thing a person asks, and the question the Manager surface now leads with. These
+  // findings are the report's half of that answer.
+  //
+  // `undefined` means the caller never asked for a digest; `null` means it asked and the
+  // read failed. Only the second is a finding — and it is deliberately a warning rather
+  // than a silent zero, because "nothing shipped" invented from a failed fetch would be
+  // the most alarming line in the report and completely unfounded.
+  const digest = input.digest ?? null;
+  if (digest == null && input.digest === null) {
+    warning.push({
+      severity: 'warning',
+      code: 'digest_unavailable',
+      text: `Today's throughput could not be loaded${input.digestError ? ` (${input.digestError})` : ''}, so this report cannot say whether anything actually finished. Everything below describes the backlog's STATE, not its movement.`,
+    });
+  } else if (digest != null) {
+    const { shipped, prs, runs, laneMoves } = digest.team;
+    const producedToday = shipped.today + prs.merged.today + runs.completed + laneMoves.forward;
+    const producedYesterday = shipped.yesterday + prs.merged.yesterday;
+
+    // The headline. Two consecutive empty days with an open backlog is not a slow patch —
+    // the loop is not turning, and every other finding in this report is downstream of it.
+    if (producedToday === 0 && stats.total > 0) {
+      const severe = producedYesterday === 0;
+      (severe ? critical : warning).push({
+        severity: severe ? 'critical' : 'warning',
+        code: severe ? 'no_throughput_two_days' : 'no_throughput_today',
+        text: severe
+          ? `NOTHING has been produced today or yesterday: 0 tickets finished, 0 pull requests merged, 0 agent runs completed and 0 forward lane moves, against ${stats.total} open tickets. The delivery loop is not turning at all — treat every finding above as a candidate cause rather than as a detail.`
+          : `Nothing has been produced yet today (0 finished, 0 merged, 0 runs completed, 0 forward lane moves) against ${stats.total} open tickets, though yesterday produced ${shipped.yesterday} finished and ${prs.merged.yesterday} merged. Either the day is young or something stopped overnight — compare lastRunAt above.`,
+      });
+    } else if (shipped.yesterday > 0 && shipped.today === 0 && prs.merged.today === 0) {
+      warning.push({
+        severity: 'warning',
+        code: 'throughput_dropped',
+        text: `Nothing has FINISHED today (0 tickets, 0 merges) although work is still moving (${laneMoves.forward} forward lane moves, ${runs.completed} runs completed) and yesterday finished ${shipped.yesterday}. Work is starting and not landing — check the sign-off gate and merge authority below.`,
+      });
+    }
+
+    // Every run failing is a different problem from no runs at all, and the two are
+    // indistinguishable in any count that only reports completions.
+    if (runs.completed === 0 && runs.failed > 0) {
+      critical.push({
+        severity: 'critical',
+        code: 'all_runs_failed_today',
+        text: `Every agent run that finished today FAILED (${runs.failed} failed, 0 completed). This is not a staffing or scheduling problem — work is being dispatched and dying. Read the executions' error messages before acting on any other finding: three consecutive failures also trip the per-ticket breaker (run_cap_exhausted), which then presents as a dispatch problem and sends the reader after the wrong cause.`,
+      });
+    }
+
+    // The manager's OWN idleness, separated from the team's. A manager that took no
+    // decision while deficits sit unfilled has not been throttled by the board — it has
+    // not run, or it ran and found nothing it was permitted to do.
+    const deficits = stats.unscored + stats.unranked + stats.unowned + stats.undated;
+    if (digest.manager.decisions.today === 0 && deficits > 0 && policy.enabled) {
+      warning.push({
+        severity: 'warning',
+        code: 'manager_idle_today',
+        text: `The manager has journalled NO decisions today while ${deficits} backlog deficits (unscored/unranked/unowned/undated) are outstanding and managing is enabled. Yesterday it took ${digest.manager.decisions.yesterday}. Either no pass has run today (check lastRunAt) or every pass found nothing it was permitted to change.`,
+      });
+    }
+
+    // Human-only movement is a quiet autonomy failure: the board looks alive on every
+    // throughput chart while the agents contribute nothing.
+    if (laneMoves.forward > 0 && laneMoves.byAgent === 0 && laneMoves.byHuman > 0) {
+      warning.push({
+        severity: 'warning',
+        code: 'movement_all_human',
+        text: `All ${laneMoves.forward} forward lane moves today were made by PEOPLE — autonomy moved nothing. Throughput charts will look healthy while the agentic loop contributes zero; read this alongside the stall census before concluding the board is working.`,
+      });
+    }
+
+    if (digest.needsAttention.openEscalations > 0) {
+      info.push({
+        severity: 'info',
+        code: 'escalations_today',
+        text: `${digest.needsAttention.openEscalations} ticket${digest.needsAttention.openEscalations === 1 ? ' is' : 's are'} waiting on a person right now (${digest.needsAttention.escalatedToday} escalated today): ${digest.needsAttention.items.map((i) => i.key ?? `#${i.taskId}`).join(', ') || '—'}.`,
+      });
+    }
+  }
+
   // ── 6. Policy gates that HOLD finished work (a full backlog with nothing shipping) ──
   if (!policy.allowAutoMerge && stats.openPullRequests > 0) {
     warning.push({
@@ -956,6 +1055,76 @@ function formatCensus(census: StallCensusResponse): string[] {
   return out;
 }
 
+/**
+ * TODAY — what the team and the manager actually produced, with yesterday beside it.
+ *
+ * The only block in this report that measures MOVEMENT rather than state, and therefore
+ * the only one that can tell a big-but-healthy backlog from a stopped one. Yesterday is
+ * printed against every headline number for the same reason the surface shows it: a bare
+ * zero is unreadable, and the difference between "quiet morning" and "dead loop" is the
+ * whole diagnosis.
+ *
+ * Contributors are printed with their three counts SEPARATE and never summed — a finished
+ * ticket, a completed run and a lane move are different units, and a total would be a
+ * ranking the data does not support.
+ */
+function formatDigest(digest: ManagerDailyDigest): string[] {
+  const out: string[] = [];
+  const { team, manager, needsAttention } = digest;
+  const vs = (d: { today: number; yesterday: number }) =>
+    `${d.today}   [yesterday: ${d.yesterday}]`;
+
+  out.push(line('local day', `${digest.dayStart} → ${digest.dayEnd}`));
+  out.push(line('computedAt', digest.computedAt));
+  out.push('');
+  out.push('the team:');
+  out.push(line('  tickets finished', vs(team.shipped)));
+  out.push(line('  tickets opened', vs(team.opened)));
+  out.push(line('  pull requests merged', vs(team.prs.merged)));
+  out.push(line('  pull requests opened today', team.prs.opened));
+  out.push(line('  agent runs completed', team.runs.completed));
+  out.push(line('  agent runs failed', team.runs.failed));
+  out.push(line('  forward lane moves', `${team.laneMoves.forward} (by people: ${team.laneMoves.byHuman} · by agents: ${team.laneMoves.byAgent})`));
+  out.push(line('  backward lane moves (redo)', team.laneMoves.backward));
+  out.push('');
+  out.push('the manager:');
+  out.push(line('  passes completed today', manager.passes));
+  out.push(line('  decisions journalled', vs(manager.decisions)));
+  if (manager.byType.length === 0) {
+    out.push('  by type: (none today)');
+  } else {
+    out.push(`  by type: ${manager.byType.map((d) => `${d.actionType}=${d.count}`).join(' ')}`);
+  }
+  out.push('');
+  out.push('finished today (newest first, sampled):');
+  if (digest.shipped.length === 0) {
+    out.push('  (nothing has reached a done lane today)');
+  }
+  for (const s of digest.shipped) {
+    out.push(`  ${s.key}  ${capText(s.title, 80)}  owner=${s.ownerName || `(${s.ownerKind})`}  bv=${s.businessValue ?? '—'}  at=${s.completedAt}`);
+  }
+  if (team.shipped.today > digest.shipped.length) {
+    out.push(`  … ${team.shipped.today - digest.shipped.length} more finished today (the endpoint samples ${digest.shipped.length}; the count above is the total)`);
+  }
+  out.push('');
+  out.push('contributors (counts kept separate — different units of work, never summed):');
+  if (team.contributors.length === 0) {
+    out.push('  (nobody is credited with movement today. NOTE: agent lane moves carry no');
+    out.push('   actor identity in task_status_transitions, so an agent appears here only via');
+    out.push('   the runs it completed or the tickets it owned.)');
+  }
+  for (const c of team.contributors) {
+    out.push(`  ${c.name} (${c.kind}): finished=${c.shipped} runs=${c.runs} moves=${c.moves}`);
+  }
+  out.push('');
+  out.push(line('waiting on a person right now', needsAttention.openEscalations));
+  out.push(line('escalated today', needsAttention.escalatedToday));
+  for (const i of needsAttention.items) {
+    out.push(`  ${i.key ?? `#${i.taskId}`}  ${capText(i.title ?? '', 80)}  ${i.reason} since ${i.since ?? '—'}`);
+  }
+  return out;
+}
+
 /** The stuck register: the counts, the causes, then the rows. */
 function formatStalls(stalls: StallRegister, nowMs: number | null): string[] {
   const out: string[] = [];
@@ -1046,10 +1215,14 @@ function formatActivity(actions: readonly ManagerAction[]): string[] {
 /**
  * Build the full AI Manager diagnostics report.
  *
- * Order: environment → findings → manager identity → policy fold → autonomy → backlog
- * health → passes → stuck register → decision feed → directives → raw JSON. Answer first,
- * evidence second, appendix last — so a report that IS truncated by whatever it is pasted
- * into loses the appendix rather than the diagnosis.
+ * Order: environment → findings → manager identity → policy fold → limits → sign-off →
+ * autonomy → TODAY's throughput → backlog health → passes → census → stuck register →
+ * decision feed → directives → raw JSON. Answer first, evidence second, appendix last —
+ * so a report that IS truncated by whatever it is pasted into loses the appendix rather
+ * than the diagnosis.
+ *
+ * Throughput sits ahead of backlog health deliberately: everything after it describes
+ * what the backlog IS, and none of that is readable until you know whether it is moving.
  */
 export function buildManagerDiagnosticsReport(
   input: ManagerDiagnosticsInput,
@@ -1116,6 +1289,22 @@ export function buildManagerDiagnosticsReport(
   out.push(line('effectivePlan', autonomy.effectivePlan));
   out.push('');
 
+  // Movement BEFORE state. Every block below this one describes what the backlog IS;
+  // this is the only one that says whether it is going anywhere, and a reader who learns
+  // that nothing has finished in two days reads all of it differently.
+  out.push('-- Today (throughput: what actually got done) --');
+  out.push('The only MOVEMENT block in this report — everything below describes state. Each');
+  out.push('headline number carries yesterday beside it because a bare zero cannot be read:');
+  out.push('0 finished is a quiet morning if yesterday was 1 and a stopped loop if it was 14.');
+  out.push('The window is the READER\'s local day (the browser\'s UTC offset is sent), so it');
+  out.push('matches what the Manager page showed the person who captured this.');
+  if (input.digest == null) {
+    out.push(`(unavailable${input.digestError ? `: ${input.digestError}` : ''} — this is NOT the same as "nothing got done")`);
+  } else {
+    out.push(...formatDigest(input.digest));
+  }
+  out.push('');
+
   out.push('-- Backlog health (open, non-archived, non-system tickets) --');
   out.push(line('total', stats.total));
   out.push(line('unscored', share(stats.unscored, stats.total)));
@@ -1172,7 +1361,10 @@ export function buildManagerDiagnosticsReport(
   // payload and are all rendered above, so they are what gets dropped when keeping them
   // would push the WHOLE report past the budget — every computed block survives.
   const body = out.join('\n');
-  const payload = { projectId: input.projectId, overview, stalls, census: input.census ?? null };
+  const payload = {
+    projectId: input.projectId, overview, stalls,
+    census: input.census ?? null, digest: input.digest ?? null,
+  };
   out.push(...jsonAppendix(body.length, payload, {
     note: `(rows elided: the full report would exceed ${REPORT_BUDGET_CHARS} characters. Every computed block above is intact.)`,
     compact: () => ({
@@ -1189,6 +1381,10 @@ export function buildManagerDiagnosticsReport(
       // The census survives compaction WHOLE: it is small (one row per CAUSE, not per
       // ticket) and it is the block a reader most needs when everything else is trimmed.
       census: input.census ?? null,
+      // The digest survives whole for the same two reasons: it is bounded by construction
+      // (counters plus a sampled handful of rows) and it is the block that says whether
+      // any of the state below is actually moving.
+      digest: input.digest ?? null,
     }),
   }));
 

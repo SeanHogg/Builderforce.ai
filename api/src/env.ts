@@ -1,5 +1,6 @@
 import type { TenantRole } from './domain/shared/types';
 import type { Db } from './infrastructure/database/connection';
+import type { MachineSubject } from './infrastructure/auth/machineSubject';
 
 /** Cloudflare Worker environment bindings for the API worker. */
 export interface Env {
@@ -496,6 +497,16 @@ export interface Vars {
   role:     TenantRole;
   sessionId?: string;
   tokenJti?: string;
+  /**
+   * Set when the caller authenticated with a MACHINE token (`agentHost:*` /
+   * `embed:*`) rather than as a person — see {@link MachineSubject}.
+   *
+   * `userId` still carries the raw subject because every tenant-scoped read needs a
+   * subject; this is what lets a WRITE that records authorship tell the two apart.
+   * Without it an on-prem agent host PATCHing a ticket was recorded as a human whose
+   * user id was the literal string `agentHost:5`.
+   */
+  machineActor?: MachineSubject;
   /** True when the request is running under an emulation token (read-only). */
   isEmulation?: boolean;
   /**
