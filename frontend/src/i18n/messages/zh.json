@@ -7007,6 +7007,58 @@
         "openTicket": "打开 {key}",
         "raised": "发现于 {when}"
       }
+    },
+    "today": {
+      "title": "今日",
+      "loading": "正在读取今日工作…",
+      "error": "无法加载今日摘要。",
+      "retry": "重试",
+      "updated": "更新于{when}",
+      "lastPass": "上次管理巡检：{when}。",
+      "viewActivity": "查看全部决策",
+      "headline": {
+        "team": "团队完成了{shipped, plural, =0 {零个工单} other {# 个工单}}，合并了{merged, plural, =0 {零个拉取请求} other {# 个拉取请求}}，共完成{runs, plural, =0 {零次代理运行} other {# 次代理运行}}。",
+        "manager": "你执行了{passes, plural, =0 {零次管理巡检} other {# 次管理巡检}}，做出了{decisions, plural, =0 {零项决策} other {# 项决策}}。",
+        "quiet": "今天还没有任何进展。",
+        "quietYesterday": "昨天：完成{shipped, plural, =0 {零个工单} other {# 个工单}}，合并{merged, plural, =0 {零个拉取请求} other {# 个拉取请求}}，管理决策{decisions, plural, =0 {零项} other {# 项}}。"
+      },
+      "stat": {
+        "shipped": "今日完成",
+        "shippedSub": "今日新建 {opened} 个",
+        "merged": "已合并 PR",
+        "mergedSub": "今日新开 {opened} 个",
+        "runs": "代理运行完成",
+        "runsSub": "{failed} 次失败",
+        "moves": "向前推进次数",
+        "movesSub": "人工 {human} 次 · 代理 {agent} 次",
+        "decisions": "管理决策",
+        "decisionsSub": "今日{passes, plural, =0 {零次巡检} other {# 次巡检}}"
+      },
+      "shipped": {
+        "title": "今日完成",
+        "empty": "今天还没有工单进入完成阶段。",
+        "unowned": "未分配",
+        "more": "另有 {n} 个"
+      },
+      "decisions": {
+        "title": "管理者做了哪些决策",
+        "empty": "管理者今天尚未做出决策。",
+        "aria": "今日管理决策（按类型）"
+      },
+      "contributors": {
+        "title": "今天谁在推动工作",
+        "caption": "人与代理同列。三项计数分开显示，因为完成工单、完成运行与推进阶段并非同一种工作单位。",
+        "metrics": "完成 {shipped} · 运行 {runs} · 推进 {moves}"
+      },
+      "attention": {
+        "title": "{open, plural, other {# 项工作正在等待人工处理}} · 今日新增 {today} 项",
+        "since": "升级于{when}",
+        "open": "打开阻塞登记表"
+      }
+    },
+    "health": {
+      "title": "待办健康度",
+      "caption": "看板的当前状态——哪些工单仍缺少价值评分、排序、日期或负责人。"
     }
   },
   "project360": {
