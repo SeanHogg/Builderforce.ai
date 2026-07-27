@@ -10,6 +10,13 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * a move to a lower-position lane is "backward" = a redo/iteration. The ordinal
  * map is cached read-through (boards/swimlanes change rarely) so the hot PATCH
  * path does not re-query the board on every move.
+ *
+ * ATTRIBUTION — `actor_kind`/`actor_ref` name WHO moved the ticket, across all four
+ * kinds (human, cloud agent, on-prem host agent, identity-less automation). See
+ * {@link resolveTransitionActor}: every caller supplies the identity it actually holds
+ * and the classification happens once, here, rather than each call site inventing its
+ * own idea of what "not a human" means. Readers that only ask "was this autonomous?"
+ * keep working unchanged — every agent kind is still `!== 'human'`.
  */
 import { and, eq } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
@@ -17,6 +24,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { boards, swimlanes, tasks, taskStatusTransitions } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached, projectScoreCacheKey, tenantRollupCacheKey } from '../../infrastructure/cache/readThroughCache';
+import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import { bumpWorkforceMetricsVersion } from '../metrics/workforceMetrics';
 import { releaseWorkItemWebhook } from '../seams/workItemWebhook';
 import { TaskStatus } from '../../domain/shared/types';
@@ -77,15 +85,83 @@ export async function invalidateSwimlaneOrdinals(env: Env, projectId: number): P
 
 const isDoneClass = (status: string, ordinals: OrdinalMap): boolean => isDoneLane(status, ordinals);
 
-export interface RecordTransitionInput {
+/**
+ * WHO moved a ticket, in the polymorphic (kind, ref) vocabulary the activity log
+ * already uses. At most one field is meaningful; all three absent ⇒ automation with no
+ * identity to name (a cron sweep, a webhook), which is the only honest 'system'.
+ */
+export interface TransitionActorInput {
+  /** The authenticated user who moved it (a human keeping the board honest). */
+  actorUserId?: string | null;
+  /** The cloud agent (`ide_agents.id` / published agent ref) whose run moved it. */
+  actorAgentRef?: string | null;
+  /** The on-prem agent host (`agent_hosts.id`) whose run moved it. */
+  actorAgentHostId?: number | string | null;
+}
+
+/** `task_status_transitions.actor_kind`. Matches {@link ActorType} minus 'hire', which
+ *  the human branch covers — a lane move records the mover, not their contract. */
+export type TransitionActorKind = 'human' | 'cloud_agent' | 'host_agent' | 'system';
+
+export interface TransitionActor {
+  actorKind: TransitionActorKind;
+  /** `users.id` / `ide_agents.id` / `agent_hosts.id` — a BARE ref, resolvable by
+   *  `resolveActorByRef`. Null only for identity-less automation. */
+  actorRef: string | null;
+}
+
+/** `actor_ref` is varchar(64); a longer ref would abort the insert and lose the row. */
+const ACTOR_REF_MAX = 64;
+
+/**
+ * Classify a lane move's actor. PURE.
+ *
+ * Two things make this more than a ternary, and both were live misattributions:
+ *
+ *  1. An agent's move used to be indistinguishable from a cron's — everything that was
+ *     not a logged-in person collapsed to `('system', null)`, so per-agent throughput
+ *     could not be read off the transition log at all and the digest had to infer agent
+ *     contribution from runs and ticket ownership instead.
+ *  2. A MACHINE token's subject is not a user id. An on-prem agent host authenticates as
+ *     `agentHost:5`, so passing `c.get('userId')` straight through stamped its hops
+ *     `('human', 'agentHost:5')` — worse than anonymous, because it invented a person and
+ *     inflated the human half of every autonomy ratio. That sub is decoded back into the
+ *     host identity it was carrying rather than being discarded.
+ *
+ * Precedence is human → cloud agent → host agent: when a person's PATCH is what drove an
+ * agent-owned ticket, the person moved it.
+ */
+export function resolveTransitionActor(input: TransitionActorInput): TransitionActor {
+  const ref = (v: string | number) => String(v).trim().slice(0, ACTOR_REF_MAX) || null;
+
+  const rawUser = input.actorUserId?.trim();
+  if (rawUser) {
+    const machine = parseMachineSubject(rawUser);
+    if (!machine) return { actorKind: 'human', actorRef: ref(rawUser) };
+    // A machine sub that names a specific host IS an identity; `agentHost:mcp` and
+    // embed sessions name none, so they fall through to the explicit fields below.
+    if (machine.agentHostId != null) {
+      return { actorKind: 'host_agent', actorRef: ref(machine.agentHostId) };
+    }
+  }
+
+  const agentRef = input.actorAgentRef?.trim();
+  if (agentRef) return { actorKind: 'cloud_agent', actorRef: ref(agentRef) };
+
+  const hostId = input.actorAgentHostId;
+  if (hostId != null && String(hostId).trim() !== '') {
+    return { actorKind: 'host_agent', actorRef: ref(hostId) };
+  }
+
+  return { actorKind: 'system', actorRef: null };
+}
+
+export interface RecordTransitionInput extends TransitionActorInput {
   tenantId: number;
   projectId: number;
   taskId: number;
   fromStatus: string | null;
   toStatus: string;
-  /** The authenticated user who moved it, if any (a human keeping the board
-   *  honest). Absent ⇒ the move came from an agent/automation ⇒ actor 'system'. */
-  actorUserId?: string | null;
 }
 
 /**
@@ -94,7 +170,7 @@ export interface RecordTransitionInput {
  * PATCH. A no-op when status didn't actually change.
  */
 export async function recordStatusTransition(env: Env, db: Db, input: RecordTransitionInput): Promise<void> {
-  const { tenantId, projectId, taskId, fromStatus, toStatus, actorUserId } = input;
+  const { tenantId, projectId, taskId, fromStatus, toStatus } = input;
   if (fromStatus === toStatus) return;
 
   const ordinals = await loadLaneOrdinals(env, db, projectId);
@@ -105,14 +181,16 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
   const wasDone = fromStatus != null && isDoneClass(fromStatus, ordinals);
   const nowDone = isDoneClass(toStatus, ordinals);
 
+  const actor = resolveTransitionActor(input);
+
   await db.insert(taskStatusTransitions).values({
     tenantId,
     projectId,
     taskId,
     fromStatus,
     toStatus,
-    actorKind: actorUserId ? 'human' : 'system',
-    actorRef: actorUserId ?? null,
+    actorKind: actor.actorKind,
+    actorRef: actor.actorRef,
     isBackward,
   });
 
@@ -188,7 +266,7 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
 export async function completeTaskOnMerge(
   env: Env,
   db: Db,
-  input: { tenantId: number; taskId: number; actorUserId?: string | null },
+  input: TransitionActorInput & { tenantId: number; taskId: number },
 ): Promise<void> {
   const [t] = await db
     .select({ status: tasks.status, projectId: tasks.projectId })
@@ -206,7 +284,9 @@ export async function completeTaskOnMerge(
     fromStatus: t.status,
     toStatus: TaskStatus.DONE,
     actorUserId: input.actorUserId ?? null,
-  }).catch((error) => { /* metrics are best-effort; completion already persisted */ 
+    actorAgentRef: input.actorAgentRef ?? null,
+    actorAgentHostId: input.actorAgentHostId ?? null,
+  }).catch((error) => { /* metrics are best-effort; completion already persisted */
     reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "completeTaskOnMerge" });
   });
 }
