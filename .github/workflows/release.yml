@@ -69,12 +69,34 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: npm run db:migrate
 
+      # Retried, because the failure this guards against is on Cloudflare's side and
+      # says nothing about the build. Observed 2026-07-28 (run 30325003865): the worker
+      # uploaded, the agent container built and pushed, the QA-runner image built and
+      # EVERY layer pushed — and the final manifest PUT to registry.cloudflare.com
+      # returned `500 Internal Server Error`, so wrangler exited 1 and the release went
+      # red. The next push succeeded unchanged.
+      #
+      # `wrangler deploy` is idempotent: a re-run re-uploads the same worker version and
+      # skips every layer already in the registry, so a retry costs seconds and cannot
+      # half-apply anything. Three attempts, so a genuine failure still fails — it just
+      # has to fail three times rather than lose a release to one bad response.
       - name: Deploy API worker
         working-directory: api
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-        run: npm run deploy:worker
+        run: |
+          for attempt in 1 2 3; do
+            if npm run deploy:worker; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "::warning::wrangler deploy failed (attempt $attempt/3) — retrying in 30s. A transient registry/API 5xx is the expected cause; see the comment in release.yml."
+              sleep 30
+            fi
+          done
+          echo "::error::wrangler deploy failed 3 times — this is not a transient registry error."
+          exit 1
 
       # Refresh the sales-demo persona tenants so any visitor-made changes are
       # wiped on every deploy. Skips quietly when the secret isn't configured
