@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-07-28 — ✅ RESOLVED: every team member read "0 finished" because credit went to the ticket's ASSIGNEE, who on a managed board is the Coordinator (api 2026.7.178)
+
+**Reported from the Manager surface**: the whole "Who moved work today" list showed `0 finished` — Bob Developer at **4,404 runs and 0 finished**. On the day it was reported the zero was also literally TRUE (nothing reached a done lane at all, which is the separate throughput problem), but the attribution underneath it was wrong and would have kept reading 0 once tickets did start finishing.
+
+**Root cause: one of the three contributor columns asked a different question than the other two.** `runs` attributes to `executions.cloud_agent_ref` and `moves` to `task_status_transitions.actor_ref` — both name the actor that did the thing. `shipped` grouped finished tickets by `tasks.assigned_user_id / assigned_agent_ref / assigned_agent_host_id`, the ticket's ASSIGNEE. On a lifecycle-managed board the assignee is the **Coordinator, never the executor** — an invariant this codebase states in three places (`evaluateAutoRun`, `stallTriage`, `systemicDiagnosis`), each warning that assigning an owner does not make anyone able to work the ticket. So every completion credited one Coordinator row and every agent that actually did the work showed zero, beside its own honest run count. That disagreement is exactly what a reader sees as "0 finished, 4,404 runs".
+
+**Fixed by asking the same question everywhere.** `shipped` now counts `count(distinct task_id)` over the terminal hops in the window, grouped by the transition's `(actor_kind, actor_ref)` and routed through the SAME `contributorKind` mapping the lane-move credit already uses — so an identity-less `'system'` stamp credits nobody rather than inventing a member. Backward hops are excluded (a redo is not a finish) and the distinct stops a reopen-and-refinish paying twice. "Terminal" is derived from `NON_TERMINAL_TASK_STATUSES`, not a second hand-written list, so renaming a done lane cannot silently stop crediting anyone.
+
+**The sampled "Finished today" list had the identical defect** and is fixed in the same pass: each row's owner caption now prefers the terminal-hop actor, read by a bounded correlated subquery over at most `SHIPPED_SAMPLE` (8) rows rather than a per-ticket lookup. The assignee is KEPT as the fallback — on an unmanaged board the assignee genuinely is the person who did it, and dropping it would have blanked the caption for every project that is not lifecycle-managed.
+
+Files: `api/src/application/manager/dailyDigest.ts` (+ tests).
+
+**Verified:** API suite `4129 passed`, `tsgo --noEmit` clean, structural guards green. Coverage pins each property that made this hide: the rollup no longer groups by the assignee columns, the count is distinct per ticket, backward hops are excluded, "terminal" comes from the shared set, the credit routes through `contributorKind`, the sample keeps its assignee fallback, and the status list is bound as expanded parameters rather than `<> all(${jsArray})` — a raw JS array in a raw-SQL fragment binds as an untyped parameter and is precisely the shape that silently matches nothing.
+
+**Note on what this does NOT fix:** today's zeros on that surface are still zeros, because nothing is finishing. This makes the panel able to tell the truth; the throughput problem is the `managed_no_role` cohort and the dispatch cap, both on the roadmap.
+
+---
+
 ## 2026-07-28 — ✅ RESOLVED: the manager's PR loop could not stop and could not reach — a merge that retried forever, and 366 of 386 pull requests it never once examined (api 2026.7.177 · frontend 2026.7.138 · migration 0381)
 
 **Diagnosed from the live capture, fixed in the MANAGER — no pull request was touched.** With the sign-off gate released, the board's throughput was still 0 finished / 0 merged / 0 forward lane moves on 5,880 completed runs, and the top of the stuck register had turned over to `pr_conflict` (154 of 200 rows). Two structural defects in `coordinatePullRequests`, both invisible to a green suite because neither is a logic error.
