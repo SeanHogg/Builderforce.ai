@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   announcesUntakenAction,
+  claimsMissingToolData,
   shouldRecoverStalledTurn,
   isExhaustedStall,
   stallRecoveryNudge,
@@ -126,6 +127,68 @@ describe('announcesUntakenAction', () => {
 });
 
 /**
+ * The stall that reads like an answer. Measured on the manager's accountability chat
+ * (project 11, chat 86, 2026-07-28, `xai-oauth/grok-4.3`): 7 model turns, 0 tool calls,
+ * and the replies below were shipped to the user verbatim because nothing in them
+ * promises or invokes anything — they simply report that results are missing.
+ */
+describe('claimsMissingToolData', () => {
+  it('matches the replies that prompted this — missing results it never asked for', () => {
+    const stalls = [
+      'The tools required are manager.digest, manager.decisions, manager.census and manager.policy. No other tools provide the needed data.',
+      'The required tools have not returned results yet, so I have no new data on digest, decisions, census or policy for project 11.',
+      'Little got done: no results from manager.digest, manager.decisions, manager.census or manager.policy for project 11.',
+      'The required data is still missing because no tool results have been returned for project 11.',
+      'Gate: tool outputs never provided. Unblock requires those four results.',
+      'I am still awaiting the tool results for project 11.',
+    ];
+    for (const s of stalls) expect(claimsMissingToolData(s), s).toBe(true);
+  });
+
+  /**
+   * The discriminator is the word "tool" NEXT TO the missing-data claim. An agent that
+   * genuinely cannot answer — or that called a tool and got an error back — has given a
+   * real answer, and re-prompting it wastes a turn and repeats itself at the user.
+   */
+  it('does NOT match a genuine "I cannot answer that" reply', () => {
+    const answers = [
+      'I do not have the task status data for project 11.',
+      'Nothing merged today because merge authority is withheld from me on this project.',
+      'The digest is empty for today — 0 tickets finished, same as yesterday.',
+      'No decisions were recorded, so there is nothing to report.',
+      'The census returned 281 stalled tickets; the oldest has been idle 48 days.',
+      'Two tools cover that: builtin_tasks_create and builtin_tasks_update.',
+      // A FILE name is not a tool name — a coding agent reports this constantly.
+      'The build failed — missing package.json in the worker directory.',
+      'No results for src/index.ts; the file was deleted in PR #302.',
+    ];
+    for (const a of answers) expect(claimsMissingToolData(a), a).toBe(false);
+  });
+
+  it('matches the claim when the TOOL is named instead of the word "tool"', () => {
+    const stalls = [
+      'Little accomplished today: missing manager.digest, manager.decisions, manager.census and manager.policy results for project 11.',
+      'No data from builtin_manager_policy, so I cannot say what I was permitted to do.',
+    ];
+    for (const s of stalls) expect(claimsMissingToolData(s), s).toBe(true);
+  });
+
+  it('has no opinion on empty text', () => {
+    expect(claimsMissingToolData('')).toBe(false);
+    expect(claimsMissingToolData('   ')).toBe(false);
+  });
+
+  /**
+   * Unlike the announcement shape this is NOT tail-limited: the claim is normally the
+   * opening sentence, with the consequences spelled out after it.
+   */
+  it('matches the claim wherever it sits in the reply', () => {
+    const opening = 'The required tools have not returned results yet. '.padEnd(600, 'x');
+    expect(claimsMissingToolData(opening)).toBe(true);
+  });
+});
+
+/**
  * The gate itself lives here rather than in each loop, so the Brain run loop and the
  * on-prem/cloud agent loop cannot drift on WHEN a stall is recoverable.
  */
@@ -158,6 +221,13 @@ describe('shouldRecoverStalledTurn', () => {
 
   it('lets a genuine final answer through untouched', () => {
     expect(shouldRecoverStalledTurn({ ...stall, text: 'The build failed because the token expired.' })).toBe(false);
+  });
+
+  it('recovers the missing-tool-data claim too — same remedy, different excuse', () => {
+    expect(shouldRecoverStalledTurn({
+      ...stall,
+      text: 'The required tools have not returned results yet, so I have no new data for project 11.',
+    })).toBe(true);
   });
 
   it('allows more than one recovery — the stall repeats', () => {

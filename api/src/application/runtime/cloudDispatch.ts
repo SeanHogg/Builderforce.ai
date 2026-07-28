@@ -301,6 +301,42 @@ export function parsePolicyGates(payload: string | undefined): PolicyGate[] {
   }
 }
 
+/**
+ * The role-participation instruction off a sign-off / producer dispatch payload.
+ *
+ * ── THE MEASURED FAILURE ─────────────────────────────────────────────────────
+ * `buildSignoffRequestPayload` / `buildProducerRequestPayload` write a
+ * `reviewInstruction` — the text that names the `builtin_kanban_signoff` tool and
+ * tells the role to record its verdict — and NOTHING read it back. The field was
+ * serialized into `executions.payload` and dropped on the floor, so the agent was
+ * dispatched to review work it was never asked to sign off on.
+ *
+ * Measured on tenant 1 the day this was found: `builtin_kanban_signoff` invoked
+ * **zero times, ever**; 912 reviewer slots stuck in `in_progress`; **0 of 2,263
+ * reviewer slots ever completed**; all 327 ledger rows `autoAttested: true`, i.e.
+ * every one written by the producer fallback in `attestRoleRun`, none by an agent.
+ * Reviewer slots are deliberately never auto-credited (that would rubber-stamp a
+ * review), so with the ask never delivered the sign-off gate could not be
+ * satisfied by any number of runs — the tickets were unsatisfiable by
+ * construction, which is what 2,351 completed runs against 0 finished tickets in
+ * one day actually means.
+ *
+ * `attestRoleRun`'s header already documents two prior rounds of this same defect
+ * (an HTTP route with no tool behind it; the catalog id instead of the advertised
+ * tool name). Both were fixed in the INSTRUCTION. This is the third: the
+ * instruction became correct and still never arrived.
+ */
+export function parseRoleInstruction(payload: string | null | undefined): string | null {
+  if (!payload) return null;
+  try {
+    const raw = (JSON.parse(payload) as { reviewInstruction?: unknown }).reviewInstruction;
+    const instruction = typeof raw === 'string' ? raw.trim() : '';
+    return instruction || null;
+  } catch {
+    return null;
+  }
+}
+
 export interface FollowUpContext { directive: string; priorExecutionId: number | null }
 
 /**
