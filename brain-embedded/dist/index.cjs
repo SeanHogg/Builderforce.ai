@@ -1386,12 +1386,46 @@ function announcesUntakenAction(text) {
   if (!t) return false;
   return ANNOUNCED_ACTION.test(t.slice(-TAIL_CHARS));
 }
+var FILE_EXTENSION = "(?:ts|tsx|js|jsx|mjs|cjs|json|md|ya?ml|sql|toml|lock|txt|env|html|css|py|go|rs|sh|png|svg|csv|xml)\\b";
+var DOTTED_TOOL_IDENT = `\\b[a-z][a-z0-9_]{2,}\\.(?!${FILE_EXTENSION})[a-z][a-z0-9_]{2,}\\b`;
+var UNCALLED_TOOL_CLAIM = new RegExp(
+  [
+    // "The tools required are X, Y and Z." / "The required tools are …"
+    "\\b(?:required tools?\\b|tools? required\\b|tools? (?:i |we )?(?:need|require)\\b)",
+    // "…tools have not returned results" / "…the tool has not returned anything yet"
+    "\\btools?\\b[^.!?]{0,80}?\\b(?:have|has|had|were|was)(?:n'?t| not)\\s+(?:yet\\s+)?(?:return|returned|provided|available|run|called)",
+    // "no tool results", "no results from the tools", "no tool outputs for project 11"
+    "\\bno\\s+(?:new\\s+)?tools?\\s+(?:results?|outputs?|data|returns?)\\b",
+    "\\bno\\s+results?\\s+(?:from|for)\\s+(?:the\\s+)?tools?\\b",
+    // "tool outputs never provided" / "the tool results were never returned"
+    "\\btools?\\s+(?:results?|outputs?)\\b[^.!?]{0,40}?\\b(?:never|not)\\s+(?:been\\s+)?(?:provided|returned|available)",
+    // "requires the tool outputs" / "awaiting the tool results"
+    "\\b(?:requires?|awaiting|waiting on|pending)\\s+(?:those\\s+|the\\s+)?tools?\\s+(?:results?|outputs?)",
+    // The same claim with the TOOL NAMED instead of the word "tool" — "no results from
+    // manager.digest", "missing builtin_manager_policy results". The name IS the
+    // discriminator here: prose does not carry tool identifiers by accident.
+    `\\bno\\s+(?:new\\s+)?(?:results?|data|outputs?|returns?)\\s+(?:from|for|on)\\s+(?:the\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`,
+    `\\b(?:missing|awaiting|pending|without)\\s+(?:the\\s+|those\\s+)?(?:results?\\s+(?:from|of|for)\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`
+  ].join("|"),
+  "i"
+);
+function claimsMissingToolData(text) {
+  const t = text.trim();
+  if (!t) return false;
+  return UNCALLED_TOOL_CLAIM.test(t);
+}
 var MAX_ANNOUNCEMENT_RECOVERIES = 3;
 function stallRecoveryNudge(lastChance) {
-  return "You said you would call a tool but did not actually call one \u2014 your last turn made zero tool calls. Make the call NOW in this turn, then answer using its result. If no tool can give you that data, say plainly which data you are missing and answer with what you already have. Do not announce another call." + (lastChance ? " This is your last chance to act: you have now stated an intention without acting several times in a row. Either emit a tool call in this turn, or give your complete final answer from what you already know \u2014 an answer that only describes what you are about to do will be shown to the user as-is." : "");
+  return (
+    // Covers BOTH stall shapes: the promise ("I'll check…") and the missing-data claim
+    // ("the required tools have not returned results"). The second wording matters —
+    // a model told only "you said you would call a tool" when it never said any such
+    // thing tends to repeat the same excuse rather than act.
+    "Your last turn made zero tool calls. You either said you would call a tool and did not, or reported that tool results were missing \u2014 no results exist because you never made the call. Make the call NOW in this turn, then answer using its result. If no tool can give you that data, say plainly which data you are missing and answer with what you already have. Do not announce another call." + (lastChance ? " This is your last chance to act: you have now stated an intention without acting several times in a row. Either emit a tool call in this turn, or give your complete final answer from what you already know \u2014 an answer that only describes what you are about to do will be shown to the user as-is." : "")
+  );
 }
 function isStalledTurn(input) {
-  return input.toolCallCount === 0 && input.availableToolCount > 0 && announcesUntakenAction(input.text);
+  return input.toolCallCount === 0 && input.availableToolCount > 0 && (announcesUntakenAction(input.text) || claimsMissingToolData(input.text));
 }
 function shouldRecoverStalledTurn(input) {
   return isStalledTurn(input) && input.recoveriesUsed < MAX_ANNOUNCEMENT_RECOVERIES;
