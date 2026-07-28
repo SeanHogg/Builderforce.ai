@@ -59,6 +59,7 @@ import {
 } from '../kanban/managedLaneRoles';
 import { MAX_CONSECUTIVE_AUTORUN_FAILURES, type AutoRunReason } from '../swimlane/evaluateAutoRun';
 import { diagnoseStall, STALL_AFTER_MS, type StallCause } from './stallTriage';
+import { getEffectiveManagerPolicy } from './managerPolicyStore';
 
 const CENSUS_TTL_SECONDS = 120;
 
@@ -101,6 +102,27 @@ export interface CensusTicketFacts {
    * sign-off cohort classify as itself rather than as a dispatch problem.
    */
   stageOwedRoles: string[];
+}
+
+/**
+ * The slice of the effective manager policy the census must honour.
+ *
+ * A REQUIRED parameter rather than an optional flag, and that is the whole point. The
+ * platform has two diagnosis paths over the same taxonomy — the deep stall triage and
+ * this census — and when `requireSignoffToComplete` became a project setting (0380) only
+ * the first was taught to consult it. The census went on reporting an `awaiting_signoff`
+ * cohort for a project whose gate was switched OFF, and `systemicDiagnosis` promoted that
+ * cohort to a platform finding ("a defect in the sign-off recording mechanism"), sending
+ * an operator after a gate that was not holding anything. Measured on project 11 at api
+ * 2026.7.175, hours after the gate was disabled: 135 tickets still counted, 76 of them
+ * raised as an open finding.
+ *
+ * Making it non-optional means a third path cannot be added without answering the
+ * question, which is the only guard that would have caught this one.
+ */
+export interface CensusPolicy {
+  /** The project's effective `requireSignoffToComplete`. */
+  requireSignoff: boolean;
 }
 
 /** One cause bucket of the census. */
@@ -170,7 +192,7 @@ export function classifyBulkAutoRunReason(f: CensusTicketFacts): AutoRunReason {
  * census never claims a PR-side verdict it has not earned — it reports the dispatch-side
  * truth, which is where 578 of the 755 measured stalls actually sit.
  */
-export function censusDiagnose(f: CensusTicketFacts, stallAfterMs = STALL_AFTER_MS) {
+export function censusDiagnose(f: CensusTicketFacts, policy: CensusPolicy, stallAfterMs = STALL_AFTER_MS) {
   return diagnoseStall({
     status: f.status,
     isTerminal: f.lane?.isTerminal ?? f.status === TaskStatus.DONE,
@@ -183,12 +205,20 @@ export function censusDiagnose(f: CensusTicketFacts, stallAfterMs = STALL_AFTER_
     // they are what turns a generic `will_run` into the real `awaiting_signoff` answer
     // for the measured 149-ticket cohort.
     //
+    // ONLY WHEN THE PROJECT ASKS FOR SIGN-OFF (0380). An open manifest slot on a project
+    // that does not require sign-off owes nothing and holds nothing — naming it as the
+    // stall cause hides the ticket's real blocker behind a gate that is switched off.
+    // `loadCensusFacts` additionally skips the manifest query entirely in that case, so
+    // this is the second of two independent stops, not the only one.
+    //
     // `dispatchable: true` is deliberate and is the CONSERVATIVE choice: false would
     // escalate the whole cohort to a human on the census's word alone, and whether the
     // owing role actually has a runnable agent needs the per-agent resolution only the
     // deep stage performs. So the census reports the cohort and lets the deep stage
     // decide who can be asked.
-    stageSignoff: f.stageOwedRoles.length > 0 ? { roleNames: f.stageOwedRoles, dispatchable: true } : null,
+    stageSignoff: policy.requireSignoff && f.stageOwedRoles.length > 0
+      ? { roleNames: f.stageOwedRoles, dispatchable: true }
+      : null,
     signoffDispatchable: null,
     pr: null,
     mergeWithheld: false,
@@ -260,7 +290,10 @@ export interface SharedCensusSignals {
  */
 export async function loadCensusFacts(
   db: Db,
-  args: { tenantId: number; projectId: number; tasks: CensusTask[]; shared?: SharedCensusSignals; now?: number; env?: Env },
+  args: {
+    tenantId: number; projectId: number; tasks: CensusTask[]; policy: CensusPolicy;
+    shared?: SharedCensusSignals; now?: number; env?: Env;
+  },
 ): Promise<CensusTicketFacts[]> {
   const now = args.now ?? Date.now();
   const taskIds = args.tasks.map((t) => t.id);
@@ -294,7 +327,13 @@ export async function loadCensusFacts(
              COALESCE(MIN(rn) FILTER (WHERE status <> ${ExecutionStatus.FAILED}) - 1, COUNT(*)) AS streak
       FROM ranked GROUP BY task_id
     `).catch(() => ({ rows: [] as Array<Record<string, unknown>> })),
-    loadOwedRoles(db, args.tenantId, taskIds).catch(() => new Map<string, string[]>()),
+    // Not merely unused when the project does not require sign-off — NOT ASKED FOR. This
+    // is a full scan of `ticket_participants` for every managed ticket on the board, on a
+    // path the dashboard polls, and on such a project its every row is irrelevant by
+    // definition (see {@link CensusPolicy}).
+    args.policy.requireSignoff
+      ? loadOwedRoles(db, args.tenantId, taskIds).catch(() => new Map<string, string[]>())
+      : Promise.resolve(new Map<string, string[]>()),
     args.shared ? Promise.resolve(args.shared) : loadFallbackSignals(db, args.tenantId, taskIds),
     // MANAGED AUTHORITY, board-wide and per-ticket, in a fixed number of queries: the
     // lane authorities are loaded ONCE for the whole board and the per-ticket decision is
@@ -444,11 +483,14 @@ async function loadFallbackSignals(db: Db, tenantId: number, taskIds: number[]):
  */
 export async function computeStallCensus(
   db: Db,
-  args: { tenantId: number; projectId: number; tasks: CensusTask[]; shared?: SharedCensusSignals; now?: number; env?: Env },
+  args: {
+    tenantId: number; projectId: number; tasks: CensusTask[]; policy: CensusPolicy;
+    shared?: SharedCensusSignals; now?: number; env?: Env;
+  },
 ): Promise<StallCensus> {
   const facts = await loadCensusFacts(db, args);
   const rows = facts.map((f) => {
-    const d = censusDiagnose(f);
+    const d = censusDiagnose(f, args.policy);
     return { taskId: f.taskId, idleMs: f.idleMs, stalled: d.stalled, cause: d.cause };
   });
   const deepDiagnosed = await db
@@ -474,6 +516,13 @@ export async function getStallCensus(
     env,
     censusKey(args.tenantId, args.projectId),
     async () => {
+      // Resolved HERE rather than asked of the caller (0380). Both read paths — the
+      // dashboard endpoint and the `manager.census` MCP tool — would otherwise each have
+      // to remember to pass it, which is the same "one path consulted the policy and the
+      // other did not" split that produced the cohort this fixes. Inside the cache
+      // factory, so it costs one fold per miss and nothing per hit; the tenant tier is
+      // itself read-through cached.
+      const policy = await getEffectiveManagerPolicy(db, args.tenantId, args.projectId, env);
       const rows = await db
         .select({
           id: tasks.id, status: tasks.status, source: tasks.source,
@@ -485,7 +534,12 @@ export async function getStallCensus(
         // the caller has already established the project belongs to this tenant.
         .where(and(eq(tasks.projectId, args.projectId), eq(tasks.archived, false)))
         .catch(() => []);
-      return computeStallCensus(db, { ...args, tasks: rows as CensusTask[], env });
+      return computeStallCensus(db, {
+        ...args,
+        tasks: rows as CensusTask[],
+        policy: { requireSignoff: policy.requireSignoffToComplete },
+        env,
+      });
     },
     { kvTtlSeconds: CENSUS_TTL_SECONDS },
   );
