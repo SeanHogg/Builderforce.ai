@@ -117,6 +117,9 @@ describe('managerChatFindings', () => {
     // this is the sentence that would have shortened the real investigation to nothing.
     expect(finding?.text).toContain('builtin_manager_digest');
     expect(finding?.text).toContain('advertised 96 tools');
+    // …and where to look. The code guards were ALL green while this was broken — the
+    // dead names were in the agent's persisted persona, which no deploy rewrites.
+    expect(finding?.text).toContain('ide_agents.bio');
   });
 
   it('separates "called nothing" from "calls failed" from "never got the tools"', () => {
