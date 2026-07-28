@@ -6910,6 +6910,8 @@
       "coordinate": "Rolle besetzt",
       "schedule": "Terminiert",
       "merge_blocked": "Merge verweigert",
+      "merge_failed": "Merge abgelehnt",
+      "pr_conflict": "PR-Konflikt",
       "triage": "Triagiert",
       "escalate": "Eskaliert",
       "systemic": "Plattform-Befund"
