@@ -33,6 +33,8 @@ export interface CoordinateCompletionResult {
   fromStatus: string;
   toStatus: string;
   outstanding: string[];
+  /** A billable run was started on entry to the destination lane. */
+  dispatched: boolean;
 }
 
 export function decideCoordinatedAdvance(
@@ -75,10 +77,14 @@ export async function coordinateCompletedStage(
   env: Env,
   db: Db,
   runtimeService: RuntimeService,
-  args: { tenantId: number; projectId: number; taskId: number; fromStatus: string },
+  args: {
+    tenantId: number; projectId: number; taskId: number; fromStatus: string;
+    /** See {@link coordinateTicket}'s `dispatch`. Defaults to true. */
+    dispatch?: boolean;
+  },
 ): Promise<CoordinateCompletionResult> {
   const unchanged = (managed: boolean, outstanding: string[] = []): CoordinateCompletionResult => ({
-    managed, advanced: false, fromStatus: args.fromStatus, toStatus: args.fromStatus, outstanding,
+    managed, advanced: false, fromStatus: args.fromStatus, toStatus: args.fromStatus, outstanding, dispatched: false,
   });
   const board = await findCanonicalBoard(db, args.projectId, args.tenantId);
   if (!board?.lifecycleManaged) return unchanged(false);
@@ -96,12 +102,16 @@ export async function coordinateCompletedStage(
     .where(and(eq(tasks.id, args.taskId), eq(tasks.status, args.fromStatus))).returning({ id: tasks.id });
   if (!changed.length) return unchanged(true);
 
-  if (!next.isTerminal) {
-    await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
-      ...args, status: next.key, originLaneKey: args.fromStatus, submittedBy: 'system:coordinator',
-    });
-  }
-  return { managed: true, advanced: true, fromStatus: args.fromStatus, toStatus: next.key, outstanding: [] };
+  // The ADVANCE is a state change and always happens; only the destination lane's run is
+  // subject to the caller's dispatch budget. Withholding the advance would be worse than
+  // spending the run — a satisfied stage that cannot move is a new kind of stall.
+  const dispatched = (args.dispatch ?? true) && !next.isTerminal
+    ? await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+      tenantId: args.tenantId, projectId: args.projectId, taskId: args.taskId,
+      status: next.key, originLaneKey: args.fromStatus, submittedBy: 'system:coordinator',
+    })
+    : false;
+  return { managed: true, advanced: true, fromStatus: args.fromStatus, toStatus: next.key, outstanding: [], dispatched };
 }
 
 export async function coordinateTicket(
@@ -119,8 +129,27 @@ export async function coordinateTicket(
      * manager's coordinate remedy, the sign-off route) leave it unset.
      */
     force?: boolean;
+    /**
+     * May this coordination START a billable run? Defaults to true.
+     *
+     * ── WHY THIS PARAMETER EXISTS ────────────────────────────────────────────────
+     * Coordination was classified as a remedy that "costs no run" — the triage stage
+     * hands it `mayStartRun: false` on that basis — while in fact every one of its three
+     * paths calls `maybeAutoRunOnLaneEntry` and starts one. It was the only branch of the
+     * eight that consulted neither flag, so it spent outside the cap on every pass:
+     * measured live on project 11, `{"dispatched":7,"dispatchCap":3}` on a `free` plan.
+     * The remedy was classified by what it was INTENDED to cost, and nothing checked what
+     * it actually cost.
+     *
+     * With `dispatch: false` the coordination still runs in full — it syncs the manifest,
+     * rewinds to the earliest unmet stage, and advances a satisfied one. It simply does
+     * not start the run at the end, and reports `dispatched: false` honestly, so the
+     * caller's budget accounting matches what happened.
+     */
+    dispatch?: boolean;
   },
 ): Promise<CoordinateResult> {
+  const mayDispatch = args.dispatch ?? true;
   const [task] = await db
     .select({ projectId: tasks.projectId, status: tasks.status })
     .from(tasks)
@@ -165,11 +194,13 @@ export async function coordinateTicket(
       const moved = await db.update(tasks).set({ status: earliest.stageKey, updatedAt: new Date() })
         .where(and(eq(tasks.id, args.taskId), eq(tasks.status, task.status))).returning({ id: tasks.id });
       if (moved.length) {
-        const dispatched = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
-          tenantId: args.tenantId, projectId: task.projectId, taskId: args.taskId,
-          status: earliest.stageKey, originLaneKey: task.status, submittedBy: 'system:coordinator',
-          ...(args.force ? { force: true } : {}),
-        }).catch(() => false);
+        const dispatched = mayDispatch
+          ? await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+            tenantId: args.tenantId, projectId: task.projectId, taskId: args.taskId,
+            status: earliest.stageKey, originLaneKey: task.status, submittedBy: 'system:coordinator',
+            ...(args.force ? { force: true } : {}),
+          }).catch(() => false)
+          : false;
         return { ok: true, status: earliest.stageKey, dispatched, requiredOutstanding };
       }
     }
@@ -180,21 +211,26 @@ export async function coordinateTicket(
   // the same verified advancement path, not merely re-run the current lane gate.
   const advancement = await coordinateCompletedStage(env, db, runtimeService, {
     tenantId: args.tenantId, projectId: task.projectId, taskId: args.taskId, fromStatus: task.status,
+    dispatch: mayDispatch,
   }).catch(() => null);
   if (advancement?.advanced) {
-    return { ok: true, status: advancement.toStatus, dispatched: true, requiredOutstanding };
+    // Report the run that ACTUALLY started, not the advance. Reporting `true` here was
+    // how an advance with no dispatch still debited the caller's budget.
+    return { ok: true, status: advancement.toStatus, dispatched: advancement.dispatched, requiredOutstanding };
   }
 
   // Drive the current lane: the gate resolves + dispatches the next required role
   // and records the hand-off; the normal auto-run covers a non-gated lane.
-  const dispatched = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
-    tenantId: args.tenantId,
-    projectId: task.projectId,
-    taskId: args.taskId,
-    status: task.status,
-    submittedBy: 'system:coordinator',
-    ...(args.force ? { force: true } : {}),
-  }).catch(() => false);
+  const dispatched = mayDispatch
+    ? await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+      tenantId: args.tenantId,
+      projectId: task.projectId,
+      taskId: args.taskId,
+      status: task.status,
+      submittedBy: 'system:coordinator',
+      ...(args.force ? { force: true } : {}),
+    }).catch(() => false)
+    : false;
 
   return { ok: true, status: task.status, dispatched, requiredOutstanding };
 }

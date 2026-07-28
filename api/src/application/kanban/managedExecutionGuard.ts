@@ -4,7 +4,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { projects, swimlanes, tasks } from '../../infrastructure/database/schema';
 import { parseActAsRole, parseCloudAgentRef, parseLaneKey } from '../runtime/cloudDispatch';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
-import { isAgentRefRoleCapable } from './roleCapability';
+import { EMPTY_ROLE_ROSTER, isAgentRefRoleCapable } from './roleCapability';
 import { loadStageProducerSlots, resolveManagedLaneAuthority, slotAuthorizesRole } from './managedLaneRoles';
 
 export interface ManagedExecutionDecision { allowed: boolean; managed: boolean; reason?: string }
@@ -49,7 +49,11 @@ export async function authorizeManagedTaskExecution(
   if (!lane) return { allowed: false, managed: true, reason: `No coordinated stage exists for status '${stageKey}'.` };
 
   const [authority, slots] = await Promise.all([
-    resolveManagedLaneAuthority(db, { tenantId, swimlaneId: lane.id, task })
+    // EMPTY_ROLE_ROSTER, deliberately: this guard reads only `roleKeys` — which stage
+    // authorizes which role — and binding agents to them would be wasted work. WHO may
+    // act as an authorized role is decided one line below by `isAgentRefRoleCapable`,
+    // which resolves through the same capability oracle the roster is built from.
+    resolveManagedLaneAuthority(db, { tenantId, swimlaneId: lane.id, task, roster: EMPTY_ROLE_ROSTER })
       .catch((error) => {
         reportCaughtError(error, { source: "application/kanban/managedExecutionGuard.ts", operation: "authority", context: { logMessage: '[managed-execution-guard] lane authority resolution failed', details: {
           tenantId,

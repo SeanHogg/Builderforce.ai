@@ -32,6 +32,15 @@ export const MAX_TENANT_DISPATCHES_PER_TICK = 25;
 export interface TickDispatchBudget {
   /** Take one slot for `tenantId`. Returns false when the tenant is out of budget. */
   tryReserve(tenantId: number): boolean;
+  /**
+   * Hand a reserved slot back, because the dispatch it was taken for did not start.
+   *
+   * Reserve-then-dispatch means taking the slot BEFORE the outcome is known, and a
+   * dispatcher declines for plenty of ordinary reasons (a live run, a cooldown, a lane
+   * gate). Without a release the ceiling would leak on every decline and a busy project
+   * would starve itself out of a budget it never spent.
+   */
+  release(tenantId: number): void;
   /** Slots already taken by `tenantId` this tick (any sweep). */
   reserved(tenantId: number): number;
   /** Whether `tenantId` has any slot left, without taking one. */
@@ -56,6 +65,12 @@ export function createTickDispatchBudget(
       taken.set(tenantId, used + 1);
       return true;
     },
+    release(tenantId) {
+      const used = taken.get(tenantId) ?? 0;
+      // Floored at zero: an over-release is a caller bug, and silently going negative
+      // would hand the tenant free budget — the exact failure this module prevents.
+      if (used > 0) taken.set(tenantId, used - 1);
+    },
     reserved(tenantId) {
       return taken.get(tenantId) ?? 0;
     },
@@ -66,6 +81,62 @@ export function createTickDispatchBudget(
       let sum = 0;
       for (const n of taken.values()) sum += n;
       return sum;
+    },
+  };
+}
+
+/**
+ * ONE tenant's view of the budget — the shape every dispatch site should hold.
+ *
+ * ── WHY THIS EXISTS RATHER THAN "REMEMBER TO CALL tryReserve" ────────────────────
+ * The AI-manager sweep held the budget and checked `hasRoom` ONCE per project as an
+ * admission gate, ran an entire pass, then replayed the spend:
+ *
+ *     for (let i = 0; i < s.dispatched; i++) budget.tryReserve(p.tenantId);
+ *
+ * That is dispatch-then-count. The boolean `tryReserve` returns was discarded because by
+ * then the runs had already happened, so the ceiling could not refuse anything: measured
+ * in simulation, 43 runs against a ceiling of 25 for one project, 38 across five projects
+ * belonging to one tenant. The header rule was written down and the code did the opposite.
+ *
+ * A rule that must be remembered at each of eight dispatch sites will be forgotten at the
+ * ninth. So the budget is no longer passed around as a counter to be updated afterwards —
+ * it is passed as this object, whose only spending verb is {@link DispatchReserver.spend},
+ * which reserves first by construction.
+ */
+export interface DispatchReserver {
+  /** Slots left for this tenant, without taking one. */
+  hasRoom(): boolean;
+  /**
+   * Reserve a slot, run `dispatch`, and hand the slot back when nothing started.
+   * Returns `refused` when there was no room — the dispatch is never attempted.
+   */
+  spend<T>(dispatch: () => Promise<T>, started: (result: T) => boolean): Promise<{ refused: boolean; result: T | null }>;
+  /** Slots this reserver still holds — what the caller should report as `dispatched`. */
+  spent(): number;
+}
+
+export function tenantDispatchReserver(budget: TickDispatchBudget, tenantId: number): DispatchReserver {
+  let held = 0;
+  return {
+    hasRoom: () => budget.hasRoom(tenantId),
+    spent: () => held,
+    async spend(dispatch, started) {
+      if (!budget.tryReserve(tenantId)) return { refused: true, result: null };
+      held += 1;
+      let result: Awaited<ReturnType<typeof dispatch>>;
+      try {
+        result = await dispatch();
+      } catch (error) {
+        budget.release(tenantId);
+        held -= 1;
+        throw error;
+      }
+      if (!started(result)) {
+        budget.release(tenantId);
+        held -= 1;
+      }
+      return { refused: false, result };
     },
   };
 }
