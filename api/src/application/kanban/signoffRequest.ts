@@ -48,6 +48,10 @@
  *
  * Pure string/JSON building, no IO — trivially unit-tested.
  */
+// Deliberately NO import of MAX_UNATTESTED_RUNS from './participantStates': that
+// module imports signoffContract, which renders these very templates at module
+// load, so the edge would close a cycle and leave SIGNOFF_TOOL_NAME uninitialised
+// at import time. The instruction states the bound in words instead of the number.
 import { advertisedName } from '../llm/toolNaming';
 
 /**
@@ -103,7 +107,10 @@ export function buildSignoffRequestInstruction(spec: SignoffRequestSpec): string
     + `an approval with no linked contribution is itself an audit finding. `
     + `If you request changes, describe the specific fixes for the producing role to resolve. `
     + `\`${SIGNOFF_TOOL_NAME}\` is available to you in this run — use it directly; do NOT attempt an HTTP request, `
-    + `you have no network tool and the verdict would simply never be recorded.`
+    + `you have no network tool and the verdict would simply never be recorded. `
+    + `Make this call BEFORE you finish: reviewing the work and then ending your turn without it leaves the ticket `
+    + `blocked on you exactly as if you had never run, and the ask is bounded — after a few runs that record no `
+    + `verdict the slot stops being asked and is handed to a person.`
   );
 }
 
@@ -131,7 +138,10 @@ export function buildProducerRequestInstruction(spec: SignoffRequestSpec): strin
     + `and \`contribution\` linking the evidence you produced (prUrl, diffFiles, executionId). `
     + (lane ? `Pass laneKey exactly as given — your record is matched to this lane's accountability slot by it. ` : '')
     + `\`${SIGNOFF_TOOL_NAME}\` is available to you in this run — use it directly; do NOT attempt an HTTP request, `
-    + `you have no network tool and the record would simply never be written.`
+    + `you have no network tool and the record would simply never be written. `
+    + `Make this call BEFORE you finish: producing the deliverable and then ending your turn without it leaves the `
+    + `ticket blocked on you, and the ask is bounded — after a few runs that record nothing the slot stops being `
+    + `asked and is handed to a person.`
   );
 }
 

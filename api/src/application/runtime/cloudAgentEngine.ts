@@ -59,7 +59,7 @@ import {
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type ToolControl, type LimbicState, type LimbicEvent, type PolicyGate, type AgentExecParams, type Capability,
 } from '@builderforce/agent-tools';
 import { resolveWebSearchCredential, type ResolvedWebSearchCredential } from './webSearchCredential';
-import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel } from './cloudDispatch';
+import { parseRemediation, parseFollowUp, parseRoleInstruction, parseCloudAgentRef, parseModel } from './cloudDispatch';
 import { classifyTaskAction } from '../llm/classifyTask';
 import { deriveAllocationCategory } from '../llm/allocationCategories';
 import { normalizeActionType, learnedRoutingEnabled, type ActionType } from '../llm/actionTypes';
@@ -2857,6 +2857,13 @@ export async function prepareCloudRun(
   const isIncidentRun = isIncidentTriagePayload(payload);
   const incidentRunId = incidentIdFromPayload(payload);
 
+  // The role-participation ask: "you are the <role> accountable for this ticket —
+  // record your verdict with builtin_kanban_signoff". Written by
+  // buildSignoffRequestPayload / buildProducerRequestPayload and, until this line,
+  // read by nothing — so a reviewer was dispatched to judge work and never asked to
+  // record the judgement. See parseRoleInstruction for the measured impact.
+  const roleInstruction = parseRoleInstruction(payload);
+
   // Show the agent the repo it's about to edit BEFORE it spends an LLM call, so a
   // wrong/empty binding is caught up-front instead of after a conceptual non-answer
   // (the exec #54 failure: the agent never saw that only `agent-runtime` was bound).
@@ -2876,6 +2883,12 @@ export async function prepareCloudRun(
     : null;
 
   const userContent = [
+    // FIRST, deliberately: this is the accountability ask the run exists to answer.
+    // A role run that produces the deliverable but records nothing leaves its slot
+    // in `in_progress` forever — the state whose only exit is this tool call.
+    roleInstruction
+      ? `## Your role on this ticket — RECORD YOUR VERDICT\n\n${roleInstruction}`
+      : null,
     isReviewRun
       ? `## Acceptance review (do NOT edit code)\n\nThis is a VALIDATOR REVIEW of already-Done work — verify the ticket was genuinely completed against its PRD/requirements and the repository. Read the branch/PR and the relevant code with search_code / read_file, judge whether the deliverable is complete and correct, then call the \`builtin_reviews_record\` tool with your verdict ('complete' or 'gaps'), a short assessment, and any concrete gaps (each becomes a GAP ticket).\n\n**Anchor every gap you can to the code.** When a gap is about a specific line you read, pass \`path\` (repo-relative, exactly as it appears in the change) and \`line\` on that gap — it is then posted as an inline comment on the pull request, on that line, where a human reviewer will actually see it. Only anchor to files this change actually touched. Leave \`path\`/\`line\` unset for gaps about work that is MISSING (no tests, an unimplemented requirement) — those have nowhere to point and go in the review summary, which is equally visible. Do NOT invent a location to satisfy the field.\n\nDo NOT write_file / delete_file or change the ticket's status — you are reviewing, not implementing.`
       : null,

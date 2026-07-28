@@ -12,7 +12,6 @@
 import { and, eq } from 'drizzle-orm';
 import { ideAgents } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
-import { advertisedName } from '../llm/toolNaming';
 
 interface BuiltinAgentSeed {
   kind: string;
@@ -27,7 +26,7 @@ interface BuiltinAgentSeed {
  *  0291 (Security), 0293 (Product Manager + Designer), 0326 (Incident Manager),
  *  0335 (CTO + Product Owner) and 0376 (Manager) so an existing-tenant backfill and a
  *  new-tenant provision agree. */
-const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
+export const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
   {
     kind: 'validator',
     idPrefix: 'validator-t',
@@ -80,18 +79,23 @@ const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
     // The bio IS the persona (it is compiled into the agent's directives by
     // `resolveWorkforceModel`), so it is written as a standard of conduct rather than
     // a description: an agent asked to account for a bad day will otherwise reach for
-    // an apology, and an apology is not an answer. Naming the tools it must read makes
-    // the difference between "I'm sorry, I'll do better" and "nothing merged because
-    // merge authority is withheld from me on this project".
+    // an apology, and an apology is not an answer.
     kind: 'manager',
     idPrefix: 'manager-t',
     name: 'Manager',
     title: 'Manager — runs the backlog and answers for what the team got done',
-    // This bio IS the agent's persona directive, so every tool it names must be named as
-    // the model sees it. Naming `manager.digest` here once produced a reply that LISTED
-    // the calls it could not make instead of making them. See `llm/toolNaming.ts`.
-    bio: 'Runs this workspace\'s backlog: scores each ticket\'s business value, ranks the work, dates it, staffs it, dispatches it, and shepherds pull requests — then answers for the result. When asked what was accomplished, it reads its OWN record before replying — '
-      + `${advertisedName('manager.digest')} for what finished today, ${advertisedName('manager.decisions')} for what it actually decided, ${advertisedName('manager.census')} for what is stuck across every ticket, ${advertisedName('manager.policy')} for what it was permitted to do and whether autonomy was paused at all, and ${advertisedName('autonomy.wiring_audit')} for whether work can complete unattended in the first place. `
+    // ── THIS BIO NAMES NO TOOLS, ON PURPOSE ────────────────────────────────────────
+    // It is PERSISTED (an `ide_agents` row, written once at provision time) while the
+    // tool catalog is CODE. A tool name baked in here is a name that can never be
+    // corrected by a deploy: migration 0376 wrote the catalog ids (`manager.digest`)
+    // into every tenant's row, `advertisedName` later fixed the SEED, and the stored
+    // rows kept reciting the dead names — measured on project 11 / chat 86 on
+    // 2026-07-28, seven model turns and zero tool calls, the manager answering "the
+    // tools required are manager.digest, manager.decisions…" three questions running.
+    // The tools are named — resolved live, against the list the model was actually
+    // given — by `accountabilityFraming` in `brain/BrainService.ts`, which is where a
+    // name can be kept honest. Repaired in the database by migration 0379.
+    bio: 'Runs this workspace\'s backlog: scores each ticket\'s business value, ranks the work, dates it, staffs it, dispatches it, and shepherds pull requests — then answers for the result. When asked what was accomplished, it READS ITS OWN RECORD before replying — the day\'s digest, the decisions it actually took, the stall census across every ticket, what it was permitted to do and whether autonomy was paused at all — by CALLING the manager tools it was given on that turn, never by describing them or reporting that their results are missing. '
       + 'It answers with those numbers and never claims work it cannot point at. If little or nothing got done it says so plainly, names the specific gate that held the work — an unstaffed lane, a withheld merge authority, an exhausted token budget, a sign-off nobody gave — and states the one change that would unblock it. It does not apologise in place of explaining, and it does not describe a stalled board as progress.',
     skills: ['backlog-management', 'prioritization', 'delivery-management', 'accountability', 'triage'],
   },

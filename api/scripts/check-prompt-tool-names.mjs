@@ -10,7 +10,7 @@
  * call it would like to make and finishes successfully. Nothing downstream can tell that
  * run apart from one that simply chose not to act.
  *
- * It has now shipped twice:
+ * It has now shipped three times:
  *   • the manager's accountability framing named `manager.digest`, and the model replied
  *     "The tools required are manager.digest, manager.decisions…" instead of calling them;
  *   • `kanban/signoffRequest.ts` — the instruction EVERY reviewer and producer run on a
@@ -19,18 +19,31 @@
  *     lane moves, 0 tickets finished**, 281 tickets stalled on `awaiting_signoff`, and 17
  *     slots classified `exhausted` for agents that had never been given a working way to
  *     record a verdict.
+ *   • migration `0376_manager_chat.sql` — which wrote the SAME dead ids into every
+ *     tenant's persisted Manager persona (`ide_agents.bio`). Fixing the TypeScript seed
+ *     did NOT fix those rows (`provisionBuiltinAgents` skips a tenant that already has
+ *     the agent), so the manager went on reciting them for a full release: project 11 /
+ *     chat 86, 2026-07-28, api 2026.7.172 — 7 model turns, 102 tools advertised, ZERO
+ *     tool calls. Repaired by 0379.
  *
  * The first fix was a unit test on one prompt. The second defect was in a different file,
- * so the test did not cover it. This checks the property everywhere instead.
+ * so the test did not cover it. The third was not in TypeScript at all. This checks the
+ * property everywhere instead — `src/**\/*.ts` AND `migrations/*.sql`.
  *
  * ── THE RULE ─────────────────────────────────────────────────────────────────────
- * No STRING LITERAL that reads as prose may contain a catalog tool id unless it also
- * contains that tool's advertised name.
+ * TypeScript: no STRING LITERAL that reads as prose may contain a catalog tool id unless
+ * it also contains that tool's advertised name.
  *
- * Deliberately AST-based and literal-only: doc comments discuss tool ids constantly and
- * legitimately, and only a string can reach a model. "Reads as prose" = contains a space,
- * which excludes the bare `'kanban.signoff'` constants, allowlist entries and Set members
- * that must keep the catalog id.
+ * SQL: a prose literal in a migration may name NO tool — not the catalog id, not the
+ * advertised name. A migration writes DATA, and prompt data is never rewritten by a
+ * deploy, so there is no tool name that stays correct in it. (The one exemption is the
+ * NEEDLE argument of `replace()`: a repair migration must quote the dead text in order
+ * to find it. See 0379.)
+ *
+ * Deliberately literal-only: doc comments discuss tool ids constantly and legitimately,
+ * and only a string can reach a model. "Reads as prose" = contains a space, which
+ * excludes the bare `'kanban.signoff'` constants, allowlist entries and Set members that
+ * must keep the catalog id.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -134,10 +147,126 @@ for (const filePath of files) {
   visit(sourceFile);
 }
 
+// ---------------------------------------------------------------------------
+// SQL MIGRATIONS — the persisted half of the same defect.
+//
+// A migration writes prompt TEXT into a row (`ide_agents.bio` is compiled straight into
+// an agent's system prompt). Unlike code, that text is never revisited by a deploy, so a
+// tool name in it is wrong forever the moment the catalog moves — which is exactly what
+// 0376 did. Hence the stricter rule here: name no tool at all.
+// ---------------------------------------------------------------------------
+
+const MIGRATION_DIRS = ['migrations', 'transactional-migrations'];
+const ADVERTISED = new Map([...CATALOG].map((id) => [advertisedName(id), id]));
+
+/** Every single-quoted SQL literal with its offset, `''` escapes folded to `'`. */
+function sqlLiterals(text) {
+  const out = [];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== "'") continue;
+    const start = i;
+    let value = '';
+    i++;
+    for (; i < text.length; i++) {
+      if (text[i] !== "'") { value += text[i]; continue; }
+      if (text[i + 1] === "'") { value += "'"; i++; continue; }
+      break;
+    }
+    out.push({ start, end: i, value });
+  }
+  return out;
+}
+
+/** `-- line comments` blanked out (length-preserving, so literal offsets still line up).
+ *  Comments discuss dead tool ids on purpose — this file's own header does. */
+function stripSqlComments(text) {
+  return text.replace(/--[^\n]*/g, (m) => ' '.repeat(m.length));
+}
+
+/**
+ * Offsets spanned by the NEEDLE argument of every `replace(haystack, needle, repl)` call.
+ *
+ * A repair migration has to quote the defective text verbatim to match it; flagging that
+ * would make the defect unfixable. Only argument 1 is exempt — the REPLACEMENT is new
+ * prompt text and is held to the rule.
+ */
+function replaceNeedleRanges(text) {
+  const ranges = [];
+  for (const m of text.matchAll(/\breplace\s*\(/gi)) {
+    let depth = 1;
+    let arg = 0;
+    let argStart = m.index + m[0].length;
+    for (let i = argStart; i < text.length && depth > 0; i++) {
+      const ch = text[i];
+      if (ch === "'") { // skip the literal wholesale, quotes inside must not move `depth`
+        for (i++; i < text.length; i++) {
+          if (text[i] !== "'") continue;
+          if (text[i + 1] === "'") { i++; continue; }
+          break;
+        }
+        continue;
+      }
+      if (ch === '(') { depth++; continue; }
+      if (ch === ')') { depth--; if (depth === 0 && arg === 1) ranges.push([argStart, i]); continue; }
+      if (ch === ',' && depth === 1) {
+        if (arg === 1) ranges.push([argStart, i]);
+        arg++;
+        argStart = i + 1;
+      }
+    }
+  }
+  return ranges;
+}
+
+/**
+ * A literal used as a SEARCH PATTERN (`bio LIKE '%manager.digest%'`) rather than as data.
+ * Same reasoning as the `replace()` needle: a repair migration must be able to FIND the
+ * defective rows, and the guard clause that makes it idempotent is exactly that search.
+ */
+function isSearchPattern(text, start) {
+  return /\b(?:i?like|similar\s+to)\s*$/i.test(text.slice(Math.max(0, start - 40), start));
+}
+
+const sqlFiles = [];
+for (const dir of MIGRATION_DIRS) {
+  const full = path.resolve(dir);
+  if (!fs.existsSync(full)) continue;
+  for (const name of fs.readdirSync(full)) {
+    if (name.endsWith('.sql')) sqlFiles.push(path.join(full, name));
+  }
+}
+
+for (const filePath of sqlFiles) {
+  const rel = path.relative(process.cwd(), filePath);
+  const raw = fs.readFileSync(filePath, 'utf8');
+  const text = stripSqlComments(raw);
+  const exempt = replaceNeedleRanges(text);
+  const lineOf = (offset) => text.slice(0, offset).split('\n').length;
+
+  for (const literal of sqlLiterals(text)) {
+    if (!literal.value.includes(' ')) continue; // an identifier or an enum value, not prose
+    if (exempt.some(([from, to]) => literal.start >= from && literal.end <= to)) continue;
+    if (isSearchPattern(text, literal.start)) continue;
+
+    const id = [...CATALOG].find((t) => literal.value.includes(t));
+    const advertised = [...ADVERTISED.keys()].find((name) => literal.value.includes(name));
+    if (!id && !advertised) continue;
+    violations.push(
+      `${rel}:${lineOf(literal.start)} a migration writes prompt text naming the tool `
+      + `'${id ?? advertised}'. Persisted prompt text is never rewritten by a deploy, so the `
+      + 'name is wrong forever once the catalog moves (0376 → 0379). State the standard and '
+      + 'let the prompt builder name the tool at reply time, against the list the model was '
+      + 'actually given.',
+    );
+  }
+}
+
 if (violations.length > 0) {
   console.error('Prompts naming a tool the model was never given:\n');
   for (const v of violations) console.error(`  ${v}`);
   console.error(`\n${violations.length} violation(s). See api/scripts/check-prompt-tool-names.mjs for the rule.`);
   process.exit(1);
 }
-console.log(`check-prompt-tool-names: OK (${CATALOG.size} catalog tools, ${files.length} files)`);
+console.log(
+  `check-prompt-tool-names: OK (${CATALOG.size} catalog tools, ${files.length} TS files, ${sqlFiles.length} SQL migrations)`,
+);

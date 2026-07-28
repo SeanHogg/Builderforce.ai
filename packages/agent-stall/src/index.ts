@@ -119,6 +119,73 @@ export function announcesUntakenAction(text: string): boolean {
 }
 
 /**
+ * The THIRD shape of the same stall, and the one that reads most like an answer: the
+ * model neither promises nor writes a pseudo-call — it reports that the tool data is
+ * MISSING. "The tools required are manager.digest, manager.decisions, manager.census
+ * and manager.policy." · "The required tools have not returned results yet, so I have
+ * no new data." It never called them; nothing was ever going to return.
+ *
+ * Measured on the manager's accountability chat (project 11, chat 86, 2026-07-28,
+ * `xai-oauth/grok-4.3`): SEVEN model turns, ZERO tool calls, and three of the replies
+ * were this shape. It scored as a complete answer because there is no first-person
+ * commitment and no invocation syntax to match — so the loop shipped "I have no data"
+ * to a person who had asked the manager to account for a dead board.
+ *
+ * Every alternative below requires the word "tool(s)" next to the missing-data claim.
+ * That is the discriminator: an agent that genuinely cannot answer says "I do not have
+ * the task status data" (a real answer, left alone), while an agent blaming absent TOOL
+ * RESULTS on a turn where it called nothing is describing a call it never made.
+ *
+ * Scanned over the WHOLE reply, not just the tail — this claim is usually the opening
+ * sentence, with the consequences ("so I cannot identify the gate") after it.
+ */
+/**
+ * A tool named the way a CATALOG names it — `manager.digest`, `autonomy.wiring_audit`.
+ * Not what the model was advertised (that is {@link TOOL_IDENT}), but exactly what a
+ * model reciting a system prompt writes, so it is what shows up in these replies.
+ *
+ * The lookahead keeps FILE names out: "the build failed — missing package.json" is an
+ * answer, not a stall, and a coding agent says it often.
+ */
+const FILE_EXTENSION = '(?:ts|tsx|js|jsx|mjs|cjs|json|md|ya?ml|sql|toml|lock|txt|env|html|css|py|go|rs|sh|png|svg|csv|xml)\\b';
+const DOTTED_TOOL_IDENT = `\\b[a-z][a-z0-9_]{2,}\\.(?!${FILE_EXTENSION})[a-z][a-z0-9_]{2,}\\b`;
+
+const UNCALLED_TOOL_CLAIM = new RegExp(
+  [
+    // "The tools required are X, Y and Z." / "The required tools are …"
+    '\\b(?:required tools?\\b|tools? required\\b|tools? (?:i |we )?(?:need|require)\\b)',
+    // "…tools have not returned results" / "…the tool has not returned anything yet"
+    "\\btools?\\b[^.!?]{0,80}?\\b(?:have|has|had|were|was)(?:n'?t| not)\\s+(?:yet\\s+)?(?:return|returned|provided|available|run|called)",
+    // "no tool results", "no results from the tools", "no tool outputs for project 11"
+    '\\bno\\s+(?:new\\s+)?tools?\\s+(?:results?|outputs?|data|returns?)\\b',
+    '\\bno\\s+results?\\s+(?:from|for)\\s+(?:the\\s+)?tools?\\b',
+    // "tool outputs never provided" / "the tool results were never returned"
+    '\\btools?\\s+(?:results?|outputs?)\\b[^.!?]{0,40}?\\b(?:never|not)\\s+(?:been\\s+)?(?:provided|returned|available)',
+    // "requires the tool outputs" / "awaiting the tool results"
+    '\\b(?:requires?|awaiting|waiting on|pending)\\s+(?:those\\s+|the\\s+)?tools?\\s+(?:results?|outputs?)',
+    // The same claim with the TOOL NAMED instead of the word "tool" — "no results from
+    // manager.digest", "missing builtin_manager_policy results". The name IS the
+    // discriminator here: prose does not carry tool identifiers by accident.
+    `\\bno\\s+(?:new\\s+)?(?:results?|data|outputs?|returns?)\\s+(?:from|for|on)\\s+(?:the\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`,
+    `\\b(?:missing|awaiting|pending|without)\\s+(?:the\\s+|those\\s+)?(?:results?\\s+(?:from|of|for)\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`,
+  ].join('|'),
+  'i',
+);
+
+/**
+ * Does this reply blame MISSING TOOL DATA on a turn that called nothing?
+ *
+ * Exported alongside {@link announcesUntakenAction} because the two are different
+ * failure shapes with the same remedy, and a caller reporting WHY it re-prompted
+ * should be able to tell them apart.
+ */
+export function claimsMissingToolData(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  return UNCALLED_TOOL_CLAIM.test(t);
+}
+
+/**
  * How many times ONE run may re-prompt a model that announced a tool call and then
  * ended the turn without making one. Each costs a model turn, so it stays small —
  * but >1, because the stall repeats: the models that promise "I'll search…" tend to
@@ -135,7 +202,12 @@ export const MAX_ANNOUNCEMENT_RECOVERIES = 3;
  */
 export function stallRecoveryNudge(lastChance: boolean): string {
   return (
-    'You said you would call a tool but did not actually call one — your last turn made zero tool calls.'
+    // Covers BOTH stall shapes: the promise ("I'll check…") and the missing-data claim
+    // ("the required tools have not returned results"). The second wording matters —
+    // a model told only "you said you would call a tool" when it never said any such
+    // thing tends to repeat the same excuse rather than act.
+    'Your last turn made zero tool calls. You either said you would call a tool and did not, or reported'
+    + ' that tool results were missing — no results exist because you never made the call.'
     + ' Make the call NOW in this turn, then answer using its result. If no tool can give you that data,'
     + ' say plainly which data you are missing and answer with what you already have.'
     + ' Do not announce another call.'
@@ -161,14 +233,15 @@ export interface StalledTurnInput {
 
 /**
  * Is this turn a stall at all — tools were offered, none were called, and the text
- * only promises? The budget-independent half, so the two gates below cannot drift on
- * WHAT a stall is while disagreeing only on what to do about it.
+ * either only promises or blames the absence of results it never asked for? The
+ * budget-independent half, so the two gates below cannot drift on WHAT a stall is
+ * while disagreeing only on what to do about it.
  */
 function isStalledTurn(input: StalledTurnInput): boolean {
   return (
     input.toolCallCount === 0
     && input.availableToolCount > 0
-    && announcesUntakenAction(input.text)
+    && (announcesUntakenAction(input.text) || claimsMissingToolData(input.text))
   );
 }
 
