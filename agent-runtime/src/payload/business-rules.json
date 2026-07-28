@@ -1,0 +1,157 @@
+{
+  "title": "Payload Generation Business Rulesets",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "required": ["title", "version", "rulesets"],
+    "properties": {
+      "title": {
+        "type": "string",
+        "pattern": "^[\\w.-]+$",
+        "description": "Ruleset catalog title."
+      },
+      "version": {
+        "type": "string",
+        "pattern": "^\\d+\\.\\d+$",
+        "description": "SemVer minor version of the catalog."
+      },
+      "rulesets": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/ruleset"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "ruleset": {
+      "type": "object",
+      "required": ["name", "version", "description"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[\\w.-]+$",
+          "description": "Ruleset identifier."
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+$",
+          "description": "SemVer minor version."
+        },
+        "description": {
+          "type": "string"
+        },
+        "appliesTo": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[\\w.-]+$"},
+          "description": "Payload type IDs that can use this ruleset."
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[\\w.-]+$",
+                "description": "Rule identifier."
+              },
+              "description": {
+                "type": "string"
+              },
+              "appliesTo": {
+                "type": "array",
+                "items": {"type": "string", "pattern": "^[\\w.-]+$"}
+              },
+              "typeOrDerived": {
+                "type": "string",
+                "enum": ["string", "number", "integer", "boolean", "date", "epoch", "derivedFunction"],
+                "description": "Base type or derived function key."
+              },
+              "nullable": {
+                "type": "boolean",
+                "default": true
+              },
+              "coerce": {
+                "type": "boolean",
+                "default": true,
+                "description": "Whether to coerce source to type. Omitted = reuse nullable."
+              },
+              "enumMappings": {
+                "type": "object",
+                "patternProperties": {
+                  "^[\\w.:]+$": {"type": "string"}
+                },
+                "description": "Map internal codes to external labels for enumeration mapping."
+              },
+              "condition": {
+                "type": "object",
+                "properties": {
+                  "field": {
+                    "type": "string",
+                    "pattern": "^[\\w.*().-]+$"
+                  },
+                  "operator": {
+                    "type": "string",
+                    "enum": [
+                      "equals",
+                      "notEquals",
+                      "contains",
+                      "startsWith",
+                      "endsWith",
+                      "greaterThan",
+                      "lessThan",
+                      "exists"
+                    ]
+                  },
+                  "value": {}
+                },
+                "required": ["field", "operator"]
+              },
+              "fn": {
+                "type": "string",
+                "description": "Used only when typeOrDerived is \"derivedFunction\" (name in generated ruleset map)."
+              },
+              "functionAliases": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Operator": {
+      "enum": ["equals", "notEquals", "contains", "startsWith", "endsWith", "greaterThan", "lessThan", "exists"]
+    }
+  },
+  "rulesets": [
+    {
+      "name": "core",
+      "version": "1.0.0",
+      "description": "Default ruleset for common payload transformations.",
+      "rules": [
+        {
+          "name": "createdAtIso",
+          "description": "Coerce epoch timestamp to ISO 8601.",
+          "typeOrDerived": "date",
+          "nullable": true,
+          "coerce": true
+        },
+        {
+          "name": "statusLabel",
+          "description": "Map internal status codes to external-facing labels.",
+          "typeOrDerived": "string",
+          "enumMappings": {
+            "A": "Active",
+            "I": "Inactive",
+            "R": "Retired"
+          }
+        }
+      ]
+    }
+  ]
+}
