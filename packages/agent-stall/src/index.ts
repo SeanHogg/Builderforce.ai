@@ -1,12 +1,18 @@
 /**
- * Announced-but-untaken tool call — detection + recovery, shared by every agent loop.
+ * Untaken tool call — detection + recovery, shared by every agent loop.
  *
- * The failure it fixes: a model ends its turn saying what it is ABOUT to do —
- * `"I'll search the codebase for the handler."`, `"Calling the tool now."` — with
- * `stopReason: stop` and ZERO tool calls. A loop that treats "no tool calls" as
- * "done" then hands the user a promise instead of a result, and the run is over.
- * Observed on `xai-oauth/grok-4.3` in a VS Code Brain chat, but it is a
- * model-behaviour class, not a vendor bug.
+ * The failure it fixes: a turn ends with `stopReason: stop` and ZERO tool calls while
+ * tools were available, and a loop that treats "no tool calls" as "done" hands the user
+ * words instead of a result. It wears three faces, all of them observed on
+ * `xai-oauth/grok-4.3` and all of them a model-behaviour class rather than a vendor bug:
+ *
+ *   1. the PROMISE — `"I'll search the codebase for the handler."`
+ *   2. the PSEUDO-CALL — `"run tool builtin_chats_list_tickets with chatId is 85"`
+ *   3. the MISSING-DATA CLAIM — `"The required tools have not returned results yet."`
+ *
+ * The third is the one that reads like an answer, and it is why the manager's
+ * accountability chat shipped "I have no data" to a person asking it to account for a
+ * dead board (project 11 / chat 86, 2026-07-28: 7 turns, 102 tools, 0 calls).
  *
  * Deliberately zero-dependency, framework-free and free of Node builtins: the Brain
  * run loop imports this into a BROWSER bundle (VS Code webview / Next.js client)
