@@ -1,0 +1,3 @@
+# Mock and integration utilities for the payload/display/reasoning test suite
+
+This directory holds mocks and integration helpers used by the test suite. To avoid overcounting in coverage, these mocks are always excluded from **collectCoverageFrom**. Real implementations should eventually live in **assertStrictSchema, validateAllowedFields**: the existing `tests/common.ts` utilities. What belongs to real modules (e.g.,的消息 mock) is tracked in `tests/mocks/modules/`. No real implementations in this workspace — wing tests to verify missing modules.
