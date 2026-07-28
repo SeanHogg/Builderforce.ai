@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect, afterEach } from 'vitest';
 import {
   computeDailyDigest, contributorKind, dayWindow, rankContributors, summarizeDecisions, isQuietDay,
@@ -212,5 +214,102 @@ describe('computeDailyDigest SQL', () => {
     expect(result.digest.shipped).toEqual([]);
     expect(result.tallies).toEqual([]);
     expect(isQuietDay(result.digest)).toBe(true);
+  });
+});
+
+/**
+ * WHO GETS CREDITED FOR FINISHING A TICKET.
+ *
+ * Reported from the live Manager surface (project 11, 2026-07-28): every member of the
+ * "Who moved work today" list read `0 finished`, beside honest run counts — Bob Developer
+ * at 4,404 runs and 0 finished. On that day the zero was also TRUE (nothing reached a
+ * done lane at all), but the attribution underneath it was wrong and would have kept
+ * reading 0 once tickets did start finishing.
+ *
+ * The `shipped` column was grouped by the TICKET'S ASSIGNEE
+ * (`tasks.assigned_user_id / assigned_agent_ref / assigned_agent_host_id`). On a
+ * LIFECYCLE-MANAGED board the assignee is the Coordinator, never the executor — an
+ * invariant this codebase states in `evaluateAutoRun`, `stallTriage` and
+ * `systemicDiagnosis`, each warning that assigning an owner does not make anyone able to
+ * work the ticket. So every completion on such a board credited one Coordinator row and
+ * every agent that did the work showed zero.
+ *
+ * The other two columns never had this problem: `runs` attributes to
+ * `executions.cloud_agent_ref` and `moves` to `task_status_transitions.actor_ref`. The
+ * fix makes `shipped` read the same transition stamp, so all three columns answer "who
+ * did this" the same way.
+ */
+describe('contributor `shipped` attribution', () => {
+  const source = readFileSync(
+    fileURLToPath(new URL('./dailyDigest.ts', import.meta.url).href),
+    'utf8',
+  );
+
+  it('credits the actor of the terminal hop, not the ticket assignee', () => {
+    // The assignee columns must no longer appear in the ownership rollup at all.
+    expect(source).not.toMatch(/\.groupBy\(tasks\.assignedUserId, tasks\.assignedAgentRef/);
+    expect(source).toMatch(/\.groupBy\(taskStatusTransitions\.actorKind, taskStatusTransitions\.actorRef\)/);
+  });
+
+  it('counts each finished ticket once, however many terminal hops it made', () => {
+    // A ticket can enter a done lane, be reopened and re-finish inside one day. Without
+    // the distinct it would inflate its actor's credit on every re-entry.
+    expect(source).toMatch(/count\(distinct \$\{taskStatusTransitions\.taskId\}\)/);
+  });
+
+  it('excludes backward hops — a redo is not a finish', () => {
+    expect(source).toMatch(/isNull\(taskStatusTransitions\.isBackward\)/);
+    expect(source).toMatch(/eq\(taskStatusTransitions\.isBackward, false\)/);
+  });
+
+  it('derives "terminal" from the shared status set, not a second hand-written list', () => {
+    // A board that renames its done lane must not silently stop crediting anyone.
+    expect(source).toMatch(/notInArray\(taskStatusTransitions\.toStatus, NON_TERMINAL_TASK_STATUSES\)/);
+  });
+
+  it('routes the credit through the SAME actor-kind mapping the lane moves use', () => {
+    // One answer to "is this an actor I can credit?" across all three columns; an
+    // identity-less 'system' stamp credits nobody rather than inventing a member.
+    expect(contributorKind('cloud_agent')).toBe('cloud_agent');
+    expect(contributorKind('human')).toBe('human');
+    expect(contributorKind('system')).toBeNull();
+    expect(contributorKind(null)).toBeNull();
+    expect(source).toMatch(/const kind = contributorKind\(o\.actorKind\);/);
+  });
+});
+
+/**
+ * The SAMPLED "Finished today" list carried the same defect as the contributor column —
+ * it captioned each row with the ticket's assignee, i.e. the Coordinator on a
+ * lifecycle-managed board. Fixed by preferring the terminal-hop actor, with the assignee
+ * kept as the fallback so an UNMANAGED board (where the assignee really is the person who
+ * did it) does not lose its caption.
+ */
+describe('shipped sample owner caption', () => {
+  const source = readFileSync(
+    fileURLToPath(new URL('./dailyDigest.ts', import.meta.url).href),
+    'utf8',
+  );
+
+  it('prefers the finisher and falls back to the assignee', () => {
+    expect(source).toMatch(/const finisher = contributorKind\(r\.finisherKind\);/);
+    expect(source).toMatch(/\(finisher && r\.finisherRef\)\s*\?\s*r\.finisherRef/);
+    // The fallback chain must survive — removing it would blank the owner column on
+    // every non-managed board.
+    expect(source).toMatch(/r\.assignedUserId \?\? r\.assignedAgentRef/);
+  });
+
+  it('reads the finisher with a BOUNDED subquery, never a per-ticket round-trip', () => {
+    // It runs against at most SHIPPED_SAMPLE rows and is expressed inside the same
+    // statement; a loop of lookups here would be the N+1 the perf rules forbid.
+    expect(source).toMatch(/order by t\.occurred_at desc limit 1/);
+    expect(source.match(/order by t\.occurred_at desc limit 1/g)?.length).toBe(2);
+  });
+
+  it('binds the status list as explicit parameters, not a raw array literal', () => {
+    // `<> all(${jsArray})` binds a JS array into raw SQL as an untyped parameter, which
+    // is exactly the shape that silently matches nothing. Keep the expanded IN list.
+    expect(source).not.toMatch(/<> all\(\$\{NON_TERMINAL_TASK_STATUSES\}\)/);
+    expect(source).toMatch(/not in \(\$\{sql\.join\(NON_TERMINAL_TASK_STATUSES\.map/);
   });
 });
