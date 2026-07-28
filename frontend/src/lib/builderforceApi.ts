@@ -1900,6 +1900,14 @@ export type ManagerActionType =
   /** A PR was ready but the effective policy withholds merge authority (0363) — the
    *  manager stopped and said so instead of skipping silently. */
   | 'merge_blocked'
+  /** The provider REFUSED the merge (0381). Its own type because the merge ceiling
+   *  counts these: the Nth refusal retires the PR to a human instead of retrying
+   *  every pass forever. */
+  | 'merge_failed'
+  /** The PR's branch conflicts with its base (0381). Its own type because it is the
+   *  only record that the PR loop worked a conflicting PR, and the manager's
+   *  least-recently-worked rotation orders by exactly that. */
+  | 'pr_conflict'
   /** A stalled ticket was diagnosed and its remedy applied (0367 stall triage). */
   | 'triage'
   /** The manager's own remedy stopped working, so the ticket went to a human (0367). */

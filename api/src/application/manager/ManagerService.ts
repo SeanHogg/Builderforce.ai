@@ -71,7 +71,7 @@ import { classifySignoffOwnership, resolveRequiredSignoffGate } from '../kanban/
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness } from './evaluateTicketReadiness';
 import { runStallTriage, loadBulkSignals, MAX_TRIAGE_DISPATCHES_PER_RUN } from './triageStage';
-import { isActionExhausted } from './stallTriage';
+import { isActionExhausted, MAX_REMEDY_ATTEMPTS } from './stallTriage';
 import { computeStallCensus, invalidateStallCensus } from './stallCensus';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { staffUnfilledLanes, describeLaneStaffing } from './staffUnfilledLanes';
@@ -241,6 +241,41 @@ const MAX_REMEDIATIONS_PER_RUN = 10;
  *  merge" and the dedupe query can find prior reports for a PR in one indexed lookup.
  *  Must fit `action_type varchar(24)`. */
 const MERGE_BLOCKED_ACTION = 'merge_blocked';
+
+/**
+ * `manager_actions.action_type` for "the provider REFUSED this merge" (0381).
+ *
+ * Its own type for the same reason `merge_blocked` is: it must be COUNTABLE. The refusal
+ * used to be journalled as a generic 'flag', which meant nothing could tell one PR's
+ * third failed merge from any of the 1,770 other flags that project files in a day — so
+ * the attempt was never counted and the merge was retried every five minutes forever.
+ * Measured on project 11, 2026-07-28: "Could not merge PR #29 … Pull Request is not
+ * mergeable" four times in the last thirty decisions, one per pass, indefinitely.
+ */
+const MERGE_FAILED_ACTION = 'merge_failed';
+
+/**
+ * `manager_actions.action_type` for "this PR's branch conflicts with its base" (0381).
+ *
+ * Also promoted out of 'flag', and for a second reason beyond counting: it is the only
+ * record that the manager TOUCHED a conflicting PR at all. The sync path writes
+ * `sync_pr`, but a PR that conflicts never reaches the sync — so with the conflict
+ * hidden inside 'flag' the fair-rotation ordering below would read every conflicting PR
+ * as "never acted on" and pin it to the front of the queue on every pass, which is
+ * precisely the starvation it exists to end.
+ */
+const PR_CONFLICT_ACTION = 'pr_conflict';
+
+/**
+ * The action types that count as "the manager did PR work on this ticket".
+ *
+ * The rotation orders by the newest of these, so the set has to be exactly the actions a
+ * PR pass can take and nothing else — including a general type like 'flag' would make
+ * every ticket look recently touched and collapse the ordering to arbitrary again.
+ */
+export const PR_ACTION_TYPES = [
+  'sync_pr', 'merge_pr', MERGE_BLOCKED_ACTION, MERGE_FAILED_ACTION, PR_CONFLICT_ACTION,
+] as const;
 
 export interface ManagerRunSummary {
   projectId: number;
@@ -1777,76 +1812,88 @@ async function coordinatePullRequests(
   // MERGE + CLOSE open PRs per policy.
   if (policy.prMergePolicy === 'queue') return;
   if (!ctx.mayRunStage('pr_merge')) return;
+  // ── WHO GETS A TURN, AND IN WHAT ORDER ──────────────────────────────────────────
+  //
+  // This query used to be an UNORDERED `limit(20)` over every open PR on the project.
+  // With 386 of them (project 11, measured 2026-07-28) an unordered LIMIT returns
+  // whatever the heap scan yields first, which in practice is the same twenty rows every
+  // pass — so 366 PRs were never examined once, on any pass, ever.
+  //
+  // The fix is LEAST-RECENTLY-WORKED FIRST. One grouped scan of the manager's own PR
+  // actions gives, per ticket, when this loop last did anything to it — never-touched
+  // PRs sort first (NULL), then longest-since-touched. Every open PR therefore reaches
+  // the window within ceil(386/20) ≈ 20 passes instead of never, and a PR the manager
+  // keeps re-handling naturally sinks behind the ones it has been ignoring.
+  //
+  // The SAME scan carries the two ceilings this loop enforces (syncs, failed merges) and
+  // the merge_blocked dedupe, which were previously THREE separate grouped queries over
+  // the same table on every pass. It is index-backed by
+  // `idx_manager_actions_pr_ceiling (tenant_id, project_id, action_type, task_id)` — 0381
+  // added it, because `manager_actions` grows by ~3.5k rows a day on one project and the
+  // prior queries were sequential scans on a five-minute path.
+  const prActivity = db
+    .select({
+      taskId: managerActions.taskId,
+      syncs: sql<number>`count(*) filter (where ${managerActions.actionType} = 'sync_pr')::int`.as('syncs'),
+      mergeFailures: sql<number>`count(*) filter (where ${managerActions.actionType} = ${MERGE_FAILED_ACTION})::int`.as('merge_failures'),
+      blockedReports: sql<number>`count(*) filter (where ${managerActions.actionType} = ${MERGE_BLOCKED_ACTION})::int`.as('blocked_reports'),
+      lastActedAt: sql<string | null>`max(${managerActions.createdAt})`.as('last_acted_at'),
+    })
+    .from(managerActions)
+    .where(and(
+      eq(managerActions.tenantId, tenantId),
+      eq(managerActions.projectId, projectId),
+      inArray(managerActions.actionType, [...PR_ACTION_TYPES]),
+    ))
+    .groupBy(managerActions.taskId)
+    .as('pr_activity');
+
   const openPrs = await db
     .select({
       id: pullRequests.id, number: pullRequests.number, taskId: pullRequests.taskId,
       buildStatus: pullRequests.buildStatus, repoId: pullRequests.repoId, updatedAt: pullRequests.updatedAt,
+      syncs: prActivity.syncs,
+      mergeFailures: prActivity.mergeFailures,
+      blockedReports: prActivity.blockedReports,
     })
     .from(pullRequests)
+    .leftJoin(prActivity, eq(prActivity.taskId, pullRequests.taskId))
     .where(and(eq(pullRequests.tenantId, tenantId), eq(pullRequests.projectId, projectId), eq(pullRequests.status, 'open')))
+    // NULLS FIRST is load-bearing: a PR the manager has never acted on is the one most
+    // in need of a turn. `id` breaks ties so the order is total and a pass cannot
+    // oscillate between two equally-stale PRs.
+    .orderBy(sql`${prActivity.lastActedAt} asc nulls first`, asc(pullRequests.id))
     .limit(MAX_PR_ACTIONS_PER_RUN);
   const activePrRuns = openPrs.some((pr) => pr.taskId != null)
     ? await runtimeService.listActiveByTasks(openPrs.flatMap((pr) => pr.taskId == null ? [] : [pr.taskId])).catch(() => [])
     : [];
   const activePrTaskIds = new Set<number>(activePrRuns.map((e) => e.taskId as unknown as number));
 
-  // ── THE SYNC CEILING ────────────────────────────────────────────────────────────
-  // How many times each open PR has ALREADY been synced with its base without ever
-  // merging. Syncing a stale branch is a correct action; syncing the same branch
-  // forever is the platform's largest measured livelock — 40,580 `sync_pr` actions
-  // against 10 merges all-time, and re-measured on 2026-07-26 still running at
-  // 13,549/week with ZERO merges in the window. The remedy was never wrong; nothing
-  // ever asked whether it worked.
+  // ── THE TWO CEILINGS AND THE DEDUPE, all from the one scan above ────────────────
   //
-  // So the sync obeys the SAME exhaustion rule every stall remedy obeys
-  // ({@link isActionExhausted}), read from the action log the loop already writes —
-  // no new table, one extra grouped SELECT for the whole project. Past the ceiling the
-  // PR is reported once as blocked and left alone for a human, instead of being
-  // re-synced every five minutes indefinitely.
+  // SYNC: how many times a PR has been brought up to date with its base without ever
+  // merging. Syncing a stale branch is a correct action; syncing the same branch forever
+  // is the platform's largest measured livelock — 40,580 `sync_pr` actions against 10
+  // merges all-time, still running at 13,549/week with ZERO merges when re-measured on
+  // 2026-07-26. The remedy was never wrong; nothing ever asked whether it worked.
+  //
+  // MERGE: how many times the PROVIDER has refused the merge. This one had no ceiling at
+  // all until 0381 — the refusal was journalled as a generic 'flag' and the loop simply
+  // went round again, so "Could not merge PR #29: … not mergeable" fired once per pass
+  // indefinitely. It is the same livelock as the sync, one branch further down the same
+  // function, and it now obeys the same rule ({@link isActionExhausted}).
+  //
+  // MERGE AUTHORITY (0363) withheld is a STATE that persists across passes, not an event,
+  // so it is reported once per PR rather than every five minutes. Both ceilings report
+  // through that same `merge_blocked` type and share its dedupe.
   const syncAttempts = new Map<number, number>();
-  {
-    const syncTaskIds = openPrs.flatMap((pr) => (pr.taskId == null ? [] : [pr.taskId]));
-    if (syncTaskIds.length) {
-      const rows = await db
-        .select({ taskId: managerActions.taskId, n: sql<number>`count(*)::int` })
-        .from(managerActions)
-        .where(and(
-          eq(managerActions.tenantId, tenantId),
-          eq(managerActions.actionType, 'sync_pr'),
-          inArray(managerActions.taskId, syncTaskIds),
-        ))
-        .groupBy(managerActions.taskId)
-        .catch(() => []);
-      for (const r of rows) if (r.taskId != null) syncAttempts.set(r.taskId, Number(r.n) || 0);
-    }
-  }
-
-  // MERGE AUTHORITY (0363) is withheld by default, so "this PR is ready but I may not
-  // merge it" is a STATE that persists across passes, not an event. Journalling it every
-  // five minutes for every open PR would bury the feed and inflate a table that is
-  // already a storage concern, so — same reasoning as the 0344 flag dedupe — load the
-  // PRs already reported and write once per PR. One extra SELECT, and zero writes on the
-  // steady-state pass where nothing changed.
-  //
-  // Loaded UNCONDITIONALLY (it used to be gated on `!allowAutoMerge`): the sync ceiling
-  // above reports through the same action type and needs the same dedupe, and a
-  // workspace WITH auto-merge enabled is exactly where a PR that never merges is worth
-  // reporting once rather than every pass.
+  const mergeFailures = new Map<number, number>();
   const alreadyReportedBlocked = new Set<number>();
-  {
-    const blockedTaskIds = openPrs.flatMap((pr) => (pr.taskId == null ? [] : [pr.taskId]));
-    if (blockedTaskIds.length) {
-      const prior = await db
-        .select({ taskId: managerActions.taskId })
-        .from(managerActions)
-        .where(and(
-          eq(managerActions.tenantId, tenantId),
-          eq(managerActions.actionType, MERGE_BLOCKED_ACTION),
-          inArray(managerActions.taskId, blockedTaskIds),
-        ))
-        .catch(() => []);
-      for (const row of prior) if (row.taskId != null) alreadyReportedBlocked.add(row.taskId);
-    }
+  for (const pr of openPrs) {
+    if (pr.taskId == null) continue;
+    syncAttempts.set(pr.taskId, pr.syncs ?? 0);
+    mergeFailures.set(pr.taskId, pr.mergeFailures ?? 0);
+    if ((pr.blockedReports ?? 0) > 0) alreadyReportedBlocked.add(pr.taskId);
   }
 
   for (const pr of openPrs) {
@@ -1868,6 +1915,25 @@ async function coordinatePullRequests(
             tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: MERGE_BLOCKED_ACTION,
             summary: `PR #${pr.number ?? '?'} has been synced with its base ${syncAttempts.get(pr.taskId)} times without merging — stopping the sync loop and handing it to a human.`,
             detail: { reason: 'sync_exhausted', syncAttempts: syncAttempts.get(pr.taskId) },
+          });
+          alreadyReportedBlocked.add(pr.taskId);
+        }
+        continue;
+      }
+
+      // EXHAUSTED MERGE (0381). The provider has refused this merge MAX_REMEDY_ATTEMPTS
+      // times. Nothing the manager does between attempts changes the answer — a PR that
+      // is not mergeable for a structural reason (a required review, a branch rule, a
+      // merge queue, squash disabled on the repo) is not mergeable on the next tick
+      // either, and re-asking is the same livelock the sync ceiling above exists to end.
+      // Report the reason ONCE and leave it for a person, who is the only one who can
+      // clear any of those.
+      if (pr.taskId != null && isActionExhausted(mergeFailures.get(pr.taskId) ?? 0)) {
+        if (!alreadyReportedBlocked.has(pr.taskId)) {
+          await recordManagerAction(db, {
+            tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: MERGE_BLOCKED_ACTION,
+            summary: `PR #${pr.number ?? '?'} has been refused by the provider ${mergeFailures.get(pr.taskId)} times — stopping the merge loop and handing it to a human. Open it on the provider for the exact block (required reviews, branch rules, a merge queue, or squash merges disabled).`,
+            detail: { reason: 'merge_failed_exhausted', mergeFailures: mergeFailures.get(pr.taskId) },
           });
           alreadyReportedBlocked.add(pr.taskId);
         }
@@ -1912,7 +1978,11 @@ async function coordinatePullRequests(
           if (recoveryStarted) summary.dispatched += 1;
         }
         await recordManagerAction(db, {
-          tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: 'flag',
+          // PR_CONFLICT_ACTION, not 'flag' (0381): this is the only trace that the loop
+          // touched a conflicting PR, and the rotation orders by it. Left as 'flag' it
+          // was invisible to that ordering, so every conflicting PR read as "never acted
+          // on" and held the front of the queue forever.
+          tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: PR_CONFLICT_ACTION,
           summary: recoveryStarted
             ? `PR #${pr.number ?? '?'} conflicts with the latest base; started its ticket agent to resolve and update it.`
             : !affordable
@@ -2002,10 +2072,17 @@ async function coordinatePullRequests(
         tenantId, prId: pr.id, method: 'squash', mergedBy: `manager:${policy.managerRef ?? 'system'}`,
       });
       if (!result.ok) {
+        // Journalled as MERGE_FAILED_ACTION, not 'flag' (0381) — the ceiling above counts
+        // these, and a refusal buried among a project's ~1,770 daily flags is a refusal
+        // nothing can count. The Nth failure is what retires the PR to a human.
         await recordManagerAction(db, {
-          tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: 'flag',
+          tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: MERGE_FAILED_ACTION,
           summary: `Could not merge PR #${pr.number ?? '?'}: ${result.error}`,
-          detail: { code: result.code },
+          detail: {
+            code: result.code,
+            attempt: (mergeFailures.get(pr.taskId ?? -1) ?? 0) + 1,
+            maxAttempts: MAX_REMEDY_ATTEMPTS,
+          },
         });
         continue;
       }

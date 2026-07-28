@@ -6910,6 +6910,8 @@
       "coordinate": "已配置角色",
       "schedule": "已排期",
       "merge_blocked": "合并被阻止",
+      "merge_failed": "合并被拒绝",
+      "pr_conflict": "PR 存在冲突",
       "triage": "已分诊",
       "escalate": "已升级",
       "systemic": "平台问题"
