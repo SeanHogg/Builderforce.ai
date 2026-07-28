@@ -25,6 +25,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { llmProxyForPlan, readProxyChoice } from './LlmProxyService';
 import { getTenantTokenAvailability } from './tenantTokenAvailability';
 import { resolveTenantLlmCredentials, listTenantProviderKeys } from './tenantProviderKeyService';
+import { isRoutableModel } from './vendors/registry';
 
 /** Max chars of task/run text handed to the teacher (bounds prompt/token cost). */
 export const TEACHER_INPUT_MAX_CHARS = 4000;
@@ -147,7 +148,7 @@ export async function generateTeacherExemplar(
  * but the tenant is out of platform tokens — two very different fixes, so they must
  * never collapse into one reason. The rest are {@link TeacherFailureReason} verbatim.
  */
-export type TeacherSkipReason = 'not_pinned' | 'budget_exhausted' | 'cooling' | TeacherFailureReason;
+export type TeacherSkipReason = 'not_pinned' | 'budget_exhausted' | 'cooling' | 'unroutable' | TeacherFailureReason;
 
 // ---------------------------------------------------------------------------
 // Fault breaker
@@ -226,7 +227,7 @@ async function isTeacherCooling(env: Env, tenantId: number, model: string): Prom
 /** The effective teacher for an alarm: the model to use, or WHY there isn't one. */
 export type EffectiveTeacher =
   | { model: string }
-  | { model: null; reason: Extract<TeacherSkipReason, 'not_pinned' | 'budget_exhausted' | 'cooling'> };
+  | { model: null; reason: Extract<TeacherSkipReason, 'not_pinned' | 'budget_exhausted' | 'cooling' | 'unroutable'> };
 
 export interface EvermindTrainingText {
   /** The text the coordinator adapts the SSM on. */
@@ -275,6 +276,13 @@ export async function resolveEvermindTeacherModel(
 ): Promise<EffectiveTeacher> {
   const model = (teacherModel ?? '').trim();
   if (!model) return { model: null, reason: 'not_pinned' };
+  // An id that routes nowhere can NEVER succeed: dispatch falls back to the
+  // default vendor, which has never heard of it, and returns 503 on every alarm
+  // forever. The pin endpoint now refuses these, but rows predating that
+  // validation still exist — and a 30-minute fault breaker only rations a call
+  // that was always doomed. Treat it as unpinned so the entry still learns
+  // un-distilled, and so the reason names the actual problem.
+  if (!isRoutableModel(model)) return { model: null, reason: 'unroutable' };
   // Benched by a recent gateway fault — skip the call entirely rather than
   // spend another paid frontier request on a teacher that just failed.
   if (await isTeacherCooling(env, tenantId, model)) return { model: null, reason: 'cooling' };

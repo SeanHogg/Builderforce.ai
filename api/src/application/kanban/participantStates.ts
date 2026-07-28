@@ -15,6 +15,7 @@
  *
  * Pure data + pure predicates: no DB, no env, trivially unit-testable.
  */
+import { SIGNOFF_CONTRACT, isCurrentSignoffContract } from './signoffContract';
 import type { ParticipantState } from './ticketParticipants';
 
 /**
@@ -101,19 +102,34 @@ export function isProducerResponsibility(responsibility: string | null | undefin
 }
 
 /**
- * How many completed runs this slot has already returned no verdict for.
+ * How many completed runs this slot has already returned no verdict for, UNDER THE
+ * CURRENT ASK CONTRACT.
  *
  * Kept in the slot's `evidence` JSON rather than a new column: it is per-slot run
  * bookkeeping that only the attestation path reads, and a migration for a counter would
  * not earn its keep.
+ *
+ * SILENCE COUNTED AGAINST AN OBSOLETE ASK IS NOT SILENCE. A count carrying a stale (or
+ * absent) `attestationContract` stamp was recorded while the instruction named a tool the
+ * agent did not have — twice measured, most recently 108 slots wedged `exhausted` on
+ * project 11 — so it is discarded rather than held against the agent. See
+ * {@link isCurrentSignoffContract} for why "no stamp" must read as obsolete.
+ *
+ * `contract` is injectable purely so the rule is testable without reaching for the live
+ * fingerprint; production always uses the default.
  */
-export function readUnattestedRuns(evidence: unknown): number {
+export function readUnattestedRuns(evidence: unknown, contract: string = SIGNOFF_CONTRACT): number {
   if (!evidence || typeof evidence !== 'object') return 0;
+  if (!isCurrentSignoffContract(evidence, contract)) return 0;
   const n = (evidence as { unattestedRuns?: unknown }).unattestedRuns;
   return typeof n === 'number' && Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
-/** True once the slot's agent has ignored the ask its full budget of times. */
-export function isAttestationExhausted(evidence: unknown, max: number = MAX_UNATTESTED_RUNS): boolean {
-  return readUnattestedRuns(evidence) >= max;
+/** True once the slot's agent has ignored the CURRENT ask its full budget of times. */
+export function isAttestationExhausted(
+  evidence: unknown,
+  max: number = MAX_UNATTESTED_RUNS,
+  contract: string = SIGNOFF_CONTRACT,
+): boolean {
+  return readUnattestedRuns(evidence, contract) >= max;
 }
