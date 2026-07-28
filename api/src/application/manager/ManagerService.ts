@@ -51,6 +51,7 @@ import {
 import { scoreBusinessValueAI } from './businessValueAI';
 import {
   resolveTieredManagerPolicy, resolveManagerAssignee, normalizePrMergePolicy,
+  DEFAULT_MANAGER_POLICY,
   type EffectiveManagerPolicy, type ManagerConfigRow, type TenantManagerDefaultsRow,
 } from './managerPolicy';
 import { resolveManagerIdentity } from './managerIdentity';
@@ -58,7 +59,7 @@ import { resolveManagerTypeById, normalizeManagerType } from './managerTypes';
 import { listActiveManagerDirectives } from './managerDirectives';
 import { RoleAssignmentService, type AssigneeKind } from '../kanban/roleAssignmentService';
 import { assignTicketOwner } from './assignOwner';
-import { classifySignoffOwnership, resolveSignoffGate } from '../kanban/signoffGate';
+import { classifySignoffOwnership, resolveRequiredSignoffGate } from '../kanban/signoffGate';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness } from './evaluateTicketReadiness';
 import { runStallTriage, loadBulkSignals, MAX_TRIAGE_DISPATCHES_PER_RUN } from './triageStage';
@@ -474,9 +475,11 @@ export async function upsertManagerConfig(
       // project gains a timeline rather than another empty column.
       autoSchedule: patch.autoSchedule ?? true,
       managerType: normalizeManagerType(patch.managerType),
-      // Default TRUE on insert: a newly-configured project must not silently gain
-      // unreviewed auto-merge authority just because the caller omitted the field.
-      requireSignoffToComplete: patch.requireSignoffToComplete ?? true,
+      // Default OFF on insert (0380) — from the shared constant, so the hardcoded floor of
+      // the fold and the value a fresh row materialises with can never drift apart. A
+      // review gate is something a project turns ON; inventing one for a project that
+      // never asked is what left tickets waiting 48 days on sign-offs nobody owed.
+      requireSignoffToComplete: patch.requireSignoffToComplete ?? DEFAULT_MANAGER_POLICY.requireSignoffToComplete,
       // Default NULL on insert = "inherit the workspace tier" (0363). Writing `false`
       // here would pin a brand-new project against a workspace-wide grant it should have
       // received; writing `true` would grant authority nobody asked for.
@@ -1797,9 +1800,13 @@ async function coordinatePullRequests(
   // SELF-GOVERNANCE (0362): this step is where the manager exercises completion
   // authority, so it is where unanimous sign-off is enforced. Previously it force-wrote
   // `status = DONE` for ANY in-review ticket with a branch, with no manifest check —
-  // agent work was merged unreviewed. Now `requireSignoffToComplete` (default true)
-  // demands every REQUIRED participation slot be satisfied first, and a ticket whose
-  // manifest has no required slots never qualifies (signoffGate fails closed).
+  // agent work was merged unreviewed. `requireSignoffToComplete` demands every REQUIRED
+  // participation slot be satisfied first, and a ticket whose manifest has no required
+  // slots never qualifies (signoffGate fails closed).
+  //
+  // IT IS A PROJECT SETTING, AND OFF BY DEFAULT SINCE 0380. `resolveRequiredSignoffGate`
+  // is the one read that consults it: a project that has not opted in owes nothing, skips
+  // the manifest read entirely, and completes on the deliverable + build checks alone.
   //
   // The eligibility filter also no longer requires `gitBranch`: a ticket can be real
   // work with nothing to merge (a decision, a doc, a non-code chore). Those used to sit
@@ -1841,7 +1848,9 @@ async function coordinatePullRequests(
         // `evaluateTicketReadiness`. Every outcome is journalled, including the ones
         // that do nothing, because the old silent `continue` is precisely how 280
         // tickets sat in review for up to 19 days with no explanation anywhere.
-        const signoff = await resolveSignoffGate(env, db, { tenantId, taskId: t.id });
+        const signoff = await resolveRequiredSignoffGate(env, db, {
+          tenantId, taskId: t.id, requireSignoff: policy.requireSignoffToComplete,
+        });
         const readiness = decideTicketReadiness({
           taskType: t.taskType,
           actionType: t.actionType,
@@ -2151,8 +2160,14 @@ async function coordinatePullRequests(
       // would leave an unreviewed back door straight to a squash-merge. Re-checking here
       // costs one cached manifest read and makes "merged ⇒ signed off" an invariant
       // rather than a property of the path taken.
-      if (policy.requireSignoffToComplete && pr.taskId != null) {
-        const gate = await resolveSignoffGate(env, db, { tenantId, taskId: pr.taskId });
+      //
+      // Through the SAME policy-aware read as the conduct step, not a hand-rolled `if`:
+      // the project setting is consulted in one place, so the two gates cannot disagree
+      // about whether this project requires sign-off at all.
+      if (pr.taskId != null) {
+        const gate = await resolveRequiredSignoffGate(env, db, {
+          tenantId, taskId: pr.taskId, requireSignoff: policy.requireSignoffToComplete,
+        });
         if (!gate.satisfied) {
           await recordManagerAction(db, {
             tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: 'flag',

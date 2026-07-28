@@ -35,7 +35,15 @@ export type SignoffGateReason =
   /** At least one required slot still owes a verdict. */
   | 'outstanding_signoffs'
   /** No required slots exist, so nobody has reviewed this — deliberately NOT satisfied. */
-  | 'no_required_participants';
+  | 'no_required_participants'
+  /**
+   * THE PROJECT DOES NOT REQUIRE SIGN-OFF AT ALL (`requireSignoffToComplete = false`).
+   *
+   * Distinct from `all_signed_off` on purpose: both open the gate, but only one of them
+   * means anybody actually reviewed the work. A ledger row that cannot tell "ten roles
+   * approved it" from "this project asked nobody" is not an audit trail.
+   */
+  | 'not_required';
 
 /** One slot still owing a verdict, for an actionable "waiting on…" message. */
 export interface OutstandingSlot {
@@ -267,4 +275,51 @@ export async function resolveSignoffGate(
       detail: 'Could not read the ticket participation manifest, so autonomous completion is withheld.',
     };
   }
+}
+
+/**
+ * The gate's answer for a project that does not require sign-off — OPEN, owing nothing.
+ *
+ * Deliberately a satisfied result rather than a null, so every consumer keeps exactly one
+ * code path: a caller that has to branch on "was a gate even evaluated?" is a caller that
+ * will eventually forget to, and the forgetful branch is the one that holds a ticket
+ * forever waiting on a review its project never asked for.
+ */
+export const SIGNOFF_NOT_REQUIRED: SignoffGateResult = {
+  satisfied: true,
+  reason: 'not_required',
+  requiredCount: 0,
+  satisfiedCount: 0,
+  outstanding: [],
+  detail: 'This project does not require role sign-off, so nothing is owed before completion.',
+};
+
+/**
+ * THE POLICY-AWARE READ — "does this ticket owe sign-offs, given what its project asks?"
+ *
+ * `requireSignoffToComplete` is a PROJECT setting (migration 0362, defaulted off by 0380),
+ * and it has to be consulted at every point the platform would otherwise hold a ticket for
+ * a verdict: the manager's conduct step, the merge itself, and stall triage — which asks a
+ * stage's owed roles to record their work on every lane, not just review. Before this
+ * existed only the first two consulted it, so a project with the setting OFF still had its
+ * tickets diagnosed `awaiting_signoff` and its whole per-pass dispatch budget spent
+ * re-asking for sign-offs that were not required in the first place (measured on project
+ * 11: 265 of 679 stalled tickets, longest idle 48 days).
+ *
+ * Reading the policy HERE rather than at each call site is what keeps that from drifting
+ * again: there is one function to call, and skipping the check is not expressible.
+ * It also saves the manifest read entirely when sign-off is off — this runs per ticket,
+ * per stage, every five minutes, across every project.
+ */
+export async function resolveRequiredSignoffGate(
+  env: Env,
+  db: Db,
+  args: {
+    tenantId: number; taskId: number; stageKey?: string | null;
+    /** The project's effective `requireSignoffToComplete`. */
+    requireSignoff: boolean;
+  },
+): Promise<SignoffGateResult> {
+  if (!args.requireSignoff) return SIGNOFF_NOT_REQUIRED;
+  return resolveSignoffGate(env, db, args);
 }

@@ -6833,7 +6833,7 @@
       },
       "requireSignoff": {
         "label": "Freigabe vor dem Abschluss verlangen",
-        "help": "Ein Ticket erst abschließen und seinen Pull Request erst mergen, wenn alle erforderlichen Prüfenden freigegeben haben. Ein Ticket, das niemand prüfen sollte, erfüllt die Bedingung nie."
+        "help": "Aus, bis Sie es einschalten. Wenn aktiviert, wird ein Ticket erst abgeschlossen – und sein Pull Request erst gemergt –, wenn alle erforderlichen Prüfenden freigegeben haben, und der Manager erinnert weiterhin die Rollen, die noch ausstehen. Ein Ticket, das niemand prüfen sollte, erfüllt die Bedingung nie."
       },
       "tri": {
         "on": "Ein",

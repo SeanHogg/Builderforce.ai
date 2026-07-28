@@ -6833,7 +6833,7 @@
       },
       "requireSignoff": {
         "label": "Exiger une validation avant de terminer",
-        "help": "Ne terminer un ticket et fusionner sa pull request qu’une fois que chaque relecteur requis a validé. Un ticket que personne n’était chargé de relire ne remplit jamais la condition."
+        "help": "Désactivé tant que vous ne l’activez pas. Une fois activé, un ticket n’est terminé — et sa pull request fusionnée — qu’après validation de chaque relecteur requis, et le manager relance les rôles qui la doivent encore. Un ticket que personne n’était chargé de relire ne remplit jamais la condition."
       },
       "tri": {
         "on": "Activé",

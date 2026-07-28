@@ -6833,7 +6833,7 @@
       },
       "requireSignoff": {
         "label": "Exigir aprobación antes de finalizar",
-        "help": "Finalizar un ticket y fusionar su pull request solo cuando todas las personas revisoras obligatorias hayan dado su aprobación. Un ticket que nadie tenía que revisar nunca cumple la condición."
+        "help": "Desactivado salvo que lo actives. Cuando está activado, un ticket solo se finaliza —y su pull request solo se fusiona— cuando todas las personas revisoras obligatorias han dado su aprobación, y el gestor sigue reclamándosela a los roles que aún la deben. Un ticket que nadie tenía que revisar nunca cumple la condición."
       },
       "tri": {
         "on": "Activado",
