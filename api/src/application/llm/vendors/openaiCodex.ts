@@ -48,9 +48,18 @@ function unpack(value: string): PackedAuth {
  * The shared Responses body plus the two fields ONLY this backend requires: the CLI's
  * mandatory `stream: true`, and `include: ['reasoning.encrypted_content']` so a
  * reasoning model carries its own state across turns without server-side storage.
+ *
+ * `max_output_tokens` is OMITTED: unlike the public Responses surface, this backend
+ * rejects it outright with `400 {"detail":"Unsupported parameter: max_output_tokens"}`,
+ * failing the whole request before a token is generated. The Codex CLI does not send
+ * it either, and the output ceiling here is a server-side per-model property, so
+ * there is nothing to cap client-side. See {@link ResponsesBodyOptions.omitMaxOutputTokens}.
  */
 function requestBody(params: VendorCallParams): Record<string, unknown> {
-  return buildResponsesBody(params, { extra: { stream: true, include: ['reasoning.encrypted_content'] } });
+  return buildResponsesBody(params, {
+    omitMaxOutputTokens: true,
+    extra: { stream: true, include: ['reasoning.encrypted_content'] },
+  });
 }
 
 /**

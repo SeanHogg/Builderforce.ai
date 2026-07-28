@@ -59,18 +59,37 @@ import type { Env } from '../../env';
 export const MAX_CONSECUTIVE_YIELDS = 2;
 
 /**
- * Stages the rotation may skip.
+ * Stages the rotation understands — the ones that may be carried in the cursor and
+ * yielded TO.
  *
- * An allow-list, not a deny-list: a stage that is cheap, or that later stages depend on,
- * must never be skipped by a scheduling heuristic, and a new stage must be opted IN
- * deliberately rather than silently inherit skippability. `value`, `assign`, `systemic`,
- * `dispatch`, `audit`, `pr_conduct` and `pr_merge` are all discretionary per-ticket or
- * per-PR loops; `triage` is here because the rotation must be able to express "this pass
- * is for the PR stages" as well as "this pass is for triage".
+ * An allow-list, not a deny-list: a new stage must be opted in deliberately rather than
+ * silently inherit rotation behaviour, and a stale cursor naming a stage that no longer
+ * exists must be ignored rather than yield the pass to nothing.
  */
 export const ROTATABLE_STAGES: ReadonlySet<string> = new Set([
   'value', 'assign', 'systemic', 'dispatch', 'audit', 'pr_conduct', 'pr_merge', 'triage',
 ]);
+
+/**
+ * Stages that may give up their turn — {@link ROTATABLE_STAGES} MINUS triage.
+ *
+ * ── WHY TRIAGE IS YIELDED TO BUT NEVER YIELDED ───────────────────────────────────
+ * The two directions are not symmetric, and treating them as one set quietly reintroduced
+ * the bug. Walk it through: a pass starves `[pr_merge, audit, triage]` and the next pass
+ * yields to exactly those three. Good — triage finally runs. But that pass then starves
+ * `[pr_merge, audit]` (triage completed), so the cursor no longer names triage, so the
+ * pass after it yields triage away again. Triage would run every third pass at best,
+ * oscillating, for no reason other than having succeeded.
+ *
+ * Triage is also the only stage that produces the remedies — staffing a stage, resetting a
+ * breaker, asking for a sign-off, resolving a conflict. Skipping it to make room for a PR
+ * loop is precisely the trade this whole mechanism exists to stop making. So it is never
+ * skipped by the rotation: it runs whenever the budget's reserve reaches it, and the
+ * rotation's job is to make sure the reserve is still there.
+ */
+export const YIELDABLE_STAGES: ReadonlySet<string> = new Set(
+  [...ROTATABLE_STAGES].filter((s) => s !== 'triage'),
+);
 
 /** The cursor as it is persisted. Deliberately tiny — it is written every pass. */
 export interface RotationState {
@@ -114,7 +133,7 @@ export function decideRotation(prior: RotationState | null | undefined): PassRot
     yieldTo,
     yields: active ? yields + 1 : 0,
     yielded,
-    mayRun: (stage: string) => yieldTo.size === 0 || !ROTATABLE_STAGES.has(stage) || yieldTo.has(stage),
+    mayRun: (stage: string) => yieldTo.size === 0 || !YIELDABLE_STAGES.has(stage) || yieldTo.has(stage),
     skip: (stage: string) => { if (!yielded.includes(stage)) yielded.push(stage); },
   };
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  MAX_CONSECUTIVE_YIELDS, ROTATABLE_STAGES, carryOverRotation, decideRotation,
+  MAX_CONSECUTIVE_YIELDS, ROTATABLE_STAGES, YIELDABLE_STAGES, carryOverRotation, decideRotation,
 } from './passRotation';
 
 /**
@@ -44,6 +44,29 @@ describe('decideRotation', () => {
     const r = decideRotation({ starved: ['pr_merge', 'audit', 'triage'], yields: 0 });
     for (const stage of ['pr_merge', 'audit', 'triage']) expect(r.mayRun(stage), stage).toBe(true);
     for (const stage of ['value', 'assign', 'systemic', 'dispatch']) expect(r.mayRun(stage), stage).toBe(false);
+  });
+
+  /**
+   * THE ASYMMETRY, and the oscillation it prevents. Triage is yielded TO but never
+   * yielded. Treating the two directions as one set produces this: a pass starves
+   * [pr_merge, audit, triage]; the next yields to those three and triage runs; that pass
+   * then starves only [pr_merge, audit] (triage succeeded), so the cursor stops naming
+   * triage — and the pass after it yields triage away again, for no reason but having
+   * worked. Triage would run every third pass, oscillating, forever.
+   */
+  it('never yields triage away — it is the stage the rotation exists to protect', () => {
+    expect(YIELDABLE_STAGES.has('triage')).toBe(false);
+    expect(ROTATABLE_STAGES.has('triage')).toBe(true);
+    for (const starved of [['pr_merge'], ['pr_merge', 'audit'], ['value', 'assign']]) {
+      expect(decideRotation({ starved, yields: 0 }).mayRun('triage'), starved.join('+')).toBe(true);
+    }
+  });
+
+  it('yields every OTHER rotatable stage when the cursor does not name it', () => {
+    const r = decideRotation({ starved: ['pr_merge'], yields: 0 });
+    for (const stage of YIELDABLE_STAGES) {
+      expect(r.mayRun(stage), stage).toBe(stage === 'pr_merge');
+    }
   });
 
   /**
@@ -124,18 +147,38 @@ describe('carryOverRotation', () => {
    * for the starvation of everything else.
    */
   it('cannot yield indefinitely to a stage that keeps overrunning', () => {
-    let cursor = carryOverRotation(decideRotation(null), ['triage']);
+    let cursor = carryOverRotation(decideRotation(null), ['pr_merge']);
     let yieldedPasses = 0;
     for (let pass = 0; pass < 10; pass += 1) {
       const rotation = decideRotation(cursor);
       if (rotation.yieldTo.size > 0) yieldedPasses += 1;
       // The yielded-to stage overruns again every single time.
       for (const stage of ROTATABLE_STAGES) if (!rotation.mayRun(stage)) rotation.skip(stage);
-      cursor = carryOverRotation(rotation, ['triage', ...rotation.yielded]);
+      cursor = carryOverRotation(rotation, ['pr_merge', ...rotation.yielded]);
     }
-    expect(yieldedPasses).toBeLessThanOrEqual(10);
     expect(yieldedPasses).toBeGreaterThan(0);
     // And it must have handed turns back: a run of 10 passes cannot all have been yields.
     expect(yieldedPasses).toBeLessThan(10);
+  });
+
+  /**
+   * THE PROPERTY THE WHOLE MECHANISM IS FOR, simulated over a run of passes: on the
+   * measured board triage was skipped on EVERY pass for seven hours. Under the rotation
+   * a pass that starves triage hands the next pass to the stages that starved it, and
+   * triage — never yieldable — gets its reserve back.
+   */
+  it('lets triage run on the pass after the one that starved it', () => {
+    // Pass 1: the PR stages consume everything; audit and triage are shed.
+    const first = decideRotation(null);
+    const cursor = carryOverRotation(first, ['audit', 'triage']);
+    expect(cursor.starved).toEqual(['audit', 'triage']);
+
+    // Pass 2 runs only those, so `pr_conduct` / `pr_merge` / `value` are not there to
+    // consume the window before triage is reached.
+    const second = decideRotation(cursor);
+    expect(second.mayRun('triage')).toBe(true);
+    expect(second.mayRun('audit')).toBe(true);
+    expect(second.mayRun('pr_conduct')).toBe(false);
+    expect(second.mayRun('pr_merge')).toBe(false);
   });
 });
