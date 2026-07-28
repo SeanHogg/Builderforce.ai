@@ -140,6 +140,21 @@ function normalizeCapability(v: string | null | undefined): string | null {
 }
 
 /**
+ * The manager-tool ids {@link accountabilityFraming} instructs the agent to call.
+ *
+ * Exported so a test can assert that every one of them is actually ADVERTISED to the
+ * model. That assertion is the regression guard for the defect this list documents: the
+ * framing named tools by catalog id, the ids matched nothing in the model's tool list,
+ * and the manager answered three consecutive accountability questions by describing the
+ * calls it had never made. Nothing failed loudly — there is no error for "the prompt
+ * referenced a tool that does not exist", which is exactly why it needs a test.
+ */
+export const ACCOUNTABILITY_TOOL_IDS: readonly string[] = [
+  'manager.digest', 'manager.decisions', 'manager.census', 'manager.policy',
+  'autonomy.wiring_audit', 'tickets.lifecycle',
+];
+
+/**
  * The standard the AI Manager is held to in its own accountability chat (0376).
  *
  * A person opens this chat to ask one thing — "what did you and the team get done, and
@@ -159,12 +174,41 @@ function normalizeCapability(v: string | null | undefined): string | null {
  *
  * `projectId` is interpolated because every manager tool takes it and the model has no
  * other way to learn it.
+ *
+ * ── TOOLS ARE NAMED BY THEIR ADVERTISED NAME, NEVER THEIR CATALOG ID ─────────────
+ * This is not a style point; it is the bug this function shipped with. The catalog id is
+ * `manager.digest`, but a model is advertised `builtin_manager_digest` — so a prompt
+ * naming the dotted id points at a tool that appears nowhere in the model's tool list.
+ * The observed result was exactly what you would expect and nothing like an error: the
+ * manager DESCRIBED the calls it could not make ("The tools required are manager.digest,
+ * manager.decisions and manager.census") and reported having no data, three questions in
+ * a row. `nameFor` resolves each id against the tools ACTUALLY advertised on this turn
+ * and omits any that are missing — so the prompt cannot reference a tool the model does
+ * not have, whatever changes to the allowlist come later.
  */
-function accountabilityFraming(projectId: number): string {
+export function accountabilityFraming(projectId: number, nameFor: (toolId: string) => string | null): string {
+  const digest = nameFor('manager.digest');
+  const decisions = nameFor('manager.decisions');
+  const census = nameFor('manager.census');
+  const policy = nameFor('manager.policy');
+  const wiring = nameFor('autonomy.wiring_audit');
+  const lifecycle = nameFor('tickets.lifecycle');
+  const call = (name: string | null, what: string) => (name ? `${name}(projectId=${projectId}) ${what}` : null);
+  const record = [
+    call(digest, 'for what finished today and yesterday'),
+    call(decisions, 'for what you actually decided'),
+    call(census, 'for what is stuck across every ticket'),
+    call(policy, 'for what you were PERMITTED to do and whether autonomy was paused'),
+  ].filter(Boolean).join(', ');
+
   return [
     `This is the AI MANAGER's accountability chat for project #${projectId}: the user is asking you to account for what the team — and you — actually got done, and why more did not. `,
-    `Before answering ANY question about outcomes, read your own record with the tools: manager.digest (projectId=${projectId}) for what finished today and yesterday, manager.decisions (projectId=${projectId}) for what you actually decided, manager.census (projectId=${projectId}) for what is stuck across every ticket, and manager.policy (projectId=${projectId}) for what you were PERMITTED to do and whether autonomy was paused. Use autonomy.wiring_audit when the question is whether work can complete unattended at all, and tickets.lifecycle for why one specific ticket is stuck. `,
-    `Answer with those numbers and cite the tickets by key. Never claim work you cannot point at. `,
+    record
+      ? `Before answering ANY question about outcomes you MUST actually CALL these tools — do not describe them, do not list them, do not say what they would return: ${record}. `
+      : '',
+    wiring ? `Call ${wiring}() when the question is whether work can complete unattended at all. ` : '',
+    lifecycle ? `Call ${lifecycle}(taskId) for why one specific ticket is stuck. ` : '',
+    `Answer with those numbers and cite the tickets by key. Never claim work you cannot point at, and never report that a tool "has not returned results" — if you have not called it, call it now. `,
     `If little or nothing got done, say so plainly in the first sentence, then name the SPECIFIC gate that held the work (an unstaffed lane, merge authority withheld from you, an exhausted token budget, a sign-off nobody gave, a failure breaker) and the ONE change that would unblock it. Do not apologise instead of explaining, and never describe a stalled board as progress. `,
   ].join('');
 }
@@ -959,6 +1003,32 @@ export class BrainService {
 
     const projectHint = (chat as unknown as { projectId?: number | null }).projectId ?? null;
     const isManagerChat = (chat as unknown as { origin?: string | null }).origin === MANAGER_ORIGIN;
+
+    // Curated, non-destructive platform tools (the same allowlist an autonomous cloud
+    // agent gets) PLUS the chat-scoped read/link tools that only make sense with a live
+    // chatId (so an agent addressed in a chat can link work to it). Advertised name →
+    // tool id map for executing the model's calls.
+    //
+    // Resolved BEFORE the system prompt because the prompt must name tools by the string
+    // the model was actually given. It previously named them by catalog id (`manager.digest`,
+    // `chats.link_ticket`) — names that appear nowhere in the model's tool list — and the
+    // measured result was an agent narrating the calls it could not make instead of making
+    // them. `nameFor` returns null for a tool that is not advertised on this turn, so a
+    // prompt clause referencing it is DROPPED rather than pointing at nothing.
+    const agentToolIds = [...CLOUD_AGENT_PLATFORM_TOOLS, ...CHAT_SCOPED_AGENT_TOOLS];
+    const toolEntries = listBuiltinTools().filter((t) => agentToolIds.includes(t.tool));
+    const nameToTool = new Map(toolEntries.map((t) => [t.name, t.tool]));
+    const toolToName = new Map(toolEntries.map((t) => [t.tool, t.name]));
+    const nameFor = (toolId: string): string | null => toolToName.get(toolId) ?? null;
+    // Advertise the platform tools PLUS the conversational `ask_user` tool (injected
+    // here, intercepted below as a terminal turn — see ASK_USER_TOOL_SPEC).
+    const tools = [
+      ...toolEntries.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
+      ASK_USER_TOOL_SPEC,
+    ];
+
+    const linkTicket = nameFor('chats.link_ticket');
+    const listTickets = nameFor('chats.list_tickets');
     const systemPrompt = [
       persona,
       `You have been addressed directly in this multi-party team chat${projectHint != null ? ` (project #${projectHint})` : ''}. `,
@@ -967,30 +1037,18 @@ export class BrainService {
       // the backlog, and that agent's persona knows nothing about being accountable for
       // it. The standard has to attach to the CONVERSATION, not to one agent row, or the
       // answer quality would silently depend on who was designated.
-      ...(isManagerChat && projectHint != null ? [accountabilityFraming(projectHint)] : []),
+      ...(isManagerChat && projectHint != null ? [accountabilityFraming(projectHint, nameFor)] : []),
       `Reply AS ${agentName} — first person, concise, helpful, no preamble and no "${agentName}:" label. `,
       `You may use the provided tools to read or update the team's work (projects, tasks, specs, OKRs, knowledge) when it helps answer or act on the request. After using tools, summarise what you found or did. `,
       // The agent IS a participant in this chat (chatId is known here, not to the model) —
-      // tell it the id so it can tie work items to THIS conversation via chats.link_ticket
-      // and read what is already linked via chats.list_tickets. Without this the chat-scoped
-      // tools are advertised but unusable (the model has no chatId to pass).
-      `You are participating in Brain chat #${chatId}. When you create or discuss a work item that belongs to this conversation, tie it to the chat with chats.link_ticket (chatId=${chatId}); use chats.list_tickets (chatId=${chatId}) to see what is already linked. `,
-      `When you need the user to make a decision before you can proceed (an owner, an approach, one target vs another), call the ask_user tool with labelled options INSTEAD of asking in prose — do not end your reply with unanswered questions when ask_user would let the user just click a choice.`,
+      // tell it the id so it can tie work items to THIS conversation. Named by ADVERTISED
+      // name for the same reason as above; dropped entirely when the tools are not offered.
+      `You are participating in Brain chat #${chatId}. `,
+      linkTicket && listTickets
+        ? `When you create or discuss a work item that belongs to this conversation, tie it to the chat with ${linkTicket}(chatId=${chatId}); use ${listTickets}(chatId=${chatId}) to see what is already linked. `
+        : '',
+      `When you need the user to make a decision before you can proceed (an owner, an approach, one target vs another), call the ${ASK_USER_TOOL} tool with labelled options INSTEAD of asking in prose — do not end your reply with unanswered questions when ${ASK_USER_TOOL} would let the user just click a choice.`,
     ].join('');
-
-    // Curated, non-destructive platform tools (the same allowlist an autonomous cloud
-    // agent gets) PLUS the chat-scoped read/link tools that only make sense with a live
-    // chatId (so an agent addressed in a chat can link work to it). Advertised name →
-    // tool id map for executing the model's calls.
-    const agentToolIds = [...CLOUD_AGENT_PLATFORM_TOOLS, ...CHAT_SCOPED_AGENT_TOOLS];
-    const toolEntries = listBuiltinTools().filter((t) => agentToolIds.includes(t.tool));
-    const nameToTool = new Map(toolEntries.map((t) => [t.name, t.tool]));
-    // Advertise the platform tools PLUS the conversational `ask_user` tool (injected
-    // here, intercepted below as a terminal turn — see ASK_USER_TOOL_SPEC).
-    const tools = [
-      ...toolEntries.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
-      ASK_USER_TOOL_SPEC,
-    ];
 
     const convo: Array<Record<string, unknown>> = [
       { role: 'system', content: systemPrompt },
@@ -1037,6 +1095,22 @@ export class BrainService {
     let text = '';
     let toolCallCount = 0;
     let iterations = 0;
+    /**
+     * The reply's TOOL TRACE, persisted at the end of the turn.
+     *
+     * This loop used to leave no server-side record of what it did: the trace table was
+     * written only by the client-driven Brain run loop, so an addressed-agent reply — the
+     * ONLY path the manager's accountability chat uses — was unauditable. When the manager
+     * answered "the required tools have not returned results" there was literally nothing
+     * to inspect: no tool rows, no errors, no way to tell "the model never called anything"
+     * from "every call failed". Those two have completely different fixes, and the surface
+     * could not distinguish them.
+     *
+     * Buffered rather than written per tool because a Worker should not pay a round-trip
+     * inside the loop; one bounded append at the end is enough for a diagnostic and cannot
+     * slow the reply. Best-effort throughout — a trace failure must never cost an answer.
+     */
+    const trace: BrainTraceEventInput[] = [];
     // Budget for the announced-but-untaken tool call recovery below (shared with the
     // Brain run loop and the agent runtime via `@builderforce/agent-stall`).
     let announcementRecoveries = 0;
@@ -1076,6 +1150,22 @@ export class BrainService {
       // NOT read as if it were the choices envelope (that silently empties every reply).
       const { message, content, toolCalls, finishReason } = await readProxyChoice(result);
       lastFinish = finishReason || lastFinish;
+      // The MODEL turn itself, recorded whether or not it called anything. A turn with
+      // `toolCalls: 0` and prose that merely names tools is the announced-but-untaken
+      // stall, and without this row it is indistinguishable from a turn whose tools all
+      // failed — the two have opposite fixes.
+      trace.push({
+        kind: 'llm',
+        label: readModel(result) || activeModel || '(gateway default)',
+        result: {
+          finishReason,
+          toolCalls: toolCalls.length,
+          toolNames: toolCalls.map((tc) => tc.function.name),
+          replyChars: content.length,
+          advertisedTools: tools.length,
+        },
+        turnSeq: iterations,
+      });
 
       if (toolCalls.length === 0) {
         // The model ANNOUNCED an action and then ended the turn without taking it
@@ -1153,15 +1243,26 @@ export class BrainService {
         }
         const toolId = nameToTool.get(tc.function.name) ?? tc.function.name;
         let out: unknown;
+        let isError = false;
+        const startedAt = Date.now();
+        let argObj: unknown = {};
         try {
-          const argObj = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
+          argObj = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
           out = await callBuiltinTool(this.db, {
-            tenantId, tool: toolId, arguments: argObj, env,
+            tenantId, tool: toolId, arguments: argObj as Record<string, unknown>, env,
             userId, role: opts?.role as never, authToken: opts?.authToken, executionCtx: opts?.executionCtx,
           });
         } catch (e) {
+          isError = true;
           out = { error: e instanceof Error ? e.message : 'tool call failed' };
         }
+        // The CATALOG id is the label, not the advertised name: it is what a reader greps
+        // for and what the prompt/allowlist are written in. A name the model invented that
+        // resolves to nothing lands here verbatim, which is itself the diagnosis.
+        trace.push({
+          kind: 'tool', label: toolId, args: argObj, result: out,
+          isError, durationMs: Date.now() - startedAt, turnSeq: iterations,
+        });
         convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out ?? null).slice(0, 8000) });
       }
     }
@@ -1303,6 +1404,17 @@ export class BrainService {
       provenance,
     });
     const [posted] = await this.appendRaw(chatId, [{ role: 'assistant', content: text, metadata }]);
+
+    // Persist the tool trace for THIS reply. Until this existed, an addressed-agent turn
+    // left no server-side record of what it called — so when the manager reported that
+    // its tools "have not returned results", there was nothing to inspect and no way to
+    // tell a model that never called anything from calls that all failed. One bounded
+    // append after the reply is posted: it must never delay or fail the answer.
+    if (trace.length > 0) {
+      await this.appendTrace(chatId, trace).catch((error) => {
+        reportCaughtError(error, { source: "application/brain/BrainService.ts", operation: "agentReply" });
+      });
+    }
 
     // Audit: an agent ACTED in this chat, and on WHICH MODEL. Previously a chat turn
     // wrote no activity row at all, so the audit timeline could not answer "what model

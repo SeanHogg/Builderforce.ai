@@ -2952,7 +2952,17 @@ async function fireAgentAssignmentHandoff(ctx: BuiltinCtx, task: Task, previousA
 }
 
 /** Flat, gateway-safe advertised name: `builtin_projects_list` (no dots). */
-function advertisedName(tool: string): string {
+/**
+ * The name a tool is advertised to the MODEL under.
+ *
+ * EXPORTED because a prompt that names a tool must name the SAME string the model was
+ * given. It is not decoration: a system prompt that told an agent to call
+ * `manager.digest` — the internal catalog id — handed it a name that appears nowhere in
+ * its tool list, and the model responded by DESCRIBING the calls it could not make
+ * ("The tools required are manager.digest, manager.decisions…") instead of making them.
+ * Any prompt referencing a tool must route through this, never a hand-typed literal.
+ */
+export function advertisedName(tool: string): string {
   return `builtin_${tool.replace(/[^a-zA-Z0-9]+/g, '_')}`;
 }
 
