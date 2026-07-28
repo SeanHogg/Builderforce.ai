@@ -25,6 +25,7 @@ import { parseDrizzleTables } from './lib/drizzleSchema.mjs';
 const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const srcDir = resolve(here, '../src');
 const migrationsDir = resolve(here, '../migrations');
+const transactionalDir = resolve(here, '../transactional-migrations');
 const allowlistFile = resolve(here, '.schema-drift-allowlist.txt');
 
 // Pre-existing drift captured when this script first landed — mostly tables
@@ -52,22 +53,63 @@ const drizzleTables = [...parseDrizzleTables(srcDir)].map(([table, cols]) => ({
 }));
 
 // ── Parse all migrations ────────────────────────────────────────────────────
+//
+// Parsed ONCE PER TRACK. `api/migrations` targets NEON_DATABASE_URL;
+// `api/transactional-migrations` targets NEON_TRANSACTIONAL_DATABASE_URL. A
+// table that lives on the operational track must have its columns declared
+// THERE — see the operational-track check further down.
 
-const sqlFiles = readdirSync(migrationsDir)
+function parseTrack(dir) {
+
+const sqlFiles = readdirSync(dir)
   .filter((f) => f.endsWith('.sql'))
   .sort();
 
 const migratedColumns = new Map(); // table -> Set<column>
 
+/**
+ * Split a CREATE TABLE / ALTER TABLE body on its TOP-LEVEL commas.
+ *
+ * Splitting on newlines instead (the original approach) only ever sees the FIRST
+ * column of a line, so a compactly-written migration — which is exactly how
+ * transactional-migrations/0001 declares its tables:
+ *   id serial PRIMARY KEY, method varchar(10), path varchar(500), message text,
+ * silently contributes one column per line and reports the rest as missing.
+ *
+ * Commas inside parentheses (`numeric(10,2)`, `PRIMARY KEY (a, b)`) and inside
+ * string literals (`DEFAULT 'a,b'`) are not separators.
+ */
+function splitTopLevel(sqlBlock) {
+  const parts = [];
+  let depth = 0;
+  let quoted = false;
+  let current = '';
+  for (let i = 0; i < sqlBlock.length; i++) {
+    const ch = sqlBlock[i];
+    if (quoted) {
+      current += ch;
+      if (ch === "'") quoted = false;
+      continue;
+    }
+    if (ch === "'") { quoted = true; current += ch; continue; }
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    if (ch === ',' && depth === 0) { parts.push(current); current = ''; continue; }
+    current += ch;
+  }
+  parts.push(current);
+  return parts;
+}
+
 function recordColumns(table, sqlBlock) {
   if (!migratedColumns.has(table)) migratedColumns.set(table, new Set());
   const cols = migratedColumns.get(table);
-  // Capture column names — first identifier on each non-empty line of the
-  // CREATE TABLE / ALTER TABLE … ADD COLUMN block. Strip leading "ADD COLUMN [IF NOT EXISTS]".
-  const lines = sqlBlock.split('\n');
-  for (let line of lines) {
-    line = line.trim().replace(/^,\s*/, '').replace(/^ADD COLUMN(?:\s+IF NOT EXISTS)?\s+/i, '');
-    const m = line.match(/^([a-z_][a-z_0-9]*)/i);
+  // Capture column names — the leading identifier of each comma-separated clause
+  // of the CREATE TABLE / ALTER TABLE … ADD COLUMN body. Strip a leading
+  // "ADD COLUMN [IF NOT EXISTS]" so the multi-action ALTER form parses too.
+  for (let part of splitTopLevel(sqlBlock)) {
+    part = part.trim().replace(/^ADD COLUMN(?:\s+IF NOT EXISTS)?\s+/i, '');
+    const m = part.match(/^([a-z_][a-z_0-9]*)/i);
     if (m) cols.add(m[1].toLowerCase());
   }
 }
@@ -128,8 +170,12 @@ function applyRenames(raw, text) {
 }
 
 for (const file of sqlFiles) {
-  const raw = readFileSync(resolve(migrationsDir, file), 'utf8');
-  const text = raw.replace(/--[^\n]*/g, '');
+  const raw = readFileSync(resolve(dir, file), 'utf8');
+  // Strip BLOCK comments before line comments: several migrations document
+  // columns with `/** … */` inside the CREATE TABLE body, and that prose
+  // contains both commas and apostrophes — which the top-level comma splitter
+  // would otherwise read as column separators and string literals.
+  const text = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--[^\n]*/g, '');
 
   // CREATE TABLE [IF NOT EXISTS] <name> ( <cols> );
   const createRe = /CREATE TABLE(?:\s+IF NOT EXISTS)?\s+([a-z_][a-z_0-9]*)\s*\(([\s\S]*?)\)\s*;/gi;
@@ -160,6 +206,13 @@ for (const file of sqlFiles) {
   applyRenames(raw, text);
 }
 
+return migratedColumns;
+
+}
+
+const migratedColumns = parseTrack(migrationsDir);
+const operationalColumns = parseTrack(transactionalDir);
+
 // ── Compare ─────────────────────────────────────────────────────────────────
 
 const errors = [];
@@ -179,6 +232,38 @@ for (const { table, cols } of drizzleTables) {
       if (allowlist.has(msg)) { allowed++; continue; }
       errors.push(msg);
     }
+  }
+}
+
+// ── Operational track: a table's columns must exist on the DB it is WRITTEN to ──
+//
+// `api/migrations` and `api/transactional-migrations` target two DIFFERENT Neon
+// databases. The forward check above is satisfied by EITHER track, so a column
+// added to the primary track for a table that actually lives on the operational
+// one looks perfectly migrated — and then fails at runtime, on every write,
+// forever.
+//
+// That has now happened twice, both silent because the writers swallow their own
+// errors:
+//   - api_error_log.{tenant_id,source,operation,handled,context} (mig 0375 →
+//     primary): the centralized error reporter persisted NOTHING in production.
+//   - activity_log.event_key (mig 0374 → primary): the unified audit log dropped
+//     every event, ~350/hour.
+//
+// Any table CREATED in transactional-migrations lives on the operational
+// database, so every Drizzle column it declares must be present in THAT track.
+
+const operationalTables = new Set(operationalColumns.keys());
+let operationalAllowed = 0;
+
+for (const { table, cols } of drizzleTables) {
+  if (!operationalTables.has(table)) continue;
+  const present = operationalColumns.get(table);
+  for (const col of cols) {
+    if (present.has(col.toLowerCase())) continue;
+    const msg = `Column '${table}.${col}' is missing from the OPERATIONAL migration track — ${table} is written to NEON_TRANSACTIONAL_DATABASE_URL, so adding it under api/migrations/ does not create it.`;
+    if (allowlist.has(msg)) { operationalAllowed++; continue; }
+    errors.push(msg);
   }
 }
 
@@ -217,6 +302,7 @@ if (errors.length > 0) {
   console.error('NEW schema drift detected (not in allowlist):\n');
   for (const err of errors) console.error('  - ' + err);
   console.error('\nAdd a migration in api/migrations/ that creates the missing column(s), or remove from schema.ts.');
+  console.error('For an OPERATIONAL-track column, the migration belongs in api/transactional-migrations/ — that table is written to a different database.');
   console.error('To deliberately grandfather this drift (e.g. for a baseline-push table), add the bullet to scripts/.schema-drift-allowlist.txt.');
   console.error("For a migrated table with no pgTable() declaration: add it to schema.ts, or list the bare table name in scripts/.schema-missing-allowlist.txt if it is intentionally unmapped (e.g. a pure join/audit table written only by SQL migrations).");
   process.exit(1);
@@ -225,6 +311,7 @@ if (errors.length > 0) {
 console.log(
   `Schema drift check passed: ${drizzleTables.length} drizzle tables, ` +
   `${[...migratedColumns.values()].reduce((sum, s) => sum + s.size, 0)} migrated columns, ` +
-  `${allowed} pre-existing drift items grandfathered, ` +
+  `${operationalTables.size} operational-track tables verified against transactional-migrations, ` +
+  `${allowed + operationalAllowed} pre-existing drift items grandfathered, ` +
   `${reverseAllowed} migrated tables intentionally unmapped.`,
 );

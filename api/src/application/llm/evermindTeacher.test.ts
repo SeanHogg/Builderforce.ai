@@ -177,6 +177,27 @@ describe('resolveEvermindTeacherModel (once-per-alarm budget gate)', () => {
     expect(await resolveEvermindTeacherModel(env, db, TENANT, 'claude-opus-4-8')).toEqual({ model: 'claude-opus-4-8' });
   });
 
+  /**
+   * `xai/grok-4.5` matches no vendor prefix and is no catalog id, so
+   * vendorForModel falls through to the default vendor — which has never heard
+   * of it and answers 503 on every alarm. Left unguarded this produced 2,083
+   * identical faults with nothing to self-correct it, so the pin must be
+   * refused BEFORE a request is spent, and named for what it is.
+   */
+  it('skips an unroutable pin without spending a call or a budget scan', async () => {
+    expect(await resolveEvermindTeacherModel(env, db, TENANT, 'xai/grok-4.5'))
+      .toEqual({ model: null, reason: 'unroutable' });
+    expect(availabilityMock).not.toHaveBeenCalled();
+    expect(providerKeysMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts the routable forms of the same vendor', async () => {
+    expect(await resolveEvermindTeacherModel(env, db, TENANT, 'direct/xai/grok-4.5'))
+      .toEqual({ model: 'direct/xai/grok-4.5' });
+    expect(await resolveEvermindTeacherModel(env, db, TENANT, 'xai-oauth/grok-4.3'))
+      .toEqual({ model: 'xai-oauth/grok-4.3' });
+  });
+
   it('returns null when the tenant is out of token budget', async () => {
     availabilityMock.mockResolvedValue({ hasTokens: false, reason: 'daily_exhausted' });
     // Distinct from 'not_pinned': a pinned teacher blocked by budget is a different fix.

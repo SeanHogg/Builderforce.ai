@@ -562,7 +562,12 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
     warning.push({
       severity: 'warning',
       code: 'passes_truncated',
-      text: `${truncated.length} of the last ${passes.length} passes ran out of their wall-clock budget and deferred ${stages.join(', ')} to the next pass. The pass still completed and journalled honestly, but a project whose PR coordination consistently consumes the whole budget is starving the stages behind it — bound the PR work (or split the pass) rather than letting the backlog behind it go ungroomed.`,
+      // "Bound the PR work or split the pass" was advice for a starvation the platform now
+      // handles: a pass that sheds a stage hands the NEXT pass to it (`passRotation.ts`),
+      // so a stage waits one tick rather than indefinitely. The deferral is only worth
+      // acting on when a stage is shed on nearly EVERY pass, which the rotation cannot
+      // happen under — that would mean the cursor is not surviving between passes.
+      text: `${truncated.length} of the last ${passes.length} passes ran out of their wall-clock budget and deferred ${stages.join(', ')} to the next pass. A shed stage is handed the following pass, so this is self-correcting and the deferred work waits one tick, not indefinitely. It is only a real problem if the SAME stage is deferred on nearly every pass — that would mean the rotation cursor is not surviving between passes, and the stage behind it is being starved rather than paced.`,
     });
   }
   // ONLY A MANUAL RUN FILES A PASS CARD. `runManagerSweep` — the 5-minute cron path —
@@ -732,7 +737,11 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
       critical.push({
         severity: 'critical',
         code: 'managed_dispatch_refused',
-        text: `${managedCohort.count} ticket${managedCohort.count === 1 ? '' : 's'} on this lifecycle-managed board cannot dispatch at all: their stage authorises roles, but none resolves to an agent, so no run can be role-attributed and the dispatcher refuses every attempt. Assigning owners will NOT fix it — on a managed board the assignee is the Coordinator, never the executor. Staff the stage's lane with a role-capable agent, or pin the role in the project roster. Example tickets: ${managedCohort.sampleTaskIds.join(', ')}.`,
+        // The manager now staffs the board's unfilled roles ITSELF, once per pass, ahead of
+      // every discretionary stage (`staffUnfilledLanes.ts`) — so a cohort that persists is
+      // no longer "somebody needs to staff this", it is "staffing ran and could not fix
+      // it". The advice has to say which, or a reader does work the platform already did.
+      text: `${managedCohort.count} ticket${managedCohort.count === 1 ? '' : 's'} on this lifecycle-managed board cannot dispatch at all: their stage authorises roles, but none resolves to an agent, so no run can be role-attributed and the dispatcher refuses every attempt. Assigning owners will NOT fix it — on a managed board the assignee is the Coordinator, never the executor. The manager staffs unfilled board roles itself every pass, so a cohort still standing means staffing RAN and could not clear it: look for an 'assign' decision naming the roles it could not fill (an unrecognised role key, or its hire budget spent), and staff or correct those by hand. Example tickets: ${managedCohort.sampleTaskIds.join(', ')}.`,
       });
     }
 
@@ -902,7 +911,13 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
     critical.push({
       severity: 'critical',
       code: 'signoff_agent_never_answers',
-      text: `${signoffs.attestationExhausted} required sign-off slot${signoffs.attestationExhausted === 1 ? ' is' : 's are'} owed by an agent that has finished every run it was given WITHOUT recording a verdict, so the manager has stopped asking. This is not a dispatch failure — the runs completed successfully. The agent is doing the work and not reporting it, which no number of further asks will change. These slots need a human: record the verdict, waive the role, or replace the agent on it. They are subtracted from the agent-owed count below, so that number is what the manager can still act on.`,
+      // The advice used to end "no number of further asks will change this — these slots
+      // need a human". That was true of a silence counted against a WORKING ask, and false
+      // of the 108 slots measured on 2026-07-28, every one of which had been counted while
+      // the instruction named a tool the agent did not have. A counted silence is now
+      // scoped to the ask that earned it (`signoffContract.ts`), so the first thing to
+      // check is whether the ask was answerable — not whether the agent is broken.
+      text: `${signoffs.attestationExhausted} required sign-off slot${signoffs.attestationExhausted === 1 ? ' is' : 's are'} owed by an agent that has finished every run it was given WITHOUT recording a verdict, so the manager has stopped asking. This is not a dispatch failure — the runs completed successfully. FIRST check whether the ask was answerable at all: an instruction naming a tool the agent does not have produces exactly this signature, and twice it has. Silences are counted per ask contract, so fixing the instruction re-arms these slots automatically on the next pass. If the ask IS sound and the agent still will not answer, the slots need a human: record the verdict, waive the role, or replace the agent. They are subtracted from the agent-owed count below, so that number is what the manager can still act on.`,
     });
   }
   if (signoffs.heldTickets >= 2 && signoffs.askedTickets === 0) {

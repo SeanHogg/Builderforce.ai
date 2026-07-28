@@ -33,15 +33,28 @@ describe('decideRemedyExecution — manager-owned recoveries on the cron path', 
     });
   }
 
-  it('still leaves plain dispatch to the executor, and says so by deferring', () => {
+  /**
+   * `dispatch` used to be deferred on the cron path, on the rule that the executor owns
+   * it. But a ticket only reaches the `never_started` diagnosis after a full day of being
+   * eligible and untouched, by which point the five-minute executor has had ~288 chances
+   * and taken none — so the deferral was unbounded, uncounted, and therefore unescalatable.
+   * Measured on project 11: 110 tickets `never_started`, the oldest idle 29 days.
+   */
+  it('starts a never-run ticket itself rather than deferring to an executor that had a day', () => {
     const p = plan({ remedy: 'dispatch', ownsDispatch: false });
-    expect(p.act).toBe(false);
-    expect(p.deferred).toBe(true);
+    expect(p).toMatchObject({ act: true, mayStartRun: true, deferred: false });
   });
 
   it('dispatches when this pass DOES own dispatch', () => {
     const p = plan({ remedy: 'dispatch', ownsDispatch: true });
     expect(p).toMatchObject({ act: true, mayStartRun: true, deferred: false });
+  });
+
+  // The ceiling is what keeps the line above from becoming a retry storm: the manager may
+  // now start plain work, but never more of it than the shared per-tick budget allows.
+  it('still defers plain dispatch when the billable-run budget is spent', () => {
+    expect(plan({ remedy: 'dispatch', ownsDispatch: false, budgetLeft: false }))
+      .toMatchObject({ act: false, deferred: true });
   });
 });
 
