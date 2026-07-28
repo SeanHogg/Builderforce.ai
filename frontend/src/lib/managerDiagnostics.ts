@@ -254,11 +254,33 @@ const RUN_STARTING_REMEDIES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * How long a register row may sit at attempts=0 before "the manager is still trying" is
- * not a credible reading of it. Three days is well past the 24h stall threshold AND past
- * any plausible per-pass cap backlog, so anything older has been passed over, not queued.
+ * How long THE REGISTER may watch a row at attempts=0 before "the manager is still
+ * trying" stops being a credible reading of it. Three days is well past the 24h stall
+ * threshold AND past any plausible per-pass cap backlog, so a row re-observed across that
+ * span without one attempt has been passed over, not queued.
+ *
+ * ── MEASURED FROM THE ROW, NOT THE TICKET ────────────────────────────────────────
+ * This used to compare the TICKET's `idleMs`, which is a different quantity and produced
+ * a false CRITICAL on every newly-discovered row. Measured on project 11,
+ * 2026-07-28T02:56: six rows reported as "every pass has skipped them", all six with
+ * `firstSeen` inside the previous five minutes and `lastAttempt=—`. The manager had had
+ * at most one pass to act on them; the tickets happened to have been idle 16 days before
+ * anyone looked. The finding's own comment already named the trap — "on the surface it is
+ * indistinguishable from a ticket the manager picked up this minute" — and then measured
+ * the one number that cannot tell them apart.
+ *
+ * `lastSeenAt - firstSeenAt` is how long the register has been re-observing the row while
+ * doing nothing about it, which is exactly what the finding claims.
  */
 export const NEVER_ATTEMPTED_AFTER_MS = 3 * 86_400_000;
+
+/** How long the register has watched this row — 0 for one seen only once. */
+function watchedMs(row: { firstSeenAt: string; lastSeenAt: string }): number {
+  const first = Date.parse(row.firstSeenAt);
+  const last = Date.parse(row.lastSeenAt);
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return 0;
+  return Math.max(0, last - first);
+}
 
 /**
  * What share of the stalled set ONE cause must hold before the report calls it a
@@ -644,20 +666,26 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
     // The OPPOSITE failure, and the harder one to see: a row nothing has ever been
     // tried on. `attempts` only advances when a remedy actually ran, so a remedy the
     // pass keeps skipping leaves the row at 0 forever — it never reaches the
-    // escalation ceiling either, so it is neither worked nor handed to a human. On the
-    // surface it is indistinguishable from a ticket the manager picked up this minute.
+    // escalation ceiling either, so it is neither worked nor handed to a human.
+    //
+    // Qualified on how long THE REGISTER has watched the row (see
+    // NEVER_ATTEMPTED_AFTER_MS), never on the ticket's idle age: a row discovered this
+    // minute on a ticket idle for a month is the manager working correctly, and reporting
+    // it as a critical sends a person to look at nothing.
     const neverAttempted = stalls.rows.filter(
       (r) => r.attempts === 0 && !r.escalatedAt
-        && RUN_STARTING_REMEDIES.has(r.remedy) && r.idleMs > NEVER_ATTEMPTED_AFTER_MS,
+        && RUN_STARTING_REMEDIES.has(r.remedy) && watchedMs(r) > NEVER_ATTEMPTED_AFTER_MS,
     );
     if (neverAttempted.length > 0) {
       const byRemedy = new Map<string, number>();
       for (const r of neverAttempted) byRemedy.set(r.remedy, (byRemedy.get(r.remedy) ?? 0) + 1);
-      const oldest = neverAttempted.reduce((a, b) => (b.idleMs > a.idleMs ? b : a));
+      const longest = neverAttempted.reduce((a, b) => (watchedMs(b) > watchedMs(a) ? b : a));
       critical.push({
         severity: 'critical',
         code: 'remedy_never_attempted',
-        text: `${neverAttempted.length} stuck ticket${neverAttempted.length === 1 ? ' has' : 's have'} a remedy that has NEVER been attempted (attempts=0), the longest idle ${formatAge(oldest.idleMs)} — ${[...byRemedy.entries()].map(([k, n]) => `${k} ×${n}`).join(', ')}. Each of these remedies has to start a run, and every pass has skipped them: because an attempt that never happened cannot fail, the ${stalls.maxAttempts}-attempt escalation ceiling is never reached either, so nothing is worked AND nothing is handed to a human.`,
+        // States the WATCHED span, because that is the number the claim rests on. The
+        // ticket's idle age says nothing about whether the manager has skipped it.
+        text: `${neverAttempted.length} stuck ticket${neverAttempted.length === 1 ? ' has' : 's have'} a remedy that has NEVER been attempted (attempts=0) despite the register re-observing ${neverAttempted.length === 1 ? 'it' : 'them'} for up to ${formatAge(watchedMs(longest))} — ${[...byRemedy.entries()].map(([k, n]) => `${k} ×${n}`).join(', ')}. Each of these remedies has to start a run, and every pass has skipped them: because an attempt that never happened cannot fail, the ${stalls.maxAttempts}-attempt escalation ceiling is never reached either, so nothing is worked AND nothing is handed to a human.`,
       });
     }
   }
