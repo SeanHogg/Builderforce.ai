@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-07-28 — ✅ SHIPPED: required sign-off is now a PROJECT setting the manager checks, and it is OFF for every project (api 2026.7.175 · frontend 2026.7.137 · migration 0380)
+
+The premise was always right: other team members — agents or humans — sign off on a ticket so the work is actually reviewed. What was wrong was that 0362 shipped it as a **default-ON platform behaviour** rather than a project's own decision. Measured on project 11 twenty-six days later: **265 of 679 stalled tickets on `awaiting_signoff`**, the oldest idle **48 days**, 22 of them carrying the `drive_signoff` remedy, the manager re-issuing the same ask every five-minute pass (1,214 `flag` decisions in one day), against **0 tickets finished today and 0 yesterday**. A review gate no project chose is indistinguishable from a deadlock.
+
+**The setting existed; the manager only half-consulted it.** `requireSignoffToComplete` gated the CONDUCT step and the MERGE. Stall triage did not: it resolved the stage-scoped gate unconditionally on every lane, so a project with sign-off switched off *still* had its tickets diagnosed `awaiting_signoff`, and spent its per-pass dispatch budget re-asking for verdicts nobody owed. Turning the setting off would have changed almost nothing visible.
+
+**One policy-aware read, three call sites.** `resolveRequiredSignoffGate` (in `signoffGate.ts`) is now the single place the project setting is consulted — conduct, merge and triage all go through it, and skipping the check is not expressible. When a project has not opted in it returns `SIGNOFF_NOT_REQUIRED` **without reading the manifest at all**, so no manifest state can put a ticket back into the loop, and the per-ticket-per-stage-per-five-minutes manifest read disappears with it. Its `not_required` reason is deliberately distinct from `all_signed_off`: both open the gate, only one means somebody reviewed the work, and a ledger that conflates them cannot answer "was this merged unreviewed?" after the fact.
+
+**Off everywhere, in all three writers.** The hardcoded floor of the fold, the column default, and every row already in the table — if any one of them disagreed, whether a project requires sign-off would depend on when it was created. Migration `0380` also **clears the workspace tier**: this field folds most-restrictive-wins (an obligation), so a leftover `tenant_manager_defaults` `true` is a FLOOR that would silently re-impose the gate on every project that just opted out. NULL there is the neutral state — "the workspace has no opinion; each project decides" — which is what makes it a project setting at all. Turning it back on is one toggle on the Manager policy panel (or one at the workspace tier to mandate it for everyone); the tri-state fold, the UI and the diagnostics are unchanged.
+
+**This does not undo yesterday's fix, and is not a substitute for it.** api 2026.7.174 repaired the *delivery* of the sign-off ask (the instruction was written into `executions.payload` and read by nothing), so a project that opts IN can now actually be satisfied. This decides who is subject to it.
+
+Files: `api/migrations/0380_signoff_opt_in_per_project.sql`, `api/src/application/kanban/signoffGate.ts`, `api/src/application/manager/{managerPolicy,ManagerService,triageStage}.ts`, `api/src/infrastructure/database/schema/work.ts`, `frontend/src/i18n/messages/{en,zh,es,fr,de}.json` (help copy now states it is off unless turned on, and that it also governs the manager chasing stage sign-offs).
+
+**Verified:** API suite `4111 passed`, frontend `672 passed`, `tsgo --noEmit` clean in both, schema-drift / migration-sequence / layering guards green. New coverage pins the three properties that let this drift in the first place: the gate opens without touching the manifest when sign-off is off (`signoffGate.test.ts`), the diagnosis never reaches the sign-off branch and a runnable ticket is dispatched instead of held (`stallTriage.test.ts`), and the fold ⇄ column-default ⇄ migration agree including the workspace clause (`managerPolicy.test.ts`).
+
+---
+
 ## 2026-07-28 — ✅ RESOLVED: 2,351 agent runs, 0 tickets finished — the sign-off ask was written into the payload and read by nothing (api 2026.7.174)
 
 Manager diagnostics for project 11 reported 2,351 completed agent runs in one local day against **0 tickets finished, 0 forward lane moves, 0 PRs merged**, with 679 of 698 active tickets stalled. The report's own headline finding blamed "a defect in the sign-off recording mechanism". It was right, and the defect was one unread field.
@@ -26,7 +44,7 @@ Files: `api/src/application/runtime/{cloudDispatch,cloudAgentEngine}.ts`, `api/s
 
 ---
 
-## 2026-07-28 — ✅ RESOLVED: the Manager was reciting a persona nobody could fix — a tool name persisted in a database row survived its own code fix for a full release (api 2026.7.173 · agent-stall 2026.7.5)
+## 2026-07-28 — ✅ RESOLVED: the Manager was reciting a persona nobody could fix — a tool name persisted in a database row survived its own code fix for a full release (api 2026.7.173 · frontend 2026.7.136 · agent-stall 2026.7.5 · VSIX 2026.7.110)
 
 **Captured live from Ask-the-Manager on project 11 / chat 86**, on api 2026.7.172 — *the version that already contained the tool-name fix*. Seven model turns, **102 tools advertised, ZERO tool calls**, and the manager answering three consecutive accountability questions with "The tools required are manager.digest, manager.decisions, manager.census and manager.policy" and "the required tools have not returned results yet". The prompt→tool-name contract was supposedly closed the day before (`toolNaming.ts`, `check-prompt-tool-names.mjs`, `agentReplyPrompt.test.ts`); every one of those guards was green.
 
@@ -38,9 +56,11 @@ Files: `api/src/application/runtime/{cloudDispatch,cloudAgentEngine}.ts`, `api/s
 
 **4 · The checker could not see SQL, and CI could not see the checker.** `check-prompt-tool-names.mjs` walked `src/**/*.ts` only — the defect shipped through a `.sql` file. It now also parses `migrations/` + `transactional-migrations/` under a **stricter** rule: a prose literal in a migration may name no tool at all, neither catalog id nor advertised name, because migrations write data and data is never re-rendered. Two exemptions, both structural rather than allowlisted: the NEEDLE argument of `replace()` and the operand of `LIKE` — a repair migration must be able to quote the dead text in order to find it. Verified by mutation (a probe migration writing `'Read manager.digest for what finished today.'` is caught; the same id in a `--` comment is not). Separately, **`check:prompt-tools` had never run in CI**: the api job calls `vitest` directly to avoid re-running the three drift scripts, so the other nine `pnpm test` guards ran nowhere. All nine now run as their own step (each verified green against the tree first).
 
-Files: `api/migrations/0379_manager_persona_no_tool_names.sql` (+ `0376` corrected for a fresh replay), `api/src/application/agent/provisionBuiltinAgents.ts` + new `provisionBuiltinAgents.test.ts` (persona names no tool; seed ⇄ 0376 ⇄ 0379 text parity), `api/scripts/check-prompt-tool-names.mjs`, `packages/agent-stall/src/index.ts` + tests, `.github/workflows/ci.yml`.
+**5 · The diagnostic that found this pointed at the half of the cause that was already fixed.** `tools_narrated_never_called` said "the usual cause is a NAME MISMATCH … check that every tool named in the prompt appears in the advertised tool list" — advice that sends a reader to the code, where every guard was green. It now names both places the instruction can come from and says which one hides: the code that builds the turn, and the persisted persona that no deploy rewrites.
 
-**Verified:** agent-stall suite green (37 tests, incl. the six captured replies as regression cases); new persona/parity suite green; `check-prompt-tools` green and mutation-tested; API suite green. NOT verified against a live turn — the deployed proof is a manager capture showing `tool calls: > 0`, and the stored row only changes when 0379 runs at deploy (the resolved persona is cached read-through for 300s KV / 60s L1, so it takes effect within five minutes of that).
+Files: `api/migrations/0379_manager_persona_no_tool_names.sql` (+ `0376` corrected for a fresh replay), `api/src/application/agent/provisionBuiltinAgents.ts` + new `provisionBuiltinAgents.test.ts` (persona names no tool; seed ⇄ 0376 ⇄ 0379 text parity), `api/scripts/check-prompt-tool-names.mjs`, `packages/agent-stall/src/index.ts` + tests, `frontend/src/lib/managerChatDiagnostics.ts`, `.github/workflows/ci.yml`.
+
+**Verified:** agent-stall suite green (37 tests, incl. the six captured replies as regression cases); new persona/parity suite green; `check-prompt-tools` green and mutation-tested; API suite green (4,100); frontend suite green (672); `tsc`/`tsgo` clean in both; VSIX repackaged (2026.7.110) and the new stall recovery confirmed present in the webview bundle. NOT verified against a live turn — the deployed proof is a manager capture showing `tool calls: > 0`, and the stored row only changes when 0379 runs at deploy (the resolved persona is cached read-through for 300s KV / 60s L1, so it takes effect within five minutes of that).
 
 ---
 

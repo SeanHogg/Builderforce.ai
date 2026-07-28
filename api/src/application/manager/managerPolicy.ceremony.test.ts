@@ -125,7 +125,7 @@ describe('ceremony autonomy — the guardrail numbers resolve to the SAFEST valu
       tenant: tier({ allowUnattendedCeremonies: true, allowAgentReassignment: true }),
     });
     expect(p.allowAutoMerge).toBe(false);
-    expect(p.requireSignoffToComplete).toBe(true);
+    expect(p.requireSignoffToComplete).toBe(false);
     expect(p.enabled).toBe(true);
   });
 });

@@ -6833,7 +6833,7 @@
       },
       "requireSignoff": {
         "label": "Require sign-off before finishing",
-        "help": "Only finish a ticket and merge its pull request once every required reviewer has signed off. A ticket nobody was asked to review never qualifies."
+        "help": "Off unless you turn it on. When on, a ticket only finishes — and its pull request only merges — once every required reviewer has signed off, and the manager keeps chasing the roles that still owe one. A ticket nobody was asked to review never qualifies."
       },
       "tri": {
         "on": "On",

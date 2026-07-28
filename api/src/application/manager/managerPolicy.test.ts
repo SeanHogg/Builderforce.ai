@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import {
   resolveEffectiveManagerPolicy,
@@ -294,8 +296,8 @@ describe('resolveTieredManagerPolicy', () => {
       tenant: tenantRow({ requireSignoffToComplete: false }),
       project: projectRow({ requireSignoffToComplete: undefined }),
     }).requireSignoffToComplete).toBe(false);
-    // …and defaults back to required when nobody speaks.
-    expect(resolveTieredManagerPolicy({}).requireSignoffToComplete).toBe(true);
+    // …and stays OFF when nobody speaks (0380): sign-off is opted into, not inherited.
+    expect(resolveTieredManagerPolicy({}).requireSignoffToComplete).toBe(false);
   });
 
   it('is pure — it never mutates the rows it folds, or the shared default object', () => {
@@ -330,5 +332,54 @@ describe('resolveTenantManagerDefaults', () => {
   });
   it('is the hardcoded default for a workspace that has never been configured', () => {
     expect(resolveTenantManagerDefaults(null)).toEqual(DEFAULT_MANAGER_POLICY);
+  });
+});
+
+/**
+ * THE DEFAULT AND THE DATABASE MUST AGREE (0380).
+ *
+ * Three writers decide what `requireSignoffToComplete` is for a given project: the
+ * hardcoded floor of the fold (a project with no row at all), the column default (a row
+ * materialised by a partial upsert), and the migration that flipped every row already in
+ * the table. If any one of them disagrees, whether a project requires sign-off depends on
+ * WHEN it was created — which is exactly the class of bug 0362 shipped in the other
+ * direction, where a default nobody chose stalled 265 tickets for up to 48 days.
+ *
+ * The workspace clause is not optional either: this field folds most-restrictive-wins, so
+ * a leftover workspace `true` is a FLOOR that silently re-imposes the gate on every
+ * project that just opted out.
+ */
+describe('requireSignoffToComplete · code ⇄ migration parity (0380)', () => {
+  const sql = readFileSync(
+    fileURLToPath(new URL('../../../migrations/0380_signoff_opt_in_per_project.sql', import.meta.url).href),
+    'utf8',
+  );
+  const normalized = sql.replace(/\s+/g, ' ');
+
+  it('the fold defaults to OFF', () => {
+    expect(DEFAULT_MANAGER_POLICY.requireSignoffToComplete).toBe(false);
+  });
+
+  it('the column default matches the fold, so a new row cannot re-acquire the gate', () => {
+    expect(normalized).toContain(
+      'ALTER TABLE project_manager_configs ALTER COLUMN require_signoff_to_complete SET DEFAULT false',
+    );
+  });
+
+  it('switches every EXISTING project off — 0362 backfilled them all to true', () => {
+    expect(normalized).toMatch(
+      /UPDATE project_manager_configs SET require_signoff_to_complete = false.*WHERE require_signoff_to_complete IS DISTINCT FROM false/,
+    );
+  });
+
+  it('clears the WORKSPACE tier, whose true is a floor no project row can relax', () => {
+    expect(normalized).toMatch(
+      /UPDATE tenant_manager_defaults SET require_signoff_to_complete = NULL.*WHERE require_signoff_to_complete IS NOT NULL/,
+    );
+    // And the fold is the reason that clause has to exist.
+    expect(resolveTieredManagerPolicy({
+      tenant: tenantRow({ requireSignoffToComplete: true }),
+      project: projectRow({ requireSignoffToComplete: false }),
+    }).requireSignoffToComplete).toBe(true);
   });
 });

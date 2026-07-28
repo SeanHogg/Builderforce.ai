@@ -336,3 +336,58 @@ describe('stageSignoffFor — the wiring between the stage gate and the diagnosi
     })).remedy).toBe('coordinate');
   });
 });
+
+/**
+ * THE PROJECT SETTING REACHES THE DIAGNOSIS (0380).
+ *
+ * `requireSignoffToComplete` used to govern only completion and merge. Stall triage
+ * resolved the stage-scoped gate unconditionally, so a project that had switched sign-off
+ * OFF still had its tickets diagnosed `awaiting_signoff` with the `drive_signoff` remedy,
+ * every five-minute pass, forever — 265 of 679 stalled tickets on the reference board,
+ * the oldest idle 48 days, while the per-pass dispatch budget went on re-asking for
+ * verdicts the project did not require.
+ *
+ * `runStallTriage` now feeds the gate through `resolveRequiredSignoffGate`, which returns
+ * SIGNOFF_NOT_REQUIRED — nothing outstanding — when the project has not opted in. This
+ * pins the consequence of that at the diagnosis layer: the ticket's REAL blocker is what
+ * gets named and remedied.
+ */
+describe('a project that does not require sign-off is never diagnosed awaiting_signoff', () => {
+  /** Exactly what triageStage composes from SIGNOFF_NOT_REQUIRED. */
+  const noneOwed = stageSignoffFor('requirements', { outstanding: [] }, { dispatchable: [] }, 'in_review');
+
+  /** The same ticket the opted-IN case below diagnoses as awaiting_signoff. */
+  const stalledTicket = { status: 'ready', everRan: true, autoRunReason: 'same_lane_reentry' as const };
+
+  it('never reaches the sign-off branch — nothing is outstanding to hold it', () => {
+    const d = diagnoseStall(base({ ...stalledTicket, stageSignoff: noneOwed, signoffDispatchable: false }));
+    expect(d.cause).not.toBe('awaiting_signoff');
+    expect(d.remedy).not.toBe('drive_signoff');
+  });
+
+  it('lets a runnable ticket be DISPATCHED rather than held for a verdict', () => {
+    const d = diagnoseStall(base({
+      status: 'ready', everRan: false, autoRunReason: 'will_run',
+      stageSignoff: noneOwed, signoffDispatchable: false,
+    }));
+    expect(d).toMatchObject({ cause: 'never_started', remedy: 'dispatch' });
+  });
+
+  it('still reports a REAL blocker underneath, rather than being silenced', () => {
+    // Switching sign-off off must not make a role-less managed stage look healthy: the
+    // two are different faults and only one of them was ever about sign-off.
+    const d = diagnoseStall(base({
+      status: 'ready', autoRunReason: 'managed_no_role',
+      stageSignoff: noneOwed, signoffDispatchable: false,
+    }));
+    expect(d).toMatchObject({ cause: 'managed_no_role', remedy: 'coordinate' });
+  });
+
+  it('and an opted-IN project keeps the sign-off diagnosis exactly as before', () => {
+    const d = diagnoseStall(base({
+      ...stalledTicket,
+      stageSignoff: { roleNames: ['Product Owner'], dispatchable: true },
+    }));
+    expect(d).toMatchObject({ cause: 'awaiting_signoff', remedy: 'drive_signoff' });
+  });
+});

@@ -158,14 +158,21 @@ export interface EffectiveManagerPolicy {
    *  'service_desk' | 'devops') or a `role:<key>` custom-role type. */
   managerType: string;
   /**
-   * Self-governance precondition (migration 0362). When true — the default — the
-   * manager may complete a ticket and merge its PR autonomously ONLY once every
-   * REQUIRED participation slot has signed off. A ticket with no required slots never
-   * qualifies (see `signoffGate.ts`, which fails closed on an empty manifest), so
+   * Self-governance precondition (migration 0362), OPT-IN since 0380.
+   *
+   * When true, the manager may complete a ticket and merge its PR autonomously ONLY once
+   * every REQUIRED participation slot has signed off. A ticket with no required slots
+   * never qualifies (see `signoffGate.ts`, which fails closed on an empty manifest), so
    * "nobody reviewed it" can never read as "everybody approved it".
    *
-   * False restores the pre-0362 behaviour: complete + squash-merge with no sign-off
-   * verification at all. That is a deliberate, auditable opt-out, not a default.
+   * When false — the default — completion rests on the deliverable and build checks alone,
+   * and NOTHING in the platform holds a ticket for a verdict: not the conduct step, not
+   * the merge, and not stall triage, which otherwise re-asks a stage's owed roles on every
+   * lane. All three consult this through `resolveRequiredSignoffGate`, which is why the
+   * setting means the same thing everywhere.
+   *
+   * Still an OBLIGATION in the fold: an explicit `true` at either tier is a floor, so a
+   * workspace that mandates review cannot be opted out of by one project.
    */
   requireSignoffToComplete: boolean;
   /**
@@ -247,8 +254,15 @@ export const DEFAULT_MANAGER_POLICY: EffectiveManagerPolicy = {
   // only to tickets with NO dates, and without it every dated surface stays empty.
   autoSchedule: true,
   managerType: DEFAULT_MANAGER_TYPE,
-  // Safe by default: autonomous completion requires unanimous sign-off (0362).
-  requireSignoffToComplete: true,
+  // OFF by default (0380). 0362 introduced this as a default-ON safety gate and the
+  // measurement is in: a required-sign-off manifest that nothing reliably satisfies does
+  // not produce reviewed work, it produces a stalled board — 265 of 679 tickets on the
+  // reference project sat `awaiting_signoff`, the oldest for 48 days, while the manager
+  // spent its whole per-pass dispatch budget re-asking. Sign-off is a real quality
+  // practice and stays available, but it is now something a project OPTS IN to (the
+  // `requireSignoffToComplete` toggle on the Manager policy panel), because a review gate
+  // that no project chose is indistinguishable from a deadlock.
+  requireSignoffToComplete: false,
   // NOT granted by default (0363). Grooming, ranking and assignment are reversible;
   // merging into a default branch is not. Authority must be handed over on purpose.
   allowAutoMerge: false,

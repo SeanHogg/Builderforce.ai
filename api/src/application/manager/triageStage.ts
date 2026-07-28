@@ -41,7 +41,7 @@ import { TaskStatus, isTerminalTaskStatus } from '../../domain/shared/types';
 import { evaluateTaskAutoRun } from '../swimlane/evaluateAutoRun';
 import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
 import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
-import { classifySignoffOwnership, resolveSignoffGate } from '../kanban/signoffGate';
+import { classifySignoffOwnership, resolveRequiredSignoffGate, type SignoffGateResult } from '../kanban/signoffGate';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness } from './evaluateTicketReadiness';
 import { coordinateTicket } from './coordinateTicket';
@@ -546,10 +546,19 @@ export async function runStallTriage(
       // the gate is still evaluated, SCOPED TO THE CURRENT STAGE, because the manager is
       // the documented retry owner for a stage whose role was asked once and never
       // answered — and it could not be that on any lane but this one.
+      //
+      // BOTH READS GO THROUGH THE POLICY (0380). This stage-scoped one used to bypass
+      // `requireSignoffToComplete` entirely, so a project that had switched sign-off OFF
+      // still had its tickets diagnosed `awaiting_signoff` and re-asked every pass — the
+      // setting governed completion and merge but not the loop that consumed the budget.
+      // With sign-off off the gate reports nothing owed, and the diagnosis falls through
+      // to the ticket's REAL blocker instead of a review its project never required.
       let readiness: StallInput['readiness'] = null;
       let signoff = null;
       if (task.status === TaskStatus.IN_REVIEW) {
-        signoff = await resolveSignoffGate(env, db, { tenantId, taskId: task.id });
+        signoff = await resolveRequiredSignoffGate(env, db, {
+          tenantId, taskId: task.id, requireSignoff: policy.requireSignoffToComplete,
+        });
         readiness = decideTicketReadiness({
           taskType: task.taskType,
           actionType: task.actionType,
@@ -562,7 +571,10 @@ export async function runStallTriage(
           requireGreenBuild: policy.prMergePolicy === 'on_green',
         }).action;
       } else {
-        signoff = await resolveSignoffGate(env, db, { tenantId, taskId: task.id, stageKey: task.status });
+        signoff = await resolveRequiredSignoffGate(env, db, {
+          tenantId, taskId: task.id, stageKey: task.status,
+          requireSignoff: policy.requireSignoffToComplete,
+        });
       }
       // Off the review lane the gate IS the stage's own owed roles, so it doubles as the
       // diagnosis input and as what `drive_signoff` asks — one resolution, no second read.
@@ -715,7 +727,7 @@ export async function applyRemedy(
     task: TriageTask;
     policy: TriagePolicy;
     remedy: string;
-    signoff: Awaited<ReturnType<typeof resolveSignoffGate>> | null;
+    signoff: SignoffGateResult | null;
     prRow: { id: string; number: number | null } | null;
     /** May start a MANAGER-OWNED recovery run (billable budget remains). */
     mayStartRun: boolean;
