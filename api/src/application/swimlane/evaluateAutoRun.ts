@@ -387,6 +387,21 @@ export interface AutoRunEvaluation {
    * dispatcher — the whole point of the verdict on a managed board.
    */
   managedRole: ManagedRoleAttribution | null;
+  /**
+   * The roles this managed stage AUTHORIZES but could not bind to an agent — i.e. exactly
+   * what has to be staffed for `managed_no_role` to stop firing.
+   *
+   * Carried separately from {@link managedRole} because that field is null in precisely
+   * the case a reader needs this one: when no producer resolves, the authority decision
+   * (and with it the names of the unfillable roles) was computed and then discarded. The
+   * manager could therefore see THAT a stage had no role-capable participant but never
+   * WHICH role was missing, so its only available remedy was to re-run the same gate
+   * against the same empty roster — 447 tickets doing that every five minutes. Naming the
+   * role is what lets `staffUnfilledRole` fill it.
+   *
+   * Empty on an unmanaged board, and empty when a producer DID resolve.
+   */
+  unfilledRoleKeys: string[];
 }
 
 /** The workspace token verdict as a ticket-level reader needs it: blocked or not,
@@ -509,6 +524,7 @@ export async function evaluateTaskAutoRun(
     tenantTokens: null,
     lifecycleManaged: false,
     managedRole: null,
+    unfilledRoleKeys: [],
     ...over,
   });
 
@@ -615,6 +631,7 @@ export async function evaluateTaskAutoRun(
   // manifest producer run here would be the author grading its own homework — the same
   // no-self-review guarantee the owner fallback has always had.
   let managedRole: ManagedRoleAttribution | null = null;
+  let unfilledRoleKeys: string[] = [];
   if (board.lifecycleManaged && !isReviewLane(status)) {
     const resolved = await resolveManagedProducer(db, {
       tenantId: args.tenantId,
@@ -630,6 +647,11 @@ export async function evaluateTaskAutoRun(
         source: resolved.producer.source,
         authorizedRoleKeys: resolved.authority.roleKeys,
       };
+    } else {
+      // No producer bound. Keep the authority decision instead of dropping it — these
+      // are the roles that must be staffed for this stage to ever dispatch, and they are
+      // the only actionable fact in a `managed_no_role` verdict.
+      unfilledRoleKeys = resolved?.authority.roleKeys ?? [];
     }
   }
 
@@ -645,7 +667,7 @@ export async function evaluateTaskAutoRun(
     return finishEvaluation({
       db, runtimeService, args, status, assignedAgentRef, gate, staffedAgentRefs,
       agents: managedAgents, managedNoRole: !managedRole,
-      lifecycleManaged: true, managedRole,
+      lifecycleManaged: true, managedRole, unfilledRoleKeys,
     });
   }
 
@@ -670,7 +692,7 @@ export async function evaluateTaskAutoRun(
   return finishEvaluation({
     db, runtimeService, args, status, assignedAgentRef, gate, staffedAgentRefs,
     agents: withOwnerAgentFallback(qualifiedLaneAgents, { agentRef: ownerFallbackRef }),
-    managedNoRole: false, lifecycleManaged: false, managedRole: null,
+    managedNoRole: false, lifecycleManaged: false, managedRole: null, unfilledRoleKeys: [],
   });
 }
 
@@ -696,6 +718,7 @@ async function finishEvaluation(input: {
   managedNoRole: boolean;
   lifecycleManaged: boolean;
   managedRole: ManagedRoleAttribution | null;
+  unfilledRoleKeys: string[];
 }): Promise<AutoRunEvaluation> {
   const { db, runtimeService, args, status, gate, agents } = input;
 
@@ -776,6 +799,7 @@ async function finishEvaluation(input: {
     tenantTokens,
     lifecycleManaged: input.lifecycleManaged,
     managedRole: input.managedRole,
+    unfilledRoleKeys: input.unfilledRoleKeys,
   };
 }
 

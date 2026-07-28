@@ -49,6 +49,14 @@ export interface SignoffContribution {
   diffFiles?: string[];
   reviewThreadRef?: string;
   toolRunId?: string;
+  /**
+   * True when the PLATFORM recorded this entry from a finished run rather than the member
+   * recording a verdict of its own (see `attestRoleRun.ts`). Flagged rather than hidden:
+   * an auto-attested producer credit is a legitimate accountability record, but a reader
+   * auditing who actually judged the work must be able to tell the two apart, and
+   * `getAccountability` must never count one as a considered review.
+   */
+  autoAttested?: boolean;
 }
 
 export interface SignoffInput {

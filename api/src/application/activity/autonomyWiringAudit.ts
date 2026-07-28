@@ -225,9 +225,9 @@ export async function auditAutonomyWiring(db: Db, args: { tenantId: number }): P
       ? 'Not enough completed runs or manifest slots to evaluate attribution.'
       : satisfiedSlots > 0
         ? `${satisfiedSlots} slot(s) satisfied across ${completedRuns} completed runs.`
-        : `${completedRuns} runs completed yet NOT ONE of ${requiredSlots} required slots advanced — run attribution is failing silently (typically role resolution returning null).`,
+        : `${completedRuns} runs completed yet NOT ONE of ${requiredSlots} required slots advanced — a finished run is not being recorded as participation.`,
     remedy: (completedRuns > 0 && requiredSlots > 0 && satisfiedSlots === 0)
-      ? 'Check attributeRunToManifest role resolution: it must fall back beyond swimlane_requirements (lane agent, then the ticket action_type) or it no-ops on unconfigured boards.'
+      ? 'Two causes, in order of likelihood. (1) ATTESTATION: a completed run must write a sign-off ledger row via attestRoleRun — a slot state set directly is erased by the next syncStates, which recomputes from the ledger and preserves only in_progress. (2) ROLE RESOLUTION: attributeRunToManifest must fall back beyond swimlane_requirements (lane agent, then the ticket action_type) or it no-ops on unconfigured boards.'
       : null,
   }));
 

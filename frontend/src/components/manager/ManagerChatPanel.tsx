@@ -160,6 +160,41 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
     void ask(initialQuestion);
   }, [compact, initialQuestion, handle, ask]);
 
+  /**
+   * The one-paste HANDOVER for this conversation: the transcript AND the tool trace that
+   * explains it.
+   *
+   * Fetched on click, never on render — and the trace is fetched with `refresh` because
+   * the server now appends to it on every reply, which a client cache invalidated only by
+   * client writes can never learn about. A capture that quietly returned a pre-reply trace
+   * would be wrong in exactly the way that wastes the session it was taken for.
+   *
+   * Messages come from state rather than a re-fetch: what the report must explain is the
+   * conversation the person is LOOKING AT, and re-reading could show them a report about a
+   * thread that has moved on.
+   *
+   * Declared ABOVE the `compact` early return, with every other hook — a hook after a
+   * conditional return changes hook order between the compact and full renders, which
+   * React's rules-of-hooks lint catches at build time and which would otherwise corrupt
+   * state the first time the same instance rendered both ways.
+   */
+  const buildDiagnostics = useCallback(async (): Promise<string> => {
+    const trace = handle
+      ? await brain.getChatTrace(handle.chatId, { refresh: true }).catch(() => null)
+      : null;
+    return buildManagerChatDiagnosticsReport(
+      {
+        projectId,
+        handle,
+        handleError: handle == null ? (error ?? 'the manager chat could not be resolved') : null,
+        messages,
+        trace,
+        traceError: handle != null && trace == null ? 'the tool trace could not be loaded' : null,
+      },
+      await captureDiagnosticsContext(),
+    );
+  }, [projectId, handle, messages, error]);
+
   const starterRow = (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
       {STARTERS.map((key) => {
@@ -193,36 +228,6 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
       </div>
     );
   }
-
-  /**
-   * The one-paste HANDOVER for this conversation: the transcript AND the tool trace that
-   * explains it.
-   *
-   * Fetched on click, never on render — and the trace is fetched with `refresh` because
-   * the server now appends to it on every reply, which a client cache invalidated only by
-   * client writes can never learn about. A capture that quietly returned a pre-reply trace
-   * would be wrong in exactly the way that wastes the session it was taken for.
-   *
-   * Messages come from state rather than a re-fetch: what the report must explain is the
-   * conversation the person is LOOKING AT, and re-reading could show them a report about a
-   * thread that has moved on.
-   */
-  const buildDiagnostics = useCallback(async (): Promise<string> => {
-    const trace = handle
-      ? await brain.getChatTrace(handle.chatId, { refresh: true }).catch(() => null)
-      : null;
-    return buildManagerChatDiagnosticsReport(
-      {
-        projectId,
-        handle,
-        handleError: handle == null ? (error ?? 'the manager chat could not be resolved') : null,
-        messages,
-        trace,
-        traceError: handle != null && trace == null ? 'the tool trace could not be loaded' : null,
-      },
-      await captureDiagnosticsContext(),
-    );
-  }, [projectId, handle, messages, error]);
 
   const header = (
     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>

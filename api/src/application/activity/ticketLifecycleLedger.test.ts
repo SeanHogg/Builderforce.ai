@@ -349,6 +349,7 @@ describe('toGateSnapshot', () => {
     tenantTokens: null,
     lifecycleManaged: false,
     managedRole: null,
+    unfilledRoleKeys: [],
   };
 
   it('carries the EVIDENCE behind the reason, not just the reason', () => {
