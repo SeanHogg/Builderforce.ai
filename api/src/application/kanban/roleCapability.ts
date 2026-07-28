@@ -155,16 +155,173 @@ export interface RoleCandidate {
   via: RoleCapableVia;
 }
 
-const capabilityKey = (tenantId: number, projectId: number, roleKey: string, v: string | number) =>
-  `role-capable:tenant:${tenantId}:project:${projectId}:role:${roleKey}:v:${v}`;
+const rosterKey = (tenantId: number, projectId: number, v: string | number) =>
+  `role-roster:tenant:${tenantId}:project:${projectId}:v:${v}`;
+
+/** One agent's pin to a role, as far as capability cares. */
+export interface RolePinRow {
+  projectId: number | null;
+  roleKey: string;
+  assigneeRef: string;
+  assigneeName: string | null;
+}
 
 /**
- * The agents capable of acting AS `roleKey` for a project, in precedence order:
- *   1) explicit project_role_assignments pin (kind 'agent'),
- *   2) explicit ide_agents.role_keys,
- *   3) builtin_kind-derived,
+ * Every capability input for a project, loaded ONCE — the active roster plus the pins
+ * that apply to it. Serializable, so it is what the read-through cache stores.
+ */
+export interface RoleRosterData {
+  agents: RoleCapableAgentRow[];
+  pins: RolePinRow[];
+}
+
+/**
+ * THE CAPABILITY ORACLE. Pure, and the only place the precedence is written down.
+ *
+ * Agents capable of acting AS `roleKey`, strongest claim first:
+ *   1) explicit `project_role_assignments` pin (project-specific beats workspace-wide),
+ *   2) explicit `ide_agents.role_keys`,
+ *   3) `builtin_kind`-derived,
  *   4) fuzzy title/skill fallback.
- * Cached on the workforce-metrics version token (bumps when agents/assignments change).
+ *
+ * ── WHY IT IS ONE FUNCTION ───────────────────────────────────────────────────────
+ * "Can this agent act as role X?" has been answered independently by a GUARD and by a
+ * SELECTOR three separate times, and all three times they diverged. The cost, in order:
+ * an empty sign-off ledger (0 rows against 1,030 reviewer runs), 405 stalled tickets,
+ * then 447. Each was fixed by widening whichever side was narrower, which fixes the
+ * instance and preserves the seam.
+ *
+ * There is now no seam. Both sides resolve through this function — the guard via
+ * {@link isAgentRefRoleCapable}, the selector via `bindStaffedAgentsToRoles` — so
+ * narrowing one necessarily narrows the other, and `roleCapabilityParity.test.ts`
+ * asserts the two agree over the whole role catalog.
+ */
+export function roleCandidatesFrom(
+  data: RoleRosterData,
+  projectId: number | null,
+  roleKey: string,
+): RoleCandidate[] {
+  const nk = (roleKey ?? '').trim();
+  if (!nk) return [];
+  const byId = new Map(data.agents.map((a) => [a.id, a]));
+  const out: RoleCandidate[] = [];
+  const seen = new Set<string>();
+
+  // 1) explicit pins. A project-specific pin outranks the workspace-wide default.
+  const pins = data.pins
+    .filter((p) => p.roleKey === nk && (projectId == null ? p.projectId == null : (p.projectId === projectId || p.projectId == null)))
+    .sort((a, b) => Number(b.projectId === projectId) - Number(a.projectId === projectId));
+  for (const p of pins) {
+    if (seen.has(p.assigneeRef)) continue;
+    const a = byId.get(p.assigneeRef);
+    // A pin naming an agent that is not on the ACTIVE roster resolves to nobody: a
+    // retired agent must not keep a stage looking staffed.
+    if (!a) continue;
+    out.push({ kind: 'agent', ref: p.assigneeRef, name: p.assigneeName ?? a.name ?? p.assigneeRef, via: 'assignment' });
+    seen.add(p.assigneeRef);
+  }
+
+  // 2–4) capability-derived, tagged by the strongest reason each qualifies.
+  for (const a of data.agents) {
+    if (seen.has(a.id)) continue;
+    const explicit = parseRoleKeys(a.roleKeys).includes(nk);
+    const kind = !!a.builtinKind && (BUILTIN_KIND_ROLE_KEYS[a.builtinKind] ?? []).includes(nk);
+    const fuzzy = !explicit && !kind && agentIsRoleCapable(a, nk);
+    if (!explicit && !kind && !fuzzy) continue;
+    out.push({ kind: 'agent', ref: a.id, name: a.name, via: explicit ? 'role-keys' : kind ? 'builtin-kind' : 'agent-skill' });
+    seen.add(a.id);
+  }
+  return out;
+}
+
+/**
+ * A project's roster, ready to answer capability questions in memory.
+ *
+ * This is what makes the parity affordable. The selector needs the answer for EVERY
+ * authorized role on EVERY lane of a board — resolving each through its own query would
+ * be the N+1 the caching rules forbid on a 675-ticket census. One cached load answers
+ * all of them.
+ */
+export interface RoleRoster {
+  /** Agents capable of `roleKey`, strongest claim first. */
+  candidates(roleKey: string): RoleCandidate[];
+}
+
+export function buildRoleRoster(data: RoleRosterData, projectId: number | null): RoleRoster {
+  const memo = new Map<string, RoleCandidate[]>();
+  return {
+    candidates(roleKey) {
+      const nk = (roleKey ?? '').trim();
+      let hit = memo.get(nk);
+      if (!hit) {
+        hit = roleCandidatesFrom(data, projectId, nk);
+        memo.set(nk, hit);
+      }
+      return hit;
+    },
+  };
+}
+
+/**
+ * The roster for a caller that deliberately does not bind agents.
+ *
+ * Exported so `roster` can be a REQUIRED parameter everywhere. An optional one is what
+ * lets a new call site silently inherit the narrow behaviour this whole module exists to
+ * end — the omission is then invisible at the call site and shows up as a stalled board.
+ */
+export const EMPTY_ROLE_ROSTER: RoleRoster = { candidates: () => [] };
+
+/**
+ * Load a project's capability inputs. Cached on the workforce-metrics version token,
+ * which bumps whenever agents or role assignments change, so a hire or a pin is visible
+ * on the very next resolution.
+ *
+ * `env` is optional only because two non-Worker callers (unit tests, the execution guard)
+ * have none; `getOrSetCached` already contracts "no KV ⇒ straight to the loader".
+ */
+export async function loadRoleRosterData(
+  env: Env | undefined,
+  db: Db,
+  tenantId: number,
+  projectId: number | null,
+): Promise<RoleRosterData> {
+  const load = async (): Promise<RoleRosterData> => {
+    const [agents, pins] = await Promise.all([
+      db
+        .select({ id: ideAgents.id, name: ideAgents.name, title: ideAgents.title, skills: ideAgents.skills, builtinKind: ideAgents.builtinKind, roleKeys: ideAgents.roleKeys })
+        .from(ideAgents)
+        .where(and(eq(ideAgents.tenantId, tenantId), eq(ideAgents.status, 'active'))),
+      db
+        .select({ projectId: projectRoleAssignments.projectId, roleKey: projectRoleAssignments.roleKey, assigneeRef: projectRoleAssignments.assigneeRef, assigneeName: projectRoleAssignments.assigneeName })
+        .from(projectRoleAssignments)
+        .where(and(
+          eq(projectRoleAssignments.tenantId, tenantId),
+          eq(projectRoleAssignments.assigneeKind, 'agent'),
+          projectId == null
+            ? isNull(projectRoleAssignments.projectId)
+            : or(eq(projectRoleAssignments.projectId, projectId), isNull(projectRoleAssignments.projectId)),
+        )),
+    ]);
+    return { agents, pins };
+  };
+  if (!env) return load();
+  const version = await readWorkforceMetricsVersion(env, tenantId);
+  return getOrSetCached(env, rosterKey(tenantId, projectId ?? 0, version), load);
+}
+
+/** {@link loadRoleRosterData}, ready to query. The selector's entry point. */
+export async function loadRoleRoster(
+  env: Env | undefined,
+  db: Db,
+  tenantId: number,
+  projectId: number | null,
+): Promise<RoleRoster> {
+  return buildRoleRoster(await loadRoleRosterData(env, db, tenantId, projectId), projectId);
+}
+
+/**
+ * The agents capable of acting AS `roleKey` for a project, in precedence order.
+ * A thin wrapper over the oracle — kept because it reads better at its call sites.
  */
 export async function resolveRoleCapableAgents(
   env: Env,
@@ -173,109 +330,29 @@ export async function resolveRoleCapableAgents(
   projectId: number,
   roleKey: string,
 ): Promise<RoleCandidate[]> {
-  const version = await readWorkforceMetricsVersion(env, tenantId);
-  return getOrSetCached(env, capabilityKey(tenantId, projectId, roleKey, version), async () => {
-    const agents = await db
-      .select({ id: ideAgents.id, name: ideAgents.name, title: ideAgents.title, skills: ideAgents.skills, builtinKind: ideAgents.builtinKind, roleKeys: ideAgents.roleKeys })
-      .from(ideAgents)
-      .where(and(eq(ideAgents.tenantId, tenantId), eq(ideAgents.status, 'active')));
-    const byId = new Map(agents.map((a) => [a.id, a]));
-
-    // 1) explicit pins (project-specific + workspace default) for this role.
-    const pins = await db
-      .select({ projectId: projectRoleAssignments.projectId, assigneeRef: projectRoleAssignments.assigneeRef, assigneeName: projectRoleAssignments.assigneeName })
-      .from(projectRoleAssignments)
-      .where(rolePinConditions(tenantId, roleKey, projectId));
-
-    const out: RoleCandidate[] = [];
-    const seen = new Set<string>();
-    pins.sort((a, b) => Number(b.projectId === projectId) - Number(a.projectId === projectId));
-    for (const p of pins) {
-      if (seen.has(p.assigneeRef)) continue;
-      const a = byId.get(p.assigneeRef);
-      if (!a) continue;
-      out.push({ kind: 'agent', ref: p.assigneeRef, name: p.assigneeName ?? a?.name ?? p.assigneeRef, via: 'assignment' });
-      seen.add(p.assigneeRef);
-    }
-    // 2–4) capability-derived, tagged by the strongest reason each qualifies.
-    for (const a of agents) {
-      if (seen.has(a.id)) continue;
-      const explicit = parseRoleKeys(a.roleKeys).includes(roleKey);
-      const kind = !!a.builtinKind && (BUILTIN_KIND_ROLE_KEYS[a.builtinKind] ?? []).includes(roleKey);
-      const fuzzy = !explicit && !kind && agentIsRoleCapable(a, roleKey);
-      if (!explicit && !kind && !fuzzy) continue;
-      out.push({ kind: 'agent', ref: a.id, name: a.name, via: explicit ? 'role-keys' : kind ? 'builtin-kind' : 'agent-skill' });
-      seen.add(a.id);
-    }
-    return out;
-  });
-}
-
-/**
- * The `project_role_assignments` predicate for "this agent is PINNED to this role",
- * scoped to a project with the workspace-wide (null projectId) pin folded in.
- *
- * Extracted so the two readers of that table — {@link resolveRoleCapableAgents}, which
- * SELECTS a role's agents, and {@link isAgentRefRoleCapable}, which GATES one agent —
- * can never disagree about what a pin is. They disagreed for weeks, and it cost the
- * platform its entire sign-off ledger (see that function's note).
- */
-function rolePinConditions(tenantId: number, roleKey: string, projectId?: number | null) {
-  return and(
-    eq(projectRoleAssignments.tenantId, tenantId),
-    eq(projectRoleAssignments.roleKey, roleKey),
-    eq(projectRoleAssignments.assigneeKind, 'agent'),
-    projectId == null
-      ? isNull(projectRoleAssignments.projectId)
-      : or(eq(projectRoleAssignments.projectId, projectId), isNull(projectRoleAssignments.projectId)),
-  );
-}
-
-/** Is this agent explicitly PINNED to `roleKey` (project-specific or workspace-wide)? */
-async function agentIsRolePinned(db: Db, tenantId: number, agentRef: string, roleKey: string, projectId?: number | null): Promise<boolean> {
-  const [pin] = await db
-    .select({ ref: projectRoleAssignments.assigneeRef })
-    .from(projectRoleAssignments)
-    .where(and(rolePinConditions(tenantId, roleKey, projectId), eq(projectRoleAssignments.assigneeRef, agentRef)))
-    .limit(1);
-  return !!pin;
-}
-
-/** Load the capability-relevant columns for one agent ref (or null if missing). */
-export async function loadAgentCapabilityRow(db: Db, tenantId: number, agentRef: string): Promise<RoleCapableAgentRow | null> {
-  const [row] = await db
-    .select({ id: ideAgents.id, name: ideAgents.name, title: ideAgents.title, skills: ideAgents.skills, builtinKind: ideAgents.builtinKind, roleKeys: ideAgents.roleKeys })
-    .from(ideAgents)
-    .where(and(eq(ideAgents.tenantId, tenantId), eq(ideAgents.id, agentRef)))
-    .limit(1);
-  return row ?? null;
+  return (await loadRoleRoster(env, db, tenantId, projectId)).candidates(roleKey);
 }
 
 /**
  * Is the given agent ref capable of `roleKey`? Unknown ref ⇒ not capable (false)
  * when a role is required. Empty roleKey ⇒ true (no constraint).
  *
- * THIS IS THE GATE, and it must accept exactly what {@link resolveRoleCapableAgents}
- * — THE SELECTOR — dispatches on. It did not, and that asymmetry is the measured cause
- * of an empty sign-off ledger: **0 rows in `ticket_role_signoffs` against 1,030 reviewer
- * runs**, with 2,288 required manifest slots stuck `assigned` and not one ticket ever
- * advanced by `decideSignoffGate`.
+ * THIS IS THE GATE, and it accepts exactly what the SELECTOR dispatches — not by
+ * agreement but by construction: both are `roleCandidatesFrom`, the gate asking whether
+ * one ref is in the answer and the selector taking the head of it. There is no second
+ * implementation left to drift.
  *
- * The selector accepts FOUR paths — (1) an explicit `project_role_assignments` pin,
- * (2) `ide_agents.role_keys`, (3) `builtin_kind`, (4) fuzzy title/skill. This gate read
- * only `agentIsRoleCapable`, which covers 2–4. So an agent dispatched as a reviewer
- * BECAUSE it was pinned was then told `403 not authorized to sign off as role '<key>'`
- * when it called `kanban.signoff`. The tool existed, was on the allowlist and was named
- * correctly in the instruction — every attempt was rejected at the door.
- *
- * `agentRoleKeys` makes this unrecoverable rather than merely likely: a row with a
- * `builtin_kind` returns EARLY, deliberately refusing fuzzy widening, and its own
- * comment directs the reader to "grant cross-role capability explicitly through
- * role_keys **or a project role assignment**" — the second of which this function never
- * consulted. The documented escape hatch did not exist.
+ * That drift is not hypothetical. This gate once read only `agentIsRoleCapable`
+ * (role_keys ∪ builtin_kind ∪ fuzzy) while the selector also honoured an explicit
+ * `project_role_assignments` pin, so an agent dispatched as a reviewer BECAUSE it was
+ * pinned was then told `403 not authorized to sign off as role '<key>'` when it called
+ * `kanban.signoff`. Measured: **0 rows in `ticket_role_signoffs` against 1,030 reviewer
+ * runs**, 2,288 required slots stuck `assigned`. Widening the gate fixed that instance
+ * and left the seam; routing both sides through one oracle removes the seam.
  *
  * Pass `projectId` wherever it is known so a project-scoped pin resolves; omitting it
- * still honours workspace-wide pins.
+ * still honours workspace-wide pins. Pass `env` wherever it is available so the roster
+ * load is served from the read-through cache.
  */
 export async function isAgentRefRoleCapable(
   db: Db,
@@ -283,17 +360,14 @@ export async function isAgentRefRoleCapable(
   agentRef: string | null | undefined,
   roleKey: string | null | undefined,
   projectId?: number | null,
+  env?: Env,
 ): Promise<boolean> {
   const nk = (roleKey ?? '').trim();
   if (!nk) return true;
   const ref = (agentRef ?? '').trim();
   if (!ref) return false;
-  const row = await loadAgentCapabilityRow(db, tenantId, ref);
-  if (row && agentIsRoleCapable(row, nk)) return true;
-  // Path 1 — the explicit pin. Checked even when the agent row is missing/unmatched:
-  // a deliberate human assignment is the STRONGEST capability signal there is, and it
-  // is the selector's highest-precedence path.
-  return agentIsRolePinned(db, tenantId, ref, nk, projectId);
+  const roster = await loadRoleRoster(env, db, tenantId, projectId ?? null);
+  return roster.candidates(nk).some((c) => c.ref === ref);
 }
 
 /** Is a human role-capable of `roleKey`? True when pinned to it (project_role_assignments)

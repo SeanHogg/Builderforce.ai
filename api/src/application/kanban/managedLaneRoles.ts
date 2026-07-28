@@ -37,11 +37,13 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
 import { swimlaneRequirements, swimlanes, ticketParticipants } from '../../infrastructure/database/schema';
 import {
   builtinRoleKeyFromText, decideLaneApprovers, loadStaffedAgentsForLanes,
   type LaneApprover, type LaneApproverTier, type LaneStaffedAgent,
 } from '../swimlane/laneApprover';
+import { EMPTY_ROLE_ROSTER, loadRoleRoster, type RoleRoster } from './roleCapability';
 import { isParticipantOpen } from './participantStates';
 import { isReviewRole } from './roleCatalog';
 import { requirementApplies } from './types';
@@ -60,8 +62,8 @@ export interface ManagedLaneAuthority {
    * FAIL-CLOSED verdict (no dispatch), never "anything goes".
    */
   roleKeys: string[];
-  /** The resolved approvers. Tier (a) carries no agent; tier (b) always does. */
-  approvers: LaneApprover[];
+  /** The resolved approvers, each bound to an agent where one could be resolved. */
+  approvers: BoundLaneApprover[];
   tier: LaneApproverTier;
 }
 
@@ -69,10 +71,22 @@ export interface ManagedLaneAuthority {
 export interface LaneAuthorityInputs {
   requirements: Array<{ kind: string; ref: string; ticketType: string | null; condition: string | null }>;
   laneAgents: LaneStaffedAgent[];
+  /**
+   * The workspace roster — the SAME capability oracle the execution guard enforces.
+   *
+   * REQUIRED, deliberately. An optional roster is what let this seam reopen twice: the
+   * omission is invisible at the call site and surfaces weeks later as a stalled board.
+   * A caller that genuinely must not bind agents passes {@link EMPTY_ROLE_ROSTER} and
+   * says why.
+   */
+  roster: RoleRoster;
 }
 
+/** An approver plus WHERE its agent came from, so the verdict can say. */
+export type BoundLaneApprover = LaneApprover & { boundVia?: 'lane_agent' | 'roster' };
+
 /**
- * Give each authorized role a concrete agent from the lane's staffing. PURE.
+ * Give each authorized role a concrete agent. PURE.
  *
  * ── WHY THIS EXISTS ──────────────────────────────────────────────────────────────
  * `decideLaneApprovers` answers "who must APPROVE this lane?", and on tier (a) it
@@ -82,37 +96,57 @@ export interface LaneAuthorityInputs {
  * Execution asks a DIFFERENT question — "who may ACT AS this required role?" — and it
  * does need one. Reading the approver answer as if it were the execution answer meant a
  * templated lane could never produce an agent, so {@link pickManagedProducer} always fell
- * through to null and every ticket on such a lane classified `managed_no_role`. Measured
- * on project 11 after the role-attribution fix shipped: 405 of 675 stalled tickets, the
- * single largest cohort on the board — stages that DID declare a required role, on lanes
- * that WERE staffed with an agent capable of it, refused because the two facts were never
- * put together.
+ * through to null and every ticket on such a lane classified `managed_no_role`.
  *
- * The operator's staffing plus `agentRoleKeys` capability IS the answer to who may act as
- * a required role, so the binding happens here rather than being a second opinion
- * somewhere downstream. An unbound role stays unbound (`agentRef: null`): it remains
- * authorized — the gate may still be satisfied by a human or a later assignment — but it
- * cannot be dispatched, which is the honest fail-closed verdict.
+ * ── THE TWO SOURCES, AND WHY BOTH ────────────────────────────────────────────────
+ *   1. LANE STAFFING — the operator staffed this agent to work this lane. The most
+ *      specific configuration there is, so it wins, and it carries the lane's pinned
+ *      model.
+ *   2. THE ROSTER — anyone the capability oracle says can act as the role: an explicit
+ *      pin, declared `role_keys`, `builtin_kind`, or a title/skill match.
  *
- * Sub-precedence per role, matching {@link approverRoleKeyForLaneAgent}: an agent whose
- * DECLARED assignment role names this role beats one that is merely capable of it, then
- * lane position. Unlike approver resolution this does NOT dedupe by agent — one agent
- * staffed on a lane may legitimately act as several of its required roles.
+ * Source 2 is not an enhancement, it is the parity. The execution guard has always
+ * accepted all four of those paths, so a stage whose role only the roster can fill was
+ * authorized-but-unselectable: the guard would have waved the agent through and nothing
+ * could nominate it. Measured on project 11 with only source 1 wired: 3 of 61 auto-gated
+ * lanes carried any staffing, and 447 of 678 stalled tickets — 66% of the board —
+ * classified `managed_no_role` while a capable built-in agent sat idle on the roster.
+ *
+ * It is also what makes the manager's staffing ladder real. `staffUnfilledRole` pins a
+ * capable teammate (or hires one and pins it) into `project_role_assignments`; with only
+ * lane staffing consulted, that pin reached nothing and the remedy reported success while
+ * changing nothing.
+ *
+ * An unbound role stays unbound (`agentRef: null`): it remains authorized — the gate may
+ * still be satisfied by a human or a later assignment — but it cannot be dispatched,
+ * which is the honest fail-closed verdict.
+ *
+ * Sub-precedence within lane staffing, matching {@link approverRoleKeyForLaneAgent}: an
+ * agent whose DECLARED assignment role names this role beats one that is merely capable
+ * of it, then lane position. Unlike approver resolution this does NOT dedupe by agent —
+ * one agent may legitimately act as several of a lane's required roles.
  */
 export function bindStaffedAgentsToRoles(
   approvers: readonly LaneApprover[],
   laneAgents: readonly LaneStaffedAgent[],
-): LaneApprover[] {
-  if (laneAgents.length === 0) return [...approvers];
+  roster: RoleRoster,
+): BoundLaneApprover[] {
   const ordered = [...laneAgents].sort(
     (a, b) => a.position - b.position || a.agentRef.localeCompare(b.agentRef),
   );
-  return approvers.map((approver) => {
+  return approvers.map((approver): BoundLaneApprover => {
     if (approver.agentRef) return approver;
     const capable = ordered.filter((a) => a.capableRoleKeys.includes(approver.roleKey));
-    if (capable.length === 0) return approver;
-    const chosen = capable.find((a) => builtinRoleKeyFromText(a.declaredRole) === approver.roleKey) ?? capable[0]!;
-    return { ...approver, agentRef: chosen.agentRef, agentName: chosen.agentName, model: chosen.model };
+    if (capable.length > 0) {
+      const chosen = capable.find((a) => builtinRoleKeyFromText(a.declaredRole) === approver.roleKey) ?? capable[0]!;
+      return { ...approver, agentRef: chosen.agentRef, agentName: chosen.agentName, model: chosen.model, boundVia: 'lane_agent' };
+    }
+    // The roster's head is the strongest claim to the role (pin → role_keys →
+    // builtin_kind → fuzzy). No model: a roster agent carries no lane-pinned model, so
+    // the dispatcher picks the workspace default exactly as it does for tier (a).
+    const fromRoster = roster.candidates(approver.roleKey)[0];
+    if (!fromRoster) return approver;
+    return { ...approver, agentRef: fromRoster.ref, agentName: fromRoster.name, model: null, boundVia: 'roster' };
   });
 }
 
@@ -139,7 +173,7 @@ export function decideManagedLaneAuthority(
   const decision = decideLaneApprovers({ requirementRoleKeys, laneAgents: inputs.laneAgents });
   return {
     roleKeys: decision.approvers.map((a) => a.roleKey),
-    approvers: bindStaffedAgentsToRoles(decision.approvers, inputs.laneAgents),
+    approvers: bindStaffedAgentsToRoles(decision.approvers, inputs.laneAgents, inputs.roster),
     tier: decision.tier,
   };
 }
@@ -175,8 +209,11 @@ export interface ManagedProducer {
   roleKey: string;
   agentRef: string;
   model: string | null;
-  /** Where the pick came from — the ticket's own manifest, or the lane's staffing. */
-  source: 'manifest' | 'lane_agent';
+  /**
+   * Where the pick came from — the ticket's own manifest, the lane's staffing, or the
+   * workspace roster (a pin, declared role_keys, builtin_kind or a title/skill match).
+   */
+  source: 'manifest' | 'lane_agent' | 'roster';
 }
 
 /**
@@ -188,9 +225,15 @@ export interface ManagedProducer {
  *     generic lane pick.
  *  2. the lane's staffing (tier b) — the operator staffed this agent to work this lane,
  *     and `decideLaneApprovers` already mapped it to a role it is genuinely capable of.
+ *  3. the workspace roster — anyone the capability oracle says can act as the role. This
+ *     is the tier the execution guard has always accepted (see
+ *     {@link bindStaffedAgentsToRoles}), so omitting it made stages authorized-but-
+ *     unselectable: 447 tickets refused for a role a capable agent could have filled.
  *
  * Null means no role-attributed run is possible here — read by the evaluator as
- * `managed_no_role`, never as permission to dispatch un-attributed.
+ * `managed_no_role`, never as permission to dispatch un-attributed. It now means what it
+ * says: nobody in the workspace can perform the role, which is a staffing decision for
+ * `staffUnfilledRole` or a human, not an accident of where the answer was looked up.
  */
 export function pickManagedProducer(
   authority: ManagedLaneAuthority,
@@ -217,7 +260,14 @@ export function pickManagedProducer(
   const bound = authority.approvers.filter((a) => !!a.agentRef);
   const staffed = bound.find((a) => !isReviewRole(a.roleKey)) ?? bound[0];
   if (staffed?.agentRef) {
-    return { roleKey: staffed.roleKey, agentRef: staffed.agentRef, model: staffed.model, source: 'lane_agent' };
+    return {
+      roleKey: staffed.roleKey,
+      agentRef: staffed.agentRef,
+      model: staffed.model,
+      // Tier (b) approvers arrive already bound by `decideLaneApprovers` and carry no
+      // marker, so an unmarked bind is lane staffing by construction.
+      source: staffed.boundVia === 'roster' ? 'roster' : 'lane_agent',
+    };
   }
   return null;
 }
@@ -256,14 +306,14 @@ async function loadLaneRequirements(db: Db, tenantId: number, swimlaneId: string
  */
 export async function resolveManagedLaneAuthority(
   db: Db,
-  args: { tenantId: number; swimlaneId: string; task: ManagedTaskScope },
+  args: { tenantId: number; swimlaneId: string; task: ManagedTaskScope; roster: RoleRoster },
 ): Promise<ManagedLaneAuthority> {
   const [requirements, staffed] = await Promise.all([
     loadLaneRequirements(db, args.tenantId, args.swimlaneId),
     loadStaffedAgentsForLanes(db, args.tenantId, [args.swimlaneId]),
   ]);
   const laneAgents = staffed.get(args.swimlaneId) ?? [];
-  return decideManagedLaneAuthority({ requirements, laneAgents }, args.task);
+  return decideManagedLaneAuthority({ requirements, laneAgents, roster: args.roster }, args.task);
 }
 
 /** Open required manifest slots for ONE ticket's current stage. */
@@ -294,10 +344,17 @@ export async function loadStageProducerSlots(
  */
 export async function resolveManagedProducer(
   db: Db,
-  args: { tenantId: number; taskId: number; swimlaneId: string; stageKey: string; task: ManagedTaskScope },
+  args: {
+    tenantId: number; projectId: number; taskId: number; swimlaneId: string;
+    stageKey: string; task: ManagedTaskScope; env?: Env;
+  },
 ): Promise<{ producer: ManagedProducer | null; authority: ManagedLaneAuthority }> {
+  // The roster is loaded HERE, not passed in, because this is the selector's entry point:
+  // every caller of it needs binding, so making them each remember to supply one is the
+  // optional-parameter trap that produced the 447-ticket cohort.
+  const roster = await loadRoleRoster(args.env, db, args.tenantId, args.projectId);
   const [authority, slots] = await Promise.all([
-    resolveManagedLaneAuthority(db, { tenantId: args.tenantId, swimlaneId: args.swimlaneId, task: args.task }),
+    resolveManagedLaneAuthority(db, { tenantId: args.tenantId, swimlaneId: args.swimlaneId, task: args.task, roster }),
     loadStageProducerSlots(db, { tenantId: args.tenantId, taskId: args.taskId, stageKey: args.stageKey }),
   ]);
   const producer = pickManagedProducer(authority, slots);
@@ -323,8 +380,13 @@ export async function resolveManagedProducer(
  */
 export async function loadBoardLaneAuthorities(
   db: Db,
-  args: { tenantId: number; boardId: string },
+  args: { tenantId: number; projectId: number; boardId: string; env?: Env },
 ): Promise<Map<string, LaneAuthorityInputs>> {
+  // ONE roster for the whole board, shared by every lane — the census asks the capability
+  // question for every authorized role of every lane, and a per-lane load would be the
+  // N+1 that makes parity unaffordable.
+  const roster = await loadRoleRoster(args.env, db, args.tenantId, args.projectId)
+    .catch(() => EMPTY_ROLE_ROSTER);
   const laneRows = await db
     .select({ id: swimlanes.id })
     .from(swimlanes)
@@ -332,7 +394,7 @@ export async function loadBoardLaneAuthorities(
   const laneIds = laneRows.map((l) => l.id);
   const out = new Map<string, LaneAuthorityInputs>();
   if (laneIds.length === 0) return out;
-  for (const id of laneIds) out.set(id, { requirements: [], laneAgents: [] });
+  for (const id of laneIds) out.set(id, { requirements: [], laneAgents: [], roster });
 
   const [requirementRows, staffed] = await Promise.all([
     db

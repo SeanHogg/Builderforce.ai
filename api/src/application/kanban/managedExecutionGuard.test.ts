@@ -23,7 +23,12 @@ vi.mock('./managedLaneRoles', async (importOriginal) => ({
   resolveManagedLaneAuthority: vi.fn(),
   loadStageProducerSlots: vi.fn(),
 }));
-vi.mock('./roleCapability', () => ({ isAgentRefRoleCapable: vi.fn() }));
+// Only the GATE is stubbed. `EMPTY_ROLE_ROSTER` is a value the guard passes through, so
+// it keeps its real implementation — stubbing a constant asserts nothing.
+vi.mock('./roleCapability', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./roleCapability')>()),
+  isAgentRefRoleCapable: vi.fn(),
+}));
 
 const mockBoard = vi.mocked(findCanonicalBoard);
 const mockAuthority = vi.mocked(resolveManagedLaneAuthority);
