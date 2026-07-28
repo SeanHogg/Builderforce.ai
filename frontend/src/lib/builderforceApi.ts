@@ -1580,7 +1580,10 @@ export interface LifecycleGateSnapshot {
   /** Roles this stage authorizes for this ticket. Empty on a managed board = nothing runs. */
   authorizedRoleKeys: string[];
   /** The role-attributed run that would go out, when one resolves. */
-  managedRole: { roleKey: string; agentRef: string; source: 'manifest' | 'lane_agent' } | null;
+  // `roster` = resolved from the workspace roster (a project_role_assignments pin,
+  // declared role_keys, builtin_kind, or a title/skill match) rather than from the lane's
+  // own staffing. See api `managedLaneRoles.bindStaffedAgentsToRoles`.
+  managedRole: { roleKey: string; agentRef: string; source: 'manifest' | 'lane_agent' | 'roster' } | null;
 }
 
 /** Workspace token budget as the lifecycle report needs it: blocked or not, which

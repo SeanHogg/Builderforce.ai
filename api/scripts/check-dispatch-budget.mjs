@@ -62,8 +62,17 @@ const BUDGET_HOLDING = [
   path.join('src', 'application', 'runtime', 'autonomousExecutionSweep.ts'),
 ];
 
-/** Identifiers that make a condition count as a budget guard. */
-const GUARD = /\b(mayStartRun|mayRaceExecutor|mayDispatch|hasRoom|budgetLeft|dispatchBudget|shouldDispatch|ownsDispatch|refused|canDispatch)\b/;
+/**
+ * Identifiers that make a condition a BUDGET guard.
+ *
+ * Deliberately NOT `shouldDispatch` / `ownsDispatch`. Those express dispatch OWNERSHIP —
+ * "the autonomous executor is the single dispatcher on the cron path" — which is a
+ * different ceiling answering a different question. Accepting them here made the check
+ * pass on an unreserved stage-5 dispatch, because the whole stage sits inside
+ * `if (shouldDispatch) { … }`. A guard that accepts the wrong kind of guard is worse than
+ * no guard: it certifies the thing it was written to catch.
+ */
+const GUARD = /\b(mayStartRun|mayRaceExecutor|mayDispatch|hasRoom|budgetLeft|dispatchBudget|canDispatch|refused)\b/;
 /** Argument properties that pass the decision down to the callee. */
 const DELEGATES = /\b(dispatch|mayStartRun|mayRaceExecutor|force)\s*:/;
 
