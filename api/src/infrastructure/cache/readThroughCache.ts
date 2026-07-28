@@ -17,6 +17,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  */
 
 import type { Env } from '../../env';
+import { isKvRateLimit, retryTransient } from '../shared/retryTransient';
 
 type L1Entry = { value: unknown; expiresAt: number };
 
@@ -24,6 +25,29 @@ type L1Entry = { value: unknown; expiresAt: number };
 const l1 = new Map<string, L1Entry>();
 const L1_TTL_MS = 30_000;
 const DEFAULT_KV_TTL_SECONDS = 300;
+
+/**
+ * Workers KV refuses any `expirationTtl` below 60 seconds with
+ * `400 Invalid expiration_ttl of N. Expiration TTL must be at least 60.`
+ *
+ * Eleven call sites asked for 10–45s, so every one of their KV writes threw and
+ * was swallowed by the best-effort catch — 3,514 failures in a day, and those
+ * paths silently degraded to an L1-only, per-isolate cache: exactly the
+ * behaviour the shared helper exists to prevent, with none of the noise a
+ * broken cache normally makes.
+ *
+ * Sub-minute expiry is simply not expressible in KV, so the honest resolution is
+ * to raise the L2 entry to the platform minimum. The caller's `l1TtlMs` is NOT
+ * clamped, so in-isolate freshness stays exactly as requested; only the
+ * cross-isolate copy lives longer. Callers needing tighter cross-isolate
+ * freshness than 60s should fold a version token into the key (as the ticket
+ * search and Project 360 readers already do) rather than lean on expiry.
+ */
+const KV_MIN_TTL_SECONDS = 60;
+
+function kvTtl(requested: number | undefined): number {
+  return Math.max(requested ?? DEFAULT_KV_TTL_SECONDS, KV_MIN_TTL_SECONDS);
+}
 
 function kvKey(key: string): string {
   return `cache:${key}`;
@@ -69,7 +93,7 @@ export async function getOrSetCached<T>(
   if (kv) {
     try {
       await kv.put(kvKey(key), JSON.stringify(fresh), {
-        expirationTtl: opts?.kvTtlSeconds ?? DEFAULT_KV_TTL_SECONDS,
+        expirationTtl: kvTtl(opts?.kvTtlSeconds),
       });
     } catch (error) {
       // Best-effort write — a miss next time is acceptable.
@@ -127,7 +151,7 @@ export async function setCached<T>(
   if (kv) {
     try {
       await kv.put(kvKey(key), JSON.stringify(value), {
-        expirationTtl: opts?.kvTtlSeconds ?? DEFAULT_KV_TTL_SECONDS,
+        expirationTtl: kvTtl(opts?.kvTtlSeconds),
       });
     } catch (error) {
       // Best-effort — a miss next read just triggers a reconcile.
@@ -230,10 +254,14 @@ export async function invalidateCached(env: Env, key: string): Promise<void> {
   const kv = env?.AUTH_CACHE_KV;
   if (kv) {
     try {
-      await kv.delete(kvKey(key));
+      // KV allows one write per second per key, so a burst of writes bumping the
+      // SAME version token 429s. "Wait for the TTL" is not an acceptable
+      // degradation here: version tokens are stored for 24h (getCacheVersion),
+      // so a dropped bump leaves every data key that embedded the old token
+      // serving stale reads for a day. Retrying past the per-key window is what
+      // makes invalidation actually hold.
+      await retryTransient(() => kv.delete(kvKey(key)), isKvRateLimit);
     } catch (error) {
-      // Invalidation failure degrades to "wait for the KV TTL" — acceptable.
-    
       reportCaughtError(error, { source: "infrastructure/cache/readThroughCache.ts", operation: "invalidateCached" });
     }
   }

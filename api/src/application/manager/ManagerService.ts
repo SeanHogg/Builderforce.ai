@@ -64,6 +64,9 @@ import { decideTicketReadiness } from './evaluateTicketReadiness';
 import { runStallTriage, loadBulkSignals, MAX_TRIAGE_DISPATCHES_PER_RUN } from './triageStage';
 import { isActionExhausted } from './stallTriage';
 import { computeStallCensus, invalidateStallCensus } from './stallCensus';
+import { findCanonicalBoard } from '../swimlane/canonicalBoard';
+import { staffUnfilledLanes, describeLaneStaffing } from './staffUnfilledLanes';
+import { loadPassRotation, savePassRotation } from './passRotation';
 import { invalidateDailyDigest } from './dailyDigest';
 import { raiseSystemicFindings } from './systemicDiagnosis';
 import { mergeRecordedPullRequest, updateRecordedPullRequestBranch } from '../repos/mergeRecordedPr';
@@ -153,6 +156,20 @@ export interface PassBudget {
    */
   exhausted: () => boolean;
   elapsedMs: () => number;
+  /** Wall-clock left before the DISCRETIONARY deadline; 0 once `over()`. */
+  remainingMs: () => number;
+  /**
+   * True when a unit expected to cost `estimateMs` still fits before the discretionary
+   * deadline.
+   *
+   * `over()` answers "has the deadline passed?", which cannot stop a unit that has not
+   * started from running straight through it. Measured on project 11: the PR loop began an
+   * iteration at ~11s of a 14s discretionary window, hit a merge conflict, dispatched a
+   * recovery run, and returned at 27.6s — 7.6s past the whole 20s budget, reserve and all.
+   * A reservation that can only be checked between units is not a reservation, so the
+   * expensive units ask whether they FIT.
+   */
+  canAfford: (estimateMs: number) => boolean;
   /** Stages that were skipped or cut short, in order — journalled on the closing row. */
   truncated: string[];
   /** Record that `stage` was shed, once per stage. Returns true the first time. */
@@ -168,10 +185,13 @@ export function createPassBudget(
   // Clamped so a caller-supplied budget smaller than the reserve cannot invert the two
   // deadlines and make `over()` fire before the pass has started.
   const discretionaryMs = Math.max(0, budgetMs - Math.min(reserveMs, budgetMs));
+  const remainingMs = () => Math.max(0, discretionaryMs - (Date.now() - startedAt));
   return {
     over: () => Date.now() - startedAt >= discretionaryMs,
     exhausted: () => Date.now() - startedAt >= budgetMs,
     elapsedMs: () => Date.now() - startedAt,
+    remainingMs,
+    canAfford: (estimateMs: number) => remainingMs() >= estimateMs,
     truncated,
     shed: (stage: string) => {
       if (truncated.includes(stage)) return false;
@@ -180,6 +200,28 @@ export function createPassBudget(
     },
   };
 }
+/**
+ * The discretionary window a dispatch-shaped unit must still have before it may START.
+ *
+ * ── WHY THIS IS A FLOOR AND NOT THE UNIT'S COST ──────────────────────────────────
+ * Starting a billable cloud run is the most expensive thing a pass does, and it is
+ * expensive for reasons outside this codebase: the run's creation is preceded by artifact,
+ * agent, repo and inference-model resolution, each a round-trip, before any container is
+ * touched. Measured on project 11, the PR loop's conflict-recovery dispatch took **16.4s**
+ * end to end (decision feed, 11:01:05.921 → 11:01:22.308) — more than the entire 14s
+ * discretionary window.
+ *
+ * So gating on the unit's real cost would refuse every recovery dispatch forever, trading
+ * a starved triage stage for a remedy that never runs. The honest reading is that a
+ * reserve CANNOT be defended against a unit larger than itself; that guarantee is made
+ * structurally instead, by `passRotation.ts`, which gives a starved stage the whole of the
+ * next pass.
+ *
+ * What this floor still buys is real and cheap: it stops a pass beginning a many-second
+ * unit with a second of window left, which is indefensible whatever the rotation does.
+ */
+export const MIN_DISPATCH_WINDOW_MS = 5_000;
+
 const MAX_DISPATCHES_PER_RUN = 12;
 const MAX_AUDITS_PER_RUN = 40;
 /** Coordinator ticks per pass — each can rewind a lane + start a run, so pace them. */
@@ -1095,14 +1137,71 @@ export async function runManagerForProject(
   // The pass's wall-clock budget, established AFTER policy resolution (a disabled
   // project returns before it) and before the first stage. See MANAGER_PASS_BUDGET_MS.
   const budget = createPassBudget(now);
+  // WHOSE TURN IT IS. When the previous pass ran out of wall-clock before a stage, this
+  // one runs ONLY the stages it starved and the rest yield their turn — the guarantee the
+  // reserve alone could not keep against a unit larger than the reserve itself. See
+  // `passRotation.ts` for the measurement that made a reservation insufficient.
+  const rotation = await loadPassRotation(env, tenantId, projectId);
+  /**
+   * Run `stage` unless the rotation is holding this pass for a starved one. A yielded
+   * stage is still reported on the closing row (a silent skip is the failure this whole
+   * budget exists to end) but is NOT fed back into the rotation — it was told to wait, it
+   * did not run out of time. See `carryOverRotation`.
+   */
+  const mayRunStage = (stage: string): boolean => {
+    if (rotation.mayRun(stage)) return true;
+    rotation.skip(stage);
+    budget.shed(stage);
+    return false;
+  };
+  /** As above, and also false once the discretionary window is spent. */
+  const mayStartStage = (stage: string): boolean => {
+    if (budget.over()) { budget.shed(stage); return false; }
+    return mayRunStage(stage);
+  };
   let managed = await loadManagedTasks(db, projectId);
+
+  // 0.5 STAFF THE BOARD'S UNFILLED LIFECYCLE ROLES — the cohort fix, ahead of every
+  // discretionary stage and outside the rotation.
+  //
+  // `managed_no_role` was the single largest stall cause on the measured board: 293 of 678
+  // stalled tickets, none of which can dispatch at all because their stage authorises a
+  // role that binds to no agent. The remedy already existed and was already correct, but
+  // it lived only inside a PER-TICKET triage remedy — capped per pass, and in the stage
+  // that gets shed — so a project-scope fix could not reach a project-scope problem.
+  //
+  // The cause is per-LANE, and a board has a few dozen lanes rather than 678 tickets, so
+  // it is asked once here: three queries, no writes in the steady state, and a couple of
+  // writes when a role is genuinely unfillable. NOT rotatable and NOT budget-shed —
+  // everything downstream is blocked on it, and it is cheap enough that shedding it would
+  // save nothing worth having.
+  const board = await findCanonicalBoard(db, projectId, tenantId);
+  if (board) {
+    const laneStaffing = await staffUnfilledLanes(env, db, {
+      tenantId, projectId, boardId: board.id, hiresUsed: 0,
+    });
+    const staffingDetail = describeLaneStaffing(laneStaffing);
+    if (staffingDetail) {
+      summary.remediated += laneStaffing.filled.length;
+      await recordManagerAction(db, {
+        tenantId, projectId, taskId: null, runTaskId, actionType: 'assign',
+        summary: staffingDetail,
+        detail: {
+          unfilledRoleKeys: laneStaffing.unfilledRoleKeys,
+          filled: laneStaffing.filled.map((f) => ({ roleKey: f.roleKey, action: f.action, agentName: f.agentName })),
+          unfillable: laneStaffing.unfillable.map((u) => u.roleKey),
+          hires: laneStaffing.hires,
+        },
+      });
+    }
+  }
 
   // 1. VALUE — backfill business value on unscored, non-manual tickets. ---------
   // The scoring decision is sequential (AI for the first few, free heuristic for the
   // rest) but the WRITES are collected and flushed in batches: a 200+ ticket backlog
   // would otherwise fire 200+ sequential neon-http round-trips here and risk the
   // Worker being evicted mid-pass. See flushBatched.
-  if (policy.autoBusinessValue) {
+  if (policy.autoBusinessValue && mayRunStage('value')) {
     const unscored = managed.filter((t) => t.businessValue == null && t.businessValueSource !== 'manual');
     // A human's deliberate PMO RICE estimate (feature_scores) is the highest-trust
     // non-manual source — fold it in first so we never burn an LLM call on a ticket
@@ -1248,7 +1347,7 @@ export async function runManagerForProject(
   }
 
   // 3. ASSIGN — give unowned runnable tickets to the best-fit teammate/agent. ----
-  if (policy.autoAssign) {
+  if (policy.autoAssign && mayRunStage('assign')) {
     const unowned = managed
       .filter((t) => RUNNABLE.includes(t.status) && !t.assignedUserId && !t.assignedAgentRef && t.assignedAgentHostId == null)
       .slice(0, MAX_ASSIGNMENTS_PER_RUN);
@@ -1309,8 +1408,8 @@ export async function runManagerForProject(
       // one thing a truncated pass must not lose. The DIAGNOSIS below spends up to
       // MAX_FINDINGS_PER_PASS model calls, so it is shed like any other optional work;
       // the cohorts are still recorded, and the next pass raises the finding.
-      const systemic = budget.over()
-        ? (budget.shed('systemic'), { findings: [], ticketsCreated: 0, resolved: 0, journal: [] })
+      const systemic = !mayStartStage('systemic')
+        ? { findings: [], ticketsCreated: 0, resolved: 0, journal: [] }
         : await raiseSystemicFindings(env, db, runtimeService, {
         tenantId, projectId, census,
         personaDirective: identity.personaDirective,
@@ -1349,13 +1448,15 @@ export async function runManagerForProject(
   // of them will not fit in one invocation however high MAX_PR_ACTIONS_PER_RUN is set.
   // It now stops at the budget instead of running until the isolate dies.
   const conductedTaskIds = new Set<number>();
-  await coordinatePullRequests(env, db, runtimeService, { tenantId, projectId, policy, managed, summary, runTaskId, conductedTaskIds, budget, runs });
+  await coordinatePullRequests(env, db, runtimeService, {
+    tenantId, projectId, policy, managed, summary, runTaskId, conductedTaskIds, budget, runs, mayRunStage,
+  });
 
   // 5. DISPATCH — kick the top-ranked runnable tickets NOW, in priority order. ---
   // Skipped on the cron path (the autonomous executor sweep owns dispatch there — see
   // shouldDispatch above). Re-read so rank + fresh assignments are reflected; the
   // dispatcher (idempotent) still gates each ticket on gate/capability/live-run.
-  if (shouldDispatch) {
+  if (shouldDispatch && mayRunStage('dispatch')) {
   const runnable = await db
     .select({ id: tasks.id, status: tasks.status, managerRank: tasks.managerRank })
     .from(tasks)
@@ -1398,7 +1499,7 @@ export async function runManagerForProject(
   // rewinds to the earliest unmet stage, resolves the role-capable participant and
   // dispatches them. Detecting the gap and only journalling it strands the ticket —
   // the flag feed was a dead end, and staffing the gap is exactly the manager's job.
-  {
+  if (mayRunStage('audit')) {
     const auditService = new TicketAuditService(db);
     for (const t of managed.slice(0, MAX_AUDITS_PER_RUN)) {
       // The stage that sat between the two budget-guarded regions with no guard of its
@@ -1490,19 +1591,29 @@ export async function runManagerForProject(
   // even on a pass whose discretionary stages were all shed. See
   // MANAGER_TRIAGE_RESERVE_MS for why an always-last stage on a plain deadline is a stage
   // that never runs at all.
-  if (budget.exhausted()) {
+  if (budget.exhausted() || !rotation.mayRun('triage')) {
     // Triage is the most valuable stage AND the most expensive, so it is the one that
     // must never be silently dropped. Say so explicitly on the register rather than
     // letting a truncated pass read as "nothing was stuck". Reaching here means even the
     // reserved slice was gone before the stage started — a genuinely overrun pass, not
     // the routine starvation the reserve exists to prevent.
+    //
+    // ROTATION-YIELDED is the OTHER way to arrive here and reads completely differently: a
+    // pass held for the PR stages that starved LAST pass has not overrun at all, and the
+    // journal must not tell a reader triage ran out of time when it deliberately gave up
+    // its turn. The two were indistinguishable for as long as there was only one reason.
+    const yielded = !rotation.mayRun('triage');
+    if (yielded) rotation.skip('triage');
     budget.shed('triage');
     await recordManagerAction(db, {
       tenantId, projectId, runTaskId, actionType: 'triage',
-      summary: `Stall triage skipped this pass — the whole ${Math.round(MANAGER_PASS_BUDGET_MS / 1000)}s pass budget, including the ${Math.round(MANAGER_TRIAGE_RESERVE_MS / 1000)}s reserved for triage, was already spent when it was reached.`,
+      summary: yielded
+        ? `Stall triage yielded this pass to ${[...rotation.yieldTo].join(', ')}, which ran out of wall-clock last pass — it runs again on the next one.`
+        : `Stall triage skipped this pass — the whole ${Math.round(MANAGER_PASS_BUDGET_MS / 1000)}s pass budget, including the ${Math.round(MANAGER_TRIAGE_RESERVE_MS / 1000)}s reserved for triage, was already spent when it was reached.`,
       detail: {
         budgetMs: MANAGER_PASS_BUDGET_MS, reserveMs: MANAGER_TRIAGE_RESERVE_MS,
         elapsedMs: budget.elapsedMs(), truncated: budget.truncated,
+        ...(yielded ? { yieldedTo: [...rotation.yieldTo] } : {}),
       },
     }).catch(() => undefined);
   } else {
@@ -1583,6 +1694,11 @@ export async function runManagerForProject(
   // time before triage" is the single most important thing this row can say, and it is
   // exactly what was missing for the two weeks the pass was being evicted here.
   summary.truncated = budget.truncated;
+  // HAND THE NEXT PASS ITS TURN. Only stages shed for WALL-CLOCK are carried over — a
+  // stage this pass yielded was told to wait, and feeding it back would make the two sets
+  // chase each other forever with neither completing. Best-effort: a lost cursor costs one
+  // unrotated pass, never correctness.
+  await savePassRotation(env, tenantId, projectId, rotation, budget.truncated);
   const didSomething =
     summary.scored || summary.ranked || summary.scheduled || summary.assigned ||
     summary.dispatched || summary.prsConducted || summary.prsMerged || summary.flagged ||
@@ -1674,6 +1790,11 @@ async function coordinatePullRequests(
     budget: PassBudget;
     /** The tenant's shared per-tick RUN ceiling. Every billable start reserves first. */
     runs: DispatchReserver;
+    /**
+     * Whose turn it is. Both PR stages are rotatable: they are the stages that starved
+     * triage on the measured board, so they must be able to give up a turn to it.
+     */
+    mayRunStage: (stage: string) => boolean;
   },
 ): Promise<void> {
   const { tenantId, projectId, policy, managed, summary, runTaskId, conductedTaskIds, budget, runs } = ctx;
@@ -1692,7 +1813,7 @@ async function coordinatePullRequests(
   // in review forever because only branch-bearing tickets were ever conducted. A
   // fully-signed-off ticket with no branch is now closed directly — there is simply no
   // PR to open for it.
-  if (policy.prMergePolicy !== 'queue') {
+  if (policy.prMergePolicy !== 'queue' && ctx.mayRunStage('pr_conduct')) {
     const reviewReady = managed
       .filter((t) => t.status === TaskStatus.IN_REVIEW)
       .slice(0, MAX_PR_ACTIONS_PER_RUN);
@@ -1864,6 +1985,7 @@ async function coordinatePullRequests(
 
   // MERGE + CLOSE open PRs per policy.
   if (policy.prMergePolicy === 'queue') return;
+  if (!ctx.mayRunStage('pr_merge')) return;
   const openPrs = await db
     .select({
       id: pullRequests.id, number: pullRequests.number, taskId: pullRequests.taskId,
@@ -1967,7 +2089,16 @@ async function coordinatePullRequests(
       if (!prepared.ok) {
         const task = pr.taskId == null ? null : managed.find((t) => t.id === pr.taskId) ?? null;
         let recoveryStarted = false;
-        if (prepared.code === 'conflict' && task && (task.assignedAgentRef || task.assignedAgentHostId != null)) {
+        // THE UNIT THAT OVERRAN THE PASS. This branch dispatches a cloud run, and a
+        // dispatch is the most expensive thing a pass does — measured at 16.4s here, on a
+        // 14s discretionary window. `budget.over()` at the top of the loop cannot stop a
+        // unit that has not started yet, so this one asks whether it still FITS. With too
+        // little window left the conflict is journalled without recovery and the stage is
+        // shed, which hands the next pass to whatever this one starved (see
+        // `passRotation.ts`) rather than silently running 7.6s past the whole budget.
+        const affordable = budget.canAfford(MIN_DISPATCH_WINDOW_MS);
+        if (!affordable) budget.shed('pr_merge');
+        if (affordable && prepared.code === 'conflict' && task && (task.assignedAgentRef || task.assignedAgentHostId != null)) {
           const recoveryNote = `\n\n[Manager recovery] PR #${pr.number ?? '?'} conflicts with the latest base branch. Sync the latest base, resolve every conflict while preserving both sets of intended changes, run the relevant checks, and update the existing PR.`;
           await db.update(tasks).set({
             status: TaskStatus.IN_PROGRESS,
@@ -1993,8 +2124,12 @@ async function coordinatePullRequests(
           tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: 'flag',
           summary: recoveryStarted
             ? `PR #${pr.number ?? '?'} conflicts with the latest base; started its ticket agent to resolve and update it.`
-            : `Could not update PR #${pr.number ?? '?'} from the latest base: ${prepared.error}`,
-          detail: { code: prepared.code, recoveryStarted },
+            : !affordable
+              // "Could not update" would read as a provider failure. It is a scheduling
+              // decision, and the honest version is the one that says the work is coming.
+              ? `PR #${pr.number ?? '?'} conflicts with the latest base; deferred starting its resolution agent because this pass has too little time left to start a run — it goes out on the next pass.`
+              : `Could not update PR #${pr.number ?? '?'} from the latest base: ${prepared.error}`,
+          detail: { code: prepared.code, recoveryStarted, ...(affordable ? {} : { deferred: 'pass_budget' }) },
         });
         continue;
       }

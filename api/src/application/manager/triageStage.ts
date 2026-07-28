@@ -185,8 +185,28 @@ const DISPATCHING_REMEDIES = new Set(['dispatch', 'reset_breaker', 'drive_signof
  * advanced toward the escalation ceiling either. Measured on project 11: 8 of 13
  * register rows sat at attempts=0 for 24+ days, re-diagnosed every five minutes,
  * remedied never.
+ *
+ * ── AND NOW `dispatch` TOO, WHICH EMPTIES IT ─────────────────────────────────────
+ * The same argument one level up. A ticket only reaches the `never_started` diagnosis
+ * after {@link STALL_AFTER_MS} — a full day — of being eligible and untouched. The
+ * executor sweeps every five minutes, so by the time triage sees the ticket the executor
+ * has already had roughly 288 chances and taken none of them. Deferring to it a 289th
+ * time is not caution about racing, it is the same unbounded wait wearing a different
+ * name: measured on project 11, **110 tickets `never_started`, the oldest idle 29 days**,
+ * each re-diagnosed and re-deferred every pass with no attempt counted — so no escalation
+ * to a human was reachable either.
+ *
+ * Racing is not the risk it sounds like: `maybeAutoRunOnLaneEntry` dedupes on a live
+ * execution, and every start is bounded by {@link MAX_TRIAGE_DISPATCHES_PER_RUN} and the
+ * tenant's shared per-tick ceiling. `ownsDispatch` still governs `mayRaceExecutor` — the
+ * optional "and start it" step a COST-FREE remedy may take — which is where the
+ * distinction genuinely belongs and where it remains.
+ *
+ * The set is kept (empty) rather than deleted along with its branch: it is the seam where
+ * a future remedy would be marked executor-owned, and the reasoning above is exactly what
+ * a person adding one needs to read first.
  */
-const EXECUTOR_OWNED_REMEDIES = new Set(['dispatch']);
+const EXECUTOR_OWNED_REMEDIES: ReadonlySet<string> = new Set<string>();
 
 /** What this pass may do about one diagnosed remedy. PURE — see {@link decideRemedyExecution}. */
 export interface RemedyExecution {

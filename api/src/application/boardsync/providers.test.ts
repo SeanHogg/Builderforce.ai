@@ -476,4 +476,30 @@ describe('createBoardProvider', () => {
       expect(() => createBoardProvider(id, { credentials: {} }, f)).not.toThrow();
     }
   });
+
+  /**
+   * Providers call their injected fetch as a METHOD (`this.fetchFn(…)`), which
+   * sets `this` to the provider instance. The Workers runtime rejects the global
+   * `fetch` invoked on anything but `globalThis` — "Illegal invocation" — and
+   * that broke every board sync in production before a request was ever sent.
+   * The factory must therefore hand the constructor a BOUND function.
+   */
+  it('binds the injected fetch so providers never invoke it with the wrong `this`', async () => {
+    const seenThis: unknown[] = [];
+    const f = function (this: unknown) {
+      seenThis.push(this);
+      return Promise.resolve(jsonResponse([]));
+    } as unknown as FetchLike;
+
+    const provider = createBoardProvider(
+      'github',
+      { credentials: { accessToken: 't' }, externalBoardId: 'o/r' },
+      f,
+    );
+    await provider.fetchTicketsSince(null);
+
+    expect(seenThis).toHaveLength(1);
+    expect(seenThis[0]).toBe(globalThis);
+    expect(seenThis[0]).not.toBeInstanceOf(GitHubBoardProvider);
+  });
 });

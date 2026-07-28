@@ -3,6 +3,7 @@ import { decideRunAttestation } from './attestRoleRun';
 import {
   MAX_UNATTESTED_RUNS, isAttestationExhausted, isProducerResponsibility, readUnattestedRuns,
 } from './participantStates';
+import { SIGNOFF_CONTRACT } from './signoffContract';
 
 /**
  * These tests guard the transition that was MISSING, and the one that must never exist.
@@ -62,22 +63,29 @@ describe('decideRunAttestation', () => {
   });
 });
 
+/**
+ * A counter is only meaningful against the ASK it counted, so every case below stamps the
+ * contract it was recorded under. An UNSTAMPED counter deliberately reads as zero — see
+ * `signoffContract.test.ts` for why, and for the 108 wedged slots that rule releases.
+ */
 describe('unattested-run bookkeeping', () => {
+  const counted = (n: number) => ({ unattestedRuns: n, attestationContract: SIGNOFF_CONTRACT });
+
   it('reads a missing or malformed counter as zero', () => {
     expect(readUnattestedRuns(null)).toBe(0);
     expect(readUnattestedRuns({})).toBe(0);
-    expect(readUnattestedRuns({ unattestedRuns: 'three' })).toBe(0);
-    expect(readUnattestedRuns({ unattestedRuns: -2 })).toBe(0);
-    expect(readUnattestedRuns({ unattestedRuns: Number.NaN })).toBe(0);
+    expect(readUnattestedRuns({ unattestedRuns: 'three', attestationContract: SIGNOFF_CONTRACT })).toBe(0);
+    expect(readUnattestedRuns(counted(-2))).toBe(0);
+    expect(readUnattestedRuns(counted(Number.NaN))).toBe(0);
   });
 
   it('reads a recorded counter', () => {
-    expect(readUnattestedRuns({ unattestedRuns: 2 })).toBe(2);
+    expect(readUnattestedRuns(counted(2))).toBe(2);
   });
 
   it('reports exhaustion only at the ceiling', () => {
-    expect(isAttestationExhausted({ unattestedRuns: MAX_UNATTESTED_RUNS - 1 })).toBe(false);
-    expect(isAttestationExhausted({ unattestedRuns: MAX_UNATTESTED_RUNS })).toBe(true);
+    expect(isAttestationExhausted(counted(MAX_UNATTESTED_RUNS - 1))).toBe(false);
+    expect(isAttestationExhausted(counted(MAX_UNATTESTED_RUNS))).toBe(true);
     // Absent evidence must read as "still askable" — the pre-existing behaviour.
     expect(isAttestationExhausted(undefined)).toBe(false);
   });

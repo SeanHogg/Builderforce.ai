@@ -1,4 +1,5 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { isR2SameObjectRateLimit, retryTransient } from '../../infrastructure/shared/retryTransient';
 /**
  * workspaceStore — THE canonical access layer for a project's IDE workspace in R2.
  *
@@ -181,38 +182,12 @@ export async function readWorkspaceFile(bucket: R2Bucket, projectId: number, pat
 }
 
 /**
- * R2 rejects rapid successive writes to the SAME key with error 10058
- * ("Reduce your concurrent request rate for the same object"). An editor
- * autosaving while an agent writes the same file hits this routinely — it is a
- * transient contention signal, not a bad request, and the correct response is to
- * wait a moment and retry rather than surface a 500 and lose the edit.
+ * An editor autosaving while an agent writes the same file trips R2's
+ * same-object rate limit routinely. Retried via the shared transient-retry
+ * helper; every other failure still propagates on the first attempt.
  */
-function isSameObjectRateLimit(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes('10058') || /concurrent request rate/i.test(message);
-}
-
-const WRITE_RETRIES = 3;
-const WRITE_BACKOFF_MS = 120;
-
-/**
- * Run an R2 mutation, retrying only the same-object rate limit. Every other
- * failure propagates on the first attempt — retrying a real fault just delays
- * the error the caller needs to see.
- */
-async function withSameObjectRetry<T>(operation: () => Promise<T>): Promise<T> {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await operation();
-    } catch (error) {
-      if (attempt >= WRITE_RETRIES - 1 || !isSameObjectRateLimit(error)) throw error;
-      // Exponential backoff with jitter so two racing writers don't re-collide
-      // in lockstep on the retry.
-      const delay = WRITE_BACKOFF_MS * 2 ** attempt + Math.floor(Math.random() * WRITE_BACKOFF_MS);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-  }
-}
+const withSameObjectRetry = <T>(operation: () => Promise<T>): Promise<T> =>
+  retryTransient(operation, isR2SameObjectRateLimit);
 
 /**
  * Write one file, enforcing the path AND content contracts. This is the single

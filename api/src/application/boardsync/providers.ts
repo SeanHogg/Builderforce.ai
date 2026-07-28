@@ -1644,5 +1644,14 @@ export function createBoardProvider(
 ): BoardProvider {
   const Ctor = PROVIDER_REGISTRY[provider];
   if (!Ctor) throw new Error(`Unsupported board provider: ${provider}`);
-  return new Ctor(cfg, fetchFn);
+  // Bind before storing. Every provider invokes its injected fetch as a METHOD
+  // (`this.fetchFn(url, …)`), which sets `this` to the provider instance — and
+  // the Workers runtime rejects the global `fetch` called on anything but
+  // `globalThis` with "Illegal invocation: function called with incorrect `this`
+  // reference". Callers pass a bare `fetch`, so every board sync threw before
+  // issuing a request (145 sweep failures/day, one per due connection).
+  //
+  // Binding HERE covers all 37 call sites across every provider at once; doing
+  // it at the call site would leave the next caller to rediscover the trap.
+  return new Ctor(cfg, fetchFn.bind(globalThis));
 }
