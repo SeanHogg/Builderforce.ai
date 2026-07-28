@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   createPassBudget, finalizeManagerRunTask, MANAGER_PASS_BUDGET_MS, MANAGER_TRIAGE_RESERVE_MS,
-  type ManagerRunSummary,
+  MIN_DISPATCH_WINDOW_MS, type ManagerRunSummary,
 } from './ManagerService';
 
 /**
@@ -95,6 +95,56 @@ describe('createPassBudget', () => {
       expect(budget.exhausted()).toBe(false);
       vi.advanceTimersByTime(5_000);
       expect(budget.exhausted()).toBe(true);
+    });
+  });
+
+  /**
+   * WHY `over()` WAS NOT ENOUGH. It answers "has the deadline passed?", which cannot stop
+   * a unit that has not started from running straight through it. Measured on project 11,
+   * 2026-07-28: the PR loop began an iteration at ~11s of the 14s discretionary window,
+   * hit a merge conflict, dispatched a recovery run, and returned at 27.6s — past the
+   * WHOLE 20s budget, reserve and all, with triage journalling `elapsedMs: 27648`. The
+   * expensive units now ask whether they FIT rather than only whether they are late.
+   */
+  describe('canAfford — refusing a unit that cannot fit', () => {
+    it('affords a unit while the discretionary window still covers it', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-26T12:00:00Z'));
+      const budget = createPassBudget(Date.now(), 20_000, 6_000);
+      expect(budget.remainingMs()).toBe(14_000);
+      expect(budget.canAfford(5_000)).toBe(true);
+    });
+
+    it('refuses a unit larger than the window that is left, while `over()` still says no', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-26T12:00:00Z'));
+      const budget = createPassBudget(Date.now(), 20_000, 6_000);
+      vi.advanceTimersByTime(11_000);
+      // This is the exact measured moment: 3s of window left, and the loop was about to
+      // start a 16.4s dispatch. The deadline check alone waves it through.
+      expect(budget.over()).toBe(false);
+      expect(budget.canAfford(MIN_DISPATCH_WINDOW_MS)).toBe(false);
+    });
+
+    it('reports no remaining window once the discretionary deadline passes, never a negative', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-26T12:00:00Z'));
+      const budget = createPassBudget(Date.now(), 20_000, 6_000);
+      vi.advanceTimersByTime(30_000);
+      expect(budget.remainingMs()).toBe(0);
+      expect(budget.canAfford(1)).toBe(false);
+      expect(budget.canAfford(0)).toBe(true);
+    });
+
+    /**
+     * A dispatch measured at 16.4s does not fit in a 14s window at all, so gating on its
+     * REAL cost would refuse every conflict recovery forever — trading a starved triage
+     * stage for a remedy that never runs. The floor is deliberately smaller than the
+     * window; the guarantee that triage runs is made by the rotation, not by this.
+     */
+    it('keeps the dispatch floor small enough that a fresh pass can still start one', () => {
+      expect(MIN_DISPATCH_WINDOW_MS).toBeGreaterThan(0);
+      expect(MIN_DISPATCH_WINDOW_MS).toBeLessThan(MANAGER_PASS_BUDGET_MS - MANAGER_TRIAGE_RESERVE_MS);
     });
   });
 

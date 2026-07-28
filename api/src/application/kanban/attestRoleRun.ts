@@ -43,6 +43,16 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *   dispatchable set and lets the existing escalation path hand it to a human. Asking a
  *   fourth time what has ignored three asks is the livelock this platform already named.
  *
+ * ── THE CEILING IS SCOPED TO THE ASK IT COUNTED ──────────────────────────────────
+ * A counted silence carries the fingerprint of the instruction that went unanswered (see
+ * `signoffContract.ts`). Twice the ask itself was impossible to answer — an HTTP route
+ * with no tool behind it, then the catalog id in place of the advertised tool name — and
+ * both times the source fix left the backlog wedged, because the ceiling had already been
+ * reached against a request no agent could satisfy. Measured on project 11 the morning
+ * after the second fix: 108 slots `exhausted`, 0 dispatchable, the gate holding 18 tickets
+ * and dispatching NOBODY. Editing either instruction now re-arms every slot that went
+ * silent under the old one, with nothing to remember and nothing to migrate.
+ *
  * ── WHY THE LEDGER AND NOT THE SLOT ──────────────────────────────────────────────
  * Credit is written to `ticket_role_signoffs`, never by setting `state = 'completed'`
  * directly, because a directly-written state DOES NOT SURVIVE. `syncStates` recomputes
@@ -70,6 +80,7 @@ import {
   isProducerResponsibility, readUnattestedRuns,
 } from './participantStates';
 import { roleDisplayName } from './roleCatalog';
+import { SIGNOFF_CONTRACT } from './signoffContract';
 import type { ParticipantState } from './ticketParticipants';
 
 /** What the platform did about a finished role run. */
@@ -243,6 +254,14 @@ export async function attestCompletedRoleRun(
         const evidence = {
           ...(slot.evidence && typeof slot.evidence === 'object' ? slot.evidence : {}),
           unattestedRuns: readUnattestedRuns(slot.evidence) + 1,
+          // STAMP WHICH ASK WENT UNANSWERED. Without it a count outlives the instruction
+          // that earned it: both times the ask was unanswerable (an HTTP route the agent
+          // has no tool for; the catalog id instead of the advertised tool name) the fix
+          // landed and the backlog stayed wedged, because the ceiling had already been
+          // reached against an impossible request. `readUnattestedRuns` discards a count
+          // whose stamp is stale, so fixing the instruction re-arms the slot. See
+          // `signoffContract.ts`.
+          attestationContract: SIGNOFF_CONTRACT,
           ...(args.executionId != null ? { lastUnattestedExecutionId: args.executionId } : {}),
           ...(outcome === 'exhausted' ? { attestationExhaustedAt: new Date().toISOString() } : {}),
         };
