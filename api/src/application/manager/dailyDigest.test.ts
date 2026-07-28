@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import {
-  computeDailyDigest, dayWindow, rankContributors, summarizeDecisions, isQuietDay,
+  computeDailyDigest, contributorKind, dayWindow, rankContributors, summarizeDecisions, isQuietDay,
   type ContributorTally, type DailyDigest,
 } from './dailyDigest';
 import { buildDatabase } from '../../infrastructure/database/connection';
@@ -66,6 +66,26 @@ describe('rankContributors', () => {
     const many = Array.from({ length: 50 }, (_, i) => t(`agent-${i}`, i, 0, 0));
     expect(rankContributors(many)).toHaveLength(6);
     expect(rankContributors(many, 2)).toHaveLength(2);
+  });
+});
+
+describe('contributorKind', () => {
+  it('credits every actor kind the transition log can name', () => {
+    // Lane moves used to credit humans only, because an agent's hop carried no
+    // identity. Now the log names the mover, so an agent's advances reach the
+    // leaderboard instead of being inferred from its run count.
+    expect(contributorKind('human')).toBe('human');
+    expect(contributorKind('hire')).toBe('hire');
+    expect(contributorKind('cloud_agent')).toBe('cloud_agent');
+    expect(contributorKind('host_agent')).toBe('host_agent');
+  });
+
+  it('credits nobody for identity-less automation', () => {
+    // 'system' is a cron or a webhook — real work with no member to point at. A
+    // "System" row on the leaderboard would be a contributor nobody can act on.
+    expect(contributorKind('system')).toBeNull();
+    expect(contributorKind(null)).toBeNull();
+    expect(contributorKind('something_new')).toBeNull();
   });
 });
 

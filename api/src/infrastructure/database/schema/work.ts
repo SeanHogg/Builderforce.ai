@@ -413,6 +413,12 @@ export const projectManagerConfigs = pgTable('project_manager_configs', {
  * Emitted from PATCH /api/tasks/:id. `isBackward` (move to a lower-ordinal
  * swimlane) is the redo signal; `actorKind`/`actorRef` record who moved it. See
  * migration 0117.
+ *
+ * `actorKind` is the (kind, ref) convention shared with `activity_log.actor_type`:
+ * 'human' | 'cloud_agent' | 'host_agent' | 'system', where 'system' means automation
+ * with NO identity to name (a cron sweep, a webhook) rather than "not a person".
+ * `actorRef` is the bare per-kind id, resolvable by `resolveActorByRef`. Written only
+ * by `taskLifecycle.recordStatusTransition` — see `resolveTransitionActor` (0377).
  */
 export const taskStatusTransitions = pgTable('task_status_transitions', {
   id:          serial('id').primaryKey(),
