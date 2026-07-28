@@ -47,6 +47,7 @@ import type { Env } from '../../env';
 import { ideAgents, projectRoleAssignments } from '../../infrastructure/database/schema';
 import { bumpWorkforceMetricsVersion } from '../metrics/workforceMetrics';
 import { resolveRoleCapableAgents } from '../kanban/roleCapability';
+import { SIGNOFF_TOOL_NAME } from '../kanban/signoffRequest';
 import { BUILTIN_ROLES, isBuiltinRoleKey, roleDisplayName } from '../kanban/roleCatalog';
 
 /**
@@ -116,8 +117,10 @@ function hireSpecFor(roleKey: string, tenantId: number): {
     // from outside. The catalog description is the canonical statement of that remit.
     bio: `${role?.description ?? `Performs the ${name} role on this workspace's tickets.`} `
       + 'This role was required by a lifecycle stage that no existing teammate could perform, '
+      // The ADVERTISED name, never the catalog id — this bio becomes the agent's persona
+      // directive, so a hand-typed id names a tool it does not have. See `toolNaming.ts`.
       + 'so the AI Manager staffed it. Work the ticket as this role, and record your verdict '
-      + 'with the `kanban.signoff` tool when the stage\'s deliverable is complete.',
+      + `with the \`${SIGNOFF_TOOL_NAME}\` tool when the stage's deliverable is complete.`,
     skills: [roleKey, ...(role?.discipline ? [role.discipline] : [])],
   };
 }

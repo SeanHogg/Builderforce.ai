@@ -31,16 +31,39 @@
  * `in_review`, reviewer dispatched, zero sign-offs. Naming the tool is what lets an
  * autonomously-reviewed ticket actually reach Done.
  *
+ * ── WHY IT NAMES THE ADVERTISED NAME AND NOT THE CATALOG ID ──────────────────────
+ * Naming the tool was necessary but not sufficient. The instruction said "call the
+ * `kanban.signoff` tool" — the internal CATALOG ID — while the model's tool list carries
+ * `builtin_kanban_signoff`, because {@link advertisedName} rewrites every id before the
+ * schema reaches the provider. So the sentence still named something the reviewer did not
+ * have, and a model handed a tool name it cannot find does not fail: it describes the
+ * call it would like to make and finishes successfully.
+ *
+ * The result was the SAME closed loop the fix above was meant to open, with no failure
+ * signal anywhere in it. Measured on project 11, 2026-07-28 (api 2026.7.170): **492 agent
+ * runs completed, 0 forward lane moves, 0 tickets finished**, 281 tickets stalled on
+ * `awaiting_signoff` (longest idle 48 days), and 17 slots classified `exhausted` — the
+ * attestation ceiling correctly reporting "this agent finishes every run without
+ * recording a verdict" for agents that had never been given a working way to record one.
+ *
  * Pure string/JSON building, no IO — trivially unit-tested.
  */
+import { advertisedName } from '../llm/toolNaming';
 
 /**
- * The MCP tool an agent records its verdict with. One constant because BOTH instruction
- * builders name it and the whole round-trip is wasted if they name anything else.
- * Must stay in sync with the `kanban.signoff` entry in `builtinMcpService.CATALOG`
- * (and its membership in `CLOUD_AGENT_PLATFORM_TOOLS`).
+ * The MCP tool an agent records its verdict with — the internal CATALOG ID. One constant
+ * because BOTH instruction builders name it and the whole round-trip is wasted if they
+ * name anything else. Must stay in sync with the `kanban.signoff` entry in
+ * `builtinMcpService.CATALOG` (and its membership in `CLOUD_AGENT_PLATFORM_TOOLS`).
  */
 export const SIGNOFF_TOOL = 'kanban.signoff';
+
+/**
+ * What the AGENT sees the tool called. THIS is the string an instruction may print — the
+ * catalog id appears nowhere in the model's tool list. Never hand-type it: it is derived,
+ * so a change to the advertising scheme cannot leave the prompt behind.
+ */
+export const SIGNOFF_TOOL_NAME = advertisedName(SIGNOFF_TOOL);
 
 /** Everything the reviewing agent must be told to record a slot-matching sign-off. */
 export interface SignoffRequestSpec {
@@ -73,13 +96,13 @@ export function buildSignoffRequestInstruction(spec: SignoffRequestSpec): string
     `You are the ${spec.roleName} accountable for ticket #${spec.taskId}${title}${at}. `
     + `Review the delivered work against the ticket description, the PRD and its acceptance criteria${pr}. `
     + `Then RECORD YOUR VERDICT — this is required, the ticket cannot complete without it: `
-    + `call the \`${SIGNOFF_TOOL}\` tool with taskId=${spec.taskId}, roleKey='${spec.roleKey}'${laneArg}, `
+    + `call the \`${SIGNOFF_TOOL_NAME}\` tool with taskId=${spec.taskId}, roleKey='${spec.roleKey}'${laneArg}, `
     + `verdict='approved' if the work meets the criteria, or verdict='changes_requested' with the specific fixes needed. `
     + (lane ? `Pass laneKey exactly as given — your verdict is matched to this lane's accountability slot by it. ` : '')
     + `Always pass \`contribution\` linking the evidence you actually inspected (prUrl, diffFiles, executionId) — `
     + `an approval with no linked contribution is itself an audit finding. `
     + `If you request changes, describe the specific fixes for the producing role to resolve. `
-    + `\`${SIGNOFF_TOOL}\` is available to you in this run — use it directly; do NOT attempt an HTTP request, `
+    + `\`${SIGNOFF_TOOL_NAME}\` is available to you in this run — use it directly; do NOT attempt an HTTP request, `
     + `you have no network tool and the verdict would simply never be recorded.`
   );
 }
@@ -104,10 +127,10 @@ export function buildProducerRequestInstruction(spec: SignoffRequestSpec): strin
     + `Implement or author the required deliverable (open a pull request for code, or write the PRD section for a spec role). `
     + `Your run is recorded as this role's participation on the ticket's accountability manifest. `
     + `When the deliverable is complete, RECORD IT — the ticket cannot complete without it: `
-    + `call the \`${SIGNOFF_TOOL}\` tool with taskId=${spec.taskId}, roleKey='${spec.roleKey}'${laneArg}, verdict='approved', `
+    + `call the \`${SIGNOFF_TOOL_NAME}\` tool with taskId=${spec.taskId}, roleKey='${spec.roleKey}'${laneArg}, verdict='approved', `
     + `and \`contribution\` linking the evidence you produced (prUrl, diffFiles, executionId). `
     + (lane ? `Pass laneKey exactly as given — your record is matched to this lane's accountability slot by it. ` : '')
-    + `\`${SIGNOFF_TOOL}\` is available to you in this run — use it directly; do NOT attempt an HTTP request, `
+    + `\`${SIGNOFF_TOOL_NAME}\` is available to you in this run — use it directly; do NOT attempt an HTTP request, `
     + `you have no network tool and the record would simply never be written.`
   );
 }

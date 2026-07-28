@@ -38,6 +38,7 @@ import { recordIncidentLearning } from './incidentLearning';
 import { fireEventTriggers } from '../workflow/eventTriggers';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { advertisedName } from '../llm/toolNaming';
 
 /** sev1 (most severe) … sev4. */
 export type IncidentSeverity = 'sev1' | 'sev2' | 'sev3' | 'sev4';
@@ -247,7 +248,10 @@ export class IncidentService {
       const brief = [
         `INCIDENT (incident \`${incidentId}\`, ${severity}) from ${source}. This is HELP-DESK TRIAGE, not a code change.`,
         input.description ? `\nSource ticket:\n${input.description}` : '',
-        `\nFirst search the knowledge base with knowledge.search for prior similar incidents / known-errors. Work out WHICH SYSTEM this pertains to and record it with incidents.classify; set an accurate severity with incidents.update; page whoever is on call with oncall.page; post what you find/do with incidents.add_note. When resolved, publish an RCA with incidents.postmortem (root cause + action items). Do NOT write code.`,
+        // Every tool named through `advertisedName` — a catalog id appears nowhere in the
+        // agent's tool list, and the model then describes the call instead of making it,
+        // with no failure signal anywhere. See `application/llm/toolNaming.ts`.
+        `\nFirst search the knowledge base with \`${advertisedName('knowledge.search')}\` for prior similar incidents / known-errors. Work out WHICH SYSTEM this pertains to and record it with \`${advertisedName('incidents.classify')}\`; set an accurate severity with \`${advertisedName('incidents.update')}\`; page whoever is on call with \`${advertisedName('oncall.page')}\`; post what you find/do with \`${advertisedName('incidents.add_note')}\`. When resolved, publish an RCA with \`${advertisedName('incidents.postmortem')}\` (root cause + action items). Do NOT write code.`,
       ].join('');
       const created = await this.tasks.createTask({
         projectId,
