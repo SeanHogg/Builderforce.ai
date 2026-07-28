@@ -6910,6 +6910,8 @@
       "coordinate": "Staffed",
       "schedule": "Scheduled",
       "merge_blocked": "Merge withheld",
+      "merge_failed": "Merge refused",
+      "pr_conflict": "PR conflicts",
       "triage": "Triaged",
       "escalate": "Escalated",
       "systemic": "Platform finding"
