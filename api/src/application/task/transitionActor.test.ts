@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { resolveTransitionActor } from './taskLifecycle';
 import { parseMachineSubject, isMachineSubject } from '../../infrastructure/auth/machineSubject';
 import { resolveMergeActor } from '../repos/mergeRecordedPr';
+import { requestActor } from '../../presentation/middleware/authMiddleware';
 
 /**
  * Lane-move attribution. Pure, so it is tested without a database.
@@ -73,6 +74,34 @@ describe('resolveTransitionActor', () => {
   it('truncates to the actor_ref column width instead of aborting the insert', () => {
     const long = 'a'.repeat(100);
     expect(resolveTransitionActor({ actorAgentRef: long }).actorRef).toHaveLength(64);
+  });
+});
+
+describe('requestActor', () => {
+  // A tiny stand-in for the Hono context: `requestActor` reads context variables only.
+  const ctx = (vars: Record<string, unknown>) =>
+    ({ get: (k: string) => vars[k] }) as unknown as Parameters<typeof requestActor>[0];
+
+  it('credits the cloud agent a replayed platform-tool call acts as', () => {
+    // The agent's ref sits in `sub` too (it is what `createdBy` records), so the signed
+    // `agt` claim must WIN — otherwise the agent is read back as a person.
+    expect(requestActor(ctx({ agentActorRef: 'ada-1', userId: 'ada-1' })))
+      .toEqual({ actorAgentRef: 'ada-1' });
+  });
+
+  it('credits the on-prem host behind a machine token', () => {
+    expect(requestActor(ctx({ machineActor: { kind: 'agent_host', agentHostId: 5, suffix: '5' }, userId: 'agentHost:5' })))
+      .toEqual({ actorAgentHostId: 5 });
+  });
+
+  it('credits the signed-in person on an ordinary request', () => {
+    expect(requestActor(ctx({ userId: 'user-1' }))).toEqual({ actorUserId: 'user-1' });
+    expect(requestActor(ctx({}))).toEqual({ actorUserId: null });
+  });
+
+  it('composes with the writer: an agent replay is never stored as human', () => {
+    expect(resolveTransitionActor(requestActor(ctx({ agentActorRef: 'ada-1', userId: 'ada-1' }))))
+      .toEqual({ actorKind: 'cloud_agent', actorRef: 'ada-1' });
   });
 });
 

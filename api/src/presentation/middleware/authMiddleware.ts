@@ -128,6 +128,9 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   // ALSO publish their machine identity, so a write that records WHO did something can
   // tell an on-prem agent host from a person instead of filing it under a fake user id.
   if (machineActor) c.set('machineActor', machineActor);
+  // …and a cloud agent replaying a route as itself publishes the agent it acts as, so a
+  // write can credit the agent rather than the ref parked in `sub`.
+  if (payload.agt) c.set('agentActorRef', payload.agt);
   updateCaughtErrorContext({ tenantId: payload.tid, userId: payload.sub });
   if (payload.sid) c.set('sessionId', payload.sid);
 
@@ -162,10 +165,15 @@ export function isManager(c: Context<HonoEnv>): boolean {
  * without every route re-learning the token shapes.
  */
 export function requestActor(c: Context<HonoEnv>): TransitionActorInput {
+  // Agent identities are returned WITHOUT a user id, deliberately: a cloud agent's
+  // replay carries its own ref in `sub`, and letting that through as `actorUserId`
+  // would take the human branch and re-create the bug this exists to close.
+  const agentRef = c.get('agentActorRef');
+  if (agentRef) return { actorAgentRef: agentRef };
+
   const machine = c.get('machineActor');
-  if (machine) {
-    return { actorUserId: null, actorAgentHostId: machine.agentHostId };
-  }
+  if (machine) return { actorAgentHostId: machine.agentHostId };
+
   return { actorUserId: c.get('userId') ?? null };
 }
 

@@ -117,6 +117,17 @@ interface BuiltinCtx {
   env?: Env;
   /** Authed user id (createdBy on migration runs), when known. */
   userId?: string | null;
+  /**
+   * The CLOUD AGENT making this call (`ide_agents.id` / published ref), when the caller
+   * is an agent rather than a person. Carried into the replay JWT as the signed `agt`
+   * claim so a replayed WRITE is credited to the agent.
+   *
+   * The cloud-agent engine also passes this ref as `userId` (it is what `createdBy`
+   * columns have always recorded for agent-authored rows, and changing that would
+   * rewrite existing authorship). This field is what lets the replayed route tell the
+   * two apart instead of reading an agent ref as a person.
+   */
+  agentRef?: string | null;
   /** The caller's role — used to mint a replay JWT for gateway-key callers. */
   role?: TenantRole;
   /** The caller's raw Bearer token — forwarded on route replay when it's a JWT
@@ -224,7 +235,14 @@ async function replayRoute(
   const bearer = tok && !isGatewayKey
     ? tok
     : await signJwt(
-        { sub: ctx.userId && !isGatewayKey ? ctx.userId : 'agentHost:mcp', tid: ctx.tenantId, role: ctx.role ?? TenantRole.DEVELOPER },
+        {
+          sub: ctx.userId && !isGatewayKey ? ctx.userId : 'agentHost:mcp',
+          tid: ctx.tenantId,
+          role: ctx.role ?? TenantRole.DEVELOPER,
+          // Signed authorship: when an AGENT is driving this call, the replayed route
+          // credits the agent instead of mistaking its ref in `sub` for a user id.
+          ...(ctx.agentRef ? { agt: ctx.agentRef } : {}),
+        },
         ctx.env.JWT_SECRET,
       );
   const headers: Record<string, string> = { authorization: `Bearer ${bearer}` };
@@ -2953,7 +2971,7 @@ async function maskSecurityTasks<T extends Record<string, unknown>>(ctx: Builtin
 function buildCtx(
   db: Db,
   tenantId: number,
-  opts?: { env?: Env; userId?: string | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext },
+  opts?: { env?: Env; userId?: string | null; agentRef?: string | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext },
 ): BuiltinCtx {
   const projectRepo = new ProjectRepository(db);
   const taskRepo = new TaskRepository(db);
@@ -2964,6 +2982,7 @@ function buildCtx(
     tasks: new TaskService(taskRepo, projectRepo),
     env: opts?.env,
     userId: opts?.userId ?? null,
+    agentRef: opts?.agentRef ?? null,
     role: opts?.role,
     authToken: opts?.authToken ?? null,
     executionCtx: opts?.executionCtx,
@@ -3184,11 +3203,11 @@ async function emitBuiltinToolActivity(env: Env, db: Db, tenantId: number, userI
 /** Run one built-in tool in-process, tenant-scoped. Throws on unknown tool. */
 export async function callBuiltinTool(
   db: Db,
-  args: { tenantId: number; tool: string; arguments: unknown; env?: Env; userId?: string | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext },
+  args: { tenantId: number; tool: string; arguments: unknown; env?: Env; userId?: string | null; agentRef?: string | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext },
 ): Promise<unknown> {
   const entry = CATALOG.find((t) => t.tool === args.tool);
   if (!entry) throw new Error(`Unknown built-in tool '${args.tool}'`);
-  const ctx = buildCtx(db, args.tenantId, { env: args.env, userId: args.userId, role: args.role, authToken: args.authToken, executionCtx: args.executionCtx });
+  const ctx = buildCtx(db, args.tenantId, { env: args.env, userId: args.userId, agentRef: args.agentRef, role: args.role, authToken: args.authToken, executionCtx: args.executionCtx });
   const result = await entry.run(ctx, (args.arguments ?? {}) as Json);
   // Unified audit stream: record any mutating tool run (best-effort, off the result).
   if (entry.mutates && args.env) {

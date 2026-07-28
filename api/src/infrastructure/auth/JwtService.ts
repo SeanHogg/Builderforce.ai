@@ -16,6 +16,19 @@ export interface JwtPayload {
   // Segment. Absent on 'single'/direct tenants → default segment is used.
   acct?: string;      // external account id (host coordinate)
   co?:   string;      // external company id (host coordinate)
+  /**
+   * The CLOUD AGENT this token acts as (`ide_agents.id` / published agent ref).
+   *
+   * Minted only for the in-process route replay a cloud agent's platform-tool call
+   * performs — never for a person's session. It rides inside the SIGNED payload rather
+   * than a header precisely because it confers identity: an authorship claim a client
+   * could set for itself would be worthless.
+   *
+   * Without it an agent's platform-tool write authenticated with the agent ref sitting
+   * in `sub`, which every consumer reads as a user id — so an agent that moved a ticket
+   * through `update_task` was recorded as a person whose id nobody could resolve.
+   */
+  agt?: string;
   iat:  number;
   exp:  number;
 }

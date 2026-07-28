@@ -1134,7 +1134,8 @@ export async function handleContainerOp(
       const data = await callBuiltinTool(db, {
         tenantId, tool: platformTool,
         arguments: { projectId, ...toolArgs },
-        env, userId: cloudAgentRef ?? null, role: TenantRole.MANAGER,
+        env, userId: cloudAgentRef ?? null, agentRef: cloudAgentRef ?? null,
+        role: TenantRole.MANAGER,
       });
       result = data && typeof data === 'object' ? (data as Record<string, unknown>) : { ok: true, result: data };
     } catch (e) {
@@ -2173,7 +2174,8 @@ export async function runCloudToolLoop(
             const data = await callBuiltinTool(db, {
               tenantId, tool: platformTool,
               arguments: { projectId, ...parsed },
-              env, userId: cloudAgentRef ?? null, role: TenantRole.MANAGER,
+              env, userId: cloudAgentRef ?? null, agentRef: cloudAgentRef ?? null,
+              role: TenantRole.MANAGER,
             });
             toolResult = data && typeof data === 'object' ? (data as Record<string, unknown>) : { ok: true, result: data };
           } catch (e) {
