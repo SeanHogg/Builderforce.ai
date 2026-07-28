@@ -385,8 +385,20 @@ export async function loadBoardLaneAuthorities(
   // ONE roster for the whole board, shared by every lane — the census asks the capability
   // question for every authorized role of every lane, and a per-lane load would be the
   // N+1 that makes parity unaffordable.
+  // A FAILED roster load must be LOUD. Degrading to `EMPTY_ROLE_ROSTER` reproduces the
+  // exact pre-fix symptom — every role unbound, every ticket `managed_no_role` — so a
+  // silent catch here would make a broken read indistinguishable from a genuinely
+  // unstaffable board, on the one number this whole fix is measured by.
   const roster = await loadRoleRoster(args.env, db, args.tenantId, args.projectId)
-    .catch(() => EMPTY_ROLE_ROSTER);
+    .catch((error) => {
+      reportCaughtError(error, { source: 'application/kanban/managedLaneRoles.ts', operation: 'loadBoardLaneAuthorities', context: { logMessage: '[managed-lane-roles] roster load failed — EVERY role on this board will report unbound', details: {
+        tenantId: args.tenantId,
+        projectId: args.projectId,
+        boardId: args.boardId,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      } } });
+      return EMPTY_ROLE_ROSTER;
+    });
   const laneRows = await db
     .select({ id: swimlanes.id })
     .from(swimlanes)

@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-28 — ✅ RESOLVED: 492 agent runs, 0 tickets finished — every reviewer was told to call a tool it did not have (api 2026.7.171)
+
+**THE ROOT CAUSE of "nothing gets done".** Every builtin MCP tool is advertised to the model as `advertisedName(id)` — `kanban.signoff` reaches it as `builtin_kanban_signoff`. The instruction in `kanban/signoffRequest.ts`, which **every reviewer and producer run on a lifecycle-managed board receives**, said *"call the `kanban.signoff` tool"* — the internal catalog id, a string that appears nowhere in the agent's tool list.
+
+A model handed a tool name it cannot find does not error. It describes the call it would like to make and finishes successfully. So: the run completes, no verdict is written, the manifest slot stays `in_progress`, the sign-off gate stays shut, the ticket never advances — and **not one component in that loop reports a failure**.
+
+Measured live, project 11, 2026-07-28T03:06 (api 2026.7.170): **492 agent runs completed, 2 failed, 0 forward lane moves, 0 tickets finished, 0 PRs merged.** 281 tickets stalled on `awaiting_signoff`, longest idle 48 days. 17 slots classified `exhausted` and rising (11 → 17 in 70 minutes) — the attestation ceiling shipped that morning faithfully reporting *"this agent finishes every run without recording a verdict"* about agents that had never been given a working way to record one. Six cloud agents logged 143/133/97/75/38/5 runs each and `finished=0, moves=0` across the board.
+
+This is the fifth instance of the same contract break. `advertisedName`'s own doc comment describes the first: a prompt naming `manager.digest` produced a reply that *listed* the calls it could not make. That was fixed with a unit test on that one prompt, so the next four shipped in other files.
+
+**Fixed everywhere, and made unrepeatable:**
+- `advertisedName` extracted to `application/llm/toolNaming.ts`. It lived inside `builtinMcpService.ts` — a module too heavy for a prompt builder to import — so prompt builders hand-typed the id instead. That weight *was* the cause; `builtinMcpService` re-exports it, so no call site changed.
+- Four more violations found and fixed by the new guard on its first run: the seeded **Manager** agent's bio (`manager.digest`, `manager.decisions`, `manager.census`, `manager.policy`, `autonomy.wiring_audit` — its persona directive, i.e. the agent told to account for the board could not call the tools it was told to read), `IncidentService`'s triage brief (six tools), and `securityDispatch`'s SOC 2 anchor task (`security.record_finding`).
+- **`check-prompt-tool-names.mjs`** in `npm test`: no prose string literal may contain a catalog id without its advertised name, AND no prose template may interpolate a constant holding a catalog id. AST-based and literal-only, so the doc comments that discuss ids constantly are untouched. Mutation-verified in **both** forms — the interpolation check was added specifically because the first version passed on a mutated tree.
+
+**The two pre-existing tests asserted `toContain('kanban.signoff')`.** They passed for the entire life of the defect — they asserted the bug. Now assert `SIGNOFF_TOOL_NAME`, plus a new block asserting the full contract: the instruction names the advertised name and never the bare id, the name is *derived* (`advertisedName(SIGNOFF_TOOL)`) rather than hard-coded, and the tool is genuinely on `CLOUD_AGENT_PLATFORM_TOOLS` with a matching advertised name in `listBuiltinTools()`. Naming it correctly is useless if it is not granted; granting it is useless if the prompt names something else. Both, or neither.
+
+---
+
 ## 2026-07-28 — ✅ RESOLVED: `remedy_never_attempted` was a false CRITICAL on every newly-discovered stall row (ui 2026.7.134)
 
 **Found in a live diagnostics capture, project 11, apiVersion 2026.7.169.** The report raised a critical: *"6 stuck tickets have a remedy that has NEVER been attempted (attempts=0), the longest idle 16d 01h … every pass has skipped them."* All six rows carried `lastAttempt=—` and a `firstSeen` inside the **previous five minutes**. The manager had discovered them on the pass that was still running; it had had at most one opportunity to act. Nothing was being skipped.

@@ -21,6 +21,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 import { and, eq, desc, sql, type SQL } from 'drizzle-orm';
 import { type ToolSchema } from '@builderforce/agent-tools';
+import { advertisedName } from './toolNaming';
 import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import {
   clampErrorLogLimit,
@@ -2953,18 +2954,12 @@ async function fireAgentAssignmentHandoff(ctx: BuiltinCtx, task: Task, previousA
 
 /** Flat, gateway-safe advertised name: `builtin_projects_list` (no dots). */
 /**
- * The name a tool is advertised to the MODEL under.
- *
- * EXPORTED because a prompt that names a tool must name the SAME string the model was
- * given. It is not decoration: a system prompt that told an agent to call
- * `manager.digest` — the internal catalog id — handed it a name that appears nowhere in
- * its tool list, and the model responded by DESCRIBING the calls it could not make
- * ("The tools required are manager.digest, manager.decisions…") instead of making them.
- * Any prompt referencing a tool must route through this, never a hand-typed literal.
+ * Re-exported so existing importers keep working. The definition moved to
+ * {@link ../llm/toolNaming} so a PROMPT BUILDER can name a tool correctly without
+ * importing this module — the weight of which is why two prompts hand-typed the catalog
+ * id instead and silently asked models to call tools they had never been given.
  */
-export function advertisedName(tool: string): string {
-  return `builtin_${tool.replace(/[^a-zA-Z0-9]+/g, '_')}`;
-}
+export { advertisedName };
 
 /**
  * Mask (don't drop) the access-restricted SECURITY tickets the MCP caller isn't

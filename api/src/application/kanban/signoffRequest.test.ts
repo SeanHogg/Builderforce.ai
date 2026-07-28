@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   buildProducerRequestInstruction, buildProducerRequestPayload,
   buildSignoffRequestInstruction, buildSignoffRequestPayload,
+  SIGNOFF_TOOL, SIGNOFF_TOOL_NAME,
 } from './signoffRequest';
+import { advertisedName, listBuiltinTools, CLOUD_AGENT_PLATFORM_TOOLS } from '../llm/builtinMcpService';
 
 /**
  * The failure these tests guard against is subtle and was live in production.
@@ -23,6 +25,49 @@ const spec = {
   laneKey: 'in_review',
 };
 
+/**
+ * THE PROMPT → TOOL-LIST CONTRACT, for the instruction that carries the entire
+ * lifecycle. This is the assertion whose absence cost the platform every forward lane
+ * move on a managed board.
+ *
+ * The instruction named `kanban.signoff` — the internal CATALOG ID — while the model's
+ * tool list carries `builtin_kanban_signoff`, because `advertisedName` rewrites every id
+ * before the schema reaches the provider. A model handed a tool name it cannot find does
+ * not error: it describes the call it would like to make and finishes successfully, so
+ * the run completes, no verdict is written, and nothing anywhere reports a failure.
+ *
+ * Measured on project 11, 2026-07-28 (api 2026.7.170): 492 agent runs completed, **0
+ * forward lane moves, 0 tickets finished**, 281 tickets stalled on `awaiting_signoff`
+ * (longest idle 48 days), 17 slots classified `exhausted`.
+ */
+describe('the sign-off instruction names the tool the MODEL was given', () => {
+  it.each([
+    ['reviewer', buildSignoffRequestInstruction],
+    ['producer', buildProducerRequestInstruction],
+  ])('%s instruction names the advertised tool, never the catalog id', (_who, build) => {
+    const text = build(spec);
+    expect(text).toContain(SIGNOFF_TOOL_NAME);
+    expect(SIGNOFF_TOOL_NAME).toBe('builtin_kanban_signoff');
+    // The catalog id must not appear on its own — it names nothing the agent has.
+    expect(text.replace(new RegExp(SIGNOFF_TOOL_NAME, 'g'), '')).not.toContain(SIGNOFF_TOOL);
+  });
+
+  it('derives the name rather than hard-coding it, so the scheme cannot drift', () => {
+    expect(SIGNOFF_TOOL_NAME).toBe(advertisedName(SIGNOFF_TOOL));
+  });
+
+  /**
+   * The other half of the contract: the tool must actually BE in the reviewer's list.
+   * Naming it correctly is useless if it is not on the cloud-agent allowlist, and being
+   * on the allowlist is useless if the prompt names something else. Both, or neither.
+   */
+  it('names a tool the cloud agent is actually given', () => {
+    expect(CLOUD_AGENT_PLATFORM_TOOLS).toContain(SIGNOFF_TOOL);
+    const advertised = listBuiltinTools().find((t) => t.tool === SIGNOFF_TOOL);
+    expect(advertised?.name).toBe(SIGNOFF_TOOL_NAME);
+  });
+});
+
 describe('buildSignoffRequestInstruction', () => {
   it('tells the agent to pass laneKey IN THE POST BODY — the slot-matching key', () => {
     const text = buildSignoffRequestInstruction(spec);
@@ -40,7 +85,9 @@ describe('buildSignoffRequestInstruction', () => {
     expect(text).toContain('ticket #42');
     expect(text).toContain('"Add rate limiting"');
     expect(text).toContain("lane 'in_review'");
-    expect(text).toContain('kanban.signoff');
+    // The ADVERTISED name. This line used to assert the catalog id and therefore
+    // PASSED for the entire life of the defect — it asserted the bug.
+    expect(text).toContain(SIGNOFF_TOOL_NAME);
     expect(text).toContain('taskId=42');
   });
 
@@ -115,7 +162,9 @@ describe('buildProducerRequestInstruction / Payload', () => {
   it('names the tool and the laneKey — the producer string it replaced named neither', () => {
     const text = buildProducerRequestInstruction(spec);
     expect(text).toContain('assigned to PRODUCE');
-    expect(text).toContain('kanban.signoff');
+    // The ADVERTISED name. This line used to assert the catalog id and therefore
+    // PASSED for the entire life of the defect — it asserted the bug.
+    expect(text).toContain(SIGNOFF_TOOL_NAME);
     expect(text).toContain("roleKey='code-reviewer'");
     expect(text).toContain("laneKey='in_review'");
     expect(text).not.toContain('POST /api/');

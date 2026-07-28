@@ -152,15 +152,21 @@ If a caller decides something may not happen, that decision must reach the code 
 
 `coordinate` was categorised as non-dispatching because that was its intent. Nothing checked. Before you put a function in a bucket, follow it to its leaves.
 
-### 5. Pin a defect you are not fixing — never park it
+### 5. A prompt names a tool the model was GIVEN, never the internal id
+
+Every builtin tool is advertised as `advertisedName(id)` — `kanban.signoff` reaches the model as `builtin_kanban_signoff`. A prompt printing the raw id hands the model a string that appears nowhere in its tool list, and the model does not error: it *describes* the call it would like to make and finishes successfully. There is no failure signal anywhere in that loop.
+
+This shipped five times, most expensively in `kanban/signoffRequest.ts` — the instruction every reviewer and producer run receives on a lifecycle-managed board. Measured: **492 agent runs completed, 0 forward lane moves, 0 tickets finished**. The agents were doing the work and being asked to report it through a door that did not exist. Route every tool reference through `advertisedName`, never a literal and never a catalog-id constant. Enforced by `api/scripts/check-prompt-tool-names.mjs`.
+
+### 6. Pin a defect you are not fixing — never park it
 
 `it.fails` states the invariant, keeps the suite green while the defect is open, and turns it RED the moment someone fixes it. That is strictly better than deleting the test or writing a comment. It is also a failing assertion that CI reports as success, so: every `it.fails` must be named in ROADMAP.md's Consolidated Gap Register, and fixing it flips the test to a plain `it` and moves the entry to `DONE.md`. Both directions are enforced by `api/scripts/check-pinned-defects.mjs`.
 
-### 6. Verify a new test by breaking the code
+### 7. Verify a new test by breaking the code
 
 A test that passes tells you nothing until you have seen it fail for the reason you intended. Revert the fix (or mutate the condition), confirm the failure message names *your* assertion rather than an earlier line, then restore. Several tests here passed for years while asserting the wrong half of the behaviour — `applied` when the invariant was about `attempted`.
 
-### 7. Keep the counter-example executable
+### 8. Keep the counter-example executable
 
 `tickDispatchBudget.contract.test.ts` still contains the broken accounting pattern and asserts that it produces exactly 43 and 38 against a ceiling of 25. "We fixed it" should be a measurement, not a claim, and the next person to read the module learns what the rule is *for*.
 
