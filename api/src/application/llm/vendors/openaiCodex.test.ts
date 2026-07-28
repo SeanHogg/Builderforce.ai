@@ -56,7 +56,15 @@ describe('OpenAI Codex subscription vendor', () => {
     expect((result.raw as { choices: Array<{ message: { content: string } }> }).choices[0]?.message.content).toBe('done');
   });
 
-  it('floors max_output_tokens to the Responses minimum so a tiny probe is not rejected', async () => {
+  /**
+   * The PRIVATE Codex backend is not the public Responses surface: it rejects
+   * `max_output_tokens` with `400 {"detail":"Unsupported parameter:
+   * max_output_tokens"}`, killing the request before any generation. The Codex
+   * CLI never sends it (its `model_max_output_tokens` config is parsed and then
+   * unused), and the ceiling is server-side per model. So the field must be
+   * ABSENT — not floored, as the public surface requires.
+   */
+  it('omits max_output_tokens entirely — this backend rejects the parameter', async () => {
     let sent: Record<string, unknown> = {};
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
       sent = JSON.parse(String(init.body)) as Record<string, unknown>;
@@ -64,9 +72,26 @@ describe('OpenAI Codex subscription vendor', () => {
     }));
     await openAiCodexModule.call({
       apiKey: JSON.stringify({ accessToken: 'access', accountId: 'acct' }),
-      model: 'gpt-5.3-codex', messages: [{ role: 'user', content: 'hi' }], maxTokens: 8,
+      model: 'gpt-5.6-sol', messages: [{ role: 'user', content: 'hi' }], maxTokens: 8,
     });
-    expect(sent.max_output_tokens).toBe(16);
+    expect(sent).not.toHaveProperty('max_output_tokens');
+    // The rest of the CLI contract must survive the omission.
+    expect(sent.stream).toBe(true);
+    expect(sent.store).toBe(false);
+  });
+
+  /** A large cap is dropped too — the field is unsupported, not merely clamped. */
+  it('omits max_output_tokens even when the caller asks for a large budget', async () => {
+    let sent: Record<string, unknown> = {};
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      sent = JSON.parse(String(init.body)) as Record<string, unknown>;
+      return codexStream({ id: 'resp_3', output_text: 'OK' });
+    }));
+    await openAiCodexModule.call({
+      apiKey: JSON.stringify({ accessToken: 'access', accountId: 'acct' }),
+      model: 'gpt-5.6-sol', messages: [{ role: 'user', content: 'hi' }], maxTokens: 4096,
+    });
+    expect(sent).not.toHaveProperty('max_output_tokens');
   });
 
   it('falls back to the accumulated deltas when the stream ends without a terminal frame', async () => {

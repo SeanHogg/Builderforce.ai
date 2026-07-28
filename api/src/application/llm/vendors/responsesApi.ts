@@ -27,6 +27,22 @@ export interface ResponsesBodyOptions {
   /** Extra top-level fields merged last — the per-vendor request contract (the Codex
    *  backend requires `stream: true` + `include: ['reasoning.encrypted_content']`). */
   extra?: Record<string, unknown>;
+  /**
+   * Omit `max_output_tokens` entirely.
+   *
+   * The PUBLIC Responses surface accepts an output cap; the private ChatGPT Codex
+   * backend does not — it answers `400 {"detail":"Unsupported parameter:
+   * max_output_tokens"}` and refuses the whole request. (`context_window`,
+   * `max_context_window` and `truncation_policy` are rejected the same way; we
+   * never send those.) The real Codex CLI never sends the field either — its
+   * `model_max_output_tokens` config option is parsed and then unused, which is
+   * why captured CLI traffic has no such key — and the output ceiling is a
+   * server-side per-model property there, not a per-request one.
+   *
+   * So this is not a value to clamp, it is a field that must not exist. Set by
+   * the Codex vendor only; every other Responses vendor keeps the cap.
+   */
+  omitMaxOutputTokens?: boolean;
 }
 
 /** Flatten a chat-completions `{ type:'function', function:{…} }` tool to the Responses
@@ -105,7 +121,9 @@ function toInput(messages: Array<Record<string, unknown>>): Array<Record<string,
 export function buildResponsesBody(params: VendorCallParams, opts?: ResponsesBodyOptions): Record<string, unknown> {
   const tools = toResponsesTools(params.tools);
   const toolChoice = toResponsesToolChoice(params.toolChoice);
-  const maxOutputTokens = params.maxTokens ? Math.max(params.maxTokens, MIN_OUTPUT_TOKENS) : undefined;
+  const maxOutputTokens = opts?.omitMaxOutputTokens || !params.maxTokens
+    ? undefined
+    : Math.max(params.maxTokens, MIN_OUTPUT_TOKENS);
   return {
     model: params.model,
     instructions: toInstructions(params.messages),
