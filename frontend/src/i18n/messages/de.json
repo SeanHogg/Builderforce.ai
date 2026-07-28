@@ -7081,7 +7081,8 @@
         "today": "Was haben Sie und das Team heute geschafft?",
         "blocked": "Warum wurde so wenig fertig — was blockiert die Arbeit?",
         "plan": "Was tun Sie als Nächstes, um das aufzulösen?"
-      }
+      },
+      "copyDiagnosticsAria": "Unterhaltung und Werkzeugprotokoll des Managers kopieren"
     }
   },
   "project360": {

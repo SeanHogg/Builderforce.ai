@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
+import { CopyButton } from '@/components/CopyButton';
+import { buildManagerChatDiagnosticsReport } from '@/lib/managerChatDiagnostics';
+import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import {
   managerApi, brain,
   type ManagerChatHandle, type BrainMessage,
@@ -77,6 +80,7 @@ export interface ManagerChatPanelProps {
 
 export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQuestion }: ManagerChatPanelProps) {
   const t = useTranslations('manager.ask');
+  const tCommon = useTranslations('common');
   const format = useFormatter();
 
   const [handle, setHandle] = useState<ManagerChatHandle | null>(null);
@@ -190,17 +194,59 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
     );
   }
 
+  /**
+   * The one-paste HANDOVER for this conversation: the transcript AND the tool trace that
+   * explains it.
+   *
+   * Fetched on click, never on render — and the trace is fetched with `refresh` because
+   * the server now appends to it on every reply, which a client cache invalidated only by
+   * client writes can never learn about. A capture that quietly returned a pre-reply trace
+   * would be wrong in exactly the way that wastes the session it was taken for.
+   *
+   * Messages come from state rather than a re-fetch: what the report must explain is the
+   * conversation the person is LOOKING AT, and re-reading could show them a report about a
+   * thread that has moved on.
+   */
+  const buildDiagnostics = useCallback(async (): Promise<string> => {
+    const trace = handle
+      ? await brain.getChatTrace(handle.chatId, { refresh: true }).catch(() => null)
+      : null;
+    return buildManagerChatDiagnosticsReport(
+      {
+        projectId,
+        handle,
+        handleError: handle == null ? (error ?? 'the manager chat could not be resolved') : null,
+        messages,
+        trace,
+        traceError: handle != null && trace == null ? 'the tool trace could not be loaded' : null,
+      },
+      await captureDiagnosticsContext(),
+    );
+  }, [projectId, handle, messages, error]);
+
   const header = (
     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span aria-hidden>🧭</span>
         <span style={sectionTitleStyle}>{t('title')}</span>
       </div>
-      {handle?.agentName && (
-        <span style={mutedStyle}>
-          {handle.designated ? t('answeredByDesignated', { name: handle.agentName }) : t('answeredBy', { name: handle.agentName })}
-        </span>
-      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        {handle?.agentName && (
+          <span style={mutedStyle}>
+            {handle.designated ? t('answeredByDesignated', { name: handle.agentName }) : t('answeredBy', { name: handle.agentName })}
+          </span>
+        )}
+        {/* Copying the conversation is only half of it: a transcript in which the manager
+            says it has no data looks the same whether it called nothing, called things
+            that failed, or was never given the tools. The trace is what separates them,
+            so the two travel together under one button. Not role-gated — reading the
+            record is not managing it. */}
+        <CopyButton
+          label={tCommon('copyDiagnostics')}
+          ariaLabel={t('copyDiagnosticsAria')}
+          getText={buildDiagnostics}
+        />
+      </div>
     </div>
   );
 

@@ -543,9 +543,18 @@ export const brain = {
     });
   },
 
-  /** Load a chat's persisted run trace (oldest-first). Cached per-chat client-side
-   *  (invalidated by appendChatTrace) so switching chats back and forth is cheap. */
-  getChatTrace: async (chatId: number): Promise<BrainChatTraceRow[]> => {
+  /**
+   * Load a chat's persisted run trace (oldest-first). Cached per-chat client-side so
+   * switching chats back and forth is cheap.
+   *
+   * `refresh` bypasses that cache, and exists because the trace is no longer written
+   * only by this client: an addressed-agent reply now appends its tool trace SERVER-side,
+   * and a client cache invalidated solely by `appendChatTrace` can never learn about a
+   * write it did not make. A diagnostics capture that silently returned a pre-reply trace
+   * would be wrong in precisely the way that wastes the session it was captured for.
+   */
+  getChatTrace: async (chatId: number, opts?: { refresh?: boolean }): Promise<BrainChatTraceRow[]> => {
+    if (opts?.refresh) brainTraceCache.delete(chatId);
     const cached = brainTraceCache.get(chatId);
     if (cached) return cached;
     const { trace } = await request<{ trace: BrainChatTraceRow[] }>(`/api/brain/chats/${chatId}/trace`);
