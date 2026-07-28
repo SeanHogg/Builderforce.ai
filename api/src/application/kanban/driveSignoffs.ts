@@ -2,10 +2,17 @@
  * driveSignoffs — ASK the outstanding roles to sign off.
  *
  * This is the step whose absence made the whole accountability model inert. Producer
- * credit is automatic (a terminal run with PR evidence completes the slot via
- * `attributeRunToManifest`), but a REVIEWER slot only clears when an agent records a
- * verdict — and nothing was ever asking one to. Measured consequence: 487 required
- * slots across the tenant, zero ever satisfied.
+ * credit is automatic (a completed producer run is written to the sign-off ledger by
+ * `attestRoleRun`), but a REVIEWER slot only clears when an agent records a verdict —
+ * and nothing was ever asking one to. Measured consequence: 487 required slots across
+ * the tenant, zero ever satisfied.
+ *
+ * Asking is now BOUNDED. A reviewer that finishes its run without recording a verdict has
+ * that silence counted, and at the ceiling its slot is classified `exhausted` rather than
+ * `dispatchable` — so `pickSignoffCandidate` stops choosing it and the stall diagnosis
+ * escalates to a human instead. Without that bound the ask repeated forever: the measured
+ * decision feed shows the same sign-off request re-issued five times in 2h20m against a
+ * slot that answered none of them.
  *
  * So for each outstanding slot with a resolved agent assignee, dispatch that agent AS
  * the role with an explicit instruction to record its sign-off, using the ONE shared

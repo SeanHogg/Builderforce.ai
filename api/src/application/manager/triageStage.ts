@@ -37,7 +37,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { executions, pullRequests, tasks, taskStatusTransitions } from '../../infrastructure/database/schema';
-import { TaskStatus } from '../../domain/shared/types';
+import { TaskStatus, isTerminalTaskStatus } from '../../domain/shared/types';
 import { evaluateTaskAutoRun } from '../swimlane/evaluateAutoRun';
 import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
 import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
@@ -45,9 +45,13 @@ import { classifySignoffOwnership, resolveSignoffGate } from '../kanban/signoffG
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness } from './evaluateTicketReadiness';
 import { coordinateTicket } from './coordinateTicket';
+import { staffUnfilledRole } from './staffUnfilledRole';
 import { assignTicketOwner } from './assignOwner';
 import { reconcilePullRequestState } from '../repos/reconcilePullRequestState';
-import { diagnoseStall, isManagerActionable, stageSignoffFor, STALL_AFTER_MS, type StallInput } from './stallTriage';
+import {
+  diagnoseStall, isActionExhausted, isManagerActionable, isStallResolved,
+  stageSignoffFor, STALL_AFTER_MS, type StallInput,
+} from './stallTriage';
 import { loadOpenStalls, gradeStall, recordStall, resolveStalls, type OpenStall } from './stallWatch';
 
 /**
@@ -59,38 +63,91 @@ import { loadOpenStalls, gradeStall, recordStall, resolveStalls, type OpenStall 
 export const MAX_TRIAGE_PER_RUN = 12;
 
 /**
+ * How much of each batch is RESERVED for tickets that have never been deep-triaged.
+ *
+ * Without a reserve, coverage freezes. Open register rows outrank new discoveries, so
+ * once the register holds more rows than the batch size, the same rows recirculate every
+ * pass and no new ticket is ever diagnosed — however many passes run. Measured on project
+ * 11: 678 stalled tickets, 50 in the register, "confirmed by deep triage: 50 of 678 (7%)"
+ * unchanged pass after pass, because the batch of 12 was drawn entirely from those 50.
+ *
+ * A third is enough to keep discovery moving without starving accountability: the
+ * register still gets two-thirds of every batch to grade and escalate what it already
+ * knows about. The reserve is only an upper bound — when there are no new candidates the
+ * whole batch goes to the register, so a healthy project loses nothing.
+ */
+export const TRIAGE_DISCOVERY_SHARE = 1 / 3;
+
+/**
  * Select the bounded deep-triage batch while preserving accountability and fairness.
- * Open, non-escalated rows outrank new discoveries. Within that group, fewer attempts
- * and the least-recent attempt go first, so the dispatch cap rotates across remedies.
- * Escalated rows are observation-only and go last.
+ *
+ * Ordering within the already-registered set, most urgent first:
+ *   0. EXHAUSTED — at or past the remedy ceiling but not yet escalated. These must be
+ *      re-diagnosed FIRST, because escalation only happens inside the batch loop: a row
+ *      that never gets picked can never be handed to a human. Sorting by fewest-attempts
+ *      put them dead last, so the rows most in need of a human were the least likely to
+ *      reach one. Measured on project 11: 3 rows sat at attempts=3 with `escalated: 0`.
+ *      Escalating costs no dispatch, so promoting them is nearly free.
+ *   1. WORKING — open rows with budget left, fewest attempts first so the billable
+ *      dispatch cap rotates across remedies rather than re-spending on one ticket.
+ *   2. ESCALATED — already handed over; observation only.
+ *
+ * New discoveries are interleaved separately (see {@link TRIAGE_DISCOVERY_SHARE}) rather
+ * than ranked against registered rows, because they lose that comparison every time.
  */
 export function selectTriageBatch<T extends { task: { id: number }; idleMs: number }>(
   candidates: T[],
   openStalls: ReadonlyMap<number, OpenStall>,
   limit = MAX_TRIAGE_PER_RUN,
 ): T[] {
+  const cap = Math.max(0, limit);
+  if (cap === 0) return [];
   const time = (d: Date | null | undefined) => d ? new Date(d).getTime() : 0;
-  return [...candidates]
-    .sort((a, b) => {
-      const ao = openStalls.get(a.task.id);
-      const bo = openStalls.get(b.task.id);
-      const aClass = ao ? (ao.escalatedAt ? 2 : 0) : 1;
-      const bClass = bo ? (bo.escalatedAt ? 2 : 0) : 1;
-      if (aClass !== bClass) return aClass - bClass;
-      if (aClass === 0) {
-        if ((ao?.attempts ?? 0) !== (bo?.attempts ?? 0)) {
-          return (ao?.attempts ?? 0) - (bo?.attempts ?? 0);
-        }
-        // A refused remedy is deliberately not counted as an attempt, but it WAS
-        // examined this pass. Fall back to lastSeenAt so the same zero-attempt rows
-        // cannot permanently monopolize the bounded batch.
-        const actionAge = time(ao?.lastAttemptAt ?? ao?.lastSeenAt)
-          - time(bo?.lastAttemptAt ?? bo?.lastSeenAt);
-        if (actionAge !== 0) return actionAge;
+
+  const registered: T[] = [];
+  const discovered: T[] = [];
+  const escalated: T[] = [];
+  for (const c of candidates) {
+    const openStall = openStalls.get(c.task.id);
+    if (!openStall) discovered.push(c);
+    else if (openStall.escalatedAt) escalated.push(c);
+    else registered.push(c);
+  }
+
+  registered.sort((a, b) => {
+    const ao = openStalls.get(a.task.id);
+    const bo = openStalls.get(b.task.id);
+    // Exhausted rows first — see the doc comment: escalation only happens inside the
+    // batch loop, so a row that never gets picked can never reach a human.
+    const exhausted = (o: OpenStall | undefined): number => (o && isActionExhausted(o.attempts) ? 0 : 1);
+    const ar = exhausted(ao);
+    const br = exhausted(bo);
+    if (ar !== br) return ar - br;
+    if (ar === 1) {
+      if ((ao?.attempts ?? 0) !== (bo?.attempts ?? 0)) {
+        return (ao?.attempts ?? 0) - (bo?.attempts ?? 0);
       }
-      return b.idleMs - a.idleMs;
-    })
-    .slice(0, Math.max(0, limit));
+      // A refused remedy is deliberately not counted as an attempt, but it WAS
+      // examined this pass. Fall back to lastSeenAt so the same zero-attempt rows
+      // cannot permanently monopolize the bounded batch.
+      const actionAge = time(ao?.lastAttemptAt ?? ao?.lastSeenAt)
+        - time(bo?.lastAttemptAt ?? bo?.lastSeenAt);
+      if (actionAge !== 0) return actionAge;
+    }
+    return b.idleMs - a.idleMs;
+  });
+  discovered.sort((a, b) => b.idleMs - a.idleMs);
+  escalated.sort((a, b) => b.idleMs - a.idleMs);
+
+  // Fill in priority order — accountable open rows, then discovery's reserved share,
+  // then already-escalated rows, which are observation-only and must yield to a ticket
+  // nobody has looked at yet. Each stage takes only what the previous left, so the cap is
+  // a budget and never a quota left unspent.
+  const discoveryQuota = Math.min(discovered.length, Math.floor(cap * TRIAGE_DISCOVERY_SHARE));
+  const fromRegistered = registered.slice(0, cap - discoveryQuota);
+  const fromDiscovered = discovered.slice(0, cap - fromRegistered.length);
+  const fromEscalated = escalated.slice(0, cap - fromRegistered.length - fromDiscovered.length);
+  return [...fromRegistered, ...fromDiscovered, ...fromEscalated];
 }
 
 /**
@@ -172,6 +229,31 @@ export function decideRemedyExecution(input: {
   if (!input.budgetLeft) return { ...idle, deferred: true };
   if (EXECUTOR_OWNED_REMEDIES.has(input.remedy) && !input.ownsDispatch) return { ...idle, deferred: true };
   return { act: true, deferred: false, mayStartRun: true, mayRaceExecutor: input.ownsDispatch };
+}
+
+/**
+ * What performing a remedy achieved.
+ *
+ * `attempted` and `applied` ARE DIFFERENT, and conflating them broke the escalation
+ * ceiling for the largest stall cohort on the board. `applyRemedy` used to report only
+ * whether the remedy MOVED the ticket, and that value drove the attempt counter — so a
+ * `coordinate` that ran in full and changed nothing (the inevitable outcome when a stage
+ * has no role-capable participant, all 447 of them) recorded no attempt at all. Never
+ * accruing an attempt means never reaching `MAX_REMEDY_ATTEMPTS`, which means never
+ * escalating: the ticket is re-diagnosed every five minutes, re-remedied every five
+ * minutes, and handed to a human never.
+ *
+ * The ceiling exists to catch a remedy that RUNS AND DOES NOT WORK. That is exactly the
+ * case the old flag could not express.
+ */
+export interface RemedyOutcome {
+  /** The manager actually performed the remedy — whether or not it worked. */
+  attempted: boolean;
+  /** The remedy moved the ticket. Counted as "unstuck" in the pass summary. */
+  applied: boolean;
+  /** A billable run was started, drawing on the per-pass dispatch budget. */
+  startedRun: boolean;
+  note: string;
 }
 
 /** The ticket shape triage needs — structurally satisfied by the manager's own rows. */
@@ -344,23 +426,71 @@ export async function runStallTriage(
   };
 
   const candidates: Array<{ task: TriageTask; idleMs: number }> = [];
-  const movingTaskIds: number[] = [];
+  const movedTaskIds: number[] = [];
   for (const t of managed) {
     const idleMs = idleMsOf(t);
-    if (idleMs < STALL_AFTER_MS || signals.liveTaskIds.has(t.id)) {
-      movingTaskIds.push(t.id);
+    // A ticket whose idle clock RESET genuinely moved — that closes its row. A ticket
+    // that is merely mid-run has NOT recovered: it is the same stuck ticket with a
+    // remedy in flight, and closing its row here is what erased the attempt history
+    // every time a remedy started a run. See `isStallResolved`.
+    if (idleMs < STALL_AFTER_MS) {
+      movedTaskIds.push(t.id);
       continue;
     }
+    // Still stalled, but something is running on it — skip it this pass WITHOUT
+    // resolving, so its register row (and its attempt count) survives.
+    if (signals.liveTaskIds.has(t.id)) continue;
     candidates.push({ task: t, idleMs });
   }
 
-  // 2. RESOLVE — anything moving again closes its register row. One batched write.
-  const toResolve = movingTaskIds.filter((id) => openStalls.has(id));
+  // 2. RESOLVE — anything that actually moved closes its register row. One batched write.
+  const toResolve = movedTaskIds.filter((id) => openStalls.has(id));
   if (toResolve.length) {
     out.resolved = await resolveStalls(env, db, { tenantId, projectId, taskIds: toResolve });
   }
 
+  // 2b. CLOSE THE ROWS OF TICKETS THAT LEFT THE BOARD.
+  //
+  // `managed` is the non-terminal set AND it is capped (`MAX_RANKED`), so "absent from
+  // this pass's ticket list" does NOT mean finished — it may simply be beyond the cap.
+  // The register row of a ticket that genuinely reached Done would otherwise never close,
+  // because triage only ever looks at non-terminal tickets: the row would sit open
+  // forever, inflating "what is stuck" with work that is finished.
+  //
+  // This matters more now that a live run no longer resolves a row. Previously a ticket
+  // was (accidentally) resolved while its final run was in flight, which masked the leak
+  // on the happy path; correctly keeping the row open until the ticket MOVES means
+  // something has to close it when the move is all the way to Done.
+  //
+  // One bounded query — the register is capped at `MAX_REGISTER_ROWS` — and only for rows
+  // this pass did not otherwise account for.
+  const seenThisPass = new Set(taskIds);
+  const unaccounted = [...openStalls.keys()].filter((id) => !seenThisPass.has(id));
+  if (unaccounted.length) {
+    const rows = await db
+      .select({ id: tasks.id, status: tasks.status, archived: tasks.archived })
+      .from(tasks)
+      // `tasks` is scoped by project, not tenant (it carries no tenant_id) — and the
+      // project filter is the meaningful one here anyway: these ids came from THIS
+      // project's register, so a row naming any other project is stale by definition.
+      .where(and(eq(tasks.projectId, projectId), inArray(tasks.id, unaccounted)))
+      .catch(() => [] as Array<{ id: number; status: string; archived: boolean }>);
+    const alive = new Set(rows.map((r) => r.id));
+    const departed = [
+      ...rows.filter((r) => r.archived || isTerminalTaskStatus(r.status)).map((r) => r.id),
+      // A row whose task no longer exists at all — deleted out from under the register.
+      ...unaccounted.filter((id) => !alive.has(id)),
+    ];
+    if (departed.length) {
+      out.resolved += await resolveStalls(env, db, { tenantId, projectId, taskIds: departed });
+    }
+  }
+
   const batch = selectTriageBatch(candidates, openStalls);
+  // Hiring budget for the whole pass, shared across every ticket it looks at — a stage
+  // gap is a per-BOARD defect, so one hire typically unblocks a large cohort at once and
+  // a per-ticket budget would provision the same role many times over.
+  let hiresUsed = 0;
 
   for (const { task, idleMs } of batch) {
     try {
@@ -427,7 +557,10 @@ export async function runStallTriage(
       });
 
       if (!diagnosis.stalled) {
-        if (openStalls.has(task.id)) {
+        // Same rule as the bulk pass above: `live` and `cooling_down` are the states a
+        // remedy CREATES, not evidence the ticket recovered. Closing the row on them
+        // resets `attempts` to zero and makes the escalation ceiling unreachable.
+        if (openStalls.has(task.id) && isStallResolved(diagnosis.cause)) {
           out.resolved += await resolveStalls(env, db, { tenantId, projectId, taskIds: [task.id] });
         }
         continue;
@@ -441,6 +574,7 @@ export async function runStallTriage(
       // 4. ACT.
       const alreadyConducted = ctx.conductedTaskIds.has(task.id);
       let applied = false;
+      let attempted = false;
       let outcomeNote = '';
 
       // Diagnosis and the register are never gated — a ticket the manager cannot act
@@ -459,16 +593,25 @@ export async function runStallTriage(
           // An `assign` that cannot also start the ticket still assigns: staffing is
           // exactly what unblocks the executor's next tick.
           mayRaceExecutor: plan.mayRaceExecutor,
+          // The role the stage authorises but cannot fill — what `coordinate` must staff
+          // before re-running a gate that will otherwise refuse for the same reason.
+          unfilledRoleKey: autoRun.unfilledRoleKeys[0] ?? null,
+          hiresUsed,
+          onHire: () => { hiresUsed += 1; },
         });
         applied = acted.applied;
+        attempted = acted.attempted;
         outcomeNote = acted.note;
         if (acted.startedRun) out.dispatched += 1;
       }
       if (plan.deferred) out.deferred += 1;
 
+      // `attempted`, NOT `applied`, drives the counter: the ceiling exists to catch a
+      // remedy that RUNS AND DOES NOT WORK, and grading it on whether it worked meant
+      // exactly that remedy never accrued an attempt. See {@link RemedyOutcome}.
       await recordStall(env, db, {
         tenantId, projectId, taskId: task.id, status: task.status, idleMs,
-        verdict, priorAttempts, applied,
+        verdict, priorAttempts, attempted,
       });
 
       if (verdict.escalated) out.escalated += 1;
@@ -491,7 +634,7 @@ export async function runStallTriage(
             cause: verdict.cause,
             remedy: verdict.remedy,
             escalated: verdict.escalated,
-            attempts: applied ? priorAttempts + 1 : priorAttempts,
+            attempts: attempted ? priorAttempts + 1 : priorAttempts,
             idleDays: Math.floor(idleMs / 86_400_000),
             autoRunReason: autoRun.reason,
             readiness,
@@ -534,11 +677,24 @@ export async function applyRemedy(
     mayStartRun: boolean;
     /** May additionally start ordinary work the autonomous executor also dispatches. */
     mayRaceExecutor: boolean;
+    /**
+     * The role this stage authorises but cannot fill, when the diagnosis found one.
+     * Present only for `managed_no_role`, which is the sole cause staffing can fix.
+     */
+    unfilledRoleKey?: string | null;
+    /** Hires already made this pass, so the budget spans the whole sweep. */
+    hiresUsed?: number;
+    maxHires?: number;
+    /** Called when a hire is made, so the caller can debit the shared budget. */
+    onHire?: () => void;
   },
-): Promise<{ applied: boolean; startedRun: boolean; note: string }> {
+): Promise<RemedyOutcome> {
   const { tenantId, projectId, task, policy } = args;
   const by = `manager:triage:${policy.managerRef ?? 'system'}`;
-  const nothing = { applied: false, startedRun: false, note: '' };
+  /** The remedy never ran — a cap or a policy refused it before it could act. */
+  const nothing: RemedyOutcome = { attempted: false, applied: false, startedRun: false, note: '' };
+  /** The remedy RAN and changed nothing. That is a failed attempt, and it must count. */
+  const ineffective: RemedyOutcome = { attempted: true, applied: false, startedRun: false, note: '' };
 
   switch (args.remedy) {
     case 'assign': {
@@ -546,7 +702,9 @@ export async function applyRemedy(
       const pick = await assignTicketOwner(env, db, {
         projectId, taskId: task.id, actionType: task.actionType,
       });
-      if (!pick.assigned) return nothing;
+      // Staffing RAN and found nobody. That is a failed attempt, not a skipped one —
+      // re-running it next pass will find the same nobody.
+      if (!pick.assigned) return ineffective;
       // Staffing alone IS a fix: an owned ticket is what the autonomous executor
       // needs to pick it up on its next tick. Starting it here as well is an
       // optimisation, taken only when this pass owns dispatch and has budget.
@@ -555,7 +713,7 @@ export async function applyRemedy(
           tenantId, projectId, taskId: task.id, status: task.status, submittedBy: by,
         }).catch(() => false)
         : false;
-      return { applied: true, startedRun: started, note: ` Assigned to ${pick.label}${started ? ' and started' : ''}.` };
+      return { attempted: true, applied: true, startedRun: started, note: ` Assigned to ${pick.label}${started ? ' and started' : ''}.` };
     }
 
     case 'dispatch': {
@@ -563,7 +721,7 @@ export async function applyRemedy(
       const started = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
         tenantId, projectId, taskId: task.id, status: task.status, submittedBy: by,
       }).catch(() => false);
-      return { applied: started, startedRun: started, note: started ? ' Started.' : '' };
+      return { attempted: true, applied: started, startedRun: started, note: started ? ' Started.' : '' };
     }
 
     case 'reset_breaker': {
@@ -580,7 +738,11 @@ export async function applyRemedy(
       const evaluation = await evaluateTaskAutoRun(db, runtimeService, {
         tenantId, projectId, taskId: task.id, status: task.status, env,
       });
-      if (!evaluation.candidate || evaluation.liveExecution) return nothing;
+      // A breaker reset with no candidate to run is a remedy that ran and could not
+      // work — the ticket's real blocker is staffing, and only a counted attempt will
+      // ever surface that to a human.
+      if (!evaluation.candidate) return ineffective;
+      if (evaluation.liveExecution) return nothing;
       const payload: { cloudAgentRef: string; model?: string; laneKey: string; actAsRole?: string } = {
         cloudAgentRef: evaluation.candidate.agentRef,
         laneKey: task.status,
@@ -608,6 +770,7 @@ export async function applyRemedy(
       ).catch(() => null);
       await Promise.allSettled(deferred);
       return {
+        attempted: true,
         applied: executionId != null,
         startedRun: executionId != null,
         note: executionId != null ? ' Allowed one fresh attempt past the failure breaker.' : '',
@@ -615,12 +778,35 @@ export async function applyRemedy(
     }
 
     case 'coordinate': {
+      // STAFF THE STAGE BEFORE RE-COORDINATING IT. `coordinate` re-runs the lane gate,
+      // and on a `managed_no_role` ticket that gate refuses for one reason: the stage
+      // authorises a role no agent can perform. Re-running it against the same empty
+      // roster is the definition of the livelock — 447 tickets, every five minutes, for
+      // weeks. Filling the role is the only thing that changes the answer, so the manager
+      // fills it (pinning a capable teammate, or hiring one) and only then coordinates.
+      let staffingNote = '';
+      if (args.unfilledRoleKey) {
+        const staffed = await staffUnfilledRole(env, db, {
+          tenantId, projectId, roleKey: args.unfilledRoleKey,
+          hiresUsed: args.hiresUsed ?? 0,
+          ...(args.maxHires != null ? { maxHires: args.maxHires } : {}),
+        });
+        if (staffed.action !== 'escalate') staffingNote = ` ${staffed.detail}`;
+        if (staffed.action === 'hired') args.onHire?.();
+      }
       const outcome = await coordinateTicket(env, db, runtimeService, { tenantId, taskId: task.id });
       const moved = outcome.ok && (outcome.dispatched || outcome.status !== task.status);
+      // ALWAYS attempted. Coordination on a stage with no role-capable participant runs
+      // to completion and moves nothing, every pass, forever — the 447-ticket
+      // `managed_no_role` cohort. Counting it is what eventually escalates it.
+      // Staffing a role the stage could not fill IS progress even when this pass's
+      // coordination does not move the ticket: the next dispatch can now be
+      // role-attributed, which is the whole blocker.
       return {
-        applied: moved,
+        attempted: true,
+        applied: moved || staffingNote !== '',
         startedRun: outcome.dispatched,
-        note: moved ? ` Coordinated${outcome.status !== task.status ? ` to ${outcome.status}` : ''}${outcome.dispatched ? ' and started' : ''}.` : '',
+        note: `${staffingNote}${moved ? ` Coordinated${outcome.status !== task.status ? ` to ${outcome.status}` : ''}${outcome.dispatched ? ' and started' : ''}.` : ''}`,
       };
     }
 
@@ -634,7 +820,7 @@ export async function applyRemedy(
         }).catch(() => false)
         : false;
       return {
-        applied: true, startedRun: restarted,
+        attempted: true, applied: true, startedRun: restarted,
         note: restarted ? ' Returned to implementation and started.' : ' Returned to implementation.',
       };
     }
@@ -645,6 +831,7 @@ export async function applyRemedy(
         tenantId, projectId, task, signoff: args.signoff, managerRef: policy.managerRef,
       });
       return {
+        attempted: true,
         applied: drive.asked.length > 0, startedRun: drive.asked.length > 0,
         note: drive.asked.length ? ` Asked ${drive.asked.join(', ')} to sign off.` : ` ${drive.blockedDetail}`.trimEnd(),
       };
@@ -653,13 +840,15 @@ export async function applyRemedy(
     case 'reconcile_pr':
       // The reconcile ALREADY ran during diagnosis (that is how the drift was detected
       // and corrected), so the remedy is complete by the time we get here.
-      return { applied: true, startedRun: false, note: ' Corrected the recorded pull-request state.' };
+      return { attempted: true, applied: true, startedRun: false, note: ' Corrected the recorded pull-request state.' };
 
     case 'resolve_conflict': {
       // Same recovery contract the merge loop uses for a conflicting PR: hand the
       // branch back to the ticket's own agent with an explicit resolution brief.
       if (!args.mayStartRun) return nothing;
-      if (!task.assignedAgentRef && task.assignedAgentHostId == null) return nothing;
+      // No agent to hand the branch back to — the remedy is inapplicable and will stay
+      // so until someone staffs the ticket. Counted, so it escalates rather than looping.
+      if (!task.assignedAgentRef && task.assignedAgentHostId == null) return ineffective;
       const note = `\n\n[Manager recovery] PR #${args.prRow?.number ?? '?'} conflicts with the latest base branch. Sync the latest base, resolve every conflict while preserving both sets of intended changes, run the relevant checks, and update the existing PR.`;
       await db.update(tasks).set({
         status: TaskStatus.IN_PROGRESS,
@@ -673,7 +862,7 @@ export async function applyRemedy(
         tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS,
         submittedBy: `${by}:conflict-resolution`,
       }).catch(() => false);
-      return { applied: started, startedRun: started, note: started ? ' Started its agent to resolve the conflict.' : '' };
+      return { attempted: true, applied: started, startedRun: started, note: started ? ' Started its agent to resolve the conflict.' : '' };
     }
 
     default:

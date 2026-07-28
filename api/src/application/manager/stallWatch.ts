@@ -138,11 +138,17 @@ export function gradeStall(
 /**
  * Open or update the ticket's register row.
  *
- * `applied` is whether the manager actually performed the remedy this pass — only
- * then does the attempt counter advance, because an attempt that never happened
- * cannot have failed. A pass that merely re-observes an escalated ticket refreshes
- * `last_seen_at` and nothing else, so the register stays honest about how long
- * something has been waiting on a human.
+ * `attempted` is whether the manager actually PERFORMED the remedy this pass — only then
+ * does the attempt counter advance, because an attempt that never happened cannot have
+ * failed. A pass that merely re-observes an escalated ticket refreshes `last_seen_at` and
+ * nothing else, so the register stays honest about how long something has been waiting on
+ * a human.
+ *
+ * IT IS NOT "DID THE REMEDY WORK". This parameter used to receive `applied` — whether the
+ * ticket MOVED — which inverted the ceiling's whole purpose: a remedy that ran in full and
+ * achieved nothing recorded no attempt, so the one case the ceiling exists to catch was
+ * the one case it could never count. Measured on project 11: 447 tickets whose
+ * `coordinate` remedy ran every five minutes for weeks, escalated: 0.
  */
 export async function recordStall(
   env: Env,
@@ -155,11 +161,11 @@ export async function recordStall(
     idleMs: number;
     verdict: StallDiagnosis;
     priorAttempts: number;
-    applied: boolean;
+    attempted: boolean;
   },
 ): Promise<void> {
   const now = new Date();
-  const attempts = args.applied ? args.priorAttempts + 1 : args.priorAttempts;
+  const attempts = args.attempted ? args.priorAttempts + 1 : args.priorAttempts;
   const escalatedAt = args.verdict.escalated ? now : null;
 
   try {
@@ -177,7 +183,7 @@ export async function recordStall(
         idleMs: Math.max(0, Math.round(args.idleMs)),
         firstSeenAt: now,
         lastSeenAt: now,
-        lastAttemptAt: args.applied ? now : null,
+        lastAttemptAt: args.attempted ? now : null,
         escalatedAt,
       })
       // The partial-unique index is on (task_id) WHERE resolved_at IS NULL, so this
@@ -195,7 +201,7 @@ export async function recordStall(
           idleMs: Math.max(0, Math.round(args.idleMs)),
           lastSeenAt: now,
           // Preserve the ORIGINAL attempt timestamp on an observe-only pass.
-          ...(args.applied ? { lastAttemptAt: now } : {}),
+          ...(args.attempted ? { lastAttemptAt: now } : {}),
           // Escalation is sticky: once handed to a human it stays stamped until the
           // ticket actually moves and the row is resolved.
           ...(escalatedAt ? { escalatedAt } : {}),

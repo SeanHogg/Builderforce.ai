@@ -126,14 +126,14 @@ describe('applyRemedy — drive_signoff', () => {
   const gate = { satisfied: false, reason: 'outstanding_signoffs', requiredCount: 10, satisfiedCount: 0, outstanding: [], detail: '' } as never;
 
   it('counts as applied ONLY when a role was actually asked', async () => {
-    mockDrive.mockResolvedValue({ asked: ['Architect'], ownership: { dispatchable: [], humanOwed: [], unstaffed: [] }, dispatchable: true, blockedDetail: '' });
+    mockDrive.mockResolvedValue({ asked: ['Architect'], ownership: { dispatchable: [], humanOwed: [], unstaffed: [], exhausted: [] }, dispatchable: true, blockedDetail: '' });
     expect(await run('drive_signoff', { signoff: gate })).toMatchObject({ applied: true, startedRun: true });
   });
 
   /** A refused dispatch must not advance the attempt counter — it never happened. */
   it('reports the blocker, not an attempt, when nothing was asked', async () => {
     mockDrive.mockResolvedValue({
-      asked: [], ownership: { dispatchable: [], humanOwed: [], unstaffed: [] }, dispatchable: true,
+      asked: [], ownership: { dispatchable: [], humanOwed: [], unstaffed: [], exhausted: [] }, dispatchable: true,
       blockedDetail: 'The dispatcher refused to start Architect\'s review',
     });
     const result = await run('drive_signoff', { signoff: gate });

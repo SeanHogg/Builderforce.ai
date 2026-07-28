@@ -19,16 +19,12 @@ import { and, eq, exists, inArray, sql } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { tasks, projects, boards, projectManagerConfigs } from '../../infrastructure/database/schema';
-import { TaskStatus } from '../../domain/shared/types';
+import { TaskStatus, NON_TERMINAL_TASK_STATUSES } from '../../domain/shared/types';
 import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';
 import { runManagerForProject } from './ManagerService';
 import { createTickDispatchBudget, type TickDispatchBudget } from '../runtime/tickDispatchBudget';
 import type { Env } from '../../env';
 
-const NON_TERMINAL: string[] = [
-  TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY,
-  TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW, TaskStatus.BLOCKED,
-];
 
 /** Bound one tick's work; a large fleet of projects paces across ticks. */
 export const MAX_PROJECTS_PER_TICK = 200;
@@ -73,7 +69,7 @@ interface ManagedProject { projectId: number; tenantId: number; }
 export async function loadManagedProjects(db: Db, limit: number): Promise<ManagedProject[]> {
   const hasWork = exists(
     db.select({ one: sql`1` }).from(tasks)
-      .where(and(eq(tasks.projectId, projects.id), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL))),
+      .where(and(eq(tasks.projectId, projects.id), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL_TASK_STATUSES))),
   );
   const hasConfig = exists(
     db.select({ one: sql`1` }).from(projectManagerConfigs)
