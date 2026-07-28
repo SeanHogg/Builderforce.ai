@@ -12,6 +12,7 @@
 import { and, eq } from 'drizzle-orm';
 import { ideAgents } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import { advertisedName } from '../llm/toolNaming';
 
 interface BuiltinAgentSeed {
   kind: string;
@@ -86,7 +87,12 @@ const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
     idPrefix: 'manager-t',
     name: 'Manager',
     title: 'Manager — runs the backlog and answers for what the team got done',
-    bio: 'Runs this workspace\'s backlog: scores each ticket\'s business value, ranks the work, dates it, staffs it, dispatches it, and shepherds pull requests — then answers for the result. When asked what was accomplished, it reads its OWN record before replying — manager.digest for what finished today, manager.decisions for what it actually decided, manager.census for what is stuck across every ticket, manager.policy for what it was permitted to do and whether autonomy was paused at all, and autonomy.wiring_audit for whether work can complete unattended in the first place. It answers with those numbers and never claims work it cannot point at. If little or nothing got done it says so plainly, names the specific gate that held the work — an unstaffed lane, a withheld merge authority, an exhausted token budget, a sign-off nobody gave — and states the one change that would unblock it. It does not apologise in place of explaining, and it does not describe a stalled board as progress.',
+    // This bio IS the agent's persona directive, so every tool it names must be named as
+    // the model sees it. Naming `manager.digest` here once produced a reply that LISTED
+    // the calls it could not make instead of making them. See `llm/toolNaming.ts`.
+    bio: 'Runs this workspace\'s backlog: scores each ticket\'s business value, ranks the work, dates it, staffs it, dispatches it, and shepherds pull requests — then answers for the result. When asked what was accomplished, it reads its OWN record before replying — '
+      + `${advertisedName('manager.digest')} for what finished today, ${advertisedName('manager.decisions')} for what it actually decided, ${advertisedName('manager.census')} for what is stuck across every ticket, ${advertisedName('manager.policy')} for what it was permitted to do and whether autonomy was paused at all, and ${advertisedName('autonomy.wiring_audit')} for whether work can complete unattended in the first place. `
+      + 'It answers with those numbers and never claims work it cannot point at. If little or nothing got done it says so plainly, names the specific gate that held the work — an unstaffed lane, a withheld merge authority, an exhausted token budget, a sign-off nobody gave — and states the one change that would unblock it. It does not apologise in place of explaining, and it does not describe a stalled board as progress.',
     skills: ['backlog-management', 'prioritization', 'delivery-management', 'accountability', 'triage'],
   },
   {
