@@ -569,19 +569,23 @@ describe('managerFindings — sign-off ownership and untried remedies', () => {
   });
 
   it('flags stuck rows whose remedy has never once been attempted', () => {
+    /** A row the register has been re-observing for `watched` without ever acting. */
+    const watched = (over: Partial<StallWatchRow>, watchedMs: number) =>
+      stallRow({ firstSeenAt: iso(watchedMs + HOUR), lastSeenAt: iso(HOUR), lastAttemptAt: null, ...over });
+
     const f = managerFindings({
       ...input,
       stalls: {
         ...stalls,
         rows: [
-          stallRow({ taskId: 1, attempts: 0, remedy: 'reset_breaker', idleMs: 25 * DAY }),
-          stallRow({ taskId: 2, attempts: 0, remedy: 'drive_signoff', idleMs: 24 * DAY }),
+          watched({ taskId: 1, attempts: 0, remedy: 'reset_breaker', idleMs: 25 * DAY }, 25 * DAY),
+          watched({ taskId: 2, attempts: 0, remedy: 'drive_signoff', idleMs: 24 * DAY }, 24 * DAY),
           // Attempted once — the manager IS working this one.
-          stallRow({ taskId: 3, attempts: 1, remedy: 'dispatch', idleMs: 24 * DAY }),
-          // Recent: still plausibly queued behind a per-pass cap.
-          stallRow({ taskId: 4, attempts: 0, remedy: 'dispatch', idleMs: 2 * HOUR }),
+          watched({ taskId: 3, attempts: 1, remedy: 'dispatch', idleMs: 24 * DAY }, 24 * DAY),
+          // Watched only briefly: still plausibly queued behind a per-pass cap.
+          watched({ taskId: 4, attempts: 0, remedy: 'dispatch', idleMs: 2 * HOUR }, 2 * HOUR),
           // Not a run-starting remedy, so attempts=0 means something else.
-          stallRow({ taskId: 5, attempts: 0, remedy: 'reconcile_pr', idleMs: 25 * DAY }),
+          watched({ taskId: 5, attempts: 0, remedy: 'reconcile_pr', idleMs: 25 * DAY }, 25 * DAY),
         ],
       },
     }, now).find((x) => x.code === 'remedy_never_attempted');
@@ -589,6 +593,52 @@ describe('managerFindings — sign-off ownership and untried remedies', () => {
     expect(f?.text).toContain('2 stuck tickets');
     expect(f?.text).toContain('reset_breaker ×1');
     expect(f?.text).toContain('drive_signoff ×1');
+  });
+
+  /**
+   * THE FALSE CRITICAL. Measured on project 11 at 2026-07-28T02:56: six rows reported as
+   * "every pass has skipped them", all six discovered inside the previous five minutes
+   * (`lastAttempt=—`, `firstSeen` minutes old) on tickets that had been idle 16 days
+   * before anyone looked at them. The predicate compared the TICKET's idle age, which
+   * cannot distinguish a skipped row from one the manager picked up this minute — the
+   * exact confusion the finding's own comment warned about.
+   */
+  it('does NOT flag a row discovered this minute, however long the TICKET has been idle', () => {
+    const justDiscovered = (taskId: number, remedy: StallWatchRow['remedy']) => stallRow({
+      taskId, remedy, attempts: 0, escalatedAt: null,
+      idleMs: 16 * DAY,               // the ticket has been stuck for 16 days …
+      firstSeenAt: iso(4 * MIN),   // … but the register only found it 4 minutes ago,
+      lastSeenAt: iso(4 * MIN),    //   and has seen it exactly once,
+      lastAttemptAt: null,            //   so no pass has yet had a chance to act.
+    });
+    const found = managerFindings({
+      ...input,
+      stalls: {
+        ...stalls,
+        rows: [
+          justDiscovered(1, 'resolve_conflict'), justDiscovered(2, 'resolve_conflict'),
+          justDiscovered(3, 'resolve_conflict'), justDiscovered(4, 'reset_breaker'),
+          justDiscovered(5, 'drive_signoff'), justDiscovered(6, 'drive_signoff'),
+        ],
+      },
+    }, now).map((x) => x.code);
+    expect(found).not.toContain('remedy_never_attempted');
+  });
+
+  it('reports the WATCHED span, not the ticket idle age, so the number backs the claim', () => {
+    const f = managerFindings({
+      ...input,
+      stalls: {
+        ...stalls,
+        rows: [stallRow({
+          taskId: 1, attempts: 0, remedy: 'reset_breaker', escalatedAt: null,
+          idleMs: 90 * DAY,             // a very old ticket …
+          firstSeenAt: iso(5 * DAY), lastSeenAt: iso(HOUR), lastAttemptAt: null, // … watched 5 days
+        })],
+      },
+    }, now).find((x) => x.code === 'remedy_never_attempted');
+    expect(f?.text).toContain('re-observing it for up to 4d');
+    expect(f?.text).not.toContain('90d');
   });
 });
 
