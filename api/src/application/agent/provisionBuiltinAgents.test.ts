@@ -63,7 +63,9 @@ describe('built-in agent personas', () => {
  */
 describe('Manager persona · seed ⇄ migration parity', () => {
   const migration = (file: string): string =>
-    readFileSync(fileURLToPath(new URL(`../../../migrations/${file}`, import.meta.url)), 'utf8');
+    // `.href`, not the URL object: the global `URL` here is the DOM/undici one,
+    // which is not assignable to node:url's `URL`. fileURLToPath accepts a string.
+    readFileSync(fileURLToPath(new URL(`../../../migrations/${file}`, import.meta.url).href), 'utf8');
 
   const managerBio = BUILTIN_AGENTS.find((a) => a.kind === 'manager')?.bio ?? '';
   /** SQL doubles a single quote to escape it; the seed is plain TypeScript. */
