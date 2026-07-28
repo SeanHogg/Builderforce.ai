@@ -6,6 +6,11 @@ import { STALL_AFTER_MS } from './stallTriage';
 
 const STALE = STALL_AFTER_MS + 60_000;
 
+/** A project that HAS opted into required sign-off — the pre-0380 assumption. */
+const SIGNOFF_ON = { requireSignoff: true };
+/** A project that has not. The default since 0380, and every project as of that migration. */
+const SIGNOFF_OFF = { requireSignoff: false };
+
 const facts = (over: Partial<CensusTicketFacts> = {}): CensusTicketFacts => ({
   taskId: 1,
   status: 'backlog',
@@ -88,17 +93,17 @@ describe('classifyBulkAutoRunReason', () => {
 
 describe('censusDiagnose', () => {
   it('does not call a recently-moved ticket stalled', () => {
-    expect(censusDiagnose(facts({ idleMs: 1000 })).stalled).toBe(false);
+    expect(censusDiagnose(facts({ idleMs: 1000 }), SIGNOFF_ON).stalled).toBe(false);
   });
 
   it('maps an unstaffed stale ticket onto the SAME cause the deep stage uses', () => {
-    const d = censusDiagnose(facts());
+    const d = censusDiagnose(facts(), SIGNOFF_ON);
     expect(d.stalled).toBe(true);
     expect(d.cause).toBe('unassigned');
   });
 
   it('never treats a live ticket as stuck', () => {
-    const d = censusDiagnose(facts({ lane: { gate: 'auto', isTerminal: false, staffed: true }, hasLiveRun: true }));
+    const d = censusDiagnose(facts({ lane: { gate: 'auto', isTerminal: false, staffed: true }, hasLiveRun: true }), SIGNOFF_ON);
     expect(d.stalled).toBe(false);
   });
 
@@ -108,7 +113,7 @@ describe('censusDiagnose', () => {
       lane: { gate: 'auto', isTerminal: false, staffed: true },
       stageOwedRoles: ['code-reviewer'],
       everRan: true,
-    }));
+    }), SIGNOFF_ON);
     expect(d.stalled).toBe(true);
     expect(d.cause).toBe('awaiting_signoff');
   });
@@ -122,8 +127,59 @@ describe('censusDiagnose', () => {
       lane: { gate: 'auto', isTerminal: false, staffed: true },
       stageOwedRoles: [],
       everRan: true,
-    }));
+    }), SIGNOFF_ON);
     expect(d.cause).not.toBe('awaiting_signoff');
+  });
+
+  /**
+   * THE SECOND DIAGNOSIS PATH (0380 follow-up, measured).
+   *
+   * `requireSignoffToComplete` became a project setting and stall TRIAGE was taught to
+   * consult it — the census was not. Measured on project 11 at api 2026.7.175, hours
+   * after the gate was switched off for every project: the census still reported an
+   * `awaiting_signoff` cohort of 135, and `systemicDiagnosis` promoted 76 of them to an
+   * open platform finding reading "a defect in the sign-off recording mechanism is
+   * preventing stage gates from opening" — for a gate that was holding nothing at all.
+   *
+   * An open manifest slot on a project that does not require sign-off is not a stall
+   * cause; whatever else is wrong with the ticket is, and naming the slot hides it.
+   */
+  it('does NOT name an owed slot as the cause when the project requires no sign-off', () => {
+    const owed = {
+      status: 'ready',
+      lane: { gate: 'auto', isTerminal: false, staffed: true },
+      stageOwedRoles: ['code-reviewer'],
+      everRan: true,
+    };
+    // Identical ticket, opposite project settings — only the policy differs.
+    expect(censusDiagnose(facts(owed), SIGNOFF_ON).cause).toBe('awaiting_signoff');
+    expect(censusDiagnose(facts(owed), SIGNOFF_OFF).cause).not.toBe('awaiting_signoff');
+  });
+
+  it('still reports the ticket as stalled — the cause changes, the stall does not', () => {
+    // The opt-out must not silence a stuck ticket, only stop mis-attributing it. A
+    // released ticket that nothing dispatches is `never_started`, which is actionable.
+    const d = censusDiagnose(facts({
+      status: 'ready',
+      lane: { gate: 'auto', isTerminal: false, staffed: true },
+      stageOwedRoles: ['code-reviewer'],
+      everRan: false,
+    }), SIGNOFF_OFF);
+    expect(d.stalled).toBe(true);
+    expect(d.cause).toBe('never_started');
+  });
+
+  it('keeps a REAL blocker visible underneath the released slot', () => {
+    // managed_no_role outranks the sign-off branch either way; switching sign-off off
+    // must not change a diagnosis that never depended on it.
+    const d = censusDiagnose(facts({
+      status: 'ready',
+      lane: { gate: 'auto', isTerminal: false, staffed: true },
+      managedProducerResolvable: false,
+      stageOwedRoles: ['code-reviewer'],
+      everRan: true,
+    }), SIGNOFF_OFF);
+    expect(d.cause).toBe('managed_no_role');
   });
 });
 

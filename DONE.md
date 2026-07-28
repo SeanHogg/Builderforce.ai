@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-07-28 — ✅ RESOLVED: the stall CENSUS was a second diagnosis path that never learned the sign-off setting, and it raised a platform finding about a gate that was switched off (api 2026.7.176)
+
+**Caught by re-measuring the change above against a live capture**, api 2026.7.175, hours after `requireSignoffToComplete` went off for every project. The gate itself was clean — `the gate held no ticket in the last 30 decisions`, the `signoff_gate` and `signoff_agent_never_answers` findings gone. But the census still reported an **`awaiting_signoff` cohort of 135**, and `systemicDiagnosis` had promoted **76 of them to an open platform finding** reading *"a defect in the sign-off recording mechanism is preventing stage gates from opening"* — about a gate that was holding nothing.
+
+**Root cause: two diagnosis paths over one taxonomy, and only one was taught the setting.** Deep stall triage (`triageStage`) resolves the gate per ticket and now consults the policy. The census (`stallCensus`) is the full-coverage bulk path — it loads owed manifest roles set-based and feeds them to the SAME `diagnoseStall`, and it consulted nothing. So the half of the manager report that ranks causes across *every* ticket disagreed with the half that remedies them, and the disagreement was promoted to a platform finding with its own ticket.
+
+**Fixed so a third path cannot repeat it.** `censusDiagnose` takes a REQUIRED `CensusPolicy` — not an optional flag — so a new caller cannot be written without answering the question; that type signature is the only guard that would have caught this one. `loadCensusFacts` additionally skips the `ticket_participants` scan entirely when sign-off is off (two independent stops, and one fewer full-table read on a path the dashboard polls). The open finding needs no migration: `systemicDiagnosis` already resolves a cohort that falls below threshold, so it closes itself on the next pass.
+
+**`managerPolicyStore.ts` — extracted, not worked around.** The census must read the effective policy, and `ManagerService` imports the census, so reading it there would have been a static import cycle. This codebase has already paid for one of those (`signoffRequest → participantStates → signoffContract` left a constant uninitialised at module load, caught by tests rather than `tsc` — see the 2026.7.174 entry). The five policy row readers/writers now live in a leaf module depending only on the schema, the connection and the pure fold; `ManagerService` re-exports them so no existing caller changed. Dead imports left behind by the move were pruned in the same pass.
+
+Also: **PUT `/api/manager/:projectId` now invalidates the stall census.** The census classifies by the effective policy, so a policy write silently changes every cohort in it; its 120s TTL would have got there eventually, but a toggle whose effect appears two minutes later reads as a toggle that did nothing. (A workspace-tier write affects every project's census and cannot be invalidated by key without an unbounded fan-out, so that one does rely on the TTL — stated rather than left implicit.)
+
+Files: `api/src/application/manager/{stallCensus,managerPolicyStore,ManagerService}.ts`, `api/src/presentation/routes/managerRoutes.ts`.
+
+**Verified:** API suite `4114 passed`, `tsgo --noEmit` clean, layering / tenant-scope / silent-catch / schema-drift guards green. Regression coverage compares the identical ticket under both project settings, and pins that the opt-out changes the CAUSE without silencing the stall (`never_started` still reported) and without hiding a real blocker underneath (`managed_no_role` still outranks it).
+
+---
+
 ## 2026-07-28 — ✅ SHIPPED: required sign-off is now a PROJECT setting the manager checks, and it is OFF for every project (api 2026.7.175 · frontend 2026.7.137 · migration 0380)
 
 The premise was always right: other team members — agents or humans — sign off on a ticket so the work is actually reviewed. What was wrong was that 0362 shipped it as a **default-ON platform behaviour** rather than a project's own decision. Measured on project 11 twenty-six days later: **265 of 679 stalled tickets on `awaiting_signoff`**, the oldest idle **48 days**, 22 of them carrying the `drive_signoff` remedy, the manager re-issuing the same ask every five-minute pass (1,214 `flag` decisions in one day), against **0 tickets finished today and 0 yesterday**. A review gate no project chose is indistinguishable from a deadlock.
