@@ -477,7 +477,7 @@ export interface LifecycleGateSnapshot {
   /** Roles this stage authorizes for THIS ticket. Empty on a managed board = nothing can run. */
   authorizedRoleKeys: string[];
   /** The role-attributed run that WOULD go out: the role, its agent, and where it came from. */
-  managedRole: { roleKey: string; agentRef: string; source: 'manifest' | 'lane_agent' } | null;
+  managedRole: { roleKey: string; agentRef: string; source: 'manifest' | 'lane_agent' | 'roster' } | null;
 }
 
 /** Cap on the execution ids listed per failure group — an id list is a pointer,

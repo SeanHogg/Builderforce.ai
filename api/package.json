@@ -19,7 +19,9 @@
     "check:tracks": "node scripts/check-track-manifest.mjs --check",
     "check:source": "node scripts/check-source-text.mjs",
     "check:silent-catches": "node scripts/check-silent-catches.mjs",
-    "test": "npm run check:schema && npm run check:db-access && npm run check:version && npm run check:migrations && npm run check:layering && npm run check:tenant-scope && npm run check:tracks && npm run check:source && npm run check:silent-catches && vitest run",
+    "check:dispatch-budget": "node scripts/check-dispatch-budget.mjs",
+    "check:pinned-defects": "node scripts/check-pinned-defects.mjs",
+    "test": "npm run check:schema && npm run check:db-access && npm run check:version && npm run check:migrations && npm run check:layering && npm run check:tenant-scope && npm run check:tracks && npm run check:source && npm run check:silent-catches && npm run check:dispatch-budget && npm run check:pinned-defects && vitest run",
     "typecheck:native": "tsgo --noEmit",
     "check:version": "node scripts/check-version-sync.mjs"
   },

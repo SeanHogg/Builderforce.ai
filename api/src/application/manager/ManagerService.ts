@@ -58,7 +58,7 @@ import { resolveManagerTypeById, normalizeManagerType } from './managerTypes';
 import { listActiveManagerDirectives } from './managerDirectives';
 import { RoleAssignmentService, type AssigneeKind } from '../kanban/roleAssignmentService';
 import { assignTicketOwner } from './assignOwner';
-import { resolveSignoffGate } from '../kanban/signoffGate';
+import { classifySignoffOwnership, resolveSignoffGate } from '../kanban/signoffGate';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness } from './evaluateTicketReadiness';
 import { runStallTriage, loadBulkSignals, MAX_TRIAGE_DISPATCHES_PER_RUN } from './triageStage';
@@ -72,6 +72,10 @@ import { dispatchTaskFinalize } from '../../presentation/routes/taskRoutes';
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
 import { TicketAuditService } from '../audit/ticketAuditService';
 import { coordinateTicket } from './coordinateTicket';
+import {
+  createTickDispatchBudget, tenantDispatchReserver,
+  type DispatchReserver, type TickDispatchBudget,
+} from '../runtime/tickDispatchBudget';
 import { recordActivity, cloudAgentActor, SYSTEM_ACTOR } from '../activity/activityLog';
 
 /** Statuses an agent could pick up (Blocked waits on a dependency, not an agent). */
@@ -786,6 +790,10 @@ export async function createManagerCoachingTask(
     // manager's next pass (step 5 dispatch) picks up the assigned runnable ticket anyway.
     if (args.autoDispatch !== false) {
       try {
+        // dispatch-budget: exempt — a HUMAN filed this coaching directive and expects to
+        // see work start on the click. The autonomous tick ceiling governs the cron
+        // sweeps, not a person's explicit action, exactly as "Run now" overrides a
+        // breaker. It is bounded by the human, not by a loop.
         await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
           tenantId, projectId, taskId, status: TaskStatus.TODO,
           submittedBy: args.submittedBy ?? `coach:${args.createdBy ?? 'human'}`,
@@ -1013,9 +1021,22 @@ export async function runManagerForProject(
   env: Env,
   db: Db,
   runtimeService: RuntimeService,
-  args: { tenantId: number; projectId: number; submittedBy?: string; runTaskId?: number | null; dispatch?: boolean },
+  args: {
+    tenantId: number; projectId: number; submittedBy?: string; runTaskId?: number | null; dispatch?: boolean;
+    /**
+     * The TICK's shared per-tenant dispatch ceiling. Every site in this pass that can
+     * start a billable run reserves against it BEFORE starting — see
+     * {@link tenantDispatchReserver} for the accounting bug that made passing the raw
+     * counter and updating it afterwards insufficient.
+     *
+     * Absent (a manual run, a test) ⇒ a private budget, which preserves standalone
+     * behaviour exactly as `tickDispatchBudget` documents.
+     */
+    dispatchBudget?: TickDispatchBudget;
+  },
 ): Promise<ManagerRunSummary> {
   const { tenantId, projectId } = args;
+  const runs = tenantDispatchReserver(args.dispatchBudget ?? createTickDispatchBudget(), tenantId);
   const submittedBy = args.submittedBy ?? 'system:manager';
   // DISPATCH ownership: on the cron path the always-on autonomous executor
   // ({@link runAutonomousExecutionSweep}) runs on the SAME tick and is the single
@@ -1276,7 +1297,7 @@ export async function runManagerForProject(
   {
     const census = censusSignals
       ? await computeStallCensus(db, {
-        tenantId, projectId, tasks: managed, shared: censusSignals,
+        tenantId, projectId, tasks: managed, shared: censusSignals, env,
       }).catch(() => null)
       : null;
 
@@ -1328,7 +1349,7 @@ export async function runManagerForProject(
   // of them will not fit in one invocation however high MAX_PR_ACTIONS_PER_RUN is set.
   // It now stops at the budget instead of running until the isolate dies.
   const conductedTaskIds = new Set<number>();
-  await coordinatePullRequests(env, db, runtimeService, { tenantId, projectId, policy, managed, summary, runTaskId, conductedTaskIds, budget });
+  await coordinatePullRequests(env, db, runtimeService, { tenantId, projectId, policy, managed, summary, runTaskId, conductedTaskIds, budget, runs });
 
   // 5. DISPATCH — kick the top-ranked runnable tickets NOW, in priority order. ---
   // Skipped on the cron path (the autonomous executor sweep owns dispatch there — see
@@ -1347,9 +1368,17 @@ export async function runManagerForProject(
   for (const t of runnable) {
     if (budget.over()) { budget.shed('dispatch'); break; }
     try {
-      const started = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
-        tenantId, projectId, taskId: t.id, status: t.status, submittedBy,
-      });
+      // Reserve-then-dispatch. The slot is taken before the trigger is called and handed
+      // straight back if it declines, so the tenant ceiling bounds what this stage
+      // actually starts rather than being reconciled against it afterwards.
+      const { refused, result: started } = await runs.spend(
+        () => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+          tenantId, projectId, taskId: t.id, status: t.status, submittedBy,
+        }),
+        (v) => v === true,
+      );
+      // Out of tenant budget for the whole tick — no later ticket can fare better.
+      if (refused) { budget.shed('dispatch'); break; }
       if (started) {
         summary.dispatched += 1;
         await recordManagerAction(db, {
@@ -1357,7 +1386,7 @@ export async function runManagerForProject(
           summary: `Started work on ticket #${t.id} (rank ${t.managerRank ?? '—'}).`,
         });
       }
-    } catch (error) { /* skip */ 
+    } catch (error) { /* skip */
       reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "runManagerForProject" });
     }
   }
@@ -1389,7 +1418,20 @@ export async function runManagerForProject(
         // instead of looking like the manager ignored it.
         if (summary.remediated >= MAX_REMEDIATIONS_PER_RUN) { summary.remediationDeferred += 1; continue; }
 
-        const outcome = await coordinateTicket(env, db, runtimeService, { tenantId, taskId: t.id });
+        // Coordination REWINDS and ADVANCES for free; only the run at the end is
+        // billable. So the slot is reserved first and the coordination told whether it
+        // may spend it — this stage used to start runs that no ceiling saw and no
+        // counter reported, which is the same accounting hole the triage stage had.
+        const spend = await runs.spend(
+          () => coordinateTicket(env, db, runtimeService, { tenantId, taskId: t.id, dispatch: true }),
+          (o) => o.dispatched,
+        );
+        // Out of tenant budget: still coordinate — the rewind and the advance are what
+        // unblock the ticket and neither costs a run — but explicitly without the
+        // dispatch, so `outcome.dispatched` reports what actually happened.
+        const outcome = spend.result
+          ?? await coordinateTicket(env, db, runtimeService, { tenantId, taskId: t.id, dispatch: false });
+        if (outcome.dispatched) summary.dispatched += 1;
         // Only journal a coordination that CHANGED something (rewound the lane or
         // started the missing role's run). A no-op tick on an already-staffed ticket
         // must stay silent, or the feed refills with noise every pass.
@@ -1471,6 +1513,9 @@ export async function runManagerForProject(
       // executor is the single dispatcher, so triage staffs and coordinates but does
       // not race it to start a run it would start anyway.
       ownsDispatch: shouldDispatch,
+      // The tenant's shared tick ceiling, so triage cannot outspend the executor and the
+      // other sweeps drawing on the same pool.
+      runs,
       policy: {
         requireSignoffToComplete: policy.requireSignoffToComplete,
         prMergePolicy: policy.prMergePolicy,
@@ -1627,9 +1672,11 @@ async function coordinatePullRequests(
     conductedTaskIds: Set<number>;
     /** The pass's wall-clock budget — checked between tickets, never mid-write. */
     budget: PassBudget;
+    /** The tenant's shared per-tick RUN ceiling. Every billable start reserves first. */
+    runs: DispatchReserver;
   },
 ): Promise<void> {
-  const { tenantId, projectId, policy, managed, summary, runTaskId, conductedTaskIds, budget } = ctx;
+  const { tenantId, projectId, policy, managed, summary, runTaskId, conductedTaskIds, budget, runs } = ctx;
 
   // CONDUCT: complete review-ready tickets and open their PRs (skip under 'queue').
   //
@@ -1708,10 +1755,17 @@ async function coordinatePullRequests(
           await db.update(tasks)
             .set({ status: TaskStatus.IN_PROGRESS, completedAt: null, updatedAt: new Date() })
             .where(and(eq(tasks.id, t.id), eq(tasks.status, TaskStatus.IN_REVIEW)));
-          const restarted = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
-            tenantId, projectId, taskId: t.id, status: TaskStatus.IN_PROGRESS,
-            submittedBy: `manager:review-return:${policy.managerRef ?? 'system'}`,
-          }).catch(() => false);
+          // The RETURN is a state change and always happens; the restart is billable, so
+          // it reserves first. A ticket returned but not restarted is picked up by the
+          // executor's next tick — strictly better than silently outspending the ceiling.
+          const restarted = (await runs.spend(
+            () => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+              tenantId, projectId, taskId: t.id, status: TaskStatus.IN_PROGRESS,
+              submittedBy: `manager:review-return:${policy.managerRef ?? 'system'}`,
+            }).catch(() => false),
+            (v) => v === true,
+          )).result === true;
+          if (restarted) summary.dispatched += 1;
           await recordManagerAction(db, {
             tenantId, projectId, taskId: t.id, runTaskId, actionType: 'flag',
             summary: `Returned "${t.title}" to implementation — ${readiness.detail}`,
@@ -1724,9 +1778,21 @@ async function coordinatePullRequests(
         // the accountability loop — without it the manifest just accumulates `assigned`
         // slots forever (measured: 487 required slots, 0 ever satisfied).
         if (readiness.action === 'drive_signoff') {
-          const drive = await driveOutstandingSignoffs(env, db, runtimeService, {
-            tenantId, projectId, task: t, signoff, managerRef: policy.managerRef,
-          });
+          // Asking a reviewer to sign off IS a billable run, so it reserves first. Out of
+          // budget the ask is deferred to the next tick, and the journal below says
+          // exactly that instead of claiming the ticket is merely "held in review".
+          const spend = await runs.spend(
+            () => driveOutstandingSignoffs(env, db, runtimeService, {
+              tenantId, projectId, task: t, signoff, managerRef: policy.managerRef,
+            }),
+            (d) => d.asked.length > 0,
+          );
+          const drive = spend.result ?? {
+            asked: [] as string[],
+            blockedDetail: 'The workspace has used its dispatch budget for this tick; the sign-off ask goes out on the next one.',
+            ownership: classifySignoffOwnership(signoff.outstanding),
+          };
+          summary.dispatched += drive.asked.length;
           await recordManagerAction(db, {
             tenantId, projectId, taskId: t.id, runTaskId, actionType: 'flag',
             summary: drive.asked.length
@@ -1911,10 +1977,17 @@ async function coordinatePullRequests(
               : `${task.description ?? ''}${recoveryNote}`.trim(),
             updatedAt: new Date(),
           }).where(eq(tasks.id, task.id));
-          recoveryStarted = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
-            tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS,
-            submittedBy: `manager:conflict-resolution:${policy.managerRef ?? 'system'}`,
-          });
+          // Reserve first. Handing the branch back to its agent is a billable run like
+          // any other; it sat outside the ceiling AND outside `summary.dispatched`, so
+          // neither the tenant budget nor the pass report ever saw it.
+          recoveryStarted = (await runs.spend(
+            () => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+              tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS,
+              submittedBy: `manager:conflict-resolution:${policy.managerRef ?? 'system'}`,
+            }),
+            (v) => v === true,
+          )).result === true;
+          if (recoveryStarted) summary.dispatched += 1;
         }
         await recordManagerAction(db, {
           tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: 'flag',

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  agentRoleKeys, agentIsRoleCapable, isAgentRefRoleCapable, personaForRole,
-  producerRoleForActionType, type RoleCapableAgentRow,
+  agentRoleKeys, agentIsRoleCapable, buildRoleRoster, isAgentRefRoleCapable, personaForRole,
+  producerRoleForActionType, type RoleCapableAgentRow, type RoleRosterData,
 } from './roleCapability';
 import { ideAgents } from '../../infrastructure/database/schema';
 
@@ -88,9 +88,15 @@ function dbWithPin(agentRow: Record<string, unknown> | null, pins: Array<{ ref: 
     select: () => ({
       from: (table: unknown) => {
         const isAgents = table === ideAgents;
-        const rows = isAgents ? (agentRow ? [agentRow] : []) : pins;
         if (isAgents) reads.agents += 1; else reads.pins += 1;
-        return { where: () => ({ limit: async () => rows }) };
+        const rows = isAgents
+          ? (agentRow ? [agentRow] : [])
+          : pins.map((p) => ({ projectId: 7, roleKey: 'code-reviewer', assigneeRef: p.ref, assigneeName: null }));
+        // The roster loader awaits `.where(...)` directly; older narrow reads chained
+        // `.limit()`. Both resolve to the same rows.
+        const result = Promise.resolve(rows) as Promise<unknown[]> & { limit: () => Promise<unknown[]> };
+        result.limit = async () => rows;
+        return { where: () => result };
       },
     }),
   } as never;
@@ -114,16 +120,22 @@ describe('isAgentRefRoleCapable — the GATE must accept what the SELECTOR dispa
     expect(await isAgentRefRoleCapable(db, 1, 'product-manager-t1', 'code-reviewer', 7)).toBe(false);
   });
 
-  it('short-circuits on derived capability without paying for the pin read', async () => {
+  it('accepts derived capability with no pin at all', async () => {
     const validator = { id: 'validator-t1', name: 'Validator', title: null, skills: null, builtinKind: 'validator', roleKeys: null };
-    const { db, reads } = dbWithPin(validator, []);
+    const { db } = dbWithPin(validator, []);
     expect(await isAgentRefRoleCapable(db, 1, 'validator-t1', 'code-reviewer', 7)).toBe(true);
-    expect(reads.pins).toBe(0);
   });
 
-  it('honours a pin even when the agent row is missing entirely', async () => {
+  /**
+   * A FOURTH instance of the same asymmetry, resolved the other way. The gate used to
+   * honour a pin naming an agent that is not on the ACTIVE roster; the selector always
+   * dropped it (`if (!a) continue`). One oracle cannot hold both opinions, and the
+   * selector's is the correct one: a retired agent cannot be dispatched, so a pin to one
+   * must not keep a stage looking staffed. The gate is now fail-closed on it.
+   */
+  it('refuses a pin naming an agent that is not on the active roster', async () => {
     const { db } = dbWithPin(null, [{ ref: 'ghost' }]);
-    expect(await isAgentRefRoleCapable(db, 1, 'ghost', 'code-reviewer', 7)).toBe(true);
+    expect(await isAgentRefRoleCapable(db, 1, 'ghost', 'code-reviewer', 7)).toBe(false);
   });
 
   it('keeps the cheap guards: empty roleKey passes, empty agentRef fails, with NO reads', async () => {
@@ -131,6 +143,21 @@ describe('isAgentRefRoleCapable — the GATE must accept what the SELECTOR dispa
     expect(await isAgentRefRoleCapable(db, 1, 'product-manager-t1', '', 7)).toBe(true);
     expect(await isAgentRefRoleCapable(db, 1, '', 'code-reviewer', 7)).toBe(false);
     expect(reads.agents + reads.pins).toBe(0);
+  });
+
+  /**
+   * THE COST PROPERTY. The oracle answers for the whole roster at once, so binding every
+   * role on a board costs ONE load — the thing that makes selector↔guard parity
+   * affordable on a 675-ticket census instead of an N+1 per role per lane.
+   */
+  it('answers every role from ONE roster load', async () => {
+    const validator = { id: 'validator-t1', name: 'Validator', title: null, skills: null, builtinKind: 'validator', roleKeys: null };
+    const data: RoleRosterData = { agents: [validator as RoleCapableAgentRow], pins: [] };
+    const roster = buildRoleRoster(data, 7);
+    for (const key of ['code-reviewer', 'qa-tester', 'validator', 'business-analyst']) {
+      expect(roster.candidates(key).map((c) => c.ref)).toEqual(['validator-t1']);
+    }
+    expect(roster.candidates('developer')).toEqual([]);
   });
 });
 
