@@ -133,6 +133,19 @@
     codebase scan/knowledge → learned routing). Out of scope: Visual Studio (C#/VSIX) and JetBrains —
     same backend, separate clients.
 
+15. **[17 — PRD: Stakeholder Alignment Diagnostic (Category 6, Epic #155)](./17-prd-stakeholder-alignment-diagnostic.md)**
+    Category 6 of the Diagnostic Question Engine. Defines the **5 canonical questions** (priorities
+    clear & agreed; competing P0s reconciled; approvers current; conflicts >48h without sign-off;
+    plan reflects agreed priorities), the **branching logic** (Q1/Q4 → conflict scan + Q2; active
+    conflict → force sign-off `Blocked`; stale approvers → stakeholder-map remediation), and the
+    data models: a versioned **HealthProfile** attached to the project, a **StakeholderMap** with P0
+    submissions + 30-day approver-staleness rule, the **competing-P0 conflict rule** (two active
+    stakeholders, different P0s, same team, within the review window) with five falsifiable cases, an
+    8-state **sign-off state machine** (Draft → PendingReview → Approved/ApprovedWithComment/Blocked →
+    Escalated → Resolved/Expired), the **escalation path** (L1/L2/L3, 3-day-per-level SLA, reminders at
+    24h/4h before deadline), and a **reporting dashboard + weekly digest** (6 metrics, digest template,
+    email/Slack delivery). First-pass spec; sub-tasks #504–#508 carry the implementation next turn.
+
 > **Decision log.** PM + Agile = Phase 1 (BuilderForce owns data, autonomous dev agents, thin
 > embed shells, Tenant→Segment isolation with BurnRateOS as IdP). Security/Governance = Phase 2
 > (doc 07), same model. DSR/suppression re-home per-Segment; BurnRateOS keeps its own
