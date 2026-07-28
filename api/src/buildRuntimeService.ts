@@ -77,8 +77,9 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
       reportCaughtError(error, { source: "buildRuntimeService.ts", operation: "buildRuntimeService" });
     }),
     // Coordinated Role Participation attribution: a terminal run records that the role
-    // it ran AS participated on the ticket's manifest (linked to the execution), and —
-    // for a producer with PR evidence — completes that slot. Best-effort.
+    // it ran AS participated on the ticket's manifest (linked to the execution), then
+    // attests what that finished run MEANS — producer credit written to the sign-off
+    // ledger, or a reviewer's non-answer counted toward escalation. Best-effort.
     (info) => attributeRunToManifest(env, db, info),
     async (info) => {
       const board = await findCanonicalBoard(db, info.projectId, info.tenantId);

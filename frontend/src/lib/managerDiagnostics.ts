@@ -316,6 +316,15 @@ export interface SignoffRollup {
   unstaffed: number;
   humanOwed: number;
   dispatchable: number;
+  /**
+   * Agent-owed slots the manager has stopped asking: the agent finished every run it was
+   * given without recording a verdict, so re-asking is a proven no-op.
+   *
+   * Reported separately because it is SUBTRACTED from `dispatchable`. Without its own
+   * line, the agent-owed count simply falls and reads as slots being satisfied — the
+   * opposite of what happened.
+   */
+  attestationExhausted: number;
   /** Roles seen outstanding with no assignee at all, most frequent first. */
   unassignedRoles: Array<{ role: string; count: number }>;
   /** People a sign-off is waiting on, most frequent first. */
@@ -332,7 +341,7 @@ export function summarizeSignoffs(actions: readonly ManagerAction[]): SignoffRol
   const people = new Map<string, number>();
   const out: SignoffRollup = {
     heldTickets: 0, askedTickets: 0, requiredTotal: 0, satisfiedTotal: 0,
-    unstaffed: 0, humanOwed: 0, dispatchable: 0,
+    unstaffed: 0, humanOwed: 0, dispatchable: 0, attestationExhausted: 0,
     unassignedRoles: [], waitingOnPeople: [], hasOwnership: false,
   };
   for (const a of actions) {
@@ -348,11 +357,13 @@ export function summarizeSignoffs(actions: readonly ManagerAction[]): SignoffRol
     const unstaffed = num(d.unstaffedCount);
     const humanOwed = num(d.humanOwedCount);
     const dispatchable = num(d.dispatchableCount);
+    const exhausted = num(d.exhaustedCount);
     if (unstaffed != null || humanOwed != null || dispatchable != null) {
       out.hasOwnership = true;
       out.unstaffed += unstaffed ?? 0;
       out.humanOwed += humanOwed ?? 0;
       out.dispatchable += dispatchable ?? 0;
+      out.attestationExhausted += exhausted ?? 0;
     }
 
     if (!Array.isArray(d.outstanding)) continue;
@@ -859,6 +870,13 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
       text: `${signoffs.humanOwed} required sign-off slot${signoffs.humanOwed === 1 ? ' is' : 's are'} owed by a PERSON, not an agent${signoffs.waitingOnPeople.length ? ` (${signoffs.waitingOnPeople.map((p) => `${p.who} ×${p.count}`).join(', ')})` : ''}. The manager can only dispatch agents, so it cannot drive these — they wait until the named person signs off on the ticket's Sign-off & Accountability tab.`,
     });
   }
+  if (signoffs.attestationExhausted > 0) {
+    critical.push({
+      severity: 'critical',
+      code: 'signoff_agent_never_answers',
+      text: `${signoffs.attestationExhausted} required sign-off slot${signoffs.attestationExhausted === 1 ? ' is' : 's are'} owed by an agent that has finished every run it was given WITHOUT recording a verdict, so the manager has stopped asking. This is not a dispatch failure — the runs completed successfully. The agent is doing the work and not reporting it, which no number of further asks will change. These slots need a human: record the verdict, waive the role, or replace the agent on it. They are subtracted from the agent-owed count below, so that number is what the manager can still act on.`,
+    });
+  }
   if (signoffs.heldTickets >= 2 && signoffs.askedTickets === 0) {
     critical.push({
       severity: 'critical',
@@ -963,6 +981,11 @@ function formatSignoffs(rollup: SignoffRollup, actionCount: number): string[] {
   out.push(line('  agent-owed (the manager can ask)', rollup.dispatchable));
   out.push(line('  owed by a person', rollup.humanOwed));
   out.push(line('  NOBODY assigned', rollup.unstaffed));
+  if (rollup.attestationExhausted > 0) {
+    // Agent-owed, but no longer counted in the askable number above — say so, or the
+    // agent-owed line reads as though these slots were satisfied.
+    out.push(line('  agent-owed but NEVER ANSWERS (asking stopped)', rollup.attestationExhausted));
+  }
   if (rollup.unassignedRoles.length) {
     out.push('');
     out.push('roles outstanding with no assignee (this is what "nobody is assigned" means');

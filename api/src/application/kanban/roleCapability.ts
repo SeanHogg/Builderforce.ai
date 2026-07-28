@@ -51,12 +51,35 @@ export function personaForRole(roleKey: string): string {
  * of (seeded deterministically in provisionBuiltinAgents.ts). Superseding the fuzzy
  * skill match for the seeded agents (Risk mitigation in the PRD).
  */
+/**
+ * `ide_agents.builtin_kind` → the role keys that built-in agent is inherently capable of.
+ *
+ * A kind listed here is an AUTHORITATIVE boundary: `agentRoleKeys` returns early for it
+ * and deliberately refuses to widen by fuzzy title/skill match. So a kind's entry must
+ * name every role it should be able to fill — an omission is a silent capability LOSS,
+ * not a conservative default.
+ *
+ * `cto`, `product_owner` and `manager` were seeded as built-in agents (migrations 0335,
+ * 0376) and never given entries, so their capability fell through to fuzzy title matching
+ * — which is how a workspace could hold a CTO whose declared skills literally begin with
+ * 'architecture' while the `architect` role resolved to nobody, and every stage requiring
+ * it classified `managed_no_role`. Measured on project 11: 447 stalled tickets on that
+ * cause, with Architect among the most-owed outstanding roles.
+ */
 export const BUILTIN_KIND_ROLE_KEYS: Readonly<Record<string, string[]>> = {
   validator: ['validator', 'team-lead', 'code-reviewer', 'qa-tester', 'business-analyst'],
   security: ['security'],
   product_manager: ['product-manager', 'product-owner', 'business-analyst'],
   designer: ['designer'],
   incident_manager: ['manager'],
+  // Judges technical feasibility, proposes the architecture and phase plan, owns delivery
+  // risk — the Architect role's remit, plus the technical-leadership review the Team Lead
+  // slot asks for.
+  cto: ['architect', 'team-lead'],
+  // Accountable for value and acceptance; the same product remit as the Product Manager.
+  product_owner: ['product-owner', 'product-manager', 'business-analyst'],
+  // The delivery-manager role, and the coordination half of team leadership.
+  manager: ['manager', 'team-lead'],
 };
 
 /**

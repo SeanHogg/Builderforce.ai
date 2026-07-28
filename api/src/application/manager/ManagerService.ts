@@ -38,7 +38,7 @@ import {
   projectManagerConfigs, tenantManagerDefaults, managerActions, managerStallWatch, projects, featureScores,
 } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { TaskStatus, TaskPriority } from '../../domain/shared/types';
+import { TaskStatus, TaskPriority, NON_TERMINAL_TASK_STATUSES } from '../../domain/shared/types';
 import { notSystemTask } from '../task/taskScope';
 import { nextProjectKeySeqBase } from '../task/taskKeys';
 import { rankBacklog, type RankableTask, type TaskPriorityTier } from './prioritize';
@@ -74,11 +74,6 @@ import { TicketAuditService } from '../audit/ticketAuditService';
 import { coordinateTicket } from './coordinateTicket';
 import { recordActivity, cloudAgentActor, SYSTEM_ACTOR } from '../activity/activityLog';
 
-/** Non-terminal statuses whose tickets the manager grooms/ranks/assigns. */
-const NON_TERMINAL: string[] = [
-  TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY,
-  TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW, TaskStatus.BLOCKED,
-];
 /** Statuses an agent could pick up (Blocked waits on a dependency, not an agent). */
 const RUNNABLE: string[] = [
   TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY,
@@ -942,7 +937,7 @@ export function managedTasksQuery(db: Db, projectId: number) {
     })
     .from(tasks)
     .where(and(
-      eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL),
+      eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL_TASK_STATUSES),
       // The manager never grooms/ranks/audits its OWN run tasks (source = 'manager').
       notSystemTask,
     ))
@@ -1756,6 +1751,11 @@ async function coordinatePullRequests(
               unstaffedCount: drive.ownership.unstaffed.length,
               humanOwedCount: drive.ownership.humanOwed.length,
               dispatchableCount: drive.ownership.dispatchable.length,
+              // Agent-owed but NO LONGER ASKABLE — the agent finished its runs without
+              // ever recording a verdict. Reported separately because it is subtracted
+              // from `dispatchableCount`, and a reader watching that number fall with no
+              // stated reason would read it as slots being satisfied.
+              exhaustedCount: drive.ownership.exhausted.length,
               dispatchedTo: drive.asked,
             },
           });

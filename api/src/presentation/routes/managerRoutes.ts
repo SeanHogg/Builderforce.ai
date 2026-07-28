@@ -20,7 +20,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
 import { Hono } from 'hono';
 import { and, eq, sql, asc, desc, inArray } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
-import { TenantRole, TaskStatus } from '../../domain/shared/types';
+import { TenantRole, TaskStatus, NON_TERMINAL_TASK_STATUSES } from '../../domain/shared/types';
 import { projects, tasks, pullRequests } from '../../infrastructure/database/schema';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -50,10 +50,6 @@ import { notSystemTask, SYSTEM_TASK_SOURCE_MANAGER } from '../../application/tas
 import { getTenantTokenAvailability } from '../../application/llm/tenantTokenAvailability';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 
-const NON_TERMINAL: string[] = [
-  TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY,
-  TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW, TaskStatus.BLOCKED,
-];
 
 export function createManagerRoutes(
   db: Db,
@@ -226,7 +222,7 @@ export function createManagerRoutes(
         flagged: sql<number>`count(*) filter (where ${tasks.auditStatus} = 'flagged')::int`,
       })
       .from(tasks)
-      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL), notSystemTask));
+      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL_TASK_STATUSES), notSystemTask));
 
     const [prCount] = await db
       .select({ open: sql<number>`count(*)::int` })
@@ -242,7 +238,7 @@ export function createManagerRoutes(
         assignedUserId: tasks.assignedUserId, assignedAgentRef: tasks.assignedAgentRef, assignedAgentHostId: tasks.assignedAgentHostId,
       })
       .from(tasks)
-      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL), notSystemTask))
+      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL_TASK_STATUSES), notSystemTask))
       .orderBy(sql`${tasks.managerRank} asc nulls last`, asc(tasks.updatedAt))
       .limit(30);
 

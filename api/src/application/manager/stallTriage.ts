@@ -196,6 +196,31 @@ const NOT_STALLED = (cause: StallCause, detail: string): StallDiagnosis =>
   ({ stalled: false, cause, remedy: 'none', detail, escalated: false });
 
 /**
+ * Does a not-stalled verdict mean the ticket RECOVERED — or only that the manager must
+ * not act on it *right now*? PURE.
+ *
+ * THIS DISTINCTION IS WHY THE ESCALATION CEILING WAS UNREACHABLE. The triage stage closed
+ * a ticket's register row whenever it was "not stalled", and `live` / `cooling_down` both
+ * report not-stalled. But those are exactly the states a remedy PRODUCES: `reset_breaker`
+ * starts a run, so the very next pass sees `live` and resolves the row; the run then fails,
+ * the ticket re-stalls, and `recordStall` opens a FRESH row — deliberately, so a resolved
+ * row's attempts never resurrect. The remedy therefore erased its own history every single
+ * time it fired, and `attempts` could never leave zero.
+ *
+ * Measured on project 11: 11 tickets showing `attempts=0` after 26 days of idleness, each
+ * with a `firstSeenAt` only hours old against an `idleMs` of 26 days — the register row was
+ * being recreated, not maintained. Because an attempt that never happened cannot fail, the
+ * 3-attempt ceiling never bit, and not one of them was ever handed to a human.
+ *
+ * So: a ticket that CHANGED STATUS recovered, and its row closes. A ticket that merely has
+ * a run in flight, or is inside its post-failure back-off, is still the same stuck ticket —
+ * the row stays open and keeps its count.
+ */
+export function isStallResolved(cause: StallCause): boolean {
+  return cause !== 'live' && cause !== 'cooling_down';
+}
+
+/**
  * Diagnose one ticket. PURE.
  *
  * Order encodes priority, and the first three checks are all NEGATIVE — a ticket that

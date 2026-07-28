@@ -211,9 +211,20 @@ export class TicketParticipantsService {
    * Attribution (§5.6): record that a role's manifest participant ran on the ticket,
    * linked to the execution it ran AS. Best-effort and non-destructive — only advances a
    * not-yet-terminal slot (pending/assigned/unstaffed/in_progress) and never downgrades a
-   * completed/changes_requested/waived state. A PRODUCER (owner/contributor) slot with PR
-   * evidence completes; everything else advances to `in_progress` (a reviewer completes
-   * via its sign-off, not merely by finishing a run). No-op until the manifest is derived.
+   * completed/changes_requested/waived state. No-op until the manifest is derived.
+   *
+   * IT MARKS `in_progress` AND NOTHING ELSE, DELIBERATELY. This used to complete a
+   * PRODUCER slot outright when the ticket had a pull request — a write that DID NOT
+   * SURVIVE. `syncStates` recomputes every slot from the sign-off ledger and preserves
+   * only `in_progress`, so a `completed` with no ledger row behind it was reverted to
+   * `assigned` by the next recompute; and `coordinateCompletedStage` calls `syncStates`
+   * as its FIRST act, immediately before reading the manifest to decide whether to
+   * advance. The credit was therefore erased microseconds before the only check that
+   * cared could read it — which is why 110 completed runs in a day advanced zero lanes.
+   *
+   * Completion is now recorded where it lasts: `attestCompletedRoleRun` writes a real
+   * ledger entry, and `syncStates` derives `completed` from that. This method's job is
+   * only to record that a run touched the slot.
    */
   async recordRunAttribution(env: Env, tenantId: number, taskId: number, opts: { roleKey: string; stageKey?: string | null; executionId?: number; prUrl?: string }): Promise<void> {
     const all = await this.db
@@ -226,8 +237,7 @@ export class TicketParticipantsService {
     const targets = exact.length ? exact : all.filter((r) => ADVANCEABLE_PARTICIPANT_STATES.has(r.state as ParticipantState));
     if (!targets.length) return;
     for (const r of targets) {
-      const isProducer = r.responsibility === 'owner' || r.responsibility === 'contributor';
-      const state: ParticipantState = isProducer && opts.prUrl ? 'completed' : 'in_progress';
+      const state: ParticipantState = 'in_progress';
       const evidence = {
         ...(r.evidence && typeof r.evidence === 'object' ? r.evidence : {}),
         ...(opts.executionId != null ? { executionId: opts.executionId } : {}),
