@@ -32,7 +32,7 @@ import {
   getTenantManagerDefaults, upsertTenantManagerDefaults, type TenantManagerDefaultsPatch,
 } from '../../application/manager/ManagerService';
 import { getStallRegister } from '../../application/manager/stallWatch';
-import { getStallCensus } from '../../application/manager/stallCensus';
+import { getStallCensus, invalidateStallCensus } from '../../application/manager/stallCensus';
 import { getDailyDigest } from '../../application/manager/dailyDigest';
 import { resolveManagerVoice } from '../../application/manager/managerChat';
 import type { BrainService } from '../../application/brain/BrainService';
@@ -365,6 +365,23 @@ export function createManagerRoutes(
     await syncManagerRosterRole(c.env as Env, db, tenantId, projectId,
       prior ? { managerRef: prior.managerRef, managerType: prior.managerType } : null,
       { managerRef: config.managerRef, managerType: config.managerType });
+
+    // INVALIDATE ON WRITE. The stall census classifies by the effective policy — with
+    // `requireSignoffToComplete` off, an owed manifest slot is not a stall cause (0380) —
+    // so a policy change silently changes every cohort in it. Its own 120s TTL would get
+    // there eventually; a toggle whose effect appears two minutes later reads as a
+    // toggle that did nothing. (A WORKSPACE-tier write affects every project's census and
+    // cannot be invalidated by key without an unbounded fan-out, so that one does rely on
+    // the TTL.)
+    await invalidateStallCensus(c.env as Env, tenantId, projectId).catch((error) => {
+      // Best-effort: the policy IS saved, and the census self-heals on its 120s TTL. A
+      // cache-eviction miss must never turn a successful settings write into a 500.
+      reportCaughtError(error, {
+        source: 'presentation/routes/managerRoutes.ts',
+        operation: 'invalidateStallCensus',
+        context: { tenantId, projectId },
+      });
+    });
 
     const policy = await getEffectiveManagerPolicy(db, tenantId, projectId, c.env as Env);
     const tenantPolicy = resolveTenantManagerDefaults(await getTenantManagerDefaults(db, tenantId, c.env as Env));
