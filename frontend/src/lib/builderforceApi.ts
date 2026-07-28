@@ -2270,6 +2270,8 @@ export interface DigestContributor {
   name: string;
   shipped: number;
   runs: number;
+  /** Forward lane moves today, for people AND agents alike — the transition log names
+   *  the mover of every hop. Backward hops (redo) are excluded server-side. */
   moves: number;
 }
 

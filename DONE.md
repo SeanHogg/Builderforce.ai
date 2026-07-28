@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-27 — ✅ RESOLVED: lane moves now name the agent that made them (migration 0377)
+
+**A lane hop recorded WHO moved a ticket only if that "who" was a person — and got even that wrong for machine callers.** `recordStatusTransition` wrote a two-valued flag: `actor_kind='human'` with `c.get('userId')` when the route had one, `('system', NULL)` otherwise. Two defects fell out of it, and the second was worse than the gap the roadmap entry described:
+
+- **Every agent hop was anonymous.** An agent advance, a Coordinator move and a cron sweep all wrote the same identity-less row, so per-agent throughput could not be read off the transition log at all. The Manager "Today" digest had to infer agent contribution from `executions` + ticket ownership, and its `moves` column was humans-only by construction.
+- **Machine callers were recorded as PEOPLE.** An on-prem agent host authenticates with a service token whose subject is `agentHost:<id>`; a cloud agent's platform-tool replay puts its own agent ref in `sub`. Both were passed straight through as `actorUserId`, landing as `('human', 'agentHost:5')` / `('human', 'ada-1')` — invented user ids that resolve to nobody, **inflating the human half of every autonomy ratio the platform reports**.
+
+The roadmap entry called this blocked on an auth-middleware change. It was — that half is done here — but it was also wrong that both call sites were in `taskRoutes`: the highest-volume writer is `syncExecutionTaskLifecycle`, driven by `RuntimeService`, where the execution row has always named its agent (`cloud_agent_ref` / `agent_host_id`) and simply wasn't forwarding it.
+
+**One classifier, four identities.** `resolveTransitionActor` (`taskLifecycle.ts`, pure + unit-tested) maps a caller's identity onto the (kind, ref) convention `activity_log` already uses — `human` | `cloud_agent` | `host_agent` | `system` — where `system` now means *automation with no identity to name*, not "not a person". Every call site supplies what it holds and classification happens once. Readers asking only "was this autonomous?" test `actor_kind <> 'human'` and were unaffected.
+
+**Identity threaded from every writer:** `RuntimeService.onTaskStatusSync` forwards the running execution's agent (the bulk of agent hops); `POST /api/tasks/next` credits the on-prem host that claimed the work; `mergeRecordedPr` decodes the `manager:<ref>` marker an auto-merge already stamps through the existing `resolveManagerAssignee`, so a manager-driven completion names the manager instead of reading as anonymous automation.
+
+**Auth layer.** New `infrastructure/auth/machineSubject.ts` is the ONE decoder for a non-person JWT subject (`agentHost:*`, `embed:*`) — it replaced three divergent open-coded `startsWith('agentHost:')` checks (`authMiddleware`, `superadminFlag`, `llmRoutes`), each with its own idea of which prefixes counted. `authMiddleware` publishes `machineActor` and (new signed `agt` JWT claim) `agentActorRef`; `requestActor` turns a request into a lifecycle actor so no route re-learns the token shapes. The `agt` claim is minted by the MCP route replay (`builtinMcpService.replayRoute`) when a cloud agent drives a platform tool — inside the signed payload, never a header, because an authorship claim a client could set for itself would be worthless.
+
+**Consumers corrected:** the digest credits forward hops to people AND agents (`contributorKind`; backward hops stay excluded — a redo is not contribution), and the ticket lifecycle ledger carries the actor kind through verbatim instead of collapsing it to human/system (`normalizeActorKind`, now shared by both of its writers).
+
+Migration `0377_transition_agent_attribution.sql` repairs the history (no DDL — `actor_kind` already held the values): `agentHost:<n>` rows recover the host identity they were carrying → `('host_agent', '<n>')`; `agentHost:mcp` / `embed:*` rows become genuinely `('system', NULL)`. Both statements idempotent.
+
+Files: `application/task/taskLifecycle.ts`, `infrastructure/auth/machineSubject.ts`, `presentation/middleware/authMiddleware.ts`, `infrastructure/auth/JwtService.ts`, `application/runtime/RuntimeService.ts`, `application/runtime/cloudAgentEngine.ts`, `application/llm/builtinMcpService.ts`, `presentation/routes/taskRoutes.ts`, `application/repos/mergeRecordedPr.ts`, `application/manager/dailyDigest.ts`, `application/activity/ticketLifecycleLedger.ts`, `infrastructure/auth/superadminFlag.ts`, `presentation/routes/llmRoutes.ts` + `application/task/transitionActor.test.ts`.
+
+---
+
 ## 2026-07-27 — ✅ RESOLVED: the centralized error log wrote nothing; exposed via MCP + consolidated onto the superadmin Logs page (api 2026.7.166 · frontend 2026.7.130)
 
 **The centralized caught-error reporter had never persisted a single row in production.** `persistCaughtError` writes `api_error_log` through `buildTransactionalDatabase` (the operational DB), but migration `0375_caught_error_context.sql` added `tenant_id/source/operation/handled/context` to the **primary** migration track only. Wherever `NEON_TRANSACTIONAL_DATABASE_URL` is bound — production — every insert failed with `column "source" of relation "api_error_log" does not exist`. Confirmed against both live databases: the operational table still had the original 6 columns, and `SELECT count(*) FROM api_error_log WHERE source IS NOT NULL` returned **0**. Meanwhile `GET /api/admin/errors` and the `/admin/health` error count both read the *primary* table, whose newest row was 2026-06-28 — so the Logs page showed a month-old snapshot of a table nothing writes.
