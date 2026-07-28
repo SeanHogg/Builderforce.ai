@@ -7081,7 +7081,8 @@
         "today": "What did you and the team accomplish today?",
         "blocked": "Why did so little get done — what is blocking the work?",
         "plan": "What will you do next to unblock it?"
-      }
+      },
+      "copyDiagnosticsAria": "Copy the conversation and the manager's tool trace"
     }
   },
   "project360": {

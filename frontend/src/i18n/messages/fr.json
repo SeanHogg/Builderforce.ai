@@ -7081,7 +7081,8 @@
         "today": "Qu’avez-vous accompli aujourd’hui, vous et l’équipe ?",
         "blocked": "Pourquoi si peu de choses ont-elles avancé — qu’est-ce qui bloque le travail ?",
         "plan": "Que ferez-vous ensuite pour débloquer la situation ?"
-      }
+      },
+      "copyDiagnosticsAria": "Copier la conversation et le relevé d’outils du gestionnaire"
     }
   },
   "project360": {
