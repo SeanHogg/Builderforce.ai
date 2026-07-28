@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-07-28 — ✅ RESOLVED: `remedy_never_attempted` was a false CRITICAL on every newly-discovered stall row (ui 2026.7.134)
+
+**Found in a live diagnostics capture, project 11, apiVersion 2026.7.169.** The report raised a critical: *"6 stuck tickets have a remedy that has NEVER been attempted (attempts=0), the longest idle 16d 01h … every pass has skipped them."* All six rows carried `lastAttempt=—` and a `firstSeen` inside the **previous five minutes**. The manager had discovered them on the pass that was still running; it had had at most one opportunity to act. Nothing was being skipped.
+
+**Root cause — the predicate measured the wrong clock.** `managerDiagnostics.ts` qualified the finding on the **ticket's** `idleMs`, which says how long the *work* has been stuck and nothing at all about whether the *manager* has passed it over. The finding's own comment already named the trap — *"on the surface it is indistinguishable from a ticket the manager picked up this minute"* — and then used the one number that cannot tell them apart. On a board where deep triage discovers new rows every pass from a 677-ticket stalled set, that fires constantly, and it fires as **critical**: it sends a person to investigate starvation that is not happening, and it devalues the same code when the starvation is real.
+
+**Fixed** by qualifying on `lastSeenAt - firstSeenAt` — how long the register has been *re-observing* the row while doing nothing about it, which is exactly the claim the text makes. The message now states that watched span rather than the ticket's idle age, so the number a reader checks is the number the conclusion rests on. Same three-day threshold.
+
+Pinned by two tests in `managerDiagnostics.test.ts`: the six-row false-positive shape reproduced verbatim from the capture, and an assertion that a 90-day-idle ticket watched for 5 days reports `4d`, never `90d`. Mutation-verified against the old predicate.
+
+---
+
 ## 2026-07-28 — ✅ RESOLVED: three defects found by writing the tests first, plus the machinery that stops the class recurring
 
 The previous pass deliberately **demonstrated** these rather than fixing them (operator: *"you need to demonstrate the shit code by using unit tests"*), pinning each with `it.fails` so the suite stayed green while the defect was open and turned RED the moment it was fixed. All three are now fixed and every pin is a plain `it`.
