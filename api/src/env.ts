@@ -507,6 +507,12 @@ export interface Vars {
    * user id was the literal string `agentHost:5`.
    */
   machineActor?: MachineSubject;
+  /**
+   * The cloud agent this request acts as (`JwtPayload.agt`) — set when a cloud agent
+   * replays a platform route in-process to perform a tool call. Read by
+   * {@link requestActor} so the write is credited to the agent.
+   */
+  agentActorRef?: string;
   /** True when the request is running under an emulation token (read-only). */
   isEmulation?: boolean;
   /**
