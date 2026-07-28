@@ -75,3 +75,45 @@ export function isParticipantOpen(state: ParticipantState | string): boolean {
 export function blocksCompletion(slot: { required: boolean; state: ParticipantState | string }): boolean {
   return slot.required && !isParticipantSatisfied(slot.state);
 }
+
+/**
+ * How many times a review-shaped role may finish a run WITHOUT recording a verdict
+ * before the manager stops asking and escalates to a human.
+ *
+ * Deliberately the same number as `MAX_REMEDY_ATTEMPTS`: an ask that produced nothing
+ * three separate times will not produce something on the fourth, and the platform's
+ * standing rule is that N identical attempts which changed nothing is not an N+1th
+ * attempt. Equal ceilings mean a silent reviewer surfaces to a human at the same pace as
+ * any other exhausted remedy.
+ */
+export const MAX_UNATTESTED_RUNS = 3;
+
+/**
+ * Is this slot's job to BUILD the stage's deliverable, rather than to judge one?
+ *
+ * Matches the test `recordRunAttribution` has always used, deliberately: producer credit
+ * is now granted without pull-request evidence, and that change must widen NOTHING else.
+ * Anything not explicitly a producer is treated as review-shaped, which is the
+ * conservative reading — an unrecognised responsibility is never auto-approved.
+ */
+export function isProducerResponsibility(responsibility: string | null | undefined): boolean {
+  return responsibility === 'owner' || responsibility === 'contributor';
+}
+
+/**
+ * How many completed runs this slot has already returned no verdict for.
+ *
+ * Kept in the slot's `evidence` JSON rather than a new column: it is per-slot run
+ * bookkeeping that only the attestation path reads, and a migration for a counter would
+ * not earn its keep.
+ */
+export function readUnattestedRuns(evidence: unknown): number {
+  if (!evidence || typeof evidence !== 'object') return 0;
+  const n = (evidence as { unattestedRuns?: unknown }).unattestedRuns;
+  return typeof n === 'number' && Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+/** True once the slot's agent has ignored the ask its full budget of times. */
+export function isAttestationExhausted(evidence: unknown, max: number = MAX_UNATTESTED_RUNS): boolean {
+  return readUnattestedRuns(evidence) >= max;
+}

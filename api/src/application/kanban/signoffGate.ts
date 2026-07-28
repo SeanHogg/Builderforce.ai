@@ -26,7 +26,7 @@
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { TicketParticipantsService, type ManifestParticipant } from './ticketParticipants';
-import { isParticipantSatisfied } from './participantStates';
+import { isParticipantSatisfied, isAttestationExhausted } from './participantStates';
 
 /** Why the gate is open or shut — surfaced to telemetry, the ledger and the UI. */
 export type SignoffGateReason =
@@ -54,6 +54,16 @@ export interface OutstandingSlot {
   assigneeName: string | null;
   assigneeRef: string | null;
   assigneeKind: string | null;
+  /**
+   * The slot's agent has now finished {@link MAX_UNATTESTED_RUNS} runs for this ask
+   * WITHOUT recording a verdict (see `attestRoleRun.ts`). It is still agent-owed, but
+   * asking it again is a proven no-op, so it must not be counted as dispatchable.
+   *
+   * Optional because absent means "not exhausted", which is both the safe reading and the
+   * behaviour that predates this field; `decideSignoffGate` — the only place real slots
+   * are built — always sets it explicitly.
+   */
+  attestationExhausted?: boolean;
 }
 
 export interface SignoffGateResult {
@@ -81,20 +91,29 @@ export interface SignoffGateResult {
  *                      only honest move is to escalate rather than "keep trying".
  *   • `unstaffed`    — no resolved assignee at all; the ticket needs staffing first.
  *                      This is the state a reader means by "nobody is assigned".
+ *   • `exhausted`    — an agent owes it and HAS BEEN ASKED to the ceiling, finishing
+ *                      every run without recording a verdict. Split out of
+ *                      `dispatchable` because it is the one bucket that looks askable
+ *                      and is not: the decision feed shows the same sign-off request
+ *                      re-issued five times in 2h20m against a slot that answered none
+ *                      of them. Counting it as dispatchable is precisely what makes the
+ *                      loop unexitable, so it is agent-owed but NOT askable.
  */
 export interface SignoffOwnership {
   dispatchable: OutstandingSlot[];
   humanOwed: OutstandingSlot[];
   unstaffed: OutstandingSlot[];
+  exhausted: OutstandingSlot[];
 }
 
 /** Split the outstanding slots by who owes them. PURE. */
 export function classifySignoffOwnership(outstanding: readonly OutstandingSlot[]): SignoffOwnership {
-  const out: SignoffOwnership = { dispatchable: [], humanOwed: [], unstaffed: [] };
+  const out: SignoffOwnership = { dispatchable: [], humanOwed: [], unstaffed: [], exhausted: [] };
   for (const slot of outstanding) {
     if (!slot.assigneeRef) out.unstaffed.push(slot);
-    else if (slot.assigneeKind === 'agent') out.dispatchable.push(slot);
-    else out.humanOwed.push(slot);
+    else if (slot.assigneeKind !== 'agent') out.humanOwed.push(slot);
+    else if (slot.attestationExhausted) out.exhausted.push(slot);
+    else out.dispatchable.push(slot);
   }
   return out;
 }
@@ -111,6 +130,12 @@ export function describeSignoffOwnership(o: SignoffOwnership): string {
   }
   if (o.humanOwed.length) {
     parts.push(`${o.humanOwed.length} owed by a person (${ownerList(o.humanOwed)})`);
+  }
+  if (o.exhausted.length) {
+    parts.push(
+      `${o.exhausted.length} whose agent has finished every run without recording a verdict `
+      + `(${ownerList(o.exhausted)}) — re-asking has been tried to the ceiling`,
+    );
   }
   if (!parts.length) return '';
   return `No agent can clear this: ${parts.join(', ')}.`;
@@ -143,6 +168,7 @@ export function decideSignoffGate(participants: readonly ManifestParticipant[]):
       assigneeName: p.assigneeName,
       assigneeRef: p.assigneeRef,
       assigneeKind: p.assigneeKind,
+      attestationExhausted: isAttestationExhausted(p.evidence),
     }));
   const satisfiedCount = required.length - outstanding.length;
 

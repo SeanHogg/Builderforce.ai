@@ -3,15 +3,22 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * Attribute a finalized run to the role it ran AS on the ticket's participation
  * manifest (PRD-coordinated-role-participation.md §5.6). Wired at the composition
  * root to `RuntimeService.onRunFinalized`, so every terminal cloud run records that
- * "role X participated" — linked to the execution — and, for a PRODUCER with PR
- * evidence, completes that role's manifest slot (the completion signal producer
- * gating needs). Best-effort by contract: never throws, never blocks the run.
+ * "role X participated", linked to the execution.
+ *
+ * Attribution then hands off to {@link attestCompletedRoleRun}, which decides what the
+ * finished run MEANS for the slot — producer credit, or a counted non-answer from a
+ * reviewer. The two are separate because they answer different questions ("did a run
+ * serve this slot?" vs "is this role done?") and because the second one writes to the
+ * sign-off ledger, which is the only place a completion survives `syncStates`.
+ *
+ * Best-effort by contract: never throws, never blocks the run.
  */
 import { and, asc, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { pullRequests, swimlaneRequirements, swimlanes, tasks } from '../../infrastructure/database/schema';
 import { TicketParticipantsService } from './ticketParticipants';
+import { attestCompletedRoleRun } from './attestRoleRun';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { producerRoleForActionType } from './roleCapability';
 
@@ -95,7 +102,22 @@ export async function attributeRunToManifest(env: Env, db: Db, info: RunFinalize
       executionId: info.executionId,
       ...(prUrl ? { prUrl } : {}),
     });
-  } catch (error) { /* best-effort: attribution must never break the run */ 
+    // ATTRIBUTION IS NOT COMPLETION. The call above records that a run touched the slot
+    // and leaves it `in_progress` — a state whose only exit used to be the agent
+    // voluntarily calling `kanban.signoff`, which is why 110 completed runs in one day
+    // moved zero lanes. This closes it: a producer's finished run is credited to the
+    // ledger, and a reviewer that returned no verdict has its silence counted toward the
+    // escalation ceiling instead of being asked again forever.
+    await attestCompletedRoleRun(env, db, {
+      tenantId: info.tenantId,
+      projectId: info.projectId,
+      taskId: info.taskId,
+      roleKey,
+      laneKey: info.laneServed,
+      executionId: info.executionId,
+      ...(prUrl ? { prUrl } : {}),
+    });
+  } catch (error) { /* best-effort: attribution must never break the run */
     reportCaughtError(error, { source: "application/kanban/attributeRunToManifest.ts", operation: "attributeRunToManifest" });
   }
 }
