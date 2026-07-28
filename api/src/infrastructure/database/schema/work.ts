@@ -382,9 +382,12 @@ export const projectManagerConfigs = pgTable('project_manager_configs', {
   managerType:       varchar('manager_type', { length: 80 }).notNull().default('general'),
   /** Self-governance precondition (0362): the manager may complete a ticket + merge its
    *  PR autonomously ONLY when every REQUIRED participation slot has signed off. Default
-   *  true — before this existed, the manager force-completed in-review tickets and
-   *  squash-merged them with no sign-off verification at all. See signoffGate.ts. */
-  requireSignoffToComplete: boolean('require_signoff_to_complete').notNull().default(true),
+   *  FALSE since 0380 — this is the project's own opt-in to a review gate, and a
+   *  default-on gate that nothing satisfied stalled 265 of 679 tickets on the reference
+   *  board. NOT NULL on purpose (unlike `allowAutoMerge`): whether this project requires
+   *  sign-off is a decision the project owns, so the column always states it outright
+   *  rather than deferring to a workspace row. See signoffGate.ts + managerPolicy.ts. */
+  requireSignoffToComplete: boolean('require_signoff_to_complete').notNull().default(false),
   /** MERGE AUTHORITY for this project (0363) — may the manager merge unattended AT ALL,
    *  as opposed to `prMergePolicy`, which only says HOW a permitted merge happens.
    *  NULLABLE unlike its siblings, and that is the point: null = "inherit the workspace

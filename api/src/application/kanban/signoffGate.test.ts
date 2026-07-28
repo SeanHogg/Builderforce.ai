@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   classifySignoffOwnership, decideSignoffGate, describeSignoffOwnership, slotsForStage,
+  resolveRequiredSignoffGate, SIGNOFF_NOT_REQUIRED,
   type OutstandingSlot,
 } from './signoffGate';
 import {
@@ -225,5 +226,50 @@ describe('slotsForStage — scoping the ASK to the lane the ticket is on', () =>
   it('always keeps a stage-less slot — it belongs to the ticket, not to a lane', () => {
     const scoped = slotsForStage([at(null, 'product-owner'), at('in_review', 'qa-tester')], 'requirements');
     expect(scoped.map((s) => s.roleKey)).toEqual(['product-owner']);
+  });
+});
+
+/**
+ * THE PROJECT SETTING (0380). `requireSignoffToComplete` is what the whole premise turns
+ * on — "other team members sign off, so the work is actually reviewed" is a practice a
+ * project chooses, and before this read existed only the conduct step and the merge
+ * consulted it. Stall triage did not, so a project with sign-off OFF still had its
+ * tickets diagnosed `awaiting_signoff` and its dispatch budget spent re-asking for
+ * verdicts nobody owed (265 of 679 stalled tickets on the reference board).
+ *
+ * These tests pin the two properties that keep that from recurring: the gate OPENS when
+ * the project does not require sign-off, and it does so WITHOUT touching the manifest —
+ * so no manifest state, however broken, can put a ticket back into the loop.
+ */
+describe('resolveRequiredSignoffGate — the project setting is the gate', () => {
+  /** Any read of the manifest would throw, proving none happened. */
+  const explodingDb = new Proxy({}, {
+    get() { throw new Error('the manifest must not be read when sign-off is not required'); },
+  }) as never;
+
+  it('opens, owing nothing, when the project does not require sign-off', async () => {
+    const gate = await resolveRequiredSignoffGate({} as never, explodingDb, {
+      tenantId: 1, taskId: 42, requireSignoff: false,
+    });
+    expect(gate.satisfied).toBe(true);
+    expect(gate.reason).toBe('not_required');
+    expect(gate.outstanding).toEqual([]);
+    expect(gate.requiredCount).toBe(0);
+  });
+
+  it('reports a reason distinct from all_signed_off — "nobody asked" is not "all approved"', () => {
+    // Both open the gate; only one means the work was reviewed. A ledger that conflates
+    // them cannot answer "was this merged unreviewed?" after the fact.
+    expect(SIGNOFF_NOT_REQUIRED.reason).not.toBe('all_signed_off');
+    expect(SIGNOFF_NOT_REQUIRED.satisfied).toBe(true);
+  });
+
+  it('still evaluates the manifest when the project DOES require sign-off', async () => {
+    // The opt-in path is unchanged: it reads, and an unreadable manifest fails closed.
+    const gate = await resolveRequiredSignoffGate({} as never, explodingDb, {
+      tenantId: 1, taskId: 42, requireSignoff: true,
+    });
+    expect(gate.satisfied).toBe(false);
+    expect(gate.detail).toContain('Could not read the ticket participation manifest');
   });
 });
