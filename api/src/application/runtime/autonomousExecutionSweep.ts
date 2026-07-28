@@ -30,7 +30,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, asc, eq, exists, inArray, isNotNull, or, sql } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { buildRuntimeService } from '../../buildRuntimeService';
-import { createTickDispatchBudget, MAX_TENANT_DISPATCHES_PER_TICK, type TickDispatchBudget } from './tickDispatchBudget';
+import { createTickDispatchBudget, MAX_TENANT_DISPATCHES_PER_TICK, tenantDispatchReserver, type TickDispatchBudget } from './tickDispatchBudget';
 import { tasks, projects, boards, swimlanes, swimlaneAgentAssignments } from '../../infrastructure/database/schema';
 import { TaskStatus } from '../../domain/shared/types';
 import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';
@@ -207,15 +207,22 @@ export async function runAutonomousExecutionSweep(
       // Dispatch the tenant's oldest-waiting tickets, bounded per tick. Each fires the
       // canonical lane trigger, which re-evaluates gate/capability/live-run and starts
       // the run only when it genuinely should — so this is safe to call broadly.
+      // Ceiling belongs to the TICK, not to this sweep — see tickDispatchBudget. Each
+      // dispatching sweep used to hold its own private per-tenant counter, so the
+      // manager / validator / QA sweeps could each grant a fresh 25 in the same
+      // five-minute window and the aggregate was unbounded.
+      //
+      // Spent through the shared reserver rather than `hasRoom` + a post-hoc
+      // `tryReserve`. That older shape traded correctness for a real property — no-ops
+      // (already running / human-gated / no qualifying agent) are cheap and must not
+      // starve genuinely-pending work — and paid for it with an overshoot of one per
+      // concurrent sweep. `spend` gives both: it takes the slot BEFORE the trigger runs
+      // and hands it straight back when nothing started.
+      const runs = tenantDispatchReserver(budget, tenantId);
       let dispatchedForTenant = 0;
       for (const c of tenantCandidates) {
-        // Ceiling now belongs to the TICK, not to this sweep — see tickDispatchBudget.
-        // Previously each dispatching sweep held its own private per-tenant counter,
-        // so the manager / validator / QA sweeps could each grant a fresh 25 in the
-        // same five-minute window and the aggregate was unbounded.
-        if (!budget.hasRoom(tenantId)) break;
         try {
-          const started = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+          const spend = await runs.spend(() => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
             tenantId: c.tenantId,
             projectId: c.projectId,
             taskId: c.taskId,
@@ -242,17 +249,10 @@ export async function runAutonomousExecutionSweep(
                 effectivePlan: availability.effectivePlan,
               },
             } : {}),
-          });
-          // Only a ticket that actually started a run counts against the per-tenant
-          // budget — no-ops (already running / human-gated / no qualifying agent) are
-          // cheap and shouldn't starve genuinely-pending work. That property is worth
-          // a small race: two sweeps can both pass `hasRoom` and then both reserve,
-          // so a tenant may overshoot by the number of concurrent sweeps. Reserving
-          // up-front instead would burn the budget on no-ops, which is far worse.
-          if (started) {
-            budget.tryReserve(tenantId);
-            dispatchedForTenant += 1;
-          }
+          }), (v) => v === true);
+          // Out of tenant budget for the whole tick — no later candidate fares better.
+          if (spend.refused) break;
+          if (spend.result) dispatchedForTenant += 1;
         } catch (err) {
           reportCaughtError(err, { source: "application/runtime/autonomousExecutionSweep.ts", operation: "runAutonomousExecutionSweep", context: { logMessage: `[cron:auto-exec] dispatch failed tenant=${tenantId} task=${c.taskId}`, details: err } });
         }

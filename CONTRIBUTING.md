@@ -124,6 +124,46 @@ Versions are simple date‑based strings (e.g. `2026.3.7`). Before deploying bum
      - Remove any unnecessary lockfiles from the workspace root if you encounter root confusion.
 
 
+## Cross-component contracts
+
+Read this before adding a test. It is the most expensive lesson this codebase has learned, and it was learned eight times.
+
+Every serious production defect here — an empty sign-off ledger (0 rows against 1,030 reviewer runs), 405 stalled tickets, then 447, a billable-run cap that spent 7 against 3, a per-tenant ceiling that allowed 43 against 25 — has been the **same shape**: a contract between two components, where every existing test asserted one component in isolation. At the time of the last one there were 3,956 passing tests and not one of them crossed a seam. Coverage was never the problem.
+
+### 1. When two components answer the same question, one of them must not exist
+
+A GUARD that validates an action and a SELECTOR that chooses one are answering the same question from opposite ends. If both derive the answer, they will diverge — not might. The three role-capability instances were each "fixed" by widening whichever side was narrower, which closes the instance and leaves the seam, so it reopened twice.
+
+Extract ONE function, make both sides call it, and delete the other implementation. `roleCandidatesFrom` in `api/src/application/kanban/roleCapability.ts` is the worked example: the guard asks whether one ref is in its answer, the selector takes the head of it, and narrowing one necessarily narrows the other.
+
+If you genuinely cannot merge them, write a test that asserts they **agree over the whole domain** — every role in the catalog, every remedy in the set — not over a chosen handful. The handful is how the eighth case slips through while the other seven are checked individually.
+
+### 2. A shared parameter that can be omitted will be omitted
+
+`LaneAuthorityInputs.roster` is required rather than optional, and callers that deliberately do not bind pass `EMPTY_ROLE_ROSTER` with a comment saying why. An optional parameter lets a new call site silently inherit the old narrow behaviour: the omission is invisible at the call site and surfaces weeks later as a stalled board. Make the compiler ask the question.
+
+### 3. Push a refusal DOWN into the thing that spends; never assert about it afterwards
+
+The triage stage decided `coordinate` "costs no run" and passed `mayStartRun: false`, and `coordinate` started a run anyway because nothing carried the refusal into `coordinateTicket`. Likewise the manager sweep reconciled its spend against the tenant ceiling *after* the pass, discarding every refusal because the runs had already happened.
+
+If a caller decides something may not happen, that decision must reach the code that would do it — as a parameter it cannot ignore, or as a primitive whose only spending verb enforces the order (`DispatchReserver.spend` reserves before it dispatches, by construction). A rule that must be remembered at each of N sites is forgotten at the N+1th. Enforced by `api/scripts/check-dispatch-budget.mjs`.
+
+### 4. Classify by what code DOES, not by what it is meant to cost
+
+`coordinate` was categorised as non-dispatching because that was its intent. Nothing checked. Before you put a function in a bucket, follow it to its leaves.
+
+### 5. Pin a defect you are not fixing — never park it
+
+`it.fails` states the invariant, keeps the suite green while the defect is open, and turns it RED the moment someone fixes it. That is strictly better than deleting the test or writing a comment. It is also a failing assertion that CI reports as success, so: every `it.fails` must be named in ROADMAP.md's Consolidated Gap Register, and fixing it flips the test to a plain `it` and moves the entry to `DONE.md`. Both directions are enforced by `api/scripts/check-pinned-defects.mjs`.
+
+### 6. Verify a new test by breaking the code
+
+A test that passes tells you nothing until you have seen it fail for the reason you intended. Revert the fix (or mutate the condition), confirm the failure message names *your* assertion rather than an earlier line, then restore. Several tests here passed for years while asserting the wrong half of the behaviour — `applied` when the invariant was about `attempted`.
+
+### 7. Keep the counter-example executable
+
+`tickDispatchBudget.contract.test.ts` still contains the broken accounting pattern and asserts that it produces exactly 43 and 38 against a ceiling of 25. "We fixed it" should be a measurement, not a claim, and the next person to read the module learns what the rule is *for*.
+
 ## How to contribute
 
 1. **Bugs / small fixes** – open a PR directly.

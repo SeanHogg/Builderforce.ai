@@ -260,7 +260,7 @@ export interface SharedCensusSignals {
  */
 export async function loadCensusFacts(
   db: Db,
-  args: { tenantId: number; projectId: number; tasks: CensusTask[]; shared?: SharedCensusSignals; now?: number },
+  args: { tenantId: number; projectId: number; tasks: CensusTask[]; shared?: SharedCensusSignals; now?: number; env?: Env },
 ): Promise<CensusTicketFacts[]> {
   const now = args.now ?? Date.now();
   const taskIds = args.tasks.map((t) => t.id);
@@ -302,7 +302,7 @@ export async function loadCensusFacts(
     // already performs. Resolving this per ticket would be the N+1 the caching rules
     // forbid on a 675-ticket census.
     board?.lifecycleManaged
-      ? loadBoardLaneAuthorities(db, { tenantId: args.tenantId, boardId: board.id }).catch(() => new Map())
+      ? loadBoardLaneAuthorities(db, { tenantId: args.tenantId, projectId: args.projectId, boardId: board.id, ...(args.env ? { env: args.env } : {}) }).catch(() => new Map())
       : Promise.resolve(new Map()),
     board?.lifecycleManaged
       ? loadProducerSlots(db, args.tenantId, taskIds).catch(() => new Map<string, ManagedProducerSlot[]>())
@@ -333,7 +333,7 @@ export async function loadCensusFacts(
       const inputs = (laneAuthorities as Map<string, LaneAuthorityInputs>).get(lane.id);
       const authority = inputs
         ? decideManagedLaneAuthority(inputs, { taskType: t.taskType ?? null, actionType: t.actionType ?? null })
-        : { roleKeys: [], approvers: [], tier: 'none' as const };
+        : { roleKeys: [] as string[], approvers: [], tier: 'none' as const };
       const slots = (producerSlots as Map<string, ManagedProducerSlot[]>).get(`${t.id}:${t.status}`) ?? [];
       managedProducerResolvable = pickManagedProducer(authority, slots) != null;
     }
@@ -444,7 +444,7 @@ async function loadFallbackSignals(db: Db, tenantId: number, taskIds: number[]):
  */
 export async function computeStallCensus(
   db: Db,
-  args: { tenantId: number; projectId: number; tasks: CensusTask[]; shared?: SharedCensusSignals; now?: number },
+  args: { tenantId: number; projectId: number; tasks: CensusTask[]; shared?: SharedCensusSignals; now?: number; env?: Env },
 ): Promise<StallCensus> {
   const facts = await loadCensusFacts(db, args);
   const rows = facts.map((f) => {
@@ -485,7 +485,7 @@ export async function getStallCensus(
         // the caller has already established the project belongs to this tenant.
         .where(and(eq(tasks.projectId, args.projectId), eq(tasks.archived, false)))
         .catch(() => []);
-      return computeStallCensus(db, { ...args, tasks: rows as CensusTask[] });
+      return computeStallCensus(db, { ...args, tasks: rows as CensusTask[], env });
     },
     { kvTtlSeconds: CENSUS_TTL_SECONDS },
   );

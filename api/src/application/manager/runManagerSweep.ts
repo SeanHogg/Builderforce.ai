@@ -129,6 +129,10 @@ export async function runManagerSweep(
 
       const s = await runManagerForProject(env, db, runtimeService, {
         tenantId: p.tenantId, projectId: p.projectId, submittedBy: 'system:manager-cron',
+        // THE CEILING, handed DOWN rather than reconciled UP. Every dispatch site inside
+        // the pass reserves against this before it starts work — see the note on the
+        // removed replay loop below.
+        dispatchBudget: budget,
       });
       if (s.skipped) continue;
       result.managed += 1;
@@ -139,9 +143,18 @@ export async function runManagerSweep(
       result.prsConducted += s.prsConducted;
       result.prsMerged += s.prsMerged;
       result.dispatched += s.dispatched;
-      // Reserve what this project actually started, so the next project under the
-      // same tenant — and the next sweep in this tick — sees the spend.
-      for (let i = 0; i < s.dispatched; i++) budget.tryReserve(p.tenantId);
+      // NO REPLAY LOOP HERE. This used to read:
+      //
+      //     for (let i = 0; i < s.dispatched; i++) budget.tryReserve(p.tenantId);
+      //
+      // — dispatch-then-count, the exact pattern `tickDispatchBudget`'s header forbids in
+      // bold. The boolean `tryReserve` returns was discarded because by then the runs had
+      // already happened, so the ceiling could not refuse anything: the `hasRoom` check
+      // above was an admission gate, not a reservation, and a tenant owning several
+      // managed projects got a fresh one per project. Simulated, that is 43 runs against
+      // a ceiling of 25 for one project and 38 across five
+      // (`tickDispatchBudget.contract.test.ts`). The pass now reserves each slot before
+      // starting the work it is for, so `s.dispatched` is already accounted.
       result.remediated += s.remediated;
       result.remediationDeferred += s.remediationDeferred;
       result.stalled += s.stalled;

@@ -53,6 +53,7 @@ import {
   stageSignoffFor, STALL_AFTER_MS, type StallInput,
 } from './stallTriage';
 import { loadOpenStalls, gradeStall, recordStall, resolveStalls, type OpenStall } from './stallWatch';
+import { createTickDispatchBudget, tenantDispatchReserver, type DispatchReserver } from '../runtime/tickDispatchBudget';
 
 /**
  * How many stalled tickets one pass diagnoses in depth. Each costs several reads
@@ -402,9 +403,17 @@ export async function runStallTriage(
      * loading them twice would double the cost on every project on every tick.
      */
     signals?: BulkSignals;
+    /**
+     * The TENANT's shared per-tick run ceiling. {@link MAX_TRIAGE_DISPATCHES_PER_RUN}
+     * bounds what THIS stage spends; this bounds what the whole workspace spends across
+     * every sweep in the tick, and the smaller of the two wins. Absent ⇒ a private
+     * budget, so a direct call keeps standalone behaviour.
+     */
+    runs?: DispatchReserver;
   },
 ): Promise<TriageOutcome> {
   const { tenantId, projectId, managed, policy } = ctx;
+  const runs = ctx.runs ?? tenantDispatchReserver(createTickDispatchBudget(), tenantId);
   const out: TriageOutcome = {
     stalled: 0, unstuck: 0, escalated: 0, resolved: 0, dispatched: 0, deferred: 0, journal: [],
   };
@@ -584,21 +593,36 @@ export async function runStallTriage(
         actionable: isManagerActionable(verdict.remedy),
         alreadyConducted,
         ownsDispatch: ctx.ownsDispatch,
-        budgetLeft: out.dispatched < MAX_TRIAGE_DISPATCHES_PER_RUN,
+        // BOTH ceilings. The per-pass cap keeps one project from monopolising a tick; the
+        // tenant reserver keeps the whole workspace — this sweep plus the autonomous
+        // executor plus the validator and QA sweeps — inside one shared bound.
+        budgetLeft: out.dispatched < MAX_TRIAGE_DISPATCHES_PER_RUN && runs.hasRoom(),
       });
       if (plan.act) {
-        const acted = await applyRemedy(env, db, runtimeService, {
+        const remedyArgs = (mayStartRun: boolean, mayRaceExecutor: boolean) => ({
           tenantId, projectId, task, policy, remedy: verdict.remedy, signoff, prRow,
-          mayStartRun: plan.mayStartRun,
+          mayStartRun,
           // An `assign` that cannot also start the ticket still assigns: staffing is
           // exactly what unblocks the executor's next tick.
-          mayRaceExecutor: plan.mayRaceExecutor,
+          mayRaceExecutor,
           // The role the stage authorises but cannot fill — what `coordinate` must staff
           // before re-running a gate that will otherwise refuse for the same reason.
           unfilledRoleKey: autoRun.unfilledRoleKeys[0] ?? null,
           hiresUsed,
           onHire: () => { hiresUsed += 1; },
         });
+        // Reserve-then-dispatch: the slot is taken BEFORE the remedy runs and handed back
+        // when nothing started. `spend` does not invoke the remedy at all when the tenant
+        // is out of budget, so the fallback below runs it exactly once, told plainly that
+        // it may not spend — which is what every remedy branch already knows how to do.
+        const spend = plan.mayStartRun || plan.mayRaceExecutor
+          ? await runs.spend(
+            () => applyRemedy(env, db, runtimeService, remedyArgs(plan.mayStartRun, plan.mayRaceExecutor)),
+            (r) => r.startedRun,
+          )
+          : { refused: false, result: null };
+        const acted = spend.result
+          ?? await applyRemedy(env, db, runtimeService, remedyArgs(false, false));
         applied = acted.applied;
         attempted = acted.attempted;
         outcomeNote = acted.note;
@@ -810,7 +834,14 @@ export async function applyRemedy(
         if (staffed.action !== 'escalate') staffingNote = ` ${staffed.detail}`;
         if (staffed.action === 'hired') args.onHire?.();
       }
-      const outcome = await coordinateTicket(env, db, runtimeService, { tenantId, taskId: task.id });
+      // THE CAP APPLIES TO EVERY REMEDY, INCLUDING THIS ONE. Coordination is classified
+      // as costing no run, so it is handed `mayStartRun: false` — and it must then act
+      // like it. Until `dispatch` existed, `coordinateTicket` started a run internally
+      // whatever the budget said, and this branch was the only one of eight that read
+      // neither flag: measured live, 7 billable runs against a cap of 3.
+      const outcome = await coordinateTicket(env, db, runtimeService, {
+        tenantId, taskId: task.id, dispatch: args.mayStartRun || args.mayRaceExecutor,
+      });
       const moved = outcome.ok && (outcome.dispatched || outcome.status !== task.status);
       // ALWAYS attempted. Coordination on a stage with no role-capable participant runs
       // to completion and moves nothing, every pass, forever — the 447-ticket

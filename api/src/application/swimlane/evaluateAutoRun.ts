@@ -300,7 +300,7 @@ export interface ManagedRoleAttribution {
   roleKey: string;
   agentRef: string;
   /** Whether the ticket's own manifest named the producer, or the lane's staffing did. */
-  source: 'manifest' | 'lane_agent';
+  source: 'manifest' | 'lane_agent' | 'roster';
   /** Every role this stage authorizes for this ticket — reported for the gate snapshot. */
   authorizedRoleKeys: string[];
 }
@@ -609,7 +609,7 @@ export async function evaluateTaskAutoRun(
   let qualifiedLaneAgents = laneAgents;
   if (producerRoleKey) {
     const roleCapable = await Promise.all(laneAgents.map((a) =>
-      a.agentRef ? isAgentRefRoleCapable(db, args.tenantId, a.agentRef, producerRoleKey, args.projectId) : Promise.resolve(true)));
+      a.agentRef ? isAgentRefRoleCapable(db, args.tenantId, a.agentRef, producerRoleKey, args.projectId, args.env) : Promise.resolve(true)));
     qualifiedLaneAgents = laneAgents.filter((_, i) => roleCapable[i]);
   }
 
@@ -635,10 +635,14 @@ export async function evaluateTaskAutoRun(
   if (board.lifecycleManaged && !isReviewLane(status)) {
     const resolved = await resolveManagedProducer(db, {
       tenantId: args.tenantId,
+      projectId: args.projectId,
       taskId: args.taskId,
       swimlaneId: lane.id,
       stageKey: status,
       task: { taskType: taskRow?.taskType ?? null, actionType: taskRow?.actionType ?? null },
+      // Serves the roster load from the read-through cache — this runs on every lane
+      // entry and inside the sweep, where an uncached roster read would be an N+1.
+      ...(args.env ? { env: args.env } : {}),
     }).catch(() => null);
     if (resolved?.producer) {
       managedRole = {
@@ -684,7 +688,7 @@ export async function evaluateTaskAutoRun(
     // the gate opening lets a REVIEWER run, never the author again.
     ownerFallbackRef = null;
   } else if (assignedAgentRef && producerRoleKey) {
-    if (!(await isAgentRefRoleCapable(db, args.tenantId, assignedAgentRef, producerRoleKey, args.projectId))) {
+    if (!(await isAgentRefRoleCapable(db, args.tenantId, assignedAgentRef, producerRoleKey, args.projectId, args.env))) {
       ownerFallbackRef = null;
     }
   }

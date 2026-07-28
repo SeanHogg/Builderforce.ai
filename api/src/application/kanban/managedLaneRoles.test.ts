@@ -3,6 +3,7 @@ import {
   bindStaffedAgentsToRoles, decideManagedLaneAuthority, pickManagedProducer,
   type LaneAuthorityInputs, type ManagedLaneAuthority, type ManagedProducerSlot,
 } from './managedLaneRoles';
+import { EMPTY_ROLE_ROSTER, type RoleRoster } from './roleCapability';
 import type { LaneStaffedAgent } from '../swimlane/laneApprover';
 
 /**
@@ -31,7 +32,16 @@ const agent = (over: Partial<LaneStaffedAgent> = {}): LaneStaffedAgent => ({
 const inputs = (over: Partial<LaneAuthorityInputs> = {}): LaneAuthorityInputs => ({
   requirements: [],
   laneAgents: [],
+  roster: EMPTY_ROLE_ROSTER,
   ...over,
+});
+
+/** A roster stub: role key → the ref of the strongest candidate for it. */
+const roster = (byRole: Record<string, string>): RoleRoster => ({
+  candidates: (roleKey) => {
+    const ref = byRole[roleKey];
+    return ref ? [{ kind: 'agent', ref, name: ref, via: 'role-keys' }] : [];
+  },
 });
 
 /**
@@ -49,18 +59,18 @@ describe('bindStaffedAgentsToRoles', () => {
     ({ roleKey, roleName: roleKey, agentRef: null, agentName: null, model: null });
 
   it('gives a required role the lane agent capable of it — the 405-ticket cohort', () => {
-    const [bound] = bindStaffedAgentsToRoles([approver('developer')], [agent()]);
+    const [bound] = bindStaffedAgentsToRoles([approver('developer')], [agent()], EMPTY_ROLE_ROSTER);
     expect(bound?.agentRef).toBe('bob-dev');
   });
 
-  it('leaves a role nobody on the lane is capable of UNBOUND rather than mis-binding it', () => {
-    const [bound] = bindStaffedAgentsToRoles([approver('architect')], [agent()]);
+  it('leaves a role NOBODY can perform unbound rather than mis-binding it', () => {
+    const [bound] = bindStaffedAgentsToRoles([approver('architect')], [agent()], EMPTY_ROLE_ROSTER);
     expect(bound?.agentRef).toBeNull();
   });
 
   it('never overwrites an agent the approver decision already resolved (tier b)', () => {
     const staffed = { ...approver('developer'), agentRef: 'already-picked' };
-    const [bound] = bindStaffedAgentsToRoles([staffed], [agent({ agentRef: 'someone-else' })]);
+    const [bound] = bindStaffedAgentsToRoles([staffed], [agent({ agentRef: 'someone-else' })], roster({ developer: 'from-roster' }));
     expect(bound?.agentRef).toBe('already-picked');
   });
 
@@ -68,7 +78,7 @@ describe('bindStaffedAgentsToRoles', () => {
     const [bound] = bindStaffedAgentsToRoles([approver('developer')], [
       agent({ agentRef: 'generalist', declaredRole: 'Architect', capableRoleKeys: ['developer', 'architect'], position: 0 }),
       agent({ agentRef: 'bob-dev', declaredRole: 'Developer', capableRoleKeys: ['developer'], position: 1 }),
-    ]);
+    ], EMPTY_ROLE_ROSTER);
     expect(bound?.agentRef).toBe('bob-dev');
   });
 
@@ -76,7 +86,7 @@ describe('bindStaffedAgentsToRoles', () => {
     const [bound] = bindStaffedAgentsToRoles([approver('developer')], [
       agent({ agentRef: 'second', declaredRole: null, position: 2 }),
       agent({ agentRef: 'first', declaredRole: null, position: 1 }),
-    ]);
+    ], EMPTY_ROLE_ROSTER);
     expect(bound?.agentRef).toBe('first');
   });
 
@@ -84,12 +94,33 @@ describe('bindStaffedAgentsToRoles', () => {
     const bound = bindStaffedAgentsToRoles(
       [approver('developer'), approver('code-reviewer')],
       [agent({ capableRoleKeys: ['developer', 'code-reviewer'] })],
+      EMPTY_ROLE_ROSTER,
     );
     expect(bound.map((b) => b.agentRef)).toEqual(['bob-dev', 'bob-dev']);
   });
 
-  it('is a no-op on an unstaffed lane, so an unstaffed stage still fails closed', () => {
-    expect(bindStaffedAgentsToRoles([approver('developer')], [])).toEqual([approver('developer')]);
+  /**
+   * THE 447-TICKET COHORT. Lane staffing was the ONLY binding source, and only 3 of 61
+   * auto-gated lanes carried any — so on 58 lanes no role could ever bind, whatever the
+   * workspace roster held, and every ticket on them classified `managed_no_role`.
+   */
+  it('falls back to the WORKSPACE ROSTER when the lane is unstaffed', () => {
+    const [bound] = bindStaffedAgentsToRoles(
+      [approver('business-analyst')], [], roster({ 'business-analyst': 'validator-t1' }),
+    );
+    expect(bound).toMatchObject({ agentRef: 'validator-t1', boundVia: 'roster', model: null });
+  });
+
+  it('prefers the lane\'s staffing over the roster — the operator\'s configuration wins', () => {
+    const [bound] = bindStaffedAgentsToRoles(
+      [approver('developer')], [agent()], roster({ developer: 'someone-on-the-roster' }),
+    );
+    expect(bound).toMatchObject({ agentRef: 'bob-dev', boundVia: 'lane_agent' });
+  });
+
+  it('still fails closed when neither the lane nor the roster can fill the role', () => {
+    expect(bindStaffedAgentsToRoles([approver('developer')], [], EMPTY_ROLE_ROSTER))
+      .toEqual([approver('developer')]);
   });
 });
 
