@@ -1591,29 +1591,22 @@ export async function runManagerForProject(
   // even on a pass whose discretionary stages were all shed. See
   // MANAGER_TRIAGE_RESERVE_MS for why an always-last stage on a plain deadline is a stage
   // that never runs at all.
-  if (budget.exhausted() || !rotation.mayRun('triage')) {
+  // The rotation is deliberately NOT consulted here: triage is yielded TO, never yielded
+  // (see YIELDABLE_STAGES). It runs whenever the reserve reaches it; the rotation's whole
+  // job is to make sure the reserve is still there when it does.
+  if (budget.exhausted()) {
     // Triage is the most valuable stage AND the most expensive, so it is the one that
     // must never be silently dropped. Say so explicitly on the register rather than
     // letting a truncated pass read as "nothing was stuck". Reaching here means even the
     // reserved slice was gone before the stage started — a genuinely overrun pass, not
     // the routine starvation the reserve exists to prevent.
-    //
-    // ROTATION-YIELDED is the OTHER way to arrive here and reads completely differently: a
-    // pass held for the PR stages that starved LAST pass has not overrun at all, and the
-    // journal must not tell a reader triage ran out of time when it deliberately gave up
-    // its turn. The two were indistinguishable for as long as there was only one reason.
-    const yielded = !rotation.mayRun('triage');
-    if (yielded) rotation.skip('triage');
     budget.shed('triage');
     await recordManagerAction(db, {
       tenantId, projectId, runTaskId, actionType: 'triage',
-      summary: yielded
-        ? `Stall triage yielded this pass to ${[...rotation.yieldTo].join(', ')}, which ran out of wall-clock last pass — it runs again on the next one.`
-        : `Stall triage skipped this pass — the whole ${Math.round(MANAGER_PASS_BUDGET_MS / 1000)}s pass budget, including the ${Math.round(MANAGER_TRIAGE_RESERVE_MS / 1000)}s reserved for triage, was already spent when it was reached.`,
+      summary: `Stall triage skipped this pass — the whole ${Math.round(MANAGER_PASS_BUDGET_MS / 1000)}s pass budget, including the ${Math.round(MANAGER_TRIAGE_RESERVE_MS / 1000)}s reserved for triage, was already spent when it was reached. The stages that overran it yield their turn on the next pass.`,
       detail: {
         budgetMs: MANAGER_PASS_BUDGET_MS, reserveMs: MANAGER_TRIAGE_RESERVE_MS,
         elapsedMs: budget.elapsedMs(), truncated: budget.truncated,
-        ...(yielded ? { yieldedTo: [...rotation.yieldTo] } : {}),
       },
     }).catch(() => undefined);
   } else {
