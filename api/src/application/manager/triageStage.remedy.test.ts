@@ -104,7 +104,17 @@ describe('applyRemedy — reset_breaker', () => {
 
   it('reports NOT applied when the dispatcher still refuses — the attempt did not happen', async () => {
     mockDispatch.mockResolvedValue(null);
-    expect(await run('reset_breaker')).toMatchObject({ applied: false, startedRun: false });
+    // `attempted` is asserted EXPLICITLY, not just `applied`. This invariant existed
+    // before `attempted` did, and was expressed only through `applied` — so when the two
+    // were split, a change that started counting quota refusals as attempts passed this
+    // file untouched. An invariant that names only one of two fields silently stops
+    // guarding the moment the second one appears.
+    //
+    // Why it matters: `force: true` has already overridden the breaker and the cooldown,
+    // so a null id here is the cloud-run allowance or token meter deferring the work.
+    // Counting it would spend the escalation ceiling on a transient condition and hand a
+    // human a ticket whose recovery was never actually tried.
+    expect(await run('reset_breaker')).toMatchObject({ attempted: false, applied: false, startedRun: false });
   });
 
   it('does nothing when a run is already live or no candidate resolves', async () => {
@@ -137,7 +147,7 @@ describe('applyRemedy — drive_signoff', () => {
       blockedDetail: 'The dispatcher refused to start Architect\'s review',
     });
     const result = await run('drive_signoff', { signoff: gate });
-    expect(result).toMatchObject({ applied: false, startedRun: false });
+    expect(result).toMatchObject({ attempted: false, applied: false, startedRun: false });
     expect(result.note).toContain('refused');
   });
 

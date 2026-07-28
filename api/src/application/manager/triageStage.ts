@@ -691,9 +691,21 @@ export async function applyRemedy(
 ): Promise<RemedyOutcome> {
   const { tenantId, projectId, task, policy } = args;
   const by = `manager:triage:${policy.managerRef ?? 'system'}`;
-  /** The remedy never ran — a cap or a policy refused it before it could act. */
+  /**
+   * The remedy never ran — a cap, a quota or a policy refused it before it could act.
+   *
+   * A refusal by the cloud-run allowance, the token meter or the re-run cooldown is
+   * INFRASTRUCTURE DEFERRING the remedy, not the remedy failing. Counting it would burn
+   * the escalation ceiling on transient conditions and hand a human a ticket whose
+   * reviewer was never actually asked.
+   */
   const nothing: RemedyOutcome = { attempted: false, applied: false, startedRun: false, note: '' };
-  /** The remedy RAN and changed nothing. That is a failed attempt, and it must count. */
+  /**
+   * The remedy RAN, against the real state of the world, and changed nothing — no agent
+   * is capable, no owner exists, the stage has no participant. That is a failed attempt
+   * and it must count: re-running it next pass meets the identical world and fails
+   * identically, which is exactly what the ceiling exists to stop.
+   */
   const ineffective: RemedyOutcome = { attempted: true, applied: false, startedRun: false, note: '' };
 
   switch (args.remedy) {
@@ -721,7 +733,8 @@ export async function applyRemedy(
       const started = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
         tenantId, projectId, taskId: task.id, status: task.status, submittedBy: by,
       }).catch(() => false);
-      return { attempted: true, applied: started, startedRun: started, note: started ? ' Started.' : '' };
+      // Starting IS the remedy — a trigger that declined has not attempted it.
+      return { attempted: started, applied: started, startedRun: started, note: started ? ' Started.' : '' };
     }
 
     case 'reset_breaker': {
@@ -769,8 +782,11 @@ export async function applyRemedy(
         },
       ).catch(() => null);
       await Promise.allSettled(deferred);
+      // A refusal here is a QUOTA refusal, not a failed recovery: `force: true` already
+      // overrode the breaker and the cooldown, so a null id means the cloud-run allowance
+      // or the token meter said no. That is deferral, so it is not an attempt.
       return {
-        attempted: true,
+        attempted: executionId != null,
         applied: executionId != null,
         startedRun: executionId != null,
         note: executionId != null ? ' Allowed one fresh attempt past the failure breaker.' : '',
@@ -830,8 +846,13 @@ export async function applyRemedy(
       const drive = await driveOutstandingSignoffs(env, db, runtimeService, {
         tenantId, projectId, task, signoff: args.signoff, managerRef: policy.managerRef,
       });
+      // Asking IS the remedy, so an ask that never went out is not an attempt — the
+      // dispatcher's refusal (cap / cooldown / breaker) is transient and would escalate a
+      // ticket nobody was ever asked about. The case this used to leave uncountable — a
+      // reviewer that IS asked and never answers — is now counted at the right layer, on
+      // the slot itself, by `attestRoleRun`.
       return {
-        attempted: true,
+        attempted: drive.asked.length > 0,
         applied: drive.asked.length > 0, startedRun: drive.asked.length > 0,
         note: drive.asked.length ? ` Asked ${drive.asked.join(', ')} to sign off.` : ` ${drive.blockedDetail}`.trimEnd(),
       };
@@ -862,7 +883,7 @@ export async function applyRemedy(
         tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS,
         submittedBy: `${by}:conflict-resolution`,
       }).catch(() => false);
-      return { attempted: true, applied: started, startedRun: started, note: started ? ' Started its agent to resolve the conflict.' : '' };
+      return { attempted: started, applied: started, startedRun: started, note: started ? ' Started its agent to resolve the conflict.' : '' };
     }
 
     default:
