@@ -2610,7 +2610,7 @@ const CATALOG: BuiltinTool[] = [
   },
   {
     tool: 'manager.decisions', mutates: false,
-    description: 'THE MANAGER\'S OWN DECISION FEED for one project, newest first — every action it journalled (prioritize, schedule, assign, score_value, dispatch, sync_pr, merge_pr, merge_blocked, flag, coordinate, triage, escalate, systemic) with the ticket it was about and the reason it recorded. This is the manager\'s work log: cite it when accounting for what you did, and read it before claiming a decision you cannot point at. An EMPTY feed for a period is itself the answer — it means no pass ran or every pass was a no-op.',
+    description: 'THE MANAGER\'S OWN DECISION FEED for one project, newest first — every action it journalled (prioritize, schedule, assign, score_value, dispatch, sync_pr, merge_pr, merge_failed, pr_conflict, merge_blocked, flag, coordinate, triage, escalate, systemic) with the ticket it was about and the reason it recorded. This is the manager\'s work log: cite it when accounting for what you did, and read it before claiming a decision you cannot point at. An EMPTY feed for a period is itself the answer — it means no pass ran or every pass was a no-op.',
     parameters: obj({ projectId: N, limit: N }, ['projectId']),
     run: async (ctx, a) => {
       const projectId = num(a.projectId);

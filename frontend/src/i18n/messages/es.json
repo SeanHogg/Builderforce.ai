@@ -6910,6 +6910,8 @@
       "coordinate": "Rol asignado",
       "schedule": "Planificado",
       "merge_blocked": "Fusión denegada",
+      "merge_failed": "Fusión rechazada",
+      "pr_conflict": "PR en conflicto",
       "triage": "Triado",
       "escalate": "Escalado",
       "systemic": "Hallazgo de plataforma"

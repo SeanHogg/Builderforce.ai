@@ -156,7 +156,12 @@ export const managerActions = pgTable('manager_actions', {
    *  role/reviewer) | 'merge_blocked' (0363: the PR is ready but the effective policy
    *  withholds merge authority — written once per PR, not once per pass) |
    *  'triage' (0367: a stalled ticket was diagnosed and its remedy applied) |
-   *  'escalate' (0367: the manager's own remedy stopped working and a human is needed). */
+   *  'escalate' (0367: the manager's own remedy stopped working and a human is needed) |
+   *  'merge_failed' (0381: the PROVIDER refused the merge — its own type because the
+   *  merge ceiling COUNTS these, and a refusal buried in 'flag' cannot be counted) |
+   *  'pr_conflict' (0381: the branch conflicts with its base — its own type because it
+   *  is the only record that the PR loop touched a conflicting PR, and the
+   *  least-recently-worked rotation orders by exactly that). */
   actionType: varchar('action_type', { length: 24 }).notNull(),
   summary:    text('summary').notNull(),
   /** Structured JSON payload for drill-in. */
