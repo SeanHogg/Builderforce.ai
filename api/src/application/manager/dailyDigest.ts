@@ -41,7 +41,7 @@
  * Pure summarisers are exported separately from the IO so the verdict is unit-testable
  * without a database.
  */
-import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, notInArray, or, sql, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -50,7 +50,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { ExecutionStatus } from '../../domain/shared/types';
+import { ExecutionStatus, NON_TERMINAL_TASK_STATUSES } from '../../domain/shared/types';
 import { liveExecution } from '../rehearsal/executionMode';
 import { notSystemTask, SYSTEM_TASK_SOURCE_MANAGER } from '../task/taskScope';
 import { resolveActorByRef, type ActorType } from '../activity/activityLog';
@@ -341,6 +341,17 @@ export async function computeDailyDigest(
       .catch(() => []),
 
     // 2. The concrete items, newest first. Bounded — the count above is the total.
+    //
+    //    The OWNER shown against each one is the actor that made the terminal hop, for
+    //    the same reason source 8 credits `shipped` that way: the assignee is the
+    //    Coordinator on a lifecycle-managed board, so naming it here would caption every
+    //    finished ticket with someone who did not do the work. One LATERAL over at most
+    //    SHIPPED_SAMPLE rows — bounded by construction, never a per-ticket round-trip.
+    //
+    //    Falls back to the assignee when the hop names no creditable actor (a bare
+    //    'system' stamp, or a row predating actor attribution in 0377): on an UNMANAGED
+    //    board the assignee genuinely is the person who did it, and losing that caption
+    //    would be a regression for every project that is not lifecycle-managed.
     db
       .select({
         id: tasks.id, key: tasks.key, title: tasks.title, completedAt: tasks.completedAt,
@@ -348,6 +359,20 @@ export async function computeDailyDigest(
         assignedUserId: tasks.assignedUserId,
         assignedAgentRef: tasks.assignedAgentRef,
         assignedAgentHostId: tasks.assignedAgentHostId,
+        finisherKind: sql<string | null>`(
+          select t.actor_kind from task_status_transitions t
+          where t.task_id = ${tasks.id}
+            and t.to_status not in (${sql.join(NON_TERMINAL_TASK_STATUSES.map((v) => sql`${v}`), sql`, `)})
+            and t.is_backward is not true
+          order by t.occurred_at desc limit 1
+        )`,
+        finisherRef: sql<string | null>`(
+          select t.actor_ref from task_status_transitions t
+          where t.task_id = ${tasks.id}
+            and t.to_status not in (${sql.join(NON_TERMINAL_TASK_STATUSES.map((v) => sql`${v}`), sql`, `)})
+            and t.is_backward is not true
+          order by t.occurred_at desc limit 1
+        )`,
       })
       .from(tasks)
       .where(and(
@@ -443,21 +468,47 @@ export async function computeDailyDigest(
       ))
       .catch(() => []),
 
-    // 8. Ownership of everything finished today (not just the sampled rows) — the
-    //    `shipped` column of the contributor table.
+    // 8. WHO FINISHED IT — the `shipped` column of the contributor table.
+    //
+    //    Credited to the actor who moved the ticket INTO its done lane, read from the
+    //    same `task_status_transitions.(actor_kind, actor_ref)` stamp that source 3
+    //    already trusts for `moves` — NOT from the ticket's assignee.
+    //
+    //    The assignee is the wrong answer on the board type this platform is built
+    //    around. On a LIFECYCLE-MANAGED board the assignee is the Coordinator, never the
+    //    executor — an invariant stated in `evaluateAutoRun`, `stallTriage` and
+    //    `systemicDiagnosis`, all of which warn that assigning an owner does not make
+    //    anyone able to work the ticket. Grouping finished tickets by that column
+    //    therefore credited every completion on such a board to ONE Coordinator row and
+    //    left every agent that actually did the work reading `0 finished` — beside its
+    //    own honest run count, because `runs` (source 4) attributes to
+    //    `executions.cloud_agent_ref` and `moves` (source 3) to the transition actor.
+    //    Two of the three columns already named the real actor; this one did not, and
+    //    the disagreement is what a reader sees as "0 finished, 4,404 runs".
+    //
+    //    The transition rows are the ticket's own terminal hop, so this stays one grouped
+    //    query — no join back to `tasks`, no per-ticket lookup. `is_backward` is excluded
+    //    because a hop OUT of done and back in must not pay twice.
     db
       .select({
-        assignedUserId: tasks.assignedUserId,
-        assignedAgentRef: tasks.assignedAgentRef,
-        assignedAgentHostId: tasks.assignedAgentHostId,
-        n: sql<number>`count(*)::int`,
+        actorKind: taskStatusTransitions.actorKind,
+        actorRef: taskStatusTransitions.actorRef,
+        n: sql<number>`count(distinct ${taskStatusTransitions.taskId})::int`,
       })
-      .from(tasks)
-      .where(and(
-        eq(tasks.projectId, projectId), eq(tasks.archived, false), notSystemTask,
-        gte(tasks.completedAt, w.start), lt(tasks.completedAt, w.end),
+      .from(taskStatusTransitions)
+      .where(scopedToTenant(
+        taskStatusTransitions, tenantId,
+        eq(taskStatusTransitions.projectId, projectId),
+        gte(taskStatusTransitions.occurredAt, w.start),
+        lt(taskStatusTransitions.occurredAt, w.end),
+        // "Terminal" through the SAME definition `isTerminalTaskStatus` uses — the
+        // complement of the non-terminal set — so a board that renames its done lane
+        // stays counted without a second list to keep in step.
+        notInArray(taskStatusTransitions.toStatus, NON_TERMINAL_TASK_STATUSES),
+        // A hop OUT of done and back in must not pay twice.
+        or(isNull(taskStatusTransitions.isBackward), eq(taskStatusTransitions.isBackward, false)),
       ))
-      .groupBy(tasks.assignedUserId, tasks.assignedAgentRef, tasks.assignedAgentHostId)
+      .groupBy(taskStatusTransitions.actorKind, taskStatusTransitions.actorRef)
       .catch(() => []),
 
     // 9. Escalation pressure: raised today, and the standing total still owed a human.
@@ -540,15 +591,19 @@ export async function computeDailyDigest(
     else if (e.agentHostId != null) bump('host_agent', String(e.agentHostId), { runs: c });
   }
 
-  for (const o of ownerRows as Array<{ assignedUserId: string | null; assignedAgentRef: string | null; assignedAgentHostId: number | null; n: number }>) {
+  // WHO FINISHED IT — the actor that made the terminal hop, through the SAME
+  // `contributorKind` mapping the lane-move credit above uses, so "who did this" has one
+  // answer across all three columns. Credited to the executor rather than the assignee;
+  // see source 8 for the board-type invariant that made the assignee the wrong column.
+  for (const o of ownerRows as Array<{ actorKind: string | null; actorRef: string | null; n: number }>) {
     const n = Number(o.n || 0);
     if (n <= 0) continue;
-    if (o.assignedUserId) bump('human', o.assignedUserId, { shipped: n });
-    else if (o.assignedAgentRef) bump('cloud_agent', o.assignedAgentRef, { shipped: n });
-    else if (o.assignedAgentHostId != null) bump('host_agent', String(o.assignedAgentHostId), { shipped: n });
-    // An unowned completion is real work with nobody to credit — counted in `shipped`
-    // above, deliberately absent from the contributor table rather than attributed to a
-    // fictional "Unassigned" member.
+    const kind = contributorKind(o.actorKind);
+    // A completion whose hop names no actor — a bare 'system' stamp, or a row written
+    // before actor attribution existed (0377) — is real work with nobody to credit. It
+    // still counts in the team's `shipped` total; it is deliberately absent from the
+    // contributor table rather than attributed to a fictional "Unassigned" member.
+    if (kind && o.actorRef) bump(kind, o.actorRef, { shipped: n });
   }
 
   const counts = (ticketCounts as Array<Record<string, number>>)[0] ?? {};
@@ -560,22 +615,32 @@ export async function computeDailyDigest(
   const shipped: DigestShippedTicket[] = (shippedRows as Array<{
     id: number; key: string; title: string; completedAt: Date | null; businessValue: number | null;
     assignedUserId: string | null; assignedAgentRef: string | null; assignedAgentHostId: number | null;
+    finisherKind: string | null; finisherRef: string | null;
   }>).map((r) => {
-    const ref = r.assignedUserId ?? r.assignedAgentRef ?? (r.assignedAgentHostId != null ? String(r.assignedAgentHostId) : null);
+    // WHO FINISHED IT first, the assignee only as the fallback — see source 2. On a
+    // lifecycle-managed board the assignee is the Coordinator, so preferring it would
+    // caption every row with someone who did not do the work.
+    const finisher = contributorKind(r.finisherKind);
+    const ref = (finisher && r.finisherRef)
+      ? r.finisherRef
+      : r.assignedUserId ?? r.assignedAgentRef ?? (r.assignedAgentHostId != null ? String(r.assignedAgentHostId) : null);
     if (ref) ownerRefs.set(r.id, ref);
+    const ownerKind: DigestOwnerKind = (finisher && r.finisherRef)
+      ? finisher
+      : r.assignedUserId
+        ? 'human'
+        : r.assignedAgentRef
+          ? 'cloud_agent'
+          : r.assignedAgentHostId != null
+            ? 'host_agent'
+            : 'unassigned';
     return {
       id: r.id,
       key: r.key,
       title: r.title,
       completedAt: (r.completedAt ?? w.start).toISOString(),
       ownerName: '',
-      ownerKind: r.assignedUserId
-        ? 'human'
-        : r.assignedAgentRef
-          ? 'cloud_agent'
-          : r.assignedAgentHostId != null
-            ? 'host_agent'
-            : 'unassigned',
+      ownerKind,
       businessValue: r.businessValue,
     };
   });
