@@ -333,6 +333,7 @@ const progressContainer: CSSProperties = {
 const progressBg: CSSProperties = {
   position: 'absolute',
   left: 0,
+  right: 0, // span the full track width, otherwise the unfilled remainder is invisible
   top: 0,
   bottom: 0,
   borderRadius: '999px',
