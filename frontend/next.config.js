@@ -124,6 +124,10 @@ const nextConfig = {
             // clickjacking, base-tag hijacking and plugin/object injection, while
             // permissive enough for what the app genuinely loads —
             //   • GTM/GA (script + connect + noscript frame)
+            //   • Cloudflare Web Analytics (static.cloudflareinsights.com/beacon.min.js) —
+            //     auto-injected by Cloudflare into responses from the deployed Worker,
+            //     so it is never in our source and must be allowlisted here or every
+            //     page logs a CSP violation. Its RUM POST is covered by `connect-src https:`.
             //   • Fontshare @import CSS (api.fontshare.com) + its font files (cdn.fontshare.com)
             //   • WASM + blob workers (onnxruntime-web, Monaco, transformers.js, WebContainer)
             //   • the in-browser IDE preview frames (*.webcontainer-api.io / *.staticblitz.com)
@@ -137,7 +141,7 @@ const nextConfig = {
               "base-uri 'self'",
               "object-src 'none'",
               "frame-ancestors 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://www.googletagmanager.com https://www.google-analytics.com https://ssl.google-analytics.com",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://www.googletagmanager.com https://www.google-analytics.com https://ssl.google-analytics.com https://static.cloudflareinsights.com",
               "style-src 'self' 'unsafe-inline' https://api.fontshare.com",
               "font-src 'self' data: https://cdn.fontshare.com https://api.fontshare.com",
               "img-src 'self' data: blob: https:",
