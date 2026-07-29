@@ -54,11 +54,11 @@ export interface LlmModelLists {
    *  so a superadmin or a BYO tenant is never shown a false paywall. */
   canUseFrontierModels: boolean;
   /** True when the tenant may select ANY paid OpenRouter model (billed at OpenRouter
-   *  cost + a flat 1¢/request). STRICTER than {@link canUseFrontierModels}: it needs a
-   *  paid plan AND a validated card, because premium routes on Builderforce's metered
-   *  key rather than the tenant's own. Mirrors the server's `evaluatePremiumModelAccess`. */
+   *  cost + a flat 1¢/request). STRICTER than {@link canUseFrontierModels}: it needs
+   *  billing details and a validated card, because premium routes on Builderforce's
+   *  metered key rather than the tenant's own. Subscription tier is independent. */
   canUsePremiumModels: boolean;
-  /** Why premium is (un)available + the exact unlock step ('upgrade' | 'validate_card')
+  /** Why premium is (un)available + the card-validation unlock step
    *  + the per-request surcharge. Undefined only on an older/failed payload. */
   premiumInfo?: PremiumModelInfo;
   /** The paid OpenRouter models premium unlocks, cheapest-first. Loaded from the cached

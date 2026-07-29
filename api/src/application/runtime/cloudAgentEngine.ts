@@ -1257,7 +1257,7 @@ export async function handleContainerOp(
       byoVendorPriority: containerCreds.vendorPriority,
       registeredOpenRouterModels: containerCreds.registeredOpenRouterModels,
       preferredRegisteredModel: containerCreds.preferredOpenRouterModel,
-      // Parity with the durable loop: a PREMIUM pin needs a paid plan + validated card.
+      // Parity with the durable loop: a PREMIUM pin needs a validated billing card.
       premiumEntitled: ctx.premiumEntitled,
     });
     const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(openaiCodexAuth ? { openaiCodexAuth } : {}), ...(xaiOAuthToken ? { xaiOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}), ...(containerCreds.vendorPriority.length ? { byoVendorPriority: containerCreds.vendorPriority } : {}), ...(containerCreds.providerPriorities?.length ? { byoProviderPriorities: containerCreds.providerPriorities } : {}), ...(containerCreds.openRouterConnections?.length ? { openRouterConnections: containerCreds.openRouterConnections } : {}), ...(containerCreds.openRouterModelKeys && Object.keys(containerCreds.openRouterModelKeys).length ? { openRouterModelKeys: containerCreds.openRouterModelKeys } : {}), ...(containerCreds.configuredProviders.length ? { byoRequired: true } : {}) }).complete({

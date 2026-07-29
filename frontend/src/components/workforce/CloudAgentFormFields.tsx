@@ -158,7 +158,7 @@ export function CloudAgentRuntimeFields({ form, onChange }: FieldGroupProps) {
           style={inputStyle}
         />
         <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('baseModelHelp')}</p>
-        {/* Renders only when premium is unlockable (paid plan + card, or upgrade) —
+        {/* Renders only when premium needs billing details/card validation —
             it decides its own visibility, so no entitlement prop-drilling here. */}
         <div style={{ marginTop: 10 }}><PremiumModelUnlock /></div>
       </div>
