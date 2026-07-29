@@ -53,15 +53,41 @@ import {
   stageSignoffFor, STALL_AFTER_MS, type StallInput,
 } from './stallTriage';
 import { loadOpenStalls, gradeStall, recordStall, resolveStalls, type OpenStall } from './stallWatch';
-import { createTickDispatchBudget, tenantDispatchReserver, type DispatchReserver } from '../runtime/tickDispatchBudget';
+import {
+  createTickDispatchBudget, tenantDispatchReserver, MAX_TENANT_DISPATCHES_PER_TICK,
+  type DispatchReserver,
+} from '../runtime/tickDispatchBudget';
 
 /**
- * How many stalled tickets one pass diagnoses in depth. Each costs several reads
- * (`evaluateTaskAutoRun` resolves lanes, staffing and live runs), and the manager
- * sweep runs this for up to 200 projects per tick, so the cap is what keeps a tick
- * bounded. Worst-first ordering means the cap delays coverage, never denies it.
+ * How many stalled tickets one pass diagnoses in depth — the CEILING, not the schedule.
+ *
+ * Each costs several reads (`evaluateTaskAutoRun` resolves lanes, staffing and live runs)
+ * and the sweep runs for up to 200 projects per tick, so this stage must stay bounded.
+ * It was bounded by COUNT alone, at 12, and the claim that "worst-first ordering means the
+ * cap delays coverage, never denies it" did not survive contact with a real backlog:
+ * measured on project 11, `confirmed by deep triage` sat at 300 of 673 (45%) pass after
+ * pass, and the surface reported the same "Unstuck 3 of 12 stalled tickets" decision every
+ * five minutes as a `decision_loop`. At 12 per pass, with two-thirds of each batch owed to
+ * the existing register, coverage of 673 tickets is not delayed — it converges to never.
+ *
+ * A count is the wrong bound anyway: what must stay bounded is TIME, and the pass already
+ * measures it. `runStallTriage` now takes the pass budget and stops between tickets
+ * ({@link TriageBudget}), exactly as the PR stages do, so this number is the ceiling for a
+ * pass with time to spare rather than the number every pass is held to. A tick that is
+ * running late still sheds the stage cleanly and says so.
  */
-export const MAX_TRIAGE_PER_RUN = 12;
+export const MAX_TRIAGE_PER_RUN = 60;
+
+/**
+ * The slice of the pass budget this stage needs — structural, so `PassBudget` satisfies it
+ * without triageStage importing ManagerService (which imports triageStage).
+ */
+export interface TriageBudget {
+  /** The RESERVED deadline. Triage is the reserve's beneficiary, so it is the one stage
+   *  that measures itself against the whole budget rather than the early cutoff. */
+  exhausted: () => boolean;
+  shed: (stage: string) => boolean;
+}
 
 /**
  * How much of each batch is RESERVED for tickets that have never been deep-triaged.
@@ -152,20 +178,27 @@ export function selectTriageBatch<T extends { task: { id: number }; idleMs: numb
 }
 
 /**
- * How many BILLABLE runs one triage pass may start, whatever it diagnoses.
+ * How much of the TENANT's per-tick run ceiling one project's triage may take.
  *
- * This cap is not cosmetic. Measured live: project 11 alone holds 662 stalled
- * tickets, 459 of them never executed. Without a ceiling, a remedy that starts a run
- * would fire {@link MAX_TRIAGE_PER_RUN} times per project per five-minute tick —
- * thousands of paid runs a day, spent re-attempting work that is stuck for reasons a
- * fresh run does not fix. Diagnosis is cheap and should be thorough; STARTING work is
- * expensive and must be deliberate, so the two are capped separately.
+ * The per-project cap exists for FAIRNESS, not for cost — cost is already bounded, hard,
+ * by {@link MAX_TENANT_DISPATCHES_PER_TICK} across every sweep in the tick. Written as a
+ * flat 3 it silently became a cost decision as well, and a bad one: a workspace with one
+ * active project could spend at most 3 of its 25 permitted runs per tick, leaving 22
+ * unused every five minutes while 673 tickets sat stalled. The surface reported the
+ * resulting "Unstuck 3 of 12 … max 3 new runs per pass", repeated verbatim every pass, as
+ * a `decision_loop` — which is exactly what a cap looks like when it is mistaken for a
+ * diagnosis.
  *
- * Every run started here is also counted into the pass summary's `dispatched`, which
- * is what the sweep reserves against the tenant's shared per-tick dispatch budget —
- * so triage cannot quietly spend budget the autonomous executor is also drawing on.
+ * As a SHARE, the two bounds say different things again: this one keeps a single project
+ * from monopolising a tick when several are active (0.4 leaves room for two more projects
+ * to be served in the same tick), while the tenant ceiling keeps the spend bounded. The
+ * workspace-wide worst case is unchanged — it was always 25 — so this widens what a busy
+ * project may claim without widening what the workspace may spend.
  */
-export const MAX_TRIAGE_DISPATCHES_PER_RUN = 3;
+export const TRIAGE_PROJECT_DISPATCH_SHARE = 0.4;
+
+export const MAX_TRIAGE_DISPATCHES_PER_RUN =
+  Math.max(3, Math.ceil(MAX_TENANT_DISPATCHES_PER_TICK * TRIAGE_PROJECT_DISPATCH_SHARE));
 
 /** Remedies whose whole effect is to START a run — the ones the dispatch cap governs. */
 const DISPATCHING_REMEDIES = new Set(['dispatch', 'reset_breaker', 'drive_signoff', 'resolve_conflict']);
@@ -430,6 +463,15 @@ export async function runStallTriage(
      * budget, so a direct call keeps standalone behaviour.
      */
     runs?: DispatchReserver;
+    /**
+     * The pass's WALL-CLOCK budget, checked between tickets and never mid-remedy.
+     *
+     * This is what makes {@link MAX_TRIAGE_PER_RUN} safe to raise: the batch is bounded by
+     * time first and by count second, so a pass with room diagnoses deeply and a pass
+     * that is already late stops cleanly instead of being evicted. Absent ⇒ unbounded by
+     * time, which keeps a direct/standalone call behaving exactly as before.
+     */
+    budget?: TriageBudget;
   },
 ): Promise<TriageOutcome> {
   const { tenantId, projectId, managed, policy } = ctx;
@@ -522,6 +564,18 @@ export async function runStallTriage(
   let hiresUsed = 0;
 
   for (const { task, idleMs } of batch) {
+    // BETWEEN tickets, never mid-remedy — the same rule the PR stages follow, so a
+    // diagnosis-and-remedy already begun always completes and shedding can never leave a
+    // half-applied action. `deferred` carries the rest to the next pass, which is what the
+    // journal then reports instead of silently diagnosing fewer tickets.
+    // `exhausted()`, NOT `over()`: the discretionary deadline fires EARLY by exactly the
+    // reserve this stage is the beneficiary of, so checking it here would make triage
+    // refuse to spend its own reservation and reproduce the starvation from the other end.
+    if (ctx.budget?.exhausted()) {
+      ctx.budget.shed('triage');
+      out.deferred += 1;
+      break;
+    }
     try {
       // 3. DIAGNOSE — ask the canonical evaluators, never re-derive their verdicts.
       // `env` serves the evaluator's workspace-token lookup through the read-through

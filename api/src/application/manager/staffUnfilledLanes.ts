@@ -37,7 +37,8 @@
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
-  decideManagedLaneAuthority, loadBoardLaneAuthorities, type LaneAuthorityInputs,
+  decideManagedLaneAuthority, loadBoardLaneAuthorities,
+  type LaneAuthorityInputs, type ManagedTaskScope,
 } from '../kanban/managedLaneRoles';
 import { MAX_HIRES_PER_PASS, staffUnfilledRole, type StaffingAction } from './staffUnfilledRole';
 
@@ -65,26 +66,81 @@ const EMPTY: LaneStaffingResult = { unfilledRoleKeys: [], filled: [], unfillable
 /**
  * Every role a board's lanes authorise that binds to NO agent. PURE.
  *
- * Scoped with an EMPTY task ({@link decideManagedLaneAuthority} filters requirements by
- * ticket type/condition) deliberately: a board-level sweep asks the unconditional
- * question, "which of this lane's roles can never bind?". A requirement that only applies
- * to security tickets is skipped here and left to the per-ticket remedy, so this step can
- * never hire for a role the board does not universally need.
+ * Scoped by the ticket SHAPES the board actually holds. The original version asked the
+ * unconditional question only — "which roles can never bind for a plain task?" — on the
+ * reasoning that a conditional requirement should be left to the per-ticket remedy so
+ * this step could never hire for a role the board does not universally need. That
+ * reasoning was wrong in one decisive way: the per-ticket remedy is capped and routinely
+ * shed, which is the whole reason this board-scope sweep exists. Deferring the
+ * conditional roles to it deferred them to nothing, and they were the ones actually
+ * blocking the board (see the comment in the body for the measurement).
  *
- * A role counts as unfilled only when EVERY approver slot carrying it is unbound: one lane
- * may authorise the same role twice, and binding it once is enough to dispatch.
+ * Hiring for a role no ticket needs is still impossible, because the shapes come from the
+ * board's own managed tickets: a role is probed only if some real ticket's type/action
+ * makes its requirement apply.
+ *
+ * A role counts as unfilled only when EVERY approver slot carrying it is unbound, under
+ * every shape: one lane may authorise the same role twice, and binding it once is enough
+ * to dispatch.
  */
-export function unfilledRolesForBoard(lanes: Iterable<LaneAuthorityInputs>): string[] {
+export function unfilledRolesForBoard(
+  lanes: Iterable<LaneAuthorityInputs>,
+  shapes: readonly ManagedTaskScope[] = [],
+): string[] {
+  // EVALUATE AGAINST THE TICKET SHAPES ACTUALLY ON THE BOARD, not one synthetic ticket.
+  //
+  // This used to ask `decideManagedLaneAuthority(inputs, {})` — a single empty task — and
+  // that silently hid a whole class of role. Lane requirements are filtered by
+  // `requirementApplies`, which scopes them by `ticketType` and by an optional `condition`
+  // (`is_security`, `has_ui_change`, `is_data_change`). Against `{}` the task type
+  // defaults to 'task' and the action type is undefined, so EVERY requirement scoped to
+  // another ticket type and EVERY conditional requirement evaluated false. Their roles
+  // were therefore never reported unfilled, never staffed, and never even named in the
+  // manager feed.
+  //
+  // The result was a board sweep that answered "everything binds" while the tickets said
+  // otherwise: project 11 held `managed_no_role` at 293 of 673 stalled tickets for days
+  // with only 3 `assign` decisions in a whole day, because a security ticket's reviewer
+  // or a frontend ticket's UI approver is invisible to a probe that is neither.
+  //
+  // The empty shape stays in the set so an unconditional requirement is still covered on
+  // a board with no tickets at all. The cross-product is small and pure — a few dozen
+  // lanes by a handful of distinct shapes, no IO — and the caller passes shapes it has
+  // already loaded.
+  const probes: ManagedTaskScope[] = [{}, ...shapes];
   const bound = new Set<string>();
   const unbound = new Set<string>();
   for (const inputs of lanes) {
-    const authority = decideManagedLaneAuthority(inputs, {});
-    for (const approver of authority.approvers) {
-      if (approver.agentRef) bound.add(approver.roleKey);
-      else unbound.add(approver.roleKey);
+    for (const shape of probes) {
+      const authority = decideManagedLaneAuthority(inputs, shape);
+      for (const approver of authority.approvers) {
+        if (approver.agentRef) bound.add(approver.roleKey);
+        else unbound.add(approver.roleKey);
+      }
     }
   }
+  // A role that binds under ANY shape is staffed — the agent is not shape-specific.
   return [...unbound].filter((roleKey) => !bound.has(roleKey)).sort();
+}
+
+/**
+ * The DISTINCT ticket shapes a board actually holds. PURE.
+ *
+ * Deduplicated because requirement applicability depends only on (taskType, actionType) —
+ * 678 tickets collapse to a handful of pairs, which is what keeps the probe above a
+ * trivial pure loop rather than a per-ticket sweep.
+ */
+export function distinctTaskShapes(
+  tasks: readonly { taskType?: string | null; actionType?: string | null }[],
+): ManagedTaskScope[] {
+  const seen = new Map<string, ManagedTaskScope>();
+  for (const t of tasks) {
+    const taskType = t.taskType ?? null;
+    const actionType = t.actionType ?? null;
+    const key = `${taskType ?? ''}|${actionType ?? ''}`;
+    if (!seen.has(key)) seen.set(key, { taskType, actionType });
+  }
+  return [...seen.values()];
 }
 
 /**
@@ -103,13 +159,17 @@ export async function staffUnfilledLanes(
     /** Hires already made this sweep, so the budget spans every project in the tick. */
     hiresUsed?: number;
     maxHires?: number;
+    /** The distinct ticket shapes on this board — see {@link unfilledRolesForBoard}.
+     *  The caller already holds the managed set, so this costs no query. Omitted ⇒ the
+     *  unconditional probe only, which is the pre-0382 behaviour. */
+    taskShapes?: readonly ManagedTaskScope[];
   },
 ): Promise<LaneStaffingResult> {
   try {
     const lanes = await loadBoardLaneAuthorities(db, {
       tenantId: args.tenantId, projectId: args.projectId, boardId: args.boardId, env,
     });
-    const unfilledRoleKeys = unfilledRolesForBoard(lanes.values());
+    const unfilledRoleKeys = unfilledRolesForBoard(lanes.values(), args.taskShapes ?? []);
     if (unfilledRoleKeys.length === 0) return EMPTY;
 
     const result: LaneStaffingResult = { unfilledRoleKeys, filled: [], unfillable: [], hires: 0 };

@@ -74,7 +74,7 @@ import { runStallTriage, loadBulkSignals, MAX_TRIAGE_DISPATCHES_PER_RUN } from '
 import { isActionExhausted, MAX_REMEDY_ATTEMPTS } from './stallTriage';
 import { computeStallCensus, invalidateStallCensus } from './stallCensus';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
-import { staffUnfilledLanes, describeLaneStaffing } from './staffUnfilledLanes';
+import { staffUnfilledLanes, describeLaneStaffing, distinctTaskShapes } from './staffUnfilledLanes';
 import { loadPassRotation, savePassRotation } from './passRotation';
 import { invalidateDailyDigest } from './dailyDigest';
 import { raiseSystemicFindings } from './systemicDiagnosis';
@@ -1003,6 +1003,12 @@ export async function runManagerForProject(
   if (board) {
     const laneStaffing = await staffUnfilledLanes(env, db, {
       tenantId, projectId, boardId: board.id, hiresUsed: 0,
+      // The board's OWN ticket shapes, from the managed set already in hand (0382).
+      // Without them the sweep probes a single synthetic plain task, and every
+      // requirement scoped to another ticket type or gated by a condition is invisible
+      // — which is how 293 tickets sat on `managed_no_role` while this stage reported
+      // nothing to do. Deduplicated to a handful of pairs, so it costs no query.
+      taskShapes: distinctTaskShapes(managed),
     });
     const staffingDetail = describeLaneStaffing(laneStaffing);
     if (staffingDetail) {
@@ -1447,6 +1453,11 @@ export async function runManagerForProject(
       // The tenant's shared tick ceiling, so triage cannot outspend the executor and the
       // other sweeps drawing on the same pool.
       runs,
+      // The pass's wall-clock budget (0382). Triage is the stage the reserve is held FOR,
+      // so it measures itself against `exhausted()` rather than the early discretionary
+      // cutoff — and with a time bound in place its per-pass ticket ceiling could be
+      // raised from 12 to 60 without risking an evicted Worker.
+      budget,
       policy: {
         requireSignoffToComplete: policy.requireSignoffToComplete,
         prMergePolicy: policy.prMergePolicy,
