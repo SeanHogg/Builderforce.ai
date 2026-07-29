@@ -440,15 +440,23 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   // POST /:id/reject — employer rejects, returning it to draft with a reason.
   router.post('/:id/reject', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
+    const actor = c.get('userId') as string;
     const id = c.req.param('id');
     let reason: string | null = null;
-    try { const b = await c.req.json<{ reason?: string }>(); reason = b.reason ?? null; } catch { /* optional */ }
+    try { const b = await c.req.json<{ reason?: string }>(); reason = b.reason?.trim() || null; } catch { /* optional */ }
+    // A rejection without a reason gives the contractor nothing to act on (FR-2.1).
+    if (!reason) return c.json({ error: 'reason is required to reject a timecard' }, 400);
+    const [current] = await sql(c.env)`SELECT id, status FROM timecards WHERE id = ${id} AND tenant_id = ${tenantId}`;
+    if (!current) return c.json({ error: 'Not found' }, 404);
+    if (current.status !== 'submitted') return c.json({ error: `Cannot reject a ${current.status} timecard`, code: 'INVALID_TRANSITION' }, 409);
+    // Return to draft so the worker can correct and resubmit (the resubmit path).
     const rows = await sql(c.env)`
       UPDATE timecards SET status = 'draft', reject_reason = ${reason}, submitted_at = NULL, updated_at = NOW()
       WHERE id = ${id} AND tenant_id = ${tenantId} AND status = 'submitted' RETURNING id, user_id
     `;
     const card = rows[0];
-    if (!card) return c.json({ error: 'Not found or not submitted' }, 404);
+    if (!card) return c.json({ error: 'Timecard is no longer submitted', code: 'INVALID_TRANSITION' }, 409);
+    await recordTimecardEvent(sql(c.env), id, 'submitted', 'rejected', actor, 'client', { reason });
     await notify(sql(c.env), c.env, { userId: card.user_id as string, tenantId, kind: 'timecard_rejected', title: 'Your timecard was returned', body: reason, ref: id });
     return c.json({ ok: true, status: 'draft' });
   });
