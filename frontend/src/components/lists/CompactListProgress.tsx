@@ -85,6 +85,35 @@ export const STATUS_ICONS: Record<ProgressItem['status'], string> = {
   blocked: '⚠',
 };
 
+/** Rank used by `sortBy="status"`, following the lifecycle order in FR-4. */
+const STATUS_ORDER: Record<ProgressItem['status'], number> = {
+  not_started: 0,
+  in_progress: 1,
+  completed: 2,
+  blocked: 3,
+};
+
+/**
+ * Apply {@link SortBy} without mutating the caller's array (FR-5). Undefined `sortBy`
+ * preserves the data source's order. `Array.prototype.sort` is stable per spec, so ties
+ * keep their incoming relative order.
+ */
+export function sortItems(items: readonly ProgressItem[], sortBy?: SortBy): ProgressItem[] {
+  const next = [...items];
+  switch (sortBy) {
+    case 'progress_desc':
+      return next.sort((a, b) => toPercent(b.completed, b.total) - toPercent(a.completed, a.total));
+    case 'progress_asc':
+      return next.sort((a, b) => toPercent(a.completed, a.total) - toPercent(b.completed, b.total));
+    case 'status':
+      return next.sort((a, b) => (STATUS_ORDER[a.status] ?? 0) - (STATUS_ORDER[b.status] ?? 0));
+    case 'label_asc':
+      return next.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+    default:
+      return next;
+  }
+}
+
 /** Design-token colour per status (FR-4). Unknown values fall back to the neutral token. */
 export function getColorByStatus(status: string): CSSProperties['color'] {
   switch (status) {
