@@ -1,8 +1,14 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   createPassBudget, finalizeManagerRunTask, MANAGER_PASS_BUDGET_MS, MANAGER_TRIAGE_RESERVE_MS,
   MIN_DISPATCH_WINDOW_MS, type ManagerRunSummary,
 } from './ManagerService';
+import {
+  MAX_TRIAGE_PER_RUN, MAX_TRIAGE_DISPATCHES_PER_RUN, TRIAGE_DISCOVERY_SHARE,
+} from './triageStage';
+import { MAX_TENANT_DISPATCHES_PER_TICK } from '../runtime/tickDispatchBudget';
 
 /**
  * THE EVICTION. A manager pass runs inside ONE Worker invocation. On project 11 (673
@@ -202,5 +208,93 @@ describe('a truncated pass still closes, and names what it deferred', () => {
     const { db, writes } = stubDb();
     await finalizeManagerRunTask(db, { taskId: 1031, summary: summary([]), ok: true });
     expect(String(writes[0]!.description)).not.toContain('deferred');
+  });
+});
+
+/**
+ * THE CAPS THAT COULD NOT DRAIN A BACKLOG (0382).
+ *
+ * Two flat numbers, each defensible alone, together guaranteeing that a large backlog
+ * never converged. Measured on project 11: 673 stalled tickets, `confirmed by deep triage`
+ * pinned at 300 (45%) pass after pass, and the identical decision — "Unstuck 3 of 12
+ * stalled tickets this pass — 8 waiting for the next one (max 3 new runs per pass)" —
+ * journalled every five minutes and reported by the diagnostics as a `decision_loop`. It
+ * was never a loop. It was two ceilings being mistaken for a diagnosis.
+ */
+describe('triage caps (0382)', () => {
+  it('bounds DIAGNOSIS by time, with the count as a ceiling rather than the schedule', () => {
+    // 12 could not converge: two-thirds of every batch is owed to the existing register
+    // (TRIAGE_DISCOVERY_SHARE), so roughly 4 new tickets per pass against 673 stalled
+    // means the register recirculates faster than discovery advances.
+    expect(MAX_TRIAGE_PER_RUN).toBeGreaterThanOrEqual(60);
+    const perPassDiscovery = Math.floor(MAX_TRIAGE_PER_RUN * TRIAGE_DISCOVERY_SHARE);
+    expect(perPassDiscovery).toBeGreaterThanOrEqual(20);
+  });
+
+  it('checks the RESERVED deadline, not the discretionary one', () => {
+    // `over()` fires early by exactly the reserve triage is the beneficiary of. A triage
+    // loop that checked it would refuse to spend its own reservation — the same
+    // starvation, entered from the other side.
+    const budget = createPassBudget(Date.now() - 15_000, 20_000, 6_000);
+    expect(budget.over()).toBe(true);        // discretionary window (14s) is gone…
+    expect(budget.exhausted()).toBe(false);  // …but triage's reserve is not.
+  });
+
+  it('lets one project claim a real share of the tenant tick, not a fixed 3', () => {
+    // The per-project cap is FAIRNESS; cost is bounded by the tenant ceiling. At a flat 3
+    // a workspace with one active project left 22 of its 25 permitted runs unused every
+    // tick while the backlog sat.
+    expect(MAX_TRIAGE_DISPATCHES_PER_RUN).toBeGreaterThan(3);
+    expect(MAX_TRIAGE_DISPATCHES_PER_RUN).toBeLessThanOrEqual(MAX_TENANT_DISPATCHES_PER_TICK);
+  });
+
+  it('still leaves room for other projects in the same tick', () => {
+    // A share, not the whole budget: at 0.4 at least two more projects can be served
+    // before the tenant ceiling binds, so one busy board cannot monopolise a tick.
+    expect(MAX_TRIAGE_DISPATCHES_PER_RUN * 2).toBeLessThanOrEqual(MAX_TENANT_DISPATCHES_PER_TICK);
+  });
+
+  it('does NOT widen what the workspace may spend — the tenant ceiling is unchanged', () => {
+    // The honest statement of the cost change: a project may now claim more of a budget
+    // that was always 25, and the reserver still refuses past it.
+    expect(MAX_TENANT_DISPATCHES_PER_TICK).toBe(25);
+  });
+});
+
+/**
+ * The guard itself. A source assertion, deliberately: `runStallTriage` reaches the loop
+ * only through `evaluateTaskAutoRun`, the stall register and four dispatchers, so a
+ * behavioural test of a five-line `if` at the top of the loop would be a test of the
+ * mocks. What can silently regress is the SHAPE — checking the wrong deadline, or checking
+ * it in the wrong place — and that is exactly what the text pins.
+ */
+describe('the triage budget guard', () => {
+  const source = readFileSync(
+    fileURLToPath(new URL('./triageStage.ts', import.meta.url).href),
+    'utf8',
+  );
+
+  it('checks the reserved deadline, sheds the stage, and defers the remainder', () => {
+    expect(source).toMatch(/if \(ctx\.budget\?\.exhausted\(\)\) \{/);
+    expect(source).toMatch(/ctx\.budget\.shed\('triage'\);/);
+    // The remainder must be REPORTED. A pass that ran out of time and said nothing is
+    // indistinguishable from a pass that found nothing wrong — the exact ambiguity the
+    // manager surface already struggles with.
+    expect(source).toMatch(/out\.deferred \+= 1;/);
+  });
+
+  it('guards BETWEEN tickets, never mid-remedy', () => {
+    // The check must precede the try block, so a diagnosis-and-remedy already begun
+    // always completes and shedding can never leave a half-applied action.
+    const loop = source.indexOf('for (const { task, idleMs } of batch) {');
+    const guard = source.indexOf('ctx.budget?.exhausted()', loop);
+    const tryBlock = source.indexOf('try {', loop);
+    expect(loop).toBeGreaterThan(-1);
+    expect(guard).toBeGreaterThan(loop);
+    expect(guard).toBeLessThan(tryBlock);
+  });
+
+  it('is optional, so a standalone caller keeps its old unbounded behaviour', () => {
+    expect(source).toMatch(/budget\?: TriageBudget;/);
   });
 });

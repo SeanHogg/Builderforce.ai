@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-07-29 — ✅ RESOLVED: the 293-ticket `managed_no_role` cohort, and the two caps that could not drain a backlog (api 2026.7.180)
+
+Three roadmap entries closed, none of which needed the live data they were logged as blocked on. **The `managed_no_role` blocker was my own misdiagnosis** — I logged it as needing the live decision feed to name the unfillable role keys. It did not. The cause was readable in the source.
+
+### 1 · The board sweep was blind to exactly the roles that were blocking the board
+
+`staffUnfilledLanes` runs every pass, is never shed, and fixes this cause at project scope — and it reported **nothing to do** while `managed_no_role` held 293 of 673 stalled tickets for days, with 3 `assign` decisions against 3,940 total in a day.
+
+It probed lane authority with ONE synthetic empty task. `decideManagedLaneAuthority` filters requirements through `requirementApplies`, which scopes them by `ticketType` and by a `condition` (`is_security` / `has_ui_change` / `is_data_change`). Against `{}` the ticket type defaults to `'task'` and the action type is undefined — so **every requirement scoped to another ticket type and every conditional requirement evaluated false**. Their roles were never reported unfilled, never staffed, never even named. A real security ticket or `frontend_ui` ticket authorises precisely those roles, finds no agent, and the dispatcher refuses. The board said "everything binds"; the tickets said "no role can execute this stage"; both were reading the same table through different probes.
+
+The sweep now probes the ticket SHAPES the board actually holds, deduplicated to a handful of `(taskType, actionType)` pairs from the managed set already in hand — **no extra query**. Hiring for a role no ticket needs remains impossible, because a role is only probed if some real ticket makes its requirement apply. The original comment argued conditional roles should be left to the per-ticket remedy; that remedy is capped and routinely shed, which is the whole reason the board-scope sweep exists, so deferring to it deferred them to nothing.
+
+### 2 · Diagnosis was bounded by a count that could not converge
+
+`MAX_TRIAGE_PER_RUN` was 12, with two-thirds of each batch owed to the existing register — roughly 4 new tickets a pass against 673 stalled. `confirmed by deep triage` sat at 300 (45%) pass after pass and the diagnostics reported the identical decision every five minutes as a `decision_loop`. It was never a loop; it was a ceiling mistaken for a diagnosis.
+
+A count was the wrong bound: what must stay bounded is TIME, and the pass already measures it. `runStallTriage` now takes the pass budget and stops **between tickets** (never mid-remedy, so shedding cannot leave a half-applied action), reporting the remainder as `deferred` rather than silently diagnosing less. With a time bound in place the ceiling is raised 12 → 60. It checks `exhausted()` and not `over()` — the discretionary deadline fires early by exactly the reserve triage is the beneficiary of, so checking it would make the stage refuse its own reservation and reproduce the starvation from the other end.
+
+### 3 · The billable cap was fairness written as a cost decision
+
+`MAX_TRIAGE_DISPATCHES_PER_RUN` was a flat 3 while `MAX_TENANT_DISPATCHES_PER_TICK` — the real, hard cost bound across every sweep in the tick — is 25. A workspace with one active project could spend 3 of its 25 permitted runs and leave **22 unused every five minutes** with 673 tickets stalled. It is now a SHARE of the tenant ceiling (0.4 → 10), which keeps one project from monopolising a tick when several are active while letting a busy one actually claim what it was always allowed. **The workspace-wide worst case is unchanged at 25** — this widens what a project may claim, not what the workspace may spend.
+
+### Also closed
+A third entry I logged this session — "a never-answering reviewer burns its ask budget before `attestRoleRun` recognises it" — is **removed as a false premise**: it proposed validating the ask against the agent's advertised tools, but `kanban.signoff` **is** on `CLOUD_AGENT_PLATFORM_TOOLS`, so that check would find nothing. Its one true remainder (the per-agent verdict-compliance MISS RATE) was already a pre-existing register entry, so mine was a duplicate.
+
+Files: `api/src/application/manager/{staffUnfilledLanes,triageStage,ManagerService}.ts` (+ tests).
+
+**Verified:** API `4154 passed`, `tsgo --noEmit` clean, all structural guards green. Coverage pins the defect explicitly — the old empty-probe behaviour is asserted as a named test so the regression is visible, alongside conditional/type-scoped roles being found from real shapes, a role no ticket needs still being refused, a role binding under any shape counting as filled, the budget guard's placement before the try block, and the dispatch share staying inside the tenant ceiling with room for other projects.
+
+---
+
 ## 2026-07-29 — ✅ RESOLVED: a merge finished tickets ANONYMOUSLY, so "0 finished" survived the attribution fix (api 2026.7.179 · frontend 2026.7.139)
 
 **The board moved for the first time** — 5 tickets finished, 3 PRs merged, `merge_failed`/`pr_conflict` counting, the `awaiting_signoff` cohort gone from the census and its platform finding auto-closed. And every one of the six agents *still* read `finished=0`, beside 5,090 runs for Bob Developer. The previous fix made the digest read the terminal-hop actor instead of the assignee; the column it now reads was **empty**.
