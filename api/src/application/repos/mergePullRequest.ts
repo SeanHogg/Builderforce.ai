@@ -43,6 +43,16 @@ export function normalizeMergeMethod(v: unknown): MergeMethod {
   return typeof v === 'string' && VALID_METHODS.has(v as MergeMethod) ? (v as MergeMethod) : 'squash';
 }
 
+/**
+ * GitHub reports several distinct merge blockers with the same HTTP 405 status.
+ * Keep content conflicts separate from policy/review blockers: callers can repair
+ * a conflict by sending the ticket agent back to the branch, while retrying a
+ * branch-rule failure cannot make progress.
+ */
+export function isMergeConflictMessage(message: string): boolean {
+  return /\bmerge conflicts?\b|\bhas conflicts?\b|\bconflicting files?\b|\bconflicts? must be resolved\b/i.test(message);
+}
+
 /** Build the provider-specific merge request (URL + method + body). Pure +
  *  exported so the per-provider request construction is unit-testable without a
  *  live API. Endpoints per each provider's documented PR-merge API. */
@@ -150,14 +160,23 @@ export async function mergePullRequest(input: MergePrInput): Promise<MergePrResu
   // surfaces a 409 the UI can explain. GitHub 405 / GitLab 405-406 = not
   // mergeable; 409 (all) = head moved / conflict.
   const text = await res.text().catch(() => '');
+  const providerMessage = extractProviderMessage(text);
+  if (
+    res.status === 409
+    || ([405, 406, 422].includes(res.status) && isMergeConflictMessage(providerMessage))
+  ) {
+    return {
+      ok: false,
+      code: 'conflict',
+      reason: `merge conflict${providerMessage ? `: ${providerMessage}` : ''}`,
+    };
+  }
   if (res.status === 405 || res.status === 406) {
-    const providerMessage = extractProviderMessage(text);
     const reason = input.provider === 'github'
       ? `GitHub could not merge this pull request${providerMessage ? `: ${providerMessage}` : ''}. Check for merge conflicts, draft status, required checks or reviews, branch rules or merge-queue requirements, and whether '${normalizeMergeMethod(input.method)}' merges are enabled. Open the pull request on GitHub for the exact blocker.`
       : `The pull request is not mergeable${providerMessage ? `: ${providerMessage}` : ''}. Check the provider for unresolved merge requirements.`;
     return { ok: false, code: 'not_mergeable', reason };
   }
-  if (res.status === 409) return { ok: false, code: 'conflict', reason: `merge conflict: ${text.slice(0, 200)}` };
   return { ok: false, code: 'provider_error', reason: `${input.provider} ${res.status}: ${text.slice(0, 200)}` };
 }
 
