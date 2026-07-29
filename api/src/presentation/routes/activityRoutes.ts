@@ -180,6 +180,27 @@ export function createActivityRoutes(db: Db): Hono<HonoEnv> {
   return router;
 }
 
+/** Append a state-transition row to the timecard audit log (FR-6.2 / AC-8).
+ *  Best-effort: an audit write must never fail the transition it records. */
+async function recordTimecardEvent(
+  sql: NeonQueryFunction<false, false>,
+  timecardId: string,
+  fromStatus: string,
+  toStatus: string,
+  actorId: string,
+  actorRole: 'contractor' | 'client' | 'admin',
+  metadata?: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await sql`
+      INSERT INTO timecard_events (timecard_id, from_status, to_status, actor_id, actor_role, metadata)
+      VALUES (${timecardId}, ${fromStatus}, ${toStatus}, ${actorId}, ${actorRole}, ${metadata ? JSON.stringify(metadata) : null})
+    `;
+  } catch (err) {
+    console.warn('[timecard] audit event write failed', { timecardId, toStatus, err });
+  }
+}
+
 export function createTimecardRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   const sql = (env: HonoEnv['Bindings']) => neon(env.NEON_DATABASE_URL);
