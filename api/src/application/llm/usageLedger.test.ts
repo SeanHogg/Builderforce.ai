@@ -5,6 +5,8 @@ import {
   sanitizeUsage,
   resolvePaidOverflowCapMillicents,
   DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS,
+  computeRecordedCostMillicents,
+  PREMIUM_REQUEST_SURCHARGE_MILLICENTS,
 } from './usageLedger';
 
 describe('resolvePaidOverflowCapMillicents', () => {
@@ -25,6 +27,21 @@ describe('resolvePaidOverflowCapMillicents', () => {
   it('honours an explicit non-negative override over the plan default', () => {
     expect(resolvePaidOverflowCapMillicents(0, 'free')).toBe(0);
     expect(resolvePaidOverflowCapMillicents(250_000, 'pro')).toBe(250_000);
+  });
+});
+
+describe('OpenRouter platform surcharge', () => {
+  const usage = { promptTokens: 1000, completionTokens: 500, totalTokens: 1500 };
+  const pricing = { prompt: 1e-6, completion: 2e-6 };
+
+  it('adds one cent on top of managed-key token cost', () => {
+    expect(computeRecordedCostMillicents(pricing, usage, false, true))
+      .toBe(200 + PREMIUM_REQUEST_SURCHARGE_MILLICENTS);
+  });
+
+  it('still charges one cent when the tenant key paid the token cost', () => {
+    expect(computeRecordedCostMillicents(pricing, usage, true, true))
+      .toBe(PREMIUM_REQUEST_SURCHARGE_MILLICENTS);
   });
 });
 

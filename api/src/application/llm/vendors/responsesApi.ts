@@ -43,6 +43,12 @@ export interface ResponsesBodyOptions {
    * the Codex vendor only; every other Responses vendor keeps the cap.
    */
   omitMaxOutputTokens?: boolean;
+  /**
+   * Encode instructions and tools as leading input items instead of the legacy
+   * top-level fields. Current Codex 5.6 models use this "Responses Lite"
+   * contract and reject the classic shape even for a valid ChatGPT account.
+   */
+  responsesLite?: boolean;
 }
 
 /** Flatten a chat-completions `{ type:'function', function:{…} }` tool to the Responses
@@ -124,12 +130,27 @@ export function buildResponsesBody(params: VendorCallParams, opts?: ResponsesBod
   const maxOutputTokens = opts?.omitMaxOutputTokens || !params.maxTokens
     ? undefined
     : Math.max(params.maxTokens, MIN_OUTPUT_TOKENS);
+  const instructions = toInstructions(params.messages);
+  const input = toInput(params.messages);
+  const encodedInput = opts?.responsesLite
+    ? [
+        { type: 'additional_tools', role: 'developer', tools: tools ?? [] },
+        {
+          type: 'message',
+          role: 'developer',
+          content: [{ type: 'input_text', text: instructions }],
+        },
+        ...input.map((item) => item.role && item.content && !item.type
+          ? { type: 'message', ...item }
+          : item),
+      ]
+    : input;
   return {
     model: params.model,
-    instructions: toInstructions(params.messages),
-    input: toInput(params.messages),
+    ...(!opts?.responsesLite ? { instructions } : {}),
+    input: encodedInput,
     store: false,
-    ...(tools ? { tools } : {}),
+    ...(!opts?.responsesLite && tools ? { tools } : {}),
     ...(toolChoice ? { tool_choice: toolChoice } : {}),
     ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}),
     ...opts?.extra,

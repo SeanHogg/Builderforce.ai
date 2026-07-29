@@ -782,6 +782,7 @@ export async function recordCloudUsage(
      *  OpenRouter cost, i.e. the surcharge silently lost on this surface. */
     effectivePlan?: 'free' | 'pro' | 'teams';
     premiumOverride?: boolean;
+    platformSurcharge?: boolean;
   },
 ): Promise<void> {
   // Clamp at the boundary so a bad-usage turn (NaN/negative tokens) can't poison the
@@ -826,9 +827,9 @@ export async function recordCloudUsage(
     // cloud surface too — the same rule the gateway route applies, so a premium model
     // costs the same whether a chat or an autonomous run drove it. BYO rows are $0 to
     // us, so recordUsageRow skips the surcharge for them.
-    premiumSurcharge: args.effectivePlan
+    premiumSurcharge: args.platformSurcharge === true || (args.effectivePlan
       ? isPremiumModelSelection(args.model, args.effectivePlan, args.premiumOverride ?? false)
-      : false,
+      : false),
   });
 }
 
@@ -1021,6 +1022,7 @@ async function recordCloudLlmTurn(
       inputTokens: result.usage.promptTokens ?? 0, outputTokens: result.usage.completionTokens ?? 0,
       byo: result.byoFunded ?? false,
       byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
+      platformSurcharge: result.platformSurcharge,
     });
   }
   const durationMs = Date.now() - opts.tGen0;
@@ -1253,10 +1255,12 @@ export async function handleContainerOp(
       byoVendors: byoVendorIdsFromCredentials(containerCreds),
       // Tenant BYO precedence — lead with the owner's chosen account (e.g. Meta first).
       byoVendorPriority: containerCreds.vendorPriority,
+      registeredOpenRouterModels: containerCreds.registeredOpenRouterModels,
+      preferredRegisteredModel: containerCreds.preferredOpenRouterModel,
       // Parity with the durable loop: a PREMIUM pin needs a paid plan + validated card.
       premiumEntitled: ctx.premiumEntitled,
     });
-    const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(openaiCodexAuth ? { openaiCodexAuth } : {}), ...(xaiOAuthToken ? { xaiOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}), ...(containerCreds.vendorPriority.length ? { byoVendorPriority: containerCreds.vendorPriority } : {}), ...(containerCreds.configuredProviders.length ? { byoRequired: true } : {}) }).complete({
+    const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(openaiCodexAuth ? { openaiCodexAuth } : {}), ...(xaiOAuthToken ? { xaiOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}), ...(containerCreds.vendorPriority.length ? { byoVendorPriority: containerCreds.vendorPriority } : {}), ...(containerCreds.providerPriorities?.length ? { byoProviderPriorities: containerCreds.providerPriorities } : {}), ...(containerCreds.openRouterConnections?.length ? { openRouterConnections: containerCreds.openRouterConnections } : {}), ...(containerCreds.openRouterModelKeys && Object.keys(containerCreds.openRouterModelKeys).length ? { openRouterModelKeys: containerCreds.openRouterModelKeys } : {}), ...(containerCreds.configuredProviders.length ? { byoRequired: true } : {}) }).complete({
       messages: sendMessages as unknown as ChatMessage[], tools: containerTools, tool_choice: 'auto',
       ...(pick.model ? { model: pick.model, ...(pick.strict ? { modelStrict: true } : {}) } : {}),
       // Personality temperature — parity with the Worker/DO loop.
@@ -1843,7 +1847,7 @@ export async function runCloudToolLoop(
   // `codingOnly` keeps the failover cascade inside the curated coding pool, so an
   // exhausted free run escalates to the paid coding backstop instead of degrading
   // onto a non-coder (gemini-flash-lite) or a tool-unreliable vendor (Ollama).
-  const proxy = llmProxyForPlan(env, routing.effectivePlan, routing.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(openaiCodexAuth ? { openaiCodexAuth } : {}), ...(xaiOAuthToken ? { xaiOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}), ...(loopCreds.vendorPriority.length ? { byoVendorPriority: loopCreds.vendorPriority } : {}), ...(loopCreds.configuredProviders.length ? { byoRequired: true } : {}) });
+  const proxy = llmProxyForPlan(env, routing.effectivePlan, routing.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(openaiCodexAuth ? { openaiCodexAuth } : {}), ...(xaiOAuthToken ? { xaiOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}), ...(loopCreds.vendorPriority.length ? { byoVendorPriority: loopCreds.vendorPriority } : {}), ...(loopCreds.providerPriorities?.length ? { byoProviderPriorities: loopCreds.providerPriorities } : {}), ...(loopCreds.openRouterConnections?.length ? { openRouterConnections: loopCreds.openRouterConnections } : {}), ...(loopCreds.openRouterModelKeys && Object.keys(loopCreds.openRouterModelKeys).length ? { openRouterModelKeys: loopCreds.openRouterModelKeys } : {}), ...(loopCreds.configuredProviders.length ? { byoRequired: true } : {}) });
 
   // Per-run model pin. A coding agent must drive the WHOLE task on one model, not
   // hop between pool models per turn (the gateway's round-robin cursor would
@@ -1883,6 +1887,8 @@ export async function runCloudToolLoop(
         byoVendors: byoVendorIdsFromCredentials(loopCreds),
         // Tenant BYO precedence — lead with the owner's chosen account (e.g. Meta first).
         byoVendorPriority: loopCreds.vendorPriority,
+        registeredOpenRouterModels: loopCreds.registeredOpenRouterModels,
+        preferredRegisteredModel: loopCreds.preferredOpenRouterModel,
         // A PREMIUM pin is honoured only with a paid plan + a validated card; otherwise
         // it's ignored and the run uses the plan's coding default.
         premiumEntitled: routing.premiumEntitled,

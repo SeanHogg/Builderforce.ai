@@ -88,6 +88,9 @@ export async function tenantProxyForPlan(
       configuredProviders: [],
       unresolvedReasons: {},
       vendorPriority: [],
+      providerPriorities: [],
+      openRouterConnections: [],
+      openRouterModelKeys: {},
     })),
   ]);
 
@@ -104,6 +107,9 @@ export async function tenantProxyForPlan(
     ...(creds.xaiOAuthToken ? { xaiOAuthToken: creds.xaiOAuthToken } : {}),
     ...(hasVendorKeys(creds.vendorKeys) ? { tenantVendorKeys: creds.vendorKeys } : {}),
     ...(creds.vendorPriority.length ? { byoVendorPriority: creds.vendorPriority } : {}),
+    ...(creds.providerPriorities?.length ? { byoProviderPriorities: creds.providerPriorities } : {}),
+    ...(creds.openRouterConnections?.length ? { openRouterConnections: creds.openRouterConnections } : {}),
+    ...(creds.openRouterModelKeys && Object.keys(creds.openRouterModelKeys).length ? { openRouterModelKeys: creds.openRouterModelKeys } : {}),
     ...(creds.configuredProviders.length ? { byoRequired: true } : {}),
     // Carry configured-vs-resolved state into the proxy so a fail-closed BYO 503 can
     // NAME the providers (and why each was unusable) rather than claiming none exists —

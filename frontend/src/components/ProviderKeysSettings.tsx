@@ -6,7 +6,19 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { useToast } from '@/components/ToastProvider';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { ConsumptionMeterCard } from '@/components/UsageMeter';
-import { llmApi, providerKeysApi, type LlmUsageStats, type ProviderAuthAlert, type ProviderAuthType, type ProviderDiagnostic, type LlmProvider } from '@/lib/builderforceApi';
+import {
+  llmApi,
+  openRouterConnectionsApi,
+  providerKeysApi,
+  type ByoPrecedenceEntry,
+  type LlmUsageStats,
+  type OpenRouterCatalogModel,
+  type OpenRouterConnection,
+  type ProviderAuthAlert,
+  type ProviderAuthType,
+  type ProviderDiagnostic,
+  type LlmProvider,
+} from '@/lib/builderforceApi';
 
 /**
  * BYO (bring-your-own-provider) credentials. A workspace owner connects their OWN
@@ -93,11 +105,13 @@ const PROVIDER_LABEL: Record<LlmProvider, string> = {
  */
 function PrecedencePanel({
   order,
+  labels,
   onReorder,
   t,
 }: {
-  order: LlmProvider[];
-  onReorder: (next: LlmProvider[]) => void;
+  order: string[];
+  labels: Record<string, string>;
+  onReorder: (next: string[]) => void;
   t: TFn;
 }) {
   const move = (index: number, dir: -1 | 1) => {
@@ -123,7 +137,7 @@ function PrecedencePanel({
             }}
           >
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', minWidth: 18, textAlign: 'center' }}>{i + 1}</span>
-            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', minWidth: 0 }}>{PROVIDER_LABEL[p]}</span>
+            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', minWidth: 0 }}>{labels[p] ?? p}</span>
             {i === 0 && (
               <span style={{ fontSize: 10.5, fontWeight: 700, color: 'rgba(34,197,94,0.9)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
                 {t('precedence.leads')}
@@ -133,7 +147,7 @@ function PrecedencePanel({
               type="button"
               onClick={() => move(i, -1)}
               disabled={i === 0}
-              aria-label={t('precedence.moveUp', { provider: PROVIDER_LABEL[p] })}
+              aria-label={t('precedence.moveUp', { provider: labels[p] ?? p })}
               style={{ ...buttonPrimary, padding: '2px 9px', opacity: i === 0 ? 0.4 : 1 }}
             >
               ↑
@@ -142,7 +156,7 @@ function PrecedencePanel({
               type="button"
               onClick={() => move(i, 1)}
               disabled={i === order.length - 1}
-              aria-label={t('precedence.moveDown', { provider: PROVIDER_LABEL[p] })}
+              aria-label={t('precedence.moveDown', { provider: labels[p] ?? p })}
               style={{ ...buttonPrimary, padding: '2px 9px', opacity: i === order.length - 1 ? 0.4 : 1 }}
             >
               ↓
@@ -480,6 +494,183 @@ function ProviderConnectionCard({
   );
 }
 
+function OpenRouterConnectionsPanel({
+  connections,
+  onChanged,
+  t,
+}: {
+  connections: OpenRouterConnection[];
+  onChanged: () => Promise<unknown>;
+  t: TFn;
+}) {
+  const [catalog, setCatalog] = useState<OpenRouterCatalogModel[]>([]);
+  const [editing, setEditing] = useState<OpenRouterConnection | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [label, setLabel] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [clearKey, setClearKey] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [search, setSearch] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
+
+  useEffect(() => {
+    void openRouterConnectionsApi.catalog()
+      .then((result) => setCatalog(result.data ?? []))
+      .catch((e: Error) => setError(e.message));
+  }, []);
+
+  const begin = (connection?: OpenRouterConnection) => {
+    setEditing(connection ?? null);
+    setCreating(true);
+    setLabel(connection?.label ?? '');
+    setSelected(connection?.models ?? []);
+    setApiKey('');
+    setClearKey(false);
+    setSearch('');
+    setError(null);
+  };
+
+  const cancel = () => {
+    setCreating(false);
+    setEditing(null);
+    setError(null);
+  };
+
+  const toggleModel = (id: string) => {
+    setSelected((current) =>
+      current.includes(id) ? current.filter((model) => model !== id) : [...current, id]);
+  };
+
+  const save = async () => {
+    if (!label.trim() || selected.length === 0) {
+      setError(t('openRouter.validation'));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const body = {
+        label: label.trim(),
+        models: selected,
+        ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+        ...(clearKey ? { clearKey: true } : {}),
+      };
+      if (editing) await openRouterConnectionsApi.update(editing.id, body);
+      else await openRouterConnectionsApi.create(body);
+      cancel();
+      await onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('openRouter.saveError'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (connection: OpenRouterConnection) => {
+    if (!(await confirm(t('openRouter.confirmRemove', { label: connection.label })))) return;
+    setBusy(true);
+    try {
+      await openRouterConnectionsApi.remove(connection.id);
+      await onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('openRouter.removeError'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const query = search.trim().toLowerCase();
+  const visibleModels = catalog
+    .filter((model) => !query || `${model.name} ${model.id} ${model.provider}`.toLowerCase().includes(query))
+    .slice(0, 100);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div>
+        <div style={sectionTitle}>{t('openRouter.title')}</div>
+        <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>
+          {t('openRouter.subtitle')}
+        </p>
+        <button type="button" style={buttonPrimary} onClick={() => begin()} disabled={busy}>
+          {t('openRouter.add')}
+        </button>
+      </div>
+
+      {connections.map((connection) => (
+        <div key={connection.id} style={{ ...cardStyle, padding: 14 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={sectionTitle}>{connection.label}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {t('openRouter.modelCount', { count: connection.models.length })}
+                {' · '}
+                {connection.hasKey ? t('openRouter.ownKey') : t('openRouter.managedKey')}
+              </div>
+              <div style={{ marginTop: 7, fontSize: 11.5, color: 'var(--text-secondary)', wordBreak: 'break-word' }}>
+                {connection.models.join(' → ')}
+              </div>
+            </div>
+            <button type="button" style={buttonPrimary} onClick={() => begin(connection)}>{t('openRouter.edit')}</button>
+            <button type="button" style={buttonDanger} onClick={() => void remove(connection)}>{t('remove')}</button>
+          </div>
+        </div>
+      ))}
+
+      {connections.length === 0 && !creating && (
+        <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t('openRouter.empty')}</div>
+      )}
+
+      {creating && (
+        <div style={{ ...cardStyle, borderColor: 'var(--accent, var(--border-subtle))' }}>
+          <div style={sectionTitle}>{editing ? t('openRouter.editTitle') : t('openRouter.createTitle')}</div>
+          <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+            {t('openRouter.name')}
+            <input value={label} onChange={(e) => setLabel(e.target.value)} style={{ ...inputStyle, marginTop: 5 }} />
+          </label>
+          <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+            {t('openRouter.apiKey')}
+            <input type="password" autoComplete="off" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-or-v1-…" style={{ ...inputStyle, marginTop: 5 }} />
+          </label>
+          {editing?.hasKey && (
+            <label style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+              <input type="checkbox" checked={clearKey} onChange={(e) => setClearKey(e.target.checked)} />
+              {t('openRouter.clearKey')}
+            </label>
+          )}
+          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 12 }}>{t('openRouter.billing')}</div>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t('openRouter.search')}
+            style={{ ...inputStyle, marginBottom: 8 }}
+          />
+          <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
+            {visibleModels.map((model) => (
+              <label key={model.id} style={{ display: 'flex', gap: 9, padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={selected.includes(model.id)} onChange={() => toggleModel(model.id)} />
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>{model.name}</span>
+                  <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', wordBreak: 'break-all' }}>{model.id}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 7 }}>
+            {t('openRouter.selected', { count: selected.length })}
+          </div>
+          {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginTop: 9 }}>{error}</div>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+            <button type="button" style={buttonPrimary} disabled={busy} onClick={() => void save()}>{busy ? t('saving') : t('save')}</button>
+            <button type="button" style={{ ...buttonPrimary, background: 'none' }} disabled={busy} onClick={cancel}>{t('cancel')}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ProviderKeysSettings({
   search = '', viewMode = 'card', priorityOpen = false, onPriorityClose, onPriorityChange,
 }: {
@@ -493,10 +684,13 @@ export function ProviderKeysSettings({
   const [authByProvider, setAuthByProvider] = useState<Partial<Record<LlmProvider, ProviderAuthType>>>({});
   // BYO precedence — connected providers, most-preferred first. Seeded from the backend
   // order (priority asc, unset last), then kept in sync as providers connect/disconnect.
-  const [order, setOrder] = useState<LlmProvider[]>([]);
+  const [order, setOrder] = useState<string[]>([]);
+  const [precedenceEntries, setPrecedenceEntries] = useState<ByoPrecedenceEntry[]>([]);
+  const [openRouterConnections, setOpenRouterConnections] = useState<OpenRouterConnection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeProvider, setActiveProvider] = useState<LlmProvider | null>(null);
+  const [openRouterOpen, setOpenRouterOpen] = useState(false);
   const [usage, setUsage] = useState<LlmUsageStats | null>(null);
   const visibleProviders = PROVIDERS.filter((p) => !search.trim() || `${p.label} ${p.id}`.toLowerCase().includes(search.trim().toLowerCase()));
 
@@ -511,7 +705,20 @@ export function ProviderKeysSettings({
     // secondary read fails, while loading both together to avoid flashing zeroes.
     const usageRead = llmApi.usage().catch(() => null);
     return providerKeysApi.list()
-      .then((r) => {
+      .then(async (r) => {
+        // The OpenRouter reads are enrichments. Keep the established provider
+        // cards usable during a rolling deploy or a transient failure on either
+        // new endpoint.
+        const fallbackEntries: ByoPrecedenceEntry[] = r.details.map((detail) => ({
+          ref: detail.provider,
+          kind: 'provider',
+          provider: detail.provider,
+          priority: detail.priority,
+        }));
+        const [connectionResult, precedenceResult] = await Promise.all([
+          openRouterConnectionsApi.list().catch(() => ({ connections: [] })),
+          openRouterConnectionsApi.precedence().catch(() => ({ entries: fallbackEntries })),
+        ]);
         const map: Partial<Record<LlmProvider, ProviderAuthType>> = {};
         const alerts: Partial<Record<LlmProvider, ProviderAuthAlert>> = {};
         for (const d of r.details) {
@@ -520,9 +727,13 @@ export function ProviderKeysSettings({
         }
         setAuthByProvider(map);
         setAlertByProvider(alerts);
-        // r.details already arrives ordered by tenant precedence — connected only.
-        setOrder(r.details.map((d) => d.provider));
-        onPriorityChange?.(r.details.map((d) => d.provider));
+        setOpenRouterConnections(connectionResult.connections);
+        setPrecedenceEntries(precedenceResult.entries);
+        const refs = precedenceResult.entries.map((entry) => entry.ref);
+        setOrder(refs);
+        onPriorityChange?.(precedenceResult.entries
+          .filter((entry): entry is Extract<ByoPrecedenceEntry, { kind: 'provider' }> => entry.kind === 'provider')
+          .map((entry) => entry.provider));
         return usageRead;
       })
       .then(setUsage)
@@ -541,15 +752,24 @@ export function ProviderKeysSettings({
       : [...prev, provider],
     );
 
-  const persistOrder = async (next: LlmProvider[]) => {
+  const persistOrder = async (next: string[]) => {
     setOrder(next); // optimistic
-    onPriorityChange?.(next);
+    onPriorityChange?.(next.filter((ref): ref is LlmProvider => !ref.startsWith('openrouter:')) as LlmProvider[]);
     try {
       await providerKeysApi.setPriority(next);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('precedence.errSave'));
     }
   };
+
+  const precedenceLabels: Record<string, string> = Object.fromEntries([
+    ...precedenceEntries.map((entry) => [
+      entry.ref,
+      entry.kind === 'provider'
+        ? PROVIDER_LABEL[entry.provider]
+        : `OpenRouter · ${entry.connection.label} (${entry.connection.models.length})`,
+    ]),
+  ]);
 
   return (
     <div>
@@ -563,6 +783,19 @@ export function ProviderKeysSettings({
       ) : (
         <>
           <div style={viewMode === 'card' ? wrapStyle : { display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {(!search.trim() || 'openrouter models routing'.includes(search.trim().toLowerCase())) && (
+              <button type="button" onClick={() => setOpenRouterOpen(true)} style={{ ...cardStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: viewMode === 'table' ? 'row' : 'column', alignItems: viewMode === 'table' ? 'center' : 'stretch', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={sectionTitle}>OpenRouter</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t('openRouter.cardBlurb')}</div>
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 650, color: openRouterConnections.length ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)' }}>
+                  {openRouterConnections.length
+                    ? t('openRouter.connectedCount', { count: openRouterConnections.length })
+                    : t('status.notConnected')}
+                </span>
+              </button>
+            )}
             {visibleProviders.map((p) => (
               <button key={p.id} type="button" onClick={() => setActiveProvider(p.id)} style={{ ...cardStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: viewMode === 'table' ? 'row' : 'column', alignItems: viewMode === 'table' ? 'center' : 'stretch', gap: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0 }}>
@@ -621,7 +854,7 @@ export function ProviderKeysSettings({
                       setAlertByProvider((prev) => { const next = { ...prev }; delete next[p.id]; return next; });
                       syncOrder(p.id, authType);
                       const nextOrder = authType === null ? order.filter((id) => id !== p.id) : order.includes(p.id) ? order : [...order, p.id];
-                      onPriorityChange?.(nextOrder);
+                      onPriorityChange?.(nextOrder.filter((id): id is LlmProvider => !id.startsWith('openrouter:')) as LlmProvider[]);
                     }}
                   />
                 </div>
@@ -629,9 +862,19 @@ export function ProviderKeysSettings({
             );
           })()}
 
+          <SlideOutPanel open={openRouterOpen} onClose={() => setOpenRouterOpen(false)} title="OpenRouter">
+            <div style={{ padding: 20 }}>
+              <OpenRouterConnectionsPanel
+                connections={openRouterConnections}
+                t={t}
+                onChanged={refresh}
+              />
+            </div>
+          </SlideOutPanel>
+
           <SlideOutPanel open={priorityOpen} onClose={() => onPriorityClose?.()} title={t('precedence.title')}>
             <div style={{ padding: 20 }}>
-              <PrecedencePanel order={order} onReorder={persistOrder} t={t} />
+              <PrecedencePanel order={order} labels={precedenceLabels} onReorder={persistOrder} t={t} />
             </div>
           </SlideOutPanel>
         </>

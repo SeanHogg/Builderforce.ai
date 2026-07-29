@@ -71,6 +71,11 @@ import { estimateTokensFromChars } from './tokenUsage';
 import type { ActionType } from './actionTypes';
 import { PROVIDER_VENDOR_MAP, byoVendorIdsFromCredentials, type TenantVendorKeys } from './tenantProviderKeyService';
 import {
+  bareModelId,
+  connectionModelRefs,
+  type OpenRouterConnection,
+} from './openRouterConnectionService';
+import {
   loadDemotedVendors,
   recordVendorUpstreamFault,
   recordVendorUpstreamSuccess,
@@ -216,6 +221,10 @@ export interface ProxyResult {
    *  VSIX surfaces) exempts the row from the plan token allowance. Stamped by
    *  finalize() via {@link isTenantFunded}. */
   byoFunded?: boolean;
+  /** True when the final model came from a tenant-registered OpenRouter
+   * connection. These calls carry the flat platform routing surcharge whether
+   * they used Builderforce's key or the tenant's own OpenRouter key. */
+  platformSurcharge?: boolean;
   /** Number of times the gateway re-dispatched on non-conforming JSON output
    *  (only applies when `body.response_format.type` is `json_object`/`json_schema`). */
   schemaRetries?: number;
@@ -387,6 +396,14 @@ export interface LlmProxyOptions {
    *  so the gateway completion seed leads with the owner's chosen account (e.g. Meta
    *  first), matching the cloud-agent pin. Empty/undefined = catalog-tier order. */
   byoVendorPriority?: readonly string[];
+  /** Shared precedence ranks for provider accounts. Unlike `byoVendorPriority`,
+   * this preserves gaps occupied by OpenRouter connections so both kinds can
+   * interleave in one ordered list. */
+  byoProviderPriorities?: readonly { vendor: string; priority: number | null }[];
+  /** Named OpenRouter registrations and their selected model sets. */
+  openRouterConnections?: readonly OpenRouterConnection[];
+  /** Bare OpenRouter model id -> tenant key for keyed registrations. */
+  openRouterModelKeys?: Readonly<Record<string, string>>;
   /** A tenant has selected BYO execution, even if every stored credential is
    *  temporarily unresolved. Prevents an expired/revoked key from silently
    *  changing the funding source to BuilderForce's shared pool. */
@@ -427,6 +444,10 @@ export class LlmProxyService {
   private readonly xaiOAuthToken: string | null;
   private readonly tenantVendorKeys: TenantVendorKeys;
   private readonly byoVendorPriority: readonly string[];
+  private readonly byoProviderPriorities: readonly { vendor: string; priority: number | null }[];
+  private readonly openRouterConnections: readonly OpenRouterConnection[];
+  private readonly openRouterModelKeys: Readonly<Record<string, string>>;
+  private readonly openRouterConnectionModels: ReadonlySet<string>;
   private readonly byoRequired: boolean;
   private readonly byoDiagnostics: ByoDiagnostics;
 
@@ -446,6 +467,10 @@ export class LlmProxyService {
     this.xaiOAuthToken = options?.xaiOAuthToken ?? null;
     this.tenantVendorKeys = options?.tenantVendorKeys ?? {};
     this.byoVendorPriority = options?.byoVendorPriority ?? [];
+    this.byoProviderPriorities = options?.byoProviderPriorities ?? [];
+    this.openRouterConnections = options?.openRouterConnections ?? [];
+    this.openRouterModelKeys = options?.openRouterModelKeys ?? {};
+    this.openRouterConnectionModels = new Set(connectionModelRefs(this.openRouterConnections));
     this.byoRequired = options?.byoRequired ?? false;
     this.byoDiagnostics = options?.byoDiagnostics ?? {};
     // Mark every vendor a BYO key overrides as tenant-funded up front, so any
@@ -514,6 +539,13 @@ export class LlmProxyService {
     return this.connectedByoVendors.has(vendor);
   }
 
+  /** Model-specific ownership is required for OpenRouter: one registration may
+   * use the tenant's key while another uses the managed key, even in one chain. */
+  private isOwnerServedModel(model: string): boolean {
+    return this.isOwnerServedVendor(vendorForModel(model))
+      || (vendorForModel(model) === 'openrouter' && !!this.openRouterModelKeys[bareModelId(model)]);
+  }
+
   /** Vendors whose call was served with a tenant's OWN BYO credential this
    *  request (populated by {@link vendorEnv} when it overlays a per-tenant key on
    *  the operator env). Combined with the Anthropic-subscription case, this is the
@@ -525,7 +557,9 @@ export class LlmProxyService {
    *  source of truth for ProxyResult.byoFunded, generalizing isSubscriptionFunded
    *  across every provider. */
   private isTenantFunded(result: ProxyResult): boolean {
-    return this.isSubscriptionFunded(result) || this.tenantFundedVendors.has(result.resolvedVendor);
+    return this.isSubscriptionFunded(result)
+      || this.tenantFundedVendors.has(result.resolvedVendor)
+      || this.isOwnerServedModel(result.resolvedModel);
   }
 
   /** BYO is strict when configured OR when at least one credential resolved. */
@@ -664,16 +698,45 @@ export class LlmProxyService {
     // failover after the connected account rather than being dropped.
     const hasCallerModel = typeof callerModel === 'string' && callerModel.length > 0;
     const connectedByo = this.connectedByoVendors;
-    const callerLeads = hasCallerModel && explicitModelPreemptsByo(callerModel as string, connectedByo);
+    const callerLeads = hasCallerModel && (
+      this.openRouterConnectionModels.has(callerModel as string)
+      || explicitModelPreemptsByo(callerModel as string, connectedByo)
+    );
     // Demote any connected vendor on a 5xx streak out of the LEAD position (it stays
     // in the seed — see `byoAutoSeedModels`). Returns an empty set and issues no reads
     // when nothing is connected, so the non-BYO path is untouched.
     const demotedVendors = await loadDemotedVendors(this.env, connectedByo);
-    const byoSeeds = byoAutoSeedModels(connectedByo, {
+    const providerSeeds = byoAutoSeedModels(connectedByo, {
       agentic: this.codingOnly,
       vendorPriority: this.byoVendorPriority,
       ...(demotedVendors.size ? { demotedVendors } : {}),
     });
+    // Merge provider flagships and named OpenRouter model sets by their SHARED
+    // persisted rank. This is the core product behavior: "Cheap coders, then my
+    // Claude account, then Frontier" is one list, not two unrelated priorities.
+    const providerSeedByVendor = new Map(providerSeeds.map((model) => [vendorForModel(model), model]));
+    const rankedSeeds: Array<{ priority: number | null; tie: number; models: string[] }> = [
+      ...this.byoProviderPriorities.map((entry, tie) => ({
+        priority: entry.priority,
+        tie,
+        models: providerSeedByVendor.has(entry.vendor as VendorId) ? [providerSeedByVendor.get(entry.vendor as VendorId)!] : [],
+      })),
+      ...this.openRouterConnections.map((connection, tie) => ({
+        priority: connection.priority,
+        tie: this.byoProviderPriorities.length + tie,
+        models: connectionModelRefs([connection]),
+      })),
+    ];
+    rankedSeeds.sort((a, b) => {
+      const ar = a.priority ?? Number.POSITIVE_INFINITY;
+      const br = b.priority ?? Number.POSITIVE_INFINITY;
+      return ar === br ? a.tie - b.tie : ar - br;
+    });
+    const rankedModels = rankedSeeds.flatMap((entry) => entry.models);
+    const byoSeeds = [...new Set([
+      ...rankedModels,
+      ...providerSeeds.filter((model) => !rankedModels.includes(model)),
+    ])];
     // An honoured caller model LEADS, but it never stands alone: the tenant's OTHER
     // connected accounts follow it as failover. BYO is an execution boundary — the
     // chain composer below drops every operator-funded model — so a lead-only head
@@ -716,8 +779,10 @@ export class LlmProxyService {
       loadCooldowns(this.env, [
         ...seedPrefix.map((m) => ({ vendor: vendorForModel(m), model: m })),
         ...fallbackPairs,
-      ].filter((p) => !this.isOwnerServedVendor(p.vendor))),
-      loadCooledVendors(this.env, seedVendors.filter((v) => !this.isOwnerServedVendor(v))),
+      ].filter((p) => !this.isOwnerServedModel(p.model))),
+      loadCooledVendors(this.env, seedVendors.filter((v) =>
+        !this.isOwnerServedVendor(v)
+        && !(v === 'openrouter' && this.openRouterConnectionModels.size > 0))),
     ]);
     // Pinned hint bypasses vendor-level cooldown so a caller-explicit paid model
     // (`anthropic/claude-3-haiku`) gets tried even when the same vendor's free
@@ -873,6 +938,9 @@ export class LlmProxyService {
     // Stamp the tenant-funding signal once, on the single path every result
     // leaves complete() through, so the route can mark the usage row `byo`.
     if (result.byoFunded === undefined) result.byoFunded = this.isTenantFunded(result);
+    if (result.platformSurcharge === undefined) {
+      result.platformSurcharge = this.openRouterConnectionModels.has(result.resolvedModel);
+    }
     return result;
   }
 
@@ -890,7 +958,7 @@ export class LlmProxyService {
     requestHeaders?: Record<string, string>,
   ): Promise<ProxyResult> {
     const vendor = vendorForModel(model);
-    if (this.byoStrict && !this.connectedByoVendors.has(vendor)) {
+    if (this.byoStrict && !this.connectedByoVendors.has(vendor) && !this.openRouterConnectionModels.has(model)) {
       // Name the vendor the pin needs AND the vendors that actually resolved — the bare
       // reason code can't distinguish "you pinned a model on an account you never
       // connected" from "the account IS connected but its credential didn't resolve".
@@ -902,7 +970,7 @@ export class LlmProxyService {
         unresolvedReasons: this.byoDiagnostics.unresolvedReasons ?? {},
       });
     }
-    if (!vendorKeyBound(this.vendorEnv(), vendor)) {
+    if (!vendorKeyBound(this.vendorEnv(), vendor) && !this.isOwnerServedModel(model)) {
       return strictUnavailableResult(model, 'vendor_key_unconfigured');
     }
 
@@ -911,7 +979,7 @@ export class LlmProxyService {
     // account, so it gets its one attempt and surfaces the REAL upstream error instead of
     // a synthetic 503 inherited from someone else's key. Skipping the gate also drops two
     // KV subrequests from every BYO strict-pin dispatch.
-    if (!this.isOwnerServedVendor(vendor)) {
+    if (!this.isOwnerServedModel(model)) {
       const [cooledSet, cooledVendors] = await Promise.all([
         loadCooldowns(this.env, [{ vendor, model }]),
         loadCooledVendors(this.env, [vendor]),
@@ -999,7 +1067,9 @@ export class LlmProxyService {
     // tenant credential resolves, remove every shared/operator-funded vendor from
     // the chain. Multiple connected providers may still fail over among themselves.
     return this.byoStrict
-      ? candidates.filter((model) => this.connectedByoVendors.has(vendorForModel(model)))
+      ? candidates.filter((model) =>
+          this.connectedByoVendors.has(vendorForModel(model))
+          || this.openRouterConnectionModels.has(model))
       : candidates;
   }
 
@@ -1009,6 +1079,7 @@ export class LlmProxyService {
       OPENROUTER_API_KEY: this.isPro
         ? (this.env.OPENROUTER_API_KEY_PRO ?? this.env.OPENROUTER_API_KEY ?? null)
         : (this.env.OPENROUTER_API_KEY ?? null),
+      OPENROUTER_MODEL_KEYS: this.openRouterModelKeys,
       OPENAI_CODEX_AUTH: this.openaiCodexAuth ? JSON.stringify(this.openaiCodexAuth) : null,
       XAI_OAUTH_TOKEN: this.xaiOAuthToken,
       CEREBRAS_API_KEY:         this.env.CEREBRAS_API_KEY         ?? null,
@@ -1525,7 +1596,7 @@ export class LlmProxyService {
     // for every other tenant ({@link isOwnerServedVendor}). Their signal is the vendor-health
     // fault below (seed order) plus the per-tenant `providerAuthAlerts` record the gateway
     // route and the daily BYO probe both write.
-    const coolable = attempts.filter((a) => !this.isOwnerServedVendor(a.vendor));
+    const coolable = attempts.filter((a) => !this.isOwnerServedModel(a.model));
     await Promise.all([
       ...coolable.map((a) => recordFailure(this.env, a.vendor, a.model, a.status, a.error)),
       // Independent of the cooldown above: extend the 5xx streak that governs BYO
@@ -1702,7 +1773,7 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[]; byoRequired?: boolean; byoDiagnostics?: ByoDiagnostics },
+  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoRequired?: boolean; byoDiagnostics?: ByoDiagnostics },
 ): LlmProxyService {
   const routing = resolveRouting(effectivePlan, premiumOverride);
   const { productName, modelPool } = routing;
@@ -1740,6 +1811,11 @@ export function llmProxyForPlan(
     // Tenant BYO precedence — leads the connected-flagship seed with the owner's
     // chosen account (e.g. Meta first), matching the cloud-agent pin.
     ...(opts?.byoVendorPriority?.length ? { byoVendorPriority: opts.byoVendorPriority } : {}),
+    ...(opts?.byoProviderPriorities?.length ? { byoProviderPriorities: opts.byoProviderPriorities } : {}),
+    ...(opts?.openRouterConnections?.length ? { openRouterConnections: opts.openRouterConnections } : {}),
+    ...(opts?.openRouterModelKeys && Object.keys(opts.openRouterModelKeys).length
+      ? { openRouterModelKeys: opts.openRouterModelKeys }
+      : {}),
     ...(opts?.byoRequired ? { byoRequired: true } : {}),
     // Diagnostics only — lets a fail-closed BYO 503 name the connected providers and
     // the reason each was unusable instead of asserting a bare "none is usable".
@@ -1906,6 +1982,11 @@ export interface PickCloudModelOptions {
    *  When set, the connected-flagship soft seed leads with the owner's chosen account
    *  (e.g. Meta first) instead of catalog-tier order. See {@link byoAutoSeedModels}. */
   byoVendorPriority?: readonly string[];
+  /** Models selected in the tenant's OpenRouter registrations. Registered
+   * models are valid pins even when they are outside the curated catalog. */
+  registeredOpenRouterModels?: readonly string[];
+  /** The registered model that leads the shared provider/connection precedence. */
+  preferredRegisteredModel?: string;
   /**
    * The tenant may select a PREMIUM model (any paid OpenRouter model outside the plan
    * pool, billed at OpenRouter cost + a flat 1¢/request) — i.e. a paid plan WITH a
@@ -1986,8 +2067,9 @@ export function pickCloudModel(
   // leads instead. Within the honored branch the free-plan gate still applies: a free
   // tenant may pin ONLY a model their own connected provider serves; paid / premium /
   // override may pin anything.
-  const explicitIsByo = !!explicit && !!opts?.byoVendors?.has(vendorForModel(explicit.trim()));
-  if (explicitModelPreemptsByo(explicit, opts?.byoVendors)) {
+  const explicitIsRegistered = !!explicit && !!opts?.registeredOpenRouterModels?.includes(explicit.trim());
+  const explicitIsByo = !!explicit && (!!opts?.byoVendors?.has(vendorForModel(explicit.trim())) || explicitIsRegistered);
+  if (explicitIsRegistered || explicitModelPreemptsByo(explicit, opts?.byoVendors)) {
     const canChooseModel = premiumOverride || effectivePlan !== 'free' || explicitIsByo;
     // A PREMIUM pin (paid OpenRouter model off the plan pool) additionally needs the
     // card-validated entitlement — a cloud run never passes the route's premium gate,
@@ -2003,7 +2085,7 @@ export function pickCloudModel(
     // ENTITLED premium pin is therefore honoured on its own: it came from the
     // OpenRouter-catalog-driven picker, and dispatch resolves a bare `<org>/<slug>` to
     // the OpenRouter vendor.
-    const pinnable = isKnownModel(explicit) || (isPremiumPin && !premiumBlocked);
+    const pinnable = explicitIsRegistered || isKnownModel(explicit) || (isPremiumPin && !premiumBlocked);
     if (canChooseModel && !premiumBlocked && pinnable) {
       return { model: (explicit as string).trim(), strict: true };
     }
@@ -2018,7 +2100,8 @@ export function pickCloudModel(
   // the run locks onto whatever this seed resolves on turn 1. Shared with the gateway
   // completion seed so both surfaces agree. Soft (not strict) so a transient provider
   // error still fails over.
-  const byoSeed = byoAutoSeedModels(opts?.byoVendors, { agentic: true, vendorPriority: opts?.byoVendorPriority })[0];
+  const byoSeed = opts?.preferredRegisteredModel
+    ?? byoAutoSeedModels(opts?.byoVendors, { agentic: true, vendorPriority: opts?.byoVendorPriority })[0];
   if (byoSeed) return { model: byoSeed, strict: false };
 
   // Soft-seed branch — the ONLY place learned routing changes anything. Reorder the

@@ -8795,6 +8795,9 @@
     "subtitle": "连接您自己的 Anthropic、OpenAI 或 Google 账户。已连接的提供商将使用您自己的账户为智能体提供支持，并决定每个选择器中的模型选项——在您本机上的使用（本地部署和 VS Code）免费；云端智能体的使用仍会计费。凭据将加密存储，且不会再次显示。",
     "loading": "加载中…",
     "errorPrefix": "错误：{message}",
+    "openRouter": {
+      "title": "OpenRouter 连接", "subtitle": "创建多个命名注册，每个注册可包含一个或多个模型，并与已连接的 AI 账户一起排序。", "cardBlurb": "为每个注册选择一个或多个 OpenRouter 模型，并与提供商账户一起设置优先级。", "add": "添加连接", "connectedCount": "● {count} 个连接", "modelCount": "已选择 {count} 个模型", "ownKey": "您的 OpenRouter 密钥", "managedKey": "Builderforce 托管计费", "edit": "编辑", "empty": "尚无 OpenRouter 连接。", "createTitle": "注册 OpenRouter 模型", "editTitle": "编辑 OpenRouter 连接", "name": "连接名称", "apiKey": "OpenRouter API 密钥（可选）", "clearKey": "移除已保存的密钥并使用 Builderforce 托管计费", "billing": "每次请求都经由 Builderforce 路由，并收取 0.01 美元平台费。使用自己的密钥时，OpenRouter 收取令牌费用；不提供密钥时，Builderforce 还会收取 OpenRouter 令牌成本。", "search": "搜索 OpenRouter 模型…", "selected": "已选择 {count} 个模型", "validation": "请输入连接名称并至少选择一个模型。", "saveError": "无法保存 OpenRouter 连接", "removeError": "无法移除 OpenRouter 连接", "confirmRemove": "移除 OpenRouter 连接“{label}”？"
+    },
     "status": {
       "connected": "● 已连接 {subscription}",
       "keyConfigured": "● 已配置 {label} API 密钥",
