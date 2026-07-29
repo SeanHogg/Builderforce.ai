@@ -2325,7 +2325,11 @@ export interface ManagerDailyDigest {
   team: {
     shipped: DigestDelta;
     opened: DigestDelta;
-    laneMoves: { forward: number; backward: number; byHuman: number; byAgent: number };
+    laneMoves: { forward: number; backward: number; byHuman: number; byAgent: number;
+      /** Hops whose actor the log cannot name — automation with no identity. Its own
+       *  bucket because folding it into byAgent claimed credit for agents the
+       *  contributor table simultaneously showed at zero. */
+      bySystem: number };
     runs: { completed: number; failed: number };
     prs: { merged: DigestDelta; opened: number };
     contributors: DigestContributor[];

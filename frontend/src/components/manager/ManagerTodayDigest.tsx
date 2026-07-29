@@ -226,7 +226,18 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
         <InsightStat
           label={t('stat.moves')}
           value={team.laneMoves.forward.toLocaleString()}
-          sub={t('stat.movesSub', { human: team.laneMoves.byHuman, agent: team.laneMoves.byAgent })}
+          // An UNATTRIBUTED hop gets its own clause instead of being folded into
+          // "by agents" — claiming agent credit for a move no agent can be named for is
+          // what let the contributor table show every agent at zero while this line said
+          // work was being done by them. Only shown when there is any, so the common
+          // fully-attributed day reads exactly as before.
+          sub={team.laneMoves.bySystem > 0
+            ? t('stat.movesSubWithSystem', {
+              human: team.laneMoves.byHuman,
+              agent: team.laneMoves.byAgent,
+              system: team.laneMoves.bySystem,
+            })
+            : t('stat.movesSub', { human: team.laneMoves.byHuman, agent: team.laneMoves.byAgent })}
         />
         <InsightStat
           label={t('stat.decisions')}

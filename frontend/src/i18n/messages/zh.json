@@ -7034,6 +7034,7 @@
         "runsSub": "{failed} 次失败",
         "moves": "向前推进次数",
         "movesSub": "人工 {human} 次 · 代理 {agent} 次",
+        "movesSubWithSystem": "人工 {human} 次 · 代理 {agent} 次 · 无归属 {system} 次",
         "decisions": "管理决策",
         "decisionsSub": "今日{passes, plural, =0 {零次巡检} other {# 次巡检}}"
       },
