@@ -278,6 +278,24 @@ function StatusBadge({ status }: { status: ProgressItem['status'] }) {
 }
 
 /* ─── Styles (FR-3) ───────────────────────────────────────────────────────── */
+/**
+ * FR-3: the list owns its width and clips its children, so a long label can never
+ * introduce a horizontal scrollbar in the container at any viewport width (AC-10).
+ */
+const listContainer: CSSProperties = {
+  width: '100%',
+  maxWidth: '100%',
+  boxSizing: 'border-box',
+  overflowX: 'hidden',
+};
+
+const emptyState: CSSProperties = {
+  display: 'block',
+  padding: '12px 0',
+  fontSize: '0.8rem',
+  color: 'var(--text-secondary)',
+};
+
 const row: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
