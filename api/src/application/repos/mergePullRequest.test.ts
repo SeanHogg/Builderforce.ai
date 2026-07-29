@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { mergePullRequest, normalizeMergeMethod, buildMergeRequest } from './mergePullRequest';
+import { mergePullRequest, normalizeMergeMethod, buildMergeRequest, isMergeConflictMessage } from './mergePullRequest';
 import { cloudAutoMergeEnabled, cloudAutoMergeRequiresGreen } from './mergeBranchToBase';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -36,6 +36,14 @@ describe('normalizeMergeMethod', () => {
     expect(normalizeMergeMethod(undefined)).toBe('squash');
     expect(normalizeMergeMethod('fast-forward')).toBe('squash');
     expect(normalizeMergeMethod(42)).toBe('squash');
+  });
+});
+
+describe('isMergeConflictMessage', () => {
+  it('recognizes provider conflict messages without confusing policy blockers', () => {
+    expect(isMergeConflictMessage('Pull Request has merge conflicts')).toBe(true);
+    expect(isMergeConflictMessage('Conflicts must be resolved before merging')).toBe(true);
+    expect(isMergeConflictMessage('At least one approving review is required')).toBe(false);
   });
 });
 
@@ -133,6 +141,18 @@ describe('mergePullRequest', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('head moved', { status: 409 })));
     const b = await mergePullRequest({ ...base, provider: 'github' });
     expect(b.ok ? '' : b.code).toBe('conflict');
+  });
+
+  it('maps GitHub 405 merge-conflict responses to conflict so callers can remediate them', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
+      message: 'Pull Request has merge conflicts',
+      documentation_url: 'https://docs.github.com/rest/pulls/pulls#merge-a-pull-request',
+    }, 405)));
+
+    const result = await mergePullRequest({ ...base, provider: 'github' });
+
+    expect(result.ok ? '' : result.code).toBe('conflict');
+    expect(result.ok ? '' : result.reason).toBe('merge conflict: Pull Request has merge conflicts');
   });
 
   it('maps other non-OK statuses to provider_error', async () => {
