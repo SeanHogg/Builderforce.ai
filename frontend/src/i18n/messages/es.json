@@ -8795,6 +8795,9 @@
     "subtitle": "Conecta tu propia cuenta de Anthropic, OpenAI o Google. Los proveedores conectados impulsan tus agentes con tu propia cuenta y determinan las opciones de modelo en cada selector: el uso en tu máquina (local y VS Code) es gratuito; el uso de agentes en la nube se sigue facturando. Las credenciales se almacenan cifradas y no se vuelven a mostrar.",
     "loading": "Cargando…",
     "errorPrefix": "Error: {message}",
+    "openRouter": {
+      "title": "Conexiones de OpenRouter", "subtitle": "Crea varios registros con uno o más modelos y priorízalos junto con tus cuentas de IA.", "cardBlurb": "Selecciona uno o varios modelos de OpenRouter por registro y priorízalos con tus cuentas conectadas.", "add": "Añadir conexión", "connectedCount": "● {count} conexión(es)", "modelCount": "{count} modelo(s) seleccionado(s)", "ownKey": "Tu clave de OpenRouter", "managedKey": "Facturación de Builderforce", "edit": "Editar", "empty": "Aún no hay conexiones de OpenRouter.", "createTitle": "Registrar modelos de OpenRouter", "editTitle": "Editar conexión de OpenRouter", "name": "Nombre de la conexión", "apiKey": "Clave API de OpenRouter (opcional)", "clearKey": "Eliminar la clave guardada y usar la facturación de Builderforce", "billing": "Cada solicitud pasa por Builderforce y añade un cargo de plataforma de 0,01 $. Con tu clave, OpenRouter cobra los tokens; sin ella, Builderforce también cobra el coste de tokens de OpenRouter.", "search": "Buscar modelos de OpenRouter…", "selected": "{count} modelo(s) seleccionado(s)", "validation": "Introduce un nombre y selecciona al menos un modelo.", "saveError": "No se pudo guardar la conexión de OpenRouter", "removeError": "No se pudo eliminar la conexión de OpenRouter", "confirmRemove": "¿Eliminar la conexión de OpenRouter «{label}»?"
+    },
     "status": {
       "connected": "● {subscription} conectada",
       "keyConfigured": "● Clave de API de {label} configurada",

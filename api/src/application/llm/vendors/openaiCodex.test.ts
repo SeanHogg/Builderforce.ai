@@ -31,11 +31,13 @@ describe('OpenAI Codex subscription vendor', () => {
       expect(init.headers).toMatchObject({
         authorization: 'Bearer access',
         'ChatGPT-Account-Id': 'acct',
-        'OpenAI-Beta': 'responses=experimental',
         originator: 'codex_cli_rs',
         accept: 'text/event-stream',
       });
-      expect((init.headers as Record<string, string>).session_id).toBeTruthy();
+      expect((init.headers as Record<string, string>)['session-id']).toBeTruthy();
+      expect((init.headers as Record<string, string>)['thread-id']).toBeTruthy();
+      expect((init.headers as Record<string, string>)['x-client-request-id'])
+        .toBe((init.headers as Record<string, string>)['thread-id']);
       expect(JSON.parse(String(init.body))).toMatchObject({
         model: 'gpt-5.3-codex',
         instructions: 'You are a helpful assistant.',
@@ -67,6 +69,9 @@ describe('OpenAI Codex subscription vendor', () => {
   it('omits max_output_tokens entirely — this backend rejects the parameter', async () => {
     let sent: Record<string, unknown> = {};
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      expect(init.headers).toMatchObject({
+        'x-openai-internal-codex-responses-lite': 'true',
+      });
       sent = JSON.parse(String(init.body)) as Record<string, unknown>;
       return codexStream({ id: 'resp_2', output_text: 'OK' });
     }));
@@ -75,9 +80,58 @@ describe('OpenAI Codex subscription vendor', () => {
       model: 'gpt-5.6-sol', messages: [{ role: 'user', content: 'hi' }], maxTokens: 8,
     });
     expect(sent).not.toHaveProperty('max_output_tokens');
+    expect(sent).not.toHaveProperty('instructions');
+    expect(sent).not.toHaveProperty('tools');
+    expect(sent.input).toMatchObject([
+      { type: 'additional_tools', role: 'developer', tools: [] },
+      {
+        type: 'message',
+        role: 'developer',
+        content: [{ type: 'input_text', text: 'You are a helpful assistant.' }],
+      },
+      {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: 'hi' }],
+      },
+    ]);
     // The rest of the CLI contract must survive the omission.
     expect(sent.stream).toBe(true);
     expect(sent.store).toBe(false);
+  });
+
+  it('moves function tools into the Responses Lite additional_tools item', async () => {
+    let sent: Record<string, unknown> = {};
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      sent = JSON.parse(String(init.body)) as Record<string, unknown>;
+      return codexStream({ id: 'resp_tools', output_text: 'OK' });
+    }));
+    await openAiCodexModule.call({
+      apiKey: JSON.stringify({ accessToken: 'access', accountId: 'acct' }),
+      model: 'gpt-5.6-sol',
+      messages: [
+        { role: 'system', content: 'Use tools.' },
+        { role: 'user', content: 'inspect' },
+      ],
+      tools: [{
+        type: 'function',
+        function: {
+          name: 'inspect_project',
+          description: 'Inspect this project',
+          parameters: { type: 'object', properties: {} },
+        },
+      }],
+    });
+    expect(sent).not.toHaveProperty('tools');
+    expect((sent.input as Array<Record<string, unknown>>)[0]).toMatchObject({
+      type: 'additional_tools',
+      role: 'developer',
+      tools: [{
+        type: 'function',
+        name: 'inspect_project',
+        description: 'Inspect this project',
+      }],
+    });
   });
 
   /** A large cap is dropped too — the field is unsupported, not merely clamped. */

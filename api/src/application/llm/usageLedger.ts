@@ -100,6 +100,19 @@ export function computeCostMillicents(
   return Math.round(usd * 100_000);
 }
 
+/** Final ledger cost rule: tenant-funded calls carry no token cost, while the
+ * OpenRouter routing surcharge is independent and therefore applies to both
+ * managed-key and BYO-key registrations. */
+export function computeRecordedCostMillicents(
+  pricing: { prompt: number; completion: number } | undefined,
+  usage: LlmUsage,
+  byo: boolean,
+  platformSurcharge: boolean,
+): number {
+  return (byo ? 0 : computeCostMillicents(pricing, usage))
+    + (platformSurcharge ? PREMIUM_REQUEST_SURCHARGE_MILLICENTS : 0);
+}
+
 /**
  * Which agent modality produced a usage row. Set on every row so metering can
  * apply the BYO exemption (own-machine on-prem/VSIX BYO usage is free; cloud BYO
@@ -187,6 +200,9 @@ interface ProxyUsageResult {
   resolvedModel?: string;
   byoFunded?: boolean;
   resolvedVendor?: string;
+  /** The served model came from a registered OpenRouter connection, so the
+   * platform routing surcharge applies even when the tenant supplied the key. */
+  platformSurcharge?: boolean;
 }
 
 /**
@@ -224,6 +240,7 @@ export async function recordProxyUsage(
       ? normalizeByoProvider(opts.result.resolvedVendor)
       : null,
     surface:    opts.surface ?? null,
+    premiumSurcharge: opts.result.platformSurcharge ?? false,
   });
 }
 
@@ -240,21 +257,32 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
     // Price the call at write time so the dashboard/billing sums a recorded
     // column instead of re-pricing tokens against a moving catalog. Catalog read
     // is L1+KV cached, so this is a cheap lookup on the hot logging path.
-    // BYO rows are served by the tenant's OWN provider account — the platform
-    // pays nothing — so their platform cost is always 0 (skip pricing entirely).
-    let costUsdMillicents = 0;
+    // BYO rows are served by the tenant's OWN provider account, so token cost is
+    // zero. A registered OpenRouter connection still uses our routing/metering
+    // product, however, and its flat platform surcharge is independent of who
+    // paid OpenRouter for the tokens.
+    let pricing: { prompt: number; completion: number } | undefined;
     if (!row.byo) {
       try {
         const catalog = await getCatalogCached(env);
-        const pricing = catalog.find((m) => m.id === row.model)?.pricing;
-        costUsdMillicents = computeCostMillicents(pricing, usage);
+        // Registered OpenRouter connections use an explicit `openrouter/` routing
+        // prefix while the public catalog stores OpenRouter's bare `<org>/<model>`
+        // id. Normalize only for the pricing lookup; keep the explicit ref in the
+        // ledger so provenance remains unambiguous.
+        const catalogModel = row.model.startsWith('openrouter/')
+          ? row.model.slice('openrouter/'.length)
+          : row.model;
+        pricing = catalog.find((m) => m.id === catalogModel)?.pricing;
       } catch (error) { /* pricing unavailable — record tokens with cost 0 */ 
         reportCaughtError(error, { source: "application/llm/usageLedger.ts", operation: "recordUsageRow" });
       }
-      // Premium (any-paid-OpenRouter) selection: add the flat per-request surcharge on
-      // top of the metered token cost so the tenant is billed "OpenRouter cost + 1¢".
-      if (row.premiumSurcharge) costUsdMillicents += PREMIUM_REQUEST_SURCHARGE_MILLICENTS;
     }
+    const costUsdMillicents = computeRecordedCostMillicents(
+      pricing,
+      usage,
+      row.byo === true,
+      row.premiumSurcharge === true,
+    );
     // Stamp the surcharge into metadata so an invoice/usage row can show it explicitly.
     const metadata = row.premiumSurcharge
       ? { ...(row.metadata ?? {}), premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS }
