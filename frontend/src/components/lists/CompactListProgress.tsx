@@ -171,34 +171,8 @@ export function CompactListProgress({
   /** Accessible name for the whole list (FR-7). */
   'aria-label'?: string;
 }) {
-  let displayItems: ProgressItem[] = items ?? [];
-
-  // FR-5: sortBy logic
-  if (sortBy === 'progress_desc' && items?.length) {
-    displayItems = [...displayItems].sort((a, b) => {
-      const pctA = (a.completed / Math.max(1, a.total)) * 100;
-      const pctB = (b.completed / Math.max(1, b.total)) * 100;
-      return pctB - pctA;
-    });
-  } else if (sortBy === 'progress_asc' && items?.length) {
-    displayItems = [...displayItems].sort((a, b) => {
-      const pctA = (a.completed / Math.max(1, a.total)) * 100;
-      const pctB = (b.completed / Math.max(1, b.total)) * 100;
-      return pctA - pctB;
-    });
-  } else if (sortBy === 'status' && items?.length) {
-    const order: Record<string, number> = {
-      not_started: 0,
-      in_progress: 1,
-      completed: 2,
-      blocked: 3,
-    };
-    displayItems = [...displayItems].sort((a, b) => order[a.status] - order[b.status]);
-  } else if (sortBy === 'label_asc' && items?.length) {
-    displayItems = [...displayItems].sort((a, b) =>
-      a.label.localeCompare(b.label, undefined, { numeric: true })
-    );
-  }
+  // FR-5: order is the data source's unless an explicit sortBy is given.
+  const displayItems = sortItems(items ?? [], sortBy);
 
   // FR-6: loading state
   if (isLoading) {
@@ -207,7 +181,8 @@ export function CompactListProgress({
         role="list"
         aria-busy="true"
         className={className}
-        aria-label={ariaLabel ?? ''}
+        style={listContainer}
+        aria-label={ariaLabel}
       >
         {Array.from({ length: skeletonRowCount }, (_, i) => (
           <div key={i} role="listitem" style={skeletonRow}>
