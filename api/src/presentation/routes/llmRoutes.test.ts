@@ -825,9 +825,9 @@ describe('POST /v1/chat/completions unpinned free-plan turn', () => {
     expect(res.status).toBe(402);
     const body = await res.json() as { code?: string; unlock?: string; requiredPlan?: string };
     expect(body.code).toBe('premium_model_not_allowed');
-    // The structured fields the client turns into an Upgrade / Add-a-card button.
-    expect(body.unlock).toBeTruthy();
-    expect(body.requiredPlan).toBe('pro');
+    // A Free account is sent to billing/card setup, never an upgrade wall.
+    expect(body.unlock).toBe('validate_card');
+    expect(body.requiredPlan).toBe('free');
   });
 
   it('does not 402 an unpinned turn that also asks for tools (the IDE chat shape)', async () => {

@@ -6,10 +6,9 @@ import { evaluatePremiumModelAccess, premiumModelGateBody } from './planFeatures
  * PREMIUM model access — "may this tenant select ANY paid OpenRouter model?"
  *
  * Deliberately STRICTER than frontier access: premium routes on Builderforce's metered
- * OpenRouter key (billed at OpenRouter cost + a flat 1¢/request), so it needs a PAID
- * plan AND a validated card. These tests pin the two properties that protect revenue and
- * UX respectively: a card alone never unlocks it, and a paid tenant without a card is
- * told to validate (not to upgrade to a plan they already have).
+ * OpenRouter key (billed at OpenRouter cost + a flat 1¢/request), so it needs a
+ * validated card. Subscription tier is independent: a Free tenant can supply a
+ * funding instrument and use metered models without upgrading.
  */
 describe('evaluatePremiumModelAccess', () => {
   const base = {
@@ -32,15 +31,15 @@ describe('evaluatePremiumModelAccess', () => {
     expect(access).toEqual({ entitled: false, reason: 'card_required', unlock: 'validate_card' });
   });
 
-  it('blocks a free plan and asks for an upgrade — a card alone must NOT unlock premium', () => {
+  it('entitles a free plan with a validated card', () => {
     const access = evaluatePremiumModelAccess({ ...base, effectivePlan: TenantPlan.FREE, cardValidated: true });
-    expect(access).toEqual({ entitled: false, reason: 'plan_required', unlock: 'upgrade' });
+    expect(access).toEqual({ entitled: true, reason: 'paid_card' });
   });
 
-  it('blocks a free plan with no card', () => {
+  it('asks a free plan with no card to add one, not upgrade', () => {
     expect(evaluatePremiumModelAccess({
       ...base, effectivePlan: TenantPlan.FREE, cardValidated: false,
-    }).entitled).toBe(false);
+    })).toEqual({ entitled: false, reason: 'card_required', unlock: 'validate_card' });
   });
 
   // Bypasses — operators and comped/beta tenants never hit the wall, even with no card.
@@ -72,10 +71,10 @@ describe('premiumModelGateBody', () => {
     expect(body.error).toMatch(/validated card/i);
   });
 
-  it('tells a free tenant to upgrade', () => {
-    const body = premiumModelGateBody({ entitled: false, reason: 'plan_required', unlock: 'upgrade' });
-    expect(body.unlock).toBe('upgrade');
-    expect(body.upgrade).toBe(true);
-    expect(body.requiredPlan).toBe(TenantPlan.PRO);
+  it('never requires a plan upgrade', () => {
+    const body = premiumModelGateBody({ entitled: false, reason: 'card_required', unlock: 'validate_card' });
+    expect(body.unlock).toBe('validate_card');
+    expect(body.upgrade).toBe(false);
+    expect(body.requiredPlan).toBe(TenantPlan.FREE);
   });
 });
