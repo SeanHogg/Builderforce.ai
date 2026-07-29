@@ -58,6 +58,11 @@ export interface VendorEnv {
   OPENAI_CODEX_AUTH?: string | null;
   XAI_OAUTH_TOKEN?: string | null;
   OPENROUTER_API_KEY?: string | null;
+  /** Optional per-model tenant OpenRouter keys. Keys are indexed by the BARE
+   * OpenRouter model id (`anthropic/claude-...`). The registry resolves this
+   * before the shared key so several named connections can safely use different
+   * OpenRouter accounts in one cascade. */
+  OPENROUTER_MODEL_KEYS?: Readonly<Record<string, string>> | null;
   CEREBRAS_API_KEY?: string | null;
   OLLAMA_API_KEY?: string | null;
   NVIDIA_API_KEY?: string | null;
