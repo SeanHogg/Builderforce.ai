@@ -1,5 +1,9 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
-import { groupByTenant } from './autonomousExecutionSweep';
+import { autonomousCandidatesQuery, groupByTenant, MAX_CANDIDATES_PER_TICK } from './autonomousExecutionSweep';
+import { RuntimeService } from './RuntimeService';
+import { buildDatabase } from '../../infrastructure/database/connection';
 import { buildUpgradeCopy, upgradeEmailDedupeKey } from './pendingAgentsUpgradeEmail';
 
 describe('groupByTenant', () => {
@@ -56,5 +60,73 @@ describe('buildUpgradeCopy', () => {
     // Teams is already the top plan — no "upgrade to X" pitch.
     expect(buildUpgradeCopy({ pendingAgents: 2, reason: 'monthly_exhausted', effectivePlan: 'teams' }).upgradeHint)
       .not.toContain('Upgrade to');
+  });
+});
+
+/**
+ * THE WINDOW THAT NEVER MOVED, one layer below the manager's (see `managedWindow.test.ts`).
+ *
+ * `loadAutonomousCandidates` bounds one tick to {@link MAX_CANDIDATES_PER_TICK} rows under
+ * a TOTAL, STABLE order (manager rank, then priority tier, then `updated_at`). A fixed cap
+ * over a fixed order is a set, not a window — so with more qualifying tickets than the
+ * limit, the same rows are examined on every tick and the tail is unreachable, not merely
+ * delayed.
+ *
+ * The bound was justified by "each dispatched ticket becomes a live run and is skipped
+ * next tick, so the backlog naturally paces itself". The skip happened in the EVALUATOR;
+ * the ticket kept its slot here. Measured on project 11, 2026-07-29: 372 of 670 stalled
+ * tickets `never_started`, oldest idle 49 days, on a board that completed 2,151 agent runs
+ * that day and holds 708 managed tickets against a 400-row window.
+ *
+ * The defect lives entirely in the WHERE clause, so this reads the rendered SQL —
+ * `.toSQL()` never dials the connection.
+ */
+const db = buildDatabase({ NEON_DATABASE_URL: 'postgresql://user:pw@localhost/db' } as Parameters<typeof buildDatabase>[0]);
+const candidateQuery = () => autonomousCandidatesQuery(db, MAX_CANDIDATES_PER_TICK).toSQL();
+const candidateSql = (): string => candidateQuery().sql;
+
+describe('the autonomous executor\'s candidate window', () => {
+  it('excludes a ticket that already has a live run, so its slot is freed', () => {
+    const sql = candidateSql();
+    // The exclusion itself: a correlated NOT EXISTS over non-terminal executions.
+    expect(sql).toMatch(/not exists/);
+    expect(sql).toContain('"executions"');
+    // Every non-terminal status must be named — omitting one (paused, say) would let
+    // that ticket hold its slot for as long as it stays in that state.
+    expect(RuntimeService.NON_TERMINAL_STATUSES.length).toBeGreaterThan(0);
+    const { params } = candidateQuery();
+    for (const status of RuntimeService.NON_TERMINAL_STATUSES) {
+      expect(params, `'${status}' must vacate the window`).toContain(status);
+    }
+  });
+
+  it('counts only LIVE runs — a rehearsal must not park a ticket out of the window', () => {
+    // A rehearsal (0372) drives the real loop and writes a real `executions` row, but it
+    // ships nothing. Letting one hold a candidate slot would starve the queue for the
+    // length of a dry run.
+    expect(candidateSql()).toMatch(/"executions"\."mode"\s*=/);
+  });
+
+  it('is backed by the index the correlated probe needs (0384)', () => {
+    // The probe is evaluated per candidate row on a five-minute cron path, over a table
+    // growing by thousands of rows a day, and `executions` had no index that serves it.
+    // Unindexed, this fix would trade one starvation for a sequential scan.
+    const migration = readFileSync(
+      fileURLToPath(new URL('../../../migrations/0384_autonomous_candidate_window.sql', import.meta.url).href),
+      'utf8',
+    ).replace(/\s+/g, ' ');
+    expect(migration).toContain(
+      'CREATE INDEX IF NOT EXISTS idx_executions_task_status ON executions(task_id, status)',
+    );
+  });
+
+  it('still bounds the scan and still drains by priority', () => {
+    // The fix must not turn the queue back into arrival order — priority-first dispatch
+    // is the reason the ordering exists.
+    const sql = candidateSql();
+    expect(sql).toContain('limit');
+    const orderBy = sql.slice(sql.lastIndexOf(' order by '));
+    expect(orderBy).toContain('manager_rank');
+    expect(orderBy.indexOf('manager_rank')).toBeLessThan(orderBy.indexOf('priority'));
   });
 });

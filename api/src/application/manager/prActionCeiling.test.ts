@@ -25,6 +25,19 @@ import { MAX_REMEDY_ATTEMPTS, isActionExhausted } from './stallTriage';
  * least-recently-worked rotation ORDERS by the newest of them. So the invariants worth
  * pinning are the ones that would silently disable either mechanism — a type that cannot
  * be persisted, a duplicate, or a write that goes back to 'flag'.
+ *
+ * ── AND THE KEY THEY ARE COUNTED ON (0383) ───────────────────────────────────────
+ * 0381 keyed all of it on `manager_actions.task_id`, and re-measured on 2026-07-29 the
+ * loop was STILL unbounded: `pull_requests.task_id` is nullable, `NULL = NULL` is never
+ * true in a join, and every guard was additionally written `pr.taskId != null && …`. So
+ * an orphan PR was exempt from both ceilings AND — its `last_acted_at` being NULL —
+ * pinned to the front of the NULLS-FIRST rotation on every pass. Measured: "Could not
+ * merge PR #29 … not mergeable" journalled with `{"attempt":1,"maxAttempts":3}` six times
+ * in thirty minutes, attempt 1 every time, while 381 open PRs waited behind it.
+ *
+ * The counters are now keyed on the PULL REQUEST, which is the contract the loop is
+ * actually about, and the third unbounded remedy on the same function — a conflict whose
+ * recovery can never start — got the same ceiling.
  */
 describe('manager PR action ceiling + rotation', () => {
   const source = readFileSync(
@@ -77,19 +90,52 @@ describe('manager PR action ceiling + rotation', () => {
     // different number of tries than every other remedy is a rule nobody can state.
     expect(isActionExhausted(MAX_REMEDY_ATTEMPTS - 1)).toBe(false);
     expect(isActionExhausted(MAX_REMEDY_ATTEMPTS)).toBe(true);
-    expect(source).toMatch(/isActionExhausted\(mergeFailures\.get\(pr\.taskId\) \?\? 0\)/);
   });
 
-  it('is backed by the index its grouped scan needs (0381)', () => {
+  /**
+   * THE 0383 REGRESSION, and like the one above it can only be a source assertion: the
+   * defect is a JOIN KEY, which no type check and no unit test of the surrounding
+   * function can see. `pull_requests.task_id` is nullable, so keying any of this on the
+   * ticket silently exempts every orphan PR from every ceiling.
+   */
+  it('counts all three ceilings on the PULL REQUEST, never on its (nullable) ticket', () => {
+    for (const counter of ['syncAttempts', 'mergeFailures', 'conflictAttempts']) {
+      expect(source, `${counter} must be keyed by pr.id`)
+        .toMatch(new RegExp(`isActionExhausted\\(${counter}\\.get\\(pr\\.id\\) \\?\\? 0\\)`));
+    }
+    // The dedupe that decides whether a retired PR is reported at all shares the key.
+    expect(source).toMatch(/alreadyReportedBlocked\.has\(pr\.id\)/);
+    // And the join/grouping the counts come from.
+    expect(source).toMatch(/\.groupBy\(managerActions\.prId\)/);
+    expect(source).toMatch(/leftJoin\(prActivity, eq\(prActivity\.prId, pullRequests\.id\)\)/);
+    // A ticket-keyed guard is exactly what let the orphan through — none may return.
+    expect(source).not.toMatch(/pr\.taskId != null && isActionExhausted/);
+    expect(source).not.toMatch(/mergeFailures\.get\(pr\.taskId/);
+  });
+
+  /**
+   * A journalled PR action with no `pr_id` is invisible to both the ceilings and the
+   * rotation — i.e. it recreates the livelock silently. Every write in the merge loop
+   * must carry it.
+   */
+  it('stamps every PR-loop journal write with the pull request it was about', () => {
+    const loop = source.slice(source.indexOf('const prActivity = db'));
+    const writes = loop.match(/tenantId, projectId, taskId: pr\.taskId,[^\n]*/g) ?? [];
+    expect(writes.length).toBeGreaterThanOrEqual(7);
+    for (const write of writes) expect(write, write).toContain('prId: pr.id');
+  });
+
+  it('is backed by the index its grouped scan needs (0381, re-keyed 0383)', () => {
     // manager_actions is append-only and grows ~3.5k rows/day on one active project.
     // Without this index the per-pass group-by is a sequential scan that gets slower
     // every day — the pass would start dying on the very loop this fixes.
     const migration = readFileSync(
-      fileURLToPath(new URL('../../../migrations/0381_manager_pr_action_ceiling.sql', import.meta.url).href),
+      fileURLToPath(new URL('../../../migrations/0383_manager_actions_pr_scope.sql', import.meta.url).href),
       'utf8',
     ).replace(/\s+/g, ' ');
     expect(migration).toContain(
-      'CREATE INDEX IF NOT EXISTS idx_manager_actions_pr_ceiling ON manager_actions(tenant_id, project_id, action_type, task_id)',
+      'CREATE INDEX IF NOT EXISTS idx_manager_actions_pr_scope ON manager_actions(tenant_id, project_id, action_type, pr_id)',
     );
+    expect(migration).toContain('ADD COLUMN IF NOT EXISTS pr_id uuid');
   });
 });
