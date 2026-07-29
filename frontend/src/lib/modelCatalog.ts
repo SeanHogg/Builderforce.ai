@@ -167,7 +167,7 @@ export async function getModelCatalog(): Promise<ModelRecord[]> {
 
 /**
  * Is `record` a PREMIUM model — one of the paid OpenRouter models a tenant unlocks
- * with a paid plan + a validated card, billed at OpenRouter cost + a flat 1¢/request?
+ * with billing details + a validated card, billed at OpenRouter cost + a flat 1¢/request?
  *
  * Mirrors the server's `isPremiumModelSelection`: a PAID model that the plan's own
  * pool does NOT already route. The gateway marks pool membership on every catalog

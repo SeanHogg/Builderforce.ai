@@ -97,6 +97,9 @@ export interface WebhookEvent {
   /** Use this to look up the tenant */
   externalCustomerId: string;
   externalSubscriptionId: string;
+  /** Signed tenant metadata on card-setup events. This lets a first-time Free
+   * tenant be linked to the Customer Stripe creates when Checkout completes. */
+  tenantId?: number;
 
   /** Present on activation/renewal events */
   billingCycle?: TenantBillingCycle;

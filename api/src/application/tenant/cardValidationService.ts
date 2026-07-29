@@ -2,8 +2,8 @@
  * Card-validation state for PREMIUM (any-paid-OpenRouter) model selection.
  *
  * A tenant unlocks the premium tier (select any paid OpenRouter model, billed at
- * OpenRouter cost + a flat 1¢/request) only with a PAID plan AND a card that has been
- * through an explicit validation flow (Stripe SetupIntent / $0 auth) — see
+ * OpenRouter cost + a flat 1¢/request) on any plan with a card that has been through
+ * an explicit validation flow (Stripe SetupIntent / $0 auth) — see
  * `evaluatePremiumModelAccess`. This module is the single read/write surface for the
  * `tenants.card_validated_at` + `card_validation_status` columns (migration 0342).
  *
@@ -118,12 +118,8 @@ export async function clearCardValidation(env: Env, tenantId: number): Promise<v
  * Clear a tenant's card by the processor's customer id, returning the
  * payment-method id that was on file so the caller can detach it.
  *
- * Used when a subscription ENDS. `DELETE /card-validation` refuses while a paid
- * plan is live (those cards are the renewal instrument), which used to leave a
- * mid-cycle canceller unable to clear their card until the period elapsed — and
- * then only by coming back to do it by hand. Since premium requires a paid plan,
- * a card kept past the subscription serves no purpose we can point at, so it goes
- * with the subscription.
+ * Retained for explicit administrative cleanup. Subscription cancellation does
+ * not call this: a Free tenant may keep the card for metered OpenRouter usage.
  *
  * Returns null when no tenant matches, or when there was nothing on file.
  */
@@ -157,17 +153,28 @@ export async function markCardValidatedByCustomer(
   env: Env,
   externalCustomerId: string,
   card?: { brand?: string | null; last4?: string | null; paymentMethodId?: string | null },
+  setup?: { tenantId?: number; billingEmail?: string | null },
 ): Promise<CardValidatedOutcome> {
   const db = writeDb(env);
   // Read the OUTGOING payment-method id in the same lookup: on a REPLACE this row
   // still holds the previous card, and once we overwrite it the only handle to
   // detach it is gone. Returned to the caller rather than detached here — this
   // module owns our record, not the processor.
-  const [row] = await buildDatabase(env)
+  let [row] = await buildDatabase(env)
     .select({ id: tenants.id, previousPaymentMethodId: tenants.externalPaymentMethodId })
     .from(tenants)
     .where(eq(tenants.externalCustomerId, externalCustomerId))
     .limit(1);
+  // A Free tenant has never checked out, so it has no external_customer_id yet.
+  // The signed tenantId metadata from the setup session is the authoritative
+  // first-link; persist the new Stripe Customer as part of the validation write.
+  if (!row && setup?.tenantId) {
+    [row] = await buildDatabase(env)
+      .select({ id: tenants.id, previousPaymentMethodId: tenants.externalPaymentMethodId })
+      .from(tenants)
+      .where(eq(tenants.id, setup.tenantId))
+      .limit(1);
+  }
   if (!row) return { known: false, replacedPaymentMethodId: null };
 
   await db.update(tenants)
@@ -177,6 +184,8 @@ export async function markCardValidatedByCustomer(
       ...(card?.brand ? { cardBrand: card.brand } : {}),
       ...(card?.last4 ? { cardLast4: card.last4 } : {}),
       ...(card?.paymentMethodId ? { externalPaymentMethodId: card.paymentMethodId } : {}),
+      ...(externalCustomerId ? { externalCustomerId } : {}),
+      ...(setup?.billingEmail ? { billingEmail: setup.billingEmail } : {}),
       // See clearCardValidation: `billingUpdatedAt` belongs to the subscription.
       updatedAt: new Date(),
     })
@@ -192,13 +201,24 @@ export async function markCardValidatedByCustomer(
 }
 
 /** Mark a tenant's card validation as failed (provider rejected the card). */
-export async function markCardValidationFailedByCustomer(env: Env, externalCustomerId: string): Promise<boolean> {
+export async function markCardValidationFailedByCustomer(
+  env: Env,
+  externalCustomerId: string,
+  tenantId?: number,
+): Promise<boolean> {
   const db = writeDb(env);
-  const [row] = await buildDatabase(env)
+  let [row] = await buildDatabase(env)
     .select({ id: tenants.id })
     .from(tenants)
     .where(eq(tenants.externalCustomerId, externalCustomerId))
     .limit(1);
+  if (!row && tenantId) {
+    [row] = await buildDatabase(env)
+      .select({ id: tenants.id })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+  }
   if (!row) return false;
   await db.update(tenants)
     .set({ cardValidationStatus: 'failed', updatedAt: new Date() })

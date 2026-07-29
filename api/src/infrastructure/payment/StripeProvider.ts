@@ -122,13 +122,24 @@ export class StripeProvider implements PaymentProvider {
     this.requireConfigured();
     const params = new URLSearchParams({
       mode: 'setup',
-      customer_email: opts.billingEmail,
+      // Metered OpenRouter billing needs an actual billing profile, not merely a
+      // usable PAN. Stripe Checkout stores the entered name/address on the
+      // PaymentMethod and Customer; no subscription is created and no charge is made.
+      billing_address_collection: 'required',
       success_url: opts.successUrl,
       cancel_url: opts.cancelUrl,
       'metadata[tenantId]': String(opts.tenantId),
       'metadata[purpose]': 'card_validation',
+      'setup_intent_data[metadata][tenantId]': String(opts.tenantId),
     });
-    if (opts.externalCustomerId) params.set('customer', opts.externalCustomerId);
+    if (opts.externalCustomerId) {
+      params.set('customer', opts.externalCustomerId);
+      params.set('customer_update[address]', 'auto');
+      params.set('customer_update[name]', 'auto');
+    } else {
+      params.set('customer_email', opts.billingEmail);
+      params.set('customer_creation', 'always');
+    }
 
     const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
@@ -235,6 +246,7 @@ export class StripeProvider implements PaymentProvider {
         // branch on mode BEFORE the subscription mapping below (a setup session has no
         // subscription and would otherwise activate a plan the tenant never bought).
         if (obj['mode'] === 'setup') {
+          const rawTenantId = Number(meta['tenantId']);
           const setupIntentId = obj['setup_intent'] as string | null;
           const card = setupIntentId
             ? await this.fetchCard(`https://api.stripe.com/v1/setup_intents/${setupIntentId}?expand[]=payment_method`)
@@ -243,6 +255,10 @@ export class StripeProvider implements PaymentProvider {
             type: 'card.validated',
             externalCustomerId: customer,
             externalSubscriptionId: '',
+            ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}),
+            billingEmail:
+              (obj['customer_email'] as string | undefined) ??
+              ((obj['customer_details'] as Record<string, string> | undefined)?.['email']),
             ...(card?.brand ? { paymentBrand: card.brand } : {}),
             ...(card?.last4 ? { paymentLast4: card.last4 } : {}),
             // The handle a later remove/replace detaches by (migration 0346).
@@ -319,10 +335,13 @@ export class StripeProvider implements PaymentProvider {
       }
 
       case 'setup_intent.setup_failed': {
+        const meta = (obj['metadata'] ?? {}) as Record<string, string>;
+        const rawTenantId = Number(meta['tenantId']);
         return {
           type: 'card.validation_failed',
           externalCustomerId: obj['customer'] as string,
           externalSubscriptionId: '',
+          ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}),
           raw: event,
         };
       }

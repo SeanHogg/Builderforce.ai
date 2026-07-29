@@ -4073,14 +4073,13 @@ export type CardValidationStatus = 'none' | 'pending' | 'validated' | 'failed';
 
 /** PREMIUM (any-paid-OpenRouter) model selection: the tenant may pick ANY paid
  *  OpenRouter model, billed at OpenRouter's own price + a flat per-request surcharge.
- *  Stricter than frontier access — it needs a paid plan AND a validated card, because
- *  it routes on Builderforce's metered key. `unlock` names the exact next step on a
- *  miss so the UI shows "Upgrade" vs "Validate your card" rather than a generic wall.
+ *  It needs billing details and a validated card because it routes on Builderforce's
+ *  metered key. This is independent of subscription tier.
  *  Mirrors `evaluatePremiumModelAccess` (the api is the source of truth). */
 export interface PremiumModelInfo {
   entitled: boolean;
-  reason: 'superadmin' | 'premium_override' | 'paid_card' | 'card_required' | 'plan_required';
-  unlock?: 'upgrade' | 'validate_card';
+  reason: 'superadmin' | 'premium_override' | 'paid_card' | 'card_required';
+  unlock?: 'validate_card';
   cardValidationStatus: CardValidationStatus;
   /** Flat surcharge added per request, in millicents (1/100000 USD). 1000 = 1¢. */
   surchargeMillicents: number;
@@ -4131,9 +4130,8 @@ export interface CardValidationState {
 }
 
 /**
- * Explicit card validation (Stripe SetupIntent / Helcim $0 verify). A paid tenant runs
- * this once to unlock premium model selection — no charge is made; it only proves the
- * card is usable, since premium is metered per request rather than sold as a plan.
+ * Explicit card validation (Stripe SetupIntent / $0 verify). A tenant on any plan runs
+ * this once to add billing details and unlock metered model selection. No charge is made.
  */
 export const cardValidationApi = {
   get: (tenantId: number): Promise<CardValidationState> =>

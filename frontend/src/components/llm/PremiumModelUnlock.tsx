@@ -9,7 +9,7 @@ import { useStartCardValidation } from '@/lib/useCardValidation';
  * OpenRouter model, billed at OpenRouter's own per-token price plus a flat 1¢ per
  * request.
  *
- * Premium is gated on a paid plan AND a card that passed an explicit validation
+ * Premium is gated on billing details and a card that passed an explicit validation
  * (a $0 SetupIntent — no charge; it only proves the card is usable, since premium is
  * metered per request rather than sold as a plan). The server decides that in ONE
  * place (`evaluatePremiumModelAccess`) and reports both the verdict and the exact
@@ -56,11 +56,7 @@ export function PremiumModelUnlock() {
           {pending && <span style={hintStyle}>{t('premiumPendingHint')}</span>}
           {failed && <span style={{ ...hintStyle, color: 'var(--danger, #ef4444)' }}>{t('premiumFailedHint')}</span>}
         </div>
-      ) : (
-        <a href="/pricing?upgrade=pro" style={{ ...buttonPrimary, display: 'inline-block', textDecoration: 'none' }}>
-          {t('premiumUpgrade')}
-        </a>
-      )}
+      ) : null}
 
       {error !== null && (
         <div role="alert" style={{ ...hintStyle, color: 'var(--danger, #ef4444)' }}>

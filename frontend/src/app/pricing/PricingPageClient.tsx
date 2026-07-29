@@ -368,12 +368,8 @@ export default function PricingPageClient() {
             )}
           </div>
 
-          {/* Card validation, on the billing console rather than only beside a model
-              picker. Premium access needs a paid plan AND a validated card, so a
-              tenant told "add and validate a card" had nowhere to go — the control
-              lived exclusively inside <ModelSelect>, which the VS Code extension and
-              every non-model surface deep-link away from. Self-gating: renders
-              nothing for an already-entitled tenant. */}
+          {/* Billing details and card validation are independent of upgrades. Free
+              tenants can add a funding instrument here for metered OpenRouter usage. */}
           <PremiumModelUnlock />
 
           {/* The after state: the card premium access actually rides on, and the

@@ -54,7 +54,7 @@ describe('isPremiumModelSelection', () => {
   });
 
   it('classifies a paid model as premium for a FREE plan (it is off their pool)', () => {
-    // The gate then rejects it with plan_required — free tenants can't reach premium.
+    // A Free tenant can use it once their billing profile/card is validated.
     expect(isPremiumModelSelection('openai/o1-pro', 'free')).toBe(true);
   });
 });

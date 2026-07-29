@@ -14,7 +14,6 @@ import type { PaymentProvider } from '../../infrastructure/payment/PaymentProvid
 import {
   markCardValidatedByCustomer,
   markCardValidationFailedByCustomer,
-  clearCardValidationByCustomer,
 } from '../../application/tenant/cardValidationService';
 
 export function createWebhookRoutes(
@@ -63,6 +62,9 @@ export function createWebhookRoutes(
             brand: event.paymentBrand ?? null,
             last4: event.paymentLast4 ?? null,
             paymentMethodId: event.paymentMethodId ?? null,
+          }, {
+            tenantId: event.tenantId,
+            billingEmail: event.billingEmail ?? null,
           });
           known = outcome.known;
 
@@ -80,7 +82,7 @@ export function createWebhookRoutes(
             }
           }
         } else {
-          known = await markCardValidationFailedByCustomer(c.env as Env, event.externalCustomerId);
+          known = await markCardValidationFailedByCustomer(c.env as Env, event.externalCustomerId, event.tenantId);
         }
         if (!known) {
           console.warn(`[webhook] card event for unknown externalCustomerId: ${event.externalCustomerId}`);
@@ -100,31 +102,9 @@ export function createWebhookRoutes(
       return c.json({ error: 'Processing failed' }, 500);
     }
 
-    // A subscription that has ENDED takes the card with it.
-    //
-    // `DELETE /card-validation` refuses while a paid plan is live, because those
-    // cards bill the renewal — which left a tenant who cancelled mid-cycle unable
-    // to clear their card until the period elapsed, and then only by returning to
-    // do it by hand. Premium needs a paid plan, so a card kept past the
-    // subscription serves no purpose; it is released here instead.
-    //
-    // Runs AFTER the downgrade so it can't race the plan write, and is
-    // best-effort: the subscription change is what the provider is waiting on, and
-    // failing the webhook over card cleanup would have it retry a downgrade
-    // that already succeeded.
-    if (event.type === 'subscription.cancelled') {
-      try {
-        const { clearedPaymentMethodId } = await clearCardValidationByCustomer(
-          c.env as Env,
-          event.externalCustomerId,
-        );
-        if (clearedPaymentMethodId) {
-          await paymentProvider.detachCards({ paymentMethodId: clearedPaymentMethodId });
-        }
-      } catch (err) {
-        reportCaughtError(err, { source: "presentation/routes/webhookRoutes.ts", operation: "createWebhookRoutes", level: 'warning', context: { logMessage: '[webhook] card release on subscription end failed:', details: err } });
-      }
-    }
+    // Cancelling a subscription does NOT remove the card-validation profile.
+    // Free tenants can keep it for metered OpenRouter usage and may remove it
+    // explicitly from /pricing once the subscription is no longer active.
 
     return c.json({ received: true, processed: true });
   });

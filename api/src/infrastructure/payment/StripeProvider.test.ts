@@ -90,6 +90,59 @@ describe('buildPaymentProvider — unconfigured', () => {
   });
 });
 
+describe('createCardValidationSession — billing profile collection', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('requires a full billing address and creates a Customer for a Free tenant', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      id: 'cs_setup',
+      url: 'https://checkout.stripe.test/setup',
+      customer: null,
+    }), { status: 200 })));
+
+    await makeProvider().createCardValidationSession({
+      tenantId: 7,
+      billingEmail: 'billing@example.com',
+      successUrl: 'https://builderforce.ai/pricing?card=validated',
+      cancelUrl: 'https://builderforce.ai/pricing?card=cancelled',
+    });
+
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    const params = new URLSearchParams(String(init?.body));
+    expect(params.get('mode')).toBe('setup');
+    expect(params.get('billing_address_collection')).toBe('required');
+    expect(params.get('customer_creation')).toBe('always');
+    expect(params.get('customer_email')).toBe('billing@example.com');
+    expect(params.get('metadata[tenantId]')).toBe('7');
+    expect(params.get('setup_intent_data[metadata][tenantId]')).toBe('7');
+    expect(params.has('customer')).toBe(false);
+  });
+
+  it('updates the billing name/address on an existing Customer without sending customer_email', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      id: 'cs_setup',
+      url: 'https://checkout.stripe.test/setup',
+      customer: 'cus_existing',
+    }), { status: 200 })));
+
+    await makeProvider().createCardValidationSession({
+      tenantId: 7,
+      billingEmail: 'billing@example.com',
+      externalCustomerId: 'cus_existing',
+      successUrl: 'https://builderforce.ai/pricing?card=validated',
+      cancelUrl: 'https://builderforce.ai/pricing?card=cancelled',
+    });
+
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    const params = new URLSearchParams(String(init?.body));
+    expect(params.get('customer')).toBe('cus_existing');
+    expect(params.get('customer_update[address]')).toBe('auto');
+    expect(params.get('customer_update[name]')).toBe('auto');
+    expect(params.has('customer_email')).toBe(false);
+    expect(params.has('customer_creation')).toBe(false);
+  });
+});
+
 describe('verifyStripeSignature (via parseWebhook)', () => {
   it('accepts a correctly signed payload', async () => {
     const body = subscriptionUpdated('active');
@@ -217,6 +270,33 @@ describe('checkout.session.completed', () => {
       targetPlan: 'teams',
       seats: 5,
       billingEmail: 'billing@example.com',
+    });
+  });
+
+  it('maps a first-time Free account setup back to signed tenant metadata', async () => {
+    const setup = JSON.stringify({
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_setup',
+          mode: 'setup',
+          customer: 'cus_new',
+          setup_intent: 'seti_123',
+          customer_details: { email: 'free@example.com' },
+          metadata: { tenantId: '19', purpose: 'card_validation' },
+        },
+      },
+    });
+    stubCardFetch({ payment_method: { id: 'pm_new', card: { brand: 'visa', last4: '4242' } } });
+
+    const event = await makeProvider().parseWebhook(setup, await sign(setup));
+
+    expect(event).toMatchObject({
+      type: 'card.validated',
+      tenantId: 19,
+      externalCustomerId: 'cus_new',
+      billingEmail: 'free@example.com',
+      paymentMethodId: 'pm_new',
     });
   });
 });

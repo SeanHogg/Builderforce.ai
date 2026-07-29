@@ -1854,7 +1854,7 @@ export function codingDefaultForPlan(effectivePlan: EffectivePlan, premiumOverri
  * Is `model` a PREMIUM OpenRouter selection — i.e. an explicit pin on a PAID
  * OpenRouter model that is NOT already in the tenant's curated in-plan pool? This
  * is the "leverage OpenRouter → any paid model" tier: it routes on OUR metered
- * OpenRouter key, so selecting it is gated behind premium access (paid plan + a
+ * OpenRouter key, so selecting it is gated behind premium access (billing details + a
  * validated card) and billed at OpenRouter cost + a flat 1¢/request.
  *
  * Excluded (return false):

@@ -44,7 +44,7 @@ export function ModelSelect({
   const t = useTranslations('modelSelect');
   const { models, codingModels, tenantModels, byoModels, canUsePremiumModels, premiumModels } = useLlmModels();
   const pool = variant === 'coding' && codingModels.length > 0 ? codingModels : models;
-  // Premium = any paid OpenRouter model, unlocked by a paid plan + a validated card.
+  // Premium = any paid OpenRouter model, unlocked by billing details + a validated card.
   // The hook only populates the list when the tenant is entitled, so rendering the
   // group off `premiumModels.length` can never show a paywalled option. `useLlmModels`
   // resolves entitlement from the SAME server rule the gateway enforces, so a selection
@@ -86,8 +86,8 @@ export function ModelSelect({
         </optgroup>
       )}
       {/* Premium — any paid OpenRouter model, billed at OpenRouter's own price plus a
-          flat 1¢ per request. Only rendered for an entitled tenant (paid plan +
-          validated card); everyone else gets the unlock CTA from PremiumModelUnlock. */}
+          flat 1¢ per request. Only rendered with a validated billing profile/card;
+          everyone else gets the unlock CTA from PremiumModelUnlock. */}
       {showPremium && (
         <optgroup label={t('premiumModels')}>
           {premiumChoices.map((m) => (

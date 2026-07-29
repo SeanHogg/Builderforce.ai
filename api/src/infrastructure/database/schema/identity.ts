@@ -279,7 +279,7 @@ export const tenants = pgTable('tenants', {
   /**
    * Explicit card-validation flow for PREMIUM (any-paid-OpenRouter) model selection
    * (migration 0342). A tenant may select any paid OpenRouter model (billed at
-   * OpenRouter cost + a flat 1¢/request) only with a PAID plan AND a card that has
+   * OpenRouter cost + a flat 1¢/request) on any plan with a card that has
    * been through the provider's validation flow (SetupIntent / $0 auth):
    *   card_validated_at    → stamped when the provider confirms a usable card (NULL
    *                          until then). Presence = "validated card on file".

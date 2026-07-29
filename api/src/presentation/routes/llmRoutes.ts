@@ -1945,8 +1945,8 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     // ── Premium (any-paid-OpenRouter) model selection ────────────────────────
     // Picking an OpenRouter model OUTSIDE the plan's curated pool is the premium
-    // tier: it routes on OUR metered OpenRouter key, so it needs a paid plan AND a
-    // validated card (superadmin / premium override bypass). A model the tenant's
+    // tier: it routes on OUR metered OpenRouter key, so it needs billing details and
+    // a validated card (superadmin / premium override bypass). A model the tenant's
     // OWN connected provider serves is NOT premium — that's BYO, funded by them, so
     // it stays on the frontier-access rule and never reaches this gate.
     const pinnedModel = typeof bodyAny.model === 'string' ? bodyAny.model.trim() : '';
@@ -2413,7 +2413,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const canChooseModel = canUseFrontierModels;
 
     // PREMIUM (any-paid-OpenRouter) selection — a STRICTER, separate rule from frontier
-    // access: paid plan AND a validated card (superadmin / override bypass). The premium
+    // access: billing details and a validated card (superadmin / override bypass). The premium
     // model LIST is deliberately NOT inlined here: it is the whole paid OpenRouter
     // catalog (hundreds of ids) and is already served, read-through + edge cached, by
     // `GET /v1/catalog`. The picker loads it from there and filters, so this payload
