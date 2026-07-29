@@ -39,18 +39,25 @@ export function toPercent(completed: number, total: number): number {
   return Math.max(0, Math.min(100, pct));
 }
 
-/** Format percent for FR-2 "7/10 or 70%". */
+/** Format a percentage for the value column, e.g. `70%` (FR-1/FR-2). */
 export function formatPct(completed: number, total: number): string {
-  return toPercent(completed, total).toFixed(0) + '%';
+  return Math.round(toPercent(completed, total)) + '%';
 }
 
-/** Format the numeric value column per the chosen ValueFormat (FR-1/FR-2). */
+/**
+ * Format the numeric value column per the chosen ValueFormat (FR-1/FR-2).
+ *
+ * With no denominator to divide by (`total <= 0`) a fraction like `5/0` would be
+ * meaningless, so the value degrades to `0%` — satisfying AC-3's "renders 0% (or N/A)
+ * without throwing".
+ */
 export function formatValue(
   completed: number,
   total: number,
   valueFormat: ValueFormat = 'fraction'
 ): string {
   if (valueFormat === 'percent') return formatPct(completed, total);
+  if (!Number.isFinite(total) || total <= 0) return formatPct(completed, total);
   return `${completed}/${total}`;
 }
 
