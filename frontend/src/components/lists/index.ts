@@ -11,6 +11,7 @@ export {
   getColorByStatus,
   STATUS_LABELS,
   STATUS_ICONS,
+  STATUS_VALUES,
   type ProgressItem,
   type PList,
   type SortBy,
