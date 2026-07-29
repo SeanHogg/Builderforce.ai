@@ -145,7 +145,11 @@ export interface DailyDigest {
   team: {
     shipped: DigestDelta;
     opened: DigestDelta;
-    laneMoves: { forward: number; backward: number; byHuman: number; byAgent: number };
+    laneMoves: { forward: number; backward: number; byHuman: number; byAgent: number;
+      /** Hops whose actor the log cannot name — automation with no identity (0381).
+       *  Its own bucket because folding it into `byAgent` claimed credit for agents that
+       *  the contributor table simultaneously showed at zero. */
+      bySystem: number };
     runs: { completed: number; failed: number };
     prs: { merged: DigestDelta; opened: number };
     contributors: DigestContributor[];
@@ -567,13 +571,22 @@ export async function computeDailyDigest(
     });
   };
 
-  let forward = 0; let backward = 0; let byHuman = 0; let byAgent = 0;
+  let forward = 0; let backward = 0; let byHuman = 0; let byAgent = 0; let bySystem = 0;
   for (const m of moveRows as Array<{ actorKind: string; actorRef: string | null; forward: number; backward: number }>) {
     const f = Number(m.forward || 0);
     const b = Number(m.backward || 0);
     forward += f;
     backward += b;
-    if (m.actorKind === 'human') byHuman += f + b; else byAgent += f + b;
+    // THREE buckets, not two. `else = agent` was a lie with a cost: an ANONYMOUS hop
+    // (`actor_kind = 'system'`, the stamp an unattributed automated completion writes)
+    // was reported as "by agents" while the contributor table — which correctly refuses
+    // to credit an actor it cannot name — showed every agent at zero. The surface
+    // therefore said "3 forward moves by agents" and "0 moves" for all six agents at the
+    // same time, and that contradiction is what hid the missing attribution for a day.
+    // An unattributed move is now counted as what it is: automation nobody can name.
+    if (m.actorKind === 'human') byHuman += f + b;
+    else if (contributorKind(m.actorKind)) byAgent += f + b;
+    else bySystem += f + b;
     // Only FORWARD hops are credited: a backward move is a redo, and counting it as
     // contribution would reward churn. An actor kind the column does not name (bare
     // 'system') has nobody to credit.
@@ -664,7 +677,7 @@ export async function computeDailyDigest(
       team: {
         shipped: { today: Number(counts.shippedToday ?? 0), yesterday: Number(counts.shippedPrev ?? 0) },
         opened: { today: Number(counts.openedToday ?? 0), yesterday: Number(counts.openedPrev ?? 0) },
-        laneMoves: { forward, backward, byHuman, byAgent },
+        laneMoves: { forward, backward, byHuman, byAgent, bySystem },
         runs: { completed: runsCompleted, failed: runsFailed },
         prs: {
           merged: { today: Number(prs.mergedToday ?? 0), yesterday: Number(prs.mergedPrev ?? 0) },
