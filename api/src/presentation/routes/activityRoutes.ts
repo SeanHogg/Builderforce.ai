@@ -221,6 +221,41 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     amountCents: Number(r.amount_cents ?? 0),
     submittedAt: r.submitted_at ?? null,
     approvedAt: r.approved_at ?? null,
+    rejectReason: r.reject_reason ?? null,
+    resubmissionCount: Number(r.resubmission_count ?? 0),
+  });
+
+  // GET /:id/events — the card's lifecycle audit trail. Visible to the worker who
+  // owns it OR the employer tenant it belongs to; anyone else gets 404 (AC-10 — we
+  // don't confirm existence to a non-party). Accepts either JWT.
+  router.get('/:id/events', async (c, next) => {
+    const hasTenantJwt = c.req.header('Authorization') != null && c.req.query('as') !== 'worker';
+    return hasTenantJwt ? authMiddleware(c, next) : webAuthMiddleware(c, next);
+  }, async (c) => {
+    const id = c.req.param('id');
+    const userId = c.get('userId') as string | undefined;
+    const tenantId = c.get('tenantId') as number | undefined;
+    const [card] = await sql(c.env)`
+      SELECT id FROM timecards
+      WHERE id = ${id}
+        AND (user_id = ${userId ?? null} OR tenant_id = ${tenantId ?? null})
+    `;
+    if (!card) return c.json({ error: 'Not found' }, 404);
+    const rows = await sql(c.env)`
+      SELECT e.*, u.display_name AS actor_name FROM timecard_events e
+      LEFT JOIN users u ON u.id = e.actor_id
+      WHERE e.timecard_id = ${id} ORDER BY e.created_at ASC, e.id ASC LIMIT 500
+    ` as unknown as Record<string, unknown>[];
+    return c.json(rows.map((r) => ({
+      id: Number(r.id),
+      fromStatus: r.from_status ?? null,
+      toStatus: r.to_status,
+      actorId: r.actor_id ?? null,
+      actorName: r.actor_name ?? null,
+      actorRole: r.actor_role ?? null,
+      metadata: r.metadata ? JSON.parse(r.metadata as string) : null,
+      createdAt: r.created_at,
+    })));
   });
 
   // POST /resolve — resolve an engagement's signals over [periodStart, periodEnd]
