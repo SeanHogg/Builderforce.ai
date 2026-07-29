@@ -80,8 +80,9 @@ const EMPTY: LaneStaffingResult = { unfilledRoleKeys: [], filled: [], unfillable
  * makes its requirement apply.
  *
  * A role counts as unfilled only when EVERY approver slot carrying it is unbound, under
- * every shape: one lane may authorise the same role twice, and binding it once is enough
- * to dispatch.
+ * every shape — but that union is taken PER LANE, never across the board. One lane may
+ * authorise the same role twice and binding it once is enough to dispatch THAT lane; a
+ * different lane binding it proves nothing about this one.
  */
 export function unfilledRolesForBoard(
   lanes: Iterable<LaneAuthorityInputs>,
@@ -107,10 +108,32 @@ export function unfilledRolesForBoard(
   // a board with no tickets at all. The cross-product is small and pure — a few dozen
   // lanes by a handful of distinct shapes, no IO — and the caller passes shapes it has
   // already loaded.
+  // ── THE UNION IS PER LANE, NOT PER BOARD ─────────────────────────────────────────
+  //
+  // The board-wide `bound` set was the second reason this sweep reported "everything
+  // binds" while the tickets said otherwise, and it survived the shape fix above because
+  // it hides in the same loop. Binding has TWO sources (`bindStaffedAgentsToRoles`): the
+  // workspace ROSTER, which is board-wide, and the LANE's own staffed agents, which are
+  // not. So a role bound on one lane by an agent staffed to that lane was recorded as
+  // bound for the WHOLE board — and every other lane authorising the same role, with no
+  // roster candidate and no staffing of its own, was filtered right back out of the
+  // unfilled set. The project-scope pin that would have fixed those lanes (the roster is
+  // where `staffUnfilledRole` writes) was therefore never made.
+  //
+  // Measured on project 11, 2026-07-29 (api 2026.7.180, i.e. WITH the shape fix live):
+  // `managed_no_role` standing at 294 of 670 stalled tickets, oldest idle 17 days, while
+  // this stage journalled ZERO `assign` decisions in 429 decisions that day — the exact
+  // signature of a sweep that believes it has nothing to do. The stalled tickets sat on
+  // `ready` (Requirements & Design) owing `product-owner`, a role bound elsewhere on the
+  // board by a lane-staffed agent.
+  //
+  // Within ONE lane the union is still right: binding is shape-independent, and a lane
+  // that authorises a role twice dispatches on either binding.
   const probes: ManagedTaskScope[] = [{}, ...shapes];
-  const bound = new Set<string>();
-  const unbound = new Set<string>();
+  const unfilled = new Set<string>();
   for (const inputs of lanes) {
+    const bound = new Set<string>();
+    const unbound = new Set<string>();
     for (const shape of probes) {
       const authority = decideManagedLaneAuthority(inputs, shape);
       for (const approver of authority.approvers) {
@@ -118,9 +141,9 @@ export function unfilledRolesForBoard(
         else unbound.add(approver.roleKey);
       }
     }
+    for (const roleKey of unbound) if (!bound.has(roleKey)) unfilled.add(roleKey);
   }
-  // A role that binds under ANY shape is staffed — the agent is not shape-specific.
-  return [...unbound].filter((roleKey) => !bound.has(roleKey)).sort();
+  return [...unfilled].sort();
 }
 
 /**
