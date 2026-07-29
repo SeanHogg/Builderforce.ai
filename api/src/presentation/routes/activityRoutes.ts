@@ -365,16 +365,19 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   // employer who owns the engagement). Writes a state transition event to timecard_events.
   router.post('/:id/submit', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-  router.post('/:id/submit', webAuthMiddleware, async (c) => {
-    const userId = c.get('userId') as string;
     const id = c.req.param('id');
+    // Re-resolve late-arriving signals, then lock the card (FR-3.2).
+    const [owned] = await sql(c.env)`SELECT id, status FROM timecards WHERE id = ${id} AND user_id = ${userId}`;
+    if (!owned) return c.json({ error: 'Not found' }, 404);
+    if (owned.status !== 'draft') return c.json({ error: `Cannot submit a ${owned.status} timecard`, code: 'INVALID_TRANSITION' }, 409);
+    await recomputeTimecard(sql(c.env), id);
     const rows = await sql(c.env)`
       UPDATE timecards SET status = 'submitted', submitted_at = NOW(), updated_at = NOW()
       WHERE id = ${id} AND user_id = ${userId} AND status = 'draft' RETURNING id, tenant_id, engagement_id, billable_minutes
     `;
     const card = rows[0];
-    const card = rows[0];
     if (!card) return c.json({ error: 'Not found or not draft' }, 404);
+    await recordTimecardEvent(sql(c.env), id, 'draft', 'submitted', userId, 'contractor');
     const [eng] = await sql(c.env)`SELECT created_by_user_id FROM freelancer_engagements WHERE id = ${card.engagement_id}`;
     const [me] = await sql(c.env)`SELECT display_name FROM users WHERE id = ${userId}`;
     if (eng?.created_by_user_id) {
