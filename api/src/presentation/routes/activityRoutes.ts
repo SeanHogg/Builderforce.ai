@@ -387,18 +387,25 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   router.post('/:id/submit', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    // Re-resolve late-arriving signals, then lock the card (FR-3.2).
-    const [owned] = await sql(c.env)`SELECT id, status FROM timecards WHERE id = ${id} AND user_id = ${userId}`;
+    const [owned] = await sql(c.env)`SELECT id, status, reject_reason FROM timecards WHERE id = ${id} AND user_id = ${userId}`;
     if (!owned) return c.json({ error: 'Not found' }, 404);
     if (owned.status !== 'draft') return c.json({ error: `Cannot submit a ${owned.status} timecard`, code: 'INVALID_TRANSITION' }, 409);
+    // A card carrying a rejection reason is a CORRECTED resubmission, not a first
+    // submission — count it, and clear the stale reason now that it's been actioned.
+    const isResubmission = owned.reject_reason != null;
+    // Re-resolve so late-arriving signals for the period are captured (FR-3.2).
     await recomputeTimecard(sql(c.env), id);
     const rows = await sql(c.env)`
-      UPDATE timecards SET status = 'submitted', submitted_at = NOW(), updated_at = NOW()
-      WHERE id = ${id} AND user_id = ${userId} AND status = 'draft' RETURNING id, tenant_id, engagement_id, billable_minutes
+      UPDATE timecards SET status = 'submitted', submitted_at = NOW(),
+        reject_reason = NULL,
+        resubmission_count = resubmission_count + ${isResubmission ? 1 : 0},
+        updated_at = NOW()
+      WHERE id = ${id} AND user_id = ${userId} AND status = 'draft'
+      RETURNING id, tenant_id, engagement_id, billable_minutes, resubmission_count
     `;
     const card = rows[0];
-    if (!card) return c.json({ error: 'Not found or not draft' }, 404);
-    await recordTimecardEvent(sql(c.env), id, 'draft', 'submitted', userId, 'contractor');
+    if (!card) return c.json({ error: 'Timecard is no longer draft', code: 'INVALID_TRANSITION' }, 409);
+    await recordTimecardEvent(sql(c.env), id, 'draft', 'submitted', userId, 'contractor', isResubmission ? { resubmission: true, resubmissionCount: Number(card.resubmission_count ?? 0) } : undefined);
     const [eng] = await sql(c.env)`SELECT created_by_user_id FROM freelancer_engagements WHERE id = ${card.engagement_id}`;
     const [me] = await sql(c.env)`SELECT display_name FROM users WHERE id = ${userId}`;
     if (eng?.created_by_user_id) {
