@@ -3,13 +3,18 @@
 import type { CSSProperties } from 'react';
 
 /**
- * Architecture note:
- * - Design & acceptance criteria: ref PRD.md (Compact List Progress Breakdown, task #667).
- * - Component spec: CompactListProgress handles FR-1 through FR-8 (all compact list, sorting, empty/loading/accessibility, reusability) and exemplifies Evidence sections implemented in this deliverable.
- * - In-compliance observable: EvermindBrainMap.tsx (DemoRegionProgress) demonstrates scoped integration without data-layer mutation (FR-8).
+ * CompactListProgress — a domain-agnostic, read-only progress breakdown rendered as a
+ * dense vertical list (PRD.md "Compact List Progress Breakdown", task #667).
+ *
+ * One row per item: label (truncating), a slim progress bar, a numeric value column
+ * (`5/10` or `50%`), and a status badge that carries an icon + text so meaning is never
+ * conveyed by colour alone. Covers FR-1..FR-8.
+ *
+ * It holds no state, performs no fetching and never mutates its input, so any list view
+ * can drop it in against its existing data layer by mapping to {@link ProgressItem}.
  */
 
-/** ProgressItem: Input shape for QList.Table -> CenPol stretch. */
+/** One row of the breakdown. The only shape a caller must map to (FR-2/FR-8). */
 export type ProgressItem = {
   id: string;
   label: string;
