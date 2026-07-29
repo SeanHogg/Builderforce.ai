@@ -202,14 +202,14 @@ export function CompactListProgress({
   // FR-6: empty state
   if (!displayItems.length) {
     return (
-      <span role="status" className={className} aria-label={ariaLabel ?? ''}>
+      <span role="status" className={className} style={emptyState} aria-label={ariaLabel}>
         {emptyText ?? 'No items to display'}
       </span>
     );
   }
 
   return (
-    <div role="list" className={className} aria-label={ariaLabel ?? ''}>
+    <div role="list" className={className} style={listContainer} aria-label={ariaLabel}>
       {displayItems.map((item) => {
         const pct = toPercent(item.completed, item.total);
         const pctStr = Math.round(pct) + '%';
