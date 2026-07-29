@@ -130,8 +130,8 @@ export function evaluateFrontierAccess(input: FrontierAccessInput): FrontierAcce
 // ---------------------------------------------------------------------------
 // Premium-MODEL access — a THIRD axis, distinct from both the boolean PlanFeature
 // flags AND frontier access. "May this tenant SELECT any paid OpenRouter model
-// (billed at OpenRouter cost + a flat 1¢/request)?" is unlocked by a stricter
-// rule than frontier access: it needs a PAID plan AND a VALIDATED card on file —
+// (billed at OpenRouter cost + a flat 1¢/request)?" is unlocked by a VALIDATED
+// card on file, independently of the tenant's subscription plan —
 // a card we ran an explicit validation (SetupIntent / $0 auth) against — so the
 // per-request metered spend has a funding instrument behind it. A superadmin or a
 // comped premium override bypasses (operators/betas never hit the wall). BYO does
@@ -145,8 +145,7 @@ export type PremiumModelReason =
   | 'superadmin'
   | 'premium_override'
   | 'paid_card'
-  | 'card_required'   // paid plan, but no validated card yet — the actionable miss
-  | 'plan_required';  // free plan — needs to upgrade first
+  | 'card_required';
 
 export interface PremiumModelAccessInput {
   /** The tenant's effective (trial/billing-resolved) plan. */
@@ -162,28 +161,25 @@ export interface PremiumModelAccessInput {
 export interface PremiumModelAccess {
   entitled: boolean;
   reason: PremiumModelReason;
-  /** What the tenant must do to unlock, when not entitled: upgrade or validate a card. */
-  unlock?: 'upgrade' | 'validate_card';
+  /** What the tenant must do to unlock, when not entitled. */
+  unlock?: 'validate_card';
 }
 
 /**
  * THE premium-model-access evaluator. Pure. Unlocked (in priority order) by:
- * superadmin → premium override → (paid plan AND a validated card). A paid plan
- * with no validated card reports `card_required` (unlock: validate_card); a free
- * plan reports `plan_required` (unlock: upgrade).
+ * superadmin → premium override → validated card. Plan tier is intentionally not
+ * part of this decision: a Free tenant may add billing details and a card without
+ * buying a subscription, then pay only for metered OpenRouter usage.
  */
 export function evaluatePremiumModelAccess(input: PremiumModelAccessInput): PremiumModelAccess {
   if (input.isSuperadmin) return { entitled: true, reason: 'superadmin' };
   if (input.premiumOverride) return { entitled: true, reason: 'premium_override' };
-  if (input.effectivePlan === TenantPlan.FREE) return { entitled: false, reason: 'plan_required', unlock: 'upgrade' };
   if (!input.cardValidated) return { entitled: false, reason: 'card_required', unlock: 'validate_card' };
   return { entitled: true, reason: 'paid_card' };
 }
 
 /**
- * The standardized premium-model **402** body. Names WHICH of the two walls the caller
- * hit (upgrade vs validate a card) so the client routes to the right action instead of
- * showing a generic paywall.
+ * The standardized premium-model **402** body.
  *
  * Lives here (pure domain) rather than in the route middleware because BOTH the gateway
  * (`llmRoutes`, which owns `resolveTenantPlan` and so cannot import the middleware back
@@ -191,17 +187,14 @@ export function evaluatePremiumModelAccess(input: PremiumModelAccessInput): Prem
  * identical envelope.
  */
 export function premiumModelGateBody(access: PremiumModelAccess) {
-  const needsCard = access.unlock === 'validate_card';
   return {
-    error: needsCard
-      ? 'Premium models (any paid OpenRouter model, billed at OpenRouter cost + 1¢ per request) require a validated card on file. Add and validate a card in Settings ▸ Billing to unlock.'
-      : 'Premium models (any paid OpenRouter model) require a paid plan (Pro/Teams) with a validated card on file.',
+    error: 'Premium models (any paid OpenRouter model, billed at OpenRouter cost + 1¢ per request) require billing details and a validated card on file. Add them on the Pricing page; no plan upgrade is required.',
     code: 'premium_model_not_allowed' as const,
     feature: 'premiumModels' as const,
     reason: access.reason,
     unlock: access.unlock,
-    requiredPlan: TenantPlan.PRO,
-    upgrade: !needsCard,
+    requiredPlan: TenantPlan.FREE,
+    upgrade: false,
   };
 }
 

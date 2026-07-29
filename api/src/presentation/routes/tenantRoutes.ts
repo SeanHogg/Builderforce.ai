@@ -412,7 +412,15 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       .catch(() => ({} as { billingEmail?: string; successUrl?: string; cancelUrl?: string }));
 
     const tenant = await tenantService.getTenant(tenantId);
-    const billingEmail = body.billingEmail ?? tenant.billingEmail;
+    let billingEmail = body.billingEmail ?? tenant.billingEmail;
+    if (!billingEmail) {
+      const [account] = await db
+        .select({ email: users.email })
+        .from(users)
+        .where(eq(users.id, c.get('userId') as string))
+        .limit(1);
+      billingEmail = account?.email ?? null;
+    }
     if (!billingEmail) return c.json({ error: 'billingEmail is required' }, 400);
 
     const appUrl = c.env.APP_URL ?? 'https://builderforce.ai';

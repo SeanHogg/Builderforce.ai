@@ -68,7 +68,19 @@ function makeTenantService(over: Record<string, unknown> = {}) {
   };
 }
 
-const routes = (ts: ReturnType<typeof makeTenantService>) => createTenantRoutes(ts as any, {} as any);
+const routes = (ts: ReturnType<typeof makeTenantService>, db: unknown = {}) =>
+  createTenantRoutes(ts as any, db as any);
+
+function callerEmailDb(email: string) {
+  const chain = {
+    from: vi.fn(),
+    where: vi.fn(),
+    limit: vi.fn(async () => [{ email }]),
+  };
+  chain.from.mockReturnValue(chain);
+  chain.where.mockReturnValue(chain);
+  return { select: vi.fn(() => chain) };
+}
 
 /** The route reads APP_URL for the checkout return links, so an env is required. */
 const ENV = { APP_URL: 'https://app.test' } as Record<string, unknown>;
@@ -92,6 +104,22 @@ describe('POST /:id/card-validation — add vs replace', () => {
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toMatchObject({ validated: false, status: 'pending' });
     expect(mocks.markCardPending).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the signed-in account email when a Free tenant has no billing email yet', async () => {
+    mocks.getCardValidation.mockResolvedValue(NO_CARD);
+
+    const res = await routes(
+      makeTenantService({ billingEmail: null, externalCustomerId: null }),
+      callerEmailDb('owner@free.test'),
+    ).request(`/${CALLER_TENANT}/card-validation`, { method: 'POST' }, ENV);
+
+    expect(res.status).toBe(200);
+    expect(mocks.createCardValidationSession).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: CALLER_TENANT,
+      billingEmail: 'owner@free.test',
+      externalCustomerId: null,
+    }));
   });
 
   it('does NOT suspend premium when REPLACING an already-validated card', async () => {
