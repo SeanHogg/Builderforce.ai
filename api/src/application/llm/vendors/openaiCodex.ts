@@ -13,16 +13,17 @@ const ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses';
  *  - `stream: true` + `accept: text/event-stream`. A non-streaming request is
  *    rejected outright, which is why a perfectly healthy subscription used to
  *    fail "Test connection" immediately after connecting.
- *  - the `OpenAI-Beta: responses=experimental` opt-in, plus the `originator`
- *    and `session_id` identity headers the backend expects from a CLI client.
+ *  - the `originator`, `session-id`, `thread-id`, and `x-client-request-id`
+ *    identity headers the backend expects from a Codex client.
  *  - `store: false` (server-side conversation state is not available here), and
  *    therefore `include: ['reasoning.encrypted_content']` so a reasoning model
  *    can carry its own state across turns.
+ *  - Codex 5.6 uses the Responses Lite wire shape: instructions and tools are
+ *    leading input items, advertised by `x-openai-internal-codex-responses-lite`.
  *
  * Everything else (the chat-completions <-> Responses translation) matches the
  * public Responses shape, so the surrounding gateway machinery is unchanged.
  */
-const BETA_HEADER = 'responses=experimental';
 const ORIGINATOR = 'codex_cli_rs';
 
 /**
@@ -56,8 +57,10 @@ function unpack(value: string): PackedAuth {
  * there is nothing to cap client-side. See {@link ResponsesBodyOptions.omitMaxOutputTokens}.
  */
 function requestBody(params: VendorCallParams): Record<string, unknown> {
+  const responsesLite = params.model.startsWith('gpt-5.6-');
   return buildResponsesBody(params, {
     omitMaxOutputTokens: true,
+    responsesLite,
     extra: { stream: true, include: ['reasoning.encrypted_content'] },
   });
 }
@@ -116,6 +119,9 @@ async function readPayload(response: Response, model: string): Promise<Responses
 
 async function callResponses(params: VendorCallParams): Promise<VendorCallResult> {
   const auth = unpack(params.apiKey);
+  const sessionId = crypto.randomUUID();
+  const threadId = crypto.randomUUID();
+  const responsesLite = params.model.startsWith('gpt-5.6-');
   const response = await fetch(ENDPOINT, {
     method: 'POST',
     headers: {
@@ -123,9 +129,11 @@ async function callResponses(params: VendorCallParams): Promise<VendorCallResult
       accept: 'text/event-stream',
       authorization: `Bearer ${auth.accessToken}`,
       'ChatGPT-Account-Id': auth.accountId,
-      'OpenAI-Beta': BETA_HEADER,
       originator: ORIGINATOR,
-      session_id: crypto.randomUUID(),
+      'session-id': sessionId,
+      'thread-id': threadId,
+      'x-client-request-id': threadId,
+      ...(responsesLite ? { 'x-openai-internal-codex-responses-lite': 'true' } : {}),
     },
     body: JSON.stringify(requestBody(params)),
     signal: params.signal,

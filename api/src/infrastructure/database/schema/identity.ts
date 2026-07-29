@@ -1116,3 +1116,34 @@ export const tenantLlmProviderKeys = pgTable('tenant_llm_provider_keys', {
 }, (t) => ({
   pk: primaryKey({ columns: [t.tenantId, t.provider] }),
 }));
+
+/**
+ * OpenRouter CONNECTIONS (0382) — a tenant's named OpenRouter model sets.
+ *
+ * Distinct from {@link tenantLlmProviderKeys} on purpose: that table is one credential per
+ * PROVIDER contributing one implicit frontier flagship, which cannot express "route through
+ * OpenRouter on THESE models in THIS order". A connection is a label + 1..N model ids, and a
+ * tenant may hold several.
+ *
+ * `keyEnc` is OPTIONAL: bound → the tenant's own OpenRouter account pays the tokens (row
+ * recorded byo, token cost 0); NULL → the request rides the operator key and is priced from
+ * the catalog. Either way the gateway routes and meters it, so the turn carries the flat
+ * per-request platform surcharge.
+ *
+ * `priority` shares ONE integer space with `tenantLlmProviderKeys.priority` — both are
+ * stamped from a single ordered list by `setByoPrecedence`, so connections and connected
+ * providers interleave in one precedence list. NULL = unset (catalog-tier fallback).
+ */
+export const tenantOpenRouterConnections = pgTable('tenant_openrouter_connections', {
+  id:              serial('id').primaryKey(),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  label:           text('label').notNull(),
+  keyEnc:          text('key_enc'),
+  /** Bare OpenRouter model ids, in the operator's chosen order. Prefixed to
+   *  `openrouter/<id>` at the routing boundary (never stored prefixed). */
+  models:          jsonb('models').$type<string[]>().notNull().default([]),
+  priority:        integer('priority'),
+  createdByUserId: text('created_by_user_id'),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+});

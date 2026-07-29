@@ -72,7 +72,6 @@ import {
   resolveTenantVendorKeys,
   resolveTenantLlmCredentials,
   listTenantProviderKeys,
-  setTenantProviderPriority,
   deleteTenantProviderKey,
   isSupportedProvider,
   byoVendorIdsFromCredentials,
@@ -84,6 +83,17 @@ import {
   type TenantVendorKeys,
   type LlmProvider,
 } from '../../application/llm/tenantProviderKeyService';
+import {
+  deleteOpenRouterConnection,
+  connectionModelRefs,
+  listOpenRouterConnections,
+  upsertOpenRouterConnection,
+} from '../../application/llm/openRouterConnectionService';
+import {
+  listByoPrecedence,
+  parsePrecedenceRef,
+  setByoPrecedence,
+} from '../../application/llm/byoPrecedence';
 import { CAPACITY_LIMIT_MARKER } from '../../application/llm/vendors/types';
 import {
   clearProviderAuthAlert,
@@ -957,7 +967,7 @@ function proxyForCompletion(
   env: Env,
   access: TenantAccess,
   body: ChatCompletionRequest,
-  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; byoVendorPriority?: readonly string[]; byoRequired?: boolean; byoDiagnostics?: ByoDiagnostics },
+  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; byoVendorPriority?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly import('../../application/llm/openRouterConnectionService').OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoRequired?: boolean; byoDiagnostics?: ByoDiagnostics },
 ): ReturnType<typeof llmProxyForPlan> {
   return llmProxyForPlan(env, access.effectivePlan, access.premiumOverride, {
     disablePaidOverflow: opts.disablePaidOverflow,
@@ -967,6 +977,9 @@ function proxyForCompletion(
     ...(opts.xaiOAuthToken ? { xaiOAuthToken: opts.xaiOAuthToken } : {}),
     ...(opts.tenantVendorKeys ? { tenantVendorKeys: opts.tenantVendorKeys } : {}),
     ...(opts.byoVendorPriority?.length ? { byoVendorPriority: opts.byoVendorPriority } : {}),
+    ...(opts.byoProviderPriorities?.length ? { byoProviderPriorities: opts.byoProviderPriorities } : {}),
+    ...(opts.openRouterConnections?.length ? { openRouterConnections: opts.openRouterConnections } : {}),
+    ...(opts.openRouterModelKeys && Object.keys(opts.openRouterModelKeys).length ? { openRouterModelKeys: opts.openRouterModelKeys } : {}),
     ...(opts.byoRequired ? { byoRequired: true } : {}),
     // Diagnostics only — so a fail-closed BYO 503 names the connected providers and
     // why each was unusable, matching `x-builderforce-byo-unresolved`.
@@ -1110,6 +1123,81 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     });
   });
 
+  // OpenRouter registrations — each named connection owns one ordered set of
+  // selected models and may optionally bind the tenant's OpenRouter key.
+  router.get('/openrouter-connections', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    return c.json({ connections: await listOpenRouterConnections(c.env, access.tenantId) });
+  });
+
+  router.post('/openrouter-connections', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const premium = evaluatePremiumModelAccess({
+      effectivePlan: toTenantPlan(access.effectivePlan),
+      premiumOverride: access.premiumOverride,
+      isSuperadmin: access.isSuperadmin,
+      cardValidated: access.cardValidated,
+    });
+    if (!premium.entitled) return c.json(premiumModelGateBody(premium), 402);
+    const body = await c.req.json<{ label?: unknown; models?: unknown; apiKey?: unknown }>()
+      .catch(() => ({} as { label?: unknown; models?: unknown; apiKey?: unknown }));
+    const result = await upsertOpenRouterConnection(c.env, access.tenantId, {
+      label: typeof body.label === 'string' ? body.label : '',
+      models: Array.isArray(body.models) ? body.models.filter((m: unknown): m is string => typeof m === 'string') : [],
+      ...(typeof body.apiKey === 'string' ? { apiKey: body.apiKey } : {}),
+    }, access.userId);
+    if (!result.ok) {
+      const status = result.reason === 'duplicate_label' ? 409 : 400;
+      return c.json({ error: result.reason, code: result.reason }, status);
+    }
+    return c.json(result.connection, 201);
+  });
+
+  router.put('/openrouter-connections/:id', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const premium = evaluatePremiumModelAccess({
+      effectivePlan: toTenantPlan(access.effectivePlan),
+      premiumOverride: access.premiumOverride,
+      isSuperadmin: access.isSuperadmin,
+      cardValidated: access.cardValidated,
+    });
+    if (!premium.entitled) return c.json(premiumModelGateBody(premium), 402);
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid connection id' }, 400);
+    const body = await c.req.json<{ label?: unknown; models?: unknown; apiKey?: unknown; clearKey?: unknown }>()
+      .catch(() => ({} as { label?: unknown; models?: unknown; apiKey?: unknown; clearKey?: unknown }));
+    const result = await upsertOpenRouterConnection(c.env, access.tenantId, {
+      id,
+      label: typeof body.label === 'string' ? body.label : '',
+      models: Array.isArray(body.models) ? body.models.filter((m: unknown): m is string => typeof m === 'string') : [],
+      ...(typeof body.apiKey === 'string' ? { apiKey: body.apiKey } : {}),
+      ...(body.clearKey === true ? { clearKey: true } : {}),
+    }, access.userId);
+    if (!result.ok) {
+      const status = result.reason === 'not_found' ? 404 : result.reason === 'duplicate_label' ? 409 : 400;
+      return c.json({ error: result.reason, code: result.reason }, status);
+    }
+    return c.json(result.connection);
+  });
+
+  router.delete('/openrouter-connections/:id', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid connection id' }, 400);
+    const deleted = await deleteOpenRouterConnection(c.env, access.tenantId, id);
+    return deleted ? c.json({ ok: true }) : c.json({ error: 'not_found' }, 404);
+  });
+
+  router.get('/byo-precedence', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    return c.json({ entries: await listByoPrecedence(c.env, access.tenantId) });
+  });
+
   // Credential health plus tenant-observed usage for the provider details drawer.
   // This does not expose or transmit the stored secret.
   router.get('/provider-keys/:provider/status', async (c) => {
@@ -1187,10 +1275,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     let access: TenantAccess;
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
     const body = await c.req.json<{ order?: unknown }>().catch(() => ({} as { order?: unknown }));
-    if (!Array.isArray(body.order) || !body.order.every((p) => typeof p === 'string' && isSupportedProvider(p))) {
-      return c.json({ error: 'order must be an array of supported provider ids' }, 400);
+    if (!Array.isArray(body.order)) return c.json({ error: 'order must be an array' }, 400);
+    const parsed = body.order.map(parsePrecedenceRef);
+    if (parsed.some((entry) => entry === null)) {
+      return c.json({ error: 'order contains an invalid provider or OpenRouter connection ref' }, 400);
     }
-    await setTenantProviderPriority(c.env, access.tenantId, body.order as LlmProvider[]);
+    await setByoPrecedence(c.env, access.tenantId, parsed as NonNullable<(typeof parsed)[number]>[]);
     return c.json({ ok: true, order: body.order });
   });
 
@@ -1941,7 +2031,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     // Validate required key for the active plan up-front so callers get a clear 503.
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
-    if (!requiredKey) {
+    if (!requiredKey && !tenantCreds.openRouterConnections?.some((connection) => connection.hasKey)) {
       return c.json({
         error: isPro
           ? 'LLM proxy not configured (missing OPENROUTER_API_KEY_PRO or OPENROUTER_API_KEY)'
@@ -1964,7 +2054,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // a plain chat keeps the general pool. Reuses the credentials resolved above so
     // any direct-Claude resolution rides the tenant subscription and BYO vendors
     // serve from the tenant's own account.
-    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, tenantVendorKeys, byoVendorPriority: tenantCreds.vendorPriority, byoRequired: tenantCreds.configuredProviders.length > 0, byoDiagnostics: { configuredProviders: tenantCreds.configuredProviders, unresolvedReasons: tenantCreds.unresolvedReasons as Record<string, string> } });
+    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, tenantVendorKeys, byoVendorPriority: tenantCreds.vendorPriority, byoProviderPriorities: tenantCreds.providerPriorities, openRouterConnections: tenantCreds.openRouterConnections, openRouterModelKeys: tenantCreds.openRouterModelKeys, byoRequired: tenantCreds.configuredProviders.length > 0, byoDiagnostics: { configuredProviders: tenantCreds.configuredProviders, unresolvedReasons: tenantCreds.unresolvedReasons as Record<string, string> } });
     // Context-fit seeding: estimate the turn's tokens so the proxy drops
     // small-window models from the first-pass seed. This is the preventive half
     // of the Brain "dies after several executions" fix — the reactive 413
@@ -1978,6 +2068,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // does the flat 1¢ surcharge apply — if the cascade failed over to a plan-pool
     // model, the tenant gets plan pricing and no surcharge (they didn't get premium).
     const premiumServed = premiumSelected && result.resolvedModel === pinnedModel;
+    const platformSurcharge = premiumServed || result.platformSurcharge === true;
 
     // Clone upstream headers we care about
     const upstreamHeaders = new Headers();
@@ -2126,7 +2217,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             byo: result.byoFunded ?? false,
             byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
             surface: resolveUsageSurface(c, access),
-            premiumSurcharge: premiumServed,
+            premiumSurcharge: platformSurcharge,
           });
           // Back-fill the streamed trace row (logged above with 0 tokens) [1298].
           backfillTraceUsage(c.env, c.executionCtx, traceId, usage);
@@ -2156,7 +2247,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       byo: result.byoFunded ?? false,
       byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
       surface: resolveUsageSurface(c, access),
-      premiumSurcharge: premiumServed,
+      premiumSurcharge: platformSurcharge,
     });
     recordBrainChatModelActivity();
 
@@ -2201,7 +2292,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         ...(access.premiumOverride ? { premium: true } : {}),
         // A premium (any-paid-OpenRouter) turn: billed at OpenRouter cost + this flat
         // per-request surcharge. Surfaced so the caller can attribute the extra cent.
-        ...(premiumServed ? { premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS } : {}),
+        ...(platformSurcharge ? { premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS } : {}),
         ...(result.schemaRetries != null ? { schemaRetries: result.schemaRetries } : {}),
         ...(result.schemaDowngraded ? { schemaDowngraded: true } : {}),
         ...(callerUseCase     ? { useCase:    callerUseCase  } : {}),
@@ -2288,10 +2379,25 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // Keep the SUMMARIES (not just provider ids): a subscription-connected provider
     // serves a different model route than an api-key one, and only the summary carries
     // the auth type that decides which.
-    const byoProviderRows: ProviderKeySummary[] = access ? await listTenantProviderKeys(c.env, access.tenantId) : [];
-    const byoModels = byoModelsFor(byoProviderRows);
+    const [byoProviderRows, openRouterConnections] = access
+      ? await Promise.all([
+          listTenantProviderKeys(c.env, access.tenantId),
+          listOpenRouterConnections(c.env, access.tenantId),
+        ])
+      : [[] as ProviderKeySummary[], []];
+    const byoModels = [
+      ...byoModelsFor(byoProviderRows),
+      ...connectionModelRefs(openRouterConnections).map((id) => ({
+        id,
+        vendor: 'openrouter',
+        tier: 'REGISTERED',
+      })),
+    ];
     // The wire shape stays a plain provider-id list (what every client reads).
-    const byoProviders = byoProviderRows.map((d) => d.provider);
+    const byoProviders: string[] = [
+      ...byoProviderRows.map((d) => d.provider),
+      ...(openRouterConnections.length ? ['openrouter'] : []),
+    ];
     // THE single frontier-access rule (superadmin || premium override || connected BYO
     // account || paid plan) — shared with every backend gate via evaluateFrontierAccess,
     // so the client's model-choice / frontier-teacher unlock matches the server exactly.
@@ -2348,7 +2454,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       : [];
 
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
-    if (!requiredKey) {
+    if (!requiredKey && !openRouterConnections.some((connection) => connection.hasKey)) {
       return c.json({
         configured: false,
         product: productName,

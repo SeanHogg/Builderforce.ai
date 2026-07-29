@@ -26,7 +26,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * queried through the Drizzle query builder (`tenantLlmProviderKeys`).
  */
 
-import { and, asc, eq, inArray, ne, not, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { tenantLlmProviderKeys, tenantMembers } from '../../infrastructure/database/schema';
@@ -35,6 +35,12 @@ import { credentialSecret } from '../integrations/credentialCrypto';
 import { refreshAnthropicToken, OAUTH_SAFETY_MARGIN_MS, type AnthropicOAuthTokens } from './anthropicOAuth';
 import { refreshOpenAICodexToken, type OpenAICodexOAuthTokens } from './openaiCodexOAuth';
 import { refreshXaiToken, type XaiOAuthTokens } from './xaiOAuth';
+import {
+  listOpenRouterConnections,
+  resolveOpenRouterConnectionKeys,
+  connectionModelRefs,
+  type OpenRouterConnection,
+} from './openRouterConnectionService';
 
 type Env = HonoEnv['Bindings'];
 
@@ -453,6 +459,24 @@ export interface TenantLlmCredentials {
    *  the order the auto-select cloud pin leads its connected flagships by (empty when
    *  no precedence is set → catalog-tier ordering). See {@link byoVendorPriorityOrder}. */
   vendorPriority: string[];
+  /** Provider ranks with their original shared integer positions preserved, so
+   * OpenRouter connections can interleave with them in one routing seed. */
+  providerPriorities?: Array<{ vendor: string; priority: number | null }>;
+  /** The tenant's OpenRouter CONNECTIONS (0382), most-preferred first — named model sets
+   *  routed through our gateway. Distinct from the provider rows above because a connection
+   *  contributes an OPERATOR-CHOSEN list of ids, not one implicit frontier flagship. Empty
+   *  for the overwhelming majority of tenants, and cached, so this costs nothing to carry.
+   *  See {@link openRouterConnectionService}. */
+  openRouterConnections?: OpenRouterConnection[];
+  /** Bare OpenRouter model id → the tenant's OWN OpenRouter key, for connections that bound
+   *  one. Threaded to the vendor so it resolves a PER-MODEL key: two connections may carry
+   *  two different OpenRouter accounts, and a single request-wide key would bill the wrong
+   *  one. Empty when no connection is keyed (then everything rides the operator key). */
+  openRouterModelKeys?: Record<string, string>;
+  /** All registered OpenRouter refs, used to validate explicit cloud pins. */
+  registeredOpenRouterModels?: string[];
+  /** Registered model that currently leads the shared provider/connection rank. */
+  preferredOpenRouterModel?: string;
 }
 
 /**
@@ -464,15 +488,24 @@ export interface TenantLlmCredentials {
  * WHY in `unresolvedReasons`) so the degrade to the shared pool is never silent.
  */
 export async function resolveTenantLlmCredentials(env: Env, tenantId: number): Promise<TenantLlmCredentials> {
-  const [anthropicRes, openaiRes, xaiRes, vendorKeys, configured] = await Promise.all([
+  const [anthropicRes, openaiRes, xaiRes, vendorKeys, configured, openRouterConnections] = await Promise.all([
     resolveAnthropicResolution(env, tenantId).catch(() => ({ auth: null }) as AnthropicResolution),
     resolveOpenAICodexResolution(env, tenantId).catch(() => ({ auth: null }) as OpenAICodexResolution),
     resolveXaiOAuthResolution(env, tenantId).catch(() => ({ token: null }) as XaiOAuthResolution),
     resolveTenantVendorKeys(env, tenantId),
     listTenantProviderKeys(env, tenantId).catch(() => [] as ProviderKeySummary[]),
+    listOpenRouterConnections(env, tenantId).catch(() => [] as OpenRouterConnection[]),
   ]);
+  // Decrypt the connections' OWN OpenRouter keys only when the (cached) metadata says at least
+  // one exists — a tenant with no keyed connection never pays for that read, and neither does
+  // one with no connections at all.
+  const openRouterModelKeys = openRouterConnections.some((c) => c.hasKey)
+    ? await resolveOpenRouterConnectionKeys(env, tenantId).catch(() => ({}))
+    : {};
   const anthropicOAuthToken = anthropicRes.auth?.mode === 'oauth' ? anthropicRes.auth.accessToken : null;
   const creds: TenantLlmCredentials = {
+    openRouterConnections,
+    openRouterModelKeys,
     anthropicOAuthToken,
     openaiCodexAuth: openaiRes.auth,
     xaiOAuthToken: xaiRes.token,
@@ -482,12 +515,28 @@ export async function resolveTenantLlmCredentials(env: Env, tenantId: number): P
     configuredProviders: configured.map((p) => p.provider),
     unresolvedReasons: {},
     vendorPriority: byoVendorPriorityOrder(configured),
+    providerPriorities: configured.map((p) => ({
+      vendor: byoVendorIdFor(p.provider, p.authType),
+      priority: p.priority,
+    })),
   };
   // Attach a reason to each configured-but-unusable provider: Anthropic gets the precise
   // reason from its resolver; an api-key provider that's configured but decrypted to
   // nothing is `undecryptable` (the only api-key failure mode `resolveTenantVendorKeys`
   // can hit). Computed against the resolved (usable) set so a working provider is skipped.
   const usable = new Set(providersFromCredentials(creds));
+  creds.registeredOpenRouterModels = connectionModelRefs(openRouterConnections);
+  const usableProviderRanks = configured
+    .filter((p) => usable.has(p.provider))
+    .map((p) => p.priority ?? Number.POSITIVE_INFINITY);
+  const leadingConnection = openRouterConnections[0];
+  const connectionRank = leadingConnection?.priority ?? Number.POSITIVE_INFINITY;
+  const providerRank = usableProviderRanks.length
+    ? Math.min(...usableProviderRanks)
+    : Number.POSITIVE_INFINITY;
+  if (leadingConnection && (usableProviderRanks.length === 0 || connectionRank < providerRank)) {
+    creds.preferredOpenRouterModel = connectionModelRefs([leadingConnection])[0];
+  }
   for (const p of creds.configuredProviders) {
     if (usable.has(p)) continue;
     creds.unresolvedReasons[p] = p === 'anthropic'
@@ -594,42 +643,30 @@ export async function listTenantProviderKeys(
 }
 
 /**
- * Set the tenant's BYO provider PRECEDENCE from an ordered provider list (most-
- * preferred first). Each provider's `priority` is stamped with its index, so the
- * auto-select cloud pin ({@link byoAutoSeedModels}) leads with the owner's chosen
- * account (e.g. Meta first) before failing over across the rest in that order.
- * Only rows that already exist (a connected provider) are updated — ordering an
- * un-connected provider is a no-op. Providers absent from `order` are reset to
- * unset (NULL → catalog-tier fallback), so the list is the single source.
+ * Stamp the provider half of the tenant's BYO PRECEDENCE.
+ *
+ * `ranks` maps a provider to its position in the shared precedence integer space (LOWER =
+ * tried first) or to `null` for "unset → catalog-tier fallback". Every provider absent from
+ * the map is left ALONE, because the ranks it must not disturb belong to the OTHER table in
+ * the same space (`tenant_openrouter_connections`). The caller that owns the whole ordering —
+ * {@link byoPrecedence.setByoPrecedence} — always passes an entry for every connected
+ * provider, so "absent" never means "silently retains a stale rank" in practice.
+ *
+ * Only rows that already exist (a connected provider) are updated; ordering an un-connected
+ * provider is a no-op.
  */
-export async function setTenantProviderPriority(
+export async function setTenantProviderPriorityRanks(
   env: Env,
   tenantId: number,
-  order: readonly LlmProvider[],
+  ranks: ReadonlyMap<LlmProvider, number | null>,
 ): Promise<void> {
+  if (ranks.size === 0) return;
   const db = buildDatabase(env);
-  const ranked = order.filter(isSupportedProvider);
-  // Clear any provider NOT in the new order back to unset, then stamp the ranked ones.
-  // Empty order → clear ALL (an unqualified provider filter; `NOT IN ()` is not valid SQL).
-  if (ranked.length === 0) {
+  for (const [provider, priority] of ranks) {
+    if (!isSupportedProvider(provider)) continue;
     await db
       .update(tenantLlmProviderKeys)
-      .set({ priority: null, updatedAt: sql`NOW()` })
-      .where(eq(tenantLlmProviderKeys.tenantId, tenantId));
-    return;
-  }
-  await db
-    .update(tenantLlmProviderKeys)
-    .set({ priority: null, updatedAt: sql`NOW()` })
-    .where(and(
-      eq(tenantLlmProviderKeys.tenantId, tenantId),
-      not(inArray(tenantLlmProviderKeys.provider, ranked as readonly string[] as string[])),
-    ));
-  for (let i = 0; i < ranked.length; i++) {
-    const provider = ranked[i] as LlmProvider;
-    await db
-      .update(tenantLlmProviderKeys)
-      .set({ priority: i, updatedAt: sql`NOW()` })
+      .set({ priority, updatedAt: sql`NOW()` })
       .where(and(
         eq(tenantLlmProviderKeys.tenantId, tenantId),
         eq(tenantLlmProviderKeys.provider, provider),

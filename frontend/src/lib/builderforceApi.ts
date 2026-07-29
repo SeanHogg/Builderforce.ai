@@ -3170,6 +3170,48 @@ export interface ProviderConnectionTestResult {
   };
 }
 
+export interface OpenRouterConnection {
+  id: number;
+  label: string;
+  /** Bare OpenRouter model ids, in the order selected during registration. */
+  models: string[];
+  hasKey: boolean;
+  priority: number | null;
+}
+
+export type ByoPrecedenceEntry =
+  | { ref: string; kind: 'provider'; provider: LlmProvider; priority: number | null }
+  | { ref: string; kind: 'connection'; connection: OpenRouterConnection; priority: number | null };
+
+export interface OpenRouterCatalogModel {
+  id: string;
+  name: string;
+  provider: string;
+  description: string;
+  contextLength: number;
+  pricing: { prompt: number; completion: number };
+  tier: 'FREE' | 'STANDARD';
+}
+
+export const openRouterConnectionsApi = {
+  list: (): Promise<{ connections: OpenRouterConnection[] }> =>
+    request<{ connections: OpenRouterConnection[] }>('/llm/openrouter-connections'),
+  catalog: (): Promise<{ data: OpenRouterCatalogModel[] }> =>
+    request<{ data: OpenRouterCatalogModel[] }>('/llm/v1/catalog'),
+  create: (body: { label: string; models: string[]; apiKey?: string }): Promise<OpenRouterConnection> =>
+    request<OpenRouterConnection>('/llm/openrouter-connections', {
+      method: 'POST', body: JSON.stringify(body),
+    }),
+  update: (id: number, body: { label: string; models: string[]; apiKey?: string; clearKey?: boolean }): Promise<OpenRouterConnection> =>
+    request<OpenRouterConnection>(`/llm/openrouter-connections/${id}`, {
+      method: 'PUT', body: JSON.stringify(body),
+    }),
+  remove: (id: number): Promise<{ ok: true }> =>
+    request<{ ok: true }>(`/llm/openrouter-connections/${id}`, { method: 'DELETE' }),
+  precedence: (): Promise<{ entries: ByoPrecedenceEntry[] }> =>
+    request<{ entries: ByoPrecedenceEntry[] }>('/llm/byo-precedence'),
+};
+
 export const providerKeysApi = {
   /** Configured providers + how each authenticates (no secrets returned). */
   list: (): Promise<{ providers: LlmProvider[]; details: ProviderKeySummary[] }> =>
@@ -3192,8 +3234,8 @@ export const providerKeysApi = {
 
   /** Set the BYO precedence — the ordered provider list (most-preferred first) the
    *  auto-select cloud pin leads its connected flagships by (e.g. Meta first). */
-  setPriority: (order: LlmProvider[]): Promise<{ ok: true; order: LlmProvider[] }> =>
-    request<{ ok: true; order: LlmProvider[] }>('/llm/provider-keys/priority', {
+  setPriority: (order: string[]): Promise<{ ok: true; order: string[] }> =>
+    request<{ ok: true; order: string[] }>('/llm/provider-keys/priority', {
       method: 'PUT',
       body: JSON.stringify({ order }),
     }),

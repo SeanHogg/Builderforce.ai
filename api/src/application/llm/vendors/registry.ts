@@ -421,7 +421,9 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
       skippedNoStream.push(`${vendorId}:${model}`);
       continue;
     }
-    const apiKey = mod.apiKeyFrom(env);
+    const apiKey = vendorId === 'openrouter'
+      ? (env.OPENROUTER_MODEL_KEYS?.[vendorModel] ?? mod.apiKeyFrom(env))
+      : mod.apiKeyFrom(env);
     if (!apiKey) {
       skippedNoKey.push(`${vendorId}:${model}`);
       continue;
