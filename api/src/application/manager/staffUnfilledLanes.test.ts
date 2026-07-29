@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { describeLaneStaffing, unfilledRolesForBoard, type LaneStaffingResult } from './staffUnfilledLanes';
+import {
+  describeLaneStaffing, unfilledRolesForBoard, distinctTaskShapes, type LaneStaffingResult,
+} from './staffUnfilledLanes';
 import { EMPTY_ROLE_ROSTER, buildRoleRoster } from '../kanban/roleCapability';
 import type { LaneAuthorityInputs } from '../kanban/managedLaneRoles';
 
@@ -140,5 +142,104 @@ describe('describeLaneStaffing', () => {
     }));
     expect(text).toContain('made-up-role');
     expect(text).toMatch(/human/);
+  });
+});
+
+/**
+ * THE 293. The board sweep above ran every pass, was never shed, and still reported
+ * NOTHING TO DO while `managed_no_role` held 293 of 673 stalled tickets on project 11 for
+ * days — 3 `assign` decisions in a whole day against 3,940 decisions total.
+ *
+ * It probed lane authority with ONE synthetic empty task. `decideManagedLaneAuthority`
+ * filters requirements through `requirementApplies`, which scopes them by `ticketType` and
+ * by a `condition` (`is_security` / `has_ui_change` / `is_data_change`). Against `{}` the
+ * ticket type defaults to `'task'` and the action type is undefined, so every requirement
+ * scoped to another ticket type and every conditional requirement evaluated FALSE. Their
+ * roles were invisible: never reported unfilled, never staffed, never even named.
+ *
+ * Meanwhile a real security ticket, or a real `frontend_ui` ticket, authorises exactly
+ * those roles — and `pickManagedProducer` finds no agent, so the dispatcher refuses. The
+ * board said "everything binds"; the tickets said "no role can execute this stage". Both
+ * were reading the same table through different probes.
+ */
+describe('unfilledRolesForBoard — conditional and type-scoped roles (0382)', () => {
+  const securityReviewer = roleRequirement('security-reviewer', { condition: 'is_security' });
+  const uiApprover = roleRequirement('ui-approver', { condition: 'has_ui_change' });
+  const bugTriager = roleRequirement('bug-triager', { ticketType: 'bug' });
+
+  it('MISSES a conditional role when probed with no ticket shapes — the old behaviour', () => {
+    // Kept as an explicit statement of the defect: the same board, same roster, the only
+    // difference being whether the caller passes the shapes it already holds.
+    expect(unfilledRolesForBoard([lane({ requirements: [securityReviewer] })])).toEqual([]);
+  });
+
+  it('finds it once the board is known to hold a security ticket', () => {
+    expect(unfilledRolesForBoard(
+      [lane({ requirements: [securityReviewer] })],
+      [{ taskType: 'security', actionType: null }],
+    )).toEqual(['security-reviewer']);
+  });
+
+  it('finds an action-type-conditional role from a real ticket shape', () => {
+    expect(unfilledRolesForBoard(
+      [lane({ requirements: [uiApprover] })],
+      [{ taskType: 'task', actionType: 'frontend_ui' }],
+    )).toEqual(['ui-approver']);
+  });
+
+  it('finds a role scoped to a ticket TYPE the board actually has', () => {
+    expect(unfilledRolesForBoard(
+      [lane({ requirements: [bugTriager] })],
+      [{ taskType: 'bug', actionType: null }],
+    )).toEqual(['bug-triager']);
+  });
+
+  it('still refuses to staff a role NO ticket on the board needs', () => {
+    // The guard against the cohort fix becoming a hiring spree: the shapes come from the
+    // board's own tickets, so a role whose condition no ticket satisfies stays invisible.
+    expect(unfilledRolesForBoard(
+      [lane({ requirements: [securityReviewer, uiApprover] })],
+      [{ taskType: 'task', actionType: 'backend_api' }],
+    )).toEqual([]);
+  });
+
+  it('counts a role as filled when it binds under ANY shape', () => {
+    // The agent is not shape-specific: one capable teammate serves the role whatever
+    // ticket triggered the requirement.
+    expect(unfilledRolesForBoard(
+      [lane({ requirements: [securityReviewer], roster: rosterFor(['security-reviewer']) })],
+      [{ taskType: 'security', actionType: null }],
+    )).toEqual([]);
+  });
+
+  it('unions across every shape, so one pass names every unfillable role at once', () => {
+    expect(unfilledRolesForBoard(
+      [lane({ requirements: [securityReviewer, uiApprover, bugTriager] })],
+      [
+        { taskType: 'security', actionType: null },
+        { taskType: 'task', actionType: 'frontend_ui' },
+        { taskType: 'bug', actionType: null },
+      ],
+    )).toEqual(['bug-triager', 'security-reviewer', 'ui-approver']);
+  });
+});
+
+describe('distinctTaskShapes', () => {
+  it('collapses a whole backlog to the pairs that change applicability', () => {
+    // 678 tickets must not become 678 probes — only (taskType, actionType) matters.
+    const shapes = distinctTaskShapes([
+      { taskType: 'task', actionType: 'frontend_ui' },
+      { taskType: 'task', actionType: 'frontend_ui' },
+      { taskType: 'security', actionType: null },
+      { taskType: 'task', actionType: 'frontend_ui' },
+    ]);
+    expect(shapes).toHaveLength(2);
+    expect(shapes).toContainEqual({ taskType: 'task', actionType: 'frontend_ui' });
+    expect(shapes).toContainEqual({ taskType: 'security', actionType: null });
+  });
+
+  it('normalizes absent fields so undefined and null are one shape, not two', () => {
+    expect(distinctTaskShapes([{}, { taskType: null }, { taskType: null, actionType: null }]))
+      .toEqual([{ taskType: null, actionType: null }]);
   });
 });
