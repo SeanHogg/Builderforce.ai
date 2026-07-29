@@ -152,7 +152,7 @@ export function TeamMemberAvatarFilter({
           alignItems: 'center',
           justifyContent: 'center',
           height: 32,
-          padding: '0 10px',
+          padding: '0 12px',
           borderRadius: 16,
           fontSize: 12,
           fontWeight: 600,
