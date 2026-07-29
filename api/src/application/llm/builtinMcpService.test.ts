@@ -44,6 +44,37 @@ describe('cloud-agent curated platform tool subset', () => {
     }
   });
 
+  // Regression [task #698]: the coordinated-role-participation tools were defined in the
+  // CATALOG but never added to the allowlist. The allowlist is safe-by-default, so a
+  // CATALOG entry is UNREACHABLE to an unattended/cloud agent until it is listed —
+  // a Coordinator asked to review a ticket's manifest silently answered from nothing
+  // instead of calling these, because the model was never advertised them.
+  // The generic "⊆ CATALOG" test above cannot catch this: an ABSENT id is trivially a
+  // subset. Only pinning the required ids detects a re-drop.
+  describe('coordinated role participation is reachable (PRD "Coordinated Role Participation")', () => {
+    const REQUIRED = ['kanban.participants', 'kanban.accountability', 'kanban.assess_resource'] as const;
+
+    it.each(REQUIRED)('%s is on the cloud-agent allowlist', (tool) => {
+      expect(CLOUD_AGENT_PLATFORM_TOOLS).toContain(tool);
+    });
+
+    it.each(REQUIRED)('%s is advertised as a builtin_* function schema an agent can name', (tool) => {
+      const advertised = cloudAgentPlatformToolSchemas().map((s) => s.function.name);
+      const expected = `builtin_${tool.replace(/\./g, '_')}`;
+      expect(advertised).toContain(expected);
+      // …and the advertised name resolves back to this exact dotted id.
+      expect(resolveCloudAgentPlatformTool(expected)).toBe(tool);
+    });
+
+    it('keeps the sign-off round-trip tools listed alongside them', () => {
+      // participants/accountability are the READ half; without signoff+audit the
+      // Coordinator can see what is required but never clear it.
+      for (const tool of ['kanban.signoff', 'kanban.audit']) {
+        expect(CLOUD_AGENT_PLATFORM_TOOLS).toContain(tool);
+      }
+    });
+  });
+
   it('grants NO admin/destructive tools to an unattended agent', () => {
     const forbiddenPrefixes = ['api_keys.', 'security.', 'provider_keys.', 'migrations.', 'agent_hosts.', 'board_connections.', 'cron.', 'integrations.'];
     // The ONE safe exception under `security.`: the Security agent files its SOC 2
