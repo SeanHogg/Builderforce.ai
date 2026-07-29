@@ -20,6 +20,17 @@ export interface TicketLinkVM {
   ref: string;
   label: string;
   status: string;
+  /**
+   * 0–100 completion percentage for the linked work item.
+   *
+   * `progressPct === 100` is the authoritative completion signal: it is emitted
+   * ONLY once the work item is fully complete (a leaf that is marked done, or a
+   * container whose every child/target is done — i.e. `done === total`). It is
+   * never reported before completion, and a value approaching 100 (e.g. 99) does
+   * NOT mean done — only an exact 100 does. Health is derived live on every read,
+   * so 100 is an idempotent terminal state (reported on every subsequent read),
+   * not a one-shot event delivered exactly once.
+   */
   progressPct: number;
   done: number;
   total: number;
