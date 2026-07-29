@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-07-29 — ✅ RESOLVED: a merge finished tickets ANONYMOUSLY, so "0 finished" survived the attribution fix (api 2026.7.179 · frontend 2026.7.139)
+
+**The board moved for the first time** — 5 tickets finished, 3 PRs merged, `merge_failed`/`pr_conflict` counting, the `awaiting_signoff` cohort gone from the census and its platform finding auto-closed. And every one of the six agents *still* read `finished=0`, beside 5,090 runs for Bob Developer. The previous fix made the digest read the terminal-hop actor instead of the assignee; the column it now reads was **empty**.
+
+**Root cause: the merge path had no actor to name, and wrote an anonymous row.** `mergeRecordedPullRequest` derives the transition actor from `mergedBy`, and the manager merges as `manager:<ref>` — but project 11 designates no manager, so the ref is the literal `'system'`, which `resolveManagerAssignee` cannot decode into any of the three identity columns. The result was `resolveTransitionActor({})` = `('system', null)`: a ticket finished with nobody on it. The green-CI / post-deploy webhook path had no actor to begin with and wrote the same row. The digest is **right** to refuse to credit an actor it cannot name — inventing a member would be worse — so the fix belongs upstream.
+
+`completeTaskOnMerge` now resolves a completion actor: the caller's when it names one (the human who pressed Approve & Merge, or a designated agent manager, both unchanged), otherwise the agent that **produced** the work — the most recent completed execution on that ticket, the same source the digest's `runs` column already attributes to. Deliberately not the assignee: on a lifecycle-managed board that is the Coordinator. A ticket that genuinely never ran stays anonymous rather than gaining a fabricated producer.
+
+**The contradiction that hid it for a day, fixed too.** The digest split lane moves `if human … else agent`, so an anonymous hop was reported as **"3 forward moves by agents"** while the contributor table showed all six agents at `moves=0` — both rendered from the same rows, one of them lying. There are now three buckets, and the agent bucket uses the SAME `contributorKind` nameability test the contributor credit uses, so the two can no longer disagree. `bySystem` is surfaced only when non-zero (localized in all five catalogs), so a fully-attributed day reads exactly as before.
+
+**The tenant-scope guard caught a real defect in this work**: the new `executions` lookup was unfiltered by tenant. It is now `scopedToTenant`, and `resolveCompletionActor` requires `tenantId` so the unscoped form is not expressible.
+
+Files: `api/src/application/task/taskLifecycle.ts`, `api/src/application/manager/dailyDigest.ts`, `frontend/src/components/manager/ManagerTodayDigest.tsx`, `frontend/src/lib/{builderforceApi,managerDiagnostics}.ts`, `frontend/src/i18n/messages/{en,zh,es,fr,de}.json` (+ tests).
+
+**Verified:** API `4137 passed`, frontend `680 passed`, `tsgo --noEmit` clean in both, tenant-scope / layering / silent-catch / schema-drift guards green. Coverage pins every branch of the credit decision — a named human survives, a named agent manager survives, `manager:system` falls through to the producing agent and that ref stores as `cloud_agent` (not `system`), an on-prem host credits as `host_agent`, and a ticket with no execution stays anonymous rather than inventing one.
+
+---
+
 ## 2026-07-28 — ✅ RESOLVED: every team member read "0 finished" because credit went to the ticket's ASSIGNEE, who on a managed board is the Coordinator (api 2026.7.178)
 
 **Reported from the Manager surface**: the whole "Who moved work today" list showed `0 finished` — Bob Developer at **4,404 runs and 0 finished**. On the day it was reported the zero was also literally TRUE (nothing reached a done lane at all, which is the separate throughput problem), but the attribution underneath it was wrong and would have kept reading 0 once tickets did start finishing.

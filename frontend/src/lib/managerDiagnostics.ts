@@ -1150,7 +1150,7 @@ function formatDigest(digest: ManagerDailyDigest): string[] {
   out.push(line('  pull requests opened today', team.prs.opened));
   out.push(line('  agent runs completed', team.runs.completed));
   out.push(line('  agent runs failed', team.runs.failed));
-  out.push(line('  forward lane moves', `${team.laneMoves.forward} (by people: ${team.laneMoves.byHuman} · by agents: ${team.laneMoves.byAgent})`));
+  out.push(line('  forward lane moves', `${team.laneMoves.forward} (by people: ${team.laneMoves.byHuman} · by agents: ${team.laneMoves.byAgent}${team.laneMoves.bySystem ? ` · unattributed: ${team.laneMoves.bySystem}` : ''})`));
   out.push(line('  backward lane moves (redo)', team.laneMoves.backward));
   out.push('');
   out.push('the manager:');

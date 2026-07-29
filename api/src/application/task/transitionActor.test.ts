@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveTransitionActor } from './taskLifecycle';
+import { resolveTransitionActor, resolveCompletionActor } from './taskLifecycle';
 import { parseMachineSubject, isMachineSubject } from '../../infrastructure/auth/machineSubject';
 import { resolveMergeActor } from '../repos/mergeRecordedPr';
 import { requestActor } from '../../presentation/middleware/authMiddleware';
@@ -119,5 +119,80 @@ describe('resolveMergeActor', () => {
   it('claims no actor for an out-of-band merge noticed by reconcile', () => {
     expect(resolveMergeActor('provider:reconcile')).toEqual({});
     expect(resolveMergeActor(null)).toEqual({});
+  });
+});
+
+/**
+ * WHO IS CREDITED WHEN A MERGE COMPLETES A TICKET.
+ *
+ * Measured on project 11 (2026-07-29, api 2026.7.178) — the first day work actually
+ * landed: **5 tickets finished, 3 pull requests merged, and every one of the six agents
+ * still reading `finished=0`** on the contributor table, beside honest run counts (Bob
+ * Developer: 5,090 runs). The "finished today" list named owners; the contributor table
+ * credited nobody. Both were reading the truth of what was stored.
+ *
+ * The stored truth was ANONYMOUS. `mergeRecordedPullRequest` derives the transition actor
+ * from `mergedBy`, and the manager merges as `manager:<ref>` — but project 11 designates
+ * no manager, so the ref is the literal `'system'`, which `resolveManagerAssignee` cannot
+ * decode into any of the three identity columns. The result was `resolveTransitionActor({})`
+ * = `('system', null)`: a terminal hop with nobody on it. The green-CI / post-deploy
+ * webhook path had no actor to begin with and wrote the same row.
+ *
+ * The digest is right to refuse to credit an actor it cannot name — inventing a member
+ * would be worse. So the fix is upstream: when the merge path has no identifiable actor,
+ * credit the agent that PRODUCED the work.
+ */
+describe('resolveCompletionActor — a merge must not finish a ticket anonymously', () => {
+  /** Minimal db double: one ordered `executions` row, or none. */
+  const dbWith = (row: { cloudAgentRef: string | null; agentHostId: number | null } | null) => ({
+    select: () => ({
+      from: () => ({
+        where: () => ({
+          orderBy: () => ({
+            limit: () => Object.assign(Promise.resolve(row ? [row] : []), { catch: () => Promise.resolve(row ? [row] : []) }),
+          }),
+        }),
+      }),
+    }),
+  }) as never;
+
+  it('keeps a named human actor — the person who pressed Approve & Merge did it', async () => {
+    const actor = await resolveCompletionActor(dbWith({ cloudAgentRef: 'ada-1', agentHostId: null }), {
+      tenantId: 1, taskId: 1, actorUserId: 'user-9',
+    });
+    expect(actor).toEqual({ actorUserId: 'user-9', actorAgentRef: null, actorAgentHostId: null });
+  });
+
+  it('keeps a named agent manager — a designated manager gets its own credit', async () => {
+    const actor = await resolveCompletionActor(dbWith({ cloudAgentRef: 'ada-1', agentHostId: null }), {
+      tenantId: 1, taskId: 1, actorAgentRef: 'manager-t1',
+    });
+    expect(actor).toEqual({ actorUserId: null, actorAgentRef: 'manager-t1', actorAgentHostId: null });
+  });
+
+  /** THE REGRESSION: `manager:system` and the CI webhook both arrive with nothing. */
+  it('falls back to the PRODUCING agent when the caller names nobody', async () => {
+    expect(resolveMergeActor('manager:system')).toEqual({
+      actorUserId: null, actorAgentRef: null, actorAgentHostId: null,
+    });
+    const actor = await resolveCompletionActor(dbWith({ cloudAgentRef: 'bob-dev-1', agentHostId: null }), {
+      tenantId: 1, taskId: 1, ...resolveMergeActor('manager:system'),
+    });
+    expect(actor.actorAgentRef).toBe('bob-dev-1');
+    // …and that ref is one `resolveTransitionActor` stores as a creditable agent, which
+    // is the whole point — `('system', null)` credits nobody.
+    expect(resolveTransitionActor(actor)).toEqual({ actorKind: 'cloud_agent', actorRef: 'bob-dev-1' });
+  });
+
+  it('credits an on-prem host agent the same way', async () => {
+    const actor = await resolveCompletionActor(dbWith({ cloudAgentRef: null, agentHostId: 7 }), { tenantId: 1, taskId: 1 });
+    expect(resolveTransitionActor(actor)).toEqual({ actorKind: 'host_agent', actorRef: '7' });
+  });
+
+  it('stays anonymous when the ticket genuinely never ran — it invents nobody', async () => {
+    // A ticket completed with no execution behind it (a doc, a decision, a manual close)
+    // has no producer to credit, and a fabricated one would be worse than a zero.
+    const actor = await resolveCompletionActor(dbWith(null), { tenantId: 1, taskId: 1 });
+    expect(resolveTransitionActor(actor)).toEqual({ actorKind: 'system', actorRef: null });
   });
 });

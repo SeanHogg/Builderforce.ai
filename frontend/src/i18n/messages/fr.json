@@ -7034,6 +7034,7 @@
         "runsSub": "{failed} en échec",
         "moves": "Avancées d’étape",
         "movesSub": "{human} par des personnes · {agent} par des agents",
+        "movesSubWithSystem": "{human} par des personnes · {agent} par des agents · {system} non attribués",
         "decisions": "Décisions du gestionnaire",
         "decisionsSub": "{passes, plural, =0 {aucune passe} one {1 passe} other {# passes}} aujourd’hui"
       },

@@ -18,16 +18,17 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * own idea of what "not a human" means. Readers that only ask "was this autonomous?"
  * keep working unchanged — every agent kind is still `!== 'human'`.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { boards, swimlanes, tasks, taskStatusTransitions } from '../../infrastructure/database/schema';
+import { boards, executions, swimlanes, tasks, taskStatusTransitions } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached, projectScoreCacheKey, tenantRollupCacheKey } from '../../infrastructure/cache/readThroughCache';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import { bumpWorkforceMetricsVersion } from '../metrics/workforceMetrics';
 import { releaseWorkItemWebhook } from '../seams/workItemWebhook';
-import { TaskStatus } from '../../domain/shared/types';
+import { TaskStatus, ExecutionStatus } from '../../domain/shared/types';
 import { DONE_CLASS, isDoneLane } from '../../domain/shared/doneClass';
 
 /**
@@ -277,18 +278,73 @@ export async function completeTaskOnMerge(
   const ordinals = await loadLaneOrdinals(env, db, t.projectId);
   if (isDoneClass(t.status, ordinals)) return; // already complete — nothing to do
   await db.update(tasks).set({ status: TaskStatus.DONE, updatedAt: new Date() }).where(eq(tasks.id, input.taskId));
+
+  // WHO FINISHED IT. The caller names an actor when one is identifiable — a user id for
+  // the in-product "Approve & Merge", or a designated agent manager. It frequently is
+  // NOT: the AI Manager sweep merges as `manager:system` when no manager is designated
+  // (the common case), and the green-CI / post-deploy webhook has no actor at all. Both
+  // fell through to `resolveTransitionActor({})` = `('system', null)`, which is an
+  // ANONYMOUS stamp — and an anonymous terminal hop credits nobody, so every agent on
+  // the contributor table read `0 finished` beside thousands of runs, while the "finished
+  // today" list still named a ticket owner. Measured on project 11 (2026-07-29): 5
+  // tickets finished, 3 PRs merged, every contributor at `finished=0`.
+  //
+  // So when the caller has no actor, fall back to the agent that actually PRODUCED the
+  // work — the most recent terminal execution on this ticket, the same source the
+  // digest's `runs` column already attributes to. Deliberately not the ticket's assignee:
+  // on a lifecycle-managed board that is the Coordinator, never the executor.
+  //
+  // Once per merge, never in a loop, and only on the path that would otherwise write an
+  // anonymous row.
+  const actor = await resolveCompletionActor(db, input);
   await recordStatusTransition(env, db, {
     tenantId: input.tenantId,
     projectId: t.projectId,
     taskId: input.taskId,
     fromStatus: t.status,
     toStatus: TaskStatus.DONE,
-    actorUserId: input.actorUserId ?? null,
-    actorAgentRef: input.actorAgentRef ?? null,
-    actorAgentHostId: input.actorAgentHostId ?? null,
+    ...actor,
   }).catch((error) => { /* metrics are best-effort; completion already persisted */
     reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "completeTaskOnMerge" });
   });
+}
+
+/**
+ * The actor to credit for a merge-completion: the caller's, or the ticket's producer.
+ * Exported for the test that pins the fallback — the anonymous stamp it replaces was
+ * invisible on every surface except as a zero.
+ */
+export async function resolveCompletionActor(
+  db: Db,
+  input: TransitionActorInput & { tenantId: number; taskId: number },
+): Promise<TransitionActorInput> {
+  const named = { ...input };
+  if (named.actorUserId || named.actorAgentRef || named.actorAgentHostId != null) {
+    return {
+      actorUserId: named.actorUserId ?? null,
+      actorAgentRef: named.actorAgentRef ?? null,
+      actorAgentHostId: named.actorAgentHostId ?? null,
+    };
+  }
+  const [run] = await db
+    .select({ cloudAgentRef: executions.cloudAgentRef, agentHostId: executions.agentHostId })
+    .from(executions)
+    .where(scopedToTenant(
+      executions, input.tenantId,
+      eq(executions.taskId, input.taskId),
+      eq(executions.status, ExecutionStatus.COMPLETED),
+    ))
+    // The LAST agent to finish work on the ticket is the one whose output is being
+    // merged. Ordered by completion, falling back to creation for a row that predates
+    // the column being populated.
+    .orderBy(desc(executions.completedAt), desc(executions.createdAt))
+    .limit(1)
+    .catch(() => []);
+  return {
+    actorUserId: null,
+    actorAgentRef: run?.cloudAgentRef ?? null,
+    actorAgentHostId: run?.agentHostId ?? null,
+  };
 }
 
 /**

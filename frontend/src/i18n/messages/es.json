@@ -7034,6 +7034,7 @@
         "runsSub": "{failed} fallidas",
         "moves": "Avances de fase",
         "movesSub": "{human} por personas · {agent} por agentes",
+        "movesSubWithSystem": "{human} por personas · {agent} por agentes · {system} sin atribuir",
         "decisions": "Decisiones del gestor",
         "decisionsSub": "{passes, plural, =0 {ninguna pasada} one {1 pasada} other {# pasadas}} hoy"
       },

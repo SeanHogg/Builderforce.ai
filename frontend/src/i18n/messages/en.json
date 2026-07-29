@@ -7034,6 +7034,7 @@
         "runsSub": "{failed} failed",
         "moves": "Forward moves",
         "movesSub": "{human} by people · {agent} by agents",
+        "movesSubWithSystem": "{human} by people · {agent} by agents · {system} unattributed",
         "decisions": "Manager decisions",
         "decisionsSub": "{passes, plural, =0 {no passes} one {1 pass} other {# passes}} today"
       },

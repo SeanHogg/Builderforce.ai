@@ -126,7 +126,7 @@ describe('isQuietDay', () => {
     team: {
       shipped: { today: 0, yesterday: 0 },
       opened: { today: 0, yesterday: 0 },
-      laneMoves: { forward: 0, backward: 0, byHuman: 0, byAgent: 0 },
+      laneMoves: { forward: 0, backward: 0, byHuman: 0, byAgent: 0, bySystem: 0 },
       runs: { completed: 0, failed: 0 },
       prs: { merged: { today: 0, yesterday: 0 }, opened: 0 },
       contributors: [],
@@ -149,7 +149,7 @@ describe('isQuietDay', () => {
   });
 
   it('is NOT quiet when work moved but nothing finished', () => {
-    expect(isQuietDay(digest({ laneMoves: { forward: 3, backward: 0, byHuman: 3, byAgent: 0 } }))).toBe(false);
+    expect(isQuietDay(digest({ laneMoves: { forward: 3, backward: 0, byHuman: 3, byAgent: 0, bySystem: 0 } }))).toBe(false);
     expect(isQuietDay(digest({ runs: { completed: 0, failed: 2 } }))).toBe(false);
   });
 });
@@ -311,5 +311,40 @@ describe('shipped sample owner caption', () => {
     // is exactly the shape that silently matches nothing. Keep the expanded IN list.
     expect(source).not.toMatch(/<> all\(\$\{NON_TERMINAL_TASK_STATUSES\}\)/);
     expect(source).toMatch(/not in \(\$\{sql\.join\(NON_TERMINAL_TASK_STATUSES\.map/);
+  });
+});
+
+/**
+ * An UNATTRIBUTED lane hop must not be reported as agent work.
+ *
+ * `else = agent` was a two-line lie with a real cost: an anonymous hop
+ * (`actor_kind = 'system'`) counted toward "by agents" while the contributor table —
+ * which correctly refuses to credit an actor it cannot name — showed every agent at
+ * zero. The surface said "3 forward moves by agents" and "0 moves" for all six agents
+ * simultaneously, and that contradiction is what hid the missing merge attribution for a
+ * full day.
+ */
+describe('lane-move attribution buckets', () => {
+  const source = readFileSync(
+    fileURLToPath(new URL('./dailyDigest.ts', import.meta.url).href),
+    'utf8',
+  );
+
+  it('splits three ways — people, nameable agents, and unattributed automation', () => {
+    expect(source).toMatch(/else if \(contributorKind\(m\.actorKind\)\) byAgent \+= f \+ b;/);
+    expect(source).toMatch(/else bySystem \+= f \+ b;/);
+  });
+
+  it('uses the SAME nameability test as the contributor credit, so they cannot disagree', () => {
+    // This is the invariant that was violated: a hop counted as "by agents" must be a hop
+    // whose actor some contributor row can be credited for.
+    expect(contributorKind('cloud_agent')).toBe('cloud_agent');
+    expect(contributorKind('host_agent')).toBe('host_agent');
+    expect(contributorKind('system')).toBeNull();
+    expect(source).toMatch(/const kind = contributorKind\(m\.actorKind\);/);
+  });
+
+  it('carries the bucket on the wire so a surface can show it', () => {
+    expect(source).toMatch(/laneMoves: \{ forward, backward, byHuman, byAgent, bySystem \}/);
   });
 });

@@ -825,7 +825,7 @@ const digest = (over: Partial<ManagerDailyDigest['team']> & {
   team: {
     shipped: { today: 2, yesterday: 3 },
     opened: { today: 5, yesterday: 4 },
-    laneMoves: { forward: 6, backward: 1, byHuman: 2, byAgent: 4 },
+    laneMoves: { forward: 6, backward: 1, byHuman: 2, byAgent: 4, bySystem: 0 },
     runs: { completed: 7, failed: 1 },
     prs: { merged: { today: 1, yesterday: 2 }, opened: 3 },
     contributors: [{ id: 'cloud_agent:a1', kind: 'cloud_agent', name: 'Ada', shipped: 2, runs: 7, moves: 0 }],
@@ -841,7 +841,7 @@ const digest = (over: Partial<ManagerDailyDigest['team']> & {
 
 const QUIET_TEAM: Partial<ManagerDailyDigest['team']> = {
   shipped: { today: 0, yesterday: 0 },
-  laneMoves: { forward: 0, backward: 0, byHuman: 0, byAgent: 0 },
+  laneMoves: { forward: 0, backward: 0, byHuman: 0, byAgent: 0, bySystem: 0 },
   runs: { completed: 0, failed: 0 },
   prs: { merged: { today: 0, yesterday: 0 }, opened: 0 },
 };
@@ -919,7 +919,7 @@ describe('managerFindings — throughput', () => {
   });
 
   it('flags a board that only PEOPLE are moving — autonomy contributing nothing', () => {
-    const humanOnly = digest({ laneMoves: { forward: 5, backward: 0, byHuman: 5, byAgent: 0 } });
+    const humanOnly = digest({ laneMoves: { forward: 5, backward: 0, byHuman: 5, byAgent: 0, bySystem: 0 } });
     expect(codes({ digest: humanOnly })).toContain('movement_all_human');
     expect(codes({ digest: digest() })).not.toContain('movement_all_human');
   });

@@ -7034,6 +7034,7 @@
         "runsSub": "{failed} fehlgeschlagen",
         "moves": "Vorwärtsschritte",
         "movesSub": "{human} von Menschen · {agent} von Agenten",
+        "movesSubWithSystem": "{human} von Menschen · {agent} von Agenten · {system} ohne Zuordnung",
         "decisions": "Manager-Entscheidungen",
         "decisionsSub": "heute {passes, plural, =0 {keine Durchläufe} one {1 Durchlauf} other {# Durchläufe}}"
       },
