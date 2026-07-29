@@ -1907,6 +1907,38 @@ async function coordinatePullRequests(
     if ((pr.blockedReports ?? 0) > 0) alreadyReportedBlocked.add(pr.taskId);
   }
 
+  /**
+   * Hand a conflicting PR back to the ticket's agent. A conflict can be found
+   * either while updating the branch or by the final merge API (GitHub commonly
+   * returns the latter as HTTP 405), so both paths must use the same recovery.
+   */
+  const startConflictRecovery = async (pr: (typeof openPrs)[number]) => {
+    const task = pr.taskId == null ? null : managed.find((t) => t.id === pr.taskId) ?? null;
+    const affordable = budget.canAfford(MIN_DISPATCH_WINDOW_MS);
+    if (!affordable) budget.shed('pr_merge');
+    let recoveryStarted = false;
+    if (affordable && task && (task.assignedAgentRef || task.assignedAgentHostId != null)) {
+      const recoveryNote = `\n\n[Manager recovery] PR #${pr.number ?? '?'} conflicts with the latest base branch. Sync the latest base, resolve every conflict while preserving both sets of intended changes, run the relevant checks, and update the existing PR.`;
+      await db.update(tasks).set({
+        status: TaskStatus.IN_PROGRESS,
+        completedAt: null,
+        description: task.description?.includes('[Manager recovery]')
+          ? task.description
+          : `${task.description ?? ''}${recoveryNote}`.trim(),
+        updatedAt: new Date(),
+      }).where(eq(tasks.id, task.id));
+      recoveryStarted = (await runs.spend(
+        () => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+          tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS,
+          submittedBy: `manager:conflict-resolution:${policy.managerRef ?? 'system'}`,
+        }),
+        (v) => v === true,
+      )).result === true;
+      if (recoveryStarted) summary.dispatched += 1;
+    }
+    return { affordable, recoveryStarted };
+  };
+
   for (const pr of openPrs) {
     // The eviction point. Each iteration does provider round-trips (sync, poll, merge),
     // so this loop is where the pass dies on a project with hundreds of open PRs. Stop
@@ -1955,8 +1987,6 @@ async function coordinatePullRequests(
       // from all being merged against the same stale main revision.
       const prepared = await updateRecordedPullRequestBranch(db, env, { tenantId, prId: pr.id });
       if (!prepared.ok) {
-        const task = pr.taskId == null ? null : managed.find((t) => t.id === pr.taskId) ?? null;
-        let recoveryStarted = false;
         // THE UNIT THAT OVERRAN THE PASS. This branch dispatches a cloud run, and a
         // dispatch is the most expensive thing a pass does — measured at 16.4s here, on a
         // 14s discretionary window. `budget.over()` at the top of the loop cannot stop a
@@ -1964,44 +1994,27 @@ async function coordinatePullRequests(
         // little window left the conflict is journalled without recovery and the stage is
         // shed, which hands the next pass to whatever this one starved (see
         // `passRotation.ts`) rather than silently running 7.6s past the whole budget.
-        const affordable = budget.canAfford(MIN_DISPATCH_WINDOW_MS);
-        if (!affordable) budget.shed('pr_merge');
-        if (affordable && prepared.code === 'conflict' && task && (task.assignedAgentRef || task.assignedAgentHostId != null)) {
-          const recoveryNote = `\n\n[Manager recovery] PR #${pr.number ?? '?'} conflicts with the latest base branch. Sync the latest base, resolve every conflict while preserving both sets of intended changes, run the relevant checks, and update the existing PR.`;
-          await db.update(tasks).set({
-            status: TaskStatus.IN_PROGRESS,
-            completedAt: null,
-            description: task.description?.includes('[Manager recovery]')
-              ? task.description
-              : `${task.description ?? ''}${recoveryNote}`.trim(),
-            updatedAt: new Date(),
-          }).where(eq(tasks.id, task.id));
-          // Reserve first. Handing the branch back to its agent is a billable run like
-          // any other; it sat outside the ceiling AND outside `summary.dispatched`, so
-          // neither the tenant budget nor the pass report ever saw it.
-          recoveryStarted = (await runs.spend(
-            () => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
-              tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS,
-              submittedBy: `manager:conflict-resolution:${policy.managerRef ?? 'system'}`,
-            }),
-            (v) => v === true,
-          )).result === true;
-          if (recoveryStarted) summary.dispatched += 1;
-        }
+        const recovery = prepared.code === 'conflict'
+          ? await startConflictRecovery(pr)
+          : { affordable: true, recoveryStarted: false };
         await recordManagerAction(db, {
           // PR_CONFLICT_ACTION, not 'flag' (0381): this is the only trace that the loop
           // touched a conflicting PR, and the rotation orders by it. Left as 'flag' it
           // was invisible to that ordering, so every conflicting PR read as "never acted
           // on" and held the front of the queue forever.
           tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: PR_CONFLICT_ACTION,
-          summary: recoveryStarted
+          summary: recovery.recoveryStarted
             ? `PR #${pr.number ?? '?'} conflicts with the latest base; started its ticket agent to resolve and update it.`
-            : !affordable
+            : !recovery.affordable
               // "Could not update" would read as a provider failure. It is a scheduling
               // decision, and the honest version is the one that says the work is coming.
               ? `PR #${pr.number ?? '?'} conflicts with the latest base; deferred starting its resolution agent because this pass has too little time left to start a run — it goes out on the next pass.`
               : `Could not update PR #${pr.number ?? '?'} from the latest base: ${prepared.error}`,
-          detail: { code: prepared.code, recoveryStarted, ...(affordable ? {} : { deferred: 'pass_budget' }) },
+          detail: {
+            code: prepared.code,
+            recoveryStarted: recovery.recoveryStarted,
+            ...(recovery.affordable ? {} : { deferred: 'pass_budget' }),
+          },
         });
         continue;
       }
@@ -2083,6 +2096,27 @@ async function coordinatePullRequests(
         tenantId, prId: pr.id, method: 'squash', mergedBy: `manager:${policy.managerRef ?? 'system'}`,
       });
       if (!result.ok) {
+        // GitHub can discover a content conflict only at the final merge call and
+        // reports it as HTTP 405. Treat it exactly like an update-branch conflict:
+        // reopen the ticket and send its assigned agent to resolve the existing PR.
+        if (result.code === 'conflict') {
+          const recovery = await startConflictRecovery(pr);
+          await recordManagerAction(db, {
+            tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: PR_CONFLICT_ACTION,
+            summary: recovery.recoveryStarted
+              ? `PR #${pr.number ?? '?'} was refused at merge because it conflicts with the latest base; started its ticket agent to resolve and update it.`
+              : !recovery.affordable
+                ? `PR #${pr.number ?? '?'} was refused at merge because it conflicts with the latest base; deferred starting its resolution agent because this pass has too little time left.`
+                : `Could not start conflict recovery for PR #${pr.number ?? '?'}: ${result.error}`,
+            detail: {
+              code: result.code,
+              detectedAt: 'merge',
+              recoveryStarted: recovery.recoveryStarted,
+              ...(recovery.affordable ? {} : { deferred: 'pass_budget' }),
+            },
+          });
+          continue;
+        }
         // Journalled as MERGE_FAILED_ACTION, not 'flag' (0381) — the ceiling above counts
         // these, and a refusal buried among a project's ~1,770 daily flags is a refusal
         // nothing can count. The Nth failure is what retires the PR to a human.

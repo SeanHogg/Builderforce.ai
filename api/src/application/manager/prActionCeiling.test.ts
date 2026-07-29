@@ -59,7 +59,7 @@ describe('manager PR action ceiling + rotation', () => {
    */
   it('journals a refused merge and a conflict as their OWN types, never as a flag', () => {
     expect(source).toMatch(/actionType: MERGE_FAILED_ACTION,\s*\n\s*summary: `Could not merge PR/);
-    expect(source).toMatch(/actionType: PR_CONFLICT_ACTION,\s*\n\s*summary: recoveryStarted/);
+    expect(source).toMatch(/actionType: PR_CONFLICT_ACTION,\s*\n\s*summary: recovery\.recoveryStarted/);
     // And the two former spellings are gone from the PR loop.
     expect(source).not.toContain("actionType: 'flag',\n          summary: `Could not merge PR");
   });
