@@ -4,6 +4,44 @@
 
 ---
 
+## 2026-07-29 — ✅ RESOLVED: three windows that were sets, and a ceiling counted on a nullable key (api 2026.7.181)
+
+A second manager-diagnostics capture on project 11, taken with 2026.7.180 already live, still read **670 of 708 tickets stalled (95%)** with `managed_no_role` at 294 and `never_started` at 372. The previous pass's fixes were correct and had shipped; three *different* defects were holding the board, and all three are the same shape — **a bounded window over a total, stable order, which is a set and not a window** — plus one counter keyed on a column that can be NULL.
+
+### 1 · The merge ceiling could not fire for a PR with no ticket, and that PR held the head of the queue forever
+
+`{"code":"not_mergeable","attempt":1,"maxAttempts":3}` for PR #29, **six times in thirty minutes, attempt 1 every time**, `ticket=—`. 0381 gave this loop its ceilings and its least-recently-worked rotation and keyed all of it on `manager_actions.task_id`. `pull_requests.task_id` is **nullable** (`ON DELETE SET NULL`, and provider ingest records PRs never opened from a ticket), so for an orphan PR:
+
+- the ceiling join `pr_activity.task_id = pull_requests.task_id` never matched — `NULL = NULL` is not true in SQL — so its own journalled refusals could never be counted back to it;
+- every guard was additionally written `pr.taskId != null && …`, skipping it outright;
+- its `last_acted_at` was NULL, and the rotation sorts **NULLS FIRST**, so it re-took a slot of the 20-PR window on *every* pass while 381 open PRs queued behind it.
+
+The counters are now keyed on the **pull request** — the contract the loop is actually about (migration **0383**, `manager_actions.pr_id` + `idx_manager_actions_pr_scope`). That also fixes a quieter bug the ticket key carried: two PRs on one ticket shared one counter, so a replacement PR inherited the retired one's refusals. **Deliberately not backfilled** — a ticket-keyed count is a count of a different contract, and leaving the tombstone in place would keep PR #29 retired on a number that was never about PR #29. See [[counters-scoped-to-their-contract]].
+
+**And the third unbounded remedy on the same function.** A conflicting PR whose recovery cannot *start* — its ticket has no agent to hand the branch back to — journalled `pr_conflict` and continued, with nothing counting it: **102 `pr_conflict` decisions in one day**, including "Could not start conflict recovery for PR #46" re-taken every pass. It now obeys the same `isActionExhausted` rule as the sync and merge ceilings and retires to `merge_blocked`.
+
+### 2 · A role bound on ONE lane was recorded as bound for the WHOLE board
+
+`staffUnfilledLanes` journalled **zero `assign` decisions in 429 that day** while `managed_no_role` stood at 294 — the signature of a sweep convinced it has nothing to do. The 0382 shape fix was live and working; this was a second masking bug in the same loop, and it hides in the same three lines.
+
+Binding has two sources: the workspace **roster**, which is board-wide, and the **lane's own staffed agents**, which are not. `unfilledRolesForBoard` accumulated `bound` across every lane, so a role bound by an agent staffed to one lane filtered that role back out of the unfilled set for *every* lane. The project-scope pin that would have fixed the others is written to the roster by `staffUnfilledRole` — so masking the gap meant it was never written. The measured cohort sat on `ready` (Requirements & Design) owing `product-owner`, a role bound elsewhere on the board.
+
+The union is now taken **per lane**. Within one lane it still holds — binding is shape-independent and a lane authorising a role twice dispatches on either binding — so the fix cannot start reporting a role its own lane already fills.
+
+### 3 · The executor's candidate window was the same 400 rows on every tick
+
+`loadAutonomousCandidates` bounds one tick to `MAX_CANDIDATES_PER_TICK = 400` under a total, stable order (manager rank → priority tier → `updated_at`). The bound was justified in its own comment by "each dispatched ticket becomes a live run and is skipped next tick, so the backlog naturally paces itself" — **the skip happened in the evaluator, one layer down, while the ticket kept its slot here.** Nothing ever vacated. With 708 managed tickets against a 400-row window, the tail was not delayed; it was unreachable.
+
+That is the `never_started` cohort: **372 of 670 stalled tickets, oldest idle 49 days, on a board that completed 2,151 agent runs that same day.** The candidate scan now excludes tickets with a live run (`mode = 'live'` only, so a rehearsal cannot park a ticket out of the window), which is exactly what the comment always claimed. Priority-first ordering is untouched. Migration **0384** adds `idx_executions_task_status` — the probe is correlated per candidate row on a five-minute path over a table growing by thousands of rows a day, and `executions` had no index that serves it (nor did `RuntimeService.listActiveByTasks`, which every manager pass, the PR loop and the census call). Unindexed, the fix would have traded one starvation for a sequential scan.
+
+This closes hypothesis (a) of the roadmap's "why the executor never started the cohort" entry, and it did not need the live `auto_run_skip` trace that entry was logged as blocked on — the ordering makes it provable from the source. Hypothesis (b) is independent and stays open in the roadmap as a post-deploy check.
+
+Files: `api/src/application/manager/{ManagerService,staffUnfilledLanes}.ts`, `api/src/application/runtime/autonomousExecutionSweep.ts`, `api/src/infrastructure/database/schema/runtime.ts`, migrations **0383**/**0384** (+ tests).
+
+**Verified:** API `4174 passed`, `tsgo --noEmit` clean. Coverage pins each defect where it actually lives: the PR ceilings as source assertions on the join key and on every journal write carrying `pr_id` (a key is invisible to the type checker and to any unit test of the surrounding function), the lane mask as a two-lane case where only lane staffing binds, and the candidate window as rendered SQL via `.toSQL()` — for which `autonomousCandidatesQuery` was split out synchronous, the same shape as `managedTasksQuery`.
+
+---
+
 ## 2026-07-29 — ✅ RESOLVED: the 293-ticket `managed_no_role` cohort, and the two caps that could not drain a backlog (api 2026.7.180)
 
 Three roadmap entries closed, none of which needed the live data they were logged as blocked on. **The `managed_no_role` blocker was my own misdiagnosis** — I logged it as needing the live decision feed to name the unfillable role keys. It did not. The cause was readable in the source.

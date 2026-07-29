@@ -70,17 +70,57 @@ describe('unfilledRolesForBoard', () => {
   });
 
   /**
-   * A role bound on ONE lane is dispatchable, so it is not a staffing gap even if another
-   * lane leaves it unbound. Reporting it would hire a second agent for a role already
-   * filled — the blast radius the ladder's "never invent a teammate it could have found"
-   * rule exists to avoid.
+   * THE 294 (0383). A role bound on one lane by an agent STAFFED TO THAT LANE says
+   * nothing about any other lane — lane staffing is per-lane, only the roster is
+   * board-wide — yet the board-wide `bound` set filtered exactly those roles back out of
+   * the unfilled list. The project-scope pin that would fix the other lanes is written to
+   * the roster by `staffUnfilledRole`, so masking the gap meant it was never written.
+   *
+   * Measured on project 11, 2026-07-29, with the 0382 shape fix already live:
+   * `managed_no_role` at 294 of 670 stalled tickets, oldest idle 17 days, and ZERO
+   * `assign` decisions in 429 that day — a sweep convinced it had nothing to do.
    */
-  it('does not report a role that binds on at least one lane', () => {
+  it('reports a role bound only by another lane’s own staffing', () => {
+    const staffed = {
+      agentRef: 'agent-arch', agentName: 'Aria', declaredRole: 'architect',
+      model: null, position: 0, capableRoleKeys: ['architect'],
+    };
+    expect(unfilledRolesForBoard([
+      lane({ requirements: [roleRequirement('architect')], laneAgents: [staffed] }),
+      lane({ requirements: [roleRequirement('architect')] }),
+    ])).toEqual(['architect']);
+  });
+
+  /**
+   * The other half of the same rule: the ROSTER is board-wide, so a role it can fill is
+   * genuinely filled on every lane. Reporting it would hire a second agent for a role
+   * already filled — the blast radius the ladder's "never invent a teammate it could have
+   * found" rule exists to avoid.
+   */
+  it('does not report a role the board-wide roster fills on every lane', () => {
     const roster = rosterFor(['architect']);
     expect(unfilledRolesForBoard([
       lane({ requirements: [roleRequirement('architect')], roster }),
-      lane({ requirements: [roleRequirement('architect')], roster: EMPTY_ROLE_ROSTER }),
+      lane({ requirements: [roleRequirement('architect')], roster }),
     ])).toEqual([]);
+  });
+
+  /**
+   * Within ONE lane the union still holds — binding is shape-independent and a lane that
+   * authorises a role twice dispatches on either binding — so scoping per lane must not
+   * start reporting a role its own lane already binds.
+   */
+  it('does not report a role its own lane binds, whatever the shape', () => {
+    expect(unfilledRolesForBoard(
+      [lane({
+        requirements: [
+          roleRequirement('architect'),
+          roleRequirement('architect', { ticketType: 'bug' }),
+        ],
+        roster: rosterFor(['architect']),
+      })],
+      [{ taskType: 'bug', actionType: null }],
+    )).toEqual([]);
   });
 
   /**

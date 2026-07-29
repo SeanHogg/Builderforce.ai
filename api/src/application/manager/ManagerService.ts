@@ -341,13 +341,24 @@ export interface ManagerRunSummary {
  *  decision to the board task representing a manual run (null for cron sweeps). */
 export async function recordManagerAction(
   db: Db,
-  a: { tenantId: number; projectId: number; taskId?: number | null; runTaskId?: number | null; actionType: string; summary: string; detail?: unknown },
+  a: {
+    tenantId: number; projectId: number; taskId?: number | null; runTaskId?: number | null;
+    actionType: string; summary: string; detail?: unknown;
+    /**
+     * The PULL REQUEST this action was about (0383). REQUIRED in practice for every
+     * {@link PR_ACTION_TYPES} write — the loop's ceilings and rotation count on this
+     * column, and a PR action journalled without it is invisible to both, which is
+     * exactly the unbounded merge loop 0383 documents.
+     */
+    prId?: string | null;
+  },
 ): Promise<void> {
   try {
     await db.insert(managerActions).values({
       tenantId: a.tenantId,
       projectId: a.projectId,
       taskId: a.taskId ?? null,
+      prId: a.prId ?? null,
       runTaskId: a.runTaskId ?? null,
       actionType: a.actionType,
       summary: a.summary.slice(0, 500),
@@ -1836,17 +1847,28 @@ async function coordinatePullRequests(
   // the window within ceil(386/20) ≈ 20 passes instead of never, and a PR the manager
   // keeps re-handling naturally sinks behind the ones it has been ignoring.
   //
-  // The SAME scan carries the two ceilings this loop enforces (syncs, failed merges) and
-  // the merge_blocked dedupe, which were previously THREE separate grouped queries over
-  // the same table on every pass. It is index-backed by
-  // `idx_manager_actions_pr_ceiling (tenant_id, project_id, action_type, task_id)` — 0381
+  // The SAME scan carries the ceilings this loop enforces (syncs, failed merges,
+  // unrecoverable conflicts) and the merge_blocked dedupe, which were previously THREE
+  // separate grouped queries over the same table on every pass. It is index-backed by
+  // `idx_manager_actions_pr_scope (tenant_id, project_id, action_type, pr_id)` — 0383
   // added it, because `manager_actions` grows by ~3.5k rows a day on one project and the
   // prior queries were sequential scans on a five-minute path.
+  //
+  // KEYED ON THE PULL REQUEST, NOT ITS TICKET (0383). 0381 grouped by `task_id` and
+  // joined it to `pull_requests.task_id`, which is NULLABLE — so an orphan PR's own
+  // journalled actions could never be counted back to it (`NULL = NULL` is never true in
+  // a join), every `pr.taskId != null &&` guard below skipped it, and its NULL
+  // `last_acted_at` pinned it to the front of a NULLS-FIRST rotation on every pass.
+  // Measured on project 11, 2026-07-29: "Could not merge PR #29 … not mergeable" written
+  // with `{"attempt":1,"maxAttempts":3}` six times in thirty minutes, attempt 1 every
+  // time, while 381 open PRs queued behind it. The PR is also the right key on its own
+  // terms — a replacement PR must not inherit a retired one's refusals.
   const prActivity = db
     .select({
-      taskId: managerActions.taskId,
+      prId: managerActions.prId,
       syncs: sql<number>`count(*) filter (where ${managerActions.actionType} = 'sync_pr')::int`.as('syncs'),
       mergeFailures: sql<number>`count(*) filter (where ${managerActions.actionType} = ${MERGE_FAILED_ACTION})::int`.as('merge_failures'),
+      conflicts: sql<number>`count(*) filter (where ${managerActions.actionType} = ${PR_CONFLICT_ACTION})::int`.as('conflicts'),
       blockedReports: sql<number>`count(*) filter (where ${managerActions.actionType} = ${MERGE_BLOCKED_ACTION})::int`.as('blocked_reports'),
       lastActedAt: sql<string | null>`max(${managerActions.createdAt})`.as('last_acted_at'),
     })
@@ -1856,7 +1878,7 @@ async function coordinatePullRequests(
       eq(managerActions.projectId, projectId),
       inArray(managerActions.actionType, [...PR_ACTION_TYPES]),
     ))
-    .groupBy(managerActions.taskId)
+    .groupBy(managerActions.prId)
     .as('pr_activity');
 
   const openPrs = await db
@@ -1865,10 +1887,11 @@ async function coordinatePullRequests(
       buildStatus: pullRequests.buildStatus, repoId: pullRequests.repoId, updatedAt: pullRequests.updatedAt,
       syncs: prActivity.syncs,
       mergeFailures: prActivity.mergeFailures,
+      conflicts: prActivity.conflicts,
       blockedReports: prActivity.blockedReports,
     })
     .from(pullRequests)
-    .leftJoin(prActivity, eq(prActivity.taskId, pullRequests.taskId))
+    .leftJoin(prActivity, eq(prActivity.prId, pullRequests.id))
     .where(and(eq(pullRequests.tenantId, tenantId), eq(pullRequests.projectId, projectId), eq(pullRequests.status, 'open')))
     // NULLS FIRST is load-bearing: a PR the manager has never acted on is the one most
     // in need of a turn. `id` breaks ties so the order is total and a pass cannot
@@ -1894,17 +1917,30 @@ async function coordinatePullRequests(
   // indefinitely. It is the same livelock as the sync, one branch further down the same
   // function, and it now obeys the same rule ({@link isActionExhausted}).
   //
+  // CONFLICT: how many times the loop has found this branch conflicting with its base.
+  // The third unbounded remedy on the same function, and the one still running when 0381
+  // shipped: a conflicting PR whose recovery cannot START — its ticket has no agent to
+  // hand the branch back to — journals `pr_conflict` and continues, every pass, with
+  // nothing counting it. Measured on project 11, 2026-07-29: 102 `pr_conflict` decisions
+  // in one day, including "Could not start conflict recovery for PR #46: merge conflict"
+  // re-taken on every pass. A conflict handed back three times and still conflicting is
+  // the same livelock the two ceilings above end, so it obeys the same rule.
+  //
   // MERGE AUTHORITY (0363) withheld is a STATE that persists across passes, not an event,
-  // so it is reported once per PR rather than every five minutes. Both ceilings report
-  // through that same `merge_blocked` type and share its dedupe.
-  const syncAttempts = new Map<number, number>();
-  const mergeFailures = new Map<number, number>();
-  const alreadyReportedBlocked = new Set<number>();
+  // so it is reported once per PR rather than every five minutes. All three ceilings
+  // report through that same `merge_blocked` type and share its dedupe.
+  //
+  // KEYED BY PR ID (0383) — see the query above. Keyed by ticket, these maps held nothing
+  // at all for an orphan PR, which is how one escaped every ceiling indefinitely.
+  const syncAttempts = new Map<string, number>();
+  const mergeFailures = new Map<string, number>();
+  const conflictAttempts = new Map<string, number>();
+  const alreadyReportedBlocked = new Set<string>();
   for (const pr of openPrs) {
-    if (pr.taskId == null) continue;
-    syncAttempts.set(pr.taskId, pr.syncs ?? 0);
-    mergeFailures.set(pr.taskId, pr.mergeFailures ?? 0);
-    if ((pr.blockedReports ?? 0) > 0) alreadyReportedBlocked.add(pr.taskId);
+    syncAttempts.set(pr.id, pr.syncs ?? 0);
+    mergeFailures.set(pr.id, pr.mergeFailures ?? 0);
+    conflictAttempts.set(pr.id, pr.conflicts ?? 0);
+    if ((pr.blockedReports ?? 0) > 0) alreadyReportedBlocked.add(pr.id);
   }
 
   /**
@@ -1952,14 +1988,14 @@ async function coordinatePullRequests(
       // MAX_REMEDY_ATTEMPTS times and still has not merged, so a further sync is not a
       // fix in progress — it is the livelock. Report it once (the `merge_blocked` dedupe
       // below is the same "state, not event" rule) and leave it for a human.
-      if (pr.taskId != null && isActionExhausted(syncAttempts.get(pr.taskId) ?? 0)) {
-        if (!alreadyReportedBlocked.has(pr.taskId)) {
+      if (isActionExhausted(syncAttempts.get(pr.id) ?? 0)) {
+        if (!alreadyReportedBlocked.has(pr.id)) {
           await recordManagerAction(db, {
-            tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: MERGE_BLOCKED_ACTION,
-            summary: `PR #${pr.number ?? '?'} has been synced with its base ${syncAttempts.get(pr.taskId)} times without merging — stopping the sync loop and handing it to a human.`,
-            detail: { reason: 'sync_exhausted', syncAttempts: syncAttempts.get(pr.taskId) },
+            tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: MERGE_BLOCKED_ACTION,
+            summary: `PR #${pr.number ?? '?'} has been synced with its base ${syncAttempts.get(pr.id)} times without merging — stopping the sync loop and handing it to a human.`,
+            detail: { reason: 'sync_exhausted', syncAttempts: syncAttempts.get(pr.id) },
           });
-          alreadyReportedBlocked.add(pr.taskId);
+          alreadyReportedBlocked.add(pr.id);
         }
         continue;
       }
@@ -1971,14 +2007,32 @@ async function coordinatePullRequests(
       // either, and re-asking is the same livelock the sync ceiling above exists to end.
       // Report the reason ONCE and leave it for a person, who is the only one who can
       // clear any of those.
-      if (pr.taskId != null && isActionExhausted(mergeFailures.get(pr.taskId) ?? 0)) {
-        if (!alreadyReportedBlocked.has(pr.taskId)) {
+      if (isActionExhausted(mergeFailures.get(pr.id) ?? 0)) {
+        if (!alreadyReportedBlocked.has(pr.id)) {
           await recordManagerAction(db, {
-            tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: MERGE_BLOCKED_ACTION,
-            summary: `PR #${pr.number ?? '?'} has been refused by the provider ${mergeFailures.get(pr.taskId)} times — stopping the merge loop and handing it to a human. Open it on the provider for the exact block (required reviews, branch rules, a merge queue, or squash merges disabled).`,
-            detail: { reason: 'merge_failed_exhausted', mergeFailures: mergeFailures.get(pr.taskId) },
+            tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: MERGE_BLOCKED_ACTION,
+            summary: `PR #${pr.number ?? '?'} has been refused by the provider ${mergeFailures.get(pr.id)} times — stopping the merge loop and handing it to a human. Open it on the provider for the exact block (required reviews, branch rules, a merge queue, or squash merges disabled).`,
+            detail: { reason: 'merge_failed_exhausted', mergeFailures: mergeFailures.get(pr.id) },
           });
-          alreadyReportedBlocked.add(pr.taskId);
+          alreadyReportedBlocked.add(pr.id);
+        }
+        continue;
+      }
+
+      // EXHAUSTED CONFLICT (0383). The branch has been found conflicting with its base
+      // MAX_REMEDY_ATTEMPTS times. Either the resolution run keeps failing to resolve it,
+      // or — the measured case — it never started because the ticket has no agent to hand
+      // the branch back to, so the loop was journalling the identical `pr_conflict` every
+      // five minutes with nothing able to count it. Retire it to a human on the same rule
+      // as the two ceilings above rather than re-detecting the same conflict forever.
+      if (isActionExhausted(conflictAttempts.get(pr.id) ?? 0)) {
+        if (!alreadyReportedBlocked.has(pr.id)) {
+          await recordManagerAction(db, {
+            tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: MERGE_BLOCKED_ACTION,
+            summary: `PR #${pr.number ?? '?'} has conflicted with its base ${conflictAttempts.get(pr.id)} times and the conflict is still there — stopping the resolution loop and handing it to a human. Resolve the conflict on the branch, or assign an agent to the ticket so the manager can hand it back.`,
+            detail: { reason: 'conflict_exhausted', conflictAttempts: conflictAttempts.get(pr.id) },
+          });
+          alreadyReportedBlocked.add(pr.id);
         }
         continue;
       }
@@ -2002,7 +2056,7 @@ async function coordinatePullRequests(
           // touched a conflicting PR, and the rotation orders by it. Left as 'flag' it
           // was invisible to that ordering, so every conflicting PR read as "never acted
           // on" and held the front of the queue forever.
-          tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: PR_CONFLICT_ACTION,
+          tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: PR_CONFLICT_ACTION,
           summary: recovery.recoveryStarted
             ? `PR #${pr.number ?? '?'} conflicts with the latest base; started its ticket agent to resolve and update it.`
             : !recovery.affordable
@@ -2020,7 +2074,7 @@ async function coordinatePullRequests(
       }
       if (prepared.updated) {
         await recordManagerAction(db, {
-          tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: 'sync_pr',
+          tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: 'sync_pr',
           summary: `Updated PR #${pr.number ?? '?'} with the latest base branch before merge.`,
         });
         // Both GitHub updates and GitLab rebases are accepted asynchronously. Never
@@ -2053,7 +2107,7 @@ async function coordinatePullRequests(
         });
         if (!gate.satisfied) {
           await recordManagerAction(db, {
-            tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: 'flag',
+            tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: 'flag',
             summary: `Did not merge PR #${pr.number ?? '?'} — ${gate.detail}`,
             detail: {
               signoffGate: gate.reason,
@@ -2075,9 +2129,9 @@ async function coordinatePullRequests(
       // surface shows "waiting on a human to merge" instead of a PR that quietly never
       // moves. Both this and the sign-off gate above must pass.
       if (!policy.allowAutoMerge) {
-        if (pr.taskId == null || !alreadyReportedBlocked.has(pr.taskId)) {
+        if (!alreadyReportedBlocked.has(pr.id)) {
           await recordManagerAction(db, {
-            tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: MERGE_BLOCKED_ACTION,
+            tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: MERGE_BLOCKED_ACTION,
             summary: `PR #${pr.number ?? '?'} is ready to merge, but autonomous merge authority is not granted — a human needs to approve & merge it.`,
             detail: {
               gate: 'allow_auto_merge',
@@ -2087,7 +2141,7 @@ async function coordinatePullRequests(
               grantAt: 'workspace manager defaults, or this project’s manager policy',
             },
           });
-          if (pr.taskId != null) alreadyReportedBlocked.add(pr.taskId);
+          alreadyReportedBlocked.add(pr.id);
         }
         continue;
       }
@@ -2102,7 +2156,7 @@ async function coordinatePullRequests(
         if (result.code === 'conflict') {
           const recovery = await startConflictRecovery(pr);
           await recordManagerAction(db, {
-            tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: PR_CONFLICT_ACTION,
+            tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: PR_CONFLICT_ACTION,
             summary: recovery.recoveryStarted
               ? `PR #${pr.number ?? '?'} was refused at merge because it conflicts with the latest base; started its ticket agent to resolve and update it.`
               : !recovery.affordable
@@ -2112,6 +2166,8 @@ async function coordinatePullRequests(
               code: result.code,
               detectedAt: 'merge',
               recoveryStarted: recovery.recoveryStarted,
+              attempt: (conflictAttempts.get(pr.id) ?? 0) + 1,
+              maxAttempts: MAX_REMEDY_ATTEMPTS,
               ...(recovery.affordable ? {} : { deferred: 'pass_budget' }),
             },
           });
@@ -2121,11 +2177,11 @@ async function coordinatePullRequests(
         // these, and a refusal buried among a project's ~1,770 daily flags is a refusal
         // nothing can count. The Nth failure is what retires the PR to a human.
         await recordManagerAction(db, {
-          tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: MERGE_FAILED_ACTION,
+          tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: MERGE_FAILED_ACTION,
           summary: `Could not merge PR #${pr.number ?? '?'}: ${result.error}`,
           detail: {
             code: result.code,
-            attempt: (mergeFailures.get(pr.taskId ?? -1) ?? 0) + 1,
+            attempt: (mergeFailures.get(pr.id) ?? 0) + 1,
             maxAttempts: MAX_REMEDY_ATTEMPTS,
           },
         });
@@ -2137,7 +2193,7 @@ async function coordinatePullRequests(
       // auto-merge all complete the ticket via the ONE completeTaskOnMerge path —
       // which also records the lifecycle transition/DORA the old direct update skipped.
       await recordManagerAction(db, {
-        tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: 'merge_pr',
+        tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: 'merge_pr',
         summary: `Merged & closed PR #${pr.number ?? '?'}${result.merged ? '' : ' (already up to date)'} — ticket done.`,
         detail: { sha: result.sha },
       });

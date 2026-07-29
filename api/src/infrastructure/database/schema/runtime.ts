@@ -146,6 +146,20 @@ export const managerActions = pgTable('manager_actions', {
   projectId:  integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   /** The ticket the action was about (null for project-wide actions like a re-rank). */
   taskId:     integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  /**
+   * The PULL REQUEST the action was about (0383) — the key the PR loop's ceilings and
+   * its least-recently-worked rotation are counted on.
+   *
+   * NOT `task_id`, which is what 0381 used and what made the ceilings unenforceable:
+   * `pull_requests.task_id` is nullable, so an orphan PR's actions could never be
+   * counted back to it (`NULL = NULL` is never true in a join) and every guard written
+   * `pr.taskId != null && …` skipped it outright. Measured on project 11: one PR
+   * journalled `merge_failed` with `attempt: 1` six times in thirty minutes, forever,
+   * while its NULL `last_acted_at` pinned it to the front of a NULLS-FIRST rotation.
+   * It is also the right key on its own terms — a replacement PR must not inherit the
+   * retired one's refusals.
+   */
+  prId:       uuid('pr_id').references(() => pullRequests.id, { onDelete: 'set null' }),
   /** The board task that REPRESENTS the manual manager run this decision belongs to
    *  (0286). Set for actions taken during a "Run manager now" pass so the run task can
    *  show exactly what it changed; null for cron-sweep decisions (feed-only). */
