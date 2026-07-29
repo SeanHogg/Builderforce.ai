@@ -414,19 +414,25 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const id = c.req.param('id');
+    // Distinguish "not yours / missing" (404) from "wrong state" (409) — AC-9/AC-10.
+    const [current] = await sql(c.env)`SELECT id, status FROM timecards WHERE id = ${id} AND tenant_id = ${tenantId}`;
+    if (!current) return c.json({ error: 'Not found' }, 404);
+    if (current.status !== 'submitted') return c.json({ error: `Cannot approve a ${current.status} timecard`, code: 'INVALID_TRANSITION' }, 409);
     const rows = await sql(c.env)`
       UPDATE timecards SET status = 'approved', approved_at = NOW(), approved_by_user_id = ${actor}, updated_at = NOW()
       WHERE id = ${id} AND tenant_id = ${tenantId} AND status = 'submitted'
       RETURNING id, engagement_id, user_id, amount_cents, currency
     `;
     const card = rows[0];
-    if (!card) return c.json({ error: 'Not found or not submitted' }, 404);
-    // Issue an invoice (idempotent per timecard).
+    // Lost the race against a concurrent approve — the other caller won.
+    if (!card) return c.json({ error: 'Timecard is no longer submitted', code: 'INVALID_TRANSITION' }, 409);
+    // Issue an invoice (idempotent per timecard) — the billable line for this period.
     await sql(c.env)`
       INSERT INTO freelancer_invoices (id, timecard_id, engagement_id, tenant_id, freelancer_user_id, amount_cents, currency, status)
       VALUES (${crypto.randomUUID()}, ${id}, ${card.engagement_id}, ${tenantId}, ${card.user_id}, ${card.amount_cents}, ${card.currency ?? 'USD'}, 'pending')
       ON CONFLICT (timecard_id) DO UPDATE SET amount_cents = EXCLUDED.amount_cents, updated_at = NOW()
     `;
+    await recordTimecardEvent(sql(c.env), id, 'submitted', 'approved', actor, 'client', { amountCents: Number(card.amount_cents ?? 0) });
     await notify(sql(c.env), c.env, { userId: card.user_id as string, tenantId, kind: 'timecard_approved', title: 'Your timecard was approved', body: `${card.currency ?? 'USD'} ${((Number(card.amount_cents) || 0) / 100).toFixed(2)}`, ref: id });
     return c.json({ ok: true, status: 'approved' });
   });
