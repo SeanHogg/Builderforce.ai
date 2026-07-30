@@ -508,6 +508,18 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
   const info: ManagerFinding[] = [];
 
   // ── 1. Is it on at all, and is the machinery that runs it allowed to run? ──
+  // `managed` FIRST, and separately from `enabled`: a project with no manager config row
+  // of its own folds to the hardcoded `enabled: true` default, so an unconfigured project
+  // reports an active policy while the sweep never selects it. Reading `enabled` alone
+  // here would state health that was never verified — the failure this whole block exists
+  // to prevent. The server sends `managed` from the one shared predicate.
+  if (overview.managed === false) {
+    critical.push({
+      severity: 'critical',
+      code: 'manager_not_configured',
+      text: `No manager has been configured for this project, so NOTHING below runs — the scheduled sweep selects only projects with their own manager settings, and "Run manager now" returns skipped=unconfigured. The policy table may still read "enabled": that is the built-in default a project with no settings of its own folds to, not a manager that is running. Turn one on from the Manager tab's settings to start passes.`,
+    });
+  }
   if (!policy.enabled) {
     critical.push({
       severity: 'critical',
