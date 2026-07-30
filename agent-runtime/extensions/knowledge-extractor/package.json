@@ -1,19 +1,18 @@
 {
   "name": "@builderforce/knowledge-extractor",
-  "version": "2026.3.22",
+  "version": "2026.3.21",
   "private": true,
   "description": "Post-execution Knowledge Extractor — delta detection engine for Evermind learning",
   "type": "module",
-  "dependencies": {
+  "devDependencies": {
     "@seanhogg/builderforce-agents": "workspace:*"
   },
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "vitest": "^3.0.0"
+  "peerDependencies": {
+    "@seanhogg/builderforce-agents": ">=2026.1.26"
   },
   "builderforce": {
     "extensions": [
-      "./src/index.ts"
+      "./index.ts"
     ]
   }
 }
