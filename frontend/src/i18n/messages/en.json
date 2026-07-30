@@ -8917,6 +8917,7 @@
     "authAlert": {
       "title": "Not being used",
       "notEntitled": "This account signed in successfully, but the provider refused the request ({status}) because the plan does not cover it. Reconnect an account whose plan includes it, or upgrade the plan.",
+      "xaiNotEntitled": "xAI accepted the sign-in but refused Grok API access ({status}). Check that this account has an eligible SuperGrok plan and remaining weekly usage, or connect an xAI API key.",
       "rejected": "The provider rejected this credential ({status}). It has probably expired, been revoked, or been rotated elsewhere — reconnect the account.",
       "capacity": "The credential works, but the account is out of budget ({status}) — a spend cap or empty credit balance. Top up or raise the limit; there is no need to reconnect.",
       "unresolved": "The stored credential could not be used at all — it has been revoked, has expired, or was saved in a different workspace. Reconnect it here."

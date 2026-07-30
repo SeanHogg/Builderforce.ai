@@ -77,12 +77,51 @@ describe('manager PR action ceiling + rotation', () => {
     expect(source).not.toContain("actionType: 'flag',\n          summary: `Could not merge PR");
   });
 
-  it('orders the open-PR window least-recently-worked first, and bounds it', () => {
-    // NULLS FIRST is the half that matters: a PR the manager has never touched is the
-    // one most in need of a turn, and without it the never-examined tail stays never
-    // examined. `asc` alone would sort NULLs LAST in Postgres.
-    expect(source).toMatch(/lastActedAt\} asc nulls first/);
+  /**
+   * ── AND THE ORDER REVERSED AGAIN (0386) ──────────────────────────────────────────
+   * 0383's least-recently-worked rotation fixed a real starvation and caused a worse one.
+   * A turn every ~19 passes (381 open PRs, 20 a pass ≈ 95 minutes) against a base branch
+   * that moves every few minutes means a PR's attempts never accumulate: measured on
+   * project 11, 2026-07-30, the stuck register showed `attempts=2` on row after row after
+   * 16 to 28 days, so no ceiling ever fired, so nothing merged AND nothing retired.
+   *
+   * A ceiling that cannot be reached is not a ceiling. The window is now oldest-first and
+   * STABLE, which is what lets the head accumulate its three attempts and reach a
+   * conclusion — see `prMergeQueue.ts`.
+   */
+  it('orders the open-PR window oldest-first and STABLE, and bounds it', () => {
+    expect(source).toMatch(/\.orderBy\(asc\(pullRequests\.createdAt\), asc\(pullRequests\.id\)\)/);
     expect(source).toMatch(/\.limit\(MAX_PR_ACTIONS_PER_RUN\)/);
+    // The rotation must not come back: re-sorting the window by when the manager last
+    // touched each PR is precisely what dilutes the attempts below the ceiling.
+    expect(source).not.toMatch(/lastActedAt\} asc nulls first/);
+  });
+
+  /**
+   * THE DEADLOCK A STABLE ORDER CREATES, and the reason the exit condition is two
+   * clauses rather than one.
+   *
+   * Retiring a PR writes `merge_blocked` — it does NOT close the pull request, which
+   * stays `open` until a person acts. A stable oldest-first window therefore fills with
+   * its own retirements and never advances unless retired PRs are excluded.
+   *
+   * But `merge_blocked` is written for TWO different situations, and only one of them is
+   * terminal. A spent ceiling is; withheld merge authority (0363) is a project policy
+   * that a human can grant, after which that PR must merge on the very next pass. So the
+   * exit is the conjunction, and either half alone is a bug: `blockedReports > 0` alone
+   * would strand every authority-blocked PR permanently, and the ceiling test alone would
+   * evict a PR in the same pass that is supposed to report it.
+   */
+  it('lets a retired PR leave the window WITHOUT stranding an authority-blocked one', () => {
+    const where = source.slice(source.indexOf('const openPrs = await db'), source.indexOf('.orderBy(asc(pullRequests.createdAt)'));
+    expect(where, 'the queue must exclude PRs it has already retired, or it deadlocks')
+      .toMatch(/coalesce\(\$\{prActivity\.blockedReports\}, 0\) > 0/);
+    // Conjoined with a spent ceiling — never on the report alone.
+    expect(where).toMatch(/\band greatest\(/);
+    expect(where).toMatch(/>= \$\{MAX_REMEDY_ATTEMPTS\}/);
+    for (const counter of ['syncs', 'mergeFailures', 'conflicts']) {
+      expect(where, `${counter} must count toward the exit`).toContain(`prActivity.${counter}`);
+    }
   });
 
   it('applies the SAME exhaustion rule the stall remedies use — no second ceiling', () => {
@@ -99,18 +138,23 @@ describe('manager PR action ceiling + rotation', () => {
    * ticket silently exempts every orphan PR from every ceiling.
    */
   it('counts all three ceilings on the PULL REQUEST, never on its (nullable) ticket', () => {
-    for (const counter of ['syncAttempts', 'mergeFailures', 'conflictAttempts']) {
-      expect(source, `${counter} must be keyed by pr.id`)
-        .toMatch(new RegExp(`isActionExhausted\\(${counter}\\.get\\(pr\\.id\\) \\?\\? 0\\)`));
-    }
-    // The dedupe that decides whether a retired PR is reported at all shares the key.
-    expect(source).toMatch(/alreadyReportedBlocked\.has\(pr\.id\)/);
-    // And the join/grouping the counts come from.
+    // 0386 moved the three comparisons themselves into `planMergeQueue`, which cannot
+    // express a ticket key at all: `QueuedPr` carries the counters, and they are read
+    // straight off the PR row. What remains here — and is still only checkable in the
+    // source — is that the row those counters come from is joined on the PR.
     expect(source).toMatch(/\.groupBy\(managerActions\.prId\)/);
     expect(source).toMatch(/leftJoin\(prActivity, eq\(prActivity\.prId, pullRequests\.id\)\)/);
-    // A ticket-keyed guard is exactly what let the orphan through — none may return.
+    // The dedupe that decides whether a retired PR is reported at all shares the key.
+    expect(source).toMatch(/alreadyReportedBlocked\.has\(pr\.id\)/);
+    // And no intermediate per-ticket map may reappear between the row and the decision —
+    // the three `Map<taskId, …>` lookups are what hid the orphan PR in the first place.
     expect(source).not.toMatch(/pr\.taskId != null && isActionExhausted/);
-    expect(source).not.toMatch(/mergeFailures\.get\(pr\.taskId/);
+    expect(source).not.toMatch(/mergeFailures\.get\(/);
+    expect(source).not.toMatch(/conflictAttempts\.get\(/);
+    for (const counter of ['syncs', 'mergeFailures', 'conflicts']) {
+      expect(source, `${counter} must reach the plan off the PR row`)
+        .toMatch(new RegExp(`${counter}: prActivity\\.${counter}`));
+    }
   });
 
   /**
