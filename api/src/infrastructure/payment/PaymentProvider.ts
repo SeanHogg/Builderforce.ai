@@ -44,21 +44,42 @@ export interface CheckoutSessionResult {
 }
 
 /**
+ * Every internal event type a provider may emit. Declared as a const tuple so the
+ * classification layer can exhaustively enumerate it at runtime (and tests can
+ * assert the mapping table covers it) while `WebhookEventType` stays a closed union.
+ */
+export const WEBHOOK_EVENT_TYPES = [
+  'subscription.activated',      // new subscription created and paid
+  'subscription.renewed',        // recurring payment succeeded
+  'subscription.cancelled',      // customer or admin cancelled
+  'subscription.past_due',       // payment failed, grace period
+  'subscription.payment_failed', // recurring charge declined/errored
+  'subscription.refunded',       // a subscription charge was refunded
+  'payment.authorized',          // pre-authorisation approved, funds not captured
+  'payment.captured',            // previously authorised funds captured
+  'payment.succeeded',           // one-off or first payment succeeded
+  'payment.failed',              // payment declined
+] as const;
+
+export type WebhookEventType = (typeof WEBHOOK_EVENT_TYPES)[number];
+
+/**
  * Normalised webhook event — provider-specific payloads are translated into this shape.
  * The webhook route handler calls tenantService methods based on `type`.
  */
 export interface WebhookEvent {
-  type:
-    | 'subscription.activated'   // new subscription created and paid
-    | 'subscription.renewed'     // recurring payment succeeded
-    | 'subscription.cancelled'   // customer or admin cancelled
-    | 'subscription.past_due'    // payment failed, grace period
-    | 'payment.succeeded'        // one-off or first payment succeeded
-    | 'payment.failed';          // payment declined
+  type: WebhookEventType;
 
   /** Use this to look up the tenant */
   externalCustomerId: string;
   externalSubscriptionId: string;
+
+  /**
+   * Provider-unique identifier for THIS delivery (e.g. Helcim's transactionId).
+   * Used to deduplicate redelivered webhooks — see FR-6. Absent for providers that
+   * do not supply one, in which case no dedup is attempted.
+   */
+  idempotencyKey?: string;
 
   /** Present on activation/renewal events */
   billingCycle?: TenantBillingCycle;
