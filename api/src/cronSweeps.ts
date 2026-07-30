@@ -269,7 +269,7 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env, budget }) => {
       const r = await runManagerSweep(env, budget);
       return r.managed > 0
-        ? `projects=${r.projects} managed=${r.managed} scored=${r.scored} ranked=${r.ranked} assigned=${r.assigned} prsConducted=${r.prsConducted} prsMerged=${r.prsMerged} dispatched=${r.dispatched} remediated=${r.remediated} remediationDeferred=${r.remediationDeferred} tokenBlocked=${r.tokenBlockedTenants}`
+        ? `projects=${r.projects} managed=${r.managed} notReached=${r.notReached} scored=${r.scored} ranked=${r.ranked} assigned=${r.assigned} prsConducted=${r.prsConducted} prsMerged=${r.prsMerged} dispatched=${r.dispatched} remediated=${r.remediated} remediationDeferred=${r.remediationDeferred} tokenBlocked=${r.tokenBlockedTenants}`
         : null;
     },
   },
