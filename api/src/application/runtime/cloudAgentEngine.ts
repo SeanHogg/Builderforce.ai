@@ -1689,8 +1689,8 @@ function buildCloudProvider(args: {
           ? {
               ok: true, ran: true, kind: 'static-validation',
               checked: v.checked, skipped: v.skipped,
-              note: `Static syntax validation PASSED for ${v.checked.length} JSON/YAML config file(s)`
-                + `${v.skipped.length ? ` (${v.skipped.length} non-config file(s) can't be parsed without a shell)` : ''}. `
+              note: `Static source/config validation PASSED for ${v.checked.length} changed file(s)`
+                + `${v.skipped.length ? ` (${v.skipped.length} file(s) had no applicable shell-free policy)` : ''}. `
                 + 'This executor has NO shell, so it did NOT run the build, project-wide type-check, lint, or tests — CI on the pull request verifies those. Do not claim those passed; ensure your code is correct.',
             }
           : {
@@ -2200,8 +2200,13 @@ export async function runCloudToolLoop(
 
       if (control?.kind === 'finish') {
         const summary = control.summary;
-        // Three finish gates, in order. Either yields a block message that forces the
+        // Four finish gates, in order. Either yields a block message that forces the
         // agent to call finish again once it has corrected the run; null = ship.
+        // Validation is AUTOMATIC here: `run_checks` remains useful for an early
+        // self-check, but forgetting to call it cannot bypass the quality policy.
+        const prefinishVerification = repoCtx && writtenPaths.size > 0
+          ? await verifyWrittenFiles({ ...repoCtx, ref: repoCtx.branch }, writtenPaths)
+          : null;
         let finishBlock: string | null = null;
         if (repoCtx && !noDeliverableBlocked && hasNoCodeDeliverable(writtenPaths)) {
           // (0) Completeness self-review (ROADMAP #38): a code-bound run is finishing
@@ -2218,14 +2223,29 @@ export async function runCloudToolLoop(
             detail: { reason: 'no_deliverable' },
             result: 'Blocked finish: no code deliverable — self-review required',
           });
+        } else if (prefinishVerification && !prefinishVerification.ok) {
+          // (1) Mandatory changed-source/config policy. Unlike the optional tool call,
+          // this cannot be skipped by a model that rushes straight to `finish`.
+          finishBlock =
+            `Cannot finish — changed-file validation found ${prefinishVerification.errors.length} issue(s). `
+            + 'Repair every issue, then finish again. This is a shell-free source policy, not a claim that the full project type-check ran.\n'
+            + prefinishVerification.errors.map((e) =>
+              `- ${e.path}${e.line ? `:${e.line}` : ''}${e.ruleId ? ` [${e.ruleId}]` : ''}: ${e.message}`,
+            ).join('\n');
+          await recordCloudToolEvent(db, {
+            tenantId, cloudAgentRef, executionId,
+            toolName: 'finish.blocked', category: 'tool',
+            detail: { reason: 'source_quality', errors: prefinishVerification.errors },
+            result: `Blocked finish: ${prefinishVerification.errors.length} source/config quality issue(s)`,
+          });
         } else if (summary && !finishBlockedOnce && assertsUnrunVerification(summary)) {
-          // (1) Honesty: the summary claims a check passed, but nothing was (or
+          // (2) Honesty: the summary claims a check passed, but nothing was (or
           // could be) run. Block once and force an honest restatement.
           finishBlockedOnce = true;
           finishBlock =
             'You stated that a build/type-check/lint/test passed or is resolved, but this executor cannot run any of those — CI on the pull request verifies them. Call finish again with a summary that does NOT claim a check passed (describe what you changed and that CI will verify), or call run_checks first.';
         } else if (repoCtx && writtenPaths.size > 0 && placeholderBlocks < MAX_PLACEHOLDER_FINISH_BLOCKS) {
-          // (2) Anti-stub: refuse to ship placeholder/scaffold code. Read the
+          // (3) Anti-stub: refuse to ship placeholder/scaffold code. Read the
           // committed files back and block if any still contain stub markers — the
           // agent must implement them for real (using the existing infrastructure)
           // or remove the dead file with delete_file.

@@ -31,8 +31,16 @@ describe('inspectAgentSource', () => {
     expect(inspectAgentSource('src/list.ts', 'const ids = rows.map((row) => row.id);')).toEqual([]);
   });
 
+  it('ignores examples inside comments and string literals', () => {
+    const source = [
+      "// onChange={ok ? (v) => save(v) : undefined}",
+      "const example = 'onChange={ok ? (v) => save(v) : undefined}';",
+      '/* onChange={ok ? (v) => save(v) : undefined} */',
+    ].join('\n');
+    expect(inspectAgentSource('src/docs.tsx', source)).toEqual([]);
+  });
+
   it('ignores non-source files', () => {
     expect(inspectAgentSource('README.md', 'onChange={ok ? (v) => save(v) : undefined}')).toEqual([]);
   });
 });
-
