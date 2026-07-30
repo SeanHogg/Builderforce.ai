@@ -8896,6 +8896,7 @@
     "authAlert": {
       "title": "Non utilisé",
       "notEntitled": "Ce compte s’est bien connecté, mais le fournisseur a refusé la requête ({status}) car l’offre ne la couvre pas. Reconnectez un compte dont l’offre l’inclut, ou passez à une offre supérieure.",
+      "xaiNotEntitled": "xAI a accepté la connexion, mais a refusé l’accès à l’API Grok ({status}). Vérifiez que ce compte dispose d’une offre SuperGrok éligible et d’un quota hebdomadaire restant, ou connectez une clé API xAI.",
       "rejected": "Le fournisseur a rejeté cet identifiant ({status}). Il a probablement expiré, été révoqué ou renouvelé ailleurs — reconnectez le compte.",
       "capacity": "L’identifiant fonctionne, mais le compte n’a plus de budget ({status}) — plafond de dépense atteint ou solde de crédits vide. Rechargez ou relevez la limite ; inutile de reconnecter.",
       "unresolved": "L’identifiant enregistré n’a pas pu être utilisé du tout : il a été révoqué, a expiré, ou a été enregistré dans un autre espace de travail. Reconnectez-le ici."

@@ -1998,7 +1998,33 @@ async function coordinatePullRequests(
     })
     .from(pullRequests)
     .leftJoin(prActivity, eq(prActivity.prId, pullRequests.id))
-    .where(and(eq(pullRequests.tenantId, tenantId), eq(pullRequests.projectId, projectId), eq(pullRequests.status, 'open')))
+    .where(and(
+      eq(pullRequests.tenantId, tenantId),
+      eq(pullRequests.projectId, projectId),
+      eq(pullRequests.status, 'open'),
+      // ── HOW A PR LEAVES THE QUEUE ───────────────────────────────────────────────
+      // Retiring a PR to a human writes `merge_blocked`; it does NOT close the pull
+      // request, which stays `open` on the provider until a person deals with it. Under
+      // the old rotation that was harmless — the window moved on regardless. Under a
+      // STABLE oldest-first order it is fatal: the twenty oldest PRs exhaust their
+      // ceilings, get reported once, and then sit at the head of the window forever, so
+      // the queue deadlocks on its own retirements and PR 21 is never reached.
+      //
+      // The exit is RETIRED AND REPORTED, and both halves are load-bearing. Exhausted
+      // but not yet reported must stay IN — that pass is what tells the human. And
+      // reported alone must not evict, because `merge_blocked` also carries "ready, but
+      // merge authority is withheld" (0363), which is a project POLICY rather than a
+      // spent ceiling: those PRs have low counters, must keep their place, and must
+      // merge on the next pass after a person grants the authority.
+      sql`not (
+        coalesce(${prActivity.blockedReports}, 0) > 0
+        and greatest(
+          coalesce(${prActivity.syncs}, 0),
+          coalesce(${prActivity.mergeFailures}, 0),
+          coalesce(${prActivity.conflicts}, 0)
+        ) >= ${MAX_REMEDY_ATTEMPTS}
+      )`,
+    ))
     // OLDEST FIRST, AND STABLE — see `prMergeQueue.ts`. 0383 ordered this
     // least-recently-worked-first so every PR got a turn, which fixed one starvation and
     // caused a worse one: a turn every ~19 passes against a base that moves every few

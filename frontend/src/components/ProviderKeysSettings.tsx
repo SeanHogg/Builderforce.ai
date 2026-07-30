@@ -196,6 +196,9 @@ const ALERT_COPY_KEY: Record<ProviderAuthAlert['reason'], string> = {
 };
 
 function AuthAlertNotice({ alert, t }: { alert: ProviderAuthAlert; t: TFn }) {
+  const copyKey = alert.vendor === 'xai-oauth' && alert.reason === 'not_entitled'
+    ? 'authAlert.xaiNotEntitled'
+    : ALERT_COPY_KEY[alert.reason];
   return (
     <div
       role="status"
@@ -215,7 +218,7 @@ function AuthAlertNotice({ alert, t }: { alert: ProviderAuthAlert; t: TFn }) {
       }}
     >
       <strong style={{ fontWeight: 700 }}>{t('authAlert.title')}</strong>
-      <span style={{ minWidth: 0 }}>{t(ALERT_COPY_KEY[alert.reason], { status: alert.status })}</span>
+      <span style={{ minWidth: 0 }}>{t(copyKey, { status: alert.status })}</span>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ProviderKeysSettings } from './ProviderKeysSettings';
 import * as api from '@/lib/builderforceApi';
 import type { ProviderAuthAlert, ProviderDiagnostic } from '@/lib/builderforceApi';
@@ -99,7 +99,9 @@ describe('ProviderKeysSettings — rejected-account prompt', () => {
       usage: { periodDays: 30, requests: 0, tokens: 0, lastUsedAt: null },
     }));
     render(<ProviderKeysSettings />);
+    fireEvent.click((await screen.findByText('xAI (Grok)')).closest('button')!);
     expect(await screen.findByText(/providerKeys\.diagnostic\.currentStatus providerKeys\.diagnostic\.state\.needs_attention/)).toBeInTheDocument();
+    expect(screen.getAllByText(/providerKeys\.authAlert\.xaiNotEntitled 403/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/providerKeys\.diagnostic\.currentStatus providerKeys\.diagnostic\.state\.ready/)).not.toBeInTheDocument();
   });
 
