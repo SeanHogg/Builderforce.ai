@@ -70,7 +70,7 @@ import { reasoningParamsForModel } from '../llm/reasoningCapability';
 import { contributeTextToProjectEverminds, buildEvermindLessonsBlock } from '../llm/projectEvermind';
 import { modelSupportsTools } from '../llm/vendors';
 import { buildProjectFactsBlock } from '../llm/projectFacts';
-import { scoreRunOutcome, finalizeLearnWeight } from './scoreRunOutcome';
+import { scoreRunOutcome, finalizeLearnWeight, runProducedOutput } from './scoreRunOutcome';
 import { recordCloudToolEvent } from './cloudToolEvents';
 import { recordRunRollbackSnapshot, teardownRunBranch, teardownCrashedRunArtifacts } from './runRollback';
 import { handleCloudRunCrash } from './cloudSelfHeal';
@@ -2732,6 +2732,26 @@ export async function finalizeCloudRun(
       `### 🤖 ${agentLabel} — task #${taskRow.id}\n\n${output}${fileBlock}${unverifiedNote}${runUrl}`,
       { kind: 'agent-run', scope: executionId },
     ).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] PR summary comment failed', details: { tenantId, executionId, prNumber: openedPrNumber, error } } }));
+  }
+
+  // STAMP WHAT THIS RUN LEFT BEHIND (0385) — the last thing finalize does, from the
+  // SAME facts the learn weight above is graded on, so the two can never disagree.
+  //
+  // This is the signal the autonomy breaker was missing. It counted `failed` runs only,
+  // so a run that COMPLETED and shipped nothing reset the streak and was re-dispatched
+  // on the next five-minute tick, forever: 5,931 completed runs against 10 failures and
+  // 3 finished tickets in one day on project 11, one agent at 5,796 runs / 0 finished,
+  // while 371 tickets on the same board had never run at all because the tenant's
+  // dispatch ceiling was spent on the re-runs.
+  //
+  // A CANCELLED run is deliberately left UNJUDGED (null): a person stopped it, which
+  // says nothing about whether the ticket can succeed — the same reading the breaker
+  // already takes of a cancellation, and of a platform eviction.
+  if (!cancelled) {
+    await db.update(executions)
+      .set({ produced: runProducedOutput({ merged, prOpened, producedChanges: writtenPaths.size > 0 }) })
+      .where(eq(executions.id, executionId))
+      .catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudAgentEngine.ts', operation: 'finalizeCloudRun', context: { logMessage: '[cloud-finalize] produced-stamp failed — this run will not count toward the autonomy breaker', details: { tenantId, executionId, taskId: taskRow.id, error } } }));
   }
 
   return { ok: !autoMergeFailed, output: output + unverifiedNote };

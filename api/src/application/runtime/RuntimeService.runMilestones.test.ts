@@ -51,7 +51,7 @@ function buildExecution(opts: {
     id: EXEC_ID as never, taskId: TASK_ID as never, agentId: null, agentHostId: null,
     tenantId: 1 as never, submittedBy: 'user-1', sessionId: null,
     status: opts.status ?? ExecutionStatus.RUNNING,
-    payload: opts.payload ?? null, cloudAgentRef: 'agent-dev', result: null, errorMessage: null,
+    payload: opts.payload ?? null, cloudAgentRef: 'agent-dev', result: null, errorMessage: null, produced: null,
     startedAt: opts.startedAt ?? now, completedAt: null, createdAt: opts.startedAt ?? now,
     updatedAt: opts.updatedAt ?? now,
   });
