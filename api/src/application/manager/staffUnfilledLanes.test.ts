@@ -145,7 +145,7 @@ describe('unfilledRolesForBoard', () => {
 
 describe('describeLaneStaffing', () => {
   const result = (over: Partial<LaneStaffingResult> = {}): LaneStaffingResult =>
-    ({ unfilledRoleKeys: [], filled: [], unfillable: [], hires: 0, ...over });
+    ({ unfilledRoleKeys: [], filled: [], unfillable: [], hires: 0, error: null, ...over });
 
   it('says nothing when there was nothing to staff — the steady state is silent', () => {
     expect(describeLaneStaffing(result())).toBe('');
@@ -182,6 +182,12 @@ describe('describeLaneStaffing', () => {
     }));
     expect(text).toContain('made-up-role');
     expect(text).toMatch(/human/);
+  });
+
+  it('does not disguise a failed staffing sweep as an empty, healthy board', () => {
+    const text = describeLaneStaffing(result({ error: 'role roster unavailable' }));
+    expect(text).toContain('role roster unavailable');
+    expect(text).toMatch(/needs attention/);
   });
 });
 

@@ -4,6 +4,42 @@
 
 ---
 
+## 2026-07-30 — ✅ RESOLVED: the stage that spent the whole pass and changed nothing, and a productivity signal that never reached the database (api 2026.7.183)
+
+Two defects found by validating in-flight work against a fresh capture, plus the guard failure that let one of them ship.
+
+### 1 · RANK re-stamped 300 identical ranks every five minutes, ahead of every stage that moves a ticket
+
+The 2026-07-30 capture finally carried the per-pass wall-clock a roadmap entry had been blocked on, and it named the culprit outright:
+
+```
+elapsedMs 21776  truncated: [pr_merge, audit, triage]
+elapsedMs 20405  truncated: [value, assign, systemic, pr_conduct, pr_merge, audit, triage]
+elapsedMs 24610  truncated: [value, assign, systemic, pr_conduct, pr_merge, audit, triage]
+```
+
+**Three of the last six passes shed every stage that can move a ticket**, and in two of them the 20s budget was gone *before* `value` — so the cost sat in stages 0–2. Stage 2 RANK is the only expensive thing there, and it is **neither rotatable nor budget-shed**: it pays in full before anything else gets a turn. It wrote `manager_rank` on all 300 windowed tickets every pass, on neon-http, on a five-minute path — **~86,000 UPDATE round-trips a day on one project** — and the order does not change on a settled backlog: `Ranked 300 tickets…` appeared seven times in thirty decisions with a byte-identical top five (score 123.15 each time), which the diagnostics correctly reported as a `decision_loop`.
+
+Ranking is pure derived data, so re-deriving it is free and only the writes were worth avoiding. The stage now compares against the rank already persisted (one extra column on a query the pass already runs) and writes only the tickets whose rank moved — zero writes and zero round-trips in the steady state, a full re-stamp when the backlog genuinely reorders. The journal follows the same rule, so `prioritize` stops being a `decision_loop` by construction. This is the exact anti-pattern the repo's own perf rule forbids: recomputing slow-changing data on every request.
+
+### 2 · The productivity verdict never reached the database
+
+In-flight work extended yesterday's breaker with a lane-move signal — `Execution.markProduced()` plus a stamp in `RuntimeService.update()`, correctly ordered after `finalizeCloudRun` so a no-code ticket that advances a lane is not judged an empty completion. It was a **dead seam**: `ExecutionRepository.update()`'s `set` never included `produced`, so `markProduced(true)` round-tripped through the aggregate, wrote every other column, and read the unchanged database value straight back.
+
+Nothing could catch it. The type checker cannot — drizzle's `set` takes a `Partial`, so an absent key is legal. The service tests cannot — they inject a fake repository (`update: async (e) => e`), which is precisely the shape that makes the round-trip look successful. So the guard reads the source of the write itself, and also pins the `?? undefined` that is load-bearing in both directions: `null` (not judged) must never erase a verdict finalize already stamped, while `false` (a real "this run shipped nothing") must persist.
+
+The rest of the in-flight work validated clean and is shipped with it: a tenant correlation added to the candidate-window live-run probe (my 0384 change correlated on `task_id` alone in a cross-tenant scan — globally-unique ids are not a tenant boundary), and `staffUnfilledLanes` surfacing its failure instead of returning an empty result indistinguishable from "all roles are staffed" — the silent catch that hid the 294-ticket cohort.
+
+### 3 · Why a broken build stamp shipped twice
+
+`npm test` is **twelve structural guards and then vitest**. I ran `npx vitest run` all session, which skips every one — including `check:version`, the guard written after `src/version.ts` drifted 44 releases behind `package.json`. So I bumped package.json twice without it, and the worker reported 2026.7.180 while running new code. The release gate has been rewritten to run `npm run type-check && npm test` before migrations or any external mutation (CI runs on pull requests; these went straight to main and reached no gate), and both files are now bumped together and verified by the guard that exists for it.
+
+Files: `api/src/application/manager/ManagerService.ts`, `api/src/infrastructure/repositories/ExecutionRepository.ts`, `api/src/application/runtime/{RuntimeService,autonomousExecutionSweep}.ts`, `api/src/domain/execution/Execution.ts`, `api/src/application/manager/staffUnfilledLanes.ts`, `api/src/version.ts`, `.github/workflows/release.yml` (+ tests).
+
+**Verified with `npm test`, not `vitest`:** all 12 guards green (`Version sync OK — both 2026.7.183`) and `4190 passed`.
+
+---
+
 ## 2026-07-29 — ✅ RESOLVED: 5,931 runs, 10 failures, 3 finished tickets — the executor's only stopping condition was FAILURE (api 2026.7.182 · frontend 2026.7.141 · brain-embedded 2026.7.56)
 
 A capture taken twelve hours after 2026.7.181 shipped. The manager-side fixes were live and working — `merge_failed` fell from six repeats in thirty decisions to one, and the PR-conflict ceiling I added was visibly counting in the payloads — and the board had not moved: 669 of 708 stalled, `never_started` 372 → 371.
@@ -29,9 +65,15 @@ Three deliberate conservatisms, each load-bearing:
 
 This is the lesson the manager's stall register already learned and wrote down — *"the ceiling exists to catch a remedy that RUNS AND DOES NOT WORK"* — finally applied to the layer that actually spends the money.
 
-### The build stamp that lied, and cost a wrong diagnosis
+### The build stamp that lied, and cost TWO wrong diagnoses — both mine
 
-The capture reported `apiVersion: 2026.7.180` twelve hours after 2026.7.181 deployed, and I took it at face value and told the user their report predated my fix. It did not. `fetchApiVersionVia` memoized the version **for the lifetime of the page** with no expiry, so a tab open across a deploy stamps every later capture with the build it started on — reproducing, at a longer timescale, the exact failure its own header says it exists to prevent: *"a dump taken minutes BEFORE a deploy is byte-identical to one taken after, so a fixed bug reads as unfixed."* Now a 60s TTL, and a failed `/health` read no longer renews the window (one blip must not make a stale stamp permanent). A stamp that lies is worse than no stamp — it is the one field a reader cannot cross-check.
+The capture reported `apiVersion: 2026.7.180` twelve hours after 2026.7.181 deployed, and I took it at face value and told the user their report predated my fix. It did not.
+
+**The cause was `api/src/version.ts`.** It is a hand-written literal that `GET /health`, the error handler and every diagnostics capture report, and it MUST equal `api/package.json`.`version`. I bumped package.json to 2026.7.181 and then 2026.7.182 and never touched it, so a worker running the new code reported the old number. The guard for exactly this — `check:version`, written after the pair drifted 44 releases apart and, in its own words, "cost a real debugging session chasing a phantom stale deploy" — **never ran, because I used `npx vitest run` all session instead of `npm test`.** `npm test` is twelve structural guards *and then* vitest; running vitest directly skips every one. It cost a second debugging session, which is precisely what that script exists to prevent.
+
+My first correction was also wrong: I blamed `fetchApiVersionVia`'s session cache. That cache **was** a real defect — it memoized the version for the lifetime of the page with no expiry, so a tab open across a deploy stamps every later capture with the build it started on, reproducing at a longer timescale the exact failure its own header says it exists to prevent. It is fixed here (60s TTL; a failed `/health` read no longer renews the window, so one blip cannot make a stale stamp permanent). But it was **not** the cause of this incident: `/health` itself was serving 2026.7.180, so no amount of client freshness would have helped.
+
+A stamp that lies is worse than no stamp — it is the one field a reader cannot cross-check. Two guards existed to keep this one honest and neither was in the path: one was bypassed by the command I chose, the other ran only on pull requests while these went straight to main.
 
 Files: `api/src/application/runtime/{scoreRunOutcome,cloudAgentEngine}.ts`, `api/src/application/swimlane/evaluateAutoRun.ts`, `api/src/domain/execution/Execution.ts`, `api/src/infrastructure/repositories/ExecutionRepository.ts`, `api/src/infrastructure/database/schema/runtime.ts`, `brain-embedded/src/apiVersion.ts`, migration **0385**, all five i18n catalogs (+ tests).
 

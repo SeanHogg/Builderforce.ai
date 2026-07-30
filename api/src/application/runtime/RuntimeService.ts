@@ -577,7 +577,8 @@ export class RuntimeService {
         throw new ForbiddenError(`Cannot transition to status '${dto.status}' via this endpoint`);
     }
 
-    const saved = await this.executions.update(execution);
+    let saved = await this.executions.update(execution);
+    let movedTicket = false;
 
     // sync task status based on execution state --------------------------------
     // Each lane move here is an AGENT moving a ticket — recorded into the ticket-
@@ -735,6 +736,7 @@ export class RuntimeService {
             }
           }
         }
+        movedTicket = dto.status === ExecutionStatus.COMPLETED && toStatus !== fromStatus;
       }
     } catch (error) {
       reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "update", context: { logMessage: '[runtime-update] lifecycle orchestration failed outside an isolated effect', details: {
@@ -744,6 +746,23 @@ export class RuntimeService {
         status: dto.status,
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
       } } });
+    }
+
+    // A lane advance is a durable product of the run just as much as a commit or PR.
+    // `finalizeCloudRun` stamps repository artifacts before this lifecycle transition;
+    // complete the verdict here, after the authoritative from/to statuses are known.
+    // Without this, a legitimate no-code workflow that advances a ticket is counted as
+    // an empty completion and can trip the unproductive-run breaker.
+    if (dto.status === ExecutionStatus.COMPLETED && movedTicket && saved.produced !== true) {
+      try {
+        saved = await this.executions.update(saved.markProduced(true));
+      } catch (error) {
+        reportCaughtError(error, {
+          source: 'application/runtime/RuntimeService.ts',
+          operation: 'markProducedFromLaneMove',
+          context: { executionId: Number(saved.id), taskId: Number(saved.taskId) },
+        });
+      }
     }
 
     const auditType = dto.status === ExecutionStatus.RUNNING
