@@ -183,6 +183,27 @@ export interface PassBudget {
   truncated: string[];
   /** Record that `stage` was shed, once per stage. Returns true the first time. */
   shed: (stage: string) => boolean;
+  /**
+   * Close the current segment and attribute its wall-clock to `stage`.
+   *
+   * ── WHY THE PASS HAD TO START TIMING ITSELF ──────────────────────────────────
+   * The pass already reported `elapsedMs` and the list of stages it SHED — enough to
+   * prove it overran, and not enough to say WHERE. Diagnosing it from the decision feed
+   * alone means inferring cost from which stages appear, and that inference was made
+   * twice and was wrong twice: RANK was identified as the culprit from
+   * `truncated: ["value", …]` (the budget was gone before `value`, and RANK was the only
+   * expensive thing ahead of it), fixed — 300 writes a pass down to ~45, measured — and
+   * the pass still overran identically: 20183 / 20827 / 21118 / 22032 / 23957 / 26024 ms
+   * against a 20s budget, with `Stall triage skipped this pass` going from 3 to 7 of the
+   * last 30 decisions.
+   *
+   * A budget that can only report that it was exceeded cannot be tuned, only guessed at.
+   * These marks cost one `Date.now()` per stage and turn the next capture into an
+   * answer instead of another hypothesis.
+   */
+  mark: (stage: string) => void;
+  /** Wall-clock per stage, ms — journalled beside `truncated`. */
+  timings: Record<string, number>;
 }
 
 export function createPassBudget(
@@ -191,11 +212,22 @@ export function createPassBudget(
   reserveMs = MANAGER_TRIAGE_RESERVE_MS,
 ): PassBudget {
   const truncated: string[] = [];
+  const timings: Record<string, number> = {};
+  let segmentStartedAt = startedAt;
   // Clamped so a caller-supplied budget smaller than the reserve cannot invert the two
   // deadlines and make `over()` fire before the pass has started.
   const discretionaryMs = Math.max(0, budgetMs - Math.min(reserveMs, budgetMs));
   const remainingMs = () => Math.max(0, discretionaryMs - (Date.now() - startedAt));
   return {
+    timings,
+    mark: (stage: string) => {
+      const at = Date.now();
+      // Accumulated, not assigned: a stage that runs in two segments (the PR loop's
+      // conduct and merge halves) must report its TOTAL, or the one number a reader
+      // most needs is the one that silently under-reports.
+      timings[stage] = (timings[stage] ?? 0) + (at - segmentStartedAt);
+      segmentStartedAt = at;
+    },
     over: () => Date.now() - startedAt >= discretionaryMs,
     exhausted: () => Date.now() - startedAt >= budgetMs,
     elapsedMs: () => Date.now() - startedAt,
@@ -1002,6 +1034,10 @@ export async function runManagerForProject(
   };
   let managed = await loadManagedTasks(db, projectId);
 
+  // The pass's own setup: the rotation read plus `loadManagedTasks` — a 300-row window
+  // whose ORDER BY carries a correlated EXISTS over `manager_stall_watch`. Timed like a
+  // stage because it is one, and because it runs before anything can be shed.
+  budget.mark('load');
   // 0.5 STAFF THE BOARD'S UNFILLED LIFECYCLE ROLES — the cohort fix, ahead of every
   // discretionary stage and outside the rotation.
   //
@@ -1044,6 +1080,7 @@ export async function runManagerForProject(
     }
   }
 
+  budget.mark('board_staffing');
   // 1. VALUE — backfill business value on unscored, non-manual tickets. ---------
   // The scoring decision is sequential (AI for the first few, free heuristic for the
   // rest) but the WRITES are collected and flushed in batches: a 200+ ticket backlog
@@ -1100,6 +1137,7 @@ export async function runManagerForProject(
     await flushBatched(db, writeOps);
   }
 
+  budget.mark('value');
   // 2. RANK — order the backlog and persist manager_rank (batched writes). -------
   //
   // ── WRITE THE DIFF, NOT THE ORDER ────────────────────────────────────────────
@@ -1150,6 +1188,7 @@ export async function runManagerForProject(
     );
   }
 
+  budget.mark('rank');
   // 2.5 SCHEDULE — place unscheduled work on the TIMELINE (0364). ----------------
   // The pass that never existed. Ranking answers "what first"; nothing answered
   // "WHEN" or "AFTER WHAT", so `start_date`/`due_date` were null on every ticket the
@@ -1221,6 +1260,7 @@ export async function runManagerForProject(
     }
   }
 
+  budget.mark('schedule');
   // 3. ASSIGN — give unowned runnable tickets to the best-fit teammate/agent. ----
   if (policy.autoAssign && mayRunStage('assign')) {
     const unowned = managed
@@ -1247,6 +1287,7 @@ export async function runManagerForProject(
     }
   }
 
+  budget.mark('assign');
   // 3.5 CENSUS + SYSTEMIC DIAGNOSIS — full-coverage measurement, deliberately EARLY. ---
   //
   // WHY IT RUNS HERE AND NOT AT THE END. It was originally the last stage, after triage,
@@ -1319,6 +1360,7 @@ export async function runManagerForProject(
     }
   }
 
+  budget.mark('census');
   // 4. PR — conduct (open) PRs for finished work, then merge/close per policy. ---
   // Records which tickets it acted on so the TRIAGE stage below can diagnose them
   // without re-applying a remedy the review pass just applied.
@@ -1330,6 +1372,7 @@ export async function runManagerForProject(
     tenantId, projectId, policy, managed, summary, runTaskId, conductedTaskIds, budget, runs, mayRunStage,
   });
 
+  budget.mark('pr');
   // 5. DISPATCH — kick the top-ranked runnable tickets NOW, in priority order. ---
   // Skipped on the cron path (the autonomous executor sweep owns dispatch there — see
   // shouldDispatch above). Re-read so rank + fresh assignments are reflected; the
@@ -1371,6 +1414,7 @@ export async function runManagerForProject(
   }
   }
 
+  budget.mark('dispatch');
   // 6. AUDIT + REMEDIATE — check each managed ticket for role/diagnostic coverage
   // (pillar 1), then CLOSE what it finds. A flagged ticket is one missing a required
   // role owner or reviewer, so the manager drives the Coordinator over it: the tick
@@ -1454,6 +1498,7 @@ export async function runManagerForProject(
     }
   }
 
+  budget.mark('audit');
   // 7. TRIAGE — what has STOPPED MOVING, why, and what unsticks it. -------------
   // The stages above each act on a ticket for a reason of their own (score it, rank
   // it, staff it, merge its PR, audit its roles); none of them asks the question a
@@ -1485,6 +1530,10 @@ export async function runManagerForProject(
       detail: {
         budgetMs: MANAGER_PASS_BUDGET_MS, reserveMs: MANAGER_TRIAGE_RESERVE_MS,
         elapsedMs: budget.elapsedMs(), truncated: budget.truncated,
+        // WHERE the budget went, not merely that it went. Without this the only way to
+        // find the expensive stage is to infer it from which stages got shed, which is
+        // how the wrong stage was blamed twice. See `PassBudget.mark`.
+        stageMs: budget.timings,
       },
     }).catch(() => undefined);
   } else {
@@ -1547,6 +1596,7 @@ export async function runManagerForProject(
       }
     }
   }
+  budget.mark('triage');
 
   // Credit the acting identity: when a specific agent is the manager, journal that it
   // ran (with its persona/model) so the feed attributes the pass to the teammate, not
@@ -1619,6 +1669,7 @@ export async function runManagerForProject(
         censusStalled: summary.censusStalled, censusTopCause: summary.censusTopCause,
         systemicFindings: summary.systemicFindings, systemicTicketsCreated: summary.systemicTicketsCreated,
         truncated: summary.truncated, passMs: budget.elapsedMs(), passBudgetMs: MANAGER_PASS_BUDGET_MS,
+        stageMs: budget.timings,
         trigger: submittedBy, managerType: policy.managerType, coachingApplied: coachingDirectives.length,
       },
     });

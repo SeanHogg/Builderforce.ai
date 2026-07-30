@@ -298,3 +298,66 @@ describe('the triage budget guard', () => {
     expect(source).toMatch(/budget\?: TriageBudget;/);
   });
 });
+
+/**
+ * A BUDGET THAT CAN ONLY REPORT THAT IT WAS EXCEEDED CANNOT BE TUNED, ONLY GUESSED AT.
+ *
+ * The pass reported `elapsedMs` and the stages it SHED — enough to prove it overran, and
+ * not enough to say where the time went. Finding the expensive stage then means inferring
+ * it from which stages got shed, and that inference was made twice and was wrong twice:
+ * RANK was blamed from `truncated: ["value", …]` (the budget was gone before `value`, and
+ * RANK was the only expensive thing ahead of it), fixed and MEASURED — 300 writes a pass
+ * down to ~45 — and the pass still overran identically: 20183 / 20827 / 21118 / 22032 /
+ * 23957 / 26024 ms against a 20s budget, with "Stall triage skipped this pass" going from
+ * 3 to 7 of the last 30 decisions.
+ *
+ * These pin the instrument, so the next capture answers the question instead of posing it.
+ */
+describe('per-stage pass timing', () => {
+  it('attributes each segment to the stage that spent it', () => {
+    let clock = 1_000;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => clock);
+    try {
+      const budget = createPassBudget(clock);
+      clock += 300; budget.mark('load');
+      clock += 50;  budget.mark('rank');
+      clock += 9_000; budget.mark('pr');
+      expect(budget.timings).toEqual({ load: 300, rank: 50, pr: 9_000 });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('ACCUMULATES a stage that runs in more than one segment', () => {
+    // The PR stage runs as conduct and merge halves. Assigning instead of accumulating
+    // would silently under-report the single number a reader most needs.
+    let clock = 0;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => clock);
+    try {
+      const budget = createPassBudget(clock);
+      clock += 400; budget.mark('pr');
+      clock += 100; budget.mark('audit');
+      clock += 600; budget.mark('pr');
+      expect(budget.timings.pr).toBe(1_000);
+      expect(budget.timings.audit).toBe(100);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('records a skipped stage as ~0 rather than omitting it', () => {
+    // An absent key reads as "not measured"; 0 reads as "ran and cost nothing". On a
+    // pass where everything downstream was shed, that distinction is the whole signal.
+    let clock = 0;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => clock);
+    try {
+      const budget = createPassBudget(clock);
+      budget.mark('value');
+      clock += 5_000; budget.mark('pr');
+      expect(budget.timings.value).toBe(0);
+      expect(Object.keys(budget.timings)).toContain('value');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});

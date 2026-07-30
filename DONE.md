@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-07-30 — ✅ RESOLVED: the pass now says WHERE its budget went, because inferring it was wrong twice (api 2026.7.184)
+
+The RANK fix shipped and is confirmed working — `Re-ranked 45 of 300 tickets` in the live feed, writes down from 300 a pass to ~45. **And the pass overruns exactly as before**: `elapsedMs` 20183 / 20827 / 21118 / 22032 / 23957 / 26024 against a 20s budget, with `Stall triage skipped this pass` going from 3 to **7 of the last 30 decisions**. So RANK was not the dominant cost, and the inference that blamed it was wrong.
+
+That is two wrong diagnoses from the same evidence, and the reason is structural: the pass reported `elapsedMs` and the list of stages it **shed**, which proves it overran and cannot say where the time went. Finding the expensive stage then means reasoning backwards from which stages got cut — "`truncated` starts at `value`, so the cost is upstream of `value`, and RANK is the only expensive thing there". That argument is sound and was still wrong, because something upstream that is *not* a named stage can hold the budget just as well.
+
+A budget that can only report that it was exceeded cannot be tuned, only guessed at. `PassBudget.mark(stage)` now closes each segment and attributes its wall-clock, and `stageMs` rides on both the triage-skip decision and the closing pass summary. It costs one `Date.now()` per stage. Accumulating rather than assigning is load-bearing (the PR stage runs as conduct and merge halves, and assigning would under-report the one number a reader most needs), and a skipped stage records `0` rather than being omitted — an absent key reads as "not measured" while `0` reads as "ran and cost nothing", which on a pass where everything downstream was shed is the whole signal. The first segment is labelled `load` and covers the rotation read plus `loadManagedTasks`, deliberately: it runs before anything can be shed, so nothing else could ever have measured it.
+
+The next capture names the stage instead of posing the question. Two suspects the instrument will confirm or clear: the PR loop's provider round-trips (381 open PRs, 20 per pass, each an `updateRecordedPullRequestBranch` call to GitHub — and every capture shows a `pr_conflict` decision immediately before the triage skip), and `loadManagedTasks`, whose ORDER BY carries a correlated EXISTS over `manager_stall_watch`.
+
+Files: `api/src/application/manager/ManagerService.ts` (+ tests).
+
+**Verified with `npm test`:** 12/12 guards green (`Version sync OK — both 2026.7.184`), `4193 passed`.
+
+---
+
 ## 2026-07-30 — ✅ RESOLVED: the stage that spent the whole pass and changed nothing, and a productivity signal that never reached the database (api 2026.7.183)
 
 Two defects found by validating in-flight work against a fresh capture, plus the guard failure that let one of them ship.
