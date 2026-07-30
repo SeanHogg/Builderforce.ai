@@ -467,7 +467,7 @@ export const webSearchTool: ToolDefinition = defineTool({
 const runChecksTool: ToolDefinition = defineTool({
   name: "run_checks",
   description:
-    "Statically validate the files you have written: it parses your committed JSON and YAML config files in-place and reports any syntax errors to fix BEFORE finishing. IMPORTANT: this serverless executor has NO shell, so it does NOT run the build, project-wide type-check, lint, or tests — those run in CI on the pull request your changes open (the source of truth). Call this after writing config files. Never claim the build/type-check/lint/tests passed — you cannot run those here; only the JSON/YAML syntax check is real.",
+    "Statically validate the files you have written: it parses committed JSON/YAML and runs the platform's shell-free changed-source quality policies, returning structured path/line/rule diagnostics to fix BEFORE finishing. The same validation runs automatically at finish, so it cannot be skipped. IMPORTANT: this serverless executor has NO shell, so it does NOT run the full build, project-wide type-check, lint, or tests — those run in CI on the pull request (the source of truth). Never claim those checks passed.",
   parameters: { type: "object", properties: {} },
   requires: ["static-check"],
   async execute(_args, ctx): Promise<ToolResult> {
