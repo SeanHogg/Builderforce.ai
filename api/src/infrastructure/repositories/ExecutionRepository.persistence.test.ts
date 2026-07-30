@@ -40,8 +40,14 @@ describe('ExecutionRepository.update persists the fields the domain can change',
    */
   it('does not let an UNJUDGED run erase a verdict that was already stamped', () => {
     expect(updateSet).toMatch(/produced:\s*plain\.produced \?\? undefined/);
-    expect(false ?? undefined).toBe(false);
-    expect(null ?? undefined).toBeUndefined();
+    // The coalesce is what makes that true, and it must stay a coalesce: a plain
+    // `plain.produced` would send `null` to drizzle as an explicit NULL write and erase
+    // the verdict finalize stamped, while `plain.produced || undefined` would swallow
+    // `false` — the one value that actually arms the breaker.
+    const coalesce = (produced: boolean | null): boolean | undefined => produced ?? undefined;
+    expect(coalesce(false), 'a run that shipped nothing must be persisted').toBe(false);
+    expect(coalesce(null), 'an unjudged run must be omitted from the write').toBeUndefined();
+    expect(coalesce(true)).toBe(true);
   });
 
   it('still writes the terminal fields it always did', () => {
