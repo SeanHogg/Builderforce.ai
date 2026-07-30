@@ -54,7 +54,7 @@ export function CeremonyTaskCard({
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--text-muted)' }}>
         <span style={{ fontFamily: 'var(--font-mono)' }}>{task.key}</span>
         <span
-          className={PRIORITY_CLASS[task.priority] ?? 'badge-gray'}
+          className={taskPriorityBadgeClass(task.priority)}
           style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, textTransform: 'capitalize' }}
         >
           {task.priority}
