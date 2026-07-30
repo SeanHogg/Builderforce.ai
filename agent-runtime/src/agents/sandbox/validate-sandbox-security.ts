@@ -238,9 +238,13 @@ export function validateSandboxSecurity(cfg: {
   network?: string;
   seccompProfile?: string;
   apparmorProfile?: string;
+  pid?: string;
+  ipc?: string;
+  uts?: string;
 }): void {
   validateBindMounts(cfg.binds);
   validateNetworkMode(cfg.network);
+  validateNamespaceModes(cfg);
   validateSeccompProfile(cfg.seccompProfile);
   validateApparmorProfile(cfg.apparmorProfile);
 }
