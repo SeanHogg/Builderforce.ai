@@ -1,6 +1,6 @@
 'use client';
 
-import type { CSSProperties } from 'react';
+import { useCallback, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 
 /**
  * CompactListProgress — a domain-agnostic, read-only progress breakdown rendered as a
