@@ -32,6 +32,15 @@ const BLOCKED_NETWORK_MODES = new Set(["host"]);
 const BLOCKED_SECCOMP_PROFILES = new Set(["unconfined"]);
 const BLOCKED_APPARMOR_PROFILES = new Set(["unconfined"]);
 
+// Cloud-Worker Isolation (GAP-CW / FR-5.1): sharing the host — or another container's —
+// PID / IPC / UTS namespace collapses the compute-layer boundary between workers, letting one
+// workload enumerate and signal another's processes or read its shared memory. `host` is always
+// rejected; `container:<id>` is rejected because it joins an existing worker's namespace.
+const BLOCKED_NAMESPACE_MODES = new Set(["host"]);
+const NAMESPACE_KINDS = ["pid", "ipc", "uts"] as const;
+
+export type SandboxNamespaceKind = (typeof NAMESPACE_KINDS)[number];
+
 export type BlockedBindReason =
   | { kind: "targets"; blockedPath: string }
   | { kind: "covers"; blockedPath: string }
