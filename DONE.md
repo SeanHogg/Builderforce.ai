@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-07-30 — ✅ RESOLVED: the PR stage was 93% of the pass, and 381 PRs racing one base are a QUEUE (api 2026.7.185)
+
+The instrument shipped in 2026.7.184 answered the question on its first capture:
+
+```
+stageMs {load:468, board_staffing:427, value:0, rank:0, schedule:0,
+         assign:0, census:1154, pr:28839, dispatch:0, audit:0}   elapsed 30888
+stageMs {load:579, board_staffing:435, …  census:878,  pr:18982, …}  elapsed 20874
+```
+
+**The PR stage is 93% of a 20s pass.** Everything else together is under two seconds — `load`, one of the two suspects named in the previous entry, is half a second and was never the problem. What the stage bought on the same day: **233 `pr_conflict` decisions, 0 merges, 0 tickets finished.** The stage that consumed the entire budget was the stage achieving nothing, and it runs *before* triage — so the 304 `managed_no_role` tickets triage exists to move were starved on every pass to pay for it.
+
+**Why it achieved nothing: 381 open PRs are not 381 problems.** They all target one base branch. Only the front of that line can merge, and the instant it does, every branch behind it is stale again. Handing twenty conflicting branches back to twenty agents at once is therefore not twenty repairs — it is nineteen repairs that are void before they finish, each costing a billable run. That is the O(N²) the feed had been showing all along: 349 conflicts against 2 merges.
+
+**The rotation had to go with it.** 0383 ordered the window least-recently-worked-first so every PR got a turn; that fixed a real starvation and created a worse one. A turn every ~19 passes (381 PRs, 20 a pass ≈ 95 minutes) against a base that moves every few minutes means no PR ever accumulates the three attempts its ceiling needs. The stuck register is the proof — `attempts=2`, row after row, after 16 to 28 days. **A ceiling that cannot be reached is not a ceiling**, so nothing merged and nothing retired either. The window is now oldest-first and *stable*, so the head accumulates its attempts and reaches a conclusion.
+
+`prMergeQueue.ts` decides in one pure pass which PRs may cost anything: ceilings first (retiring is three comparisons and a journal write — free, and it is what makes the queue *advance*), then in-flight resolutions, then a head of `MERGE_QUEUE_DEPTH = 3` that may spend provider round-trips, and everything behind it `queued` at zero cost. Conflict *recovery* is bounded harder still — to the single head PR — because a second resolution is invalidated by the first one merging and costs a ~16.4s dispatch to discover that. Ordering the ceilings ahead of the active-run check is deliberate: a ceiling is a statement that the runs against this PR are *not working*, so checking `running` first would make a livelocked PR permanently unretirable.
+
+**The deadlock a stable order creates, and the two-clause exit.** Retiring writes `merge_blocked`; it does *not* close the pull request, which stays `open` until a person acts. Under the old rotation that was harmless. Under a stable oldest-first window it is fatal — the twenty oldest PRs exhaust their ceilings, get reported once, then hold the head forever and PR 21 is never reached. The exit is therefore *retired* **and** *reported*, and both halves matter: exhausted-but-unreported must stay in (that pass is what tells the human), and reported alone must not evict, because `merge_blocked` also carries "ready, but merge authority is withheld" (0363) — a project *policy* whose PRs have low counters, must keep their place, and must merge on the next pass once a person grants it.
+
+`prQueue {worked, queued, retired, running, depth}` is journalled on the triage-skip decision (every pass) as well as the closing summary (manual passes only), so the next capture shows whether the queue is draining without anyone inferring it from decision counts. The dead `last_acted_at` aggregate went with the rotation it ordered.
+
+Files: `api/src/application/manager/prMergeQueue.ts` (new, + `prMergeQueue.test.ts`), `ManagerService.ts`, `prActionCeiling.test.ts`.
+
+---
+
 ## 2026-07-30 — ✅ RESOLVED: the pass now says WHERE its budget went, because inferring it was wrong twice (api 2026.7.184)
 
 The RANK fix shipped and is confirmed working — `Re-ranked 45 of 300 tickets` in the live feed, writes down from 300 a pass to ~45. **And the pass overruns exactly as before**: `elapsedMs` 20183 / 20827 / 21118 / 22032 / 23957 / 26024 against a 20s budget, with `Stall triage skipped this pass` going from 3 to **7 of the last 30 decisions**. So RANK was not the dominant cost, and the inference that blamed it was wrong.
