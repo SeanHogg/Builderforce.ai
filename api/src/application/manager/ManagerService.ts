@@ -71,7 +71,8 @@ import { classifySignoffOwnership, resolveRequiredSignoffGate } from '../kanban/
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness } from './evaluateTicketReadiness';
 import { runStallTriage, loadBulkSignals, MAX_TRIAGE_DISPATCHES_PER_RUN } from './triageStage';
-import { isActionExhausted, MAX_REMEDY_ATTEMPTS } from './stallTriage';
+import { MAX_REMEDY_ATTEMPTS } from './stallTriage';
+import { planMergeQueue, summarizeMergeQueue } from './prMergeQueue';
 import { computeStallCensus, invalidateStallCensus } from './stallCensus';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { staffUnfilledLanes, describeLaneStaffing, distinctTaskShapes } from './staffUnfilledLanes';
@@ -366,6 +367,18 @@ export interface ManagerRunSummary {
    * manager that appears to have found nothing wrong.
    */
   truncated: string[];
+  /**
+   * How the open-PR window was DISPOSED of this pass — see {@link planMergeQueue}.
+   *
+   * Journalled because the shape of this object is the whole thesis of the queue, and
+   * without it the next capture can only be read the way the last four were: by
+   * inferring cost from which decisions appear, which was wrong twice. `worked` bounded
+   * at the depth with a large `queued` beside it is the queue holding; `retired` climbing
+   * is the queue DRAINING (a PR that cannot merge leaving for a human is progress, not
+   * failure); `worked` at the depth with `queued` at 0 means the window is finally
+   * smaller than the queue and the backlog is nearly gone.
+   */
+  prQueue?: { worked: number; queued: number; retired: number; running: number; depth: number };
 }
 
 
@@ -1534,6 +1547,11 @@ export async function runManagerForProject(
         // find the expensive stage is to infer it from which stages got shed, which is
         // how the wrong stage was blamed twice. See `PassBudget.mark`.
         stageMs: budget.timings,
+        // The PR stage is what `stageMs` named as 93% of the pass, so its disposition
+        // belongs on the decision that reports the overrun. This one is journalled on
+        // EVERY pass; the closing summary is written only by a manual run, so a cron
+        // pass's queue shape would otherwise be invisible.
+        prQueue: summary.prQueue,
       },
     }).catch(() => undefined);
   } else {
@@ -1669,7 +1687,7 @@ export async function runManagerForProject(
         censusStalled: summary.censusStalled, censusTopCause: summary.censusTopCause,
         systemicFindings: summary.systemicFindings, systemicTicketsCreated: summary.systemicTicketsCreated,
         truncated: summary.truncated, passMs: budget.elapsedMs(), passBudgetMs: MANAGER_PASS_BUDGET_MS,
-        stageMs: budget.timings,
+        stageMs: budget.timings, prQueue: summary.prQueue,
         trigger: submittedBy, managerType: policy.managerType, coachingApplied: coachingDirectives.length,
       },
     });
@@ -1955,7 +1973,10 @@ async function coordinatePullRequests(
       mergeFailures: sql<number>`count(*) filter (where ${managerActions.actionType} = ${MERGE_FAILED_ACTION})::int`.as('merge_failures'),
       conflicts: sql<number>`count(*) filter (where ${managerActions.actionType} = ${PR_CONFLICT_ACTION})::int`.as('conflicts'),
       blockedReports: sql<number>`count(*) filter (where ${managerActions.actionType} = ${MERGE_BLOCKED_ACTION})::int`.as('blocked_reports'),
-      lastActedAt: sql<string | null>`max(${managerActions.createdAt})`.as('last_acted_at'),
+      // `last_acted_at` was dropped with the least-recently-worked rotation it ordered:
+      // the queue is oldest-first and stable, so when the manager last touched a PR is
+      // no longer an input to anything. Selecting a `max()` nothing reads is a grouped
+      // aggregate paid for on every pass.
     })
     .from(managerActions)
     .where(and(
@@ -1978,10 +1999,14 @@ async function coordinatePullRequests(
     .from(pullRequests)
     .leftJoin(prActivity, eq(prActivity.prId, pullRequests.id))
     .where(and(eq(pullRequests.tenantId, tenantId), eq(pullRequests.projectId, projectId), eq(pullRequests.status, 'open')))
-    // NULLS FIRST is load-bearing: a PR the manager has never acted on is the one most
-    // in need of a turn. `id` breaks ties so the order is total and a pass cannot
-    // oscillate between two equally-stale PRs.
-    .orderBy(sql`${prActivity.lastActedAt} asc nulls first`, asc(pullRequests.id))
+    // OLDEST FIRST, AND STABLE — see `prMergeQueue.ts`. 0383 ordered this
+    // least-recently-worked-first so every PR got a turn, which fixed one starvation and
+    // caused a worse one: a turn every ~19 passes against a base that moves every few
+    // minutes means no PR ever accumulates the three attempts its ceiling needs, so
+    // nothing merges and nothing retires either (measured: `attempts=2` on row after row
+    // of the stuck register after 16–28 days). A queue has to keep the same PR at its
+    // head until that head reaches a conclusion. `id` breaks ties so the order is total.
+    .orderBy(asc(pullRequests.createdAt), asc(pullRequests.id))
     .limit(MAX_PR_ACTIONS_PER_RUN);
   const activePrRuns = openPrs.some((pr) => pr.taskId != null)
     ? await runtimeService.listActiveByTasks(openPrs.flatMap((pr) => pr.taskId == null ? [] : [pr.taskId])).catch(() => [])
@@ -2017,28 +2042,37 @@ async function coordinatePullRequests(
   //
   // KEYED BY PR ID (0383) — see the query above. Keyed by ticket, these maps held nothing
   // at all for an orphan PR, which is how one escaped every ceiling indefinitely.
-  const syncAttempts = new Map<string, number>();
-  const mergeFailures = new Map<string, number>();
-  const conflictAttempts = new Map<string, number>();
   const alreadyReportedBlocked = new Set<string>();
-  for (const pr of openPrs) {
-    syncAttempts.set(pr.id, pr.syncs ?? 0);
-    mergeFailures.set(pr.id, pr.mergeFailures ?? 0);
-    conflictAttempts.set(pr.id, pr.conflicts ?? 0);
-    if ((pr.blockedReports ?? 0) > 0) alreadyReportedBlocked.add(pr.id);
-  }
+  for (const pr of openPrs) if ((pr.blockedReports ?? 0) > 0) alreadyReportedBlocked.add(pr.id);
+
+  // ── THE QUEUE ───────────────────────────────────────────────────────────────────
+  // Three counters and the active-run check decide, in one pure pass, which PRs may
+  // cost provider round-trips — see `prMergeQueue.ts` for why a window of 20 conflicting
+  // branches all targeting one base is a QUEUE and not twenty independent repairs. The
+  // counters are read straight off the PR row (the grouped scan above is keyed on
+  // `pr_id`), so there is no intermediate map that could reintroduce a ticket key.
+  const queue = planMergeQueue(openPrs, {
+    hasActiveRun: (pr) => pr.taskId != null && activePrTaskIds.has(pr.taskId),
+  });
+  summary.prQueue = summarizeMergeQueue(queue);
 
   /**
    * Hand a conflicting PR back to the ticket's agent. A conflict can be found
    * either while updating the branch or by the final merge API (GitHub commonly
    * returns the latter as HTTP 405), so both paths must use the same recovery.
    */
-  const startConflictRecovery = async (pr: (typeof openPrs)[number]) => {
+  const startConflictRecovery = async (pr: (typeof openPrs)[number], mayRecover: boolean) => {
     const task = pr.taskId == null ? null : managed.find((t) => t.id === pr.taskId) ?? null;
     const affordable = budget.canAfford(MIN_DISPATCH_WINDOW_MS);
     if (!affordable) budget.shed('pr_merge');
+    // TWO REASONS TO HOLD A RECOVERY, and they are not the same reason. `pass_budget`
+    // says this pass ran out of time; `merge_queue` says the work would be void — a
+    // second resolution running beside the head's is invalidated the moment the head
+    // merges, and it costs a billable run to find that out. Journalled apart so the
+    // feed can never again read as "the manager tried" when it deliberately did not.
+    const deferred = !affordable ? 'pass_budget' : !mayRecover ? 'merge_queue' : null;
     let recoveryStarted = false;
-    if (affordable && task && (task.assignedAgentRef || task.assignedAgentHostId != null)) {
+    if (deferred == null && task && (task.assignedAgentRef || task.assignedAgentHostId != null)) {
       const recoveryNote = `\n\n[Manager recovery] PR #${pr.number ?? '?'} conflicts with the latest base branch. Sync the latest base, resolve every conflict while preserving both sets of intended changes, run the relevant checks, and update the existing PR.`;
       await db.update(tasks).set({
         status: TaskStatus.IN_PROGRESS,
@@ -2057,28 +2091,34 @@ async function coordinatePullRequests(
       )).result === true;
       if (recoveryStarted) summary.dispatched += 1;
     }
-    return { affordable, recoveryStarted };
+    return { deferred, recoveryStarted };
   };
 
-  for (const pr of openPrs) {
+  for (const { pr, disposition, mayRecover } of queue) {
     // The eviction point. Each iteration does provider round-trips (sync, poll, merge),
     // so this loop is where the pass dies on a project with hundreds of open PRs. Stop
     // at the budget, between PRs, and let the closing journal say so.
     if (budget.over()) { budget.shed('pr_merge'); break; }
     try {
       // A previous conflict-resolution run owns this branch until it finishes.
-      if (pr.taskId != null && activePrTaskIds.has(pr.taskId)) continue;
+      if (disposition === 'running') continue;
+
+      // BEHIND THE HEAD. Not skipped for lack of time — skipped because only the front
+      // of the queue can merge, and every branch behind it goes stale the moment it
+      // does. This is the branch that gives the pass its budget back: it costs nothing,
+      // and it is where 17 of the 20 PRs in a window now land.
+      if (disposition === 'queued') continue;
 
       // Exhausted sync: this PR has been brought up to date with its base
       // MAX_REMEDY_ATTEMPTS times and still has not merged, so a further sync is not a
       // fix in progress — it is the livelock. Report it once (the `merge_blocked` dedupe
       // below is the same "state, not event" rule) and leave it for a human.
-      if (isActionExhausted(syncAttempts.get(pr.id) ?? 0)) {
+      if (disposition === 'sync_exhausted') {
         if (!alreadyReportedBlocked.has(pr.id)) {
           await recordManagerAction(db, {
             tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: MERGE_BLOCKED_ACTION,
-            summary: `PR #${pr.number ?? '?'} has been synced with its base ${syncAttempts.get(pr.id)} times without merging — stopping the sync loop and handing it to a human.`,
-            detail: { reason: 'sync_exhausted', syncAttempts: syncAttempts.get(pr.id) },
+            summary: `PR #${pr.number ?? '?'} has been synced with its base ${pr.syncs} times without merging — stopping the sync loop and handing it to a human.`,
+            detail: { reason: 'sync_exhausted', syncAttempts: pr.syncs },
           });
           alreadyReportedBlocked.add(pr.id);
         }
@@ -2092,12 +2132,12 @@ async function coordinatePullRequests(
       // either, and re-asking is the same livelock the sync ceiling above exists to end.
       // Report the reason ONCE and leave it for a person, who is the only one who can
       // clear any of those.
-      if (isActionExhausted(mergeFailures.get(pr.id) ?? 0)) {
+      if (disposition === 'merge_exhausted') {
         if (!alreadyReportedBlocked.has(pr.id)) {
           await recordManagerAction(db, {
             tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: MERGE_BLOCKED_ACTION,
-            summary: `PR #${pr.number ?? '?'} has been refused by the provider ${mergeFailures.get(pr.id)} times — stopping the merge loop and handing it to a human. Open it on the provider for the exact block (required reviews, branch rules, a merge queue, or squash merges disabled).`,
-            detail: { reason: 'merge_failed_exhausted', mergeFailures: mergeFailures.get(pr.id) },
+            summary: `PR #${pr.number ?? '?'} has been refused by the provider ${pr.mergeFailures} times — stopping the merge loop and handing it to a human. Open it on the provider for the exact block (required reviews, branch rules, a merge queue, or squash merges disabled).`,
+            detail: { reason: 'merge_failed_exhausted', mergeFailures: pr.mergeFailures },
           });
           alreadyReportedBlocked.add(pr.id);
         }
@@ -2110,12 +2150,12 @@ async function coordinatePullRequests(
       // the branch back to, so the loop was journalling the identical `pr_conflict` every
       // five minutes with nothing able to count it. Retire it to a human on the same rule
       // as the two ceilings above rather than re-detecting the same conflict forever.
-      if (isActionExhausted(conflictAttempts.get(pr.id) ?? 0)) {
+      if (disposition === 'conflict_exhausted') {
         if (!alreadyReportedBlocked.has(pr.id)) {
           await recordManagerAction(db, {
             tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: MERGE_BLOCKED_ACTION,
-            summary: `PR #${pr.number ?? '?'} has conflicted with its base ${conflictAttempts.get(pr.id)} times and the conflict is still there — stopping the resolution loop and handing it to a human. Resolve the conflict on the branch, or assign an agent to the ticket so the manager can hand it back.`,
-            detail: { reason: 'conflict_exhausted', conflictAttempts: conflictAttempts.get(pr.id) },
+            summary: `PR #${pr.number ?? '?'} has conflicted with its base ${pr.conflicts} times and the conflict is still there — stopping the resolution loop and handing it to a human. Resolve the conflict on the branch, or assign an agent to the ticket so the manager can hand it back.`,
+            detail: { reason: 'conflict_exhausted', conflictAttempts: pr.conflicts },
           });
           alreadyReportedBlocked.add(pr.id);
         }
@@ -2134,8 +2174,8 @@ async function coordinatePullRequests(
         // shed, which hands the next pass to whatever this one starved (see
         // `passRotation.ts`) rather than silently running 7.6s past the whole budget.
         const recovery = prepared.code === 'conflict'
-          ? await startConflictRecovery(pr)
-          : { affordable: true, recoveryStarted: false };
+          ? await startConflictRecovery(pr, mayRecover)
+          : { deferred: null, recoveryStarted: false };
         await recordManagerAction(db, {
           // PR_CONFLICT_ACTION, not 'flag' (0381): this is the only trace that the loop
           // touched a conflicting PR, and the rotation orders by it. Left as 'flag' it
@@ -2144,15 +2184,17 @@ async function coordinatePullRequests(
           tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: PR_CONFLICT_ACTION,
           summary: recovery.recoveryStarted
             ? `PR #${pr.number ?? '?'} conflicts with the latest base; started its ticket agent to resolve and update it.`
-            : !recovery.affordable
+            : recovery.deferred === 'pass_budget'
               // "Could not update" would read as a provider failure. It is a scheduling
               // decision, and the honest version is the one that says the work is coming.
               ? `PR #${pr.number ?? '?'} conflicts with the latest base; deferred starting its resolution agent because this pass has too little time left to start a run — it goes out on the next pass.`
-              : `Could not update PR #${pr.number ?? '?'} from the latest base: ${prepared.error}`,
+              : recovery.deferred === 'merge_queue'
+                ? `PR #${pr.number ?? '?'} conflicts with the latest base; holding its resolution until the pull request ahead of it in the merge queue lands, because resolving against a base that is about to move would have to be redone.`
+                : `Could not update PR #${pr.number ?? '?'} from the latest base: ${prepared.error}`,
           detail: {
             code: prepared.code,
             recoveryStarted: recovery.recoveryStarted,
-            ...(recovery.affordable ? {} : { deferred: 'pass_budget' }),
+            ...(recovery.deferred ? { deferred: recovery.deferred } : {}),
           },
         });
         continue;
@@ -2239,21 +2281,23 @@ async function coordinatePullRequests(
         // reports it as HTTP 405. Treat it exactly like an update-branch conflict:
         // reopen the ticket and send its assigned agent to resolve the existing PR.
         if (result.code === 'conflict') {
-          const recovery = await startConflictRecovery(pr);
+          const recovery = await startConflictRecovery(pr, mayRecover);
           await recordManagerAction(db, {
             tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: PR_CONFLICT_ACTION,
             summary: recovery.recoveryStarted
               ? `PR #${pr.number ?? '?'} was refused at merge because it conflicts with the latest base; started its ticket agent to resolve and update it.`
-              : !recovery.affordable
+              : recovery.deferred === 'pass_budget'
                 ? `PR #${pr.number ?? '?'} was refused at merge because it conflicts with the latest base; deferred starting its resolution agent because this pass has too little time left.`
-                : `Could not start conflict recovery for PR #${pr.number ?? '?'}: ${result.error}`,
+                : recovery.deferred === 'merge_queue'
+                  ? `PR #${pr.number ?? '?'} was refused at merge because it conflicts with the latest base; holding its resolution until the pull request ahead of it in the merge queue lands.`
+                  : `Could not start conflict recovery for PR #${pr.number ?? '?'}: ${result.error}`,
             detail: {
               code: result.code,
               detectedAt: 'merge',
               recoveryStarted: recovery.recoveryStarted,
-              attempt: (conflictAttempts.get(pr.id) ?? 0) + 1,
+              attempt: (pr.conflicts ?? 0) + 1,
               maxAttempts: MAX_REMEDY_ATTEMPTS,
-              ...(recovery.affordable ? {} : { deferred: 'pass_budget' }),
+              ...(recovery.deferred ? { deferred: recovery.deferred } : {}),
             },
           });
           continue;
@@ -2266,7 +2310,7 @@ async function coordinatePullRequests(
           summary: `Could not merge PR #${pr.number ?? '?'}: ${result.error}`,
           detail: {
             code: result.code,
-            attempt: (mergeFailures.get(pr.id) ?? 0) + 1,
+            attempt: (pr.mergeFailures ?? 0) + 1,
             maxAttempts: MAX_REMEDY_ATTEMPTS,
           },
         });

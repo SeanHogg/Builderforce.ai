@@ -38,7 +38,7 @@ describe('evermind vendor module', () => {
     expect(evermindModule.supportsTools).toBe(true);
     expect(modelSupportsTools('evermind/evermind/project/1/11/v7')).toBe(true);
     expect(modelSupportsTools('claude-opus-4-8')).toBe(true);
-    expect(modelSupportsTools('xai-oauth/grok-4.3')).toBe(true);
+    expect(modelSupportsTools('xai-oauth/grok-4.5')).toBe(true);
   });
 
   it('never returns prose that fails the coherence gate, even on a tool-bearing turn', async () => {
