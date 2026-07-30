@@ -98,6 +98,36 @@ const PROVIDER_LABEL: Record<LlmProvider, string> = {
 };
 
 /**
+ * Display label for ONE precedence entry — the single formatter the drawer list, the
+ * toolbar chip and any future consumer share.
+ *
+ * It exists because the precedence list interleaves TWO kinds of rankable account
+ * (a connected provider, and a named OpenRouter connection). Anything that formats only
+ * the provider half reports a different leader than the list shows — the bug where a
+ * tenant whose #1 was an OpenRouter connection saw the chip claim "Priority · Anthropic",
+ * i.e. the account ranked SECOND.
+ */
+function precedenceEntryLabel(entry: ByoPrecedenceEntry): string {
+  return entry.kind === 'provider'
+    ? PROVIDER_LABEL[entry.provider]
+    : `OpenRouter · ${entry.connection.label} (${entry.connection.models.length})`;
+}
+
+/** Label of the account that currently LEADS `refs`, or null when nothing is ranked.
+ *  Falls back to a bare provider's brand name for a ref that isn't in `entries` yet
+ *  (a just-connected provider, before the next list read). */
+function precedenceLeaderLabel(
+  entries: readonly ByoPrecedenceEntry[],
+  refs: readonly string[],
+): string | null {
+  const leader = refs[0];
+  if (!leader) return null;
+  const entry = entries.find((e) => e.ref === leader);
+  if (entry) return precedenceEntryLabel(entry);
+  return PROVIDER_LABEL[leader as LlmProvider] ?? leader;
+}
+
+/**
  * BYO PRECEDENCE — the ordered list (most-preferred first) the auto-select cloud pin
  * leads its connected flagships by. Shown only when 2+ providers are connected (order
  * is moot with one). Reordering persists the whole list via `setPriority`, so an owner
@@ -196,8 +226,10 @@ const ALERT_COPY_KEY: Record<ProviderAuthAlert['reason'], string> = {
 };
 
 function AuthAlertNotice({ alert, t }: { alert: ProviderAuthAlert; t: TFn }) {
-  const copyKey = alert.vendor === 'xai-oauth' && alert.reason === 'not_entitled'
-    ? 'authAlert.xaiNotEntitled'
+  const copyKey = alert.vendor === 'xai-oauth'
+    ? alert.reason === 'not_entitled' ? 'authAlert.xaiNotEntitled'
+      : alert.reason === 'capacity' ? 'authAlert.xaiCapacity'
+      : ALERT_COPY_KEY[alert.reason]
     : ALERT_COPY_KEY[alert.reason];
   return (
     <div
@@ -251,6 +283,7 @@ function ProviderStatusChip({
   // account that is stored but refused is not meaningfully "connected", and splicing the
   // two ("… connected — needs attention") reads as a contradiction.
   const text = authType === null ? t('status.notConnected')
+    : alert?.reason === 'capacity' ? t('status.usageDepleted', { label: authType === 'oauth' ? subscription : label })
     : alert ? t('status.needsAttention', { label: authType === 'oauth' ? subscription : label })
     : authType === 'oauth' ? t('status.connected', { subscription })
     : t('status.keyConfigured', { label });
@@ -675,13 +708,16 @@ function OpenRouterConnectionsPanel({
 }
 
 export function ProviderKeysSettings({
-  search = '', viewMode = 'card', priorityOpen = false, onPriorityClose, onPriorityChange,
+  search = '', viewMode = 'card', priorityOpen = false, onPriorityClose, onLeaderChange,
 }: {
   search?: string;
   viewMode?: 'card' | 'table';
   priorityOpen?: boolean;
   onPriorityClose?: () => void;
-  onPriorityChange?: (order: LlmProvider[]) => void;
+  /** Display label of the account currently LEADING the BYO precedence list (null when
+   *  nothing is ranked). The label — not a provider id — because the leader may be an
+   *  OpenRouter connection, which has no provider id; see {@link precedenceEntryLabel}. */
+  onLeaderChange?: (leaderLabel: string | null) => void;
 }) {
   const t = useTranslations('providerKeys');
   const [authByProvider, setAuthByProvider] = useState<Partial<Record<LlmProvider, ProviderAuthType>>>({});
@@ -734,9 +770,7 @@ export function ProviderKeysSettings({
         setPrecedenceEntries(precedenceResult.entries);
         const refs = precedenceResult.entries.map((entry) => entry.ref);
         setOrder(refs);
-        onPriorityChange?.(precedenceResult.entries
-          .filter((entry): entry is Extract<ByoPrecedenceEntry, { kind: 'provider' }> => entry.kind === 'provider')
-          .map((entry) => entry.provider));
+        onLeaderChange?.(precedenceLeaderLabel(precedenceResult.entries, refs));
         return usageRead;
       })
       .then(setUsage)
@@ -757,7 +791,7 @@ export function ProviderKeysSettings({
 
   const persistOrder = async (next: string[]) => {
     setOrder(next); // optimistic
-    onPriorityChange?.(next.filter((ref): ref is LlmProvider => !ref.startsWith('openrouter:')) as LlmProvider[]);
+    onLeaderChange?.(precedenceLeaderLabel(precedenceEntries, next));
     try {
       await providerKeysApi.setPriority(next);
     } catch (e) {
@@ -765,14 +799,9 @@ export function ProviderKeysSettings({
     }
   };
 
-  const precedenceLabels: Record<string, string> = Object.fromEntries([
-    ...precedenceEntries.map((entry) => [
-      entry.ref,
-      entry.kind === 'provider'
-        ? PROVIDER_LABEL[entry.provider]
-        : `OpenRouter · ${entry.connection.label} (${entry.connection.models.length})`,
-    ]),
-  ]);
+  const precedenceLabels: Record<string, string> = Object.fromEntries(
+    precedenceEntries.map((entry) => [entry.ref, precedenceEntryLabel(entry)]),
+  );
 
   return (
     <div>
@@ -857,7 +886,7 @@ export function ProviderKeysSettings({
                       setAlertByProvider((prev) => { const next = { ...prev }; delete next[p.id]; return next; });
                       syncOrder(p.id, authType);
                       const nextOrder = authType === null ? order.filter((id) => id !== p.id) : order.includes(p.id) ? order : [...order, p.id];
-                      onPriorityChange?.(nextOrder.filter((id): id is LlmProvider => !id.startsWith('openrouter:')) as LlmProvider[]);
+                      onLeaderChange?.(precedenceLeaderLabel(precedenceEntries, nextOrder));
                     }}
                   />
                 </div>
