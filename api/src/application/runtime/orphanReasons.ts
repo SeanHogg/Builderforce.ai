@@ -193,7 +193,7 @@ export const HOST_ORPHAN_REASON =
  * new Worker version is published, so an ordinary deploy interrupts every in-flight
  * cloud run at once. Those interruptions used to be written as terminal failures
  * carrying the raw platform message, and each one counted toward the ticket's
- * consecutive-failure breaker ({@link ../swimlane/evaluateAutoRun.trailingFailureStreak},
+ * consecutive-failure breaker ({@link ../swimlane/evaluateAutoRun.trailingUnproductiveStreak},
  * 3 strikes) — so shipping three times in an hour could halt autonomy on a perfectly
  * healthy ticket. Measured on task 683: three of its five failures were this exact
  * message inside one 47-minute deploy window.

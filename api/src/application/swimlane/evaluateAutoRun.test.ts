@@ -4,7 +4,7 @@ vi.mock('../kanban/managedLaneRoles', () => ({ resolveManagedProducer: vi.fn() }
 import {
   classifyResolvedAutoRun,
   parseRequiredCapabilities,
-  trailingFailureStreak,
+  trailingUnproductiveStreak,
   autoRunCooldownRemainingMs,
   AUTORUN_COOLDOWN_BASE_MS,
   MAX_CONSECUTIVE_AUTORUN_FAILURES,
@@ -124,19 +124,60 @@ describe('AUTO_RUN_REASON_TEXT / EVALUATED_AUTO_RUN_REASONS — the reason vocab
   });
 });
 
-describe('trailingFailureStreak', () => {
+describe('trailingUnproductiveStreak', () => {
   it('counts leading (newest-first) failed runs', () => {
-    expect(trailingFailureStreak([{ status: 'failed' }, { status: 'failed' }, { status: 'failed' }])).toBe(3);
+    expect(trailingUnproductiveStreak([{ status: 'failed' }, { status: 'failed' }, { status: 'failed' }])).toBe(3);
   });
 
-  it('stops at the first non-failed run (a completed/cancelled/live resets it)', () => {
-    expect(trailingFailureStreak([{ status: 'failed' }, { status: 'completed' }, { status: 'failed' }])).toBe(1);
-    expect(trailingFailureStreak([{ status: 'running' }, { status: 'failed' }])).toBe(0);
-    expect(trailingFailureStreak([{ status: 'cancelled' }, { status: 'failed' }])).toBe(0);
+  it('stops at the first run that produced something (cancelled/live also reset it)', () => {
+    expect(trailingUnproductiveStreak([{ status: 'failed' }, { status: 'completed', produced: true }, { status: 'failed' }])).toBe(1);
+    expect(trailingUnproductiveStreak([{ status: 'running' }, { status: 'failed' }])).toBe(0);
+    expect(trailingUnproductiveStreak([{ status: 'cancelled' }, { status: 'failed' }])).toBe(0);
+  });
+
+  /**
+   * THE 5,796 RUNS (0385). The streak counted `failed` and nothing else, which made
+   * FAILURE the executor's only stopping condition. A run that COMPLETED and shipped
+   * nothing reset the streak to zero and owed no cooldown, so the ticket was
+   * re-dispatched on the very next five-minute tick — forever.
+   *
+   * Measured on project 11, 2026-07-29: 5,931 runs completed and 10 failed in ONE DAY,
+   * against 3 finished tickets and 2 merged PRs. One agent accounted for 5,796 runs and
+   * 0 finished tickets. The breaker was sitting right there and never armed once. The
+   * same burn is why 371 tickets on that board had never run at all — the tenant's
+   * 25-per-tick dispatch ceiling was ~80% consumed by the re-runs.
+   */
+  it('counts a COMPLETED run that shipped nothing — failure is not the only way to waste a run', () => {
+    const empty = { status: 'completed', produced: false };
+    expect(trailingUnproductiveStreak([empty, empty, empty])).toBe(3);
+    // Mixed: a failure and two empty completions are one unbroken streak.
+    expect(trailingUnproductiveStreak([empty, { status: 'failed' }, empty])).toBe(3);
+  });
+
+  it('clears the moment one run ships', () => {
+    const empty = { status: 'completed', produced: false };
+    expect(trailingUnproductiveStreak([{ status: 'completed', produced: true }, empty, empty])).toBe(0);
+  });
+
+  /**
+   * LOAD-BEARING, not laziness. Every row written before 0385 is unjudged, as is every
+   * dispatch surface that does not route through `finalizeCloudRun`. Reading `null` as
+   * unproductive would trip the breaker on every ticket on every board on the deploy
+   * that shipped it, and halt autonomy platform-wide.
+   */
+  it('treats an UNJUDGED run as productive, so an unknown can never halt a board', () => {
+    expect(trailingUnproductiveStreak([{ status: 'completed' }, { status: 'failed' }])).toBe(0);
+    expect(trailingUnproductiveStreak([{ status: 'completed', produced: null }, { status: 'failed' }])).toBe(0);
+    // And a legacy row sitting behind fresh empties still stops the walk there.
+    expect(trailingUnproductiveStreak([
+      { status: 'completed', produced: false },
+      { status: 'completed' },
+      { status: 'completed', produced: false },
+    ])).toBe(1);
   });
 
   it('is 0 for no runs', () => {
-    expect(trailingFailureStreak([])).toBe(0);
+    expect(trailingUnproductiveStreak([])).toBe(0);
   });
 
   // A deploy resets every live Durable Object at once, so an ordinary release used
@@ -145,17 +186,28 @@ describe('trailingFailureStreak', () => {
   const evicted = { status: 'failed', errorMessage: 'Durable Object reset because its code was updated.' };
 
   it('does not count a platform eviction as a strike', () => {
-    expect(trailingFailureStreak([evicted, evicted, evicted])).toBe(0);
+    expect(trailingUnproductiveStreak([evicted, evicted, evicted])).toBe(0);
   });
 
   it('skips an eviction without BREAKING a genuine streak around it', () => {
     // Conservative on purpose: a deploy landing between two real failures must not
     // hand the ticket a clean slate, or the breaker stops catching retry storms.
-    expect(trailingFailureStreak([{ status: 'failed' }, evicted, { status: 'failed' }])).toBe(2);
+    expect(trailingUnproductiveStreak([{ status: 'failed' }, evicted, { status: 'failed' }])).toBe(2);
   });
 
-  it('still stops at a completed run sitting behind an eviction', () => {
-    expect(trailingFailureStreak([evicted, { status: 'completed' }, { status: 'failed' }])).toBe(0);
+  it('still stops at a productive run sitting behind an eviction', () => {
+    expect(trailingUnproductiveStreak([evicted, { status: 'completed', produced: true }, { status: 'failed' }])).toBe(0);
+  });
+
+  it('backs off from an empty completion, not only from a failure', () => {
+    // The cooldown must measure from whichever run actually counted, or the ticket
+    // that completes-and-ships-nothing keeps its zero-wait re-dispatch.
+    const now = Date.UTC(2026, 6, 29, 12, 0, 0);
+    const remaining = autoRunCooldownRemainingMs(
+      [{ status: 'completed', produced: false, completedAt: new Date(now - 60_000) }],
+      now,
+    );
+    expect(remaining).toBeGreaterThan(0);
   });
 
   it('backs off from the newest COUNTED failure, not from an eviction on top of it', () => {
