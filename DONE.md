@@ -4,6 +4,41 @@
 
 ---
 
+## 2026-07-29 — ✅ RESOLVED: 5,931 runs, 10 failures, 3 finished tickets — the executor's only stopping condition was FAILURE (api 2026.7.182 · frontend 2026.7.141 · brain-embedded 2026.7.56)
+
+A capture taken twelve hours after 2026.7.181 shipped. The manager-side fixes were live and working — `merge_failed` fell from six repeats in thirty decisions to one, and the PR-conflict ceiling I added was visibly counting in the payloads — and the board had not moved: 669 of 708 stalled, `never_started` 372 → 371.
+
+**The number that explains it: 5,931 agent runs completed and 10 failed in one day, against 3 finished tickets and 2 merged PRs. One agent — Bob Developer — accounted for 5,796 runs and 0 finished tickets.**
+
+### The executor could only ever stop on FAILURE
+
+`MAX_CONSECUTIVE_AUTORUN_FAILURES` (3 strikes) and its exponential cooldown were both computed by `trailingFailureStreak`, which counted `status === 'failed'` and nothing else. A run that **completes and ships nothing** reset the streak to zero and owed no backoff, so the ticket was re-dispatched on the very next five-minute tick — forever. The breaker was sitting right there, on the one dispatch chokepoint every dispatcher routes through, and never armed once, because nothing ever failed.
+
+And the two headline cohorts are the **same fact**: the tenant's 25-dispatches-per-tick ceiling was ~80% consumed all day re-running tickets that had already run and produced nothing, so the 371 `never_started` tickets — oldest idle 50 days — could not win a slot. Yesterday's candidate-window fix (0384) frees a ticket's slot only while its run is LIVE; the moment it ended, the same top-ranked ticket was eligible again.
+
+### The verdict already existed — it was being spent on the wrong decision
+
+No new judgement was needed. `finalizeLearnWeight` has graded every run **merged > opened > wrote-files > no-op** since it replaced text length as the Evermind teaching weight. The platform always knew which runs accomplished nothing; it used that to decide how hard to teach the model and threw it away for the one decision that would have stopped the burn.
+
+`runProducedOutput` now reads the *same facts* (a test asserts the two graders cannot disagree — "produced nothing" must be exactly the set whose learn weight bottoms out), `finalizeCloudRun` stamps the verdict onto `executions.produced` (**0385**) at the terminal chokepoint every cloud surface already routes through, and the streak becomes `trailingUnproductiveStreak`: failed, **or** completed having shipped nothing. One streak, one ceiling, one cooldown, one human override — the existing primitive generalised rather than a second mechanism bolted alongside it.
+
+Three deliberate conservatisms, each load-bearing:
+- **NULL means productive.** Every pre-0385 row is unjudged, as is every surface that does not route through finalize. Reading unknown as unproductive would trip the breaker on every ticket on every board on the deploy that shipped it.
+- **A cancelled run is not judged.** A person stopped it; that says nothing about the ticket — the same reading the breaker already takes of a platform eviction.
+- **The predicate is generous.** One file, one PR, or one lane move counts. Only a run with *nothing* to show for itself counts against the ticket.
+
+This is the lesson the manager's stall register already learned and wrote down — *"the ceiling exists to catch a remedy that RUNS AND DOES NOT WORK"* — finally applied to the layer that actually spends the money.
+
+### The build stamp that lied, and cost a wrong diagnosis
+
+The capture reported `apiVersion: 2026.7.180` twelve hours after 2026.7.181 deployed, and I took it at face value and told the user their report predated my fix. It did not. `fetchApiVersionVia` memoized the version **for the lifetime of the page** with no expiry, so a tab open across a deploy stamps every later capture with the build it started on — reproducing, at a longer timescale, the exact failure its own header says it exists to prevent: *"a dump taken minutes BEFORE a deploy is byte-identical to one taken after, so a fixed bug reads as unfixed."* Now a 60s TTL, and a failed `/health` read no longer renews the window (one blip must not make a stale stamp permanent). A stamp that lies is worse than no stamp — it is the one field a reader cannot cross-check.
+
+Files: `api/src/application/runtime/{scoreRunOutcome,cloudAgentEngine}.ts`, `api/src/application/swimlane/evaluateAutoRun.ts`, `api/src/domain/execution/Execution.ts`, `api/src/infrastructure/repositories/ExecutionRepository.ts`, `api/src/infrastructure/database/schema/runtime.ts`, `brain-embedded/src/apiVersion.ts`, migration **0385**, all five i18n catalogs (+ tests).
+
+**Verified:** API `4181 passed`, `tsgo --noEmit` clean, schema-drift + migration-sequence checks green, brain-embedded typecheck + `4 passed`. The breaker copy is re-localized in en/zh/es/fr/de — the reason a ticket is paused is no longer "too many failed runs" when nothing failed.
+
+---
+
 ## 2026-07-29 — ✅ RESOLVED: three windows that were sets, and a ceiling counted on a nullable key (api 2026.7.181)
 
 A second manager-diagnostics capture on project 11, taken with 2026.7.180 already live, still read **670 of 708 tickets stalled (95%)** with `managed_no_role` at 294 and `never_started` at 372. The previous pass's fixes were correct and had shipped; three *different* defects were holding the board, and all three are the same shape — **a bounded window over a total, stable order, which is a set and not a window** — plus one counter keyed on a column that can be NULL.

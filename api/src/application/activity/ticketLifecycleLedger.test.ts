@@ -167,7 +167,9 @@ describe('classifyTicketAutonomy', () => {
       ...autonomousToDone, currentStatus: 'review', isTerminal: false, lastSkipReason: 'run_cap_exhausted',
     });
     expect(v.stallReason).toBe('run_cap_exhausted');
-    expect(v.stallText).toContain('last consecutive runs all failed');
+    // The breaker's streak is no longer failure-only (0385) — it counts a run that
+    // COMPLETED and shipped nothing too — so the ledger's copy names both.
+    expect(v.stallText).toContain('either failed or finished without producing anything');
   });
 
   it('reports a stall with no recorded reason as an unexplained stall, not a false pass', () => {

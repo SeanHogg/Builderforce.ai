@@ -157,7 +157,7 @@ export type { PersistedStep } from './persistedSteps';
 
 // Deployed API version (session-cached) — the "which build produced this capture?"
 // half of the diagnostics version stamp. Each surface supplies its own /health read.
-export { fetchApiVersionVia } from './apiVersion';
+export { fetchApiVersionVia, resetApiVersionCache, API_VERSION_TTL_MS } from './apiVersion';
 
 // Which model to try NEXT when the current one won't emit tool calls. One ordering,
 // shared by every host that holds a `/llm/v1/models` surface.

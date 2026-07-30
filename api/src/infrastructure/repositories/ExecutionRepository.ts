@@ -113,6 +113,10 @@ function toDomain(row: typeof executionsTable.$inferSelect): Execution {
     cloudAgentRef: row.cloudAgentRef ?? null,
     result:       row.result ?? null,
     errorMessage: row.errorMessage ?? null,
+    // The autonomy breaker's productivity signal (0385). It MUST survive into
+    // `toPlain()` — both breaker call sites read the plain props, and dropping it here
+    // would silently restore the failure-only streak with everything else in place.
+    produced:     row.produced ?? null,
     startedAt:    row.startedAt ?? null,
     completedAt:  row.completedAt ?? null,
     createdAt:    row.createdAt,

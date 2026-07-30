@@ -41,7 +41,7 @@ function buildExecution(payload: string | null, status = ExecutionStatus.RUNNING
   return Execution.reconstitute({
     id: EXEC_ID as never, taskId: TASK_ID as never, agentId: null, agentHostId: null,
     tenantId: 1 as never, submittedBy: 'system:lane-auto', sessionId: null, status,
-    payload, cloudAgentRef: 'agent-dev', result: null, errorMessage: null,
+    payload, cloudAgentRef: 'agent-dev', result: null, errorMessage: null, produced: null,
     startedAt: now, completedAt: null, createdAt: now, updatedAt: now,
   });
 }

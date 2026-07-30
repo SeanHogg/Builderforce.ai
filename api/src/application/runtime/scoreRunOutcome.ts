@@ -110,6 +110,49 @@ export function finalizeLearnWeight(s: {
   return 0.2;                         // text-only / no-op
 }
 
+/** What a finished run left behind — the inputs both the learn weight and the
+ *  productivity verdict are computed from, so the two can never disagree. */
+export interface RunProduct {
+  merged: boolean;
+  prOpened: boolean;
+  /** The run committed at least one file. */
+  producedChanges: boolean;
+  /** The run moved the ticket to a different lane / status. */
+  movedTicket?: boolean;
+}
+
+/**
+ * Did this run leave ANYTHING behind? PURE.
+ *
+ * ── WHY THE PLATFORM NEEDED THIS AND DID NOT HAVE IT ─────────────────────────────
+ * {@link finalizeLearnWeight} right above already answers "how good was this run?" —
+ * merged > opened > wrote-files > no-op — and has since it replaced text-length as the
+ * teaching weight. The platform therefore ALWAYS knew which runs accomplished nothing.
+ * It spent that verdict on teaching the model and threw it away for the one decision
+ * that would have stopped the burn: whether to dispatch the ticket AGAIN.
+ *
+ * The autonomy circuit breaker (`MAX_CONSECUTIVE_AUTORUN_FAILURES`) and its cooldown
+ * were keyed on `status === 'failed'` alone. A run that COMPLETES and ships nothing
+ * reset the streak to zero and owed no backoff, so it was re-dispatched on the very
+ * next five-minute tick, forever. Measured on project 11, 2026-07-29: **5,931 agent
+ * runs completed and 10 failed in one day; 3 tickets finished and 2 PRs merged.** One
+ * agent — Bob Developer — accounted for **5,796 runs and 0 finished tickets**. The
+ * breaker never armed once, because nothing ever failed.
+ *
+ * That burn is also why 371 tickets on the same board had NEVER run: the tenant's
+ * 25-dispatches-per-tick ceiling was ~80% consumed, all day, re-running tickets that
+ * had already run and produced nothing.
+ *
+ * This is the same lesson the manager's stall register learned and wrote down — "the
+ * ceiling exists to catch a remedy that RUNS AND DOES NOT WORK" — applied to the layer
+ * that actually spends the money. It is deliberately GENEROUS: any artifact at all
+ * counts, so a run that writes one file, opens a PR, or advances the ticket is
+ * productive. Only a run that ends with nothing to show for itself is not.
+ */
+export function runProducedOutput(s: RunProduct): boolean {
+  return s.merged || s.prOpened || s.producedChanges || s.movedTicket === true;
+}
+
 export type OutcomeSource = 'cloud' | 'onprem' | 'ide' | 'external';
 
 export interface ClientRunOutcome {

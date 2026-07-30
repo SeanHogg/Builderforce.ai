@@ -17,6 +17,13 @@ export interface ExecutionProps {
   /** JSON result returned by the agent. */
   result:       string | null;
   errorMessage: string | null;
+  /**
+   * Did this finished run leave anything behind — a commit, a PR, a merge, or a lane
+   * move (0385)? `null` = not judged (a legacy row, a cancelled run, or a surface that
+   * does not route through `finalizeCloudRun`), which the autonomy breaker reads as
+   * PRODUCTIVE so an unknown can never halt a board. See `runProducedOutput`.
+   */
+  produced:     boolean | null;
   startedAt:    Date | null;
   completedAt:  Date | null;
   createdAt:    Date;
@@ -68,6 +75,8 @@ export class Execution {
       cloudAgentRef: null, // set at dispatch once the cloud agent is resolved
       result:       null,
       errorMessage: null,
+      // Not judged until the run finishes and finalize stamps it (0385).
+      produced:     null,
       startedAt:    null,
       completedAt:  null,
       createdAt:    now,

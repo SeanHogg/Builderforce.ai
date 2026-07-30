@@ -21,6 +21,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var src_exports = {};
 __export(src_exports, {
   ADDRESSED_TO_META_KEY: () => ADDRESSED_TO_META_KEY,
+  API_VERSION_TTL_MS: () => API_VERSION_TTL_MS,
   AUTHORED_BY_META_KEY: () => AUTHORED_BY_META_KEY,
   BrainActionsProvider: () => BrainActionsProvider,
   BrainContextProvider: () => BrainContextProvider,
@@ -106,6 +107,7 @@ __export(src_exports, {
   parseStepMessage: () => parseStepMessage,
   prepareImageDataUrl: () => prepareImageDataUrl,
   reasoningForRun: () => reasoningForRun,
+  resetApiVersionCache: () => resetApiVersionCache,
   resetBrainRunStore: () => resetBrainRunStore,
   resolveRecipient: () => resolveRecipient,
   resolveRunConfirm: () => resolveRunConfirm,
@@ -3588,14 +3590,25 @@ function subscribeToChatMessages(baseUrl, getToken, chatId, onChanged) {
 }
 
 // src/apiVersion.ts
+var API_VERSION_TTL_MS = 6e4;
 var cached = null;
+var cachedAt = 0;
 var inflight = null;
-function fetchApiVersionVia(read) {
-  if (cached) return Promise.resolve(cached);
+function resetApiVersionCache() {
+  cached = null;
+  cachedAt = 0;
+  inflight = null;
+}
+function fetchApiVersionVia(read, now = Date.now) {
+  if (cached && now() - cachedAt < API_VERSION_TTL_MS) return Promise.resolve(cached);
   if (inflight) return inflight;
   inflight = read().then((data) => {
-    cached = data?.version ?? null;
-    return cached;
+    const next = data?.version ?? null;
+    if (next) {
+      cached = next;
+      cachedAt = now();
+    }
+    return next;
   }).catch(() => null).finally(() => {
     inflight = null;
   });
@@ -3849,6 +3862,7 @@ function formatChatDiagnostics(d) {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   ADDRESSED_TO_META_KEY,
+  API_VERSION_TTL_MS,
   AUTHORED_BY_META_KEY,
   BrainActionsProvider,
   BrainContextProvider,
@@ -3934,6 +3948,7 @@ function formatChatDiagnostics(d) {
   parseStepMessage,
   prepareImageDataUrl,
   reasoningForRun,
+  resetApiVersionCache,
   resetBrainRunStore,
   resolveRecipient,
   resolveRunConfirm,

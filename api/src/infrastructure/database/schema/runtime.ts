@@ -403,6 +403,19 @@ export const executions = pgTable('executions', {
    *  Never filter on this literal: use `liveExecution()` from
    *  application/rehearsal/executionMode.ts so the predicate exists in one place. */
   mode:         varchar('mode', { length: 16 }).notNull().default('live'),
+  /**
+   * Did this finished run leave ANYTHING behind — a commit, a PR, a merge, or a lane
+   * move (0385)? Stamped at the terminal chokepoint every cloud surface routes through
+   * (`finalizeCloudRun`) from the SAME facts `finalizeLearnWeight` already grades.
+   *
+   * Read by the autonomy circuit breaker and its cooldown, which counted only FAILED
+   * runs and therefore never armed on a board where everything completed and shipped
+   * nothing: 5,931 completed runs and 10 failures in one day against 3 finished tickets,
+   * one agent at 5,796 runs / 0 finished. NULL means NOT JUDGED — legacy rows and the
+   * surfaces that do not route through finalize — and is treated as PRODUCTIVE, so an
+   * unknown can never halt autonomy. See `runProducedOutput`.
+   */
+  produced:     boolean('produced'),
   /** Monotonic lifecycle transition number. Maintained by the database trigger
    * that appends execution_lifecycle_outbox rows. */
   lifecycleVersion: integer('lifecycle_version').notNull().default(1),
