@@ -21,7 +21,7 @@ import { projectManagerConfigs, tenantManagerDefaults } from '../../infrastructu
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { normalizeManagerType } from './managerTypes';
 import {
-  resolveTieredManagerPolicy, normalizePrMergePolicy, DEFAULT_MANAGER_POLICY,
+  resolveTieredManagerPolicy, normalizePrMergePolicy, DEFAULT_MANAGER_POLICY, isProjectManaged,
   type EffectiveManagerPolicy, type ManagerConfigRow, type TenantManagerDefaultsRow,
 } from './managerPolicy';
 
@@ -176,11 +176,30 @@ export async function upsertTenantManagerDefaults(
 export async function getEffectiveManagerPolicy(
   db: Db, tenantId: number, projectId: number, env?: Env,
 ): Promise<EffectiveManagerPolicy> {
+  return (await getProjectManagerState(db, tenantId, projectId, env)).policy;
+}
+
+/**
+ * The policy AND whether this project is managed at all, from the same pair of reads.
+ *
+ * Two separate calls would be two answers to one question and a second round-trip to get
+ * them out of step with: `managed` is not derivable from the policy alone, because the
+ * fold cannot tell "this project has no row" from "this project has a row that agrees
+ * with every default" — both resolve to `enabled: true`. Only the raw row distinguishes
+ * them, and that distinction IS the opt-in (see {@link isProjectManaged}).
+ */
+export async function getProjectManagerState(
+  db: Db, tenantId: number, projectId: number, env?: Env,
+): Promise<{ policy: EffectiveManagerPolicy; configured: boolean; managed: boolean }> {
   const [tenant, project] = await Promise.all([
     getTenantManagerDefaults(db, tenantId, env),
     getManagerConfigRow(db, tenantId, projectId),
   ]);
-  return resolveTieredManagerPolicy({ tenant, project });
+  return {
+    policy: resolveTieredManagerPolicy({ tenant, project }),
+    configured: !!project,
+    managed: isProjectManaged({ tenant, project }),
+  };
 }
 
 /** Upsert a project's manager config (the designation + policy). */

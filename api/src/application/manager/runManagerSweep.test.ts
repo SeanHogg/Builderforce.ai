@@ -80,6 +80,48 @@ describe('manager sweep fans out across projects', () => {
   });
 
   /**
+   * THE OPT-IN, and the SQL mirror of `isProjectManaged`.
+   *
+   * The rule used to be `hasBoard AND (hasWork OR hasConfig)` — i.e. any project with a
+   * board and one open ticket got an AI manager, configured or not, because a project
+   * with no config row folds to the hardcoded `enabled: true` default. That is opt-OUT
+   * for something that reopens tickets, dispatches billable runs and merges PRs.
+   *
+   * An INNER join is the point: as a LEFT join the requirement is a WHERE clause someone
+   * can drop, and dropping it silently restores management of every project on the
+   * instance.
+   */
+  it('selects ONLY projects that opted in — an enabled config row of their own', () => {
+    expect(source, 'the config row must be required structurally, not by a clause')
+      .toMatch(/\.innerJoin\(projectManagerConfigs, and\(/);
+    expect(source).toMatch(/eq\(projectManagerConfigs\.enabled, true\)/);
+    // The opt-out shape must not return in any form.
+    expect(source).not.toMatch(/\.leftJoin\(projectManagerConfigs/);
+    expect(source).not.toMatch(/hasWork\} OR \$\{hasConfig\}/);
+  });
+
+  /**
+   * THE ROTATION AND THE OPT-IN ARE THE SAME FIX.
+   *
+   * `last_run_at` is stamped by an UPDATE, not an upsert, so a project with no config
+   * row can never be stamped. Ordering NULLS FIRST over a LEFT join therefore selected
+   * such a project, managed it, failed to stamp it, and selected it again — pinning the
+   * head of the rotation forever and starving every project behind it. Requiring the row
+   * makes every selectable project one the pass can also stamp, which is what makes the
+   * ordering terminate. Guarded because the two changes look unrelated and a later edit
+   * could reintroduce the LEFT join for a plausible-sounding reason.
+   */
+  it('can stamp every project it selects, so the rotation terminates', () => {
+    const service = readFileSync(
+      fileURLToPath(new URL('./ManagerService.ts', import.meta.url).href),
+      'utf8',
+    );
+    expect(service, 'the stamp is an UPDATE — an unstampable project would pin the rotation')
+      .toMatch(/db\.update\(projectManagerConfigs\)\s*\n?\s*\.set\(\{ lastRunAt/);
+    expect(source).toMatch(/\.innerJoin\(projectManagerConfigs/);
+  });
+
+  /**
    * The pool only helps if the deadline is worth several passes; at one pass per worker
    * it is just the old serial sweep with extra steps. And it must stay well inside the
    * 5-minute cadence, or a slow tick overlaps the next one.

@@ -277,6 +277,38 @@ export const DEFAULT_MANAGER_POLICY: EffectiveManagerPolicy = {
   agentReassignMaxPerSession: 3,
 };
 
+/**
+ * WHETHER THIS PROJECT IS MANAGED AT ALL — the opt-in gate, and the one definition of it.
+ *
+ * ── WHY A PROJECT ROW IS REQUIRED, NOT JUST AN "ENABLED" POLICY ──────────────────
+ * `DEFAULT_MANAGER_POLICY.enabled` is `true`, and `resolveEffectiveManagerPolicy(null)`
+ * returns that default — so a project that had never heard of the manager still resolved
+ * to "enabled". The sweep matched on `hasWork OR hasConfig`, which means the real rule was
+ * **any project with a board and an open ticket gets an AI manager**, whether or not
+ * anyone asked for one. That is opt-OUT, and it is the wrong default for a thing that
+ * ranks, assigns, reopens tickets, dispatches billable runs and merges pull requests.
+ *
+ * The row is the opt-in. It only ever comes into existence through `upsertManagerConfig`,
+ * i.e. a deliberate write from the Manager settings surface, so "has a row" means "a human
+ * turned this on for this project". The workspace tier still shapes HOW a managed project
+ * is managed; it does not decide WHETHER an unconfigured project is managed, because a
+ * workspace default is a statement about the projects you opted in, not a licence over the
+ * ones you did not.
+ *
+ * ── AND WHY IT MUST BE ONE FUNCTION ──────────────────────────────────────────────
+ * Three places answer this question — the sweep's SQL, the per-project pass, and the
+ * Manager surface — and two of them disagreeing is worse than either answer. A surface
+ * reading `enabled: yes` over a project the sweep silently skips is precisely the class of
+ * defect that cost four diagnostics captures: a report that states health it has not
+ * verified. The SQL mirror in `loadManagedProjects` is pinned to this by a source test.
+ */
+export function isProjectManaged(tiers: {
+  tenant?: TenantManagerDefaultsRow | null;
+  project?: ManagerConfigRow | null;
+}): boolean {
+  return !!tiers.project && resolveTieredManagerPolicy(tiers).enabled;
+}
+
 const VALID_PR_POLICIES: ReadonlySet<string> = new Set(['immediate', 'on_green', 'queue']);
 
 /** Normalize an arbitrary PR-policy string, defaulting to the tenant default. */
