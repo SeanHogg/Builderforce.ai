@@ -194,8 +194,8 @@ describe('resolveEvermindTeacherModel (once-per-alarm budget gate)', () => {
   it('accepts the routable forms of the same vendor', async () => {
     expect(await resolveEvermindTeacherModel(env, db, TENANT, 'direct/xai/grok-4.5'))
       .toEqual({ model: 'direct/xai/grok-4.5' });
-    expect(await resolveEvermindTeacherModel(env, db, TENANT, 'xai-oauth/grok-4.3'))
-      .toEqual({ model: 'xai-oauth/grok-4.3' });
+    expect(await resolveEvermindTeacherModel(env, db, TENANT, 'xai-oauth/grok-4.5'))
+      .toEqual({ model: 'xai-oauth/grok-4.5' });
   });
 
   it('returns null when the tenant is out of token budget', async () => {

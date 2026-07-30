@@ -8883,6 +8883,7 @@
       "failedTitle": "{label}-Verbindung fehlgeschlagen",
       "state": {
         "ready": "bereit",
+        "needs_attention": "Aufmerksamkeit erforderlich",
         "not_connected": "nicht verbunden",
         "revoked": "widerrufen",
         "expired": "abgelaufen",

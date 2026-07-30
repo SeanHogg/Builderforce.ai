@@ -90,6 +90,19 @@ describe('ProviderKeysSettings — rejected-account prompt', () => {
     expect(screen.queryByText(/providerKeys.status.connected/)).not.toBeInTheDocument();
   });
 
+  it('does NOT report a rejected account diagnostic as ready', async () => {
+    mockApi([{ provider: 'xai', authType: 'oauth', priority: 0, authAlert: alert({ provider: 'xai', vendor: 'xai-oauth' }) }]);
+    vi.spyOn(api.providerKeysApi, 'status').mockImplementation(async (provider) => ({
+      provider, configured: provider === 'xai', usable: provider === 'xai',
+      status: provider === 'xai' ? 'needs_attention' : 'not_connected',
+      ...(provider === 'xai' ? { authAlert: alert({ provider: 'xai', vendor: 'xai-oauth' }) } : {}),
+      usage: { periodDays: 30, requests: 0, tokens: 0, lastUsedAt: null },
+    }));
+    render(<ProviderKeysSettings />);
+    expect(await screen.findByText(/providerKeys\.diagnostic\.currentStatus providerKeys\.diagnostic\.state\.needs_attention/)).toBeInTheDocument();
+    expect(screen.queryByText(/providerKeys\.diagnostic\.currentStatus providerKeys\.diagnostic\.state\.ready/)).not.toBeInTheDocument();
+  });
+
   it('still reports a healthy connected account as connected', async () => {
     mockApi([{ provider: 'openai', authType: 'oauth', priority: 0 }]);
     render(<ProviderKeysSettings />);

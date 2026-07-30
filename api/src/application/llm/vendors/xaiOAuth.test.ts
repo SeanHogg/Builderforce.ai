@@ -4,15 +4,15 @@ import { xaiOAuthModule } from './xaiOAuth';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('xAI SuperGrok OAuth vendor', () => {
-  it('uses the Responses API with grok-4.3 and normalizes output', async () => {
+  it('uses the Responses API with grok-4.5 and normalizes output', async () => {
     const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
       expect(url).toBe('https://api.x.ai/v1/responses');
       expect(init.headers).toMatchObject({ authorization: 'Bearer oauth-token' });
-      expect(JSON.parse(String(init.body))).toMatchObject({ model: 'grok-4.3', store: false });
+      expect(JSON.parse(String(init.body))).toMatchObject({ model: 'grok-4.5', store: false });
       return new Response(JSON.stringify({ id: 'resp_xai', output_text: 'OK', usage: { input_tokens: 2, output_tokens: 1 } }), { status: 200 });
     });
     vi.stubGlobal('fetch', fetchMock);
-    const result = await xaiOAuthModule.call({ apiKey: 'oauth-token', model: 'grok-4.3', messages: [{ role: 'user', content: 'Reply OK.' }] });
+    const result = await xaiOAuthModule.call({ apiKey: 'oauth-token', model: 'grok-4.5', messages: [{ role: 'user', content: 'Reply OK.' }] });
     expect(result.content).toBe('OK');
     expect(result.usage).toMatchObject({ prompt_tokens: 2, completion_tokens: 1 });
   });
@@ -26,7 +26,7 @@ describe('xAI SuperGrok OAuth vendor', () => {
       return new Response(JSON.stringify({ id: 'resp_xai', output: [{ type: 'function_call', call_id: 'c1', name: 'save_note', arguments: '{"a":1}' }] }), { status: 200 });
     }));
     const result = await xaiOAuthModule.call({
-      apiKey: 'oauth-token', model: 'grok-4.3', messages: [{ role: 'user', content: 'note it' }],
+      apiKey: 'oauth-token', model: 'grok-4.5', messages: [{ role: 'user', content: 'note it' }],
       tools: [{ type: 'function', function: { name: 'save_note', parameters: { type: 'object' } } }],
       toolChoice: { type: 'function', function: { name: 'save_note' } },
     });
@@ -43,7 +43,7 @@ describe('xAI SuperGrok OAuth vendor', () => {
       sent = JSON.parse(String(init.body)) as Record<string, unknown>;
       return new Response(JSON.stringify({ id: 'resp_xai', output_text: 'OK' }), { status: 200 });
     }));
-    await xaiOAuthModule.call({ apiKey: 'oauth-token', model: 'grok-4.3', messages: [{ role: 'user', content: 'hi' }], toolChoice: 'required' });
+    await xaiOAuthModule.call({ apiKey: 'oauth-token', model: 'grok-4.5', messages: [{ role: 'user', content: 'hi' }], toolChoice: 'required' });
     expect(sent.tool_choice).toBe('required');
   });
 
@@ -55,7 +55,7 @@ describe('xAI SuperGrok OAuth vendor', () => {
       sent = JSON.parse(String(init.body)) as Record<string, unknown>;
       return new Response(JSON.stringify({ id: 'resp_xai', output_text: 'OK' }), { status: 200 });
     }));
-    await xaiOAuthModule.call({ apiKey: 'oauth-token', model: 'grok-4.3', messages: [{ role: 'user', content: 'hi' }], maxTokens: 8 });
+    await xaiOAuthModule.call({ apiKey: 'oauth-token', model: 'grok-4.5', messages: [{ role: 'user', content: 'hi' }], maxTokens: 8 });
     expect(sent.max_output_tokens).toBe(16);
   });
 
@@ -68,7 +68,7 @@ describe('xAI SuperGrok OAuth vendor', () => {
       return new Response(JSON.stringify({ id: 'resp_xai', output_text: 'OK' }), { status: 200 });
     }));
     await xaiOAuthModule.call({
-      apiKey: 'oauth-token', model: 'grok-4.3',
+      apiKey: 'oauth-token', model: 'grok-4.5',
       messages: [
         { role: 'system', content: [{ type: 'text', text: 'be terse' }] },
         { role: 'user', content: 'hi' },
