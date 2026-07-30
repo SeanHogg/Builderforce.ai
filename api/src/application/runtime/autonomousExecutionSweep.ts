@@ -120,6 +120,10 @@ export function autonomousCandidatesQuery(db: Db, limit: number) {
       .select({ one: sql`1` })
       .from(executions)
       .where(and(
+        // The outer candidate scan is cross-tenant by design, so correlate the
+        // tenant explicitly as well as the task id. Relying on globally unique task
+        // ids is not a tenant boundary and fails the repository's scope invariant.
+        eq(executions.tenantId, projects.tenantId),
         eq(executions.taskId, tasks.id),
         eq(executions.mode, 'live'),
         inArray(executions.status, RuntimeService.NON_TERMINAL_STATUSES),
