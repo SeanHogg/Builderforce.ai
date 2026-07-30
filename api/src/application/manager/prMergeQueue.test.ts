@@ -31,7 +31,7 @@ describe('merge queue', () => {
   it('allows exactly one conflict-recovery dispatch per pass', () => {
     const plan = planMergeQueue(Array.from({ length: 20 }, (_, i) => pr(`${i}`)), { hasActiveRun: never });
     expect(plan.filter((e) => e.mayRecover)).toHaveLength(1);
-    expect(plan[0].mayRecover).toBe(true);
+    expect(plan[0]?.mayRecover).toBe(true);
     // A queued PR must never carry the permission — that is the whole overrun.
     for (const e of plan.filter((x) => x.disposition !== 'work')) expect(e.mayRecover).toBe(false);
   });
@@ -81,7 +81,7 @@ describe('merge queue', () => {
     );
     expect(dispositions(plan)).toEqual(['running', 'work', 'work', 'work', 'queued']);
     // The recovery permission moves with the head, so a running PR does not strand it.
-    expect(plan[1].mayRecover).toBe(true);
+    expect(plan[1]?.mayRecover).toBe(true);
   });
 
   it('is total — every PR in the window gets a disposition', () => {
