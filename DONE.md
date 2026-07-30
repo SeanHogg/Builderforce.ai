@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-30 — ✅ RESOLVED: the manager was a queue with one server — projects now fan out (api 2026.7.186)
+
+Raised by the operator, and correct: *"this is a manager, you're making the manager do all the work, shouldn't it assign and execute multiple other team leads or agents?"*
+
+`runManagerSweep` awaited a full `runManagerForProject` inside a plain `for` loop over up to `MAX_PROJECTS_PER_TICK = 200` projects. One pass costs **20–31s** of wall-clock (measured on project 11 the same day: `elapsedMs` 20874 and 30888 on consecutive passes). So the first project consumed the entire Worker invocation and **every project behind it got nothing — not less, nothing — on every tick.**
+
+And "behind it" was a fixed set: `loadManagedProjects` had **no ORDER BY**, so it returned heap order, in practice the same rows in the same sequence every time. The two defects compose into the worst version of themselves — one project managed forever, the rest never managed once — and nothing reported it, because a sweep evicted mid-loop cannot say how far it got. This is the same bug class 0383 fixed inside the PR window (an unordered LIMIT returning the same rows forever), one level up, where it was costing whole projects rather than pull requests.
+
+- **A bounded pool** (`MAX_CONCURRENT_PROJECT_PASSES = 6`) of workers drawing from one cursor replaces the serial loop. `cursor++` needs no lock — a synchronous read-modify-write cannot be interleaved in JS, and the only suspension points are inside the pass, by which time the slot is claimed. Bounded rather than unbounded because neon-http opens a connection per query: an unbounded fan-out over 200 projects trades a starved sweep for a throttled database. A pass is nearly all I/O (Postgres + provider round-trips), which is why concurrency here is real parallelism and not CPU contention.
+- **Longest-unmanaged first**, maintained by the pass's own `last_run_at` stamp — no cursor, no new storage. NULLS FIRST is load-bearing: a project with no manager-config row has never been managed at all. Fairness is the right property *here* and was the wrong one for the PR window, which had to give up exactly this ordering the same day — the difference is that each project's pass is independent work that progresses on its own, whereas a pull request needs repeated attempts on the **same** item to converge, and rotating those diluted the attempts below the ceiling they had to reach.
+- **A sweep deadline** (`MANAGER_SWEEP_BUDGET_MS = 60_000`) checked *before* claiming a project, so the clock never half-starts one. A project not reached is not lost — by declining to stamp `last_run_at` it sorts to the front of the next tick.
+- **`notReached`** on the result and the cron log line. The old sweep could not have reported this: it ran until the invocation ended, so there was no moment at which it knew what it had skipped.
+- The per-tenant token verdict is now cached as a **promise**, not a resolved boolean — correct while passes ran one at a time, an N+1 the moment they do not.
+
+On the operator's underlying question, the honest split: **mechanical** work (merge a PR, rank, census) is correctly done by the manager directly — an LLM agent doing a REST call would be strictly worse and costlier — while **cognitive** work (resolve a conflict, unstick a ticket, staff a role) is correctly delegated to dispatched agents, and already was (`ownsDispatch: false` on the cron path). The defect was never *who* does the work; it was that all of it was crammed into one serial actor with one 20s box, where the mechanical bulk starved the delegation.
+
+Files: `api/src/application/manager/runManagerSweep.ts` (+ `runManagerSweep.test.ts`), `api/src/cronSweeps.ts`.
+
+---
+
 ## 2026-07-30 — ✅ RESOLVED: the PR stage was 93% of the pass, and 381 PRs racing one base are a QUEUE (api 2026.7.185)
 
 The instrument shipped in 2026.7.184 answered the question on its first capture:
