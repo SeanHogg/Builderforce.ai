@@ -409,12 +409,14 @@ export class BrainService {
    * tenants who connected their own account" path.
    */
   private async buildTenantLlmService(env: Env, tenantId: number): Promise<LlmProxyService> {
-    const { proxy, byoVendors } = await tenantProxyForPlan(env, tenantId).catch(
-      () => ({ proxy: null as LlmProxyService | null, byoVendors: new Set<string>() }),
+    const { proxy, hasByo } = await tenantProxyForPlan(env, tenantId).catch(
+      () => ({ proxy: null as LlmProxyService | null, hasByo: false }),
     );
-    // A connected account (BYO vendor set is non-empty) serves the call on the tenant's
-    // own model; otherwise keep the unchanged operator-key path.
-    if (proxy && byoVendors.size > 0) return proxy;
+    // Any rankable account of the tenant's own — a connected provider OR a registered
+    // OpenRouter connection — serves the call on their own model; otherwise keep the
+    // unchanged operator-key path. `hasByo` covers both (a connection contributes no
+    // BYO vendor id, so a vendor-set check alone would miss a connection-only tenant).
+    if (proxy && hasByo) return proxy;
     return this.buildLlmService(env.OPENROUTER_API_KEY ?? '');
   }
 
@@ -1060,7 +1062,7 @@ export class BrainService {
     // tenant's OWN account when they have one — NOT a weak operator-key model that
     // empty-turns. `codingOnly` restricts failover to the curated coding pool + paid
     // coding backstop (agentic tool turn), never a lite non-coder.
-    const { proxy: service, byoVendors } = await tenantProxyForPlan(env, tenantId, { codingOnly: true });
+    const { proxy: service, byoVendors, registeredModels } = await tenantProxyForPlan(env, tenantId, { codingOnly: true });
     // The tenant's connected account beats a weak/default agent base model. Honor an
     // explicit base model ONLY when it preempts the BYO seed — the tenant has no
     // connected account, OR the base model is itself served by a connected BYO vendor.
@@ -1069,7 +1071,7 @@ export class BrainService {
     // `@cf/*` model) that returns empty turns and never touches the connected account —
     // the exact bug where a connected Claude subscription still ran Ada on `@cf/qwen/...`.
     const baseModel = resolved?.baseModel ?? undefined;
-    const pinnedModel = explicitModelPreemptsByo(baseModel, byoVendors) ? baseModel : undefined;
+    const pinnedModel = explicitModelPreemptsByo(baseModel, byoVendors, registeredModels) ? baseModel : undefined;
     const readModel = (r: unknown): string => (r as { resolvedModel?: string } | undefined)?.resolvedModel ?? '';
     // The vendor + whether the tenant's OWN account served the turn — captured per
     // completion so the FINAL turn's values drive both the empty-reply diagnostic and

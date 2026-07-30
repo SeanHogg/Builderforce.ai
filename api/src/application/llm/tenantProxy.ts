@@ -27,6 +27,7 @@ import {
   PREMIUM_VENDOR_CALL_TIMEOUT_MS,
   explicitModelPreemptsByo,
   canonicalModelId,
+  type ModelRefs,
   type LlmProxyService,
   type ChatCompletionRequest,
   type ProxyResult,
@@ -56,6 +57,15 @@ export interface TenantProxyResult {
   /** Gateway vendor ids the tenant can serve from their OWN connected account. Pass to
    *  {@link byoAwareModel} / `explicitModelPreemptsByo` to gate an explicit model pin. */
   byoVendors: Set<string>;
+  /** The tenant's REGISTERED OpenRouter connection refs (`openrouter/<org>/<slug>`, 0382).
+   *  Returned alongside `byoVendors` because a connection is rankable BYO that contributes
+   *  no vendor id — every gate that consults one must consult both, or a precedence list
+   *  led by a connection is silently ignored. See {@link explicitModelPreemptsByo}. */
+  registeredModels: readonly string[];
+  /** True when the tenant has ANY rankable account of their own — a connected provider OR
+   *  a registered OpenRouter connection. The single "is this tenant BYO?" test; a
+   *  `byoVendors.size > 0` check alone misses a connection-only tenant. */
+  hasByo: boolean;
 }
 
 /** True when a resolved BYO api-key set has at least one usable key. */
@@ -91,6 +101,7 @@ export async function tenantProxyForPlan(
       providerPriorities: [],
       openRouterConnections: [],
       openRouterModelKeys: {},
+      registeredOpenRouterModels: [],
     })),
   ]);
 
@@ -98,6 +109,7 @@ export async function tenantProxyForPlan(
   // api-key vendor) — the same set the proxy's BYO boundary enforces, so a gated model
   // can't name a vendor the proxy would then filter out.
   const byoVendors = byoVendorIdsFromCredentials(creds);
+  const registeredModels = creds.registeredOpenRouterModels ?? [];
 
   const proxy = llmProxyForPlan(env, plan.effectivePlan, plan.premiumOverride, {
     ...(opts?.codingOnly ? { codingOnly: true, backstopModels: CODING_BACKSTOP_MODELS } : {}),
@@ -127,26 +139,31 @@ export async function tenantProxyForPlan(
     ...(byoVendors.size > 0 ? { vendorCallTimeoutMs: PREMIUM_VENDOR_CALL_TIMEOUT_MS } : {}),
   });
 
-  return { proxy, byoVendors };
+  return { proxy, byoVendors, registeredModels, hasByo: byoVendors.size > 0 || registeredModels.length > 0 };
 }
 
 /**
  * Resolve the `model` to pass to `.complete()` while honouring the connected account:
  * an explicit choice (agent base model, workflow node config, compile-run pin) is kept
- * ONLY when it preempts the BYO seed (nothing connected, or the model is on the tenant's
- * OWN account — see {@link explicitModelPreemptsByo}). Otherwise returns `undefined` so
- * `.complete()` auto-seeds the connected flagship. Single helper so every call site gates
- * its explicit model identically.
+ * ONLY when it preempts the BYO seed (nothing rankable connected, or the model is on the
+ * tenant's OWN account / registered list — see {@link explicitModelPreemptsByo}).
+ * Otherwise returns `undefined` so `.complete()` auto-seeds by the tenant's own BYO
+ * precedence. Single helper so every call site gates its explicit model identically.
+ *
+ * Pass `registeredModels` (from {@link tenantProxyForPlan}) whenever you have it: without
+ * it, a deliberately-pinned OpenRouter connection ref is discarded as "not BYO", and a
+ * tenant whose only account IS a connection has every stale default treated as preempting.
  */
 export function byoAwareModel(
   explicit: string | undefined | null,
   byoVendors: ReadonlySet<string> | null | undefined,
+  registeredModels?: ModelRefs,
 ): string | undefined {
   // Rewrite a superseded id BEFORE the BYO gate reads it: `vendorForModel` inside
   // `explicitModelPreemptsByo` must see the id we will actually dispatch, or a stale
   // Anthropic pin could be judged against one id and then dispatched as another.
   const canonical = canonicalModelId(explicit) || undefined;
-  return explicitModelPreemptsByo(canonical, byoVendors) ? canonical : undefined;
+  return explicitModelPreemptsByo(canonical, byoVendors, registeredModels) ? canonical : undefined;
 }
 
 export interface CompleteForTenantOptions {
@@ -181,10 +198,10 @@ export async function completeForTenant(
   request: ChatCompletionRequest,
   opts?: CompleteForTenantOptions,
 ): Promise<ProxyResult> {
-  const { proxy, byoVendors } = await tenantProxyForPlan(env, tenantId, {
+  const { proxy, byoVendors, registeredModels } = await tenantProxyForPlan(env, tenantId, {
     ...(opts?.codingOnly ? { codingOnly: true } : {}),
   });
-  const model = byoAwareModel(opts?.explicitModel ?? request.model, byoVendors);
+  const model = byoAwareModel(opts?.explicitModel ?? request.model, byoVendors, registeredModels);
   const result = await proxy.complete({ ...request, model }, undefined, opts?.traceId);
   if (opts?.meterUseCase) {
     void recordProxyUsage(buildDatabase(env), env, {
