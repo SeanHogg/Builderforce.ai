@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Board-sync sweep — the cron-driven half of external board synchronization.
  *
@@ -56,10 +57,13 @@ async function engineForConnection(
   db: Db,
   secret: string,
   conn: typeof boardConnections.$inferSelect,
+  env: Env,
 ): Promise<SyncEngine | null> {
   const loaded = await loadConnectionCredentials(db, conn.tenantId, conn.credentialId, secret);
   if (!loaded) return null; // bad/missing credential — skip, surfaced via sync log on next manual run
-  const store = createDrizzleStore(db);
+  // `env` is what lets a ticket synced IN fire the lane auto-run trigger (the funnel
+  // in drizzleStore.upsertTask); without it the inbound path lands tickets silently.
+  const store = createDrizzleStore(db, env);
   return new SyncEngine(store, (sc: StoredConnection) =>
     createBoardProvider(
       sc.provider,
@@ -101,12 +105,12 @@ export async function runBoardSyncSweep(env: BoardSyncSweepEnv): Promise<BoardSy
           { credentials: loaded.credentials, baseUrl: loaded.baseUrl, externalBoardId: conn.externalBoardId },
           fetch,
         );
-        await syncItsmConnection(db, env as unknown as Env, conn, provider, createDrizzleStore(db));
+        await syncItsmConnection(db, env as unknown as Env, conn, provider, createDrizzleStore(db, env as unknown as Env));
         synced++;
         continue; // read-only into support_tickets; no outbox drain
       }
 
-      const engine = await engineForConnection(db, secret, conn);
+      const engine = await engineForConnection(db, secret, conn, env as unknown as Env);
       if (!engine) {
         errors++;
         continue;
@@ -118,7 +122,7 @@ export async function runBoardSyncSweep(env: BoardSyncSweepEnv): Promise<BoardSy
       drained += drainResult.succeeded;
     } catch (e) {
       errors++;
-      console.error(`[cron:board-sync] connection ${conn.id} failed`, e);
+      reportCaughtError(e, { source: "application/boardsync/runBoardSyncSweep.ts", operation: "runBoardSyncSweep", context: { logMessage: `[cron:board-sync] connection ${conn.id} failed`, details: e } });
     }
   }
 

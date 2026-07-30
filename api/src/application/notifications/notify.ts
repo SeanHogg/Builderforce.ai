@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Marketplace notifications.
  *
@@ -7,10 +8,10 @@
  * routes through, so the recipient always has a durable in-app feed regardless of
  * email config. Best-effort: notification failures never block the triggering action.
  */
-import type { neon } from '@neondatabase/serverless';
+import { eq } from 'drizzle-orm';
 import type { Env } from '../../env';
-
-type Sql = ReturnType<typeof neon<false, false>>;
+import type { Db } from '../../infrastructure/database/connection';
+import { freelancerNotifications, users } from '../../infrastructure/database/schema';
 
 export interface NotifyInput {
   userId: string;
@@ -22,18 +23,29 @@ export interface NotifyInput {
 }
 
 /** Insert an in-app notification for the recipient (+ optional email). */
-export async function notify(sql: Sql, env: Pick<Env, 'NOTIFY_EMAIL_URL' | 'NOTIFY_EMAIL_KEY'>, input: NotifyInput): Promise<void> {
+export async function notify(db: Db, env: Pick<Env, 'NOTIFY_EMAIL_URL' | 'NOTIFY_EMAIL_KEY'>, input: NotifyInput): Promise<void> {
   try {
-    await sql`
-      INSERT INTO freelancer_notifications (user_id, tenant_id, kind, title, body, ref)
-      VALUES (${input.userId}, ${input.tenantId ?? null}, ${input.kind}, ${input.title.slice(0, 200)}, ${input.body ?? null}, ${input.ref ?? null})
-    `;
+    await db.insert(freelancerNotifications).values({
+      userId: input.userId,
+      tenantId: input.tenantId ?? null,
+      kind: input.kind,
+      title: input.title.slice(0, 200),
+      body: input.body ?? null,
+      ref: input.ref ?? null,
+    });
   } catch (err) {
-    console.warn('[notify] insert failed:', (err as Error)?.message);
+    // Deliberately non-fatal (see docblock), but the drop must not be silent:
+    // this row IS the durable feed, so losing it means the recipient never learns
+    // of the event by any channel. Log enough to identify which one was lost.
+    reportCaughtError(err, { source: "application/notifications/notify.ts", operation: "notify", context: { logMessage: `[notify] in-app notification LOST kind=${input.kind} user=${input.userId}:`, details: (err as Error)?.message } });
   }
   if (env.NOTIFY_EMAIL_URL) {
     try {
-      const [u] = await sql`SELECT email FROM users WHERE id = ${input.userId}` as unknown as { email: string }[];
+      const [u] = await db
+        .select({ email: users.email })
+        .from(users)
+        .where(eq(users.id, input.userId))
+        .limit(1);
       if (u?.email) {
         await fetch(env.NOTIFY_EMAIL_URL, {
           method: 'POST',
@@ -42,7 +54,7 @@ export async function notify(sql: Sql, env: Pick<Env, 'NOTIFY_EMAIL_URL' | 'NOTI
         });
       }
     } catch (err) {
-      console.warn('[notify] email failed:', (err as Error)?.message);
+      reportCaughtError(err, { source: "application/notifications/notify.ts", operation: "notify", level: 'warning', context: { logMessage: `[notify] email failed kind=${input.kind} user=${input.userId}:`, details: (err as Error)?.message } });
     }
   }
 }

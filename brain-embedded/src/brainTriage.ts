@@ -9,7 +9,9 @@
  * straight into a bug report.
  */
 
+import { announcesUntakenAction } from '@builderforce/agent-stall';
 import type { BrainMessage } from './types';
+import { traceWithPersistedSteps } from './persistedSteps';
 
 /** One step of the Brain agent loop, recorded as it runs. */
 export interface BrainTraceEvent {
@@ -59,6 +61,13 @@ export interface BrainTraceEvent {
   resultBytes?: number;
   /** `tool` steps: true when the result sent to the model was truncated. */
   truncated?: boolean;
+  /**
+   * True when this event was RECONSTRUCTED from a durable step row rather than
+   * recorded live this session (see `persistedSteps.traceWithPersistedSteps`).
+   * Diagnostics uses it to tell a fully-observed run from a partially-recovered
+   * one, so mismatched coverage is labelled instead of silently averaged in.
+   */
+  recovered?: boolean;
 }
 
 /**
@@ -140,6 +149,154 @@ export function detectUnbackedTicketClaim(events: BrainTraceEvent[], messages: B
   );
   if (filedOk) return false;
   return messages.some((m) => m.role === 'assistant' && typeof m.content === 'string' && TICKET_CLAIM.test(m.content));
+}
+
+/**
+ * The "it doesn't execute, it just dies" signature: an assistant turn that NARRATES a
+ * tool call — announcing it in prose, or writing the bare call as text — while the run
+ * recorded ZERO tool steps.
+ *
+ * This is a model fault, not a user one: the agent loop only runs structured
+ * `toolCalls` (plus the inline dialects `xmlToolCalls` lifts), so a model that writes
+ * its intent as plain text achieves nothing. Without this detector the triage block
+ * scores such a run "healthy" (no errors, no truncation, no context pressure), which
+ * is exactly backwards.
+ *
+ * Deliberately reuses `announcesUntakenAction` — the SAME detector the run loop gates
+ * its stall recovery on. Diagnostics that disagreed with the loop about what counts as
+ * a stall would be worse than none: a report could call a run healthy while the loop
+ * had spent three recovery turns on it.
+ *
+ * Pure over the merged trace + visible messages, so both copy surfaces flag it
+ * identically.
+ */
+export function detectAnnouncedButUnmadeToolCall(events: BrainTraceEvent[], messages: BrainMessage[]): boolean {
+  if (events.some((e) => e.category === 'tool')) return false;
+  return messages.some(
+    (m) => m.role === 'assistant' && typeof m.content === 'string' && announcesUntakenAction(m.content),
+  );
+}
+
+/**
+ * The loop's own self-diagnosis steps, by label. These are what turn "nine turns, zero
+ * tool calls" from a mystery into a narrative: the loop SAW the stall, re-prompted, and
+ * (optionally) switched models. They are persisted durably by the run store, so a
+ * reopened chat still reports them.
+ */
+const LOOP_STEP = {
+  recovery: 'loop.recover_announced_tool_call',
+  failover: 'loop.model_failover',
+  unrecovered: 'loop.stall_unrecovered',
+} as const;
+
+/** How many times this run re-prompted a model that announced a call without making one. */
+export function stallRecoveriesInTrace(events: BrainTraceEvent[]): number {
+  return events.filter((e) => e.label === LOOP_STEP.recovery).length;
+}
+
+/** How many times this run switched MODELS because one wouldn't emit tool calls. */
+export function modelFailoversInTrace(events: BrainTraceEvent[]): number {
+  return events.filter((e) => e.label === LOOP_STEP.failover).length;
+}
+
+/** True when the stall survived every recovery AND every failover this run. */
+export function stallUnrecoveredInTrace(events: BrainTraceEvent[]): boolean {
+  return events.some((e) => e.label === LOOP_STEP.unrecovered);
+}
+
+/** Tool-catalog exposure for a run, read off the `llm` turns the loop records. */
+export interface ToolExposure {
+  /** Tools advertised on the LAST measured turn (what the model could call at the end). */
+  lastTurn: number | null;
+  /** Fewest tools advertised on any measured turn — a zero here explains everything. */
+  min: number | null;
+  /** Size of the whole registered catalog the selection drew from. */
+  catalog: number | null;
+}
+
+/**
+ * How many tools the model was actually OFFERED, per turn, versus how many exist.
+ *
+ * The chat-diagnostics header can only report the registry-wide total and the per-turn
+ * CEILING (`up to 64 advertised`). That is not the same question: a turn that was handed
+ * ZERO tools and a turn that was handed sixty-four and ignored them produce byte-identical
+ * reports, and only one of them is the model's fault. The loop now records the real
+ * per-turn number, and this reads it back. Nulls when the run predates the field.
+ */
+export function toolExposureInTrace(events: BrainTraceEvent[]): ToolExposure {
+  let lastTurn: number | null = null;
+  let min: number | null = null;
+  let catalog: number | null = null;
+  for (const ev of events) {
+    if (ev.category !== 'llm') continue;
+    const a = ev.args as { advertisedTools?: unknown; catalogTools?: unknown } | undefined;
+    if (typeof a?.advertisedTools === 'number') {
+      lastTurn = a.advertisedTools;
+      min = min == null ? a.advertisedTools : Math.min(min, a.advertisedTools);
+    }
+    if (typeof a?.catalogTools === 'number') catalog = a.catalogTools;
+  }
+  return { lastTurn, min, catalog };
+}
+
+/**
+ * Tools the model WROTE OUT by name on a turn that made no call, which it had never been
+ * advertised — recorded per-turn by the run loop (only it holds both halves).
+ *
+ * This is the signal that separates two failures the old report collapsed into one
+ * "the model won't emit tool calls, try another":
+ *   - the model narrated a tool it COULD see  ⇒ genuinely a model/provider fault;
+ *   - the model narrated a tool it could NOT see ⇒ our per-turn tool selection dropped
+ *     the tool the prompt told it to call, and no model can emit a call for a function
+ *     it was never given. Swapping models does nothing.
+ * De-duplicated, first-seen order.
+ */
+export function narratedUnadvertisedInTrace(events: BrainTraceEvent[]): string[] {
+  const seen: string[] = [];
+  for (const ev of events) {
+    const raw = (ev.args as { narratedUnadvertised?: unknown } | undefined)?.narratedUnadvertised;
+    if (!Array.isArray(raw)) continue;
+    for (const n of raw) {
+      if (typeof n === 'string' && n && !seen.includes(n)) seen.push(n);
+    }
+  }
+  return seen;
+}
+
+/** One turn the memory-first short-circuit answered — the LLM was never called. */
+export interface MemoryAnsweredTurn {
+  /** `evermind` = the project's SSM GENERATED the reply; `qa-cache` = a stored answer was replayed. */
+  source: 'evermind' | 'qa-cache';
+  /** Evermind head version that served it (evermind source only). */
+  version?: number;
+  /** WHICH project's Evermind served it — a project can target several heads. */
+  projectId?: number;
+}
+
+/**
+ * Turns the memory-first short-circuit answered, taken from the run loop's own
+ * `evermind.answer` / `memory.answer` recall steps (`result.skippedLlm`).
+ *
+ * Without this the report is actively MISLEADING: a memory-answered turn has zero
+ * `llm` turns and zero tool steps, which reads exactly like "the model refused to
+ * emit tool calls" — and the prescribed remedy ("try a different model") cannot
+ * help, because no model ran. Naming it turns an unexplained blank run into the
+ * one-line answer: memory replied instead of the model.
+ */
+export function memoryAnswersInTrace(events: BrainTraceEvent[]): MemoryAnsweredTurn[] {
+  const out: MemoryAnsweredTurn[] = [];
+  for (const ev of events) {
+    if (ev.category !== 'recall') continue;
+    if (ev.label !== 'evermind.answer' && ev.label !== 'memory.answer') continue;
+    const r = ev.result as { source?: unknown; skippedLlm?: unknown; version?: unknown; evermindProjectId?: unknown } | undefined;
+    if (r?.skippedLlm !== true) continue;
+    out.push({
+      source: r.source === 'evermind' ? 'evermind' : 'qa-cache',
+      ...(typeof r.version === 'number' ? { version: r.version } : {}),
+      ...(typeof r.evermindProjectId === 'number' ? { projectId: r.evermindProjectId } : {}),
+    });
+  }
+  return out;
 }
 
 function cap(s: unknown, n = 2000): string {
@@ -330,8 +487,67 @@ export interface BrainDiagnostics {
   downgradeEvents: number;
   /** Turns that ended on `length` or produced empty text. */
   emptyOrLengthFinishes: number;
-  /** Best-effort verdict — the header a triager reads first. */
-  likelyCause: 'context-exhaustion' | 'model-degradation' | 'inconclusive';
+  /**
+   * True when a turn NARRATED a tool call ("I'll call the tool…", `builtin_…`) while
+   * the run made none — the model isn't emitting structured `toolCalls`, so nothing
+   * ever executes. See {@link detectAnnouncedButUnmadeToolCall}.
+   */
+  announcedUnmadeToolCall: boolean;
+  /** How many times the loop re-prompted a model that announced a call without making one. */
+  stallRecoveries: number;
+  /** How many times the loop switched MODELS after one burned its whole stall budget. */
+  modelFailovers: number;
+  /** True when the stall survived every recovery and every failover — the run gave up. */
+  stallUnrecovered: boolean;
+  /** How many tools the model was offered on the last measured turn (null ⇒ not recorded). */
+  advertisedToolsLastTurn: number | null;
+  /** Fewest tools offered on any measured turn — a 0 explains a whole run by itself. */
+  advertisedToolsMin: number | null;
+  /** Size of the registered catalog the per-turn selection drew from. */
+  catalogTools: number | null;
+  /**
+   * Tools the model named in prose on a call-less turn that it was never advertised.
+   * Non-empty means the request was impossible as framed — see
+   * {@link narratedUnadvertisedInTrace}.
+   */
+  narratedUnadvertisedTools: string[];
+  /**
+   * Turns the memory-first short-circuit answered WITHOUT calling a model (see
+   * {@link memoryAnswersInTrace}). A run made only of these has no turns, no tokens
+   * and no tool calls — the exact shape of a "the model won't call tools" run, which
+   * is why it must be named rather than left to inference.
+   */
+  memoryAnswers: MemoryAnsweredTurn[];
+  /**
+   * True when tool steps were RECOVERED from durable history but no `llm` turn
+   * covers them — i.e. the chat predates durable turn records (or was reopened),
+   * so the turn/token figures describe only this session while the tool figures
+   * describe the whole conversation. Reported so the two aren't read as one run's
+   * totals: "Turns: 2 · Tool calls: 44" is nonsense unless the mismatch is named.
+   */
+  turnCoveragePartial: boolean;
+  /**
+   * Best-effort verdict — the header a triager reads first. `healthy` is distinct
+   * from `inconclusive`: the former means there is no failure to explain, the
+   * latter that there IS one but the signals don't separate A from B. Collapsing
+   * both into "inconclusive" made a clean run read as an unsolved problem.
+   *
+   * `tool-calls-not-emitted` outranks the rest: a run that narrated its calls did
+   * nothing at all, and every other signal on it reads clean.
+   *
+   * `no-tools-advertised` and `tool-not-advertised` outrank even that, because they are
+   * OUR fault rather than the model's, and the remedy ("pick a different model") that
+   * `tool-calls-not-emitted` prescribes is actively wrong for them.
+   */
+  likelyCause:
+    | 'memory-answered'
+    | 'no-tools-advertised'
+    | 'tool-not-advertised'
+    | 'tool-calls-not-emitted'
+    | 'context-exhaustion'
+    | 'model-degradation'
+    | 'inconclusive'
+    | 'healthy';
 }
 
 /** Byte length of a JSON-serialized value (UTF-16 length is a fine proxy here). */
@@ -344,8 +560,16 @@ function byteLen(v: unknown): number {
  * Derive {@link BrainDiagnostics} from a recorded trace. Pure — no clock, no I/O
  * — so both the web report and the VS Code transcript compute the identical
  * block from the same events (single source of truth for A-vs-B triage).
+ *
+ * `messages` is the visible conversation. It is optional only so older callers keep
+ * compiling; without it the narrated-tool-call verdict can't be reached, so every
+ * surface should pass it.
  */
-export function computeBrainDiagnostics(events: BrainTraceEvent[], requestedModel?: string): BrainDiagnostics {
+export function computeBrainDiagnostics(
+  events: BrainTraceEvent[],
+  requestedModel?: string,
+  messages: BrainMessage[] = [],
+): BrainDiagnostics {
   const llm = events.filter((e) => e.category === 'llm');
   const toolEvents = events.filter((e) => e.category === 'tool');
   const errors = events.filter((e) => e.isError || e.category === 'error');
@@ -377,8 +601,20 @@ export function computeBrainDiagnostics(events: BrainTraceEvent[], requestedMode
     const toolCallsThisTurn = (ev.args as { toolCalls?: unknown } | undefined)?.toolCalls;
     const askedNoTools = typeof toolCallsThisTurn === 'number' ? toolCallsThisTurn === 0 : true;
     if (finish === 'length' || (emptyText && askedNoTools)) emptyOrLengthFinishes += 1;
-    const resolved = (ev.args as { model?: unknown } | undefined)?.model;
-    if (req && typeof resolved === 'string' && resolved && resolved !== 'default' && resolved !== req) downgradeEvents += 1;
+    // A DOWNGRADE is the gateway answering with a model we did not ask for on THAT
+    // turn — a context-exhaustion symptom. Compare against the per-turn
+    // `requestedModel` the loop records, not the run's original ask: when the loop
+    // deliberately fails over (a model that would not emit tool calls), every
+    // subsequent turn differs from the original ask and used to be counted as a
+    // silent gateway downgrade — so a run the loop successfully RESCUED reported
+    // "likely context exhaustion". Falls back to the run-level ask for older traces
+    // that predate the per-turn field.
+    const a = ev.args as { model?: unknown; requestedModel?: unknown } | undefined;
+    const asked = typeof a?.requestedModel === 'string' && a.requestedModel !== 'default'
+      ? a.requestedModel
+      : req;
+    const resolved = a?.model;
+    if (asked && typeof resolved === 'string' && resolved && resolved !== 'default' && resolved !== asked) downgradeEvents += 1;
   }
 
   let toolResultBytes = 0;
@@ -393,6 +629,15 @@ export function computeBrainDiagnostics(events: BrainTraceEvent[], requestedMode
 
   const modelsUsed = modelsUsedInTrace(events);
   const evermindUsed = modelsUsed.filter(isEvermindModel);
+  const memoryAnswers = memoryAnswersInTrace(events);
+
+  // Coverage check. Tool steps are persisted durably; `llm` turns only became so
+  // later — so a chat from before that (or one reopened mid-run) recovers its tool
+  // chain from history with no turns to match. Reporting both as one run's totals
+  // is how "Turns: 2 · Tool calls: 44" happens.
+  const recoveredToolEvents = toolEvents.filter((e) => e.recovered).length;
+  const recoveredTurns = llm.filter((e) => e.recovered).length;
+  const turnCoveragePartial = recoveredToolEvents > 0 && recoveredTurns === 0;
 
   // Verdict. Context-exhaustion signals: big prompt tokens, truncated tool
   // results, or a model downgrade/length-finish. Degradation signals: an
@@ -403,10 +648,43 @@ export function computeBrainDiagnostics(events: BrainTraceEvent[], requestedMode
   const degradationSignal =
     evermindUsed.length > 0 && emptyOrLengthFinishes > 0 &&
     (!tokensMeasured || promptTokenPeak < 24_000) && truncatedToolResults === 0;
+  // Nothing went wrong: no errors, no aborted loop, no truncated/empty turn, and
+  // no context pressure. There is no failure to attribute — say so rather than
+  // implying an unresolved one. (A run that did NOTHING is not evidence of health,
+  // so require it to have actually produced work.)
+  const didWork = toolEvents.length > 0 || completionTokenTotal > 0 || llm.length > 0;
+  // A run that narrated its tool calls instead of emitting them produces NO errors,
+  // NO truncation and NO context pressure — it scored "healthy" while accomplishing
+  // nothing. It outranks the other verdicts because it explains the whole run.
+  const announcedUnmadeToolCall = detectAnnouncedButUnmadeToolCall(events, messages);
+  // How the loop responded to the stall, and what the model could actually see. These
+  // three are the difference between "the model is broken" and "we handed it nothing".
+  const stallRecoveries = stallRecoveriesInTrace(events);
+  const modelFailovers = modelFailoversInTrace(events);
+  const stallUnrecovered = stallUnrecoveredInTrace(events);
+  const exposure = toolExposureInTrace(events);
+  const narratedUnadvertisedTools = narratedUnadvertisedInTrace(events);
+  // A turn offered ZERO tools cannot emit one. That is a configuration/catalog failure
+  // (the MCP catalog fetch failed, or nothing was registered), never a model fault.
+  const noToolsAdvertised = exposure.min === 0 && toolEvents.length === 0;
+  // A run whose ONLY turn came from memory never called a model at all. Every
+  // model-fault verdict below is inapplicable to it (there is no model to blame and
+  // no tool call it could have emitted), so this outranks them — but only when NO
+  // llm turn ran, so a run that answered from memory once and used the model for the
+  // rest still gets triaged on its real turns.
+  const memoryOnlyRun = memoryAnswers.length > 0 && llm.length === 0;
+  const healthy =
+    errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal
+    && !announcedUnmadeToolCall && didWork;
   const likelyCause: BrainDiagnostics['likelyCause'] =
-    contextSignal && !degradationSignal ? 'context-exhaustion'
-      : degradationSignal && !contextSignal ? 'model-degradation'
-        : 'inconclusive';
+    memoryOnlyRun ? 'memory-answered'
+      : noToolsAdvertised ? 'no-tools-advertised'
+        : narratedUnadvertisedTools.length > 0 ? 'tool-not-advertised'
+          : announcedUnmadeToolCall ? 'tool-calls-not-emitted'
+            : contextSignal && !degradationSignal ? 'context-exhaustion'
+              : degradationSignal && !contextSignal ? 'model-degradation'
+                : healthy ? 'healthy'
+                  : 'inconclusive';
 
   return {
     turns: llm.length,
@@ -424,6 +702,16 @@ export function computeBrainDiagnostics(events: BrainTraceEvent[], requestedMode
     evermindUsed,
     downgradeEvents,
     emptyOrLengthFinishes,
+    announcedUnmadeToolCall,
+    stallRecoveries,
+    modelFailovers,
+    stallUnrecovered,
+    advertisedToolsLastTurn: exposure.lastTurn,
+    advertisedToolsMin: exposure.min,
+    catalogTools: exposure.catalog,
+    narratedUnadvertisedTools,
+    memoryAnswers,
+    turnCoveragePartial,
     likelyCause,
   };
 }
@@ -439,28 +727,87 @@ function kb(bytes: number): string {
  * a leading `--- Diagnostics ---` header and returns the lines (caller joins).
  */
 export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
+  const evermindAnswers = d.memoryAnswers?.filter((m) => m.source === 'evermind') ?? [];
   const verdict =
-    d.likelyCause === 'context-exhaustion'
-      ? 'Likely CONTEXT EXHAUSTION (case A) — the transcript outgrew the model window.'
-      : d.likelyCause === 'model-degradation'
-        ? 'Likely MODEL DEGRADATION (case B) — an Evermind/SSM turn returned empty while tokens stayed low.'
-        : 'Inconclusive — not enough signal to separate context exhaustion from model degradation.';
+    d.likelyCause === 'memory-answered'
+      ? `ANSWERED FROM MEMORY — no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === 'evermind' ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ''}${m.version != null ? ` v${m.version}` : ''}` : 'the Q&A cache').join(', ')}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? 'The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work — if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head.' : 'The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model.'} Switching models changes nothing here.`
+    : d.likelyCause === 'no-tools-advertised'
+      ? 'NO TOOLS ADVERTISED — at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.'
+      : d.likelyCause === 'tool-not-advertised'
+        ? `TOOL NOT ADVERTISED — a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(', ')} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for — not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.`
+        : d.likelyCause === 'tool-calls-not-emitted'
+          ? 'TOOL CALLS NOT EMITTED — a turn NARRATED a tool call in prose ("I\'ll call the tool…", a bare `builtin_…` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.'
+          : d.likelyCause === 'context-exhaustion'
+            ? 'Likely CONTEXT EXHAUSTION (case A) — the transcript outgrew the model window.'
+            : d.likelyCause === 'model-degradation'
+              ? 'Likely MODEL DEGRADATION (case B) — an Evermind/SSM turn returned empty while tokens stayed low.'
+              : d.likelyCause === 'healthy'
+                ? 'No failure signal — no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging.'
+                : 'Inconclusive — not enough signal to separate context exhaustion from model degradation.';
 
   const lines: string[] = ['--- Diagnostics ---', `Likely cause: ${verdict}`];
-  lines.push(`Turns: ${d.turns} · Tool calls: ${d.toolCalls} · Errors: ${d.errors}${d.loopExhausted ? ' · LOOP EXHAUSTED' : ''}`);
+  // When the turn/token figures cover only THIS session while the tool figures
+  // cover the whole conversation, say so on the line itself — read together
+  // without it, "Turns: 2 · Tool calls: 44" looks like corrupt data.
+  const scope = d.turnCoveragePartial ? ' (this session)' : '';
+  lines.push(`Turns${scope}: ${d.turns} · Tool calls: ${d.toolCalls} · Errors: ${d.errors}${d.loopExhausted ? ' · LOOP EXHAUSTED' : ''}`);
   if (d.tokensMeasured) {
     lines.push(
-      `Tokens: prompt peak ${d.promptTokenPeak.toLocaleString()} · last-turn prompt ${d.lastPromptTokens.toLocaleString()} · completion total ${d.completionTokenTotal.toLocaleString()}`,
+      `Tokens${scope}: prompt peak ${d.promptTokenPeak.toLocaleString()} · last-turn prompt ${d.lastPromptTokens.toLocaleString()} · completion total ${d.completionTokenTotal.toLocaleString()}`,
     );
   } else {
     lines.push('Tokens: not reported by the gateway for this run.');
   }
+  if (d.turnCoveragePartial) {
+    lines.push(
+      'Coverage: tool steps were recovered from this chat\'s durable history, but its earlier TURNS predate durable turn records — so the turn and token counts above describe only the current session, not the whole conversation. Send a new turn to capture a fully-measured run.',
+    );
+  }
   lines.push(
     `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` · largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ''}${d.truncatedToolResults ? ` · ${d.truncatedToolResults} truncated before the model saw them` : ''}`,
   );
+  // What the model could actually CALL, per turn — not the registry-wide total. A run
+  // whose turns saw 0 tools and a run whose turns saw 64 and ignored them used to render
+  // identically, which is how "try a different model" became the standing advice for a
+  // fault that no model change could fix.
+  if (d.advertisedToolsLastTurn != null) {
+    const range =
+      d.advertisedToolsMin != null && d.advertisedToolsMin !== d.advertisedToolsLastTurn
+        ? `${d.advertisedToolsMin}–${d.advertisedToolsLastTurn}`
+        : `${d.advertisedToolsLastTurn}`;
+    lines.push(
+      `Tools advertised per turn: ${range}${d.catalogTools ? ` (of ${d.catalogTools} in the catalog)` : ''}${d.advertisedToolsMin === 0 ? ' · ⚠ a turn was offered NONE' : ''}`,
+    );
+  } else {
+    lines.push('Tools advertised per turn: not recorded (this run predates per-turn tool accounting).');
+  }
+  if (d.narratedUnadvertisedTools.length) {
+    lines.push(`Narrated but never advertised: ${d.narratedUnadvertisedTools.join(', ')} — the model was told to call a tool it was not given.`);
+  }
+  // How the loop FOUGHT the stall. Without these a report showing nine turns and zero
+  // tool calls reads as though nothing intervened, when in fact the loop re-prompted
+  // three times and swapped models twice before giving up.
+  if (d.stallRecoveries > 0 || d.modelFailovers > 0 || d.stallUnrecovered) {
+    lines.push(
+      `Stall handling: ${d.stallRecoveries} re-prompt(s) · ${d.modelFailovers} model failover(s)${d.stallUnrecovered ? ' · GAVE UP (the stall survived every attempt)' : ' · recovered'}`,
+    );
+  }
   if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
   if (d.emptyOrLengthFinishes > 0) lines.push(`Degenerate turns: ${d.emptyOrLengthFinishes} ended on \`length\` or returned empty text.`);
   if (d.evermindUsed.length) lines.push(`Evermind/SSM answered: ${d.evermindUsed.join(', ')}`);
+  // Always reported when it happened, even on a mixed run where the model handled the
+  // other turns — otherwise a memory-answered reply is invisible in the numbers and the
+  // reader attributes its (tool-less, token-less) shape to the model.
+  if (d.memoryAnswers?.length) {
+    lines.push(
+      `Answered from memory (LLM skipped): ${d.memoryAnswers.length} turn(s) — `
+      + d.memoryAnswers
+        .map((m) => m.source === 'evermind'
+          ? `Evermind SSM${m.projectId != null ? ` (project #${m.projectId}` : ''}${m.version != null ? `${m.projectId != null ? ', ' : ' ('}v${m.version}` : ''}${m.projectId != null || m.version != null ? ')' : ''}`
+          : 'Q&A cache')
+        .join(', '),
+    );
+  }
   return lines;
 }
 
@@ -490,7 +837,12 @@ export interface BuildBrainTriageOptions {
  * header → errors-first → full event log → derived log lines → transcript.
  */
 export function buildBrainTriageReport(opts: BuildBrainTriageOptions): string {
-  const { capturedAt, events, messages = [], chatId, chatTitle, agentLabel, configuredModel, surface, error } = opts;
+  const { capturedAt, messages = [], chatId, chatTitle, agentLabel, configuredModel, surface, error } = opts;
+  // The caller's `events` are the LIVE trace, which only covers the current
+  // session — a reopened or resumed chat holds none of the earlier run's steps in
+  // memory, only their durable `role:'tool'` rows. Merging them back in is what
+  // stops the report claiming `Tool calls: 0` for a run that made twenty.
+  const events = traceWithPersistedSteps(messages, opts.events);
   const errors = events.filter((e) => e.isError || e.category === 'error');
   const lines: string[] = [];
 
@@ -507,7 +859,7 @@ export function buildBrainTriageReport(opts: BuildBrainTriageOptions): string {
 
   // Diagnostics block — the A-vs-B verdict + the token/tool-payload/downgrade
   // numbers behind it. Same builder the VS Code transcript uses.
-  lines.push('', ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel)));
+  lines.push('', ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel, messages)));
 
   // Structural honesty flag — a "saved the file" claim with no successful file-write
   // tool call this run (the "it said it updated the file but didn't" failure mode).

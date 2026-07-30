@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Meetings — /api/meetings/*
  *
@@ -27,6 +28,8 @@ import { pushMeetingEvent, deleteMeetingEvent } from '../../application/calendar
 import type { CalendarProviderName } from '../../application/calendar/calendarProviders';
 import { loadExternalBusy, mergeBusy } from '../../application/calendar/calendarFreeBusy';
 import { loadProjectTeamMembers } from '../../application/metrics/assigneeRecommender';
+import { findActiveCeremonyForMeeting } from '../../application/ceremony/ceremonyMeeting';
+import { recordCeremonyPresence } from '../../application/ceremony/concludeCeremony';
 import { BrainService } from '../../application/brain/BrainService';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import {
@@ -247,7 +250,9 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
         if (!('error' in resolved)) {
           await db.update(meetings).set({ chatId: resolved.id as number, updatedAt: new Date() }).where(eq(meetings.id, meeting.id));
         }
-      } catch { /* team chat is a nice-to-have on a meeting; never block creation */ }
+      } catch (error) { /* team chat is a nice-to-have on a meeting; never block creation */ 
+        reportCaughtError(error, { source: "presentation/routes/meetingRoutes.ts", operation: "createMeetingRoutes" });
+      }
     }
 
     // Organizer is always attendee #0 (host, auto-accepted). De-dupe by ref.
@@ -286,14 +291,13 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     return c.json(await hydrate(tenantId, meeting.id), 201);
   });
 
-  // ── Detail ─────────────────────────────────────────────────────────────────
-  r.get('/:id', async (c) => {
-    const { tenantId } = scope(c);
-    const detail = await hydrate(tenantId, c.req.param('id'));
-    if (!detail) return c.json({ error: 'Not found' }, 404);
-    if (!(await canAccess(c, detail.meeting, detail.attendees))) return c.json({ error: 'Not authorized for this meeting' }, 403);
-    return c.json(detail);
-  });
+  // NOTE: the single-segment DETAIL route `GET /:id` is registered at the BOTTOM of this
+  // file, after every literal single-segment path (`/availability`, `/freebusy`,
+  // `/suggest`). Hono matches in registration order and the first handler to return a
+  // response wins, so a `/:id` registered here swallowed all three: `GET /freebusy` ran
+  // the detail handler, which compared a `uuid` column to the string 'freebusy' and blew
+  // up in Postgres — taking out the meeting-time suggestions the scheduling panel calls.
+  // Two-segment routes like `/:id/transcript` are unaffected and stay where they read best.
 
   // ── Join — returns the room key + ICE config; marks presence + goes live ──────
   r.post('/:id/join', async (c) => {
@@ -327,6 +331,29 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
         memberName: body.name || 'Guest', email: body.email ?? null, role: 'attendee', response: 'accepted', joinedAt: now,
       });
     }
+
+    // WRITE THROUGH TO THE CEREMONY (0366). If this meeting is the shell for a live
+    // standup/planning session, joining the call IS attending the ceremony — and the
+    // ceremony, not `meeting_attendees`, is the side that owns attendance and feeds the
+    // rules that can reassign someone's work. Routed through the SAME
+    // `recordCeremonyPresence` the round-table heartbeat uses, so the two surfaces cannot
+    // produce disagreeing records. Best-effort: never cost someone their video call.
+    try {
+      const session = await findActiveCeremonyForMeeting(db, tenantId, id);
+      if (session) {
+        await recordCeremonyPresence(db, {
+          tenantId,
+          segmentId: session.segmentId,
+          sessionId: session.id,
+          memberKind: 'human',
+          memberRef: userId,
+          memberName: mine?.memberName || body.name || 'Guest',
+        });
+      }
+    } catch (err) {
+      reportCaughtError(err, { source: "presentation/routes/meetingRoutes.ts", operation: "createMeetingRoutes", context: { logMessage: `[meeting:join] ceremony presence write-through failed meeting=${id}`, details: err } });
+    }
+
     return c.json({ roomKey: m.roomKey, videoEnabled: m.videoEnabled, iceServers: await iceServers(env), meeting: await hydrate(tenantId, id) });
   });
 
@@ -441,7 +468,9 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     await db.update(meetings).set({ status: 'ended', endedAt: now, updatedAt: now }).where(eq(meetings.id, res.meeting.id));
     // Auto-generate minutes from the transcript (best-effort: never block ending).
     if (!res.meeting.summary) {
-      try { await summarizeMeeting(db, c.env as Env, { ...res.meeting, status: 'ended', endedAt: now }); } catch { /* honest no-op */ }
+      try { await summarizeMeeting(db, c.env as Env, { ...res.meeting, status: 'ended', endedAt: now }); } catch (error) { /* honest no-op */ 
+        reportCaughtError(error, { source: "presentation/routes/meetingRoutes.ts", operation: "createMeetingRoutes" });
+      }
     }
     return c.json(await hydrate(tenantId, res.meeting.id));
   });
@@ -582,6 +611,17 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const busy = mergeBusy(appBusy, extBusy);
     const slots = suggestSlots(availability, busy, { fromMs, toMs, durationMinutes, count });
     return c.json({ slots });
+  });
+
+  // ── Detail ─────────────────────────────────────────────────────────────────
+  // LAST on purpose: `/:id` matches any single segment, so registering it above the
+  // literal paths above (`/availability`, `/freebusy`, `/suggest`) made those unreachable.
+  r.get('/:id', async (c) => {
+    const { tenantId } = scope(c);
+    const detail = await hydrate(tenantId, c.req.param('id'));
+    if (!detail) return c.json({ error: 'Not found' }, 404);
+    if (!(await canAccess(c, detail.meeting, detail.attendees))) return c.json({ error: 'Not authorized for this meeting' }, 403);
+    return c.json(detail);
   });
 
   return r;

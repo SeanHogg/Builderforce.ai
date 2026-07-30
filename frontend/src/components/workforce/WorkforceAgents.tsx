@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import {
   agentHosts,
@@ -167,7 +168,9 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   const [registerName, setRegisterName] = useState('');
   const [registering, setRegistering] = useState(false);
   const [newHost, setNewHost] = useState<AgentHostRegistration | null>(null);
-  const [apiKeyCopied, setApiKeyCopied] = useState(false);
+  // One-time API key copy: the write, the 2000ms "Copied!" window and its
+  // unmount-safe reset all live in the shared hook.
+  const copyApiKeyState = useCopyToClipboard();
 
   // --- Cloud agent management slide-out ------------------------------------
   const [selectedAgent, setSelectedAgent] = useState<PublishedAgent | null>(null);
@@ -245,12 +248,14 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   );
 
   // --- Create dialog open/close --------------------------------------------
+  // No copy-flag reset here any more: the shared hook expires its own confirmation
+  // after 2000ms, and the key panel only exists while `newHost` is set — so there is
+  // nothing left for open/close to clear.
   const openCreate = (kind: AgentKind) => {
     setCreateKind(kind);
     setForm(EMPTY_CLOUD_AGENT_FORM);
     setRegisterName('');
     setNewHost(null);
-    setApiKeyCopied(false);
     setError('');
     setDialogOpen(true);
   };
@@ -259,7 +264,6 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     setForm(EMPTY_CLOUD_AGENT_FORM);
     setRegisterName('');
     setNewHost(null);
-    setApiKeyCopied(false);
     setError('');
   };
 
@@ -305,13 +309,11 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     }
   };
 
+  // A refused clipboard stays silent as before — the key input is still on screen to
+  // select by hand, so the button just never flips to "Copied!".
   const copyApiKey = async () => {
     if (!newHost?.apiKey) return;
-    try {
-      await navigator.clipboard.writeText(newHost.apiKey);
-      setApiKeyCopied(true);
-      setTimeout(() => setApiKeyCopied(false), 2000);
-    } catch { /* ignore */ }
+    await copyApiKeyState.copy(newHost.apiKey);
   };
 
   // --- Quick card actions --------------------------------------------------
@@ -401,7 +403,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
 
   return (
    <WorkforceMetricsProvider>
-    <section>
+    <section data-tour="demo-roster">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-strong)', margin: 0 }}>{tWf('workforceTitle')}</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -820,7 +822,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                 <label style={labelStyle}>{tAdd('apiKeyLabel')}</label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input type="password" readOnly value={newHost.apiKey} style={{ ...inputStyle, fontFamily: 'var(--font-mono)', fontSize: 12 }} />
-                  <button type="button" onClick={copyApiKey} style={btnPrimary}>{apiKeyCopied ? tAdd('copied') : tAdd('copy')}</button>
+                  <button type="button" onClick={copyApiKey} style={btnPrimary}>{copyApiKeyState.copied ? tAdd('copied') : tAdd('copy')}</button>
                 </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

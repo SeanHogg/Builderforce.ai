@@ -20,6 +20,9 @@ import {
   getRunSnapshot,
   getRunTrace,
   formatChatDiagnostics,
+  classifyModelFunding,
+  getMcpToolStatus,
+  nextFallbackModel,
   type BrainTraceEvent,
   type ChatDiagnosticsData,
 } from '@seanhogg/builderforce-brain-embedded';
@@ -27,13 +30,18 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { ChatInput } from '@/components/ChatInput';
 import { EvermindStatusBadge } from '@/components/ide/EvermindStatusBadge';
 import { recallProjectEvermind, getProjectEvermindContributions } from '@/lib/projectEvermindApi';
+import { APP_VERSION, fetchApiVersion } from '@/lib/appVersions';
 import { getStoredTenant, getStoredUser } from '@/lib/auth';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { ChatMessageActions } from '@/components/ChatMessageActions';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
 import { AttentionDot } from '@/components/AttentionDot';
+import { UnreadBadge } from '@/components/UnreadBadge';
 import { useAttention } from '@/lib/useAttention';
 import { RepoContextPicker, type RepoFileSource } from '@/components/brain/RepoContextPicker';
+import { BrainCapabilityPicker } from '@/components/brain/BrainCapabilityPicker';
+import { CapabilityArtifactNotice } from '@/components/brain/CapabilityArtifactNotice';
+import { AllowanceBanner } from '@/components/brain/AllowanceBanner';
 import { ThemeSelect } from '@/components/ThemeSelect';
 import { Select } from '@/components/Select';
 import { fetchProjects, createProject } from '@/lib/api';
@@ -52,6 +60,9 @@ import {
   mentionRecipient,
   resolveRecipient,
   isStepMessage,
+  getBrainCapability,
+  type BrainCapabilityId,
+  type BrainCapabilitySurface,
   type SuggestedAction,
   type BrainModality,
   type BrainEffort,
@@ -60,6 +71,11 @@ import {
 } from '@/lib/brain';
 import type { BrainChat, BrainMessage, BrainChatTraceRow } from '@/lib/builderforceApi';
 import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo, type TicketKind } from '@/lib/builderforceApi';
+import { fetchConsumptionSnapshot } from '@/lib/useConsumption';
+import { useLlmModels } from '@/lib/useLlmModels';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
+import { PlanBadge } from '@/components/PlanBadge';
+import { BrainErrorBanner } from './BrainErrorBanner';
 import { dispatchBrainDataChanged } from '@/lib/brain/brainDataEvent';
 import { loadAgentPoolCached, type PoolAgent } from '@/lib/agentPool';
 import { getModality } from '@/lib/modality';
@@ -137,6 +153,13 @@ export interface BrainPanelProps {
    * task" flow. Handled once; ensures a chat exists, then reuses `brain.linkChatTicket`.
    */
   initialTicket?: { kind: string; ref: string };
+  /**
+   * Which capability set this surface offers ("what are we making?"). Brain
+   * Storm authors artifacts (document / slides / data viz / spreadsheet); the
+   * IDE builds and runs things (website / design / mobile / animation / 3D
+   * game). See lib/brain/capabilities.ts.
+   */
+  capabilitySurface?: BrainCapabilitySurface;
   /** Docked only: close handler for the drawer chrome. */
   onClose?: () => void;
 }
@@ -150,6 +173,7 @@ export function BrainPanel({
   initialChatId,
   initialPrompt,
   initialTicket,
+  capabilitySurface = 'brainstorm',
   onClose,
 }: BrainPanelProps) {
   const isPage = variant === 'page';
@@ -183,6 +207,8 @@ export function BrainPanel({
   }, [scope]);
   const [searchQuery, setSearchQuery] = useState('');
   const [input, setInput] = useState('');
+  /** Bumped to pull focus into the composer after something seeds it. */
+  const [composerFocusToken, setComposerFocusToken] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -241,7 +267,25 @@ export function BrainPanel({
   // Brain agent/persona switcher: the user can run the Brain as the default
   // assistant, as a built-in modality persona, or as one of the agents assigned
   // to the Brain (scope='brain' in the canonical agent-assignment model).
-  const [personaSel, setPersonaSel] = useState<string>('default');
+  //
+  // Docked in an IDE project, the persona STARTS as that project's modality: the
+  // modality prompt was already the one in force there (see personaSystemPrompt
+  // below), so leaving the picker on "Default Brain" only misreported which
+  // persona was answering — open a Mobile project and the chat looked generic
+  // even though it was the mobile coder. `modality` is the resolved id, so an
+  // unknown/legacy value can't select a persona that isn't in the registry.
+  const dockedPersona = !isPage && pinnedProjectId != null ? `modality:${modality}` : 'default';
+  const [personaSel, setPersonaSel] = useState<string>(dockedPersona);
+  // Follow the project/modality the drawer is pinned to until the user picks a
+  // persona themselves — after that their choice sticks for the session.
+  const personaPicked = useRef(false);
+  useEffect(() => {
+    if (!personaPicked.current) setPersonaSel(dockedPersona);
+  }, [dockedPersona]);
+  const choosePersona = useCallback((value: string) => {
+    personaPicked.current = true;
+    setPersonaSel(value);
+  }, []);
   const [brainAgents, setBrainAgents] = useState<AgentAssignment[]>([]);
   const [agentPool, setAgentPool] = useState<PoolAgent[]>([]);
   useEffect(() => {
@@ -323,9 +367,35 @@ export function BrainPanel({
   // '' (a no-op) when they have no profile. This is the web half of Gap 2/3; the
   // VS Code surfaces inject the equivalent block via the gateway helper.
   const personalityBlock = usePersonalityBlock();
+
+  // ---- Capability ("what are we making?") ----------------------------------
+  // A property of the CHAT (migration 0345), so the choice follows the
+  // conversation to every surface instead of living in this browser. Picking one
+  // folds a capability block into the system prompt so the model shapes its
+  // output as that artifact, and seeds the composer with a starting line.
+  const capabilityId = (getBrainCapability(chats.activeChat?.capability)?.id ?? null) as BrainCapabilityId | null;
+  const selectCapability = useCallback(async (id: BrainCapabilityId | null) => {
+    // From the empty state there is no chat yet — start one carrying the choice
+    // (same path the "Start new chat" button takes, plus the capability).
+    if (chats.activeChatId == null) {
+      if (id == null) return;
+      await chats.create({ capability: id });
+    } else {
+      await chats.setCapability(chats.activeChatId, id);
+    }
+    if (id) {
+      setInput((prev) => (prev.trim() ? prev : tBrain(`capabilities.${id}.starter`)));
+      // Focus with the caret at the end: the starter is an editable opening line,
+      // not a finished message. (Sending the raw seed produced stub replies.)
+      setComposerFocusToken((n) => n + 1);
+    }
+  }, [chats, tBrain]);
+  const capabilityPrompt = getBrainCapability(capabilityId)?.systemPrompt;
+
   const ambientSystem = useMemo(() => {
     const parts: string[] = [];
     if (extraSystem) parts.push(extraSystem);
+    if (capabilityPrompt) parts.push(capabilityPrompt);
     if (personalityBlock) parts.push(personalityBlock);
     if (ctxProjectId != null) {
       const name = projects.find((p) => p.id === ctxProjectId)?.name;
@@ -339,7 +409,7 @@ export function BrainPanel({
     const composer = buildComposerDirectives({ effort, thinking, web: webBrowsing });
     if (composer) parts.push(composer);
     return parts.length > 0 ? parts.join('\n') : undefined;
-  }, [ctxProjectId, projects, extraSystem, autoApprove, effort, thinking, webBrowsing, personalityBlock]);
+  }, [ctxProjectId, projects, extraSystem, capabilityPrompt, autoApprove, effort, thinking, webBrowsing, personalityBlock]);
 
   // Per-turn limbic affect (VS Code webview parity). The static personality tone
   // above (`ambientSystem` ← personalityBlock) sets the user's baseline voice;
@@ -410,12 +480,24 @@ export function BrainPanel({
   // Gate the Evermind hooks on the per-chat switch — off ⇒ no recall/learn this chat.
   const gatedEvermind = memoryEnabled ? evermind : undefined;
 
+  // The shared (module-cached) model surface. Read here — ABOVE the conversation hook
+  // — because the run loop needs it to fail over when a model will not emit tool
+  // calls; the diagnostics capture below reads the same cached object.
+  const llmModels = useLlmModels();
+  // Tool-call failover: the SHARED selector over that surface, so "which model next"
+  // is decided in one place for every host rather than per surface.
+  const pickFallbackModel = useCallback(
+    (tried: readonly string[]) => nextFallbackModel({ ...llmModels.fundingSurface, codingModels: llmModels.codingModels }, tried),
+    [llmModels],
+  );
+
   const conv = useBrainConversation({
     chatId: chats.activeChatId,
     modality,
     extraSystem: ambientSystem,
     systemPrompt: personaSystemPrompt,
     model: personaModel,
+    pickFallbackModel,
     toolSpecs,
     runTool,
     needsConfirm,
@@ -731,6 +813,8 @@ export function BrainPanel({
       'not-seeded': tTimeline('learnSkipReasonNotSeeded'),
       frozen: tTimeline('learnSkipReasonFrozen'),
     },
+    learnTargetContributed: tTimeline('learnTargetContributed'),
+    learnTargetSkipped: tTimeline('learnTargetSkipped'),
     reconcileTitle: tTimeline('reconcileTitle'),
     reconcileHint: tTimeline('reconcileHint'),
   }), [tTimeline]);
@@ -751,8 +835,8 @@ export function BrainPanel({
   // recomputes as the user types, so a callback that depends on them would change
   // identity every keystroke and defeat <BrainTimeline>'s memo. Read the latest
   // values from a ref instead, keeping the callbacks below referentially stable.
-  const timelineCtxRef = useRef({ conv, chats, recipient, projectId: chats.activeChat?.projectId ?? pinnedProjectId ?? undefined });
-  timelineCtxRef.current = { conv, chats, recipient, projectId: chats.activeChat?.projectId ?? pinnedProjectId ?? undefined };
+  const timelineCtxRef = useRef({ conv, chats, recipient, projectId: chats.activeChat?.projectId ?? pinnedProjectId ?? undefined, capability: chats.activeChat?.capability ?? null, chatTitle: chats.activeChat?.title });
+  timelineCtxRef.current = { conv, chats, recipient, projectId: chats.activeChat?.projectId ?? pinnedProjectId ?? undefined, capability: chats.activeChat?.capability ?? null, chatTitle: chats.activeChat?.title };
   const onAnswerTimelineQuestion = useCallback((answer: string) => {
     const { conv: c, recipient: r } = timelineCtxRef.current;
     void c.send(answer, { addressedTo: r });
@@ -772,12 +856,14 @@ export function BrainPanel({
     [],
   );
   const renderTimelineAssistantActions = useCallback((msg: BrainMessage) => {
-    const { conv: c, projectId } = timelineCtxRef.current;
+    const { conv: c, projectId, capability, chatTitle } = timelineCtxRef.current;
     return (
       <MessageActions
         msg={msg}
         conv={c}
         projectId={projectId}
+        capability={capability}
+        chatTitle={chatTitle}
         suggestions={parseSuggestedActions(msg.content).actions}
         onRunSuggestion={(prompt) => { void c.send(prompt); }}
       />
@@ -806,12 +892,23 @@ export function BrainPanel({
     }
   }, [newProjectName, chats, creatingProject]);
 
+  // Messages the user typed while a run was still streaming. Held here and
+  // flushed one at a time as each run completes, so the composer NEVER blocks
+  // typing while the AI is thinking — you can keep composing and stack turns.
+  const [queuedMessages, setQueuedMessages] = useState<string[]>([]);
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text) return;
     setInput('');
     // Audited engagement signal: interacting with the AI agent is billable activity.
     trackActivity('agent_message', { weight: 2 });
+    // A run is already streaming — queue this turn and let the flush effect send
+    // it once the current run finishes, instead of disabling the composer.
+    if (conv.sending) {
+      setQueuedMessages((q) => [...q, text]);
+      return;
+    }
     // Restore the text if the send fails before it's persisted (e.g. an expired
     // session) so the user's message is never silently lost. `addressedTo` routes
     // the turn: a participant is talked to (no BRAIN run); null runs the BRAIN.
@@ -819,10 +916,32 @@ export function BrainPanel({
     if (!ok) setInput((cur) => cur || text);
   }, [input, conv, recipient]);
 
+  // Flush one queued message per completed run (on the sending→idle edge). Sends
+  // exactly one queued turn each time the current run finishes.
+  const prevSendingRef = useRef(conv.sending);
+  useEffect(() => {
+    const was = prevSendingRef.current;
+    prevSendingRef.current = conv.sending;
+    if (was && !conv.sending && queuedMessages.length > 0) {
+      const [next, ...rest] = queuedMessages;
+      setQueuedMessages(rest);
+      void conv.send(next, { addressedTo: recipient });
+    }
+  }, [conv.sending, queuedMessages, conv, recipient]);
+
+  // Discard any queued turns when the active chat changes — queued text belongs
+  // to the chat it was typed in, never the one switched to.
+  const activeChatKey = chats.activeChat?.id ?? null;
+  useEffect(() => {
+    setQueuedMessages([]);
+  }, [activeChatKey]);
+
   // Capture execution: copy the Brain run's LLM/tool/error trace + transcript to
   // the clipboard — the Brain twin of the Observability/Logs "Copy triage info"
   // button, so a misbehaving run can be dropped straight into a bug report.
-  const [captureState, setCaptureState] = useState<'idle' | 'copied' | 'error'>('idle');
+  // Was a local 'idle' | 'copied' | 'error' + a 2000ms reset — the same states the
+  // shared hook owns, so it replaces the local copy verbatim.
+  const capture = useCopyToClipboard();
   const modalityCopy = useModalityCopy();
   const localizedModalities = useLocalizedModalities();
   const personaLabel = useMemo(() => {
@@ -834,7 +953,10 @@ export function BrainPanel({
     return tBrain('brainDefault');
   }, [personaSel, brainAgents, agentName, tBrain, modalityCopy]);
   const captureExecution = useCallback(async () => {
-    try {
+    // The write, the idle→copied/error→idle feedback and its 2000ms reset all live in the
+    // shared hook. Thunk form: the payload is built on click, and a build that throws
+    // lands on `error` exactly as the old try/catch around it did.
+    await capture.copy(async () => {
       // Prepend a Chat diagnostics block (identity + Evermind wiring state + Signals) so a
       // pasted report answers "what STATE was this chat in?" — the CHAT's own project (what
       // the learn gate keys on) vs the page's project, tenant/user, the Evermind head
@@ -843,10 +965,17 @@ export function BrainPanel({
       // per source: a failed fetch degrades to null/[] so the copy never breaks.
       const chatId = chats.activeChatId;
       const chatProjectId = chats.activeChat?.projectId ?? null;
-      const [agents, tickets, contrib] = await Promise.all([
+      const [agents, tickets, contrib, consumption, apiVersion] = await Promise.all([
         chatId != null ? brain.listChatAgents(chatId).catch(() => []) : Promise.resolve([]),
         chatId != null ? brain.listChatTickets(chatId).catch(() => []) : Promise.resolve([]),
         chatProjectId != null ? getProjectEvermindContributions(chatProjectId).catch(() => null) : Promise.resolve(null),
+        // Plan + month-to-date allowance. Best-effort: a free/card-less tenant's report
+        // must SAY so rather than read as an unexplained capability failure, but the
+        // fetch may not block the copy. Shared cached snapshot — the same one the
+        // header's <PlanBadge/> shows, so the report and the chip can't disagree.
+        fetchConsumptionSnapshot(),
+        // Session-cached; shares the footer's /health read rather than adding one.
+        fetchApiVersion(),
       ]);
       const lastLearn = [...conv.messages].reverse().find((m) => m.role === 'assistant' && m.evermindLearn)?.evermindLearn ?? null;
       const tenant = getStoredTenant();
@@ -874,15 +1003,39 @@ export function BrainPanel({
         lastLearn,
         agents: agents.map((a) => ({ agentRef: a.agentRef, role: a.role })),
         tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
+        // WHO the user is to the platform: tier, whether a card is on file, what is left
+        // of each allowance, and what the plan entitles them to model-wise.
+        account: {
+          plan: consumption?.plan.effective ?? null,
+          billingStatus: consumption?.plan.billingStatus ?? null,
+          periodStart: consumption?.period.start ?? null,
+          resetsAt: consumption?.period.resetsAt ?? null,
+          meters: consumption?.meters ?? [],
+          model: personaModel ?? null,
+          // Shared cached model surface — `fundingSurface` keeps the vendor tagging the
+          // classifier needs, so this reads the list the pickers already loaded instead
+          // of re-fetching /llm/v1/models on every capture.
+          modelFunding: classifyModelFunding(personaModel, llmModels.fundingSurface),
+          canUsePremiumModels: llmModels.canUsePremiumModels,
+          planModelCount: llmModels.models.length,
+          byoProviders: llmModels.byoProviders,
+        },
+        // What the model could actually CALL. The COUNT is the live registry the
+        // conversation runs on (`toolSpecs` — navigation + MCP catalog together),
+        // not just the MCP subset; the catalog status explains a zero (a failed
+        // MCP fetch used to collapse silently to no tools at all).
+        tools: (() => {
+          const mcp = getMcpToolStatus();
+          return { count: toolSpecs.length, error: mcp.error, loading: mcp.loading };
+        })(),
+        // Which build produced this capture — without it, a dump taken just before
+        // a deploy is indistinguishable from one taken after.
+        versions: { ui: APP_VERSION, api: apiVersion },
       };
       const diagBlock = formatChatDiagnostics(diagnostics).join('\n');
-      await navigator.clipboard.writeText(`${diagBlock}\n\n${conv.buildTriageReport(personaLabel)}`);
-      setCaptureState('copied');
-    } catch {
-      setCaptureState('error');
-    }
-    setTimeout(() => setCaptureState('idle'), 2000);
-  }, [conv, personaLabel, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
+      return `${diagBlock}\n\n${conv.buildTriageReport(personaLabel)}`;
+    });
+  }, [capture, conv, personaLabel, personaModel, llmModels, toolSpecs, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
 
   // Shared chrome for the "capture execution" icon button (page + docked headers).
   const captureButton = (
@@ -904,9 +1057,9 @@ export function BrainPanel({
         fontSize: 13,
         lineHeight: 1,
         background: 'var(--bg-elevated)',
-        color: captureState === 'error'
+        color: capture.state === 'error'
           ? 'var(--red, #ef4444)'
-          : captureState === 'copied'
+          : capture.state === 'copied'
             ? 'var(--green, #22c55e)'
             : 'var(--text-secondary)',
         border: '1px solid var(--border-subtle)',
@@ -915,7 +1068,7 @@ export function BrainPanel({
         opacity: conv.hasTrace ? 1 : 0.5,
       }}
     >
-      {captureState === 'copied' ? '✓' : captureState === 'error' ? '✕' : '⧉'}
+      {capture.state === 'copied' ? '✓' : capture.state === 'error' ? '✕' : '⧉'}
     </button>
   );
 
@@ -960,6 +1113,12 @@ export function BrainPanel({
   const error = chats.error || conv.error;
   // The banner surfaces either source; dismissing must clear whichever is set.
   const dismissError = useCallback(() => { chats.setError(''); conv.clearError(); }, [chats, conv]);
+
+  // Provider usage-cap banner — shown when a BYO provider's key hit its billing
+  // limit this run. Keyed on the provider set so a new provider re-shows it.
+  const [dismissedProviderCap, setDismissedProviderCap] = useState('');
+  const providerCapKey = conv.providerCap.join(',');
+  const showProviderCapBanner = conv.providerCap.length > 0 && dismissedProviderCap !== providerCapKey;
 
   // ---- Shared sub-renders ---------------------------------------------------
 
@@ -1008,6 +1167,10 @@ export function BrainPanel({
               )}
               {formatTime(chat.updatedAt)}
               <AttentionDot state={attn.chats[chat.id]?.state} />
+              {/* Unread badge — new messages (execution milestones, teammate/agent
+                  turns) in a chat you're not viewing. The OPEN chat is read, so it
+                  never shows one. */}
+              <UnreadBadge count={active ? 0 : attn.chatUnread[chat.id]} />
             </div>
             {active && renamingId !== chat.id && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
@@ -1041,12 +1204,29 @@ export function BrainPanel({
 
   const conversation = (
     <>
-      {error && (
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '8px 12px 0', padding: '8px 12px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8 }} role="alert">
-          <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{error}</span>
+      {/* The message AND the fix: a 402/429 gets an Upgrade / Add-a-card action from
+          the shared verdict, instead of dead-ending on prose. The verdict only
+          applies to a CONVERSATION error — a chat-list failure isn't an entitlement
+          problem, so it gets the plain dismissible banner. */}
+      <BrainErrorBanner
+        error={error}
+        action={conv.error ? conv.errorAction : null}
+        onDismiss={dismissError}
+      />
+      {/* Spent/nearly-spent token allowance — the state that silently degrades or
+          truncates turns. Self-gating on the shared consumption snapshot. */}
+      <AllowanceBanner />
+      {showProviderCapBanner && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '8px 12px 0', padding: '8px 12px', fontSize: 13, background: 'var(--warning-bg, rgba(234,179,8,0.12))', color: 'var(--warning-text, #d97706)', border: '1px solid var(--warning-border, rgba(234,179,8,0.3))', borderRadius: 8 }} role="status">
+          <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
+            {tBrain('providerCapBanner', { providers: conv.providerCap.join(', ') })}{' '}
+            <a href="/settings/integrations" style={{ color: 'inherit', fontWeight: 600, textDecoration: 'underline' }}>
+              {tBrain('manageApiKeys')}
+            </a>
+          </span>
           <button
             type="button"
-            onClick={dismissError}
+            onClick={() => setDismissedProviderCap(providerCapKey)}
             title={tCommon('dismiss')}
             aria-label={tCommon('dismiss')}
             style={{ flex: '0 0 auto', background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}
@@ -1060,9 +1240,28 @@ export function BrainPanel({
           <div style={{ fontSize: 40 }}>🧠</div>
           <div style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-primary)' }}>{tBrain('brainTitle')}</div>
           <div style={{ fontSize: 13 }}>{tBrain('emptyHint')}</div>
-          <button type="button" onClick={() => chats.create()} style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer' }}>
-            {tBrain('startNewChat')}
-          </button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button type="button" onClick={() => chats.create()} style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer' }}>
+              {tBrain('startNewChat')}
+            </button>
+            {/* Onboarding entry point — starts a chat seeded so the Brain guides a
+                new user (scope, costs, plan recommendation, connecting an AI account). */}
+            <button
+              type="button"
+              onClick={() => { chats.create(); setInput(tBrain('onboardMePrompt')); setComposerFocusToken((n) => n + 1); }}
+              style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'transparent', color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 10, cursor: 'pointer' }}
+            >
+              ✨ {tBrain('onboardMe')}
+            </button>
+          </div>
+          {/* …or start from what you want to make. Picking one opens a chat
+              already in that mode. */}
+          <BrainCapabilityPicker
+            surface={capabilitySurface}
+            value={capabilityId}
+            onSelect={selectCapability}
+            layout="tiles"
+          />
         </div>
       ) : (
         <>
@@ -1117,13 +1316,17 @@ export function BrainPanel({
               renderAssistantActions={renderTimelineAssistantActions}
             />
           </div>
-          <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : '12px 16px', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }}>
+          {/* Composer chrome uses the shared --chat-ctl-* metrics (globals.css) so the
+              toolbar, the input box and the docked panel breathe the same amount —
+              docked, this is a ~310px column, where the old fixed 12/16px padding and
+              8px stack gaps ate most of the width. */}
+          <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : 'var(--chat-ctl-pad-y, 6px) var(--chat-ctl-pad-x, 8px)', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }}>
             {pendingConfirm && <ToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} onApproveAll={approveAll} />}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--chat-ctl-gap, 6px)', marginBottom: 'var(--chat-ctl-pad-y, 6px)', flexWrap: 'wrap' }}>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{tBrain('actingAs')}</span>
               <Select
                 value={personaSel}
-                onChange={(e) => setPersonaSel(e.target.value)}
+                onChange={(e) => choosePersona(e.target.value)}
                 aria-label={tBrain('personaAria')}
                 style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
               >
@@ -1141,6 +1344,15 @@ export function BrainPanel({
                   </optgroup>
                 )}
               </Select>
+              {/* What this chat is making — same registry as the empty-state tiles,
+                  changeable (or clearable) mid-chat. */}
+              <BrainCapabilityPicker
+                surface={capabilitySurface}
+                value={capabilityId}
+                onSelect={selectCapability}
+                layout="compact"
+                disabled={conv.sending}
+              />
               {/* Recipient selector — only once the chat is multi-party. Routes the
                   next message to the BRAIN (executes) or a participant (talked to). */}
               {participants.length > 0 && (
@@ -1208,7 +1420,9 @@ export function BrainPanel({
               onChange={setInput}
               onSubmit={handleSend}
               placeholder={recipient ? tBrain('messageParticipant', { name: recipient.name }) : tBrain('messagePlaceholder')}
-              disabled={conv.sending}
+              // Stay editable while a run streams so the user can keep typing and
+              // queue follow-up turns (flushed one at a time as runs complete).
+              disabled={false}
               running={conv.sending}
               onStop={conv.stop}
               stopLabel={tTimeline('stop')}
@@ -1231,8 +1445,15 @@ export function BrainPanel({
               onRemoveAttachment={conv.removeAttachment}
               mentionables={participants}
               onMention={setRecipientChoice}
+              focusToken={composerFocusToken}
             />
             {conv.uploading && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{tBrain('uploading')}</div>}
+            {queuedMessages.length > 0 && (
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span aria-hidden>⏳</span>
+                {tBrain('queuedCount', { count: queuedMessages.length })}
+              </div>
+            )}
           </div>
         </>
       )}
@@ -1253,9 +1474,12 @@ export function BrainPanel({
       <div className="bs-shell" style={{ marginBottom: 0 }}>
         <div className="bs-sidebar">
           <div className="bs-sidebar-header">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 8 }}>
               <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-strong)' }}>{tBrain('brainStorm')}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                {/* Which plan funds this chat, and what's left of the allowance —
+                    stated up front rather than after a turn dies on the cap. */}
+                <PlanBadge />
                 {captureButton}
                 <button type="button" onClick={() => chats.create()} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
                   {tBrain('newChat')}
@@ -1290,12 +1514,29 @@ export function BrainPanel({
   // Docked drawer
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
-      <div style={{ flexShrink: 0, padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ flexShrink: 0, padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
         <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>🧠 {tBrain('brainTitle')}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+          {/* Plan + remaining allowance (see the page header). */}
+          <PlanBadge />
           {captureButton}
           <button type="button" onClick={() => chats.create()} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{tBrain('newChat')}</button>
-          <Link href="/brainstorm" title={tBrain('openFullBrainStorm')} style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>{tBrain('expand')}</Link>
+          {/* Expand → full Brain Storm page. Carry the ACTIVE chat id (and the
+              project it's scoped to) so the page opens the SAME conversation
+              instead of a blank one — otherwise expanding a docked chat (e.g. the
+              Designer/Website Builder chat) looked like it "deleted" the chat. */}
+          <Link
+            href={(() => {
+              const qs = new URLSearchParams();
+              if (chats.activeChatId != null) qs.set('chat', String(chats.activeChatId));
+              const proj = pinnedProjectId ?? ctxProjectId ?? null;
+              if (proj != null) qs.set('project', String(proj));
+              const s = qs.toString();
+              return s ? `/brainstorm?${s}` : '/brainstorm';
+            })()}
+            title={tBrain('openFullBrainStorm')}
+            style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}
+          >{tBrain('expand')}</Link>
           {onClose && (
             <button type="button" onClick={onClose} aria-label={tBrain('closeBrain')} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}>×</button>
           )}
@@ -1358,14 +1599,19 @@ function ToolConfirmBar({ req, onDecide, onApproveAll }: { req: { name: string; 
   );
 }
 
-function MessageActions({ msg, conv, projectId, suggestions, onRunSuggestion }: {
+function MessageActions({ msg, conv, projectId, capability, chatTitle, suggestions, onRunSuggestion }: {
   msg: BrainMessage;
   conv: ReturnType<typeof useBrainConversation>;
   projectId?: number;
+  /** The chat's capability — drives the reply's "Download as …" action. */
+  capability?: string | null;
+  chatTitle?: string;
   /** Model-authored next-step buttons parsed from this reply. */
   suggestions?: SuggestedAction[];
   onRunSuggestion?: (prompt: string) => void;
 }) {
+  // Only the newest assistant turn is worth judging/retrying for a missing artifact.
+  const lastAssistantId = [...conv.messages].reverse().find((m) => m.role === 'assistant' && !isStepMessage(m))?.id;
   return (
     <>
       {suggestions && suggestions.length > 0 && onRunSuggestion && (
@@ -1397,12 +1643,23 @@ function MessageActions({ msg, conv, projectId, suggestions, onRunSuggestion }: 
           ))}
         </div>
       )}
+      {/* A capability reply that never produced its artifact reads as "nothing
+          happened" — say so, and offer to ask for it explicitly. */}
+      <CapabilityArtifactNotice
+        capability={capability}
+        content={msg.content}
+        streaming={conv.sending}
+        isLatest={msg.id === lastAssistantId}
+        onRetry={(prompt) => { void conv.send(prompt); }}
+      />
       <ChatMessageActions
         onCopy={() => conv.copyMessage(msg)}
         copied={conv.copiedMessageId === msg.id}
         feedback={conv.feedbackMap[msg.id]}
         onFeedback={(value) => conv.submitFeedback(msg, value)}
         projectId={projectId}
+        capability={capability}
+        chatTitle={chatTitle}
         assistantContent={msg.content}
         conversationMessages={conv.messages.filter((m) => !isStepMessage(m)).map((m) => ({ role: m.role, content: m.content }))}
       />

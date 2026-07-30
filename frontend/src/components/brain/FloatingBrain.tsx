@@ -124,6 +124,18 @@ export function FloatingBrain() {
               >
                 {counts.awaiting}
               </span>
+            ) : counts.unread > 0 ? (
+              // New messages (execution milestones / teammate turns) landed in a
+              // chat you're not viewing — indigo count, distinct from the amber
+              // "needs an answer" badge and the coral "running" dot.
+              <span
+                className="brain-launcher-badge brain-launcher-badge-unread"
+                role="status"
+                aria-label={tAttn('unread', { count: counts.unread })}
+                title={tAttn('unread', { count: counts.unread })}
+              >
+                {counts.unread > 99 ? '99+' : counts.unread}
+              </span>
             ) : counts.running > 0 ? (
               <span
                 className="brain-launcher-dot"
@@ -170,6 +182,12 @@ export function FloatingBrain() {
               text-align: center;
               box-shadow: 0 0 0 2px var(--bg-base, #0b0b0b);
               animation: agentPulse 1.4s ease-in-out infinite;
+            }
+            /* "New unread messages" — indigo count, no pulse (informational, not a
+               blocking ask). Distinct hue from the amber answer badge. */
+            .brain-launcher-badge-unread {
+              background: var(--badge-unread, #6366f1);
+              animation: none;
             }
             /* Background activity (something running, nothing blocked) — a quiet
                coral dot, no count. */

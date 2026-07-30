@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { eq, and, or, desc, isNull, inArray, sql } from 'drizzle-orm';
 import {
   brainChats,
@@ -18,16 +19,21 @@ import {
 import { ideProxy, explicitModelPreemptsByo, readProxyChoice, type LlmProxyService } from '../llm/LlmProxyService';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
 import { classifyReplyAccount, buildReplyProvenance } from '../llm/replyProvenance';
-import { getProjectEvermindHead } from '../llm/projectEvermind';
+import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../activity/activityLog';
+import { getProjectEvermindHead, recordEvermindServeOutcome } from '../llm/projectEvermind';
+import { isServableText } from '../llm/textCoherence';
+import { learnFromPersistedTurns } from './brainEvermindLearning';
 import { tenantProxyForPlan } from '../llm/tenantProxy';
 import { vendorForModel } from '../llm/vendors';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from '../llm/builtinMcpService';
+import { shouldRecoverStalledTurn, isExhaustedStall, stallRecoveryNudge, stallExhaustedNotice, MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS } from '@builderforce/agent-stall';
 import {
-  BRAIN_ORIGIN, TEAM_ORIGIN, ACCESSIBLE_ORIGINS,
+  BRAIN_ORIGIN, TEAM_ORIGIN, MANAGER_ORIGIN, ACCESSIBLE_ORIGINS,
   resolveChatAccess, syncPendingMemberships as syncPendingMembershipsShared,
 } from './chatAccess';
+import { markChatRead } from './chatReadState';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -107,6 +113,7 @@ export interface CreateChatDto {
   userId: string;
   title?: string;
   projectId?: number | null;
+  capability?: string | null;
 }
 
 export interface UpdateChatDto {
@@ -114,6 +121,96 @@ export interface UpdateChatDto {
   projectId?: number | null;
   /** LOCK toggle (owner only): 'shared' = teammate-visible, 'locked' = private. */
   visibility?: 'shared' | 'locked';
+  /** What the chat is making (migration 0345) — a client-registry capability id,
+   *  or null to clear it. See {@link normalizeCapability}. */
+  capability?: string | null;
+}
+
+/**
+ * Sanitize an inbound capability id. The catalogue itself is a client-side UI
+ * registry (frontend/src/lib/brain/capabilities.ts) and an id the client no longer
+ * knows resolves to "no capability" on read, so the server stores it opaquely
+ * rather than keeping a second copy of the list that would drift. All we enforce is
+ * the column's shape: a short, plain identifier, or null.
+ */
+function normalizeCapability(v: string | null | undefined): string | null {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return /^[a-z0-9_-]{1,64}$/i.test(s) ? s : null;
+}
+
+/**
+ * The manager-tool ids {@link accountabilityFraming} instructs the agent to call.
+ *
+ * Exported so a test can assert that every one of them is actually ADVERTISED to the
+ * model. That assertion is the regression guard for the defect this list documents: the
+ * framing named tools by catalog id, the ids matched nothing in the model's tool list,
+ * and the manager answered three consecutive accountability questions by describing the
+ * calls it had never made. Nothing failed loudly — there is no error for "the prompt
+ * referenced a tool that does not exist", which is exactly why it needs a test.
+ */
+export const ACCOUNTABILITY_TOOL_IDS: readonly string[] = [
+  'manager.digest', 'manager.decisions', 'manager.census', 'manager.policy',
+  'autonomy.wiring_audit', 'tickets.lifecycle',
+];
+
+/**
+ * The standard the AI Manager is held to in its own accountability chat (0376).
+ *
+ * A person opens this chat to ask one thing — "what did you and the team get done, and
+ * why not more?" — and the failure mode of an agent facing that question is well known:
+ * it apologises, promises to do better, and says nothing checkable. Three instructions
+ * are what turn that into an answer.
+ *
+ *   1. READ THE RECORD FIRST. The tools exist and are on the allowlist; an agent that
+ *      does not call them is guessing about its own work.
+ *   2. NAME THE GATE. The true cause of a dead board is almost never "I didn't try" —
+ *      it is a withheld merge authority, an unstaffed lane, an exhausted token budget,
+ *      a sign-off nobody gave. Those live in `manager.policy` and the census, and every
+ *      one of them is actionable by the person asking.
+ *   3. NEVER DRESS A ZERO AS PROGRESS. The digest reports yesterday alongside today
+ *      precisely so a quiet day and a stopped board are distinguishable; a manager that
+ *      blurs them has destroyed the only signal the page exists to carry.
+ *
+ * `projectId` is interpolated because every manager tool takes it and the model has no
+ * other way to learn it.
+ *
+ * ── TOOLS ARE NAMED BY THEIR ADVERTISED NAME, NEVER THEIR CATALOG ID ─────────────
+ * This is not a style point; it is the bug this function shipped with. The catalog id is
+ * `manager.digest`, but a model is advertised `builtin_manager_digest` — so a prompt
+ * naming the dotted id points at a tool that appears nowhere in the model's tool list.
+ * The observed result was exactly what you would expect and nothing like an error: the
+ * manager DESCRIBED the calls it could not make ("The tools required are manager.digest,
+ * manager.decisions and manager.census") and reported having no data, three questions in
+ * a row. `nameFor` resolves each id against the tools ACTUALLY advertised on this turn
+ * and omits any that are missing — so the prompt cannot reference a tool the model does
+ * not have, whatever changes to the allowlist come later.
+ */
+export function accountabilityFraming(projectId: number, nameFor: (toolId: string) => string | null): string {
+  const digest = nameFor('manager.digest');
+  const decisions = nameFor('manager.decisions');
+  const census = nameFor('manager.census');
+  const policy = nameFor('manager.policy');
+  const wiring = nameFor('autonomy.wiring_audit');
+  const lifecycle = nameFor('tickets.lifecycle');
+  const call = (name: string | null, what: string) => (name ? `${name}(projectId=${projectId}) ${what}` : null);
+  const record = [
+    call(digest, 'for what finished today and yesterday'),
+    call(decisions, 'for what you actually decided'),
+    call(census, 'for what is stuck across every ticket'),
+    call(policy, 'for what you were PERMITTED to do and whether autonomy was paused'),
+  ].filter(Boolean).join(', ');
+
+  return [
+    `This is the AI MANAGER's accountability chat for project #${projectId}: the user is asking you to account for what the team — and you — actually got done, and why more did not. `,
+    record
+      ? `Before answering ANY question about outcomes you MUST actually CALL these tools — do not describe them, do not list them, do not say what they would return: ${record}. `
+      : '',
+    wiring ? `Call ${wiring}() when the question is whether work can complete unattended at all. ` : '',
+    lifecycle ? `Call ${lifecycle}(taskId) for why one specific ticket is stuck. ` : '',
+    `Answer with those numbers and cite the tickets by key. Never claim work you cannot point at, and never report that a tool "has not returned results" — if you have not called it, call it now. `,
+    `If little or nothing got done, say so plainly in the first sentence, then name the SPECIFIC gate that held the work (an unstaffed lane, merge authority withheld from you, an exhausted token budget, a sign-off nobody gave, a failure breaker) and the ONE change that would unblock it. Do not apologise instead of explaining, and never describe a stalled board as progress. `,
+  ].join('');
 }
 
 export interface AppendMessagesDto {
@@ -138,6 +235,7 @@ const chatColumns = {
   title: brainChats.title,
   ownerId: brainChats.userId,
   visibility: brainChats.visibility,
+  capability: brainChats.capability,
   createdAt: brainChats.createdAt,
   updatedAt: brainChats.updatedAt,
 } as const;
@@ -265,8 +363,10 @@ export class BrainService {
       if (existing) return;
       await this.db.insert(chatMembers)
         .values({ chatId, tenantId, userId, status: 'active', role: 'participant' });
-    } catch {
+    } catch (error) {
       /* audience tracking is non-critical — never fail a post over it */
+    
+      reportCaughtError(error, { source: "application/brain/BrainService.ts", operation: "ensureMembership" });
     }
   }
 
@@ -434,8 +534,10 @@ export class BrainService {
           list.push({ ref: m.userId, kind: 'human', name: m.name || m.email || undefined });
           byChat.set(m.chatId, list);
         }
-      } catch {
+      } catch (error) {
         /* participants are non-critical — the chat list must survive their absence */
+      
+        reportCaughtError(error, { source: "application/brain/BrainService.ts", operation: "attachParticipants" });
       }
     }
     return rows.map((r) => ({ ...r, participants: byChat.get(r.id) ?? [] }));
@@ -457,6 +559,7 @@ export class BrainService {
         origin: BRAIN_ORIGIN,
         projectId: dto.projectId ?? null,
         title,
+        capability: normalizeCapability(dto.capability),
       })
       .returning(chatColumns);
 
@@ -473,18 +576,75 @@ export class BrainService {
    *  index means a concurrent create just re-selects the winner. `userId` may be null
    *  (an unattended agent resolving it). */
   private async findTeamChat(tenantId: number, scope: TeamChatScope) {
+    return this.findScopedChat(tenantId, TEAM_ORIGIN, scope);
+  }
+
+  /**
+   * The live (non-archived) chat that IS a given scope, for any singleton-chat origin.
+   *
+   * Shared by the team chat (0294) and the manager chat (0376) because they are the
+   * same shape — one canonical conversation per (tenant, origin, scope), backed by a
+   * partial unique index and resolved by get-or-create. Duplicating the lookup is how
+   * two "always-there" chats drift into disagreeing about what "already exists" means,
+   * and a forked singleton chat loses half its transcript on the next read.
+   */
+  private async findScopedChat(tenantId: number, origin: string, scope: TeamChatScope) {
     const [row] = await this.db
       .select(chatDetailColumns)
       .from(brainChats)
       .where(and(
         eq(brainChats.tenantId, tenantId),
-        eq(brainChats.origin, TEAM_ORIGIN),
+        eq(brainChats.origin, origin),
         eq(brainChats.isArchived, false),
         scope.projectId != null ? eq(brainChats.projectId, scope.projectId) : isNull(brainChats.projectId),
         scope.teamId != null ? eq(brainChats.teamId, scope.teamId) : isNull(brainChats.teamId),
       ))
       .limit(1);
     return row ?? null;
+  }
+
+  /**
+   * Resolve the ONE MANAGER chat for a project, creating it on first access (0376).
+   *
+   * This is where a person holds the AI Manager to account — "what did you and the team
+   * get done today, and why not more?" — so it is deliberately a real Brain chat rather
+   * than a bespoke Q&A log: it inherits the transcript, the members, the agent
+   * participants, the addressed-agent reply loop and the tool trace, and the manager
+   * answers through the SAME path any other agent teammate answers through.
+   *
+   * `visibility: 'shared'` because the manager's account of the team's day belongs to
+   * the team, not to whoever opened the page first. Race-safe via `uq_manager_chat_scope`.
+   */
+  async getOrCreateManagerChat(tenantId: number, userId: string | null, projectId: number) {
+    const proj = await this.verifyProjectInTenant(projectId, tenantId);
+    if (!proj) return { error: 'Project not found in tenant' as const };
+
+    let chat = await this.findScopedChat(tenantId, MANAGER_ORIGIN, { projectId });
+    if (!chat) {
+      try {
+        const [created] = await this.db
+          .insert(brainChats)
+          .values({
+            tenantId, userId: userId ?? null, origin: MANAGER_ORIGIN, projectId,
+            title: `${proj.name} — Manager`, visibility: 'shared',
+          })
+          .returning(chatDetailColumns);
+        chat = created ?? null;
+      } catch {
+        // Lost the create race (unique index) — the winner is now selectable.
+        chat = await this.findScopedChat(tenantId, MANAGER_ORIGIN, { projectId });
+      }
+    }
+    if (!chat) return { error: 'Chat not found' as const };
+
+    const { ownerId, ...rest } = chat as unknown as Record<string, unknown> & { ownerId: string | null };
+    return {
+      ...rest,
+      id: (chat as unknown as { id: number }).id,
+      isOwner: ownerId != null && ownerId === userId,
+      visibility: (rest as { visibility?: string }).visibility ?? 'shared',
+      isManagerChat: true as const,
+    };
   }
 
   private async verifyTeamInTenant(teamId: number, tenantId: number) {
@@ -576,6 +736,7 @@ export class BrainService {
       projectId: brainChats.projectId,
       origin: brainChats.origin,
       title: brainChats.title,
+      capability: brainChats.capability,
       createdAt: brainChats.createdAt,
       updatedAt: brainChats.updatedAt,
       isArchived: brainChats.isArchived,
@@ -604,6 +765,7 @@ export class BrainService {
     if (dto.title !== undefined) updates.title = dto.title.trim() || 'New chat';
     if (dto.projectId !== undefined) updates.projectId = dto.projectId;
     if (dto.visibility === 'shared' || dto.visibility === 'locked') updates.visibility = dto.visibility;
+    if (dto.capability !== undefined) updates.capability = normalizeCapability(dto.capability);
 
     const [updated] = await this.db
       .update(brainChats)
@@ -644,6 +806,16 @@ export class BrainService {
     return msgs;
   }
 
+  /** Advance the caller's read high-water mark for a chat (unread-badge state).
+   *  Access-checked, then delegates to the shared {@link markChatRead} rule.
+   *  `seq` omitted → mark everything read. Returns the seq actually stored. */
+  async markRead(chatId: number, tenantId: number, userId: string, seq?: number | null) {
+    const chat = await this.canAccessChat(chatId, tenantId, userId);
+    if (!chat) return { error: 'Chat not found' as const };
+    const lastReadSeq = await markChatRead(this.db, tenantId, userId, chatId, seq);
+    return { lastReadSeq };
+  }
+
   async appendMessages(
     chatId: number,
     tenantId: number,
@@ -668,12 +840,6 @@ export class BrainService {
    *  callers must have already verified access. Shared by {@link appendMessages}
    *  and {@link agentReply} so the write path lives once. */
   private async appendRaw(chatId: number, messages: Array<{ role: string; content: string; metadata?: string | null }>) {
-    const [maxRow] = await this.db
-      .select({ maxSeq: sql<number>`COALESCE(MAX(${brainChatMessages.seq}), 0)` })
-      .from(brainChatMessages)
-      .where(eq(brainChatMessages.chatId, chatId));
-    let seq = maxRow?.maxSeq ?? 0;
-
     const inserted: Array<{
       id: number;
       role: string;
@@ -685,7 +851,6 @@ export class BrainService {
 
     for (const msg of messages) {
       if (!msg.role || typeof msg.content !== 'string') continue;
-      seq += 1;
       const [row] = await this.db
         .insert(brainChatMessages)
         .values({
@@ -693,10 +858,14 @@ export class BrainService {
           role: msg.role,
           content: msg.content,
           metadata: msg.metadata ?? null,
-          seq,
         })
         .returning(messageColumns);
-      if (row) inserted.push(row);
+      if (row) {
+        // The generated PK is an atomic database append order. A read-then-write
+        // MAX(seq)+1 races when agents and humans append concurrently.
+        await this.db.update(brainChatMessages).set({ seq: row.id }).where(eq(brainChatMessages.id, row.id));
+        inserted.push({ ...row, seq: row.id });
+      }
     }
 
     // Touch updatedAt on the chat
@@ -790,7 +959,12 @@ export class BrainService {
     env: Env,
     opts?: { role?: string; authToken?: string | null; executionCtx?: ExecutionContext },
   ) {
-    const chat = await this.canAccessChat(chatId, tenantId, userId);
+    // `origin` is read alongside the access check because the MANAGER chat (0376) asks a
+    // different KIND of question than a team chat does — see `accountabilityFraming`.
+    const chat = await this.canAccessChat(chatId, tenantId, userId, {
+      projectId: brainChats.projectId,
+      origin: brainChats.origin,
+    });
     if (!chat) return { error: 'Chat not found' as const };
     const apiKey = env.OPENROUTER_API_KEY;
     if (!apiKey) return { error: 'LLM not configured' as const };
@@ -828,32 +1002,53 @@ export class BrainService {
       .join('\n\n');
 
     const projectHint = (chat as unknown as { projectId?: number | null }).projectId ?? null;
-    const systemPrompt = [
-      persona,
-      `You have been addressed directly in this multi-party team chat${projectHint != null ? ` (project #${projectHint})` : ''}. `,
-      `Reply AS ${agentName} — first person, concise, helpful, no preamble and no "${agentName}:" label. `,
-      `You may use the provided tools to read or update the team's work (projects, tasks, specs, OKRs, knowledge) when it helps answer or act on the request. After using tools, summarise what you found or did. `,
-      // The agent IS a participant in this chat (chatId is known here, not to the model) —
-      // tell it the id so it can tie work items to THIS conversation via chats.link_ticket
-      // and read what is already linked via chats.list_tickets. Without this the chat-scoped
-      // tools are advertised but unusable (the model has no chatId to pass).
-      `You are participating in Brain chat #${chatId}. When you create or discuss a work item that belongs to this conversation, tie it to the chat with chats.link_ticket (chatId=${chatId}); use chats.list_tickets (chatId=${chatId}) to see what is already linked. `,
-      `When you need the user to make a decision before you can proceed (an owner, an approach, one target vs another), call the ask_user tool with labelled options INSTEAD of asking in prose — do not end your reply with unanswered questions when ask_user would let the user just click a choice.`,
-    ].join('');
+    const isManagerChat = (chat as unknown as { origin?: string | null }).origin === MANAGER_ORIGIN;
 
     // Curated, non-destructive platform tools (the same allowlist an autonomous cloud
     // agent gets) PLUS the chat-scoped read/link tools that only make sense with a live
     // chatId (so an agent addressed in a chat can link work to it). Advertised name →
     // tool id map for executing the model's calls.
+    //
+    // Resolved BEFORE the system prompt because the prompt must name tools by the string
+    // the model was actually given. It previously named them by catalog id (`manager.digest`,
+    // `chats.link_ticket`) — names that appear nowhere in the model's tool list — and the
+    // measured result was an agent narrating the calls it could not make instead of making
+    // them. `nameFor` returns null for a tool that is not advertised on this turn, so a
+    // prompt clause referencing it is DROPPED rather than pointing at nothing.
     const agentToolIds = [...CLOUD_AGENT_PLATFORM_TOOLS, ...CHAT_SCOPED_AGENT_TOOLS];
     const toolEntries = listBuiltinTools().filter((t) => agentToolIds.includes(t.tool));
     const nameToTool = new Map(toolEntries.map((t) => [t.name, t.tool]));
+    const toolToName = new Map(toolEntries.map((t) => [t.tool, t.name]));
+    const nameFor = (toolId: string): string | null => toolToName.get(toolId) ?? null;
     // Advertise the platform tools PLUS the conversational `ask_user` tool (injected
     // here, intercepted below as a terminal turn — see ASK_USER_TOOL_SPEC).
     const tools = [
       ...toolEntries.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
       ASK_USER_TOOL_SPEC,
     ];
+
+    const linkTicket = nameFor('chats.link_ticket');
+    const listTickets = nameFor('chats.list_tickets');
+    const systemPrompt = [
+      persona,
+      `You have been addressed directly in this multi-party team chat${projectHint != null ? ` (project #${projectHint})` : ''}. `,
+      // The MANAGER chat's framing (0376). It lives here rather than only in the built-in
+      // Manager agent's persona because a tenant may designate its OWN cloud agent to run
+      // the backlog, and that agent's persona knows nothing about being accountable for
+      // it. The standard has to attach to the CONVERSATION, not to one agent row, or the
+      // answer quality would silently depend on who was designated.
+      ...(isManagerChat && projectHint != null ? [accountabilityFraming(projectHint, nameFor)] : []),
+      `Reply AS ${agentName} — first person, concise, helpful, no preamble and no "${agentName}:" label. `,
+      `You may use the provided tools to read or update the team's work (projects, tasks, specs, OKRs, knowledge) when it helps answer or act on the request. After using tools, summarise what you found or did. `,
+      // The agent IS a participant in this chat (chatId is known here, not to the model) —
+      // tell it the id so it can tie work items to THIS conversation. Named by ADVERTISED
+      // name for the same reason as above; dropped entirely when the tools are not offered.
+      `You are participating in Brain chat #${chatId}. `,
+      linkTicket && listTickets
+        ? `When you create or discuss a work item that belongs to this conversation, tie it to the chat with ${linkTicket}(chatId=${chatId}); use ${listTickets}(chatId=${chatId}) to see what is already linked. `
+        : '',
+      `When you need the user to make a decision before you can proceed (an owner, an approach, one target vs another), call the ${ASK_USER_TOOL} tool with labelled options INSTEAD of asking in prose — do not end your reply with unanswered questions when ${ASK_USER_TOOL} would let the user just click a choice.`,
+    ].join('');
 
     const convo: Array<Record<string, unknown>> = [
       { role: 'system', content: systemPrompt },
@@ -900,6 +1095,32 @@ export class BrainService {
     let text = '';
     let toolCallCount = 0;
     let iterations = 0;
+    /**
+     * The reply's TOOL TRACE, persisted at the end of the turn.
+     *
+     * This loop used to leave no server-side record of what it did: the trace table was
+     * written only by the client-driven Brain run loop, so an addressed-agent reply — the
+     * ONLY path the manager's accountability chat uses — was unauditable. When the manager
+     * answered "the required tools have not returned results" there was literally nothing
+     * to inspect: no tool rows, no errors, no way to tell "the model never called anything"
+     * from "every call failed". Those two have completely different fixes, and the surface
+     * could not distinguish them.
+     *
+     * Buffered rather than written per tool because a Worker should not pay a round-trip
+     * inside the loop; one bounded append at the end is enough for a diagnostic and cannot
+     * slow the reply. Best-effort throughout — a trace failure must never cost an answer.
+     */
+    const trace: BrainTraceEventInput[] = [];
+    // Budget for the announced-but-untaken tool call recovery below (shared with the
+    // Brain run loop and the agent runtime via `@builderforce/agent-stall`).
+    let announcementRecoveries = 0;
+    // The model this reply is currently talking to, plus every model already tried.
+    // A model that burns its whole stall budget without emitting a tool call is spent;
+    // dropping the pin hands the next attempt to the gateway cascade, which routes
+    // past it to a different model rather than returning a promise as the answer.
+    let activeModel = pinnedModel;
+    const triedModels: string[] = [];
+    let modelFailovers = 0;
     let lastModel = pinnedModel ?? '';
     let lastFinish = '';
     // Auto-compact the running transcript BEFORE each paid turn so a tool-heavy reply
@@ -914,7 +1135,7 @@ export class BrainService {
       const compaction = await compactMessages(convo, CLOUD_COMPACT_DEFAULTS, summarize);
       if (compaction.compacted) convo.splice(0, convo.length, ...compaction.messages);
       const result = await service.complete({
-        model: pinnedModel,
+        model: activeModel,
         messages: convo as never,
         tools,
         temperature: replyTemp,
@@ -929,8 +1150,64 @@ export class BrainService {
       // NOT read as if it were the choices envelope (that silently empties every reply).
       const { message, content, toolCalls, finishReason } = await readProxyChoice(result);
       lastFinish = finishReason || lastFinish;
+      // The MODEL turn itself, recorded whether or not it called anything. A turn with
+      // `toolCalls: 0` and prose that merely names tools is the announced-but-untaken
+      // stall, and without this row it is indistinguishable from a turn whose tools all
+      // failed — the two have opposite fixes.
+      trace.push({
+        kind: 'llm',
+        label: readModel(result) || activeModel || '(gateway default)',
+        result: {
+          finishReason,
+          toolCalls: toolCalls.length,
+          toolNames: toolCalls.map((tc) => tc.function.name),
+          replyChars: content.length,
+          advertisedTools: tools.length,
+        },
+        turnSeq: iterations,
+      });
 
       if (toolCalls.length === 0) {
+        // The model ANNOUNCED an action and then ended the turn without taking it
+        // ("I'll search the codebase…" → finish: stop, 0 tool calls). Breaking here
+        // returns the promise to the user as the answer. Re-prompt instead, bounded
+        // per reply by the shared budget. Same gate + wording as the Brain run loop
+        // and the on-prem/cloud agent loop (`@builderforce/agent-stall`).
+        const stallInput = {
+          text: content,
+          toolCallCount: 0,
+          availableToolCount: tools.length,
+          recoveriesUsed: announcementRecoveries,
+        };
+        if (shouldRecoverStalledTurn(stallInput)) {
+          announcementRecoveries += 1;
+          convo.push({ role: 'assistant', content });
+          convo.push({
+            role: 'user',
+            content: stallRecoveryNudge(announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES),
+          });
+          continue;
+        }
+        // Every recovery spent and the reply is STILL only a description of calls it
+        // never made. Re-prompting THIS model is finished — so fail over rather than
+        // hand the requester a promise dressed as an answer. Dropping the pin routes
+        // the retry through the gateway cascade, which selects a different model; the
+        // model that just failed goes into `triedModels` so a repeat is recognisable.
+        if (isExhaustedStall(stallInput)) {
+          for (const m of [activeModel, lastModel]) if (m && !triedModels.includes(m)) triedModels.push(m);
+          // Only worth retrying while an UNTRIED route remains: once the pin is already
+          // dropped, another unpinned attempt would just re-select the same model.
+          if (modelFailovers < MAX_MODEL_FAILOVERS && activeModel) {
+            modelFailovers += 1;
+            activeModel = undefined;
+            announcementRecoveries = 0;
+            convo.push({ role: 'assistant', content });
+            convo.push({ role: 'user', content: stallRecoveryNudge(false) });
+            continue;
+          }
+          text = `${content}\n\n${stallExhaustedNotice(lastModel, triedModels)}`;
+          break;
+        }
         text = content;
         break;
       }
@@ -966,15 +1243,26 @@ export class BrainService {
         }
         const toolId = nameToTool.get(tc.function.name) ?? tc.function.name;
         let out: unknown;
+        let isError = false;
+        const startedAt = Date.now();
+        let argObj: unknown = {};
         try {
-          const argObj = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
+          argObj = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
           out = await callBuiltinTool(this.db, {
-            tenantId, tool: toolId, arguments: argObj, env,
+            tenantId, tool: toolId, arguments: argObj as Record<string, unknown>, env,
             userId, role: opts?.role as never, authToken: opts?.authToken, executionCtx: opts?.executionCtx,
           });
         } catch (e) {
+          isError = true;
           out = { error: e instanceof Error ? e.message : 'tool call failed' };
         }
+        // The CATALOG id is the label, not the advertised name: it is what a reader greps
+        // for and what the prompt/allowlist are written in. A name the model invented that
+        // resolves to nothing lands here verbatim, which is itself the diagnosis.
+        trace.push({
+          kind: 'tool', label: toolId, args: argObj, result: out,
+          isError, durationMs: Date.now() - startedAt, turnSeq: iterations,
+        });
         convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out ?? null).slice(0, 8000) });
       }
     }
@@ -1006,9 +1294,10 @@ export class BrainService {
     // SSM can't tool-call, so it never drives tool selection). SOFT pin: passing
     // `evermind/<ref>` WITHOUT modelStrict makes complete() try Evermind first and CASCADE
     // to the coding pool on error; we ADOPT the Evermind turn only when Evermind ITSELF
-    // served a substantive reply (resolved model still `evermind/`, ≥20 chars) — otherwise
-    // we keep the capable-model answer. So enabling inference can never break or blank a
-    // reply, and a successful turn carries the "🧠 Evermind vN" provenance chip.
+    // served a substantive AND coherent reply (resolved model still `evermind/`, ≥20 chars,
+    // passes `looksLikeCoherentText`) — otherwise we keep the capable-model answer. So an
+    // under-trained head can never make the agent reply in gibberish, enabling inference can
+    // never break or blank a reply, and a successful turn carries the "🧠 Evermind vN" chip.
     // [[evermind-learning-architecture]]
     let evermindRun: { version: number } | undefined;
     if (text && projectHint != null) {
@@ -1023,7 +1312,22 @@ export class BrainService {
         this.recordUsage(apiKey, tenantId, 'brain_agent_reply', evResult);
         const evModel = readModel(evResult);
         const evChoice = await readProxyChoice(evResult);
-        if (evModel.startsWith('evermind/') && evChoice.content.trim().length >= 20) {
+        // Adopt the Evermind turn ONLY when it served a substantive AND coherent reply
+        // (same bar the memory-first resolver uses — DRY). An under-trained head emits
+        // gibberish that clears the length check; keep the capable-model answer instead.
+        const evRan = evModel.startsWith('evermind/'); // false if it cascaded to a real model
+        // The transcript is passed as context so domain jargon the conversation already
+        // uses is never mistaken for the invented-word gibberish the gate hunts for.
+        const evCoherent = evRan && isServableText(evChoice.content, { context: transcript }).coherent;
+        // Feed the outcome to the head's quarantine counter (only when Evermind ITSELF
+        // ran — a cascade-away isn't the SSM's output). N incoherent serves in a row
+        // auto-disable inference so a broken head stops answering in gibberish.
+        if (evRan) {
+          await recordEvermindServeOutcome(env, this.db, tenantId, projectHint, evCoherent).catch((error) => { /* best-effort */ 
+            reportCaughtError(error, { source: "application/brain/BrainService.ts", operation: "agentReply" });
+          });
+        }
+        if (evCoherent) {
           text = evChoice.content;
           lastModel = evModel;
           lastVendor = readVendor(evResult) || lastVendor;
@@ -1100,6 +1404,56 @@ export class BrainService {
       provenance,
     });
     const [posted] = await this.appendRaw(chatId, [{ role: 'assistant', content: text, metadata }]);
+
+    // Persist the tool trace for THIS reply. Until this existed, an addressed-agent turn
+    // left no server-side record of what it called — so when the manager reported that
+    // its tools "have not returned results", there was nothing to inspect and no way to
+    // tell a model that never called anything from calls that all failed. One bounded
+    // append after the reply is posted: it must never delay or fail the answer.
+    if (trace.length > 0) {
+      await this.appendTrace(chatId, trace).catch((error) => {
+        reportCaughtError(error, { source: "application/brain/BrainService.ts", operation: "agentReply" });
+      });
+    }
+
+    // Audit: an agent ACTED in this chat, and on WHICH MODEL. Previously a chat turn
+    // wrote no activity row at all, so the audit timeline could not answer "what model
+    // did this agent run on" — the provenance existed only on the chat message. Same
+    // `provenance` object, projected through the ONE shared metadata builder the gateway
+    // default-agent turn also uses. Best-effort by design (recordActivity swallows) —
+    // `llm_usage_log` remains the billing source of truth.
+    await recordActivity(env, this.db, {
+      tenantId,
+      projectId: projectHint,
+      actor: cloudAgentActor(input.agentRef, agentName),
+      verb: 'agent.replied',
+      targetType: 'chat',
+      targetId: chatId,
+      targetLabel: (chat as unknown as { title?: string | null }).title ?? null,
+      summary: `${agentName} replied in chat #${chatId}${provenance.model ? ` using ${provenance.model}` : ''}`,
+      metadata: buildModelActivityMetadata({
+        via: 'brain-chat',
+        model: provenance.model,
+        vendor: provenance.vendor,
+        account: provenance.account,
+        byoFunded: lastByoFunded,
+        evermind: provenance.evermind,
+        extra: { chatId },
+      }),
+    });
+
+    // Contribute this @agent reply to the project's Evermind through the SAME
+    // learn-on-persist path the Brain message route uses. Previously the addressed-reply
+    // loop persisted via appendRaw DIRECTLY and silently skipped training, so @agent
+    // turns never fed the project Evermind (GAP-488). Best-effort; dispatched in the
+    // background via the route's executionCtx when present.
+    await learnFromPersistedTurns(
+      env, this.db, chatId, tenantId, [{ role: 'assistant', content: text }],
+      (p) => { if (opts?.executionCtx) opts.executionCtx.waitUntil(p); },
+    ).catch((error) => { /* never fail the reply */ 
+      reportCaughtError(error, { source: "application/brain/BrainService.ts", operation: "agentReply" });
+    });
+
     return posted ?? { error: 'Failed to post reply' as const };
   }
 

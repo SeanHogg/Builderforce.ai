@@ -17,7 +17,11 @@ import { signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { hashPassword, verifyPassword } from '../../infrastructure/auth/HashService';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
 import { getOrSetCached, invalidateCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import type { Env, HonoEnv } from '../../env';
+import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
+import { sendWelcomeEmail } from '../../infrastructure/email/EmailService';
+import { sendTransactionalEmail } from '../../application/email/sendEmail';
+import { headerHints } from '../../application/email/emailLocaleResolver';
+import { localeFromHeaders } from '../../infrastructure/email/emailLocale';
 
 /** Read-through cache key for a single published skill's SEO/SSR payload. */
 const skillSeoCacheKey = (slug: string): string => `mp:skill:seo:${slug}`;
@@ -140,13 +144,35 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
     const passwordHash = await hashPassword(password);
 
     const userId = crypto.randomUUID();
+    // Capture the language this signup happened in so the welcome — and every
+    // later mail — is written in it.
+    const locale = localeFromHeaders(headerHints(c.req));
+
     await db.insert(schema.users).values({
       id:           userId,
       email,
       username,
       displayName:  display_name ?? username,
       passwordHash,
+      locale,
     });
+
+    // Fire-and-forget: a mail failure must not fail the registration. This path
+    // never creates a gig account, so the builder next steps apply.
+    void sendTransactionalEmail(
+      c.env,
+      db,
+      email,
+      (ctx) => sendWelcomeEmail(
+        c.env,
+        email,
+        display_name ?? username,
+        resolveAppBaseUrl(c.env),
+        'standard',
+        ctx.locale,
+      ),
+      { storedLocale: locale, headers: headerHints(c.req) },
+    );
 
     const token = await signWebJwt(
       { sub: userId, email, username },

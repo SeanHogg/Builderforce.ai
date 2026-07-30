@@ -26,14 +26,14 @@ import {
   CODING_BACKSTOP_MODELS,
   PREMIUM_VENDOR_CALL_TIMEOUT_MS,
   explicitModelPreemptsByo,
+  canonicalModelId,
   type LlmProxyService,
   type ChatCompletionRequest,
   type ProxyResult,
 } from './LlmProxyService';
 import {
   resolveTenantLlmCredentials,
-  byoVendorIdSet,
-  providersFromCredentials,
+  byoVendorIdsFromCredentials,
   type TenantVendorKeys,
 } from './tenantProviderKeyService';
 import { recordProxyUsage } from './usageLedger';
@@ -82,19 +82,45 @@ export async function tenantProxyForPlan(
           .catch(() => ({ effectivePlan: 'free' as const, premiumOverride: false })),
     resolveTenantLlmCredentials(env, tenantId).catch(() => ({
       anthropicOAuthToken: null,
+      openaiCodexAuth: null,
+      xaiOAuthToken: null,
       vendorKeys: {} as TenantVendorKeys,
       configuredProviders: [],
       unresolvedReasons: {},
+      vendorPriority: [],
+      providerPriorities: [],
+      openRouterConnections: [],
+      openRouterModelKeys: {},
     })),
   ]);
 
-  const byoVendors = byoVendorIdSet(providersFromCredentials(creds));
+  // The DISPATCH vendor ids (a subscription rides `openai-codex` / `xai-oauth`, not the
+  // api-key vendor) — the same set the proxy's BYO boundary enforces, so a gated model
+  // can't name a vendor the proxy would then filter out.
+  const byoVendors = byoVendorIdsFromCredentials(creds);
 
   const proxy = llmProxyForPlan(env, plan.effectivePlan, plan.premiumOverride, {
     ...(opts?.codingOnly ? { codingOnly: true, backstopModels: CODING_BACKSTOP_MODELS } : {}),
     ...(opts?.disablePaidOverflow ? { disablePaidOverflow: true } : {}),
     ...(creds.anthropicOAuthToken ? { anthropicOAuthToken: creds.anthropicOAuthToken } : {}),
+    ...(creds.openaiCodexAuth ? { openaiCodexAuth: creds.openaiCodexAuth } : {}),
+    ...(creds.xaiOAuthToken ? { xaiOAuthToken: creds.xaiOAuthToken } : {}),
     ...(hasVendorKeys(creds.vendorKeys) ? { tenantVendorKeys: creds.vendorKeys } : {}),
+    ...(creds.vendorPriority.length ? { byoVendorPriority: creds.vendorPriority } : {}),
+    ...(creds.providerPriorities?.length ? { byoProviderPriorities: creds.providerPriorities } : {}),
+    ...(creds.openRouterConnections?.length ? { openRouterConnections: creds.openRouterConnections } : {}),
+    ...(creds.openRouterModelKeys && Object.keys(creds.openRouterModelKeys).length ? { openRouterModelKeys: creds.openRouterModelKeys } : {}),
+    ...(creds.configuredProviders.length ? { byoRequired: true } : {}),
+    // Carry configured-vs-resolved state into the proxy so a fail-closed BYO 503 can
+    // NAME the providers (and why each was unusable) rather than claiming none exists —
+    // the same fields that drive `x-builderforce-byo-unresolved`, so the header and the
+    // error body can never tell an operator two different stories.
+    ...(creds.configuredProviders.length ? {
+      byoDiagnostics: {
+        configuredProviders: creds.configuredProviders,
+        unresolvedReasons: creds.unresolvedReasons as Record<string, string>,
+      },
+    } : {}),
     // A connected BYO account is the PRIMARY path — lift the free plan's 15s fast-fail
     // budget so a (non-streaming) frontier completion on the tenant's own account isn't
     // aborted (`code 0 / no response`) and silently cascaded to the shared pool.
@@ -116,7 +142,11 @@ export function byoAwareModel(
   explicit: string | undefined | null,
   byoVendors: ReadonlySet<string> | null | undefined,
 ): string | undefined {
-  return explicitModelPreemptsByo(explicit, byoVendors) ? (explicit ?? undefined)?.trim() || undefined : undefined;
+  // Rewrite a superseded id BEFORE the BYO gate reads it: `vendorForModel` inside
+  // `explicitModelPreemptsByo` must see the id we will actually dispatch, or a stale
+  // Anthropic pin could be judged against one id and then dispatched as another.
+  const canonical = canonicalModelId(explicit) || undefined;
+  return explicitModelPreemptsByo(canonical, byoVendors) ? canonical : undefined;
 }
 
 export interface CompleteForTenantOptions {

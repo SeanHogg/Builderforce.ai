@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -136,7 +137,9 @@ export class GuestChatService {
       const current = await this.ipCountToday(env, ip);
       await kv
         .put(ipCounterKey(ip), String(current + 1), { expirationTtl: secondsUntilUtcMidnight() })
-        .catch(() => { /* best-effort backstop — never fail the request */ });
+        .catch((error) => { /* best-effort backstop — never fail the request */ 
+          reportCaughtError(error, { source: "application/guest/GuestChatService.ts", operation: "consumeMessage" });
+        });
     }
 
     const used = await this.visitorCountToday(visitorId);
@@ -154,6 +157,8 @@ export class GuestChatService {
       .update(marketingSessions)
       .set({ guestChatTokens: sql`${marketingSessions.guestChatTokens} + ${Math.round(totalTokens)}` })
       .where(eq(marketingSessions.visitorId, visitorId))
-      .catch(() => { /* usage accounting is best-effort */ });
+      .catch((error) => { /* usage accounting is best-effort */ 
+        reportCaughtError(error, { source: "application/guest/GuestChatService.ts", operation: "addTokens" });
+      });
   }
 }

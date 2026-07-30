@@ -14,11 +14,12 @@ import { PmoContent } from '@/components/pm/PmoContent';
 import { CeremoniesContent } from '@/components/ceremony/CeremoniesContent';
 import { ManagerContent } from '@/components/manager/ManagerContent';
 import { KanbanTemplatesContent } from '@/components/KanbanTemplatesContent';
+import RfpContent from '@/components/rfp/RfpContent';
 import { RoleGate } from '@/components/RoleGate';
 import { usePublishNavCount } from '@/lib/navCounts';
 import { PROJECTS_COUNT_KEY } from '@/lib/navGroups';
 
-type Tab = 'projects' | 'tasks' | 'manager' | 'pm' | 'portfolio' | 'ceremonies' | 'templates';
+type Tab = 'projects' | 'tasks' | 'manager' | 'pm' | 'portfolio' | 'ceremonies' | 'templates' | 'rfp';
 
 /**
  * Projects — the single destination for all project work. Its sub-views are
@@ -62,6 +63,7 @@ export default function ProjectsTasksPage() {
     : tabParam === 'portfolio' ? 'portfolio'
     : tabParam === 'ceremonies' ? 'ceremonies'
     : tabParam === 'templates' ? 'templates'
+    : tabParam === 'rfp' ? 'rfp'
     : 'projects';
   // Project scope comes from the global TopBar tenant→project selector
   // (useProjectScope), so the Planning/Tasks tabs no longer need their own
@@ -95,6 +97,7 @@ export default function ProjectsTasksPage() {
       )}
       {activeTab === 'ceremonies' && <CeremoniesContent />}
       {activeTab === 'templates' && <KanbanTemplatesContent />}
+      {activeTab === 'rfp' && <RfpContent />}
     </PageContainer>
   );
 }

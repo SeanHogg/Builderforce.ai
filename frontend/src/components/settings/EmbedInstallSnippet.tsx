@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   EMBED_VIEWS,
   EMBED_VIEW_KEYS,
@@ -8,6 +9,7 @@ import {
   type EmbedCapability,
   type EmbedView,
 } from '@seanhogg/builderforce-embedded';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 /**
  * Copy-paste install block for a host developer wiring BuilderForce into their
@@ -52,14 +54,14 @@ interface Props {
 }
 
 export function EmbedInstallSnippet({ capabilities }: Props) {
-  const [copied, setCopied] = useState<'install' | 'usage' | null>(null);
-
-  const copy = (what: 'install' | 'usage', text: string) => {
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopied(what);
-      setTimeout(() => setCopied(null), 1500);
-    });
-  };
+  const t = useTranslations('embedInstall');
+  // Two independent buttons → two hook instances, so confirming one does not light up
+  // the other; both keep the previous 1500ms window. The old single `.then()` had no
+  // rejection handler, so a refused clipboard (insecure context / permission policy)
+  // raised an unhandled rejection instead of just leaving the label alone — the shared
+  // write reports failure as a value, which is why that path is gone.
+  const installCopy = useCopyToClipboard(1500);
+  const usageCopy = useCopyToClipboard(1500);
 
   // Views the host may mount, filtered to the enabled capabilities only.
   const enabledViews = useMemo(
@@ -90,20 +92,19 @@ export default function ProductPage() {
   return (
     <div>
       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
-        Install in your host app
+        {t('heading')}
       </div>
       <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-        A host developer installs the package and renders one component per page, passing your signed
-        SSO/tenant JWT. The token is handed to the iframe over <code>postMessage</code> — never in a URL.
+        {t.rich('intro', { code: (chunks) => <code>{chunks}</code> })}
       </div>
 
-      <div style={labelStyle}>1 · Install</div>
+      <div style={labelStyle}>{t('stepInstall')}</div>
       <pre style={codeBox}>{INSTALL_CMD}</pre>
 
-      <div style={labelStyle}>2 · Mount a surface</div>
+      <div style={labelStyle}>{t('stepMount')}</div>
       <pre style={codeBox}>{usage}</pre>
 
-      <div style={labelStyle}>Mountable views ({enabledViews.length})</div>
+      <div style={labelStyle}>{t('mountableViews', { count: enabledViews.length })}</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {enabledViews.map((v) => (
           <span
@@ -119,17 +120,17 @@ export default function ProductPage() {
         ))}
         {enabledViews.length === 0 && (
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            No capabilities enabled — turn on Product / Agile / Security above to expose views.
+            {t('noCapabilities')}
           </span>
         )}
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-        <button type="button" onClick={() => copy('install', INSTALL_CMD)} style={button}>
-          {copied === 'install' ? '✓ Copied' : 'Copy install'}
+        <button type="button" onClick={() => void installCopy.copy(INSTALL_CMD)} style={button}>
+          {installCopy.copied ? t('copiedFlash') : t('copyInstall')}
         </button>
-        <button type="button" onClick={() => copy('usage', usage)} style={button}>
-          {copied === 'usage' ? '✓ Copied' : 'Copy snippet'}
+        <button type="button" onClick={() => void usageCopy.copy(usage)} style={button}>
+          {usageCopy.copied ? t('copiedFlash') : t('copySnippet')}
         </button>
       </div>
     </div>

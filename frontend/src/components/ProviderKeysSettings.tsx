@@ -3,7 +3,22 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
-import { providerKeysApi, type ProviderAuthType, type LlmProvider } from '@/lib/builderforceApi';
+import { useToast } from '@/components/ToastProvider';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { ConsumptionMeterCard } from '@/components/UsageMeter';
+import {
+  llmApi,
+  openRouterConnectionsApi,
+  providerKeysApi,
+  type ByoPrecedenceEntry,
+  type LlmUsageStats,
+  type OpenRouterCatalogModel,
+  type OpenRouterConnection,
+  type ProviderAuthAlert,
+  type ProviderAuthType,
+  type ProviderDiagnostic,
+  type LlmProvider,
+} from '@/lib/builderforceApi';
 
 /**
  * BYO (bring-your-own-provider) credentials. A workspace owner connects their OWN
@@ -26,14 +41,19 @@ interface ProviderConfig {
   label: string;
   /** Placeholder / format hint for the API-key input — literal. */
   keyPlaceholder: string;
-  /** Anthropic also supports connecting a Pro/Max subscription via OAuth. */
+  /** Provider supports connecting a consumer subscription via OAuth. */
   supportsOauth: boolean;
 }
 
 const PROVIDERS: ProviderConfig[] = [
   { id: 'anthropic', label: 'Anthropic (Claude)', keyPlaceholder: 'sk-ant-…', supportsOauth: true },
-  { id: 'openai',    label: 'OpenAI',             keyPlaceholder: 'sk-…',     supportsOauth: false },
+  { id: 'openai',    label: 'OpenAI',             keyPlaceholder: 'sk-…',     supportsOauth: true },
   { id: 'google',    label: 'Google (Gemini)',    keyPlaceholder: 'AIza…',   supportsOauth: false },
+  { id: 'meta',      label: 'Meta AI (MUSE)',     keyPlaceholder: 'meta-…',  supportsOauth: false },
+  { id: 'kimi',      label: 'Kimi',                keyPlaceholder: 'sk-…',    supportsOauth: false },
+  { id: 'qwen',      label: 'Qwen',                keyPlaceholder: 'sk-…',    supportsOauth: false },
+  { id: 'minimax',   label: 'MiniMax',             keyPlaceholder: 'sk-…',    supportsOauth: false },
+  { id: 'xai',       label: 'xAI (Grok)',           keyPlaceholder: 'xai-…',   supportsOauth: true },
 ];
 
 const cardStyle: React.CSSProperties = {
@@ -65,6 +85,178 @@ const dividerLine: React.CSSProperties = { flex: 1, height: 1, background: 'var(
 
 type TFn = ReturnType<typeof useTranslations>;
 
+/** Provider display label by id — literal brand names (not translated). */
+const PROVIDER_LABEL: Record<LlmProvider, string> = {
+  anthropic: 'Anthropic (Claude)',
+  openai: 'OpenAI',
+  google: 'Google (Gemini)',
+  meta: 'Meta AI (MUSE)',
+  kimi: 'Kimi',
+  qwen: 'Qwen',
+  minimax: 'MiniMax',
+  xai: 'xAI (Grok)',
+};
+
+/**
+ * BYO PRECEDENCE — the ordered list (most-preferred first) the auto-select cloud pin
+ * leads its connected flagships by. Shown only when 2+ providers are connected (order
+ * is moot with one). Reordering persists the whole list via `setPriority`, so an owner
+ * at their Anthropic quota can put **Meta first** and have cloud agents route there.
+ */
+function PrecedencePanel({
+  order,
+  labels,
+  onReorder,
+  t,
+}: {
+  order: string[];
+  labels: Record<string, string>;
+  onReorder: (next: string[]) => void;
+  t: TFn;
+}) {
+  const move = (index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= order.length) return;
+    const next = [...order];
+    [next[index], next[target]] = [next[target], next[index]];
+    onReorder(next);
+  };
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: 20 }}>
+      <div style={sectionTitle}>{t('precedence.title')}</div>
+      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('precedence.subtitle')}</p>
+      {order.length === 0 && <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t('status.notConnected')}</div>}
+      <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {order.map((p, i) => (
+          <li
+            key={p}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+              background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8,
+            }}
+          >
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', minWidth: 18, textAlign: 'center' }}>{i + 1}</span>
+            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', minWidth: 0 }}>{labels[p] ?? p}</span>
+            {i === 0 && (
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: 'rgba(34,197,94,0.9)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                {t('precedence.leads')}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => move(i, -1)}
+              disabled={i === 0}
+              aria-label={t('precedence.moveUp', { provider: labels[p] ?? p })}
+              style={{ ...buttonPrimary, padding: '2px 9px', opacity: i === 0 ? 0.4 : 1 }}
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              onClick={() => move(i, 1)}
+              disabled={i === order.length - 1}
+              aria-label={t('precedence.moveDown', { provider: labels[p] ?? p })}
+              style={{ ...buttonPrimary, padding: '2px 9px', opacity: i === order.length - 1 ? 0.4 : 1 }}
+            >
+              ↓
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/**
+ * "Reconnect this account" notice — the operator-facing end of the gateway's
+ * auth-class failover signal.
+ *
+ * Rendered whenever a connected account was REJECTED on a recent call (401/403).
+ * Nothing else on this page can show that: `● connected` only means a credential is
+ * stored, and the diagnostic status only means it decrypts — a ChatGPT plan that
+ * lapsed still satisfies both while 403ing every request. Until now the gateway
+ * cooled the vendor, failed over, and the operator was never told, so the account
+ * sat "connected" and unused indefinitely.
+ *
+ * Warning-coloured, not error: the request itself succeeded elsewhere, so this is
+ * "your account isn't being used", not "something is broken". Uses the theme's
+ * `--warning-*` triple with literal fallbacks so it reads in light AND dark, and
+ * wraps freely so it doesn't overflow a 360px viewport.
+ */
+/** Failure reason → its remediation copy key. Typed as an exhaustive record so adding a
+ *  reason to {@link ProviderAuthAlert} is a compile error until copy exists for it — the
+ *  alternative (interpolating the reason into the key) silently renders a raw key the day
+ *  the API grows a new one, and the reasons are snake_case while the catalog is camel. */
+const ALERT_COPY_KEY: Record<ProviderAuthAlert['reason'], string> = {
+  not_entitled: 'authAlert.notEntitled',
+  rejected: 'authAlert.rejected',
+  capacity: 'authAlert.capacity',
+  unresolved: 'authAlert.unresolved',
+};
+
+function AuthAlertNotice({ alert, t }: { alert: ProviderAuthAlert; t: TFn }) {
+  return (
+    <div
+      role="status"
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'baseline',
+        gap: 6,
+        marginTop: 8,
+        padding: '8px 10px',
+        borderRadius: 8,
+        fontSize: 11.5,
+        lineHeight: 1.5,
+        background: 'var(--warning-bg, rgba(245,158,11,0.16))',
+        color: 'var(--warning-text, #b45309)',
+        border: '1px solid var(--warning, #d97706)',
+      }}
+    >
+      <strong style={{ fontWeight: 700 }}>{t('authAlert.title')}</strong>
+      <span style={{ minWidth: 0 }}>{t(ALERT_COPY_KEY[alert.reason], { status: alert.status })}</span>
+    </div>
+  );
+}
+
+/**
+ * THE connection-status chip — grid card and details drawer both render this one
+ * component, so they cannot disagree about whether an account is working.
+ *
+ * It deliberately reports HEALTH, not configuration. Both surfaces previously coloured
+ * themselves green off "a credential is stored", which is why the Integrations page could
+ * show five healthy-looking cards while Test connection failed on one of them: a lapsed
+ * subscription, a rotated key and an out-of-credit account all keep a stored credential
+ * that decrypts perfectly. When the daily sweep (or a dispatch, or the Test button) has
+ * recorded an alert, this reads "needs attention" in warning colour instead — the chip
+ * decides that itself from the alert, rather than taking a `healthy` prop a caller could
+ * forget to pass.
+ */
+function ProviderStatusChip({
+  label, subscription, authType, alert, t, style,
+}: {
+  label: string;
+  /** Subscription display name, for the OAuth wording. */
+  subscription: string;
+  authType: ProviderAuthType | null;
+  alert?: ProviderAuthAlert;
+  t: TFn;
+  style?: React.CSSProperties;
+}) {
+  // The "needs attention" wording names the ACCOUNT, not the connected sentence: an
+  // account that is stored but refused is not meaningfully "connected", and splicing the
+  // two ("… connected — needs attention") reads as a contradiction.
+  const text = authType === null ? t('status.notConnected')
+    : alert ? t('status.needsAttention', { label: authType === 'oauth' ? subscription : label })
+    : authType === 'oauth' ? t('status.connected', { subscription })
+    : t('status.keyConfigured', { label });
+  const color = authType === null ? 'var(--text-muted)'
+    : alert ? 'var(--warning-text, #b45309)'
+    : 'rgba(34,197,94,0.9)';
+  return <span style={{ fontSize: 12, fontWeight: 650, color, ...style }}>{text}</span>;
+}
+
 /**
  * One provider's connect card. Owns its own draft/busy/connect state and decides
  * its own UI from the provider config (OAuth block only when supported). Reports
@@ -74,11 +266,14 @@ function ProviderConnectionCard({
   config,
   authType,
   onChange,
+  onHealthChange,
   t,
 }: {
   config: ProviderConfig;
   authType: ProviderAuthType | null; // null = nothing configured
   onChange: (authType: ProviderAuthType | null) => void;
+  /** Report a fresh health verdict (from a probe) up so the grid repaints too. */
+  onHealthChange: (alert: ProviderAuthAlert | null) => void;
   t: TFn;
 }) {
   const [draft, setDraft] = useState('');
@@ -86,7 +281,42 @@ function ProviderConnectionCard({
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [pastedCode, setPastedCode] = useState('');
+  const [oauthState, setOauthState] = useState('');
+  const [diagnostic, setDiagnostic] = useState<ProviderDiagnostic | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ message: string; ok: boolean } | null>(null);
   const confirm = useConfirm();
+  const toast = useToast();
+
+  const loadDiagnostic = () => providerKeysApi.status(config.id).then(setDiagnostic).catch((e: Error) => setError(e.message));
+  useEffect(() => { void loadDiagnostic(); }, [config.id, authType]);
+
+  /** Localized label for a diagnostic status; unknown values degrade to the raw id. */
+  const stateLabel = (status: string) => {
+    const label = t(`diagnostic.state.${status}`);
+    return label === `diagnostic.state.${status}` ? status.replaceAll('_', ' ') : label;
+  };
+
+  const testConnection = async () => {
+    setTesting(true); setTestResult(null); setError(null);
+    try {
+      const result = await providerKeysApi.test(config.id);
+      const message = result.ok
+        ? (result.model ? t('diagnostic.verifiedWith', { model: result.model }) : t('diagnostic.verified'))
+        : result.error ?? t('diagnostic.failedFallback', { status: stateLabel(result.status) });
+      setTestResult({ message, ok: result.ok });
+      if (!result.ok) toast.error(message, { title: t('diagnostic.failedTitle', { label: config.label }) });
+      // Repaint the whole page's health from THIS verdict — the probe just wrote (or
+      // cleared) the alert server-side, so the grid behind the drawer would otherwise keep
+      // showing the stale colour until its next full refresh.
+      onHealthChange(result.authAlert ?? null);
+      await loadDiagnostic();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : t('diagnostic.failedGeneric');
+      setTestResult({ message, ok: false });
+      toast.error(message, { title: t('diagnostic.failedTitle', { label: config.label }) });
+    } finally { setTesting(false); }
+  };
 
   const configured = authType !== null;
   const blurb = t(`provider.${config.id}.blurb`);
@@ -110,7 +340,8 @@ function ProviderConnectionCard({
   const startConnect = async () => {
     setBusy(true); setError(null);
     try {
-      const { authorizeUrl } = await providerKeysApi.oauthStart();
+      const { authorizeUrl, state } = await providerKeysApi.oauthStart(config.id);
+      setOauthState(state);
       window.open(authorizeUrl, '_blank', 'noopener,noreferrer');
       setConnecting(true);
     } catch (e) {
@@ -125,10 +356,11 @@ function ProviderConnectionCard({
     if (!code) return;
     setBusy(true); setError(null);
     try {
-      await providerKeysApi.oauthComplete(code);
+      await providerKeysApi.oauthComplete(config.id, code, oauthState || undefined);
       onChange('oauth');
       setConnecting(false);
       setPastedCode('');
+      setOauthState('');
     } catch (e) {
       setError(e instanceof Error ? e.message : t('errConnectSubscription'));
     } finally {
@@ -152,20 +384,54 @@ function ProviderConnectionCard({
     }
   };
 
-  const statusLabel =
-    authType === 'oauth' ? t('status.connected', { subscription })
-    : authType === 'api_key' ? t('status.keyConfigured', { label: config.label })
-    : t('status.notConnected');
-
   return (
     <div style={cardStyle}>
       <div style={sectionTitle}>{config.label}</div>
       <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>{blurb}</p>
 
+      <div style={{ padding: 12, marginBottom: 14, borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+          {/* `usable` alone would paint this green for a credential that decrypts and then
+              403s on every call, so an outstanding alert downgrades it the same way it
+              downgrades the chip below. */}
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: diagnostic?.authAlert ? 'var(--warning-text, #b45309)' : diagnostic?.usable ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)' }}>
+            {t('diagnostic.currentStatus', { status: diagnostic?.status ? stateLabel(diagnostic.status) : t('diagnostic.checking') })}
+          </span>
+          <button type="button" onClick={testConnection} disabled={testing || !configured} style={{ ...buttonPrimary, opacity: testing || !configured ? 0.5 : 1 }}>
+            {testing ? t('diagnostic.testing') : t('diagnostic.test')}
+          </button>
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+          {t('diagnostic.usage', {
+            requests: (diagnostic?.usage.requests ?? 0).toLocaleString(),
+            tokens: (diagnostic?.usage.tokens ?? 0).toLocaleString(),
+          })}
+          {diagnostic?.usage.lastUsedAt ? t('diagnostic.lastUsed', { when: new Date(diagnostic.usage.lastUsedAt).toLocaleString() }) : ''}
+        </div>
+        {testResult && (
+          <div
+            role={testResult.ok ? 'status' : 'alert'}
+            style={{ fontSize: 11.5, color: testResult.ok ? 'rgba(34,197,94,0.9)' : 'var(--error, #ef4444)', marginTop: 7 }}
+          >
+            {testResult.message}
+          </div>
+        )}
+        {/* Dispatch-observed rejection — the reason this "connected" account is not
+            actually serving anything. Sits under the status strip because that is
+            where an operator already looks to answer "is this working?". */}
+        {diagnostic?.authAlert && <AuthAlertNotice alert={diagnostic.authAlert} t={t} />}
+      </div>
+
       {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{t('errorPrefix', { message: error })}</div>}
 
-      <div style={{ fontSize: 12, fontWeight: 600, color: configured ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span>{statusLabel}</span>
+      <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <ProviderStatusChip
+          label={config.label}
+          subscription={subscription || config.label}
+          authType={authType}
+          {...(diagnostic?.authAlert ? { alert: diagnostic.authAlert } : {})}
+          t={t}
+        />
         {configured && (
           <button type="button" onClick={remove} disabled={busy} style={{ ...buttonDanger, padding: '2px 10px' }}>
             {authType === 'oauth' ? t('disconnect') : t('remove')}
@@ -183,21 +449,21 @@ function ProviderConnectionCard({
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
-                {t.rich('pastePrompt', { code: (chunks) => <code>{chunks}</code> })}
+                {t.rich(`provider.${config.id}.pastePrompt`, { code: (chunks) => <code>{chunks}</code> })}
               </p>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <input
                   type="text"
                   value={pastedCode}
                   onChange={(e) => setPastedCode(e.target.value)}
-                  placeholder={t('pastePlaceholder')}
+                  placeholder={t(`provider.${config.id}.pastePlaceholder`)}
                   disabled={busy}
                   style={{ ...inputStyle, flex: '1 1 180px' }}
                 />
                 <button type="button" onClick={finishConnect} disabled={busy || !pastedCode.trim()} style={{ ...buttonPrimary, opacity: busy || !pastedCode.trim() ? 0.5 : 1, flexShrink: 0 }}>
                   {busy ? t('connecting') : t('finish')}
                 </button>
-                <button type="button" onClick={() => { setConnecting(false); setPastedCode(''); }} disabled={busy} style={{ ...buttonDanger, flexShrink: 0 }}>
+                <button type="button" onClick={() => { setConnecting(false); setPastedCode(''); setOauthState(''); }} disabled={busy} style={{ ...buttonDanger, flexShrink: 0 }}>
                   {t('cancel')}
                 </button>
               </div>
@@ -228,23 +494,282 @@ function ProviderConnectionCard({
   );
 }
 
-export function ProviderKeysSettings() {
+function OpenRouterConnectionsPanel({
+  connections,
+  onChanged,
+  t,
+}: {
+  connections: OpenRouterConnection[];
+  onChanged: () => Promise<unknown>;
+  t: TFn;
+}) {
+  const [catalog, setCatalog] = useState<OpenRouterCatalogModel[]>([]);
+  const [editing, setEditing] = useState<OpenRouterConnection | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [label, setLabel] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [clearKey, setClearKey] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [search, setSearch] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
+
+  useEffect(() => {
+    void openRouterConnectionsApi.catalog()
+      .then((result) => setCatalog(result.data ?? []))
+      .catch((e: Error) => setError(e.message));
+  }, []);
+
+  const begin = (connection?: OpenRouterConnection) => {
+    setEditing(connection ?? null);
+    setCreating(true);
+    setLabel(connection?.label ?? '');
+    setSelected(connection?.models ?? []);
+    setApiKey('');
+    setClearKey(false);
+    setSearch('');
+    setError(null);
+  };
+
+  const cancel = () => {
+    setCreating(false);
+    setEditing(null);
+    setError(null);
+  };
+
+  const toggleModel = (id: string) => {
+    setSelected((current) =>
+      current.includes(id) ? current.filter((model) => model !== id) : [...current, id]);
+  };
+
+  const save = async () => {
+    if (!label.trim() || selected.length === 0) {
+      setError(t('openRouter.validation'));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const body = {
+        label: label.trim(),
+        models: selected,
+        ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+        ...(clearKey ? { clearKey: true } : {}),
+      };
+      if (editing) await openRouterConnectionsApi.update(editing.id, body);
+      else await openRouterConnectionsApi.create(body);
+      cancel();
+      await onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('openRouter.saveError'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (connection: OpenRouterConnection) => {
+    if (!(await confirm(t('openRouter.confirmRemove', { label: connection.label })))) return;
+    setBusy(true);
+    try {
+      await openRouterConnectionsApi.remove(connection.id);
+      await onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('openRouter.removeError'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const query = search.trim().toLowerCase();
+  const visibleModels = catalog
+    .filter((model) => !query || `${model.name} ${model.id} ${model.provider}`.toLowerCase().includes(query))
+    .slice(0, 100);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div>
+        <div style={sectionTitle}>{t('openRouter.title')}</div>
+        <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>
+          {t('openRouter.subtitle')}
+        </p>
+        <button type="button" style={buttonPrimary} onClick={() => begin()} disabled={busy}>
+          {t('openRouter.add')}
+        </button>
+      </div>
+
+      {connections.map((connection) => (
+        <div key={connection.id} style={{ ...cardStyle, padding: 14 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={sectionTitle}>{connection.label}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {t('openRouter.modelCount', { count: connection.models.length })}
+                {' · '}
+                {connection.hasKey ? t('openRouter.ownKey') : t('openRouter.managedKey')}
+              </div>
+              <div style={{ marginTop: 7, fontSize: 11.5, color: 'var(--text-secondary)', wordBreak: 'break-word' }}>
+                {connection.models.join(' → ')}
+              </div>
+            </div>
+            <button type="button" style={buttonPrimary} onClick={() => begin(connection)}>{t('openRouter.edit')}</button>
+            <button type="button" style={buttonDanger} onClick={() => void remove(connection)}>{t('remove')}</button>
+          </div>
+        </div>
+      ))}
+
+      {connections.length === 0 && !creating && (
+        <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t('openRouter.empty')}</div>
+      )}
+
+      {creating && (
+        <div style={{ ...cardStyle, borderColor: 'var(--accent, var(--border-subtle))' }}>
+          <div style={sectionTitle}>{editing ? t('openRouter.editTitle') : t('openRouter.createTitle')}</div>
+          <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+            {t('openRouter.name')}
+            <input value={label} onChange={(e) => setLabel(e.target.value)} style={{ ...inputStyle, marginTop: 5 }} />
+          </label>
+          <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+            {t('openRouter.apiKey')}
+            <input type="password" autoComplete="off" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-or-v1-…" style={{ ...inputStyle, marginTop: 5 }} />
+          </label>
+          {editing?.hasKey && (
+            <label style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+              <input type="checkbox" checked={clearKey} onChange={(e) => setClearKey(e.target.checked)} />
+              {t('openRouter.clearKey')}
+            </label>
+          )}
+          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 12 }}>{t('openRouter.billing')}</div>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t('openRouter.search')}
+            style={{ ...inputStyle, marginBottom: 8 }}
+          />
+          <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
+            {visibleModels.map((model) => (
+              <label key={model.id} style={{ display: 'flex', gap: 9, padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={selected.includes(model.id)} onChange={() => toggleModel(model.id)} />
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>{model.name}</span>
+                  <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', wordBreak: 'break-all' }}>{model.id}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 7 }}>
+            {t('openRouter.selected', { count: selected.length })}
+          </div>
+          {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginTop: 9 }}>{error}</div>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+            <button type="button" style={buttonPrimary} disabled={busy} onClick={() => void save()}>{busy ? t('saving') : t('save')}</button>
+            <button type="button" style={{ ...buttonPrimary, background: 'none' }} disabled={busy} onClick={cancel}>{t('cancel')}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ProviderKeysSettings({
+  search = '', viewMode = 'card', priorityOpen = false, onPriorityClose, onPriorityChange,
+}: {
+  search?: string;
+  viewMode?: 'card' | 'table';
+  priorityOpen?: boolean;
+  onPriorityClose?: () => void;
+  onPriorityChange?: (order: LlmProvider[]) => void;
+}) {
   const t = useTranslations('providerKeys');
   const [authByProvider, setAuthByProvider] = useState<Partial<Record<LlmProvider, ProviderAuthType>>>({});
+  // BYO precedence — connected providers, most-preferred first. Seeded from the backend
+  // order (priority asc, unset last), then kept in sync as providers connect/disconnect.
+  const [order, setOrder] = useState<string[]>([]);
+  const [precedenceEntries, setPrecedenceEntries] = useState<ByoPrecedenceEntry[]>([]);
+  const [openRouterConnections, setOpenRouterConnections] = useState<OpenRouterConnection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeProvider, setActiveProvider] = useState<LlmProvider | null>(null);
+  const [openRouterOpen, setOpenRouterOpen] = useState(false);
+  const [usage, setUsage] = useState<LlmUsageStats | null>(null);
+  const visibleProviders = PROVIDERS.filter((p) => !search.trim() || `${p.label} ${p.id}`.toLowerCase().includes(search.trim().toLowerCase()));
 
-  const refresh = () =>
-    providerKeysApi.list()
-      .then((r) => {
+  // Rejected-account notices keyed by provider, from the LIST read — so an operator
+  // sees "this account isn't being used" on the grid without having to open each
+  // provider's drawer. Cleared implicitly on every refresh (a provider absent from
+  // the new map has no live alert).
+  const [alertByProvider, setAlertByProvider] = useState<Partial<Record<LlmProvider, ProviderAuthAlert>>>({});
+
+  const refresh = () => {
+    // Usage is an all-member read. Keep credential management available if that
+    // secondary read fails, while loading both together to avoid flashing zeroes.
+    const usageRead = llmApi.usage().catch(() => null);
+    return providerKeysApi.list()
+      .then(async (r) => {
+        // The OpenRouter reads are enrichments. Keep the established provider
+        // cards usable during a rolling deploy or a transient failure on either
+        // new endpoint.
+        const fallbackEntries: ByoPrecedenceEntry[] = r.details.map((detail) => ({
+          ref: detail.provider,
+          kind: 'provider',
+          provider: detail.provider,
+          priority: detail.priority,
+        }));
+        const [connectionResult, precedenceResult] = await Promise.all([
+          openRouterConnectionsApi.list().catch(() => ({ connections: [] })),
+          openRouterConnectionsApi.precedence().catch(() => ({ entries: fallbackEntries })),
+        ]);
         const map: Partial<Record<LlmProvider, ProviderAuthType>> = {};
-        for (const d of r.details) map[d.provider] = d.authType;
+        const alerts: Partial<Record<LlmProvider, ProviderAuthAlert>> = {};
+        for (const d of r.details) {
+          map[d.provider] = d.authType;
+          if (d.authAlert) alerts[d.provider] = d.authAlert;
+        }
         setAuthByProvider(map);
+        setAlertByProvider(alerts);
+        setOpenRouterConnections(connectionResult.connections);
+        setPrecedenceEntries(precedenceResult.entries);
+        const refs = precedenceResult.entries.map((entry) => entry.ref);
+        setOrder(refs);
+        onPriorityChange?.(precedenceResult.entries
+          .filter((entry): entry is Extract<ByoPrecedenceEntry, { kind: 'provider' }> => entry.kind === 'provider')
+          .map((entry) => entry.provider));
+        return usageRead;
       })
+      .then(setUsage)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
+  };
 
   useEffect(() => { void refresh(); }, []);
+
+  // Reflect a connect/disconnect in the precedence list: append a newly-connected
+  // provider to the tail (lowest precedence until reordered), drop a removed one.
+  const syncOrder = (provider: LlmProvider, authType: ProviderAuthType | null) =>
+    setOrder((prev) =>
+      authType === null ? prev.filter((p) => p !== provider)
+      : prev.includes(provider) ? prev
+      : [...prev, provider],
+    );
+
+  const persistOrder = async (next: string[]) => {
+    setOrder(next); // optimistic
+    onPriorityChange?.(next.filter((ref): ref is LlmProvider => !ref.startsWith('openrouter:')) as LlmProvider[]);
+    try {
+      await providerKeysApi.setPriority(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('precedence.errSave'));
+    }
+  };
+
+  const precedenceLabels: Record<string, string> = Object.fromEntries([
+    ...precedenceEntries.map((entry) => [
+      entry.ref,
+      entry.kind === 'provider'
+        ? PROVIDER_LABEL[entry.provider]
+        : `OpenRouter · ${entry.connection.label} (${entry.connection.models.length})`,
+    ]),
+  ]);
 
   return (
     <div>
@@ -256,24 +781,103 @@ export function ProviderKeysSettings() {
       {loading ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
       ) : (
-        <div style={wrapStyle}>
-          {PROVIDERS.map((p) => (
-            <ProviderConnectionCard
-              key={p.id}
-              config={p}
-              authType={authByProvider[p.id] ?? null}
-              t={t}
-              onChange={(authType) =>
-                setAuthByProvider((prev) => {
-                  const next = { ...prev };
-                  if (authType === null) delete next[p.id];
-                  else next[p.id] = authType;
-                  return next;
-                })
-              }
-            />
-          ))}
-        </div>
+        <>
+          <div style={viewMode === 'card' ? wrapStyle : { display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {(!search.trim() || 'openrouter models routing'.includes(search.trim().toLowerCase())) && (
+              <button type="button" onClick={() => setOpenRouterOpen(true)} style={{ ...cardStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: viewMode === 'table' ? 'row' : 'column', alignItems: viewMode === 'table' ? 'center' : 'stretch', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={sectionTitle}>OpenRouter</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t('openRouter.cardBlurb')}</div>
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 650, color: openRouterConnections.length ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)' }}>
+                  {openRouterConnections.length
+                    ? t('openRouter.connectedCount', { count: openRouterConnections.length })
+                    : t('status.notConnected')}
+                </span>
+              </button>
+            )}
+            {visibleProviders.map((p) => (
+              <button key={p.id} type="button" onClick={() => setActiveProvider(p.id)} style={{ ...cardStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: viewMode === 'table' ? 'row' : 'column', alignItems: viewMode === 'table' ? 'center' : 'stretch', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={sectionTitle}>{p.label}</div>
+                    <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t(`provider.${p.id}.blurb`)}</div>
+                    {/* Surfaced on the grid, not only in the drawer: an account that is
+                        connected-but-rejected looks identical to a healthy one here, and
+                        an operator who never opens the drawer would never find out. */}
+                    {alertByProvider[p.id] && <AuthAlertNotice alert={alertByProvider[p.id]!} t={t} />}
+                  </div>
+                  {usage && (
+                    <ConsumptionMeterCard
+                      meter={{
+                        key: 'ai_tokens', unit: 'tokens',
+                        used: usage.byCredential.find((c) => c.type === 'integration' && c.id === p.id)?.tokens ?? 0,
+                        limit: -1, unlimited: true, remaining: -1, percentUsed: 0,
+                      }}
+                      isFree={false}
+                      title={t('diagnostic.tokensUsed')}
+                      usageOnly
+                      periodLabel={t('diagnostic.periodLabel', { period: usage.period })}
+                    />
+                  )}
+                </div>
+                <ProviderStatusChip
+                  label={p.label}
+                  subscription={p.supportsOauth ? t(`provider.${p.id}.subscription`) : p.label}
+                  authType={authByProvider[p.id] ?? null}
+                  {...(alertByProvider[p.id] ? { alert: alertByProvider[p.id]! } : {})}
+                  t={t}
+                  style={{ whiteSpace: 'normal' }}
+                />
+              </button>
+            ))}
+          </div>
+
+          {activeProvider && (() => {
+            const p = PROVIDERS.find((item) => item.id === activeProvider)!;
+            return (
+              <SlideOutPanel open onClose={() => setActiveProvider(null)} title={p.label}>
+                <div style={{ padding: 20 }}>
+                  <ProviderConnectionCard
+                    config={p}
+                    authType={authByProvider[p.id] ?? null}
+                    t={t}
+                    onHealthChange={(alert) => setAlertByProvider((prev) => {
+                      const next = { ...prev };
+                      if (alert) next[p.id] = alert; else delete next[p.id];
+                      return next;
+                    })}
+                    onChange={(authType) => {
+                      setAuthByProvider((prev) => { const next = { ...prev }; if (authType === null) delete next[p.id]; else next[p.id] = authType; return next; });
+                      // A reconnect/removal clears the server-side alert, so drop the local
+                      // one too rather than leaving the card warning about work just done.
+                      setAlertByProvider((prev) => { const next = { ...prev }; delete next[p.id]; return next; });
+                      syncOrder(p.id, authType);
+                      const nextOrder = authType === null ? order.filter((id) => id !== p.id) : order.includes(p.id) ? order : [...order, p.id];
+                      onPriorityChange?.(nextOrder.filter((id): id is LlmProvider => !id.startsWith('openrouter:')) as LlmProvider[]);
+                    }}
+                  />
+                </div>
+              </SlideOutPanel>
+            );
+          })()}
+
+          <SlideOutPanel open={openRouterOpen} onClose={() => setOpenRouterOpen(false)} title="OpenRouter">
+            <div style={{ padding: 20 }}>
+              <OpenRouterConnectionsPanel
+                connections={openRouterConnections}
+                t={t}
+                onChanged={refresh}
+              />
+            </div>
+          </SlideOutPanel>
+
+          <SlideOutPanel open={priorityOpen} onClose={() => onPriorityClose?.()} title={t('precedence.title')}>
+            <div style={{ padding: 20 }}>
+              <PrecedencePanel order={order} labels={precedenceLabels} onReorder={persistOrder} t={t} />
+            </div>
+          </SlideOutPanel>
+        </>
       )}
     </div>
   );

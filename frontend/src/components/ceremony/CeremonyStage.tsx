@@ -8,8 +8,8 @@ import { useMediaRoom } from '@/lib/useMediaRoom';
 import { VideoGrid } from '@/components/video/VideoGrid';
 import { MediaControls } from '@/components/video/MediaControls';
 import {
-  tasksApi, sprintsApi, runtimeApi, ceremonySessionsApi, membersApi,
-  type Task, type Sprint, type Execution, type CeremonySession, type CeremonySessionDetail, type CeremonyParticipant, type MemberProfile,
+  tasksApi, sprintsApi, ceremonySessionsApi, membersApi,
+  type Task, type Sprint, type CeremonySession, type CeremonySessionDetail, type CeremonyParticipant, type MemberProfile,
 } from '@/lib/builderforceApi';
 import { listTeamsByProject, getTeam, listWorkforceDirectory } from '@/lib/teams';
 import { useAuth } from '@/lib/AuthContext';
@@ -30,9 +30,6 @@ export type CeremonyMode = 'standup' | 'planning';
 const ACTIVE_STATUSES = new Set(['in_progress', 'in_review', 'ready']);
 /** Default per-member WIP cap when no member profile sets one. */
 const DEFAULT_CAP = 8;
-/** Execution statuses that mean a run is already in-flight or done (skip re-dispatch). */
-const LIVE_OR_DONE = new Set(['pending', 'submitted', 'running', 'completed']);
-
 /** Resolve the round-table seats: the project's attached team(s), else the whole workforce. */
 async function loadProjectMembers(projectId: number): Promise<CeremonyMember[]> {
   try {
@@ -97,7 +94,6 @@ export function CeremonyStage({
   const [session, setSession] = useState<CeremonySession | null>(null);
   const [participants, setParticipants] = useState<CeremonyParticipant[]>([]);
   const [sessionBusy, setSessionBusy] = useState(false);
-  const [executions, setExecutions] = useState<Execution[]>([]);
   const [profiles, setProfiles] = useState<MemberProfile[]>([]);
   // Slide-out targets (scorecard / assigned work) for a clicked seat.
   const [scorecardMember, setScorecardMember] = useState<CeremonyMember | null>(null);
@@ -106,12 +102,11 @@ export function CeremonyStage({
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [tasksData, sprintsData, memberData, sessionData, execData, profileData] = await Promise.all([
+      const [tasksData, sprintsData, memberData, sessionData, profileData] = await Promise.all([
         tasksApi.list(projectId),
         sprintsApi.list(projectId).catch(() => [] as Sprint[]),
         loadProjectMembers(projectId),
         ceremonySessionsApi.active(projectId, mode).catch((): CeremonySessionDetail => ({ session: null })),
-        runtimeApi.listRecent().catch(() => [] as Execution[]),
         membersApi.profiles().then((r) => r.profiles).catch(() => [] as MemberProfile[]),
       ]);
       setTasks(tasksData);
@@ -119,7 +114,6 @@ export function CeremonyStage({
       setMembers(memberData);
       setSession(sessionData.session ?? null);
       setParticipants(sessionData.participants ?? []);
-      setExecutions(execData);
       setProfiles(profileData);
       setActiveSprintId((prev) =>
         prev || sprintsData.find((s) => s.status === 'active')?.id || sprintsData[0]?.id || '',
@@ -148,10 +142,18 @@ export function CeremonyStage({
   }, []);
   const { peers, connected, send } = useCeremonyRoom(projectId, me, { onChange: reload, onFrame });
 
-  // Live cameras/mics for the round-table — one media room per project ceremony.
-  // Mesh P2P; joins only while the user turns cameras on (no forced capture).
+  // Live cameras/mics for the round table. Mesh P2P; joins only while the user turns
+  // cameras on (no forced capture).
+  //
+  // The key comes from the SERVER (0366): a ceremony now has a companion `meetings` row,
+  // and `session.meetingRoomKey` is that meeting's stored `room_key`. This used to be
+  // `ceremony-${projectId}`, synthesised here and persisted nowhere — which meant the
+  // ceremony and the meetings surface could never share a call, and every consecutive
+  // standup on a board reused one room. The project-scoped key survives only as the
+  // fallback for an informal huddle with no session open.
+  const mediaRoomKey = session?.meetingRoomKey ?? `ceremony-${projectId}`;
   const media = useMediaRoom(
-    camerasOn ? `ceremony-${projectId}` : null,
+    camerasOn ? mediaRoomKey : null,
     { name: me.name, ref: me.ref },
     { enabled: camerasOn },
   );
@@ -162,6 +164,32 @@ export function CeremonyStage({
     if (connected && me.ref) s.add(memberKey(me));
     return s;
   }, [peers, connected, me]);
+
+  // ATTENDANCE (0365). Presence used to exist only as live WebSocket peers — real while
+  // the tab was open, gone the instant it closed — so a concluded ceremony could not say
+  // who had actually turned up. This beat persists it: `joined_at` is stamped on the
+  // first beat and `left_at` moves forward on each one, and the server resolves the
+  // verdict once at conclude.
+  //
+  // Every 60s while a session is live, and immediately on join. Deliberately coarse: this
+  // answers "was this person at the standup", a question minutes wide, so a chattier beat
+  // would buy nothing and cost a write per client per tick. Only ever records the CALLER
+  // (the endpoint takes no identity from the body), so this cannot mark anyone else present.
+  const sessionId = session?.status === 'active' ? session.id : null;
+  useEffect(() => {
+    if (!sessionId || !connected) return;
+    let cancelled = false;
+    const beat = () => {
+      if (cancelled) return;
+      // Silent: a dropped heartbeat is recoverable (the next one lands, and an accrued
+      // speaking turn is a server-side backstop), so it must not raise an error banner
+      // over a live ceremony.
+      ceremonySessionsApi.heartbeat(sessionId).catch(() => {});
+    };
+    beat();
+    const id = setInterval(beat, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [sessionId, connected]);
 
   // Expire stale peer cursors (a peer that stopped moving / left).
   useEffect(() => {
@@ -215,18 +243,6 @@ export function CeremonyStage({
     const p = participants.find((x) => x.turnOrder === session.currentTurn);
     return p ? memberKey({ kind: p.memberKind, ref: p.memberRef }) : null;
   }, [session?.currentTurn, participants]);
-
-  // Latest execution per task → dedupe auto-dispatch on Complete.
-  const latestExecByTask = useMemo(() => {
-    const m = new Map<number, Execution>();
-    for (const e of executions) {
-      const prev = m.get(e.taskId);
-      const ec = e.createdAt ? new Date(e.createdAt).getTime() : 0;
-      const pc = prev?.createdAt ? new Date(prev.createdAt).getTime() : -1;
-      if (!prev || ec >= pc) m.set(e.taskId, e);
-    }
-    return m;
-  }, [executions]);
 
   const isFacilitator = !session || session.facilitatorId === (user?.id ?? '');
 
@@ -312,34 +328,24 @@ export function CeremonyStage({
     }
   }, [session, applySession, t]);
 
-  // On Complete: end the session, then auto-dispatch agent-assigned work (mirrors
-  // the board's lane auto-run). Humans keep their assignments; agents start running.
+  // On Complete: just end the session. The auto-dispatch of agent-owned work now
+  // happens SERVER-SIDE inside POST /sessions/:id/complete, through the canonical
+  // lane-entry gate (which applies the capability/cooldown/token/live-run checks
+  // this client loop used to approximate with its own execution-dedupe map).
+  // Previously this ran here, so the automation depended on the tab staying open,
+  // only saw the tasks this client had fetched, and swallowed every failure.
   const completeSession = useCallback(async () => {
     if (!session) return;
     setSessionBusy(true);
     try {
       applySession(await ceremonySessionsApi.complete(session.id));
-      const agentTasks = tasks.filter((t) => {
-        if (t.assignedAgentHostId == null && !t.assignedAgentRef) return false;
-        if (t.status === 'done') return false;
-        const last = latestExecByTask.get(t.id);
-        return !(last && LIVE_OR_DONE.has(last.status));
-      });
-      await Promise.all(agentTasks.map((t) =>
-        runtimeApi.submitExecution({
-          taskId: t.id,
-          agentHostId: t.assignedAgentHostId ?? undefined,
-          payload: t.assignedAgentRef ? JSON.stringify({ cloudAgentRef: t.assignedAgentRef }) : undefined,
-        }).catch(() => null),
-      ));
-      send({ type: 'changed' });
       reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : t('errorComplete'));
     } finally {
       setSessionBusy(false);
     }
-  }, [session, tasks, latestExecByTask, applySession, send, reload, t]);
+  }, [session, applySession, reload, t]);
 
   // --- cursor broadcast (throttled) ----------------------------------------
   const lastCursor = useRef(0);

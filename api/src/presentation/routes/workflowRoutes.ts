@@ -74,6 +74,15 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
     const workflowId = body.id ?? crypto.randomUUID();
     const now = new Date();
 
+    // Cross-tenant upsert guard: the caller supplies body.id and the conflict target
+    // is the global workflows.id PK, so without this check a caller could overwrite
+    // another tenant's workflow by guessing its id. Only reject on an id that already
+    // exists under a different tenant; a novel id creates a fresh row as normal.
+    if (body.id) {
+      const [existing] = await db.select({ tenantId: workflows.tenantId }).from(workflows).where(eq(workflows.id, workflowId));
+      if (existing && existing.tenantId !== tenantId) return c.json({ error: 'Workflow not found' }, 404);
+    }
+
     await db
       .insert(workflows)
       .values({

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { Select } from '@/components/Select';
 import { timeApi, pmoApi, type MemberDailyHours, type MemberKind, type SpineNode } from '@/lib/builderforceApi';
 
 /**
@@ -81,10 +82,10 @@ export function MemberTimeChart({ kind, refId, days = 30 }: { kind: MemberKind; 
 
       {/* Log form */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-        <select style={{ ...field, flex: 1, minWidth: 140 }} value={taskId} onChange={(e) => setTaskId(e.target.value)}>
+        <Select style={{ ...field, flex: 1, minWidth: 140 }} value={taskId} onChange={(e) => setTaskId(e.target.value)}>
           <option value="">{t('pickTask')}</option>
           {tasks.map((n) => <option key={n.key} value={n.id}>{n.title}</option>)}
-        </select>
+        </Select>
         <input style={{ ...field, width: 70 }} type="number" min={0} step={0.25} placeholder={t('hoursPh')} value={hours} onChange={(e) => setHours(e.target.value)} />
         <input style={{ ...field, width: 130 }} type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
         <button style={{ ...btn, opacity: busy || !taskId || !hours ? 0.6 : 1 }} disabled={busy || !taskId || !hours} onClick={logTime}>{t('log')}</button>

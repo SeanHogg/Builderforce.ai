@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Manager routes — /api/manager
  *
@@ -6,15 +7,20 @@
  * priority-ranked backlog, the coordination stats, the decision activity feed, and
  * a "run the manager now" button. Every read is tenant-scoped to the project.
  *
- *   GET  /api/manager/:projectId           config + policy + stats + ranked backlog
- *   PUT  /api/manager/:projectId           designate a manager + tune policy (MANAGER)
- *   POST /api/manager/:projectId/run        run the manager pass now (MANAGER)
- *   GET  /api/manager/:projectId/activity   the decision audit feed
+ *   GET   /api/manager/defaults             workspace-wide autonomy defaults + resolved policy
+ *   PATCH /api/manager/defaults             set the workspace defaults (MANAGER)
+ *   GET   /api/manager/:projectId           config + policy + stats + ranked backlog
+ *   PUT   /api/manager/:projectId           designate a manager + tune policy (MANAGER)
+ *   POST  /api/manager/:projectId/run       run the manager pass now (MANAGER)
+ *   GET   /api/manager/:projectId/activity  the decision audit feed
+ *   GET   /api/manager/:projectId/stalls    the stuck-ticket register (0367)
+ *   GET   /api/manager/:projectId/digest    what you + the team accomplished today
+ *   GET   /api/manager/:projectId/chat      the manager's accountability chat + who answers
  */
 import { Hono } from 'hono';
 import { and, eq, sql, asc, desc, inArray } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
-import { TenantRole, TaskStatus } from '../../domain/shared/types';
+import { TenantRole, TaskStatus, NON_TERMINAL_TASK_STATUSES } from '../../domain/shared/types';
 import { projects, tasks, pullRequests } from '../../infrastructure/database/schema';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -23,8 +29,18 @@ import {
   getManagerConfigRow, getEffectiveManagerPolicy, upsertManagerConfig,
   listManagerActions, runManagerForProject, createManagerRunTask, finalizeManagerRunTask,
   recordManagerAction, createManagerCoachingTask, syncManagerRosterRole,
+  getTenantManagerDefaults, upsertTenantManagerDefaults, type TenantManagerDefaultsPatch,
 } from '../../application/manager/ManagerService';
-import { normalizePrMergePolicy } from '../../application/manager/managerPolicy';
+import { getStallRegister } from '../../application/manager/stallWatch';
+import { getStallCensus, invalidateStallCensus } from '../../application/manager/stallCensus';
+import { getDailyDigest } from '../../application/manager/dailyDigest';
+import { resolveManagerVoice } from '../../application/manager/managerChat';
+import type { BrainService } from '../../application/brain/BrainService';
+import { listSystemicFindings } from '../../application/manager/systemicDiagnosis';
+import {
+  normalizePrMergePolicy, resolveTenantManagerDefaults, DEFAULT_MANAGER_POLICY,
+  AGENT_REASSIGN_IDLE_HOURS_RANGE, AGENT_REASSIGN_MAX_PER_SESSION_RANGE,
+} from '../../application/manager/managerPolicy';
 import { resolveManagerTypesForTenant, normalizeManagerType } from '../../application/manager/managerTypes';
 import {
   addManagerDirective, listManagerDirectives, setManagerDirectiveStatus,
@@ -34,12 +50,12 @@ import { notSystemTask, SYSTEM_TASK_SOURCE_MANAGER } from '../../application/tas
 import { getTenantTokenAvailability } from '../../application/llm/tenantTokenAvailability';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 
-const NON_TERMINAL: string[] = [
-  TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY,
-  TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW, TaskStatus.BLOCKED,
-];
 
-export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hono<HonoEnv> {
+export function createManagerRoutes(
+  db: Db,
+  runtimeService: RuntimeService,
+  brainService: BrainService,
+): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
@@ -53,6 +69,126 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     return p ?? null;
   }
 
+  // ── workspace (tenant) autonomy defaults (migration 0363) ─────────────────
+  //
+  // Registered BEFORE '/:projectId' so the literal segment is never swallowed by the
+  // param route. The three-tier fold means these two endpoints and the per-project ones
+  // describe the SAME policy at different scopes, resolved by the one shared function.
+
+  /**
+   * A TRI-STATE body field. `undefined` = "the caller didn't mention it, leave it alone";
+   * `null` = "clear this workspace opinion, fall back to the hardcoded default"; a
+   * boolean = an explicit workspace opinion. Anything else is ignored rather than
+   * coerced, so a malformed field can never silently widen or narrow authority.
+   */
+  function triStateBool(v: unknown): boolean | null | undefined {
+    if (v === undefined) return undefined;
+    if (v === null) return null;
+    return typeof v === 'boolean' ? v : undefined;
+  }
+
+  /**
+   * A TRI-STATE numeric body field (0365). Same three-way contract as
+   * {@link triStateBool}, plus a range clamp — an out-of-range or non-numeric value is
+   * IGNORED rather than clamped, because silently rewriting "reassign after 0 hours" to
+   * the minimum would grant more autonomy than the operator typed.
+   */
+  function triStateNumber(v: unknown, range: { min: number; max: number }): number | null | undefined {
+    if (v === undefined) return undefined;
+    if (v === null) return null;
+    if (typeof v !== 'number' || !Number.isFinite(v)) return undefined;
+    const n = Math.round(v);
+    return n >= range.min && n <= range.max ? n : undefined;
+  }
+
+  type DefaultsBody = {
+    enabled?: boolean | null;
+    prMergePolicy?: string | null;
+    autoAssign?: boolean | null;
+    autoBusinessValue?: boolean | null;
+    autoPrioritize?: boolean | null;
+    autoSchedule?: boolean | null;
+    requireSignoffToComplete?: boolean | null;
+    allowAutoMerge?: boolean | null;
+    allowUnattendedCeremonies?: boolean | null;
+    allowAgentReassignment?: boolean | null;
+    agentReassignIdleHours?: number | null;
+    agentReassignMaxPerSession?: number | null;
+  };
+
+  /**
+   * The workspace posture, in three parts, all resolved SERVER-SIDE by the one shared fold:
+   *   • `defaults`      — the raw stored opinions (nulls included, so the UI can tell
+   *                       "not set" from "set to the same value as the default").
+   *   • `policy`        — what a project with no config row of its own gets.
+   *   • `builtinPolicy` — the tier BELOW this one, i.e. what a field left unset resolves
+   *                       to. Sent explicitly so the "Use default → currently X" hint is
+   *                       never computed on the client; folding tiers in two places is how
+   *                       a surface ends up promising something the manager won't do.
+   */
+  const defaultsPayload = (defaults: Awaited<ReturnType<typeof getTenantManagerDefaults>>) => ({
+    defaults,
+    policy: resolveTenantManagerDefaults(defaults),
+    builtinPolicy: DEFAULT_MANAGER_POLICY,
+  });
+
+  // GET /api/manager/defaults — read-through cached inside getTenantManagerDefaults and
+  // invalidated by the PATCH below.
+  router.get('/defaults', async (c) => {
+    const tenantId = c.get('tenantId');
+    return c.json(defaultsPayload(await getTenantManagerDefaults(db, tenantId, c.env as Env)));
+  });
+
+  // PATCH /api/manager/defaults — set the workspace defaults (managers only). Same role
+  // gate as the per-project PUT: whoever may grant a project merge authority may grant it
+  // workspace-wide.
+  router.patch('/defaults', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId');
+    const userId = (c as { get(k: 'userId'): string | undefined }).get('userId');
+    const body = await c.req.json<DefaultsBody>().catch(() => ({} as DefaultsBody));
+
+    const patch: TenantManagerDefaultsPatch = {};
+    const bools = [
+      'enabled', 'autoAssign', 'autoBusinessValue', 'autoPrioritize', 'autoSchedule',
+      'requireSignoffToComplete', 'allowAutoMerge',
+      'allowUnattendedCeremonies', 'allowAgentReassignment',
+    ] as const;
+    for (const key of bools) {
+      const v = triStateBool(body[key]);
+      if (v !== undefined) patch[key] = v;
+    }
+    const idle = triStateNumber(body.agentReassignIdleHours, AGENT_REASSIGN_IDLE_HOURS_RANGE);
+    if (idle !== undefined) patch.agentReassignIdleHours = idle;
+    const cap = triStateNumber(body.agentReassignMaxPerSession, AGENT_REASSIGN_MAX_PER_SESSION_RANGE);
+    if (cap !== undefined) patch.agentReassignMaxPerSession = cap;
+    if (body.prMergePolicy !== undefined) {
+      patch.prMergePolicy = body.prMergePolicy === null || body.prMergePolicy === ''
+        ? null
+        : normalizePrMergePolicy(body.prMergePolicy);
+    }
+
+    const defaults = await upsertTenantManagerDefaults(db, tenantId, patch, {
+      updatedBy: userId ?? null,
+      env: c.env as Env,
+    });
+    const payload = defaultsPayload(defaults);
+
+    // Autonomy posture is a governance change — record WHO changed it on the shared
+    // audit timeline, not just in the row's updated_by.
+    await recordActivity(c.env as Env, db, {
+      tenantId,
+      actor: await resolveActorFromContext(c.env as Env, db, c as never),
+      verb: 'manager.defaults.update',
+      targetType: 'tenant', targetId: tenantId,
+      summary: `Updated the workspace AI Manager defaults (merge authority: ${payload.policy.allowAutoMerge ? 'granted' : 'withheld'}).`,
+      metadata: { patch },
+    }).catch((error) => { /* the timeline is best-effort — never fail the write */ 
+      reportCaughtError(error, { source: "presentation/routes/managerRoutes.ts", operation: "createManagerRoutes" });
+    });
+
+    return c.json(payload);
+  });
+
   // GET /api/manager/:projectId — config + effective policy + coordination stats +
   // the priority-ranked backlog the manager produced. Not cached (live state).
   router.get('/:projectId', async (c) => {
@@ -62,9 +198,13 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       return c.json({ error: 'Project not found' }, 404);
     }
 
-    const [config, policy] = await Promise.all([
+    // `policy` is the full three-tier fold; `tenantPolicy` (below) is the tier this
+    // project INHERITS — both resolved by the shared fold, so the project form can label a
+    // control "inherited from the workspace: X" WITHOUT re-implementing precedence.
+    const [config, policy, tenantDefaults] = await Promise.all([
       getManagerConfigRow(db, tenantId, projectId),
-      getEffectiveManagerPolicy(db, tenantId, projectId),
+      getEffectiveManagerPolicy(db, tenantId, projectId, c.env as Env),
+      getTenantManagerDefaults(db, tenantId, c.env as Env),
     ]);
 
     // Coordination stats (small aggregate queries).
@@ -73,10 +213,16 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
         total: sql<number>`count(*)::int`,
         unscored: sql<number>`count(*) filter (where ${tasks.businessValue} is null)::int`,
         unranked: sql<number>`count(*) filter (where ${tasks.managerRank} is null)::int`,
+        // Work with NO place on the timeline (0364) — the number that made the planning
+        // spine read "no dates" from top to bottom, now visible before a human notices it.
+        undated: sql<number>`count(*) filter (where ${tasks.startDate} is null and ${tasks.dueDate} is null)::int`,
         unowned: sql<number>`count(*) filter (where ${tasks.assignedUserId} is null and ${tasks.assignedAgentRef} is null and ${tasks.assignedAgentHostId} is null)::int`,
+        // Role/diagnostic coverage, read off the denormalised verdict on the task —
+        // free here (same aggregate) rather than a second pass over ticket_audits.
+        flagged: sql<number>`count(*) filter (where ${tasks.auditStatus} = 'flagged')::int`,
       })
       .from(tasks)
-      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL), notSystemTask));
+      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL_TASK_STATUSES), notSystemTask));
 
     const [prCount] = await db
       .select({ open: sql<number>`count(*)::int` })
@@ -92,7 +238,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
         assignedUserId: tasks.assignedUserId, assignedAgentRef: tasks.assignedAgentRef, assignedAgentHostId: tasks.assignedAgentHostId,
       })
       .from(tasks)
-      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL), notSystemTask))
+      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL_TASK_STATUSES), notSystemTask))
       .orderBy(sql`${tasks.managerRank} asc nulls last`, asc(tasks.updatedAt))
       .limit(30);
 
@@ -137,12 +283,17 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     return c.json({
       config: config ?? null,
       policy,
+      /** What this project inherits when its own row says nothing (the workspace tier,
+       *  resolved). NOT the same as `policy`, which already includes this project's row. */
+      tenantPolicy: resolveTenantManagerDefaults(tenantDefaults),
       stats: {
         total: counts?.total ?? 0,
         unscored: counts?.unscored ?? 0,
         unranked: counts?.unranked ?? 0,
+        undated: counts?.undated ?? 0,
         unowned: counts?.unowned ?? 0,
         openPullRequests: prCount?.open ?? 0,
+        flagged: counts?.flagged ?? 0,
         lastRunAt: config?.lastRunAt ?? null,
       },
       backlog,
@@ -168,7 +319,17 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       autoAssign?: boolean;
       autoBusinessValue?: boolean;
       autoPrioritize?: boolean;
+      autoSchedule?: boolean;
       managerType?: string;
+      requireSignoffToComplete?: boolean;
+      /** Tri-state (0363): true/false = an explicit project decision, null = inherit the
+       *  workspace default, absent = leave whatever is stored alone. */
+      allowAutoMerge?: boolean | null;
+      /** Ceremony autonomy (0365) — all tri-state, for the same reason. */
+      allowUnattendedCeremonies?: boolean | null;
+      allowAgentReassignment?: boolean | null;
+      agentReassignIdleHours?: number | null;
+      agentReassignMaxPerSession?: number | null;
     };
     const body = (await c.req.json<ConfigBody>().catch(() => ({} as ConfigBody)));
 
@@ -183,7 +344,21 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       ...(body.autoAssign !== undefined ? { autoAssign: !!body.autoAssign } : {}),
       ...(body.autoBusinessValue !== undefined ? { autoBusinessValue: !!body.autoBusinessValue } : {}),
       ...(body.autoPrioritize !== undefined ? { autoPrioritize: !!body.autoPrioritize } : {}),
+      ...(body.autoSchedule !== undefined ? { autoSchedule: !!body.autoSchedule } : {}),
       ...(body.managerType !== undefined ? { managerType: normalizeManagerType(body.managerType) } : {}),
+      ...(body.requireSignoffToComplete !== undefined ? { requireSignoffToComplete: !!body.requireSignoffToComplete } : {}),
+      // NOT coerced with `!!` — null must survive as "inherit the workspace tier", which
+      // `!!null === false` would silently turn into "this project refuses merge authority".
+      ...(triStateBool(body.allowAutoMerge) !== undefined ? { allowAutoMerge: triStateBool(body.allowAutoMerge) } : {}),
+      // Ceremony autonomy (0365) — tri-state for the same reason as allowAutoMerge.
+      ...(triStateBool(body.allowUnattendedCeremonies) !== undefined
+        ? { allowUnattendedCeremonies: triStateBool(body.allowUnattendedCeremonies) } : {}),
+      ...(triStateBool(body.allowAgentReassignment) !== undefined
+        ? { allowAgentReassignment: triStateBool(body.allowAgentReassignment) } : {}),
+      ...(triStateNumber(body.agentReassignIdleHours, AGENT_REASSIGN_IDLE_HOURS_RANGE) !== undefined
+        ? { agentReassignIdleHours: triStateNumber(body.agentReassignIdleHours, AGENT_REASSIGN_IDLE_HOURS_RANGE) } : {}),
+      ...(triStateNumber(body.agentReassignMaxPerSession, AGENT_REASSIGN_MAX_PER_SESSION_RANGE) !== undefined
+        ? { agentReassignMaxPerSession: triStateNumber(body.agentReassignMaxPerSession, AGENT_REASSIGN_MAX_PER_SESSION_RANGE) } : {}),
     });
 
     // A manager is a team member: keep its roster role in lock-step with its type.
@@ -191,8 +366,26 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       prior ? { managerRef: prior.managerRef, managerType: prior.managerType } : null,
       { managerRef: config.managerRef, managerType: config.managerType });
 
-    const policy = await getEffectiveManagerPolicy(db, tenantId, projectId);
-    return c.json({ config, policy });
+    // INVALIDATE ON WRITE. The stall census classifies by the effective policy — with
+    // `requireSignoffToComplete` off, an owed manifest slot is not a stall cause (0380) —
+    // so a policy change silently changes every cohort in it. Its own 120s TTL would get
+    // there eventually; a toggle whose effect appears two minutes later reads as a
+    // toggle that did nothing. (A WORKSPACE-tier write affects every project's census and
+    // cannot be invalidated by key without an unbounded fan-out, so that one does rely on
+    // the TTL.)
+    await invalidateStallCensus(c.env as Env, tenantId, projectId).catch((error) => {
+      // Best-effort: the policy IS saved, and the census self-heals on its 120s TTL. A
+      // cache-eviction miss must never turn a successful settings write into a 500.
+      reportCaughtError(error, {
+        source: 'presentation/routes/managerRoutes.ts',
+        operation: 'invalidateStallCensus',
+        context: { tenantId, projectId },
+      });
+    });
+
+    const policy = await getEffectiveManagerPolicy(db, tenantId, projectId, c.env as Env);
+    const tenantPolicy = resolveTenantManagerDefaults(await getTenantManagerDefaults(db, tenantId, c.env as Env));
+    return c.json({ config, policy, tenantPolicy });
   });
 
   // POST /api/manager/:projectId/run — run the manager pass now (managers only).
@@ -210,16 +403,15 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
       return c.json({ error: 'Project not found' }, 404);
     }
-    const policy = await getEffectiveManagerPolicy(db, tenantId, projectId);
+    const policy = await getEffectiveManagerPolicy(db, tenantId, projectId, c.env as Env);
     if (!policy.enabled) {
       return c.json({ started: false, reason: 'disabled' as const });
     }
+    // Mint/reconcile the run task before acknowledging. createManagerRunTask closes
+    // any orphaned prior pass first, so a new pass never starts while older manager
+    // cards still appear open.
+    const runTaskId = await createManagerRunTask(db, { tenantId, projectId, policy });
     c.executionCtx.waitUntil((async () => {
-      // A manual run is a first-class, owned, status-tracked board task: mint it
-      // in-progress, run the pass (its decisions link back to the task), then close
-      // it with the summary. Cron sweeps pass no run task (feed-only) to avoid one
-      // card per project per tick.
-      const runTaskId = await createManagerRunTask(db, { tenantId, projectId, policy });
       let summary: Awaited<ReturnType<typeof runManagerForProject>> | null = null;
       let ok = false;
       try {
@@ -227,17 +419,26 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
           tenantId, projectId, submittedBy: `manager:${userId ?? 'human'}`, runTaskId,
         });
         ok = true;
-      } catch {
+      } catch (error) {
         /* the pass is best-effort + idempotent; a failure just means the next run
            (manual or cron) resumes where this left off. */
+      
+        reportCaughtError(error, { source: "presentation/routes/managerRoutes.ts", operation: "createManagerRoutes" });
       }
       if (runTaskId != null) {
         await finalizeManagerRunTask(db, {
           taskId: runTaskId,
           ok,
+          // An all-zero summary for a pass that threw before producing one. Every field
+          // of ManagerRunSummary must appear: the compiler is the only thing that
+          // catches a new counter being added without a zero here, and a missing one
+          // would surface as an undefined count on the run card.
           summary: summary ?? {
-            projectId, skipped: !ok, scored: 0, ranked: 0, assigned: 0,
-            prsConducted: 0, prsMerged: 0, dispatched: 0, audited: 0, flagged: 0,
+            projectId, skipped: !ok, scored: 0, ranked: 0, scheduled: 0, assigned: 0,
+            prsConducted: 0, prsMerged: 0, dispatched: 0, audited: 0, flagged: 0, remediated: 0, remediationDeferred: 0,
+            stalled: 0, unstuck: 0, escalated: 0, stallsResolved: 0, staleRunTasksClosed: 0,
+            censusStalled: 0, censusTopCause: null, systemicFindings: 0, systemicTicketsCreated: 0,
+            truncated: [],
           },
         });
       }
@@ -352,6 +553,120 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     const limit = Number(c.req.query('limit')) || 50;
     const actions = await listManagerActions(db, tenantId, projectId, limit);
     return c.json({ actions });
+  });
+
+  // GET /api/manager/:projectId/stalls — the STUCK-TICKET REGISTER (0367).
+  //
+  // What the manager currently cannot finish, why, what it has tried, and which ones
+  // it has handed back to a human. Distinct from /activity, which is the stream of
+  // decisions taken: this is the standing list of work that is not moving. Read-only
+  // and served through the shared read-through cache (the manager pass invalidates it
+  // on every write), so a polled panel never reaches the database.
+  router.get('/:projectId/stalls', async (c) => {
+    const tenantId = c.get('tenantId');
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    const register = await getStallRegister(c.env as Env, db, { tenantId, projectId });
+    return c.json(register);
+  });
+
+  // GET /api/manager/:projectId/census — the FULL-COVERAGE stall census (0373).
+  //
+  // /stalls is the per-ticket register, and it is bounded by what the deep triage stage
+  // has had budget to diagnose (max 12 tickets per project per pass). That bound made
+  // the register's own `byCause` summary a sample rather than a census — measured on one
+  // tenant, 755 stalled tickets against 44 register rows, with the sample's top cause
+  // reading `unknown` while the true largest cohort was 313 tickets sharing one cause.
+  //
+  // This endpoint answers the question the register cannot: across EVERY ticket, what is
+  // stuck and what do they share? Plus the systemic findings the manager has raised from
+  // it — a cohort it judged a platform defect, with the ticket it filed. Read-only and
+  // served through the shared read-through cache (the manager pass invalidates it), so a
+  // polled panel never reaches the database.
+  router.get('/:projectId/census', async (c) => {
+    const tenantId = c.get('tenantId');
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    const [census, findings] = await Promise.all([
+      getStallCensus(c.env as Env, db, { tenantId, projectId }),
+      listSystemicFindings(db, { tenantId, projectId }),
+    ]);
+    return c.json({ ...census, findings });
+  });
+
+  // GET /api/manager/:projectId/digest — WHAT DID YOU AND THE TEAM ACCOMPLISH TODAY.
+  //
+  // The counters on the rest of this surface describe the BOARD's standing state
+  // (679 tickets, 373 coverage gaps) — properties that barely move day to day and
+  // answer no question a person actually arrives with. This endpoint answers the one
+  // they do: what finished, who finished it, what the manager itself decided, and what
+  // it handed back. See `dailyDigest` for how the six unjoined sources combine.
+  //
+  // `tz` is the caller's UTC offset in MINUTES (`-new Date().getTimezoneOffset()`), so
+  // "today" is the reader's day rather than UTC's. Read-only, served through the shared
+  // read-through cache keyed by that day boundary; the manager pass invalidates it.
+  router.get('/:projectId/digest', async (c) => {
+    const tenantId = c.get('tenantId');
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    // A missing/garbage offset degrades to UTC inside dayWindow rather than 400-ing:
+    // a digest for the wrong midnight is still a digest, and refusing to answer would
+    // be a worse failure than a few hours of skew.
+    const tz = Number(c.req.query('tz'));
+    const config = await getManagerConfigRow(db, tenantId, projectId).catch(() => null);
+    const digest = await getDailyDigest(c.env as Env, db, {
+      tenantId, projectId,
+      tzOffsetMinutes: Number.isFinite(tz) ? tz : 0,
+      lastRunAt: config?.lastRunAt ?? null,
+    });
+    return c.json(digest);
+  });
+
+  // GET /api/manager/:projectId/chat — ASK THE MANAGER.
+  //
+  // Resolves (creating on first access) the project's ONE manager chat and says WHO
+  // answers in it. The client then drives the conversation through the ordinary Brain
+  // chat endpoints — post a message, request the addressed agent's reply, read the
+  // transcript — because this IS an ordinary Brain chat. Nothing about holding the
+  // manager to account needs a second messaging stack, and building one would have
+  // meant a second transcript, a second reply loop and a second tool trace to keep in
+  // step with the first.
+  //
+  // NOT role-gated. Asking what got done is reading, not managing, and the person who
+  // most needs the answer is often not the one who may run a pass — the same reasoning
+  // that keeps "Copy diagnostics" ungated. The manager answers with the caller's OWN
+  // permissions (agentReply executes tools under the triggering user's token), so it can
+  // never surface work the asker could not already see.
+  router.get('/:projectId/chat', async (c) => {
+    const tenantId = c.get('tenantId');
+    const userId = (c as { get(k: 'userId'): string | undefined }).get('userId') ?? null;
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+
+    const [chat, voice] = await Promise.all([
+      brainService.getOrCreateManagerChat(tenantId, userId, projectId),
+      resolveManagerVoice(c.env as Env, db, { tenantId, projectId }),
+    ]);
+    if ('error' in chat) return c.json({ error: chat.error }, 404);
+
+    // A voice of null means this tenant has no manager agent at all and provisioning
+    // could not repair it. Return the chat anyway rather than 500-ing: the transcript is
+    // still readable, and the client renders an explicit "nobody can answer yet" state
+    // instead of an input box whose Send button would silently do nothing.
+    return c.json({
+      chatId: chat.id,
+      agentRef: voice?.agentRef ?? null,
+      agentName: voice?.name ?? null,
+      designated: voice?.designated ?? false,
+    });
   });
 
   return router;

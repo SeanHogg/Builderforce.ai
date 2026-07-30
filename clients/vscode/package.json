@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.7.73",
+  "version": "2026.7.110",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -55,37 +55,53 @@
     "views": {
       "builderforce": [
         {
+          "id": "builderforce.welcome",
+          "name": "%view.welcome%",
+          "when": "!builderforce.signedIn"
+        },
+        {
           "id": "builderforce.sessions",
-          "name": "%view.sessions%"
+          "name": "%view.sessions%",
+          "when": "builderforce.signedIn"
         },
         {
           "id": "builderforce.project",
-          "name": "%view.project%"
+          "name": "%view.project%",
+          "when": "builderforce.signedIn"
         },
         {
           "id": "builderforce.inbox",
-          "name": "%view.inbox%"
+          "name": "%view.inbox%",
+          "when": "builderforce.signedIn"
         },
         {
           "id": "builderforce.insights",
-          "name": "%view.insights%"
+          "name": "%view.insights%",
+          "when": "builderforce.signedIn"
         },
         {
           "id": "builderforce.evermind",
           "type": "webview",
-          "name": "%view.evermind%"
+          "name": "%view.evermind%",
+          "when": "builderforce.signedIn"
         },
         {
           "id": "builderforce.diagnostics",
-          "name": "%view.diagnostics%"
+          "name": "%view.diagnostics%",
+          "when": "builderforce.signedIn"
         },
         {
           "id": "builderforce.meetings",
-          "name": "%view.meetings%"
+          "name": "%view.meetings%",
+          "when": "builderforce.signedIn"
         }
       ]
     },
     "viewsWelcome": [
+      {
+        "view": "builderforce.welcome",
+        "contents": "%welcome.signIn%"
+      },
       {
         "view": "builderforce.sessions",
         "contents": "%welcome.sessions%"
@@ -664,6 +680,19 @@
             "%config.permissionMode.acceptEdits%"
           ],
           "description": "%config.permissionMode.desc%"
+        },
+        "builderforce.sessionTabs": {
+          "type": "string",
+          "enum": [
+            "reuse",
+            "perSession"
+          ],
+          "default": "reuse",
+          "markdownEnumDescriptions": [
+            "%config.sessionTabs.reuse%",
+            "%config.sessionTabs.perSession%"
+          ],
+          "description": "%config.sessionTabs.desc%"
         }
       }
     }
@@ -674,11 +703,15 @@
     "build:webview": "vite build --config webview/vite.config.ts",
     "watch": "node esbuild.mjs --watch",
     "watch:webview": "vite build --watch --config webview/vite.config.ts",
-    "typecheck": "tsc -p ./ && tsc -p webview/tsconfig.json",
+    "typecheck": "tsc -p ./ && tsc -p webview/tsconfig.json && tsc -p harness/tsconfig.json",
     "package": "vsce package --no-dependencies",
     "publish:marketplace": "vsce publish --no-dependencies",
     "publish:openvsx": "ovsx publish",
-    "typecheck:native": "tsgo --noEmit"
+    "typecheck:native": "tsgo --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "harness": "node esbuild.mjs --harness && node out/harness.cjs",
+    "probe": "node esbuild.mjs --harness && node out/harness.cjs probe"
   },
   "dependencies": {},
   "devDependencies": {
@@ -701,6 +734,7 @@
     "remark-gfm": "^4.0.1",
     "tailwindcss": "^3.4.17",
     "typescript": "^6.0.3",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "vitest": "^4.0.3"
   }
 }

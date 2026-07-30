@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { decksApi, type DeckTemplateSummary } from '@/lib/builderforceApi';
+import { Select } from '@/components/Select';
 
 /**
  * Board-deck download — the dedicated entry point (paired with the Brain
@@ -61,15 +62,15 @@ export function DeckDownloadButton() {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-      <select aria-label={t('pickTemplate')} value={templateId} onChange={(e) => setTemplateId(e.target.value)} style={selectStyle}>
+      <Select aria-label={t('pickTemplate')} value={templateId} onChange={(e) => setTemplateId(e.target.value)} style={selectStyle}>
         {templates.length === 0 && <option value="">{t('boardDeck')}</option>}
         {templates.map((tmpl) => (
           <option key={tmpl.id} value={tmpl.id}>{tmpl.isBuiltin ? t(tmpl.archetype === 'cfo_devfinops' ? 'cfoDeck' : 'boardDeck') : tmpl.name}</option>
         ))}
-      </select>
-      <select aria-label={t('pickQuarter')} value={quarter} onChange={(e) => setQuarter(e.target.value)} style={selectStyle}>
+      </Select>
+      <Select aria-label={t('pickQuarter')} value={quarter} onChange={(e) => setQuarter(e.target.value)} style={selectStyle}>
         {quarterOptions().map((q) => <option key={q} value={q}>{q}</option>)}
-      </select>
+      </Select>
       <button
         type="button"
         onClick={onDownload}

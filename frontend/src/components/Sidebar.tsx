@@ -40,6 +40,9 @@ function GroupLink({ group, active, onNavigate, t }: {
       className={`nav-item ${active ? 'active' : ''} flex items-center`}
       style={{ textAlign: 'left' }}
       aria-current={active ? 'page' : undefined}
+      // Stable anchor for the demo product tour (DemoTour) — the group id maps to
+      // a TourAnchor. Inert outside a demo session.
+      data-tour={group.id}
     >
       <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{group.icon}</span>
       <span className="nav-item-label">{t(group.labelKey)}</span>

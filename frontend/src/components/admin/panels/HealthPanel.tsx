@@ -13,6 +13,7 @@ import {
   fmtNum,
 } from '../adminShared';
 import { PlatformTrends } from './PlatformTrends';
+import { SystemHealthSection } from './SystemHealthSection';
 
 export default function HealthPanel() {
   const t = useTranslations('admin');
@@ -96,6 +97,7 @@ export default function HealthPanel() {
         </div>
         {/* Platform-wide historical trends (growth / LLM usage / error volume). */}
         <PlatformTrends />
+        <SystemHealthSection />
 
         <div>
           <div className="health-label" style={{ marginBottom: 12 }}>{t('health.llmPool', { n: health.llm.pool })}</div>

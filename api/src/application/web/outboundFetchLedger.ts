@@ -13,7 +13,9 @@
 import { and, eq, gte, sql } from 'drizzle-orm';
 import { outboundFetchLog, tenants } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
+import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
 import { resolveOutboundFetchesMonthly } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { utcMonthStart } from '../llm/tokenUsage';
@@ -60,7 +62,7 @@ export type OutboundFetchCapResult =
  * (and superadmin-unlimited tenants) always pass. Fails OPEN on a query error — a
  * metering hiccup must not block a legitimate fetch.
  */
-export async function enforceOutboundFetchCap(db: Db, tenantId: number): Promise<OutboundFetchCapResult> {
+export async function enforceOutboundFetchCap(db: Db, tenantId: number, env?: Env): Promise<OutboundFetchCapResult> {
   try {
     const [tenantRow] = await db
       .select({
@@ -82,7 +84,12 @@ export async function enforceOutboundFetchCap(db: Db, tenantId: number): Promise
       effectivePlan,
       tokenDailyLimitOverride: tenantRow?.tokenDailyLimitOverride ?? null,
     });
-    if (limit < 0) return { allowed: true }; // unlimited
+    if (limit < 0) return { allowed: true }; // plan-unlimited (Teams / -1 override)
+
+    // A superadmin OPERATOR is unlimited on EVERY meter — same rule, same source of
+    // truth as the token and cloud-run gates. Only consulted once the plan already
+    // caps the tenant, so unlimited tenants pay nothing for it.
+    if (await resolveSuperadminUnlimited(db, tenantId, undefined, env)) return { allowed: true };
 
     const used = await sumTenantOutboundFetches(db, tenantId, utcMonthStart());
     if (used >= limit) return { allowed: false, effectivePlan, used, limit };

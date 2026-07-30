@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * AuditRunner — runs a system-level audit against a project and produces a
  * tracked diagnostic + a notification.
@@ -19,7 +20,6 @@
  * All IO lives here; the scanners (`auditScanners.ts`) stay pure/testable.
  */
 import { and, eq, ne, inArray } from 'drizzle-orm';
-import type { neon } from '@neondatabase/serverless';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { TaskType, TaskStatus } from '../../domain/shared/types';
@@ -31,8 +31,6 @@ import type { ToolService, SavedToolRun } from './ToolService';
 import type { TaskService } from '../task/TaskService';
 import { getSystemAudit } from './systemAudits';
 import type { AuditScanContext, ScannedRepo } from './auditScanners';
-
-type Sql = ReturnType<typeof neon<false, false>>;
 
 export interface RunAuditArgs {
   tenantId: number;
@@ -190,7 +188,7 @@ export class AuditRunner {
   }
 
   /** Run the audit end-to-end. */
-  async runAudit(env: Env, sql: Sql, args: RunAuditArgs): Promise<AuditRunOutcome | null> {
+  async runAudit(env: Env, args: RunAuditArgs): Promise<AuditRunOutcome | null> {
     const audit = getSystemAudit(args.auditId);
     if (!audit) return null;
 
@@ -206,14 +204,16 @@ export class AuditRunner {
     });
 
     // In-app notification (+ optional email) deep-linking to the report.
-    await notify(sql, env, {
+    await notify(this.db, env, {
       userId: args.userId,
       tenantId: args.tenantId,
       kind: 'audit_complete',
       title: `${audit.name} ready`,
       body: `${ctx.projectName}: ${result.headline}`,
       ref: `/projects?project=${args.projectId}&panel=diagnostics&audit=${encodeURIComponent(audit.id)}`,
-    }).catch(() => {});
+    }).catch((error) => {
+      reportCaughtError(error, { source: "application/tools/AuditRunner.ts", operation: "runAudit" });
+    });
 
     // Best-effort: file the remediation ticket(s) for the audit agent. Left
     // unassigned — the board's lane-autorun trigger + owner-agent fallback
@@ -261,8 +261,10 @@ export class AuditRunner {
         }, args.tenantId);
         agentTasks.push({ taskId: Number(task.id), status: task.status });
       }
-    } catch {
+    } catch (error) {
       // No board/agent available — the deterministic report already landed.
+    
+      reportCaughtError(error, { source: "application/tools/AuditRunner.ts", operation: "runAudit" });
     }
 
     const agentTask = agentTasks[0];

@@ -22,6 +22,21 @@
  * rows keep working unchanged.
  */
 
+import type { Env } from '../../env';
+
+/**
+ * Canonical resolution order for the at-rest credential-encryption BASE secret.
+ * The dedicated `CREDENTIAL_ENCRYPTION_SECRET` is preferred so that a leak of
+ * `JWT_SECRET` (the session-signing key) no longer also decrypts stored credentials
+ * — see finding M2. `INTEGRATION_ENCRYPTION_SECRET` is the intermediate fallback and
+ * `JWT_SECRET` the last-resort legacy fallback (also the value passed as `legacySecret`
+ * when reading pre-migration rows). ONE definition so every credential store agrees on
+ * which secret seals its data (DRY — was previously copy-pasted per module).
+ */
+export function credentialSecret(env: Env): string {
+  return env.CREDENTIAL_ENCRYPTION_SECRET ?? env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET;
+}
+
 /** Fixed PBKDF2 salt base. v1 (legacy) used exactly this; v2 appends `:${tenantId}`. */
 const SALT_BASE = 'builderforce-integrations';
 
@@ -54,6 +69,22 @@ function globalSalt(): string {
  *  derived key is distinct from every other tenant's under the same base secret. */
 function tenantSalt(tenantId: number): string {
   return `${SALT_BASE}:${tenantId}`;
+}
+
+/**
+ * Shared AES-256-GCM key derivation for OTHER credential stores that keep their
+ * own single-string container format (e.g. MfaService's `iv.cipher` blobs for
+ * tenant LLM provider keys / OAuth token blobs) but must NOT invent a second KDF.
+ *
+ * Uses the exact same PBKDF2 (100k, SHA-256) derivation as this module: with a
+ * `tenantId` the key is bound to `${SALT_BASE}:${tenantId}` (per-tenant → ciphertext
+ * is not portable across tenants); without one it uses the global salt (a dedicated-
+ * secret, non-per-tenant key). Callers pass their OWN base secret (e.g. the dedicated
+ * CREDENTIAL_ENCRYPTION_SECRET), so a shared salt base never lets keys collide across
+ * modules — the secret differs.
+ */
+export async function deriveTenantAesKey(secret: string, tenantId?: number): Promise<CryptoKey> {
+  return deriveKey(secret, tenantId == null ? globalSalt() : tenantSalt(tenantId));
 }
 
 /**

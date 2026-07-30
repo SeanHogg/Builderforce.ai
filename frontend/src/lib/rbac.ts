@@ -56,11 +56,30 @@ export const CAPABILITIES = {
   'workspace.delete':     'owner',
   'apiKeys.manage':       'owner',
   'billing.manage':       'manager',
+  // Per-seat AI spend caps (Teams). Owner-only: it governs how much of the
+  // workspace's money each seat may spend. Mirrors requireRole(OWNER) on
+  // PATCH /api/tenants/:id/spend-limits (+ the per-seat variant).
+  'billing.spendLimits':  'owner',
   'integrations.manage':  'manager',
 
   // Workforce
   'agents.create':        'manager',
   'agents.manage':        'manager',
+
+  // Starting / cancelling / steering an agent run. Mirrors the API's
+  // requireRole(DEVELOPER) on every dispatch-tier route in runtimeRoutes (submit,
+  // cancel, messages, state, broadcast, telemetry). DEVELOPER — not manager —
+  // because running agents IS the developer's job (see ROLE_DESCRIPTION.developer);
+  // the manager control for a run is the SEPARATE governance approval gate, which
+  // holds high/urgent tickets for sign-off in /api/approvals. Keeping both at
+  // manager would collapse two distinct controls and make the approval queue moot.
+  'runtime.execute':      'developer',
+  // REVERTING a finished run — closing the PR it opened and deleting the branch it
+  // wrote. Mirrors requireRole(MANAGER) on POST /api/runtime/executions/:id/revert.
+  // Deliberately a tier ABOVE runtime.execute: starting a run is the developer's
+  // job, but destroying its output (commits a human may already have reviewed) is
+  // a governance action and irreversible.
+  'runtime.revert':       'manager',
   // Manage a project's self-learning Evermind model (seed base, flip inference /
   // learning mode). Mirrors the API's requireRole(MANAGER) on the evermind routes.
   'project.manageEvermind': 'manager',
@@ -74,6 +93,11 @@ export const CAPABILITIES = {
   // tickets need manager sign-off before an agent runs them). Mirrors the API's
   // per-field requireRole(MANAGER) check on PATCH /api/boards/:id.
   'board.manageApproval': 'manager',
+
+  // Ceremony cadence — create/edit/delete the recurring standup & planning
+  // schedules the cron sweep runs. Mirrors the API's requireRole(MANAGER) on the
+  // POST/PATCH/DELETE /api/agile/ceremonies/schedules routes (reads are open).
+  'ceremonies.manageSchedules': 'manager',
 
   // Enterprise insight lenses (the role-based dashboards from the platform
   // assessment). Gating them now means the lens surfaces light up for the right
@@ -89,6 +113,7 @@ export const CAPABILITIES = {
   'insights.devex':       'manager',   // DevEx surveys & AI DevEx analysis lens
   'insights.portfolio':   'manager',   // PMO / CEO: portfolio rollup + innovation funnel
   'insights.compliance':  'manager',   // CISO: audit / evidence packs
+  'insights.autonomy':    'manager',   // Autonomy Health: per-origin lifecycle funnel, hop split & stall gates (mirrors requireRole(MANAGER) on /api/insights/autonomy)
 
   // Feature pages with their own destinations (manager-gated authoring).
   'devex.manage':         'manager',   // author DevEx survey templates & launch campaigns
@@ -121,6 +146,11 @@ export const CAPABILITIES = {
   'facts.view':            'viewer',
   'facts.manage':          'developer',
 
+  // RFP / RFQ Response — pre-sales proposal generation. Reads open to any member;
+  // creating/generating is developer+ (mirrors the API requireRole(DEVELOPER)).
+  'rfp.view':              'viewer',
+  'rfp.manage':            'developer',
+
   // EMP buyer-checklist lenses (manager-gated, mirroring server requireRole(MANAGER)).
   'insights.crossTeam':      'manager', // EMP-5  internal cross-team benchmarking
   'insights.delayTaxonomy':  'manager', // EMP-9  delay root-cause taxonomy
@@ -130,6 +160,11 @@ export const CAPABILITIES = {
   // Blended human+agent workforce planning + periodic lens review snapshots.
   'workforce.plan':          'manager',
   'insights.snapshots':      'manager',
+
+  // Governance policy packs — the gates the agent runtime hard-enforces at its
+  // tool-call seam. Reads are open to any member (you may see the posture you run
+  // under); authoring mirrors the API's requireRole(MANAGER) on every write.
+  'policies.manage':         'manager',
 } as const satisfies Record<string, TenantRole>;
 
 export type Capability = keyof typeof CAPABILITIES;

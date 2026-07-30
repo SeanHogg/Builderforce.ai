@@ -6,7 +6,9 @@ import type { Project } from '@/lib/types';
 import type { ProjectDiagnosticSummary } from '@/lib/tools';
 import { ProjectHealthGauges } from './ProjectHealth';
 import { ProjectInspectionGrade } from './ProjectInspection';
+import { ProjectConfigProgress } from './ProjectConfigProgress';
 import { ProjectOriginBadge } from './ProjectOriginBadge';
+import { useOpenProjectChat } from '@/lib/brain';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { RunDiagnosticsButton } from './RunDiagnosticsButton';
@@ -55,6 +57,7 @@ export function ProjectCard({
   diagnostics,
 }: ProjectCardProps) {
   const t = useTranslations('projectCard');
+  const openProjectChat = useOpenProjectChat();
   const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (onCardClick && e.key === 'Enter') {
@@ -185,6 +188,21 @@ export function ProjectCard({
               <path d="M12 3 v9 l6.5 3.5" />
             </svg>
           </button>
+          {/* Project chat — opens a NEW Brain chat scoped to this project */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              openProjectChat(typeof project.id === 'number' ? project.id : Number(project.id));
+            }}
+            aria-label={t('openChat')}
+            title={t('openChat')}
+            style={iconButtonStyle}
+          >
+            <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>
           {/* IDE button */}
           <button
             type="button"
@@ -282,6 +300,10 @@ export function ProjectCard({
         project={project}
         onOpen={onDetailsClick ? (p) => onDetailsClick(p, 'analytics') : undefined}
       />
+
+      {/* Configuration-completeness donut — only for projects that still need
+          setting up. Surfaces what's missing and a one-click brainstorm-goals. */}
+      <ProjectConfigProgress project={project} />
 
       {/* Diagnostics run against this project (SOC 2 readiness, Quality, …) — the
           latest score per diagnostic, straight from the workspace rollup so the

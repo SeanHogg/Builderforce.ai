@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { persistLastProjectId } from '@/lib/auth';
+import { Select } from '@/components/Select';
 import {
   listIdeProjects,
   createIdeProject,
@@ -370,10 +371,10 @@ export default function IDEDashboardPage() {
               </div>
               <div>
                 <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('parentOptional')}</label>
-                <select value={newParent ?? ''} onChange={(e) => setNewParent(e.target.value ? Number(e.target.value) : null)} style={inputStyle}>
+                <Select value={newParent ?? ''} onChange={(e) => setNewParent(e.target.value ? Number(e.target.value) : null)} style={inputStyle}>
                   <option value="">{t('ungrouped')}</option>
                   {containers.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-                </select>
+                </Select>
               </div>
               {createType === 'evermind' && (
                 <div>
@@ -423,10 +424,10 @@ export default function IDEDashboardPage() {
                   {activeRecipe.needsSeedModel && publishedModels.length > 0 && (
                     <div style={{ marginTop: 10 }}>
                       <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('recipeSeedModelLabel')}</label>
-                      <select value={seedModelSlug ?? ''} onChange={(e) => setSeedModelSlug(e.target.value || null)} required style={inputStyle}>
+                      <Select value={seedModelSlug ?? ''} onChange={(e) => setSeedModelSlug(e.target.value || null)} required style={inputStyle}>
                         <option value="">{t('recipeSeedSelect')}</option>
                         {publishedModels.map((m) => (<option key={m.slug} value={m.slug}>{m.name}</option>))}
-                      </select>
+                      </Select>
                     </div>
                   )}
                 </div>

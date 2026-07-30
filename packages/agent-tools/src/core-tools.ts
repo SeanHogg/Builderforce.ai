@@ -12,8 +12,16 @@
  */
 
 import type {
+  LeaseClaimResult,
+  LeaseListResult,
+  LeaseMode,
+  LeaseReleaseResult,
+  MemoryForgetResult,
   MemoryRecallResult,
   MemoryRememberResult,
+  MemoryScopeKind,
+  WorkspaceNoteResult,
+  WorkspaceReadResult,
   RepoDeleteResult,
   RepoEditResult,
   RepoListResult,
@@ -261,6 +269,17 @@ export const memoryRememberTool: ToolDefinition = defineTool({
       content: { type: "string", description: "The fact, as one concise line." },
       tags: { type: "array", items: { type: "string" }, description: "Optional tags for grouping/filtering." },
       importance: { type: "number", description: "0–1; higher surfaces earlier. Default 0.5." },
+      scope: {
+        type: "string",
+        enum: ["tenant", "project", "ticket"],
+        description:
+          "How widely this fact should be visible. 'ticket' = only this ticket's runs; 'project' (default) = every run on this project; 'tenant' = the whole workspace. Prefer the NARROWEST scope that is still true — a project convention is 'project', not 'tenant'.",
+      },
+      ttl_days: {
+        type: "number",
+        description:
+          "Forget automatically after this many days. Use it for anything time-bound (a release date, a temporary workaround, an in-flight migration). Omit only for facts that stay true indefinitely.",
+      },
     },
     required: ["key", "content"],
   },
@@ -272,8 +291,132 @@ export const memoryRememberTool: ToolDefinition = defineTool({
     const tags = Array.isArray(args.tags) ? args.tags.filter((t): t is string => typeof t === "string") : undefined;
     const importance =
       typeof args.importance === "number" && Number.isFinite(args.importance) ? args.importance : undefined;
-    const r = (await ctx.caps.memory!.remember(key, content, { tags, importance })) as MemoryRememberResult;
+    // The model may only NARROW or name a scope — the surface resolves which concrete
+    // project/ticket that means from the run, so a scope string can never aim a write
+    // at another project.
+    const scope = MEMORY_SCOPES.includes(args.scope as MemoryScopeKind) ? (args.scope as MemoryScopeKind) : undefined;
+    const ttlDays =
+      typeof args.ttl_days === "number" && Number.isFinite(args.ttl_days) && args.ttl_days > 0 ? args.ttl_days : undefined;
+    const r = (await ctx.caps.memory!.remember(key, content, { tags, importance, scope, ttlDays })) as MemoryRememberResult;
     return { data: r as unknown as Record<string, unknown> };
+  },
+});
+
+const MEMORY_SCOPES: readonly MemoryScopeKind[] = ["tenant", "project", "ticket"];
+
+export const memoryForgetTool: ToolDefinition = defineTool({
+  name: "memory_forget",
+  description:
+    "Delete one stored fact from cross-run memory by its key. Use when a fact you (or an earlier run) stored has become WRONG — a decision was reversed, a workaround was removed, a convention changed. Correcting a fact is memory_remember with the same key; this is for facts that should no longer exist at all.",
+  parameters: {
+    type: "object",
+    properties: { key: { type: "string", description: "The key of the fact to delete." } },
+    required: ["key"],
+  },
+  requires: ["memory", "memory.forget"],
+  async execute(args, ctx): Promise<ToolResult> {
+    const key = typeof args.key === "string" ? args.key : "";
+    if (!key.trim()) return { data: { ok: false, error: "key is required" } };
+    const r = (await ctx.caps.memory!.forget!(key)) as MemoryForgetResult;
+    return { data: r as unknown as Record<string, unknown> };
+  },
+});
+
+// ── Multi-agent coordination ─────────────────────────────────────────────────────
+// These four exist because a ticket stage can dispatch SEVERAL agents at once. The
+// surface enforces write leases implicitly, so these tools are not load-bearing for
+// safety — they let an agent reserve work BEFORE doing it and see what its peers are
+// doing, which is what turns a refused write into a plan instead of a retry loop.
+
+export const claimResourceTool: ToolDefinition = defineTool({
+  name: "claim_resource",
+  description:
+    "Reserve a shared resource before you work on it, so a peer agent working the same ticket does not change it underneath you. Pass a file path ('src/app.ts'), a directory ('src/api/'), or 'repo' for the whole tree. Returns granted:false with the current holder when someone else has it — then work on something else, or leave a workspace_note explaining what you need. Writes to a path held by another agent are refused whether or not you claim first.",
+  parameters: {
+    type: "object",
+    properties: {
+      resource: { type: "string", description: "What to reserve: a repo-relative file path, a directory, or 'repo'." },
+      mode: {
+        type: "string",
+        enum: ["exclusive", "shared"],
+        description: "'exclusive' (default) to write it; 'shared' to signal you are reading it and block others' exclusive claims.",
+      },
+      reason: { type: "string", description: "One line on why you need it — shown to the peer agent that gets refused." },
+    },
+    required: ["resource"],
+  },
+  requires: ["coordinate"],
+  async execute(args, ctx): Promise<ToolResult> {
+    const resource = typeof args.resource === "string" ? args.resource : "";
+    if (!resource.trim()) return { data: { ok: false, error: "resource is required" } };
+    const mode: LeaseMode | undefined = args.mode === "shared" || args.mode === "exclusive" ? args.mode : undefined;
+    const reason = typeof args.reason === "string" ? args.reason : undefined;
+    const r = (await ctx.caps.coordination!.claim(resource, { mode, reason })) as LeaseClaimResult;
+    return { data: r as unknown as Record<string, unknown> };
+  },
+});
+
+export const releaseResourceTool: ToolDefinition = defineTool({
+  name: "release_resource",
+  description:
+    "Release a resource you claimed, so a peer agent can take it. Do this as soon as you are finished with it rather than holding it to the end of the run. Every lease this run holds is released automatically when the run ends, so this is an optimisation, not a requirement.",
+  parameters: {
+    type: "object",
+    properties: { resource: { type: "string", description: "The resource string you claimed." } },
+    required: ["resource"],
+  },
+  requires: ["coordinate"],
+  async execute(args, ctx): Promise<ToolResult> {
+    const resource = typeof args.resource === "string" ? args.resource : "";
+    if (!resource.trim()) return { data: { ok: false, error: "resource is required" } };
+    const r = (await ctx.caps.coordination!.release(resource)) as LeaseReleaseResult;
+    return { data: r as unknown as Record<string, unknown> };
+  },
+});
+
+export const workspaceNoteTool: ToolDefinition = defineTool({
+  name: "workspace_note",
+  description:
+    "Publish a short note on the shared workspace for this ticket, readable by every agent working it (now or later in the ticket's lifecycle). Use it to declare intent ('I own the DB migration'), hand off a finding, or record a decision a peer must not contradict. Reusing a key overwrites that note. This is WORKING state for the current ticket — durable cross-ticket knowledge belongs in memory_remember.",
+  parameters: {
+    type: "object",
+    properties: {
+      key: { type: "string", description: "Short stable identifier, e.g. 'owns-migration' or 'api-contract'." },
+      content: { type: "string", description: "The note, in one or two lines." },
+    },
+    required: ["key", "content"],
+  },
+  requires: ["coordinate"],
+  async execute(args, ctx): Promise<ToolResult> {
+    const key = typeof args.key === "string" ? args.key : "";
+    const content = typeof args.content === "string" ? args.content : "";
+    if (!key.trim() || !content.trim()) return { data: { ok: false, error: "key and content are required" } };
+    const r = (await ctx.caps.coordination!.postNote(key, content)) as WorkspaceNoteResult;
+    return { data: r as unknown as Record<string, unknown> };
+  },
+});
+
+export const workspaceReadTool: ToolDefinition = defineTool({
+  name: "workspace_read",
+  description:
+    "Read the shared workspace for this ticket — notes posted by peer agents plus the resources they currently hold. Call this EARLY when a ticket may be staffed by more than one agent, so you plan around what others already own instead of colliding with them.",
+  parameters: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "Optional filter; omit to read everything." },
+      limit: { type: "number", description: "Max notes to return (default 20)." },
+    },
+  },
+  requires: ["coordinate"],
+  async execute(args, ctx): Promise<ToolResult> {
+    const query = typeof args.query === "string" && args.query.trim() ? args.query : undefined;
+    const limit = typeof args.limit === "number" && Number.isFinite(args.limit) ? args.limit : undefined;
+    const [notes, leases] = await Promise.all([
+      ctx.caps.coordination!.readNotes(query, limit) as Promise<WorkspaceReadResult>,
+      ctx.caps.coordination!.listClaims() as Promise<LeaseListResult>,
+    ]);
+    if (!notes.ok) return { data: notes as unknown as Record<string, unknown> };
+    return { data: { ok: true, notes: notes.notes ?? [], heldResources: leases.ok ? (leases.leases ?? []) : [] } };
   },
 });
 
@@ -312,7 +455,11 @@ export const webSearchTool: ToolDefinition = defineTool({
   async execute(args, ctx): Promise<ToolResult> {
     const query = typeof args.query === "string" ? args.query : "";
     if (!query.trim()) return { data: { ok: false, error: "query is required" } };
-    const r = (await ctx.caps.web!.search(query)) as WebSearchResult;
+    // `web.search` is in the surface's capability set, so the registry only reaches
+    // here when a search backing is wired (see WebCapability — `search` is optional
+    // precisely so a fetch-only surface can omit `web.search`).
+    if (!ctx.caps.web?.search) return { data: { ok: false, error: "web search is not available on this surface" } };
+    const r = (await ctx.caps.web.search(query)) as WebSearchResult;
     return { data: r as unknown as Record<string, unknown> };
   },
 });
@@ -559,6 +706,11 @@ export const CORE_TOOLS: readonly ToolDefinition[] = [
   webSearchTool,
   memoryRecallTool,
   memoryRememberTool,
+  memoryForgetTool,
+  claimResourceTool,
+  releaseResourceTool,
+  workspaceNoteTool,
+  workspaceReadTool,
   askHumanTool,
   finishTool,
 ];

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Calendar connections — /api/calendar/*
  *
@@ -110,7 +111,9 @@ export function createCalendarRoutes(db: Db): Hono<HonoEnv> {
       try {
         const info = await fetch(provider.accountInfoUrl, { headers: { Authorization: `Bearer ${tok.access_token}` } });
         if (info.ok) accountEmail = provider.parseAccountEmail(await info.json() as Record<string, unknown>);
-      } catch { /* email is best-effort */ }
+      } catch (error) { /* email is best-effort */ 
+        reportCaughtError(error, { source: "presentation/routes/calendarRoutes.ts", operation: "createCalendarRoutes" });
+      }
 
       const expiresAt = tok.expires_in ? new Date(Date.now() + tok.expires_in * 1000) : null;
       await db.insert(calendarConnections).values({
@@ -175,7 +178,9 @@ export function createCalendarRoutes(db: Db): Hono<HonoEnv> {
       try {
         const events = await provider.listUpcoming(token, conn.calendarId, { maxResults: 25, timeMinISO, timeMaxISO });
         for (const e of events) all.push({ ...e, provider: conn.provider as CalendarProviderName });
-      } catch { /* skip a failing provider, still return the rest */ }
+      } catch (error) { /* skip a failing provider, still return the rest */ 
+        reportCaughtError(error, { source: "presentation/routes/calendarRoutes.ts", operation: "createCalendarRoutes" });
+      }
     }
     all.sort((a, b) => a.startISO.localeCompare(b.startISO));
     return c.json({ events: all });

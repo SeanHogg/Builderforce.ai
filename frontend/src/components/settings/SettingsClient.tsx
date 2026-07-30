@@ -6,7 +6,10 @@
  *   - Account (default): profile, language, connected accounts, get-hired opt-in
  *   - Personality: the user's own psychometric profile
  *   - Sessions: personal account security (moved here from /security)
+ *   - Email: email language + lifecycle-mail consent (CAN-SPAM surface)
  *   - Workspace: workspace identity + jump-off links (owner tools)
+ *   - Manager: workspace-wide AI Manager autonomy defaults (0363)
+ *   - Spend: per-seat AI spend limits (Teams)
  */
 
 import { useState, useEffect } from 'react';
@@ -30,7 +33,10 @@ import {
 import PsychometricEditor from '@/components/PsychometricEditor';
 import PersonalitySummary from '@/components/PersonalitySummary';
 import ForHireCard from '@/components/account/ForHireCard';
+import EmailPreferencesCard from '@/components/account/EmailPreferencesCard';
 import AccountSecurityPanel from '@/components/security/AccountSecurityPanel';
+import TeamSpendLimits from '@/components/settings/TeamSpendLimits';
+import ManagerDefaults from '@/components/settings/ManagerDefaults';
 import type { PsychometricProfile } from '@/lib/psychometric';
 import { clearPersonalityBlockCache } from '@/lib/usePersonalityBlock';
 
@@ -43,7 +49,7 @@ function ApiKeysSettingsLink({ label }: { label: string }) {
   return (
     <RoleGate capability="apiKeys.manage">
       <Link
-        href="/settings/api-keys"
+        href="/settings/integrations"
         style={{
           padding: '6px 12px', fontSize: 12, fontWeight: 600,
           background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
@@ -159,7 +165,14 @@ export default function SettingsClient() {
     { id: '', label: t('accountTab'), icon: '👤', href: '/settings' },
     { id: 'personality', label: t('personality'), icon: '🧠', href: '/settings?sub=personality' },
     { id: 'sessions', label: t('sessionsTab'), icon: '🔒', href: '/settings?sub=sessions' },
-    ...(tenant ? [{ id: 'workspace', label: t('workspace'), icon: '🏢', href: '/settings?sub=workspace' }] : []),
+    { id: 'email', label: t('emailTab'), icon: '✉️', href: '/settings?sub=email' },
+    ...(tenant ? [
+      { id: 'workspace', label: t('workspace'), icon: '🏢', href: '/settings?sub=workspace' },
+      // Workspace-scoped like the two around it: the AI Manager autonomy defaults every
+      // project inherits (0363). Role-gated inside the panel, not hidden from the bar.
+      { id: 'manager', label: t('managerDefaults'), icon: '🧭', href: '/settings?sub=manager' },
+      { id: 'spend', label: t('spendLimits'), icon: '💳', href: '/settings?sub=spend' },
+    ] : []),
   ];
 
   const renderAccount = () => (
@@ -358,9 +371,15 @@ export default function SettingsClient() {
         ? renderPersonality()
         : sub === 'sessions'
           ? <AccountSecurityPanel />
-          : sub === 'workspace'
-            ? renderWorkspace()
-            : renderAccount()}
+          : sub === 'email'
+            ? <EmailPreferencesCard />
+            : sub === 'workspace'
+              ? renderWorkspace()
+              : sub === 'manager'
+                ? <ManagerDefaults />
+                : sub === 'spend'
+                  ? <TeamSpendLimits />
+                  : renderAccount()}
     </PageContainer>
   );
 }

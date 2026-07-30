@@ -88,6 +88,16 @@ export class ExecutionRepository implements IExecutionRepository {
         status:       plain.status,
         result:       plain.result ?? undefined,
         errorMessage: plain.errorMessage ?? undefined,
+        // The productivity verdict (0385) must actually LAND. Without this column in the
+        // set, `markProduced(true)` round-trips through the domain, writes everything
+        // except the one field it exists for, and `toDomain(updated)` reads the unchanged
+        // value straight back — a silent no-op that leaves the lane-move signal dead and
+        // lets a legitimate no-code ticket be judged an empty completion.
+        //
+        // `?? undefined` is load-bearing: drizzle omits an undefined key, so a `null`
+        // (not judged) can never overwrite a verdict `finalizeCloudRun` already wrote,
+        // while `false` — a real "this run shipped nothing" — is persisted.
+        produced:     plain.produced ?? undefined,
         startedAt:    plain.startedAt ?? undefined,
         completedAt:  plain.completedAt ?? undefined,
         updatedAt:    new Date(),
@@ -113,6 +123,10 @@ function toDomain(row: typeof executionsTable.$inferSelect): Execution {
     cloudAgentRef: row.cloudAgentRef ?? null,
     result:       row.result ?? null,
     errorMessage: row.errorMessage ?? null,
+    // The autonomy breaker's productivity signal (0385). It MUST survive into
+    // `toPlain()` — both breaker call sites read the plain props, and dropping it here
+    // would silently restore the failure-only streak with everything else in place.
+    produced:     row.produced ?? null,
     startedAt:    row.startedAt ?? null,
     completedAt:  row.completedAt ?? null,
     createdAt:    row.createdAt,

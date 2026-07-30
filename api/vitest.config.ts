@@ -16,6 +16,9 @@ export default defineConfig({
       '@builderforce/agent-tools': fileURLToPath(
         new URL('../packages/agent-tools/src/index.ts', import.meta.url),
       ),
+      '@builderforce/agent-stall': fileURLToPath(
+        new URL('../packages/agent-stall/src/index.ts', import.meta.url),
+      ),
     },
   },
 });

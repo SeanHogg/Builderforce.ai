@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { IProjectRepository } from '../../domain/project/IProjectRepository';
 import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { Project } from '../../domain/project/Project';
@@ -204,8 +205,10 @@ function parseGithubUrl(
     if (parts.length >= 2 && parts[0] && parts[1]) {
       return { githubRepoOwner: parts[0], githubRepoName: parts[1] };
     }
-  } catch {
+  } catch (error) {
     // fall through
+  
+    reportCaughtError(error, { source: "application/project/ProjectService.ts", operation: "parseGithubUrl" });
   }
   return { githubRepoOwner: null, githubRepoName: null };
 }

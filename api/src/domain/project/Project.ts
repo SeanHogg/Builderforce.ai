@@ -22,7 +22,7 @@ export interface ProjectProps {
   githubRepoOwner: string | null;
   githubRepoName:  string | null;
   governance:      string | null;
-  /** IDE: active modality ('designer' | 'video' | 'evermind' | 'finetune' | 'voice'). */
+  /** IDE: active modality ('designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice'). */
   modality:        string | null;
   /** Where the project was born — 'ide' | 'imported' | 'external' (drives the badge). */
   origin:          string | null;

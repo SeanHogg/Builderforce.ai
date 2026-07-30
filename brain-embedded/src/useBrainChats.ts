@@ -56,8 +56,11 @@ export interface UseBrainChats {
   setError(msg: string): void;
   select(id: number | null): Promise<BrainChat | null>;
   /** Create a chat (defaults project to the active filter/pin) and select it. */
-  create(opts?: { title?: string; projectId?: number | null }): Promise<BrainChat | null>;
+  create(opts?: { title?: string; projectId?: number | null; capability?: string | null }): Promise<BrainChat | null>;
   rename(id: number, title: string): Promise<void>;
+  /** Set (or clear, with null) what the chat is making. Persisted on the chat, so
+   *  the choice follows the conversation across surfaces instead of the browser. */
+  setCapability(id: number, capability: string | null): Promise<void>;
   /**
    * Auto-name a still-untitled chat (title === {@link DEFAULT_CHAT_TITLE}) from its
    * first user message, so "New chat" becomes the topic once the conversation begins.
@@ -157,11 +160,11 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     }
   }, [persistence, chats, setActiveChatId]);
 
-  const create = useCallback(async (opts?: { title?: string; projectId?: number | null }): Promise<BrainChat | null> => {
+  const create = useCallback(async (opts?: { title?: string; projectId?: number | null; capability?: string | null }): Promise<BrainChat | null> => {
     setError('');
     try {
       const projectId = opts?.projectId !== undefined ? opts.projectId : defaultProjectId();
-      const chat = await persistence.createChat({ title: opts?.title ?? 'New chat', projectId });
+      const chat = await persistence.createChat({ title: opts?.title ?? 'New chat', projectId, capability: opts?.capability ?? null });
       setChats((prev) => [chat, ...prev]);
       setActiveChatId(chat.id);
       return chat;
@@ -170,6 +173,20 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
       return null;
     }
   }, [persistence, defaultProjectId, setActiveChatId]);
+
+  const setCapability = useCallback(async (id: number, capability: string | null) => {
+    // Optimistic: the picker is a mode switch, so the UI must not lag the click.
+    // Reconciled from the server's echo, reverted on failure.
+    const prevValue = chatsRef.current.find((c) => c.id === id)?.capability ?? null;
+    setChats((prev) => prev.map((c) => (c.id === id ? { ...c, capability } : c)));
+    try {
+      const updated = await persistence.updateChat(id, { capability });
+      setChats((prev) => prev.map((c) => (c.id === id ? { ...c, capability: updated.capability ?? null } : c)));
+    } catch (e) {
+      setChats((prev) => prev.map((c) => (c.id === id ? { ...c, capability: prevValue } : c)));
+      setError(e instanceof Error ? e.message : 'Failed to set capability');
+    }
+  }, [persistence]);
 
   const rename = useCallback(async (id: number, title: string) => {
     const trimmed = title.trim();
@@ -261,6 +278,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     select,
     create,
     rename,
+    setCapability,
     autoTitle,
     summarize,
     remove,

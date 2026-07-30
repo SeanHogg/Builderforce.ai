@@ -86,13 +86,23 @@ export interface ChatInputProps {
   /** Called when a participant is picked from the @-mention typeahead. */
   onMention?: (recipient: DirectedRecipient) => void;
   className?: string;
+  /**
+   * Change this to any new value to focus the composer and put the caret at the
+   * end of the text. Used when something else seeds the composer (e.g. picking a
+   * capability), so the seeded line reads as a sentence to finish rather than a
+   * finished message to send.
+   */
+  focusToken?: number | string;
 }
 
-/* Theme-aware: uses --chat-input-* from globals.css (light and dark) */
+/* Theme-aware: uses --chat-input-* from globals.css (light and dark).
+   Sizing comes from the shared --chat-ctl-* metrics so every control in the
+   composer (and the toolbars around it) stays one size, and coarse pointers get
+   the touch-friendly variant without a second set of numbers here. */
 const iconButtonStyle = (disabled?: boolean): React.CSSProperties => ({
-  width: 40,
-  height: 40,
-  minWidth: 40,
+  width: 'var(--chat-ctl-size, 32px)',
+  height: 'var(--chat-ctl-size, 32px)',
+  minWidth: 'var(--chat-ctl-size, 32px)',
   flexShrink: 0,
   display: 'flex',
   alignItems: 'center',
@@ -111,7 +121,7 @@ const inputStyle: React.CSSProperties = {
   color: 'var(--chat-input-text)',
   fontSize: '0.9375rem',
   borderRadius: 0,
-  padding: '10px 12px',
+  padding: '6px 4px',
   outline: 'none',
   border: 'none',
   fontFamily: 'var(--font-body)',
@@ -120,9 +130,9 @@ const inputStyle: React.CSSProperties = {
 };
 
 const sendButtonStyle = (disabled: boolean): React.CSSProperties => ({
-  width: 40,
-  height: 40,
-  minWidth: 40,
+  width: 'var(--chat-ctl-size, 32px)',
+  height: 'var(--chat-ctl-size, 32px)',
+  minWidth: 'var(--chat-ctl-size, 32px)',
   flexShrink: 0,
   display: 'flex',
   alignItems: 'center',
@@ -324,6 +334,7 @@ export function ChatInput({
   mentionables,
   onMention,
   className,
+  focusToken,
 }: ChatInputProps) {
   const t = useTranslations('chatInput');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -334,6 +345,16 @@ export function ChatInput({
   valueRef.current = value;
   const [recording, setRecording] = useState(false);
   const [focused, setFocused] = useState(false);
+  // Externally-seeded text: focus and drop the caret at the end so the user
+  // continues the sentence instead of sending the seed verbatim.
+  useEffect(() => {
+    if (focusToken == null) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
+  }, [focusToken]);
   const canSubmit = value.trim().length > 0 && !disabled;
   // "Activated" once the user is typing in / focused on the composer — the whole
   // box lights up in accent (blue), the same treatment as the VS Code composer so
@@ -476,7 +497,7 @@ export function ChatInput({
   }, []);
 
   return (
-    <form onSubmit={handleSubmit} className={className} style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+    <form onSubmit={handleSubmit} className={className} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--chat-ctl-gap, 6px)', width: '100%' }}>
       {pendingAttachments.length > 0 && onRemoveAttachment && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {pendingAttachments.map((a) => (
@@ -514,10 +535,10 @@ export function ChatInput({
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'flex-end',
-          gap: 10,
-          rowGap: 8,
+          gap: 'var(--chat-ctl-gap, 6px)',
+          rowGap: 'var(--chat-ctl-pad-y, 6px)',
           width: '100%',
-          padding: '8px 10px 8px 12px',
+          padding: 'var(--chat-ctl-pad-y, 6px) var(--chat-ctl-pad-x, 8px)',
           borderRadius: 18,
           border: `1px solid ${active ? 'var(--chat-input-active-border)' : 'var(--chat-input-border)'}`,
           background: 'var(--chat-input-bg)',
@@ -599,10 +620,10 @@ export function ChatInput({
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 5,
+              gap: 4,
               flexShrink: 0,
-              height: 40,
-              padding: '0 12px',
+              height: 'var(--chat-ctl-size, 32px)',
+              padding: '0 10px',
               borderRadius: 9999,
               fontSize: 12,
               cursor: disabled ? 'not-allowed' : 'pointer',
@@ -649,7 +670,11 @@ export function ChatInput({
             <MicIcon />
           </button>
         )}
-        {running && onStop ? (
+        {running && onStop && !canSubmit ? (
+          // Streaming with an empty composer → the button interrupts the run.
+          // When the composer HAS submittable text (e.g. the queue-while-thinking
+          // path where the host keeps the input editable), the Send button below
+          // renders instead so the typed turn can be queued.
           <button
             type="button"
             onClick={onStop}

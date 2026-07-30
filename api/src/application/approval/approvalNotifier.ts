@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Approval/question notification fan-out — the single place that tells humans an
  * agent has bubbled something up.
@@ -24,7 +25,9 @@ export async function sendSlackNotification(webhookUrl: string, text: string): P
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
-  }).catch(() => { /* best-effort */ });
+  }).catch((error) => { /* best-effort */ 
+    reportCaughtError(error, { source: "application/approval/approvalNotifier.ts", operation: "sendSlackNotification" });
+  });
 }
 
 /**
@@ -49,7 +52,9 @@ export async function sendTeamsNotification(
       title,
       text,
     }),
-  }).catch(() => { /* best-effort */ });
+  }).catch((error) => { /* best-effort */ 
+    reportCaughtError(error, { source: "application/approval/approvalNotifier.ts", operation: "sendTeamsNotification" });
+  });
 }
 
 export async function sendEmailNotification(
@@ -63,7 +68,9 @@ export async function sendEmailNotification(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ from, to, subject, html }),
-  }).catch(() => { /* best-effort */ });
+  }).catch((error) => { /* best-effort */ 
+    reportCaughtError(error, { source: "application/approval/approvalNotifier.ts", operation: "sendEmailNotification" });
+  });
 }
 
 /** Manager/owner email addresses for a tenant — the notification recipients. */

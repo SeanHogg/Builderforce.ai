@@ -1,4 +1,101 @@
 {
+  "marketingDeck": {
+    "seo": {
+      "title": "The Ultimate Demo — Builderforce",
+      "description": "Follow five moves to watch one idea become a running, deployed, tested app operated by a team of humans and AI agents.",
+      "ogTitle": "The Ultimate Demo — build, deploy and scale in minutes"
+    },
+    "ui": {
+      "start": "Start the demo",
+      "next": "Next",
+      "prev": "Back",
+      "restart": "Start over",
+      "progress": "{current} / {total}",
+      "progressLabel": "Demo progress",
+      "seeLabel": "What you'll see",
+      "ctaPrimary": "Start building",
+      "ctaSecondary": "Book a demo"
+    },
+    "slides": [
+      {
+        "kind": "intro",
+        "eyebrow": "The ultimate demo",
+        "title": "Build, deploy and scale — in one sitting.",
+        "tagline": "Five moves take a single idea all the way to a running product operated by a team of humans and AI agents. Follow along."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "01",
+        "eyebrow": "Sign in",
+        "title": "Zero setup. You're already in.",
+        "tagline": "No forms, no configuration — just an account.",
+        "steps": [
+          "Create an account or log in",
+          "Land straight in your Default workspace",
+          "A Default project is already waiting for you"
+        ],
+        "see": "You're in a working workspace in seconds — on the web or in VS Code."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "02",
+        "eyebrow": "Describe it",
+        "title": "Say what you want. Watch it build.",
+        "tagline": "Type your idea into the \"What should we build?\" prompt.",
+        "steps": [
+          "Type a plain-language description of your app",
+          "Land in the Builder with your prompt carried across",
+          "The AI scaffolds a complete, running app for you"
+        ],
+        "see": "A live preview lights up with a working app — from a single sentence."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "03",
+        "eyebrow": "Deploy & test",
+        "title": "One click live. Tested automatically.",
+        "tagline": "Publish, then let the agent put it through its paces.",
+        "steps": [
+          "Hit Publish — your app goes live at a URL in seconds",
+          "The Agentic Tester targets the deployed app automatically",
+          "Findings come back as fix-ready tickets"
+        ],
+        "see": "Deployed and quality-checked without ever leaving the Builder."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "04",
+        "eyebrow": "Scale the team",
+        "title": "Invite people. Hire agents. One team.",
+        "tagline": "Humans and AI agents work the same board.",
+        "steps": [
+          "Invite a teammate into your workspace",
+          "Add an AI agent to your workforce",
+          "Assign work to a person or an agent — same picker"
+        ],
+        "see": "A blended human + agent team, collaborating on one shared board."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "05",
+        "eyebrow": "Lead the workforce",
+        "title": "A lean team. An augmented workforce.",
+        "tagline": "A few developers direct a fleet of agents.",
+        "steps": [
+          "Staff swimlanes with the right agents",
+          "Drag a ticket into a lane to auto-run an agent",
+          "Steer live runs and answer their questions as they work"
+        ],
+        "see": "A handful of developers orchestrate a workforce of agents doing the heavy lifting."
+      },
+      {
+        "kind": "outro",
+        "eyebrow": "That's the WOW",
+        "title": "Idea to product to team — in minutes.",
+        "tagline": "You just watched one prompt become a deployed, tested app, run by a team of humans and AI agents. Now it's your turn."
+      }
+    ]
+  },
   "contentManager": {
     "migrate": {
       "moving": "Moving your content into Knowledge…",
@@ -121,6 +218,15 @@
     "assignTeam": "Assign a team…",
     "assign": "Assign",
     "boardNameLabel": "Board name",
+    "templateHeading": "Board template",
+    "templateLabel": "Board template",
+    "templateHint": "Applying a template replaces this board's swimlanes, role requirements, gates, and coordinated-lifecycle setting.",
+    "templateApply": "Apply template",
+    "templateApplying": "Applying…",
+    "templateConfirmTitle": "Apply board template?",
+    "templateConfirmMessage": "Apply “{name}” to this board? Existing swimlane configuration will be replaced. Tickets and their history are preserved.",
+    "templateLoadError": "Could not load board templates",
+    "templateApplyError": "Could not apply the board template",
     "maxConcurrent": "Max concurrent tickets",
     "hideDoneItems": "Hide done items",
     "standupTimer": "Standup turn timer",
@@ -274,7 +380,7 @@
       "dashboard": "Dashboard",
       "brainstorm": "Brain Storm",
       "projects": "Projects",
-      "ide": "IDE",
+      "ide": "Builder",
       "workflows": "Workflows",
       "workforce": "Talent / Workforce",
       "insights": "Insights",
@@ -290,7 +396,9 @@
       "myWorkspace": "My Workspace",
       "marketplace": "Marketplace",
       "incidents": "Incidents",
-      "monitoring": "Monitoring"
+      "monitoring": "Monitoring",
+      "reliability": "Reliability",
+      "agentOps": "Agent Ops"
     },
     "tab": {
       "projects": "Projects",
@@ -340,7 +448,7 @@
       "logs": "Logs",
       "qa": "Agentic QA",
       "home": "Home",
-      "integrations": "Integrations",
+      "integrations": "Integrations / API Keys",
       "manager": "Manager",
       "roles": "Roles",
       "talent": "Talent",
@@ -365,8 +473,16 @@
       "escalation": "Escalation",
       "contacts": "Contacts",
       "boards": "Boards",
-      "reporting": "Reporting"
-    }
+      "monitors": "Monitors",
+      "reporting": "Reporting",
+      "rfp": "RFP",
+      "feedback": "Feedback",
+      "autonomy": "Autonomy",
+      "coordination": "Coordination",
+      "memory": "Memory",
+      "rehearsal": "Rehearsal"
+    },
+    "primaryAria": "Primary"
   },
   "alerts": {
     "title": "Alerts",
@@ -440,12 +556,16 @@
     }
   },
   "ceremonies": {
-    "selectProject": "Select a project to start a ceremony."
+    "selectProject": "Select a project to start a ceremony.",
+    "viewLive": "Live round-table",
+    "viewSchedules": "Schedules",
+    "viewSwitchLabel": "Ceremony view",
+    "viewHistory": "History"
   },
   "projectCard": {
     "details": "Details",
     "taskBoard": "Task board",
-    "openIde": "Open in IDE",
+    "openIde": "Open in Builder",
     "deleteProject": "Delete project",
     "agentLabel": "Agent:",
     "tasks": "{count, plural, one {# task} other {# tasks}}",
@@ -465,7 +585,26 @@
     "healthNoDataAria": "Project health — no delivery data yet",
     "doneAria": "{pct}% done — {completed} of {total} tasks complete",
     "donePct": "{pct}% done",
-    "health360": "Project 360"
+    "health360": "Project 360",
+    "originBuilder": "Builder",
+    "originImported": "Imported",
+    "originBuilderTitle": "Started in the Builder",
+    "originImportedTitle": "Imported from a repository",
+    "openChat": "Open project chat",
+    "configTitle": "Finish setup",
+    "configDone": "Configured",
+    "configTodo": "To do",
+    "configAria": "Configuration {pct}% complete",
+    "config_vision": "Vision",
+    "config_goals": "Goals",
+    "config_deadline": "Deadline",
+    "config_owner": "Owner",
+    "config_tasks": "Tasks",
+    "config_architecture": "Architecture",
+    "configPct": "{pct}% set up",
+    "configMissingList": "Still to set up: {items}",
+    "brainstormGoals": "Brainstorm goals",
+    "brainstormGoalsPrompt": "Help me brainstorm clear goals for the project \"{name}\". Ask me about its scope and success criteria, then propose 3–5 concrete goals I can turn into objectives."
   },
   "projectInspection": {
     "title": "Inspection",
@@ -651,8 +790,8 @@
     "modalityProject": "{label} project",
     "modality": {
       "designer": {
-        "label": "Designer",
-        "tagline": "Generate and build apps with Preview, Code, and a live dev server.",
+        "label": "Website",
+        "tagline": "Generate and build a website or web app with Preview, Code, and a live dev server.",
         "runLabel": "Run"
       },
       "video": {
@@ -674,6 +813,16 @@
         "label": "Voice",
         "tagline": "Clone and design a custom voice, then synthesize speech from it.",
         "runLabel": "Generate"
+      },
+      "mobile": {
+        "label": "Mobile",
+        "tagline": "Build a phone app and preview it in a device simulator, then scan to open it on your own handset.",
+        "runLabel": "Run"
+      },
+      "webmobile": {
+        "label": "Web + Mobile",
+        "tagline": "Build a web application and a mobile app together from one codebase — preview both side by side.",
+        "runLabel": "Run"
       }
     },
     "all": "All",
@@ -683,10 +832,10 @@
     "noProjectsFilter": "No projects match this filter. Create a new one above.",
     "noProjectsYet": "No projects yet. Pick a type above to create your first one.",
     "deleteFailed": "Failed to delete project",
-    "title": "IDE",
-    "subtitle": "Start a new IDE project or open an existing one.",
-    "newIdeProject": "New IDE project",
-    "yourIdeProjects": "Your IDE projects",
+    "title": "Builder",
+    "subtitle": "Start a new Builder project or open an existing one.",
+    "newIdeProject": "New Builder project",
+    "yourIdeProjects": "Your Builder projects",
     "comingSoon": "coming soon",
     "soon": "soon",
     "newModalityProject": "New {label} project",
@@ -703,16 +852,16 @@
     "projectNamePlaceholder": "My Awesome Project",
     "parentOptional": "Group under a Project (optional)",
     "parentProject": "Parent Project",
-    "parentProjectHint": "Group this IDE project under a Project, or leave it ungrouped.",
-    "ideProjectSettings": "IDE project settings",
+    "parentProjectHint": "Group this Builder project under a Project, or leave it ungrouped.",
+    "ideProjectSettings": "Builder project settings",
     "openProjectsAria": "Open projects",
     "editNameHint": "Edit project name (saves on blur or Enter)",
-    "projectDetailsTitle": "IDE project details",
+    "projectDetailsTitle": "Builder project details",
     "projectSettingsAria": "Project settings",
     "settingsRepoTitle": "Settings & repository",
     "blockOnFailHint": "When on, Run is blocked while the last checks are failing",
     "runChecksHint": "Run type-check, lint and build in the browser to validate the code",
-    "detailedConfigHint": "Memory, model, inference, personality and voice for this project are configured in the IDE's panels. This is where you rename it and set its parent Project.",
+    "detailedConfigHint": "Memory, model, inference, personality and voice for this project are configured in the Builder's panels. This is where you rename it and set its parent Project.",
     "createOpen": "Create & open",
     "creating": "Creating…",
     "cancel": "Cancel",
@@ -748,7 +897,68 @@
     "recipeBlankDesc": "A minimal model you train from scratch in the Studio.",
     "recipeSeedModelLabel": "Published model to seed from",
     "recipeSeedSelect": "Select a model…",
-    "recipeSeedNoModels": "no published models yet"
+    "recipeSeedNoModels": "no published models yet",
+    "centerPreview": "Preview",
+    "centerCode": "Code",
+    "device": {
+      "simulateOnWeb": "Simulate on web",
+      "deviceLabel": "Device",
+      "rotate": "Rotate",
+      "reload": "Reload preview",
+      "openInTab": "Open in a new tab",
+      "tryOnDevice": "Try on device",
+      "previewTitle": "Mobile app preview",
+      "emptyTitle": "Nothing running yet",
+      "emptyHint": "Press Run to start the dev server and see your app here.",
+      "panelTitle": "Preview on your phone",
+      "panelIntro": "The simulator runs inside this browser tab, so your phone cannot reach it. Scan the published build instead.",
+      "checking": "Checking for a published build…",
+      "qrAlt": "QR code for the published app URL",
+      "copyLink": "Copy link",
+      "copied": "Copied",
+      "openLink": "Open",
+      "step1": "Open the camera app on your phone.",
+      "step2": "Point it at the QR code above.",
+      "step3": "Tap the notification to open your app.",
+      "lastPublished": "Last published {when}",
+      "republishHint": "Publish again after making changes — the QR code keeps working, it always points at the latest build.",
+      "notPublishedTitle": "Nothing published yet",
+      "notPublishedBody": "Publish this app to get a link your phone can open. It takes about a minute.",
+      "goToPublish": "Go to Publish"
+    },
+    "publish": {
+      "title": "Publish to the web",
+      "description": "Build this app and host it at a subdomain. Static hosting — your app runs in the browser.",
+      "subdomain": "Subdomain",
+      "building": "Building…",
+      "uploading": "Uploading…",
+      "publish": "Publish",
+      "republish": "Re-publish",
+      "published": "Published ✓",
+      "liveSite": "Live site",
+      "preview": "preview",
+      "fileCount": "{count, plural, one {# file} other {# files}}",
+      "invalidSubdomain": "Enter a valid subdomain (letters, numbers and hyphens).",
+      "failed": "Publish failed"
+    },
+    "deploy": {
+      "title": "Deploy from GitHub",
+      "description": "Let GitHub Actions build this project on every push and deploy it here — no need to keep the Builder open.",
+      "checking": "Checking the connected repository…",
+      "needsRepo": "Connect a GitHub repository to this project first, from Settings → Repository.",
+      "needsGitHub": "This project is connected to a non-GitHub repository. GitHub Actions deploys need a GitHub repo.",
+      "repoLabel": "Repository:",
+      "enable": "Enable GitHub deploys",
+      "reapply": "Update the workflow",
+      "enabling": "Writing the workflow…",
+      "enableFailed": "Could not enable GitHub deploys.",
+      "enabledOn": "Added {path} on {branch}. The next push to that branch builds and deploys.",
+      "viewRuns": "View workflow runs on GitHub",
+      "viewWorkflow": "Show the workflow file"
+    },
+    "askAi": "Ask AI",
+    "previewWeb": "Web",
+    "previewMobile": "Mobile"
   },
   "tools": {
     "outOf5": "out of 5.0",
@@ -855,7 +1065,15 @@
     "clearanceNeededBody": "This is a restricted security item. You don’t have clearance to view its details. Ask a workspace owner or manager for access.",
     "typeProduct": "Product",
     "typeDesign": "Design",
-    "typeIncident": "Incident"
+    "typeIncident": "Incident",
+    "requiresRoleHint": "{role, select, viewer {Requires Viewer role} developer {Requires Developer role} manager {Requires Manager role} owner {Requires Owner role} other {Requires {role} role}}",
+    "requiresDeveloperRole": "Requires Developer role",
+    "closePanel": "Close panel",
+    "panel": "Panel",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Copy failed",
+    "copyDiagnostics": "Copy diagnostics"
   },
   "prdCreate": {
     "title": "New PRD",
@@ -974,6 +1192,12 @@
     "merging": "Merging…"
   },
   "memberProfile": {
+    "tabs": {
+      "overview": "Overview",
+      "timeLogs": "Time Logs",
+      "tasks": "Tasks"
+    },
+    "noTasks": "No tasks are assigned to this user.",
     "subtitle": "{kind} · capability & availability",
     "syncing": "Syncing…",
     "syncFromGoogleCalendar": "Sync from Google Calendar",
@@ -1034,7 +1258,7 @@
       "cloud_runs": "Cloud runs",
       "ingestion": "Data",
       "error_events": "Errors",
-      "outbound_fetches": "Uptime"
+      "outbound_fetches": "Outbound fetches"
     },
     "unlimited": "Unlimited",
     "freePerMo": "{amount} free / mo",
@@ -1101,7 +1325,73 @@
     },
     "accountTab": "Account",
     "sessionsTab": "Sessions",
-    "subnavLabel": "Settings sections"
+    "subnavLabel": "Settings sections",
+    "emailTab": "Email",
+    "emailPrefs": {
+      "title": "Email preferences",
+      "whatWeSend": "What we send",
+      "error": "Could not update your email preferences. Please try again.",
+      "language": "Email language",
+      "languageAuto": "Auto-detect",
+      "languageHelp": "The language we write your emails in. Independent of the app language above.",
+      "languageTitle": "Language",
+      "languageDetail": "We write to you in this language. If it is set to auto-detect we use the language you signed up in, falling back to English.",
+      "optionalTitle": "Optional email",
+      "optionalHelp": "Turn off anything you would rather not receive.",
+      "optionalDetail": "These are the emails we choose to send. You can switch each one off, and every one of them carries an unsubscribe link.",
+      "productUpdates": "Product updates",
+      "productUpdatesHelp": "New features and notable changes.",
+      "onboardingTips": "Tips and guides",
+      "onboardingTipsHelp": "Occasional pointers on getting more out of Builderforce.",
+      "digests": "Summaries and digests",
+      "digestsHelp": "Periodic roundups of activity across your projects.",
+      "alwaysOnTitle": "Always sent",
+      "alwaysOnBody": "These emails are part of your account. They are never suppressed, even if you unsubscribe from everything else.",
+      "alwaysOn": {
+        "signIn": "Sign-in links and magic links",
+        "verification": "Email verification codes",
+        "invites": "Workspace and chat invitations",
+        "security": "Security and account-access notices"
+      },
+      "transactionalNote": "Account and security emails are always sent — they are part of how your account works, so they are not listed above.",
+      "unsubscribedTitle": "You are unsubscribed",
+      "unsubscribedBody": "You are not receiving any optional email. Account and security messages are still sent.",
+      "resubscribeCta": "Resubscribe",
+      "resubscribeTitle": "Resubscribe to optional email",
+      "resubscribeConfirm": "You will start receiving optional email again, based on the categories you have switched on. Continue?"
+    },
+    "spendLimits": "Spend limits",
+    "spendTitle": "Team AI spend limits",
+    "spendDescription": "Set a monthly AI spend cap for each seat. Seats without their own model key run on Builderforce at the OpenRouter rate — a cap pauses their paid usage once reached, and you and they are notified as they approach it.",
+    "spendTeamsOnlyTitle": "A Teams plan feature",
+    "spendTeamsOnly": "Per-seat spend limits are available on the Teams plan. Upgrade to set a monthly AI budget for each member.",
+    "spendDefaultTitle": "Default per-seat budget",
+    "spendDefaultDescription": "Applied to every seat that doesn’t have its own limit. Leave blank for no default.",
+    "spendDefaultLabel": "Default monthly budget in US dollars",
+    "spendNoDefaultPlaceholder": "No limit",
+    "spendPerSeatMonth": "per seat / month",
+    "spendDefaultHint": "Amounts are in US dollars. Usage covered by a member’s own model key (BYO) is never counted.",
+    "spendSeatsTitle": "Seats",
+    "spendResetsOn": "Spend resets on {date}.",
+    "spendNoSeats": "No active members yet.",
+    "spendOfCap": "{spent} of {cap}",
+    "spendUnlimitedUsage": "{spent} · no limit",
+    "spendModeLabel": "Budget mode",
+    "spendModeInherit": "Use default",
+    "spendModeUnlimited": "No limit",
+    "spendModeCustom": "Custom",
+    "spendAmountPlaceholder": "Amount",
+    "spendAmountLabel": "Monthly budget in US dollars",
+    "spendSave": "Save",
+    "spendSaving": "Saving…",
+    "spendSaved": "Saved",
+    "spendSaveFailed": "Could not save",
+    "managerDefaults": "AI Manager",
+    "managerDefaultsTitle": "Workspace AI Manager defaults",
+    "managerDefaultsSubtitle": "How the AI Manager behaves across every project in this workspace. A project can refine these on its own Manager tab — but it can never grant itself a permission you withhold here.",
+    "managerDefaultsError": "Could not load the workspace AI Manager defaults.",
+    "managerDefaultsProjectHint": "To change just one project:",
+    "managerDefaultsProjectLink": "open its Manager settings"
   },
   "pmo": {
     "title": "Portfolio (PMO)",
@@ -1310,7 +1600,9 @@
         "crossTeam": "Cross-team",
         "crossTeamDesc": "Rank each team against the others",
         "delayTaxonomy": "Delay causes",
-        "delayTaxonomyDesc": "Why work is running late"
+        "delayTaxonomyDesc": "Why work is running late",
+        "autonomy": "Autonomy Health",
+        "autonomyDesc": "Did the work finish itself? Lifecycle funnel by who created the ticket, the autonomous-vs-human move split, and where autonomy stalls."
       },
       "summary": {
         "cycleTime": "Avg cycle time",
@@ -1723,7 +2015,12 @@
       "activeUsers": "Active users",
       "cost": "Cost",
       "tokensSub": "across all models",
-      "tokensByModel": "Tokens by model"
+      "tokensByModel": "Tokens by model",
+      "byIntegration": "Consumption by integration",
+      "platformKey": "Builderforce (platform key)",
+      "fundedOwnKey": "Your key",
+      "fundedPlatform": "Platform",
+      "requests": "Requests"
     },
     "devexhub": {
       "title": "DevEx",
@@ -2054,6 +2351,78 @@
       "title": "This lens needs a higher plan",
       "body": "Advanced insights aren't included in your {plan} plan. Upgrade to unlock forecasting, anomaly detection and the exec lenses.",
       "cta": "View plans"
+    },
+    "autonomy": {
+      "title": "Autonomy Health",
+      "subtitle": "Do the tickets your AI manager and your people open actually run their full lifecycle on their own? Compare the funnel by who created the work, see who is really moving the board, and find the gates where autonomy dies.",
+      "scopeAll": "All projects in this workspace.",
+      "scopeProject": "Scoped to {project}.",
+      "coverage": {
+        "full": "Full coverage — all {n} tickets opened in the last {days} days were audited.",
+        "truncated": "Sample only — the audit was capped at {n} tickets from the last {days} days, so these figures cover the newest tickets, not every one."
+      },
+      "origin": {
+        "label": "Created by",
+        "agent": "Agent",
+        "manager_card": "Manager card",
+        "human": "Human",
+        "system": "Automation",
+        "unknown": "Unattributed"
+      },
+      "stage": {
+        "created": "Created",
+        "dispatched": "Ever dispatched",
+        "progressed": "Progressed autonomously",
+        "terminal": "Reached Done",
+        "fullyAutonomous": "Fully autonomous"
+      },
+      "allOrigins": "All origins",
+      "conversion": "End-to-end",
+      "ticketsCreated": "{n} created",
+      "endToEnd": "reached Done with zero human lane moves ({n} tickets).",
+      "funnelAria": "Autonomy funnel for tickets created by {origin} — {n} tickets, shown as a share of those created.",
+      "originMixAria": "Tickets created in this window, split by who created them.",
+      "hopsAutonomous": "Autonomous moves",
+      "hopsHuman": "Human moves",
+      "hopsOfTotal": "{share} autonomous of {n} moves",
+      "hopSplitAria": "Lane moves for {origin}: {a} autonomous, {h} human.",
+      "stallAria": "Gates holding {n} stalled tickets, ranked by ticket count.",
+      "noTickets": "No tickets were opened in this window.",
+      "noHops": "No lane moves were recorded in this window.",
+      "noStalls": "Nothing is stalled — no ticket is short of Done with nothing running.",
+      "stat": {
+        "fully": "Finished autonomously",
+        "fullySub": "{n} of {total} tickets reached Done with no human hop",
+        "dispatchedSub": "{n} of {total} tickets got at least one run",
+        "hopShare": "Moves made by autonomy",
+        "hopShareSub": "{a} autonomous vs {h} human lane moves",
+        "stalled": "Stalled at a gate",
+        "stalledSub": "{share} of tickets — short of Done, nothing running",
+        "neverStartedSub": "{share} of tickets — never ran, never moved"
+      },
+      "gateShort": {
+        "unrecorded": "Never evaluated"
+      },
+      "gate": {
+        "will_run": "A run was dispatched for these tickets.",
+        "no_board": "The project has no board, so there is no lane for autonomy to resolve against.",
+        "no_lane": "No swimlane on the board matches the ticket's status, so autonomy has nothing to trigger on.",
+        "terminal_lane": "The ticket sits in a terminal (Done) lane, which never auto-runs.",
+        "human_gate": "The lane is human-gated — a person must approve it or press Run now.",
+        "no_agent": "The lane has no staffed agent and the owner cannot execute this stage. Staff the lane, or dispatch explicitly with Run now.",
+        "managed_no_role": "This board is lifecycle-managed, so every run must be attributed to a role the stage authorises — and no authorised role resolves to an agent here. Assigning an owner will not help: the assignee is the Coordinator, never the executor. Staff the lane, pin the role, or let the Coordinator resolve the stage participant.",
+        "capability_mismatch": "Every candidate agent lacks the skills this lane requires.",
+        "already_running": "A run is already live on the ticket, so no new one was dispatched.",
+        "run_cap_exhausted": "The last consecutive runs each either failed or finished without producing anything, so autonomy stopped re-dispatching. A human Run now overrides it.",
+        "cooldown_active": "The last run failed or finished with nothing to show for it, so the ticket is in its back-off window before the next autonomous attempt.",
+        "not_executable": "A system or coordination chore — never dispatched to an agent by design.",
+        "pending_approval": "An external request awaiting human acceptance in triage before any agent may touch it.",
+        "unrecorded": "No auto-run decision was ever recorded — autonomy never evaluated these tickets.",
+        "lane_requirement_gate": "The lane requires a role sign-off that is still outstanding, so the requirement gate dispatched that reviewer and suppressed the lane's normal agent until the review clears.",
+        "same_lane_reentry": "The run that just finished already served this lane, so the loop guard suppressed an immediate re-dispatch into it. Nothing is executing.",
+        "tenant_token_limit": "The workspace has used its token allowance, so autonomy is paused for every ticket it owns until the allowance resets or the plan is upgraded.",
+        "cloud_run_limit": "The workspace has used its monthly cloud-run allowance. Retrying will not clear this — upgrade the plan or wait for the reset. On-prem and VS Code runs stay unlimited."
+      }
     }
   },
   "cloudAgentForm": {
@@ -2078,9 +2447,10 @@
     "surface": "Runtime surface",
     "surfaceLabel": {
       "durable": "Durable (cloud, on-demand serverless)",
-      "container": "Long-lived Cloudflare Container (for very long runs)"
+      "container": "Long-lived Cloudflare Container (for very long runs)",
+      "github_actions": "GitHub Actions (runs on your repo's runners)"
     },
-    "surfaceHelp": "Both run the full task in the cloud (all Cloudflare). Durable executes on-demand on a Durable Object (per step) — the default. Long-lived Cloudflare Container keeps a process running for very long, continuous tasks (falls back to Durable until Container infra is enabled).",
+    "surfaceHelp": "All run the full task remotely. Durable executes on-demand on a Durable Object (per step) — the default. Long-lived Cloudflare Container keeps a process running for very long, continuous tasks (falls back to Durable until Container infra is enabled). GitHub Actions runs the agent on your linked repo's own runners with a real filesystem and toolchain and a 60-minute limit — it requires the Builderforce agent workflow (.github/workflows/builderforce-agent.yml) committed to the repo, otherwise the run falls back to Durable.",
     "baseModel": "Base model (optional)",
     "baseModelDefault": "builderforce.ai default (best coding model)",
     "baseModelHelp": "The tool-calling + coding model this agent runs on — pick one of your LLMs or a model from the pool. A run pins one model for the whole task; leave default to use the plan's best coding model.",
@@ -2103,7 +2473,7 @@
     "statusPublished": "PUBLISHED",
     "statusDraft": "DRAFT",
     "loadingCapabilities": "Loading capabilities…",
-    "capabilitiesHint": "Skills and personas assigned here travel with this agent everywhere it runs — IDE, Workflow, on-prem or cloud — independent of any project.",
+    "capabilitiesHint": "Skills and personas assigned here travel with this agent everywhere it runs — Builder, Workflow, on-prem or cloud — independent of any project.",
     "pricingIntro": "Set a price to publish <strong>{name}</strong> to the marketplace. Use 0 to list it for free.",
     "pricingModel": "Pricing model",
     "pricingFlatFee": "Flat fee",
@@ -2279,8 +2649,8 @@
     "brainHint": "Use Brain to generate PRDs and executable task actions for this project.",
     "integrationKeys": "Project integration keys",
     "workspaceTitle": "Workspace",
-    "workspaceDesc": "Workspace and file system for this project. Open the IDE to edit files.",
-    "openInIde": "Open in IDE",
+    "workspaceDesc": "Workspace and file system for this project. Open the Builder to edit files.",
+    "openInIde": "Open in Builder",
     "dueDateLabel": "Due date",
     "dueDateHint": "Set a project deadline. Leave empty to use the latest task due date.",
     "deadline": "Deadline",
@@ -2309,7 +2679,9 @@
       "task": "Task",
       "roadmap": "Roadmap"
     },
-    "exportCsv": "Export CSV"
+    "exportCsv": "Export CSV",
+    "milestoneTip": "Milestone — only one date is set",
+    "derivedTip": "Dates inferred from the items inside it"
   },
   "reconcile": {
     "loading": "Loading work items…",
@@ -2382,7 +2754,23 @@
     },
     "performance": {
       "activityTitle": "Contribution activity",
-      "activitySub": "Whole-team activity — humans via git/PR, agents via telemetry."
+      "activitySub": "Whole-team activity — humans via git/PR, agents via telemetry.",
+      "title": "Performance",
+      "scorecards": "Member scorecards",
+      "scorecardsSub": "· last {days}d · click a row to edit capability/availability",
+      "loading": "Loading…",
+      "noActivity": "No activity in this window.",
+      "colMember": "Member",
+      "colAssigned": "Assigned",
+      "colCompleted": "Completed",
+      "colRedo": "Redo",
+      "colReopen": "Reopen",
+      "colCycle": "Cycle",
+      "colPickup": "Pickup",
+      "colIdleDone": "Idle→done",
+      "colHygiene": "Hygiene",
+      "colEngage": "Engage",
+      "colEffective": "Effective"
     },
     "consolidate": {
       "title": "Consolidate people",
@@ -2411,7 +2799,9 @@
       "security": "Security",
       "product_manager": "Product",
       "designer": "Designer",
-      "incident_manager": "Incident Manager"
+      "incident_manager": "Incident Manager",
+      "cto": "CTO",
+      "product_owner": "Product Owner"
     },
     "teams": {
       "heading": "Teams",
@@ -2511,7 +2901,24 @@
     "errUnhireFailed": "Unhire failed",
     "errRemoveMember": "Failed to remove member",
     "errChangeRole": "Failed to change role",
-    "errRevokeInvite": "Failed to revoke invitation"
+    "errRevokeInvite": "Failed to revoke invitation",
+    "copiedExclaim": "Copied!",
+    "manifest": {
+      "assignedConfig": "Assigned configuration",
+      "copyManifest": "Copy manifest",
+      "emptyNote": "No skills or personas assigned",
+      "noneAssigned": "None assigned",
+      "personas": "Personas",
+      "skills": "Skills",
+      "content": "Content"
+    },
+    "quickstart": {
+      "title": "Connect a new agent",
+      "intro": "Pre-configured for <b>{name}</b>. Run this on any machine — the agent installs and registers straight into this workgroup.",
+      "osUnix": "macOS / Linux",
+      "osWindows": "Windows",
+      "noToken": "No workspace token in this session — the agent will prompt you to pick a workgroup on first run."
+    }
   },
   "knowledge": {
     "headingSops": "Standard Operating Procedures",
@@ -2769,6 +3176,7 @@
       "reopen": "Reopen"
     },
     "loadMore": "Load more",
+    "aggregateConsumption": "Errors · All collectors",
     "setup": {
       "title": "Error collectors",
       "subtitle": "Connect where your errors come from — one collector per project.",
@@ -2781,6 +3189,7 @@
       "creating": "Creating…",
       "tenantName": "Tenant collector",
       "tenantScope": "All projects (tenant-level)",
+      "collectorConsumption": "Errors · {name}",
       "snippetNote": "Your ingest key is shown only once, at creation. Drop this snippet into every app in the project.",
       "sdkSnippet": "Browser SDK",
       "otlpEndpoint": "OTLP endpoint",
@@ -2792,6 +3201,10 @@
       "paused": "paused",
       "pause": "Pause",
       "resume": "Resume",
+      "test": "Test",
+      "testing": "Testing…",
+      "testSucceeded": "Test error received. This collector is configured correctly.",
+      "testFailed": "Collector test failed",
       "delete": "Delete",
       "confirmDelete": "Delete this collector? Ingested errors are kept.",
       "lastEvent": "last event",
@@ -2945,9 +3358,11 @@
       "daysAgo": "{n}d ago"
     },
     "heading": "What should we build?",
-    "subheading": "Start in <brainstorm>Brain Storm</brainstorm> to ideate, then execute as a project and build in the IDE—or assign work via <tasks>Tasks</tasks> and <workforce>Workforce</workforce> agents.",
+    "subheading": "Start in <brainstorm>Brain Storm</brainstorm> to ideate, then execute as a project and build in the Builder—or assign work via <tasks>Tasks</tasks> and <workforce>Workforce</workforce> agents.",
     "promptPlaceholder": "Build a budget tracker with Material UI components…",
     "brainStorm": "Brain Storm",
+    "build": "Build",
+    "building": "Starting…",
     "agentsConnected": "{count, plural, one {# agent connected} other {# agents connected}}",
     "noAgents": "No agents connected —",
     "setUpInWorkforce": "set up in Workforce",
@@ -2967,7 +3382,7 @@
     "tabs": {
       "projects": "Projects",
       "workforce": "Talent / Workforce",
-      "ide": "IDE",
+      "ide": "Builder",
       "ideas": "Ideas / Brainstorm",
       "quality": "Quality",
       "knowledge": "Knowledge"
@@ -3007,7 +3422,7 @@
       "agentsHeading": "Agents ({count})",
       "noPeople": "No people online.",
       "noAgents": "No agents online.",
-      "inIde": "In the IDE",
+      "inIde": "In the Builder",
       "activeSession": "Active session",
       "manage": "Manage workforce",
       "agent": {
@@ -3068,7 +3483,8 @@
       "hours": "Hours",
       "labor": "Labor",
       "aiSpend": "AI spend",
-      "qualified": "Qualified"
+      "qualified": "Qualified",
+      "optionalPh": "(optional)"
     },
     "soc": {
       "coverage": "Control coverage",
@@ -3148,13 +3564,14 @@
       "wfPerformance": "Workforce · Performance",
       "marketplace": "Marketplace",
       "tools": "Tools",
-      "ide": "IDE",
+      "ide": "Builder",
       "alerts": "Alerts",
       "logs": "Logs",
       "quality": "Quality",
       "integrations": "Integrations",
       "content": "Content",
       "ceremonies": "Ceremonies",
+      "incidents": "Incidents",
       "wfPlan": "Workforce plan",
       "empAllocation": "Allocation",
       "empCollaboration": "Collaboration",
@@ -3162,7 +3579,8 @@
       "empCost": "Labor cost",
       "empPerformers": "Performers",
       "empInitiatives": "Initiative mix",
-      "forecast": "Forecast"
+      "forecast": "Forecast",
+      "autonomy": "Autonomy"
     },
     "title": {
       "aiProductivity": "AI Productivity Score",
@@ -3174,6 +3592,7 @@
       "aiModelShare": "Model share of runs",
       "aiMergeRate": "Merge rate by model",
       "aiComparison": "Multi-tool evaluation",
+      "aiByIntegration": "Consumption by integration",
       "aiShareTrend": "Adoption & share trend",
       "delivCycleTime": "Cycle time",
       "delivVelocity": "Velocity",
@@ -3236,7 +3655,7 @@
       "catalogMarketplaceTopEval": "Best-evaluated agent",
       "catalogToolsByCategory": "Tools by category",
       "ideByModality": "Builds by modality",
-      "ideRecency": "IDE builds",
+      "ideRecency": "Builder builds",
       "obsAlertFires": "Alert firings / day",
       "obsAlertRuleHealth": "Alert rule health",
       "obsLogVolume": "Event volume",
@@ -3249,6 +3668,10 @@
       "obsContentByKind": "Documents by kind",
       "obsCeremonyCadence": "Ceremony cadence",
       "obsCeremonyBalance": "Ceremony talk balance",
+      "incStatus": "Open incidents",
+      "incSeverity": "Incidents by severity",
+      "incSystems": "Incidents by system",
+      "incMttr": "Mean time to resolve",
       "wfpCostSplit": "Hire vs. agent cost",
       "wfpCapacity": "Capacity vs WIP",
       "wfpGap": "Allocatable gap",
@@ -3262,7 +3685,18 @@
       "forecastCycleProjection": "Projected cycle time",
       "forecastCfrProjection": "Projected change-failure",
       "forecastAnomalies": "Open anomalies",
-      "forecastCostTrend": "Spend forecast"
+      "forecastCostTrend": "Spend forecast",
+      "autoFully": "Finished autonomously",
+      "autoDispatched": "Ever dispatched",
+      "autoHopShare": "Moves made by autonomy",
+      "autoStalled": "Stalled at a gate",
+      "autoNeverStarted": "Never started",
+      "autoOriginFunnel": "Lifecycle funnel by origin",
+      "autoHopSplit": "Autonomous vs human moves",
+      "autoStallGates": "Where autonomy stalls",
+      "autoOriginMix": "Who opens the work",
+      "autoFunnelTable": "Autonomy funnel (table)",
+      "autoCoverage": "Audit coverage"
     },
     "loading": "Loading…",
     "overview": {
@@ -3293,7 +3727,11 @@
       "bySource": "Cost by source",
       "spendSub": "estimated, last 7 days",
       "byProject": "Spend by project",
-      "noProjects": "No project spend"
+      "noProjects": "No project spend",
+      "byoFundedOnly": "No platform spend — all usage ran on your connected keys",
+      "sourceCloud": "Cloud",
+      "sourceOnPrem": "On-prem",
+      "sourceWeb": "Web / SDK"
     },
     "catalog": {
       "noInstalls": "No installs yet",
@@ -3345,8 +3783,8 @@
     },
     "ide": {
       "builds": "builds",
-      "buildsSub": "IDE builds",
-      "noProjects": "No IDE builds yet"
+      "buildsSub": "Builder builds",
+      "noProjects": "No Builder builds yet"
     },
     "obs": {
       "noFirings": "No firings yet",
@@ -3381,6 +3819,19 @@
       "humanTalk": "Human",
       "agentTalk": "AI agent",
       "completed": "completed"
+    },
+    "inc": {
+      "noIncidents": "No incidents",
+      "ofTotal": "of {total} in window",
+      "openNudge": "{count} needing attention",
+      "allClear": "All clear",
+      "incidents": "incidents",
+      "unclassified": "Unclassified",
+      "mttrSub": "mean time to resolve",
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
     },
     "reorder": {
       "drag": "Drag to reorder",
@@ -3595,6 +4046,22 @@
     "detailTitle": "Learned memory",
     "detailTask": "Task",
     "detailLearned": "Learned",
+    "detailTeacher": "Teacher",
+    "detailTeacherSelf": "Self-learned",
+    "detailTeacherUnknown": "Frontier model",
+    "detailNoAnswer": "Nothing was learned for this task — the teacher produced no answer.",
+    "faultBadge": "Not distilled",
+    "faultTitle": "Teacher produced no answer",
+    "faultBody": "The teacher did not answer this task ({reason}), so nothing was learned from it.",
+    "faultBodyWithModel": "{model} did not answer this task ({reason}), so nothing was learned from it.",
+    "faultHint": "Check the pinned teacher model and your frontier credit, then teach the task again.",
+    "faultNotPinned": "no teacher pinned",
+    "faultBudget": "out of frontier token budget",
+    "faultTooShort": "task too short to teach",
+    "faultGateway": "the model gateway returned an error",
+    "faultEmpty": "the teacher returned an empty answer",
+    "faultException": "the teacher call failed",
+    "faultUnknown": "reason not recorded",
     "detailKind": "Type",
     "detailVersion": "Version",
     "detailWeight": "Weight",
@@ -3736,7 +4203,31 @@
     "membersTab": "Members",
     "agentsTab": "Agents",
     "auditTab": "SOC 2",
-    "subnavLabel": "Security sections"
+    "subnavLabel": "Security sections",
+    "policiesTab": "Policies",
+    "webTab": "Website Scan",
+    "webTitle": "Website security scan",
+    "webSubtitle": "Point at your live site and get security findings now. Each issue is filed as a ticket your team can fix.",
+    "webUrlLabel": "Website URL",
+    "webUrlPlaceholder": "https://your-site.com",
+    "webSave": "Save",
+    "webRunNow": "Run scan",
+    "webRunning": "Scanning…",
+    "webScore": "Posture score",
+    "webScoreDelta": "{delta} vs last scan",
+    "webBaselineFirst": "First scan — this is your baseline.",
+    "webNewFindings": "{count} new",
+    "webResolved": "{count} resolved",
+    "webFindingsFiled": "{count} filed as tickets",
+    "webNoIssues": "No issues found — your site passed every check.",
+    "webHistory": "Scan history",
+    "webNoHistory": "No scans yet. Run your first scan above.",
+    "webRecommendation": "Recommendation",
+    "sev_critical": "Critical",
+    "sev_high": "High",
+    "sev_medium": "Medium",
+    "sev_low": "Low",
+    "sev_info": "Info"
   },
   "catalogInsights": {
     "total": {
@@ -3773,8 +4264,9 @@
     "viewWorkflows": "View workflows",
     "workflows": "Workflows",
     "workflowsWithCount": "Workflows ({count})",
-    "openIde": "Open in IDE",
-    "delete": "Delete"
+    "openIde": "Open in Builder",
+    "delete": "Delete",
+    "openChat": "Open project chat"
   },
   "diagnosticsStrip": {
     "title": "Diagnostics",
@@ -5101,7 +5593,8 @@
         "question": "Can I buy or sell a Kanban board template?",
         "answer": "Yes. Package a delivery process — lanes, required roles, review gates, and a recommended roster — as a Kanban template and publish it to the marketplace to sell or share. Any team can install a proven template into a project in one click and inherit a governed, role-gated workflow instead of building one from scratch."
       }
-    ]
+    ],
+    "newsletterPlaceholder": "your@email.com"
   },
   "pricing": {
     "seo": {
@@ -5146,26 +5639,23 @@
     "labelSeats": "Seats",
     "labelBillingEmail": "Billing Email",
     "placeholderBillingEmail": "billing@example.com",
-    "labelCardBrand": "Card Brand",
-    "labelCardLast4": "Card Last 4 Digits",
     "redirectNote": "You will be redirected to our payment provider to securely enter your card details.",
     "total": "Total: ${price}/{unit}",
     "totalForSeats": "{seats, plural, one {for # seat} other {for # seats}}",
     "unitYear": "yr",
     "unitMonth": "mo",
     "errorBillingEmailRequired": "Billing email is required.",
-    "errorCardLast4": "Card last 4 must be exactly 4 digits.",
     "errorUpgradeFailed": "Upgrade failed",
     "cancel": "Cancel",
-    "activating": "Activating…",
     "redirecting": "Redirecting…",
-    "activatePlan": "Activate {plan}",
     "continueToPayment": "Continue to Payment",
     "planComparison": "Plan Comparison",
     "colFeature": "Feature",
     "priceFree": "$0",
     "priceProMonthly": "${price}/mo",
     "priceTeamsMonthly": "${price}/seat/mo",
+    "teamsVolumeNote": "{min}-seat minimum",
+    "teamsSeatMinimum": "{min}-seat minimum — Teams is volume-priced for the whole org.",
     "teamsCostNoteYear": "${perSeat}/seat/yr — billed as ${total}/yr",
     "teamsCostNoteMonth": "${perSeat}/seat/mo — billed as ${total}/mo",
     "managedAddon": "Add-on: <b>Managed AgentHost</b> — ${price}/mo per hosted AgentHost. We run your BuilderForce Agents instance for you — no Docker, no DevOps.",
@@ -5525,7 +6015,9 @@
       "learnSkipReasonFrozen": "this project’s Evermind is frozen (read-only)",
       "reconcileTitle": "Reconciled {count} learned memories in Evermind v{version}",
       "reconcileHint": "The answer restated these recalled learnings, so it updates them (write-through cognition).",
-      "stop": "Stop"
+      "stop": "Stop",
+      "learnTargetContributed": "Contributed to {name} (project #{projectId} v{version})",
+      "learnTargetSkipped": "Skipped {name} (project #{projectId}) — {reason}"
     },
     "tickets": {
       "none": "No tickets linked yet.",
@@ -5572,6 +6064,15 @@
       "lockHint": "Shared chats are visible to the whole team; lock to keep this chat to its members only.",
       "mergeHint": "Merge other chats into this one. Their messages, tickets and agents move here; the sources are archived.",
       "mergeNoOthers": "No other chats to merge.",
+      "questions": "Questions",
+      "noQuestions": "No pending questions.",
+      "answerPlaceholder": "Type your answer…",
+      "submitAnswer": "Answer",
+      "answering": "Sending…",
+      "showTickets": "Show linked tickets",
+      "hideTickets": "Hide linked tickets",
+      "ticketCount": "{n, plural, one {# ticket} other {# tickets}}",
+      "overallAria": "Overall progress: {pct}% done",
       "mergeAction": "Merge {n} here",
       "mergedN": "Merged {n} chat(s).",
       "kind": {
@@ -5587,7 +6088,7 @@
     },
     "approveAll": "Approve all",
     "newChat": "+ New",
-    "messagePlaceholder": "Message Brain…",
+    "messagePlaceholder": "What would you like to accomplish?",
     "searchChats": "Search chats…",
     "confirmActionAria": "Confirm action",
     "wantsTo": "Brain wants to <b>{action}</b>. Approve to run it.",
@@ -5611,6 +6112,8 @@
     "brainDefault": "Brain (default)",
     "noChatsYet": "No chats yet. Click + New to start.",
     "noChatsMatch": "No chats match your search.",
+    "providerCapBanner": "Your {providers} API key hit its usage limit — this run fell back to the shared model pool.",
+    "manageApiKeys": "Manage your API keys →",
     "rename": "Rename",
     "summarize": "Summarize",
     "deleteChatConfirm": "Delete \"{title}\"? This cannot be undone.",
@@ -5620,8 +6123,81 @@
     "addToProject": "Add to project…",
     "createNewProject": "+ Create new project",
     "brainTitle": "Brain",
-    "emptyHint": "Start a new chat or pick one to begin.",
+    "emptyHint": "Tell me what you'd like to accomplish, and I'll help you get it done.",
     "startNewChat": "Start new chat",
+    "capabilities": {
+      "makingLabel": "Making",
+      "pickerAria": "What are you making?",
+      "none": "Anything",
+      "tilesHintBrainstorm": "…or start from what you want to make",
+      "tilesHintIde": "…or start from what you want to build",
+      "document": {
+        "label": "Document",
+        "hint": "Write a structured document with headings, sections, and tables.",
+        "starter": "Write a document summarising where this project stands today."
+      },
+      "slides": {
+        "label": "Slides",
+        "hint": "Build a presentation, one slide per section.",
+        "starter": "Build a slide deck summarising where this project stands today."
+      },
+      "dataviz": {
+        "label": "Data Visualization",
+        "hint": "Turn data into inline charts with the figures beneath them.",
+        "starter": "Chart how this project's tasks are distributed across statuses."
+      },
+      "spreadsheet": {
+        "label": "Spreadsheet",
+        "hint": "Model numbers as a table with formulas and totals.",
+        "starter": "Build a spreadsheet of this project's open tasks with owner, status and age."
+      },
+      "website": {
+        "label": "Website",
+        "hint": "Build a web app or site as real, ready-to-create files.",
+        "starter": "Build a landing page for this project."
+      },
+      "design": {
+        "label": "Design",
+        "hint": "Design the interface — layout, spacing, type, and theme tokens.",
+        "starter": "Design the main screen for this project, with light and dark themes."
+      },
+      "mobile": {
+        "label": "Mobile",
+        "hint": "Build a phone-first app with native-feeling navigation.",
+        "starter": "Build a mobile home screen for this project."
+      },
+      "animation": {
+        "label": "Animation",
+        "hint": "Add purposeful motion with explicit timing and easing.",
+        "starter": "Add an entrance animation to this project's main screen."
+      },
+      "game3d": {
+        "label": "3D Game",
+        "hint": "Build a 3D game — scene, camera, input, and game loop.",
+        "starter": "Build a simple 3D scene I can move a camera around in."
+      },
+      "export": {
+        "docx": "Download Word",
+        "pptx": "Download PowerPoint",
+        "csv": "Download CSV",
+        "working": "Preparing…",
+        "failed": "Export failed",
+        "untitled": "Untitled"
+      },
+      "missing": {
+        "body": "This reply did not include the {capability} — the model returned only a heading.",
+        "retry": "Ask again",
+        "retryPrompt": "That reply had no {capability} in it. Produce the full {capability} now, in this reply."
+      }
+    },
+    "messageActions": {
+      "copy": "Copy",
+      "copied": "Copied!",
+      "goodResponse": "Good response",
+      "badResponse": "Bad response",
+      "thumbsUp": "Thumbs up",
+      "thumbsDown": "Thumbs down"
+    },
     "newProjectPlaceholder": "New project name",
     "createAndAssign": "Create & assign",
     "actingAs": "Acting as",
@@ -5647,10 +6223,30 @@
     "assignChatToProjectAria": "Assign chat to project",
     "addProject": "+ Project",
     "workflowsArrow": "Workflows →",
-    "openInIde": "Open in IDE →",
+    "openInIde": "Open in Builder →",
     "brainModality": "Brain — {modality}",
     "brainAs": "Brain as {name}",
-    "chatHistory": "Chat history"
+    "chatHistory": "Chat history",
+    "upgrade": "Upgrade",
+    "upgradeToPlan": "Upgrade to {plan}",
+    "addCard": "Add a card",
+    "cardValidationFailed": "Card validation failed.",
+    "allowance": {
+      "exhausted": "Your AI token allowance for this period is spent ({used} of {limit}). Turns will fail or stop mid-answer until it resets on {resets}.",
+      "nearLimit": "AI token allowance is {percent}% used — {remaining} left until {resets}. Long answers may be cut off.",
+      "upgrade": "Upgrade",
+      "connectAccount": "Connect your own account",
+      "dismiss": "Dismiss"
+    },
+    "queuedCount": "{count, plural, one {# message queued} other {# messages queued}}",
+    "onboardMe": "Help me get started",
+    "onboardMePrompt": "I'm new here — help me get started. Ask me about what I want to build, explain how usage and costs work, recommend whether the Free or Pro plan fits my timeframe, and help me connect my existing AI account if I have one."
+  },
+  "chatMessage": {
+    "copy": "Copy",
+    "apply": "Apply →",
+    "createFile": "Create file",
+    "downloadAs": "Download {ext}"
   },
   "modelExport": {
     "subtitle": "Export a published model to a portable artifact — a Hugging Face repo, ONNX, safetensors, or GGUF — and download it. The model is produced on the server; no token is needed.",
@@ -5697,11 +6293,19 @@
         "already_running": "Already running",
         "human_gate": "Waiting for approval",
         "capability_mismatch": "Agent missing required skills",
+        "run_cap_exhausted": "Too many runs with nothing to show — paused for review",
+        "cloud_run_limit": "Monthly cloud-run allowance used — upgrade to run more",
+        "cooldown_active": "Cooling down after an unproductive run — retrying shortly",
         "no_agent": "No agent assigned",
+        "managed_no_role": "No role can execute this stage",
         "no_board": "No board configured",
         "no_lane": "Lane not configured",
         "terminal_lane": "Done — no run needed",
-        "not_executable": "System task — not run by an agent"
+        "not_executable": "System task — not run by an agent",
+        "pending_approval": "External request — awaiting human approval",
+        "lane_requirement_gate": "Waiting on role sign-off",
+        "same_lane_reentry": "Just finished this stage",
+        "tenant_token_limit": "Workspace out of tokens — upgrade or wait for the reset"
       }
     },
     "businessValue": {
@@ -5714,8 +6318,10 @@
     },
     "audit": {
       "flagged": "Flagged",
-      "flaggedTitle": "This ticket skipped a required role or diagnostic — review needed"
-    }
+      "flaggedTitle": "This ticket skipped a required role or diagnostic — review needed",
+      "participantsTitle": "Required-role participation: complete of required"
+    },
+    "prdBadgeTitle": "{count, plural, one {# linked PRD} other {# linked PRDs}}"
   },
   "projectsContent": {
     "errLoad": "Failed to load projects. Check your connection and try again.",
@@ -5915,6 +6521,19 @@
     "description": "Give this project its own self-learning model. Once enabled, the project's agents run on it and get sharper with every task they finish — shared across cloud, on-premise, and the editor.",
     "statusSeeded": "Active · v{version}",
     "statusUnseeded": "Not set up",
+    "quarantinedBadge": "Quarantined",
+    "quarantinedHint": "This Evermind auto-disabled after producing incoherent output ({reason}). Retrain it past the coherence bar to re-enable inference.",
+    "targetsTitle": "Everminds under this project",
+    "targetsHint": "Every Evermind this project contributes learning to.",
+    "targetsEmpty": "No Everminds resolved for this project yet.",
+    "targetSelfBadge": "This project",
+    "targetBuildBadge": "IDE build",
+    "targetSeeded": "v{version}",
+    "targetUnseeded": "not seeded",
+    "targetInferenceOn": "inference",
+    "targetConnected": "connected",
+    "targetFrozen": "frozen",
+    "targetProjectId": "project #{id}",
     "noModels": "Publish a trained model in the LLM Studio first, then enable it here.",
     "pickModelLabel": "Choose a published model to power this project",
     "enableCta": "Enable",
@@ -5979,7 +6598,66 @@
     "validateMethod": "{method, select, embedding {Semantic recall} other {Lexical recall (fallback)}}",
     "evalDelta": "{pct}% vs prev",
     "evalFlat": "no change",
-    "evalTooltip": "Regression check on v{version}: held-out loss {base} → {next} across {size, plural, one {# prior task} other {# prior tasks}}."
+    "evalTooltip": "Regression check on v{version}: held-out loss {base} → {next} across {size, plural, one {# prior task} other {# prior tasks}}.",
+    "inheritedHint": "This build shares its parent project’s Evermind, so everything it has learned is available here. Training and settings live on the parent project.",
+    "testTitle": "Test bench",
+    "testHint": "Run a prompt through the model and see exactly what it writes, graded the same way a real reply is. This is how you check the model is worth switching on — before anyone chats with it.",
+    "testPlaceholder": "Ask the model something, e.g. “Summarise where this project stands.”",
+    "testRunCta": "Run prompt",
+    "testReadinessCta": "Readiness check",
+    "testRunning": "Generating…",
+    "testResultReadiness": "Readiness check — {passed} of {total} answers usable",
+    "testResultPrompt": "What the model produced",
+    "testServable": "Usable",
+    "testRefused": "Refused",
+    "testRefusedBecause": "This would not be shown to a user: {detail}.",
+    "testEmptyOutput": "(the model produced nothing)",
+    "testVerdictReady": "This model is coherent enough to serve replies.",
+    "testVerdictNotReady": "This model is not coherent enough to serve replies yet. Teach it more, set a teacher model, or re-seed it below.",
+    "maintenanceTitle": "Maintenance",
+    "maintenanceHint": "Repair and tidy the model when it has gone wrong. None of this deletes your project’s work.",
+    "reseedLabel": "Replace the model",
+    "reseedHint": "Start over from a known-good base, keeping the project. Use this when the model has trained itself into nonsense. Replies stay switched off until it passes a readiness check again.",
+    "reseedCta": "Replace…",
+    "reseedConfirm": "Replace this model’s brain with a fresh base? What it has learned so far will no longer shape its answers. This cannot be undone.",
+    "reseedStarterOption": "Fresh starter base (untrained)",
+    "reseedDone": "Model replaced — now at v{version}. Run a readiness check before switching replies back on.",
+    "reindexLabel": "Rebuild recall index",
+    "reindexHint": "Re-file every memory against the current model. Memories are filed when they are learned, so recall drifts as the model changes — rebuild if it starts recalling the wrong things.",
+    "reindexCta": "Rebuild index",
+    "reindexDone": "Re-filed {count} memories.",
+    "cleanupLabel": "Clean up",
+    "cleanupHint": "Throw away anything queued but not yet learned, and clear cached answers so repeat questions are answered fresh. Learned knowledge is untouched.",
+    "cleanupCta": "Clean up",
+    "cleanupConfirm": "Discard everything queued but not yet learned, and clear cached answers?",
+    "cleanupDone": "Discarded {discarded} queued item(s) and cleared {cached} cached answer(s).",
+    "analyzeTitle": "Check what it has learned",
+    "analyzeHint": "Read back everything the model has learned and have a frontier model check it for mistakes, stale facts and nonsense — then fix what is wrong by teaching the corrections.",
+    "analyzeCta": "Check knowledge",
+    "analyzing": "Checking…",
+    "analyzeClean": "Checked {analyzed} memories — nothing looks wrong.",
+    "analyzeSummary": "{issues} of {analyzed} memories need attention (checked by {model}).",
+    "analyzeSummaryLocal": "{issues} of {analyzed} memories need attention.",
+    "analyzeVerdict": "{verdict, select, incoherent {Nonsense} incorrect {Wrong} outdated {Out of date} unusable {Not an answer} redundant {Duplicate} other {Fine}}",
+    "analyzeCorrectionLabel": "Will be replaced with",
+    "analyzeSelectAll": "Select all",
+    "analyzeSelectNone": "Clear selection",
+    "analyzeApplyCta": "Fix {count} selected",
+    "analyzeApplying": "Fixing…",
+    "analyzeApplied": "Fixed: {corrected} corrected, {forgotten} forgotten. Model is now at v{version}.",
+    "analyzeSkipped": "{count} could not be applied.",
+    "tabsLabel": "Evermind controls",
+    "tabTeach": "Teach",
+    "tabTest": "Test",
+    "tabCheck": "Check",
+    "tabMaintain": "Maintain",
+    "diagnosticsTitle": "Diagnostics",
+    "diagnosticsHint": "Copy everything on this panel — the model’s state, what it actually produced, what it has learned and any problems found — as text you can paste to support or to an AI assistant.",
+    "diagnosticsCta": "Copy diagnostics",
+    "diagnosticsCopied": "Copied to your clipboard.",
+    "diagnosticsShow": "Show report",
+    "diagnosticsHide": "Hide report",
+    "diagnosticsManualHint": "Copying automatically was blocked here — the report is selected below, press Ctrl/Cmd+C to copy it."
   },
   "topbar": {
     "cart": "Shopping cart",
@@ -6085,14 +6763,26 @@
       "unscored": "Need a value",
       "unranked": "Not yet ranked",
       "unowned": "No owner",
-      "openPullRequests": "Open PRs"
+      "openPullRequests": "Open PRs",
+      "flagged": "Coverage gaps",
+      "undated": "No dates"
     },
     "chart": {
       "title": "Backlog by priority",
       "caption": "How the open work breaks down across priority levels.",
       "empty": "No open tickets to chart yet."
     },
+    "subnav": {
+      "label": "Manager sections",
+      "overview": "Overview",
+      "backlog": "Backlog",
+      "activity": "Activity",
+      "policy": "Policy",
+      "stuck": "Stuck",
+      "ask": "Ask"
+    },
     "insightNudge": "{unscored} tickets still need a business value and {unranked} aren’t ranked — run the manager to catch them up.",
+    "coverageNudge": "{flagged} tickets are missing a required role or reviewer — the manager staffs these automatically on its next pass.",
     "policy": {
       "title": "How this backlog is managed",
       "subtitle": "Decide who runs the backlog and how much they do automatically. You can change this any time.",
@@ -6134,7 +6824,66 @@
         "queue": {
           "label": "Leave for a human",
           "help": "Never merge automatically — hold every pull request for someone to review and merge."
-        }
+        },
+        "needsAuthority": "Timing only matters once the manager is allowed to merge — right now merges wait for a person."
+      },
+      "allowAutoMerge": {
+        "label": "Let the manager merge pull requests",
+        "help": "This is permission to merge at all — separate from the timing choice below. When off, the manager still prepares and checks everything, then leaves the merge to a person."
+      },
+      "requireSignoff": {
+        "label": "Require sign-off before finishing",
+        "help": "Off unless you turn it on. When on, a ticket only finishes — and its pull request only merges — once every required reviewer has signed off, and the manager keeps chasing the roles that still owe one. A ticket nobody was asked to review never qualifies."
+      },
+      "tri": {
+        "on": "On",
+        "off": "Off",
+        "inherit": "Use default",
+        "builtinIs": "Built-in default: {value}",
+        "workspaceIs": "Workspace default: {value}"
+      },
+      "effective": {
+        "title": "In effect right now",
+        "help": "What the manager will actually do once every level of these settings is combined. For permissions, the strictest answer wins.",
+        "managingOn": "Managing the backlog",
+        "managingOff": "Managing paused",
+        "mergeGranted": "May merge pull requests",
+        "mergeWithheld": "Merges wait for a person",
+        "signoffRequired": "Sign-off required to finish",
+        "signoffOptional": "No sign-off required",
+        "ceremoniesUnattended": "May run ceremonies unattended",
+        "ceremoniesNeedPeople": "Ceremonies need a person",
+        "reassignGranted": "May reassign work idle {hours}h+",
+        "reassignWithheld": "Absent owners keep their work"
+      },
+      "workspaceDefaultsHint": "Anything left on “Use default” follows your workspace defaults in Settings → AI Manager.",
+      "ceremonies": {
+        "sectionTitle": "Ceremonies",
+        "sectionHelp": "What the manager may do when it runs a standup or planning session and the people it concerns are not there."
+      },
+      "allowUnattendedCeremonies": {
+        "label": "Run ceremonies without people",
+        "help": "Lets the manager conduct a scheduled standup nobody joined. Off: the session is still recorded, showing that nobody attended, but nothing is decided on the team’s behalf."
+      },
+      "allowAgentReassignment": {
+        "label": "Hand stale work to agents",
+        "help": "Lets a ceremony move a ticket from someone who missed it onto an agent. Missing a ceremony is never enough on its own — the ticket must also have sat untouched for the period below."
+      },
+      "agentReassignIdleHours": {
+        "label": "Only after the ticket is idle for",
+        "help": "How long a ticket must sit untouched before an absent owner’s claim on it lapses. Long enough that a normal absence never reaches it.",
+        "unit": "hours",
+        "inherited": "Using the inherited value: {value} hours"
+      },
+      "agentReassignMaxPerSession": {
+        "label": "At most, per ceremony",
+        "help": "Hard limit on how many tickets one ceremony may hand over, so a single standup can never quietly re-home a whole sprint.",
+        "unit": "tickets",
+        "inherited": "Using the inherited value: {value}"
+      },
+      "autoSchedule": {
+        "label": "Put the work on a timeline",
+        "help": "Give undated tickets a start and due date in ranked order, respecting what blocks what. Never changes a date you set yourself."
       }
     },
     "backlog": {
@@ -6155,8 +6904,17 @@
       "assign": "Assigned",
       "score_value": "Valued",
       "dispatch": "Dispatched",
+      "sync_pr": "Updated PR",
       "merge_pr": "Merged PR",
-      "flag": "Flagged"
+      "flag": "Flagged",
+      "coordinate": "Staffed",
+      "schedule": "Scheduled",
+      "merge_blocked": "Merge withheld",
+      "merge_failed": "Merge refused",
+      "pr_conflict": "PR conflicts",
+      "triage": "Triaged",
+      "escalate": "Escalated",
+      "systemic": "Platform finding"
     },
     "runTasks": {
       "title": "Manager tasks",
@@ -6177,6 +6935,157 @@
       "title": "Recent activity",
       "working": "Manager is working — streaming decisions live…",
       "empty": "The manager hasn’t taken any actions yet."
+    },
+    "stalls": {
+      "title": "Stuck tickets",
+      "caption": "Work the manager cannot finish, why, and what it has already tried. After {maxAttempts} attempts that fail to move a ticket, the manager stops retrying and hands it to you.",
+      "loading": "Checking what is stuck…",
+      "empty": "Nothing is stuck — every ticket is either moving or finished.",
+      "error": "Could not load the stuck list.",
+      "retry": "Try again",
+      "byCause": "What is holding work up",
+      "needsYou": "Needs you",
+      "lastTried": "Last tried {when}",
+      "attemptsOf": "{attempts} of {max} tries",
+      "idleDays": "{days, plural, one {# day} other {# days}}",
+      "idleToday": "Under a day",
+      "stat": {
+        "working": "Manager is working these",
+        "escalated": "Handed to a human"
+      },
+      "col": {
+        "ticket": "Ticket",
+        "cause": "Why it is stuck",
+        "doing": "What the manager is doing",
+        "attempts": "Attempts",
+        "stuckFor": "Stuck for"
+      },
+      "cause": {
+        "live": "Running",
+        "cooling_down": "Backing off",
+        "moving": "In motion",
+        "never_started": "Never started",
+        "unassigned": "Nobody assigned",
+        "managed_no_role": "No role can execute this stage",
+        "capability_gap": "No capable agent",
+        "human_gate": "Awaiting human approval",
+        "failure_breaker": "Halted after repeated failures",
+        "missing_deliverable": "No deliverable produced",
+        "build_failed": "Build not green",
+        "awaiting_signoff": "Awaiting sign-off",
+        "pr_conflict": "Pull request conflicts",
+        "pr_unreconciled": "Pull request state drifted",
+        "merge_withheld": "Merge withheld by policy",
+        "blocked": "Blocked",
+        "unknown": "Unclassified"
+      },
+      "copyDiagnosticsAria": "Copy the full AI Manager diagnostics — policy tiers, autonomy health, backlog counts, every management pass, every decision and every stuck ticket"
+    },
+    "census": {
+      "title": "Stall census",
+      "caption": "Every ticket in this project, classified by what is holding it up — not only the ones the manager has diagnosed in depth.",
+      "loading": "Counting what is stuck…",
+      "empty": "Nothing is stalled — every ticket is moving or finished.",
+      "error": "Could not load the stall census.",
+      "retry": "Try again",
+      "coverageNote": "{stalled} tickets are stalled; {diagnosed} have been diagnosed in depth so far. The rest are counted here but not yet individually investigated.",
+      "computedAt": "Counted {when}.",
+      "stat": {
+        "managed": "Active tickets",
+        "stalled": "Stalled",
+        "moving": "Moving",
+        "deepDiagnosed": "Diagnosed in depth"
+      },
+      "cohorts": {
+        "title": "What is holding work up, across every ticket",
+        "aria": "Stalled tickets grouped by cause"
+      },
+      "findings": {
+        "title": "Platform findings",
+        "caption": "When many tickets stall for the same reason, that is one defect rather than many ticket problems. The manager diagnoses it and opens a ticket to fix it.",
+        "headline": "{count} tickets stalled on “{cause}”",
+        "remediation": "Fix:",
+        "sourceAi": "diagnosed by model",
+        "sourceHeuristic": "diagnosed from measurements",
+        "openTicket": "Open {key}",
+        "raised": "Raised {when}"
+      }
+    },
+    "today": {
+      "title": "Today",
+      "loading": "Reading today’s work…",
+      "error": "Could not load today’s summary.",
+      "retry": "Try again",
+      "updated": "updated {when}",
+      "lastPass": "Last management pass {when}.",
+      "viewActivity": "See every decision",
+      "headline": {
+        "team": "The team finished {shipped, plural, =0 {nothing} one {1 ticket} other {# tickets}} and merged {merged, plural, =0 {no pull requests} one {1 pull request} other {# pull requests}}, across {runs, plural, =0 {no completed agent runs} one {1 completed agent run} other {# completed agent runs}}.",
+        "manager": "You ran {passes, plural, =0 {no management passes} one {1 management pass} other {# management passes}} and took {decisions, plural, =0 {no decisions} one {1 decision} other {# decisions}}.",
+        "quiet": "Nothing has moved yet today.",
+        "quietYesterday": "Yesterday: {shipped, plural, =0 {no tickets} one {1 ticket} other {# tickets}} finished, {merged, plural, =0 {no pull requests} one {1 pull request} other {# pull requests}} merged, {decisions, plural, =0 {no manager decisions} one {1 manager decision} other {# manager decisions}}."
+      },
+      "stat": {
+        "shipped": "Finished today",
+        "shippedSub": "{opened} opened today",
+        "merged": "PRs merged",
+        "mergedSub": "{opened} opened today",
+        "runs": "Agent runs done",
+        "runsSub": "{failed} failed",
+        "moves": "Forward moves",
+        "movesSub": "{human} by people · {agent} by agents",
+        "movesSubWithSystem": "{human} by people · {agent} by agents · {system} unattributed",
+        "decisions": "Manager decisions",
+        "decisionsSub": "{passes, plural, =0 {no passes} one {1 pass} other {# passes}} today"
+      },
+      "shipped": {
+        "title": "Finished today",
+        "empty": "No ticket has reached a done lane yet today.",
+        "unowned": "Unassigned",
+        "more": "+{n} more"
+      },
+      "decisions": {
+        "title": "What the manager decided",
+        "empty": "The manager has not taken a decision yet today.",
+        "aria": "Manager decisions today, by type"
+      },
+      "contributors": {
+        "title": "Who moved work today",
+        "caption": "People and agents on one list. The three counts are kept separate because a finished ticket, a completed run and a lane move are not the same unit of work.",
+        "metrics": "{shipped} finished · {runs} runs · {moves} moves"
+      },
+      "attention": {
+        "title": "{open, plural, one {1 item is waiting on a person} other {# items are waiting on a person}} · {today} raised today",
+        "since": "escalated {when}",
+        "open": "Open the stuck register"
+      }
+    },
+    "health": {
+      "title": "Backlog health",
+      "caption": "The standing state of the board — what still needs a value, a rank, dates or an owner."
+    },
+    "ask": {
+      "title": "Ask the manager",
+      "caption": "Put it to the manager directly. It reads its own record — what finished, what it decided, what is stuck and what it was actually permitted to do — before it answers.",
+      "loading": "Opening the conversation…",
+      "error": "The manager could not answer just now.",
+      "empty": "Nothing asked yet. Start with one of the questions below.",
+      "placeholder": "Ask about today, a ticket, or why something has not moved…",
+      "send": "Ask",
+      "sending": "Asking…",
+      "you": "You",
+      "fallbackName": "the manager",
+      "thinking": "{name} is checking the record…",
+      "answeredBy": "Answered by {name}",
+      "answeredByDesignated": "Answered by {name}, this project’s designated manager",
+      "noAgent": "No manager agent is set up in this workspace yet, so nobody can answer here. Designate a manager under Policy, and the conversation opens up.",
+      "compactPrompt": "Not the day you wanted? Ask {name} about it.",
+      "starter": {
+        "today": "What did you and the team accomplish today?",
+        "blocked": "Why did so little get done — what is blocking the work?",
+        "plan": "What will you do next to unblock it?"
+      },
+      "copyDiagnosticsAria": "Copy the conversation and the manager's tool trace"
     }
   },
   "project360": {
@@ -6884,6 +7793,8 @@
     "taskCount": "{count, plural, one {# task} other {# tasks}}",
     "byStage": "By stage",
     "byAssignee": "By assignee",
+    "expandAssigneeRow": "Expand tasks assigned to {name}",
+    "collapseAssigneeRow": "Collapse tasks assigned to {name}",
     "startStandup": "Start standup",
     "startPlanning": "Start planning",
     "viewPrdAria": "View PRD",
@@ -6901,6 +7812,7 @@
     "deleteTask": "Delete task",
     "tabAgent": "Agent / Capabilities",
     "tabPrd": "PRD",
+    "tabAccountability": "Sign-off & Accountability",
     "changeStatusTitle": "Click to change status",
     "changePriorityTitle": "Click to change priority",
     "viewCodeChangesTitle": "View the code changes on GitHub",
@@ -6914,7 +7826,116 @@
     "errMove": "Move failed",
     "tabChanges": "Changes",
     "release": "Release",
-    "delayReason": "Delay reason"
+    "delayReason": "Delay reason",
+    "lifecycleAction": "Lifecycle",
+    "lifecycleActionTitle": "Lifecycle & autonomy proof — did this ticket move itself, or did a person push every hop?"
+  },
+  "ticketLifecycle": {
+    "title": "Lifecycle / autonomy proof",
+    "loading": "Assembling the chain of custody…",
+    "errorTitle": "Could not load this ticket’s lifecycle",
+    "retry": "Try again",
+    "openedAt": "Opened",
+    "currentLane": "Current lane",
+    "origin": {
+      "label": "Opened by",
+      "human": "A person",
+      "agent": "An agent (AI Manager)",
+      "system": "Automation",
+      "manager_card": "AI Manager grooming card",
+      "unknown": "Not recorded"
+    },
+    "verdict": {
+      "fullyAutonomous": "Ran autonomously end-to-end — 0 human lane moves",
+      "fullyAutonomousDetail": "Autonomy made {hops, plural, one {# lane move} other {# lane moves}} and reached a terminal lane. No person ever moved this ticket.",
+      "partialStalled": "Partially autonomous — stalled",
+      "partialStalledDetail": "Autonomy made {hops, plural, one {# lane move} other {# lane moves}}, but the ticket is short of Done with nothing running.",
+      "partialRunning": "Partially autonomous — still working",
+      "partialRunningDetail": "Autonomy made {hops, plural, one {# lane move} other {# lane moves}} and a run is live right now.",
+      "humanDriven": "Human-driven — autonomy never moved this ticket",
+      "humanDrivenDetail": "Every lane move was made by a person ({hops} in total). Not one autonomous hop is on record.",
+      "assisted": "Finished with human help",
+      "assistedDetail": "It reached a terminal lane, but a person made {humanHops} of the {totalHops} lane moves.",
+      "noMovement": "Never moved",
+      "noMovementDetail": "This ticket has not changed lane once — neither a person nor autonomy has moved it.",
+      "liveRun": "Run live now",
+      "managerCardTitle": "Coordination card",
+      "managerCard": "The AI Manager opens these to groom the backlog, and autonomy deliberately refuses to dispatch them. Here “no runs” is the intended behaviour, not a failure."
+    },
+    "stall": {
+      "title": "Why it is sitting there",
+      "unrecorded": "No gate was recorded — nothing has tried to run this ticket yet.",
+      "laneGate": "Lane gate",
+      "gate": {
+        "auto": "Automatic",
+        "human": "Human approval required"
+      },
+      "staffed": "Agents staffed on the lane",
+      "noneStaffed": "None",
+      "candidate": "“Run now” would dispatch",
+      "noCandidate": "Nothing can run it",
+      "streak": "Consecutive failed runs",
+      "streakValue": "{count} (autonomy halts at {limit})",
+      "cooldown": "Cooldown remaining",
+      "capabilityMismatch": "Capability mismatch"
+    },
+    "stats": {
+      "title": "Hops & runs",
+      "autonomousHops": "Autonomous hops",
+      "autonomousHopsHint": "Lane moves written by an agent or by automation.",
+      "humanHops": "Human hops",
+      "humanHopsHint": "Lane moves a person made.",
+      "runsDispatched": "Runs dispatched",
+      "runsCompleted": "Runs completed",
+      "runsFailed": "Runs failed",
+      "backwardHops": "Redo hops",
+      "backwardHopsHint": "Backward lane moves — work sent back for another pass."
+    },
+    "timeline": {
+      "title": "Chain of custody",
+      "help": "Every row names the table it was read from, so this reads as evidence rather than narration.",
+      "empty": "No lifecycle events recorded for this ticket yet.",
+      "laneMove": "{from} → {to}",
+      "laneEntered": "Entered {to}",
+      "backward": "Redo",
+      "run": "Run #{id}",
+      "dispatchedBy": "Dispatched by {who}"
+    },
+    "kind": {
+      "created": "Created",
+      "lane_moved": "Lane moved",
+      "run_dispatched": "Run dispatched",
+      "run_completed": "Run completed",
+      "run_failed": "Run failed",
+      "autorun_dispatched": "Auto-run dispatched",
+      "autorun_skipped": "Auto-run declined",
+      "autorun_error": "Auto-run error",
+      "autorun_awaiting_approval": "Auto-run awaiting approval",
+      "role_event": "Role event"
+    },
+    "source": {
+      "activity_log": "Activity / audit log",
+      "task_status_transitions": "Lane transition log",
+      "executions": "Run records",
+      "tool_audit_events": "Auto-run decision audit",
+      "aria": "Source: {label}"
+    },
+    "copyDiagnosticsAria": "Copy the full lifecycle diagnostics for this ticket, including every event, run id and gate reason",
+    "failures": {
+      "title": "Failure analysis",
+      "help": "Failed runs grouped by cause. One cause repeating on a regular interval is a retry loop, not a series of unrelated failures.",
+      "runs": "{count, plural, one {# run failed this way} other {# runs failed this way}}",
+      "cadence": "every ~{interval}",
+      "cadenceOnce": "happened once",
+      "window": "First {first} · last {last}",
+      "dispatchedBy": "dispatched by {who}",
+      "runIds": "Runs: {ids}"
+    },
+    "dispatchers": {
+      "title": "Who dispatched the runs",
+      "help": "The subsystem that started each run. Anything other than the lane trigger reached the dispatcher without passing its consecutive-failure breaker.",
+      "counts": "{runs} runs · {completed} completed · {failed} failed"
+    }
   },
   "taskChanges": {
     "allChanges": "All changes",
@@ -6944,6 +7965,7 @@
     "sub": {
       "health": "Health",
       "directory": "Directory",
+      "sessions": "Sessions",
       "security": "Security",
       "emulation": "Emulation",
       "tenants": "Workspaces",
@@ -6960,7 +7982,12 @@
       "errors": "Errors",
       "audit": "Audit Log",
       "apiKeys": "API Keys",
-      "token": "Superadmin Token"
+      "token": "Superadmin Token",
+      "feedback": "Feedback",
+      "releaseNotes": "Release notes",
+      "demoFunnel": "Demo funnel",
+      "salesLeads": "Sales leads",
+      "cron": "Scheduled sweeps"
     },
     "common": {
       "loading": "Loading…",
@@ -7040,12 +8067,41 @@
       "errorVolume": "Error volume"
     },
     "errors": {
-      "lastN": "Last {n} errors",
       "noErrorsRecorded": "No errors recorded.",
       "time": "Time",
-      "method": "Method",
       "path": "Path",
-      "message": "Message"
+      "message": "Message",
+      "tenant": "Workspace",
+      "kind": "Kind",
+      "source": "Source",
+      "operation": "Operation",
+      "count": "Events",
+      "tenants": "Workspaces",
+      "lastSeen": "Last seen",
+      "sample": "Latest message",
+      "statTotal": "Exceptions",
+      "statUnhandled": "Became a 500",
+      "statHandled": "Handled",
+      "statFaults": "Distinct faults",
+      "topFaults": "Loudest faults",
+      "window": "Time window",
+      "window_all": "All time",
+      "window_h1": "Last hour",
+      "window_h24": "Last 24 hours",
+      "window_d7": "Last 7 days",
+      "window_d30": "Last 30 days",
+      "handledFilter": "Handled state",
+      "handled_all": "All",
+      "handled_unhandled": "Unhandled",
+      "handled_handled": "Handled",
+      "sourceFilter": "Source module",
+      "allSources": "All sources",
+      "searchPlaceholder": "Search source, path or message…",
+      "clearFault": "Clear fault filter",
+      "scopedTo": "Showing {source} · {operation}",
+      "context": "Context",
+      "stack": "Stack trace",
+      "pagination": "{from}–{to} of {total}"
     },
     "token": {
       "shareWarning": "This web token grants superadmin API access for your current session. Share only with trusted tooling.",
@@ -7132,6 +8188,22 @@
         "colDuration": "Duration",
         "durationActive": "Active"
       }
+    },
+    "sessions": {
+      "title": "Adoption sessions",
+      "subtitle": "Anonymous Brain and free-tool visitors, including account and paid conversion.",
+      "count": "{count, plural, one {# session} other {# sessions}}",
+      "empty": "No guest sessions found.",
+      "visitor": "Visitor",
+      "engagement": "Engagement",
+      "firstSeen": "First seen",
+      "lastSeen": "Last seen",
+      "conversion": "Conversion",
+      "brainMessages": "{count} Brain messages",
+      "tokensAndTools": "{tokens} tokens · {tools} tool runs",
+      "guest": "guest",
+      "registered": "registered",
+      "paid": "paid"
     },
     "usage": {
       "aiAnalyze": "AI Analyze",
@@ -7399,7 +8471,14 @@
     },
     "permissions": {
       "title": "Roles & Permissions",
-      "colPermission": "Permission"
+      "colPermission": "Permission",
+      "enforced": "Enforced",
+      "advisory": "Advisory",
+      "granted": "Granted",
+      "denied": "Denied",
+      "enforcedHint": "This permission is checked on every request. Overrides take effect immediately.",
+      "advisoryHint": "This permission is not yet checked at request time — the route is gated by the role tier alone, so editing this row changes only what this table shows.",
+      "enforcementNote": "Rows marked Enforced are checked on every request, so an override takes effect immediately. Rows marked Advisory are gated by the role tier alone: editing them changes this table only, not what a member can actually do."
     },
     "modules": {
       "title": "Platform Modules",
@@ -7558,17 +8637,193 @@
       "requestBody": "Request body",
       "responseBody": "Response body",
       "callerMetadata": "Caller metadata"
+    },
+    "releaseNotes": {
+      "digestTitle": "Weekly product-update email",
+      "unsentCount": "{count, plural, =0 {No unsent notes — the next digest will be empty} one {# published note not yet emailed} other {# published notes not yet emailed}}",
+      "digestSent": "Sent {notes} notes to {sent} people ({suppressed} opted out).",
+      "sendDigest": "Send digest now",
+      "sendDigestConfirm": "Email every published, not-yet-sent release note to all consenting users now?",
+      "editNote": "Edit release note",
+      "newNote": "New release note",
+      "phVersion": "Version (e.g. 2026.7.93)",
+      "phTitle": "Title — the benefit, in plain language",
+      "phBody": "What it does for the user. Blank lines separate paragraphs.",
+      "savePublish": "Save & publish",
+      "saveDraft": "Save draft",
+      "allNotes": "All notes ({count})",
+      "thTitle": "Title",
+      "thVersion": "Version",
+      "thCategory": "Category",
+      "thStatus": "Status",
+      "thEmailed": "Emailed",
+      "published": "Published",
+      "draft": "Draft",
+      "publish": "Publish",
+      "unpublish": "Unpublish",
+      "deleteConfirm": "Delete the release note “{title}”? This cannot be undone.",
+      "sendNote": "Send now",
+      "resendNote": "Resend",
+      "sendNoteHint": "Email this note to all consenting users now — it will be excluded from the weekly digest.",
+      "resendNoteHint": "This note was already emailed. Send it again to all consenting users.",
+      "sendNoteConfirm": "Email the release note “{title}” to all consenting users now? It will then be excluded from the weekly digest.",
+      "resendNoteConfirm": "This note was already sent. Email “{title}” again to all consenting users now?"
+    },
+    "demoFunnel": {
+      "title": "Demo conversion funnel",
+      "subtitle": "Anonymous demo-account engagement by persona (last 30 days).",
+      "persona": "Persona",
+      "total": "Total",
+      "convRate": "{rate}% sign-up",
+      "recentTitle": "Recent events",
+      "empty": "No demo activity yet.",
+      "when": "When",
+      "event": "Event",
+      "path": "Path",
+      "personas": {
+        "ai-team": "AI Software Team",
+        "insights": "Engineering ROI & Insights",
+        "pmo": "PMO Command Center",
+        "talent": "Talent & Marketplace",
+        "governance": "Security, Architecture & Governance"
+      },
+      "stages": {
+        "demo_start": "Started",
+        "page_view": "Page views",
+        "convert_prompt_shown": "Prompt shown",
+        "convert_clicked": "Sign-up clicked",
+        "book_demo_opened": "Booked opened",
+        "lead_submitted": "Lead submitted",
+        "exit_prompt_shown": "Exit shown",
+        "demo_exit": "Exited"
+      }
+    },
+    "salesLeads": {
+      "title": "Sales leads",
+      "subtitle": "Book-a-demo and exit-intent leads from the marketing site.",
+      "count": "{count} leads",
+      "filterAll": "All statuses",
+      "contact": "Contact",
+      "interest": "Interest",
+      "source": "Source",
+      "received": "Received",
+      "statusHeader": "Status",
+      "empty": "No leads yet.",
+      "mailSubject": "Your Builderforce demo",
+      "status": {
+        "new": "New",
+        "contacted": "Contacted",
+        "qualified": "Qualified",
+        "closed": "Closed"
+      },
+      "personas": {
+        "ai-team": "AI Software Team",
+        "insights": "Engineering ROI & Insights",
+        "pmo": "PMO Command Center",
+        "talent": "Talent & Marketplace",
+        "governance": "Security, Architecture & Governance"
+      }
+    },
+    "cron": {
+      "title": "Scheduled sweeps",
+      "subtitle": "Cloudflare delivers cron triggers to the Worker, never to a URL. Force a run here instead of waiting out the work-gate.",
+      "forceNote": "Running a sweep here bypasses the KV work-gate and does not move the floor timer, so a forced run never delays the next real tick. Use \"Signal pending work\" to test the gate itself.",
+      "gate": {
+        "heading": "KV work-gate",
+        "checkedAt": "Checked {at}",
+        "wouldRun": "The next tick would run the database fan-out",
+        "wouldSkip": "The next tick would skip — Postgres stays asleep",
+        "reason": {
+          "signal": "a write signalled pending work",
+          "floor": "the floor interval has elapsed",
+          "idle": "nothing signalled and the floor is not due",
+          "kv-unavailable": "KV is unreachable, so the gate fails open"
+        },
+        "floorInterval": "Floor interval",
+        "overridden": "overridden",
+        "lastFloor": "Last floor sweep",
+        "nextFloor": "Next floor sweep",
+        "never": "Never",
+        "asap": "Next tick",
+        "explainIdle": "An idle gate does not mean nothing is pending. The signal only fires when a ticket actually passes its gates, so a board of stalled tickets signals nothing and waits for the floor sweep.",
+        "kvUnbound": "AUTH_CACHE_KV is not bound, so the gate fails open and every tick runs the fan-out.",
+        "signalled": "Pending work signalled — the next scheduled tick will run the fan-out."
+      },
+      "actions": {
+        "runFrequent": "▶ Run the 5-minute tick",
+        "signal": "⚑ Signal pending work",
+        "run": "Run",
+        "runGroup": "▶ Run group",
+        "running": "Running…"
+      },
+      "cadence": {
+        "frequent": "Frequent tick",
+        "daily": "Daily",
+        "weekly-mon": "Weekly (Monday)",
+        "weekly-fri": "Weekly (Friday)",
+        "everyFiveMinutes": "every 5 minutes (work-gated)"
+      },
+      "table": {
+        "sweep": "Sweep",
+        "description": "What it does",
+        "lastRun": "Last forced run"
+      },
+      "badge": {
+        "dispatches": "starts agent runs",
+        "unavailable": "disabled in this environment"
+      },
+      "outcome": {
+        "ok": "OK in {ms} ms",
+        "noop": "nothing to do",
+        "failed": "Failed",
+        "timedOut": "Still running after {ms} ms — check the logs for the result",
+        "skipped": "Skipped (disabled)"
+      },
+      "result": {
+        "heading": "Forced {target}:",
+        "summary": "{ok} of {total} sweeps completed in {ms} ms · {dispatched} agent runs started"
+      },
+      "confirm": {
+        "title": "Force a scheduled sweep?",
+        "dispatch": "Running \"{target}\" starts real agent runs across every tenant ({count} of the selected sweeps dispatch work). This spends tokens and is not a dry run.",
+        "confirmLabel": "Run now"
+      }
     }
   },
   "providerKeys": {
     "title": "Bring your own models",
-    "subtitle": "Connect your own Anthropic, OpenAI, or Google account. Connected providers power your agents on your own account and drive the model choices in every picker — usage on your machine (on-prem & VS Code) is free; cloud-agent usage is still billed. Credentials are stored encrypted and never shown again.",
+    "subtitle": "Connect your own Anthropic, OpenAI, Google, Kimi, Qwen, MiniMax, or Meta account. Connected providers power your agents on your own account and drive the model choices in every picker — usage on your machine (on-prem & VS Code) is free; cloud-agent usage is still billed. Credentials are stored encrypted and never shown again.",
     "loading": "Loading…",
     "errorPrefix": "Error: {message}",
+    "openRouter": {
+      "title": "OpenRouter connections",
+      "subtitle": "Create multiple named registrations. Each registration can include one or many OpenRouter models and participates in the same priority list as your connected AI accounts.",
+      "cardBlurb": "Select one or many OpenRouter models per registration, then prioritize them alongside your connected provider accounts.",
+      "add": "Add connection",
+      "connectedCount": "● {count} connection(s)",
+      "modelCount": "{count} selected model(s)",
+      "ownKey": "Your OpenRouter key",
+      "managedKey": "Builderforce managed billing",
+      "edit": "Edit",
+      "empty": "No OpenRouter connections yet.",
+      "createTitle": "Register OpenRouter models",
+      "editTitle": "Edit OpenRouter connection",
+      "name": "Connection name",
+      "apiKey": "OpenRouter API key (optional)",
+      "clearKey": "Remove the saved OpenRouter key and use Builderforce managed billing",
+      "billing": "Every request goes through Builderforce routing and adds a $0.01 platform charge. With your own key, OpenRouter charges your account for tokens; without one, Builderforce also bills the OpenRouter token cost.",
+      "search": "Search OpenRouter models…",
+      "selected": "{count} model(s) selected",
+      "validation": "Enter a connection name and select at least one model.",
+      "saveError": "Failed to save OpenRouter connection",
+      "removeError": "Failed to remove OpenRouter connection",
+      "confirmRemove": "Remove the OpenRouter connection “{label}”?"
+    },
     "status": {
       "connected": "● {subscription} connected",
       "keyConfigured": "● {label} API key configured",
-      "notConnected": "○ Not connected"
+      "notConnected": "○ Not connected",
+      "needsAttention": "▲ {label} — needs attention"
     },
     "disconnect": "Disconnect",
     "remove": "Remove",
@@ -7592,24 +8847,97 @@
     "errStartConnect": "Failed to start connect",
     "errConnectSubscription": "Failed to connect subscription",
     "errRemove": "Failed to remove credential",
+    "precedence": {
+      "title": "Provider priority",
+      "subtitle": "When more than one of your accounts is connected, cloud agents lead with the provider at the top and fail over down the list. Put Meta first to route cloud agents through it.",
+      "leads": "Leads",
+      "moveUp": "Move {provider} up",
+      "moveDown": "Move {provider} down",
+      "errSave": "Failed to save priority"
+    },
     "provider": {
       "anthropic": {
         "blurb": "Connect your Claude Pro/Max subscription (no per-token billing) or paste an Anthropic API key.",
-        "subscription": "Claude subscription"
+        "subscription": "Claude subscription",
+        "pastePrompt": "Approved in the Claude tab? Paste the code it shows you (the full <code>code#state</code> value) below.",
+        "pastePlaceholder": "Paste code from Claude…"
       },
       "openai": {
-        "blurb": "Paste an OpenAI API key to run GPT models on your own OpenAI account."
+        "blurb": "Connect your ChatGPT/Codex subscription or paste an OpenAI API key to run GPT models on your own account.",
+        "subscription": "ChatGPT/Codex subscription",
+        "pastePrompt": "After signing in, your browser may show a localhost error. Copy the full <code>http://localhost:1455/auth/callback?code=…&state=…</code> URL from the address bar and paste it below.",
+        "pastePlaceholder": "Paste the full OpenAI redirect URL…"
       },
       "google": {
         "blurb": "Paste a Google AI (Gemini) API key to run Gemini models on your own Google account."
+      },
+      "meta": {
+        "blurb": "Paste a Meta AI API key to run MUSE models (muse-spark-1.1) on your own Meta AI account."
+      },
+      "kimi": {
+        "blurb": "Paste a Kimi Code subscription key or Moonshot API key to run Kimi models on your own account."
+      },
+      "qwen": {
+        "blurb": "Paste an Alibaba DashScope API key to run Qwen models on your own account."
+      },
+      "minimax": {
+        "blurb": "Paste a MiniMax API key to run MiniMax models on your own account."
+      },
+      "xai": {
+        "blurb": "Connect an eligible SuperGrok subscription or paste an xAI API key to run Grok models on your own account.",
+        "subscription": "SuperGrok subscription",
+        "pastePrompt": "After approving access, copy the code shown on the xAI page and paste it below.",
+        "pastePlaceholder": "Paste the xAI sign-in code…"
       }
+    },
+    "diagnostic": {
+      "currentStatus": "Current status: {status}",
+      "checking": "checking…",
+      "test": "Test connection",
+      "testing": "Testing…",
+      "verified": "Connection verified.",
+      "verifiedWith": "Connection verified with {model}.",
+      "usage": "Last 30 days: {requests} requests · {tokens} tokens",
+      "lastUsed": " · Last used {when}",
+      "failedFallback": "Connection test failed: {status}.",
+      "failedGeneric": "Connection test failed",
+      "failedTitle": "{label} connection failed",
+      "state": {
+        "ready": "ready",
+        "not_connected": "not connected",
+        "revoked": "revoked",
+        "expired": "expired",
+        "undecryptable": "unreadable credential",
+        "unavailable": "unavailable"
+      },
+      "tokensUsed": "AI tokens used",
+      "periodLabel": "Last {period}"
+    },
+    "authAlert": {
+      "title": "Not being used",
+      "notEntitled": "This account signed in successfully, but the provider refused the request ({status}) because the plan does not cover it. Reconnect an account whose plan includes it, or upgrade the plan.",
+      "rejected": "The provider rejected this credential ({status}). It has probably expired, been revoked, or been rotated elsewhere — reconnect the account.",
+      "capacity": "The credential works, but the account is out of budget ({status}) — a spend cap or empty credit balance. Top up or raise the limit; there is no need to reconnect.",
+      "unresolved": "The stored credential could not be used at all — it has been revoked, has expired, or was saved in a different workspace. Reconnect it here."
     }
   },
   "modelSelect": {
     "yourLlms": "Your LLMs",
     "connectedProviders": "Connected providers",
     "models": "Models",
-    "current": "{model} (current)"
+    "current": "{model} (current)",
+    "premiumModels": "Premium — any OpenRouter model (cost + 1¢/request)",
+    "premiumOption": "{name} · {price}/M in",
+    "premiumUnlockTitle": "Unlock premium models",
+    "premiumUnlockCardBody": "Add billing details and validate a card to select any paid OpenRouter model. You are billed OpenRouter’s own price plus 1¢ per request. Card setup places no charge and does not upgrade your plan.",
+    "premiumUnlockUpgradeBody": "Premium models (any paid OpenRouter model, billed at OpenRouter cost plus 1¢ per request) need a paid plan with a validated card.",
+    "premiumValidateCard": "Add billing & card",
+    "premiumValidating": "Opening…",
+    "premiumPending": "Awaiting confirmation",
+    "premiumPendingHint": "Finish validation with your payment provider, then reload.",
+    "premiumFailedHint": "That card could not be validated. Try another.",
+    "premiumUpgrade": "Upgrade to Pro",
+    "premiumUnlockFailed": "Could not start card validation."
   },
   "runAgentControl": {
     "agentTitle": "Agent",
@@ -7682,7 +9010,16 @@
       "system": "System",
       "unknown": "Unknown"
     },
+    "model": {
+      "tooltip": "Served by model {model}",
+      "accountOwn": "Your account",
+      "accountShared": "Shared pool",
+      "accountSharedUnused": "Shared pool (your account unused)"
+    },
     "verb": {
+      "agent": {
+        "replied": "replied in a chat"
+      },
       "task": {
         "created": "created a ticket",
         "updated": "updated a ticket",
@@ -7835,7 +9172,8 @@
     "running": "Running",
     "awaiting": "Needs answer",
     "needsYou": "{count} awaiting your answer",
-    "runningCount": "{count} running"
+    "runningCount": "{count} running",
+    "unread": "{count, plural, =1 {1 unread message} other {# unread messages}}"
   },
   "onboarding": {
     "welcome": "Welcome to Builderforce",
@@ -7870,6 +9208,18 @@
       },
       "invite": {
         "label": "Invite Team"
+      },
+      "talentProfile": {
+        "label": "Your Profile"
+      },
+      "resume": {
+        "label": "Résumé"
+      },
+      "publish": {
+        "label": "Publish"
+      },
+      "findWork": {
+        "label": "Find Work"
       }
     },
     "ticketing": {
@@ -7905,7 +9255,15 @@
       "runningAll": "Running audits…",
       "run": "Run selected audits",
       "viewReports": "View reports",
-      "notifyHint": "We'll notify you when each report is ready. You can leave this page — the audits keep running."
+      "notifyHint": "We'll notify you when each report is ready. You can leave this page — the audits keep running.",
+      "webHeading": "Scan your live website",
+      "webIntro": "Have a site already? Enter its URL for an instant security scan — findings become tickets you can fix.",
+      "webPlaceholder": "https://your-site.com",
+      "webButton": "Scan website",
+      "webScanning": "Scanning…",
+      "webResult": "Score {score}/100 — {count} issue(s) filed as tickets",
+      "webView": "View results",
+      "webError": "Scan failed. Check the URL and try again."
     },
     "closeOnboarding": "Close onboarding",
     "workspaceReady": "Workspace ready",
@@ -7938,6 +9296,25 @@
       "monetize": "Make money with AI agents",
       "automate": "Automate my dev workflow",
       "learn": "Learn and explore"
+    },
+    "welcomeHired": "Welcome to Builderforce",
+    "subtitleHired": "Let's get you hireable in a few quick steps.",
+    "talentProfile": {
+      "intro": "Employers search on these fields — the more you fill in, the more often you show up."
+    },
+    "resumeStep": {
+      "intro": "Upload a résumé and we can fill in your headline, summary and skills for you.",
+      "skipHint": "Optional — you can add this later from your profile."
+    },
+    "publishStep": {
+      "intro": "Publishing lists you in the talent marketplace. You can unpublish at any time."
+    },
+    "findWorkStep": {
+      "intro": "You're set up. Here's where the work happens.",
+      "gigs": "Browse gigs",
+      "gigsHint": "Open roles matched to your skills and rate.",
+      "timecard": "Log your hours",
+      "timecardHint": "Submit timecards and track what you've been paid."
     }
   },
   "soc2": {
@@ -8135,7 +9512,10 @@
     "errorCreateSprint": "Create sprint failed",
     "errorStart": "Could not start session",
     "errorAdvance": "Could not advance turn",
-    "errorComplete": "Could not complete session"
+    "errorComplete": "Could not complete session",
+    "startSession": "Start standup",
+    "startSessionHint": "Start the standup",
+    "startSessionFacilitatorOnly": "Only the facilitator can start"
   },
   "meetings": {
     "title": "Meetings",
@@ -8298,7 +9678,8 @@
     "commonQuestions": "Common Questions",
     "pillLora": "🧠 LoRA Training",
     "pillRegistry": "🤖 Agent Registry",
-    "pillEval": "🔬 AI Evaluation"
+    "pillEval": "🔬 AI Evaluation",
+    "emailPlaceholder": "you@example.com"
   },
   "gigs": {
     "publish": {
@@ -8584,6 +9965,10 @@
   },
   "agentExecution": {
     "runThisTask": "Run this task",
+    "coordinateThisTicket": "Coordinate this ticket",
+    "coordinateNow": "Assign and run next role",
+    "coordinating": "Coordinating…",
+    "coordinateHint": "The assignee coordinates this lifecycle. BuilderForce verifies the manifest and dispatches the next required BA, architect, developer, reviewer, QA, or validator—never the assignee as the default executor.",
     "awaitingApproval": "Awaiting approval before this can run: {reason}",
     "executions": "Executions",
     "ticketSpendTooltip": "Ticket spend across all runs: {tokens} tokens over {requests} LLM call(s). Rolls up to this project, then the account.",
@@ -8620,7 +10005,15 @@
     "noFileChangesYet": "No file changes yet.",
     "noFileChangesRecorded": "This run did not record any file changes.",
     "noToolCalls": "No tool calls recorded.",
-    "failedToRerun": "Failed to re-run"
+    "failedToRerun": "Failed to re-run",
+    "revert": "Revert run",
+    "reverting": "Reverting…",
+    "revertHint": "Close the pull request this run opened and delete the branch it wrote. Refused if anything else has touched them.",
+    "revertConfirmTitle": "Revert this run?",
+    "revertConfirmMessage": "This closes the pull request run #{id} opened and deletes the branch it wrote. This cannot be undone. It will be refused if the pull request was already merged or anything else changed the branch.",
+    "revertConfirmAction": "Revert run",
+    "revertDone": "Reverted — deleted branch {branch} ({commits} commit(s)).",
+    "failedToRevert": "Failed to revert this run"
   },
   "aiTraining": {
     "title": "AI Model Training",
@@ -8974,8 +10367,8 @@
     "noKey": "no key",
     "test": "Test",
     "testing": "Testing…",
-    "importTitle": "Import this repo's files into the IDE workspace so you can edit and run them in the browser",
-    "importToIde": "Import to IDE",
+    "importTitle": "Import this repo's files into the Builder workspace so you can edit and run them in the browser",
+    "importToIde": "Import to Builder",
     "importing": "Importing…",
     "copyConfigTitle": "Copy this repo's configuration (no secrets) for diagnosing a failed Test",
     "copied": "Copied!",
@@ -8992,7 +10385,20 @@
     "workspaceSuffix": ", workspace",
     "setAsDefault": "Set as the project's default repository",
     "saveChanges": "Save changes",
-    "addRepository": "Add repository"
+    "addRepository": "Add repository",
+    "enableAgentRuns": "Enable agent runs",
+    "agentRunsEnabled": "Agent runs enabled",
+    "enablingAgentRuns": "Enabling…",
+    "enableAgentRunsTitle": "Commit the Builderforce agent workflow to this repo so agents can run on your own GitHub Actions runners",
+    "reenableAgentRunsTitle": "Already enabled — re-run to overwrite the workflow file with the latest version",
+    "confirmReenableActions": "This rewrites .github/workflows/builderforce-agent.yml on the default branch, discarding any edits you made to it. Continue?",
+    "actionsEnabled": "Agent workflow committed to {path}",
+    "actionsEnableFailed": "Could not commit the agent workflow",
+    "backfillAlerts": "Backfill alerts",
+    "backfillingAlerts": "Backfilling…",
+    "backfillAlertsTitle": "Import every open code-scanning and Dependabot alert from this repo as a security finding. Safe to re-run.",
+    "alertsBackfilled": "Imported {count} security {count, plural, one {finding} other {findings}} ({deduped} already tracked)",
+    "alertsBackfillFailed": "Could not import security alerts"
   },
   "workflowsContent": {
     "noRunsYet": "No runs yet",
@@ -9080,6 +10486,16 @@
       "escalation": "Escalation",
       "contacts": "Contacts"
     },
+    "workflows": {
+      "title": "Runbooks & workflows",
+      "blurb": "Run a custom workflow against this incident, or review the workflows its events triggered.",
+      "pick": "Workflow",
+      "pickPlaceholder": "Choose a workflow…",
+      "run": "Run workflow",
+      "create": "Create a workflow",
+      "runs": "Runs for this incident",
+      "noRuns": "No workflow runs yet."
+    },
     "severity": {
       "sev1": "SEV1",
       "sev2": "SEV2",
@@ -9139,6 +10555,8 @@
       "publishedNote": "A root-cause analysis has been published for this incident.",
       "prompt": "This incident is resolved. Publish a root-cause analysis to the knowledge base.",
       "formTitle": "Publish root-cause analysis",
+      "fishTitle": "Why did this occur?",
+      "fishAria": "Fishbone root-cause diagram for {title}",
       "summary": "Summary",
       "summaryPlaceholder": "One-paragraph overview of the incident…",
       "rootCause": "Root cause",
@@ -9175,7 +10593,7 @@
     "memberDisplayName": "Display name",
     "memberRef": "Member reference",
     "memberRefPlaceholder": "u:123 / contact:abc / c:acme",
-    "memberRefHelp": "Reference a platform user (u:<id>), a business contact (contact:<id>), or a company (c:<slug>).",
+    "memberRefHelp": "Reference a platform user (u:'<id>'), a business contact (contact:'<id>'), or a company (c:'<slug>').",
     "addMember": "Add member",
     "removeMember": "Remove member",
     "rotationName": "Name",
@@ -9218,7 +10636,18 @@
     "deleteContactConfirm": "Delete contact \"{name}\"?",
     "oncallSubtitle": "On-call rotations decide who gets paged first when an incident fires.",
     "escalationSubtitle": "Escalation policies climb through targets and channels until someone responds.",
-    "contactsSubtitle": "Business contacts you can page or escalate to during an incident."
+    "contactsSubtitle": "Business contacts you can page or escalate to during an incident.",
+    "implicated": {
+      "title": "Implicated delivery tickets",
+      "help": "The delivery ticket(s) whose change caused this incident — each with its accountability so RCA can see where the process was skipped or waived.",
+      "loading": "Loading…",
+      "empty": "No implicated tickets linked yet.",
+      "signed": "{done}/{total} signed off",
+      "gaps": "{count} gap(s)",
+      "remove": "Remove",
+      "add": "Link ticket",
+      "addPlaceholder": "Ticket #"
+    }
   },
   "monitoring": {
     "boardsTitle": "Active Monitoring",
@@ -9252,6 +10681,13 @@
     "fieldIntervalSeconds": "Interval (seconds)",
     "fieldUrl": "URL",
     "fieldExpectedStatus": "Expected status",
+    "fieldMethod": "Method",
+    "fieldHeaders": "Request headers",
+    "headersPlaceholder": "Authorization: Bearer …",
+    "headersHint": "One \"Header: value\" per line — sent with the health check.",
+    "fieldBodyMatch": "Body must contain",
+    "bodyMatchPlaceholder": "\"status\":\"ok\"",
+    "bodyMatchHint": "Optional: breach if the response body doesn't contain this text.",
     "fieldMetric": "Metric",
     "fieldComparator": "Comparator",
     "fieldThreshold": "Threshold",
@@ -9346,5 +10782,974 @@
     "statusError": "Error",
     "errFailed": "Failed to invite",
     "laterHint": "You can also invite teammates later from <link>Workforce</link>."
+  },
+  "accountability": {
+    "loading": "Loading accountability…",
+    "signedHeader": "{done} of {total} required roles signed off",
+    "unassigned": "Unassigned",
+    "addedBadge": "added",
+    "gaps": {
+      "title": "{count} accountability gap(s)",
+      "outstandingTitle": "{count} role(s) still to sign off",
+      "kind": {
+        "unsigned": "Unsigned",
+        "unstaffed": "Resource gap",
+        "no_contribution": "No contribution",
+        "waived": "Waived",
+        "changes_requested": "Changes requested"
+      },
+      "detail": {
+        "unsigned": "Required role has not signed off.",
+        "pending": "Not started yet.",
+        "assigned": "Assigned; work has not started yet.",
+        "in_progress": "Work in progress; sign-off not recorded yet.",
+        "unstaffed": "No capable resource is available for this required role.",
+        "changes_requested": "Changes were requested and not yet resolved.",
+        "no_contribution": "Approved with no linked contribution — a rubber-stamp risk.",
+        "waived": "Waived: {reason}",
+        "waived_no_reason": "Waived without a recorded reason."
+      }
+    },
+    "table": {
+      "title": "Sign-off & Accountability",
+      "role": "Role",
+      "who": "Who",
+      "state": "State",
+      "verdict": "Verdict",
+      "when": "When",
+      "comments": "Comments",
+      "contribution": "Contribution",
+      "empty": "No required roles for this ticket yet.",
+      "action": "Action"
+    },
+    "verdict": {
+      "approved": "Approved",
+      "changes_requested": "Changes requested",
+      "waived": "Waived",
+      "delegated": "Delegated"
+    },
+    "state": {
+      "pending": "Pending",
+      "assigned": "Assigned",
+      "in_progress": "In progress",
+      "completed": "Completed",
+      "changes_requested": "Changes requested",
+      "waived": "Waived",
+      "skipped": "Skipped",
+      "unstaffed": "Unstaffed"
+    },
+    "responsibility": {
+      "owner": "Owner",
+      "reviewer": "Reviewer",
+      "contributor": "Contributor"
+    },
+    "assess": {
+      "title": "Resource assessment",
+      "help": "Add a role this ticket needs beyond the template (e.g. designer, security engineer). If no capable resource is available it is flagged as a resource gap.",
+      "rolePlaceholder": "Select a role…",
+      "notePlaceholder": "Why is this role needed? (optional)",
+      "add": "Add required role",
+      "materialize": "Create work items",
+      "materializeHelp": "Spin up a child task per resource so progress rolls up to this ticket."
+    },
+    "contribution": {
+      "pr": "PR",
+      "run": "Run #{id}",
+      "prd": "PRD r{revision}",
+      "test": "Test {id}",
+      "files": "{count, plural, one {# file} other {# files}}"
+    },
+    "signoff": {
+      "action": "Sign off",
+      "cancel": "Cancel",
+      "confirm": "Sign off as {role}",
+      "recording": "Recording…",
+      "summaryPlaceholder": "What did you check? (optional)",
+      "reasonRequired": "Reason for waiving (required)",
+      "help": "Only a member capable of this role may sign off as it; the workspace records who signed, when and with what evidence."
+    }
+  },
+  "rfpPage": {
+    "title": "RFP Response",
+    "subtitle": "Respond to an RFQ/RFP with a co-branded proposal grounded on your portfolio — capability roster, P&L, delivery plan and risks.",
+    "newRequest": "New response",
+    "needDeveloper": "Requires Developer role",
+    "loading": "Loading…",
+    "empty": "No RFP requests yet. Create one to draft a co-branded proposal.",
+    "validation": "A title is required.",
+    "creating": "Creating…",
+    "create": "Create & draft",
+    "cancel": "Cancel",
+    "noOrg": "Unnamed organisation",
+    "sourceNew": "New build",
+    "sourceExisting": "Based on a project",
+    "quoted": "Quoted {price}",
+    "notGenerated": "Not generated yet",
+    "scanFresh": "Fresh scan",
+    "status": {
+      "draft": "Draft",
+      "analyzing": "Analyzing",
+      "ready": "Ready",
+      "submitted": "Submitted"
+    },
+    "field": {
+      "title": "Title",
+      "titlePlaceholder": "e.g. Customer portal rebuild",
+      "requesterOrg": "Requesting organisation",
+      "requesterOrgPlaceholder": "Who issued the RFP",
+      "requesterBrand": "Requester brand colours",
+      "requesterBrandHint": "The asking business's palette — blended with your own on the proposal.",
+      "primary": "Primary",
+      "secondary": "Secondary",
+      "accent": "Accent",
+      "logoUrl": "Logo URL",
+      "requirements": "Requirements",
+      "requirementsPlaceholder": "Paste the RFP/RFQ requirements…",
+      "sourceMode": "Grounding",
+      "project": "Project",
+      "selectProject": "Select a project…",
+      "economics": "Economics",
+      "margin": "Margin",
+      "marketing": "Marketing",
+      "contingency": "Contingency"
+    },
+    "backToList": "Back to requests",
+    "generating": "Generating…",
+    "regenerate": "Regenerate",
+    "generate": "Generate response",
+    "generatingHint": "Running the freshness-gated scan, matching your portfolio, and drafting the proposal…",
+    "noResponseYet": "No proposal generated yet. Click Generate to draft one.",
+    "scanRefreshed": "Scan refreshed",
+    "scanCurrent": "Scan current",
+    "groundedOn": "Grounded on {project}",
+    "greenfield": "Greenfield — proposed from the requirements",
+    "scanAge": "last scan {days}d ago",
+    "sec": {
+      "summary": "Executive summary",
+      "capabilities": "Capabilities & approach",
+      "economics": "Investment & commercials",
+      "plan": "Delivery plan",
+      "risks": "Key risks",
+      "dependencies": "Dependencies",
+      "portfolio": "Similar projects",
+      "document": "Branded proposal"
+    },
+    "capabilitiesGreenfield": "Greenfield engagement — capabilities are proposed from the requirements.",
+    "col": {
+      "component": "Component",
+      "responsibility": "Responsibility"
+    },
+    "stack": "Stack",
+    "quotedPrice": "Quoted price",
+    "marginNote": "{pct}% profit margin · {weeks} weeks of effort.",
+    "deliveryWindow": "Delivery: {start} → {end} ({weeks} weeks).",
+    "severity": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "depType": {
+      "internal": "Internal",
+      "external": "External",
+      "third_party": "Third-party"
+    },
+    "downloadDoc": "Download"
+  },
+  "planBadge": {
+    "tier": {
+      "free": "Free",
+      "pro": "Pro",
+      "teams": "Teams"
+    },
+    "freeHint": "You are on the Free plan — chats run on the included BuilderForce models. Click to see plans and upgrade.",
+    "paidHint": "Your workspace is on the {plan} plan. Click to manage your plan.",
+    "tokensLeft": "{count} tokens left",
+    "noTokens": "no tokens left",
+    "upgrade": "Upgrade"
+  },
+  "billing": {
+    "cardOnFileTitle": "Card on file",
+    "cardOnFileHint": "Premium model access is verified against this card. Replacing it starts a new $0 verification.",
+    "cardPendingHint": "We are waiting for your bank to confirm this card. Premium models unlock as soon as it clears.",
+    "cardNoDetails": "Card details unavailable",
+    "cardStatusValidated": "Verified",
+    "cardStatusPending": "Verifying…",
+    "cardStatusFailed": "Verification failed",
+    "replaceCard": "Replace card",
+    "retryCard": "Try again",
+    "cardWorking": "Working…",
+    "replaceCardTitle": "Replace your card?",
+    "replaceCardWarning": "Your current card keeps working until the new one is verified, so premium models are never interrupted. The old card is removed automatically once the new one is confirmed.",
+    "retryCardMessage": "We will start a new $0 verification. Your card is not charged.",
+    "replaceCardConfirm": "Continue",
+    "cardValidationFailed": "We could not start card verification. Please try again.",
+    "removeCard": "Remove card",
+    "removeCardTitle": "Remove your card?",
+    "removeCardWarning": "Premium models will be turned off, and we will stop storing your card. Your plan and included models keep working. You can add a card again at any time.",
+    "removeCardConfirm": "Remove card",
+    "removeCardFailed": "We could not remove the card. Please try again."
+  },
+  "policyPacks": {
+    "title": "Policy packs",
+    "subtitle": "Governance gates your agents are held to. A gate applies on the next run in its scope — the runtime enforces it at every tool call.",
+    "newPack": "New pack",
+    "error": "Error: {message}",
+    "genericError": "Something went wrong.",
+    "loading": "Loading policy packs…",
+    "empty": "No policy packs yet. Create one to start governing what your agents may do.",
+    "effectiveTitle": "In force right now",
+    "effectiveEmpty": "No gates apply to a workspace-wide run. Agents are ungated.",
+    "effectiveCount": "{count, plural, one {# gate applies} other {# gates apply}} to a workspace-wide run.",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "noGates": "No gates in this pack.",
+    "remove": "Remove",
+    "scopeTenant": "Applies to every project and agent",
+    "scopeProject": "Project: {project}",
+    "scopeAgent": "Agent: {agent}",
+    "scopeProjectAgent": "{project} · {agent}",
+    "anyTool": "Any tool",
+    "fieldName": "Name",
+    "fieldNamePlaceholder": "e.g. Production safety",
+    "fieldDescription": "Description",
+    "fieldProject": "Project",
+    "allProjects": "All projects",
+    "fieldAgent": "Agent",
+    "allAgents": "All agents",
+    "fieldEnabled": "Pack is enabled",
+    "saving": "Saving…",
+    "createPack": "Create pack",
+    "savePack": "Save changes",
+    "deletePack": "Delete pack",
+    "deletePackTitle": "Delete policy pack",
+    "deletePackConfirm": "Delete “{name}” and all of its gates? Agents will no longer be held to them.",
+    "gatesTitle": "Gates",
+    "gatesHelp": "Each gate matches a tool call and decides what happens: an instruction, a pause for approval, or a refusal.",
+    "addGateTitle": "Add a gate",
+    "fieldGateKey": "Gate ID",
+    "fieldGateKeyPlaceholder": "e.g. no-shell-in-prod",
+    "fieldTool": "Tool",
+    "toolHelp": "Use * to govern every tool — that is how you author a deny-by-default posture.",
+    "fieldEffect": "Effect",
+    "fieldDirective": "Instruction",
+    "fieldDirectivePlaceholder": "What the agent must do, in plain language.",
+    "fieldReason": "Reason",
+    "fieldReasonPlaceholder": "Why this is gated — shown to the agent and the approver.",
+    "addGate": "Add gate",
+    "deleteGateTitle": "Delete gate",
+    "deleteGateConfirm": "Delete the gate “{key}”?",
+    "effect": {
+      "inject-directive": "Instruct",
+      "require-approval": "Approve",
+      "block": "Block"
+    },
+    "effectHelp": {
+      "inject-directive": "Adds a binding instruction to the agent’s prompt. It still runs the tool.",
+      "require-approval": "The agent pauses and asks a human before using the tool.",
+      "block": "The agent refuses the tool outright and explains why."
+    }
+  },
+  "ceremonySchedules": {
+    "title": "Recurring ceremonies",
+    "subtitle": "Run standups and plannings on a cadence. Each scheduled ceremony opens on its own with the round table already seated.",
+    "newSchedule": "New schedule",
+    "editSchedule": "Edit schedule",
+    "empty": "No recurring ceremonies yet. Add a schedule and your standup will start itself.",
+    "enabled": "Active",
+    "paused": "Paused",
+    "pause": "Pause",
+    "resume": "Resume",
+    "colKind": "Ceremony",
+    "colCadence": "Cadence",
+    "colNextRun": "Next run",
+    "colLastRun": "Last run",
+    "colStatus": "Status",
+    "colActions": "Actions",
+    "colRoster": "Round table",
+    "kind_standup": "Standup",
+    "kind_planning": "Planning",
+    "scope_members": "Project members",
+    "scope_roster": "Fixed list",
+    "preset_weekdays9": "Weekdays at 09:00",
+    "preset_weekdays10": "Weekdays at 10:00",
+    "preset_daily9": "Every day at 09:00",
+    "preset_mondays10": "Mondays at 10:00",
+    "preset_fridays16": "Fridays at 16:00",
+    "presetCustom": "Custom schedule…",
+    "fieldKind": "Ceremony",
+    "fieldCadence": "How often",
+    "fieldCron": "Cron expression",
+    "cronHelp": "Five fields: minute, hour, day of month, month, day of week. The preset above fills this in; edit it for anything more specific.",
+    "fieldTimezone": "Time zone",
+    "fieldRoster": "Who takes part",
+    "rosterHelp": "Project members seats everyone active on this project, quietest speaker first. A fixed list always seats the same people.",
+    "fieldMaxParticipants": "Maximum seats",
+    "fieldTurnSeconds": "Seconds per turn",
+    "turnSecondsPlaceholder": "Use the board default",
+    "fieldEnabled": "Schedule is active",
+    "enabledHelp": "A paused schedule keeps its settings but never opens a ceremony.",
+    "fieldAutoDispatch": "Start agent work when the ceremony ends",
+    "autoDispatchHelp": "When the session is completed, agent-owned tickets on this project are handed to their agents automatically.",
+    "confirmDelete": "Delete this recurring ceremony? Sessions that already ran are kept.",
+    "errorLoad": "Could not load the schedules.",
+    "errorSave": "Could not save the schedule.",
+    "errorDelete": "Could not delete the schedule."
+  },
+  "permissionDebugger": {
+    "title": "Permission Debugger",
+    "copyAll": "Copy All",
+    "copyAllHint": "Copy all as JSON",
+    "exportCsv": "Export CSV",
+    "exportCsvHint": "Export as CSV",
+    "close": "Close",
+    "role": "Role:",
+    "activeCount": "Active: {granted} / {total} permissions",
+    "deniedCount": "{count} denied",
+    "softGatedCount": "{count} soft-gated",
+    "empty": "No permissions in this view.",
+    "tab": {
+      "page": "Page",
+      "user": "User",
+      "role": "Role",
+      "missing": "Missing"
+    },
+    "col": {
+      "permission": "Permission",
+      "status": "Status",
+      "source": "Source",
+      "count": "Count",
+      "apiEndpoint": "API Endpoint"
+    },
+    "status": {
+      "granted": "GRANTED",
+      "denied": "DENIED",
+      "soft-gate": "SOFT-GATE"
+    }
+  },
+  "githubActionsSurface": {
+    "notReadyTitle": "GitHub Actions is not set up for this project yet",
+    "notReadyBody": "The Builderforce agent workflow is missing from this project’s default repository, so runs will fall back to the durable cloud executor. Open Source control settings and choose “Enable agent runs” on the repository.",
+    "noGithubRepoBody": "This project has no GitHub repository linked, so there is nowhere to run GitHub Actions. Runs will fall back to the durable cloud executor. Link a GitHub repository under Source control settings."
+  },
+  "feedback": {
+    "page": {
+      "title": "Feedback",
+      "subtitle": "Collect feature requests, bugs and ideas — and review them before any work begins."
+    },
+    "tab": {
+      "label": "Feedback",
+      "tooltip": "Send us feedback"
+    },
+    "kind": {
+      "feature": "Feature request",
+      "bug": "Bug report",
+      "idea": "Idea",
+      "other": "Something else"
+    },
+    "status": {
+      "new": "New",
+      "approved": "Approved",
+      "declined": "Declined"
+    },
+    "form": {
+      "title": "Send us feedback",
+      "intro": "Tell us what would make this better. Feature requests, bugs, half-formed ideas — all welcome.",
+      "destination": "Goes to the {project} backlog for review.",
+      "kind": "Type",
+      "summary": "Summary",
+      "summaryPlaceholder": "One line — what do you want?",
+      "details": "Details",
+      "detailsPlaceholder": "What are you trying to do, and what is getting in the way?",
+      "gateNote": "Your request is filed for a person to review — nothing is built automatically.",
+      "submit": "Send feedback",
+      "submitting": "Sending…",
+      "close": "Close",
+      "another": "Send another",
+      "successTitle": "Thank you",
+      "successBody": "Your request has been filed for the team to review.",
+      "errorRequired": "Please describe your feedback before sending.",
+      "errorGeneric": "Something went wrong sending your feedback. Please try again."
+    },
+    "setup": {
+      "intro": "One collector per project — a single embeddable snippet that gathers feature requests, bugs and ideas from any application into this project’s backlog.",
+      "pickProject": "Select a project to configure its feedback collector.",
+      "enable": "Enable feedback collection",
+      "enableAction": "Enable",
+      "namePlaceholder": "Collector name",
+      "creating": "Creating…",
+      "created": "Collector created",
+      "dismiss": "Dismiss",
+      "keyOnce": "Copy your ingest key now — it is shown once and never stored.",
+      "ingestKey": "Ingest key",
+      "curlSnippet": "Test with curl",
+      "snippet": "Embed snippet",
+      "endpoint": "Submit endpoint",
+      "snippetNote": "Paste this into any application to add a feedback tab.",
+      "copy": "Copy",
+      "enabled": "Enabled",
+      "paused": "Paused",
+      "pause": "Pause",
+      "resume": "Resume",
+      "delete": "Delete",
+      "confirmDelete": "Delete this feedback collector? The snippet will stop accepting submissions.",
+      "lastSubmission": "Last submission",
+      "options": "Options",
+      "autoCreateTask": "Open a backlog ticket per submission",
+      "autoCreateTaskHint": "When off, submissions are still recorded and can be reviewed, but no card is added to the board.",
+      "dailyLimit": "Daily submission limit",
+      "dailyLimitHint": "Submissions accepted from this snippet per rolling 24 hours (abuse ceiling).",
+      "allowedOrigins": "Allowed origins",
+      "allowedOriginsHint": "Comma-separated list of sites that may post, or * for any.",
+      "loading": "Loading…",
+      "loadFailed": "Failed to load the feedback collector.",
+      "createFailed": "Failed to create the collector.",
+      "saveFailed": "Failed to save changes."
+    },
+    "triage": {
+      "intro": "Review each request and approve it to allow work, or decline it. Nothing runs until you approve.",
+      "filter": "Show",
+      "statusAll": "All",
+      "loading": "Loading…",
+      "loadFailed": "Failed to load submissions.",
+      "reviewFailed": "Failed to record your decision.",
+      "empty": "No feedback here yet.",
+      "approve": "Approve",
+      "decline": "Decline",
+      "working": "Working…",
+      "confirmDecline": "Decline this request? Its ticket will be archived off the board.",
+      "gatedNote": "External request — awaiting your approval. No agent will pick it up until you approve it.",
+      "showMore": "Show more",
+      "showLess": "Show less"
+    },
+    "admin": {
+      "title": "Product feedback",
+      "subtitle": "Feature requests, bugs and ideas gathered from every workspace’s feedback collectors."
+    }
+  },
+  "onboardingPill": {
+    "title": "Account setup progress",
+    "ariaLabel": "Account setup {pct}% complete",
+    "label": "Setup {pct}%",
+    "panelTitle": "Finish account setup",
+    "progressLabel": "Setup progress",
+    "percentDone": "{pct}% done",
+    "intro": "Complete these steps to get the most out of your workspace. Your progress is saved as you go.",
+    "statusDone": "Done",
+    "statusTodo": "To do",
+    "continueSetup": "Continue setup",
+    "reviewSetup": "Review setup"
+  },
+  "globalError": {
+    "collapse": "Collapse",
+    "expandDetails": "Expand details",
+    "report": "Report to a project",
+    "copyTicket": "Copy support ticket",
+    "dismiss": "Dismiss"
+  },
+  "reportError": {
+    "title": "Report an error",
+    "intro": "File an error into a project. It appears in that project's Quality feed alongside automatically-collected errors.",
+    "projectLabel": "Project",
+    "projectPlaceholder": "Choose a project…",
+    "titleLabel": "Title",
+    "titlePlaceholder": "Short summary (optional)",
+    "messageLabel": "What happened?",
+    "messagePlaceholder": "Describe the error, what you were doing, and anything that helps reproduce it.",
+    "levelLabel": "Severity",
+    "level_fatal": "Fatal",
+    "level_error": "Error",
+    "level_warning": "Warning",
+    "level_info": "Info",
+    "noProjects": "You have no projects yet — create one first to report an error to it.",
+    "reported": "Error reported to the project.",
+    "failed": "Could not report the error.",
+    "cancel": "Cancel",
+    "submit": "Report error",
+    "submitting": "Reporting…"
+  },
+  "activate": {
+    "title": "Connect your editor",
+    "loading": "Loading…",
+    "working": "Working…",
+    "redirecting": "Taking you to sign in…",
+    "confirmIntro": "Your editor is requesting access. Confirm this code matches what VS Code shows:",
+    "approve": "Approve",
+    "deny": "Deny",
+    "approved": "✓ Approved. Return to VS Code — it will finish signing in automatically.",
+    "denied": "Request denied. You can close this tab.",
+    "keyIntro": "Here is your editor key. Copy it and paste it into VS Code:",
+    "copyKey": "Copy key",
+    "copied": "✓ Copied",
+    "keyFine": "Keep this key secret. You can revoke it anytime in Settings → API Keys.",
+    "tryAgain": "Try again",
+    "errorNoTenant": "Your account has no workspace yet. Create one, then try again.",
+    "errorAlreadyResolved": "This code was already used or has expired. Re-run sign-in from your editor.",
+    "errorApprove": "Could not approve the device ({status}).",
+    "errorDeny": "Could not deny the device ({status}).",
+    "errorCreateKey": "Could not create a key ({status}).",
+    "errorNetwork": "Network error. Please try again.",
+    "errorNoKey": "No key returned. Please try again."
+  },
+  "marketingNav": {
+    "beta": "BETA",
+    "primaryNav": "Primary",
+    "home": "Home",
+    "product": "Product",
+    "resources": "Resources",
+    "talentWorkforce": "Talent / Workforce",
+    "agents": "Agents",
+    "models": "Models",
+    "pricing": "Pricing",
+    "blog": "Blog",
+    "diagnosticsTools": "Diagnostics & Tools",
+    "soc2Audits": "SOC 2 & System Audits",
+    "promptLibrary": "Prompt Library",
+    "compare": "Compare",
+    "integrations": "Integrations",
+    "mediaKit": "Media Kit",
+    "signIn": "Sign In",
+    "getStarted": "Get Started →",
+    "toggleMenu": "Toggle menu"
+  },
+  "media": {
+    "seo": {
+      "title": "Media Kit — Sales Deck & Marketing Media",
+      "description": "Download the Builderforce.ai sales deck as a print-ready PDF or PowerPoint, plus every slide as PNG marketing media.",
+      "ogTitle": "Builderforce.ai Media Kit"
+    },
+    "eyebrow": "Media kit",
+    "title": "The Builderforce.ai deck — ready to share.",
+    "intro": "Download the product & platform deck in the format you need — a print-ready PDF, an editable PowerPoint, or every slide as a PNG you can drop into your own docs and posts.",
+    "deckAlt": "Cover slide of the Builderforce.ai product deck",
+    "download": "Download",
+    "assets": {
+      "pdf": {
+        "name": "Sales deck (PDF)",
+        "desc": "The full 26-slide product & platform overview — print- and email-ready."
+      },
+      "pptx": {
+        "name": "Sales deck (PowerPoint)",
+        "desc": "The same deck as a PPTX for presenting or embedding in your own materials."
+      },
+      "slides": {
+        "name": "All slides (PNG)",
+        "desc": "Every slide as a 2560×1440 PNG — share individual slides as marketing media."
+      }
+    },
+    "usageNote": "You are welcome to share these materials as-is when writing about or presenting Builderforce.ai. The Builderforce.ai name and logo remain trademarks; please do not alter the slides or imply endorsement."
+  },
+  "authCallback": {
+    "title": "Sign-in failed",
+    "backToLogin": "Back to login",
+    "signingIn": "Signing you in…",
+    "errorMissingParams": "Authentication failed: missing parameters.",
+    "errorInvalidState": "Authentication failed: invalid or expired state. Please try again.",
+    "errorAuthFailed": "Authentication failed with the provider. Please try again.",
+    "errorNoEmail": "Your provider account has no verified email address.",
+    "errorAccountNotFound": "Account not found or has been disabled.",
+    "errorAccountSuspended": "Your account has been suspended. Please contact support.",
+    "errorProviderUnavailable": "This sign-in provider is not currently available.",
+    "errorAlreadyLinkedOther": "This provider account is already connected to a different Builderforce account.",
+    "errorUnexpected": "An unexpected error occurred. Please try again.",
+    "errorNoCode": "No sign-in code received. Please try again.",
+    "errorProfile": "Failed to load your account profile. Please try signing in again."
+  },
+  "footer": {
+    "builtBy": "Built by",
+    "navLabel": "Footer",
+    "termsOfUse": "Terms of Use",
+    "privacyPolicy": "Privacy Policy",
+    "whatsNewHint": "See what's new",
+    "colProduct": "Product",
+    "colPlatform": "Platform",
+    "colGetStarted": "Get started",
+    "linkProduct": "Product",
+    "linkCompare": "Compare",
+    "linkPricing": "Pricing",
+    "linkMediaKit": "Media Kit",
+    "linkEvermind": "Evermind LLM",
+    "linkWorkforceRegistry": "Workforce Registry",
+    "linkAgents": "BuilderForce Agents",
+    "linkDiagnostics": "Diagnostics & Tools",
+    "linkSoc2": "SOC 2 & System Audits",
+    "linkBlog": "Blog",
+    "linkLiveDemo": "Live Demo",
+    "linkSignIn": "Sign In",
+    "linkGetStarted": "Get Started"
+  },
+  "whatsNew": {
+    "title": "What's new",
+    "loading": "Loading…",
+    "error": "Couldn't load release notes. Please try again later.",
+    "empty": "No updates yet — check back soon.",
+    "categories": {
+      "new": "New",
+      "improvement": "Improved",
+      "fix": "Fixed"
+    }
+  },
+  "demo": {
+    "personas": {
+      "ai-team": "AI Software Team",
+      "insights": "Engineering ROI & Insights",
+      "pmo": "PMO Command Center",
+      "talent": "Talent & Marketplace",
+      "governance": "Security, Architecture & Governance"
+    },
+    "bannerAria": "Demo session controls",
+    "badge": "Live demo",
+    "bannerText": "You're exploring a live demo — {name}",
+    "bookOrJoin": "Join or book a demo",
+    "createAccount": "Create account",
+    "exit": "Exit demo",
+    "convertTitle": "Make this your workspace",
+    "convertLead": "You just explored the {persona} demo with sample data. Create a free account to do this with your own projects — or talk to our team.",
+    "benefit1": "Bring your own repos, tickets, and team",
+    "benefit2": "AI agents that ship real pull requests",
+    "benefit3": "Free to start — no credit card",
+    "createAccountFree": "Create a free account",
+    "talkToSales": "Talk to sales",
+    "bookLead": "Prefer a guided walkthrough? Book a demo.",
+    "exitTitle": "Before you go",
+    "exitLead": "Want to keep exploring with your own data, or have us walk you through it?",
+    "exitBookLead": "Book a demo with our team",
+    "showcase": {
+      "heading": "Try a live demo — no signup",
+      "lead": "Pick the story that fits you and jump straight into a fully-seeded workspace. It’s the real product, pre-loaded with sample data.",
+      "launch": "Launch demo",
+      "launching": "Launching…",
+      "error": "Could not start the demo. Please try again.",
+      "note": "Demos are shared, reset regularly, and require no account. Changes you make are temporary.",
+      "personas": {
+        "ai-team": {
+          "title": "AI Software Team",
+          "audience": "For engineering teams",
+          "desc": "A live sprint board where AI agents and humans share the work — watch an agent pick up a ticket, plan it, and open a pull request."
+        },
+        "insights": {
+          "title": "Engineering ROI & Insights",
+          "audience": "For VPs & CTOs",
+          "desc": "Delivery health, AI impact, and cost per ticket — the numbers that show what AI-assisted delivery actually returns."
+        },
+        "pmo": {
+          "title": "PMO Command Center",
+          "audience": "For program & delivery leaders",
+          "desc": "One dated hierarchy from company objective down to the agent-executed ticket: portfolio, OKRs, Gantt, and ceremonies."
+        },
+        "talent": {
+          "title": "Talent & Marketplace",
+          "audience": "For agencies & freelancers",
+          "desc": "A mixed roster of your people, hired freelancers, and AI agents on one board — hire either through the same flow."
+        },
+        "governance": {
+          "title": "Security, Architecture & Governance",
+          "audience": "For security & compliance",
+          "desc": "A weekly SOC 2 audit that files remediation tickets, an immutable audit trail, and policy gates on every deploy."
+        }
+      }
+    },
+    "tour": {
+      "ariaLabel": "Product tour",
+      "welcomeTitle": "Welcome to your demo",
+      "finishTitle": "You're all set",
+      "finishBody": "That's the quick tour. Ready to do this with your own projects and team?",
+      "stepOf": "{current} of {total}",
+      "takeTour": "Take the tour",
+      "next": "Next",
+      "back": "Back",
+      "skip": "Skip tour",
+      "finish": "Finish",
+      "close": "Close",
+      "getStarted": "Get started free",
+      "welcome": {
+        "ai-team": "Let's walk through how AI agents work as real teammates on a shared board.",
+        "insights": "Let's walk through what AI-assisted delivery actually costs and returns.",
+        "pmo": "Let's walk through the path from company objective down to the agent-executed ticket.",
+        "talent": "Let's walk through running your people, freelancers, and AI agents on one board.",
+        "governance": "Let's walk through continuous SOC 2 auditing, remediation, and the audit trail."
+      },
+      "nav": {
+        "dashboard": {
+          "title": "Build anything",
+          "body": "Describe what you want in plain language and an AI agent starts building it — no setup."
+        },
+        "projects": {
+          "title": "The shared board",
+          "body": "Humans and AI agents work one board. Drag a ticket to Ready and an agent plans it, writes the code, and opens a pull request."
+        },
+        "workforce": {
+          "title": "Your workforce",
+          "body": "AI agents and people are first-class teammates — assign work, hire, and manage them side by side."
+        },
+        "insights": {
+          "title": "Insights & ROI",
+          "body": "Delivery health, AI impact, and cost per ticket — see exactly what AI-assisted delivery returns."
+        },
+        "quality": {
+          "title": "Quality & reliability",
+          "body": "Errors, DORA metrics, and automated QA so nothing ships broken."
+        },
+        "knowledge": {
+          "title": "Knowledge & governance",
+          "body": "SOPs, processes, and policies with versioning and read-acknowledgement for audit evidence."
+        }
+      }
+    }
+  },
+  "bookDemo": {
+    "badge": "Talk to us",
+    "pageTitle": "Book a demo",
+    "pageLead": "See Builderforce on your own use case with our team — or jump into a self-serve live demo right now.",
+    "formHeading": "Schedule with sales",
+    "formSub": "Tell us a little about you and we’ll reach out to set up a walkthrough.",
+    "selfServeHeading": "Or try it yourself now",
+    "selfServeSub": "No signup, no waiting — explore a fully-seeded demo workspace.",
+    "selfServe1": "Real product, real sample data",
+    "selfServe2": "Five stories for five kinds of buyer",
+    "selfServe3": "Convert to your own account any time",
+    "selfServeCta": "Browse live demos",
+    "nameLabel": "Name",
+    "namePlaceholder": "Your name",
+    "emailLabel": "Work email",
+    "emailPlaceholder": "you@company.com",
+    "companyLabel": "Company",
+    "companyPlaceholder": "Company name",
+    "interestLabel": "I'm interested in",
+    "interestAny": "Not sure yet",
+    "messageLabel": "Anything we should know?",
+    "messagePlaceholder": "Your goals, team size, timeline…",
+    "submit": "Request a demo",
+    "submitting": "Sending…",
+    "error": "Something went wrong. Please try again.",
+    "successTitle": "Thanks — we’ll be in touch",
+    "successBody": "Our team will reach out shortly to schedule your walkthrough.",
+    "personas": {
+      "ai-team": "AI Software Team",
+      "insights": "Engineering ROI & Insights",
+      "pmo": "PMO Command Center",
+      "talent": "Talent & Marketplace",
+      "governance": "Security, Architecture & Governance"
+    }
+  },
+  "ceremonyHistory": {
+    "loading": "Loading…",
+    "errorLoad": "Could not load ceremony history.",
+    "filterAll": "All",
+    "filterStandup": "Standups",
+    "filterPlanning": "Planning",
+    "count": "{count} recorded",
+    "emptyTitle": "No ceremonies have run yet",
+    "emptyHelp": "Once a standup or planning session finishes, it appears here with who attended and what changed.",
+    "loadMore": "Load older",
+    "durationMinutes": "{minutes} min",
+    "attended": "{present} of {expected} attended",
+    "missed": "{count} missed it",
+    "reassigned": "{count} reassigned",
+    "dispatched": "{count} agent runs started",
+    "detailTitle": "{kind} · {when}",
+    "whoWasHere": "Who was here",
+    "whatHappened": "What happened",
+    "noParticipants": "Nobody was seated at this ceremony.",
+    "noJournal": "Nothing was recorded for this ceremony.",
+    "seatHuman": "Person",
+    "seatAgent": "Agent",
+    "seatAdHoc": "joined ad-hoc",
+    "spoke": "spoke {seconds}s",
+    "kind": {
+      "standup": "Standup",
+      "planning": "Planning"
+    },
+    "closeReason": {
+      "facilitator": "Closed by a person",
+      "unattended": "Run by the manager",
+      "no_humans": "Nobody attended",
+      "expired": "Timed out"
+    },
+    "concludedBy": {
+      "manager": "Manager conducted",
+      "system": "Closed automatically"
+    },
+    "attendance": {
+      "unknown": "Unknown",
+      "present": "Present",
+      "absent": "Missed it",
+      "excused": "Optional"
+    },
+    "errorCorrect": "Could not update attendance.",
+    "correctAria": "Attendance for {name}",
+    "sourcePto": "On approved leave",
+    "sourceManual": "Corrected by a manager"
+  },
+  "observability": {
+    "agents": "Agents",
+    "agentsHint": "Click an agent to view its diagnostics. Select more than one to compare.",
+    "selectAll": "Select all",
+    "clear": "Clear",
+    "loadingAgents": "Loading agents…",
+    "agentFallback": "Agent",
+    "agentNumbered": "Agent {id}",
+    "cloudAgentFallback": "Cloud agent",
+    "scopedFromPanel": "{name} (scoped from panel)",
+    "noAgents": "No agents yet. Register a self-hosted agent in <link>Workforce</link> or create a cloud agent — both appear here once they run.",
+    "online": "ONLINE",
+    "offline": "OFFLINE",
+    "viewLabel": "View:",
+    "logView": "Log view",
+    "timelineView": "Timeline view",
+    "conn": {
+      "connecting": "connecting",
+      "connected": "connected",
+      "offline": "offline",
+      "disconnected": "disconnected"
+    },
+    "refreshing": "Refreshing…",
+    "refreshCloud": "Refresh cloud",
+    "autoScroll": "Auto-scroll",
+    "copyTriage": "Copy triage info",
+    "copyReport": "Copy report (+diffs)",
+    "copyTriageTitle": "Copy a full triage report (agents, telemetry, errors, logs) to the clipboard",
+    "copyReportTitle": "Copy a full report — materials/PRD, the code changes (diffs), telemetry, errors, and logs — to the clipboard",
+    "cloudNote": "Cloud agents run server-side via the gateway (no live relay stream); their log lines are derived from execution telemetry. Use “Refresh cloud” for the latest.",
+    "registerThenSelect": "Register or create an agent first, then select it above.",
+    "selectForLogs": "Select one or more agents above to view diagnostics.",
+    "waitingForLogs": "Waiting for log output…",
+    "timeline": "Timeline",
+    "categoryFilterPlaceholder": "Category filter (e.g. llm, thinking)",
+    "refresh": "Refresh",
+    "viewGantt": "Gantt",
+    "viewList": "List",
+    "loadingTimeline": "Loading timeline…",
+    "noTimelineEvents": "No timeline events",
+    "noTimelineHint": "Tool-call audit events and workflow tasks appear here once the agents run.",
+    "registerFirst": "Register or create an agent first.",
+    "goToWorkforce": "Go to Workforce →",
+    "selectForTimeline": "Select one or more agents above to view the execution timeline.",
+    "errLoadAgents": "Failed to load agents",
+    "errLoadDiagnostics": "Failed to load diagnostics"
+  },
+  "embedInstall": {
+    "heading": "Install in your host app",
+    "intro": "A host developer installs the package and renders one component per page, passing your signed SSO/tenant JWT. The token is handed to the iframe over <code>postMessage</code> — never in a URL.",
+    "stepInstall": "1 · Install",
+    "stepMount": "2 · Mount a surface",
+    "mountableViews": "Mountable views ({count})",
+    "noCapabilities": "No capabilities enabled — turn on Product / Agile / Security above to expose views.",
+    "copyInstall": "Copy install",
+    "copySnippet": "Copy snippet",
+    "copiedFlash": "✓ Copied"
+  },
+  "ticketContext": {
+    "thisTicket": "This ticket",
+    "thisEpic": "This epic",
+    "parentEpic": "Parent epic",
+    "signoffs": "Sign-offs",
+    "basisLane": "Stage {index} of {total}",
+    "basisSignoff": "{done} of {total} signed off",
+    "basisChildren": "{done} of {total} child items done",
+    "basisWeight": "{weight}% weight",
+    "partOfEpic": "Part of epic",
+    "epicChildren": "{done} of {total} items done",
+    "waitingOn": "Waiting on",
+    "gapsOnly": "{count, plural, one {# accountability gap} other {# accountability gaps}}",
+    "dispatchReviewers": "Dispatch reviewers",
+    "dispatching": "Dispatching…",
+    "reviewSignoffs": "Review sign-offs",
+    "objective": "Objective",
+    "noObjective": "Not linked to an objective. Link it on the Planning board so its value is measurable.",
+    "objectiveAttained": "attained",
+    "objectiveShare": "This ticket is <b>{share}%</b> of the delivery linked to this objective ({done} of {total} done).",
+    "objectiveInherited": "Inherited from this ticket’s scope — no direct delivery link.",
+    "via": {
+      "task": "Directly linked",
+      "epic": "Via epic",
+      "project": "Project goal",
+      "initiative": "Initiative goal"
+    }
+  },
+  "agentOps": {
+    "loading": "Loading…",
+    "close": "Close",
+    "genericError": "Something went wrong.",
+    "coordination": {
+      "title": "Coordination",
+      "subtitle": "Several agents can work one ticket at the same time and share a single branch. This is who currently holds which files, and the notes they are leaving each other.",
+      "ticketLabel": "Ticket number",
+      "ticketPlaceholder": "e.g. 412",
+      "inspect": "Inspect ticket",
+      "empty": "Enter a ticket number to see which files its agents hold and what they have told each other.",
+      "leasesTitle": "Files held right now",
+      "noLeases": "No agent is holding a file on this ticket.",
+      "notesTitle": "Shared workspace",
+      "noNotes": "No agent has posted a note on this ticket.",
+      "resource": "File",
+      "holder": "Held by",
+      "mode": "Lock",
+      "reason": "Why",
+      "exclusive": "Exclusive",
+      "shared": "Shared",
+      "release": "Force release",
+      "releaseTitle": "Force-release this file?",
+      "releaseConfirm": "{holder} still holds {resource}. Releasing it lets another agent write the file immediately — do this only when you know the holder has stopped."
+    },
+    "memory": {
+      "title": "Memory",
+      "subtitle": "Everything your agents believe, with how far each belief travels, where it came from, and when it stops being true. Shown for the current project scope — exactly what an agent running here would recall.",
+      "tableTitle": "Remembered facts",
+      "empty": "Your agents have not stored any facts in this scope yet.",
+      "key": "Key",
+      "fact": "Fact",
+      "scope": "Scope",
+      "origin": "Came from",
+      "expiry": "Expires",
+      "durable": "Never",
+      "lapsed": "Lapsed",
+      "fromRun": "run #{id}",
+      "scopeTenant": "Whole workspace",
+      "scopeProject": "This project",
+      "scopeTicket": "Ticket #{id}",
+      "forget": "Forget",
+      "forgetTitle": "Forget this fact?",
+      "forgetConfirm": "Agents will stop recalling \"{key}\". If a broader version of the same key exists, that one becomes visible again.",
+      "purge": "Clear lapsed",
+      "purgeTitle": "Clear lapsed facts?",
+      "purgeConfirm": "Deletes facts whose expiry has already passed. Agents stopped recalling them when they lapsed, so nothing changes for a run.",
+      "statTotal": "Facts in scope",
+      "statTotalHint": "What an agent running here can recall.",
+      "statScoped": "Narrowly scoped",
+      "statScopedHint": "Facts that stay inside this project or one ticket.",
+      "statExpiring": "With an expiry",
+      "statExpiringHint": "Time-bound facts that will lapse on their own.",
+      "statLapsed": "Already lapsed",
+      "statLapsedHint": "No longer recalled; waiting to be swept."
+    },
+    "rehearsal": {
+      "title": "Rehearsal",
+      "subtitle": "Run an agent for real against a ticket with every effect suppressed — no commit, no pull request, no memory write, nobody paged — then read what it would have done.",
+      "startTitle": "Run a rehearsal",
+      "kind": "Kind",
+      "kindDryRun": "Dry run",
+      "kindReplay": "Replay",
+      "kindTrial": "Trial",
+      "ticket": "Ticket",
+      "ticketPlaceholder": "e.g. 412",
+      "agent": "Agent",
+      "agentPlaceholder": "Leave blank to use the ticket's assigned agent",
+      "startHint": "A rehearsal spends model tokens, so it is bounded to a short run. A trial rehearses the same agent across the most recently updated tickets in this project.",
+      "start": "Run rehearsal",
+      "running": "Running…",
+      "historyTitle": "Past rehearsals",
+      "empty": "No rehearsals yet. Run one before changing a prompt, a policy pack or a model pin.",
+      "wouldWrite": "Would write",
+      "stepCount": "{count} effects",
+      "outcome": "Outcome",
+      "finished": "Finished",
+      "unfinished": "Ran out of steps",
+      "failed": "Failed",
+      "viewReport": "Report",
+      "reportTitle": "What the agent would have done",
+      "frozenAt": "Read the repository at",
+      "suppressedTitle": "Suppressed effects",
+      "noSteps": "The agent produced no effects at all — it neither wrote code nor stored anything."
+    }
   }
 }

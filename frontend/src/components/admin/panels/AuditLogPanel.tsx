@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AuditLogEntry } from '@/lib/adminApi';
+import { downloadText } from '@/lib/download';
 import { AdminError, AdminLoading, errText, fmtDateTime } from '@/components/admin/adminShared';
 
 export default function AuditLogPanel() {
@@ -66,11 +67,7 @@ export default function AuditLogPanel() {
               setError('');
               try {
                 const csv = await adminApi.auditLogExport({ event: auditEventFilter || undefined });
-                const blob = new Blob([csv], { type: 'text/csv' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url; a.download = 'audit-log.csv'; a.click();
-                URL.revokeObjectURL(url);
+                downloadText(csv, 'audit-log.csv', 'text/csv');
               } catch (e) { setError(errText(e)); }
               finally { setAuditExporting(false); }
             }}

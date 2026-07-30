@@ -27,7 +27,8 @@ export type WorkflowNodeKind =
   | 'transform'  // ETL: map/shape the payload
   | 'filter'     // ETL: drop the payload unless a predicate holds
   | 'branch'     // ETL: conditional fan-out
-  | 'output';    // terminal: write artifact / notify / push to board
+  | 'output'     // terminal: write artifact / notify / push to board
+  | 'gmail';     // integration: send an email via the tenant's connected Gmail
 
 /** Reserved orchestrator roles for non-agent (in-process) node handlers.
  *  Agent nodes use their configured role instead. Kept here so the builder, the
@@ -43,6 +44,7 @@ export const NODE_HANDLER_ROLES: Record<Exclude<WorkflowNodeKind, 'agent'>, stri
   filter:    'node:filter',
   branch:    'node:branch',
   output:    'node:output',
+  gmail:     'node:gmail',
 };
 
 export interface WorkflowDefNode {

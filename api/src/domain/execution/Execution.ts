@@ -17,11 +17,29 @@ export interface ExecutionProps {
   /** JSON result returned by the agent. */
   result:       string | null;
   errorMessage: string | null;
+  /**
+   * Did this finished run leave anything behind — a commit, a PR, a merge, or a lane
+   * move (0385)? `null` = not judged (a legacy row, a cancelled run, or a surface that
+   * does not route through `finalizeCloudRun`), which the autonomy breaker reads as
+   * PRODUCTIVE so an unknown can never halt a board. See `runProducedOutput`.
+   */
+  produced:     boolean | null;
   startedAt:    Date | null;
   completedAt:  Date | null;
   createdAt:    Date;
   updatedAt:    Date;
 }
+
+/**
+ * The statuses from which no further transition is legal. Declared once so the
+ * transition guards, `cancel()` and callers deciding whether a run is already
+ * concluded all agree on what "terminal" means.
+ */
+export const TERMINAL_EXECUTION_STATUSES: readonly ExecutionStatus[] = [
+  ExecutionStatus.COMPLETED,
+  ExecutionStatus.FAILED,
+  ExecutionStatus.CANCELLED,
+];
 
 /**
  * Execution aggregate root.
@@ -57,6 +75,8 @@ export class Execution {
       cloudAgentRef: null, // set at dispatch once the cloud agent is resolved
       result:       null,
       errorMessage: null,
+      // Not judged until the run finishes and finalize stamps it (0385).
+      produced:     null,
       startedAt:    null,
       completedAt:  null,
       createdAt:    now,
@@ -84,6 +104,7 @@ export class Execution {
   get cloudAgentRef(): string | null   { return this.props.cloudAgentRef; }
   get result():       string | null    { return this.props.result; }
   get errorMessage(): string | null    { return this.props.errorMessage; }
+  get produced():     boolean | null   { return this.props.produced; }
   get startedAt():    Date | null      { return this.props.startedAt; }
   get completedAt():  Date | null      { return this.props.completedAt; }
   get createdAt():    Date             { return this.props.createdAt; }
@@ -123,6 +144,29 @@ export class Execution {
     });
   }
 
+  /**
+   * Record that terminal lifecycle orchestration itself produced durable progress
+   * (for example, advancing the ticket to its next lane). This is intentionally
+   * monotonic: a previously recorded artifact can never be erased by a later signal.
+   */
+  markProduced(produced: boolean): Execution {
+    return new Execution({
+      ...this.props,
+      produced: this.props.produced === true || produced,
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
+   * True once the run has concluded. A caller holding a stale view of the run
+   * (a retried Durable Object alarm, an at-least-once agent report, the orphan
+   * sweep) should check this and skip rather than attempt a transition that can
+   * only fail — re-asserting a terminal state would also clobber a cancellation.
+   */
+  get isTerminal(): boolean {
+    return TERMINAL_EXECUTION_STATUSES.includes(this.props.status);
+  }
+
   /** Cancels the execution if it has not yet finished. */
   cancel(): Execution {
     if (
@@ -142,12 +186,7 @@ export class Execution {
   // -----------------------------------------------------------------------
 
   private assertNotTerminal(action: string): void {
-    const terminal: ExecutionStatus[] = [
-      ExecutionStatus.COMPLETED,
-      ExecutionStatus.FAILED,
-      ExecutionStatus.CANCELLED,
-    ];
-    if (terminal.includes(this.props.status)) {
+    if (this.isTerminal) {
       throw new ValidationError(
         `Cannot ${action} an execution in status '${this.props.status}'`,
       );

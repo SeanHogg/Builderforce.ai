@@ -30,35 +30,62 @@ import type { BrainMessage } from './types';
 import type {
   BrainToolSpec,
   ChatCompletionMessage,
+  CompletionMetadata,
   ContentPart,
   StreamChatOptions,
   StreamHandlers,
   StreamChatResult,
 } from './streamChatCompletion';
+import type { ReasoningIntent } from './effort';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
+import { chatErrorAction, type ChatErrorAction } from './chatError';
 import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
+import { selectToolsForTurn } from './selectTools';
+import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
+import { setLastResolvedModel } from './lastResolvedModel';
 import { chatWorkLinkingDirective, isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, isReadOnlyPlatformTool } from './chatWorkLinking';
+import {
+  shouldRecoverStalledTurn,
+  isExhaustedStall,
+  stallRecoveryNudge,
+  stallExhaustedNotice,
+  modelFailoverNotice,
+  MAX_ANNOUNCEMENT_RECOVERIES,
+  MAX_MODEL_FAILOVERS,
+  toolNamesMentionedIn,
+} from '@builderforce/agent-stall';
 import {
   formatEvermindMemoryBlock,
   countReconciledMemories,
   type EvermindRunHooks,
   type EvermindRecallResult,
+  type MemoryFirstAnswer,
 } from './evermindMemory';
 
 /**
  * Build the provenance metadata for a persisted assistant turn from the stream
  * result — the resolved model + which account served it (`x-builderforce-account`,
- * captured as `result.account`). Returns `undefined` when the gateway reported no
- * account (older gateway / header not exposed), so the message simply carries no
- * provenance rather than a half-populated blob. Shared by both the mid-run
- * narration and the final-answer persist so the chip shows on every durable turn.
+ * captured as `result.account`).
+ *
+ * The MODEL alone is enough to record. An older gateway (or a CORS setup that
+ * doesn't expose the account header) reports no account, and requiring one used to
+ * throw away the model with it — leaving a turn with no attribution at all, which
+ * is exactly when a user asking "why is this answer so bad?" needs it most.
+ * Shared by both the mid-run narration and the final-answer persist so the chip
+ * shows on every durable turn.
  */
 function provenanceMetadata(result: StreamChatResult): string | undefined {
   const model = result.resolvedModel;
-  const account = result.account;
-  if (!model || (account !== 'own' && account !== 'shared' && account !== 'shared_byo_unused')) return undefined;
-  return withProvenanceMetadata({ model, account: account as ProvenanceAccount });
+  if (!model) return undefined;
+  const a = result.account;
+  const account: ProvenanceAccount | undefined =
+    a === 'own' || a === 'shared' || a === 'shared_byo_unused' ? a : undefined;
+  return withProvenanceMetadata({ model, ...(account ? { account } : {}) });
 }
+
+// Announced-but-untaken tool call detection lives in `@builderforce/agent-stall` —
+// the on-prem/cloud agent loop hits the identical failure and shares the heuristic,
+// the per-run budget and the re-prompt wording from there.
 
 /**
  * Max agent-loop iterations before we stop chaining tool calls (runaway guard).
@@ -95,6 +122,17 @@ function accrueByoUnresolved(c: RunCell, raw: string | undefined): void {
   const next = new Set(c.byoUnresolved);
   for (const p of raw.split(',').map((s) => s.trim()).filter(Boolean)) next.add(p);
   if (next.size !== before) c.byoUnresolved = [...next];
+}
+
+/** Fold a `x-builderforce-provider-cap` header value (comma-separated providers)
+ *  into the run cell's accumulated set, updating only when it grows so the banner
+ *  appears the moment a BYO provider's usage cap is hit. */
+function accrueProviderCap(c: RunCell, raw: string | undefined): void {
+  if (!raw) return;
+  const before = c.providerCap.length;
+  const next = new Set(c.providerCap);
+  for (const p of raw.split(',').map((s) => s.trim()).filter(Boolean)) next.add(p);
+  if (next.size !== before) c.providerCap = [...next];
 }
 /**
  * Token budget for the working transcript sent to the model each turn. This is
@@ -182,10 +220,36 @@ export interface BrainRunRequest {
   resolvedSystemPrompt: string;
   tools?: BrainToolSpec[];
   model?: string;
+  /**
+   * Pick the next model to try when the current one has burned its whole stall budget
+   * without emitting a single tool call — i.e. re-prompting it is spent and only a
+   * DIFFERENT model can finish the request.
+   *
+   * The loop is deliberately surface-agnostic here: the host holds the cached
+   * `/llm/v1/models` surface and answers with `nextFallbackModel(surface, tried)`, so
+   * the ordering (own account + tool-calling pool first) lives in ONE shared function
+   * rather than in each host. Return undefined — or omit the callback — to keep the
+   * previous behaviour: stop and explain, instead of switching.
+   *
+   * `tried` holds every model already attempted this run, requested and resolved.
+   */
+  pickFallbackModel?: (tried: readonly string[]) => string | undefined;
   runTool?: (name: string, args: unknown) => Promise<unknown>;
   /** Pure predicate: true → pause the loop for an explicit user confirmation. */
   needsConfirm?: (req: { name: string; args: unknown }) => boolean;
   stream: BrainStreamFn;
+  /**
+   * `max_tokens` for this run's completions — the composer's Effort level (see
+   * `effort.ts`). Absent keeps `streamChatCompletion`'s 4096 default.
+   */
+  maxTokens?: number;
+  /**
+   * Vendor-neutral reasoning intent for this run (the composer's Thinking toggle,
+   * at the Effort level's intensity). Absent ⇒ no `reasoning` key on the wire.
+   * Applies to the MODEL-FACING turns only — the internal transcript summarizer
+   * is a mechanical compaction, never a "think harder" job.
+   */
+  reasoning?: ReasoningIntent;
   persistence: BrainRunPersistence;
   onActivity?: (chatId: number) => void;
   /** Seed the rich transcript from prior persisted history (first turn only). */
@@ -227,6 +291,15 @@ export interface BrainRunSnapshot {
   running: boolean;
   streamingText: string;
   error: string;
+  /**
+   * What the user can DO about {@link error}, when the failure was actionable —
+   * an expired session (reconnect), a plan that doesn't cover the request
+   * (upgrade), or billing that needs a card (validate_card). Derived ONCE here
+   * from the thrown error's structured gateway fields via {@link chatErrorAction},
+   * so a mounted view renders the right button without re-parsing error prose.
+   * Null when nothing but dismissing applies.
+   */
+  errorAction: ChatErrorAction | null;
   pendingConfirm: { name: string; args: unknown } | null;
   /** Bumped whenever a new assistant message is persisted. */
   messagesEpoch: number;
@@ -256,6 +329,14 @@ export interface BrainRunSnapshot {
    * when everything resolved (or nothing is connected).
    */
   byoUnresolved: string[];
+  /**
+   * BYO providers whose key hit a usage/capacity cap on any turn of this run
+   * (from `x-builderforce-provider-cap`) — e.g. the tenant's Anthropic key hit its
+   * monthly spend limit, or Meta MUSE quota was exhausted. A mounted view shows a
+   * "manage your API keys" banner so the user knows to top up or switch providers.
+   * Accumulated across turns; reset fresh each run. Empty when no cap was hit.
+   */
+  providerCap: string[];
 }
 
 interface RunCell {
@@ -265,6 +346,8 @@ interface RunCell {
   running: boolean;
   streamingText: string;
   error: string;
+  /** Actionable verdict for {@link error} — see BrainRunSnapshot.errorAction. */
+  errorAction: ChatErrorAction | null;
   pendingConfirm: { name: string; args: unknown } | null;
   confirmResolver: ((ok: boolean) => void) | null;
   appended: BrainMessage[];
@@ -279,6 +362,8 @@ interface RunCell {
   abort: AbortController | null;
   /** Connected-but-unresolved BYO providers accumulated across this run's turns. */
   byoUnresolved: string[];
+  /** BYO providers that hit a capacity/usage cap accumulated across this run's turns. */
+  providerCap: string[];
   /**
    * Backstop bookkeeping for the current run (reset each {@link startRun}): whether a
    * workspace code-change tool succeeded, whether the model itself recorded a ticket
@@ -325,12 +410,14 @@ const EMPTY_SNAPSHOT: BrainRunSnapshot = {
   running: false,
   streamingText: '',
   error: '',
+  errorAction: null,
   pendingConfirm: null,
   messagesEpoch: 0,
   appended: [],
   hasTrace: false,
   trace: [],
   byoUnresolved: [],
+  providerCap: [],
 };
 
 function makeCell(): RunCell {
@@ -340,6 +427,7 @@ function makeCell(): RunCell {
     running: false,
     streamingText: '',
     error: '',
+    errorAction: null,
     pendingConfirm: null,
     confirmResolver: null,
     appended: [],
@@ -347,6 +435,7 @@ function makeCell(): RunCell {
     listeners: new Set(),
     abort: null,
     byoUnresolved: [],
+    providerCap: [],
     codeChanged: false,
     ticketRecorded: false,
     touchedFiles: [],
@@ -393,12 +482,14 @@ function emit(c: RunCell): void {
     running: c.running,
     streamingText: c.streamingText,
     error: c.error,
+    errorAction: c.errorAction,
     pendingConfirm: c.pendingConfirm,
     messagesEpoch: c.messagesEpoch,
     appended: c.appended,
     hasTrace: c.trace.length > 0,
     trace: c.trace,
     byoUnresolved: c.byoUnresolved,
+    providerCap: c.providerCap,
   };
   for (const l of c.listeners) l();
   // Cross-chat subscribers (the dropdown / session-list indicators) see every
@@ -419,11 +510,18 @@ function pushTrace(c: RunCell, ev: BrainTraceEvent): void {
 const STEP_RESULT_CAP = 4_000;
 
 /**
- * Persist a tool / memory step DURABLY so it survives a reload — the in-memory
- * `trace` alone vanishes on remount, which is why tool + memory steps used to
- * disappear from a reopened chat. Stored as a `role:'tool'` message whose metadata
- * carries the step payload (`{ kind:'step', ... }`); the timeline reconstructs the
- * node from it (see timelineModel.buildSettledTimeline).
+ * Persist a step DURABLY so it survives a reload — the in-memory `trace` alone
+ * vanishes on remount, which is why steps used to disappear from a reopened chat.
+ * Stored as a `role:'tool'` message whose metadata carries the step payload
+ * (`{ kind:'step', ... }`); the timeline reconstructs the node from it (see
+ * timelineModel.buildSettledTimeline) and the triage diagnostics reconstruct the
+ * trace event from it (see persistedSteps.traceWithPersistedSteps).
+ *
+ * The DIAGNOSTICS scalars ride along verbatim: the pre-trim `resultBytes` and the
+ * `truncated` flag on a tool step (so the "which tool flooded the window" signal
+ * isn't lost to the 4 KB result cap below), and `usage` / `finishReason` /
+ * `textChars` on an `llm` turn. Without them a reloaded chat's diagnostics could
+ * only report a byte floor and no tokens at all.
  *
  * Deliberately NOT recorded into the live message list (no recordAppended): the live
  * view already shows the step from `trace`, and the seed builders exclude `role:'tool'`
@@ -446,6 +544,13 @@ function persistStep(chatId: number, persistence: BrainRunPersistence, ev: Brain
     result,
     isError: ev.isError ?? false,
     ...(ev.durationMs != null ? { durationMs: ev.durationMs } : {}),
+    // Diagnostics scalars — tiny, and the whole point of keeping the row.
+    ...(ev.resultBytes != null ? { resultBytes: ev.resultBytes } : {}),
+    ...(ev.truncated ? { truncated: true } : {}),
+    ...(ev.usage ? { usage: ev.usage } : {}),
+    ...(ev.finishReason != null ? { finishReason: ev.finishReason } : {}),
+    ...(ev.textChars != null ? { textChars: ev.textChars } : {}),
+    ...(ev.ttftMs != null ? { ttftMs: ev.ttftMs } : {}),
     ts: ev.ts,
   });
   void persistence.sendMessages(chatId, [{ role: 'tool', content: '', metadata }]).catch(() => {
@@ -837,6 +942,7 @@ export function clearRunError(chatId: number | null): void {
   const c = cells.get(chatId);
   if (!c || !c.error) return;
   c.error = '';
+  c.errorAction = null;
   emit(c);
 }
 
@@ -862,8 +968,10 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
   if (c.running) return; // already running elsewhere — never double-fire
   c.running = true;
   c.error = '';
+  c.errorAction = null;
   c.streamingText = '';
   c.byoUnresolved = []; // fresh per run — a reconnected account clears the banner
+  c.providerCap = [];   // fresh per run — a topped-up account clears the banner
   // Fresh backstop bookkeeping per run (see the finally block below).
   c.codeChanged = false;
   c.ticketRecorded = false;
@@ -886,7 +994,13 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
     // A user-initiated Stop aborts the stream mid-flight; that's a clean exit,
     // not an error to surface. (runLoop already returns on an aborted signal, so
     // this guards the rare throw that races the abort.)
-    if (!c.abort?.signal.aborted) c.error = e instanceof Error ? e.message : 'Reply failed';
+    if (!c.abort?.signal.aborted) {
+      c.error = e instanceof Error ? e.message : 'Reply failed';
+      // Keep the gateway's structured entitlement verdict (402 needs-a-card /
+      // needs-a-plan, 401 expired session) attached to the surfaced error, so
+      // the banner can offer the fix instead of only naming the problem.
+      c.errorAction = chatErrorAction(e);
+    }
   } finally {
     const aborted = c.abort?.signal.aborted ?? false;
     c.running = false;
@@ -1050,9 +1164,22 @@ async function autoLinkCreatedItem(
 export { startRun as runBrainLoop };
 
 async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promise<void> {
-  const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind } = req;
+  const { resolvedSystemPrompt, tools: toolSpecs, model, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
-  const tools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined;
+  const allTools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined;
+  // Tools this run has actually called — pinned into every later turn's selection
+  // so a multi-step task never loses a tool it is mid-way through using.
+  const usedTools = new Set<string>();
+  // Caller provenance for the gateway's audit emit — this is what makes the
+  // DEFAULT agent's turn show WHICH MODEL served it in the activity log (the
+  // server no-ops without a chat id). Built once and shared by every
+  // model-facing turn of this run. Deliberately NOT passed to the transcript
+  // summarizer (`summarizeMiddle`): that is mechanical compaction, not a reply,
+  // and auditing it would double-count the turn.
+  const metadata: CompletionMetadata = {
+    chatId,
+    ...(req.projectId != null ? { projectId: req.projectId } : {}),
+  };
 
   // Evermind recall — before the FIRST turn, ask the project's self-learning model
   // which learned memories are relevant to this request. When it returns some, we
@@ -1081,6 +1208,54 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
             result: { count: recalled.items.length, version: recalled.version, mode: recalled.mode, items: recalled.items },
           });
         }
+      }
+    }
+  }
+
+  // Memory-first short-circuit: if the project's OWN memory can answer this request —
+  // an exact-repeat Q&A cache hit, or its Evermind SSM (opt-in) — adopt that answer and
+  // SKIP the paid model entirely. This is the token-reduction core: for a repeated or
+  // learned question we spend zero model tokens. Opt-in + best-effort — a host that
+  // doesn't inject `answer`, a non-project chat, or a miss falls straight through to the
+  // normal loop below. Only attempted on the run's FIRST turn (no tool results yet).
+  //
+  // `toolsAvailable` is passed through HONESTLY (it is what this run can actually
+  // call) because it decides how far memory is allowed to pre-empt the model: with
+  // tools in play the server may only replay a cached answer, never generate a fresh
+  // one from the Evermind SSM — the SSM cannot call a tool, so letting it answer
+  // stranded any request whose answer lives behind one.
+  if (evermind?.answer && !c.abort?.signal.aborted) {
+    const query = latestUserText(convo);
+    if (query) {
+      let memAnswer: MemoryFirstAnswer | null = null;
+      try {
+        memAnswer = await evermind.answer(query, { toolsAvailable: !!allTools && allTools.length > 0 });
+      } catch { memAnswer = null; }
+      const finalText = memAnswer?.text.trim();
+      if (finalText) {
+        convo.push({ role: 'assistant', content: finalText });
+        const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: finalText }]);
+        c.streamingText = '';
+        recordAppended(c, assistantMsg);
+        // Visible on the timeline: memory answered, the LLM was skipped.
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: 'recall',
+          label: memAnswer!.source === 'evermind' ? 'evermind.answer' : 'memory.answer',
+          args: { query },
+          result: {
+            source: memAnswer!.source,
+            skippedLlm: true,
+            ...(memAnswer!.evermindVersion != null ? { version: memAnswer!.evermindVersion } : {}),
+            // WHICH head served it — a project can target several, so without this a
+            // memory hit from a sibling IDE build's Evermind is indistinguishable from
+            // the chat project's own.
+            ...(memAnswer!.evermindProjectId != null ? { evermindProjectId: memAnswer!.evermindProjectId } : {}),
+          },
+        });
+        emit(c);
+        onActivity?.(chatId);
+        return;
       }
     }
   }
@@ -1115,6 +1290,79 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // a write/edit/delete (or any side-effecting call) can change what a re-read would
   // see, so a read after a mutation is never suppressed. Only successful reads cache.
   const readDedupe = new Set<string>();
+  // Bounded counter for the announced-but-never-made tool call recovery below, so a
+  // model that keeps narrating instead of acting cannot spin the loop. Not one-shot:
+  // a model that stalls once frequently stalls again on the very next turn, and
+  // spending the single retry on the first stall left the user holding the SECOND
+  // promise. MAX_TOOL_ITERATIONS still caps the run either way.
+  let announcementRecoveries = 0;
+  // The model this run is CURRENTLY talking to, and every model it has already tried.
+  // Both change when a model burns its whole stall budget without emitting a single
+  // tool call: re-prompting such a model is spent, so the run fails over to another
+  // one rather than handing the user a promise (see the failover branch below).
+  let activeModel = model;
+  const triedModels: string[] = [];
+  let modelFailovers = 0;
+  // The user's ACTUAL request for this run, resolved once. Every turn's tool
+  // selection scores against this and nothing else — see the `query` note below.
+  const requestQuery =
+    (req.userTurn !== undefined ? latestUserText([{ role: 'user', content: req.userTurn }]) : '')
+    || latestUserText(convo)
+    || '';
+  // Tool names the resolved system prompt tells the model to call. Always advertised.
+  const promptNamedTools = toolNamesMentionedIn(systemPrompt);
+
+  // Evermind learning + reconciliation provenance for a completed turn. Extracted so
+  // BOTH the normal final-answer branch AND the tool-budget-exhausted forced-final
+  // synthesis branch emit identical memory provenance — a forced-final answer still
+  // persists server-side (its `assistantMsg` carries the truthful `evermindLearn`), so
+  // it must show the same `learn`/`reconcile` steps + answer-cache write as any other.
+  // The server reports the TRUTHFUL learn outcome on the persisted assistant message
+  // (`evermindLearn`) — the same `learnFromBrainTurn` gate it actually applies — so the
+  // `learn` step shows exactly when the server contributed. The `reconcile` step stays
+  // client-side: which of the RECALLED memories this answer restated (write-through).
+  const emitEvermindLearnReconcile = (assistantMsg: BrainMessage | undefined, finalText: string): void => {
+    const learn = assistantMsg?.evermindLearn;
+    if (learn?.learned) {
+      pushDurableStep(c, chatId, persistence, {
+        ts: nowIso(),
+        category: 'learn',
+        label: 'evermind.learn',
+        // `targets` carries the per-Evermind breakdown (a project can fan out to many)
+        // so the timeline can name each by id; the renderer falls back to `version` alone.
+        result: { version: learn.version, queued: true, ...(learn.targets ? { targets: learn.targets } : {}) },
+      });
+      const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
+      if (reconciled > 0) {
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: 'reconcile',
+          label: 'evermind.reconcile',
+          result: { count: reconciled, version: learn.version },
+        });
+      }
+    } else if (learn && learn.reason && learn.reason !== 'too-short') {
+      // The turn did NOT feed the Evermind, for a project-level reason the user can act
+      // on (chat not attached to a project / not seeded / frozen). Surface it as an
+      // EXPLAINED muted step so "Connected, yet nothing learned" is never a silent
+      // mystery again. `too-short` is mundane (a one-line turn) and intentionally not surfaced.
+      pushDurableStep(c, chatId, persistence, {
+        ts: nowIso(),
+        category: 'learn',
+        label: 'evermind.learn',
+        result: { version: learn.version, skipped: true, reason: learn.reason, ...(learn.targets ? { targets: learn.targets } : {}) },
+      });
+    }
+
+    // Remember this (question → answer) so an exact repeat short-circuits next time
+    // (see the memory-first block at loop start) — the write half of the cache. Only
+    // caches genuine model answers; the server guards length + skips trivial ones.
+    // Best-effort, fire-and-forget — never delays or fails the reply.
+    if (evermind?.cacheAnswer) {
+      const q = latestUserText(convo);
+      if (q) { void Promise.resolve(evermind.cacheAnswer(q, finalText)).catch(() => { /* best-effort */ }); }
+    }
+  };
 
   for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
     // User hit Stop between turns (or after a tool call) — unwind cleanly.
@@ -1125,7 +1373,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     // when the transcript exceeds the token budget (instead of silently dropping it
     // and making the model thrash into "LOOP EXHAUSTED"). Falls back to the
     // drop-oldest window when no summarizer is reachable.
-    const working = await buildWorkingTranscript(c, systemPrompt, stream, model);
+    const working = await buildWorkingTranscript(c, systemPrompt, stream, activeModel);
     if (c.abort?.signal.aborted) return;
     const llmStart = nowMs();
     // Time-to-first-token: stamped on the FIRST streamed delta of this turn so
@@ -1133,9 +1381,52 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     // whole turn. Stays undefined for a pure tool-call / empty turn.
     let firstTokenAt: number | undefined;
     let result;
+    // Advertise a RELEVANT subset rather than the whole catalog. ~300 tool
+    // definitions push most providers past the point where they reliably emit any
+    // tool call at all (observed: 308 tools → three consecutive turns with zero
+    // calls), besides dominating the prompt budget. No-ops for small catalogs.
+    const selection = selectToolsForTurn(allTools, {
+      // The REQUEST, captured once before the loop — never "the latest user message".
+      // The loop pushes its own `role:'user'` turns (the stall-recovery nudge, the
+      // tool-budget close-out), so reading the newest one re-rolled the advertised
+      // set from text WE wrote: after one recovery the query became "…made zero tool
+      // calls… answer using its result…", which scores `key_results`/`dashboards`/
+      // `incidents` and drops the ticket tools the user actually asked for. The tool
+      // the model was told to call then genuinely did not exist, and it narrated.
+      // Holding the request steady also keeps the advertised set STABLE across turns
+      // — a tool must not vanish between one turn and the next.
+      query: requestQuery,
+      pinned: usedTools,
+      // Tools the SYSTEM PROMPT instructs the model to call (e.g. the chat↔ticket
+      // directive names `builtin_chats_list_tickets`) are never optional: telling a
+      // model to call a tool we then decline to advertise is the exact contradiction
+      // that produces a narrated call. Derived from the prompt text, so a directive
+      // edit can never silently desync from this list.
+      required: promptNamedTools,
+    });
+    // The ROUTER rides along whenever selection actually trimmed something, so the
+    // tools that missed the cut stay REACHABLE instead of silently ceasing to exist.
+    // Three fixed schemas buy back the whole catalog; see toolRouter.ts.
+    const advertised = selection.trimmed
+      ? [...selection.tools, ...routerToolSpecs(allTools?.length ?? 0)]
+      : selection.tools;
+    const tools = advertised.length > 0 ? advertised : undefined;
+    // What the model could actually call THIS turn. Kept as a set so the turn can
+    // answer, at the only point that knows both halves, "did it narrate a tool it was
+    // never shown?" — see `narratedUnadvertised` below.
+    const advertisedNames = new Set(advertised.map((t) => t.function.name));
+    if (selection.trimmed) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: 'message',
+        label: 'tools.selected',
+        args: { step: iter },
+        result: `${selection.tools.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`,
+      });
+    }
     try {
       result = await stream(
-        { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model, signal: c.abort?.signal },
+        { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model: activeModel, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         { onTextDelta: (d) => { if (firstTokenAt === undefined) firstTokenAt = nowMs(); c.streamingText += d; emit(c); } },
       );
     } catch (e) {
@@ -1147,7 +1438,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         category: 'error',
         label: 'llm.complete',
         durationMs: nowMs() - llmStart,
-        args: { model: model ?? 'default', step: iter },
+        args: { model: activeModel ?? 'default', step: iter },
         result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
         isError: true,
       });
@@ -1156,12 +1447,17 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     // Surface a connected-but-unresolved BYO account for a live banner (and reset
     // clears it when the account is reconnected). Emit happens with the trace below.
     accrueByoUnresolved(c, result.byoUnresolved);
+    // Surface any BYO provider usage cap so the user knows to manage their keys.
+    accrueProviderCap(c, result.providerCap);
     // Silent-downgrade detection: the gateway can fail over mid-run to a
     // different (often smaller-window) model than we requested. That's a prime
     // context-exhaustion symptom, so surface it as its own warning step instead
     // of leaving it buried in the model field — the diagnostics block counts it.
-    const resolved = result.resolvedModel ?? model ?? 'default';
-    const requested = model ?? 'default';
+    const resolved = result.resolvedModel ?? activeModel ?? 'default';
+    const requested = activeModel ?? 'default';
+    // Record what ACTUALLY served this turn so `builtin_session_current_model` can
+    // report the exact model (an MCP call is a separate request and can't see it).
+    setLastResolvedModel(result.resolvedModel);
     if (requested !== 'default' && resolved !== 'default' && resolved !== requested) {
       pushTrace(c, {
         ts: nowIso(),
@@ -1171,7 +1467,23 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) — a smaller context window can truncate long transcripts.`,
       });
     }
-    pushTrace(c, {
+    // Tool names this turn WROTE OUT as prose while emitting no structured call, that
+    // were never advertised to it. Computed here because this is the only place that
+    // holds BOTH the turn's text and the exact set the turn was offered — after the
+    // fact a reader can only see the catalog total, which is why "the model is broken,
+    // pick another one" was the standing (and sometimes wrong) verdict for a run whose
+    // real fault was that the tool it was told to call had been selected away. Cheap:
+    // a handful of strings, and empty on every healthy turn.
+    const narratedUnadvertised =
+      result.toolCalls.length === 0
+        ? toolNamesMentionedIn(result.text).filter((n) => !advertisedNames.has(n))
+        : [];
+    // DURABLE, not just live: an `llm` turn carries the token usage, finish reason
+    // and resolved model the A-vs-B triage runs on. Kept in memory only, a chat
+    // copied after a reload reported `Turns: 0` / "Tokens: not reported" and could
+    // never separate context exhaustion from model degradation. The payload is a
+    // handful of scalars — no transcript text — so the row stays small.
+    pushDurableStep(c, chatId, persistence, {
       ts: nowIso(),
       category: 'llm',
       label: 'llm.complete',
@@ -1191,6 +1503,13 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         // connected Claude account (expired?)" apart from "nothing connected".
         account: result.account,
         byoUnresolved: result.byoUnresolved,
+        // How many tools the turn was actually OFFERED, out of the whole catalog.
+        // A zero here is the difference between "the model refused to act" and "it had
+        // nothing to act with" — previously unanswerable from a copied report, which
+        // only ever carried the registry-wide total.
+        advertisedTools: advertised.length,
+        catalogTools: allTools?.length ?? 0,
+        ...(narratedUnadvertised.length ? { narratedUnadvertised } : {}),
       },
       // Structured diagnostics fields — the A-vs-B triage reads these directly.
       usage: result.usage,
@@ -1228,7 +1547,35 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       }
       c.streamingText = '';
       emit(c);
-      for (const tc of result.toolCalls) {
+      for (const rawCall of result.toolCalls) {
+        // Router calls resolve against the in-memory catalog FIRST. `find`/`describe`
+        // are answered locally (no network, no host dispatch); `invoke` unwraps to the
+        // real tool and then falls through to the normal path below — so a routed call
+        // still passes the confirm gate, the read-dedupe, the audit step and the
+        // auto-link, exactly like a directly-advertised one.
+        let tc = rawCall;
+        if (isRouterTool(tc.name)) {
+          const routed = handleRouterCall(allTools ?? [], tc.name, parseArgs(tc.args));
+          if ('result' in routed) {
+            convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(routed.result) });
+            pushDurableStep(c, chatId, persistence, {
+              ts: nowIso(),
+              category: 'tool',
+              label: tc.name,
+              args: parseArgs(tc.args),
+              result: routed.result,
+            });
+            continue;
+          }
+          tc = { ...tc, name: routed.dispatch.name, args: JSON.stringify(routed.dispatch.args ?? {}) };
+          pushTrace(c, {
+            ts: nowIso(),
+            category: 'message',
+            label: 'tools.routed',
+            args: { step: iter, via: rawCall.name },
+            result: `Called ${tc.name} through the tool router (it was not advertised directly this turn).`,
+          });
+        }
         const args = parseArgs(tc.args);
         // Human-in-the-loop gate: pause for an explicit confirm when the host's
         // predicate says so. The resolver lives on the cell, so whichever Brain
@@ -1310,7 +1657,51 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         });
         // Cache only a SUCCESSFUL read so a failed read can be retried.
         if (isReadTool && !isFailedToolResult(out)) readDedupe.add(dedupeKey);
+        // Pin this tool into every later turn's selection — a multi-step task must
+        // never lose a tool it is mid-way through using.
+        usedTools.add(tc.name);
       }
+      continue;
+    }
+
+    // The model ANNOUNCED an action and then ended the turn without taking it
+    // ("Calling the tool now." → finish: stop, 0 tool calls). Accepting that as a
+    // final answer strands the user with a promise instead of a result. Nudge and
+    // let the loop run another turn — bounded to MAX_ANNOUNCEMENT_RECOVERIES per run
+    // so a model that keeps narrating can't spin.
+    if (
+      runTool
+      && shouldRecoverStalledTurn({
+        text: result.text,
+        toolCallCount: result.toolCalls.length,
+        availableToolCount: toolSpecs?.length ?? 0,
+        recoveriesUsed: announcementRecoveries,
+      })
+    ) {
+      announcementRecoveries += 1;
+      const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
+      // Keep what the user already watched stream in, as its own durable block —
+      // same treatment a narration-before-tool-calls turn gets.
+      const narration = result.text.trim();
+      if (narration) {
+        const meta = provenanceMetadata(result);
+        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: narration, ...(meta ? { metadata: meta } : {}) }]);
+        recordAppended(c, narrationMsg);
+      }
+      convo.push({ role: 'assistant', content: result.text });
+      convo.push({ role: 'user', content: stallRecoveryNudge(lastChance) });
+      // Durable: "the loop caught this and re-prompted" is a fact a triage report must
+      // still carry after a reload. Live-only, a reopened chat showed nine narrating
+      // turns and no sign the loop had ever fought back.
+      pushDurableStep(c, chatId, persistence, {
+        ts: nowIso(),
+        category: 'message',
+        label: 'loop.recover_announced_tool_call',
+        args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES, advertisedTools: advertised.length },
+        result: `Model announced a tool call without making one — re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`,
+      });
+      c.streamingText = '';
+      emit(c);
       continue;
     }
 
@@ -1321,46 +1712,59 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: finalText, ...(finalMeta ? { metadata: finalMeta } : {}) }]);
     c.streamingText = '';
     recordAppended(c, assistantMsg);
-    emit(c);
 
-    // Evermind learning + reconciliation steps. The server reports the TRUTHFUL learn
-    // outcome for this turn on the persisted assistant message (`evermindLearn`) — the
-    // same `learnFromBrainTurn` gate it actually applies — so the `learn` step shows
-    // exactly when the server contributed. This replaces the old client-side heuristic
-    // (which both false-positived, and false-negatived for a connected-but-EMPTY Evermind
-    // where recall seeded nothing yet the first contribution still lands). The
-    // `reconcile` step stays client-side: which of the RECALLED memories this answer
-    // restated (write-through — the turn updates those learnings).
-    const learn = assistantMsg?.evermindLearn;
-    if (learn?.learned) {
-      pushDurableStep(c, chatId, persistence, {
-        ts: nowIso(),
-        category: 'learn',
-        label: 'evermind.learn',
-        result: { version: learn.version, queued: true },
-      });
-      const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
-      if (reconciled > 0) {
+    // This model spent its whole recovery budget still DESCRIBING calls instead of
+    // making them. Re-prompting it again is spent — the only remedy that works is a
+    // different model, so the run switches to one itself rather than handing the user
+    // a promise and telling them to go pick one (the "it doesn't execute, it just
+    // dies" report). Bounded by MAX_MODEL_FAILOVERS: a run that has burned two models
+    // stops and says so rather than walking the catalog on the tenant's money.
+    if (
+      runTool
+      && isExhaustedStall({
+        text: result.text,
+        toolCallCount: result.toolCalls.length,
+        availableToolCount: toolSpecs?.length ?? 0,
+        recoveriesUsed: announcementRecoveries,
+      })
+    ) {
+      // Record BOTH what we asked for and what actually answered: a gateway
+      // auto-select run pinned nothing, so `resolved` is the only id that identifies
+      // the model to skip.
+      for (const m of [activeModel, resolved]) if (m && m !== 'default' && !triedModels.includes(m)) triedModels.push(m);
+      const next = modelFailovers < MAX_MODEL_FAILOVERS ? pickFallbackModel?.(triedModels) : undefined;
+      if (next) {
+        modelFailovers += 1;
         pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
-          category: 'reconcile',
-          label: 'evermind.reconcile',
-          result: { count: reconciled, version: learn.version },
+          category: 'message',
+          label: 'loop.model_failover',
+          args: { step: iter, from: resolved, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
+          result: modelFailoverNotice(resolved, next),
         });
+        activeModel = next;
+        // The new model starts with a full stall budget — the old one's failures say
+        // nothing about this one, and carrying the count over would give it no chance.
+        announcementRecoveries = 0;
+        convo.push({ role: 'user', content: stallRecoveryNudge(false) });
+        c.streamingText = '';
+        emit(c);
+        continue;
       }
-    } else if (learn && learn.reason && learn.reason !== 'too-short') {
-      // The turn did NOT feed the Evermind, for a project-level reason the user can act
-      // on (chat not attached to a project / not seeded / frozen). Surface it as an
-      // EXPLAINED muted step so "Connected, yet nothing learned" is never a silent
-      // mystery again — the same defect that sent the last debugging session in circles.
-      // `too-short` is mundane (a one-line turn) and intentionally not surfaced.
+      const notice = stallExhaustedNotice(resolved, triedModels);
       pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
-        category: 'learn',
-        label: 'evermind.learn',
-        result: { version: learn.version, skipped: true, reason: learn.reason },
+        category: 'error',
+        label: 'loop.stall_unrecovered',
+        args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: triedModels, advertisedTools: advertised.length },
+        result: notice,
+        isError: true,
       });
+      c.error = notice;
     }
+    emit(c);
+
+    emitEvermindLearnReconcile(assistantMsg, finalText);
 
     onActivity?.(chatId);
     return;
@@ -1390,17 +1794,18 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       let closeFirstTokenAt: number | undefined;
       const closing = await stream(
         // No `tools` → the model can't call another tool and must produce text.
-        { messages: working, model, signal: c.abort?.signal },
+        { messages: working, model: activeModel, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         { onTextDelta: (d) => { if (closeFirstTokenAt === undefined) closeFirstTokenAt = nowMs(); c.streamingText += d; emit(c); } },
       );
       accrueByoUnresolved(c, closing.byoUnresolved);
+      accrueProviderCap(c, closing.providerCap);
       pushTrace(c, {
         ts: nowIso(),
         category: 'llm',
         label: 'llm.complete',
         durationMs: nowMs() - closeStart,
         ttftMs: closeFirstTokenAt !== undefined ? closeFirstTokenAt - closeStart : undefined,
-        args: { model: closing.resolvedModel ?? model ?? 'default', requestedModel: model ?? 'default', step: MAX_TOOL_ITERATIONS, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
+        args: { model: closing.resolvedModel ?? activeModel ?? 'default', requestedModel: activeModel ?? 'default', step: MAX_TOOL_ITERATIONS, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
         usage: closing.usage,
         finishReason: closing.finishReason,
         textChars: closing.text.length,
@@ -1414,6 +1819,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         c.streamingText = '';
         recordAppended(c, assistantMsg);
         emit(c);
+        // A forced-final answer still contributed server-side — emit the same memory
+        // provenance (learn/reconcile steps + answer cache) as the normal branch.
+        emitEvermindLearnReconcile(assistantMsg, closingText);
         onActivity?.(chatId);
         return;
       }
