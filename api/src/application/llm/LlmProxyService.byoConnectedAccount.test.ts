@@ -205,7 +205,7 @@ describe('MULTIPLE connected accounts fail over to each other', () => {
 
     expect(result.response.status).toBe(200);
     expect(result.resolvedVendor).toBe('xai-oauth');
-    expect(result.resolvedModel).toBe('xai-oauth/grok-4.3');
+    expect(result.resolvedModel).toBe('xai-oauth/grok-4.5');
     // The pin still LED — failover, not reordering.
     expect(seen[0]).toBe(ANTHROPIC_ENDPOINT);
     expect(seen).toContain(XAI_OAUTH_ENDPOINT);

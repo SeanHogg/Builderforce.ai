@@ -8883,6 +8883,7 @@
       "failedTitle": "Échec de la connexion à {label}",
       "state": {
         "ready": "prête",
+        "needs_attention": "nécessite une attention",
         "not_connected": "non connectée",
         "revoked": "révoquée",
         "expired": "expirée",

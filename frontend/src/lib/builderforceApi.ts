@@ -3143,7 +3143,7 @@ export interface ProviderDiagnostic {
   provider: LlmProvider;
   configured: boolean;
   usable: boolean;
-  status: 'ready' | 'not_connected' | 'revoked' | 'expired' | 'undecryptable' | 'unavailable';
+  status: 'ready' | 'needs_attention' | 'not_connected' | 'revoked' | 'expired' | 'undecryptable' | 'unavailable';
   usage: { periodDays: number; requests: number; tokens: number; lastUsedAt: string | null };
   /** Present when this account was rejected on a recent call — see {@link ProviderAuthAlert}. */
   authAlert?: ProviderAuthAlert;

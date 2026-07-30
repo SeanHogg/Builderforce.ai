@@ -272,7 +272,7 @@ const BYO_FRONTIER_FLAGSHIPS: Readonly<Record<string, { agentic: string; chat: s
   anthropic: { agentic: 'claude-opus-5', chat: 'claude-sonnet-5' },
   openai:    { agentic: 'direct/openai/gpt-4.1', chat: 'direct/openai/gpt-4.1' },
   'openai-codex': { agentic: 'openai-codex/gpt-5.6-sol', chat: 'openai-codex/gpt-5.6-sol' },
-  'xai-oauth': { agentic: 'xai-oauth/grok-4.3', chat: 'xai-oauth/grok-4.3' },
+  'xai-oauth': { agentic: 'xai-oauth/grok-4.5', chat: 'xai-oauth/grok-4.5' },
   googleai:  { agentic: 'googleai/gemini-2.5-pro', chat: 'googleai/gemini-2.5-pro' },
   meta:      { agentic: 'direct/meta/muse-spark-1.1', chat: 'direct/meta/muse-spark-1.1' },
   moonshot:  { agentic: 'direct/moonshot/kimi-k2-0711-preview', chat: 'direct/moonshot/kimi-k2-0711-preview' },

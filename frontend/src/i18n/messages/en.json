@@ -8904,6 +8904,7 @@
       "failedTitle": "{label} connection failed",
       "state": {
         "ready": "ready",
+        "needs_attention": "needs attention",
         "not_connected": "not connected",
         "revoked": "revoked",
         "expired": "expired",

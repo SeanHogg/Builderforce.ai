@@ -8883,6 +8883,7 @@
       "failedTitle": "{label} 连接失败",
       "state": {
         "ready": "就绪",
+        "needs_attention": "需要处理",
         "not_connected": "未连接",
         "revoked": "已撤销",
         "expired": "已过期",
