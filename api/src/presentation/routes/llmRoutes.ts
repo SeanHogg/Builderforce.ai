@@ -1231,7 +1231,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const row = (usage.rows?.[0] ?? {}) as Record<string, unknown>;
     return c.json({
       provider, configured, usable,
-      status: !configured ? 'not_connected' : usable ? 'ready' : (creds.unresolvedReasons[provider] ?? 'unavailable'),
+      // A credential that decrypts but is refused upstream is not ready. Configuration
+      // and health are separate signals; health wins in the operator-facing verdict.
+      status: !configured ? 'not_connected'
+        : authAlert ? 'needs_attention'
+        : usable ? 'ready'
+        : (creds.unresolvedReasons[provider] ?? 'unavailable'),
       // Only meaningful while the credential is still configured — a removed one has
       // nothing to reconnect, and the alert is cleared on removal anyway.
       ...(configured && authAlert ? { authAlert } : {}),
@@ -1257,7 +1262,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       ok: false,
       status: probe.status,
       error: probe.error
-        ? `${provider} connection test failed: ${probe.error}`
+        ? probe.alert?.reason === 'not_entitled'
+          ? `${provider} connection test failed: this account cannot use ${probe.model ?? 'the selected model'} (HTTP ${probe.alert.status}). Check the account's SuperGrok/API access and usage allowance, or use an xAI API key.`
+          : `${provider} connection test failed: ${probe.error}`
         : `${provider} connection test could not run: ${probe.status.replaceAll('_', ' ')}.`,
       code: 'provider_test_failed',
       testedAt: probe.checkedAt,
