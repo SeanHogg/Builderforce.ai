@@ -35,10 +35,43 @@ function lineAt(source: string, offset: number): number {
   return line;
 }
 
+/** Blank comments and string/template literals while preserving offsets/newlines.
+ * Policy rules inspect executable source, never examples in docs, tests, or comments. */
+function maskNonCode(source: string): string {
+  const chars = [...source];
+  type State = 'code' | 'single' | 'double' | 'template' | 'line-comment' | 'block-comment';
+  let state: State = 'code';
+  for (let i = 0; i < chars.length; i += 1) {
+    const c = chars[i]!;
+    const next = chars[i + 1];
+    if (state === 'code') {
+      if (c === '/' && next === '/') { chars[i] = chars[i + 1] = ' '; state = 'line-comment'; i += 1; }
+      else if (c === '/' && next === '*') { chars[i] = chars[i + 1] = ' '; state = 'block-comment'; i += 1; }
+      else if (c === "'") { chars[i] = ' '; state = 'single'; }
+      else if (c === '"') { chars[i] = ' '; state = 'double'; }
+      else if (c === '`') { chars[i] = ' '; state = 'template'; }
+      continue;
+    }
+    if (c === '\n' && state === 'line-comment') { state = 'code'; continue; }
+    if (c === '\n') continue;
+    const escaped = i > 0 && source[i - 1] === '\\';
+    if (state === 'block-comment' && c === '*' && next === '/') {
+      chars[i] = chars[i + 1] = ' '; state = 'code'; i += 1; continue;
+    }
+    chars[i] = ' ';
+    if (!escaped && (
+      (state === 'single' && c === "'")
+      || (state === 'double' && c === '"')
+      || (state === 'template' && c === '`')
+    )) state = 'code';
+  }
+  return chars.join('');
+}
+
 export function inspectAgentSource(path: string, source: string): SourceQualityFinding[] {
   if (!TS_SOURCE.test(path)) return [];
   const findings: SourceQualityFinding[] = [];
-  for (const match of source.matchAll(CONDITIONAL_JSX_CALLBACK)) {
+  for (const match of maskNonCode(source).matchAll(CONDITIONAL_JSX_CALLBACK)) {
     const prop = match[1]!;
     const parameter = match[2]!;
     findings.push({
@@ -52,4 +85,3 @@ export function inspectAgentSource(path: string, source: string): SourceQualityF
   }
   return findings;
 }
-
