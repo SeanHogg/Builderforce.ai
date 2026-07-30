@@ -58,10 +58,10 @@ import {
 // manager's public surface and every existing caller imports them from it.
 export {
   getManagerConfigRow, getTenantManagerDefaults, upsertTenantManagerDefaults,
-  getEffectiveManagerPolicy, upsertManagerConfig,
+  getEffectiveManagerPolicy, getProjectManagerState, upsertManagerConfig,
   type ManagerConfigRowWithMeta, type TenantManagerDefaultsPatch,
 } from './managerPolicyStore';
-import { getEffectiveManagerPolicy, getManagerConfigRow } from './managerPolicyStore';
+import { getEffectiveManagerPolicy, getManagerConfigRow, getProjectManagerState } from './managerPolicyStore';
 import { resolveManagerIdentity } from './managerIdentity';
 import { resolveManagerTypeById } from './managerTypes';
 import { listActiveManagerDirectives } from './managerDirectives';
@@ -985,7 +985,13 @@ export async function runManagerForProject(
     truncated: [],
   };
 
-  const policy = await getEffectiveManagerPolicy(db, tenantId, projectId, env);
+  const { policy, managed: projectIsManaged } = await getProjectManagerState(db, tenantId, projectId, env);
+  // THE OPT-IN, checked on the manual path too. The sweep filters unconfigured projects
+  // out in SQL, but "Run manager now" reaches this function directly — and the two must
+  // give the same answer, or a button would manage a project the schedule refuses to.
+  // See `isProjectManaged`: a project with no config row of its own folds to the
+  // hardcoded `enabled: true` default, which is a statement about defaults, not consent.
+  if (!projectIsManaged) return { ...summary, skipped: true, reason: 'unconfigured' };
   if (!policy.enabled) return { ...summary, skipped: true, reason: 'disabled' };
 
   // 0. REAP — close orphaned "backlog management pass" cards from passes whose Worker

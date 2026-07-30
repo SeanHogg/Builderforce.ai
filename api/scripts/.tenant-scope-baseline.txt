@@ -55,7 +55,7 @@ application/maintenance/parkAgeTimeout.ts:1
 application/maintenance/retentionPurge.ts:4
 application/manager/coordinateTicket.ts:2
 application/manager/ManagerService.ts:1
-application/manager/runManagerSweep.ts:2
+application/manager/runManagerSweep.ts:1
 application/manager/stallWatch.ts:2
 application/manager/triageStage.ts:2
 application/meetings/meetingIntelligence.ts:3

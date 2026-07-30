@@ -364,6 +364,22 @@
       "back": "返回",
       "next": "下一步",
       "working": "处理中…"
+    },
+    "page": {
+      "title": "集成 / API 密钥",
+      "subtitle": "在一处连接模型提供商与业务工具、管理开发者密钥并控制提供商优先级。",
+      "searchPlaceholder": "搜索集成与 API 密钥…",
+      "categoryLabel": "类别",
+      "priorityChip": "优先级 · {leader}",
+      "priorityNone": "无",
+      "embedHeading": "嵌入式集成",
+      "category": {
+        "all": "全部",
+        "models": "模型提供商",
+        "apps": "应用集成",
+        "developer": "开发者 API 密钥",
+        "embed": "嵌入"
+      }
     }
   },
   "nav": {
@@ -6734,6 +6750,11 @@
       "noExpiry": "永不过期",
       "markDone": "完成"
     },
+    "notConfigured": {
+      "title": "此项目尚未设置经理",
+      "body": "本页的功能目前都不会运行。定时任务只会处理拥有自身经理设置的项目，在设置完成之前，“立即运行经理”也会被跳过。下方的策略表可能仍显示“已启用”——那只是没有自身设置的项目所回退到的内置默认值，并不代表经理正在运行。",
+      "cta": "设置经理"
+    },
     "autonomyPaused": {
       "title": "自主管理已暂停",
       "daily": "此工作区已达到每日 token 限额，因此自动管理器和智能体已暂停，直至额度重置。在此期间，待办列表不会重新排序，无人认领的工作不会被分配或派发，Evermind 也不会从新的运行中学习。你仍可在下方手动运行管理器。升级你的套餐以获得更高的每日额度。",
@@ -8796,12 +8817,34 @@
     "loading": "加载中…",
     "errorPrefix": "错误：{message}",
     "openRouter": {
-      "title": "OpenRouter 连接", "subtitle": "创建多个命名注册，每个注册可包含一个或多个模型，并与已连接的 AI 账户一起排序。", "cardBlurb": "为每个注册选择一个或多个 OpenRouter 模型，并与提供商账户一起设置优先级。", "add": "添加连接", "connectedCount": "● {count} 个连接", "modelCount": "已选择 {count} 个模型", "ownKey": "您的 OpenRouter 密钥", "managedKey": "Builderforce 托管计费", "edit": "编辑", "empty": "尚无 OpenRouter 连接。", "createTitle": "注册 OpenRouter 模型", "editTitle": "编辑 OpenRouter 连接", "name": "连接名称", "apiKey": "OpenRouter API 密钥（可选）", "clearKey": "移除已保存的密钥并使用 Builderforce 托管计费", "billing": "每次请求都经由 Builderforce 路由，并收取 0.01 美元平台费。使用自己的密钥时，OpenRouter 收取令牌费用；不提供密钥时，Builderforce 还会收取 OpenRouter 令牌成本。", "search": "搜索 OpenRouter 模型…", "selected": "已选择 {count} 个模型", "validation": "请输入连接名称并至少选择一个模型。", "saveError": "无法保存 OpenRouter 连接", "removeError": "无法移除 OpenRouter 连接", "confirmRemove": "移除 OpenRouter 连接“{label}”？"
+      "title": "OpenRouter 连接",
+      "subtitle": "创建多个命名注册，每个注册可包含一个或多个模型，并与已连接的 AI 账户一起排序。",
+      "cardBlurb": "为每个注册选择一个或多个 OpenRouter 模型，并与提供商账户一起设置优先级。",
+      "add": "添加连接",
+      "connectedCount": "● {count} 个连接",
+      "modelCount": "已选择 {count} 个模型",
+      "ownKey": "您的 OpenRouter 密钥",
+      "managedKey": "Builderforce 托管计费",
+      "edit": "编辑",
+      "empty": "尚无 OpenRouter 连接。",
+      "createTitle": "注册 OpenRouter 模型",
+      "editTitle": "编辑 OpenRouter 连接",
+      "name": "连接名称",
+      "apiKey": "OpenRouter API 密钥（可选）",
+      "clearKey": "移除已保存的密钥并使用 Builderforce 托管计费",
+      "billing": "每次请求都经由 Builderforce 路由，并收取 0.01 美元平台费。使用自己的密钥时，OpenRouter 收取令牌费用；不提供密钥时，Builderforce 还会收取 OpenRouter 令牌成本。",
+      "search": "搜索 OpenRouter 模型…",
+      "selected": "已选择 {count} 个模型",
+      "validation": "请输入连接名称并至少选择一个模型。",
+      "saveError": "无法保存 OpenRouter 连接",
+      "removeError": "无法移除 OpenRouter 连接",
+      "confirmRemove": "移除 OpenRouter 连接“{label}”？"
     },
     "status": {
       "connected": "● 已连接 {subscription}",
       "keyConfigured": "● 已配置 {label} API 密钥",
       "notConnected": "○ 未连接",
+      "usageDepleted": "▲ {label} — 用量已耗尽",
       "needsAttention": "▲ {label} — 需要处理"
     },
     "disconnect": "断开连接",
@@ -8883,6 +8926,7 @@
       "failedTitle": "{label} 连接失败",
       "state": {
         "ready": "就绪",
+        "capacity": "用量已耗尽",
         "needs_attention": "需要处理",
         "not_connected": "未连接",
         "revoked": "已撤销",
@@ -8897,6 +8941,7 @@
       "title": "未被使用",
       "notEntitled": "该账户已成功登录，但服务商拒绝了请求（{status}），因为当前套餐不包含此功能。请改用套餐包含该功能的账户重新连接，或升级套餐。",
       "xaiNotEntitled": "xAI 已接受登录，但拒绝了 Grok API 访问（{status}）。请确认该账户具有符合条件的 SuperGrok 套餐且每周用量尚有余额，或连接 xAI API 密钥。",
+      "xaiCapacity": "您的每周 SuperGrok API 用量已耗尽（{status}）。重置后 Grok 将恢复；如需立即继续，请购买额外用量点数、启用自动充值或升级到 SuperGrok Heavy。无需重新连接账户。",
       "rejected": "服务商拒绝了此凭据（{status}）。它可能已过期、被吊销，或已在别处轮换——请重新连接该账户。",
       "capacity": "凭据本身有效，但账户额度已用尽（{status}）——可能是消费上限或余额为零。请充值或提高上限，无需重新连接。",
       "unresolved": "存储的凭据完全无法使用——它已被吊销、已过期，或保存在其他工作区。请在此重新连接。"

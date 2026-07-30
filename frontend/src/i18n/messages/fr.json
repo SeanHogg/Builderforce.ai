@@ -364,6 +364,22 @@
       "back": "Retour",
       "next": "Suivant",
       "working": "Traitement…"
+    },
+    "page": {
+      "title": "Intégrations / Clés API",
+      "subtitle": "Connectez des fournisseurs de modèles et des outils métier, gérez les clés développeur et contrôlez la priorité des fournisseurs depuis un seul endroit.",
+      "searchPlaceholder": "Rechercher des intégrations et des clés API…",
+      "categoryLabel": "Catégorie",
+      "priorityChip": "Priorité · {leader}",
+      "priorityNone": "Aucun",
+      "embedHeading": "Intégration embarquée",
+      "category": {
+        "all": "Tout",
+        "models": "Fournisseurs de modèles",
+        "apps": "Intégrations d'applications",
+        "developer": "Clés API développeur",
+        "embed": "Intégrer"
+      }
     }
   },
   "nav": {
@@ -6734,6 +6750,11 @@
       "noExpiry": "Sans expiration",
       "markDone": "Terminé"
     },
+    "notConfigured": {
+      "title": "Aucun manager n’est configuré pour ce projet",
+      "body": "Rien de cette page ne s’exécute pour l’instant. Les passes planifiées ne couvrent que les projets ayant leurs propres réglages de manager, et « Lancer le manager » est ignoré tant qu’il n’en existe pas. Le tableau des politiques ci-dessous peut toujours indiquer « activé » : c’est la valeur par défaut intégrée vers laquelle bascule un projet sans réglages propres, pas un manager en cours d’exécution.",
+      "cta": "Configurer le manager"
+    },
     "autonomyPaused": {
       "title": "Gestion autonome en pause",
       "daily": "Cet espace de travail a atteint sa limite quotidienne de jetons ; le gestionnaire automatique et les agents sont donc en pause jusqu’à sa réinitialisation. D’ici là, le backlog ne sera pas re-priorisé, le travail sans responsable ne sera pas attribué ni lancé, et l’Evermind n’apprendra pas des nouvelles exécutions. Vous pouvez toujours lancer le gestionnaire manuellement ci-dessous. Passez à un forfait supérieur pour une allocation quotidienne plus élevée.",
@@ -8796,12 +8817,34 @@
     "loading": "Chargement…",
     "errorPrefix": "Erreur : {message}",
     "openRouter": {
-      "title": "Connexions OpenRouter", "subtitle": "Créez plusieurs inscriptions nommées avec un ou plusieurs modèles et classez-les avec vos comptes IA.", "cardBlurb": "Sélectionnez un ou plusieurs modèles OpenRouter par inscription et classez-les avec vos comptes connectés.", "add": "Ajouter une connexion", "connectedCount": "● {count} connexion(s)", "modelCount": "{count} modèle(s) sélectionné(s)", "ownKey": "Votre clé OpenRouter", "managedKey": "Facturation Builderforce", "edit": "Modifier", "empty": "Aucune connexion OpenRouter.", "createTitle": "Inscrire des modèles OpenRouter", "editTitle": "Modifier la connexion OpenRouter", "name": "Nom de la connexion", "apiKey": "Clé API OpenRouter (facultative)", "clearKey": "Supprimer la clé et utiliser la facturation Builderforce", "billing": "Chaque requête passe par Builderforce et ajoute 0,01 $ de frais de plateforme. Avec votre clé, OpenRouter facture les jetons ; sans clé, Builderforce facture aussi le coût des jetons OpenRouter.", "search": "Rechercher des modèles OpenRouter…", "selected": "{count} modèle(s) sélectionné(s)", "validation": "Saisissez un nom et sélectionnez au moins un modèle.", "saveError": "Échec de l’enregistrement de la connexion OpenRouter", "removeError": "Échec de la suppression de la connexion OpenRouter", "confirmRemove": "Supprimer la connexion OpenRouter « {label} » ?"
+      "title": "Connexions OpenRouter",
+      "subtitle": "Créez plusieurs inscriptions nommées avec un ou plusieurs modèles et classez-les avec vos comptes IA.",
+      "cardBlurb": "Sélectionnez un ou plusieurs modèles OpenRouter par inscription et classez-les avec vos comptes connectés.",
+      "add": "Ajouter une connexion",
+      "connectedCount": "● {count} connexion(s)",
+      "modelCount": "{count} modèle(s) sélectionné(s)",
+      "ownKey": "Votre clé OpenRouter",
+      "managedKey": "Facturation Builderforce",
+      "edit": "Modifier",
+      "empty": "Aucune connexion OpenRouter.",
+      "createTitle": "Inscrire des modèles OpenRouter",
+      "editTitle": "Modifier la connexion OpenRouter",
+      "name": "Nom de la connexion",
+      "apiKey": "Clé API OpenRouter (facultative)",
+      "clearKey": "Supprimer la clé et utiliser la facturation Builderforce",
+      "billing": "Chaque requête passe par Builderforce et ajoute 0,01 $ de frais de plateforme. Avec votre clé, OpenRouter facture les jetons ; sans clé, Builderforce facture aussi le coût des jetons OpenRouter.",
+      "search": "Rechercher des modèles OpenRouter…",
+      "selected": "{count} modèle(s) sélectionné(s)",
+      "validation": "Saisissez un nom et sélectionnez au moins un modèle.",
+      "saveError": "Échec de l’enregistrement de la connexion OpenRouter",
+      "removeError": "Échec de la suppression de la connexion OpenRouter",
+      "confirmRemove": "Supprimer la connexion OpenRouter « {label} » ?"
     },
     "status": {
       "connected": "● {subscription} connecté",
       "keyConfigured": "● Clé d'API {label} configurée",
       "notConnected": "○ Non connecté",
+      "usageDepleted": "▲ {label} — quota épuisé",
       "needsAttention": "▲ {label} — nécessite une action"
     },
     "disconnect": "Déconnecter",
@@ -8883,6 +8926,7 @@
       "failedTitle": "Échec de la connexion à {label}",
       "state": {
         "ready": "prête",
+        "capacity": "quota épuisé",
         "needs_attention": "nécessite une attention",
         "not_connected": "non connectée",
         "revoked": "révoquée",
@@ -8897,6 +8941,7 @@
       "title": "Non utilisé",
       "notEntitled": "Ce compte s’est bien connecté, mais le fournisseur a refusé la requête ({status}) car l’offre ne la couvre pas. Reconnectez un compte dont l’offre l’inclut, ou passez à une offre supérieure.",
       "xaiNotEntitled": "xAI a accepté la connexion, mais a refusé l’accès à l’API Grok ({status}). Vérifiez que ce compte dispose d’une offre SuperGrok éligible et d’un quota hebdomadaire restant, ou connectez une clé API xAI.",
+      "xaiCapacity": "Votre quota hebdomadaire d’API SuperGrok est épuisé ({status}). Grok reprendra après sa réinitialisation ; pour continuer maintenant, achetez des crédits d’utilisation supplémentaires, activez la recharge automatique ou passez à SuperGrok Heavy. Ne reconnectez pas le compte.",
       "rejected": "Le fournisseur a rejeté cet identifiant ({status}). Il a probablement expiré, été révoqué ou renouvelé ailleurs — reconnectez le compte.",
       "capacity": "L’identifiant fonctionne, mais le compte n’a plus de budget ({status}) — plafond de dépense atteint ou solde de crédits vide. Rechargez ou relevez la limite ; inutile de reconnecter.",
       "unresolved": "L’identifiant enregistré n’a pas pu être utilisé du tout : il a été révoqué, a expiré, ou a été enregistré dans un autre espace de travail. Reconnectez-le ici."

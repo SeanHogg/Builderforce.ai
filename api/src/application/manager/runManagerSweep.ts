@@ -6,10 +6,12 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * arrival order, whereas this sweep grooms value, ranks by priority, assigns
  * unowned work, and merges/closes PRs — the manager judgement a human PM would do.
  *
- * Scope: a project qualifies when it has a board AND either an explicit manager
- * config row or at least one non-terminal ticket (so idle/empty projects are
- * skipped). The per-project {@link runManagerForProject} still resolves the
- * effective policy (a disabled project no-ops), so this is a cheap superset filter.
+ * Scope — OPT-IN. A project qualifies when a human has configured a manager for it (an
+ * enabled `project_manager_configs` row of its own), it has a board, and it has open
+ * work: live tickets or open pull requests. A project that never asked for a manager is
+ * not managed, however busy its board is. See {@link isProjectManaged}, which is the one
+ * definition of that rule; this query is its SQL mirror and `runManagerForProject`
+ * re-checks it so the manual "Run manager now" path cannot disagree with the schedule.
  *
  * Token gate: a tenant with no budget is skipped (the AI scoring + dispatch would
  * fail the gateway anyway) — the same gate the autonomous executor + gateway use.
@@ -18,7 +20,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, asc, eq, exists, inArray, sql } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { buildRuntimeService } from '../../buildRuntimeService';
-import { tasks, projects, boards, projectManagerConfigs } from '../../infrastructure/database/schema';
+import { tasks, projects, boards, projectManagerConfigs, pullRequests } from '../../infrastructure/database/schema';
 import { TaskStatus, NON_TERMINAL_TASK_STATUSES } from '../../domain/shared/types';
 import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';
 import { runManagerForProject } from './ManagerService';
@@ -107,15 +109,41 @@ export interface ManagerSweepResult {
 
 interface ManagedProject { projectId: number; tenantId: number; }
 
-/** Projects with a board that carry live work or an explicit manager config. */
+/**
+ * Projects that have OPTED IN to being managed and have something to manage.
+ *
+ * ── THE OPT-IN (the SQL mirror of `isProjectManaged`) ────────────────────────────
+ * This used to match `hasBoard AND (hasWork OR hasConfig)` — so the real rule was **any
+ * project with a board and one open ticket gets an AI manager**, configured or not,
+ * because a project with no config row folds to the hardcoded `enabled: true` default.
+ * That is opt-OUT for a thing that ranks, assigns, reopens tickets, dispatches billable
+ * runs and merges pull requests. The `project_manager_configs` row only ever comes into
+ * existence through a deliberate write from the Manager settings surface, so requiring
+ * it — as an INNER join, so the requirement is structural rather than a clause someone
+ * can drop — makes "a human turned this on" the precondition it always should have been.
+ *
+ * ── AND IT IS WHAT MAKES THE ROTATION BELOW WELL-FOUNDED ─────────────────────────
+ * The `last_run_at` rotation is stamped by an UPDATE, not an upsert, so a project with no
+ * config row could never be stamped. Under the old LEFT join such a project sorted NULLS
+ * FIRST, got managed, failed to stamp, and sorted first again — pinning the head of the
+ * rotation forever and starving every project behind it. The fairness fix and the opt-in
+ * are the same fix: every project the sweep can now select is one it can also stamp.
+ */
 export async function loadManagedProjects(db: Db, limit: number): Promise<ManagedProject[]> {
+  // Something to manage. Open PRs count as work in their own right — the merge queue is
+  // real work on a project whose tickets are all closed, and gating on tickets alone
+  // would strand a finished board's last pull requests.
   const hasWork = exists(
     db.select({ one: sql`1` }).from(tasks)
       .where(and(eq(tasks.projectId, projects.id), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL_TASK_STATUSES))),
   );
-  const hasConfig = exists(
-    db.select({ one: sql`1` }).from(projectManagerConfigs)
-      .where(eq(projectManagerConfigs.projectId, projects.id)),
+  const hasOpenPr = exists(
+    db.select({ one: sql`1` }).from(pullRequests)
+      .where(and(
+        eq(pullRequests.projectId, projects.id),
+        eq(pullRequests.tenantId, projects.tenantId),
+        eq(pullRequests.status, 'open'),
+      )),
   );
   const hasBoard = exists(
     db.select({ one: sql`1` }).from(boards).where(eq(boards.projectId, projects.id)),
@@ -124,14 +152,21 @@ export async function loadManagedProjects(db: Db, limit: number): Promise<Manage
   const rows = await db
     .select({ projectId: projects.id, tenantId: projects.tenantId })
     .from(projects)
-    .leftJoin(projectManagerConfigs, and(
+    .innerJoin(projectManagerConfigs, and(
       eq(projectManagerConfigs.projectId, projects.id),
       // Correlated on the tenant as well as the project: `project_manager_configs` is
       // tenant-owned, and a join on `project_id` alone is the shape that leaks rows
       // across tenants the moment ids collide.
       eq(projectManagerConfigs.tenantId, projects.tenantId),
     ))
-    .where(and(hasBoard, sql`(${hasWork} OR ${hasConfig})`))
+    .where(and(
+      // The project's own master switch. Checked here as well as inside the pass so a
+      // disabled project costs the sweep nothing at all, rather than a pass that loads
+      // its policy only to return `skipped`.
+      eq(projectManagerConfigs.enabled, true),
+      hasBoard,
+      sql`(${hasWork} OR ${hasOpenPr})`,
+    ))
     // ── LONGEST-UNMANAGED FIRST ────────────────────────────────────────────────────
     // This had NO order at all, so it returned heap order — in practice the same rows
     // in the same sequence on every tick. Combined with a serial loop that ran out of
