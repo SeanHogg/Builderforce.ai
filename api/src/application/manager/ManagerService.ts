@@ -789,6 +789,8 @@ interface ManagedTaskRow {
   actionType: string | null;
   /** Read by the stall census to recognise a non-executable or unapproved-feedback ticket. */
   source: string | null;
+  /** The rank already persisted — the RANK stage writes only the tickets whose rank moved. */
+  managerRank: number | null;
 }
 
 /**
@@ -819,6 +821,10 @@ export function managedTasksQuery(db: Db, projectId: number) {
       assignedAgentHostId: tasks.assignedAgentHostId, gitBranch: tasks.gitBranch, githubPrUrl: tasks.githubPrUrl,
       createdAt: tasks.createdAt, taskType: tasks.taskType, actionType: tasks.actionType,
       source: tasks.source,
+      // The rank ALREADY PERSISTED, so the RANK stage can write only what changed
+      // rather than re-stamping an identical order every five minutes. One column on a
+      // query the pass already runs — see the stage for what it was costing.
+      managerRank: tasks.managerRank,
     })
     .from(tasks)
     .where(and(
@@ -1032,6 +1038,7 @@ export async function runManagerForProject(
           filled: laneStaffing.filled.map((f) => ({ roleKey: f.roleKey, action: f.action, agentName: f.agentName })),
           unfillable: laneStaffing.unfillable.map((u) => u.roleKey),
           hires: laneStaffing.hires,
+          error: laneStaffing.error,
         },
       });
     }
@@ -1094,19 +1101,46 @@ export async function runManagerForProject(
   }
 
   // 2. RANK — order the backlog and persist manager_rank (batched writes). -------
+  //
+  // ── WRITE THE DIFF, NOT THE ORDER ────────────────────────────────────────────
+  // This stage re-stamped `manager_rank` on ALL 300 windowed tickets every pass, and it
+  // is neither rotatable nor budget-shed — so it spent its full cost before every stage
+  // that actually moves a ticket. On a settled backlog the order does not change: project
+  // 11, 2026-07-30, journalled `Ranked 300 tickets…` seven times in thirty decisions with
+  // a byte-identical top five (score 123.15 each time), which the diagnostics correctly
+  // reported as a `decision_loop`. That is ~86,000 no-op UPDATE round-trips a day on one
+  // project, on neon-http, on a five-minute path.
+  //
+  // What it cost is visible in the same capture: three of the last six passes shed EVERY
+  // remaining stage — `["value","assign","systemic","pr_conduct","pr_merge","audit",
+  // "triage"]` at `elapsedMs` 20405 and 24610 against a 20s budget. The budget was gone
+  // before `value`, and RANK is the only expensive thing ahead of it.
+  //
+  // Ranking is pure derived data (priority × value × urgency), so re-deriving it is free
+  // and only the WRITES are worth avoiding. Persisting just the tickets whose rank
+  // actually moved turns the steady state into zero writes and zero round-trips, while a
+  // genuinely reordered backlog still lands in full. The journal follows the same rule —
+  // a decision re-taken every pass with an identical outcome is noise that buries the
+  // ones that mattered.
   if (policy.autoPrioritize && managed.length > 0) {
     const ranked = rankBacklog(managed.map(toRankable), now);
-    await flushBatched(db, ranked.map((r) => db.update(tasks).set({ managerRank: r.rank }).where(eq(tasks.id, r.taskId))));
-    summary.ranked = ranked.length;
-    const top = ranked.slice(0, 5).map((r) => {
-      const t = managed.find((m) => m.id === r.taskId);
-      return { rank: r.rank, taskId: r.taskId, title: t?.title ?? '', score: r.score };
-    });
-    await recordManagerAction(db, {
-      tenantId, projectId, runTaskId, actionType: 'prioritize',
-      summary: `Ranked ${ranked.length} tickets by priority × value × urgency.`,
-      detail: { top },
-    });
+    const previousRank = new Map(managed.map((t) => [t.id, t.managerRank]));
+    const moved = ranked.filter((r) => previousRank.get(r.taskId) !== r.rank);
+    if (moved.length) {
+      await flushBatched(db, moved.map((r) => db.update(tasks).set({ managerRank: r.rank }).where(eq(tasks.id, r.taskId))));
+    }
+    summary.ranked = moved.length;
+    if (moved.length) {
+      const top = ranked.slice(0, 5).map((r) => {
+        const t = managed.find((m) => m.id === r.taskId);
+        return { rank: r.rank, taskId: r.taskId, title: t?.title ?? '', score: r.score };
+      });
+      await recordManagerAction(db, {
+        tenantId, projectId, runTaskId, actionType: 'prioritize',
+        summary: `Re-ranked ${moved.length} of ${ranked.length} tickets by priority × value × urgency.`,
+        detail: { top, reranked: moved.length, windowed: ranked.length },
+      });
+    }
     // Ranking reorders `managed` for the SCHEDULE pass below, which places work in
     // rank order — the manager's own judgement of what comes first is what decides
     // what gets the earliest window.

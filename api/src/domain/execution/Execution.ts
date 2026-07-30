@@ -104,6 +104,7 @@ export class Execution {
   get cloudAgentRef(): string | null   { return this.props.cloudAgentRef; }
   get result():       string | null    { return this.props.result; }
   get errorMessage(): string | null    { return this.props.errorMessage; }
+  get produced():     boolean | null   { return this.props.produced; }
   get startedAt():    Date | null      { return this.props.startedAt; }
   get completedAt():  Date | null      { return this.props.completedAt; }
   get createdAt():    Date             { return this.props.createdAt; }
@@ -140,6 +141,19 @@ export class Execution {
     return this.transition(ExecutionStatus.FAILED, {
       errorMessage,
       completedAt: new Date(),
+    });
+  }
+
+  /**
+   * Record that terminal lifecycle orchestration itself produced durable progress
+   * (for example, advancing the ticket to its next lane). This is intentionally
+   * monotonic: a previously recorded artifact can never be erased by a later signal.
+   */
+  markProduced(produced: boolean): Execution {
+    return new Execution({
+      ...this.props,
+      produced: this.props.produced === true || produced,
+      updatedAt: new Date(),
     });
   }
 

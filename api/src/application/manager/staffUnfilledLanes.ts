@@ -41,6 +41,7 @@ import {
   type LaneAuthorityInputs, type ManagedTaskScope,
 } from '../kanban/managedLaneRoles';
 import { MAX_HIRES_PER_PASS, staffUnfilledRole, type StaffingAction } from './staffUnfilledRole';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 /** What staffing one role achieved, for the manager feed. */
 export interface LaneStaffingOutcome {
@@ -59,9 +60,17 @@ export interface LaneStaffingResult {
   unfillable: LaneStaffingOutcome[];
   /** Hires made, so the caller can debit the sweep-wide budget. */
   hires: number;
+  /**
+   * Why the board-wide staffing sweep could not be evaluated. This must be visible:
+   * returning an indistinguishable empty success hid 294 undispatchable tickets while
+   * every pass appeared to find nothing to staff.
+   */
+  error: string | null;
 }
 
-const EMPTY: LaneStaffingResult = { unfilledRoleKeys: [], filled: [], unfillable: [], hires: 0 };
+const EMPTY: LaneStaffingResult = {
+  unfilledRoleKeys: [], filled: [], unfillable: [], hires: 0, error: null,
+};
 
 /**
  * Every role a board's lanes authorise that binds to NO agent. PURE.
@@ -195,7 +204,9 @@ export async function staffUnfilledLanes(
     const unfilledRoleKeys = unfilledRolesForBoard(lanes.values(), args.taskShapes ?? []);
     if (unfilledRoleKeys.length === 0) return EMPTY;
 
-    const result: LaneStaffingResult = { unfilledRoleKeys, filled: [], unfillable: [], hires: 0 };
+    const result: LaneStaffingResult = {
+      unfilledRoleKeys, filled: [], unfillable: [], hires: 0, error: null,
+    };
     const maxHires = args.maxHires ?? MAX_HIRES_PER_PASS;
     for (const roleKey of unfilledRoleKeys) {
       const staffed = await staffUnfilledRole(env, db, {
@@ -216,10 +227,20 @@ export async function staffUnfilledLanes(
       else result.filled.push(outcome);
     }
     return result;
-  } catch {
+  } catch (error) {
     // A staffing sweep that cannot read the board is not a reason to abandon the pass;
-    // the per-ticket remedy still covers the same cause, more slowly.
-    return EMPTY;
+    // the per-ticket remedy still covers the same cause, more slowly. It IS a reason to
+    // journal the failure: the former empty result was indistinguishable from "all roles
+    // are staffed" and concealed the exact project-wide defect this sweep owns.
+    reportCaughtError(error, {
+      source: 'application/manager/staffUnfilledLanes.ts',
+      operation: 'staffUnfilledLanes',
+      context: { tenantId: args.tenantId, projectId: args.projectId, boardId: args.boardId },
+    });
+    return {
+      ...EMPTY,
+      error: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300),
+    };
   }
 }
 
@@ -231,6 +252,10 @@ export async function staffUnfilledLanes(
  * the thing that changed.
  */
 export function describeLaneStaffing(result: LaneStaffingResult): string {
+  if (result.error) {
+    return `Could not inspect or staff this board's lifecycle roles: ${result.error}. `
+      + 'Per-ticket recovery remains available, but the board-wide staffing gap needs attention.';
+  }
   if (result.filled.length === 0 && result.unfillable.length === 0) return '';
   const parts: string[] = [];
   if (result.filled.length) {

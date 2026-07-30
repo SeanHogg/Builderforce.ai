@@ -51,16 +51,20 @@ type Captured = { status: string; originLaneKey?: string } | null;
 function makeService(opts: {
   taskStatus: string;
   payload: string | null;
+  produced?: boolean | null;
   nextStatus?: string | null;
   managedToStatus?: string;
   taskSyncFailures?: number;
   laneEntryFailures?: number;
 }) {
   let stored = buildTask(opts.taskStatus);
-  const exec = buildExecution(opts.payload);
+  let storedExecution = Execution.reconstitute({
+    ...buildExecution(opts.payload).toPlain(),
+    produced: opts.produced ?? null,
+  });
   const executions = {
-    findById: async () => exec,
-    update: async (e: Execution) => e,
+    findById: async () => storedExecution,
+    update: async (e: Execution) => { storedExecution = e; return e; },
   } as unknown as IExecutionRepository;
   const tasks = {
     findById: async () => stored,
@@ -97,6 +101,7 @@ function makeService(opts: {
     getStored: () => stored,
     getTaskSyncCalls: () => taskSyncCalls,
     getLaneEntryCalls: () => laneEntryCalls,
+    getStoredExecution: () => storedExecution,
   };
 }
 
@@ -108,6 +113,27 @@ describe('RuntimeService lane chaining', () => {
     await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'done' });
     expect(getStored().status).toBe(TaskStatus.IN_REVIEW);
     expect(getCaptured()).toEqual({ status: TaskStatus.IN_REVIEW, originLaneKey: 'in_progress' });
+  });
+
+  it('counts a lane advance as productive even when the run wrote no files', async () => {
+    const { svc, getStoredExecution } = makeService({
+      taskStatus: TaskStatus.IN_PROGRESS,
+      payload: JSON.stringify({ laneKey: 'in_progress' }),
+      produced: false,
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'advanced workflow' });
+    expect(getStoredExecution().produced).toBe(true);
+  });
+
+  it('does not call a completed run productive when its ticket remained in place', async () => {
+    const { svc, getStoredExecution } = makeService({
+      taskStatus: 'ready',
+      payload: JSON.stringify({ laneKey: 'ready', actAsRole: 'business-analyst' }),
+      managedToStatus: 'ready',
+      produced: false,
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'no accepted change' });
+    expect(getStoredExecution().produced).toBe(false);
   });
 
   it('threads originLaneKey = the destination lane when a run completes back into its own lane (loop case the guard then suppresses)', async () => {
