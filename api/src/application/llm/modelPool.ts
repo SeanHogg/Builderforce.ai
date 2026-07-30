@@ -388,30 +388,63 @@ export function byoAutoSeedModels(
   });
 }
 
+/** Registered OpenRouter connection refs (`openrouter/<org>/<slug>`), in either shape. */
+export type ModelRefs = ReadonlySet<string> | readonly string[] | null | undefined;
+
+/** Membership test that accepts either shape a caller already holds — the proxy keeps
+ *  the registered refs as a Set, the credentials resolver as an array — so neither has
+ *  to allocate a copy on the hot path just to ask this question. */
+function refsHave(refs: ModelRefs, id: string): boolean {
+  if (!refs) return false;
+  // `Array.isArray` does not narrow a `readonly string[]` union member, so discriminate
+  // on the Set surface instead — which is also the cheaper check for the hot-path shape.
+  return refs instanceof Set ? refs.has(id) : (refs as readonly string[]).includes(id);
+}
+
+function refsCount(refs: ModelRefs): number {
+  if (!refs) return 0;
+  return refs instanceof Set ? refs.size : (refs as readonly string[]).length;
+}
+
 /**
  * Does an explicit model choice preempt the tenant's connected-BYO auto-seed?
  *
  * Connecting your own frontier account is a strong "use MY account" signal, so it
  * leads auto-select UNLESS the explicit model is a deliberate choice ON that account.
  * Returns true (honor the explicit model) when:
- *   • the tenant connected nothing (`byoVendors` empty) — normal plan routing, OR
- *   • the explicit model is itself served by a connected BYO vendor (a deliberate pick
- *     on the owner's own account — e.g. they connected Claude AND pinned claude-opus).
- * Returns false (let the connected flagship lead) for a NON-BYO explicit model while an
- * account is connected — e.g. a default agent base model of `@cf/qwen` must NOT shadow
- * a connected Claude subscription (the exact bug where Ada ran on `@cf/qwen` despite a
- * live subscription). This is the SINGLE branching rule the gateway cloud pin
- * ({@link pickCloudModel}) and the Brain addressed-reply path share, so "the connected
- * account wins over a non-BYO pin" can never drift between the two surfaces again.
+ *   • the tenant has NOTHING rankable — no connected provider AND no registered
+ *     OpenRouter connection — so normal plan routing applies, OR
+ *   • the explicit model is itself served by a connected BYO vendor, OR is one of the
+ *     tenant's REGISTERED OpenRouter connection refs (both are deliberate picks on the
+ *     owner's own list — e.g. they connected Claude AND pinned claude-opus).
+ * Returns false (let the tenant's own precedence lead) for a NON-BYO explicit model
+ * while anything is connected — e.g. a default agent base model of `@cf/qwen` must NOT
+ * shadow a connected Claude subscription (the exact bug where Ada ran on `@cf/qwen`
+ * despite a live subscription).
+ *
+ * `registeredModels` is load-bearing, not an optimisation. An OpenRouter CONNECTION
+ * (0382) contributes no provider row and therefore no BYO *vendor*, so a rule that only
+ * consults `byoVendors` is blind to it in BOTH directions: a deliberately-pinned
+ * connection ref gets discarded as "not BYO", and a tenant whose ONLY rankable account is
+ * a connection has every stale caller default treated as preempting. Both are how a
+ * precedence list with an OpenRouter connection at #1 could be silently ignored.
+ *
+ * This is the SINGLE branching rule the gateway seed ({@link LlmProxyService.complete}),
+ * the cloud pin ({@link pickCloudModel}), `byoAwareModel` and the Brain addressed-reply
+ * path share, so "the tenant's own account wins over a non-BYO pin" can never drift
+ * between the surfaces again.
  */
 export function explicitModelPreemptsByo(
   explicit: string | undefined | null,
   byoVendors: ReadonlySet<string> | null | undefined,
+  registeredModels?: ModelRefs,
 ): boolean {
   const trimmed = typeof explicit === 'string' ? explicit.trim() : '';
   if (!trimmed) return false;
-  if (!byoVendors || byoVendors.size === 0) return true;
-  return byoVendors.has(vendorForModel(trimmed));
+  if (refsHave(registeredModels, trimmed)) return true;
+  const rankable = (byoVendors?.size ?? 0) + refsCount(registeredModels);
+  if (rankable === 0) return true;
+  return !!byoVendors?.has(vendorForModel(trimmed));
 }
 
 /**

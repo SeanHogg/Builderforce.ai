@@ -698,10 +698,11 @@ export class LlmProxyService {
     // failover after the connected account rather than being dropped.
     const hasCallerModel = typeof callerModel === 'string' && callerModel.length > 0;
     const connectedByo = this.connectedByoVendors;
-    const callerLeads = hasCallerModel && (
-      this.openRouterConnectionModels.has(callerModel as string)
-      || explicitModelPreemptsByo(callerModel as string, connectedByo)
-    );
+    // ONE rule, and it must see the REGISTERED refs too: an OpenRouter connection
+    // contributes no BYO vendor, so a vendor-only test would let a stale caller default
+    // lead over the connection the tenant ranked #1 (see explicitModelPreemptsByo).
+    const callerLeads = hasCallerModel
+      && explicitModelPreemptsByo(callerModel as string, connectedByo, this.openRouterConnectionModels);
     // Demote any connected vendor on a 5xx streak out of the LEAD position (it stays
     // in the seed — see `byoAutoSeedModels`). Returns an empty set and issues no reads
     // when nothing is connected, so the non-BYO path is untouched.
@@ -2069,7 +2070,7 @@ export function pickCloudModel(
   // override may pin anything.
   const explicitIsRegistered = !!explicit && !!opts?.registeredOpenRouterModels?.includes(explicit.trim());
   const explicitIsByo = !!explicit && (!!opts?.byoVendors?.has(vendorForModel(explicit.trim())) || explicitIsRegistered);
-  if (explicitIsRegistered || explicitModelPreemptsByo(explicit, opts?.byoVendors)) {
+  if (explicitModelPreemptsByo(explicit, opts?.byoVendors, opts?.registeredOpenRouterModels)) {
     const canChooseModel = premiumOverride || effectivePlan !== 'free' || explicitIsByo;
     // A PREMIUM pin (paid OpenRouter model off the plan pool) additionally needs the
     // card-validated entitlement — a cloud run never passes the route's premium gate,
