@@ -97,11 +97,11 @@ async function executeCloudNode(env: CloudExecutorEnv, node: NodeInput, inputTex
       // own account) — otherwise the connected flagship leads. Without a tenant (should
       // not happen for a real workflow) fall back to the operator pool.
       const nodeModel = typeof cfg.model === 'string' ? cfg.model : undefined;
-      const { proxy, byoVendors } = usageCtx
+      const { proxy, byoVendors, registeredModels } = usageCtx
         ? await tenantProxyForPlan(env as unknown as Env, usageCtx.tenantId)
-        : { proxy: ideProxy(env), byoVendors: new Set<string>() };
+        : { proxy: ideProxy(env), byoVendors: new Set<string>(), registeredModels: [] as readonly string[] };
       const result = await proxy.complete({
-        model: byoAwareModel(nodeModel, byoVendors),
+        model: byoAwareModel(nodeModel, byoVendors, registeredModels),
         messages,
         ...(typeof cfg.temperature === 'number' ? { temperature: cfg.temperature } : {}),
       });
