@@ -38,7 +38,7 @@ import { resolveManagerVoice } from '../../application/manager/managerChat';
 import type { BrainService } from '../../application/brain/BrainService';
 import { listSystemicFindings } from '../../application/manager/systemicDiagnosis';
 import {
-  normalizePrMergePolicy, resolveTenantManagerDefaults, DEFAULT_MANAGER_POLICY,
+  normalizePrMergePolicy, resolveTenantManagerDefaults, DEFAULT_MANAGER_POLICY, isProjectManaged,
   AGENT_REASSIGN_IDLE_HOURS_RANGE, AGENT_REASSIGN_MAX_PER_SESSION_RANGE,
 } from '../../application/manager/managerPolicy';
 import { resolveManagerTypesForTenant, normalizeManagerType } from '../../application/manager/managerTypes';
@@ -283,6 +283,16 @@ export function createManagerRoutes(
     return c.json({
       config: config ?? null,
       policy,
+      /**
+       * Whether the scheduled sweep will actually run this project — from the SAME
+       * predicate the sweep and the pass use, never re-derived here.
+       *
+       * `policy.enabled` alone cannot answer it: a project with no config row folds to
+       * the hardcoded `enabled: true` default, so the surface would report an active
+       * manager over a project the sweep skips. A report that states health it has not
+       * verified is the exact failure four diagnostics captures were spent on.
+       */
+      managed: isProjectManaged({ tenant: tenantDefaults, project: config ?? null }),
       /** What this project inherits when its own row says nothing (the workspace tier,
        *  resolved). NOT the same as `policy`, which already includes this project's row. */
       tenantPolicy: resolveTenantManagerDefaults(tenantDefaults),

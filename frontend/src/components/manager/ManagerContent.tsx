@@ -408,6 +408,37 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
         </div>
       )}
 
+      {/* NOT MANAGED — the project never opted in, so the scheduled sweep does not
+          select it and "Run manager now" returns skipped=unconfigured. This has to be
+          stated on the surface rather than inferred from the policy table, because that
+          table reads "enabled: yes" for exactly this project: a project with no config
+          row of its own folds to the built-in default. `managed` comes from the server's
+          shared predicate; `=== false` because an older API omits the field entirely. */}
+      {data.managed === false && (
+        <div
+          role="alert"
+          style={{
+            ...panelStyle,
+            display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap',
+            borderColor: 'var(--danger-fg, #dc2626)',
+            background: 'var(--danger-bg, rgba(220, 38, 38, 0.08))',
+          }}
+        >
+          <span aria-hidden style={{ fontSize: '1.1rem', lineHeight: '1.3rem' }}>🚫</span>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--danger-fg, #dc2626)' }}>
+              {t('notConfigured.title')}
+            </div>
+            <div style={{ ...mutedStyle, marginTop: 4 }}>{t('notConfigured.body')}</div>
+          </div>
+          <RoleGate capability="manager.manage">
+            <Link href={href('policy')} style={{ ...primaryBtn, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+              {t('notConfigured.cta')}
+            </Link>
+          </RoleGate>
+        </div>
+      )}
+
       {/* Autonomy paused — the cron manager sweep + executor gate on the tenant's
           token budget and skip a capped tenant, so the board (and its Evermind
           learning) freezes with no on-surface reason. Surface it: only manual runs

@@ -2112,6 +2112,17 @@ export interface ManagerAutonomy {
 export interface ManagerOverview {
   config: ManagerConfig | null;
   policy: ManagerPolicy;
+  /**
+   * Whether the scheduled sweep will actually run this project — the server's answer
+   * from the one shared predicate, never re-derived on the client.
+   *
+   * NOT the same as `policy.enabled`, and the difference is the whole point: a project
+   * with no manager config row of its own folds to the built-in `enabled: true` default,
+   * so `policy.enabled` reads true for a project the sweep never selects. Optional
+   * because a client can be newer than the API it is talking to; `=== false` is the only
+   * safe test (see `managerFindings`).
+   */
+  managed?: boolean;
   stats: ManagerStats;
   backlog: ManagerBacklogItem[];
   actions: ManagerAction[];
@@ -3143,7 +3154,7 @@ export interface ProviderDiagnostic {
   provider: LlmProvider;
   configured: boolean;
   usable: boolean;
-  status: 'ready' | 'needs_attention' | 'not_connected' | 'revoked' | 'expired' | 'undecryptable' | 'unavailable';
+  status: 'ready' | 'capacity' | 'needs_attention' | 'not_connected' | 'revoked' | 'expired' | 'undecryptable' | 'unavailable';
   usage: { periodDays: number; requests: number; tokens: number; lastUsedAt: string | null };
   /** Present when this account was rejected on a recent call — see {@link ProviderAuthAlert}. */
   authAlert?: ProviderAuthAlert;

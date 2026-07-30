@@ -364,6 +364,22 @@
       "back": "Back",
       "next": "Next",
       "working": "Working…"
+    },
+    "page": {
+      "title": "Integrations / API Keys",
+      "subtitle": "Connect model providers and business tools, manage developer keys, and control provider priority from one place.",
+      "searchPlaceholder": "Search integrations and API keys…",
+      "categoryLabel": "Category",
+      "priorityChip": "Priority · {leader}",
+      "priorityNone": "None",
+      "embedHeading": "Embedded Integration",
+      "category": {
+        "all": "All",
+        "models": "Model Providers",
+        "apps": "App Integrations",
+        "developer": "Developer API Keys",
+        "embed": "Embed"
+      }
     }
   },
   "nav": {
@@ -6734,6 +6750,11 @@
       "noExpiry": "No expiry",
       "markDone": "Done"
     },
+    "notConfigured": {
+      "title": "No manager is set up for this project",
+      "body": "Nothing on this page runs yet. Scheduled passes only cover projects that have their own manager settings, and “Run manager now” is skipped until one exists. The policy table below may still read “enabled” — that is the built-in default a project with no settings of its own falls back to, not a manager that is running.",
+      "cta": "Set up the manager"
+    },
     "autonomyPaused": {
       "title": "Autonomous management paused",
       "daily": "This workspace has reached its daily token limit, so the automatic manager and agents are paused until it resets. Until then the backlog won’t be re-ranked, unowned work won’t be assigned or dispatched, and the Evermind won’t learn from new runs. You can still run the manager manually below. Upgrade your plan for a higher daily allowance.",
@@ -8823,6 +8844,7 @@
       "connected": "● {subscription} connected",
       "keyConfigured": "● {label} API key configured",
       "notConnected": "○ Not connected",
+      "usageDepleted": "▲ {label} — usage depleted",
       "needsAttention": "▲ {label} — needs attention"
     },
     "disconnect": "Disconnect",
@@ -8904,6 +8926,7 @@
       "failedTitle": "{label} connection failed",
       "state": {
         "ready": "ready",
+        "capacity": "usage depleted",
         "needs_attention": "needs attention",
         "not_connected": "not connected",
         "revoked": "revoked",
@@ -8918,6 +8941,7 @@
       "title": "Not being used",
       "notEntitled": "This account signed in successfully, but the provider refused the request ({status}) because the plan does not cover it. Reconnect an account whose plan includes it, or upgrade the plan.",
       "xaiNotEntitled": "xAI accepted the sign-in but refused Grok API access ({status}). Check that this account has an eligible SuperGrok plan and remaining weekly usage, or connect an xAI API key.",
+      "xaiCapacity": "Your weekly SuperGrok API allowance is depleted ({status}). Grok will resume when it resets; to continue now, buy Extra Usage Credits, enable Auto Top-Up, or upgrade to SuperGrok Heavy. Do not reconnect the account.",
       "rejected": "The provider rejected this credential ({status}). It has probably expired, been revoked, or been rotated elsewhere — reconnect the account.",
       "capacity": "The credential works, but the account is out of budget ({status}) — a spend cap or empty credit balance. Top up or raise the limit; there is no need to reconnect.",
       "unresolved": "The stored credential could not be used at all — it has been revoked, has expired, or was saved in a different workspace. Reconnect it here."

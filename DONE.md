@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-07-30 — ✅ RESOLVED: managing a project is OPT-IN, and it is what makes the rotation terminate (api 2026.7.187)
+
+Operator direction: *"The manager for the tenant should just make sure and check the settings of each project's manager. If the settings for the project don't have a manager then the Tenant manager shouldn't try to manage the projects."*
+
+The sweep matched `hasBoard AND (hasWork OR hasConfig)`, so the real rule was **any project with a board and one open ticket gets an AI manager**, whether or not anyone asked for one. That is opt-OUT for something that ranks, assigns, reopens tickets, dispatches billable runs and merges pull requests. It held because `DEFAULT_MANAGER_POLICY.enabled` is `true` and the tier fold applies that default to a project with no row — so `resolveEffectiveManagerPolicy(null).enabled` returns `true` for a project that has never heard of the manager.
+
+**The row is the consent.** A `project_manager_configs` row only ever comes into existence through `upsertManagerConfig`, i.e. a deliberate write from the Manager settings surface. `loadManagedProjects` now requires one via an **INNER join** — structural, not a WHERE clause a later edit can drop — plus `enabled = true`. The workspace tier still shapes *how* an opted-in project is managed and still holds its most-restrictive-wins veto; it does not opt a project in on its behalf, because a workspace default is a statement about the projects you chose, not a licence over the ones you did not.
+
+**And it closes a defect introduced hours earlier in 2026.7.186.** `last_run_at` is stamped by an `UPDATE`, not an upsert, so a project with no config row can never be stamped. The new longest-unmanaged-first rotation ordered `NULLS FIRST` over a LEFT join — so it would select an unconfigured project, manage it, fail to stamp it, and select it again, **pinning the head of the rotation forever and starving every project behind it**. Requiring the row means every project the sweep can select is one the pass can also stamp, which is what makes the ordering terminate. The fairness fix and the opt-in turn out to be the same fix; a source test pins them together, because the two changes look unrelated and a later edit could reintroduce the LEFT join for a plausible-sounding reason.
+
+**One definition, three consumers.** `isProjectManaged({ tenant, project })` in `managerPolicy.ts` is the rule; the sweep's SQL is its mirror, `runManagerForProject` re-checks it (so "Run manager now" cannot manage a project the schedule refuses — it returns `skipped: 'unconfigured'`), and `getProjectManagerState` returns policy + `managed` from one pair of reads. `managed` is not derivable from the policy: the fold cannot tell "no row" from "a row agreeing with every default" — both resolve to `enabled: true`, and only the raw row distinguishes them.
+
+**The surface had to say so, or this would be the old bug in a new place.** An unconfigured project's policy table reads `enabled: yes` while the sweep skips it — a report stating health it never verified, which is exactly what four diagnostics captures were spent on. So: `GET /api/manager/:projectId` returns `managed`; the Manager tab shows a danger banner with a "Set up the manager" CTA (theme-token colours, wraps at 360px, localized in all five catalogs); and `managerFindings` emits a `critical` **`manager_not_configured`** finding that leads the pasted diagnostics report and explicitly warns that the policy table below it is a default, not a running manager.
+
+Files: `api/src/application/manager/{managerPolicy,managerPolicyStore,runManagerSweep,ManagerService}.ts`, `api/src/presentation/routes/managerRoutes.ts`, `frontend/src/lib/{managerDiagnostics,builderforceApi}.ts`, `frontend/src/components/manager/ManagerContent.tsx`, `frontend/src/i18n/messages/{en,zh,es,fr,de}.json`, + `managerPolicy.optIn.test.ts` and `runManagerSweep.test.ts`.
+
+---
+
 ## 2026-07-30 — ✅ RESOLVED: the manager was a queue with one server — projects now fan out (api 2026.7.186)
 
 Raised by the operator, and correct: *"this is a manager, you're making the manager do all the work, shouldn't it assign and execute multiple other team leads or agents?"*
