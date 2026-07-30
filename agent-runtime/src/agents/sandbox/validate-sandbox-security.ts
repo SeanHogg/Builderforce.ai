@@ -172,6 +172,47 @@ export function validateNetworkMode(network: string | undefined): void {
   }
 }
 
+/**
+ * Validate a single namespace mode (`pid` / `ipc` / `uts`).
+ * Blocks `host` and `container:<id>` — both break worker-to-worker isolation.
+ */
+export function validateNamespaceMode(
+  kind: SandboxNamespaceKind,
+  mode: string | undefined,
+): void {
+  if (!mode) {
+    return;
+  }
+  const normalized = mode.trim().toLowerCase();
+  if (!normalized) {
+    return;
+  }
+  if (BLOCKED_NAMESPACE_MODES.has(normalized)) {
+    throw new Error(
+      `Sandbox security: ${kind} namespace mode "${mode}" is blocked. ` +
+        `Sharing the host ${kind} namespace removes worker isolation and exposes other workloads. ` +
+        `Omit this setting so the worker gets a private ${kind} namespace.`,
+    );
+  }
+  if (normalized.startsWith("container:")) {
+    throw new Error(
+      `Sandbox security: ${kind} namespace mode "${mode}" is blocked. ` +
+        `Joining another container's ${kind} namespace lets workloads observe each other. ` +
+        `Omit this setting so the worker gets a private ${kind} namespace.`,
+    );
+  }
+}
+
+export function validateNamespaceModes(cfg: {
+  pid?: string;
+  ipc?: string;
+  uts?: string;
+}): void {
+  for (const kind of NAMESPACE_KINDS) {
+    validateNamespaceMode(kind, cfg[kind]);
+  }
+}
+
 export function validateSeccompProfile(profile: string | undefined): void {
   if (profile && BLOCKED_SECCOMP_PROFILES.has(profile.trim().toLowerCase())) {
     throw new Error(
