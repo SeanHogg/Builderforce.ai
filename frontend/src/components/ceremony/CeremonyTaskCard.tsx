@@ -2,13 +2,7 @@
 
 import type { Task } from '@/lib/builderforceApi';
 import { DRAG_TASK } from './types';
-
-const PRIORITY_CLASS: Record<string, string> = {
-  low: 'badge-gray',
-  medium: 'badge-blue',
-  high: 'badge-yellow',
-  urgent: 'badge-red',
-};
+import { taskPriorityBadgeClass } from '@/lib/taskPriority';
 
 /**
  * Compact, draggable task chip used across the ceremony surface (backlog rail,
