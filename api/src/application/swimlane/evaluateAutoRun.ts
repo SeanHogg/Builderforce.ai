@@ -52,10 +52,10 @@ export type AutoRunReason =
   | 'capability_mismatch' // every candidate agent lacks the lane's required capabilities
   | 'already_running'     // a live (pending/submitted/running/paused) run already exists on the ticket
   | 'same_lane_reentry'   // the run that just finished already SERVED this lane — the loop guard suppressed an immediate re-dispatch into it
-  | 'run_cap_exhausted'   // the ticket's last N consecutive runs all FAILED — autonomy stops re-dispatching (a human Run-now still overrides)
+  | 'run_cap_exhausted'   // the ticket's last N consecutive runs all failed OR finished having shipped nothing — autonomy stops re-dispatching (a human Run-now still overrides)
   | 'cloud_run_limit'     // the TENANT is over its monthly cloud-run allowance — NOT retryable, and a human Run-now does not override it either
   | 'tenant_token_limit'  // the WORKSPACE is out of token budget — pauses EVERY ticket it owns, not just this one
-  | 'cooldown_active'     // the ticket's last run failed too recently — backing off before the next autonomous attempt (a human Run-now still overrides)
+  | 'cooldown_active'     // the ticket's last run failed (or shipped nothing) too recently — backing off before the next autonomous attempt (a human Run-now still overrides)
   | 'not_executable'      // a system/coordination chore (e.g. an AI Manager run task) — never dispatched to an agent
   | 'pending_approval'    // an EXTERNAL feedback request — a human must accept it in triage before any agent may touch it
   | 'lane_requirement_gate'; // the lane's REQUIREMENT gate suppressed the normal agent — a required reviewer/producer round-trip is owed first
@@ -82,10 +82,10 @@ export const AUTO_RUN_REASON_TEXT: Record<AutoRunReason, string> = {
   capability_mismatch: 'No run: every candidate agent lacks the capabilities this lane requires.',
   already_running: 'No new run: this ticket already has a live execution. If that run is PAUSED it is waiting on an answer to an agent question — it holds the ticket until answered (or until the 72-hour paused deadline releases it), so answering it is what unblocks the ticket.',
   same_lane_reentry: 'No new run: the run that just finished already served this lane, so the loop guard suppressed an immediate re-dispatch into the same lane. Nothing is executing right now.',
-  run_cap_exhausted: 'No run: the ticket\'s last consecutive runs all failed, so autonomy has stopped re-dispatching it. A human Run now overrides.',
+  run_cap_exhausted: 'No run: the ticket\'s last consecutive runs each either failed or finished without producing anything — no commit, no pull request, no lane move — so autonomy has stopped re-dispatching it rather than burning the workspace\'s run budget on a loop. A human Run now overrides.',
   cloud_run_limit: 'No run: this workspace has used its monthly cloud-run allowance. Retrying will NOT clear this — upgrade the plan, or wait for the allowance to reset. On-prem and VS Code runs stay unlimited.',
   tenant_token_limit: 'No run: this workspace has used its token allowance, so autonomy is paused for EVERY ticket it owns — not just this one. It resumes on its own when the allowance resets, or immediately on an upgrade.',
-  cooldown_active: 'No run yet: the ticket is in its post-failure back-off window before the next autonomous attempt.',
+  cooldown_active: 'No run yet: the ticket\'s last run failed or finished with nothing to show for it, so it is in its back-off window before the next autonomous attempt.',
   not_executable: 'No run: this is a system/coordination chore, never dispatched to an agent.',
   pending_approval: 'No run: this is an external feedback request awaiting human acceptance in triage.',
   lane_requirement_gate: 'No run by the lane\'s normal agent: this lane requires a role sign-off that is still outstanding, so the requirement gate dispatched that reviewer/producer instead and suppressed the normal agent until the review clears.',
@@ -140,23 +140,56 @@ export function autoRunReasonEvaluationText(reason: AutoRunReason): string {
 }
 
 /**
- * How many consecutive FAILED runs a ticket may accumulate before autonomy stops
- * auto-re-dispatching it. The reported failure mode: a single ticket auto-ran 30+
- * times, every run failing (e.g. no reachable coding model → `coding_model_degraded`
+ * How many consecutive UNPRODUCTIVE runs a ticket may accumulate before autonomy stops
+ * auto-re-dispatching it. The originally reported failure mode: a single ticket auto-ran
+ * 30+ times, every run failing (e.g. no reachable coding model → `coding_model_degraded`
  * → a backstop that loops on search and ships nothing), and nothing halted the burn.
  * Past this streak the ticket is surfaced as `run_cap_exhausted` for a human/manager
- * to intervene, instead of silently churning identical failing runs. A human clicking
+ * to intervene, instead of silently churning identical runs. A human clicking
  * "Run now" (which dispatches off `candidate`, not `canRunNow`) is the explicit escape
  * hatch — it forces a run and, on success, breaks the streak.
+ *
+ * The constant keeps its name (three strikes is three strikes) but the streak it bounds
+ * is no longer failure-only — see {@link trailingUnproductiveStreak}.
  */
 export const MAX_CONSECUTIVE_AUTORUN_FAILURES = 3;
 
+/** A finished run, as far as the breaker cares. */
+export interface RunOutcomeRow {
+  status: string;
+  errorMessage?: string | null;
+  /** `executions.produced` (0385): did the run leave anything behind? `null`/absent =
+   *  not judged, which BREAKS the streak — see {@link trailingUnproductiveStreak}. */
+  produced?: boolean | null;
+}
+
 /**
- * Count the ticket's most-recent consecutive FAILED runs. `execs` is newest-first
- * (ExecutionRepository.findByTask orders createdAt DESC). Counts leading `failed`
- * rows and STOPS at the first run that is not a failure — a `completed` or a
- * deliberate `cancelled` (or any live run) resets the streak, so the breaker only
- * trips on an unbroken run of failures and clears the moment one run does not fail.
+ * Count the ticket's most-recent consecutive runs that ACCOMPLISHED NOTHING. `execs` is
+ * newest-first (ExecutionRepository.findByTask orders createdAt DESC). Stops at the first
+ * run that did produce something — so the breaker only trips on an unbroken streak of
+ * fruitless runs and clears the moment one run ships.
+ *
+ * ── WHY THIS IS NO LONGER "FAILED" ───────────────────────────────────────────────
+ * It counted `status === 'failed'` and nothing else, which made FAILURE the executor's
+ * only stopping condition. A run that COMPLETED and shipped nothing reset the streak to
+ * zero and owed no cooldown, so the ticket was re-dispatched on the very next five-minute
+ * tick — forever. Measured on project 11, 2026-07-29: **5,931 runs completed and 10
+ * failed in one day, against 3 finished tickets and 2 merged PRs**; one agent alone
+ * accounted for **5,796 runs and 0 finished tickets**. The breaker was sitting right
+ * there and never armed once, because nothing ever failed.
+ *
+ * The same burn is why 371 tickets on that board had NEVER run: the tenant's
+ * 25-dispatches-per-tick ceiling was ~80% consumed all day by re-runs of tickets that had
+ * already run and produced nothing, so a never-started ticket could not win a slot.
+ *
+ * A run now counts toward the streak when it is:
+ *   • FAILED — as before; a failure produces nothing by definition; or
+ *   • terminal and explicitly judged to have produced nothing (`produced === false`).
+ *
+ * NULL / absent `produced` BREAKS the streak, exactly as a `completed` did before. That
+ * is load-bearing, not laziness: every pre-0385 row is unjudged, as is every dispatch
+ * surface that does not route through `finalizeCloudRun`. Treating unknown as
+ * unproductive would halt autonomy across every board on the deploy that shipped it.
  *
  * PLATFORM EVICTIONS ARE SKIPPED, not counted and not treated as a break: a run the
  * runtime killed because a deploy replaced its code says nothing about whether this
@@ -169,13 +202,21 @@ export const MAX_CONSECUTIVE_AUTORUN_FAILURES = 3;
  *
  * Pure — unit-tested directly.
  */
-export function trailingFailureStreak(execs: ReadonlyArray<{ status: string; errorMessage?: string | null }>): number {
+export function trailingUnproductiveStreak(execs: ReadonlyArray<RunOutcomeRow>): number {
   let n = 0;
   for (const e of execs) {
     if (e.status === ExecutionStatus.FAILED) {
       if (isInfrastructureEviction(e.errorMessage)) continue;
       n += 1;
-    } else break;
+      continue;
+    }
+    // A finished run the platform JUDGED to have shipped nothing. `produced === false`
+    // only — `null`/`undefined` is "not judged" and breaks the streak.
+    if (e.status === ExecutionStatus.COMPLETED && e.produced === false) {
+      n += 1;
+      continue;
+    }
+    break;
   }
   return n;
 }
@@ -210,13 +251,18 @@ export function autoRunCooldownMs(consecutiveFailures: number): number {
 }
 
 /** The end of a run, for cooldown math: when it finished, else its last update. */
-export interface ExecTiming {
-  status: string;
+export interface ExecTiming extends RunOutcomeRow {
   completedAt?: Date | null;
   updatedAt?: Date | null;
   createdAt?: Date | null;
-  /** Read only to recognise a platform eviction — see {@link trailingFailureStreak}. */
-  errorMessage?: string | null;
+}
+
+/** Did this row count toward the streak? The ONE predicate the streak walk and the
+ *  cooldown's "which run do we back off from?" both read, so they cannot disagree
+ *  about what an unproductive run is. */
+function countsAsUnproductive(e: RunOutcomeRow): boolean {
+  if (e.status === ExecutionStatus.FAILED) return !isInfrastructureEviction(e.errorMessage);
+  return e.status === ExecutionStatus.COMPLETED && e.produced === false;
 }
 
 /**
@@ -226,12 +272,12 @@ export interface ExecTiming {
  * trailing failure or the window has already elapsed.
  */
 export function autoRunCooldownRemainingMs(execs: ReadonlyArray<ExecTiming>, nowMs: number): number {
-  const streak = trailingFailureStreak(execs);
+  const streak = trailingUnproductiveStreak(execs);
   if (streak === 0) return 0;
   // The newest run that actually COUNTED toward the streak — a platform eviction
   // sitting on top of it is not a failure to back off from, so backing off from its
   // timestamp would extend the wait for something the ticket did not do.
-  const lastFailure = execs.find((e) => e.status === ExecutionStatus.FAILED && !isInfrastructureEviction(e.errorMessage));
+  const lastFailure = execs.find(countsAsUnproductive);
   const endedAt = lastFailure?.completedAt ?? lastFailure?.updatedAt ?? lastFailure?.createdAt ?? null;
   if (!endedAt) return 0; // untimestamped row — never block on missing data
   const elapsed = nowMs - endedAt.getTime();
@@ -272,7 +318,7 @@ export interface RerunBackoff {
 }
 
 export function assessRerunBackoff(execs: readonly ExecTiming[], nowMs: number): RerunBackoff {
-  const consecutiveFailures = trailingFailureStreak(execs);
+  const consecutiveFailures = trailingUnproductiveStreak(execs);
   const cooldownRemainingMs = autoRunCooldownRemainingMs(execs, nowMs);
   // Breaker before cooldown: a halted ticket reports the stronger reason (the cooldown
   // would expire on its own; the breaker will not without intervention).
@@ -348,7 +394,7 @@ export interface AutoRunEvaluation {
    *  UI can say WHEN the ticket resumes rather than just that it is waiting. */
   cooldownRemainingMs: number;
   /**
-   * The ticket's most-recent consecutive FAILED runs ({@link trailingFailureStreak}).
+   * The ticket's most-recent consecutive UNPRODUCTIVE runs — failed, or completed having shipped nothing ({@link trailingUnproductiveStreak}).
    *
    * Reported even when it did not decide the verdict, because it is the fact that
    * distinguishes "nothing has tried" from "something is retrying an identical
@@ -437,9 +483,9 @@ export function classifyResolvedAutoRun(input: {
    * staffing problem while the real one was that no dispatch could be attributed.
    */
   managedNoRole?: boolean;
-  /** Consecutive most-recent FAILED runs on the ticket (see {@link trailingFailureStreak}). */
+  /** Consecutive most-recent UNPRODUCTIVE runs on the ticket (see {@link trailingUnproductiveStreak}). */
   consecutiveFailures?: number;
-  /** Cooldown still owed since the last failed run (see {@link autoRunCooldownRemainingMs}). */
+  /** Cooldown still owed since the last unproductive run (see {@link autoRunCooldownRemainingMs}). */
   cooldownRemainingMs?: number;
 }): { reason: AutoRunReason; canRunNow: boolean } {
   if (input.gate === 'human') return { reason: 'human_gate', canRunNow: false };
