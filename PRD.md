@@ -1,64 +1,58 @@
-> **PRD** — drafted by Ada (Sr. Product Mgr) · task #377
+> **PRD** — drafted by CTO · task #487
 > _Each agent that updates this PRD signs its change below._
 
-## Product Requirements Document: Dispute Resolution
+# Evermind Knowledge & Learning Pipeline PRD
 
-### 1. Problem & Goal
+## Problem & Goal
+Teams building memory-enabled agents lack a repeatable pipeline to baseline existing knowledge, extract new insights, review for quality, store durably, and transfer to downstream systems. The goal is to deliver a reliable, auditable pipeline that turns raw interactions into structured, transferable knowledge while minimizing hallucination and drift.
 
-#### 1.1 Problem
-A critical gap (P1-7) exists in the platform's engagement lifecycle: there is no formal dispute, arbitration, or mediation flow. This absence leaves clients and freelancers without a clear path to resolve disagreements on engagements or milestones, leading to potential financial stalemates, project abandonment, and an inability to mediate conflicts effectively.
+## Target Users / ICP Roles
+- Memory-engine maintainers and platform engineers
+- AI application developers integrating long-term memory
+- Knowledge operations roles responsible for review and governance
 
-#### 1.2 Goal
-To implement a robust dispute resolution system that allows either party (client or freelancer) to formally initiate a dispute on an engagement or milestone. This system will securely hold associated funds in escrow, facilitate communication, and enable resolution through a defined mediation state machine, ensuring fair outcomes and appropriate fund disbursement.
+## Scope
+Implement the five-stage pipeline (baseline → extract → review → store → transfer) as a core workflow inside `memory-engine`. Cover orchestration, data models, review interfaces, and transfer adapters for the initial release.
 
-### 2. Target Users / ICP Roles
+## Functional Requirements
+- **Baseline**: Snapshot current knowledge graph and vector store state with versioning.
+- **Extract**: Identify and pull candidate facts, entities, and relationships from new sessions or documents.
+- **Review**: Human-in-the-loop or automated quality gates for accuracy, relevance, and conflict detection.
+- **Store**: Persist reviewed items into the canonical knowledge store with provenance metadata.
+- **Transfer**: Export approved knowledge to external targets (vector DBs, graphs, downstream agents) via configurable adapters.
+- Provide CLI and SDK entry points for pipeline execution and status tracking.
+- Log every stage transition for auditability.
 
-*   **Client/Employer:** Initiates disputes, responds to disputes, provides evidence, agrees to resolutions.
-*   **Freelancer/Contractor:** Initiates disputes, responds to disputes, provides evidence, agrees to resolutions.
-*   **Platform Administrator/Mediator:** Oversees dispute processes, reviews evidence, facilitates communication, and enforces resolutions.
+## Acceptance Criteria
+- Pipeline completes an end-to-end run on a 100-session corpus with <5% manual intervention.
+- Baseline and store operations produce immutable snapshots retrievable by version.
+- Review step surfaces conflicts and requires explicit approval before storage.
+- Transfer adapters successfully sync to at least two target systems with zero data loss.
+- All stages expose metrics (latency, items processed, rejection rate) via Prometheus.
 
-### 3. Scope
+## Out of Scope
+- Advanced LLM fine-tuning or model training
+- Real-time streaming ingestion
+- Multi-tenant isolation or billing features
+- Mobile or non-engine client SDKs
+- Historical data migration from legacy systems
 
-This feature will encompass the ability for users to initiate and manage disputes related to monetary engagements or milestones. It includes escrowing disputed funds, providing a communication channel for all parties, and a state-based system to guide disputes through to a final resolution by platform administrators.
+## Requirements
 
-### 4. Functional Requirements
+_Owned by the business-analyst — to be authored._
 
-1.  **Dispute Initiation:**
-    *   Either the client or freelancer can initiate a dispute on an active engagement or specific milestone.
-    *   Users must provide a clear reason and description for the dispute.
-    *   System validates eligibility (e.g., active engagement, funds present for milestones).
-2.  **Escrow Management:**
-    *   Upon dispute initiation, all funds associated with the disputed engagement or milestone are immediately moved to a secure escrow state.
-    *   These funds remain held until the dispute is formally resolved.
-    *   No further payments or refunds related to the disputed item can be processed outside the dispute flow.
-3.  **Dispute State Machine:**
-    *   Implement a clear lifecycle with states: `Open`, `Under Review`, `Mediation Phase`, `Awaiting Party Agreement`, `Platform Decision`, `Resolved - Released`, `Resolved - Refunded`, `Canceled`.
-    *   Define permissible transitions between states based on actions by users or platform administrators.
-4.  **Communication & Evidence:**
-    *   Provide a dedicated, private communication thread within the dispute interface for all involved parties (client, freelancer, platform mediator).
-    *   Allow parties to upload supporting documents, screenshots, and other evidence.
-5.  **Resolution Mechanisms:**
-    *   Enable parties to propose and mutually agree upon a resolution (e.g., full payment, partial refund, full refund).
-    *   Platform Administrators/Mediators can review all evidence and communication to make an impartial decision.
-    *   Resolution actions include: releasing full payment to the freelancer, issuing a full refund to the client, or distributing funds partially based on the agreed/decided outcome.
-6.  **Notifications:**
-    *   Automated notifications to all involved parties for dispute initiation, status changes, new messages, and resolution.
-7.  **Dispute Visibility & Access:**
-    *   Disputes are only visible to the directly involved client, freelancer, and platform administrators.
+## Design
 
-### 5. Acceptance Criteria
+_Owned by the architect — to be authored._
 
-*   A user (client or freelancer) can successfully initiate a dispute on an active engagement or milestone.
-*   Upon dispute initiation, all funds directly associated with the disputed engagement/milestone are automatically and securely moved to an escrow state, preventing any unauthorized disbursement.
-*   The dispute progresses through its defined state machine from initiation to resolution (e.g., `Open` -> `Mediation Phase` -> `Resolved`).
-*   A platform administrator can intervene, review all submitted evidence, and enforce a final resolution.
-*   Based on the final resolution outcome (mutual agreement or platform decision), funds are accurately released to the freelancer, fully refunded to the client, or partially distributed as specified.
+## Implementation Notes
 
-### 6. Out of Scope
+_Owned by the developer — to be authored._
 
-*   Automated arbitration via AI or algorithms.
-*   Integration with external legal systems or third-party arbitration services.
-*   Dispute resolution for non-monetary or non-engagement related issues (e.g., pure reputational disputes without an associated financial transaction).
-*   Advanced reporting and analytics features on dispute trends (for V1).
-*   Handling of multiple simultaneous disputes on the exact same discrete milestone.
-*   Dispute escalation paths beyond platform administrators to external authorities (for V1).
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
