@@ -89,7 +89,7 @@ describe("deriveTaskSummary (F5 + AC3/AC4)", () => {
 // ---------------------------------------------------------------------------
 
 describe("deduplicateByNumber (AC4)", () => {
-  it("removes duplicate PRs by number and keeps first occurrence", () => {
+  it("removes duplicate PRs by identity and keeps first occurrence", () => {
     const prs: GhPullRequest[] = [basePr({ number: 1, title: "first" }), basePr({ number: 2, title: "second" }), basePr({ number: 1, title: "duplicate" })];
     const result = deduplicateByNumber(prs);
     expect(result).toHaveLength(2);
@@ -108,13 +108,25 @@ describe("deduplicateByNumber (AC4)", () => {
     expect(deduplicateByNumber([basePr({ number: 42, title: "only" })])).toHaveLength(1);
   });
 
-  it("preserves the repo a PR was found in, so org-wide scans stay attributable (F4)", () => {
+  it("does NOT collapse PRs that share a number but belong to different repos (F4 org scan)", () => {
     const prs: GhPullRequest[] = [
       basePr({ number: 1, repo: "org/alpha" }),
       basePr({ number: 2, repo: "org/beta" }),
-      // Same PR number in a different repo is a distinct PR, but dedup is by
-      // number within a single task's result set — first occurrence wins.
       basePr({ number: 1, repo: "org/gamma" }),
+    ];
+    const result = deduplicateByNumber(prs);
+    // PR numbers are per-repository — same number in different repos = distinct PRs.
+    expect(result).toHaveLength(3);
+    expect(result.find((p) => p.number === 1 && p.repo === "org/alpha")).toBeTruthy();
+    expect(result.find((p) => p.number === 1 && p.repo === "org/gamma")).toBeTruthy();
+  });
+
+  it("preserves the repo a PR was found in and still dedupes same identity (F4)", () => {
+    const prs: GhPullRequest[] = [
+      basePr({ number: 1, repo: "org/alpha" }),
+      basePr({ number: 2, repo: "org/beta" }),
+      // Same identity in same repo is still a duplicate — first wins.
+      basePr({ number: 1, title: "duplicate in same repo", repo: "org/alpha" }),
     ];
     const result = deduplicateByNumber(prs);
     expect(result).toHaveLength(2);
