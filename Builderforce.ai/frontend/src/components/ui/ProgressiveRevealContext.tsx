@@ -293,10 +293,32 @@ export function ProgressiveRevealOrchestrator({
         bean.timeoutHandle = undefined;
       }
 
-      streamsRef.current.delete(key);
+      // Reset in-place so consuming components re-render without needing
+      // to call register() again (which would be guarded by `has(key)`).
+      bean.resolved = false;
+      bean.error = null;
+      bean.data = null;
+      bean.chunks = [];
+      bean.timestamp = performance.now();
+
+      // Restart the timeout timer.
+      const timeoutMs = bean.timeoutMs ?? getTimeoutMs(bean.priority);
+      bean.timeoutHandle = setTimeout(() => {
+        const b = streamsRef.current.get(key);
+        if (!b || b.resolved || b.error) return;
+        if (b.timeoutHandle) clearTimeout(b.timeoutHandle);
+        b.error = new Error(`${key} timed out after ${timeoutMs}ms`);
+        b.timeoutHandle = undefined;
+        b.timestamp = performance.now();
+        callbacksRef.current.onStreamTimeout?.(
+          b as unknown as ProgressiveRevealStream,
+        );
+        sync();
+      }, timeoutMs);
+
       sync();
     },
-    [sync],
+    [getTimeoutMs, sync],
   );
 
   // ---- reset ----
