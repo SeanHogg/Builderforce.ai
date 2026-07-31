@@ -8923,7 +8923,10 @@
         "blurb": "粘贴 Meta AI API 密钥，在您自己的 Meta AI 账户上运行 MUSE 模型（muse-spark-1.1）。"
       },
       "kimi": {
-        "blurb": "粘贴 Kimi Code 订阅密钥或 Moonshot API 密钥。"
+        "blurb": "粘贴 Kimi Code 订阅密钥，以使用您在 kimi.com 购买的编程模型。"
+      },
+      "moonshot": {
+        "blurb": "粘贴 Moonshot 开放平台 API 密钥以使用 Moonshot 模型。"
       },
       "qwen": {
         "blurb": "粘贴阿里云 DashScope API 密钥以运行 Qwen 模型。"

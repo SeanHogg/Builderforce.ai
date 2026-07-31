@@ -131,7 +131,8 @@ export function normalizeByoProvider(vendor: string): string {
   const aliases: Record<string, string> = {
     googleai: 'google',
     'openai-codex': 'openai',
-    moonshot: 'kimi',
+    'kimi-code': 'kimi',
+    moonshot: 'moonshot',
   };
   return aliases[vendor] ?? vendor;
 }

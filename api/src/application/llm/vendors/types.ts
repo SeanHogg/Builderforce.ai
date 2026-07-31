@@ -31,7 +31,7 @@ export type VendorId =
   //    (autoRoute:false — they don't pollute the auto-selected FREE/PRO pools) and
   //    participate in the same dispatch/cooldown/fallback machinery as the rest.
   | 'openai' | 'groq' | 'deepseek' | 'mistral' | 'together' | 'fireworks' | 'qwen'
-  | 'deepinfra' | 'xai' | 'perplexity' | 'moonshot' | 'hyperbolic' | 'novita'
+  | 'deepinfra' | 'xai' | 'perplexity' | 'moonshot' | 'kimi-code' | 'hyperbolic' | 'novita'
   | 'sambanova' | 'lepton' | 'anyscale' | 'octoai' | 'featherless' | 'inferencenet'
   | 'targon' | 'avian' | 'nebius' | 'baseten' | 'lambda' | 'klusterai'
   | 'parasail' | 'nscale' | 'chutes' | 'ai21' | 'siliconflow' | 'minimax'
@@ -117,6 +117,8 @@ export interface VendorEnv {
   PERPLEXITY_API_KEY?: string | null;
   /** Moonshot AI (Kimi) — api.moonshot.cn/v1. */
   MOONSHOT_API_KEY?: string | null;
+  /** Kimi Code subscription — api.kimi.com/coding/v1 (not interchangeable with Moonshot keys). */
+  KIMI_CODE_API_KEY?: string | null;
   QWEN_API_KEY?: string | null;
   /** Hyperbolic — api.hyperbolic.xyz/v1. */
   HYPERBOLIC_API_KEY?: string | null;

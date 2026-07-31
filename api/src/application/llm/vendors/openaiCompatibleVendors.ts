@@ -93,6 +93,13 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k', 'kimi-k2-0711-preview'],
   },
   {
+    id: 'kimi-code', brand: 'Kimi Code', apiKeyEnv: 'KIMI_CODE_API_KEY',
+    baseUrl: 'https://api.kimi.com/coding/v1/chat/completions',
+    // Keep the all-members model first: credential health probes use the first
+    // catalog entry, while K3/high-speed access depends on the subscription tier.
+    models: ['kimi-for-coding', 'k3-256k', 'k3', 'kimi-for-coding-highspeed'],
+  },
+  {
     id: 'qwen', brand: 'Qwen', apiKeyEnv: 'QWEN_API_KEY',
     baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
     models: ['qwen3-coder-plus', 'qwen3-max', 'qwen-plus', 'qwen-turbo'],
