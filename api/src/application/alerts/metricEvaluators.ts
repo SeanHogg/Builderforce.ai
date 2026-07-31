@@ -26,7 +26,16 @@ import { millicentsToUsd } from '../../domain/shared/money';
 const HOUR_MS = 3_600_000;
 
 /** The full set of metric keys a rule may target (kept in lockstep with the
- *  migration's CHECK-list and the schema AlertMetric type). */
+ *  migration's CHECK-list and the schema AlertMetric type).
+ *
+ *  Extended for PRD #208 (Trend Analysis):
+ *    - trend_slope_<metricKey> — the least-squares slope (per-day) for any
+ *      registry metric that exposes a daily series; callers create rules like
+ *      "slope of Conversion Rate < -0.02" (AC3).
+ *    - trend_label_<metricKey> — encoded trend transition:
+ *      Accelerating=1, Steady=0, Slowing=-1, so threshold rules detect shifts
+ *      (e.g. Steady→Slowing when the encoded label crosses below -0.5).
+ */
 export const ALERT_METRICS: readonly AlertMetric[] = [
   'token_spend_usd',
   'token_spend_pct_of_cap',
@@ -35,6 +44,11 @@ export const ALERT_METRICS: readonly AlertMetric[] = [
   'dora_lead_time_hours',
   'ai_effectiveness_score',
   'eval_drift',
+  // PRD #208 — trend observability for existing collection surfaces.
+  'trend_slope_throughput',
+  'trend_slope_cost_per_run',
+  'trend_slope_tokens_per_run',
+  'trend_label_throughput',
 ] as const;
 
 export interface EvaluateMetricArgs {
