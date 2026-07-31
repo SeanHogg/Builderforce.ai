@@ -230,6 +230,36 @@ export class AgentOrchestrator {
     return this.limbicSystem;
   }
 
+  /**
+   * Initialize the policy engine with default PRD analysis policies.
+   * Call at gateway startup to enable governance enforcement (FR.4, FR.5).
+   */
+  initPolicyEngine(policies?: (import("./policy-engine.js").PolicyDefinition & { conditions: import("./policy-engine.js").PolicyCondition[] })[]): void {
+    this.policyEngine = new PolicyEngine(policies ?? DEFAULT_PRD_ANALYSIS_POLICIES);
+  }
+
+  /**
+   * Get the policy engine instance for external policy management.
+   */
+  getPolicyEngine(): PolicyEngine | null {
+    return this.policyEngine;
+  }
+
+  /**
+   * Enforce policies for a workflow task.
+   * Returns violations that should be handled by the caller.
+   */
+  enforcePoliciesForTask(
+    taskId: string,
+    role: string,
+    context: Record<string, any>,
+  ): PolicyViolation[] {
+    if (!this.policyEngine) {
+      return [];
+    }
+    return this.policyEngine.enforcePolicies(taskId, role, context);
+  }
+
   // ── Single-port shims (kept for backward compatibility) ──────────────────────
 
   /** @deprecated Use configure({ telemetry }) instead. */
