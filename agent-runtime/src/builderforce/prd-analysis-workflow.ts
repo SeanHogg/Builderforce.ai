@@ -62,7 +62,7 @@ export function createPrdAnalysisWorkflow(
       task: "Generate a comprehensive PRD analysis summary including: key requirements, identified risks, dependency concerns, missing sections, and actionable recommendations. Structure the response as a markdown report.",
       dependsOn: [
         "Identify and map feature requirements to their dependencies on other systems, components, or third-party services. Produce a dependency graph and list of external integrations.",
-        "Flag any missing or incomplete sections in the PRD and produce a checklist of items to address.",
+        "Flag any missing or incomplete sections in the PRD (e.g., missing requirements, undefined success criteria, undefined exit criteria) and produce a checklist of items to address.",
       ],
     },
   ];
