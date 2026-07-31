@@ -36,7 +36,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
 import { CODEX_AUTH_MARKER } from './vendors/openaiCodex';
-import { CAPACITY_LIMIT_MARKER } from './vendors';
+import { CAPACITY_LIMIT_MARKER, isCapacityLimitBody } from './vendors';
 import { PROVIDER_VENDOR_MAP, isSupportedProvider, type LlmProvider } from './tenantProviderKeyService';
 
 /** Just the slice of `Env` this module needs — mirrors `CooldownEnv`'s narrowing so
@@ -131,7 +131,8 @@ export interface AuthFailoverLike {
  * Rules:
  *  - only vendors that map to a CONNECTABLE provider count — an operator-pool key
  *    failing auth is our problem, not something the tenant can fix from settings;
- *  - a spend-cap / out-of-credits failure ({@link CAPACITY_LIMIT_MARKER}) is `capacity`:
+ *  - a spend-cap / out-of-credits failure ({@link CAPACITY_LIMIT_MARKER}), including
+ *    xAI's raw "weekly limit" 403 wording, is `capacity`:
  *    the credential is fine, so telling the owner to reconnect would be wrong advice.
  *    It is checked FIRST because it rides on a 429/400 that the gates below would
  *    otherwise misroute (mirrors `cooldownStore.classifyFailure`);
@@ -153,7 +154,7 @@ export function providerAlertFromFailure(
   if (!provider) return null;
   const text = (detail ?? '').toLowerCase();
   const reason: ProviderAuthAlertReason | null =
-    text.includes(CAPACITY_LIMIT_MARKER.toLowerCase()) ? 'capacity'
+    text.includes(CAPACITY_LIMIT_MARKER.toLowerCase()) || isCapacityLimitBody(text) ? 'capacity'
     : text.includes(CODEX_AUTH_MARKER) || status === 403 ? 'not_entitled'
     : status === 401 ? 'rejected'
     : null;
