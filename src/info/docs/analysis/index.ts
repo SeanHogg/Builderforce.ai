@@ -8,7 +8,7 @@ import type {
   PlanError,
   InferenceConfig as InferenceConfigType,
 } from "./types";
-import { buildDependencyGraph } from "./dag";
+import { buildDAG } from "./dag";
 import { computeWaves } from "./waves";
 import { inferDependencies } from "./inference";
 import { parseTaskList } from "./ingestion";
