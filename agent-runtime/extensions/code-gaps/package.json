@@ -1,0 +1,12 @@
+{
+  "name": "@builderforce/code-gaps",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BuilderForceAgents Code Gap Analysis plugin — identify planned-but-missing features",
+  "type": "module",
+  "builderforce": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
