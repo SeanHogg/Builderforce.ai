@@ -377,6 +377,11 @@ export function diagnoseStall(input: StallInput): StallDiagnosis {
           `Stuck ${age}: no build verdict has arrived for this pull request, so the merge cannot be cleared.`,
         );
       case 'complete':
+      // Every review check passed and only the MERGE is outstanding. Falls through to the
+      // two PR-specific diagnoses below — a conflicting branch and withheld merge
+      // authority are the two ways that merge does not happen — and is answered
+      // explicitly after them.
+      case 'await_merge':
         break;
       case 'wait_for_run':
         return NOT_STALLED('live', 'A run is in flight on this ticket.');
@@ -393,6 +398,20 @@ export function diagnoseStall(input: StallInput): StallDiagnosis {
     return stalled(
       'merge_withheld', 'escalate_human',
       `Stuck ${age}: this is ready to merge but the manager is not permitted to merge on this project.`,
+    );
+  }
+  // ── WAITING ON A MERGE IS NOT A PER-TICKET STALL ──────────────────────────
+  // The branch is clean, every review check passed and merge authority is granted, so the
+  // only thing left is the merge queue's turn — a process that always ends (it merges the
+  // PR, or spends its ceiling and hands it to a person, within MAX_REMEDY_ATTEMPTS). The
+  // per-ticket remedies cannot improve on that and two of them would make it worse:
+  // `dispatch` starts a billable run on a ticket that is already finished, and
+  // `resolve_conflict` hands an agent a branch that is not conflicting. Anything the queue
+  // CANNOT resolve leaves by one of the two checks above, so nothing is hidden here.
+  if (input.readiness === 'await_merge') {
+    return NOT_STALLED(
+      'moving',
+      'Every review check passed and its pull request is open with no conflict — waiting on the merge queue to land it.',
     );
   }
   if (input.status === 'blocked') {

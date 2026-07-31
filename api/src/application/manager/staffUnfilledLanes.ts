@@ -43,6 +43,7 @@ import {
   type LaneAuthorityInputs, type ManagedTaskScope,
 } from '../kanban/managedLaneRoles';
 import { MAX_HIRES_PER_PASS, staffUnfilledRole, type StaffingAction } from './staffUnfilledRole';
+import { stateFingerprint } from './managerActionJournal';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 /** What staffing one role achieved, for the manager feed. */
@@ -501,6 +502,46 @@ async function staffLaneProducer(
       + `${staffed.action === 'hired' ? ' (hired for it)' : ''} — every ticket sitting in that stage can now be dispatched`,
     ),
   };
+}
+
+/**
+ * Identifies WHICH state a board-staffing verdict is, so two states sharing the `assign`
+ * action type can never suppress each other's journal entry.
+ */
+export const BOARD_STAFFING_STATE_KEY = 'board_staffing';
+
+/**
+ * The identity of a board-staffing verdict. PURE.
+ *
+ * ── WHY A VERDICT NEEDS AN IDENTITY ──────────────────────────────────────────────
+ * This sweep runs on every pass and, in the steady state on a board a human has not
+ * touched, produces the IDENTICAL verdict every time. Measured on project 11,
+ * 2026-07-31: "3 stages on this board authorise NO role … 317 tickets …" journalled 3× in
+ * the last 30 decisions (07:55:06 → 09:00:02) with nothing about the board having changed
+ * — a `manager_actions` row per project per five minutes for an unchanged, unactionable
+ * condition, on a board deliberately held on Neon's free tier, crowding real decisions out
+ * of both the 30-item feed and the 200-row window. The report's own `decision_loop`
+ * finding fires on it.
+ *
+ * ── WHAT IT MUST CARRY, AND WHY ──────────────────────────────────────────────────
+ * Everything the sentence is computed from: the lanes, their reasons, the ticket counts,
+ * the unmapped agents, the role keys and the error. The fingerprint IS the contract — a
+ * key narrower than the verdict would suppress a genuine change (a lane draining from 299
+ * to 4, a new stage falling unconfigured, the sweep starting to fail) as "already said",
+ * and a suppressed defect is worse than a duplicated one. Sorted where the underlying set
+ * has no meaningful order, so an incidental reordering does not read as a change.
+ */
+export function laneStaffingFingerprint(result: LaneStaffingResult): string {
+  return stateFingerprint([
+    result.error ?? '',
+    [...result.unfilledRoleKeys].sort().join(','),
+    [...result.unfillable].map((u) => u.roleKey).sort().join(','),
+    [...result.filled].map((f) => `${f.roleKey}:${f.action}:${f.agentName ?? ''}`).sort().join(','),
+    [...result.unauthorizedLanes]
+      .map((l) => `${l.laneKey ?? l.swimlaneId}:${l.reason}:${l.ticketCount}:${[...l.unmappedAgents].sort().join('/')}`)
+      .sort()
+      .join(','),
+  ]);
 }
 
 /**
