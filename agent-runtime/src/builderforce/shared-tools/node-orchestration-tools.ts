@@ -27,6 +27,7 @@ import {
   type SpawnSubagentContext,
   type WorkflowStep,
 } from "../orchestrator.js";
+import { createPrdAnalysisWorkflow } from "../prd-analysis-workflow.js";
 import { loadProjectContext, saveSessionHandoff } from "../project-context.js";
 
 /** Per-run orchestration context (channel/session routing for spawned subagents) +
