@@ -1,5 +1,5 @@
 /**
- * teamHealthUtils.ts — pure helpers for score computation, CSV export, etc.
+ * teamHealthUtils.ts — pure helpers for score computation, CSV export, overload calc.
  */
 
 import type {
@@ -9,6 +9,7 @@ import type {
   AgentHealth,
   HealthScoreConfig,
   HealthScoreBreakdown,
+  OverloadResult,
 } from './teamHealthTypes';
 
 /** Compute the weighted Team Health Score (0–100). */
@@ -25,7 +26,7 @@ export function computeHealthScore(
   const blockerScore = blockers.length === 0 ? 100 : Math.max(0, 100 - blockers.length * 8);
 
   // Over-capacity sub-score: % of contributors NOT over threshold
-  const overThreshold = config.thresholds.overLoadWarningPct ?? 120;
+  const overThreshold = config.thresholds.overloadWarningPct ?? 120;
   const overCount = contributors.filter((c) => {
     if (!c.capacity || c.capacity <= 0) return false;
     return (c.activeTaskCount / c.capacity) * 100 > overThreshold;
@@ -59,6 +60,24 @@ export function computeHealthScore(
       { label: 'Agents', score: Math.round(agentScore) },
     ],
   };
+}
+
+/** Compute overload level and percentage for a single contributor. */
+export function computeOverload(
+  tasksAssigned: number,
+  capacity: number,
+  config: HealthScoreConfig,
+): OverloadResult {
+  if (!capacity || capacity <= 0) {
+    return { level: 'ok', pct: 0 };
+  }
+  const pct = Math.round((tasksAssigned / capacity) * 100);
+  const criticalThreshold = config.thresholds.overloadCriticalPct ?? 150;
+  const warningThreshold = config.thresholds.overloadWarningPct ?? 120;
+
+  if (pct >= criticalThreshold) return { level: 'critical', pct };
+  if (pct >= warningThreshold) return { level: 'warning', pct };
+  return { level: 'ok', pct };
 }
 
 /** Export an aging-WIP list to CSV string (FR-3.5). */
