@@ -95,7 +95,7 @@ function validateRole(role: string): string | null {
 }
 
 export async function runOrchestrate(opts: OrchestrateOpts, context: OrchestrationContext): Promise<Record<string, unknown>> {
-  const { workflow, description, customSteps } = opts;
+  const { workflow, description, customSteps, requireImpactAnalysis } = opts;
   try {
     // Pull hired agents into the role registry before resolving any role.
     await refreshHiredAgentRoles();
@@ -112,7 +112,8 @@ export async function runOrchestrate(opts: OrchestrateOpts, context: Orchestrati
         const known = [...Object.keys(WORKFLOW_REGISTRY), "custom"].join("', '");
         return { error: `Unknown workflow type: ${workflow}. Use '${known}'.` };
       }
-      steps = factory(description);
+      // Pass additional options to workflows that accept them (prd_analysis)
+      steps = factory(description, { requireImpactAnalysis });
     }
 
     // Validate every step's role against the registry (built-in OR hired). Returns
