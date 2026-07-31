@@ -36,13 +36,15 @@ export type OrchestrationContext = SpawnSubagentContext & { taskId?: number };
 
 // ── orchestrate ──────────────────────────────────────────────────────────────────
 
-const WORKFLOW_REGISTRY: Record<string, (description: string) => WorkflowStep[]> = {
+const WORKFLOW_REGISTRY: Record<string, (description: string, opts?: { requireImpactAnalysis?: boolean }) => WorkflowStep[]> = {
   feature: createFeatureWorkflow,
   bugfix: createBugFixWorkflow,
   refactor: createRefactorWorkflow,
   security_audit: createSecurityAuditWorkflow,
   planning: createPlanningWorkflow,
   adversarial: createAdversarialReviewWorkflow,
+  prd_analysis: (description: string, opts?: { requireImpactAnalysis?: boolean }) =>
+    createPrdAnalysisWorkflow(description, opts?.requireImpactAnalysis),
 };
 
 export interface OrchestrateOpts {
