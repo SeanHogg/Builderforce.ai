@@ -56,8 +56,13 @@ describe('a model that narrates tool calls instead of making them', () => {
     expect(run.diagnostics.stallRecoveries).toBe(1);
     expect(run.diagnostics.stallUnrecovered).toBe(false);
     expect(run.toolCalls.map((c) => c.name)).toContain('builtin_chats_list_tickets');
-    // The re-prompt must be the thing that produced the call.
-    expect(run.requests[1].lastUserText).toMatch(/did not actually call one/i);
+    // The re-prompt must be the thing that produced the call. Asserted on the two
+    // clauses that ARE the contract — it names the failure and demands the call this
+    // turn — rather than on a passing phrase: this line pinned wording the nudge had
+    // already moved past, so it failed for a rewording while saying nothing about
+    // whether recovery worked.
+    expect(run.requests[1].lastUserText).toMatch(/zero tool calls/i);
+    expect(run.requests[1].lastUserText).toMatch(/make the call now in this turn/i);
     expect(run.error).toBe('');
   });
 
