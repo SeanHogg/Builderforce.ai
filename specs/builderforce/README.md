@@ -104,7 +104,7 @@
     action type (project→tenant→global scope). **Cost model (§4.1, load-bearing):** the routing
     *decision* must work headless, so it's a **server-side O(1) read of a tiny incrementally-maintained
     `routing:<scope>` KV blob** (no SQL/aggregation on the hot path); the heavy **SSM/Samba recall runs
-    on the client GPU** (WebGPU/MambaKit, IndexedDB) and only *biases* interactive runs — zero server
+    on the client GPU** (WebGPU/builderforce-memory, IndexedDB) and only *biases* interactive runs — zero server
     CPU/DB. 3 phases (Capture → Analyze+Route → client-SSM recall); degrades to today's static cascade
     under cold-start/error/headless/kill-switch. Builds on existing `llm_usage_log` capture + the curated
     coding pool — see [[claude-direct-coding-floor]].

@@ -78,9 +78,26 @@ export type Need =
  */
 export type LlmComplete = (messages: Array<{ role: 'system' | 'user'; content: string }>) => Promise<string>;
 
+/** A grounded SOP/Process doc recalled for the diagnostic adapter. */
+export interface KnowledgeRecallHit {
+  id: string;
+  title: string;
+  docType: string;
+  excerpt: string;
+}
+
+/**
+ * An injected knowledge recall. The diagnostic adapter uses it to ground a
+ * compiled improvement agent in the tenant's OWN published SOPs/processes rather
+ * than generic advice. The route wires the real tenant-scoped DB read; pure
+ * adapters get a deterministic fake (or omit it) in tests.
+ */
+export type RecallKnowledge = (query: string, topK?: number) => Promise<KnowledgeRecallHit[]>;
+
 /** Dependencies injected into the modality adapters (kept minimal + faked in tests). */
 export interface CompileDeps {
   llm?: LlmComplete;
+  recallKnowledge?: RecallKnowledge;
 }
 
 export type { AgentSpec, AgentSurface, CompiledStep };

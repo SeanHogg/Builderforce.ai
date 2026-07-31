@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * BuilderForce Agents instance routes – /api/agent-hosts
  *
@@ -9,6 +10,7 @@
  */
 import { Hono, type Context } from 'hono';
 import { eq, and, isNull, desc, inArray, gte } from 'drizzle-orm';
+import { synthesizeRunFailedEvent } from '../../application/runtime/toolAuditReadRepair';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   agentHosts,
@@ -30,6 +32,7 @@ import {
   specs,
   taskSpecs,
   platformPersonas,
+  taskFileChanges,
 } from '../../infrastructure/database/schema';
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
 import { invalidateAgentHostKeyCache } from '../../infrastructure/auth/keyResolutionCache';
@@ -43,12 +46,12 @@ import { resolveRepoCredential, isResolveError } from '../../application/repos/r
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { openDispatchPullRequest } from '../../application/repos/openDispatchPullRequest';
 import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
-import { neon } from '@neondatabase/serverless';
 import { executeGitProxy } from '../../application/repos/gitProxy';
 import { agentDispatches } from '../../infrastructure/database/schema';
+import { taskInTenant } from '../../infrastructure/database/tenantScope';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { normalizeRequestKind } from '../../domain/approval/requestKind';
-import type { HonoEnv } from '../../env';
+import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import type { AgentHostService } from '../../application/agentHost/AgentHostService';
@@ -345,7 +348,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       return c.json({ error: 'name is required' }, 400);
     }
 
-    const guard = buildPlanLimitsGuard(db);
+    const guard = buildPlanLimitsGuard(db, c.env as Env);
     const limitErr = await guard.checkAgentHostLimit(tenantId);
     if (limitErr) return c.json(limitErr, 402);
 
@@ -1191,7 +1194,12 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
         capabilitiesJson = JSON.stringify(caps);
       }
       machineProfile = normalizeMachineProfile(body.machineProfile);
-    } catch { /* body may be empty — fine */ }
+    } catch (error) {
+      reportCaughtError(error, { source: "presentation/routes/agentHostRoutes.ts", operation: "createAgentHostRoutes", level: 'warning', context: { logMessage: '[agent-host] optional request body could not be parsed', details: {
+        agentHostId: id,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      } } });
+    }
 
     await db
       .update(agentHosts)
@@ -1590,11 +1598,22 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const change = ['created', 'modified', 'deleted'].includes(body.change ?? '') ? body.change! : 'modified';
     const agent = typeof body.agent === 'string' && body.agent.trim() ? body.agent.trim() : 'agent';
 
-    const sql = neon(c.env.NEON_DATABASE_URL);
-    await sql`
-      INSERT INTO task_file_changes (tenant_id, task_id, execution_id, path, change, agent)
-      VALUES (${agentHost.tenantId}, ${taskId}, ${Number.isFinite(Number(body.executionId)) ? Number(body.executionId) : null}, ${path}, ${change}, ${agent})
-    `;
+    // `taskId` arrives in the request BODY. The row is stamped with the host's
+    // tenant, and the FK to tasks.id only proves the task exists — so without this
+    // check a host key for tenant A could attach file-change rows to tenant B's
+    // task. Tasks inherit tenancy through their project, hence the shared helper.
+    if (!(await taskInTenant(db, taskId, agentHost.tenantId))) {
+      return c.json({ error: 'task not found' }, 404);
+    }
+
+    await db.insert(taskFileChanges).values({
+      tenantId: agentHost.tenantId,
+      taskId,
+      executionId: Number.isFinite(Number(body.executionId)) ? Number(body.executionId) : null,
+      path,
+      change,
+      agent,
+    });
     return c.json({ ok: true });
   });
 
@@ -1699,31 +1718,47 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const runId    = c.req.query('runId');
     const sessKey  = c.req.query('sessionKey');
     const limit    = Math.min(Number(c.req.query('limit') ?? 200), 500);
+    // Optional per-execution scope: a V2/host run stamps `execution_id` on every
+    // tool-audit row, so scoping to it isolates ONE run's Logs/Timeline instead of
+    // showing every event the host ever emitted (parity with the cloud read).
+    const execRaw = Number(c.req.query('executionId'));
+    const executionId = Number.isFinite(execRaw) && execRaw > 0 ? execRaw : null;
 
     const conditions = [
       eq(toolAuditEvents.agentHostId,    agentHostId),
       eq(toolAuditEvents.tenantId,  tenantId),
-      ...(runId   ? [eq(toolAuditEvents.runId,       runId)]   : []),
-      ...(sessKey ? [eq(toolAuditEvents.sessionKey,  sessKey)] : []),
+      ...(runId       ? [eq(toolAuditEvents.runId,       runId)]       : []),
+      ...(sessKey     ? [eq(toolAuditEvents.sessionKey,  sessKey)]     : []),
+      ...(executionId ? [eq(toolAuditEvents.executionId, executionId)] : []),
     ];
 
     const rows = await db
       .select({
-        id:         toolAuditEvents.id,
-        runId:      toolAuditEvents.runId,
-        sessionKey: toolAuditEvents.sessionKey,
-        toolCallId: toolAuditEvents.toolCallId,
-        toolName:   toolAuditEvents.toolName,
-        category:   toolAuditEvents.category,
-        args:       toolAuditEvents.args,
-        result:     toolAuditEvents.result,
-        durationMs: toolAuditEvents.durationMs,
-        ts:         toolAuditEvents.ts,
+        id:          toolAuditEvents.id,
+        runId:       toolAuditEvents.runId,
+        sessionKey:  toolAuditEvents.sessionKey,
+        toolCallId:  toolAuditEvents.toolCallId,
+        toolName:    toolAuditEvents.toolName,
+        category:    toolAuditEvents.category,
+        args:        toolAuditEvents.args,
+        result:      toolAuditEvents.result,
+        durationMs:  toolAuditEvents.durationMs,
+        executionId: toolAuditEvents.executionId,
+        ts:          toolAuditEvents.ts,
       })
       .from(toolAuditEvents)
       .where(and(...conditions))
       .orderBy(toolAuditEvents.ts)
       .limit(limit);
+
+    // Read-path repair (shared with the cloud tool-audit read): surface a terminal
+    // `run.failed` for an execution that failed without emitting the telemetry event,
+    // so a DISCONNECTED host's Log/Timeline tab shows the failure. Events are oldest-
+    // first here, so the terminal failure appends.
+    if (executionId != null) {
+      const synthetic = await synthesizeRunFailedEvent(db, tenantId, executionId, rows);
+      if (synthetic) rows.push(synthetic);
+    }
 
     return c.json({ events: rows });
   });
@@ -1828,7 +1863,11 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
           description: body.description,
           expiresAt:   body.expiresAt,
         }),
-      })).catch(() => { /* best-effort */ });
+      })).catch((error) => reportCaughtError(error, { source: "presentation/routes/agentHostRoutes.ts", operation: "createAgentHostRoutes", context: { logMessage: '[agent-host] approval relay notification failed', details: {
+        agentHostId,
+        approvalId,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      } } }));
     }
 
     return c.json({ ok: true, approvalId }, 201);

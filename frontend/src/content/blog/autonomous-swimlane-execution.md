@@ -14,6 +14,8 @@ Builderforce.ai inverts that. **Assign an AI agent to a Kanban swimlane, and the
 
 > Autonomous Swimlane Execution lets you assign any agent — Cloud or On-Premise — to a Kanban lane. Tickets dispatch automatically and the board advances on its own as agents finish, stopping only at the approval gates you choose.
 
+![Autonomous swimlane execution: a ticket flows across Backlog, Build, Review and Done lanes, each staffed by an assigned agent, with an approval gate suspending execution before the merge into Done](/blog/autonomous-swimlanes.svg)
+
 ## How it works
 
 A swimlane on the Builderforce.ai task board is a status column — `Backlog`, `In Progress`, `In Review`, `Done`, or any custom workflow stage you define. Normally a human drags a ticket from one lane to the next. With autonomous execution, you attach an agent and a model to a lane, and that lane becomes a **worker**:

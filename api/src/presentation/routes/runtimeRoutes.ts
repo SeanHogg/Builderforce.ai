@@ -1,35 +1,54 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { neon } from '@neondatabase/serverless';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
+import { dispatchGithubActionsRun, githubActionsAvailable } from '../../application/runtime/githubActionsDispatch';
 import { resolveTicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
 import { readRepoFile } from '../../application/repos/readRepoContents';
+import { importRepoContents } from '../../application/repos/importRepoContents';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { and, desc, eq, gte, inArray, isNull } from 'drizzle-orm';
+import { liveExecution } from '../../application/rehearsal/executionMode';
+import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import {
   resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
-  isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, buildFollowUpPayload, withDefaultModel,
+  isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, buildFollowUpPayload, withDefaultModel, withExecutor,
 } from '../../application/runtime/cloudDispatch';
 import { mintContainerRunToken, verifyContainerRunToken } from '../../application/runtime/containerRunToken';
+import { synthesizeRunFailedEvent } from '../../application/runtime/toolAuditReadRepair';
+import { mintPreviewToken, PREVIEW_TOKEN_TTL_SECONDS } from '../../application/runtime/previewToken';
+import { PREVIEW_HOST } from '../../application/runtime/previewIngress';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { enqueueExecutionMessage, listExecutionMessages, releasePendingSteers } from '../../application/runtime/executionSteering';
 import { subscribeExecution, unsubscribeExecution, notifyExecutionSubscribers } from '../../application/runtime/executionEvents';
 import {
-  runCloudExecution, markCloudExecutionRunning, prepareCloudRun, gitSecret, recordCloudToolEvent, recordPrdDirective,
+  markCloudExecutionRunning, prepareCloudRun, gitSecret, recordCloudToolEvent, recordPrdDirective,
   handleContainerOp, loadContainerRunContext, resolveCloudAgent, agentAllowsHostExecution, DEFAULT_CLOUD_REF,
 } from '../../application/runtime/cloudAgentEngine';
+import { recordAutoRunSkip, clearAutoRunSkip } from '../../application/runtime/autoRunSkipLedger';
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
-import { ExecutionStatus } from '../../domain/shared/types';
+import { enforceCloudRunCap, type CloudRunCapResult } from '../../application/runtime/cloudRunLedger';
+import { assessRerunBackoff, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
+import { evaluateExecutionApprovalGate } from '../../application/runtime/executionApprovalGate';
+import { revertRun } from '../../application/runtime/runRollback';
+import { resolveActorFromContext } from '../../application/activity/activityLog';
+import { unreadCountsForUser } from '../../application/brain/chatReadState';
+import { ExecutionStatus, TenantRole } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
+import { millicentsToUsd } from '../../domain/shared/money';
+import { parseJsonArray } from '../../domain/shared/json';
 import type { Execution } from '../../domain/execution/Execution';
 import type { Env, HonoEnv } from '../../env';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentHosts, boards, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
-import { approvals } from '../../infrastructure/database/schema';
+import { agentHosts, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
+import { approvals, chatTicketLinks, projectManagerConfigs } from '../../infrastructure/database/schema';
+import { agentPurchases, ideAgents, llmUsageLog, taskFileChanges } from '../../infrastructure/database/schema';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
+import { resolveProjectInferenceModel } from '../../application/llm/projectEvermind';
+import { executionTokenGate } from './executionTokenGate';
+import { authorizeManagedTaskExecution } from '../../application/kanban/managedExecutionGuard';
 
 /**
  * Runtime routes – task execution lifecycle.
@@ -42,12 +61,38 @@ import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelay
  * PATCH  /api/runtime/executions/:id/state   – agent callback: update state
  * GET    /api/runtime/tasks/:taskId/executions – history for a task
  * GET    /api/runtime/agents/:ref/tool-audit  – tool-audit timeline for one cloud agent
+ *
+ * AUTHORIZATION. Every route below `router.use('*', authMiddleware)` is tenant-
+ * authenticated. On top of that, each route carries an explicit role gate:
+ *   • READS (list / detail / timeline / cost / repo browsing) are member-level —
+ *     no extra gate, a VIEWER may observe the fleet.
+ *   • Anything that STARTS, cancels, steers, retries or reports on a billable run
+ *     is `requireRole(TenantRole.DEVELOPER)` — the platform's "build and run
+ *     agents" tier (see frontend ROLE_DESCRIPTION). This is what excludes a
+ *     read-only VIEWER from spending the tenant's cloud-run + token allowance.
+ *     It is deliberately NOT manager-level: the manager check for a run is the
+ *     separate GOVERNANCE gate (evaluateExecutionApprovalGate), which stops
+ *     high/urgent tickets and routes them to /api/approvals for MANAGER sign-off.
+ *     Machine tokens minted for on-prem agent hosts carry DEVELOPER (see
+ *     authRoutes agent-host key exchange), so host callbacks keep working.
+ * System/cron callers (autonomousExecutionSweep → maybeAutoRunOnLaneEntry, the CI
+ * auto-fix loop, incident/validation dispatch) never traverse these routes — they
+ * call the exported `dispatchCloudRunForTask` directly and so are unaffected by
+ * the gates. `/internal/container-op` is mounted ABOVE authMiddleware on purpose
+ * and authenticates with its own per-run HMAC token.
  */
 type RuntimeHonoEnv = HonoEnv & {
   Bindings: HonoEnv['Bindings'] & {
     AGENT_HOST_RELAY: DurableObjectNamespace<AgentHostRelayDO>;
   };
 };
+
+// The approval-gate primitives now live in the application layer so system callers
+// (autonomous lane trigger / cron sweep) can apply the SAME gate without a request
+// context — see application/runtime/executionApprovalGate.ts. Re-exported here
+// because existing importers reference them through this module.
+export { parseApprovalReplay, evaluateExecutionApprovalGate } from '../../application/runtime/executionApprovalGate';
+export type { ApprovalReplay, ApprovalGateTask, ExecutionApprovalGateResult } from '../../application/runtime/executionApprovalGate';
 
 /** ide_agents.base_model sentinel meaning "no explicit model — use the default"
  *  (mirrors cloudAgentEngine.AGENT_DEFAULT_MODEL_SENTINEL). */
@@ -68,11 +113,7 @@ function hiredAgentRoleKey(name: string | null | undefined, id: string): string 
 function projectHiredAgent(r: { id: string; name: string | null; bio: string | null; skills: unknown; base_model: string | null }): {
   id: string; name: string; roleKey: string; systemPrompt: string; skills: string[]; model?: string;
 } {
-  const skills = Array.isArray(r.skills)
-    ? (r.skills as unknown[]).map(String)
-    : typeof r.skills === 'string'
-      ? (() => { try { const v = JSON.parse(r.skills as string); return Array.isArray(v) ? v.map(String) : []; } catch { return []; } })()
-      : [];
+  const skills = parseJsonArray(r.skills).map(String);
   const rawModel = typeof r.base_model === 'string' ? r.base_model.trim() : '';
   const model = rawModel && rawModel !== AGENT_DEFAULT_MODEL_SENTINEL ? rawModel : undefined;
   return {
@@ -122,15 +163,6 @@ type ExecutionTaskRow = {
   projectId: number;
 };
 
-type ExecutionApprovalGateResult =
-  | { allowed: true }
-  | {
-      allowed: false;
-      approvalId: string;
-      status: 'pending';
-      reason: string;
-    };
-
 type ExecutionTelemetryBody = {
   inputTokens?: number;
   outputTokens?: number;
@@ -145,152 +177,6 @@ function parseOptionalNumber(value: string | undefined | null): number | null {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return null;
   return parsed;
-}
-
-function parseApprovalTaskId(metadata: string | null): number | null {
-  if (!metadata) return null;
-  try {
-    const parsed = JSON.parse(metadata) as { taskId?: unknown };
-    const value = parsed.taskId;
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-    if (typeof value === 'string') {
-      const n = Number(value);
-      if (Number.isFinite(n)) return n;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Whether running this task must first open a manager-approval request.
- *
- * Only HIGH/URGENT priority tickets are gated. A manager can OVERRIDE the gate
- * per board (boards.require_execution_approval = false) so high/urgent work on
- * that board runs without approval — see the board "Require manager approval"
- * setting. The board flag is read directly (not cached) so flipping the toggle
- * takes effect on the very next run rather than after a cache TTL; it is a single
- * indexed lookup on the manual-execution path, alongside the gate's own
- * uncached approvals query.
- */
-async function requiresTaskExecutionApproval(db: Db, tenantId: number, task: ExecutionTaskRow): Promise<boolean> {
-  if (task.priority !== 'high' && task.priority !== 'urgent') return false;
-
-  const [board] = await db
-    .select({ requireExecutionApproval: boards.requireExecutionApproval })
-    .from(boards)
-    .where(and(eq(boards.tenantId, tenantId), eq(boards.projectId, task.projectId)))
-    .limit(1);
-
-  // No board row yet → keep the default governance behaviour (gate on).
-  return board?.requireExecutionApproval !== false;
-}
-
-/** Run context replayed when a `task.execution` approval is approved. */
-export interface ApprovalReplay {
-  taskId: number;
-  /** The original submit payload (carries the cloud-agent ref + model + repo pin). */
-  payload?: string;
-  /** A per-run pinned host, if the gated run targeted one. */
-  agentHostId?: number | null;
-}
-
-/**
- * Read the stored run context off a `task.execution` approval so approving it can
- * replay the original submit AS the same agent + model — the gate discards no run
- * detail (see {@link evaluateExecutionApprovalGate}). Returns null for approvals
- * without a parseable taskId (non-task.execution rows).
- */
-export function parseApprovalReplay(metadata: string | null): ApprovalReplay | null {
-  const taskId = parseApprovalTaskId(metadata);
-  if (taskId == null || !metadata) return null;
-  try {
-    const parsed = JSON.parse(metadata) as { payload?: unknown; agentHostId?: unknown };
-    const payload = typeof parsed.payload === 'string' ? parsed.payload : undefined;
-    const agentHostId =
-      typeof parsed.agentHostId === 'number' && Number.isFinite(parsed.agentHostId)
-        ? parsed.agentHostId
-        : null;
-    return { taskId, payload, agentHostId };
-  } catch {
-    return { taskId };
-  }
-}
-
-async function evaluateExecutionApprovalGate(
-  db: Db,
-  tenantId: number,
-  requestedBy: string,
-  task: ExecutionTaskRow,
-  requestedAgentHostId: number | null,
-  /** The original submit context, persisted so an approve replays the exact run. */
-  submitContext?: { payload?: string },
-): Promise<ExecutionApprovalGateResult> {
-  if (!(await requiresTaskExecutionApproval(db, tenantId, task))) {
-    return { allowed: true };
-  }
-
-  const now = new Date();
-  const recentApprovals = await db
-    .select({
-      id: approvals.id,
-      status: approvals.status,
-      metadata: approvals.metadata,
-      expiresAt: approvals.expiresAt,
-      createdAt: approvals.createdAt,
-    })
-    .from(approvals)
-    .where(
-      and(
-        eq(approvals.tenantId, tenantId),
-        eq(approvals.actionType, 'task.execution'),
-      ),
-    )
-    .orderBy(desc(approvals.createdAt))
-    .limit(100);
-
-  const latestForTask = recentApprovals.find((row) => parseApprovalTaskId(row.metadata) === task.id);
-  if (latestForTask) {
-    if (latestForTask.status === 'approved' && (!latestForTask.expiresAt || latestForTask.expiresAt > now)) {
-      return { allowed: true };
-    }
-    if (latestForTask.status === 'pending' && (!latestForTask.expiresAt || latestForTask.expiresAt > now)) {
-      return {
-        allowed: false,
-        approvalId: latestForTask.id,
-        status: 'pending',
-        reason: 'Task execution is waiting for manager approval.',
-      };
-    }
-  }
-
-  const approvalId = crypto.randomUUID();
-  await db.insert(approvals).values({
-    id: approvalId,
-    tenantId,
-    agentHostId: task.assignedAgentHostId ?? requestedAgentHostId,
-    requestedBy,
-    actionType: 'task.execution',
-    description: `Approve execution of task #${task.id}: ${task.title}`,
-    metadata: JSON.stringify({
-      taskId: task.id,
-      priority: task.priority,
-      // Persist the run context so approving the request replays the exact run
-      // (as the same cloud agent + model + repo pin) — see parseApprovalReplay.
-      payload: submitContext?.payload ?? null,
-      agentHostId: task.assignedAgentHostId ?? requestedAgentHostId,
-    }),
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  return {
-    allowed: false,
-    approvalId,
-    status: 'pending',
-    reason: 'Task priority requires manager approval before execution.',
-  };
 }
 
 function normalizeCodeChanges(value: unknown): number | null {
@@ -404,23 +290,52 @@ async function dispatchAndQueue(
 }
 
 /**
- * Context-free dispatch: create AND start a cloud run for a task. Used by the
- * CI-webhook auto-fix loop (no request context — it has only `env`, `db`, the
- * injected `runtimeService`, and `waitUntil`). Returns the new execution id, or
- * null if the task can't be resolved for the tenant.
+ * Context-free dispatch: create AND start a cloud run for a task. Used by every
+ * non-HTTP dispatcher (the lane trigger, the lane requirement gate's reviewer /
+ * producer runs, the AI Manager, the validator / security / incident dispatchers,
+ * the CI-webhook auto-fix loop). Returns the new execution id, or null when the
+ * task can't be resolved, the tenant is over its cloud-run allowance, or autonomy
+ * is in backoff on this ticket.
+ *
+ * ── THIS IS WHERE BACKPRESSURE LIVES ────────────────────────────────────────────
+ * The consecutive-failure breaker and the re-run cooldown used to sit inside
+ * `evaluateTaskAutoRun`, which only the lane trigger consults — so the nine other
+ * callers below dispatched with no backpressure whatsoever. Measured on task 467:
+ * 134 runs, all failing on the same cloud-run-cap message, every five minutes, with
+ * a three-strike breaker that never saw one of them.
+ *
+ * Both guards therefore run HERE, at the single choke point every autonomous cloud
+ * entry already funnels through, so a dispatch path cannot opt out of them by
+ * construction. `force` is the deliberate, explicit override for a HUMAN-initiated
+ * dispatch (Run now, a manager approving a held run, "fix with agent") — a person
+ * clicking is the same override the breaker always honoured.
+ *
+ * The cloud-run cap is NOT subject to `force`: it is a billing entitlement, not
+ * backpressure, so a human cannot click past it either. It is checked BEFORE the
+ * execution row is created, so a quota refusal no longer materialises as a `failed`
+ * run that every scheduler then retries as though it were transient.
  */
 export async function dispatchCloudRunForTask(
   env: Env,
   db: Db,
   runtimeService: RuntimeService,
   waitUntil: (p: Promise<unknown>) => void,
-  params: { taskId: number; tenantId: number; payload?: string; submittedBy?: string; agentHostId?: number | null },
+  params: {
+    taskId: number; tenantId: number; payload?: string; submittedBy?: string;
+    agentHostId?: number | null;
+    /** HUMAN-initiated dispatch: skip the failure breaker + re-run cooldown (never
+     *  the cloud-run cap). Autonomous callers must leave this unset. */
+    force?: boolean;
+  },
 ): Promise<number | null> {
   const [taskRow] = await db
     .select({
       id: tasks.id, title: tasks.title, description: tasks.description,
       assignedAgentHostId: tasks.assignedAgentHostId, assignedAgentRef: tasks.assignedAgentRef,
       assignedUserId: tasks.assignedUserId,
+      // The lane is part of an auto-run skip's STATE (see autoRunSkipLedger): the same
+      // refusal on a different lane is a different fact about the ticket.
+      status: tasks.status,
       priority: tasks.priority, projectId: tasks.projectId,
     })
     .from(tasks)
@@ -428,6 +343,98 @@ export async function dispatchCloudRunForTask(
     .where(and(eq(tasks.id, params.taskId), eq(projects.tenantId, params.tenantId)))
     .limit(1);
   if (!taskRow) return null;
+
+  const submittedBy = params.submittedBy ?? 'system:autofix';
+
+  // (0) MANAGED AUTHORIZATION — a REFUSAL, not an exception.
+  //
+  // This used to `throw`, and the throw was the whole failure mode: it happens BEFORE the
+  // execution row exists, so nothing counted it. The lane trigger's catch recorded a raw
+  // `auto_run_error` (unbounded — one row per sweep tick, on a database held under
+  // $5/month), the failure breaker and the re-run cooldown never saw a failure to back
+  // off from, and every other caller `.catch(() => null)`d it into silence. A managed
+  // board therefore refused every autonomous dispatch forever, invisibly.
+  //
+  // It is the same KIND of answer as the two guards below — "this run must not start,
+  // and here is why" — so it is recorded and returned the same way: through the
+  // state-gated skip ledger, with a real `AutoRunReason` the lifecycle ledger can resolve.
+  const authorization = await authorizeManagedTaskExecution(db, params.tenantId, params.taskId, params.payload);
+  if (!authorization.allowed) {
+    await recordAutoRunSkip(env, db, {
+      tenantId: params.tenantId,
+      taskId: params.taskId,
+      cloudAgentRef: taskRow.assignedAgentRef ?? submittedBy,
+      lane: taskRow.status,
+      reason: 'managed_no_role' satisfies AutoRunReason,
+      detail: {
+        taskId: params.taskId, reason: 'managed_no_role' satisfies AutoRunReason,
+        managed: authorization.managed, refusal: authorization.reason ?? null, submittedBy,
+      },
+      result: `Dispatch refused: ${authorization.reason ?? 'managed execution is not authorized'}`,
+    });
+    return null;
+  }
+
+  // (1) CLOUD-RUN CAP — checked before the execution row exists. A quota refusal is
+  // not a run that failed; it is a run that must not start, and it cannot clear by
+  // retrying (only a new billing month or an upgrade clears it). Creating a `failed`
+  // execution for it is what made every scheduler treat it as a transient blip and
+  // retry it on the next tick. Refuse, record WHY against the ticket, create nothing.
+  //
+  // ONLY for a cloud-bound dispatch. On-prem runs execute on the user's own machine
+  // and are unlimited by policy (it is what the refusal message itself promises), so
+  // a task with a pinned host skips the pre-flight entirely. Delivery to that host can
+  // still fail and fall through to cloud — which is why the gate inside
+  // `startDispatchedExecution` stays, and why `cloudGate` is only handed down when it
+  // was actually resolved here.
+  const hostPinned = (params.agentHostId ?? taskRow.assignedAgentHostId) != null;
+  const cloudGate = hostPinned ? undefined : await enforceCloudRunCap(db, params.tenantId, env);
+  if (cloudGate && !cloudGate.allowed) {
+    await recordAutoRunSkip(env, db, {
+      tenantId: params.tenantId,
+      taskId: params.taskId,
+      cloudAgentRef: taskRow.assignedAgentRef ?? submittedBy,
+      lane: taskRow.status,
+      reason: 'cloud_run_limit',
+      // `reason` must be a real AutoRunReason: the lifecycle ledger reads this blob to
+      // resolve the ticket's stall reason, and an off-vocabulary value would resolve to
+      // no explanation at all — the silent-gap failure mode this whole pass removes.
+      detail: {
+        taskId: params.taskId, reason: 'cloud_run_limit' satisfies AutoRunReason, retryable: false,
+        used: cloudGate.used, limit: cloudGate.limit, plan: cloudGate.effectivePlan, submittedBy,
+      },
+      result: `Dispatch refused: monthly cloud-run allowance reached (${cloudGate.used}/${cloudGate.limit} on the ${cloudGate.effectivePlan} plan). Retrying will not clear this — upgrade at builderforce.ai/pricing. On-prem and VS Code runs stay unlimited.`,
+    });
+    return null;
+  }
+
+  // (2) FAILURE BREAKER + RE-RUN COOLDOWN — the same verdict `evaluateTaskAutoRun`
+  // shows in triage, applied to EVERY autonomous dispatcher rather than only the lane
+  // trigger. A human dispatch (`force`) overrides, exactly as it always did.
+  if (!params.force) {
+    const backoff = assessRerunBackoff(
+      (await runtimeService.listByTask(params.taskId)).map((e) => e.toPlain()),
+      Date.now(),
+    );
+    if (backoff.blockedBy) {
+      await recordAutoRunSkip(env, db, {
+        tenantId: params.tenantId,
+        taskId: params.taskId,
+        cloudAgentRef: taskRow.assignedAgentRef ?? submittedBy,
+        lane: taskRow.status,
+        // The failure COUNT is part of the state: each additional failed run is a real
+        // change (it is what walks the ticket toward the breaker), not a repeat.
+        reason: `${backoff.blockedBy}:${backoff.consecutiveFailures}`,
+        detail: {
+          taskId: params.taskId, reason: backoff.blockedBy, submittedBy,
+          consecutiveFailures: backoff.consecutiveFailures,
+          ...(backoff.cooldownRemainingMs ? { cooldownRemainingMs: backoff.cooldownRemainingMs } : {}),
+        },
+        result: `Dispatch refused (${backoff.blockedBy}) for task ${params.taskId}: ${backoff.consecutiveFailures} consecutive failed runs. A human "Run now" overrides.`,
+      });
+      return null;
+    }
+  }
 
   // A per-run pinned host (e.g. an approved high-priority on-prem run) overrides
   // the task's assignee for THIS dispatch so host targeting survives the replay.
@@ -439,10 +446,20 @@ export async function dispatchCloudRunForTask(
     taskId: params.taskId,
     agentHostId: effectiveTaskRow.assignedAgentHostId ?? undefined,
     tenantId: params.tenantId,
-    submittedBy: params.submittedBy ?? 'system:autofix',
+    submittedBy,
     payload: params.payload,
   });
-  await startDispatchedExecution(env, db, runtimeService, waitUntil, params.tenantId, execution as SubmittedExecution, effectiveTaskRow, params.payload);
+  // A run is starting — drop the skip-suppression marker so a stall AFTER this run is
+  // recorded in full rather than swallowed as a repeat of the pre-run state.
+  await clearAutoRunSkip(env, params.tenantId, params.taskId);
+  // A resolved `cloudGate` is handed down so the choke point below does not re-run the
+  // cap query — one check per dispatch, two places that can act on it. Omitted for a
+  // host-pinned dispatch, so a host that fails delivery still gets capped down there.
+  await startDispatchedExecution(
+    env, db, runtimeService, waitUntil, params.tenantId,
+    execution as SubmittedExecution, effectiveTaskRow, params.payload,
+    cloudGate ? { cloudGate } : undefined,
+  );
   return execution.id;
 }
 
@@ -456,6 +473,9 @@ async function startDispatchedExecution(
   execution: SubmittedExecution,
   taskRow: ExecutionTaskRow,
   payload: string | undefined,
+  /** A cloud-run cap verdict the caller already resolved, so the pre-submit gate in
+   *  {@link dispatchCloudRunForTask} and this one never query it twice. */
+  opts?: { cloudGate?: CloudRunCapResult },
 ): Promise<unknown> {
   // On-Prem (hosted) execution happens ONLY when a host is explicitly pinned on the
   // task — a cloud agent is never broadcast to a client machine. Resolve a dispatch
@@ -486,7 +506,7 @@ async function startDispatchedExecution(
             .limit(1)).length > 0;
     if (valid) {
       await db.update(tasks).set({ explicitRepoId: repoId, updatedAt: new Date() })
-        .where(eq(tasks.id, taskRow.id)).catch(() => { /* best-effort */ });
+        .where(eq(tasks.id, taskRow.id)).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "startDispatchedExecution", context: { logMessage: '[runtime-dispatch] task repo pin update failed', details: { tenantId, taskId: taskRow.id, error } } }));
     }
   }
 
@@ -516,19 +536,41 @@ async function startDispatchedExecution(
     await Promise.all([
       unowned
         ? db.update(tasks).set({ assignedAgentRef: agent.ref, updatedAt: new Date() })
-            .where(eq(tasks.id, taskRow.id)).catch(() => { /* best-effort */ })
+            .where(eq(tasks.id, taskRow.id)).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "startDispatchedExecution", context: { logMessage: '[runtime-dispatch] unowned task claim failed', details: { tenantId, taskId: taskRow.id, agentRef: agent.ref, error } } }))
         : Promise.resolve(),
       // Always stamp the EXECUTION with the agent that ran it, so its logs/telemetry
       // stay scoped to THIS run even when ownership stays with someone else.
       db.update(executions).set({ cloudAgentRef: agent.ref })
-        .where(eq(executions.id, execution.id)).catch(() => { /* best-effort */ }),
+        .where(eq(executions.id, execution.id)).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "startDispatchedExecution", context: { logMessage: '[runtime-dispatch] execution attribution update failed', details: { tenantId, executionId: execution.id, agentRef: agent.ref, error } } })),
     ]);
   }
 
   // Fold the agent's own model into the payload up front so EVERY surface — the
   // on-prem host included — runs AS the agent's model, never silently the gateway
   // default. (The cloud branch reuses this same effective payload below.)
-  const effectivePayload = withDefaultModel(payload, agent.baseModel);
+  //
+  // Project Evermind consumer emitter (single point, all surfaces). When the agent
+  // has NO explicit base model AND the project is configured to run on its own
+  // self-learning model, default to the project's CURRENT Evermind head (a concrete
+  // `evermind/<ref>`, resolved ONCE here — the run boundary → pull-on-boundary). Every
+  // surface then agrees: the cloud loop hard-pins the `evermind/` route, on-prem sends
+  // it to the gateway (which routes it to the evermind vendor). Precedence:
+  // payload pin > agent.baseModel > project Evermind > gateway default. Off/unseeded →
+  // undefined → today's behaviour. [[evermind-learning-architecture]]
+  //
+  // The pin is emitted unconditionally now that Evermind tool-calls (constrained
+  // decoding — see application/llm/evermindToolCall). This used to be gated on
+  // `modelSupportsTools`, withholding the pin entirely because a tool-less head
+  // handed `tools` narrates the calls it cannot emit and does zero work. That
+  // failure mode is gone at the source, and the remaining risk — a head that CAN
+  // form a call but picks one at random — is caught per-request by the vendor's
+  // confidence gate, which 400s so the run's SOFT pin cascades to a coding model.
+  // Deciding it there (with the actual margin in hand) beats deciding it here on a
+  // static flag that could only ever say "never".
+  const projectEvermindPin = agent.baseModel
+    ? undefined
+    : await resolveProjectInferenceModel(env as Env, db, tenantId, taskRow.projectId);
+  const effectivePayload = withDefaultModel(payload, agent.baseModel ?? projectEvermindPin);
 
   const message: DispatchMessage = {
     type: 'task.assign',
@@ -568,7 +610,7 @@ async function startDispatchedExecution(
       toolName: 'runtime.route', category: 'planning',
       detail: { reason: 'agent runtime_support=cloud; pinned host ignored', pinnedHostId, ranOn: 'cloud' },
       result: `Agent "${agent.label ?? agent.ref ?? 'cloud agent'}" is cloud-only (runtime_support=cloud); the pinned On-Prem host was not used — running in the cloud.`,
-    }).catch(() => { /* best-effort telemetry */ });
+    }).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "startDispatchedExecution", context: { logMessage: '[runtime-dispatch] route telemetry failed', details: { tenantId, executionId: execution.id, error } } }));
   }
   const delivered = pinnedHostId != null && hostAllowed
     ? (await Promise.all(hostTargets.map((targetId) => dispatchToAgentHost(env as RuntimeHonoEnv['Bindings'], targetId, message).catch(() => false)))).some(Boolean)
@@ -586,6 +628,32 @@ async function startDispatchedExecution(
   };
 
   if (!delivered) {
+    // Cloud-compute gate: a cloud run executes on OUR infra (unlike on-prem/VSIX),
+    // so it consumes the monthly "Cloud runs" allowance even when the tenant brings
+    // their own model (BYO tokens are $0 to us, but the orchestration isn't). This
+    // is the ONE choke point every cloud entry funnels through (Run-now, board,
+    // autofix), so gating here covers them all. Over the cap → fail fast with an
+    // upgrade hint rather than start a run we'd have to run for free. Superadmin /
+    // unlimited plans pass; a metering error fails OPEN (never blocks a real run).
+    //
+    // An AUTONOMOUS dispatch never reaches this branch: `dispatchCloudRunForTask`
+    // already refused before creating a run (and passes its verdict down via `opts`
+    // so the query is not repeated). What lands here is an HTTP submit, where the
+    // person who clicked deserves a visible failed run carrying the reason.
+    const cloudGate = opts?.cloudGate ?? await enforceCloudRunCap(db, tenantId, env);
+    if (!cloudGate.allowed) {
+      const msg = `Monthly cloud-run allowance reached (${cloudGate.used}/${cloudGate.limit} on the ${cloudGate.effectivePlan} plan). Upgrade at builderforce.ai/pricing to run more cloud agents — on-prem and VS Code runs stay unlimited.`;
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+        toolName: 'runtime.route', category: 'planning',
+        detail: { reason: 'cloud_run_limit_exceeded', used: cloudGate.used, limit: cloudGate.limit, plan: cloudGate.effectivePlan },
+        result: msg,
+      }).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "startDispatchedExecution", context: { logMessage: '[runtime-dispatch] cloud-cap telemetry failed', details: { tenantId, executionId: execution.id, error } } }));
+      await runtimeService.update(execution.id, { status: ExecutionStatus.FAILED, errorMessage: msg }).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "startDispatchedExecution", level: 'warning', context: { logMessage: '[runtime-dispatch] cloud-cap terminal transition rejected', details: { tenantId, executionId: execution.id, error } } }));
+      await notifyDone();
+      return runtimeService.getExecution(execution.id).then((e) => e.toPlain()).catch(() => ({ id: execution.id, status: ExecutionStatus.FAILED }));
+    }
+
     // Route a container-surface run to the REAL long-lived Cloudflare Container
     // (AgentContainerDO) when it's bound; everything else — a durable-surface run,
     // and a container run with no Container binding — runs on the durable executor
@@ -594,21 +662,70 @@ async function startDispatchedExecution(
     const wantsContainer = surface === 'container';
     const hasContainerBinding = wantsContainer && !!env.AGENT_CONTAINER;
     const hasCloudRunner = !!env.CLOUD_RUNNER;
+    // The GitHub Actions surface has no binding and no liveness probe — a runner
+    // does not exist until GitHub schedules one — so the pre-flight is "can this
+    // be QUEUED": a linked GitHub repo whose default branch carries the agent
+    // workflow. Resolved inside orchestrate() because it costs a GitHub call.
+    const wantsGithubActions = surface === 'github_actions';
 
-    const runWorkerFallback = async () => {
-      await runCloudExecution(env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, effectivePayload, artifacts);
-      await notifyDone();
+    // The payload the run is dispatched with. Once `orchestrate` resolves the executor
+    // it re-stamps this (and the executions row) with `executor` so the orphan reaper /
+    // read-path repair pick the right per-surface silence ceiling. The kickoff closures
+    // read this variable (not `effectivePayload`) so they carry the stamped copy.
+    let dispatchPayload = effectivePayload;
+
+    const failCloudRuntimeUnavailable = async (reason: string) => {
+      const msg = `Cloud execution could not start because no durable executor was available: ${reason}. `
+        + 'The unsafe in-request Worker fallback was not started because multi-step runs exceed its background-execution limit. '
+        + 'Verify the CLOUD_RUNNER Durable Object binding and deployment, then re-run the task.';
+      await runtimeService.update(execution.id, {
+        status: ExecutionStatus.FAILED,
+        errorMessage: msg,
+      }).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "failCloudRuntimeUnavailable", level: 'warning', context: { logMessage: '[runtime-dispatch] unavailable-runtime terminal transition rejected', details: { tenantId, executionId: execution.id, error } } }));
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+        toolName: 'run.failed', category: 'error',
+        detail: { reason, phase: 'durable_kickoff' },
+        result: msg,
+      }).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "failCloudRuntimeUnavailable", context: { logMessage: '[runtime-dispatch] unavailable-runtime telemetry failed', details: { tenantId, executionId: execution.id, error } } }));
+      await notifyDone().catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "failCloudRuntimeUnavailable", context: { logMessage: '[runtime-dispatch] unavailable-runtime live notification failed', details: { tenantId, executionId: execution.id, error } } }));
     };
+    /**
+     * Queue the run onto the repo's GitHub Actions runners.
+     *
+     * Unlike the other two starters this hands off to infrastructure we do not
+     * control and cannot call back into: `workflow_dispatch` returns 204 meaning
+     * "accepted into GitHub's queue", not "a runner started". The run becomes
+     * real only when the runner's first heartbeat reaches
+     * /api/runtime/github-actions/op — which is why this surface carries a much
+     * larger orphan-reaper ceiling (CLOUD_GITHUB_ACTIONS_SILENCE_MS).
+     *
+     * A dispatch that GitHub rejects IS terminal, though: nothing was queued, so
+     * no runner will ever call back and the run would otherwise sit pending until
+     * reaped ~20 minutes later with a misleading "silent run" reason.
+     */
+    const startGithubActions = async () => {
+      const res = await dispatchGithubActionsRun(env, db, {
+        tenantId, taskId: taskRow.id, executionId: execution.id,
+      }).catch((e) => ({ ok: false as const, code: 'threw', reason: e instanceof Error ? e.message : String(e) }));
+
+      if (!res.ok) {
+        await failCloudRuntimeUnavailable(`GitHub Actions dispatch failed: ${res.reason}`);
+        return;
+      }
+
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+        toolName: 'runtime.queued', category: 'planning',
+        detail: { surface: 'github_actions' },
+        result: 'Queued on GitHub Actions — waiting for a runner to be scheduled.',
+      }).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "startGithubActions", context: { logMessage: '[runtime-dispatch] GitHub Actions dispatch telemetry failed', details: { tenantId, executionId: execution.id, error } } }));
+    };
+
     const startDurable = async () => {
       const cloudRunner = env.CLOUD_RUNNER;
       if (!cloudRunner) {
-        await recordCloudToolEvent(db, {
-          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
-          toolName: 'runtime.fallback', category: 'planning',
-          detail: { reason: 'no CLOUD_RUNNER binding', ranOn: 'worker' },
-          result: 'Durable Object binding (CLOUD_RUNNER) not configured — running on the interim Worker loop (may not survive long multi-step runs).',
-        });
-        await runWorkerFallback();
+        await failCloudRuntimeUnavailable('the CLOUD_RUNNER binding is not configured');
         return;
       }
       try {
@@ -619,26 +736,14 @@ async function startDispatchedExecution(
             executionId: execution.id, tenantId, projectId: taskRow.projectId,
             taskId: taskRow.id, taskTitle: taskRow.title, taskDescription: taskRow.description,
             cloudAgentRef: agent.ref, agentLabel: agent.label ?? 'BuilderForce Agent',
-            payload: effectivePayload, artifacts,
+            payload: dispatchPayload, artifacts,
           }),
         });
         if (!res.ok) {
-          await recordCloudToolEvent(db, {
-            tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
-            toolName: 'runtime.fallback', category: 'planning',
-            detail: { reason: `CloudRunnerDO /start ${res.status}`, ranOn: 'worker' },
-            result: `Durable Object kickoff returned ${res.status} — running on the interim Worker loop instead.`,
-          });
-          await runWorkerFallback();
+          await failCloudRuntimeUnavailable(`CloudRunnerDO /start returned HTTP ${res.status}`);
         }
       } catch (e) {
-        await recordCloudToolEvent(db, {
-          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
-          toolName: 'runtime.fallback', category: 'planning',
-          detail: { reason: e instanceof Error ? e.message : String(e), ranOn: 'worker' },
-          result: 'Durable Object kickoff threw — running on the interim Worker loop instead.',
-        });
-        await runWorkerFallback();
+        await failCloudRuntimeUnavailable(`CloudRunnerDO /start threw: ${e instanceof Error ? e.message : String(e)}`);
       }
     };
 
@@ -654,7 +759,7 @@ async function startDispatchedExecution(
       try {
         const { systemPrompt, userContent } = await prepareCloudRun(
           env, db, execution.id, taskRow, tenantId, taskRow.projectId,
-          agent.label ?? 'BuilderForce Agent', agent.baseModel, artifacts, agent.ref, effectivePayload,
+          agent.label ?? 'BuilderForce Agent', agent.baseModel, artifacts, agent.ref, dispatchPayload,
           { shell: true },
         );
         const token = await mintContainerRunToken(env.JWT_SECRET, execution.id);
@@ -716,7 +821,27 @@ async function startDispatchedExecution(
         ? env.AGENT_CONTAINER.get(env.AGENT_CONTAINER.idFromName(`exec:${execution.id}`))
         : null;
       const containerHealthy = stub ? await probeContainerHealth(stub) : false;
-      const executor = chooseCloudExecutor({ wantsContainer, hasContainerBinding, containerHealthy, hasCloudRunner });
+      const actionsAvailable = wantsGithubActions
+        ? await resolveDefaultRepoForTask(db, tenantId, taskRow.id)
+            .then((r) => (r ? githubActionsAvailable(env, db, tenantId, r.repoId) : false))
+            .catch(() => false)
+        : false;
+      const executor = chooseCloudExecutor({
+        wantsContainer, hasContainerBinding, containerHealthy, hasCloudRunner,
+        wantsGithubActions, githubActionsAvailable: actionsAvailable,
+      });
+
+      // Stamp the resolved executor onto the payload + the executions row so the orphan
+      // reaper and read-path repair measure this run against the RIGHT silence ceiling:
+      // a long-lived 'durable'/'container' run heartbeats once per alarm tick and a tick
+      // spans one slow LLM step, so it must not be reaped at the serverless 90s wall
+      // (execution #136). The row is what the reaper reads; the kickoff body carries the
+      // same stamped copy so a self-heal re-dispatch keeps it.
+      dispatchPayload = executor === 'unavailable'
+        ? effectivePayload
+        : withExecutor(effectivePayload, executor);
+      await db.update(executions).set({ payload: dispatchPayload })
+        .where(eq(executions.id, execution.id)).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "orchestrate", context: { logMessage: '[runtime-dispatch] executor payload stamp failed', details: { tenantId, executionId: execution.id, executor, error } } }));
 
       await recordCloudToolEvent(db, {
         tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
@@ -728,19 +853,59 @@ async function startDispatchedExecution(
       // Explain a container→durable/worker downgrade so the timeline shows WHY.
       if (wantsContainer && executor !== 'container') {
         const why = !hasContainerBinding ? 'no long-lived Cloudflare Container is bound' : 'the Cloudflare Container is not live (health probe failed)';
+        const fallbackResult = executor === 'unavailable'
+          ? `${typeLabel}: ${why}, and no durable executor is available — failing without starting the unsafe in-request Worker loop.`
+          : `${typeLabel}: ${why} — running on the durable cloud executor instead, which executes the run to completion.`;
         await recordCloudToolEvent(db, {
           tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
           toolName: 'runtime.fallback', category: 'planning',
           detail: { requestedSurface: 'container', ranOn: executor, reason: !hasContainerBinding ? 'no AGENT_CONTAINER binding' : 'container /health unreachable' },
-          result: `${typeLabel}: ${why} — running on the ${executor} cloud executor instead, which executes the run to completion.`,
+          result: fallbackResult,
         });
       }
 
-      if (executor === 'container' && stub) await startContainer(stub);
+      // Explain a github_actions→durable downgrade the same way the container
+      // downgrade is explained, so the timeline says WHY rather than silently
+      // running somewhere the tenant did not choose.
+      if (wantsGithubActions && executor !== 'github_actions') {
+        await recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+          toolName: 'runtime.fallback', category: 'planning',
+          detail: { requestedSurface: 'github_actions', ranOn: executor, reason: 'agent workflow not available on the linked repo' },
+          result: `${typeLabel}: the GitHub Actions agent workflow is not present on the linked repo — running on the ${executor} executor instead.`,
+        });
+      }
+
+      if (executor === 'github_actions') await startGithubActions();
+      else if (executor === 'container' && stub) await startContainer(stub);
       else if (executor === 'durable') await startDurable();
-      else await runWorkerFallback();
+      else await failCloudRuntimeUnavailable('the CLOUD_RUNNER binding is not configured');
     };
-    waitUntil(orchestrate());
+    // orchestrate() degrades container→durable and fails fast when durable kickoff is
+    // unavailable. It never runs the multi-step loop inside waitUntil: that path is
+    // subject to the background-execution wall that caused the original timeouts.
+    // Catch any unexpected orchestration failure so the row is never stranded pending.
+    waitUntil(orchestrate().catch(async (err) => {
+      try {
+        const current = await runtimeService.getExecution(execution.id);
+        if (isTerminalExecutionStatus(current.status)) return;
+        const msg = `Cloud dispatch failed before any executor took the run: ${err instanceof Error ? err.message : String(err)}`;
+        await runtimeService.update(execution.id, { status: ExecutionStatus.FAILED, errorMessage: msg }).catch((transitionError) => reportCaughtError(transitionError, { source: "presentation/routes/runtimeRoutes.ts", operation: "startDispatchedExecution", level: 'warning', context: { logMessage: '[runtime-dispatch] orchestration failure transition rejected', details: { tenantId, executionId: execution.id, transitionError } } }));
+        await recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+          toolName: 'run.failed', category: 'error',
+          detail: { reason: err instanceof Error ? err.message : String(err), phase: 'dispatch' },
+          result: msg,
+        });
+        await notifyDone();
+      } catch (recoveryError) {
+        reportCaughtError(recoveryError, { source: "presentation/routes/runtimeRoutes.ts", operation: "startDispatchedExecution", context: { logMessage: '[runtime-dispatch] orchestration recovery failed; stale reaper is the backstop', details: {
+          tenantId,
+          executionId: execution.id,
+          recoveryError,
+        } } });
+      }
+    }));
   }
 
   // Announce the queued/dispatched execution immediately.
@@ -828,13 +993,16 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // The original AgentHostLink transport adapter used /api/runtime/sessions and
   // /api/runtime/tasks/submit. These endpoints are kept for CLI/agent compatibility.
 
-  router.post('/sessions', async (c) => {
+  // Mints a session handle for a run the caller is about to submit — part of the
+  // dispatch path, so it carries the same run-tier gate as the submit itself.
+  router.post('/sessions', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const body = await c.req.json<{ sessionId?: string }>().catch(() => ({} as any));
     const sessionId = body.sessionId ?? crypto.randomUUID();
     return c.json({ sessionId }, 201);
   });
 
-  router.post('/tasks/submit', async (c) => {
+  // STARTS a billable run (legacy BuilderForce Link submit path).
+  router.post('/tasks/submit', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const body = await c.req.json<{
       taskId:   number;
       agentId?: number;
@@ -868,6 +1036,15 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     if (!taskRow) {
       return c.json({ error: 'Task not found' }, 404);
     }
+
+    const authorization = await authorizeManagedTaskExecution(db, c.get('tenantId'), body.taskId, body.payload);
+    if (!authorization.allowed) return c.json({ error: authorization.reason }, 409);
+
+    // Token gate — no budget → no run (shared adapter, so Run-now + this path + the
+    // board Run agree and the superadmin bypass is applied once). Fails open on a
+    // scan error; superadmin / unlimited tenants pass through.
+    const tokenBlock = await executionTokenGate(c, db);
+    if (tokenBlock) return tokenBlock;
 
     const gate = await evaluateExecutionApprovalGate(
       db,
@@ -910,15 +1087,16 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     return c.json(owned.toPlain());
   });
 
-  router.post('/tasks/:id/cancel', async (c) => {
+  // CANCELS a run (legacy alias of /executions/:id/cancel).
+  router.post('/tasks/:id/cancel', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const id = Number(c.req.param('id'));
     if (!(await loadOwnedExecution(c, runtimeService, id))) return c.json({ error: 'Execution not found' }, 404);
     const execution = await runtimeService.cancel(id, c.get('userId'));
     return c.json(execution.toPlain());
   });
 
-  // Submit a task for execution
-  router.post('/executions', async (c) => {
+  // Submit a task for execution — the primary "start a billable run" entry point.
+  router.post('/executions', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const body = await c.req.json<{
       taskId:   number;
       agentId?: number;
@@ -951,6 +1129,12 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     if (!taskRow) {
       return c.json({ error: 'Task not found' }, 404);
     }
+
+    // Token gate — no budget → no run (shared adapter, so Run-now + this path + the
+    // board Run agree and the superadmin bypass is applied once). Fails open on a
+    // scan error; superadmin / unlimited tenants pass through.
+    const tokenBlock = await executionTokenGate(c, db);
+    if (tokenBlock) return tokenBlock;
 
     const gate = await evaluateExecutionApprovalGate(
       db,
@@ -1126,6 +1310,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   router.get('/active', async (c) => {
     const tenantId = c.get('tenantId');
     const limit = Math.min(Number(c.req.query('limit') ?? '200'), 500);
+    // `liveExecution()` — a rehearsal (0372) drives a real execution row but is a
+    // probe rather than fleet activity, so it must not appear on the active-runs board.
     const rows = await db
       .select({
         id: executions.id,
@@ -1140,7 +1326,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       })
       .from(executions)
       .innerJoin(tasks, eq(tasks.id, executions.taskId))
-      .where(and(eq(executions.tenantId, tenantId), inArray(executions.status, ['pending', 'submitted', 'running'])))
+      .where(and(eq(executions.tenantId, tenantId), inArray(executions.status, ['pending', 'submitted', 'running']), liveExecution()))
       .orderBy(desc(executions.createdAt))
       .limit(limit);
 
@@ -1156,6 +1342,141 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       };
     });
     return c.json({ active, runningCloudRefs: [...new Set(active.filter((a) => a.kind === 'cloud').map((a) => a.cloudAgentRef))] });
+  });
+
+  // GET /api/runtime/attention  — the ONE cross-surface "what's live / what needs me"
+  // aggregator. Every surface (web Brain chat list + FloatingBrain badge, the board,
+  // the VS Code sessions/tasks trees, any modality) reads this SAME signal so a
+  // session's status follows it everywhere the user multitasks — switching chats on
+  // the web never changes whether the agent keeps executing in the background.
+  //
+  // Two derived states per work item, most-severe wins:
+  //   'awaiting_input' — an execution is PAUSED on ask_human (a pending question/feedback
+  //                      approval): a person must answer before it resumes.  [amber flag]
+  //   'running'        — an execution is pending/submitted/running: actively executing. [blue/pulse]
+  // (idle items are omitted entirely to keep the payload bounded.)
+  //
+  // Attribution: directly to the task via executions.task_id, and to a Brain chat via
+  // chat_ticket_links (chat → task/epic/gap). Intentionally uncached — a live operational
+  // surface that must reflect state this instant, same rationale as /active; it is three
+  // indexed, bounded queries with no N+1, and every consumer polls it adaptively.
+  router.get('/attention', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const projectIdRaw = c.req.query('projectId');
+    const projectId = projectIdRaw ? Number(projectIdRaw) : undefined;
+    const LIMIT = 500;
+
+    // 1) Every non-terminal execution for the tenant (optionally one project), with its task.
+    const execWhere = [eq(executions.tenantId, tenantId), inArray(executions.status, ['pending', 'submitted', 'running', 'paused']), liveExecution()];
+    if (projectId != null && Number.isFinite(projectId)) execWhere.push(eq(tasks.projectId, projectId));
+    const execRows = await db
+      .select({ id: executions.id, taskId: executions.taskId, status: executions.status })
+      .from(executions)
+      .innerJoin(tasks, eq(tasks.id, executions.taskId))
+      .where(and(...execWhere))
+      .orderBy(desc(executions.createdAt))
+      .limit(LIMIT);
+
+    // 2) Pending human questions (ask_human) — the authoritative "needs an answer" rows.
+    const approvalRows = await db
+      .select({ id: approvals.id, executionId: approvals.executionId })
+      .from(approvals)
+      .where(and(
+        eq(approvals.tenantId, tenantId),
+        eq(approvals.status, 'pending'),
+        inArray(approvals.kind, ['question', 'feedback']),
+      ))
+      .limit(LIMIT);
+
+    // execId → taskId (only executions we actually surfaced above, so already project-scoped).
+    const execTask = new Map<number, number>();
+    for (const e of execRows) if (e.taskId != null) execTask.set(e.id, e.taskId);
+    const approvalByExec = new Map<number, string>();
+    for (const a of approvalRows) if (a.executionId != null) approvalByExec.set(a.executionId, a.id);
+
+    // 3) Fold into per-task state (awaiting_input wins over running).
+    type Item = { state: 'running' | 'awaiting_input'; executionId?: number; approvalId?: string };
+    const taskState = new Map<number, Item>();
+    const setState = (taskId: number, next: Item) => {
+      const cur = taskState.get(taskId);
+      if (!cur || (next.state === 'awaiting_input' && cur.state !== 'awaiting_input')) taskState.set(taskId, next);
+      else if (cur.state === next.state && !cur.approvalId && next.approvalId) taskState.set(taskId, next);
+    };
+    for (const e of execRows) {
+      if (e.taskId == null) continue;
+      const approvalId = approvalByExec.get(e.id);
+      // A paused run, or any run carrying a pending question, is awaiting a person.
+      if (e.status === 'paused' || approvalId) setState(e.taskId, { state: 'awaiting_input', executionId: e.id, approvalId });
+      else setState(e.taskId, { state: 'running', executionId: e.id });
+    }
+
+    // 4) Propagate task state onto the Brain chats linked to those tasks (chat_ticket_links).
+    const taskIds = [...taskState.keys()];
+    const chatState: Record<number, Item & { taskId: number }> = {};
+    if (taskIds.length > 0) {
+      const linkRows = await db
+        .select({ chatId: chatTicketLinks.chatId, ticketRef: chatTicketLinks.ticketRef })
+        .from(chatTicketLinks)
+        .where(and(
+          eq(chatTicketLinks.tenantId, tenantId),
+          inArray(chatTicketLinks.ticketKind, ['task', 'epic', 'gap']),
+          inArray(chatTicketLinks.ticketRef, taskIds.map(String)),
+        ))
+        .limit(LIMIT);
+      for (const l of linkRows) {
+        const taskId = Number(l.ticketRef);
+        const item = taskState.get(taskId);
+        if (!item) continue;
+        const cur = chatState[l.chatId];
+        if (!cur || (item.state === 'awaiting_input' && cur.state !== 'awaiting_input')) {
+          chatState[l.chatId] = { ...item, taskId };
+        }
+      }
+    }
+
+    const tasksOut: Record<number, Item> = {};
+    for (const [taskId, item] of taskState) tasksOut[taskId] = item;
+
+    // 4b) Unread Brain chats for the caller — new messages (execution milestones,
+    // a teammate/agent turn) in a chat the user has read before but isn't viewing.
+    // Bounded, indexed grouped read via the shared read-state rule; global (not
+    // project-scoped) because unread is inherently cross-project. Only for a real
+    // user JWT (an agentHost runtime token has no userId, so it just sees {}).
+    const userId = c.get('userId') as string | undefined;
+    const chatUnread = userId
+      ? await unreadCountsForUser(db, tenantId, userId).catch(() => ({} as Record<number, number>))
+      : {};
+    const unreadTotal = Object.values(chatUnread).reduce((a, b) => a + b, 0);
+
+    // 5) AI Manager cadence — the freshest `last managed` stamp across the manager's
+    // scope, so a human on ANY screen sees an ambient "Manager active" pulse when a
+    // pass just ran (cron or manual). A manager can be scoped to one project OR the
+    // whole tenant, so: project-scoped attention reads that project's stamp; the
+    // tenant-wide view reads MAX(last_run_at) across all the tenant's managed
+    // projects. One bounded aggregate — consistent with this endpoint's other reads.
+    const mgrWhere = projectId != null && Number.isFinite(projectId)
+      ? and(eq(projectManagerConfigs.tenantId, tenantId), eq(projectManagerConfigs.projectId, projectId))
+      : eq(projectManagerConfigs.tenantId, tenantId);
+    const [mgrRow] = await db
+      .select({ lastRunAt: sql<Date | null>`max(${projectManagerConfigs.lastRunAt})` })
+      .from(projectManagerConfigs)
+      .where(mgrWhere);
+    const lastRunAt = mgrRow?.lastRunAt ? new Date(mgrRow.lastRunAt) : null;
+    // "Active" = a pass landed within the last 3 min (the cron cadence is 5 min, a
+    // pass is seconds long, so this reads as "the manager is working on schedule").
+    const recentlyActive = lastRunAt != null && Date.now() - lastRunAt.getTime() < 3 * 60_000;
+
+    return c.json({
+      tasks: tasksOut,
+      chats: chatState,
+      chatUnread,
+      counts: {
+        running: [...taskState.values()].filter((i) => i.state === 'running').length,
+        awaiting: [...taskState.values()].filter((i) => i.state === 'awaiting_input').length,
+        unread: unreadTotal,
+      },
+      manager: { lastRunAt: lastRunAt ? lastRunAt.toISOString() : null, recentlyActive },
+    });
   });
 
   // GET /api/runtime/hired-agents
@@ -1180,14 +1501,28 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const rows = await getOrSetCached(
       c.env as Env,
       runtimeHiredAgentsCacheKey(tenantId),
-      () => neon(c.env.NEON_DATABASE_URL)`
-        SELECT a.id, a.name, a.bio, a.skills, a.base_model
-        FROM ide_agents a
-        JOIN agent_purchases p ON p.agent_id = a.id
-        WHERE p.tenant_id = ${tenantId} AND p.unhired_at IS NULL AND a.status = 'active'
-        ORDER BY p.created_at DESC
-        LIMIT 200
-      ` as unknown as Promise<Array<{ id: string; name: string; bio: string | null; skills: unknown; base_model: string | null }>>,
+      // Projected with the ORIGINAL snake_case `base_model` key: the contract above
+      // (and the KV-cached payload) is read by projectHiredAgent, so the shape must
+      // not drift to Drizzle's camelCase.
+      // `unhired_at` (migration 0101, the soft-delete marker) is not declared on the
+      // Drizzle `agentPurchases` table, so the predicate stays a raw fragment.
+      async () => db
+        .select({
+          id: ideAgents.id,
+          name: ideAgents.name,
+          bio: ideAgents.bio,
+          skills: ideAgents.skills,
+          base_model: ideAgents.baseModel,
+        })
+        .from(ideAgents)
+        .innerJoin(agentPurchases, eq(agentPurchases.agentId, ideAgents.id))
+        .where(and(
+          eq(agentPurchases.tenantId, tenantId),
+          sql`${agentPurchases}.unhired_at is null`,
+          eq(ideAgents.status, 'active'),
+        ))
+        .orderBy(desc(agentPurchases.createdAt))
+        .limit(200),
     );
 
     const agents = rows.map((r) => projectHiredAgent(r));
@@ -1214,7 +1549,9 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   });
 
   // Legacy telemetry / trace endpoints (used by some older integrations)
-  router.post('/executions/:id/telemetry', async (c) => {
+  // WRITES metered usage rows for a run (agent-host callback; host machine tokens
+  // carry DEVELOPER). Not a read — a viewer must not be able to forge usage.
+  router.post('/executions/:id/telemetry', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const id = Number(c.req.param('id'));
     const body = await c.req
       .json<ExecutionTelemetryBody>()
@@ -1363,16 +1700,18 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const namedRefs = rows.map((r) => r.ref).filter((r): r is string => !!r);
     const hasDefault = rows.some((r) => r.ref == null);
 
-    // Resolve display names from the raw-SQL ide_agents table (best-effort).
+    // Resolve display names from the ide_agents table (best-effort).
     const nameByRef = new Map<string, string>();
     if (namedRefs.length > 0) {
       try {
-        const sql = neon((c.env as Env).NEON_DATABASE_URL);
-        const named = (await sql`
-          SELECT id, name FROM ide_agents WHERE tenant_id = ${tenantId} AND id = ANY(${namedRefs})
-        `) as Array<{ id: string; name: string }>;
+        const named = await db
+          .select({ id: ideAgents.id, name: ideAgents.name })
+          .from(ideAgents)
+          .where(and(eq(ideAgents.tenantId, tenantId), inArray(ideAgents.id, namedRefs)));
         for (const n of named) nameByRef.set(String(n.id), n.name);
-      } catch { /* names are cosmetic — fall back to the ref */ }
+      } catch (error) {
+        reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "createRuntimeRoutes", level: 'warning', context: { logMessage: '[runtime-tool-audit] agent display-name resolution failed; using refs', details: { tenantId, agentRefs: namedRefs, error } } });
+      }
     }
 
     const agents = [
@@ -1426,38 +1765,36 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       .orderBy(desc(toolAuditEvents.ts))
       .limit(limit);
 
-    // Read-path repair: a run that FAILED before the failure-telemetry emit
-    // existed (or via any path that missed it) has its reason only on
-    // executions.error_message, so the Logs/Timeline (telemetry-only views) never
-    // show it — the timeline just stops at the last successful tool call. When
-    // scoped to one execution, synthesize the terminal `run.failed` event from the
-    // execution row if it failed and no persisted failure event is present. Self-
-    // healing and idempotent (mirrors RuntimeService.reapIfOrphaned's read repair);
-    // one indexed PK lookup, only on the per-execution path.
-    if (executionId != null && !events.some((e) => e.toolName === 'run.failed')) {
-      const [exec] = await db
-        .select({ status: executions.status, errorMessage: executions.errorMessage, completedAt: executions.completedAt, updatedAt: executions.updatedAt })
-        .from(executions)
-        .where(and(eq(executions.id, executionId), eq(executions.tenantId, tenantId)))
-        .limit(1);
-      if (exec?.status === 'failed') {
-        events.unshift({
-          id: -executionId,
-          runId: null,
-          sessionKey: `exec:${executionId}`,
-          toolCallId: null,
-          toolName: 'run.failed',
-          category: 'error',
-          args: null,
-          result: exec.errorMessage ?? 'Run failed',
-          durationMs: null,
-          executionId,
-          ts: exec.completedAt ?? exec.updatedAt,
-        });
-      }
+    // Read-path repair (shared with the host tool-audit read): when scoped to one
+    // execution, surface a terminal `run.failed` synthesized from the execution row
+    // for a run that failed without emitting the telemetry event. Events are newest-
+    // first here, so the failure prepends.
+    if (executionId != null) {
+      const synthetic = await synthesizeRunFailedEvent(db, tenantId, executionId, events);
+      if (synthetic) events.unshift(synthetic);
     }
 
     return c.json({ events });
+  });
+
+  // Live container-preview URL for a run (Replit-parity phase 2, flag-gated). Mints a
+  // signed, time-limited URL that proxies to a dev server the run started inside its
+  // container (see application/runtime/previewIngress). 404 unless PREVIEW_INGRESS_ENABLED
+  // is set, so the endpoint is inert until an operator turns the feature on. Tenant-
+  // scoped via loadOwnedExecution so a guessed id can't mint another tenant's preview.
+  router.get('/executions/:id/preview-url', async (c) => {
+    if (c.env.PREVIEW_INGRESS_ENABLED !== 'true') {
+      return c.json({ error: 'Live preview is not enabled.' }, 404);
+    }
+    const id = Number(c.req.param('id'));
+    const owned = await loadOwnedExecution(c, runtimeService, id);
+    if (!owned) return c.json({ error: 'Execution not found' }, 404);
+
+    const token = await mintPreviewToken(c.env.JWT_SECRET, id, Date.now() / 1000);
+    return c.json({
+      url: `https://${PREVIEW_HOST}/${token}/`,
+      expiresInSeconds: PREVIEW_TOKEN_TTL_SECONDS,
+    });
   });
 
   // P0-2: WebSocket streaming endpoint for a single execution.
@@ -1506,7 +1843,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // the host (which aborts the live session); cloud runs are halted by the
   // background loop's per-step cancel poll (see runCloudToolLoop). Without this,
   // cancel was cosmetic and the agent kept burning tokens to completion.
-  router.post('/executions/:id/cancel', async (c) => {
+  router.post('/executions/:id/cancel', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const id = Number(c.req.param('id'));
     if (!(await loadOwnedExecution(c, runtimeService, id))) return c.json({ error: 'Execution not found' }, 404);
     const execution = await runtimeService.cancel(id, c.get('userId'));
@@ -1523,7 +1860,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ executionId: id }),
-      }).catch(() => { /* best effort; status is already CANCELLED */ });
+      }).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "createRuntimeRoutes", context: { logMessage: '[runtime-cancel] host relay cancellation failed after status transition', details: { tenantId: c.get('tenantId'), executionId: id, error } } }));
     }
 
     notifyExecutionSubscribers(execution.id, {
@@ -1535,6 +1872,41 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     });
 
     return c.json(execution.toPlain());
+  });
+
+  // Revert a completed run: close the pull request it opened and delete the ticket
+  // branch it wrote, once the shared teardown decision can PROVE nothing else
+  // touched them. If the run's PR already MERGED there is nothing on a branch left
+  // to undo, so the revert escalates to opening a revert pull request against the
+  // base (`mode: 'revert_pr'` — a proposal, applied only when a human merges it).
+  // Refusals (advanced branch, foreign commits/paths, unreadable evidence, a
+  // conflict with newer work, a provider that cannot revert) come back as a 409
+  // carrying the reason verbatim so the UI can explain exactly what blocked it.
+  //
+  // MANAGER — not the DEVELOPER tier the rest of this file's dispatch routes use.
+  // Starting a run is a developer's job; DESTROYING the output of one, including
+  // commits a human may have reviewed, is a governance action.
+  router.post('/executions/:id/revert', requireRole(TenantRole.MANAGER) as never, async (c) => {
+    const id = Number(c.req.param('id'));
+    const owned = await loadOwnedExecution(c, runtimeService, id);
+    if (!owned) return c.json({ error: 'Execution not found' }, 404);
+
+    // Only a settled run can be reverted — a live one is still writing, so cancel
+    // it first (which routes into the automatic teardown sweep instead).
+    if (!isTerminalExecutionStatus(owned.status)) {
+      return c.json({ error: 'Only a finished run can be reverted — cancel it first.', refusal: 'run_not_terminal' }, 409);
+    }
+
+    const outcome = await revertRun(c.env, db, {
+      tenantId: c.get('tenantId'),
+      executionId: id,
+      actor: await resolveActorFromContext(c.env, db, c as unknown as Context<HonoEnv>),
+      secret: gitSecret(c.env),
+    });
+    if (!outcome.reverted) {
+      return c.json({ error: outcome.reason, refusal: outcome.refusal }, 409);
+    }
+    return c.json(outcome);
   });
 
   // Send a follow-up direction to a running/queued execution so the user can
@@ -1553,7 +1925,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   //     (built on the prior run's committed work + the evolved PRD), and return the
   //     new execution id so the UI can follow it. This replaces the old silent
   //     no-op, which only ever forwarded to a live host and dropped everything else.
-  router.post('/executions/:id/messages', async (c) => {
+  // STEERS a live run and, on a terminal run, STARTS a brand-new billable one.
+  router.post('/executions/:id/messages', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const id = Number(c.req.param('id'));
     const body = await c.req.json<{ text?: string }>().catch(() => ({} as { text?: string }));
     const text = body.text?.trim();
@@ -1589,7 +1962,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ executionId: id, text }),
-        }).catch(() => { /* best effort; the loop still drains the persisted steer */ });
+        }).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "createRuntimeRoutes", context: { logMessage: '[runtime-steer] durable runner wake-up failed; persisted steer remains queued', details: { tenantId, executionId: id, error } } }));
       }
 
       notifyExecutionSubscribers(id, { type: 'message', executionId: id, role: 'user', text, ts: new Date().toISOString() });
@@ -1634,7 +2007,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   });
 
   // Agent callback: update execution state (running / completed / failed)
-  router.patch('/executions/:id/state', async (c) => {
+  router.patch('/executions/:id/state', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const id = Number(c.req.param('id'));
     if (!(await loadOwnedExecution(c, runtimeService, id))) return c.json({ error: 'Execution not found' }, 404);
     const body = await c.req.json<{
@@ -1728,17 +2101,19 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       c.env as Env,
       `task-cost:v1:${tenantId}:${taskId}`,
       async () => {
-        const sql = neon((c.env as Env).NEON_DATABASE_URL);
-        const rows = (await sql`
-          SELECT COALESCE(SUM(cost_usd_millicents), 0)::bigint AS cost_mc,
-                 COALESCE(SUM(total_tokens), 0)::bigint       AS tokens,
-                 COUNT(*)::int                                 AS requests
-            FROM llm_usage_log
-           WHERE tenant_id = ${tenantId} AND task_id = ${taskId}
-        `) as Array<{ cost_mc: string; tokens: string; requests: number }>;
+        // ::bigint comes back as a STRING from the driver, ::int as a number — the
+        // Number() coercions below are what normalise both.
+        const rows = await db
+          .select({
+            cost_mc: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}), 0)::bigint`,
+            tokens: sql<string>`coalesce(sum(${llmUsageLog.totalTokens}), 0)::bigint`,
+            requests: sql<number>`count(*)::int`,
+          })
+          .from(llmUsageLog)
+          .where(and(eq(llmUsageLog.tenantId, tenantId), eq(llmUsageLog.taskId, taskId)));
         const r = rows[0];
         return {
-          estimatedCostUsd: Number(r?.cost_mc ?? 0) / 100_000,
+          estimatedCostUsd: millicentsToUsd(Number(r?.cost_mc ?? 0)),
           totalTokens: Number(r?.tokens ?? 0),
           requests: Number(r?.requests ?? 0),
         };
@@ -1754,14 +2129,41 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   router.get('/tasks/:taskId/file-changes', async (c) => {
     const taskId = Number(c.req.param('taskId'));
     if (!Number.isFinite(taskId)) return c.json({ changes: [] });
-    const sql = neon((c.env as Env).NEON_DATABASE_URL);
-    const rows = (await sql`
-      SELECT path, change, agent, execution_id AS "executionId", created_at AS "createdAt"
-      FROM task_file_changes
-      WHERE task_id = ${taskId} AND tenant_id = ${c.get('tenantId')}
-      ORDER BY created_at DESC
-      LIMIT 500
-    `) as Array<{ path: string; change: string; agent: string; executionId: number | null; createdAt: string }>;
+    // `createdAt` is projected as the RAW driver string (not a Drizzle `Date`) so the
+    // JSON wire format the Changes tab already parses is unchanged.
+    const rows = await db
+      .select({
+        path: taskFileChanges.path,
+        change: taskFileChanges.change,
+        agent: taskFileChanges.agent,
+        executionId: taskFileChanges.executionId,
+        createdAt: sql<string>`${taskFileChanges.createdAt}`,
+        // NOTE: the outer-row references below interpolate the TABLE (`${taskFileChanges}`),
+        // not its columns. In a single-table select Drizzle renders an interpolated
+        // Column WITHOUT its table qualifier, so `${taskFileChanges.executionId}` would
+        // emit a bare `"execution_id"` that the correlated subquery resolves against its
+        // OWN table — silently turning the filter into a tautology.
+        models: sql<string[]>`ARRAY(
+          SELECT DISTINCT substring(a.args from '"model"\\s*:\\s*"([^"]+)"')
+          FROM tool_audit_events a
+          WHERE a.execution_id = ${taskFileChanges}.execution_id AND a.tenant_id = ${taskFileChanges}.tenant_id
+            AND a.tool_name = 'llm.complete'
+            AND substring(a.args from '"model"\\s*:\\s*"([^"]+)"') IS NOT NULL
+        )`,
+        modelUsage: sql<Array<{ model: string; byo: boolean; provider: string | null }>>`COALESCE((
+          SELECT jsonb_agg(DISTINCT jsonb_build_object(
+            'model', u.model,
+            'byo', u.byo,
+            'provider', u.byo_provider
+          ))
+          FROM llm_usage_log u
+          WHERE u.execution_id = ${taskFileChanges}.execution_id AND u.tenant_id = ${taskFileChanges}.tenant_id
+        ), '[]'::jsonb)`,
+      })
+      .from(taskFileChanges)
+      .where(and(eq(taskFileChanges.taskId, taskId), eq(taskFileChanges.tenantId, c.get('tenantId'))))
+      .orderBy(desc(taskFileChanges.createdAt))
+      .limit(500);
     return c.json({ changes: rows });
   });
 
@@ -1814,14 +2216,17 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     };
 
     // Version token = newest change row for this path (null when unrecorded).
-    const sql = neon(env.NEON_DATABASE_URL);
-    const [ver] = (await sql`
-      SELECT created_at AS "ts"
-      FROM task_file_changes
-      WHERE task_id = ${taskId} AND tenant_id = ${tenantId} AND path = ${path}
-      ORDER BY created_at DESC
-      LIMIT 1
-    `) as Array<{ ts: string }>;
+    // Kept as the raw driver string so the cache key it composes is byte-identical.
+    const [ver] = await db
+      .select({ ts: sql<string>`${taskFileChanges.createdAt}` })
+      .from(taskFileChanges)
+      .where(and(
+        eq(taskFileChanges.taskId, taskId),
+        eq(taskFileChanges.tenantId, tenantId),
+        eq(taskFileChanges.path, path),
+      ))
+      .orderBy(desc(taskFileChanges.createdAt))
+      .limit(1);
 
     if (!ver?.ts) return c.json(await load());
     const body = await getOrSetCached(
@@ -1853,8 +2258,67 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     return c.json({ bound: !noRepo, hasCredential: false, reason: r.reason });
   });
 
+  // GET /api/runtime/tasks/:taskId/repo-files
+  // List the files on the task's AGENT WORKING BRANCH (the ticket branch the run
+  // commits to), so the Brain composer's "Add context" can reference the agent's
+  // in-progress workspace — not just the repo's default branch. Reads server-side
+  // with the decrypted token via the SAME importRepoContents path the IDE hydrate
+  // uses; the token never reaches the browser. Falls back to the base branch when
+  // the ticket branch doesn't exist yet (a run that hasn't committed).
+  //
+  // Cached read-through keyed by a version token = the latest recorded file-change
+  // ts for the task: a fresh agent write bumps the token → next read is live; a
+  // settled run is served from cache, so re-opening the picker doesn't re-pull.
+  router.get('/tasks/:taskId/repo-files', async (c) => {
+    const taskId = Number(c.req.param('taskId'));
+    if (!Number.isFinite(taskId)) return c.json({ ok: false, reason: 'invalid task', files: [] }, 400);
+    const env = c.env as Env;
+    const tenantId = c.get('tenantId');
+
+    const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
+    if (!repo.ok) return c.json({ ok: false, reason: repo.reason, files: [] });
+    const ctx = repo.ctx;
+
+    const load = async () => {
+      const read = { provider: ctx.provider, host: ctx.host, owner: ctx.owner, repo: ctx.repo, token: ctx.token };
+      // Prefer the agent's working branch; a run that hasn't committed has no such
+      // branch yet, so fall back to the base so the picker still shows the repo.
+      let result = await importRepoContents({ ...read, ref: ctx.branch });
+      let ref = ctx.branch;
+      if (!result.ok) { result = await importRepoContents({ ...read, ref: ctx.base }); ref = ctx.base; }
+      return {
+        ok: result.ok,
+        ref,
+        branch: ctx.branch,
+        base: ctx.base,
+        files: result.files,
+        truncated: result.truncated,
+        ...(result.ok ? {} : { reason: result.error ?? 'Failed to read repository' }),
+      };
+    };
+
+    // Version token = newest change row for this task (null when the run hasn't
+    // written anything yet — then the branch content is stable at the base).
+    const [ver] = await db
+      .select({ ts: sql<string>`${taskFileChanges.createdAt}` })
+      .from(taskFileChanges)
+      .where(and(eq(taskFileChanges.taskId, taskId), eq(taskFileChanges.tenantId, tenantId)))
+      .orderBy(desc(taskFileChanges.createdAt))
+      .limit(1);
+
+    const body = await getOrSetCached(
+      env,
+      `task-repo-files:${tenantId}:${taskId}:${ctx.branch}:${ver?.ts ?? 'base'}`,
+      load,
+      { kvTtlSeconds: 300, l1TtlMs: 30_000 },
+    );
+    return c.json(body);
+  });
+
   // Broadcast an existing task to all currently connected agentHosts in the tenant.
-  router.post('/tasks/:taskId/broadcast', async (c) => {
+  // STARTS a run and fans it out to every connected host — the widest-blast-radius
+  // dispatch in the file.
+  router.post('/tasks/:taskId/broadcast', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const taskId = Number(c.req.param('taskId'));
     const body = await c.req.json<{ payload?: string }>().catch((): { payload?: string } => ({}));
 
@@ -1863,6 +2327,9 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         id: tasks.id,
         title: tasks.title,
         description: tasks.description,
+        priority: tasks.priority,
+        projectId: tasks.projectId,
+        assignedAgentHostId: tasks.assignedAgentHostId,
       })
       .from(tasks)
       .innerJoin(projects, eq(projects.id, tasks.projectId))
@@ -1875,6 +2342,16 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
     if (!taskRow) {
       return c.json({ error: 'Task not found' }, 404);
+    }
+
+    // Broadcast starts a real run on every connected host, so it must clear the
+    // SAME governance gate as a targeted submit — otherwise it was a way to run a
+    // high/urgent ticket without the manager approval those tickets require.
+    const gate = await evaluateExecutionApprovalGate(
+      db, c.get('tenantId'), c.get('userId'), taskRow, null, { payload: body.payload },
+    );
+    if (!gate.allowed) {
+      return c.json({ status: 'awaiting_approval', approvalId: gate.approvalId, taskId: taskRow.id, reason: gate.reason }, 202);
     }
 
     const execution = await runtimeService.submit({

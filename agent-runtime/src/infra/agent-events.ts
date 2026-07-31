@@ -15,6 +15,10 @@ export type AgentRunContext = {
   sessionKey?: string;
   verboseLevel?: VerboseLevel;
   isHeartbeat?: boolean;
+  /** The run's initiating user prompt (the "ticket"). Captured at run start so any
+   *  post-run consumer (e.g. the project-Evermind teacher distillation) can learn
+   *  `(task → answer)` rather than only refining the output. */
+  prompt?: string;
 };
 
 // Keep per-run counters so streams stay strictly monotonic per runId.
@@ -40,6 +44,9 @@ export function registerAgentRunContext(runId: string, context: AgentRunContext)
   if (context.isHeartbeat !== undefined && existing.isHeartbeat !== context.isHeartbeat) {
     existing.isHeartbeat = context.isHeartbeat;
   }
+  if (context.prompt && existing.prompt !== context.prompt) {
+    existing.prompt = context.prompt;
+  }
 }
 
 export function getAgentRunContext(runId: string) {
@@ -48,10 +55,14 @@ export function getAgentRunContext(runId: string) {
 
 export function clearAgentRunContext(runId: string) {
   runContextById.delete(runId);
+  // Drop the per-run sequence counter too, else it leaks one entry per runId for
+  // the whole process lifetime (emitAgentEvent seeds seqByRun but never evicts).
+  seqByRun.delete(runId);
 }
 
 export function resetAgentRunContextForTest() {
   runContextById.clear();
+  seqByRun.clear();
 }
 
 export function emitAgentEvent(event: Omit<AgentEventPayload, "seq" | "ts">) {

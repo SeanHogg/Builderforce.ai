@@ -17,6 +17,7 @@ import { GitHubRepoSource } from './GitHubRepoSource';
 import { GitLabRepoSource } from './GitLabRepoSource';
 import { BitbucketRepoSource } from './BitbucketRepoSource';
 import type { FetchLike, RepoSource, RepoSourceConfig, RepoTreeEntry } from './repoSourceBase';
+import { estimateTokensFromChars } from '../../llm/tokenUsage';
 
 export type {
   FetchLike,
@@ -85,9 +86,10 @@ export function isSecretPath(path: string): boolean {
   return SECRET_PATH.test(path);
 }
 
-/** Rough token estimate for a byte count (~4 bytes/token). */
+/** Rough token estimate for a byte count (~4 bytes/token). Delegates to the ONE
+ *  chars/4 heuristic (bytes ≈ chars for the ASCII-dominant source it samples). */
 export function estimateTokens(bytes: number): number {
-  return Math.ceil(bytes / 4);
+  return estimateTokensFromChars(bytes);
 }
 
 export interface SelectEvidenceOptions {

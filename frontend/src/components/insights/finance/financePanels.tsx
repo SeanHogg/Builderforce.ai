@@ -20,10 +20,12 @@ import type { ReactNode } from 'react';
 import type { Capability } from '@/lib/rbac';
 import { FinanceLens } from '@/components/insights/FinanceLens';
 import { AllocationLens } from '@/components/insights/AllocationLens';
+import { ForecastPanel } from '@/components/insights/ForecastPanel';
+import { RdReconciliationLens } from '@/components/insights/RdReconciliationLens';
 import { FinopsLens } from './FinopsLens';
 
 /** Stable, gateway-safe ids (also the `?drill=` deep-link + Brain enum values). */
-export type FinancePanelId = 'finance' | 'allocation' | 'devfinops';
+export type FinancePanelId = 'finance' | 'allocation' | 'devfinops' | 'forecast' | 'rdReconciliation';
 
 export interface FinancePanelDef {
   id: FinancePanelId;
@@ -41,6 +43,8 @@ export const FINANCE_PANELS: FinancePanelDef[] = [
   { id: 'finance', icon: '💰', titleKey: 'fin.title', subtitleKey: 'fin.subtitle', capability: 'insights.finance', render: () => <FinanceLens /> },
   { id: 'allocation', icon: '🧭', titleKey: 'alloc.title', subtitleKey: 'alloc.subtitle', capability: 'insights.allocation', render: () => <AllocationLens /> },
   { id: 'devfinops', icon: '🧾', titleKey: 'finhub.devfinops.title', subtitleKey: 'finhub.devfinops.subtitle', capability: 'finops.manage', render: () => <FinopsLens /> },
+  { id: 'forecast', icon: '📈', titleKey: 'forecast.title', subtitleKey: 'forecast.subtitle', capability: 'insights.finance', render: () => <ForecastPanel /> },
+  { id: 'rdReconciliation', icon: '⚖️', titleKey: 'emp.recon.title', subtitleKey: 'emp.recon.subtitle', capability: 'finops.rdReconciliation', render: () => <RdReconciliationLens /> },
 ];
 
 export const FINANCE_PANEL_IDS = FINANCE_PANELS.map((p) => p.id);

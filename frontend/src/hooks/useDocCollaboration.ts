@@ -128,35 +128,53 @@ export function useDocCollaboration(docId: string, opts: Options): DocCollaborat
     const provider = new WebsocketProvider(wsBase, `knowledge:${docId}`, ydoc, { connect: true });
     providerRef.current = provider;
 
-    // Seed the room from the API content once, after a short settle window so
-    // any existing peer's state has time to arrive. Deterministic tiebreak
-    // ({@link shouldSeed}) prevents two simultaneous first-editors double-seeding.
-    // This replaces seed-on-'sync' which never fires for a lone editor against
-    // the dumb-relay DO (no server doc to complete the sync handshake), leaving
-    // the shared text empty and later joiners desynced from the visible content.
+    // Seed the room from the API content once. Deterministic tiebreak
+    // ({@link shouldSeed}) prevents two simultaneous first-editors double-seeding
+    // each other; `seeded` makes seeding idempotent within this client.
     let seedTimer: ReturnType<typeof setTimeout> | null = null;
+    let seeded = false;
+    const adopt = () => {
+      const current = ytext.toString();
+      localValueRef.current = current;
+      setValueState(current);
+    };
     const trySeed = () => {
+      if (seeded) {
+        adopt();
+        return;
+      }
       const peerIds = Array.from(provider.awareness.getStates().values())
         .map((s) => (s as Partial<CollabPeer>).userId)
         .filter((u): u is string => !!u && u !== userId);
       if (shouldSeed(userId, peerIds, ytext.length === 0, !!seedRef.current)) {
         ydoc.transact(() => ytext.insert(0, seedRef.current), 'seed');
+        seeded = true;
       }
-      const current = ytext.toString();
-      localValueRef.current = current;
-      setValueState(current);
+      adopt();
     };
 
+    // Authoritative path: the y-websocket sync handshake completed, so `ytext`
+    // now mirrors the server/peer doc. Seeding here can never double-insert — if
+    // the doc already has content the emptiness check skips it; if it is empty we
+    // are the deterministic origin. With a server-authoritative CollaborationRoom
+    // this always fires and is the ONLY path that seeds.
+    provider.on('sync', (isSynced: boolean) => {
+      if (isSynced) trySeed();
+    });
     provider.on('status', ({ status }: { status: string }) => {
       const isConnected = status === 'connected';
       setConnected(isConnected);
+      // Fallback for the legacy dumb-relay DO whose sync handshake never
+      // completes for a lone editor (no server doc to answer sync step 1). Seed
+      // after a settle window — but ONLY if the network has not already synced
+      // authoritative content in. Gating on `provider.synced` closes the
+      // seed-then-sync double-insert: once a real sync lands we adopt, never seed.
       if (isConnected && seedTimer == null) {
-        seedTimer = setTimeout(trySeed, 600);
+        seedTimer = setTimeout(() => {
+          if (provider.synced) adopt();
+          else trySeed();
+        }, 600);
       }
-    });
-    // If the y-websocket sync handshake does complete (peer present), seed/adopt now.
-    provider.on('sync', (isSynced: boolean) => {
-      if (isSynced) trySeed();
     });
 
     const observer = (_e: Y.YTextEvent, tr: Y.Transaction) => {

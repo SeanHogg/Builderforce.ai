@@ -1,15 +1,40 @@
 import type { TenantRole } from './domain/shared/types';
+import type { Db } from './infrastructure/database/connection';
+import type { MachineSubject } from './infrastructure/auth/machineSubject';
 
 /** Cloudflare Worker environment bindings for the API worker. */
 export interface Env {
   /** Postgres connection string. Set via `wrangler secret put NEON_DATABASE_URL`. */
   NEON_DATABASE_URL: string;
+  /** Operational Postgres connection (logs, audit, telemetry and processing
+   * ledgers). When omitted during local/test rollout, the primary connection is
+   * used for backwards compatibility. */
+  NEON_TRANSACTIONAL_DATABASE_URL?: string;
   /** Comma-separated allowed CORS origins, e.g. "https://builderforce.ai" */
   CORS_ORIGINS: string;
   /** "production" | "development" */
   ENVIRONMENT: string;
   /** Secret used to sign JWTs.  Set via `wrangler secret put JWT_SECRET`. */
   JWT_SECRET: string;
+  /** Kill switch for the logged-out guest Brain/Ideas chat. Guests can try the
+   *  Brain before signing up (metered per visitor + IP, tiny cap). Set to the
+   *  string "false" to hard-disable anonymous gateway traffic; any other value
+   *  (or unset) leaves it ON. Toggle via `wrangler secret put GUEST_BRAIN_ENABLED`. */
+  GUEST_BRAIN_ENABLED?: string;
+  /** Kill switch for the sales-cycle demo accounts (seeded persona tenants entered
+   *  from the marketing shell — migration 0360). Set to the string "false" to
+   *  disable `POST /api/demo/session` and the nightly reseed; any other value (or
+   *  unset) leaves it ON. Toggle via `wrangler secret put DEMO_ACCOUNTS_ENABLED`. */
+  DEMO_ACCOUNTS_ENABLED?: string;
+  /** Shared secret the deploy workflow sends (header `x-demo-reseed-secret`) to
+   *  trigger `POST /api/demo/reseed` after each deploy. Unset = only a superadmin
+   *  web token can reseed. Set via `wrangler secret put DEMO_RESEED_SECRET`. */
+  DEMO_RESEED_SECRET?: string;
+  /** Quality ingest key (bfq_…) for DOGFOODING — the API ships its OWN unhandled
+   *  500s to the Product Quality pillar via the public /api/quality-ingest endpoint
+   *  (the same SDK path any customer uses). Unbound → self-reporting is skipped.
+   *  Set via `wrangler secret put BUILDERFORCE_ERROR_API_KEY`. */
+  BUILDERFORCE_ERROR_API_KEY?: string;
   /** OpenRouter API key — drives builderforceLLM (Free plan) and IDE chat. Required for /api/ai/chat.
    *  Set via `wrangler secret put OPENROUTER_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   OPENROUTER_API_KEY?: string;
@@ -32,7 +57,7 @@ export interface Env {
   GOOGLE_API_KEY?: string;
   /** Anthropic (Claude) API key — the last-resort reliability floor for cloud CODING
    *  runs. When every OpenRouter-routed paid coder is unreachable, the coding cascade
-   *  falls back to Claude DIRECTLY on api.anthropic.com (claude-sonnet-4-6 →
+   *  falls back to Claude DIRECTLY on api.anthropic.com (claude-sonnet-5 →
    *  claude-opus-4-8), vendor-diverse from OpenRouter. Unbound → the cascade simply
    *  skips the Anthropic floor. Set via `wrangler secret put CLAUDE_API_KEY` (or
    *  api/.env + `npm run secrets:from-env`). */
@@ -73,6 +98,7 @@ export interface Env {
   PERPLEXITY_API_KEY?: string;
   /** Moonshot AI (Kimi) — api.moonshot.cn/v1. */
   MOONSHOT_API_KEY?: string;
+  QWEN_API_KEY?: string;
   /** Hyperbolic — api.hyperbolic.xyz/v1. */
   HYPERBOLIC_API_KEY?: string;
   /** Novita AI — api.novita.ai/v3/openai. */
@@ -141,8 +167,45 @@ export interface Env {
    *  Set via `wrangler secret put VOYAGE_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   VOYAGE_API_KEY?: string;
 
+  /** OPTIONAL operator-wide Brave Search API key — the floor under the cloud agent's
+   *  `web_search` tool. Search is metered per query, so the platform funds NO key: the
+   *  normal path is a tenant's own BYO key in `integration_credentials`
+   *  (provider `brave_search`), which always wins over this. Set this only if you are
+   *  self-hosting and want to fund search for every tenant. When neither is configured,
+   *  `web.search` is not advertised and the agent keeps fetch-only web access — no tool
+   *  that would certainly fail is ever handed to the model.
+   *  Set via `wrangler secret put BRAVE_SEARCH_API_KEY`. */
+  BRAVE_SEARCH_API_KEY?: string;
+
   /** R2 bucket for file uploads. */
   UPLOADS?: R2Bucket;
+
+  /** hired.video partner API key (@seanhogg/hired-video-sdk). Provisions job-seeker
+   *  accounts for freelancers, uploads/parses resumes, and mints embed tokens for
+   *  the embedded profile/resume viewer. When unset the freelance marketplace still
+   *  works with the NATIVE R2 resume fallback; the hired.video calls are skipped and
+   *  the provider reports `configured=false`. Set via `wrangler secret put HIRED_API_KEY`. */
+  HIRED_API_KEY?: string;
+  /** Optional override for the hired.video API base URL (defaults to the SDK default).
+   *  `wrangler secret put HIRED_API_BASE_URL`. */
+  HIRED_API_BASE_URL?: string;
+
+  /** Freelancer payout provider webhook. When set, "Pay" on an approved freelancer
+   *  invoice POSTs `{invoiceId, amountCents, currency, freelancerUserId, tenantId}`
+   *  here (Bearer PAYOUT_WEBHOOK_KEY) and marks the invoice paid with the returned
+   *  reference. Unset = manual "Mark paid" only (no money movement).
+   *  `wrangler secret put PAYOUT_WEBHOOK_URL`. */
+  PAYOUT_WEBHOOK_URL?: string;
+  /** Bearer key for PAYOUT_WEBHOOK_URL. `wrangler secret put PAYOUT_WEBHOOK_KEY`. */
+  PAYOUT_WEBHOOK_KEY?: string;
+
+  /** Transactional-email webhook for marketplace notifications (invite/hire/paid/…).
+   *  When set, each in-app notification also POSTs `{to, subject, body}` here
+   *  (Bearer NOTIFY_EMAIL_KEY). Unset = in-app notifications only.
+   *  `wrangler secret put NOTIFY_EMAIL_URL`. */
+  NOTIFY_EMAIL_URL?: string;
+  /** Bearer key for NOTIFY_EMAIL_URL. `wrangler secret put NOTIFY_EMAIL_KEY`. */
+  NOTIFY_EMAIL_KEY?: string;
 
   /** Clone-capable TTS endpoint for server-side voice synthesis (Voice PRD §3.1).
    *  Provider-agnostic: any service that accepts (referenceAudio, text) and
@@ -198,6 +261,11 @@ export interface Env {
    *    [[durable_objects.bindings]] name = "PROJECT_EVERMIND" class_name = "ProjectEvermindCoordinatorDO" */
   PROJECT_EVERMIND?: DurableObjectNamespace;
 
+  /** Max text-path adaptations (fits) the Evermind coordinator DO runs per alarm —
+   *  the per-alarm CPU knob. Overrides the code default (8); lower it if a busy
+   *  project's alarm approaches the DO CPU limit. Parsed as an int; invalid → default. */
+  EVERMIND_MAX_FITS_PER_ALARM?: string;
+
   /** Cloudflare Container runtime for a "Cloud Agent (Node/Container)" — a
    *  long-lived Node process with a real shell (the `container` runtime surface).
    *  One instance per execution (`idFromName('exec:<id>')`). Optional: when unset
@@ -205,6 +273,15 @@ export interface Env {
    *  durable executor so it still runs in the cloud. Backed by AgentContainerDO via
    *  a `[[containers]]` block in wrangler.toml; binding name `AGENT_CONTAINER`. */
   AGENT_CONTAINER?: DurableObjectNamespace;
+
+  /** Live container-preview ingress (Replit-parity phase 2). When set to `'true'`
+   *  the Worker proxies `preview.builderforce.ai/<token>/*` HTTP + WebSocket traffic
+   *  through {@link AGENT_CONTAINER} to a dev server the run started inside its
+   *  container (the `/__preview__` passthrough in `container/server.mjs`). Default
+   *  unset ⇒ the ingress is inert (404), so the feature is fully off until an operator
+   *  enables it on a Containers-Paid account. Requires a proxied `preview` DNS record.
+   *  Toggle via `wrangler secret put PREVIEW_INGRESS_ENABLED`. */
+  PREVIEW_INGRESS_ENABLED?: string;
 
   /** Cloudflare Container runtime for the Agentic Tester (browser exploration) —
    *  the Playwright runner image (qa-e2e/Dockerfile). The scheduled QA sweep
@@ -231,6 +308,18 @@ export interface Env {
   AUTH_CACHE_KV?: KVNamespace;
 
   /**
+   * Optional override (milliseconds) for the KV cron work-gate's floor interval —
+   * how long an idle platform may go without an unconditional Postgres fan-out.
+   * Unset → 30 min (see `application/runtime/cronWorkSignal.ts`). Clamped to
+   * [5 min, 6 h]; a non-numeric value falls back to the default.
+   *
+   * This is a COST dial, not a correctness one: shorter = more idle Neon wake-ups
+   * (~48/day at 30 min) and tighter worst-case staleness; longer = cheaper compute.
+   * Set via `wrangler secret put CRON_FLOOR_INTERVAL_MS` or a `[vars]` entry.
+   */
+  CRON_FLOOR_INTERVAL_MS?: string;
+
+  /**
    * Optional KV namespace backing the shared (L2) semantic response cache
    * (`/v1/semantic-cache`). Holds, per tenant+namespace partition, a bounded
    * list of {embedding, response} so a paraphrased prompt answered on one
@@ -244,15 +333,13 @@ export interface Env {
   SEMANTIC_CACHE_KV?: KVNamespace;
 
   // ---------------------------------------------------------------------------
-  // Payment provider (optional — defaults to "manual" if unset)
+  // Payments — Stripe is the only provider (see infrastructure/payment/index.ts).
+  // Absent secrets do NOT break boot; billing routes return 503 until they are set.
   // ---------------------------------------------------------------------------
 
-  /** Which payment provider to use: "manual" | "stripe" | "helcim"  Default: "manual" */
-  PAYMENT_PROVIDER?: string;
   /** App URL used to build checkout success/cancel redirect URLs (e.g. "https://builderforce.ai") */
   APP_URL?: string;
 
-  // Stripe (required when PAYMENT_PROVIDER=stripe)
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   /** Pro plan flat-rate prices */
@@ -265,10 +352,6 @@ export interface Env {
   STRIPE_PRICE_MONTHLY?: string;
   STRIPE_PRICE_YEARLY?: string;
 
-  // Helcim (required when PAYMENT_PROVIDER=helcim)
-  HELCIM_API_TOKEN?: string;
-  HELCIM_WEBHOOK_SECRET?: string;
-
   // ---------------------------------------------------------------------------
   // OAuth providers (optional — only required for the providers you enable)
   // Set via: wrangler secret put GOOGLE_CLIENT_ID  (etc.)
@@ -276,11 +359,28 @@ export interface Env {
 
   // ---------------------------------------------------------------------------
   // GitHub App (optional — required for /api/webhooks/github)
+  //
+  // When GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY are both set, repo operations
+  // authenticate as a GitHub App installation (short-lived, least-privilege,
+  // survives the departure of whoever connected the repo) instead of the
+  // tenant's stored user PAT. Unset = the pre-App behaviour, unchanged: see
+  // resolveRepoAuth in application/repos/githubClient.ts for the fallback order.
   // ---------------------------------------------------------------------------
 
   /** Webhook secret configured in the GitHub App or repository webhook settings.
    *  Set via: wrangler secret put GITHUB_WEBHOOK_SECRET */
   GITHUB_WEBHOOK_SECRET?: string;
+
+  /** Numeric App ID from the GitHub App's settings page.
+   *  Set via: wrangler secret put GITHUB_APP_ID */
+  GITHUB_APP_ID?: string;
+
+  /** The App's PEM private key. GitHub issues these in PKCS#1 form
+   *  ("BEGIN RSA PRIVATE KEY"); WebCrypto needs PKCS#8, and githubApp.ts
+   *  converts transparently, so paste the file exactly as downloaded.
+   *  Escaped "\n" sequences are tolerated for secret stores that mangle newlines.
+   *  Set via: wrangler secret put GITHUB_APP_PRIVATE_KEY */
+  GITHUB_APP_PRIVATE_KEY?: string;
 
   /** Secret token configured on the GitLab project/group webhook (sent as the
    *  `X-Gitlab-Token` header). Set via: wrangler secret put GITLAB_WEBHOOK_SECRET */
@@ -290,10 +390,6 @@ export interface Env {
    *  Set via: wrangler secret put BITBUCKET_WEBHOOK_SECRET */
   BITBUCKET_WEBHOOK_SECRET?: string;
 
-  /** Shared secret for internal cron endpoints (e.g. GET /api/approvals/escalate).
-   *  Set via: wrangler secret put CRON_SECRET */
-  CRON_SECRET?: string;
-
   // ---------------------------------------------------------------------------
   // DevDynamics / Phase 6 (optional — required for integrations feature)
   // ---------------------------------------------------------------------------
@@ -301,6 +397,18 @@ export interface Env {
   /** Passphrase used to derive the AES-256-GCM key for integration credential encryption.
    *  Set via: wrangler secret put INTEGRATION_ENCRYPTION_SECRET */
   INTEGRATION_ENCRYPTION_SECRET?: string;
+
+  /** Dedicated passphrase for sealing SENSITIVE at-rest credentials — tenant BYO LLM
+   *  provider keys + Claude/OpenAI/xAI subscription OAuth token blobs
+   *  (`tenant_llm_provider_keys.key_enc`) and (as a follow-up) MFA secrets. Kept SEPARATE
+   *  from `JWT_SECRET` on purpose: reusing the JWT signing key as the encryption key meant
+   *  one leak both forged sessions AND decrypted every credential, and blocked JWT rotation.
+   *  New writes derive an AES-256 key via PBKDF2 (100k) with a per-tenant salt under this
+   *  secret (v2 scheme). Falls back to INTEGRATION_ENCRYPTION_SECRET, then JWT_SECRET, so an
+   *  operator who hasn't set it yet keeps working — but SET IT to actually separate the keys.
+   *  Legacy rows sealed under JWT_SECRET still decrypt (versioned dual-read).
+   *  Set via: wrangler secret put CREDENTIAL_ENCRYPTION_SECRET */
+  CREDENTIAL_ENCRYPTION_SECRET?: string;
 
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
@@ -318,6 +426,11 @@ export interface Env {
   /** Incoming Slack webhook URL for approval notifications.
    *  Set via: wrangler secret put SLACK_APPROVAL_WEBHOOK_URL */
   SLACK_APPROVAL_WEBHOOK_URL?: string;
+
+  /** Incoming MS Teams webhook URL for incident/on-call notifications (an Incoming
+   *  Webhook connector posting MessageCard JSON — the low-effort analog to Slack).
+   *  Set via: wrangler secret put TEAMS_WEBHOOK_URL */
+  TEAMS_WEBHOOK_URL?: string;
 
   /** Resend API key for email notifications.
    *  Set via: wrangler secret put RESEND_API_KEY */
@@ -337,6 +450,36 @@ export interface Env {
 
   MICROSOFT_CLIENT_ID?: string;
   MICROSOFT_CLIENT_SECRET?: string;
+
+  /** Optional TURN relay for meeting media (mesh WebRTC). Without it, calls fall
+   *  back to public STUN only, which fails for peers behind symmetric NATs.
+   *  TURN_URL may be comma-separated (e.g. "turn:host:3478,turns:host:5349").
+   *  Set via: wrangler secret put TURN_URL / TURN_USERNAME / TURN_CREDENTIAL */
+  TURN_URL?: string;
+  TURN_USERNAME?: string;
+  TURN_CREDENTIAL?: string;
+
+  /** Optional Cloudflare TURN service — the managed alternative to running coturn.
+   *  When both are set, `/api/meetings/ice` mints short-lived TURN credentials per
+   *  key (cached) and appends them to the ICE list, so symmetric-NAT peers connect
+   *  with no self-hosted relay. Create a TURN key in the Cloudflare Realtime
+   *  dashboard, then: wrangler secret put CLOUDFLARE_TURN_KEY_ID /
+   *  CLOUDFLARE_TURN_API_TOKEN */
+  CLOUDFLARE_TURN_KEY_ID?: string;
+  CLOUDFLARE_TURN_API_TOKEN?: string;
+}
+
+/**
+ * The single resolver for the user-facing app origin used to build links in
+ * redirects and emails. APP_URL may hold a comma-separated allow-list (the CORS
+ * config shares the var) — the first entry is the canonical origin. Trailing
+ * slashes are stripped so callers can always append `/path`.
+ */
+export function resolveAppBaseUrl(env: { APP_URL?: string }): string {
+  return (env.APP_URL ?? 'https://builderforce.ai')
+    .split(',')[0]!
+    .trim()
+    .replace(/\/$/, '');
 }
 
 /** Variables injected into Hono context by the auth middleware. */
@@ -354,8 +497,33 @@ export interface Vars {
   role:     TenantRole;
   sessionId?: string;
   tokenJti?: string;
+  /**
+   * Set when the caller authenticated with a MACHINE token (`agentHost:*` /
+   * `embed:*`) rather than as a person — see {@link MachineSubject}.
+   *
+   * `userId` still carries the raw subject because every tenant-scoped read needs a
+   * subject; this is what lets a WRITE that records authorship tell the two apart.
+   * Without it an on-prem agent host PATCHing a ticket was recorded as a human whose
+   * user id was the literal string `agentHost:5`.
+   */
+  machineActor?: MachineSubject;
+  /**
+   * The cloud agent this request acts as (`JwtPayload.agt`) — set when a cloud agent
+   * replays a platform route in-process to perform a tool call. Read by
+   * {@link requestActor} so the write is credited to the agent.
+   */
+  agentActorRef?: string;
   /** True when the request is running under an emulation token (read-only). */
   isEmulation?: boolean;
+  /**
+   * The request's database handle, built once by the auth middleware.
+   *
+   * Downstream middleware (e.g. `requirePermission`) reads this instead of
+   * calling `buildDatabase` again — one connection per request rather than one
+   * per consumer, and it keeps those middlewares free of an infrastructure
+   * import. Absent on unauthenticated paths, so callers must fall back.
+   */
+  db?: Db;
 }
 
 /** Combined Hono environment type used across the app. */

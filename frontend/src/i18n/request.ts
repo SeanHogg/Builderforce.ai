@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { getRequestConfig } from 'next-intl/server';
 import { DEFAULT_LOCALE, isLocale } from './config';
+import { ignoreEnvironmentFallback } from './onError';
 
 /**
  * Per-request locale + message resolution for next-intl (App Router, no i18n
@@ -17,5 +18,9 @@ export default getRequestConfig(async () => {
   return {
     locale,
     messages: (await import(`./messages/${locale}.json`)).default,
+    // We intentionally format in the viewer's local clock + time zone (see
+    // ./onError). Swallow only the benign ENVIRONMENT_FALLBACK code so it does
+    // not spam logs; every real i18n error still surfaces.
+    onError: ignoreEnvironmentFallback,
   };
 });

@@ -13,6 +13,7 @@ import {
 } from "./auth-rate-limit.js";
 import {
   isLoopbackAddress,
+  isLoopbackHost,
   isTrustedProxyAddress,
   resolveHostName,
   parseForwardedForClientIp,
@@ -94,7 +95,7 @@ export function isLocalDirectRequest(req?: IncomingMessage, trustedProxies?: str
   }
 
   const host = resolveHostName(req.headers?.host);
-  const hostIsLocal = host === "localhost" || host === "127.0.0.1" || host === "::1";
+  const hostIsLocal = isLoopbackHost(host);
   const hostIsTailscaleServe = host.endsWith(".ts.net");
 
   const hasForwarded = Boolean(

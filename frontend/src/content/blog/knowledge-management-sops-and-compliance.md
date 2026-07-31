@@ -14,6 +14,8 @@ Builderforce.ai's **Knowledge Management** subsystem puts that knowledge on the 
 
 > Builderforce.ai's Knowledge Management subsystem versions SOPs, processes and docs with immutable snapshots and timestamped read-acknowledgements — audit-ready evidence for SOX, TISAX and ISO 27001 — while the same documents ground the agent workforce.
 
+![Diagram of the Knowledge Management subsystem: a versioned SOP with immutable v1/v2/v3 snapshots, read-acknowledgement tracking (acknowledged, pending, overdue) feeding a compliance rollup for SOX, TISAX and ISO 27001, AI-assisted authoring, and the same document grounding the agent workforce](/blog/knowledge-management.svg)
+
 ## Versioning that produces audit evidence, not just history
 
 Every document has a live, editable body and an immutable snapshot taken on each publish. Publishing increments the version number and writes a frozen copy with a change note and the publishing user. That isn't a nice-to-have — it's the mechanism that makes acknowledgements *mean something*: when a user acknowledges a procedure, they acknowledge a specific, frozen version, and the record proves exactly which words they signed off on.

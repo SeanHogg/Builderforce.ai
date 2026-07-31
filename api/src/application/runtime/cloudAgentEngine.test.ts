@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { isCodingModelDegraded, agentAllowsHostExecution } from './cloudAgentEngine';
-import { CODING_MODEL_POOL, CODING_BACKSTOP_MODELS } from '../llm/LlmProxyService';
+import { CODING_MODEL_POOL, CODING_BACKSTOP_MODELS, BYO_FRONTIER_CODERS } from '../llm/LlmProxyService';
 
 describe('agentAllowsHostExecution', () => {
   it('blocks a cloud-only agent from a pinned host', () => {
@@ -36,6 +36,18 @@ describe('isCodingModelDegraded', () => {
       expect(CODING_MODEL_POOL.includes(m)).toBe(true);
       expect(isCodingModelDegraded(m)).toBe(false);
     }
+  });
+
+  it('does NOT flag a BYO frontier flagship coder (connected-account run, not degraded)', () => {
+    // These route ONLY on a tenant's own key so they are absent from the auto-route
+    // CODING_MODEL_POOL — but they are real coders and must not be mislabelled a
+    // "degraded onto a non-coder backstop" (the direct/meta/muse-spark-1.1 regression).
+    expect(BYO_FRONTIER_CODERS.length).toBeGreaterThan(0);
+    for (const m of BYO_FRONTIER_CODERS) {
+      expect(isCodingModelDegraded(m)).toBe(false);
+    }
+    // The specific model from the reported triage.
+    expect(isCodingModelDegraded('direct/meta/muse-spark-1.1')).toBe(false);
   });
 
   it('does NOT flag when no resolved model was reported (unknown, not degraded)', () => {

@@ -19,6 +19,7 @@ import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmEmpty, PmError } from './pmShared';
 import { Select } from '@/components/Select';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 /**
  * Task dependency / epic-flow graph. Nodes are tasks; solid edges are precedence
@@ -194,7 +195,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
     if (readOnly) return;
     const edgeId = (edge.data as { edgeId?: number } | undefined)?.edgeId;
     if (edgeId == null) return; // epic edges aren't deletable here
-    if (!window.confirm(t('depRemoveConfirm'))) return;
+    if (!(await confirm(t('depRemoveConfirm')))) return;
     try { await tasksApi.removeDependency(edgeId); reload(); } catch { /* surfaced on next load */ }
   };
 
@@ -255,6 +256,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
 
 export function DependencyGraph() {
   const t = useTranslations('pm');
+  const confirm = useConfirm();
   const { projectId } = usePmScope();
   // Optional: present in the app shell, absent in embed (which scopes explicitly).
   const scope = useOptionalProjectScope();

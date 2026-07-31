@@ -6,6 +6,8 @@ import { loadAgentPool, AGENT_KIND_LABEL, type PoolAgent } from '@/lib/agentPool
 import { CapabilitiesContent } from './CapabilitiesContent';
 import { CronJobsContent } from './CronJobsContent';
 import { ObservabilityContent } from './ObservabilityContent';
+import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 export interface AgentCapabilitiesContentProps {
   projectId: number;
@@ -24,6 +26,9 @@ export interface AgentCapabilitiesContentProps {
  * for the section UI; the agent target only changes the scope/scopeId passed in.
  */
 export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, className, style }: AgentCapabilitiesContentProps) {
+  const confirm = useConfirm();
+  const tc = useTranslations('common');
+  const t = useTranslations('agentCapabilities');
   const [attached, setAttached] = useState<ProjectAgent[]>([]);
   const [pool, setPool] = useState<PoolAgent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,7 +46,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
       setAttached(list);
       setPool(poolAgents);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load agents');
+      setError(e instanceof Error ? e.message : t('failedLoadAgents'));
     } finally {
       setLoading(false);
     }
@@ -65,14 +70,14 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
       await projectAgents.add({ projectId, agentKind: p.kind, agentRef: p.ref, name: p.name });
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add agent');
+      setError(e instanceof Error ? e.message : t('failedAddAgent'));
     } finally {
       setBusy(false);
     }
   };
 
   const handleRemove = async (agent: ProjectAgent) => {
-    if (!confirm(`Remove "${agent.name}" from this project? Its per-agent capabilities will be cleared.`)) return;
+    if (!(await confirm(tc('removeAgentFromProjectConfirm', { name: agent.name })))) return;
     setBusy(true);
     setError(null);
     try {
@@ -80,7 +85,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
       if (target === agent.id) setTarget(null);
       setAttached((prev) => prev.filter((a) => a.id !== agent.id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to remove agent');
+      setError(e instanceof Error ? e.message : t('failedRemoveAgent'));
     } finally {
       setBusy(false);
     }
@@ -93,7 +98,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
       {/* Agents */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Agents ({attached.length})</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{t('agentsCount', { count: attached.length })}</div>
           <button
             type="button"
             onClick={() => setShowAdd((v) => !v)}
@@ -108,19 +113,19 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
               cursor: 'pointer',
             }}
           >
-            {showAdd ? 'Done' : '+ Add Agent'}
+            {showAdd ? t('done') : t('addAgent')}
           </button>
         </div>
 
         {error && <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.15)', color: '#ef4444', borderRadius: 8 }}>{error}</div>}
 
         {loading ? (
-          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{tc('loading')}</div>
         ) : showAdd ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {available.length === 0 ? (
               <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: 12 }}>
-                No more custom agents to add. Create agents in Workforce or register one in Settings.
+                {t('noMoreAgents')}
               </div>
             ) : (
               available.map((p) => (
@@ -147,7 +152,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
                     disabled={busy}
                     style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, background: 'var(--coral-bright)', color: '#fff', border: 'none', borderRadius: 6, cursor: busy ? 'wait' : 'pointer', flexShrink: 0 }}
                   >
-                    Add
+                    {t('add')}
                   </button>
                 </div>
               ))
@@ -155,7 +160,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
           </div>
         ) : attached.length === 0 ? (
           <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 16, textAlign: 'center' }}>
-            No agents on this project yet. Click &quot;+ Add Agent&quot; to assign your custom agents.
+            {t('noAgentsYet')}
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -182,7 +187,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
                   disabled={busy}
                   style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, cursor: busy ? 'wait' : 'pointer', flexShrink: 0 }}
                 >
-                  Remove
+                  {t('remove')}
                 </button>
               </div>
             ))}
@@ -192,13 +197,13 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
 
       {/* Capability target selector */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>Capabilities for:</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>{t('capabilitiesFor')}</span>
         <button
           type="button"
           onClick={() => setTarget(null)}
           style={chipStyle(target === null)}
         >
-          Project-wide
+          {t('projectWide')}
         </button>
         {attached.map((a) => (
           <button key={a.id} type="button" onClick={() => setTarget(a.id)} style={chipStyle(target === a.id)}>
@@ -231,7 +236,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
       {attached.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-            Scheduled runs (Cron)
+            {t('scheduledRunsCron')}
             {selectedAgent && (
               <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}> · {selectedAgent.name}</span>
             )}
@@ -245,7 +250,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
             />
           ) : (
             <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 16, textAlign: 'center', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
-              Assign an agent host (Cloud or On-Premise) to this project to schedule cron runs.
+              {t('assignHostHint')}
             </div>
           )}
         </div>
@@ -254,7 +259,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
       {/* Observability — pick an agent above to stream its logs / timeline. Lives
           here (not its own tab) because observability is agent-scoped. */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Observability</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{t('observability')}</div>
         <ObservabilityContent />
       </div>
     </div>

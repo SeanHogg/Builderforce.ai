@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+    <marker id="arrowD" markerWidth="12" markerHeight="12" refX="5" refY="8" orient="auto"><path d="M0,0 L10,0 L5,9 Z" fill="rgba(255,255,255,0.35)"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">SPECS &amp; PLANNING</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">The planning stack: idea to executable task</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- down arrows -->
+  <line x1="800" y1="306" x2="800" y2="326" stroke="rgba(255,255,255,0.35)" stroke-width="2.5" marker-end="url(#arrowD)"/>
+  <line x1="800" y1="414" x2="800" y2="434" stroke="rgba(255,255,255,0.35)" stroke-width="2.5" marker-end="url(#arrowD)"/>
+  <line x1="800" y1="522" x2="800" y2="542" stroke="rgba(255,255,255,0.35)" stroke-width="2.5" marker-end="url(#arrowD)"/>
+  <line x1="800" y1="630" x2="800" y2="650" stroke="rgba(255,255,255,0.35)" stroke-width="2.5" marker-end="url(#arrowD)"/>
+
+  <!-- L1 Idea -->
+  <rect x="350" y="222" width="900" height="84" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="350" y="222" width="6" height="84" rx="3" fill="url(#violetGrad)"/>
+  <text x="800" y="258" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="800" fill="#EEF0FA">Idea / goal</text>
+  <text x="800" y="286" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8">Free-text — where every spec begins</text>
+
+  <!-- L2 PRD -->
+  <rect x="390" y="330" width="820" height="84" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="390" y="330" width="6" height="84" rx="3" fill="url(#coolGrad)"/>
+  <text x="800" y="366" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="800" fill="#EEF0FA">PRD</text>
+  <text x="800" y="394" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8">User stories &amp; acceptance criteria · AI-assisted in Brainstorm</text>
+
+  <!-- L3 Architecture Spec -->
+  <rect x="430" y="438" width="740" height="84" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="430" y="438" width="6" height="84" rx="3" fill="url(#mintGrad)"/>
+  <text x="800" y="474" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="800" fill="#EEF0FA">Architecture Spec</text>
+  <text x="800" y="502" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8">Components, data model, API · AI-assisted in Brainstorm</text>
+
+  <!-- L4 Task list -->
+  <rect x="470" y="546" width="660" height="84" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="470" y="546" width="6" height="84" rx="3" fill="url(#amberGrad)"/>
+  <text x="800" y="582" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="800" fill="#EEF0FA">Task list (JSON)</text>
+  <text x="800" y="610" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8">Atomic tasks with personas · AI-generated from the spec</text>
+
+  <!-- L5 Executable tasks -->
+  <rect x="510" y="654" width="580" height="84" rx="14" fill="rgba(52,224,161,0.10)" stroke="rgba(52,224,161,0.45)" stroke-width="1.5"/>
+  <rect x="510" y="654" width="6" height="84" rx="3" fill="url(#coralGrad)"/>
+  <text x="800" y="690" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="800" fill="#EEF0FA">Executable tasks</text>
+  <text x="800" y="718" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8">Dispatched to the board and run by agents</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">One spec carries your thinking all the way through to executing agents</text>
+</svg>

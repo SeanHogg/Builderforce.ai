@@ -1,35 +1,21 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { ChatMessageContent } from './ChatMessageContent';
 
 /**
- * Shared review modals for generated project artifacts (PRD + Tasks). Both the
+ * Shared review panels for generated project artifacts (PRD + Tasks). Both the
  * message-action buttons ([ChatProjectActions]) and the Brain `generate_prd` /
  * `generate_tasks` tools ([IDE]) render these so a generated artifact is always
- * reviewed before it lands in the project — one modal, two call sites.
+ * reviewed before it lands in the project — one panel, two call sites.
+ *
+ * Rendered as slide-out panels (not modals): approving a preview is a constructive
+ * save, not a terminal/destructive confirm, so per the app convention it uses
+ * SlideOutPanel.
  */
 
-const overlayStyle: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  zIndex: 1000,
-  background: 'rgba(0,0,0,0.6)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: 24,
-};
-
-const headerStyle: React.CSSProperties = {
-  padding: 12,
-  borderBottom: '1px solid var(--border-subtle)',
-  fontWeight: 600,
-  fontFamily: 'var(--font-display)',
-};
-
 const footerStyle: React.CSSProperties = {
-  padding: 12,
-  borderTop: '1px solid var(--border-subtle)',
   display: 'flex',
   gap: 8,
   justifyContent: 'flex-end',
@@ -59,7 +45,7 @@ const confirmBtnStyle: React.CSSProperties = {
 function ModalError({ error }: { error?: string | null }) {
   if (!error) return null;
   return (
-    <span style={{ marginRight: 'auto', fontSize: 12, color: '#ef4444' }}>{error}</span>
+    <span style={{ marginRight: 'auto', fontSize: 12, color: 'var(--error-text, #ef4444)' }}>{error}</span>
   );
 }
 
@@ -76,37 +62,25 @@ export function PrdReviewModal({
   error?: string | null;
   saving?: boolean;
 }) {
+  const t = useTranslations('artifactReview');
+  const tc = useTranslations('common');
   return (
-    <div style={overlayStyle} onClick={onCancel}>
-      <div
-        style={{
-          background: 'var(--bg-base)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 12,
-          maxWidth: 720,
-          maxHeight: '85vh',
-          width: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={headerStyle}>Generated PRD</div>
-        <div style={{ flex: 1, overflow: 'auto', padding: 16, fontSize: 13, lineHeight: 1.6 }}>
+    <SlideOutPanel open onClose={onCancel} title={t('prdTitle')} width="min(720px, 96vw)">
+      <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ fontSize: 13, lineHeight: 1.6 }}>
           <ChatMessageContent content={prd} />
         </div>
         <div style={footerStyle}>
           <ModalError error={error} />
           <button type="button" onClick={onCancel} style={cancelBtnStyle}>
-            Cancel
+            {tc('cancel')}
           </button>
           <button type="button" onClick={onConfirm} disabled={saving} style={{ ...confirmBtnStyle, opacity: saving ? 0.6 : 1, cursor: saving ? 'wait' : 'pointer' }}>
-            {saving ? 'Saving…' : 'Save to project PRDs'}
+            {saving ? tc('saving') : t('savePrd')}
           </button>
         </div>
       </div>
-    </div>
+    </SlideOutPanel>
   );
 }
 
@@ -125,24 +99,12 @@ export function TasksReviewModal({
   error?: string | null;
   saving?: boolean;
 }) {
+  const t = useTranslations('artifactReview');
+  const tc = useTranslations('common');
   return (
-    <div style={overlayStyle} onClick={onCancel}>
-      <div
-        style={{
-          background: 'var(--bg-base)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 12,
-          maxWidth: 480,
-          maxHeight: '80vh',
-          width: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={headerStyle}>Generated tasks ({titles.length})</div>
-        <ul style={{ flex: 1, overflow: 'auto', padding: 16, margin: 0, fontSize: 13, lineHeight: 1.5 }}>
+    <SlideOutPanel open onClose={onCancel} title={t('tasksTitle', { count: titles.length })} width="min(720px, 96vw)">
+      <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.5 }}>
           {titles.map((title, i) => (
             <li key={i} style={{ marginBottom: 6 }}>
               <strong>{title}</strong>
@@ -155,13 +117,13 @@ export function TasksReviewModal({
         <div style={footerStyle}>
           <ModalError error={error} />
           <button type="button" onClick={onCancel} style={cancelBtnStyle}>
-            Cancel
+            {tc('cancel')}
           </button>
           <button type="button" onClick={onConfirm} disabled={saving} style={{ ...confirmBtnStyle, opacity: saving ? 0.6 : 1, cursor: saving ? 'wait' : 'pointer' }}>
-            {saving ? 'Adding…' : 'Add all to project tasks'}
+            {saving ? t('adding') : t('addAllTasks')}
           </button>
         </div>
       </div>
-    </div>
+    </SlideOutPanel>
   );
 }

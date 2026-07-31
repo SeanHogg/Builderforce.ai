@@ -24,6 +24,8 @@ import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
 import { encryptCredentials, decryptCredentials } from '../../application/integrations/credentialCrypto';
+import { braveSearchVendor } from '../../application/runtime/webSearchVendors';
+import { testGmail, testGoogleDrive } from '../../application/integrations/googleOAuth';
 
 /**
  * Credential providers accepted by this endpoint. Mirrors integrationProviderEnum
@@ -32,8 +34,15 @@ import { encryptCredentials, decryptCredentials } from '../../application/integr
  */
 const CREDENTIAL_PROVIDERS = [
   'github', 'gitlab', 'bitbucket', 'jira', 'confluence',
-  'freshservice', 'servicenow', 'linear', 'sentry', 'pagerduty',
+  'freshservice', 'freshdesk', 'servicenow', 'linear', 'sentry', 'pagerduty',
   'monday', 'asana', 'clickup',
+  // BYO web-search vendor key (blob: `{ apiKey }`). Storing it here is what turns on
+  // the cloud agent's `web_search` tool for this tenant — see webSearchCredential.ts.
+  'brave_search',
+  // Google connectors — OAuth offline creds (blob: `{ clientId, clientSecret,
+  // refreshToken, ... }`). Gmail backs the email workflow node; Drive can back a
+  // project's file storage.
+  'gmail', 'google_drive',
 ] as const;
 type CredentialProvider = (typeof CREDENTIAL_PROVIDERS)[number];
 
@@ -60,6 +69,19 @@ async function testGitHub(creds: Record<string, unknown>): Promise<{ ok: boolean
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : 'Network error contacting GitHub' };
   }
+}
+
+/** Connectivity test for a BYO web-search key: run one real query through the SAME
+ *  vendor adapter the agent uses, so "Test" proves exactly what `web_search` will do
+ *  (right key, right endpoint, right parse) rather than a look-alike request. */
+async function testBraveSearch(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
+  const raw = creds.apiKey ?? creds.apiToken ?? creds.token;
+  const key = typeof raw === 'string' ? raw.trim() : '';
+  if (!key) return { ok: false, message: 'apiKey is required' };
+  const r = await braveSearchVendor.search('builderforce connectivity check', key);
+  return r.ok
+    ? { ok: true, message: `Connected — ${r.results?.length ?? 0} result(s). Cloud agents can now use web_search.` }
+    : { ok: false, message: r.error ?? 'Search request failed' };
 }
 
 async function testJira(
@@ -143,6 +165,22 @@ async function testFreshservice(
   return res.ok
     ? { ok: true, message: 'Connected' }
     : { ok: false, message: `Freshservice API returned ${res.status}` };
+}
+
+async function testFreshdesk(
+  creds: Record<string, unknown>,
+  baseUrl: string | null,
+): Promise<{ ok: boolean; message: string }> {
+  const apiKey = creds.apiKey as string;
+  if (!apiKey || !baseUrl) return { ok: false, message: 'apiKey and baseUrl are required' };
+  // Freshdesk REST API — a lightweight agent-list probe; Basic auth with apiKey:X.
+  const url = `${baseUrl.replace(/\/$/, '')}/api/v2/agents?per_page=1`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Basic ${btoa(`${apiKey}:X`)}`, Accept: 'application/json' },
+  });
+  return res.ok
+    ? { ok: true, message: 'Connected' }
+    : { ok: false, message: `Freshdesk API returned ${res.status}` };
 }
 
 async function testLinear(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
@@ -468,6 +506,9 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       case 'freshservice':
         result = await testFreshservice(creds, row.baseUrl);
         break;
+      case 'freshdesk':
+        result = await testFreshdesk(creds, row.baseUrl);
+        break;
       case 'linear':
         result = await testLinear(creds);
         break;
@@ -488,6 +529,15 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
         break;
       case 'clickup':
         result = await testClickUp(creds);
+        break;
+      case 'brave_search':
+        result = await testBraveSearch(creds);
+        break;
+      case 'gmail':
+        result = await testGmail(creds);
+        break;
+      case 'google_drive':
+        result = await testGoogleDrive(creds);
         break;
       default:
         result = { ok: false, message: `Connectivity test not available for provider: ${row.provider}` };

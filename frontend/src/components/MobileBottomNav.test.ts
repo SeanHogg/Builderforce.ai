@@ -3,7 +3,7 @@ import { itemsFor } from './MobileBottomNav';
 
 const hrefs = (items: ReturnType<typeof itemsFor>) => items.map((i) => i.href);
 
-describe('MobileBottomNav itemsFor (role-aware) [1335]', () => {
+describe('MobileBottomNav itemsFor (account-type + privilege aware)', () => {
   it('logged-out bar always has 5 items ending in an accented Sign In', () => {
     const items = itemsFor(false, false);
     expect(items).toHaveLength(5);
@@ -14,24 +14,45 @@ describe('MobileBottomNav itemsFor (role-aware) [1335]', () => {
     expect(items.filter((i) => i.accent)).toHaveLength(1);
   });
 
-  it('superadmin gets Admin in the last slot regardless of role', () => {
-    expect(hrefs(itemsFor(true, true, 'developer'))[4]).toBe('/admin');
-    expect(hrefs(itemsFor(true, true, 'owner'))[4]).toBe('/admin');
+  it('builder (IDE creator) bar is Home / Projects / Workforce / Insights / account slot', () => {
+    expect(hrefs(itemsFor(true, false))).toEqual([
+      '/dashboard',
+      '/projects',
+      '/workforce',
+      '/insights',
+      '/settings',
+    ]);
   });
 
-  it('owner/manager get Settings; developer/viewer get Projects', () => {
-    expect(hrefs(itemsFor(true, false, 'owner'))[4]).toBe('/settings');
-    expect(hrefs(itemsFor(true, false, 'manager'))[4]).toBe('/settings');
-    expect(hrefs(itemsFor(true, false, 'developer'))[4]).toBe('/projects');
-    expect(hrefs(itemsFor(true, false, 'viewer'))[4]).toBe('/projects');
+  it('superadmin builder gets Admin in the final slot instead of Settings', () => {
+    expect(hrefs(itemsFor(true, true))[4]).toBe('/admin');
   });
 
-  it('unknown/absent role defaults to the contributor (Projects) slot', () => {
-    expect(hrefs(itemsFor(true, false, undefined))[4]).toBe('/projects');
+  it('non-superadmin builder gets their account Settings in the final slot', () => {
+    expect(hrefs(itemsFor(true, false))[4]).toBe('/settings');
+  });
+
+  it('job seeker (freelancer) bar is Home / Profile / Marketplace / Timecard / account slot', () => {
+    const items = itemsFor(true, false, true);
+    expect(hrefs(items)).toEqual([
+      '/freelancer/dashboard',
+      '/freelancer/profile',
+      '/marketplace',
+      '/freelancer/timecard',
+      '/settings',
+    ]);
+    // No builder work destinations leak into the for-hire shell, and no CTA accent in-app.
+    expect(items.some((i) => i.href === '/workforce' || i.href === '/insights' || i.href === '/projects')).toBe(false);
+    expect(items.some((i) => i.accent)).toBe(false);
+  });
+
+  it('a superadmin freelancer still gets Admin in the final slot', () => {
+    expect(hrefs(itemsFor(true, true, true))[4]).toBe('/admin');
   });
 
   it('always renders exactly 5 items when authenticated', () => {
-    expect(itemsFor(true, false, 'owner')).toHaveLength(5);
-    expect(itemsFor(true, false, 'developer')).toHaveLength(5);
+    expect(itemsFor(true, false)).toHaveLength(5);
+    expect(itemsFor(true, true)).toHaveLength(5);
+    expect(itemsFor(true, false, true)).toHaveLength(5);
   });
 });

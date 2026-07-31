@@ -759,9 +759,61 @@ const aiDevMaturity: QuizTool = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Ticket Role & Diagnostic Coverage (questionnaire + data mode)
+// Part of the Manager AI agent's diagnostic: are the key roles and diagnostics
+// actually performed on each ticket before it advances? The data mode scores this
+// objectively from the per-ticket audit ledger (ticket_audits).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ticketRoleCoverage: QuestionnaireTool = {
+  id: 'ticket-role-coverage',
+  name: 'Ticket Role & Diagnostic Coverage',
+  tagline: 'Are the right roles and checks performed on every ticket?',
+  icon: '✅',
+  category: 'governance',
+  kind: 'questionnaire',
+  about:
+    'Audits whether each ticket passed through its required roles (BA, Architect, Developer, Review, QA) and diagnostics before it advanced. The "from your data" mode scores this objectively from the per-ticket audit ledger and lists flagged tickets to fix first.',
+  scale: [
+    { value: 1, label: 'Never' }, { value: 2, label: 'Rarely' }, { value: 3, label: 'Sometimes' },
+    { value: 4, label: 'Usually' }, { value: 5, label: 'Always' },
+  ],
+  sections: [
+    {
+      key: 'roles', name: 'Role coverage', description: 'The right people (or agents) touch each ticket.',
+      questions: [
+        { id: 'role1', text: 'Every ticket is reviewed by an Architect before it is built or tested.' },
+        { id: 'role2', text: 'Code review and QA sign-off happen before a ticket is Done.' },
+      ],
+      recommendations: {
+        2: 'Adopt a kanban template that assigns a responsible role to every lane.',
+        3: 'Require reviewer sign-off on the review and Done lanes.',
+        4: 'Flag tickets that skip a required role and route them back automatically.',
+        5: 'Continuously tune role requirements from audit outcomes.',
+      },
+    },
+    {
+      key: 'diagnostics', name: 'Diagnostic coverage', description: 'Required checks actually run per ticket.',
+      questions: [
+        { id: 'diag1', text: 'Required diagnostics (security, architecture, tests) run on the relevant tickets.' },
+        { id: 'diag2', text: 'A ticket cannot silently reach Done with unmet required checks.' },
+      ],
+      recommendations: {
+        2: 'Attach required diagnostics to the lanes where they matter.',
+        3: 'Turn on the per-ticket audit so gaps are visible.',
+        4: 'Gate the Done lane on required diagnostics.',
+        5: 'Drive the plan from flagged-ticket trends each week.',
+      },
+    },
+  ],
+  score(answers) { return scoreQuestionnaire(this, answers); },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const TOOLS: Tool[] = [
   agenticMaturity,
+  ticketRoleCoverage,
   aiDevMaturity,
   doraQuickCheck,
   aiCostEstimator,

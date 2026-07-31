@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { getModality } from '@/lib/modality';
+import { useModalityCopy } from '@/lib/useModalityCopy';
 import type { IdeProject } from '@/lib/types';
 
 /**
@@ -22,7 +22,7 @@ export function IdeProjectCard({
   onDelete: (p: IdeProject) => void;
 }) {
   const t = useTranslations('ide');
-  const m = getModality(ideProject.modality);
+  const m = useModalityCopy()(ideProject.modality);
 
   return (
     <div

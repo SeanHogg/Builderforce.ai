@@ -1,16 +1,20 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 // Stub the free-pool proxy so the classifier is exercised without a real gateway call.
+// Spread the ACTUAL module so real exports (readProxyChoice) keep working — only the
+// proxy factory is overridden.
 const completeMock = vi.fn();
-vi.mock('./LlmProxyService', () => ({
+vi.mock('./LlmProxyService', async (importActual) => ({
+  ...(await importActual<typeof import('./LlmProxyService')>()),
   ideProxy: () => ({ complete: completeMock }),
 }));
 
 import { classifyTaskAction } from './classifyTask';
 
-/** Build a minimal ProxyResult-shaped object with a chat-completion JSON body. */
+/** Build a minimal ProxyResult-shaped object with a chat-completion JSON body.
+ *  Uses a REAL Response so `readProxyChoice`'s `.clone().json()` works as in production. */
 function gatewayResponse(content: string, status = 200) {
-  return { response: { status, json: async () => ({ choices: [{ message: { content } }] }) } };
+  return { response: new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status, headers: { 'content-type': 'application/json' } }) };
 }
 
 const env = {} as never;

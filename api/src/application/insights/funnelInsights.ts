@@ -92,9 +92,11 @@ export async function computeFunnel(
   segmentId: string,
   initiativeId: string | undefined,
   now: number,
+  projectId?: number,
 ): Promise<FunnelMetrics> {
   const conds = [eq(innovationIdeas.tenantId, tenantId), eq(innovationIdeas.segmentId, segmentId)];
   if (initiativeId) conds.push(eq(innovationIdeas.initiativeId, initiativeId));
+  if (projectId != null) conds.push(eq(innovationIdeas.linkedProjectId, projectId));
   const rows = (await db
     .select({ stage: innovationIdeas.stage, createdAt: innovationIdeas.createdAt, stageEnteredAt: innovationIdeas.stageEnteredAt })
     .from(innovationIdeas)

@@ -56,6 +56,14 @@ export type Capability =
   | "human"
   /** Persist / recall cross-run knowledge (memory, handoff, project knowledge). */
   | "memory"
+  /** Authoritatively DELETE a stored memory entry. Split from `memory` for the same
+   *  reason `web.search` is split from `web`: a surface can back recall/remember
+   *  without a real erase (the on-prem SSM store SUPERSEDES a belief rather than
+   *  deleting it), so a surface advertises this only when `forget` truly removes. */
+  | "memory.forget"
+  /** Claim shared resources and read/write the run's shared workspace, so concurrent
+   *  agents on one ticket can serialize conflicting work instead of clobbering it. */
+  | "coordinate"
   /** Fetch a known URL's content. */
   | "web"
   /** Search the public web (needs a search backend; separate from plain fetch). */
@@ -74,9 +82,16 @@ export type Capability =
 
 /** List/read/search the working tree. Backed by git-over-HTTP (cloud) or disk (Node). */
 export interface RepoReadCapability {
-  listFiles(subdir?: string): Promise<RepoListResult>;
+  /** List working-tree files. `subdir` scopes to a folder; `glob` filters by name
+   *  (e.g. `ROADMAP.md`, `**\/*.test.ts`) — case-insensitive, and a slash-free glob
+   *  matches the basename at any depth. A `glob` also bypasses the big-repo directory
+   *  summary so a matched file is always returned in full. */
+  listFiles(subdir?: string, glob?: string): Promise<RepoListResult>;
   readFile(path: string): Promise<RepoReadResult>;
-  searchCode(query: string): Promise<RepoSearchResult>;
+  /** Search the tree for `query`. Pass `scope` (a repo-relative subdirectory) to
+   *  restrict the search — essential on a large monorepo where an unscoped walk can
+   *  be truncated before it reaches the relevant subtree. */
+  searchCode(query: string, scope?: string): Promise<RepoSearchResult>;
 }
 
 /** Mutate the working tree. The provider owns the side effects of a write —
@@ -91,10 +106,15 @@ export interface RepoWriteCapability {
   editFile(path: string, oldString: string, newString: string, replaceAll?: boolean): Promise<RepoEditResult>;
 }
 
-/** Fetch / search the public web (capability `web`). */
+/** Fetch / search the public web. The two halves are gated SEPARATELY — `fetch` by
+ *  capability `web`, `search` by `web.search` — because they need different backings:
+ *  fetching a known URL is just an HTTP client (every surface has one), while search
+ *  needs a search-engine vendor. So `search` is OPTIONAL: a surface that can fetch but
+ *  has no search vendor wired backs `fetch` only and omits `web.search` from its
+ *  capability set, and the registry then never surfaces `web_search` to the model. */
 export interface WebCapability {
   fetch(url: string): Promise<WebFetchResult>;
-  search(query: string): Promise<WebSearchResult>;
+  search?(query: string): Promise<WebSearchResult>;
 }
 
 /** Run a real shell command. Present only on surfaces with a true process (the
@@ -121,11 +141,76 @@ export interface HumanCapability {
  *  Inversion), so `memory_recall`/`memory_remember` are defined ONCE. */
 export interface MemoryCapability {
   /** Store one durable fact under `key`. Re-using a key overwrites it. */
-  remember(key: string, content: string, opts?: { tags?: string[]; importance?: number }): Promise<MemoryRememberResult>;
+  remember(key: string, content: string, opts?: MemoryWriteOpts): Promise<MemoryRememberResult>;
   /** Return the entries most relevant to `query` (semantic where backed, else lexical),
    *  capped to `limit`. */
   recall(query: string, limit?: number): Promise<MemoryRecallResult>;
+  /** Delete the entry stored under `key`. OPTIONAL — present iff the surface
+   *  advertises `memory.forget` (see that capability's note). */
+  forget?(key: string): Promise<MemoryForgetResult>;
 }
+
+/**
+ * How WIDELY a remembered fact is visible. The narrower the scope, the smaller the
+ * contamination blast radius: a `ticket` fact is invisible to the next ticket, a
+ * `project` fact never reaches another project, and only `tenant` facts are global.
+ * A surface resolves the concrete owner (which project / which ticket) from the RUN —
+ * never from the model — so an agent cannot widen its own scope or aim a write at a
+ * project it is not running in.
+ */
+export type MemoryScopeKind = "tenant" | "project" | "ticket";
+
+/** Write-side options for {@link MemoryCapability.remember}. */
+export interface MemoryWriteOpts {
+  tags?: string[];
+  importance?: number;
+  /** Visibility of this fact. Defaults to the run's own narrowest scope. */
+  scope?: MemoryScopeKind;
+  /** Forget automatically after this many days. Omit for a durable fact. */
+  ttlDays?: number;
+}
+
+/** One recalled memory entry. `key`/`content` are the model-facing pair; the rest is
+ *  PROVENANCE — where the belief came from, how wide it is, and when it lapses. */
+export interface MemoryEntry {
+  key: string;
+  content: string;
+  scope?: MemoryScopeKind;
+  /** Free-form origin marker, e.g. `cloud-run`, `ide`, `brain`, `user`. */
+  origin?: string;
+  /** ISO-8601 expiry, when the entry carries a TTL. */
+  expiresAt?: string | null;
+}
+
+/**
+ * Multi-agent coordination (capability `coordinate`). Two agents in the same stage —
+ * or two stages of two tickets pointed at one repo — are concurrent writers with no
+ * arbiter. This capability is that arbiter, and it has two halves:
+ *
+ *   • LEASES (`claim`/`release`/`listClaims`) — a mutual-exclusion lock on a named
+ *     resource (a file path, a branch, a whole repo). The surface ALSO enforces
+ *     leases implicitly on writes, so correctness never depends on the model
+ *     choosing to call `claim` first; the tool exists so an agent can reserve work
+ *     ahead of doing it and can see WHO holds what.
+ *   • BLACKBOARD (`postNote`/`readNotes`) — a shared, run-scoped scratchpad so
+ *     concurrent agents can publish intent ("I own the migration") and read their
+ *     peers' notes, instead of each rediscovering the same context in isolation.
+ */
+export interface CoordinationCapability {
+  /** Take a lease on `resource`. Fails (never throws) when another live holder has it. */
+  claim(resource: string, opts?: { mode?: LeaseMode; reason?: string; ttlSeconds?: number }): Promise<LeaseClaimResult>;
+  /** Release a lease this run holds. Releasing one it does not hold is a benign no-op. */
+  release(resource: string): Promise<LeaseReleaseResult>;
+  /** Every live lease in this run's coordination scope, including other agents'. */
+  listClaims(): Promise<LeaseListResult>;
+  /** Publish/overwrite one note on the shared workspace under `key`. */
+  postNote(key: string, content: string): Promise<WorkspaceNoteResult>;
+  /** Read the shared workspace, optionally filtered by a lexical `query`. */
+  readNotes(query?: string, limit?: number): Promise<WorkspaceReadResult>;
+}
+
+/** `exclusive` = one holder. `shared` = many readers, but blocks an exclusive claim. */
+export type LeaseMode = "exclusive" | "shared";
 
 /** A surface's bag of capability services. A service is present iff the matching
  *  capability is in {@link capabilities}; the registry guarantees a tool's handler
@@ -140,6 +225,7 @@ export interface CapabilityProvider {
   readonly human?: HumanCapability;
   readonly web?: WebCapability;
   readonly memory?: MemoryCapability;
+  readonly coordination?: CoordinationCapability;
 }
 
 // Surfaces declare their capability set EXPLICITLY (it is the source of truth for
@@ -160,7 +246,15 @@ export interface RepoReadResult {
   ok: boolean;
   path?: string;
   content?: string;
+  /** True when `content` is only part of the file (a paginated line window, or the
+   *  provider hit its own byte cap) — more remains beyond what was returned. */
   truncated?: boolean;
+  /** Total line count of the file, so the model knows how far it has left to page. */
+  totalLines?: number;
+  /** 1-based line number `content` starts at (for the paginated `read_file` window). */
+  offset?: number;
+  /** Human/model-facing guidance, e.g. how to read the next chunk of a large file. */
+  note?: string;
   error?: string;
 }
 export interface RepoSearchResult {
@@ -176,6 +270,9 @@ export interface RepoWriteResult {
   branch?: string;
   commitUrl?: string | null;
   change?: "created" | "modified";
+  /** Model-facing guidance about the write, e.g. that it was recorded rather than
+   *  applied (rehearsal). Present on a SUCCESSFUL result — `error` is for failures. */
+  note?: string;
   error?: string;
 }
 export interface RepoDeleteResult {
@@ -194,6 +291,8 @@ export interface RepoEditResult {
   change?: "modified";
   /** How many occurrences were replaced. */
   replaced?: number;
+  /** Model-facing guidance on a SUCCESSFUL edit (see {@link RepoWriteResult.note}). */
+  note?: string;
   error?: string;
 }
 export interface ShellResult {
@@ -244,6 +343,58 @@ export interface MemoryRememberResult {
 export interface MemoryRecallResult {
   ok: boolean;
   query?: string;
-  entries?: Array<{ key: string; content: string }>;
+  entries?: MemoryEntry[];
+  error?: string;
+}
+export interface MemoryForgetResult {
+  ok: boolean;
+  key?: string;
+  /** False when no entry matched (benign — the fact is gone either way). */
+  deleted?: boolean;
+  error?: string;
+}
+
+/** A live lease as the coordination capability reports it. */
+export interface LeaseInfo {
+  resource: string;
+  mode: LeaseMode;
+  /** Display name of the agent holding it. */
+  holder: string;
+  /** True when THIS run is the holder. */
+  mine: boolean;
+  reason?: string | null;
+  expiresAt?: string | null;
+}
+export interface LeaseClaimResult {
+  ok: boolean;
+  resource?: string;
+  mode?: LeaseMode;
+  /** True when the lease was granted (or already held by this run). */
+  granted?: boolean;
+  /** Present when refused: who holds it and why, so the model can coordinate. */
+  heldBy?: string;
+  expiresAt?: string | null;
+  note?: string;
+  error?: string;
+}
+export interface LeaseReleaseResult {
+  ok: boolean;
+  resource?: string;
+  released?: boolean;
+  error?: string;
+}
+export interface LeaseListResult {
+  ok: boolean;
+  leases?: LeaseInfo[];
+  error?: string;
+}
+export interface WorkspaceNoteResult {
+  ok: boolean;
+  key?: string;
+  error?: string;
+}
+export interface WorkspaceReadResult {
+  ok: boolean;
+  notes?: Array<{ key: string; content: string; author: string; updatedAt: string; mine: boolean }>;
   error?: string;
 }

@@ -19,6 +19,11 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { agentFleetTool } from "../builderforce/tools/agent-fleet-tool.js";
 import { codebaseSearchTool } from "../builderforce/tools/codebase-search-tool.js";
 import { gitHistoryTool } from "../builderforce/tools/git-history-tool.js";
+import {
+  reviewsRecordTool,
+  securityRecordTool,
+  ticketsFromDeltaTool,
+} from "../builderforce/tools/platform-ticket-tools.js";
 import { projectKnowledgeTool } from "../builderforce/tools/project-knowledge-tool.js";
 import { semanticSearchTool } from "../builderforce/tools/semantic-search-tool.js";
 import { workflowStatusTool } from "../builderforce/tools/workflow-status-tool.js";
@@ -31,11 +36,27 @@ import {
   sendMethodNotAllowed,
   sendInvalidRequest,
 } from "./http-common.js";
-import { getBearerToken } from "./http-utils.js";
+import { getBearerToken, getHeader } from "./http-utils.js";
 
 const MCP_VERSION = "2024-11-05";
 const SERVER_NAME = "builderforce";
 const SERVER_VERSION = "1.0.0";
+
+/**
+ * True if an `Origin` header names a loopback host. MCP clients (Cursor, Claude
+ * Code, Goose, …) are NOT browsers and send NO `Origin`; only a web page sends
+ * one. A page served from anything but localhost that reaches the loopback MCP
+ * port is a drive-by CSRF attempt (esp. when loopback auth is disabled), so we
+ * accept an `Origin` only when it is itself loopback.
+ */
+function isLoopbackOrigin(origin: string): boolean {
+  try {
+    const host = new URL(origin).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "::1";
+  } catch {
+    return false;
+  }
+}
 
 /** The BuilderForceAgents tools exposed via MCP. */
 const MCP_TOOLS = [
@@ -45,6 +66,9 @@ const MCP_TOOLS = [
   gitHistoryTool,
   workflowStatusTool,
   agentFleetTool,
+  ticketsFromDeltaTool, // relay: record a code delta on the board (builtin tickets.from_delta)
+  reviewsRecordTool, // relay: record a Done-item review outcome (builtin reviews.record)
+  securityRecordTool, // relay: file a SOC 2 finding as a SECURITY ticket (builtin security.record_finding)
 ];
 
 /**
@@ -94,6 +118,19 @@ export async function handleMcpHttpRequest(
     return false;
   }
 
+  // Cross-origin browser guard (drive-by localhost CSRF). A real MCP client sends
+  // no Origin; a web page always does. Reject any request carrying a non-loopback
+  // Origin BEFORE auth so a page can't invoke tools even when loopback auth is off.
+  const origin = getHeader(req, "origin");
+  if (origin && !isLoopbackOrigin(origin)) {
+    sendJson(res, 403, {
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32002, message: "Forbidden: cross-origin requests are not allowed" },
+    });
+    return true;
+  }
+
   // Authenticate all MCP requests
   const token = getBearerToken(req);
   const authResult = await authorizeGatewayConnect({
@@ -112,10 +149,16 @@ export async function handleMcpHttpRequest(
     return true;
   }
 
-  // Set CORS headers so browser-based IDE extensions can call the MCP server
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  // No wildcard CORS: MCP clients are not browsers. We only ever reach here with
+  // no Origin (native client) or a loopback Origin (guarded above), so reflect a
+  // loopback Origin for the rare local browser tool and emit nothing otherwise.
+  // A wildcard `*` would let ANY visited web page fetch the loopback tool endpoint.
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  }
 
   if (req.method === "OPTIONS") {
     res.statusCode = 204;

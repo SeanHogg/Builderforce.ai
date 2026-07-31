@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Cloud workflow executor — runs `runtime='cloud'` workflows on the
  * builderforce-hosted runtime, instead of a self-hosted agentHost polling and
@@ -7,7 +8,8 @@
  * its tasks reach a terminal state.
  *
  * Node-kind coverage on cloud:
- *   - trigger / llm / transform / filter / branch / output  → executed natively.
+ *   - trigger / llm / transform / filter / branch / output / gmail → executed natively.
+ *     gmail sends through the tenant's connected Gmail integration (googleOAuth).
  *     llm runs via the gateway; the ETL kinds (transform/filter/branch) are
  *     evaluated by the sandbox-safe expression engine in `domain/workflowExpr`
  *     (an empty expression is a pass-through, so legacy workflows are unaffected).
@@ -27,7 +29,10 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { workflows, workflowTasks } from '../../infrastructure/database/schema';
-import { ideProxy } from '../llm/LlmProxyService';
+import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
+import { loadGoogleCredential } from '../integrations/googleCredential';
+import { sendGmail } from '../integrations/googleOAuth';
+import { tenantProxyForPlan, byoAwareModel } from '../llm/tenantProxy';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { contextFromInput, evaluateBool, renderTransform } from '../../domain/workflowExpr';
 import type { ProxyEnv } from '../llm/LlmProxyService';
@@ -86,9 +91,17 @@ async function executeCloudNode(env: CloudExecutorEnv, node: NodeInput, inputTex
         ...(system ? [{ role: 'system' as const, content: renderTemplate(system, inputText) }] : []),
         { role: 'user' as const, content: renderTemplate(prompt || '{{input}}', inputText) },
       ];
-      const proxy = ideProxy(env);
+      // The tenant's workflow LLM node → run on their connected BYO account when they
+      // have one; the node's configured `cfg.model` is a deliberate choice, so it's
+      // honored only when it preempts the BYO seed (nothing connected, or it's on their
+      // own account) — otherwise the connected flagship leads. Without a tenant (should
+      // not happen for a real workflow) fall back to the operator pool.
+      const nodeModel = typeof cfg.model === 'string' ? cfg.model : undefined;
+      const { proxy, byoVendors, registeredModels } = usageCtx
+        ? await tenantProxyForPlan(env as unknown as Env, usageCtx.tenantId)
+        : { proxy: ideProxy(env), byoVendors: new Set<string>(), registeredModels: [] as readonly string[] };
       const result = await proxy.complete({
-        model: typeof cfg.model === 'string' ? cfg.model : undefined,
+        model: byoAwareModel(nodeModel, byoVendors, registeredModels),
         messages,
         ...(typeof cfg.temperature === 'number' ? { temperature: cfg.temperature } : {}),
       });
@@ -100,10 +113,7 @@ async function executeCloudNode(env: CloudExecutorEnv, node: NodeInput, inputTex
       if (!result.response.ok) {
         throw new Error(`llm call failed (${result.response.status})`);
       }
-      const json = (await result.response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-      return { output: json.choices?.[0]?.message?.content ?? '' };
+      return { output: (await readProxyChoice(result)).content };
     }
 
     // ETL kinds — evaluated cloud-side via the sandbox-safe expression engine
@@ -134,13 +144,30 @@ async function executeCloudNode(env: CloudExecutorEnv, node: NodeInput, inputTex
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
           return { output: JSON.stringify({ ...parsed, $branch: taken }) };
         }
-      } catch {
+      } catch (error) {
         /* non-JSON payload — fall through to passthrough */
+      
+        reportCaughtError(error, { source: "application/workflow/cloudExecutor.ts", operation: "executeCloudNode" });
       }
       return { output: inputText };
     }
     case 'output':
       return { output: inputText };
+
+    case 'gmail': {
+      // Send an email through the tenant's connected Gmail integration. Fields
+      // support {{input}} so an upstream node's output can drive the recipient,
+      // subject or body. Needs the tenant context to load the (encrypted) creds.
+      if (!usageCtx) throw new Error('The Gmail node needs a tenant context to load your connected account');
+      const creds = await loadGoogleCredential(env as unknown as Env, usageCtx.db, usageCtx.tenantId, 'gmail');
+      if (!creds) throw new Error('Connect a Gmail integration under Settings ▸ Integrations to use the Gmail node');
+      const cfg = node.config;
+      const to = renderTemplate(typeof cfg.to === 'string' ? cfg.to : '', inputText).trim();
+      const subject = renderTemplate(typeof cfg.subject === 'string' ? cfg.subject : '', inputText);
+      const body = renderTemplate(typeof cfg.body === 'string' ? cfg.body : '{{input}}', inputText);
+      const sent = await sendGmail(creds, { to, subject, body });
+      return { output: JSON.stringify({ sent: true, id: sent.id, to }) };
+    }
 
     default:
       throw new Error(

@@ -16,7 +16,7 @@
  *    otherwise start() is a no-op.
  */
 
-import { getApiBaseUrl, getAuthHeaders } from '../apiClient';
+import { getApiBaseUrl, getAuthHeaders, apiRequestStream } from '../apiClient';
 
 export type QaEventType = 'pageview' | 'click' | 'input' | 'submit' | 'nav';
 
@@ -219,17 +219,23 @@ class QaCapture {
   flush(beacon = false): void {
     if (this.queue.length === 0) return;
     const batch = this.queue.splice(0, this.queue.length);
-    const url = `${getApiBaseUrl()}/api/qa/events`;
+    const path = '/api/qa/events';
     const payload = JSON.stringify({ sessionId: getSessionId(), events: batch });
     try {
-      const headers = getAuthHeaders({ 'Content-Type': 'application/json' });
       if (beacon && navigator.sendBeacon) {
-        // sendBeacon can't set Authorization; only use it as a best-effort
-        // last gasp. The interval flush (below) is the reliable path.
-        navigator.sendBeacon(url, new Blob([payload], { type: 'application/json' }));
+        // sendBeacon can't set Authorization, so it cannot go through the shared
+        // transport at all; only use it as a best-effort last gasp. The interval
+        // flush (below) is the reliable, authenticated path.
+        navigator.sendBeacon(`${getApiBaseUrl()}${path}`, new Blob([payload], { type: 'application/json' }));
         return;
       }
-      void fetch(url, { method: 'POST', headers, body: payload, keepalive: true }).catch(() => {});
+      void apiRequestStream(path, {
+        method: 'POST',
+        body: payload,
+        keepalive: true,
+        // Telemetry flush — best-effort, and fires on unload.
+        expectedErrors: [400, 401, 403, 404, 429, 500, 502, 503],
+      }).catch(() => {});
     } catch {
       /* ignore */
     }

@@ -14,6 +14,20 @@ export function formatDuration(ms: number): string {
   return `${sec}s`;
 }
 
+/**
+ * Day-scale elapsed formatting: "7d 04h" / "1h 04m" / "45s".
+ *
+ * {@link formatDuration} is right for timers and cooldowns but degrades past a day
+ * ("168h 00m" for a week), and a week is exactly the scale a stuck ticket or an orphaned
+ * background pass sits at — the unit a reader reasons about it in. Clamps negatives to 0.
+ */
+export function formatAge(ms: number): string {
+  const days = Math.floor(Math.max(0, ms) / 86_400_000);
+  if (days < 1) return formatDuration(ms);
+  const hours = Math.floor((Math.max(0, ms) % 86_400_000) / 3_600_000);
+  return `${days}d ${String(hours).padStart(2, '0')}h`;
+}
+
 /** Compact hours value for scorecards: "3.2h" / "—" when null. */
 export function formatHours(hours: number | null | undefined): string {
   if (hours == null) return '—';

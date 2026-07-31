@@ -4,6 +4,7 @@ import {
   parseFollowUp, buildFollowUpPayload,
   parseModel, parseCloudAgentRef, parseRepoId, parseRemediation,
   markReaperRequeued, wasReaperRequeued, withDefaultModel,
+  parseExecutor, withExecutor,
 } from './cloudDispatch';
 
 describe('chooseCloudExecutor', () => {
@@ -21,9 +22,10 @@ describe('chooseCloudExecutor', () => {
   it('uses durable for non-container runs (V1 / V2 durable)', () => {
     expect(chooseCloudExecutor({ wantsContainer: false, hasContainerBinding: false, containerHealthy: false, hasCloudRunner: true })).toBe('durable');
   });
-  it('falls to the in-request worker only when no durable runner is bound', () => {
-    expect(chooseCloudExecutor({ wantsContainer: false, hasContainerBinding: false, containerHealthy: false, hasCloudRunner: false })).toBe('worker');
-    expect(chooseCloudExecutor({ wantsContainer: true, hasContainerBinding: true, containerHealthy: false, hasCloudRunner: false })).toBe('worker');
+  it('fails closed when no durable runner is bound', () => {
+    // Never return the old in-request Worker executor: that multi-step loop times out.
+    expect(chooseCloudExecutor({ wantsContainer: false, hasContainerBinding: false, containerHealthy: false, hasCloudRunner: false })).toBe('unavailable');
+    expect(chooseCloudExecutor({ wantsContainer: true, hasContainerBinding: true, containerHealthy: false, hasCloudRunner: false })).toBe('unavailable');
   });
 });
 
@@ -116,6 +118,33 @@ describe('resolveCloudSurface', () => {
     expect(resolveCloudSurface(undefined, false)).toBe('durable');
     expect(resolveCloudSurface(null, false)).toBe('durable');
     expect(resolveCloudSurface('something-else', false)).toBe('durable');
+  });
+});
+
+describe('executor stamping (per-surface orphan ceiling)', () => {
+  it('withExecutor stamps the executor while preserving existing payload keys', () => {
+    const stamped = withExecutor('{"model":"x","cloudAgentRef":"a1"}', 'durable');
+    expect(JSON.parse(stamped)).toEqual({ model: 'x', cloudAgentRef: 'a1', executor: 'durable' });
+    // Absent/garbage payload → a fresh object carrying just the executor.
+    expect(JSON.parse(withExecutor(null, 'container'))).toEqual({ executor: 'container' });
+    expect(JSON.parse(withExecutor('not json', 'container'))).toEqual({ executor: 'container' });
+    // Re-stamping overwrites (idempotent).
+    expect(parseExecutor(withExecutor(stamped, 'container'))).toBe('container');
+  });
+
+  it('parseExecutor round-trips a stamped executor and rejects unknown/garbage', () => {
+    for (const e of ['durable', 'container'] as const) {
+      expect(parseExecutor(withExecutor(undefined, e))).toBe(e);
+    }
+    expect(parseExecutor('{"executor":"bogus"}')).toBeUndefined();
+    // The in-request Worker executor was removed; a payload stamped before that must
+    // parse as unknown, which the ceiling helper treats as long-lived (never a tight
+    // fast-fail on a run that may still be alive).
+    expect(parseExecutor('{"executor":"worker"}')).toBeUndefined();
+    expect(parseExecutor('{"model":"x"}')).toBeUndefined();
+    expect(parseExecutor('null')).toBeUndefined();
+    expect(parseExecutor(undefined)).toBeUndefined();
+    expect(parseExecutor('not json')).toBeUndefined();
   });
 });
 

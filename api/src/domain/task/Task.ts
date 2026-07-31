@@ -40,8 +40,32 @@ export interface TaskProps {
   /** Story-point estimate (0246), or null when unestimated — the leaf source for
    *  derived sprint velocity. */
   storyPoints: number | null;
+  /** AI Manager (0265): business value 0-100, null when unscored. */
+  businessValue: number | null;
+  /** One-line justification for {@link businessValue}. */
+  businessValueRationale: string | null;
+  /** How the score was set: 'ai' | 'rice' | 'manual' (a manual edit pins it). */
+  businessValueSource: string | null;
+  /** The manager's computed backlog rank (1 = do first), null when unranked. */
+  managerRank: number | null;
+  /** Validator review bookkeeping (0270): how many review passes this task has had,
+   *  when the last pass ran, and its verdict ('complete' | 'gaps' | null). */
+  reviewCount: number;
+  lastReviewedAt: Date | null;
+  lastReviewVerdict: string | null;
+  /** For a GAP-typed task: the Done item whose review produced it (null otherwise). */
+  gapOriginTaskId: TaskId | null;
   startDate: Date | null;
   dueDate: Date | null;
+  /**
+   * For an EPIC: which reasoning step produced its children — 'llm' (a real BA-style
+   * assessment), 'heuristic' (the degraded markdown-checklist fallback that runs when
+   * the model call fails), or 'manual' (a human/caller-supplied breakdown). Null on a
+   * task that was never decomposed. Recorded because the fallback silently produces a
+   * visibly worse plan, and "why does this Epic look like shredded markdown?" was
+   * previously unanswerable from the data.
+   */
+  decompositionSource: string | null;
   persona: string | null;
   archived: boolean;
   createdAt: Date;
@@ -73,7 +97,7 @@ export class Task {
   static create(
     props: Omit<
       TaskProps,
-      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'taskType' | 'parentTaskId' | 'sprintId' | 'releaseId' | 'storyPoints'
+      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'taskType' | 'parentTaskId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank' | 'reviewCount' | 'lastReviewedAt' | 'lastReviewVerdict' | 'gapOriginTaskId' | 'decompositionSource'
     > & {
       projectKey: string;
       /** Highest existing key sequence in the project; this task gets the next one. */
@@ -85,6 +109,8 @@ export class Task {
       /** Type at creation (default `task`). A decomposed child passes the Epic's id as parent. */
       taskType?: TaskType;
       parentTaskId?: TaskId | null;
+      /** For a GAP task: the Done item whose review produced it (Validator sets this). */
+      gapOriginTaskId?: TaskId | null;
     },
   ): Task {
     if (!props.title.trim()) throw new ValidationError('Task title is required');
@@ -115,8 +141,17 @@ export class Task {
       sprintId: null,
       releaseId: null,
       storyPoints: null,
+      businessValue: null,
+      businessValueRationale: null,
+      businessValueSource: null,
+      managerRank: null,
+      reviewCount: 0,
+      lastReviewedAt: null,
+      lastReviewVerdict: null,
+      gapOriginTaskId: props.gapOriginTaskId ?? null,
       startDate: props.startDate ?? null,
       dueDate: props.dueDate ?? null,
+      decompositionSource: null,
       persona: props.persona ?? null,
       archived: false,
       createdAt: now,
@@ -160,8 +195,19 @@ export class Task {
   get sprintId(): string | null { return this.props.sprintId; }
   get releaseId(): string | null { return this.props.releaseId; }
   get storyPoints(): number | null { return this.props.storyPoints; }
+  get businessValue(): number | null { return this.props.businessValue; }
+  get businessValueRationale(): string | null { return this.props.businessValueRationale; }
+  get businessValueSource(): string | null { return this.props.businessValueSource; }
+  get managerRank(): number | null { return this.props.managerRank; }
+  get reviewCount(): number { return this.props.reviewCount; }
+  get lastReviewedAt(): Date | null { return this.props.lastReviewedAt; }
+  get lastReviewVerdict(): string | null { return this.props.lastReviewVerdict; }
+  get gapOriginTaskId(): TaskId | null { return this.props.gapOriginTaskId; }
+  get isGap(): boolean { return this.props.taskType === TaskType.GAP; }
   get startDate(): Date | null { return this.props.startDate; }
   get dueDate(): Date | null { return this.props.dueDate; }
+  /** For an Epic: which reasoning step produced its children ('llm' | 'heuristic' | 'manual'). */
+  get decompositionSource(): string | null { return this.props.decompositionSource; }
   get persona(): string | null { return this.props.persona; }
   get archived(): boolean { return this.props.archived; }
   get createdAt(): Date { return this.props.createdAt; }
@@ -171,17 +217,36 @@ export class Task {
   // Behaviour
   // ------------------------------------------------------------------
 
+  /**
+   * Apply a PARTIAL edit. `undefined` means "not provided — leave it alone";
+   * `null` is the authoritative clear (detach the parent, unassign, un-schedule).
+   *
+   * The undefined-stripping is load-bearing, not defensive hygiene. Callers build
+   * their patch as an object LITERAL with a key per updatable field
+   * (`parentTaskId: dto.parentTaskId !== undefined ? … : undefined`), so an absent
+   * field still arrives as a present key holding `undefined` — and a plain spread
+   * overwrites with it. `TaskRepository.update` then writes the assignee/parent/
+   * sprint columns AUTHORITATIVELY (`plain.x ?? null`) so `null` can actually clear
+   * them, which turned that `undefined` into a real `NULL`. Net effect: every
+   * partial update silently de-nested the ticket from its Epic and dropped its
+   * human assignee — e.g. a Brain `tasks.update` that only set status + agent ref
+   * wiped `parentTaskId` (#679), and a board PATCH did the same on every drag.
+   */
   update(
     updates: Partial<
       Pick<
         TaskProps,
         'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'assignedAgentType'
         | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'startDate' | 'dueDate'
-        | 'persona' | 'archived'
+        | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank'
+        | 'decompositionSource' | 'persona' | 'archived'
       >
     >,
   ): Task {
-    return new Task({ ...this.props, ...updates, updatedAt: new Date() });
+    const provided = Object.fromEntries(
+      Object.entries(updates).filter(([, v]) => v !== undefined),
+    ) as typeof updates;
+    return new Task({ ...this.props, ...provided, updatedAt: new Date() });
   }
 
   /**

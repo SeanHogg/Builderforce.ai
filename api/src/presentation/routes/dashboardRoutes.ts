@@ -32,10 +32,11 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { USAGE_KIND } from '../../application/llm/usageSource';
+import { millicentsToUsd } from '../../domain/shared/money';
 
 /** Millicents (1/100000 USD) → USD. */
 function mcToUsd(millicents: unknown): number {
-  return Number(millicents ?? 0) / 100_000;
+  return millicentsToUsd(millicents as number | null | undefined);
 }
 
 /**

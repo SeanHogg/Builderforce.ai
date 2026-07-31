@@ -24,7 +24,7 @@
  *
  * Dependency-light + summarizer-injected so it is unit-testable without an LLM.
  */
-import { estimateRequestTokens, ideProxy, type ProxyEnv } from './LlmProxyService';
+import { estimateRequestTokens, ideProxy, readProxyChoice, type ProxyEnv } from './LlmProxyService';
 
 type Msg = Record<string, unknown>;
 
@@ -174,9 +174,8 @@ export function buildGatewaySummarizer(env: ProxyEnv): CompactionSummarizer {
         temperature: 0,
       });
       if (result.response.status >= 400) return null;
-      const json = (await result.response.json().catch(() => null)) as { choices?: Array<{ message?: { content?: unknown } }> } | null;
-      const content = json?.choices?.[0]?.message?.content;
-      return typeof content === 'string' && content.trim() ? content : null;
+      const { content } = await readProxyChoice(result);
+      return content ? content : null;
     } catch {
       return null;
     }

@@ -10,6 +10,7 @@ import {
   buildOpenAIChatBody,
   executeChatCompletion,
   executeChatCompletionStream,
+  forwardCallOpts,
   type AiModelTier,
   type VendorCallParams,
   type VendorCallResult,
@@ -74,9 +75,8 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'anthropic/claude-haiku-4.5',                tier: 'STANDARD', label: 'Claude Haiku 4.5',     brand: 'Anthropic' },
 
   // ── PREMIUM tier — paid coding-grade models
-  // Claude Sonnet 4.6 replaces the retired Claude 3.7 Sonnet (`claude-3-7-sonnet`
-  // was retired on the first-party API 2026-02-19; current-gen Sonnet is 4.6).
-  { id: 'anthropic/claude-sonnet-4.6',               tier: 'PREMIUM', label: 'Claude Sonnet 4.6',     brand: 'Anthropic' },
+  // Claude Sonnet 5 replaces Sonnet 4.6. Keep the exact live OpenRouter id.
+  { id: 'anthropic/claude-sonnet-5',                 tier: 'PREMIUM', label: 'Claude Sonnet 5',       brand: 'Anthropic' },
   { id: 'openai/gpt-4.1',                            tier: 'PREMIUM', label: 'GPT-4.1',               brand: 'OpenAI'    },
   { id: 'openai/o4-mini',                            tier: 'PREMIUM', label: 'o4-mini (reasoning)',   brand: 'OpenAI'    },
   { id: 'google/gemini-2.5-pro',                     tier: 'PREMIUM', label: 'Gemini 2.5 Pro',        brand: 'Google'    },
@@ -135,9 +135,7 @@ export const openRouterModule: VendorModule = {
       model: params.model,
       body: buildBody(params),
       headers: HEADERS,
-      ...(params.title ? { title: params.title } : {}),
-      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-      ...(params.signal ? { signal: params.signal } : {}),
+      ...forwardCallOpts(params),
     });
   },
   async callStream(params: VendorCallParams): Promise<VendorStreamResult> {
@@ -148,9 +146,7 @@ export const openRouterModule: VendorModule = {
       model: params.model,
       body: buildBody(params),
       headers: HEADERS,
-      ...(params.title ? { title: params.title } : {}),
-      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-      ...(params.signal ? { signal: params.signal } : {}),
+      ...forwardCallOpts(params),
     });
   },
 };

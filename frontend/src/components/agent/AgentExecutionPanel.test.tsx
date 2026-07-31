@@ -8,6 +8,16 @@ import { useExecutionStream } from './useExecutionStream';
 vi.mock('@/lib/builderforceApi');
 vi.mock('./useExecutionStream', () => ({ useExecutionStream: vi.fn() }));
 
+// This panel is a DISPATCH surface: re-run / cancel / steer are gated on the
+// `runtime.execute` capability (developer+, mirroring requireRole(DEVELOPER) on
+// the /api/runtime routes). Drive the workspace role from a mutable stub so the
+// suite can exercise both a permitted actor and a read-only viewer.
+const auth = { role: 'developer' };
+vi.mock('@/lib/AuthContext', () => ({
+  useAuth: () => ({ tenant: { role: auth.role } }),
+  useOptionalAuth: () => ({ tenant: { role: auth.role } }),
+}));
+
 // Isolate from the run control + markdown renderer + status palette + Link.
 vi.mock('../task/RunAgentControl', () => ({ RunAgentControl: () => <div data-testid="run-control" /> }));
 vi.mock('../ChatMessageContent', () => ({ ChatMessageContent: ({ content }: { content: string }) => <div>{content}</div> }));
@@ -32,6 +42,7 @@ describe('AgentExecutionPanel — steering echo', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    auth.role = 'developer';
     vi.spyOn(builderforceApi.runtimeApi, 'listForTask').mockResolvedValue([RUNNING_EXECUTION]);
     vi.spyOn(builderforceApi.runtimeApi, 'taskFileChanges').mockResolvedValue({ changes: [] });
     vi.spyOn(builderforceApi.runtimeApi, 'taskCost').mockResolvedValue({ estimatedCostUsd: 0, totalTokens: 0, requests: 0 });
@@ -44,6 +55,13 @@ describe('AgentExecutionPanel — steering echo', () => {
     vi.spyOn(builderforceApi.runtimeApi, 'trace').mockResolvedValue({
       execution: RUNNING_EXECUTION,
       trace: { source: 'test', usageSnapshots: [], toolEvents: [] },
+    });
+    // Role-coordination status is fetched per task on mount. The module is
+    // automocked, so without this the call resolves to `undefined` and the
+    // panel throws reading `.requiredCount` off it.
+    vi.spyOn(builderforceApi.kanbanApi, 'accountability').mockResolvedValue({
+      taskId: 1, requiredCount: 0, completedCount: 0, percentComplete: 0,
+      participants: [], signoffs: [], gaps: [],
     });
     // Simulate the per-isolate drop: the stream NEVER echoes the user message back.
     mockStream.mockReturnValue({
@@ -58,9 +76,9 @@ describe('AgentExecutionPanel — steering echo', () => {
     );
 
     // Wait for the running execution to load (chatbox becomes active).
-    const box = await waitFor(() => getByPlaceholderText(/Send the agent a new direction/i));
+    const box = await waitFor(() => getByPlaceholderText('agentExecution.steerPlaceholder'));
     fireEvent.change(box, { target: { value: 'focus on the pricing page' } });
-    fireEvent.click(getByText('Send'));
+    fireEvent.click(getByText('agentExecution.send'));
 
     // The directive shows in the thread without waiting on a round-trip echo.
     expect(await findByText('focus on the pricing page')).toBeTruthy();
@@ -89,7 +107,7 @@ describe('AgentExecutionPanel — steering echo', () => {
     // Both narrations render (oldest-first), not the "working…" placeholder.
     expect(await findByText('Creating the plugin core logic.')).toBeTruthy();
     expect(await findByText('Now wiring the Outlook UI.')).toBeTruthy();
-    expect(queryByText(/output will stream here/i)).toBeNull();
+    expect(queryByText(/agentExecution.outputPlaceholder/i)).toBeNull();
   });
 
   it('shows a re-run action on a failed execution and re-submits with its target + payload', async () => {
@@ -110,6 +128,31 @@ describe('AgentExecutionPanel — steering echo', () => {
       agentHostId: undefined,
       payload: '{"cloudAgentRef":"agt_9","model":"x"}',
     }));
+  });
+
+  it('leaves a viewer’s re-run visible but inert, with the role hint, instead of letting it 403', async () => {
+    auth.role = 'viewer';
+    const failed: Execution = { id: 17, taskId: 1, status: 'failed', agentHostId: null, payload: '{"cloudAgentRef":"agt_9"}' };
+    vi.spyOn(builderforceApi.runtimeApi, 'listForTask').mockResolvedValue([failed]);
+    mockStream.mockReturnValue({ status: null, execution: null, messages: [], fileChanges: [], connected: false });
+    const submit = vi.spyOn(builderforceApi.runtimeApi, 'submitExecution');
+
+    const { findByLabelText, findAllByTitle, findByRole } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
+
+    // Per the product rule the control is DISABLED + labelled, never hidden…
+    const retry = await findByLabelText(/Re-run this task/i);
+    // The hint is localized (common.requiresRoleHint, an ICU select on the role), so
+    // assert the gate's presence via the translation key the test harness echoes —
+    // asserting the English sentence would re-break the moment copy is translated.
+    expect((await findAllByTitle(/common\.requiresRoleHint/i)).length).toBeGreaterThan(0);
+
+    // …and clicking it dispatches nothing (the gate swallows the click).
+    fireEvent.click(retry);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(submit).not.toHaveBeenCalled();
+
+    // Reading the run is untouched — the execution chip still selects.
+    expect(await findByRole('button', { name: /#17/ })).toBeTruthy();
   });
 
   it('shows the per-run agent in the execution header from the run’s own fields + telemetry', async () => {
@@ -133,15 +176,15 @@ describe('AgentExecutionPanel — steering echo', () => {
     const { findByText, findByTitle } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
 
     // The header shows the run's own agent name (not the task's current assignment)…
-    expect((await findByTitle('Agent that ran this execution')).textContent).toContain('Coder Agent');
+    expect((await findByTitle('agentExecution.agentThatRan')).textContent).toContain('Coder Agent');
     // …and the engine type it actually dispatched as, from its own telemetry.
-    expect(await findByText(/ran as Cloud Agent \(Node\/Container\)/)).toBeTruthy();
+    expect(await findByText(/agentExecution\.ranAs Cloud Agent \(Node\/Container\)/)).toBeTruthy();
   });
 
   it('shows ticket-level spend beside the Executions heading', async () => {
     vi.spyOn(builderforceApi.runtimeApi, 'taskCost').mockResolvedValue({ estimatedCostUsd: 0.42, totalTokens: 12345, requests: 7 });
     const { findByText } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
-    expect(await findByText(/\$0\.42 spent on this ticket/)).toBeTruthy();
+    expect(await findByText(/agentExecution\.spentOnTicket \$0\.42/)).toBeTruthy();
   });
 
   it('does not show a re-run action on a running execution', async () => {
@@ -161,14 +204,75 @@ describe('AgentExecutionPanel — steering echo', () => {
     const { findByText, getByText, getByTestId, queryByTestId } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
 
     // Open the Changes tab and click the file row.
-    fireEvent.click(await findByText(/^Changes/));
+    fireEvent.click(await findByText(/agentExecution.tabChanges/));
     expect(queryByTestId('file-change-viewer')).toBeNull();
     fireEvent.click(getByText('src/outlook-plugin.ts'));
 
-    // The viewer mounts for that file; "All changes" returns to the list.
+    // The viewer mounts for that file; the "back to list" control returns to it.
+    // (The label is localized — `taskChanges.allChanges` — so match the key the
+    // test-env passthrough i18n mock renders, not the English copy.)
     expect(getByTestId('file-change-viewer').textContent).toContain('src/outlook-plugin.ts');
-    fireEvent.click(getByText(/All changes/));
+    fireEvent.click(getByText(/allChanges/i));
     expect(queryByTestId('file-change-viewer')).toBeNull();
+  });
+
+  // ── revert a finished run ────────────────────────────────────────────────────
+  // Destructive + manager-gated. The cases that matter are: it confirms first, it
+  // does NOT offer itself on a live run, a developer sees it disabled rather than
+  // gone, and a server REFUSAL is shown verbatim (the reason is the product).
+  describe('revert', () => {
+    const completed: Execution = { id: 55, taskId: 1, status: 'completed', agentHostId: null };
+    const settle = () => {
+      vi.spyOn(builderforceApi.runtimeApi, 'listForTask').mockResolvedValue([completed]);
+      mockStream.mockReturnValue({ status: 'completed', execution: null, messages: [], fileChanges: [], connected: false });
+    };
+
+    it('confirms, then reverts, and reports the branch it deleted', async () => {
+      auth.role = 'manager';
+      settle();
+      const revert = vi.spyOn(builderforceApi.runtimeApi, 'revert').mockResolvedValue({
+        reverted: true, branch: 'builderforce/task-1', branchDeleted: true, prClosed: true, commits: 2,
+      });
+
+      const { findByText } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
+      fireEvent.click(await findByText('agentExecution.revert'));
+
+      await waitFor(() => expect(revert).toHaveBeenCalledWith(55));
+      expect(await findByText(/agentExecution\.revertDone/)).toBeTruthy();
+    });
+
+    it('shows the server’s refusal reason verbatim instead of a generic failure', async () => {
+      auth.role = 'manager';
+      settle();
+      vi.spyOn(builderforceApi.runtimeApi, 'revert').mockRejectedValue(
+        new Error('pull request #7 was already merged — its commits are on \'main\' and cannot be undone by deleting the branch'),
+      );
+
+      const { findByText } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
+      fireEvent.click(await findByText('agentExecution.revert'));
+
+      expect(await findByText(/already merged/)).toBeTruthy();
+    });
+
+    it('is not offered while the run is still going', async () => {
+      auth.role = 'manager';
+      const { queryByText, findByRole } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
+      await findByRole('button', { name: /#10/ });
+      expect(queryByText('agentExecution.revert')).toBeNull();
+    });
+
+    it('is visible but inert for a developer (manager-gated, disabled not hidden)', async () => {
+      auth.role = 'developer';
+      settle();
+      const revert = vi.spyOn(builderforceApi.runtimeApi, 'revert');
+
+      const { findByText } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
+      const btn = await findByText('agentExecution.revert');
+      fireEvent.click(btn);
+
+      await new Promise((r) => setTimeout(r, 0));
+      expect(revert).not.toHaveBeenCalled();
+    });
   });
 
   it('rolls the optimistic echo back when the post fails', async () => {
@@ -177,13 +281,13 @@ describe('AgentExecutionPanel — steering echo', () => {
       <AgentExecutionPanel task={task} agentHosts={[]} />,
     );
 
-    const box = (await waitFor(() => getByPlaceholderText(/Send the agent a new direction/i))) as HTMLTextAreaElement;
+    const box = (await waitFor(() => getByPlaceholderText('agentExecution.steerPlaceholder'))) as HTMLTextAreaElement;
     fireEvent.change(box, { target: { value: 'retry me' } });
-    fireEvent.click(getByText('Send'));
+    fireEvent.click(getByText('agentExecution.send'));
 
     // After the failed post the thread echo (a "You" message) is removed and the
     // draft is restored for retry. ("You" only renders for a user thread message.)
-    await waitFor(() => expect(queryByText('You')).toBeNull());
+    await waitFor(() => expect(queryByText('agentExecution.you')).toBeNull());
     expect(box.value).toBe('retry me');
   });
 });

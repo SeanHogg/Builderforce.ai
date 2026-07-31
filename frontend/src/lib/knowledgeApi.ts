@@ -5,7 +5,7 @@
  */
 import { apiRequest, apiRequestStream } from './apiClient';
 
-export type DocType = 'sop' | 'process' | 'doc';
+export type DocType = 'sop' | 'process' | 'doc' | 'postmortem' | 'known_error';
 export type DocStatus = 'draft' | 'published' | 'archived';
 export type ComplianceState = 'acknowledged' | 'pending' | 'overdue' | 'not_required';
 export type DocAccess = 'manager' | 'editor' | 'viewer' | 'none';
@@ -241,6 +241,19 @@ export const knowledgeApi = {
   // --- Marketplace: sell / install knowledge documents -------------------
   listings: () =>
     apiRequest<{ listings: KnowledgeListing[] }>(`${BASE}/listings`).then((r) => r.listings),
+
+  /** PUBLIC browse — works logged-out (no tenant token required). */
+  publicListings: () =>
+    apiRequest<{ listings: KnowledgeListing[] }>(`/api/knowledge-market/listings`).then((r) => r.listings),
+
+  /** Purchase a paid listing (records the purchase that unlocks install). Free
+   *  listings return `{ free: true }`; hosted-card deployments not yet configured
+   *  return `{ requiresConfig: true }`. */
+  checkoutListing: (id: string) =>
+    apiRequest<{ purchased?: boolean; free?: boolean; requiresConfig?: boolean }>(
+      `${BASE}/listings/${id}/checkout`,
+      { method: 'POST' },
+    ),
 
   docListing: (id: string) =>
     apiRequest<{ listing: MyKnowledgeListing | null }>(`${BASE}/documents/${id}/listing`).then((r) => r.listing),

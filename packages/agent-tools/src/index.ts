@@ -8,6 +8,8 @@
  */
 
 export * from "./capabilities.js";
+export * from "./edit.js";
+export * from "./glob.js";
 export * from "./tool.js";
 export * from "./registry.js";
 export * from "./engine.js";

@@ -1,0 +1,884 @@
+/**
+ * <EvermindConsole> — the per-project Evermind inspect-and-train surface, rendered
+ * identically on the web app (embedded in the IDE agent panel) and in the VS Code
+ * sidebar webview. Presentational + self-managing: it loads through the injected
+ * {@link EvermindConsoleAdapter}, refreshes on a light poll, and drives the
+ * manager-gated training controls (seed / inference / learning mode / teacher),
+ * the "teach from a transcript" producer path, a "learn now" flush, and the
+ * recent-contributions inspection list. Themed via cascading `--bf-*` CSS variables
+ * so it reads natively in both light and dark, on the web and in the editor.
+ *
+ * All colours resolve through the injected host tokens; the write controls are
+ * disabled (not hidden) when `canManage` is false, mirroring the web RoleGate.
+ * See [[evermind-learning-architecture]].
+ */
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  DEFAULT_EVERMIND_LABELS,
+  type EvermindConsoleAdapter,
+  type EvermindConsoleData,
+  type EvermindConsoleLabels,
+  type EvermindEvalPoint,
+  type EvermindKnowledgeAnalysis,
+  type EvermindProbeResult,
+  type EvermindRecentEntry,
+  type EvermindSeedModel,
+  type EvermindTarget,
+  type EvermindTeacherOptions,
+  type EvermindValidateResult,
+} from './types';
+import { evermindLearnedStatus } from './learnedStatus';
+import { EvermindTestBench } from './EvermindTestBench';
+import { EvermindMaintenance } from './EvermindMaintenance';
+import { EvermindAnalyzer } from './EvermindAnalyzer';
+import { EvermindDiagnostics, useDiagnosticsCopy } from './EvermindDiagnostics';
+import { ConsoleTabs, type ConsoleTab } from './ConsoleTabs';
+import { buildEvermindDiagnostics } from './diagnosticsReport';
+import {
+  C, italic, fieldLabel, fieldTitle, fieldHint, select, optionStyle, sectionBlock,
+  primaryBtn, secondaryBtn, ghostBtn, linkBtn, pill, tag, warnBox,
+} from './consoleStyles';
+
+export interface EvermindConsoleProps {
+  adapter: EvermindConsoleAdapter;
+  /** Whether the viewer can change settings (manager). Controls are disabled, not hidden. */
+  canManage: boolean;
+  /** i18n overrides; unspecified keys fall back to English defaults. */
+  labels?: Partial<EvermindConsoleLabels>;
+  /** Poll interval (ms) for the live pending/recent readout. 0 disables. Default 20s. */
+  refreshMs?: number;
+  /** Name of the project this console is scoped to. Shown in the header so the same
+   *  panel on two surfaces (web tab vs VS Code sidebar) never looks like contradictory
+   *  states for "the same project" when they are in fact different projects. */
+  projectName?: string;
+  /** Show the "Recently learned" list. Default true; a host that renders its own
+   *  learnings surface (e.g. the web Studio's region-filterable panel) passes false. */
+  showRecent?: boolean;
+  /** Show the inline `↻` refresh button in the header. Default true. A host that
+   *  drives refresh from its OWN chrome (e.g. the VS Code sidebar view's title bar)
+   *  passes false and bumps {@link refreshSignal} instead, so the control lives in
+   *  the one place that host expects it rather than duplicated inside the card. */
+  showHeaderRefresh?: boolean;
+  /** A monotonic counter a host bumps to trigger an in-place reload from OUTSIDE the
+   *  console (e.g. a title-bar refresh action). Each new value re-fetches without the
+   *  loading flash — the same reload the inline `↻` runs. Undefined/0 = no external refresh. */
+  refreshSignal?: number;
+  /** Called whenever a Validate runs (or is cleared, with null) — lets a host lift
+   *  the recall result to a companion surface (e.g. highlight the matched memories
+   *  on the web Studio's Knowledge Map). The console also renders the result inline. */
+  onValidate?: (result: EvermindValidateResult | null) => void;
+  /** Which surface is rendering — stamped into the diagnostics export, because the two
+   *  hosts fail differently and "which one was this?" is the first question asked of a
+   *  pasted report. Default 'web'. */
+  host?: 'web' | 'vscode';
+}
+
+export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate, host = 'web' }: EvermindConsoleProps) {
+  const t = useMemo<EvermindConsoleLabels>(() => ({ ...DEFAULT_EVERMIND_LABELS, ...(labels ?? {}) }), [labels]);
+
+  const [data, setData] = useState<EvermindConsoleData | null>(null);
+  // The set of Everminds under this project (self + IDE builds). Null until the first
+  // fetch resolves (or forever, when the host supplies no `loadTargets`) so the section
+  // never flashes empty. Folded into the SAME refresh path as `loadData` — no 2nd timer.
+  const [targets, setTargets] = useState<EvermindTarget[] | null>(null);
+  const [seedModels, setSeedModels] = useState<EvermindSeedModel[]>([]);
+  const [teacherOpts, setTeacherOpts] = useState<EvermindTeacherOptions | null>(null);
+  const [selectedSlug, setSelectedSlug] = useState('');
+  const [teachPrompt, setTeachPrompt] = useState('');
+  const [teachText, setTeachText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [validateResult, setValidateResult] = useState<EvermindValidateResult | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  // Which working surface is open. Teach first: it is the only one an operator uses
+  // on a healthy model, and the other three are things you go looking for.
+  const [tab, setTab] = useState('teach');
+  // The last test-bench run and knowledge audit, lifted OUT of their tabs. Two reasons
+  // they can't stay local: the diagnostics export has to include evidence produced on a
+  // tab the operator has since left, and a failing readiness check has to keep showing
+  // on the Test tab's badge from the other three.
+  const [probeResult, setProbeResult] = useState<EvermindProbeResult | null>(null);
+  const [analysis, setAnalysis] = useState<EvermindKnowledgeAnalysis | null>(null);
+  // A load FAILURE is distinct from a genuinely-unseeded model: without this, a 404 /
+  // expired token / wrong project id would fall through to `seeded === false` and render
+  // the exact same "Not set up" UI as a real unseeded project — actively misleading.
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  const reload = useCallback(async () => {
+    // Kick off the targets fetch alongside loadData so the list rides the SAME refresh
+    // path (mount / poll / refreshSignal) without a second timer and without adding
+    // latency to the primary head load. A targets failure is non-fatal — keep the last.
+    const targetsP = adapter.loadTargets?.().catch(() => null);
+    try {
+      const d = await adapter.loadData();
+      setData(d);
+      setLoadFailed(false);
+    } catch {
+      setData(null);
+      setLoadFailed(true);
+    } finally {
+      setLoaded(true);
+    }
+    if (targetsP) { const tg = await targetsP; if (tg) setTargets(tg); }
+  }, [adapter]);
+
+  // Initial load + adapter change (project switch re-provisions the adapter host-side).
+  useEffect(() => { setLoaded(false); void reload(); }, [reload]);
+
+  // Manager-only ancillary lists (seed candidates + teacher options). Fetched once
+  // per adapter — a non-manager never needs them.
+  useEffect(() => {
+    if (!canManage) return;
+    let cancelled = false;
+    void adapter.loadSeedModels().then((m) => { if (!cancelled) { setSeedModels(m); setSelectedSlug((cur) => cur || (m[0]?.slug ?? '')); } }).catch(() => {});
+    void adapter.loadTeacherOptions().then((o) => { if (!cancelled) setTeacherOpts(o); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [adapter, canManage]);
+
+  // Light poll so pending/recent stay live while learning happens. The read endpoint
+  // is server-cached, so this is cheap; paused while an action is in flight.
+  useEffect(() => {
+    if (!refreshMs) return;
+    const id = setInterval(() => { if (!busy) void reload(); }, refreshMs);
+    return () => clearInterval(id);
+  }, [refreshMs, busy, reload]);
+
+  // Host-driven refresh: when a host bumps `refreshSignal` (e.g. a VS Code title-bar
+  // action), reload in place — the same effect as the inline `↻`, no loading flash.
+  // A ref tracks the last-handled value so the initial mount (and adapter-swap reload
+  // churn) never double-fires: only a genuinely NEW value triggers a reload.
+  const lastRefreshSignal = useRef<number | undefined>(refreshSignal);
+  useEffect(() => {
+    if (refreshSignal == null || refreshSignal === lastRefreshSignal.current) return;
+    lastRefreshSignal.current = refreshSignal;
+    void reload();
+  }, [refreshSignal, reload]);
+
+  // Validate: preview which learned memories would answer a candidate task. Read-only
+  // — never teaches. Stores the result for the inline list AND lifts it to the host
+  // (onValidate) so a companion surface can highlight the matched memories.
+  const runValidate = useCallback(async (prompt: string) => {
+    const task = prompt.trim();
+    if (task.length < 3) return;
+    setValidating(true); setError(null); setNotice(null);
+    try {
+      const result = await adapter.validate(task);
+      setValidateResult(result);
+      onValidate?.(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.errorGeneric);
+    } finally {
+      setValidating(false);
+    }
+  }, [adapter, onValidate, t.errorGeneric]);
+
+  const clearValidate = useCallback(() => { setValidateResult(null); onValidate?.(null); }, [onValidate]);
+
+  const run = useCallback(async (op: () => Promise<void>, successNotice?: string) => {
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      await op();
+      await reload();
+      if (successNotice) setNotice(successNotice);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.errorGeneric);
+    } finally {
+      setBusy(false);
+    }
+  }, [reload, t.errorGeneric]);
+
+  // Namespaces the tab/panel ids so two consoles on one page (the web IDE can show a
+  // project's and a build's side by side) never generate colliding aria-controls.
+  const panelId = useId();
+
+  // The diagnostics payload is assembled ON DEMAND from whatever the console is holding
+  // at that moment — nothing is serialised until the operator asks for it.
+  const buildReport = useCallback(() => buildEvermindDiagnostics({
+    data, projectName, host, targets, probe: probeResult, analysis, error, now: Date.now(),
+  }), [data, projectName, host, targets, probeResult, analysis, error]);
+
+  // ONE copy action behind both the header button and the Maintain tab's panel — the
+  // state lives here so the two surfaces can never disagree about whether the copy
+  // landed. When the clipboard is refused the report is revealed in the panel, so the
+  // header press has to open the tab holding it; otherwise the fallback is invisible.
+  const diagnostics = useDiagnosticsCopy({
+    buildReport,
+    onCopy: adapter.copyText,
+    onManualFallback: () => setTab('maintain'),
+  });
+
+  if (!loaded) return <Section aria-busy><p style={{ margin: 0, color: C.text2, fontSize: '0.82rem' }}>{t.loading}</p></Section>;
+
+  const seeded = !!data?.seeded;
+  const frozen = data?.mode === 'offline-frozen';
+  // This build is showing its CONTAINER's Evermind, not one of its own — see
+  // `EvermindConsoleData.inherited`. Gates the console to read-only.
+  const inherited = !!data?.inherited;
+  // Auto-quarantined after a streak of incoherent serves: it can't be re-enabled until
+  // it passes the coherence probe again. Surface a badge + reason so the disable is legible.
+  const quarantined = !!data?.quarantinedAt;
+  const quarantineReason = data?.quarantineReason?.trim() || '';
+
+  // The scoped project name — rendered next to the title so the panel always says WHICH
+  // project's Evermind this is (the web tab and the VS Code sidebar can be on different
+  // projects at once). Trimmed to avoid an empty pill from a whitespace name.
+  const scopeName = projectName?.trim();
+  const Header = (
+    <header style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <span aria-hidden style={{ fontSize: '1.05rem' }}>🧠</span>
+      <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: C.text }}>{t.title}</h3>
+      {scopeName && <span style={{ fontSize: '0.8rem', color: C.text2 }} title={scopeName}>· {scopeName}</span>}
+      {!loadFailed && <span style={pill(seeded)}>{seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded}</span>}
+      {!loadFailed && seeded && <RegressionChip t={t} evalPoint={data?.eval ?? null} />}
+      {!loadFailed && quarantined && (
+        <span style={quarantinePill} title={t.quarantinedHint(quarantineReason)}>⚠ {t.quarantinedBadge}</span>
+      )}
+      {/* The export sits in the HEADER as well as in the Maintain tab, deliberately.
+          The moment you want to hand this to someone is the moment something is wrong,
+          and an affordance you have to go tab-hunting for at that moment is one people
+          conclude does not exist. Both press the same action (see useDiagnosticsCopy),
+          and it stays available even when the load FAILED — that failure is itself the
+          most useful thing to be able to send. */}
+      {/* The ONE confirmation, and it lives in the header rather than beside either
+          button: the copy can be pressed from either surface, and a confirmation that
+          only appears on the tab you happened to press from would be missed from the
+          other. `aria-label` stays the CTA — a button that renames itself to its own
+          success message stops saying what it does. */}
+      {diagnostics.copied && (
+        <span role="status" style={{ fontSize: '0.72rem', color: C.accent }}>{t.diagnosticsCopied}</span>
+      )}
+      <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <button
+          type="button"
+          onClick={() => void diagnostics.copy()}
+          style={{ ...ghostBtn, marginLeft: 0, fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+          title={t.diagnosticsCta}
+          aria-label={t.diagnosticsCta}
+        >
+          <span aria-hidden>{diagnostics.copied ? '✓' : '⧉'}</span>{t.diagnosticsTitle}
+        </button>
+        {showHeaderRefresh && (
+          <button type="button" onClick={() => void reload()} disabled={busy} style={{ ...ghostBtn, marginLeft: 0 }} title={t.refresh} aria-label={t.refresh}>↻</button>
+        )}
+      </span>
+    </header>
+  );
+
+  // Load failed — surface it with a retry instead of masquerading as "Not set up".
+  if (loadFailed) {
+    return (
+      <Section aria-label={t.title}>
+        {Header}
+        <p style={{ margin: 0, fontSize: '0.8rem', lineHeight: 1.5, color: C.danger }} role="alert">{t.errorGeneric}</p>
+        <button type="button" onClick={() => void reload()} disabled={busy} style={primaryBtn(busy)}>{t.refresh}</button>
+      </Section>
+    );
+  }
+
+  /* ── The four working surfaces ────────────────────────────────────────────────
+     Each is a separate JOB on the same model, not a step of one, which is why they
+     are tabs rather than a stack. Each self-gates on what the host implements and on
+     the viewer's role, so a tab with nothing behind it is never offered — an empty
+     tab is a worse affordance than a missing one. */
+  const tabs: ConsoleTab[] = [];
+  if (data && seeded && !inherited) {
+    const head = data;
+
+    tabs.push({
+      id: 'teach',
+      label: t.tabTeach,
+      // The queue depth belongs here: "3 waiting" is a prompt to press Learn now, and
+      // it is the one number that changes while you are on another tab.
+      ...(head.pending > 0 ? { badge: String(head.pending), badgeTone: 'info' as const } : {}),
+      content: (
+        <>
+          <TeacherPicker
+            t={t} canManage={canManage} busy={busy} opts={teacherOpts}
+            value={head.teacherModel ?? ''}
+            onChange={(m) => run(() => adapter.setTeacher(m || null))}
+          />
+
+          <TeachBox
+            t={t} busy={busy} validating={validating} teacherModel={head.teacherModel ?? ''}
+            prompt={teachPrompt} text={teachText}
+            onPrompt={setTeachPrompt} onText={setTeachText}
+            onTeach={() => run(
+              async () => {
+                const task = teachPrompt.trim();
+                const body = teachText.trim();
+                // With a teacher pinned you teach a TASK: the teacher answers it and the
+                // model learns (task → ideal answer), so send the task as both text + prompt.
+                if (head.teacherModel && body.length < 20 && task.length >= 20) {
+                  await adapter.teach(task, task);
+                } else {
+                  await adapter.teach(body, task || undefined);
+                }
+                setTeachText(''); setTeachPrompt('');
+              },
+              t.taught,
+            )}
+            // Validate the SAME task the user would teach: the pinned-teacher task prompt,
+            // else the transcript's task prompt, else the transcript body itself.
+            onValidate={() => runValidate(head.teacherModel ? teachPrompt : (teachPrompt.trim() || teachText))}
+          />
+
+          {validateResult && (
+            <ValidateResults t={t} result={validateResult} onClear={clearValidate} />
+          )}
+
+          {canManage && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                disabled={busy || frozen}
+                onClick={() => run(async () => {
+                  const r = await adapter.flush();
+                  setNotice(r.merged > 0 ? t.flushedN(r.merged, r.version) : t.flushedNone);
+                }, undefined)}
+                style={primaryBtn(busy || frozen)}
+              >
+                {busy ? t.flushing : t.flushCta}
+              </button>
+              {head.pending > 0 && (
+                <span style={{ fontSize: '0.74rem', color: C.text2 }}>{t.pendingLabel}: {head.pending}</span>
+              )}
+            </div>
+          )}
+
+          {/* Import from builderforce-memory — only when the host implements the file
+              op (VS Code). The shared component decides its own visibility, so the web
+              app (no adapter.importMemory) simply never renders it. */}
+          {canManage && adapter.importMemory && (
+            <ImportBox
+              t={t} busy={busy} frozen={frozen}
+              onImport={() => run(async () => {
+                const report = await adapter.importMemory!();
+                if (!report) return; // user cancelled the picker — no notice
+                setNotice(
+                  report.absorbed > 0
+                    ? t.importDone(report.absorbed, report.version, report.compacted, (report.bytesSaved / 1024).toFixed(1))
+                    : t.importNothing,
+                );
+              })}
+            />
+          )}
+        </>
+      ),
+    });
+
+    // TEST — "what will this model actually produce?". Offered to every viewer (reading
+    // what the model writes is not a privileged act); the endpoint is manager-gated, so
+    // a non-manager sees the controls disabled rather than a button that 403s.
+    if (adapter.probe) {
+      const refused = probeResult ? !probeResult.ready : false;
+      tabs.push({
+        id: 'test',
+        label: t.tabTest,
+        // A failed readiness check follows you to the other tabs. A refusal you can only
+        // see while standing on the tab that found it is a refusal you forget.
+        ...(refused ? { badge: '!', badgeTone: 'bad' as const } : {}),
+        content: (
+          <EvermindTestBench
+            t={t} disabled={!canManage || busy}
+            onProbe={(p) => adapter.probe!(p)}
+            result={probeResult}
+            onResult={setProbeResult}
+          />
+        ),
+      });
+    }
+
+    // CHECK — audit what was learned, then repair it.
+    if (canManage && adapter.analyze) {
+      const issues = analysis?.findings.length ?? 0;
+      tabs.push({
+        id: 'check',
+        label: t.tabCheck,
+        ...(issues > 0 ? { badge: String(issues), badgeTone: 'bad' as const } : {}),
+        content: (
+          <EvermindAnalyzer
+            t={t} disabled={busy}
+            onAnalyze={() => adapter.analyze!()}
+            {...(adapter.applyFindings ? { onApply: (f) => adapter.applyFindings!(f) } : {})}
+            onRepaired={() => void reload()}
+            analysis={analysis}
+            onAnalysis={setAnalysis}
+          />
+        ),
+      });
+    }
+
+    // MAINTAIN — repair the model, and export the evidence. Diagnostics lives here for
+    // every viewer, not just managers: describing a broken model is not a privileged
+    // act, and the person who can fix it is often not the person who can manage it.
+    tabs.push({
+      id: 'maintain',
+      label: t.tabMaintain,
+      content: (
+        <>
+          {canManage && (
+            <EvermindMaintenance
+              t={t} disabled={busy} seedModels={seedModels}
+              {...(adapter.reseed ? {
+                onReseed: (slug?: string) => run(async () => {
+                  const r = await adapter.reseed!(slug);
+                  setNotice(t.reseedDone(r.version));
+                }),
+              } : {})}
+              {...(adapter.reindex ? {
+                onReindex: () => run(async () => {
+                  const r = await adapter.reindex!();
+                  setNotice(t.reindexDone(r.reindexed));
+                }),
+              } : {})}
+              {...(adapter.cleanup ? {
+                onCleanup: () => run(async () => {
+                  const r = await adapter.cleanup!();
+                  setNotice(t.cleanupDone(r.discarded, r.cachedAnswers));
+                }),
+              } : {})}
+            />
+          )}
+          <EvermindDiagnostics t={t} disabled={busy} copy={diagnostics} />
+        </>
+      ),
+    });
+  }
+
+  return (
+    <Section aria-label={t.title}>
+      {Header}
+
+      <p style={{ margin: 0, fontSize: '0.8rem', lineHeight: 1.5, color: C.text2 }}>{t.description}</p>
+      {!canManage && <p style={{ margin: 0, fontSize: '0.72rem', color: C.text2, fontStyle: 'italic' }}>{t.managerOnlyHint}</p>}
+      {inherited && (
+        <p
+          style={{ margin: 0, fontSize: '0.72rem', lineHeight: 1.5, color: C.text2, fontStyle: 'italic' }}
+          role="note"
+        >
+          {t.inheritedHint}
+        </p>
+      )}
+      {quarantined && <p style={warnBox} role="alert">{t.quarantinedHint(quarantineReason)}</p>}
+
+      {/* Read-only "Everminds under this project" list — self + IDE builds. Self-gating:
+          renders nothing until the host's optional loadTargets resolves. */}
+      {targets && <TargetsList t={t} targets={targets} />}
+
+      {inherited ? (
+        // INHERITED — read-only. This build has no `project_evermind` row of its own;
+        // it is displaying its container project's. Every write endpoint keeps exact-id
+        // semantics, so a seed/toggle/teach issued here would post to a row that does
+        // not exist: zero rows updated, HTTP OK, nothing changes, and the panel keeps
+        // rendering the container's unchanged stats. Rendering the stats WITHOUT the
+        // controls is the honest surface — the model is genuinely shared and genuinely
+        // shown; it is just not managed from here.
+        <StatRow t={t} data={data!} />
+      ) : !seeded ? (
+        <SeedControls
+          t={t} canManage={canManage} busy={busy} models={seedModels}
+          selectedSlug={selectedSlug} onSelect={setSelectedSlug}
+          onSeed={() => selectedSlug && run(() => adapter.seedFromModel(selectedSlug))}
+        />
+      ) : (
+        <>
+          {/* The always-true state stays OUTSIDE the tabs: it is the context every tab
+              is read against. Putting the quarantine badge or the inference switch
+              behind a tab would let someone replace a model without seeing why. */}
+          <StatRow t={t} data={data!} />
+
+          <ToggleRow
+            label={t.inferenceLabel} hint={t.inferenceHint}
+            on={!!data?.inferenceEnabled} onText={t.on} offText={t.off}
+            disabled={!canManage || busy}
+            onToggle={() => run(() => adapter.setInference(!data?.inferenceEnabled))}
+          />
+          <ToggleRow
+            label={t.learningLabel} hint={t.learningHint}
+            on={!frozen} onText={t.connected} offText={t.frozen}
+            disabled={!canManage || busy}
+            onToggle={() => run(() => adapter.setMode(frozen ? 'connected' : 'offline-frozen'))}
+          />
+
+          <ConsoleTabs
+            tabs={tabs}
+            activeId={tabs.some((x) => x.id === tab) ? tab : (tabs[0]?.id ?? 'teach')}
+            onSelect={setTab}
+            label={t.tabsLabel}
+            idPrefix={`ev${panelId}`}
+          />
+
+          {showRecent && <RecentList t={t} entries={data?.recent ?? []} />}
+        </>
+      )}
+
+      {notice && <p style={{ margin: 0, fontSize: '0.74rem', color: C.accent }} role="status">{notice}</p>}
+      {error && <p style={{ margin: 0, fontSize: '0.76rem', color: C.danger }} role="alert">{error}</p>}
+    </Section>
+  );
+}
+
+/* ── Sub-sections ─────────────────────────────────────────────────────────── */
+
+/**
+ * The automatic pre/post regression chip beside the status pill: ▲ when the latest
+ * merge LOWERED held-out loss on the project's prior taught examples (improved /
+ * retained), ▼ when it raised it (regressed), ≈ when flat. Renders nothing until a
+ * merge had a held-out set to score. `delta = baseLoss - newLoss`.
+ */
+function RegressionChip({ t, evalPoint }: { t: EvermindConsoleLabels; evalPoint: EvermindEvalPoint | null }) {
+  if (!evalPoint || !(evalPoint.baseLoss > 0)) return null;
+  const frac = evalPoint.delta / evalPoint.baseLoss;
+  const pct = Math.abs(frac) * 100;
+  const tone: 'up' | 'down' | 'flat' = pct < 0.5 ? 'flat' : frac > 0 ? 'up' : 'down';
+  const arrow = tone === 'up' ? '▲' : tone === 'down' ? '▼' : '≈';
+  const color = tone === 'up' ? '#22c55e' : tone === 'down' ? '#f87171' : C.text2;
+  const label = tone === 'flat' ? t.evalFlat : t.evalDelta(pct.toFixed(1));
+  const title = t.evalTooltip(evalPoint.version, evalPoint.baseLoss.toFixed(3), evalPoint.newLoss.toFixed(3), evalPoint.evalSize);
+  return (
+    <span
+      title={title} aria-label={title}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700,
+        color, border: `1px solid ${color}`, borderRadius: 999, padding: '2px 8px',
+      }}
+    >
+      <span aria-hidden>{arrow}</span>{label}
+    </span>
+  );
+}
+
+function Section({ children, ...rest }: React.PropsWithChildren<React.HTMLAttributes<HTMLElement>>) {
+  return (
+    <section
+      {...rest}
+      style={{
+        border: `1px solid ${C.border}`,
+        borderRadius: 10,
+        background: C.surface,
+        padding: 14,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+      }}
+    >
+      {children}
+    </section>
+  );
+}
+
+function SeedControls({
+  t, canManage, busy, models, selectedSlug, onSelect, onSeed,
+}: {
+  t: EvermindConsoleLabels; canManage: boolean; busy: boolean; models: EvermindSeedModel[];
+  selectedSlug: string; onSelect: (s: string) => void; onSeed: () => void;
+}) {
+  if (!canManage) return <p style={italic}>{t.notSetUp}</p>;
+  if (models.length === 0) return <p style={italic}>{t.noModels}</p>;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <label style={fieldLabel}>{t.pickModelLabel}</label>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select value={selectedSlug} onChange={(e) => onSelect(e.target.value)} disabled={busy} style={{ ...select, flex: '1 1 200px' }}>
+          {models.map((m) => <option key={m.slug} value={m.slug} style={optionStyle}>{m.name}</option>)}
+        </select>
+        <button type="button" onClick={onSeed} disabled={busy || !selectedSlug} style={primaryBtn(busy || !selectedSlug)}>
+          {busy ? t.working : t.enableCta}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function StatRow({ t, data }: { t: EvermindConsoleLabels; data: EvermindConsoleData }) {
+  const last = data.lastLearnedAt ? t.formatWhen(new Date(data.lastLearnedAt).getTime()) : t.neverLearned;
+  const stats: Array<{ label: string; value: string }> = [
+    { label: t.versionLabel, value: `v${data.version}` },
+    { label: t.contributionsLabel, value: String(data.contributions) },
+    { label: t.pendingLabel, value: String(data.pending) },
+    { label: t.lastLearnedLabel, value: last },
+  ];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(88px, 1fr))', gap: 8 }}>
+      {stats.map((s) => (
+        <div key={s.label} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px' }}>
+          <div style={{ fontSize: '0.66rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: C.text2 }}>{s.label}</div>
+          <div style={{ fontSize: '0.9rem', fontWeight: 700, color: C.text, marginTop: 2, wordBreak: 'break-word' }}>{s.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ToggleRow({
+  label, hint, on, disabled, onToggle, onText, offText,
+}: {
+  label: string; hint: string; on: boolean; disabled: boolean; onToggle: () => void; onText: string; offText: string;
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+      <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+        <div style={fieldTitle}>{label}</div>
+        <div style={fieldHint}>{hint}</div>
+      </div>
+      <button
+        type="button" onClick={onToggle} disabled={disabled} aria-pressed={on}
+        style={{
+          padding: '6px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: 999,
+          border: `1px solid ${on ? C.accent : C.border}`,
+          background: on ? C.accent : C.surface2,
+          color: on ? '#fff' : C.text2,
+          cursor: disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: disabled ? 0.7 : 1,
+        }}
+      >
+        {on ? onText : offText}
+      </button>
+    </div>
+  );
+}
+
+function TeacherPicker({
+  t, canManage, busy, opts, value, onChange,
+}: {
+  t: EvermindConsoleLabels; canManage: boolean; busy: boolean;
+  opts: EvermindTeacherOptions | null; value: string; onChange: (m: string) => void;
+}) {
+  // Keep a currently-pinned teacher visible even if it's no longer in the plan pool.
+  const models = opts?.models ?? [];
+  const options = value && !models.includes(value) ? [value, ...models] : models;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div>
+        <div style={fieldTitle}>{t.teacherLabel}</div>
+        <div style={fieldHint}>{t.teacherHint}</div>
+      </div>
+      {!canManage ? (
+        <div style={{ ...select, color: C.text2 }}>{value || t.teacherNone}</div>
+      ) : opts && !opts.isPaid ? (
+        <p style={italic}>{t.teacherPaidOnly}</p>
+      ) : (
+        <select value={value} onChange={(e) => onChange(e.target.value)} disabled={busy} aria-label={t.teacherLabel} style={{ ...select, maxWidth: 340 }}>
+          <option value="" style={optionStyle}>{t.teacherNone}</option>
+          {options.map((m) => <option key={m} value={m} style={optionStyle}>{m}</option>)}
+        </select>
+      )}
+      {value && (
+        <div style={{ fontSize: '0.72rem', lineHeight: 1.4, color: C.accent, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 8px' }}>
+          {t.teacherActiveHint(value)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TeachBox({
+  t, busy, validating, prompt, text, onPrompt, onText, onTeach, onValidate, teacherModel,
+}: {
+  t: EvermindConsoleLabels; busy: boolean; validating: boolean; prompt: string; text: string;
+  onPrompt: (s: string) => void; onText: (s: string) => void; onTeach: () => void; onValidate: () => void;
+  /** When a teacher is pinned, teach a TASK (the teacher answers it) — no transcript needed. */
+  teacherModel: string;
+}) {
+  const teaching = !!teacherModel;
+  const canTeach = teaching ? prompt.trim().length >= 20 : text.trim().length >= 20;
+  // Validate needs only a short task string (the prompt when teaching a task, else
+  // whatever task/transcript is typed) — a lower bar than teaching.
+  const canValidate = (teaching ? prompt : (prompt.trim() || text)).trim().length >= 3;
+  return (
+    <div style={sectionBlock}>
+      <div style={fieldTitle}>{teaching ? t.teachTeacherTitle : t.teachTitle}</div>
+      <div style={fieldHint}>{teaching ? t.teachTeacherHint(teacherModel) : t.teachHint}</div>
+      {teaching ? (
+        <textarea value={prompt} onChange={(e) => onPrompt(e.target.value)} disabled={busy} placeholder={t.teachTaskPlaceholder} rows={3} style={{ ...select, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
+      ) : (
+        <>
+          <input value={prompt} onChange={(e) => onPrompt(e.target.value)} disabled={busy} placeholder={t.teachPromptPlaceholder} style={{ ...select, width: '100%' }} />
+          <textarea value={text} onChange={(e) => onText(e.target.value)} disabled={busy} placeholder={t.teachTextPlaceholder} rows={3} style={{ ...select, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
+        </>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" onClick={onTeach} disabled={busy || !canTeach} style={primaryBtn(busy || !canTeach)}>
+          {busy ? t.teaching : (teaching ? t.teachTeacherCta : t.teachCta)}
+        </button>
+        <button type="button" onClick={onValidate} disabled={busy || validating || !canValidate} style={secondaryBtn(busy || validating || !canValidate)} title={t.validateHint}>
+          {validating ? t.validating : t.validateCta}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Import-from-builderforce-memory action — folds a local memory snapshot into the
+ *  model and compacts the absorbed facts to stubs. Frozen learning disables it (the
+ *  same guard the flush uses), since a frozen model can't absorb the import. */
+function ImportBox({ t, busy, frozen, onImport }: { t: EvermindConsoleLabels; busy: boolean; frozen: boolean; onImport: () => void }) {
+  const disabled = busy || frozen;
+  return (
+    <div style={sectionBlock}>
+      <div style={fieldTitle}>{t.importTitle}</div>
+      <div style={fieldHint}>{t.importHint}</div>
+      <button type="button" onClick={onImport} disabled={disabled} style={{ ...secondaryBtn(disabled), alignSelf: 'flex-start' }}>
+        {busy ? t.importing : t.importCta}
+      </button>
+    </div>
+  );
+}
+
+/** The Validate recall preview: which learned memories would answer the task, ranked. */
+function ValidateResults({ t, result, onClear }: { t: EvermindConsoleLabels; result: EvermindValidateResult; onClear: () => void }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ ...fieldTitle, flex: 1, minWidth: 0 }}>{t.validateResultTitle(result.prompt)}</span>
+        <span style={{ fontSize: '0.64rem', fontWeight: 600, color: C.text2, border: `1px solid ${C.border}`, borderRadius: 999, padding: '1px 8px' }}>{t.validateMethod(result.method)}</span>
+        <button type="button" onClick={onClear} style={{ ...ghostBtn, marginLeft: 0 }}>{t.validateClear}</button>
+      </div>
+      {result.matches.length === 0 ? (
+        <p style={italic}>{t.validateEmpty}</p>
+      ) : (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {result.matches.map((m) => {
+            const primary = m.id === result.primaryId;
+            const pct = Math.round(m.score * 100);
+            return (
+              <li key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, border: `1px solid ${primary ? C.accent : C.border}`, borderRadius: 6, padding: '6px 8px', background: C.surface }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  {primary && <span style={tag(false)}>{t.validatePrimaryBadge}</span>}
+                  <span style={{ fontSize: '0.68rem', color: C.text2 }}>{t.versionTag(m.version)}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: '0.68rem', fontWeight: 700, color: C.accent }}>{t.validateScore(pct)}</span>
+                </div>
+                {/* Score bar so relative recall strength reads at a glance. */}
+                <div style={{ height: 4, borderRadius: 999, background: C.border, overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: C.accent }} />
+                </div>
+                {m.prompt && <div style={{ fontSize: '0.74rem', fontWeight: 600, color: C.text, wordBreak: 'break-word' }}>{m.prompt}</div>}
+                {m.text && <div style={{ fontSize: '0.72rem', color: C.text2, lineHeight: 1.4, wordBreak: 'break-word', whiteSpace: 'pre-wrap', maxHeight: 54, overflow: 'hidden' }}>{m.text}</div>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Read-only list of every Evermind under this project (self + IDE builds). The list
+ *  is ordered `[self, …builds]` server-side, so index 0 is the project itself. Renders
+ *  even for a single target — the value is the explicit count + per-target state. */
+function TargetsList({ t, targets }: { t: EvermindConsoleLabels; targets: EvermindTarget[] }) {
+  return (
+    <div style={sectionBlock}>
+      <div style={fieldTitle}>{t.targetsTitle}</div>
+      <div style={fieldHint}>{t.targetsHint}</div>
+      {targets.length === 0 ? (
+        <p style={italic}>{t.targetsEmpty}</p>
+      ) : (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {targets.map((tg, i) => (
+            <li
+              key={tg.projectId}
+              style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}
+            >
+              <span style={tag(false)}>{i === 0 ? t.targetSelfBadge : t.targetBuildBadge}</span>
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: C.text, wordBreak: 'break-word', minWidth: 0 }}>{tg.name}</span>
+              <span style={{ fontSize: '0.68rem', color: C.text2 }}>{t.targetProjectId(tg.projectId)}</span>
+              <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={targetChip}>{tg.seeded ? t.targetSeeded(tg.version) : t.targetUnseeded}</span>
+                <span style={targetChip}>{tg.mode === 'connected' ? t.targetConnected : t.targetFrozen}</span>
+                {tg.inferenceEnabled && <span style={{ ...targetChip, color: C.accent, borderColor: C.accent }}>{t.targetInferenceOn}</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function RecentList({ t, entries }: { t: EvermindConsoleLabels; entries: EvermindRecentEntry[] }) {
+  return (
+    <div style={sectionBlock}>
+      <div style={fieldTitle}>{t.inspectTitle}</div>
+      {entries.length === 0 ? (
+        <p style={italic}>{t.inspectEmpty}</p>
+      ) : (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {entries.map((e) => <RecentRow key={e.id} t={t} entry={e} />)}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function RecentRow({ t, entry }: { t: EvermindConsoleLabels; entry: EvermindRecentEntry }) {
+  const [open, setOpen] = useState(false);
+  const status = evermindLearnedStatus(entry);
+  // A pinned teacher that answered nothing leaves only the raw input behind — which on a
+  // teach-a-task IS the question. Showing it would present the question as its own
+  // answer, so the row reports the fault instead. [[evermind-learning-architecture]]
+  const faulted = status.state === 'fault';
+  const body = entry.kind === 'delta' ? t.deltaEntry : (faulted ? '' : (entry.text ?? ''));
+  // A delta carries no inspectable text; only text contributions have detail to expand.
+  const hasDetail = entry.kind !== 'delta' && (!!entry.prompt || !!entry.text || faulted);
+  return (
+    <li style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <span style={tag(entry.kind === 'delta')}>{entry.kind === 'delta' ? t.kindDelta : t.kindText}</span>
+        <span style={{ fontSize: '0.68rem', color: C.text2 }}>{t.versionTag(entry.version)}</span>
+        <span style={{ fontSize: '0.68rem', color: C.text2 }}>{t.weightTag(entry.weight)}</span>
+        {faulted && <span style={faultTag}>{t.notDistilled}</span>}
+        {status.state === 'distilled' && status.teacherModel && (
+          <span style={{ fontSize: '0.68rem', color: C.text2 }}>{t.distilledBy(status.teacherModel)}</span>
+        )}
+        <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: C.text2 }}>{t.formatWhen(entry.at)}</span>
+      </div>
+      {entry.prompt && <div style={{ fontSize: '0.76rem', fontWeight: 600, color: C.text, wordBreak: 'break-word' }}>{entry.prompt}</div>}
+      {open ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2 }}>
+          {faulted ? (
+            <div style={{ fontSize: '0.74rem', color: C.text2, lineHeight: 1.5 }}>
+              {t.teacherFault(status.teacherModel ?? '', status.reason)}
+            </div>
+          ) : entry.text && (
+            <div>
+              <div style={{ fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: C.text2 }}>{t.detailTextLabel}</div>
+              <div style={{ fontSize: '0.74rem', color: C.text, lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{entry.text}</div>
+            </div>
+          )}
+        </div>
+      ) : (
+        body && <div style={{ fontSize: '0.74rem', color: C.text2, lineHeight: 1.45, wordBreak: 'break-word', whiteSpace: 'pre-wrap', maxHeight: 72, overflow: 'hidden' }}>{body}</div>
+      )}
+      {hasDetail && (
+        <button type="button" onClick={() => setOpen((v) => !v)} style={{ ...linkBtn, alignSelf: 'flex-start' }}>
+          {open ? t.hideDetail : t.viewDetail}
+        </button>
+      )}
+    </li>
+  );
+}
+
+
+/** The "not distilled" warning tag. `--bf-warn-*` cascade from the host theme, with
+ *  literal fallbacks that stay legible on both light and dark surfaces. */
+const faultTag: React.CSSProperties = {
+  fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
+  padding: '1px 6px', borderRadius: 5,
+  color: C.warnText, background: C.warnBg, border: `1px solid ${C.warnBorder}`,
+};
+
+/** The header quarantine badge — the same `--bf-warn-*` cascade as the fault tag, in
+ *  the rounded-pill shape the other header chips use. */
+const quarantinePill: React.CSSProperties = {
+  fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+  color: C.warnText, background: C.warnBg, border: `1px solid ${C.warnBorder}`,
+  whiteSpace: 'nowrap',
+};
+
+/** A small state chip in a targets-list row (version / mode / inference). */
+const targetChip: React.CSSProperties = {
+  fontSize: '0.64rem', fontWeight: 600, padding: '1px 7px', borderRadius: 999,
+  border: `1px solid ${C.border}`, background: C.surface, color: C.text2, whiteSpace: 'nowrap',
+};

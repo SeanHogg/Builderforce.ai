@@ -13,20 +13,46 @@
  */
 import { coercePolicyGates, type PolicyGate } from '@builderforce/agent-tools';
 import { ExecutionStatus } from '../../domain/shared/types';
+import { canonicalModelId } from '../llm/modelPool';
 
-export type CloudSurface = 'durable' | 'container';
+export type CloudSurface = 'durable' | 'container' | 'github_actions';
+
+/**
+ * Every surface value the platform accepts. `ide_agents.runtime_surface` is
+ * varchar(16), so a value MUST stay within 16 characters — 'github_actions' is
+ * 14. Exported so the API's validation whitelist and this union can never drift
+ * (they were previously two hand-maintained lists).
+ */
+export const CLOUD_SURFACES = ['durable', 'container', 'github_actions'] as const;
+
+export function isCloudSurface(v: unknown): v is CloudSurface {
+  return typeof v === 'string' && (CLOUD_SURFACES as readonly string[]).includes(v);
+}
 
 /**
  * Resolve the surface a run targets. An explicitly-pinned host is a long-lived
  * runtime (reached via the relay), so it maps to 'container'; otherwise honor the
  * agent's chosen surface, defaulting to 'durable' (on-demand, no always-on infra).
+ *
+ * An explicit host still wins over a 'github_actions' preference: pinning a host
+ * means "run on THAT machine", which an ephemeral GitHub runner cannot satisfy.
  */
 export function resolveCloudSurface(agentSurface: string | undefined | null, hasExplicitHost: boolean): CloudSurface {
   if (hasExplicitHost) return 'container';
-  return agentSurface === 'container' ? 'container' : 'durable';
+  if (agentSurface === 'container') return 'container';
+  if (agentSurface === 'github_actions') return 'github_actions';
+  return 'durable';
 }
 
-export type CloudExecutor = 'container' | 'durable' | 'worker';
+/**
+ * The executors a cloud run can actually land on. There are exactly TWO, and both are
+ * long-lived: the alarm-ticked `durable` CloudRunnerDO and the `container` runtime.
+ * There is no in-request Worker executor — a `waitUntil` background loop cannot
+ * outlast the ~30s serverless wall, so {@link chooseCloudExecutor} fails fast to
+ * `unavailable` rather than starting a run that provably cannot finish.
+ */
+export type CloudExecutor = 'container' | 'durable' | 'github_actions';
+export type CloudDispatchTarget = CloudExecutor | 'unavailable';
 
 /**
  * Decide which cloud executor a run lands on, given the resolved capabilities.
@@ -37,18 +63,35 @@ export type CloudExecutor = 'container' | 'durable' | 'worker';
  *   1. `container` — only when the run wants it, the binding exists, AND a health
  *      probe proved the container is actually live;
  *   2. `durable` (CloudRunnerDO) — the surviving serverless executor, whenever bound;
- *   3. `worker` — last-resort in-request loop (does NOT survive long runs); only
- *      when no durable runner is bound.
+ *   3. `unavailable` — no long-lived executor exists. Dispatch fails fast. There is
+ *      deliberately no third, in-request fallback: a Worker loop running under
+ *      `waitUntil` cannot survive a multi-step run's ~30s background-execution wall,
+ *      so offering it would only convert a clear "no executor bound" error into a run
+ *      that silently dies mid-task and gets orphan-reaped.
  */
 export function chooseCloudExecutor(caps: {
   wantsContainer: boolean;
   hasContainerBinding: boolean;
   containerHealthy: boolean;
   hasCloudRunner: boolean;
-}): CloudExecutor {
+  /** The agent asked to run on the repo's GitHub Actions runners. */
+  wantsGithubActions?: boolean;
+  /**
+   * The agent workflow is present in the linked repo AND the credential can
+   * dispatch it. Unlike the container there is no liveness probe to run — an
+   * Actions runner does not exist until GitHub schedules one — so this is a
+   * "can we queue work" signal, not a "is a process alive" signal.
+   */
+  githubActionsAvailable?: boolean;
+}): CloudDispatchTarget {
+  // Checked first: when a tenant has deliberately chosen Actions, running on it
+  // is the point (their runners, their minutes, a real toolchain). Falling back
+  // to durable would silently give them the constrained surface they opted out
+  // of, so the fallback only happens when Actions genuinely cannot be queued.
+  if (caps.wantsGithubActions && caps.githubActionsAvailable) return 'github_actions';
   if (caps.wantsContainer && caps.hasContainerBinding && caps.containerHealthy) return 'container';
   if (caps.hasCloudRunner) return 'durable';
-  return 'worker';
+  return 'unavailable';
 }
 
 /**
@@ -74,7 +117,9 @@ export async function probeContainerHealth(stub: { fetch: (input: string, init?:
  *  There is ONE engine, so only the surface varies — the label is just "Cloud Agent"
  *  plus the surface (no engine-version prefix). */
 export function cloudAgentTypeLabel(surface: string): string {
-  return surface === 'container' ? 'Cloud Agent (Node/Container)' : 'Cloud Agent (Durable Object)';
+  if (surface === 'container') return 'Cloud Agent (Node/Container)';
+  if (surface === 'github_actions') return 'Cloud Agent (GitHub Actions)';
+  return 'Cloud Agent (Durable Object)';
 }
 
 /** Terminal = the run has settled and has no live session to steer. A "Send" to a
@@ -89,6 +134,58 @@ export function parseCloudAgentRef(payload: string | undefined): string | undefi
   try {
     const p = JSON.parse(payload) as { cloudAgentRef?: unknown };
     return typeof p.cloudAgentRef === 'string' && p.cloudAgentRef.trim() ? p.cloudAgentRef.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The ROLE a run ran AS, off its payload — the reviewer round-trip stamps `reviewRole`,
+ *  a role-attributed producer stamps `actAsRole`. Drives manifest attribution at finalize
+ *  and the approvals→sign-off bridge (a human approving a role's gate records that role's
+ *  sign-off). Null when the run carries no role stamp. */
+/**
+ * True when a run was dispatched to fulfil a specific ROLE on a lane — a reviewer asked
+ * for a verdict, or a producer asked for this stage's deliverable.
+ *
+ * Such a run must NOT move the ticket's lane when it completes. It runs against an
+ * already-open ticket to answer a question; the answer (a recorded sign-off) is what
+ * advances the stage, and the run merely finishing is not the answer. Without this,
+ * `RuntimeService.update` fell through to the ordinary COMPLETED→next-lane path and the
+ * reviewer's own completion pushed the ticket onward regardless of its verdict —
+ * measured on task 387: a `manager:signoff-request` run completed in 20 seconds and the
+ * lane moved 1.5 seconds later.
+ *
+ * Shares this module with {@link parseActAsRole} because it is the same payload contract:
+ * `reviewRole` (a judgement) or `actAsRole` (a production) both mark a role-attributed run.
+ */
+export function isRoleAttributedRun(payload: string | null | undefined): boolean {
+  return parseActAsRole(payload) !== undefined;
+}
+
+export function parseActAsRole(payload: string | null | undefined): string | undefined {
+  if (!payload) return undefined;
+  try {
+    const p = JSON.parse(payload) as { actAsRole?: unknown; reviewRole?: unknown };
+    const role = typeof p.actAsRole === 'string' ? p.actAsRole : typeof p.reviewRole === 'string' ? p.reviewRole : undefined;
+    return role && role.trim() ? role.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The LANE a role-attributed run serves, off its payload.
+ *
+ * A role run is dispatched against the accountability slot's OWN stage, which is not
+ * always the ticket's current status: an outstanding pre-review slot is asked for while
+ * the ticket already sits in `in_review`. Anything authorizing such a run has to measure
+ * it against THIS lane, not against `tasks.status` — see `authorizeManagedTaskExecution`.
+ */
+export function parseLaneKey(payload: string | null | undefined): string | undefined {
+  if (!payload) return undefined;
+  try {
+    const p = JSON.parse(payload) as { laneKey?: unknown };
+    return typeof p.laneKey === 'string' && p.laneKey.trim() ? p.laneKey.trim() : undefined;
   } catch {
     return undefined;
   }
@@ -112,14 +209,28 @@ export function parseRepoId(payload: string | undefined): string | undefined {
   }
 }
 
-/** The pinned model off an execution payload (trimmed), or undefined when absent /
- *  blank / the payload is not JSON. The single reader of `payload.model` — the dispatch
- *  loop, the durable runner, and `withDefaultModel` all go through this. */
+/**
+ * The pinned model off an execution payload (trimmed and REWRITTEN through the
+ * supersession map), or undefined when absent / blank / the payload is not JSON. The
+ * single reader of `payload.model` — the dispatch loop, the durable runner, and
+ * `withDefaultModel` all go through this.
+ *
+ * An execution payload is DURABLE STATE, and long-lived state is exactly what
+ * `canonicalModelId` exists for: the payload is written once at dispatch (from a lane
+ * agent's `model` column, a manifest role approver, a re-dispatch copying the prior
+ * run's pin) and can be read back weeks later, after the vendor has retired that id.
+ * The gateway seam (`LlmProxyService.complete`) rewrites `body.model`, but a stale id
+ * read HERE still leads the BYO chain and still names the failing model in every
+ * diagnostic — measured as **555 reviewer-run failures on `claude-opus-4-8`**, a
+ * superseded id no agent row pins, reported as `byo_unavailable` with four providers
+ * connected. Rewriting at the reader means no caller can reintroduce it.
+ */
 export function parseModel(payload: string | undefined): string | undefined {
   if (!payload) return undefined;
   try {
     const p = JSON.parse(payload) as { model?: unknown };
-    return typeof p.model === 'string' && p.model.trim() ? p.model.trim() : undefined;
+    if (typeof p.model !== 'string' || !p.model.trim()) return undefined;
+    return canonicalModelId(p.model) || undefined;
   } catch {
     return undefined;
   }
@@ -190,6 +301,42 @@ export function parsePolicyGates(payload: string | undefined): PolicyGate[] {
   }
 }
 
+/**
+ * The role-participation instruction off a sign-off / producer dispatch payload.
+ *
+ * ── THE MEASURED FAILURE ─────────────────────────────────────────────────────
+ * `buildSignoffRequestPayload` / `buildProducerRequestPayload` write a
+ * `reviewInstruction` — the text that names the `builtin_kanban_signoff` tool and
+ * tells the role to record its verdict — and NOTHING read it back. The field was
+ * serialized into `executions.payload` and dropped on the floor, so the agent was
+ * dispatched to review work it was never asked to sign off on.
+ *
+ * Measured on tenant 1 the day this was found: `builtin_kanban_signoff` invoked
+ * **zero times, ever**; 912 reviewer slots stuck in `in_progress`; **0 of 2,263
+ * reviewer slots ever completed**; all 327 ledger rows `autoAttested: true`, i.e.
+ * every one written by the producer fallback in `attestRoleRun`, none by an agent.
+ * Reviewer slots are deliberately never auto-credited (that would rubber-stamp a
+ * review), so with the ask never delivered the sign-off gate could not be
+ * satisfied by any number of runs — the tickets were unsatisfiable by
+ * construction, which is what 2,351 completed runs against 0 finished tickets in
+ * one day actually means.
+ *
+ * `attestRoleRun`'s header already documents two prior rounds of this same defect
+ * (an HTTP route with no tool behind it; the catalog id instead of the advertised
+ * tool name). Both were fixed in the INSTRUCTION. This is the third: the
+ * instruction became correct and still never arrived.
+ */
+export function parseRoleInstruction(payload: string | null | undefined): string | null {
+  if (!payload) return null;
+  try {
+    const raw = (JSON.parse(payload) as { reviewInstruction?: unknown }).reviewInstruction;
+    const instruction = typeof raw === 'string' ? raw.trim() : '';
+    return instruction || null;
+  } catch {
+    return null;
+  }
+}
+
 export interface FollowUpContext { directive: string; priorExecutionId: number | null }
 
 /**
@@ -247,6 +394,37 @@ export function parseRemediation(payload: string | undefined): RemediationContex
   } catch {
     return null;
   }
+}
+
+/**
+ * The cloud executor a run actually landed on, parsed off its execution payload
+ * (stamped by dispatch once {@link chooseCloudExecutor} decides). The orphan
+ * detectors read this to pick the silence ceiling: BOTH surviving executors are
+ * long-lived and heartbeat once per alarm tick, and a tick legitimately spans one
+ * whole (possibly slow) LLM step, so neither may be reaped at the serverless wall.
+ * An unrecognized value — including `'worker'` on a payload stamped before the
+ * in-request Worker executor was removed — parses as undefined, which the ceiling
+ * helper treats as long-lived, so a live run is never reaped prematurely. */
+export function parseExecutor(payload: string | null | undefined): CloudExecutor | undefined {
+  if (!payload) return undefined;
+  try {
+    const e = (JSON.parse(payload) as { executor?: unknown }).executor;
+    return e === 'durable' || e === 'container' ? e : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Stamp the resolved cloud executor into the execution payload so the orphan
+ *  detectors can measure it against the right silence ceiling. Idempotent (re-stamps
+ *  overwrite). Returns the payload unchanged shape with `executor` set. */
+export function withExecutor(payload: string | null | undefined, executor: CloudExecutor): string {
+  let obj: Record<string, unknown> = {};
+  if (payload) {
+    try { obj = JSON.parse(payload) as Record<string, unknown>; } catch { obj = {}; }
+  }
+  obj.executor = executor;
+  return JSON.stringify(obj);
 }
 
 /**

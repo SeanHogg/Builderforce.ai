@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { Task } from '@/lib/builderforceApi';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { DRAG_TASK } from './types';
 
 /** One Epic container — a drop target that nests the dropped task under the Epic. */
@@ -17,6 +19,7 @@ function EpicCard({
   onOpen: (task: Task) => void;
 }) {
   const [over, setOver] = useState(false);
+  const t = useTranslations('ceremony');
   return (
     <div
       onDragOver={(e) => { e.preventDefault(); setOver(true); }}
@@ -56,7 +59,7 @@ function EpicCard({
         </span>
       </div>
       <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-        {childCount} {childCount === 1 ? 'task' : 'tasks'}
+        {t('taskCount', { count: childCount })}
       </div>
     </div>
   );
@@ -79,10 +82,12 @@ export function EpicRail({
   onCreateEpic: () => void;
   onOpen: (task: Task) => void;
 }) {
+  const isMobile = useIsMobile();
+  const t = useTranslations('ceremony');
   return (
     <div
       style={{
-        width: 240,
+        width: isMobile ? '100%' : 240,
         flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
@@ -91,13 +96,13 @@ export function EpicRail({
         borderRadius: 12,
         background: 'var(--bg-deep)',
         border: '1px solid var(--border-subtle)',
-        maxHeight: '100%',
+        maxHeight: isMobile ? 260 : '100%',
         overflowY: 'auto',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
-          Epics
+          {t('epics')}
         </span>
         <button
           type="button"
@@ -111,12 +116,12 @@ export function EpicRail({
             cursor: 'pointer',
           }}
         >
-          + New
+          {t('newShort')}
         </button>
       </div>
       {epics.length === 0 ? (
         <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '12px 0', textAlign: 'center' }}>
-          No epics yet
+          {t('noEpics')}
         </div>
       ) : (
         epics.map((e) => (

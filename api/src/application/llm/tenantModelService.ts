@@ -20,6 +20,8 @@ import {
   getCacheVersion,
   bumpCacheVersion,
 } from '../../infrastructure/cache/readThroughCache';
+import { slugify as slugifyBase } from '../../domain/shared/strings';
+import { parseJsonObject } from '../../domain/shared/json';
 import type { Env } from '../../env';
 
 /** The ref prefix a model field carries to point at a tenant model. */
@@ -58,15 +60,11 @@ function versionKey(tenantId: number): string {
 }
 
 function slugify(s: string): string {
-  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'model';
+  return slugifyBase(s, { maxLen: 80, fallback: 'model' });
 }
 
 function safeParams(v: unknown): Record<string, unknown> {
-  if (v && typeof v === 'object' && !Array.isArray(v)) return v as Record<string, unknown>;
-  if (typeof v === 'string') {
-    try { const p = JSON.parse(v); return p && typeof p === 'object' && !Array.isArray(p) ? p : {}; } catch { return {}; }
-  }
-  return {};
+  return parseJsonObject(v);
 }
 
 /** Ensure (tenant, slug) uniqueness by suffixing on clash. */
@@ -238,11 +236,20 @@ export async function resolveTenantModel(
         .filter(Boolean)
         .join('\n\n') || null;
 
+      // A trained SSM can be the model's base off `trained_model_ref` ALONE. When
+      // `baseModel` is blank but a trained ref is set, the trained Evermind
+      // artifact IS the base — resolve it to the in-Worker `evermind/<ref>` vendor
+      // so "train your own model → use it as an LLM's base" works even if publish
+      // didn't also mirror the ref into `baseModel`. (Previously `trained_model_ref`
+      // was written but never read — a dead seam; this makes it the live selector.)
+      const baseModel = row.baseModel?.trim()
+        || (row.trainedModelRef?.trim() ? `evermind/${row.trainedModelRef.trim()}` : null);
+
       return {
         id: row.id,
         slug: row.slug,
         name: row.name,
-        baseModel: row.baseModel?.trim() || null,
+        baseModel,
         directives,
         params: safeParams(row.params),
         providerKey: row.providerKey?.trim() || null,

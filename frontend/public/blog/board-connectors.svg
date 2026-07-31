@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+    <marker id="arw" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8891AE"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">BOARD CONNECTORS</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">One board, every tracker</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- category headers -->
+  <text x="110" y="232" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" letter-spacing="2" font-weight="700" fill="#A98BFF">PROJECT &amp; WORK MANAGEMENT</text>
+  <text x="1240" y="232" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" letter-spacing="2" font-weight="700" fill="#3DD6F5">ITSM</text>
+  <text x="1240" y="512" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" letter-spacing="2" font-weight="700" fill="#FF8F7A">INCIDENT &amp; MONITORING</text>
+
+  <!-- spokes (two-way) -->
+  <g fill="none" stroke-width="2">
+    <line x1="360" y1="281" x2="620" y2="420" stroke="rgba(169,139,255,0.45)" marker-start="url(#arw)" marker-end="url(#arw)"/>
+    <line x1="360" y1="371" x2="620" y2="452" stroke="rgba(169,139,255,0.45)" marker-start="url(#arw)" marker-end="url(#arw)"/>
+    <line x1="360" y1="461" x2="620" y2="484" stroke="rgba(169,139,255,0.45)" marker-start="url(#arw)" marker-end="url(#arw)"/>
+    <line x1="360" y1="551" x2="620" y2="516" stroke="rgba(169,139,255,0.45)" marker-start="url(#arw)" marker-end="url(#arw)"/>
+    <line x1="360" y1="641" x2="620" y2="548" stroke="rgba(169,139,255,0.45)" marker-start="url(#arw)" marker-end="url(#arw)"/>
+    <line x1="360" y1="731" x2="620" y2="580" stroke="rgba(169,139,255,0.45)" marker-start="url(#arw)" marker-end="url(#arw)"/>
+    <line x1="1240" y1="291" x2="980" y2="440" stroke="rgba(61,214,245,0.45)" marker-start="url(#arw)" marker-end="url(#arw)"/>
+    <line x1="1240" y1="381" x2="980" y2="474" stroke="rgba(61,214,245,0.45)" marker-start="url(#arw)" marker-end="url(#arw)"/>
+    <line x1="1240" y1="571" x2="980" y2="526" stroke="rgba(255,143,122,0.45)" marker-start="url(#arw)" marker-end="url(#arw)"/>
+    <line x1="1240" y1="661" x2="980" y2="560" stroke="rgba(255,143,122,0.45)" marker-start="url(#arw)" marker-end="url(#arw)"/>
+  </g>
+
+  <!-- left nodes: work management (violet) -->
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <g>
+      <rect x="110" y="250" width="250" height="62" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+      <rect x="112" y="252" width="6" height="58" rx="3" fill="url(#violetGrad)"/>
+      <circle cx="146" cy="281" r="6" fill="#5BF0BC"/>
+      <text x="168" y="288" font-size="20" font-weight="700" fill="#EEF0FA">GitHub Issues</text>
+    </g>
+    <g>
+      <rect x="110" y="340" width="250" height="62" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+      <rect x="112" y="342" width="6" height="58" rx="3" fill="url(#violetGrad)"/>
+      <circle cx="146" cy="371" r="6" fill="#5BF0BC"/>
+      <text x="168" y="378" font-size="20" font-weight="700" fill="#EEF0FA">Jira</text>
+    </g>
+    <g>
+      <rect x="110" y="430" width="250" height="62" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+      <rect x="112" y="432" width="6" height="58" rx="3" fill="url(#violetGrad)"/>
+      <circle cx="146" cy="461" r="6" fill="#5BF0BC"/>
+      <text x="168" y="468" font-size="20" font-weight="700" fill="#EEF0FA">Linear</text>
+    </g>
+    <g>
+      <rect x="110" y="520" width="250" height="62" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+      <rect x="112" y="522" width="6" height="58" rx="3" fill="url(#violetGrad)"/>
+      <circle cx="146" cy="551" r="6" fill="#5BF0BC"/>
+      <text x="168" y="558" font-size="20" font-weight="700" fill="#EEF0FA">monday.com</text>
+    </g>
+    <g>
+      <rect x="110" y="610" width="250" height="62" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+      <rect x="112" y="612" width="6" height="58" rx="3" fill="url(#violetGrad)"/>
+      <circle cx="146" cy="641" r="6" fill="#FFCE6B"/>
+      <text x="168" y="648" font-size="20" font-weight="700" fill="#EEF0FA">Asana</text>
+    </g>
+    <g>
+      <rect x="110" y="700" width="250" height="62" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+      <rect x="112" y="702" width="6" height="58" rx="3" fill="url(#violetGrad)"/>
+      <circle cx="146" cy="731" r="6" fill="#FFCE6B"/>
+      <text x="168" y="738" font-size="20" font-weight="700" fill="#EEF0FA">ClickUp</text>
+    </g>
+  </g>
+
+  <!-- right nodes: ITSM (cool) + incident (coral) -->
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <g>
+      <rect x="1240" y="260" width="250" height="62" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+      <rect x="1242" y="262" width="6" height="58" rx="3" fill="url(#coolGrad)"/>
+      <circle cx="1276" cy="291" r="6" fill="#FFCE6B"/>
+      <text x="1298" y="298" font-size="20" font-weight="700" fill="#EEF0FA">ServiceNow</text>
+    </g>
+    <g>
+      <rect x="1240" y="350" width="250" height="62" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+      <rect x="1242" y="352" width="6" height="58" rx="3" fill="url(#coolGrad)"/>
+      <circle cx="1276" cy="381" r="6" fill="#FFCE6B"/>
+      <text x="1298" y="388" font-size="20" font-weight="700" fill="#EEF0FA">Freshservice</text>
+    </g>
+    <g>
+      <rect x="1240" y="540" width="250" height="62" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+      <rect x="1242" y="542" width="6" height="58" rx="3" fill="url(#coralGrad)"/>
+      <circle cx="1276" cy="571" r="6" fill="#5BF0BC"/>
+      <text x="1298" y="578" font-size="20" font-weight="700" fill="#EEF0FA">Sentry</text>
+    </g>
+    <g>
+      <rect x="1240" y="630" width="250" height="62" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+      <rect x="1242" y="632" width="6" height="58" rx="3" fill="url(#coralGrad)"/>
+      <circle cx="1276" cy="661" r="6" fill="#5BF0BC"/>
+      <text x="1298" y="668" font-size="20" font-weight="700" fill="#EEF0FA">PagerDuty</text>
+    </g>
+  </g>
+
+  <!-- central hub -->
+  <rect x="620" y="400" width="360" height="200" rx="20" fill="rgba(169,139,255,0.10)" stroke="url(#violetGrad)" stroke-width="2"/>
+  <text x="800" y="462" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="26" font-weight="800" fill="#EEF0FA">Builderforce board</text>
+  <text x="800" y="498" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#A6ADC8">One normalized ticket shape,</text>
+  <text x="800" y="522" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#A6ADC8">stamped with its source system</text>
+  <text x="800" y="560" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#8891AE">Agents &amp; humans act here; each ticket</text>
+  <text x="800" y="580" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#8891AE">stays canonical in its home system</text>
+
+  <!-- legend -->
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <circle cx="620" cy="700" r="7" fill="#5BF0BC"/>
+    <text x="638" y="707" font-size="16" fill="#A6ADC8">Inbound webhook &#8212; near-real-time sync</text>
+    <circle cx="620" cy="736" r="7" fill="#FFCE6B"/>
+    <text x="638" y="743" font-size="16" fill="#A6ADC8">Polling on an interval you set</text>
+    <text x="620" y="782" font-size="15.5" fill="#8891AE">Bidirectional both ways: an agent's change flows back to the origin, a human's change flows in. No migration.</text>
+  </g>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Single pane, not single cage &#8212; orchestrate across everything while work stays where it lives.</text>
+</svg>

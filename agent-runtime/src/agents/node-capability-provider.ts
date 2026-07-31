@@ -29,6 +29,7 @@ import {
   writeFile as fsWriteFile,
 } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve as resolvePath, sep } from "node:path";
+import { filterByGlob, normalizeScopeDir, isUnderScopeDir } from "@builderforce/agent-tools";
 import type {
   Capability,
   CapabilityProvider,
@@ -211,13 +212,13 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
       },
     },
     repoRead: {
-      async listFiles(sub): Promise<RepoListResult> {
+      async listFiles(sub, glob): Promise<RepoListResult> {
         const scope = sub ? resolveInside(root, sub) : root;
         if (!scope) {
           return { ok: false, error: escaped(sub ?? "") };
         }
         const { paths, truncated } = await walkFiles(root, scope);
-        return { ok: true, paths, truncated };
+        return { ok: true, paths: glob ? filterByGlob(paths, glob) : paths, truncated };
       },
       async readFile(path): Promise<RepoReadResult> {
         const abs = resolveInside(root, path);
@@ -231,7 +232,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
           return { ok: false, error: err instanceof Error ? err.message : String(err) };
         }
       },
-      async searchCode(query): Promise<RepoSearchResult> {
+      async searchCode(query, scope): Promise<RepoSearchResult> {
         const r = (await runCodebaseSearch(root, { query })) as {
           error?: string;
           results?: Array<{ filePath: string } & Record<string, unknown>>;
@@ -239,7 +240,15 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         if (r.error) {
           return { ok: false, error: r.error };
         }
-        const matches = (r.results ?? []).map((m) => ({ path: m.filePath, ...m }));
+        let matches = (r.results ?? []).map((m) => ({ path: m.filePath, ...m }));
+        // Honor an optional subdirectory scope by prefix-filtering the ripgrep hits,
+        // so `search_code`'s `path` argument narrows results here too (parity with the
+        // editor provider that scopes its walk natively). Normalization + prefix-match
+        // are the ONE shared helpers so this can't drift from the other providers. The
+        // ripgrep result set is complete (not a capped ranked page), so filtering it is
+        // lossless — unlike the cloud GitHub-API path, which must scope in the query.
+        const scopeDir = normalizeScopeDir(scope);
+        if (scopeDir) matches = matches.filter((m) => typeof m.path === "string" && isUnderScopeDir(m.path, scopeDir));
         return { ok: true, query, total: matches.length, matches };
       },
     },

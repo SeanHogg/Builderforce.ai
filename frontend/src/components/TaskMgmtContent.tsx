@@ -2,12 +2,15 @@
 
 import { Select } from '@/components/Select';
 
-import { useState, useEffect, useCallback, useMemo, Fragment, type CSSProperties } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment, type CSSProperties } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { RoleGate } from '@/components/RoleGate';
 import {
   tasksApi,
+  kanbanApi,
   agentHosts,
   workflowDefinitions,
   approvalsApi,
@@ -33,19 +36,33 @@ import {
   type TeamMember,
 } from '@/lib/taskAssignee';
 import { BoardConfigPanel } from './board/BoardConfigPanel';
+import { AssigneeProfilesProvider } from './workforce/AssigneeProfilesContext';
+import AssigneeHovercard, { AssigneePersonalityInline } from './workforce/AssigneeHovercard';
+import { MemberProfileEditor } from './workforce/MemberProfileEditor';
+import type { MemberKind } from '@/lib/builderforceApi';
 import { AgentChip, ACTIVE_EXECUTION_STATUSES } from './board/AgentChip';
 import { SwimlaneTriageButton } from './board/SwimlaneTriageButton';
+import { trackActivity } from '@/lib/activity/tracker';
 import { TeamMemberAvatarFilter } from './board/TeamMemberAvatarFilter';
 import { useBoardConfig } from './board/useBoardConfig';
 import { useBoardLiveRuns } from './board/useBoardLiveRuns';
 import { useRealtimeRoom } from '@/lib/embed/useRealtimeRoom';
 import { SlideOutPanel } from './SlideOutPanel';
+import { ReleasePicker } from './ReleasePicker';
+import { DelayReasonTag } from './DelayReasonTag';
 import { MoveToBoardControl } from './MoveToBoardControl';
 import { AgentTab } from './agent/AgentTab';
+import { TaskChangesPanel } from './agent/TaskChangesPanel';
 import { TaskPrdTab } from './task/TaskPrdTab';
+import { AccountabilityTab } from './task/AccountabilityTab';
+import { TaskBadges } from './task/TaskBadges';
+import { TicketContextStrip } from './task/TicketContextStrip';
+import { TicketLifecyclePanel } from './task/TicketLifecyclePanel';
 import { RunTaskButton } from './task/RunTaskButton';
 import { ApprovalResolveControl } from './humanRequests/ApprovalResolveControl';
 import { ChatMessageContent } from './ChatMessageContent';
+import { PublishToMarketplaceModal } from './PublishToMarketplaceModal';
+import { getTicketPosting, unpublishTicket, type TicketPosting } from '@/lib/freelancerApi';
 import { ViewToggle } from './ViewToggle';
 import { CeremonyStage, type CeremonyMode } from './ceremony/CeremonyStage';
 import { ScheduleCalendar } from './ScheduleCalendar';
@@ -55,6 +72,7 @@ import {
   taskStatusLabel,
   taskStatusBadgeClass,
 } from '@/lib/taskStatus';
+import { TASK_PRIORITIES, taskPriorityBadgeClass } from '@/lib/taskPriority';
 
 type TaskView = 'board' | 'table' | 'calendar' | 'gantt';
 
@@ -65,13 +83,7 @@ interface BoardColumn {
   label: string;
   agents: SwimlaneAgent[];
 }
-const PRIORITIES: TaskPriority[] = ['low', 'medium', 'high', 'urgent'];
-const PRIORITY_CLASS: Record<TaskPriority, string> = {
-  low: 'badge-gray',
-  medium: 'badge-blue',
-  high: 'badge-yellow',
-  urgent: 'badge-red',
-};
+const PRIORITIES = TASK_PRIORITIES;
 
 export interface TaskMgmtContentProps {
   /** When set, tasks are scoped to this project and project filter is hidden. */
@@ -120,6 +132,7 @@ function AssigneeSelect({
   onBlur?: () => void;
   style?: CSSProperties;
 }) {
+  const t = useTranslations('taskMgmt');
   return (
     <Select
       autoFocus={autoFocus}
@@ -129,23 +142,23 @@ function AssigneeSelect({
       onChange={(e) => onChange(parseAssigneeSelectValue(e.target.value))}
       style={style}
     >
-      <option value="">Unassigned</option>
+      <option value="">{t('unassigned')}</option>
       {members.length > 0 && (
-        <optgroup label="Team members">
+        <optgroup label={t('teamMembers')}>
           {members.map((m) => (
             <option key={`u:${m.id}`} value={`u:${m.id}`}>{m.name}</option>
           ))}
         </optgroup>
       )}
       {hosts.length > 0 && (
-        <optgroup label="Agent hosts">
+        <optgroup label={t('agentHosts')}>
           {hosts.map((h) => (
             <option key={`h:${h.id}`} value={`h:${h.id}`}>{h.name}</option>
           ))}
         </optgroup>
       )}
       {cloudAgents.length > 0 && (
-        <optgroup label="Cloud agents">
+        <optgroup label={t('cloudAgents')}>
           {cloudAgents.map((a) => (
             <option key={`c:${a.ref}`} value={`c:${a.ref}`}>{a.name}</option>
           ))}
@@ -162,11 +175,23 @@ export function TaskMgmtContent({
   compact = false,
 }: TaskMgmtContentProps) {
   const tApproval = useTranslations('boardConfig');
+  const confirm = useConfirm();
+  const tBoard = useTranslations('board');
+  const tCommon = useTranslations('common');
+  const tTask = useTranslations('taskMgmt');
+  const tGigs = useTranslations('gigs');
   // Global project scope (present in the app shell, absent in embed/standalone).
   // When present it is the single project picker — the board's own project filter
   // is hidden and the TopBar tenant→project selector drives scope instead.
   const globalScope = useOptionalProjectScope();
   const [tasks, setTasks] = useState<Task[]>([]);
+  // Ticket audit: ids of tickets flagged by the role/diagnostic audit (a required
+  // role or check was skipped). Fetched once per project (server-side cached) and
+  // rendered as a flag chip on the card — no per-card round-trip.
+  const [flaggedIds, setFlaggedIds] = useState<Set<number>>(new Set());
+  // Participation progress per ticket (X of Y required roles complete) — the
+  // Coordinated Role Participation %-complete chip. One cached project fetch.
+  const [participantProgress, setParticipantProgress] = useState<Map<number, { completed: number; required: number; percent: number }>>(new Map());
   const [projects, setProjects] = useState<Project[]>(projectsProp ?? globalScope?.projects ?? []);
   const [agentHostsList, setAgentHostsList] = useState<AgentHost[]>([]);
   const [cloudAgentsList, setCloudAgentsList] = useState<CloudAgentTarget[]>([]);
@@ -181,6 +206,12 @@ export function TaskMgmtContent({
   // Standup mode: pivot the board so rows = teammates/agents and columns = stages,
   // surfacing each person's in-flight work at a glance. Board-view only, session-only.
   const [groupByAssignee, setGroupByAssignee] = useState(false);
+  // Assignee swimlanes can contain hundreds of cards. Keep every row collapsed
+  // until the viewer explicitly opens it; this state is intentionally session-only.
+  const [expandedAssigneeRows, setExpandedAssigneeRows] = useState<Set<string>>(new Set());
+  const [profileAssignee, setProfileAssignee] = useState<{
+    kind: MemberKind; refId: string; name: string; tasks: Task[];
+  } | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterProject, setFilterProject] = useState<string>(projectId != null ? String(projectId) : '');
   const [filterPriority, setFilterPriority] = useState<string>('');
@@ -207,21 +238,128 @@ export function TaskMgmtContent({
   // Live ceremony overlay (standup/planning round-table) for the selected board.
   const [ceremony, setCeremony] = useState<CeremonyMode | null>(null);
   const [prdOpen, setPrdOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<'details' | 'agent' | 'prd'>('details');
+  const [drawerTab, setDrawerTab] = useState<'details' | 'agent' | 'changes' | 'prd' | 'accountability'>('details');
+  // Ticket whose LIFECYCLE / AUTONOMY PROOF panel is open (opened from the drawer
+  // header, stacks above the drawer). null = closed.
+  const [lifecycleTaskId, setLifecycleTaskId] = useState<number | null>(null);
   // Inline per-field editing in the task drawer. Only one field is editable at a
   // time; `fieldDraft` holds the in-progress value (string for text/date inputs).
   const [editingField, setEditingField] = useState<
-    null | 'title' | 'description' | 'dueDate' | 'assignee' | 'priority' | 'status' | 'project'
+    null | 'title' | 'description' | 'dueDate' | 'assignee' | 'priority' | 'status' | 'project' | 'businessValue'
   >(null);
   const [fieldDraft, setFieldDraft] = useState('');
   const [fieldSaving, setFieldSaving] = useState(false);
+  // Marketplace posting state for the open drawer ticket: `undefined` = not yet
+  // loaded, `null` = not published, else the live posting. Drives the "Publish to
+  // Marketplace" action + the "Published" badge / Unpublish control.
+  const [posting, setPosting] = useState<TicketPosting | null | undefined>(undefined);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishBusy, setPublishBusy] = useState(false);
 
   // Open a task drawer on a specific tab (defaults to Details). Used so clicking
   // a running-agent chip jumps straight to the Agent tab.
-  const openTask = useCallback((t: Task, tab: 'details' | 'agent' | 'prd' = 'details') => {
+  const openTask = useCallback((t: Task, tab: 'details' | 'agent' | 'changes' | 'prd' = 'details') => {
     setDrawerTab(tab);
     setDrawerTask(t);
   }, []);
+
+  // Swap the drawer to a ticket's parent Epic. The Epic is usually already in the
+  // loaded board, but it can sit outside the active filter (or on a collapsed
+  // lane), so fall back to fetching it rather than making the link a dead end.
+  const openEpic = useCallback((epicId: number) => {
+    const known = tasks.find((t) => t.id === epicId);
+    if (known) { openTask(known); return; }
+    tasksApi.get(epicId).then(openTask).catch(() => {});
+  }, [tasks, openTask]);
+
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const deepLinkedTaskRef = useRef<string | null>(null);
+
+  // Close the drawer AND strip a lingering `?task=` deep-link param, so the board
+  // URL stays clean and the drawer can't re-open on the next render. Every
+  // user-facing close affordance (overlay, close button) goes through this.
+  // Programmatic closes (delete/move) call setDrawerTask(null) directly — the row
+  // is gone, so there's no deep-link left to honour.
+  const closeDrawer = useCallback(() => {
+    setDrawerTask(null);
+    // The lifecycle audit is a child of the drawer — it must not outlive it.
+    setLifecycleTaskId(null);
+    if (searchParams?.get('task')) {
+      const params = new URLSearchParams(Array.from(searchParams.entries()));
+      params.delete('task');
+      const qs = params.toString();
+      router.replace(qs ? `?${qs}` : '?', { scroll: false });
+    }
+  }, [searchParams, router]);
+
+  // Deep-link to a ticket's DETAIL drawer via a `?task=<id>` query param — the target
+  // the Brain ChatTicketsPanel "Open" routes to for a linked task/epic/gap (so the
+  // chip opens the ticket's details, not just the board). Resolve from the loaded
+  // board list when the ticket is present (instant), otherwise FETCH it directly:
+  // the global ProjectScope resolving `?project=` and the scoped task list loading
+  // race, so at the moment this runs the target may not yet be in `tasks` (or may sit
+  // in a different project scope). A list-only lookup would silently no-op there.
+  // We deliberately KEEP the `?task=` param in place while the drawer is open
+  // (closeDrawer strips it) so a transient remount during auth/scope hydration
+  // RE-opens the drawer instead of dropping to the bare board — the "redirects back
+  // with no panel" symptom. The ref guards against re-opening the same id per mount.
+  useEffect(() => {
+    const raw = searchParams?.get('task');
+    if (!raw) return;
+    const id = Number(raw);
+    if (!Number.isInteger(id) || id <= 0) return;
+    if (drawerTask?.id === id) return;             // already open on this ticket
+    if (deepLinkedTaskRef.current === raw) return; // handled this id already this mount
+    const inList = tasks.find((t) => t.id === id);
+    if (inList) {
+      deepLinkedTaskRef.current = raw;
+      openTask(inList);
+      return;
+    }
+    // Not in the (scoped) list — fetch it directly. GET /api/tasks/:id is tenant-
+    // scoped server-side (404s for a foreign / other-tenant id), so an inaccessible
+    // id just leaves the board unchanged. Guarded so a late resolve can't open a
+    // drawer the list-path already opened.
+    let alive = true;
+    tasksApi.get(id)
+      .then((full) => {
+        if (alive && full && deepLinkedTaskRef.current !== raw) {
+          deepLinkedTaskRef.current = raw;
+          openTask(full);
+        }
+      })
+      .catch(() => { /* not found / not accessible — leave the board as-is */ });
+    return () => { alive = false; };
+  }, [searchParams, tasks, openTask, drawerTask?.id]);
+
+  // Load whether the open ticket is already published to the marketplace, so the
+  // drawer can show a "Published" badge + Unpublish, or offer to publish. Best-effort:
+  // a tenantless/unauthorized viewer just sees the not-published state.
+  useEffect(() => {
+    const id = drawerTask?.id;
+    if (id == null || drawerTask?.restricted) { setPosting(undefined); return; }
+    let alive = true;
+    setPosting(undefined);
+    getTicketPosting(id).then((p) => { if (alive) setPosting(p); }).catch(() => { if (alive) setPosting(null); });
+    return () => { alive = false; };
+  }, [drawerTask?.id, drawerTask?.restricted]);
+
+  const unpublishDrawerTicket = async () => {
+    if (!drawerTask) return;
+    setPublishBusy(true);
+    try { await unpublishTicket(drawerTask.id); setPosting(null); }
+    catch { /* surfaced by leaving the badge; best-effort */ }
+    finally { setPublishBusy(false); }
+  };
+
+  // A SECURITY ticket the viewer isn't cleared for arrives masked (`restricted`),
+  // its title blanked server-side — everywhere a task title renders we show the
+  // localized "clearance needed" placeholder instead. One helper, used at every site.
+  const titleOf = useCallback(
+    (task: Task): string => (task.restricted ? tCommon('clearanceNeeded') : task.title),
+    [tCommon],
+  );
 
   // Fetch the gated approval so the banner can resolve it inline. Cleared with the gate.
   useEffect(() => {
@@ -234,11 +372,15 @@ export function TaskMgmtContent({
     return () => { alive = false; };
   }, [approvalGate?.approvalId]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // `background:true` refetches WITHOUT flipping the full-screen "Loading…" state,
+  // so a live refresh (a realtime echo of the user's own drag, the brain bus, an
+  // approval/ceremony/agent update) reconciles in place instead of blanking the
+  // board. Only the initial mount / project switch shows the spinner.
+  const load = useCallback(async (opts?: { background?: boolean }) => {
+    if (!opts?.background) setLoading(true);
     setError(null);
     try {
-      const [tasksData, agentHostsData, runTargets, membersData, projectWf] = await Promise.all([
+      const [tasksData, agentHostsData, runTargets, membersData, projectWf, assignable] = await Promise.all([
         tasksApi.list(projectId),
         agentHosts.list().catch(() => []),
         // Cloud agents assignable to a ticket (active, cloud-capable ide_agents).
@@ -251,6 +393,10 @@ export function TaskMgmtContent({
         // picker to their members. Falls back to the full roster when no team is
         // assigned (scopedToTeams=false) or in the all-projects view (no projectId).
         projectId != null ? getProjectWorkforce(projectId).catch(() => null) : Promise.resolve(null),
+        // The unified assignable workforce — its `hires` are active freelance-marketplace
+        // engagements (cross-tenant humans) that `tasksApi.assignees()` (tenant members)
+        // doesn't return, so a hired freelancer can be assigned a ticket on the board.
+        kanbanApi.assignable().catch(() => ({ agents: [], humans: [], hires: [] as Array<{ ref: string; name: string }> })),
       ]);
       setTasks(tasksData);
       // When a project has teams assigned, the assignable workforce is exactly
@@ -262,7 +408,12 @@ export function TaskMgmtContent({
         : null;
       setAgentHostsList(teamSet ? agentHostsData.filter((h) => teamSet.has(`host_agent:${h.id}`)) : agentHostsData);
       setCloudAgentsList(teamSet ? runTargets.cloudAgents.filter((a) => teamSet.has(`cloud_agent:${a.ref}`)) : runTargets.cloudAgents);
-      setMembersList(teamSet ? membersData.filter((m) => teamSet.has(`human:${m.id}`)) : membersData);
+      // Team members (team-scoped when the board is), then union in freelance hires —
+      // explicit project engagements that should be assignable regardless of team
+      // scoping — deduped by id. A hire's ref is a users.id, so `u:<id>` decodes right.
+      const scopedMembers = teamSet ? membersData.filter((m) => teamSet.has(`human:${m.id}`)) : membersData;
+      const hireMembers = assignable.hires.map((h) => ({ id: h.ref, name: h.name }));
+      setMembersList([...scopedMembers, ...hireMembers.filter((h) => !scopedMembers.some((m) => m.id === h.id))]);
       // Always resolve the full project list (unless the parent supplied one or
       // the global scope already holds it): it backs both the project filter and
       // the "Move to board" destinations, needed even in the scoped view. When a
@@ -275,9 +426,9 @@ export function TaskMgmtContent({
         setProjects(projs);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      setError(e instanceof Error ? e.message : tTask('errLoad'));
     } finally {
-      setLoading(false);
+      if (!opts?.background) setLoading(false);
     }
   }, [projectId, projectsProp, globalScope]);
 
@@ -296,7 +447,7 @@ export function TaskMgmtContent({
   // "update task" action in the docked drawer), the write lands via the API but
   // this board holds its own state — so listen on the brain-data bus and refetch
   // to reflect the change live instead of going stale until a manual reload.
-  useBrainDataRefresh(['tasks', 'executions', 'projects'], () => { void load(); });
+  useBrainDataRefresh(['tasks', 'executions', 'projects', 'boards'], () => { void load({ background: true }); });
 
   useEffect(() => {
     if (view === 'board') {
@@ -326,12 +477,28 @@ export function TaskMgmtContent({
   // Resolve a task's assignee (human teammate, self-hosted host, OR cloud agent) to its display name.
   const taskAssigneeName = (t: { assignedAgentHostId?: number | null; assignedAgentRef?: string | null; assignedUserId?: string | null }) =>
     assigneeName(t.assignedAgentHostId, t.assignedAgentRef, t.assignedUserId, agentHostsList, cloudAgentsList, membersList);
+  // The same encoded value the picker uses — the key the personality hovercard reads.
+  const taskAssigneeSelectValue = (t: { assignedAgentHostId?: number | null; assignedAgentRef?: string | null; assignedUserId?: string | null }) =>
+    assigneeSelectValue(t.assignedAgentHostId, t.assignedAgentRef, t.assignedUserId);
 
   // The board being configured: the scoped project, or the single project chosen
   // in the filter. Null when viewing "All projects" — the cog stays visible but disabled.
   const effectiveProjectId = projectId ?? (filterProject ? Number(filterProject) : undefined);
   const effectiveProjectName =
     projectId != null ? projectName : projectNameById(effectiveProjectId);
+
+  // Load the flagged-ticket set for the current project's ticket audit.
+  useEffect(() => {
+    if (effectiveProjectId == null) { setFlaggedIds(new Set()); return; }
+    let alive = true;
+    kanbanApi.flaggedForProject(effectiveProjectId)
+      .then((rows) => { if (alive) setFlaggedIds(new Set(rows.map((r) => r.taskId))); })
+      .catch(() => { if (alive) setFlaggedIds(new Set()); });
+    kanbanApi.participantsSummary(effectiveProjectId)
+      .then((rows) => { if (alive) setParticipantProgress(new Map(rows.map((r) => [r.taskId, { completed: r.completed, required: r.required, percent: r.percent }]))); })
+      .catch(() => { if (alive) setParticipantProgress(new Map()); });
+    return () => { alive = false; };
+  }, [effectiveProjectId, tasks]);
 
   // Swimlanes + their configured agents for the selected board, shown discretely
   // in each column header. Only fetched for the board view of a single project.
@@ -381,7 +548,10 @@ export function TaskMgmtContent({
   // This is the primary liveness path; the run-feed poll above is a reconcile
   // backstop for a dropped socket (cross-isolate WS is lossy on Workers).
   const onRealtimeChange = useCallback(() => {
-    void load();
+    // A realtime push is a LIVE reconcile (often the echo of the user's own drag) —
+    // refetch in the background so the board updates in place instead of flashing
+    // the full-screen "Loading…" placeholder.
+    void load({ background: true });
     refreshRuns();
   }, [load, refreshRuns]);
   useRealtimeRoom(
@@ -430,6 +600,20 @@ export function TaskMgmtContent({
     return cols.length > 0 ? cols : defaults();
   }, [lanes, agentsByLane, tasks]);
 
+  // Order tickets within a lane by the AI Manager's computed backlog rank (rank 1 =
+  // highest value × urgency), nulls last, so every lane shows the most-important work
+  // at the top — the same order the priority-aware autonomous dispatcher runs them in.
+  // Stable: a null-rank vs null-rank pair keeps the incoming (filtered) order.
+  const byManagerRank = (list: Task[]): Task[] =>
+    list
+      .map((t, i) => ({ t, i }))
+      .sort((a, b) => {
+        const ra = a.t.managerRank ?? Number.POSITIVE_INFINITY;
+        const rb = b.t.managerRank ?? Number.POSITIVE_INFINITY;
+        return ra !== rb ? ra - rb : a.i - b.i;
+      })
+      .map((x) => x.t);
+
   // Status choices for dropdowns / move-to / filters = the board's columns.
   const statusChoices = boardColumns.map((c) => ({ value: c.status, label: c.label }));
   // Label for a task's status: prefer its column's name, else a humanized label.
@@ -454,6 +638,36 @@ export function TaskMgmtContent({
       return a.name.localeCompare(b.name);
     });
   }, [filtered, taskAssigneeName]);
+
+  const openAssigneeProfile = useCallback((key: string, name: string) => {
+    if (!key) return;
+    const prefix = key.slice(0, 2);
+    const refId = key.slice(2);
+    const kind: MemberKind | null = prefix === 'u:' ? 'human' : prefix === 'c:' ? 'cloud_agent' : prefix === 'h:' ? 'host_agent' : null;
+    if (kind && refId) {
+      setProfileAssignee({
+        kind,
+        refId,
+        name,
+        // The profile is an assignee-level view, so include every task currently
+        // loaded for this board even when board filters hide some of them.
+        tasks: tasks.filter((task) => assigneeSelectValue(
+          task.assignedAgentHostId,
+          task.assignedAgentRef,
+          task.assignedUserId,
+        ) === key),
+      });
+    }
+  }, [tasks]);
+
+  const toggleAssigneeRow = useCallback((key: string) => {
+    setExpandedAssigneeRows((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   // Latest execution per task → which agent is actively running (or last ran) it.
   const latestExecByTask = useMemo(() => {
@@ -545,7 +759,7 @@ export function TaskMgmtContent({
       } else {
         const projectIdToUse = projectId ?? (form.projectId as number);
         if (projectIdToUse == null) {
-          setError('Select a project');
+          setError(tTask('errSelectProject'));
           return;
         }
         const created = await tasksApi.create({
@@ -567,7 +781,7 @@ export function TaskMgmtContent({
       }
       setShowModal(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(e instanceof Error ? e.message : tTask('errSave'));
     } finally {
       setSaving(false);
     }
@@ -576,20 +790,20 @@ export function TaskMgmtContent({
   const removeTask = async (t: Task | null, e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (!t?.id) return;
-    if (!confirm(`Delete "${t.title}"?`)) return;
+    if (!(await confirm(tCommon('deleteNamedConfirm', { name: t.title })))) return;
     try {
       await tasksApi.delete(t.id);
       setTasks((prev) => prev.filter((i) => i.id !== t.id));
       if (drawerTask?.id === t.id) setDrawerTask(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed');
+      setError(e instanceof Error ? e.message : tTask('errDelete'));
     }
   };
 
   // Persist a single edited field from the drawer's inline editors. Patches the
   // open task, syncs the list + drawer, and closes the active editor on success.
   const saveTaskField = async (
-    patch: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'dueDate'>>
+    patch: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'dueDate' | 'businessValue' | 'releaseId'>>
   ) => {
     if (!drawerTask) return;
     setFieldSaving(true);
@@ -599,10 +813,20 @@ export function TaskMgmtContent({
       setDrawerTask(updated);
       setEditingField(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(e instanceof Error ? e.message : tTask('errSave'));
     } finally {
       setFieldSaving(false);
     }
+  };
+
+  // Commit the drawer's business-value editor: blank clears it (null), otherwise
+  // clamp to 0–100. Setting it server-side pins the value's source to 'manual'.
+  const commitBusinessValue = () => {
+    const raw = fieldDraft.trim();
+    if (raw === '') { void saveTaskField({ businessValue: null }); return; }
+    const n = Number(raw);
+    if (Number.isNaN(n)) { setEditingField(null); return; }
+    void saveTaskField({ businessValue: Math.max(0, Math.min(100, Math.round(n))) });
   };
 
   const patchStatus = async (id: number, status: string) => {
@@ -610,6 +834,9 @@ export function TaskMgmtContent({
       const updated = await tasksApi.update(id, { status });
       setTasks((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
       if (drawerTask?.id === id) setDrawerTask(updated);
+      // Audited "click sense": moving a ticket between swimlanes is a billable
+      // engagement action (see activity tracker → timecard pipeline).
+      trackActivity('ticket_move', { ref: `task:${id}`, metadata: { status } });
       // The board "autonomous trigger" (auto-run a ticket entering a lane with a
       // configured cloud agent) is now decided SERVER-SIDE on the task PATCH — see
       // maybeAutoRunOnLaneEntry / decideLaneAutoRun in the api. The frontend no
@@ -624,7 +851,7 @@ export function TaskMgmtContent({
       // the run-feed poll as the dropped-socket backstop; no client-side trigger.
       refreshRuns();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Update failed');
+      setError(e instanceof Error ? e.message : tTask('errUpdate'));
     }
   };
 
@@ -660,7 +887,7 @@ export function TaskMgmtContent({
       setTasks((prev) => prev.map((t) => (t.id === moved.id ? moved : t)));
       if (drawerTask?.id === id) setDrawerTask(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Move failed');
+      setError(e instanceof Error ? e.message : tTask('errMove'));
     }
   };
 
@@ -751,8 +978,9 @@ export function TaskMgmtContent({
             </span>
           )}
         </div>
-        <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--text-primary)' }}>
-          {task.title}
+        <div style={{ fontWeight: 500, fontSize: 13, color: task.restricted ? 'var(--text-muted)' : 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          {task.restricted && <span aria-hidden style={{ flexShrink: 0 }}>🔒</span>}
+          <span style={task.restricted ? { fontStyle: 'italic' } : undefined}>{titleOf(task)}</span>
         </div>
         <div
           style={{
@@ -765,21 +993,12 @@ export function TaskMgmtContent({
             flexWrap: 'wrap',
           }}
         >
-          <span style={{ fontFamily: 'var(--font-mono)' }}>{task.key}</span>
-          <span
-            className={PRIORITY_CLASS[task.priority]}
-            style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, textTransform: 'capitalize' }}
-          >
-            {task.priority}
-          </span>
-          {task.specCount ? (
-            <span
-              title={`${task.specCount} linked PRD${task.specCount > 1 ? 's' : ''}`}
-              style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
-            >
-              📄 PRD{task.specCount > 1 ? ` ×${task.specCount}` : ''}
-            </span>
-          ) : null}
+          <TaskBadges
+            task={task}
+            showKey
+            flagged={flaggedIds.has(task.id)}
+            participants={participantProgress.get(task.id) ?? null}
+          />
           {runs.length > 0 ? (
             // One chip per agent that has touched this task, newest run first, so
             // history reads left-to-right: a freshly-queued agent (Bob · pending)
@@ -803,9 +1022,13 @@ export function TaskMgmtContent({
             // agent owns it so a just-dropped card reads "Bob · pending" before its
             // execution row materializes.
             (task.assignedAgentHostId || task.assignedAgentRef) ? (
-              <AgentChip label={taskAssigneeName(task)} status="pending" meta="pending" title={`${taskAssigneeName(task)} — queued`} />
+              <AssigneeHovercard selectValue={taskAssigneeSelectValue(task)}>
+                <AgentChip label={taskAssigneeName(task)} status="pending" meta="pending" title={`${taskAssigneeName(task)} — queued`} />
+              </AssigneeHovercard>
             ) : (
-              <span>{taskAssigneeName(task)}</span>
+              <AssigneeHovercard selectValue={taskAssigneeSelectValue(task)}>
+                <span>{taskAssigneeName(task)}</span>
+              </AssigneeHovercard>
             )
           ) : null}
           {task.githubPrUrl && (
@@ -826,6 +1049,7 @@ export function TaskMgmtContent({
   };
 
   return (
+    <AssigneeProfilesProvider>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {error && (
         <div
@@ -873,7 +1097,7 @@ export function TaskMgmtContent({
                 onResolved={(updated) => {
                   setApprovalGate(null);
                   setGateApproval(null);
-                  if (updated.status === 'approved') { void load(); }
+                  if (updated.status === 'approved') { void load({ background: true }); }
                 }}
               />
             )}
@@ -909,7 +1133,7 @@ export function TaskMgmtContent({
                 textDecoration: 'none',
               }}
             >
-              Open approvals
+              {tTask('openApprovals')}
             </Link>
           </span>
         </div>
@@ -919,7 +1143,7 @@ export function TaskMgmtContent({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div>
             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              {filtered.length} task{filtered.length !== 1 ? 's' : ''}
+              {tTask('taskCount', { count: filtered.length })}
               {projectName ? ` · ${projectName}` : ''}
             </span>
           </div>
@@ -932,13 +1156,13 @@ export function TaskMgmtContent({
                 value={groupByAssignee ? 'people' : 'stage'}
                 onChange={(m) => setGroupByAssignee(m === 'people')}
                 options={[
-                  { value: 'stage', label: 'By stage' },
-                  { value: 'people', label: 'By assignee' },
+                  { value: 'stage', label: tTask('byStage') },
+                  { value: 'people', label: tTask('byAssignee') },
                 ]}
               />
             )}
             <button type="button" onClick={openCreate} style={buttonPrimary}>
-              New task
+              {tTask('newTask')}
             </button>
             {effectiveProjectId != null && (
               // Launch the live round-table ceremony as a full-screen overlay over
@@ -946,10 +1170,10 @@ export function TaskMgmtContent({
               // onto seats / Epics / a sprint.
               <>
                 <button type="button" onClick={() => setCeremony('standup')} style={buttonTertiary}>
-                  Start standup
+                  {tTask('startStandup')}
                 </button>
                 <button type="button" onClick={() => setCeremony('planning')} style={buttonTertiary}>
-                  Start planning
+                  {tTask('startPlanning')}
                 </button>
               </>
             )}
@@ -974,8 +1198,8 @@ export function TaskMgmtContent({
                     onClick={() => canConfigure && setPrdOpen(true)}
                     disabled={!canConfigure}
                     style={iconBtn}
-                    aria-label="View PRD"
-                    title={canConfigure ? 'View the PRD (shared by every agent on this board)' : 'Select a single project to view its PRD'}
+                    aria-label={tTask('viewPrdAria')}
+                    title={canConfigure ? tTask('viewPrdTitle') : tTask('viewPrdDisabledTitle')}
                   >
                     <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -989,8 +1213,8 @@ export function TaskMgmtContent({
                     onClick={() => { if (canConfigure) { setBoardConfigTab('lanes'); setBoardConfigOpen(true); } }}
                     disabled={!canConfigure}
                     style={iconBtn}
-                    aria-label="Configure board"
-                    title={canConfigure ? 'Configure swimlanes & agents' : 'Select a single project to configure its board'}
+                    aria-label={tTask('configureBoardAria')}
+                    title={canConfigure ? tTask('configureBoardTitle') : tTask('configureBoardDisabledTitle')}
                   >
                     <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
                       <circle cx="12" cy="12" r="3" />
@@ -1008,7 +1232,7 @@ export function TaskMgmtContent({
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <input
             type="text"
-            placeholder="Search…"
+            placeholder={tTask('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{
@@ -1036,7 +1260,7 @@ export function TaskMgmtContent({
               color: 'var(--text-primary)',
             }}
           >
-            <option value="">All statuses</option>
+            <option value="">{tTask('allStatuses')}</option>
             {statusChoices.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
@@ -1058,7 +1282,7 @@ export function TaskMgmtContent({
                 color: 'var(--text-primary)',
               }}
             >
-              <option value="">All projects</option>
+              <option value="">{tTask('allProjects')}</option>
               {projects.map((p) => (
                 <option key={p.id} value={String(p.id)}>
                   {p.name}
@@ -1080,7 +1304,7 @@ export function TaskMgmtContent({
               color: 'var(--text-primary)',
             }}
           >
-            <option value="">All priorities</option>
+            <option value="">{tTask('allPriorities')}</option>
             {PRIORITIES.map((p) => (
               <option key={p} value={p}>
                 {p}
@@ -1100,13 +1324,13 @@ export function TaskMgmtContent({
       )}
 
       {loading ? (
-        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{tCommon('loading')}</div>
       ) : view === 'board' && groupByAssignee ? (
         // Standup pivot: one row per teammate/agent, board columns as stage cells.
         // Tasks stay draggable across stages (same renderTaskCard + drop targets).
         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 4 }}>
           {assigneeRows.length === 0 ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No tasks found</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{tTask('noTasks')}</div>
           ) : (
             <div
               style={{
@@ -1126,49 +1350,82 @@ export function TaskMgmtContent({
                   {column.label}
                 </div>
               ))}
-              {assigneeRows.map((row) => (
-                <Fragment key={row.key || 'unassigned'}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: 'var(--text-primary)',
-                      padding: '8px 4px',
-                      borderTop: '1px solid var(--border-subtle)',
-                    }}
-                  >
-                    {row.name}
-                    <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>
-                      {row.tasks.length}
-                    </span>
-                  </div>
-                  {boardColumns.map((column) => {
-                    const cellTasks = row.tasks.filter((t) => t.status === column.status);
-                    return (
-                      <div
-                        key={column.id}
-                        onDragOver={onDragOver}
-                        onDrop={(e) => onDrop(e, column.status)}
-                        style={{
-                          background: 'var(--bg-deep)',
-                          border: '1px dashed var(--border-subtle)',
-                          borderRadius: 10,
-                          padding: 8,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 8,
-                          minHeight: 56,
-                          borderTop: '1px solid var(--border-subtle)',
-                        }}
+              {assigneeRows.map((row) => {
+                const rowStateKey = row.key || 'unassigned';
+                const expanded = expandedAssigneeRows.has(rowStateKey);
+                return (
+                  <Fragment key={rowStateKey}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: 'var(--text-primary)',
+                        padding: '8px 4px',
+                        borderTop: '1px solid var(--border-subtle)',
+                        gridColumn: expanded ? undefined : '1 / -1',
+                        // An expanded assignee can own hundreds of cards. Keep the
+                        // row identity visible while its tall grid row scrolls, then
+                        // let the next assignee naturally replace it at the boundary.
+                        position: expanded ? 'sticky' : undefined,
+                        top: expanded ? 0 : undefined,
+                        alignSelf: expanded ? 'start' : undefined,
+                        zIndex: expanded ? 2 : undefined,
+                        background: expanded ? 'var(--bg-surface)' : undefined,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleAssigneeRow(rowStateKey)}
+                        aria-expanded={expanded}
+                        aria-label={tTask(expanded ? 'collapseAssigneeRow' : 'expandAssigneeRow', { name: row.name })}
+                        style={{ border: 0, padding: 2, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', lineHeight: 1 }}
                       >
-                        {cellTasks.map((task) => renderTaskCard(task))}
-                      </div>
-                    );
-                  })}
-                </Fragment>
-              ))}
+                        <span aria-hidden>{expanded ? '▾' : '▸'}</span>
+                      </button>
+                      {row.key ? (
+                        <AssigneeHovercard selectValue={row.key}>
+                          <a
+                            href={`#assignee-${encodeURIComponent(row.key)}`}
+                            onClick={(event) => { event.preventDefault(); openAssigneeProfile(row.key, row.name); }}
+                            style={{ color: 'var(--accent)', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                          >
+                            {row.name}
+                          </a>
+                        </AssigneeHovercard>
+                      ) : row.name}
+                      <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>
+                        {row.tasks.length}
+                      </span>
+                    </div>
+                    {expanded && boardColumns.map((column) => {
+                      const cellTasks = byManagerRank(row.tasks.filter((t) => t.status === column.status));
+                      return (
+                        <div
+                          key={column.id}
+                          onDragOver={onDragOver}
+                          onDrop={(e) => onDrop(e, column.status)}
+                          style={{
+                            background: 'var(--bg-deep)',
+                            border: '1px dashed var(--border-subtle)',
+                            borderRadius: 10,
+                            padding: 8,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 8,
+                            minHeight: 56,
+                            borderTop: '1px solid var(--border-subtle)',
+                          }}
+                        >
+                          {cellTasks.map((task) => renderTaskCard(task))}
+                        </div>
+                      );
+                    })}
+                  </Fragment>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1192,7 +1449,7 @@ export function TaskMgmtContent({
         >
           {boardColumns.map((column) => {
             const status = column.status;
-            const tasksForStatus = filtered.filter((t) => t.status === status);
+            const tasksForStatus = byManagerRank(filtered.filter((t) => t.status === status));
             return (
               <div
                 key={column.id}
@@ -1233,7 +1490,7 @@ export function TaskMgmtContent({
                   {column.agents.length > 0 && (
                     <div
                       style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}
-                      title="Agents configured on this swimlane"
+                      title={tTask('swimlaneAgentsTitle')}
                     >
                       {column.agents.map((a) => {
                         const disp = latestDispatchByAssignment.get(a.id);
@@ -1281,14 +1538,14 @@ export function TaskMgmtContent({
           })}
         </div>
       ) : view === 'calendar' ? (
-        <ScheduleCalendar items={filtered} getLabel={(t) => t.title} onSelect={(t) => openTask(t)} />
+        <ScheduleCalendar items={filtered} getLabel={titleOf} onSelect={(t) => openTask(t)} />
       ) : view === 'gantt' ? (
-        <ScheduleGantt items={filtered} getLabel={(t) => t.title} onSelect={(t) => openTask(t)} noun="task" />
+        <ScheduleGantt items={filtered} getLabel={titleOf} onSelect={(t) => openTask(t)} noun="task" />
       ) : (
         <div style={cardStyle}>
           {filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)', fontSize: 13 }}>
-              No tasks found
+              {tTask('noTasks')}
             </div>
           ) : (
             <>
@@ -1305,7 +1562,7 @@ export function TaskMgmtContent({
                     }}
                     style={{ padding: '4px 8px', fontSize: 13 }}
                   >
-                    <option value="">Bulk change status…</option>
+                    <option value="">{tTask('bulkChangeStatus')}</option>
                     {statusChoices.map((s) => (
                       <option key={s.value} value={s.value}>
                         {s.label}
@@ -1331,24 +1588,24 @@ export function TaskMgmtContent({
                         />
                       </th>
                       <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                        Task
+                        {tTask('colTask')}
                       </th>
                     <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                      Status
+                      {tTask('status')}
                     </th>
                     <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                      Priority
+                      {tTask('priority')}
                     </th>
                     {!projectId && (
                       <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                        Project
+                        {tTask('project')}
                       </th>
                     )}
                     <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                      Assignee
+                      {tTask('colAssignee')}
                     </th>
                     <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                      Due
+                      {tTask('colDue')}
                     </th>
                     <th style={{ width: 1 }} />
                   </tr>
@@ -1377,7 +1634,9 @@ export function TaskMgmtContent({
                         />
                       </td>
                       <td style={{ padding: '10px 12px' }}>
-                        <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{task.title}</div>
+                        <div style={{ fontWeight: 500, color: task.restricted ? 'var(--text-muted)' : 'var(--text-primary)', fontStyle: task.restricted ? 'italic' : undefined }}>
+                          {task.restricted && <span aria-hidden style={{ marginRight: 6 }}>🔒</span>}{titleOf(task)}
+                        </div>
                         <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
                           {task.key}
                         </div>
@@ -1415,16 +1674,12 @@ export function TaskMgmtContent({
                         )}
                       </td>
                       <td style={{ padding: '10px 12px' }}>
-                        <span
-                          className={PRIORITY_CLASS[task.priority]}
-                          style={{
-                            fontSize: 10,
-                            padding: '2px 6px',
-                            borderRadius: 4,
-                            textTransform: 'capitalize',
-                          }}
-                        >
-                          {task.priority}
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <TaskBadges
+                            task={task}
+                            flagged={flaggedIds.has(task.id)}
+                            participants={participantProgress.get(task.id) ?? null}
+                          />
                         </span>
                       </td>
                       {!projectId && (
@@ -1442,7 +1697,9 @@ export function TaskMgmtContent({
                             onClick={() => openTask(task, 'agent')}
                           />
                         ) : (
-                          taskAssigneeName(task)
+                          <AssigneeHovercard selectValue={taskAssigneeSelectValue(task)}>
+                            {taskAssigneeName(task)}
+                          </AssigneeHovercard>
                         )}
                       </td>
                       <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>
@@ -1455,20 +1712,20 @@ export function TaskMgmtContent({
                             style={{ ...buttonTertiary, padding: '4px 8px', fontSize: 12 }}
                             onClick={() => openTask(task)}
                           >
-                            View
+                            {tCommon('view')}
                           </button>
                           <button
                             type="button"
                             style={{ ...buttonTertiary, padding: '4px 8px', fontSize: 12 }}
                             onClick={(e) => openEdit(task, e)}
                           >
-                            Edit
+                            {tCommon('edit')}
                           </button>
                           <MoveToBoardControl
                             projects={projects}
                             currentProjectId={task.projectId}
                             onMove={(projectId) => moveTask(task.id, projectId)}
-                            label="Move…"
+                            label={tTask('move')}
                             style={{ padding: '4px 6px', fontSize: 12 }}
                           />
                           <button
@@ -1482,7 +1739,7 @@ export function TaskMgmtContent({
                             }}
                             onClick={(e) => removeTask(task, e)}
                           >
-                            Delete
+                            {tCommon('delete')}
                           </button>
                         </div>
                       </td>
@@ -1497,44 +1754,21 @@ export function TaskMgmtContent({
         </div>
       )}
 
-      {showModal && (
-        <div
-          className="modal-overlay"
-          role="presentation"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 10000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 24,
-          }}
-          onClick={(e) => e.target === e.currentTarget && setShowModal(false)}
-        >
-          <div
-            style={{
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 12,
-              padding: 24,
-              maxWidth: 540,
-              width: '100%',
-              maxHeight: '90vh',
-              overflow: 'auto',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>
-              {editTarget ? 'Edit task' : 'New task'}
-            </div>
+      <SlideOutPanel
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        title={editTarget ? tTask('editTask') : tTask('newTask')}
+        width="min(560px, 96vw)"
+      >
+        <div style={{ padding: 20 }}>
             <form onSubmit={handleSave} style={{ display: 'grid', gap: 14 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                  Title
+                  {tTask('title')}
                 </label>
                 <input
                   required
-                  placeholder="What needs to be done?"
+                  placeholder={tTask('titlePlaceholder')}
                   value={form.title ?? ''}
                   onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                   style={{
@@ -1550,10 +1784,10 @@ export function TaskMgmtContent({
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                  Description (optional)
+                  {tTask('descriptionOptional')}
                 </label>
                 <textarea
-                  placeholder="Additional context…"
+                  placeholder={tTask('descriptionPlaceholder')}
                   value={form.description ?? ''}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                   rows={3}
@@ -1572,7 +1806,7 @@ export function TaskMgmtContent({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Status
+                    {tTask('status')}
                   </label>
                   <Select
                     value={form.status ?? 'todo'}
@@ -1596,7 +1830,7 @@ export function TaskMgmtContent({
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Priority
+                    {tTask('priority')}
                   </label>
                   <Select
                     value={form.priority ?? 'medium'}
@@ -1622,7 +1856,7 @@ export function TaskMgmtContent({
               {!projectId && (
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Project
+                    {tTask('project')}
                   </label>
                   <Select
                     value={form.projectId ?? ''}
@@ -1639,7 +1873,7 @@ export function TaskMgmtContent({
                       color: 'var(--text-primary)',
                     }}
                   >
-                    <option value="">Select project</option>
+                    <option value="">{tTask('selectProject')}</option>
                     {projects.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
@@ -1651,7 +1885,7 @@ export function TaskMgmtContent({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Assign to team member
+                    {tTask('assignToMember')}
                   </label>
                   <AssigneeSelect
                     hosts={agentHostsList}
@@ -1674,7 +1908,7 @@ export function TaskMgmtContent({
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Due date (optional)
+                    {tTask('dueDateOptional')}
                   </label>
                   <input
                     type="date"
@@ -1694,7 +1928,7 @@ export function TaskMgmtContent({
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                  GitHub PR URL (optional)
+                  {tTask('githubPrUrl')}
                 </label>
                 <input
                   type="url"
@@ -1715,16 +1949,15 @@ export function TaskMgmtContent({
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
                 <button type="button" style={buttonTertiary} onClick={() => setShowModal(false)}>
-                  Cancel
+                  {tCommon('cancel')}
                 </button>
                 <button type="submit" disabled={saving} style={{ ...buttonPrimary, opacity: saving ? 0.7 : 1 }}>
-                  {saving ? 'Saving…' : editTarget ? 'Save changes' : 'Create task'}
+                  {saving ? tCommon('saving') : editTarget ? tTask('saveChanges') : tTask('createTask')}
                 </button>
               </div>
             </form>
-          </div>
         </div>
-      )}
+      </SlideOutPanel>
 
       {drawerTask && (
         <>
@@ -1736,7 +1969,7 @@ export function TaskMgmtContent({
               inset: 0,
               zIndex: 10002,
             }}
-            onClick={() => setDrawerTask(null)}
+            onClick={closeDrawer}
           />
           <div
             className="slide-panel-drawer"
@@ -1789,13 +2022,17 @@ export function TaskMgmtContent({
                       color: 'var(--text-primary)',
                     }}
                   />
+                ) : drawerTask.restricted ? (
+                  <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-muted)', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px', margin: '-4px -6px' }}>
+                    <span aria-hidden>🔒</span>{tCommon('clearanceNeeded')}
+                  </div>
                 ) : (
                   <div
                     role="button"
                     tabIndex={0}
                     onClick={() => { setFieldDraft(drawerTask.title); setEditingField('title'); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') { setFieldDraft(drawerTask.title); setEditingField('title'); } }}
-                    title="Click to edit title"
+                    title={tTask('editTitleTitle')}
                     style={{ fontWeight: 700, fontSize: 16, cursor: 'text', borderRadius: 6, padding: '4px 6px', margin: '-4px -6px' }}
                   >
                     {drawerTask.title}
@@ -1805,7 +2042,28 @@ export function TaskMgmtContent({
                   {drawerTask.key}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {/* LIFECYCLE / AUTONOMY PROOF — "did this ticket move itself, or did a
+                  person push it every hop?". Opens the audit slide-out over the drawer.
+                  Suppressed on a restricted ticket like every other drill-down, since
+                  its lane history would leak what the mask hides. The label collapses
+                  to the icon on a phone so the header stays on one row. */}
+              {!drawerTask.restricted && (
+              <button
+                type="button"
+                className="drawer-action"
+                onClick={() => setLifecycleTaskId(drawerTask.id)}
+                aria-label={tTask('lifecycleAction')}
+                title={tTask('lifecycleActionTitle')}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden style={{ width: 17, height: 17, stroke: 'currentColor', fill: 'none', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }}>
+                  <circle cx="12" cy="12" r="9" />
+                  <polyline points="12 7 12 12 16 14" />
+                </svg>
+                <span className="drawer-action-label">{tTask('lifecycleAction')}</span>
+              </button>
+              )}
+              {!drawerTask.restricted && (
               <button
                 type="button"
                 onClick={(e) => removeTask(drawerTask, e)}
@@ -1821,8 +2079,8 @@ export function TaskMgmtContent({
                   color: 'var(--error-text)',
                   cursor: 'pointer',
                 }}
-                aria-label="Delete task"
-                title="Delete task"
+                aria-label={tTask('deleteTask')}
+                title={tTask('deleteTask')}
               >
                 <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }}>
                   <polyline points="3 6 5 6 21 6" />
@@ -1831,9 +2089,10 @@ export function TaskMgmtContent({
                   <line x1="14" y1="11" x2="14" y2="17" />
                 </svg>
               </button>
+              )}
               <button
                 type="button"
-                onClick={() => setDrawerTask(null)}
+                onClick={closeDrawer}
                 style={{
                   width: 36,
                   height: 36,
@@ -1846,7 +2105,7 @@ export function TaskMgmtContent({
                   color: 'var(--text-secondary)',
                   cursor: 'pointer',
                 }}
-                aria-label="Close"
+                aria-label={tCommon('close')}
               >
                 <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
                   <line x1="18" y1="6" x2="6" y2="18" />
@@ -1856,9 +2115,11 @@ export function TaskMgmtContent({
               </div>
             </div>
 
-            {/* Tabs */}
+            {/* Tabs — suppressed for a restricted (masked) ticket; the clearance
+                notice replaces all tab content. */}
+            {!drawerTask.restricted && (
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, overflowX: 'auto' }}>
-              {([['details', 'Details'], ['agent', 'Agent / Capabilities'], ['prd', 'PRD']] as const).map(([id, label]) => (
+              {([['details', tTask('details')], ['agent', tTask('tabAgent')], ['changes', tTask('tabChanges')], ['prd', tTask('tabPrd')], ['accountability', tTask('tabAccountability')]] as const).map(([id, label]) => (
                 <button
                   key={id}
                   type="button"
@@ -1874,14 +2135,32 @@ export function TaskMgmtContent({
                 </button>
               ))}
             </div>
+            )}
 
-            {drawerTab === 'agent' ? (
+            {drawerTask.restricted ? (
+              // Access-restricted SECURITY ticket the viewer isn't cleared for: its
+              // content is masked, and the detail/agent/changes tabs are suppressed
+              // (they fetch by id and would otherwise leak). Show a clearance notice.
+              <div style={{ flex: 1, overflow: 'auto', padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 12 }}>
+                <div aria-hidden style={{ fontSize: 40 }}>🔒</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{tCommon('clearanceNeeded')}</div>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 360, margin: 0 }}>{tCommon('clearanceNeededBody')}</p>
+              </div>
+            ) : drawerTab === 'agent' ? (
               <div style={{ flex: 1, overflow: 'auto' }}>
-                <AgentTab task={drawerTask} projectId={drawerTask.projectId} agentHosts={agentHostsList} onTaskChanged={load} />
+                <AgentTab task={drawerTask} projectId={drawerTask.projectId} agentHosts={agentHostsList} onTaskChanged={() => load({ background: true })} />
+              </div>
+            ) : drawerTab === 'changes' ? (
+              <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+                <TaskChangesPanel taskId={drawerTask.id} maxHeight={9999} />
               </div>
             ) : drawerTab === 'prd' ? (
               <div style={{ flex: 1, overflow: 'auto' }}>
                 <TaskPrdTab taskId={drawerTask.id} projectId={drawerTask.projectId} />
+              </div>
+            ) : drawerTab === 'accountability' ? (
+              <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+                <AccountabilityTab taskId={drawerTask.id} />
               </div>
             ) : (
             <>
@@ -1912,7 +2191,7 @@ export function TaskMgmtContent({
                     tabIndex={0}
                     onClick={() => setEditingField('status')}
                     onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('status'); }}
-                    title="Click to change status"
+                    title={tTask('changeStatusTitle')}
                     className={taskStatusBadgeClass(drawerTask.status)}
                     style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, cursor: 'pointer' }}
                   >
@@ -1945,17 +2224,34 @@ export function TaskMgmtContent({
                     tabIndex={0}
                     onClick={() => setEditingField('priority')}
                     onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('priority'); }}
-                    title="Click to change priority"
-                    className={PRIORITY_CLASS[drawerTask.priority]}
+                    title={tTask('changePriorityTitle')}
+                    className={taskPriorityBadgeClass(drawerTask.priority)}
                     style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, cursor: 'pointer' }}
                   >
                     {drawerTask.priority}
                   </span>
                 )}
+                {/* The SAME badges the board card carries. Opening a ticket used to
+                    drop them (the flag, the sign-off rollup, the PRD count), so the
+                    card said more than the ticket did. One shared component now. */}
+                <TaskBadges
+                  task={drawerTask}
+                  showPriority={false}
+                  flagged={flaggedIds.has(drawerTask.id)}
+                  participants={participantProgress.get(drawerTask.id) ?? null}
+                />
               </div>
+              {/* Epic / %-complete / objective alignment + the blockers that hold it
+                  up — above the fold, so none of it needs a trip to another tab. */}
+              <TicketContextStrip
+                taskId={drawerTask.id}
+                onOpenEpic={openEpic}
+                onOpenTab={setDrawerTab}
+                onChanged={() => load({ background: true })}
+              />
               {(drawerTask.gitBranch || drawerTask.githubPrUrl) && (
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>Branch &amp; PR</div>
+                  <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>{tTask('branchAndPr')}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     {drawerTask.gitBranch && (
                       <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
@@ -1967,7 +2263,7 @@ export function TaskMgmtContent({
                         href={drawerTask.githubPrUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        title="View the code changes on GitHub"
+                        title={tTask('viewCodeChangesTitle')}
                         style={{
                           fontSize: 12,
                           fontWeight: 600,
@@ -1988,7 +2284,7 @@ export function TaskMgmtContent({
                 </div>
               )}
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Description</div>
+                <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>{tTask('description')}</div>
                 {editingField === 'description' ? (
                   <div style={{ display: 'grid', gap: 8 }}>
                     <textarea
@@ -1997,7 +2293,7 @@ export function TaskMgmtContent({
                       onChange={(e) => setFieldDraft(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Escape') setEditingField(null); }}
                       rows={6}
-                      placeholder="Markdown supported…"
+                      placeholder={tTask('markdownPlaceholder')}
                       style={{
                         width: '100%',
                         padding: '8px 10px',
@@ -2013,7 +2309,7 @@ export function TaskMgmtContent({
                     />
                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                       <button type="button" style={buttonTertiary} onClick={() => setEditingField(null)}>
-                        Cancel
+                        {tCommon('cancel')}
                       </button>
                       <button
                         type="button"
@@ -2021,7 +2317,7 @@ export function TaskMgmtContent({
                         style={{ ...buttonPrimary, opacity: fieldSaving ? 0.7 : 1 }}
                         onClick={() => saveTaskField({ description: fieldDraft.trim() || null })}
                       >
-                        {fieldSaving ? 'Saving…' : 'Save'}
+                        {fieldSaving ? tCommon('saving') : tCommon('save')}
                       </button>
                     </div>
                   </div>
@@ -2031,7 +2327,7 @@ export function TaskMgmtContent({
                     tabIndex={0}
                     onClick={() => { setFieldDraft(drawerTask.description ?? ''); setEditingField('description'); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') { setFieldDraft(drawerTask.description ?? ''); setEditingField('description'); } }}
-                    title="Click to edit description (Markdown)"
+                    title={tTask('editDescriptionTitle')}
                     style={{
                       fontSize: 13,
                       color: drawerTask.description ? 'var(--text-secondary)' : 'var(--text-muted)',
@@ -2045,15 +2341,52 @@ export function TaskMgmtContent({
                   >
                     {drawerTask.description
                       ? <ChatMessageContent content={drawerTask.description} />
-                      : 'Add a description…'}
+                      : tTask('addDescription')}
                   </div>
                 )}
               </div>
+              {/* Publish-to-Marketplace: open this work item for hire, or manage the
+                  live posting. Hidden until we know the posting state (undefined). */}
+              {posting !== undefined && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>{tGigs('publish.section')}</div>
+                  {posting ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <span className="badge-green">{tGigs('publish.published')}</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{tGigs('publish.publishedHint')}</span>
+                      <button
+                        type="button"
+                        disabled={publishBusy}
+                        onClick={unpublishDrawerTicket}
+                        style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        {publishBusy ? tGigs('publish.unpublishing') : tGigs('publish.unpublish')}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setPublishOpen(true)}
+                      style={{ padding: '7px 16px', borderRadius: 8, border: '1px solid var(--coral-bright)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      {tGigs('publish.action')}
+                    </button>
+                  )}
+                </div>
+              )}
+              {publishOpen && (
+                <PublishToMarketplaceModal
+                  ticketId={drawerTask.id}
+                  defaultRequirements={drawerTask.description ?? ''}
+                  onClose={() => setPublishOpen(false)}
+                  onPublished={(p) => { setPosting(p); setPublishOpen(false); }}
+                />
+              )}
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>Details</div>
+                <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>{tTask('details')}</div>
                 <div style={{ display: 'grid', gap: 8 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Project</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{tTask('project')}</span>
                     {editingField === 'project' ? (
                       <MoveToBoardControl
                         projects={projects}
@@ -2068,7 +2401,7 @@ export function TaskMgmtContent({
                         tabIndex={0}
                         onClick={() => setEditingField('project')}
                         onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('project'); }}
-                        title="Click to move this task to another board"
+                        title={tTask('moveBoardTitle')}
                         style={{ color: 'var(--text-primary)', cursor: 'pointer', borderBottom: '1px dashed var(--border-subtle)' }}
                       >
                         {projectNameById(drawerTask.projectId)}
@@ -2076,7 +2409,7 @@ export function TaskMgmtContent({
                     )}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Assignee / Owner</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{tTask('assigneeOwner')}</span>
                     {editingField === 'assignee' ? (
                       <AssigneeSelect
                         autoFocus
@@ -2104,15 +2437,17 @@ export function TaskMgmtContent({
                         tabIndex={0}
                         onClick={() => setEditingField('assignee')}
                         onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('assignee'); }}
-                        title="Click to change assignee"
+                        title={tTask('changeAssigneeTitle')}
                         style={{ color: 'var(--text-primary)', cursor: 'pointer', borderBottom: '1px dashed var(--border-subtle)' }}
                       >
                         {taskAssigneeName(drawerTask)}
                       </span>
                     )}
                   </div>
+                  {/* This assignee's personality, self-hidden when they haven't got one. */}
+                  <AssigneePersonalityInline selectValue={taskAssigneeSelectValue(drawerTask)} />
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Due date</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{tTask('dueDate')}</span>
                     {editingField === 'dueDate' ? (
                       <input
                         type="date"
@@ -2137,19 +2472,96 @@ export function TaskMgmtContent({
                         tabIndex={0}
                         onClick={() => setEditingField('dueDate')}
                         onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('dueDate'); }}
-                        title="Click to set a due date"
+                        title={tTask('setDueDateTitle')}
                         style={{
                           color: drawerTask.dueDate ? 'var(--text-primary)' : 'var(--text-muted)',
                           cursor: 'pointer',
                           borderBottom: '1px dashed var(--border-subtle)',
                         }}
                       >
-                        {formatDate(drawerTask.dueDate) || 'None'}
+                        {formatDate(drawerTask.dueDate) || tTask('none')}
                       </span>
                     )}
                   </div>
+                  {/* Release association (EMP-10a) — persists through the task update path. */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28, gap: 12 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{tTask('release')}</span>
+                    <ReleasePicker
+                      value={drawerTask.releaseId ?? null}
+                      projectId={drawerTask.projectId}
+                      onChange={(releaseId) => void saveTaskField({ releaseId })}
+                    />
+                  </div>
+                  {/* Delay root-cause tag (EMP-9) — owns its own persistence. */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28, gap: 12 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{tTask('delayReason')}</span>
+                    <DelayReasonTag taskId={drawerTask.id} value={null} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: 13, minHeight: 28, gap: 12 }}>
+                    <span style={{ color: 'var(--text-muted)', paddingTop: 4 }}>
+                      {tBoard('businessValue.label')}
+                      {drawerTask.managerRank != null && (
+                        <span
+                          title={tBoard('businessValue.rankTitle')}
+                          style={{ marginLeft: 6, fontSize: 10, padding: '1px 5px', borderRadius: 4, background: 'var(--surface-interactive, var(--bg-elevated))', color: 'var(--text-secondary)', fontWeight: 700 }}
+                        >
+                          #{drawerTask.managerRank}
+                        </span>
+                      )}
+                    </span>
+                    {editingField === 'businessValue' ? (
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        autoFocus
+                        value={fieldDraft}
+                        disabled={fieldSaving}
+                        onChange={(e) => setFieldDraft(e.target.value)}
+                        onBlur={commitBusinessValue}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') commitBusinessValue();
+                          if (e.key === 'Escape') setEditingField(null);
+                        }}
+                        placeholder="0–100"
+                        style={{
+                          width: 90,
+                          fontSize: 13,
+                          padding: '3px 6px',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: 6,
+                          background: 'var(--bg-deep)',
+                          color: 'var(--text-primary)',
+                        }}
+                      />
+                    ) : (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => { setFieldDraft(drawerTask.businessValue != null ? String(drawerTask.businessValue) : ''); setEditingField('businessValue'); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { setFieldDraft(drawerTask.businessValue != null ? String(drawerTask.businessValue) : ''); setEditingField('businessValue'); } }}
+                        title={drawerTask.businessValueRationale ?? tBoard('businessValue.editTitle')}
+                        style={{
+                          color: drawerTask.businessValue != null ? 'var(--text-primary)' : 'var(--text-muted)',
+                          cursor: 'pointer',
+                          borderBottom: '1px dashed var(--border-subtle)',
+                          textAlign: 'right',
+                          maxWidth: 220,
+                        }}
+                      >
+                        {drawerTask.businessValue != null
+                          ? tBoard('businessValue.badge', { value: drawerTask.businessValue })
+                          : tBoard('businessValue.unset')}
+                      </span>
+                    )}
+                  </div>
+                  {drawerTask.businessValue != null && drawerTask.businessValueRationale && editingField !== 'businessValue' && (
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: -2, lineHeight: 1.5 }}>
+                      {drawerTask.businessValueRationale}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Created</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{tTask('created')}</span>
                     <span style={{ color: 'var(--text-primary)' }}>{formatDate(drawerTask.createdAt)}</span>
                   </div>
                 </div>
@@ -2172,12 +2584,17 @@ export function TaskMgmtContent({
               }}
             >
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                Runs as <strong style={{ color: 'var(--text-secondary)' }}>{taskAssigneeName(drawerTask)}</strong>. Change the runtime in the Agent tab.
+                {tTask.rich('runsAs', { name: taskAssigneeName(drawerTask), b: (chunks) => <strong style={{ color: 'var(--text-secondary)' }}>{chunks}</strong> })}
               </span>
               <RunTaskButton
                 task={drawerTask}
-                label="Run this task"
-                onRan={() => { patchStatus(drawerTask.id, 'in_progress'); setDrawerTab('agent'); }}
+                label={tTask('runThisTask')}
+                // The lane move is SERVER-SIDE: the runtime transitions the ticket to
+                // in_progress when the run reports RUNNING, and the change arrives over
+                // the project realtime socket. The client no longer writes the status
+                // itself (that pre-empted the server and forced a board re-render before
+                // the run had even started). Just surface the live output + refresh runs.
+                onRan={() => { setDrawerTab('agent'); refreshRuns(); }}
                 onAwaitingApproval={(g) => setApprovalGate({ approvalId: g.approvalId, taskId: g.taskId, reason: g.reason })}
               />
             </div>
@@ -2187,6 +2604,11 @@ export function TaskMgmtContent({
         </>
       )}
 
+      {/* Lifecycle / autonomy proof for the drawer ticket. Rendered outside the
+          drawer markup so it survives the drawer's own overflow clipping, and
+          stacked above it (see the panel's zIndex). */}
+      <TicketLifecyclePanel taskId={lifecycleTaskId} onClose={() => setLifecycleTaskId(null)} />
+
       {effectiveProjectId != null && (
         <BoardConfigPanel
           open={boardConfigOpen}
@@ -2194,6 +2616,16 @@ export function TaskMgmtContent({
           projectId={effectiveProjectId}
           projectName={effectiveProjectName}
           initialTab={boardConfigTab}
+        />
+      )}
+
+      {profileAssignee && (
+        <MemberProfileEditor
+          kind={profileAssignee.kind}
+          refId={profileAssignee.refId}
+          name={profileAssignee.name}
+          tasks={profileAssignee.tasks}
+          onClose={() => setProfileAssignee(null)}
         />
       )}
 
@@ -2236,11 +2668,12 @@ export function TaskMgmtContent({
               projectId={effectiveProjectId}
               mode={ceremony}
               onModeChange={setCeremony}
-              onClose={() => { setCeremony(null); load(); }}
+              onClose={() => { setCeremony(null); void load({ background: true }); }}
             />
           </div>
         </div>
       )}
     </div>
+    </AssigneeProfilesProvider>
   );
 }

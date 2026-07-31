@@ -473,6 +473,7 @@ export function buildAgentSystemPrompt(params: {
     "- If you become idle during an orchestrated workflow, call workflow_status (without workflowId if needed), pick a runnable next task, and continue execution.",
     "- Avoid unproductive loops: if the same tool call fails repeatedly or progress stalls, summarize the blocker clearly and ask one direct question instead of retrying indefinitely.",
     "- Only produce a final text response when the work is done or you are genuinely blocked and need user input.",
+    "- Work visibility: when your turn ADDS or CHANGES code not already tracked by a ticket, call the `builtin_tickets_from_delta` tool with a one-line summary, the kind (improvement | fix | bug), and the files you touched, so the change is visible on the board.",
     "",
     ...safetySection,
     "## BuilderForceAgents CLI Quick Reference",

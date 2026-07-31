@@ -39,6 +39,29 @@ export enum TaskStatus {
   BLOCKED = 'blocked',
 }
 
+/**
+ * The statuses a ticket is still WORKABLE in — i.e. everything the manager grooms,
+ * ranks, staffs, triages and counts as active.
+ *
+ * One definition because it was three: `ManagerService`, `runManagerSweep` and
+ * `managerRoutes` each carried a private copy of the identical array. Three copies of
+ * "which tickets are still open" is exactly the drift that lets the sweep pick up a
+ * project the pass then considers empty, or a count on one surface disagree with the
+ * board on another.
+ *
+ * `blocked` is deliberately INCLUDED: a blocked ticket has not left the board, it is
+ * waiting on something, and the manager's whole job is to notice that.
+ */
+export const NON_TERMINAL_TASK_STATUSES: string[] = [
+  TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY,
+  TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW, TaskStatus.BLOCKED,
+];
+
+/** True when the ticket has left the board (done, cancelled, or any non-workable state). */
+export function isTerminalTaskStatus(status: string | null | undefined): boolean {
+  return !NON_TERMINAL_TASK_STATUSES.includes(status ?? '');
+}
+
 export enum TaskPriority {
   LOW     = 'low',
   MEDIUM  = 'medium',
@@ -54,6 +77,20 @@ export enum TaskPriority {
 export enum TaskType {
   TASK = 'task',
   EPIC = 'epic',
+  /** Minted by the Validator agent when a reviewed Done item is found incomplete
+   *  (migration 0270). A first-class, schedulable board item that carries a
+   *  gapOriginTaskId back to the Done item it was found in. */
+  GAP = 'gap',
+  /** Minted by the Security agent for a SOC 2 audit finding (migration 0290). A
+   *  first-class, schedulable board item carrying the finding's severity + Trust
+   *  Service Criterion, and access-restricted via security_ticket_access — visible
+   *  only to allowlisted/opted-in audiences plus Owner/Admin. */
+  SECURITY = 'security',
+  /** Opened by the Incident Manager agent for a help-desk ticket that reads as an
+   *  incident (migration 0325). A first-class, schedulable board item carrying the
+   *  incident's severity, status and affected system, bridged to a prodIncidents
+   *  record (task.incidentId) that owns the MTTR/escalation lifecycle. */
+  INCIDENT = 'incident',
 }
 
 export enum AgentType {
@@ -143,15 +180,6 @@ export enum AssignmentScope {
   PROJECT = 'project',
   TASK    = 'task',
 }
-
-/** Precedence order for scope resolution (highest → lowest). */
-export const SCOPE_PRECEDENCE: AssignmentScope[] = [
-  AssignmentScope.AGENT,
-  AssignmentScope.TASK,
-  AssignmentScope.PROJECT,
-  AssignmentScope.HOST,
-  AssignmentScope.TENANT,
-];
 
 export type ResolvedArtifacts = {
   skills:   string[];

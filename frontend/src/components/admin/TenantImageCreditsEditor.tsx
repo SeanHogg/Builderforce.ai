@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
 import { TenantIntegerOverrideEditor } from './TenantIntegerOverrideEditor';
 
@@ -17,25 +18,26 @@ interface Props {
 }
 
 export function TenantImageCreditsEditor({ tenantId, value, onChange }: Props) {
+  const t = useTranslations('admin');
   return (
     <TenantIntegerOverrideEditor
       tenantId={tenantId}
       value={value}
       onChange={onChange}
       config={{
-        label: 'Daily image credits',
+        label: t('tenants.imageCredits.label'),
         fieldKey: 'imgc',
         summary: (v) =>
-          v === null ? 'Using plan default (free 10 · pro 1000)'
-          : v === -1 ? 'Unlimited (gate skipped)'
-          : `${v.toLocaleString()} images / day`,
+          v === null ? t('tenants.imageCredits.summaryPlanDefault')
+          : v === -1 ? t('tenants.imageCredits.summaryUnlimited')
+          : t('tenants.imageCredits.summaryCustom', { value: v.toLocaleString() }),
         toInput: (stored) => String(stored),
         fromInput: (input) => {
           const n = Number(input);
           return Number.isInteger(n) && n >= 0 ? n : null;
         },
-        customSuffix: 'images / day',
-        placeholder: 'e.g. 100',
+        customSuffix: t('tenants.imageCredits.suffix'),
+        placeholder: t('tenants.imageCredits.placeholder'),
         step: 10,
         save: async (id, next) => (await adminApi.setTenantImageCreditsLimit(id, next)).imageCreditsDailyLimit,
       }}

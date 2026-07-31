@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+    <marker id="arw" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8891AE"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">KNOWLEDGE MANAGEMENT</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">SOPs your agents read and your auditor trusts</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- Versioned document column -->
+  <rect x="100" y="228" width="430" height="500" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="100" y="228" width="6" height="500" rx="3" fill="url(#coolGrad)"/>
+  <text x="140" y="284" font-size="28">📄</text>
+  <text x="188" y="284" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="800" fill="#EEF0FA">Versioned SOP</text>
+  <text x="140" y="322" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#8891AE">live editable body + immutable snapshot per publish</text>
+
+  <rect x="140" y="346" width="350" height="66" rx="12" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)"/>
+  <text x="162" y="378" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="800" fill="#A6ADC8">v1</text>
+  <text x="210" y="382" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#8891AE">frozen snapshot · change note · publisher</text>
+  <rect x="140" y="424" width="350" height="66" rx="12" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)"/>
+  <text x="162" y="456" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="800" fill="#A6ADC8">v2</text>
+  <text x="210" y="460" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#8891AE">frozen snapshot · change note · publisher</text>
+  <rect x="140" y="502" width="350" height="66" rx="12" fill="rgba(91,240,188,0.08)" stroke="rgba(91,240,188,0.35)"/>
+  <text x="162" y="534" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="800" fill="#5BF0BC">v3</text>
+  <text x="210" y="538" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#A6ADC8">current published · what people acknowledge</text>
+
+  <text x="140" y="618" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="140" dy="0">Publish increments the version, writes a</tspan><tspan x="140" dy="28">frozen copy, and asks the people who need</tspan><tspan x="140" dy="28">it to re-acknowledge — proof of the exact</tspan><tspan x="140" dy="28">words they signed off on.</tspan></text>
+
+  <line x1="530" y1="360" x2="588" y2="360" stroke="#8891AE" stroke-width="2" marker-end="url(#arw)"/>
+
+  <!-- Read-acknowledgement card -->
+  <rect x="600" y="228" width="440" height="250" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="600" y="228" width="6" height="250" rx="3" fill="url(#mintGrad)"/>
+  <text x="640" y="284" font-size="28">✍️</text>
+  <text x="688" y="284" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Read-acknowledgement</text>
+  <text x="640" y="326" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="640" dy="0">Tracked per user, per document —</tspan><tspan x="640" dy="28">acknowledgement of a specific frozen version.</tspan></text>
+  <rect x="640" y="404" width="160" height="42" rx="21" fill="rgba(91,240,188,0.10)" stroke="rgba(91,240,188,0.35)"/><text x="720" y="431" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#5BF0BC">acknowledged</text>
+  <rect x="810" y="404" width="96" height="42" rx="21" fill="rgba(255,206,107,0.10)" stroke="rgba(245,166,35,0.35)"/><text x="858" y="431" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#FFCE6B">pending</text>
+  <rect x="916" y="404" width="104" height="42" rx="21" fill="rgba(240,87,74,0.10)" stroke="rgba(240,87,74,0.35)"/><text x="968" y="431" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#FF8F7A">overdue</text>
+
+  <!-- Compliance rollup card -->
+  <rect x="600" y="500" width="440" height="228" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="600" y="500" width="6" height="228" rx="3" fill="url(#amberGrad)"/>
+  <text x="640" y="556" font-size="28">📋</text>
+  <text x="688" y="556" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Compliance rollup</text>
+  <text x="640" y="598" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="640" dy="0">GET /api/knowledge/compliance —</tspan><tspan x="640" dy="28">required · acknowledged · who is overdue.</tspan></text>
+  <rect x="640" y="660" width="90" height="42" rx="21" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.14)"/><text x="685" y="687" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8">SOX</text>
+  <rect x="742" y="660" width="110" height="42" rx="21" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.14)"/><text x="797" y="687" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8">TISAX</text>
+  <rect x="864" y="660" width="150" height="42" rx="21" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.14)"/><text x="939" y="687" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8">ISO 27001</text>
+
+  <!-- Author with AI card -->
+  <rect x="1070" y="228" width="430" height="250" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="1070" y="228" width="6" height="250" rx="3" fill="url(#violetGrad)"/>
+  <text x="1110" y="284" font-size="28">🤖</text>
+  <text x="1158" y="284" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Author with AI</text>
+  <text x="1110" y="326" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="1110" dy="0">Stream a first draft from a plain prompt,</tspan><tspan x="1110" dy="28">clean Markdown with compliance phrasing.</tspan><tspan x="1110" dy="28">Point the analyzer at a procedure — it</tspan><tspan x="1110" dy="28">returns findings (gap, risk, clarity) with</tspan><tspan x="1110" dy="28">severity and a proposed improved flow.</tspan></text>
+
+  <!-- Grounds the agents card -->
+  <rect x="1070" y="500" width="430" height="228" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="1070" y="500" width="6" height="228" rx="3" fill="url(#coralGrad)"/>
+  <text x="1110" y="556" font-size="28">🧠</text>
+  <text x="1158" y="556" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Grounds the agents</text>
+  <text x="1110" y="598" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="1110" dy="0">The same procedure that tells a human</tspan><tspan x="1110" dy="28">how to handle a refund becomes the</tspan><tspan x="1110" dy="28">agent context an agent grounds its work</tspan><tspan x="1110" dy="28">in — every run, human or agent, correct.</tspan></text>
+
+  <!-- Co-editing strip -->
+  <rect x="100" y="748" width="1400" height="52" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="100" y="748" width="6" height="52" rx="3" fill="url(#violetGrad)"/>
+  <text x="140" y="781" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8">Written together in real time — CRDT (Yjs) co-editing: presence awareness, delta sync, autosave fallback</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">One source of truth that both proves compliance and grounds the agent workforce</text>
+</svg>

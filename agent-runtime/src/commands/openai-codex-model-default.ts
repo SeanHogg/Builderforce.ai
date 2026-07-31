@@ -1,5 +1,5 @@
 import type { BuilderForceAgentsConfig } from "../config/config.js";
-import type { AgentModelListConfig } from "../config/types.js";
+import { resolvePrimaryModel } from "./model-default.js";
 
 export const OPENAI_CODEX_DEFAULT_MODEL = "openai-codex/gpt-5.3-codex";
 
@@ -16,16 +16,6 @@ function shouldSetOpenAICodexModel(model?: string): boolean {
     return true;
   }
   return normalized === "gpt" || normalized === "gpt-mini";
-}
-
-function resolvePrimaryModel(model?: AgentModelListConfig | string): string | undefined {
-  if (typeof model === "string") {
-    return model;
-  }
-  if (model && typeof model === "object" && typeof model.primary === "string") {
-    return model.primary;
-  }
-  return undefined;
 }
 
 export function applyOpenAICodexModelDefault(cfg: BuilderForceAgentsConfig): {

@@ -1,3 +1,22 @@
+/**
+ * CollaborationRoom — a hibernation-WebSocket relay Durable Object for real-time
+ * co-editing (Yjs) + shared terminals.
+ *
+ * CURRENT: a stateless binary/JSON broadcast relay — it forwards Yjs updates and
+ * presence between peers but holds no server Y.Doc. The client hook
+ * (useDocCollaboration) is written to degrade safely against this: it gates
+ * seeding on `provider.synced` so it never double-inserts, and seeds a lone
+ * editor after a settle window.
+ *
+ * PLANNED (infra-blocked): make this server-authoritative — hold the Y.Doc,
+ * apply incoming updates to it, persist to `state.storage`, and complete the
+ * y-websocket sync handshake for a newly-joined client (so a late joiner adopts
+ * the current document instead of an empty one). That requires adding
+ * `yjs` + `y-protocols` + `lib0` to THIS worker package and implementing the
+ * y-websocket server protocol, then deploying `worker/` and running a live
+ * 2-client smoke to verify — none of which can be validated without the deploy.
+ * Tracked in ROADMAP.md.
+ */
 export class CollaborationRoom implements DurableObject {
   private sessions: Map<WebSocket, { userId: string; name: string; color: string }> = new Map();
   private state: DurableObjectState;

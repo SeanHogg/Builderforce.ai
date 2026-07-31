@@ -1,4 +1,5 @@
 import type { LlmUsage } from './LlmProxyService';
+import { parseSseDataFrames } from './sseFrames';
 
 /**
  * Parse token usage out of a full Anthropic Messages SSE stream (the concatenated
@@ -13,22 +14,13 @@ export function parseAnthropicSseUsage(raw: string): LlmUsage {
   let cacheRead = 0;
   let cacheCreate = 0;
 
-  for (const line of raw.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith('data:')) continue;
-    const data = trimmed.slice(5).trim();
-    if (!data || data === '[DONE]') continue;
-    let ev: {
+  const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  for (const frame of parseSseDataFrames(raw)) {
+    const ev = frame as {
       type?: string;
       message?: { usage?: Record<string, unknown> };
       usage?: Record<string, unknown>;
     };
-    try {
-      ev = JSON.parse(data);
-    } catch {
-      continue;
-    }
-    const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
     if (ev.type === 'message_start' && ev.message?.usage) {
       input = n(ev.message.usage.input_tokens) || input;
       cacheRead = n(ev.message.usage.cache_read_input_tokens) || cacheRead;

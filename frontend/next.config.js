@@ -39,6 +39,17 @@ const nextConfig = {
       'onnxruntime-node$': false,
       sharp$: false,
     };
+    // Silence unactionable "Critical dependency" warnings emitted from inside
+    // third-party deps we don't control: @huggingface/transformers uses a
+    // dynamic `require(expr)` and reads `import.meta` directly, and
+    // @seanhogg/builderforce-memory's HF publish path does the same. These are
+    // browser/edge-unused code paths (stubbed above) — the warnings are pure
+    // noise and cannot be fixed in our source, so filter them out.
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings || []),
+      { message: /Critical dependency: the request of a dependency is an expression/ },
+      { message: /Critical dependency: Accessing import\.meta directly is unsupported/ },
+    ];
     return config;
   },
   async redirects() {
@@ -46,6 +57,8 @@ const nextConfig = {
     return [
       { source: '/coderclaw', destination: '/agents', permanent: true },
       { source: '/coderclaw/:path*', destination: '/agents/:path*', permanent: true },
+      // The guided demo deck moved from /marketing to /demo.
+      { source: '/marketing', destination: '/demo', permanent: true },
     ]
   },
   async rewrites() {
@@ -90,6 +103,56 @@ const nextConfig = {
         headers: [
           { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
           { key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' },
+        ],
+      },
+      {
+        // Baseline security hardening (L2): clickjacking protection + a pragmatic
+        // CSP. Deliberately EXCLUDES /embed — those routes are framed cross-origin
+        // by host apps (BurnRateOS, the VS Code webview) and set their OWN
+        // `frame-ancestors` CSP in middleware.ts; adding X-Frame-Options:SAMEORIGIN
+        // or frame-ancestors 'self' here would break that framing. /embed keeps the
+        // COOP/COEP rule above but is left out of this one so middleware stays
+        // authoritative for its framing. api/ and webcontainer/connect are excluded
+        // as before.
+        source: '/((?!api/|webcontainer/connect|embed).*)',
+        headers: [
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          {
+            // Pragmatic (non-nonce) CSP: strict enough to block frame-based
+            // clickjacking, base-tag hijacking and plugin/object injection, while
+            // permissive enough for what the app genuinely loads —
+            //   • GTM/GA (script + connect + noscript frame)
+            //   • Cloudflare Web Analytics (static.cloudflareinsights.com/beacon.min.js) —
+            //     auto-injected by Cloudflare into responses from the deployed Worker,
+            //     so it is never in our source and must be allowlisted here or every
+            //     page logs a CSP violation. Its RUM POST is covered by `connect-src https:`.
+            //   • Fontshare @import CSS (api.fontshare.com) + its font files (cdn.fontshare.com)
+            //   • WASM + blob workers (onnxruntime-web, Monaco, transformers.js, WebContainer)
+            //   • the in-browser IDE preview frames (*.webcontainer-api.io / *.staticblitz.com)
+            //   • WebRTC/relay sockets (wss:) for meetings, execution steering, live rooms
+            // 'unsafe-inline' is required because the app styles via inline
+            // style={} and injects inline <script> (theme anti-FOUC, GTM loader);
+            // a nonce CSP is impractical across the statically-prerendered shell.
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "base-uri 'self'",
+              "object-src 'none'",
+              "frame-ancestors 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://www.googletagmanager.com https://www.google-analytics.com https://ssl.google-analytics.com https://static.cloudflareinsights.com",
+              "style-src 'self' 'unsafe-inline' https://api.fontshare.com",
+              "font-src 'self' data: https://cdn.fontshare.com https://api.fontshare.com",
+              "img-src 'self' data: blob: https:",
+              "media-src 'self' blob: data: https:",
+              "worker-src 'self' blob:",
+              "child-src 'self' blob:",
+              "frame-src 'self' blob: https://www.googletagmanager.com https://*.webcontainer-api.io https://*.staticblitz.com",
+              "connect-src 'self' https: wss:",
+              "manifest-src 'self'",
+            ].join('; '),
+          },
         ],
       },
     ]

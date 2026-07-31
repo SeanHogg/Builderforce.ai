@@ -2,7 +2,8 @@
  * DevFinOps API client — R&D Tax Credits, SOC 1 Type II controls, and Audit-Ready
  * Reports. Talks to /api/finops on the auth API. Manager-gated server-side.
  */
-import { apiRequest, getApiBaseUrl, getAuthHeaders } from './apiClient';
+import { apiRequest, apiRequestStream } from './apiClient';
+import { downloadBlob } from './download';
 
 // ── R&D Tax Credits ──────────────────────────────────────────────────────────
 
@@ -80,10 +81,6 @@ export interface ControlCoverage {
 
 export function getSocControls(): Promise<ControlCoverage> {
   return apiRequest<ControlCoverage>('/api/finops/soc/controls');
-}
-
-export function getSocCoverage(): Promise<ControlCoverage> {
-  return apiRequest<ControlCoverage>('/api/finops/soc/coverage');
 }
 
 export interface NewSocControl {
@@ -174,17 +171,8 @@ export function getAuditReport(period?: string): Promise<AuditReport> {
 export async function downloadAuditReport(format: 'csv' | 'json', period?: string): Promise<void> {
   const q = new URLSearchParams({ format });
   if (period) q.set('period', period);
-  const res = await fetch(`${getApiBaseUrl()}/api/finops/audit-report/export?${q.toString()}`, {
-    headers: getAuthHeaders(),
-  });
+  const res = await apiRequestStream(`/api/finops/audit-report/export?${q.toString()}`);
   if (!res.ok) throw new Error(`Export failed (${res.status})`);
   const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `audit-report-${period ?? 'current'}.${format}`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, `audit-report-${period ?? 'current'}.${format}`);
 }

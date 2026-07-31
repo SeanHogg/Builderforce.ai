@@ -26,3 +26,24 @@ export function resolveChannelMediaMaxBytes(params: {
   }
   return undefined;
 }
+
+/**
+ * Resolve the outbound media byte limit for a channel whose config exposes an
+ * account-scoped and channel-level `mediaMaxMb` (per-account wins, then
+ * channel-level, then the agent default). Shared by the signal/imessage
+ * outbound adapters, which differ only by channel key.
+ */
+export function resolveOutboundMaxBytes(
+  cfg: BuilderForceAgentsConfig,
+  channelKey: "signal" | "imessage",
+  accountId?: string | null,
+): number | undefined {
+  return resolveChannelMediaMaxBytes({
+    cfg,
+    resolveChannelLimitMb: ({ cfg, accountId }) => {
+      const channel = cfg.channels?.[channelKey];
+      return channel?.accounts?.[accountId]?.mediaMaxMb ?? channel?.mediaMaxMb;
+    },
+    accountId,
+  });
+}

@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="880" viewBox="0 0 1600 880">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+  </defs>
+  <rect width="1600" height="880" fill="url(#bgGlow)"/>
+
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">WEBGPU LORA</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Train a tiny adapter, freeze the giant</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- W = W0 + B A -->
+  <!-- Frozen base W0 -->
+  <rect x="120" y="250" width="300" height="300" rx="18" fill="rgba(122,128,153,0.12)" stroke="rgba(122,128,153,0.5)" stroke-width="2"/>
+  <text x="270" y="352" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#B8BFD6">W₀</text>
+  <text x="270" y="392" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#8891AE">frozen base weights</text>
+  <text x="270" y="420" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18">❄️</text>
+
+  <text x="452" y="410" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="44" font-weight="800" fill="#A6ADC8">+</text>
+
+  <!-- B (m x r) -->
+  <rect x="520" y="250" width="90" height="300" rx="14" fill="rgba(91,240,188,0.14)" stroke="url(#mintGrad)" stroke-width="2"/>
+  <text x="565" y="410" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#5BF0BC">B</text>
+  <text x="565" y="580" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#8891AE">m × r</text>
+
+  <text x="628" y="410" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="700" fill="#A6ADC8">×</text>
+
+  <!-- A (r x n) -->
+  <rect x="680" y="360" width="300" height="90" rx="14" fill="rgba(91,240,188,0.14)" stroke="url(#mintGrad)" stroke-width="2"/>
+  <text x="830" y="415" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#5BF0BC">A</text>
+  <text x="830" y="478" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#8891AE">r × n</text>
+
+  <!-- equals W -->
+  <text x="1010" y="410" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="44" font-weight="800" fill="#A6ADC8">=</text>
+  <rect x="1080" y="250" width="300" height="300" rx="18" fill="rgba(61,214,245,0.10)" stroke="url(#coolGrad)" stroke-width="2"/>
+  <text x="1230" y="360" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#EEF0FA">W</text>
+  <text x="1230" y="400" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8">adapted weights</text>
+
+  <!-- trainable note -->
+  <text x="565" y="228" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="700" fill="#5BF0BC">only these two train (rank r ≪ m, n)</text>
+
+  <!-- bottom stat cards -->
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <rect x="120" y="620" width="400" height="150" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/><rect x="120" y="620" width="6" height="150" rx="3" fill="url(#mintGrad)"/>
+    <text x="152" y="674" font-size="30" font-weight="900" fill="#5BF0BC">~10,000×</text>
+    <text x="152" y="712" font-size="19" fill="#A6ADC8"><tspan x="152" dy="0">fewer trainable parameters on a 7B</tspan><tspan x="152" dy="26">model at rank 8.</tspan></text>
+
+    <rect x="560" y="620" width="400" height="150" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/><rect x="560" y="620" width="6" height="150" rx="3" fill="url(#coolGrad)"/>
+    <text x="592" y="674" font-size="30" font-weight="900" fill="#3DD6F5">up to 2B</text>
+    <text x="592" y="712" font-size="19" fill="#A6ADC8"><tspan x="592" dy="0">parameters fine-tuned in a browser</tspan><tspan x="592" dy="26">tab via WebGPU compute shaders.</tspan></text>
+
+    <rect x="1000" y="620" width="400" height="150" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/><rect x="1000" y="620" width="6" height="150" rx="3" fill="url(#violetGrad)"/>
+    <text x="1032" y="674" font-size="30" font-weight="900" fill="#A98BFF">$0 · 100%</text>
+    <text x="1032" y="712" font-size="19" fill="#A6ADC8"><tspan x="1032" dy="0">cloud GPU bills, and your data</tspan><tspan x="1032" dy="26">never leaves the browser.</tspan></text>
+  </g>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="832" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="839" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="838" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Low-Rank Adaptation, running on your own GPU</text>
+</svg>

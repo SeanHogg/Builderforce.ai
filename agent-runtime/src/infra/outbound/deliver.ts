@@ -13,6 +13,7 @@ import type {
 } from "../../channels/plugins/types.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { resolveMarkdownTableMode } from "../../config/markdown-tables.js";
+import { stripWhatsAppLeadingBlankLines } from "./whatsapp-text.js";
 import {
   appendAssistantMessageToSessionTranscript,
   resolveMirroredTranscriptText,
@@ -421,7 +422,7 @@ async function deliverOutboundPayloadsCore(
   const normalizeWhatsAppPayload = (payload: ReplyPayload): ReplyPayload | null => {
     const hasMedia = Boolean(payload.mediaUrl) || (payload.mediaUrls?.length ?? 0) > 0;
     const rawText = typeof payload.text === "string" ? payload.text : "";
-    const normalizedText = rawText.replace(/^(?:[ \t]*\r?\n)+/, "");
+    const normalizedText = stripWhatsAppLeadingBlankLines(rawText);
     if (!normalizedText.trim()) {
       if (!hasMedia) {
         return null;

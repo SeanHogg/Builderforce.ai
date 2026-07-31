@@ -57,3 +57,26 @@ export const PSYCH_DIM = {
 
 export type PsychDimKey = keyof typeof PSYCH_DIM;
 export type PsychDimId = (typeof PSYCH_DIM)[PsychDimKey];
+
+// ── Trait-scoring primitives (shared by the psychometric compiler + limbic) ──────
+// The 0..100 trait scale thresholds and the scorer live here — the one neutral
+// module both `psychometrics.ts` and `limbic.ts` already import — so the two
+// compilers read a trait vector identically and neither owns the other's constants.
+
+/** Score at/above which a trait reads as "high". */
+export const HI = 65;
+/** Score at/below which a trait reads as "low". */
+export const LO = 35;
+/** The resting/absent score — a fully untouched trait. */
+export const NEUTRAL = 50;
+
+/**
+ * Clamp a raw trait score to 0..100, mapping an absent/NaN value to {@link NEUTRAL}.
+ * The single shared scorer for both the limbic setpoint derivation and the
+ * psychometric compiler, so both read a trait vector identically.
+ */
+export function score(vector: Record<string, number> | undefined, id: string): number {
+  const raw = vector?.[id];
+  if (typeof raw !== "number" || Number.isNaN(raw)) return NEUTRAL;
+  return Math.max(0, Math.min(100, raw));
+}

@@ -12,8 +12,8 @@
  * into a tensor of the target shape. The mode-specific logic is *only* where
  * the projection result is applied. No duplicated state→tensor pipelines.
  *
- * State advancement uses the mambacode.js peerDep — we never reimplement the
- * SSM scan kernel here.
+ * State advancement uses the builderforce-memory-engine peerDep — we never
+ * reimplement the SSM scan kernel here.
  */
 
 import type { CoherenceMode, MambaStateSnapshot } from '../types';
@@ -358,8 +358,8 @@ export function applyToLatent(args: ApplyToLatentArgs): Float32Array {
  * input strategy without touching the projection logic above.
  *
  * NOTE: this initial implementation runs the recurrence on the CPU as a
- * Float32 loop for clarity. The mambacode.js peerDep will replace this body
- * with the WGSL selective-scan kernel once the scan call shape stabilises
+ * Float32 loop for clarity. The builderforce-memory-engine peerDep will replace
+ * this body with the WGSL selective-scan kernel once the scan call shape stabilises
  * (tracked in the Consolidated Gap Register).
  */
 export function advanceState(

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { validateFileContentForPath, coerceFileContent } from './fileContentGuard';
+import { VANILLA_DEFAULTS, MOBILE_DEFAULTS } from './vanillaDefaults';
 
 describe('validateFileContentForPath', () => {
   it('allows empty/whitespace content for any path (blank file)', () => {
@@ -29,6 +30,60 @@ describe('validateFileContentForPath', () => {
     expect(validateFileContentForPath('App.jsx', 'export default () => null;').ok).toBe(true);
     expect(validateFileContentForPath('README.md', '# Title').ok).toBe(true);
     expect(validateFileContentForPath('noext', 'anything').ok).toBe(true);
+  });
+
+  // Inverse guard: a JS/TS file that is actually a JSON object/array is another
+  // file's data cross-wired in (the package.json → vite.config.js corruption
+  // that crashed Vite with `Expected ";" but found ":"`).
+  it("rejects package.json's JSON written into a .js file", () => {
+    const pkgJson = JSON.stringify({ name: 'my-mobile-app', version: '1.0.0' }, null, 2);
+    const r = validateFileContentForPath('vite.config.js', pkgJson);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toMatch(/JSON data, not JS source/);
+    // Same for a JSON array in a .ts file.
+    expect(validateFileContentForPath('data.ts', '[1, 2, 3]').ok).toBe(false);
+  });
+
+  it('leaves a bare JSON scalar in a .js file alone (valid JS expression)', () => {
+    // `"x"` / `42` / `true` parse as JSON but are legitimate JS statements.
+    expect(validateFileContentForPath('flag.js', 'true').ok).toBe(true);
+    expect(validateFileContentForPath('n.js', '42').ok).toBe(true);
+    expect(validateFileContentForPath('s.ts', '"hello"').ok).toBe(true);
+  });
+
+  // The reported preview bug: vite.config.js's source got written into index.html,
+  // so the browser served raw JS as the page.
+  it('rejects non-markup (JS/config source) written into an .html file', () => {
+    const viteConfig = "import { defineConfig } from 'vite';\nexport default defineConfig({});";
+    const r = validateFileContentForPath('index.html', viteConfig);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toMatch(/HTML markup/);
+    // JSON in an .html file is equally wrong.
+    expect(validateFileContentForPath('index.html', '{"name":"x"}').ok).toBe(false);
+  });
+
+  it('accepts real HTML (doctype, comment, or bare tag) in an .html file', () => {
+    expect(validateFileContentForPath('index.html', '<!DOCTYPE html><html></html>').ok).toBe(true);
+    expect(validateFileContentForPath('index.html', '\n  <!-- hi -->\n<html></html>').ok).toBe(true);
+    expect(validateFileContentForPath('page.htm', '<div id="root"></div>').ok).toBe(true);
+  });
+
+  it('rejects an HTML document written into a .js/.jsx file (inverse cross-wire)', () => {
+    expect(validateFileContentForPath('index.js', '<!DOCTYPE html>\n<html></html>').ok).toBe(false);
+    expect(validateFileContentForPath('App.jsx', '<html lang="en"></html>').ok).toBe(false);
+    // A lone `<` that is real JSX/comparison is NOT an HTML document → allowed.
+    expect(validateFileContentForPath('App.jsx', 'const ok = a < b;').ok).toBe(true);
+  });
+
+  // The real scaffolds must all pass their own guard, in BOTH directions — the
+  // JS configs/sources aren't flagged as JSON, and package.json stays valid JSON.
+  it.each([
+    ['vanilla', VANILLA_DEFAULTS],
+    ['mobile', MOBILE_DEFAULTS],
+  ])('accepts every %s scaffold file at its own path', (_name, template) => {
+    for (const [path, content] of Object.entries(template)) {
+      expect(validateFileContentForPath(path, content)).toEqual({ ok: true });
+    }
   });
 
   // The model emits package.json content as an object, not a string — the guard

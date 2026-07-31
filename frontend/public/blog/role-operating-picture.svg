@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">ONE SOURCE OF TRUTH, MANY LENSES</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Every role gets its operating picture</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- Spokes -->
+  <g stroke="rgba(139,108,255,0.35)" stroke-width="2" fill="none">
+    <path d="M480 302 L640 430"/>
+    <path d="M480 485 L640 505"/>
+    <path d="M480 668 L640 580"/>
+    <path d="M1120 302 L960 430"/>
+    <path d="M1120 485 L960 505"/>
+    <path d="M1120 668 L960 580"/>
+  </g>
+
+  <!-- Central hub -->
+  <rect x="620" y="390" width="360" height="230" rx="24" fill="rgba(139,108,255,0.10)" stroke="rgba(139,108,255,0.40)" stroke-width="2"/>
+  <text x="800" y="470" text-anchor="middle" font-size="40">🎯</text>
+  <text x="800" y="522" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="900" fill="#EEF0FA">One source of truth</text>
+  <text x="800" y="560" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="800" dy="0">every action — human or agent —</tspan><tspan x="800" dy="26">instrumented, costed, attributed</tspan></text>
+
+  <!-- Left role cards -->
+  <rect x="100" y="222" width="380" height="160" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="100" y="222" width="6" height="160" rx="3" fill="url(#violetGrad)"/>
+  <text x="132" y="272" font-size="26">👔</text>
+  <text x="176" y="272" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA">CEO</text>
+  <text x="132" y="312" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="132" dy="0">Innovation throughput — the idea →</tspan><tspan x="132" dy="26">shipped funnel and ROI of the AI spend</tspan></text>
+
+  <rect x="100" y="405" width="380" height="160" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="100" y="405" width="6" height="160" rx="3" fill="url(#coolGrad)"/>
+  <text x="132" y="455" font-size="26">🛠️</text>
+  <text x="176" y="455" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA">CTO</text>
+  <text x="132" y="495" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="132" dy="0">DORA four-keys + AI effectiveness —</tspan><tspan x="132" dy="26">which approach actually shipped, by model</tspan></text>
+
+  <rect x="100" y="588" width="380" height="160" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="100" y="588" width="6" height="160" rx="3" fill="url(#mintGrad)"/>
+  <text x="132" y="638" font-size="26">💰</text>
+  <text x="176" y="638" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA">CFO</text>
+  <text x="132" y="678" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="132" dy="0">Cost-per-outcome — priced at write time,</tspan><tspan x="132" dy="26">rolled up ticket → project → initiative</tspan></text>
+
+  <!-- Right role cards -->
+  <rect x="1120" y="222" width="380" height="160" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="1120" y="222" width="6" height="160" rx="3" fill="url(#amberGrad)"/>
+  <text x="1152" y="272" font-size="26">📋</text>
+  <text x="1196" y="272" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA">PMO</text>
+  <text x="1152" y="312" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="1152" dy="0">Portfolio rollup — each initiative carries</tspan><tspan x="1152" dy="26">real cost, delivery forecast, outcomes</tspan></text>
+
+  <rect x="1120" y="405" width="380" height="160" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="1120" y="405" width="6" height="160" rx="3" fill="url(#coralGrad)"/>
+  <text x="1152" y="455" font-size="26">🛡️</text>
+  <text x="1196" y="455" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA">CISO</text>
+  <text x="1152" y="495" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="1152" dy="0">Immutable, append-only record of every</tspan><tspan x="1152" dy="26">tool every agent invoked — SOC 2 evidence</tspan></text>
+
+  <rect x="1120" y="588" width="380" height="160" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="1120" y="588" width="6" height="160" rx="3" fill="url(#violetGrad)"/>
+  <text x="1152" y="638" font-size="26">👥</text>
+  <text x="1196" y="638" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA">Managers</text>
+  <text x="1152" y="678" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="1152" dy="0">The blended human + agent board —</tspan><tspan x="1152" dy="26">throughput, cycle time, rework, pickup</tspan></text>
+
+  <!-- Access strip -->
+  <rect x="100" y="762" width="1400" height="46" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(139,108,255,0.30)" stroke-width="1.5"/>
+  <rect x="100" y="762" width="6" height="46" rx="3" fill="url(#violetGrad)"/>
+  <text x="140" y="791" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8">Same data, appropriate access — capabilities are shown disabled with the role required, never hidden</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Every role's view is a projection of one instrumented record — not a report someone maintains</text>
+</svg>

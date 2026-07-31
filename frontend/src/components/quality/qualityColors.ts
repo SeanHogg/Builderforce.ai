@@ -15,5 +15,11 @@ export const STATUS_COLOR: Record<string, string> = {
   unresolved: '#ef4444', fixing: '#7c3aed', resolved: '#16a34a', ignored: '#6b7280',
 };
 
+/** Ingest sources (must mirror api qualitySourceCatalog ids) → swatch colours. */
+export const SOURCE_COLOR: Record<string, string> = {
+  native: '#2563eb', otlp: '#0891b2', sentry: '#7c3aed', posthog: '#d97706', logrocket: '#db2777',
+};
+
 export const levelColor = (level: string): string => LEVEL_COLOR[level] ?? '#6b7280';
 export const statusColor = (status: string): string => STATUS_COLOR[status] ?? '#6b7280';
+export const sourceColor = (source: string): string => SOURCE_COLOR[source] ?? '#6b7280';

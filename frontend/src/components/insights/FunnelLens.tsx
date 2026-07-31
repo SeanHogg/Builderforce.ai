@@ -1,14 +1,33 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { innovationApi, type FunnelMetrics, type InnovationIdea, type FunnelStage } from '@/lib/builderforceApi';
+import { innovationApi, pmoApi, type FunnelMetrics, type InnovationIdea, type FunnelStage, type Initiative } from '@/lib/builderforceApi';
+import { fetchProjects } from '@/lib/api';
+import type { Project } from '@/lib/types';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError, StatCard, ProgressBar, StatusPill } from '@/components/pm/pmShared';
+import { Select } from '@/components/Select';
 import { KpiGrid } from './LensShell';
 import { pct, days as dDays } from './format';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 
 const FUNNEL_ORDER: FunnelStage[] = ['idea', 'validated', 'in_build', 'shipped', 'measured'];
+
+/** Map the compact link-picker value into the idea's link fields (both cleared
+ *  unless one is chosen — an idea links to at most one of project / initiative). */
+function linkBody(link: string): { linkedProjectId: number | null; initiativeId: string | null } {
+  if (link.startsWith('project:')) return { linkedProjectId: Number(link.slice(8)), initiativeId: null };
+  if (link.startsWith('initiative:')) return { linkedProjectId: null, initiativeId: link.slice(11) };
+  return { linkedProjectId: null, initiativeId: null };
+}
+
+/** Current link of an idea → the picker value. */
+function linkValue(idea: InnovationIdea): string {
+  if (idea.linkedProjectId != null) return `project:${idea.linkedProjectId}`;
+  if (idea.initiativeId) return `initiative:${idea.initiativeId}`;
+  return 'none';
+}
 
 const inputStyle: React.CSSProperties = {
   flex: 1, minWidth: 0, padding: '7px 10px', borderRadius: 8,
@@ -29,10 +48,43 @@ function nextStage(stage: string): FunnelStage | null {
  *  conversion + the idea pipeline manager (the CEO "is innovation working" view). */
 export function FunnelLens() {
   const t = useTranslations('insights');
+  const { currentProjectId } = useProjectScope();
   const [busy, setBusy] = useState(false);
   const [newIdea, setNewIdea] = useState('');
-  const funnelQ = usePmData<FunnelMetrics>(() => innovationApi.funnel(), []);
-  const ideasQ = usePmData<InnovationIdea[]>(() => innovationApi.ideas.list(), []);
+  const [newLink, setNewLink] = useState('none');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [initiatives, setInitiatives] = useState<Initiative[]>([]);
+  const funnelQ = usePmData<FunnelMetrics>(() => innovationApi.funnel(undefined, currentProjectId), [currentProjectId]);
+  const ideasQ = usePmData<InnovationIdea[]>(() => innovationApi.ideas.list(currentProjectId), [currentProjectId]);
+
+  useEffect(() => {
+    setNewLink(currentProjectId == null ? 'none' : `project:${currentProjectId}`);
+  }, [currentProjectId]);
+
+  // Link targets: a project OR an initiative an idea can be tied to.
+  useEffect(() => {
+    let alive = true;
+    fetchProjects().then((p) => { if (alive) setProjects(p); }).catch(() => {});
+    pmoApi.initiatives.list().then((i) => { if (alive) setInitiatives(i); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  /** Shared link <Select> (used on create and per-idea). */
+  const linkSelect = (value: string, onChange: (v: string) => void, ariaLabel: string) => (
+    <Select style={{ ...inputStyle, flex: 'none', maxWidth: 170 }} value={value} onChange={(e) => onChange(e.target.value)} aria-label={ariaLabel}>
+      {currentProjectId == null && <option value="none">{t('funnel.linkNone')}</option>}
+      {projects.length > 0 && (
+        <optgroup label={t('funnel.linkProjects')}>
+          {projects.filter((p) => currentProjectId == null || p.id === currentProjectId).map((p) => <option key={`p${p.id}`} value={`project:${p.id}`}>{p.name}</option>)}
+        </optgroup>
+      )}
+      {currentProjectId == null && initiatives.length > 0 && (
+        <optgroup label={t('funnel.linkInitiatives')}>
+          {initiatives.map((i) => <option key={`i${i.id}`} value={`initiative:${i.id}`}>{i.name}</option>)}
+        </optgroup>
+      )}
+    </Select>
+  );
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -42,7 +94,7 @@ export function FunnelLens() {
   if (funnelQ.error) return <PmError message={funnelQ.error} />;
   if (!funnelQ.data) return <PmEmpty message={t('loading')} />;
   const f = funnelQ.data;
-  const ideas = ideasQ.data ?? [];
+  const ideas = (ideasQ.data ?? []).filter((idea) => currentProjectId == null || idea.linkedProjectId === currentProjectId);
   const stageLabel = (s: string) => t(`funnel.stage.${s}`);
 
   return (
@@ -75,11 +127,12 @@ export function FunnelLens() {
       <PmCard
         title={t('funnel.ideas')}
         action={
-          <div style={{ display: 'flex', gap: 8, minWidth: 320 }}>
+          <div style={{ display: 'flex', gap: 8, minWidth: 320, flexWrap: 'wrap' }}>
             <input style={inputStyle} placeholder={t('funnel.newIdea')} value={newIdea} onChange={(e) => setNewIdea(e.target.value)} />
+            {linkSelect(newLink, setNewLink, t('funnel.link'))}
             <button
               type="button" style={btnStyle} disabled={busy || !newIdea.trim()}
-              onClick={() => run(async () => { await innovationApi.ideas.create({ title: newIdea.trim(), stage: 'idea' }); setNewIdea(''); })}
+              onClick={() => run(async () => { await innovationApi.ideas.create({ title: newIdea.trim(), stage: 'idea', ...linkBody(newLink) }); setNewIdea(''); setNewLink('none'); })}
             >
               {t('funnel.addIdea')}
             </button>
@@ -97,6 +150,7 @@ export function FunnelLens() {
                   <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{idea.title}</span>
                   <StatusPill value={idea.stage === 'killed' ? 'blocked' : idea.stage === 'shipped' || idea.stage === 'measured' ? 'done' : 'in_progress'} />
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', minWidth: 70 }}>{stageLabel(idea.stage)}</span>
+                  {linkSelect(linkValue(idea), (v) => run(() => innovationApi.ideas.update(idea.id, linkBody(v))), t('funnel.link'))}
                   {next && (
                     <button type="button" style={ghostBtn} disabled={busy} onClick={() => run(() => innovationApi.ideas.update(idea.id, { stage: next }))}>
                       {t('funnel.advanceTo', { stage: stageLabel(next) })}

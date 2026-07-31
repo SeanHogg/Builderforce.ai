@@ -1,44 +1,115 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Approvals routes – /api/approvals
  *
  * Human-in-the-loop approval gate for destructive / high-risk agent actions.
  *
- * POST   /api/approvals          Create a pending approval (agentHost API key auth)
+ * POST   /api/approvals          Create a pending approval (agentHost API key auth, or tenant JWT DEVELOPER+)
  * GET    /api/approvals          List approvals for tenant (tenant JWT)
  * GET    /api/approvals/:id      Get approval detail (tenant JWT)
  * PATCH  /api/approvals/:id      Accept or reject an approval (tenant JWT, MANAGER+)
- * GET    /api/approvals/escalate  Expire timed-out pending approvals + re-notify (internal/cron)
+ *
+ * Expiring timed-out approvals is NOT a route. It used to be `GET /escalate`, guarded
+ * by a `CRON_SECRET` query param — but Cloudflare crons invoke `scheduled()`, not a
+ * URL, so nothing ever called it, and an unset secret made it an unauthenticated
+ * bulk-mutate endpoint. It now runs natively on the `*​/5` tick as
+ * `runApprovalExpirySweep` (application/approvals), so there is one cron pattern and
+ * no shared secret to leak or forget.
+ *
+ * AUTHORIZATION. Every route is behind an auth middleware mounted BEFORE the routes
+ * (it used to be mounted after POST /, leaving creation unauthenticated-by-ordering
+ * for anything the handler's own inline check missed):
+ *   • all routes        — `approvalAuth`: an agentHost API key (?agentHostId=&key=)
+ *                         OR a tenant JWT.
+ * On top of that:
+ *   • POST /            — DEVELOPER+ for human callers; `task.execution` action types
+ *                         are server-only (they clear the run gate, so a client must
+ *                         never be able to forge one and self-approve a run).
+ *   • PATCH /:id        — MANAGER+ to approve/reject (approving a `task.execution`
+ *                         gate STARTS a billable autonomous run); DEVELOPER+ to
+ *                         answer a question/feedback request, which decides nothing.
+ * Superadmin note: superadmin is a GLOBAL user flag (`sa` claim / users.is_superadmin)
+ * used for cap-bypass (resolveSuperadminUnlimited); it is orthogonal to tenant role
+ * and no requireRole gate in this codebase bypasses on it. A superadmin in their own
+ * tenant holds OWNER, which clears every gate here.
  */
 import { Hono } from 'hono';
-import { eq, and, desc, lt } from 'drizzle-orm';
-import { authMiddleware } from '../middleware/authMiddleware';
-import { approvals, agentHosts } from '../../infrastructure/database/schema';
-import { verifySecret } from '../../infrastructure/auth/HashService';
+import type { MiddlewareHandler } from 'hono';
+import { eq, and, desc, lt, getTableColumns } from 'drizzle-orm';
+import { authMiddleware, requireRole, isManager } from '../middleware/authMiddleware';
+import { memberHasPermission } from '../../application/rbac/effectivePermissions';
+import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
+import { TenantRole, hasMinRole } from '../../domain/shared/types';
+import { approvals, executions, tasks } from '../../infrastructure/database/schema';
+import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
 import { checkAutoApprovalRules } from './approvalRuleRoutes';
 import { normalizeRequestKind, isAnswerableKind } from '../../domain/approval/requestKind';
 import { sendSlackNotification, notifyApprovalRequested } from '../../application/approval/approvalNotifier';
 import { resumePausedExecution } from '../../application/runtime/executionResume';
-import { dispatchCloudRunForTask, parseApprovalReplay } from './runtimeRoutes';
+import { dispatchCloudRunForTask } from './runtimeRoutes';
+import { parseApprovalReplay } from '../../application/runtime/executionApprovalGate';
+import { TicketAuditService } from '../../application/audit/ticketAuditService';
+import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
+import { resolveMemberDisplayName } from '../../application/kanban/roleCapability';
+import { recordActivity, resolveHumanActor } from '../../application/activity/activityLog';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 
+/** The role a `task.execution` approval was created for (set on the metadata when
+ *  the gated run is role-attributed), or null. Drives the §5.8 approvals→sign-off bridge. */
+function parseApprovalRoleKey(metadata: string | null): string | null {
+  if (!metadata) return null;
+  try {
+    const m = JSON.parse(metadata) as { roleKey?: unknown };
+    return typeof m.roleKey === 'string' && m.roleKey.trim() ? m.roleKey.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 type ApprovalHonoEnv = HonoEnv & {
   Bindings: HonoEnv['Bindings'] & {
     AGENT_HOST_RELAY: DurableObjectNamespace<AgentHostRelayDO>;
   };
+  Variables: HonoEnv['Variables'] & {
+    /** Set only on the agentHost API-key branch of {@link buildApprovalAuth}. */
+    approvalAgentHostId?: number;
+  };
 };
 
-async function verifyAgentHostApiKey(db: Db, id: number, key?: string | null): Promise<{ id: number; tenantId: number } | null> {
-  if (!key) return null;
-  const [agentHost] = await db
-    .select({ id: agentHosts.id, tenantId: agentHosts.tenantId, apiKeyHash: agentHosts.apiKeyHash })
-    .from(agentHosts)
-    .where(eq(agentHosts.id, id));
-  if (!agentHost) return null;
-  const valid = await verifySecret(key, agentHost.apiKeyHash);
-  return valid ? agentHost : null;
+/**
+ * Auth for every tenant-facing approvals route.
+ *
+ * Two legitimate principals reach this router: a self-hosted agent host proving an
+ * API key on the query string (it has no user), and a signed-in tenant user. This
+ * middleware resolves whichever is present and establishes `tenantId` (plus
+ * `approvalAgentHostId` for the machine caller) BEFORE any handler runs, so no
+ * route in the file can be reached unauthenticated by mount ordering.
+ *
+ * A machine caller has no tenant role, so `role` is left unset — every role gate
+ * below therefore also refuses it unless it takes the explicit machine branch.
+ */
+function buildApprovalAuth(db: Db): MiddlewareHandler<ApprovalHonoEnv> {
+  return async (c, next) => {
+    const agentHostIdParam = Number(c.req.query('agentHostId') ?? '');
+    const apiKey = c.req.query('key');
+    // The machine branch is scoped to CREATION only (POST /) — the one thing a host
+    // legitimately does here. Widening it to the reads would let a host key page
+    // through the tenant's whole approval queue, which it never could before.
+    if (c.req.method === 'POST' && Number.isInteger(agentHostIdParam) && agentHostIdParam > 0 && apiKey) {
+      const agentHost = await verifyAgentHostApiKey(db, agentHostIdParam, apiKey);
+      if (!agentHost) return c.text('Unauthorized', 401);
+      c.set('tenantId', agentHost.tenantId);
+      c.set('approvalAgentHostId', agentHost.id);
+      await next();
+      return;
+    }
+    // Cast: authMiddleware is typed against the base HonoEnv; this router only widens
+    // Bindings/Variables, so it is safe to run here (same pattern as agentHostRoutes).
+    return (authMiddleware as unknown as MiddlewareHandler<ApprovalHonoEnv>)(c, next);
+  };
 }
 
 // Slack/email fan-out + manager-email lookup live in the shared approvalNotifier
@@ -51,78 +122,24 @@ async function verifyAgentHostApiKey(db: Db, id: number, key?: string | null): P
 export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Hono<ApprovalHonoEnv> {
   const router = new Hono<ApprovalHonoEnv>();
 
-  // ── GET /api/approvals/escalate ─────────────────────────────────────────
-  // Intended to be called by a Cloudflare Cron Trigger (or an admin endpoint).
-  // Finds all pending approvals whose expiresAt has passed, marks them expired,
-  // and sends a Slack/email escalation alert.
-  // Auth: CRON_SECRET query param (or open for Cloudflare cron if secured at CF level)
-  router.get('/escalate', async (c) => {
-    const env = c.env;
-    const secret = c.req.query('secret');
-    if (secret !== env.CRON_SECRET && env.CRON_SECRET) {
-      return c.json({ error: 'Unauthorized' }, 401);
-    }
-
-    const now = new Date();
-    const expired = await db
-      .select()
-      .from(approvals)
-      .where(and(
-        eq(approvals.status, 'pending'),
-        lt(approvals.expiresAt, now),
-      ));
-
-    if (expired.length === 0) return c.json({ escalated: 0 });
-
-    const ids = expired.map((a) => a.id);
-    await db
-      .update(approvals)
-      .set({ status: 'expired', updatedAt: now })
-      .where(and(
-        eq(approvals.status, 'pending'),
-        lt(approvals.expiresAt, now),
-      ));
-
-    // Group by tenant for notifications
-    const byTenant = new Map<number, typeof expired>();
-    for (const a of expired) {
-      const list = byTenant.get(a.tenantId) ?? [];
-      list.push(a);
-      byTenant.set(a.tenantId, list);
-    }
-
-    if (env.SLACK_APPROVAL_WEBHOOK_URL) {
-      for (const [, list] of byTenant) {
-        const lines = list.map((a) => `• *${a.actionType}* — ${a.description}`).join('\n');
-        await sendSlackNotification(
-          env.SLACK_APPROVAL_WEBHOOK_URL,
-          `:warning: *${list.length} approval request(s) expired without review:*\n${lines}`,
-        );
-      }
-    }
-
-    return c.json({ escalated: expired.length, ids });
-  });
+  // Auth (agentHost API key OR tenant JWT) for EVERY route below. Mounted here —
+  // above the routes — because it previously sat after POST '/', so creation
+  // depended entirely on the handler's own inline check.
+  router.use('*', buildApprovalAuth(db));
 
   // POST /api/approvals – create a pending approval request
-  // AgentHost API key auth (?agentHostId=&key=) or tenant JWT.
+  // AgentHost API key auth (?agentHostId=&key=) or tenant JWT (DEVELOPER+).
   router.post('/', async (c) => {
     const env = c.env;
-    let tenantId: number;
-    let resolvedAgentHostId: number | null = null;
+    const tenantId = c.get('tenantId') as number;
+    const resolvedAgentHostId = c.get('approvalAgentHostId') ?? null;
 
-    const agentHostIdParam = Number(c.req.query('agentHostId') ?? '');
-    const apiKey = c.req.query('key');
-    if (!Number.isNaN(agentHostIdParam) && agentHostIdParam > 0 && apiKey) {
-      const agentHost = await verifyAgentHostApiKey(db, agentHostIdParam, apiKey);
-      if (!agentHost) return c.text('Unauthorized', 401);
-      tenantId = agentHost.tenantId;
-      resolvedAgentHostId = agentHost.id;
-    } else {
-      await authMiddleware(c as unknown as Parameters<typeof authMiddleware>[0], async () => {});
-      const tid = (c as unknown as { get: (k: string) => unknown }).get('tenantId');
-      if (!tid) return c.text('Unauthorized', 401);
-      tenantId = tid as number;
+    // Human callers must be DEVELOPER+ : an approval request is a work item that
+    // notifies managers over Slack/email and can auto-resolve against the tenant's
+    // auto-approval rules, so a read-only VIEWER must not be able to open one.
+    // (The machine branch has no role and is authorized by its API key instead.)
+    if (resolvedAgentHostId == null && !hasMinRole(c.get('role') as TenantRole, TenantRole.DEVELOPER)) {
+      return c.json({ error: `Requires at least '${TenantRole.DEVELOPER}' role to raise an approval request` }, 403);
     }
 
     const body = await c.req.json<{
@@ -136,6 +153,15 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
 
     if (!body.actionType || !body.description) {
       return c.json({ error: 'actionType and description are required' }, 400);
+    }
+
+    // `task.execution` is the RUN gate: an approved one lets a task dispatch without
+    // further manager sign-off (see evaluateExecutionApprovalGate, which is the only
+    // thing that legitimately creates them — server-side, never over HTTP). Accepting
+    // one here would let any caller mint a gate row and, if an auto-approval rule
+    // matched it, clear the manager gate on a high/urgent ticket outright.
+    if (body.actionType === 'task.execution') {
+      return c.json({ error: `'task.execution' approvals are created by the execution gate, not by clients` }, 400);
     }
 
     const kind = normalizeRequestKind(body.kind);
@@ -182,7 +208,9 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
           expiresAt:   body.expiresAt,
           status,
         }),
-      })).catch(() => { /* best-effort */ });
+      })).catch((error) => { /* best-effort */ 
+        reportCaughtError(error, { source: "presentation/routes/approvalRoutes.ts", operation: "createApprovalRoutes" });
+      });
     }
 
     // Slack + email fan-out for new pending requests (skip if auto-approved).
@@ -195,23 +223,32 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
     return c.json({ approvalId, status }, 201);
   });
 
-  // All read/update routes require tenant JWT
-  router.use('*', authMiddleware);
-
-  // GET /api/approvals?status=&agentHostId=
+  // GET /api/approvals?status=&agentHostId=&projectId=
+  // Each row is enriched with `taskId` and `projectId` (via execution → task) so
+  // callers can show the work item that caused the request and scope/group the
+  // queue by project without a second round-trip; null when the
+  // approval isn't tied to a task (e.g. a self-hosted host gate). An explicit
+  // `?projectId=` narrows server-side.
   router.get('/', async (c) => {
     const tenantId     = c.get('tenantId') as number;
     const statusFilter = c.req.query('status');
     const agentHostFilter   = c.req.query('agentHostId') ? Number(c.req.query('agentHostId')) : null;
+    const projectFilterRaw  = c.req.query('projectId');
+    const projectFilter     = projectFilterRaw && Number.isInteger(Number(projectFilterRaw))
+      ? Number(projectFilterRaw)
+      : null;
 
     let rows = await db
-      .select()
+      .select({ ...getTableColumns(approvals), taskId: tasks.id, projectId: tasks.projectId })
       .from(approvals)
+      .leftJoin(executions, eq(approvals.executionId, executions.id))
+      .leftJoin(tasks, eq(executions.taskId, tasks.id))
       .where(eq(approvals.tenantId, tenantId))
       .orderBy(desc(approvals.createdAt));
 
     if (statusFilter) rows = rows.filter((r) => r.status === statusFilter);
     if (agentHostFilter != null) rows = rows.filter((r) => r.agentHostId === agentHostFilter);
+    if (projectFilter != null) rows = rows.filter((r) => r.projectId === projectFilter);
 
     return c.json({ approvals: rows });
   });
@@ -226,9 +263,16 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
   });
 
   // PATCH /api/approvals/:id – resolve a request.
-  //   approval kind  → status 'approved' | 'rejected'
-  //   question/feedback kind → status 'answered' with a free-text responseText
-  router.patch('/:id', async (c) => {
+  //   approval kind  → status 'approved' | 'rejected'   (MANAGER+)
+  //   question/feedback kind → status 'answered' with a free-text responseText (DEVELOPER+)
+  //
+  // The DECISION verbs are manager-only: approving a `task.execution` gate below
+  // replays the run via dispatchCloudRunForTask, i.e. any member who could PATCH
+  // this could clear the governance gate and start a billable autonomous run. That
+  // was the hole. Answering a question steers a run that is ALREADY approved and
+  // running, so it stays at the run tier — split with the shared `isManager`
+  // predicate rather than a second gating mechanism.
+  router.patch('/:id', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const tenantId  = c.get('tenantId') as number;
     const userId    = c.get('userId') as string;
     const id        = c.req.param('id');
@@ -245,6 +289,25 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
     }
     if (body.status === 'answered' && !body.responseText?.trim()) {
       return c.json({ error: 'responseText is required when answering' }, 400);
+    }
+    // Approving/rejecting is the governance action; ANSWERING a question merely
+    // steers a run that is already approved, so it stays at the developer tier.
+    // The split cannot be a route-level middleware because it depends on the
+    // request BODY, so the permission is checked inline — same registry, same
+    // resolution (role defaults → overrides → per-user grants/revocations) as
+    // `requirePermission`, just applied where the branch actually is.
+    if (body.status !== 'answered') {
+      if (!isManager(c as never)) {
+        return c.json({
+          error: `Requires at least '${TenantRole.MANAGER}' role to approve or reject a request`,
+        }, 403);
+      }
+      const mayApprove = await memberHasPermission(
+        db, tenantId, userId, c.get('role') as string, PERMISSIONS.APPROVAL_APPROVE, env,
+      );
+      if (!mayApprove) {
+        return c.json({ error: `Requires the '${PERMISSIONS.APPROVAL_APPROVE}' permission` }, 403);
+      }
     }
 
     const [existing] = await db.select().from(approvals).where(and(eq(approvals.id, id), eq(approvals.tenantId, tenantId)));
@@ -282,6 +345,7 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
         executionId: existing.executionId,
         tenantId,
         answer: responseText,
+        approvalId: id,
       });
     }
 
@@ -306,8 +370,59 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
             payload: replay.payload,
             agentHostId: replay.agentHostId,
             submittedBy: existing.requestedBy ?? userId,
+            // A manager just approved THIS run. That decision is the same explicit
+            // human override "Run now" carries, so it clears the failure breaker and
+            // the re-run cooldown — otherwise approving a run for a ticket whose last
+            // attempts failed would silently do nothing. (The cloud-run cap still
+            // applies: an approval is not an entitlement.)
+            force: true,
           },
         ).catch(() => null);
+      }
+    }
+
+    // §5.8 — Approvals ↔ sign-offs bridge: a human DECIDING a role-attributed execution
+    // gate records that role's sign-off on the accountability ledger, so a human approval
+    // satisfies the role/review requirement (and clears the audit) exactly like an agent
+    // reviewer's sign-off. Only when the approval carries an explicit roleKey (set at
+    // creation for a role-attributed run) — never inferred, so it can't forge a record.
+    if (body.status === 'approved' || body.status === 'rejected') {
+      const roleKey = parseApprovalRoleKey(existing.metadata);
+      const bridgeTaskId = parseApprovalReplay(existing.metadata)?.taskId;
+      if (roleKey && bridgeTaskId != null) {
+        try {
+          const auditSvc = new TicketAuditService(db);
+          const memberName = await resolveMemberDisplayName(db, tenantId, 'human', userId);
+          await auditSvc.recordSignoff(env, tenantId, {
+            taskId: bridgeTaskId,
+            roleKey,
+            verdict: body.status === 'approved' ? 'approved' : 'changes_requested',
+            memberKind: 'human',
+            memberRef: userId,
+            memberName,
+            summary: body.reviewNote ?? (body.status === 'approved' ? 'Approved via human gate' : 'Changes requested via human gate'),
+            contribution: existing.executionId ? { executionId: existing.executionId } : undefined,
+          });
+          const participants = new TicketParticipantsService(db);
+          await participants.syncStates(env, tenantId, bridgeTaskId).catch((error) => {
+            reportCaughtError(error, { source: "presentation/routes/approvalRoutes.ts", operation: "createApprovalRoutes" });
+          });
+          await participants.invalidate(env, bridgeTaskId).catch((error) => {
+            reportCaughtError(error, { source: "presentation/routes/approvalRoutes.ts", operation: "createApprovalRoutes" });
+          });
+          await recordActivity(env, db, {
+            tenantId, projectId: null,
+            actor: await resolveHumanActor(env, db, tenantId, userId),
+            verb: body.status === 'approved' ? 'ticket.role.completed' : 'ticket.signed_off',
+            targetType: 'task', targetId: String(bridgeTaskId), targetLabel: `#${bridgeTaskId}`,
+            summary: `${roleKey} ${body.status === 'approved' ? 'approved' : 'changes requested'} via human approval`.slice(0, 300),
+            metadata: { roleKey, via: 'approval', verdict: body.status },
+          }).catch((error) => {
+            reportCaughtError(error, { source: "presentation/routes/approvalRoutes.ts", operation: "createApprovalRoutes" });
+          });
+        } catch (error) { /* best-effort bridge — never block the approval resolve */ 
+          reportCaughtError(error, { source: "presentation/routes/approvalRoutes.ts", operation: "createApprovalRoutes" });
+        }
       }
     }
 
@@ -325,7 +440,9 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
           responseText,
           reviewedBy:   userId,
         }),
-      })).catch(() => { /* best-effort */ });
+      })).catch((error) => { /* best-effort */ 
+        reportCaughtError(error, { source: "presentation/routes/approvalRoutes.ts", operation: "createApprovalRoutes" });
+      });
     }
 
     // Slack notification on decision

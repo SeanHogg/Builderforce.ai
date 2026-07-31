@@ -2,7 +2,9 @@
 
 import { useTranslations } from 'next-intl';
 import { WorkforceMetricsContent } from './WorkforceMetricsContent';
+import { EmpMetricsView } from './EmpMetricsView';
 import { ContributorsView } from '@/components/contributors/ContributorsView';
+import { AuditTrailPanel } from '@/components/contributors/AuditTrailPanel';
 
 /**
  * Performance tab — the merged effectiveness/engagement scorecards (formerly the
@@ -20,12 +22,21 @@ export function PerformanceView() {
         <WorkforceMetricsContent />
       </section>
 
+      {/* Extended member / EMP metrics lenses (EMP-12..19). */}
+      <section>
+        <EmpMetricsView />
+      </section>
+
       <section>
         <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-strong)', margin: '0 0 4px' }}>
           {t('activityTitle')}
         </h2>
         <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 16px' }}>{t('activitySub')}</p>
         <ContributorsView />
+      </section>
+
+      <section>
+        <AuditTrailPanel />
       </section>
     </div>
   );

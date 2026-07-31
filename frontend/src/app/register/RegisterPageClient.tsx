@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -10,10 +11,14 @@ import JsonLd from '@/components/JsonLd';
 import OAuthButtons from '@/components/OAuthButtons';
 import PasswordInput from '@/components/PasswordInput';
 import { registerSchema } from '@/lib/structured-data';
-import { REGISTER_FAQ, STATS, FEATURES } from '@/lib/content';
+import { REGISTER_MARKETING } from '@/lib/content';
+import MarketingVisual from '@/components/account/MarketingVisual';
+import AccountTypeChooser from '@/components/account/AccountTypeChooser';
+import EmailVerificationStep from '@/components/account/EmailVerificationStep';
 
 export default function RegisterPageClient() {
   const router = useRouter();
+  const tr = useTranslations('register');
   const { register, isAuthenticated } = useAuth();
 
   const [name, setName] = useState('');
@@ -21,8 +26,19 @@ export default function RegisterPageClient() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreeToTerms, setAgreeToTerms] = useState(false);
+  const [accountType, setAccountType] = useState<'standard' | 'freelancer'>('standard');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set once the account is created but its email needs verifying — swaps the form
+  // for the code-entry step.
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+
+  // Right-hand marketing panel follows the Build/Hired chooser.
+  const marketing = REGISTER_MARKETING[accountType];
+
+  // Freelancers land on their for-hire profile (the restricted gig shell); standard
+  // accounts go to the builder dashboard.
+  const destination = accountType === 'freelancer' ? '/freelancer/profile' : '/dashboard';
 
   useEffect(() => {
     if (isAuthenticated) router.replace('/dashboard');
@@ -30,14 +46,18 @@ export default function RegisterPageClient() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password !== confirmPassword) { setError('Passwords do not match'); return; }
+    if (password !== confirmPassword) { setError(tr('passwordsMismatch')); return; }
     setError(null);
     setIsLoading(true);
     try {
-      await register(email, password, name.trim() || undefined, agreeToTerms);
-      router.push('/dashboard');
+      const res = await register(email, password, name.trim() || undefined, agreeToTerms, accountType);
+      if (res.needsVerification) {
+        setPendingEmail(res.email);
+      } else {
+        router.push(destination);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+      setError(err instanceof Error ? err.message : tr('registrationFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -107,7 +127,7 @@ export default function RegisterPageClient() {
               fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.875rem',
               backdropFilter: 'blur(8px)',
             }}>
-              Sign in
+              {tr('navSignIn')}
             </Link>
           </div>
         </div>
@@ -115,23 +135,23 @@ export default function RegisterPageClient() {
 
       {/* Split-panel layout: form left, marketing right */}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', minHeight: 'calc(100vh - 60px)' }} className="auth-split-grid">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', minHeight: 'calc(100vh - 60px)', alignItems: 'start' }} className="auth-split-grid">
         {/* LEFT PANEL — form */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 20px', minHeight: 'calc(100vh - 60px)' }}>
         <div style={{ width: '100%', maxWidth: 420 }}>
           {/* Heading */}
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.75rem', fontWeight: 700, marginBottom: 6, color: 'var(--text-primary)' }}>
-              Create your account
+              {tr('heading')}
             </h1>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              Start building custom AI agents — free forever
+              {tr('subtitle')}
             </p>
           </div>
 
           {/* Feature pills */}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 28 }}>
-            {['🧠 LoRA Training', '🤖 Agent Registry', '🔬 AI Evaluation'].map(f => (
+            {[tr('pillLora'), tr('pillRegistry'), tr('pillEval')].map(f => (
               <span key={f} style={{
                 fontSize: '0.75rem', fontWeight: 600,
                 background: 'var(--surface-coral-soft)',
@@ -143,6 +163,16 @@ export default function RegisterPageClient() {
             ))}
           </div>
 
+          {/* Email-verification step — shown after the account is created; the user
+              enters the emailed 6-digit code to activate the account and sign in. */}
+          {pendingEmail ? (
+            <EmailVerificationStep
+              email={pendingEmail}
+              onVerified={() => router.push(destination)}
+              onChangeEmail={() => setPendingEmail(null)}
+            />
+          ) : (
+          <>
           {/* Glass card form */}
           <div style={{
             background: 'var(--surface-card)',
@@ -153,18 +183,24 @@ export default function RegisterPageClient() {
             boxShadow: '0 16px 48px var(--shadow-coral-soft)',
           }}>
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Account type — a freelancer gets the restricted for-hire shell
+                  (Profile / Find Work / Timecard); a builder gets the full app. */}
+              <div>
+                <label style={labelStyle}>{tr('want')}</label>
+                <AccountTypeChooser value={accountType} onChange={setAccountType} />
+              </div>
               <div>
                 <label htmlFor="name" style={labelStyle}>
-                  Name <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(optional)</span>
+                  {tr('nameLabel')} <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{tr('nameOptional')}</span>
                 </label>
                 <input id="name" type="text" autoComplete="name" autoFocus
                   value={name} onChange={e => setName(e.target.value)}
-                  placeholder="Jane Smith" style={inputStyle}
+                  placeholder={tr('namePlaceholder')} style={inputStyle}
                   onFocus={focusIn} onBlur={focusOut}
                 />
               </div>
               <div>
-                <label htmlFor="email" style={labelStyle}>Email</label>
+                <label htmlFor="email" style={labelStyle}>{tr('emailLabel')}</label>
                 <input id="email" type="email" autoComplete="email"
                   value={email} onChange={e => setEmail(e.target.value)}
                   placeholder="you@example.com" style={inputStyle}
@@ -173,20 +209,20 @@ export default function RegisterPageClient() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label htmlFor="password" style={labelStyle}>Password</label>
+                  <label htmlFor="password" style={labelStyle}>{tr('passwordLabel')}</label>
                   <PasswordInput
                     id="password"
                     autoComplete="new-password"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    placeholder="Min. 8 chars"
+                    placeholder={tr('passwordPlaceholder')}
                     required
                     minLength={8}
                     style={inputStyle}
                   />
                 </div>
                 <div>
-                  <label htmlFor="confirm" style={labelStyle}>Confirm</label>
+                  <label htmlFor="confirm" style={labelStyle}>{tr('confirmLabel')}</label>
                   <PasswordInput
                     id="confirm"
                     autoComplete="new-password"
@@ -206,7 +242,7 @@ export default function RegisterPageClient() {
                   onChange={e => setAgreeToTerms(e.target.checked)}
                   style={{ marginTop: 3, accentColor: 'var(--coral-bright)' }}
                 />
-                <span>I agree to the Terms of Use and Privacy Policy (see footer links below)</span>
+                <span>{tr('terms')}</span>
               </label>
 
               {error && (
@@ -230,17 +266,19 @@ export default function RegisterPageClient() {
                   letterSpacing: '0.02em',
                 }}
               >
-                {isLoading ? 'Creating account…' : 'Create Account →'}
+                {isLoading ? tr('creating') : tr('submit')}
               </button>
             </form>
 
             <OAuthButtons />
           </div>
+          </>
+          )}
 
           <p style={{ textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: 20 }}>
-            Already have an account?{' '}
+            {tr('haveAccount')}{' '}
             <Link href="/login" style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 600 }}>
-              Sign in
+              {tr('signInLink')}
             </Link>
           </p>
         </div>
@@ -255,53 +293,62 @@ export default function RegisterPageClient() {
           background: 'var(--surface-card)',
           borderLeft: '1px solid var(--border-subtle)',
         }}>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>
-            Your AI Agent Workspace Awaits
-          </h2>
-          <p style={{ fontSize: '0.92rem', color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 24 }}>
-            {STATS.quotable.freeForever} {STATS.quotable.browserNative} {STATS.quotable.datasetSpeed}
-          </p>
+          {/* Keyed on accountType so switching Build/Hired re-mounts and fades in */}
+          <div key={accountType} className="auth-marketing-content">
+            <span style={{
+              display: 'inline-block', marginBottom: 12,
+              fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+              color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)',
+              border: '1px solid var(--border-accent)', borderRadius: 999, padding: '4px 12px',
+              fontFamily: 'var(--font-display)',
+            }}>{marketing.eyebrow}</span>
 
-          {/* Stat cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
-            {[
-              { value: '$0', label: 'Free forever' },
-              { value: '14 days', label: 'Pro trial included' },
-              { value: '0%', label: 'Commission' },
-              { value: '2B+', label: 'Params in-browser' },
-            ].map(s => (
-              <div key={s.label} style={{ padding: '14px 12px', background: 'var(--bg-elevated)', borderRadius: 12, textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--coral-bright)' }}>{s.value}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{s.label}</div>
-              </div>
-            ))}
-          </div>
+            <MarketingVisual variant={accountType} />
 
-          {/* Feature bullets */}
-          <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {FEATURES.slice(0, 6).map(f => (
-              <li key={f.title} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <span style={{ color: 'var(--coral-bright)', fontWeight: 700, flexShrink: 0 }}>✓</span> {f.title} — {f.shortDesc}
-              </li>
-            ))}
-          </ul>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>
+              {marketing.heading}
+            </h2>
+            <p style={{ fontSize: '0.92rem', color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 24 }}>
+              {marketing.intro}
+            </p>
 
-          {/* Comparison quote */}
-          <blockquote style={{ margin: '0 0 24px', padding: '14px 18px', borderLeft: '3px solid var(--coral-bright)', background: 'var(--bg-elevated)', borderRadius: '0 10px 10px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-            &ldquo;Unlike cloud training platforms that charge per GPU-hour, Builderforce runs training on your local WebGPU device at zero cost.&rdquo;
-          </blockquote>
+            {/* Stat cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+              {marketing.stats.map(s => (
+                <div key={s.label} style={{ padding: '14px 12px', background: 'var(--bg-elevated)', borderRadius: 12, textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--coral-bright)' }}>{s.value}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
 
-          {/* FAQ section for GEO citability */}
-          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 20 }}>
-            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Common Questions
-            </h3>
-            {REGISTER_FAQ.map(faq => (
-              <details key={faq.question} style={{ marginBottom: 8 }}>
-                <summary style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>{faq.question}</summary>
-                <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.6, marginTop: 4, paddingLeft: 12 }}>{faq.answer}</p>
-              </details>
-            ))}
+            {/* Value-prop bullets */}
+            <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {marketing.bullets.map(b => (
+                <li key={b.title} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: '1rem', flexShrink: 0, lineHeight: 1.4 }} aria-hidden>{b.icon}</span>
+                  <span><strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{b.title}</strong> — {b.desc}</span>
+                </li>
+              ))}
+            </ul>
+
+            {/* Comparison quote */}
+            <blockquote style={{ margin: '0 0 24px', padding: '14px 18px', borderLeft: '3px solid var(--coral-bright)', background: 'var(--bg-elevated)', borderRadius: '0 10px 10px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+              &ldquo;{marketing.quote}&rdquo;
+            </blockquote>
+
+            {/* FAQ section for GEO citability */}
+            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 20 }}>
+              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                {tr('commonQuestions')}
+              </h3>
+              {marketing.faq.map(faq => (
+                <details key={faq.question} style={{ marginBottom: 8 }}>
+                  <summary style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>{faq.question}</summary>
+                  <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.6, marginTop: 4, paddingLeft: 12 }}>{faq.answer}</p>
+                </details>
+              ))}
+            </div>
           </div>
         </aside>
 
@@ -313,6 +360,14 @@ export default function RegisterPageClient() {
         @media (min-width: 900px) {
           .auth-split-grid { grid-template-columns: 1fr 1fr !important; }
           .auth-marketing-panel { display: flex !important; }
+        }
+        .auth-marketing-content { animation: authMarketingFade 0.35s ease; }
+        @keyframes authMarketingFade {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .auth-marketing-content { animation: none; }
         }
       `}</style>
     </div>

@@ -3,12 +3,16 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
+import type { ProjectDiagnosticSummary } from '@/lib/tools';
 import { ProjectHealthGauges } from './ProjectHealth';
 import { ProjectInspectionGrade } from './ProjectInspection';
+import { ProjectConfigProgress } from './ProjectConfigProgress';
 import { ProjectOriginBadge } from './ProjectOriginBadge';
+import { useOpenProjectChat } from '@/lib/brain';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { RunDiagnosticsButton } from './RunDiagnosticsButton';
+import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
 
 export interface ProjectCardProps {
   project: Project;
@@ -30,6 +34,9 @@ export interface ProjectCardProps {
    *  editor (`/ide/<id>`); the Projects page overrides this to route through the
    *  IDE dashboard scoped to the project. */
   onOpenIde?: (project: Project) => void;
+  /** Latest per-diagnostic scores (SOC 2, Quality, …) for this project, from the
+   *  workspace rollup. Rendered as a compact score strip; omit/empty hides it. */
+  diagnostics?: ProjectDiagnosticSummary[];
 }
 
 const createdDate = (project: Project): string => {
@@ -47,8 +54,10 @@ export function ProjectCard({
   onDelete,
   showDeleteButton = !!onDelete,
   onOpenIde,
+  diagnostics,
 }: ProjectCardProps) {
   const t = useTranslations('projectCard');
+  const openProjectChat = useOpenProjectChat();
   const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (onCardClick && e.key === 'Enter') {
@@ -162,6 +171,38 @@ export function ProjectCard({
               <rect x="17" y="4" width="4" height="14" rx="1" />
             </svg>
           </button>
+          {/* Project 360 button — the whole-picture health view (health wheel,
+              missing items, who's working). Reuses the shared <Project360View>. */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.location.href = `/projects/${project.id}/360`;
+            }}
+            aria-label={t('health360')}
+            title={t('health360')}
+            style={iconButtonStyle}
+          >
+            <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 3 v9 l6.5 3.5" />
+            </svg>
+          </button>
+          {/* Project chat — opens a NEW Brain chat scoped to this project */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              openProjectChat(typeof project.id === 'number' ? project.id : Number(project.id));
+            }}
+            aria-label={t('openChat')}
+            title={t('openChat')}
+            style={iconButtonStyle}
+          >
+            <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>
           {/* IDE button */}
           <button
             type="button"
@@ -257,7 +298,19 @@ export function ProjectCard({
           prescriptive report in the details panel so the user knows what to target. */}
       <ProjectInspectionGrade
         project={project}
-        onOpen={onDetailsClick ? (p) => onDetailsClick(p, 'details') : undefined}
+        onOpen={onDetailsClick ? (p) => onDetailsClick(p, 'analytics') : undefined}
+      />
+
+      {/* Configuration-completeness donut — only for projects that still need
+          setting up. Surfaces what's missing and a one-click brainstorm-goals. */}
+      <ProjectConfigProgress project={project} />
+
+      {/* Diagnostics run against this project (SOC 2 readiness, Quality, …) — the
+          latest score per diagnostic, straight from the workspace rollup so the
+          card can show them without a per-card fetch. Self-hides when none. */}
+      <ProjectDiagnosticsStrip
+        diagnostics={diagnostics ?? []}
+        onOpen={onDetailsClick ? () => onDetailsClick(project, 'diagnostics') : undefined}
       />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', flexWrap: 'wrap' }}>

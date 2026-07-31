@@ -1,6 +1,6 @@
 {
   "name": "builderforce-frontend",
-  "version": "2026.6.31",
+  "version": "2026.7.152",
   "private": true,
   "scripts": {
     "clean": "node -e \"const fs=require('fs');const p='.next';if(fs.existsSync(p)){fs.rmSync(p,{recursive:true});console.log('Removed .next');}else{console.log('.next not found');}\"",
@@ -10,7 +10,8 @@
     "cf-deploy": "npm run cf-build && npx wrangler deploy --no-bundle",
     "start": "next start",
     "lint": "eslint .",
-    "test": "vitest run",
+    "check:api-transport": "node scripts/check-api-transport.mjs",
+    "test": "npm run check:api-transport && vitest run",
     "test:watch": "vitest",
     "typecheck:native": "tsgo --noEmit"
   },
@@ -22,8 +23,9 @@
     "@seanhogg/builderforce-brain-embedded": "link:../brain-embedded",
     "@seanhogg/builderforce-brain-ui": "link:../packages/brain-ui",
     "@seanhogg/builderforce-embedded": "link:../builderforce-embedded",
-    "@seanhogg/builderforce-memory": "^2026.6.39",
-    "@seanhogg/builderforce-memory-engine": "^2026.6.39",
+    "@seanhogg/builderforce-memory": "^2026.7.11",
+    "@seanhogg/builderforce-memory-engine": "^2026.7.11",
+    "@seanhogg/builderforce-quality": "^2026.7.5",
     "@seanhogg/builderforce-sdk": "link:../sdk",
     "@seanhogg/builderforce-studio": "link:../studio",
     "@seanhogg/builderforce-studio-embedded": "link:../studio-embedded",
@@ -82,7 +84,8 @@
     "overrides": {
       "d3-array": "^3.2.4",
       "d3-shape": "^3.2.0",
-      "d3-path": "^3.1.0"
+      "d3-path": "^3.1.0",
+      "sharp": "0.35.3"
     }
   }
 }

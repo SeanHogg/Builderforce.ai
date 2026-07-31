@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
 
 /**
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export function TenantPremiumOverrideEditor({ tenantId, value, onChange }: Props) {
+  const t = useTranslations('admin');
   const [pending, setPending] = useState<boolean>(value);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +36,7 @@ export function TenantPremiumOverrideEditor({ tenantId, value, onChange }: Props
       const updated = await adminApi.setTenantPremiumOverride(tenantId, pending);
       onChange(updated.premiumOverride);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Update failed');
+      setError(e instanceof Error ? e.message : t('tenants.premiumOverride.updateFailed'));
     } finally {
       setSaving(false);
     }
@@ -51,9 +53,9 @@ export function TenantPremiumOverrideEditor({ tenantId, value, onChange }: Props
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>Premium routing</div>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>{t('tenants.premiumOverride.title')}</div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          Current: {value ? 'PREMIUM pool + 60s vendor timeout' : 'Plan default'}
+          {t('tenants.premiumOverride.current', { value: value ? t('tenants.premiumOverride.currentPremium') : t('tenants.premiumOverride.currentDefault') })}
         </div>
       </div>
 
@@ -66,7 +68,7 @@ export function TenantPremiumOverrideEditor({ tenantId, value, onChange }: Props
             onChange={() => setPending(false)}
             disabled={saving}
           />
-          Plan default
+          {t('tenants.premiumOverride.planDefault')}
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <input
@@ -76,7 +78,7 @@ export function TenantPremiumOverrideEditor({ tenantId, value, onChange }: Props
             onChange={() => setPending(true)}
             disabled={saving}
           />
-          Premium (top PREMIUM-tier models, extended timeout)
+          {t('tenants.premiumOverride.premiumOption')}
         </label>
 
         <button
@@ -86,7 +88,7 @@ export function TenantPremiumOverrideEditor({ tenantId, value, onChange }: Props
           onClick={(e) => { e.stopPropagation(); void save(); }}
           disabled={saving || !dirty}
         >
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? t('common.saving') : t('common.save')}
         </button>
       </div>
 

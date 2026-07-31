@@ -8,6 +8,7 @@ import { useRole, ROLE_LABEL, ASSIGNABLE_ROLES, type TenantRole } from '@/lib/rb
 import { WorkforceCard, InitialAvatar } from './WorkforceCard';
 import { MemberStatsStrip } from './MemberStatsStrip';
 import { useWorkforceMetrics } from './WorkforceMetricsContext';
+import PersonalitySummary from '@/components/PersonalitySummary';
 
 const roleBadgeStyle: CSSProperties = {
   fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
@@ -110,6 +111,8 @@ export function MemberCard({
       body={
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
           <MemberStatsStrip scorecard={scorecard} engagement={engagement} />
+          {/* This person's personality — self-hides when they haven't taken the test. */}
+          <PersonalitySummary profile={member.psychometric ?? undefined} />
           <div style={{ fontSize: 12, color: 'var(--muted)' }}>
             {member.activeSessions} active session{member.activeSessions === 1 ? '' : 's'}
           </div>

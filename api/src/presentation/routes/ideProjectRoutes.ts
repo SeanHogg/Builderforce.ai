@@ -1,6 +1,7 @@
 /**
  * IDE projects (0224) — the first-class "IDE project" entity: the buildable
- * artifact you open in the IDE (a Designer app, an LLM, a Video, a Voice).
+ * artifact you open in the IDE (a Designer app, an Evermind, a Fine-tune, a
+ * Video, a Voice).
  *
  * Many IDE projects can hang off one container Project (`containerProjectId`,
  * optional + reassignable), and each one is BACKED by a `projects` row
@@ -20,11 +21,16 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import { ideProjects, projects, workflowDefinitions } from '../../infrastructure/database/schema';
 import { ProjectService } from '../../application/project/ProjectService';
 import { ensureProjectTemplate } from '../../application/project/projectTemplate';
+import { applyEvermindRecipe, toEvermindRecipeId } from '../../application/llm/evermindRecipes';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** The IDE modalities an IDE project can be. */
-const MODALITIES = new Set(['designer', 'video', 'llm', 'voice']);
+/** The IDE modalities an IDE project can be — must stay in step with the frontend's
+ *  `lib/modality.ts` registry, since an id missing here is silently downgraded to
+ *  `designer` (which is how `webmobile` projects lost their Mobile identity).
+ *  `llm` is the retired combined modality, accepted for backward compatibility
+ *  (the frontend aliases it to `evermind`). */
+const MODALITIES = new Set(['designer', 'mobile', 'webmobile', 'video', 'evermind', 'finetune', 'voice', 'llm']);
 
 const listCacheKey = (tenantId: number) => `ide-projects:list:${tenantId}`;
 
@@ -149,6 +155,11 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
       containerProjectId?: number | null;
       template?: string | null;
       workflowDefinitionId?: string | null;
+      // Evermind modality: the one-click Evermind recipe (+ its optional inputs) that
+      // provisions the new project's model. See application/llm/evermindRecipes.
+      evermindRecipe?: string | null;
+      evermindTeacherModel?: string | null;
+      evermindSeedModelSlug?: string | null;
     }>();
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
@@ -160,15 +171,14 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
       if (containerProjectId === null) return c.json({ error: 'Invalid container project' }, 400);
     }
 
-    // LLM projects run a workflow — one must be assigned at creation. Other
-    // modalities ignore it. Validate tenant ownership when supplied.
+    // An automation workflow is OPTIONAL for any modality (advanced users can attach
+    // one later via the details modal). Evermind projects instead pick an Evermind
+    // RECIPE at creation, which provisions the project's model (applied below). Validate
+    // tenant ownership of a workflow when one is supplied.
     let workflowDefinitionId: string | null = null;
     if (body.workflowDefinitionId) {
       if (!(await ownsWorkflow(tenantId, body.workflowDefinitionId))) return c.json({ error: 'Invalid workflow' }, 400);
       workflowDefinitionId = body.workflowDefinitionId;
-    }
-    if (modality === 'llm' && !workflowDefinitionId) {
-      return c.json({ error: 'An LLM project requires a workflow' }, 400);
     }
 
     // Backing storage project — reuses the proven project create + template seed.
@@ -207,6 +217,45 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
         workflowDefinitionId,
       })
       .returning({ id: ideProjects.id });
+
+    // Evermind projects: provision the project's Evermind from the chosen recipe so it
+    // opens with a working, learnable model (no automation-workflow gate). Keyed on
+    // the BACKING storage project — the id the Evermind panel + routes operate on.
+    // Best-effort inside applyEvermindRecipe: creation succeeds even if seeding does not.
+    // `llm` is the retired combined modality — treat it as evermind for legacy callers.
+    //
+    // DECISION — every OTHER modality (video, voice, designer, finetune, mobile)
+    // deliberately gets NO row of its own and INHERITS its container project's
+    // Evermind. This is the intended model, not an oversight, and the alternative
+    // (provision one per build) was rejected for three reasons:
+    //
+    //  1. The read path already inherits, on purpose. `resolveEffectiveEvermindProjectId`
+    //     falls back to the container so a build's console shows the container's TRAINED
+    //     model. Provisioning per-build would replace that with a freshly-generated,
+    //     empty v1 — a visible capability REGRESSION for every existing build.
+    //  2. Learning is already container-scoped. `resolveEvermindTargets` fans a
+    //     contribution across the container plus its builds as ONE learning unit;
+    //     per-build models would shard a tenant's corpus across N cold Everminds that
+    //     each learn a fraction of it.
+    //  3. It would cost an R2 artifact + row per build for modalities that have no
+    //     distinct corpus to learn from — a video or designer build shares its
+    //     container's domain knowledge; that is the whole point of grouping it there.
+    //
+    // A build that genuinely needs its own model is still fully supported: seeding one
+    // (`POST /evermind/seed-from-model`) creates the row, and the resolver's
+    // own-head-wins precedence means it immediately stops inheriting. What is dropped
+    // is the misleading affordance — the console no longer offers seed/management controls on
+    // an INHERITING build, where every such write silently updated zero rows. See
+    // `contributionsCore`'s `inherited` projection and `EvermindConsole`.
+    if (modality === 'evermind' || modality === 'llm') {
+      await applyEvermindRecipe(c.env as Env, db, tenantId, storage.id, {
+        recipe: toEvermindRecipeId(body.evermindRecipe),
+        teacherModel: typeof body.evermindTeacherModel === 'string' ? body.evermindTeacherModel : null,
+        seedModelSlug: typeof body.evermindSeedModelSlug === 'string' ? body.evermindSeedModelSlug : null,
+        name,
+      });
+    }
+
     await invalidateCached(c.env as Env, listCacheKey(tenantId));
     const view = await fetchOne(tenantId, String(created!.id));
     return c.json(view, 201);

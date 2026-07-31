@@ -23,11 +23,12 @@ export type WorkflowNodeKind =
   | 'mcp'        // invoke an MCP-server / SaaS integration tool
   | 'memory'     // read/write the SSM hippocampus memory
   | 'knowledge'  // ingest into / query a knowledge base
-  | 'train'      // kick a MambaKit/SSMjs training run → hippocampus model
+  | 'train'      // train an Evermind model (builderforce-memory engine) → hippocampus model
   | 'transform'  // ETL: map/shape the payload
   | 'filter'     // ETL: drop the payload unless a predicate holds
   | 'branch'     // ETL: conditional fan-out
-  | 'output';    // terminal: write artifact / notify / push to board
+  | 'output'     // terminal: write artifact / notify / push to board
+  | 'gmail';     // integration: send an email via the tenant's connected Gmail
 
 /** Reserved orchestrator roles for non-agent (in-process) node handlers.
  *  Agent nodes use their configured role instead. Kept here so the builder, the
@@ -43,6 +44,7 @@ export const NODE_HANDLER_ROLES: Record<Exclude<WorkflowNodeKind, 'agent'>, stri
   filter:    'node:filter',
   branch:    'node:branch',
   output:    'node:output',
+  gmail:     'node:gmail',
 };
 
 export interface WorkflowDefNode {
@@ -151,7 +153,10 @@ export function roleForNode(node: WorkflowDefNode): string {
   if (node.kind === 'agent') {
     return String(node.config.role ?? node.config.agentRole ?? 'code-creator');
   }
-  return NODE_HANDLER_ROLES[node.kind];
+  // Client-side Evermind BUILD-step kinds (train-tokenizer, train-model, …) are a
+  // frontend-only superset run in-browser via the engine, never dispatched here.
+  // If one is ever server-run, fall back to a benign role rather than undefined.
+  return NODE_HANDLER_ROLES[node.kind] ?? `node:${node.kind}`;
 }
 
 /** Human/agent-readable task text for a node, derived from its config. */

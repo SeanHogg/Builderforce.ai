@@ -286,6 +286,41 @@ export async function revokeTenantApiKey(
   return true;
 }
 
+/**
+ * Self-service revoke of a `bfk_*` key by presenting the raw key itself —
+ * possession of the key authorizes its own revocation, so this needs no JWT or
+ * tenant/key-id context. Used by editor clients (VS Code) on sign-out so the
+ * server-side key dies with the local session instead of being orphaned.
+ *
+ * Returns true if an active key matched and was revoked. Idempotent: a
+ * malformed key, an unknown key, or an already-revoked key all return false
+ * without error (nothing to leak — the caller never learns whether the key
+ * existed). Invalidates the auth cache so the revocation is immediate.
+ */
+export async function revokeTenantApiKeyByRawKey(
+  db: Db,
+  args: { rawKey: string; env?: Env },
+): Promise<boolean> {
+  const raw = args.rawKey?.trim();
+  if (!raw) return false;
+  const keyHash = await hashSecret(raw);
+
+  const [row] = await db
+    .update(tenantApiKeys)
+    .set({ revokedAt: new Date() })
+    .where(and(
+      eq(tenantApiKeys.keyHash, keyHash),
+      isNull(tenantApiKeys.revokedAt),
+    ))
+    .returning({ id: tenantApiKeys.id, keyHash: tenantApiKeys.keyHash });
+  if (!row) return false;
+
+  if (args.env) {
+    await invalidateKeyCache(args.env, 'bfk', row.keyHash);
+  }
+  return true;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-key usage / audit-trail queries — used by both the owner self-service
 // and superadmin flows so the shape never drifts.

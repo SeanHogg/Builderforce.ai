@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   groupCompletedByAssignee,
   completedByAssigneeCacheKey,
-  DONE_CLASS_STATUSES,
   type CompletedTaskRow,
 } from './reportRoutes';
+import { DONE_CLASS_STATUSES } from '../../domain/shared/doneClass';
 
 /**
  * Locks gap [1253]: the "tasks completed by assignee over a window" rollup.

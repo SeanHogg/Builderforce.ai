@@ -58,10 +58,16 @@ export class Tenant {
   static create(
     name: string,
     ownerUserId: string,
+    slugOverride?: string,
   ): Tenant {
     if (!name.trim()) throw new ValidationError('Tenant name is required');
 
-    const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    // Slug is globally unique. Callers that must guarantee uniqueness (e.g. the
+    // auto-provisioned "Default" workspace, whose display name collides across
+    // every new user) pass a pre-resolved slug; otherwise derive it from the name.
+    const slug = slugOverride?.trim()
+      ? slugOverride.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      : name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const now = new Date();
     // Every new workspace starts on a 14-day Pro trial: plan=Pro + status=trialing
     // + trial_ends_at = now + 14d. effectivePlan() yields Pro limits until it lapses,
@@ -137,6 +143,11 @@ export class Tenant {
   addMember(actorUserId: string, newUserId: string, role: TenantRole): Tenant {
     if (!this.canManageMembers(actorUserId)) {
       throw new ForbiddenError('Only owners and managers can add members');
+    }
+    // Granting OWNER is owner-only — mirrors changeMemberRole so a MANAGER can't
+    // escalate a new member (or themselves via a re-add) to OWNER.
+    if (role === TenantRole.OWNER && this.getMember(actorUserId)?.role !== TenantRole.OWNER) {
+      throw new ForbiddenError('Only an owner can assign the owner role');
     }
     if (this.getMember(newUserId)) {
       throw new ValidationError(`User '${newUserId}' is already a member`);

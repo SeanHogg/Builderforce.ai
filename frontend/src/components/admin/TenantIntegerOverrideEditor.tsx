@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 
 /**
  * Generic superadmin override editor for a per-tenant integer cap with the
@@ -51,6 +52,7 @@ interface Props {
 }
 
 export function TenantIntegerOverrideEditor({ tenantId, value, onChange, config }: Props) {
+  const t = useTranslations('admin');
   const [mode, setMode] = useState<Mode>(modeFor(value));
   const [customStr, setCustomStr] = useState<string>(
     value !== null && value >= 0 ? config.toInput(value) : '',
@@ -66,7 +68,7 @@ export function TenantIntegerOverrideEditor({ tenantId, value, onChange, config 
     else {
       const parsed = config.fromInput(customStr);
       if (parsed === null) {
-        setError('Enter a valid non-negative value (or pick a different option).');
+        setError(t('tenants.intOverride.invalidValue'));
         return;
       }
       next = parsed;
@@ -77,7 +79,7 @@ export function TenantIntegerOverrideEditor({ tenantId, value, onChange, config 
       const saved = await config.save(tenantId, next);
       onChange(saved);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Update failed');
+      setError(e instanceof Error ? e.message : t('tenants.intOverride.updateFailed'));
     } finally {
       setSaving(false);
     }
@@ -97,21 +99,21 @@ export function TenantIntegerOverrideEditor({ tenantId, value, onChange, config 
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{ fontSize: 13, fontWeight: 700 }}>{config.label}</div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Current: {config.summary(value)}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('tenants.intOverride.current', { value: config.summary(value) })}</div>
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center', fontSize: 12 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <input type="radio" name={name} checked={mode === 'plan_default'} onChange={() => setMode('plan_default')} disabled={saving} />
-          Plan default
+          {t('tenants.intOverride.planDefault')}
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <input type="radio" name={name} checked={mode === 'unlimited'} onChange={() => setMode('unlimited')} disabled={saving} />
-          Unlimited
+          {t('tenants.intOverride.unlimited')}
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <input type="radio" name={name} checked={mode === 'custom'} onChange={() => setMode('custom')} disabled={saving} />
-          Custom:{config.customPrefix ? ` ${config.customPrefix}` : ''}
+          {t('tenants.intOverride.custom')}{config.customPrefix ? ` ${config.customPrefix}` : ''}
           <input
             type="number"
             min={0}
@@ -136,7 +138,7 @@ export function TenantIntegerOverrideEditor({ tenantId, value, onChange, config 
           onClick={(e) => { e.stopPropagation(); void save(); }}
           disabled={saving}
         >
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? t('common.saving') : t('common.save')}
         </button>
       </div>
 
