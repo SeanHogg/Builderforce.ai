@@ -34,6 +34,13 @@ const TaskPrStatusSchema = Type.Object({
         "Specific repository to search within. If omitted, all repos accessible to the token in the org are scanned.",
     }),
   ),
+  maxResultsPerTask: Type.Optional(
+    Type.Integer({
+      description: "Maximum number of PRs to return per task ID. Defaults to 10. Use for large-scale scans.",
+      minimum: 1,
+      maximum: 100,
+    }),
+  ),
 });
 
 type TaskPrStatusParams = {
