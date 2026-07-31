@@ -8,6 +8,7 @@
  * - Preserves field values across mode switches so no data is lost (FR-1).
  * - Both modes submit the same payload through the same onSubmit callback,
  *   and both call the same success handler on completion (FR-4.2 / FR-4.3).
+ * - Includes a live region so screen readers announce mode transitions (FR-5).
  */
 import { useCallback, useState, useEffect } from 'react';
 import { GuidedInput } from '@/components/GuidedInput';
@@ -43,10 +44,20 @@ export function InputModeForm({
   const [values, setValues] = useState<Record<string, unknown>>(
     () => initialValues ?? buildInitialValues(schema),
   );
+  const [modeAnnouncement, setModeAnnouncement] = useState<string>('');
 
   // Sync mode to localStorage on change (FR-1)
   useEffect(() => {
     setStoredInputMode(mode);
+  }, [mode]);
+
+  // Announce mode changes for screen readers (FR-5)
+  useEffect(() => {
+    setModeAnnouncement(
+      mode === 'guided'
+        ? 'Switched to Guided mode — step-by-step entry.'
+        : 'Switched to Express mode — single-screen entry.',
+    );
   }, [mode]);
 
   // Track initial mode selection
@@ -75,6 +86,42 @@ export function InputModeForm({
 
   return (
     <div className={className}>
+      {/* Screen-reader live region for mode transitions (FR-5) */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        style={{
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          padding: 0,
+          margin: -1,
+          overflow: 'hidden',
+          clip: 'rect(0,0,0,0)',
+          whiteSpace: 'nowrap',
+          border: 0,
+        }}
+      >
+        {modeAnnouncement}
+      </div>
+
+      {/* Screen-reader live region for form state (error count, submit state) */}
+      <div
+        aria-live="assertive"
+        style={{
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          padding: 0,
+          margin: -1,
+          overflow: 'hidden',
+          clip: 'rect(0,0,0,0)',
+          whiteSpace: 'nowrap',
+          border: 0,
+        }}
+      />
+
       {mode === 'guided' ? (
         <GuidedInput
           schema={schema}
