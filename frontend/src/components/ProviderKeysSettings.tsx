@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useToast } from '@/components/ToastProvider';
@@ -134,6 +134,95 @@ function precedenceLeaderLabel(
  * is moot with one). Reordering persists the whole list via `setPriority`, so an owner
  * at their Anthropic quota can put **Meta first** and have cloud agents route there.
  */
+/**
+ * THE ordered "what gets tried first" list — one implementation for both places a tenant
+ * ranks something.
+ *
+ * Two different things are ranked on this page and they mean the same thing to the router:
+ * the ACCOUNT precedence (which connected account leads) and, inside one OpenRouter
+ * registration, the MODEL order (which id the cascade seeds with, and which the Test button
+ * probes). Both are a list where position 1 wins, so both get the same numbered rows, the
+ * same ↑/↓ affordance, and the same "leads" badge — a second hand-rolled reorder list is how
+ * the two drift into looking like unrelated features.
+ *
+ * `onRemove` is optional: precedence rows are removed by disconnecting the account, while a
+ * model row can be dropped from the registration in place.
+ */
+function ReorderableList({
+  keys,
+  labels,
+  onReorder,
+  onRemove,
+  t,
+}: {
+  keys: string[];
+  labels: Record<string, string>;
+  onReorder: (next: string[]) => void;
+  onRemove?: (key: string) => void;
+  t: TFn;
+}) {
+  const labelFor = (key: string) => labels[key] ?? key;
+  const move = (index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= keys.length) return;
+    const next = [...keys];
+    [next[index], next[target]] = [next[target], next[index]];
+    onReorder(next);
+  };
+
+  return (
+    <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {keys.map((key, i) => (
+        <li
+          key={key}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', flexWrap: 'wrap',
+            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8,
+          }}
+        >
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', minWidth: 18, textAlign: 'center' }}>{i + 1}</span>
+          <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', minWidth: 0, wordBreak: 'break-word' }}>
+            {labelFor(key)}
+          </span>
+          {i === 0 && (
+            <span style={{ fontSize: 10.5, fontWeight: 700, color: 'rgba(34,197,94,0.9)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+              {t('precedence.leads')}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => move(i, -1)}
+            disabled={i === 0}
+            aria-label={t('precedence.moveUp', { provider: labelFor(key) })}
+            style={{ ...buttonPrimary, padding: '2px 9px', opacity: i === 0 ? 0.4 : 1 }}
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            onClick={() => move(i, 1)}
+            disabled={i === keys.length - 1}
+            aria-label={t('precedence.moveDown', { provider: labelFor(key) })}
+            style={{ ...buttonPrimary, padding: '2px 9px', opacity: i === keys.length - 1 ? 0.4 : 1 }}
+          >
+            ↓
+          </button>
+          {onRemove && (
+            <button
+              type="button"
+              onClick={() => onRemove(key)}
+              aria-label={t('openRouter.removeModel', { model: labelFor(key) })}
+              style={{ ...buttonDanger, padding: '2px 9px' }}
+            >
+              ×
+            </button>
+          )}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function PrecedencePanel({
   order,
   labels,
@@ -145,56 +234,12 @@ function PrecedencePanel({
   onReorder: (next: string[]) => void;
   t: TFn;
 }) {
-  const move = (index: number, dir: -1 | 1) => {
-    const target = index + dir;
-    if (target < 0 || target >= order.length) return;
-    const next = [...order];
-    [next[index], next[target]] = [next[target], next[index]];
-    onReorder(next);
-  };
-
   return (
     <div style={{ ...cardStyle, marginBottom: 20 }}>
       <div style={sectionTitle}>{t('precedence.title')}</div>
       <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('precedence.subtitle')}</p>
       {order.length === 0 && <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t('status.notConnected')}</div>}
-      <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {order.map((p, i) => (
-          <li
-            key={p}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-              background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8,
-            }}
-          >
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', minWidth: 18, textAlign: 'center' }}>{i + 1}</span>
-            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', minWidth: 0 }}>{labels[p] ?? p}</span>
-            {i === 0 && (
-              <span style={{ fontSize: 10.5, fontWeight: 700, color: 'rgba(34,197,94,0.9)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                {t('precedence.leads')}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => move(i, -1)}
-              disabled={i === 0}
-              aria-label={t('precedence.moveUp', { provider: labels[p] ?? p })}
-              style={{ ...buttonPrimary, padding: '2px 9px', opacity: i === 0 ? 0.4 : 1 }}
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              onClick={() => move(i, 1)}
-              disabled={i === order.length - 1}
-              aria-label={t('precedence.moveDown', { provider: labels[p] ?? p })}
-              style={{ ...buttonPrimary, padding: '2px 9px', opacity: i === order.length - 1 ? 0.4 : 1 }}
-            >
-              ↓
-            </button>
-          </li>
-        ))}
-      </ol>
+      <ReorderableList keys={order} labels={labels} onReorder={onReorder} t={t} />
     </div>
   );
 }
@@ -717,6 +762,19 @@ function OpenRouterConnectionsPanel({
     .filter((model) => !query || `${model.name} ${model.id} ${model.provider}`.toLowerCase().includes(query))
     .slice(0, 100);
 
+  // One pass over the (≈400-entry) catalog per catalog change, not one linear scan per
+  // selected row per render.
+  const catalogNames = useMemo(() => new Map(catalog.map((model) => [model.id, model.name])), [catalog]);
+  // The id is what actually routes, so it is always shown; the friendly name is a prefix
+  // when we have one. A selected id absent from the catalog (retired upstream, or hand-added
+  // via the API) still renders — as its bare id, which is the honest thing to show.
+  const modelLabels: Record<string, string> = Object.fromEntries(
+    selected.map((id) => {
+      const name = catalogNames.get(id);
+      return [id, name && name !== id ? `${name} · ${id}` : id];
+    }),
+  );
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div>
@@ -785,6 +843,27 @@ function OpenRouterConnectionsPanel({
             </label>
           )}
           <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 12 }}>{t('openRouter.billing')}</div>
+
+          {/* ORDER IS ROUTING, not presentation: this list is the cascade seed — position 1
+              is what agents run and what Test connection probes, and the rest are the
+              failover chain in order. Ticking boxes in a 400-row catalog can express WHICH
+              models, never WHICH FIRST, so the selection gets its own ranked editor. */}
+          {selected.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+                {t('openRouter.orderTitle')}
+              </div>
+              <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '0 0 8px' }}>{t('openRouter.orderHint')}</p>
+              <ReorderableList
+                keys={selected}
+                labels={modelLabels}
+                onReorder={setSelected}
+                onRemove={(id) => setSelected((current) => current.filter((model) => model !== id))}
+                t={t}
+              />
+            </div>
+          )}
+
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
