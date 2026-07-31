@@ -8932,7 +8932,11 @@
         "revoked": "widerrufen",
         "expired": "abgelaufen",
         "undecryptable": "Anmeldedaten unlesbar",
-        "unavailable": "nicht verfügbar"
+        "unavailable": "nicht verfügbar",
+        "failed": "fehlgeschlagen",
+        "not_found": "Verbindung nicht gefunden",
+        "no_test_model": "kein Modell zum Testen ausgewählt",
+        "key_unresolved": "gespeicherter Schlüssel konnte nicht verwendet werden"
       },
       "tokensUsed": "Verbrauchte KI-Token",
       "periodLabel": "Letzte {period}"

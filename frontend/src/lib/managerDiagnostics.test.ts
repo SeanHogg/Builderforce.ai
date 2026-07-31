@@ -8,6 +8,8 @@ import {
   repeatedActions,
   summarizePassLimits,
   summarizeSignoffs,
+  summarizeBoardStaffing,
+  MAX_CAUSE_WORDINGS,
   STALL_WINDOW_HEAD,
   STALL_WINDOW_TAIL,
   type ManagerDiagnosticsInput,
@@ -777,6 +779,140 @@ describe('managed dispatch — the finding that must read zero', () => {
   it('is ABSENT on a board with no managed-dispatch cohort — the post-fix steady state', () => {
     const f = managerFindings(withCohorts([{ cause: 'awaiting_signoff', count: 20, sampleTaskIds: [58], maxIdleMs: 2 * DAY }]), now);
     expect(f.some((x) => x.code === 'managed_dispatch_refused')).toBe(false);
+  });
+
+  /**
+   * THE ANSWER MUST BE IN THE FINDING, NOT IN A POINTER TO THE APPENDIX.
+   *
+   * The board-staffing sweep is the only thing that knows WHY a managed lane authorises
+   * nobody, and it says so in one `assign` decision. That decision lives in the decision
+   * feed — the last prose section, behind the PR pile and the register. Measured on
+   * project 11 (2026-07-31, api 2026.7.191): the report ran past 50,000 characters, the
+   * feed was the part that got cut, and the finding at the top said "look for an 'assign'
+   * decision" — instructing the reader to read a section that was no longer there.
+   */
+  const cohort = withCohorts([{ cause: 'managed_no_role', count: 306, sampleTaskIds: [526], maxIdleMs: 19 * DAY }]);
+  const sweepAction = (detail: Record<string, unknown>, summary = 'Board staffing swept'): ManagerAction => ({
+    id: 'staff-1', taskId: null, ticketKey: null, ticketTitle: null,
+    actionType: 'assign', summary, detail: JSON.stringify(detail), createdAt: iso(2 * MIN),
+  });
+  const withSweep = (action: ManagerAction | null): ManagerDiagnosticsInput => ({
+    ...cohort,
+    overview: { ...overview, actions: action ? [action, ...actions] : actions },
+  });
+  const refusal = (over: ManagerDiagnosticsInput) =>
+    managerFindings(over, now).find((x) => x.code === 'managed_dispatch_refused')?.text ?? '';
+
+  it('NAMES the unauthorised lane, what it holds and why, inside the finding itself', () => {
+    const text = refusal(withSweep(sweepAction({
+      unfilledRoleKeys: [], filled: [], unfillable: [], hires: 0, error: null,
+      unauthorizedLanes: [{ swimlaneId: 's1', laneKey: 'ready', reason: 'lane_unstaffed', ticketCount: 204 }],
+    })));
+    expect(text).toContain("'ready' holding 204");
+    expect(text).toContain('no requirements and no staffed agents');
+    // The pointer it replaced. A reader must never be sent to a section that may be cut.
+    expect(text).not.toContain("look for an 'assign' decision");
+  });
+
+  it('calls an EMPTY sweep beside a standing cohort a contradiction, not a clean board', () => {
+    const text = refusal(withSweep(sweepAction({
+      unfilledRoleKeys: [], filled: [], unfillable: [], hires: 0, error: null, unauthorizedLanes: [],
+    })));
+    expect(text).toContain('contradicts this cohort');
+  });
+
+  it('says the sweep journalled NOTHING when it did — the same contradiction, one step earlier', () => {
+    expect(refusal(withSweep(null))).toContain('NO board-staffing decision');
+  });
+
+  it('reports a FAILED sweep as unexplained rather than unstaffable', () => {
+    const text = refusal(withSweep(sweepAction({
+      unfilledRoleKeys: [], filled: [], unfillable: [], hires: 0, unauthorizedLanes: [],
+      error: 'role roster unavailable',
+    })));
+    expect(text).toContain('UNEXPLAINED');
+    expect(text).toContain('role roster unavailable');
+  });
+
+  it('credits what the sweep DID fill, so a reader does not redo it by hand', () => {
+    const text = refusal(withSweep(sweepAction({
+      unfilledRoleKeys: ['product-owner'], unauthorizedLanes: [], error: null, hires: 1,
+      filled: [{ roleKey: 'product-owner', action: 'hired', agentName: 'Ada' }],
+      unfillable: ['security-reviewer'],
+    })));
+    expect(text).toContain('It DID fill product-owner (1 hired)');
+    expect(text).toContain('could not fill security-reviewer');
+  });
+
+  it('puts the board-staffing block ABOVE the decision feed it was extracted from', () => {
+    const r = buildManagerDiagnosticsReport(withSweep(sweepAction({
+      unfilledRoleKeys: [], filled: [], unfillable: [], hires: 0, error: null,
+      unauthorizedLanes: [{ swimlaneId: 's1', laneKey: 'ready', reason: 'shape_unmatched', ticketCount: 204 }],
+    }, 'Staffed 0 roles; 1 stage authorises nobody')), ctx);
+    expect(r.indexOf('-- Board staffing')).toBeLessThan(r.indexOf('-- Decision feed'));
+    expect(r.indexOf('-- Board staffing')).toBeLessThan(r.indexOf('-- Stuck register'));
+    expect(r).toContain('ready  holding=204  reason=shape_unmatched');
+    // The sweep's own sentence, not a re-derivation of it in this module.
+    expect(r).toContain("the sweep's own words: Staffed 0 roles; 1 stage authorises nobody");
+  });
+
+  it('says the sweep is silent rather than rendering an empty staffing block', () => {
+    const r = buildManagerDiagnosticsReport(withSweep(null), ctx);
+    expect(r).toContain('no board-staffing decision in the last');
+  });
+
+  it('reads the BOARD-scope sweep, never a per-ticket assign that happens to share the type', () => {
+    const perTicket: ManagerAction = {
+      id: 'a-ticket', taskId: 77, ticketKey: '1-UNTITLED-077', ticketTitle: 'A ticket',
+      actionType: 'assign', summary: 'Assigned Ada', detail: '{"unfilledRoleKeys":["decoy"]}',
+      createdAt: iso(MIN),
+    };
+    const board = sweepAction({ unfilledRoleKeys: ['product-owner'], unauthorizedLanes: [] });
+    // Newest first, and the per-ticket row is the newest of the two.
+    expect(summarizeBoardStaffing([perTicket, board])?.unfilledRoleKeys).toEqual(['product-owner']);
+    expect(summarizeBoardStaffing([perTicket])).toBeNull();
+    expect(summarizeBoardStaffing(actions)).toBeNull();
+  });
+});
+
+/**
+ * THE REGISTER'S DETAIL IS A PROPERTY OF THE CAUSE, NOT OF THE ROW.
+ *
+ * Triage writes one sentence per cause and stamps it on every ticket carrying it, so a
+ * 60-row window spent ~18,000 characters restating a handful of sentences — and what got
+ * cut to pay for it was the decision feed at the end of the report.
+ */
+describe('the stuck register — one wording per cause, not one per row', () => {
+  const conflict = 'the pull request conflicts with its base branch — dispatching an agent to resolve it.';
+  const many = Array.from({ length: 40 }, (_, i) => stallRow({
+    taskId: i, cause: 'pr_conflict', remedy: 'resolve_conflict',
+    detail: `Stuck ${16 + (i % 5)} days: ${conflict}`,
+  }));
+  const r = buildManagerDiagnosticsReport({
+    ...input,
+    stalls: { ...stalls, rows: many, byCause: [{ cause: 'pr_conflict', count: 40 }] },
+  }, ctx);
+
+  it('prints the shared wording ONCE, under its cause', () => {
+    expect(r.split(conflict).length - 1).toBe(1);
+    expect(r).toContain(`  pr_conflict: 40\n      → ${conflict}`);
+  });
+
+  it('drops the per-row detail line entirely — the cause column indexes it', () => {
+    expect(r).not.toContain('     detail: Stuck');
+    expect(r).toContain('cause=pr_conflict  remedy=resolve_conflict');
+  });
+
+  it('counts the distinct wordings it did not print rather than dropping them silently', () => {
+    const varied = Array.from({ length: 12 }, (_, i) => stallRow({
+      taskId: i, cause: 'never_started', remedy: 'dispatch', detail: `Stuck 3 days: wording ${i}`,
+    }));
+    const big = buildManagerDiagnosticsReport({
+      ...input,
+      stalls: { ...stalls, rows: varied, byCause: [{ cause: 'never_started', count: 12 }] },
+    }, ctx);
+    expect(big).toContain('→ wording 0');
+    expect(big).toContain(`… ${12 - MAX_CAUSE_WORDINGS} further distinct wordings for this cause not shown`);
   });
 });
 

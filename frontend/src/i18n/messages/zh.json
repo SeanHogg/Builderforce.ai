@@ -8932,7 +8932,11 @@
         "revoked": "已撤销",
         "expired": "已过期",
         "undecryptable": "凭据无法读取",
-        "unavailable": "不可用"
+        "unavailable": "不可用",
+        "failed": "失败",
+        "not_found": "未找到该连接",
+        "no_test_model": "未选择可测试的模型",
+        "key_unresolved": "无法使用已保存的密钥"
       },
       "tokensUsed": "已使用的 AI 令牌",
       "periodLabel": "最近 {period}"

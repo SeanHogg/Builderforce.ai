@@ -100,7 +100,7 @@ import {
   loadProviderAuthAlert,
 } from '../../application/llm/providerAuthAlerts';
 import { raiseProviderAuthAlertsFromFailovers } from '../../application/llm/byoCredentialAlerting';
-import { probeByoProvider } from '../../application/llm/byoCredentialHealth';
+import { probeByoProvider, probeOpenRouterConnection } from '../../application/llm/byoCredentialHealth';
 import { byoModelsFor } from '../../application/llm/byoModelRouting';
 import {
   generatePkce,
@@ -1123,6 +1123,20 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     });
   });
 
+  // Premium entitlement for the OpenRouter connection surface. Creating, editing and
+  // TESTING a registration all spend the same paid capability — a test is a real (tiny)
+  // upstream dispatch, and on a managed-key connection it is OUR key that pays for it — so
+  // the gate is defined once here instead of being re-derived per route.
+  const requireOpenRouterEntitlement = (c: Context<HonoEnv>, access: TenantAccess): Response | null => {
+    const premium = evaluatePremiumModelAccess({
+      effectivePlan: toTenantPlan(access.effectivePlan),
+      premiumOverride: access.premiumOverride,
+      isSuperadmin: access.isSuperadmin,
+      cardValidated: access.cardValidated,
+    });
+    return premium.entitled ? null : c.json(premiumModelGateBody(premium), 402);
+  };
+
   // OpenRouter registrations — each named connection owns one ordered set of
   // selected models and may optionally bind the tenant's OpenRouter key.
   router.get('/openrouter-connections', async (c) => {
@@ -1134,13 +1148,8 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   router.post('/openrouter-connections', async (c) => {
     let access: TenantAccess;
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
-    const premium = evaluatePremiumModelAccess({
-      effectivePlan: toTenantPlan(access.effectivePlan),
-      premiumOverride: access.premiumOverride,
-      isSuperadmin: access.isSuperadmin,
-      cardValidated: access.cardValidated,
-    });
-    if (!premium.entitled) return c.json(premiumModelGateBody(premium), 402);
+    const gated = requireOpenRouterEntitlement(c, access);
+    if (gated) return gated;
     const body = await c.req.json<{ label?: unknown; models?: unknown; apiKey?: unknown }>()
       .catch(() => ({} as { label?: unknown; models?: unknown; apiKey?: unknown }));
     const result = await upsertOpenRouterConnection(c.env, access.tenantId, {
@@ -1158,13 +1167,8 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   router.put('/openrouter-connections/:id', async (c) => {
     let access: TenantAccess;
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
-    const premium = evaluatePremiumModelAccess({
-      effectivePlan: toTenantPlan(access.effectivePlan),
-      premiumOverride: access.premiumOverride,
-      isSuperadmin: access.isSuperadmin,
-      cardValidated: access.cardValidated,
-    });
-    if (!premium.entitled) return c.json(premiumModelGateBody(premium), 402);
+    const gated = requireOpenRouterEntitlement(c, access);
+    if (gated) return gated;
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid connection id' }, 400);
     const body = await c.req.json<{ label?: unknown; models?: unknown; apiKey?: unknown; clearKey?: unknown }>()
@@ -1181,6 +1185,38 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return c.json({ error: result.reason, code: result.reason }, status);
     }
     return c.json(result.connection);
+  });
+
+  // Test ONE registration by actually dispatching a tiny strict-pinned request down its own
+  // model list, on its own key when it has one. The provider cards have had this since the
+  // day a page of green "connected" chips sat next to a failing Test button; a registration
+  // is exactly as capable of being silently broken (a rotated OpenRouter key, a model id
+  // that OpenRouter retired), and until now nothing on this surface could tell an operator
+  // so. Same verdict shape, same probe module — see `probeOpenRouterConnection`.
+  router.post('/openrouter-connections/:id/test', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const gated = requireOpenRouterEntitlement(c, access);
+    if (gated) return gated;
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid connection id' }, 400);
+    const probe = await probeOpenRouterConnection(c.env, access.tenantId, id);
+    if (probe.status === 'not_found') return c.json({ error: 'not_found', code: 'not_found' }, 404);
+    if (probe.ok) {
+      return c.json({ ok: true, status: probe.status, model: probe.model, ownKey: probe.ownKey, testedAt: probe.checkedAt });
+    }
+    return c.json({
+      ok: false,
+      status: probe.status,
+      model: probe.model,
+      ownKey: probe.ownKey,
+      error: probe.error
+        ? `OpenRouter connection test failed: ${probe.error}`
+        : `OpenRouter connection test could not run: ${probe.status.replaceAll('_', ' ')}.`,
+      code: 'openrouter_connection_test_failed',
+      testedAt: probe.checkedAt,
+      details: { connectionId: probe.connectionId, model: probe.model, upstreamStatus: probe.upstreamStatus },
+    });
   });
 
   router.delete('/openrouter-connections/:id', async (c) => {

@@ -1,6 +1,12 @@
 /**
  * Untaken tool call — detection + recovery, shared by every agent loop.
  *
+ * Recovery has two halves and BOTH live in this package: the re-prompt budget and the
+ * user-facing notices below, and the model SELECTOR in `./modelFallback` (re-exported
+ * at the bottom). They were split across two packages once, and the server loop —
+ * unable to import the browser-only half — hand-rolled its own selection and got it
+ * wrong. See `modelFallback.ts` for that failure.
+ *
  * The failure it fixes: a turn ends with `stopReason: stop` and ZERO tool calls while
  * tools were available, and a loop that treats "no tool calls" as "done" hands the user
  * words instead of a result. It wears three faces, all of them observed on
@@ -28,7 +34,7 @@
  * "outlets"/"tablets" out.
  */
 const ANNOUNCE_SUBJECT =
-  "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
+  "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to|'d need to| would need to| will need to| need to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
 
 /** Optional hedges/adverbs models slip between the subject and the verb. */
 const ANNOUNCE_FILLER =
@@ -41,6 +47,12 @@ const ANNOUNCE_FILLER =
  * "Let me LOOK AT the PRs", "Let me FIND the agents", "Let me DO that now",
  * "Let me START by examining …". Excludes "know" so "Let me know if …" — a complete
  * answer inviting follow-up — stays out.
+ *
+ * `i(?:'d| would| will)? need to` is here rather than in ANNOUNCE_SUBJECT's contraction
+ * list because it is the CONDITIONAL form of the same stall — "I would need to call the
+ * digest first" is a promise with the commitment filed off, and a run that ends on it has
+ * exactly as little data as one that ends on "I'll call the digest". It still requires an
+ * ANNOUNCE_VERB, so "I need to know your budget" (verb excluded) stays out.
  */
 const ANNOUNCE_VERB =
   '(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|see|walk|trace|map)';
@@ -156,6 +168,22 @@ export function announcesUntakenAction(text: string): boolean {
 const FILE_EXTENSION = '(?:ts|tsx|js|jsx|mjs|cjs|json|md|ya?ml|sql|toml|lock|txt|env|html|css|py|go|rs|sh|png|svg|csv|xml)\\b';
 const DOTTED_TOOL_IDENT = `\\b[a-z][a-z0-9_]{2,}\\.(?!${FILE_EXTENSION})[a-z][a-z0-9_]{2,}\\b`;
 
+/**
+ * Every CATALOG-style tool id in `text` (`manager.digest`), de-duplicated, in order —
+ * the counterpart to {@link toolNamesMentionedIn}, which finds the ADVERTISED form.
+ *
+ * The pair is a DIAGNOSIS, not a curiosity, and it is the distinction a shipped report
+ * got wrong. A stalled reply naming `manager.digest` was told to call a string the model
+ * never had (the prompt / persisted-persona name mismatch, fixed by migration 0379). A
+ * stalled reply naming `builtin_manager_digest` was told correctly and could not comply —
+ * the tool list is fine and the MODEL is the problem. Identical transcripts, opposite
+ * fixes; a report that asserts the first while the evidence says the second sends the
+ * reader to re-audit prompts and migrations that were already right.
+ */
+export function catalogToolNamesMentionedIn(text: string): string[] {
+  return [...new Set(text.match(new RegExp(DOTTED_TOOL_IDENT, 'gi')) ?? [])];
+}
+
 const UNCALLED_TOOL_CLAIM = new RegExp(
   [
     // "The tools required are X, Y and Z." / "The required tools are …"
@@ -164,6 +192,10 @@ const UNCALLED_TOOL_CLAIM = new RegExp(
     "\\btools?\\b[^.!?]{0,80}?\\b(?:have|has|had|were|was)(?:n'?t| not)\\s+(?:yet\\s+)?(?:return|returned|provided|available|run|called)",
     // "no tool results", "no results from the tools", "no tool outputs for project 11"
     '\\bno\\s+(?:new\\s+)?tools?\\s+(?:results?|outputs?|data|returns?)\\b',
+    // "No other tools provide the needed data." — the same claim aimed at the CATALOG
+    // rather than at the results: an inventory of what it would need, from a turn that
+    // called none of it. Observed as the closing sentence of the measured replies.
+    '\\bno\\s+other\\s+tools?\\b[^.!?]{0,40}?\\b(?:provide|provides|give|gives|return|returns|have|has|offer|offers)\\b',
     '\\bno\\s+results?\\s+(?:from|for)\\s+(?:the\\s+)?tools?\\b',
     // "tool outputs never provided" / "the tool results were never returned"
     '\\btools?\\s+(?:results?|outputs?)\\b[^.!?]{0,40}?\\b(?:never|not)\\s+(?:been\\s+)?(?:provided|returned|available)',
@@ -277,14 +309,6 @@ export function isExhaustedStall(input: StalledTurnInput): boolean {
 }
 
 /**
- * How many times ONE run may swap MODELS after a model burns its whole stall budget.
- * Small on purpose: each switch replays the turn, and a run that two different models
- * have already failed to act on is not going to be rescued by a third — at that point
- * the honest move is to stop and say so, not to walk the catalog on the tenant's money.
- */
-export const MAX_MODEL_FAILOVERS = 2;
-
-/**
  * The run switched models because the previous one would not emit tool calls. Shown
  * on the timeline, so the swap is visible rather than a silent change of who is
  * answering — a chat that quietly changes model is its own support ticket.
@@ -322,3 +346,8 @@ export function stallExhaustedNotice(model?: string | null, tried?: readonly str
         + ' and send the message again.')
   );
 }
+
+// Which model to try NEXT once the budget above is spent, and the budget for switching.
+// Same package as the policy it serves, so no loop can reach one half without the other.
+export { nextFallbackModel, chooseStallFailover, MAX_MODEL_FAILOVERS } from './modelFallback';
+export type { ModelFallbackSurface, StallFailoverInput } from './modelFallback';
