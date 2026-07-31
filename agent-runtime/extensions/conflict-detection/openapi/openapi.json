@@ -1,0 +1,125 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Builderforce.ai — Conflict Detection Rules and Alerts API",
+    "description": "Automatically detects prioritization conflicts where two distinct stakeholders assign conflicting P0 priorities to the same team within the same review window. Rule: stakeholder_1 != stakeholder_2 AND priority(req1)=P0 AND priority(req2)=P0 AND team(req1)=team(req2) AND reviewWindow(req1) overlaps reviewWindow(req2) THEN ConflictAlert. Deliverables: conflict detector component, conflict rule spec, conflict alert DTO with labeling/summarization/attachment, detection API, list API filtered by status, manual resolution, OpenAPI docs, sample payloads.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    { "url": "http://localhost:3000/api", "description": "Local" },
+    { "url": "https://api.builderforce.ai/api", "description": "Prod" }
+  ],
+  "tags": [{ "name": "conflicts", "description": "Conflict detection, listing, manual resolution" }],
+  "paths": {
+    "/conflicts/detect": {
+      "post": {
+        "tags": ["conflicts"],
+        "operationId": "detectConflicts",
+        "summary": "Trigger conflict detection (create/detect)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DetectConflictsRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Conflicts created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DetectConflictsResponse" } } } },
+          "200": { "description": "No new conflicts / duplicates only" },
+          "400": { "description": "Validation error" }
+        }
+      }
+    },
+    "/conflicts": {
+      "get": {
+        "tags": ["conflicts"],
+        "operationId": "listConflicts",
+        "summary": "List conflicts from priority register (by status)",
+        "description": "Retrieves conflicts with filtering per PRD. Visible to all team members via API.",
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["open", "acknowledged", "resolved", "dismissed", "all"] } },
+          { "name": "versionId", "in": "query", "schema": { "type": "string" } },
+          { "name": "teamId", "in": "query", "schema": { "type": "string" } },
+          { "name": "stakeholderId", "in": "query", "schema": { "type": "string" } },
+          { "name": "severity", "in": "query", "schema": { "type": "string", "enum": ["critical", "high", "medium", "low"] } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": {
+          "200": { "description": "Paginated list", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ListConflictsResponse" } } } }
+        }
+      }
+    },
+    "/conflicts/{id}": {
+      "get": {
+        "tags": ["conflicts"],
+        "operationId": "getConflict",
+        "summary": "Get conflict by ID",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Conflict" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/conflicts/{id}/resolve": {
+      "post": {
+        "tags": ["conflicts"],
+        "operationId": "resolveConflict",
+        "summary": "Manually resolve conflict (resolver role)",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ResolveConflictRequest" } } } },
+        "responses": { "200": { "description": "Resolved" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/conflicts/rule": {
+      "get": {
+        "tags": ["conflicts"],
+        "operationId": "getRule",
+        "summary": "Formal Conflict Rule Spec",
+        "responses": { "200": { "description": "Rule spec" } }
+      }
+    },
+    "/conflicts/health": {
+      "get": {
+        "tags": ["conflicts"],
+        "operationId": "health",
+        "summary": "Health check",
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PriorityLevel": { "type": "string", "enum": ["P0", "P1", "P2", "P3"] },
+      "ConflictStatus": { "type": "string", "enum": ["open", "acknowledged", "resolved", "dismissed"] },
+      "ConflictSeverity": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+      "Stakeholder": { "type": "object", "required": ["stakeholderId", "stakeholderName"], "properties": { "stakeholderId": { "type": "string" }, "stakeholderName": { "type": "string" }, "role": { "type": "string", "nullable": true }, "email": { "type": "string", "nullable": true } } },
+      "Team": { "type": "object", "required": ["teamId", "teamName"], "properties": { "teamId": { "type": "string" }, "teamName": { "type": "string" } } },
+      "ConflictKey": { "type": "object", "properties": { "stakeholderId1": { "type": "string" }, "stakeholderId2": { "type": "string" }, "teamId": { "type": "string" }, "versionId": { "type": "string", "nullable": true } } },
+      "ConflictingPriorities": { "type": "object", "properties": { "stakeholder1": { "$ref": "#/components/schemas/Stakeholder" }, "stakeholder2": { "$ref": "#/components/schemas/Stakeholder", "nullable": true }, "team": { "$ref": "#/components/schemas/Team" }, "priority1": { "$ref": "#/components/schemas/PriorityLevel" }, "priority2": { "$ref": "#/components/schemas/PriorityLevel" } } },
+      "ConflictAlert": {
+        "type": "object",
+        "required": ["id", "key", "title", "description", "summary", "severity", "detectedAt", "status", "conflictingPriorities", "stakeholders", "versionIds", "sourceRequestIds"],
+        "properties": {
+          "id": { "type": "string", "example": "alice__bob__engineering__V1" },
+          "key": { "$ref": "#/components/schemas/ConflictKey" },
+          "title": { "type": "string", "example": "Engineering Team — P0 Priority Conflict" },
+          "description": { "type": "string" },
+          "summary": { "type": "string", "description": "Reasoning summary per PRD" },
+          "severity": { "$ref": "#/components/schemas/ConflictSeverity" },
+          "detectedAt": { "type": "string", "format": "date-time" },
+          "status": { "$ref": "#/components/schemas/ConflictStatus" },
+          "conflictingPriorities": { "$ref": "#/components/schemas/ConflictingPriorities" },
+          "stakeholders": { "type": "array", "items": { "$ref": "#/components/schemas/Stakeholder" } },
+          "versionIds": { "type": "array", "items": { "type": "string" } },
+          "sourceRequestIds": { "type": "array", "items": { "type": "string" } },
+          "conflictCount": { "type": "integer" }
+        }
+      },
+      "PriorityRequest": { "type": "object", "required": ["id", "title", "priority", "stakeholderId", "stakeholder", "teamId", "team", "createdAt"], "properties": { "id": { "type": "string" }, "title": { "type": "string" }, "priority": { "$ref": "#/components/schemas/PriorityLevel" }, "stakeholderId": { "type": "string" }, "stakeholder": { "type": "object" }, "teamId": { "type": "string" }, "team": { "type": "object" }, "versionId": { "type": "string", "nullable": true }, "createdAt": { "type": "string", "format": "date-time" } } },
+      "DetectConflictsRequest": { "type": "object", "required": ["requests"], "properties": { "requests": { "type": "array", "items": { "$ref": "#/components/schemas/PriorityRequest" } }, "versionId": { "type": "string", "nullable": true }, "windowThresholdDays": { "type": "integer", "nullable": true } } },
+      "DetectConflictsResponse": { "type": "object", "properties": { "success": { "type": "boolean" }, "conflicts": { "type": "array", "items": { "$ref": "#/components/schemas/ConflictAlert" } }, "duplicatesFound": { "type": "integer" }, "timestamp": { "type": "string", "format": "date-time" } } },
+      "ListConflictsResponse": { "type": "object", "properties": { "conflicts": { "type": "array", "items": { "$ref": "#/components/schemas/ConflictAlert" } }, "total": { "type": "integer" }, "page": { "type": "integer" }, "limit": { "type": "integer" }, "totalPages": { "type": "integer" }, "timestamp": { "type": "string" } } },
+      "ResolveConflictRequest": { "type": "object", "required": ["action"], "properties": { "action": { "type": "string", "enum": ["acknowledge", "resolve", "dismiss"] }, "note": { "type": "string", "nullable": true }, "resolverUserId": { "type": "string", "nullable": true } } }
+    }
+  }
+}
