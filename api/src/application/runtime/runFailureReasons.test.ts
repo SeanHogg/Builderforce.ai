@@ -139,3 +139,55 @@ describe('run failure rollup', () => {
     expect(rollUpRunFailures([])).toEqual([]);
   });
 });
+
+/**
+ * THE ENVELOPE IS NOT THE CAUSE.
+ *
+ * Measured on the very first capture this classifier produced (project 11, 2026-07-31):
+ *
+ *   78× (48%) runtime_crash — "This cloud run's runtime crashed before reporting
+ *   completion: gateway error: Gateway 429 on model 'direct/meta/muse-spark-1.1' ·
+ *   chain: openrouter/moonshotai/kimi-k3 → …"
+ *   72× (44%) rate_limited
+ *
+ * Every one of those 78 is a rate limit wearing a crash's clothes, so the report split
+ * ONE cause across two rows and made the largest fact on the board — 150 of 164 failures
+ * (91%) being the free model pool returning 429 — look like two medium ones. Splitting a
+ * dominant cause in half is worse than not classifying it at all.
+ */
+describe('classifyRunFailure — crash wrappers carry the real cause inside', () => {
+  it('classifies the INNER cause of a wrapped crash, not the wrapper', () => {
+    const wrapped = cloudCrashReason(
+      "gateway error: Gateway 429 on model 'direct/meta/muse-spark-1.1' · chain: openrouter/moonshotai/kimi-k3 → claude-opus-5",
+    );
+    expect(classifyRunFailure(wrapped)).toBe('rate_limited');
+    // And it must be counted as the platform's fault, not the ticket's — the two demand
+    // opposite responses, and 91% of a board's failures being a provider ceiling is not
+    // a board that is broken.
+    expect(isPlatformFailure(classifyRunFailure(wrapped))).toBe(true);
+  });
+
+  it('keeps runtime_crash when the inner detail names nothing recognisable', () => {
+    expect(classifyRunFailure(cloudCrashReason('ENOENT: no such file or directory'))).toBe('runtime_crash');
+  });
+
+  it('does not let the wrapper’s own advice sentence classify the failure', () => {
+    // `cloudCrashReason` appends "…re-run the task — and if a container run keeps
+    // crashing here the image or a tool call is unstable." Those words must never become
+    // the inner probe's input.
+    const wrapped = cloudCrashReason('disk full');
+    expect(wrapped).toMatch(/re-run the task/);
+    expect(classifyRunFailure(wrapped)).toBe('runtime_crash');
+  });
+
+  it('rolls the unwrapped failures in with their unwrapped twins', () => {
+    const rolled = rollUpRunFailures([
+      { message: cloudCrashReason('Gateway 429 on model x'), count: 78 },
+      { message: '429 Too Many Requests', count: 72 },
+      { message: CLOUD_ORPHAN_REASON, count: 14 },
+    ]);
+    // One cause, one row, 150 — not 78 + 72 read as two different problems.
+    expect(rolled[0]).toMatchObject({ reason: 'rate_limited', count: 150 });
+    expect(rolled).toHaveLength(2);
+  });
+});

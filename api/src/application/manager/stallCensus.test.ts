@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import {
   classifyBulkAutoRunReason, censusDiagnose, summarizeCensus, type CensusTicketFacts,
@@ -216,5 +218,73 @@ describe('summarizeCensus', () => {
   it('is empty-safe', () => {
     const c = summarizeCensus(7, [], 0);
     expect(c).toMatchObject({ managed: 0, stalled: 0, moving: 0, cohorts: [] });
+  });
+});
+
+/**
+ * A FAILED READ IS NOT A VERDICT — the 306-ticket cohort.
+ *
+ * `loadCensusFacts` used to substitute `{ roleKeys: [], approvers: [], tier: 'none' }`
+ * whenever the bulk lane-authority map had no entry for a ticket's lane, and
+ * `pickManagedProducer` reads that as null, which this ladder reports as
+ * `managed_no_role`. The map's loader was itself wrapped in `.catch(() => new Map())`, so
+ * ONE failed read relabelled every managed ticket on the board at once.
+ *
+ * Measured on project 11 across five captures: `managed_no_role` sat at 294 → 306 of
+ * ~670 stalled tickets while the board-staffing sweep — the SAME `loadBoardLaneAuthorities`
+ * call, in the same pass, without a swallow — reported `unfilledRoleKeys: []` and no
+ * unauthorised lanes. Two code paths, identical inputs, opposite answers, because one of
+ * them turned a failure into the most alarming available verdict.
+ *
+ * The ladder's contract is what these pin: FALSE means "asked and the answer is no",
+ * `null` means "could not ask". Only the first may produce `managed_no_role`.
+ */
+describe('classifyBulkAutoRunReason — unknown must not read as managed_no_role', () => {
+  const managedLane = { gate: 'auto', isTerminal: false, staffed: true };
+
+  it('reports managed_no_role only when the producer was genuinely resolved to none', () => {
+    expect(classifyBulkAutoRunReason(facts({
+      lane: managedLane, managedProducerResolvable: false,
+    }))).toBe('managed_no_role');
+  });
+
+  it('falls through when the producer question could not be answered at all', () => {
+    const verdict = classifyBulkAutoRunReason(facts({
+      lane: managedLane, managedProducerResolvable: null,
+    }));
+    expect(verdict).not.toBe('managed_no_role');
+  });
+
+  it('never reports managed_no_role when a producer DID resolve', () => {
+    expect(classifyBulkAutoRunReason(facts({
+      lane: managedLane, managedProducerResolvable: true,
+    }))).not.toBe('managed_no_role');
+  });
+});
+
+/**
+ * The source guard for the same defect, because the fabrication is a control-flow
+ * decision no unit test of the pure ladder can see: `loadCensusFacts` builds the facts,
+ * and substituting an empty authority there is invisible to `classifyBulkAutoRunReason`,
+ * which only ever sees the boolean that substitution produced.
+ */
+describe('loadCensusFacts does not fabricate an authority it could not load', () => {
+  const source = readFileSync(
+    fileURLToPath(new URL('./stallCensus.ts', import.meta.url).href),
+    'utf8',
+  );
+
+  it('leaves the producer verdict UNKNOWN when the lane has no loaded inputs', () => {
+    // The fabricated fallback must not return in any form.
+    expect(source).not.toMatch(/:\s*\{ roleKeys: \[\] as string\[\], approvers: \[\], tier: 'none' as const \}/);
+    // The verdict is computed only INSIDE the `if (inputs)` branch, so an absent entry
+    // leaves the initialised `null` in place.
+    expect(source).toMatch(/if \(inputs\) \{[\s\S]*?managedProducerResolvable = pickManagedProducer/);
+  });
+
+  it('does not swallow a failed lane-authority load', () => {
+    expect(source, 'a silent catch here relabels every managed ticket on the board')
+      .not.toMatch(/loadBoardLaneAuthorities\([\s\S]{0,300}?\}\)\.catch\(\(\) => new Map\(\)\)/);
+    expect(source).toMatch(/loadBoardLaneAuthorities[\s\S]{0,400}?reportCaughtError/);
   });
 });

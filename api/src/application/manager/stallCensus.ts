@@ -60,6 +60,7 @@ import {
 import { MAX_CONSECUTIVE_AUTORUN_FAILURES, type AutoRunReason } from '../swimlane/evaluateAutoRun';
 import { diagnoseStall, STALL_AFTER_MS, type StallCause } from './stallTriage';
 import { getEffectiveManagerPolicy } from './managerPolicyStore';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 const CENSUS_TTL_SECONDS = 120;
 
@@ -340,8 +341,23 @@ export async function loadCensusFacts(
     // made in memory, and the manifest slots come from the same single read `loadOwedRoles`
     // already performs. Resolving this per ticket would be the N+1 the caching rules
     // forbid on a 675-ticket census.
+    // NOT `.catch(() => new Map())`. That swallow is what produced the 306-ticket
+    // `managed_no_role` cohort: an empty map makes EVERY lane's authority unknown, and
+    // the fabrication below then read unknown as "authorises nothing" for every managed
+    // ticket on the board. `loadBoardLaneAuthorities`' own header warns that degrading
+    // its ROSTER to empty "reproduces the exact pre-fix symptom — every role unbound,
+    // every ticket managed_no_role"; wrapping the whole function in a catch does the
+    // same thing one level up and for the entire board at once.
     board?.lifecycleManaged
-      ? loadBoardLaneAuthorities(db, { tenantId: args.tenantId, projectId: args.projectId, boardId: board.id, ...(args.env ? { env: args.env } : {}) }).catch(() => new Map())
+      ? loadBoardLaneAuthorities(db, { tenantId: args.tenantId, projectId: args.projectId, boardId: board.id, ...(args.env ? { env: args.env } : {}) })
+        .catch((error) => {
+          reportCaughtError(error, {
+            source: 'application/manager/stallCensus.ts',
+            operation: 'loadCensusFacts.loadBoardLaneAuthorities',
+            context: { logMessage: '[census] lane authorities failed to load — every managed ticket will report an UNKNOWN producer, not managed_no_role', details: { tenantId: args.tenantId, projectId: args.projectId, boardId: board.id } },
+          });
+          return new Map<string, LaneAuthorityInputs>();
+        })
       : Promise.resolve(new Map()),
     board?.lifecycleManaged
       ? loadProducerSlots(db, args.tenantId, taskIds).catch(() => new Map<string, ManagedProducerSlot[]>())
@@ -370,11 +386,29 @@ export async function loadCensusFacts(
     let managedProducerResolvable: boolean | null = null;
     if (managed && lane && !lane.isTerminal && !isReviewLane(t.status)) {
       const inputs = (laneAuthorities as Map<string, LaneAuthorityInputs>).get(lane.id);
-      const authority = inputs
-        ? decideManagedLaneAuthority(inputs, { taskType: t.taskType ?? null, actionType: t.actionType ?? null })
-        : { roleKeys: [] as string[], approvers: [], tier: 'none' as const };
-      const slots = (producerSlots as Map<string, ManagedProducerSlot[]>).get(`${t.id}:${t.status}`) ?? [];
-      managedProducerResolvable = pickManagedProducer(authority, slots) != null;
+      // ── ABSENT INPUTS ARE UNKNOWN, NOT "NO ROLE" ────────────────────────────────
+      // This used to substitute `{ roleKeys: [], approvers: [], tier: 'none' }` when the
+      // map had no entry for the lane, which `pickManagedProducer` reads as null, which
+      // the ladder reports as `managed_no_role`. So a lane whose authority could not be
+      // LOADED was indistinguishable from a lane that authorises nobody — and because
+      // the load was wrapped in a catch returning an empty map, one failed read
+      // relabelled every managed ticket on the board at once.
+      //
+      // Measured on project 11: `managed_no_role` at 306 of 672 stalled tickets across
+      // five captures, while the board-staffing sweep — the SAME `loadBoardLaneAuthorities`
+      // call, in the same pass, without a swallow — reported `unfilledRoleKeys: []` and
+      // no unauthorised lanes. Two code paths, identical inputs, opposite answers,
+      // because one of them turned a failure into a verdict.
+      //
+      // `null` is the honest value: the question could not be answered, so the ladder
+      // falls through to the next cause instead of asserting the most alarming one. A
+      // genuinely empty authority still reports FALSE — that path goes through
+      // `decideManagedLaneAuthority` and is a real reading, not a fabricated one.
+      if (inputs) {
+        const authority = decideManagedLaneAuthority(inputs, { taskType: t.taskType ?? null, actionType: t.actionType ?? null });
+        const slots = (producerSlots as Map<string, ManagedProducerSlot[]>).get(`${t.id}:${t.status}`) ?? [];
+        managedProducerResolvable = pickManagedProducer(authority, slots) != null;
+      }
     }
     return {
       taskId: t.id,
