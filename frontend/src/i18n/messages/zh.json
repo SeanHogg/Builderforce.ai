@@ -8822,6 +8822,7 @@
       "cardBlurb": "为每个注册选择一个或多个 OpenRouter 模型，并与提供商账户一起设置优先级。",
       "add": "添加连接",
       "connectedCount": "● {count} 个连接",
+      "brokenCount": "{count} 个 OpenRouter 连接",
       "modelCount": "已选择 {count} 个模型",
       "ownKey": "您的 OpenRouter 密钥",
       "managedKey": "Builderforce 托管计费",

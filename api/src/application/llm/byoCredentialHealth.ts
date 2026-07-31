@@ -53,13 +53,18 @@ import {
   type TenantLlmCredentials,
 } from './tenantProviderKeyService';
 import {
+  clearConnectionAuthAlert,
   clearProviderAuthAlert,
+  connectionAlertFromFailure,
+  loadConnectionAuthAlert,
   loadProviderAuthAlert,
   providerAlertFromFailure,
+  recordConnectionAuthAlert,
   recordProviderAuthAlert,
+  type ConnectionAuthAlert,
   type ProviderAuthAlert,
 } from './providerAuthAlerts';
-import { raiseProviderAuthAlert } from './byoCredentialAlerting';
+import { raiseConnectionAuthAlert, raiseProviderAuthAlert } from './byoCredentialAlerting';
 
 /**
  * The probe's verdict for one tenant+provider.
@@ -134,20 +139,29 @@ function upstreamMessage(payload: string): string {
  * one probe only, the second surface reported a bare "failed" for a failure the first would
  * have explained.
  */
-interface ProbeDispatch {
+interface ProbeDispatch<A> {
   ok: boolean;
   /** The id the gateway actually dispatched (a strict pin, so normally the requested one). */
   resolvedModel: string;
   upstreamStatus: number;
   /** Human-readable failure detail — absent on success. */
   error?: string;
-  /** The owner-actionable alert this failure classifies to, when it is one. Always `null`
-   *  for a vendor no tenant can connect from a settings card (`openrouter`), which is why
-   *  the connection probe persists nothing: there is no card to paint. */
-  alert?: ProviderAuthAlert;
+  /** The owner-actionable alert this failure classifies to, when it is one. `undefined` for
+   *  a transient blip (429 without a capacity marker, 5xx, timeout), which must never paint
+   *  a card red or mail anyone. */
+  alert?: A;
 }
 
-async function dispatchProbe(service: LlmProxyService, model: string, now: number): Promise<ProbeDispatch> {
+/** How a caller turns one failed attempt into its own alert shape — a provider alert or a
+ *  connection alert. Passed in (rather than hard-coded) because the ATTEMPT-walking rule
+ *  below is the part worth sharing; whose account it belongs to is the caller's business. */
+type ProbeClassifier<A> = (vendor: string, status: number, detail: string) => A | null;
+
+async function dispatchProbe<A>(
+  service: LlmProxyService,
+  model: string,
+  classify: ProbeClassifier<A>,
+): Promise<ProbeDispatch<A>> {
   const body: ChatCompletionRequest = {
     model, modelStrict: true, max_tokens: PROBE_MAX_TOKENS,
     messages: [{ role: 'user', content: 'Reply OK.' }],
@@ -170,10 +184,10 @@ async function dispatchProbe(service: LlmProxyService, model: string, now: numbe
     attemptDetail ? `(${attemptDetail})` : '',
   ].filter(Boolean).join(' ');
 
-  const alert = (result.failovers ?? []).reduce<ProviderAuthAlert | null>(
-    (found, f) => found ?? providerAlertFromFailure(f.vendor, f.code, f.detail ?? message, now),
+  const alert = (result.failovers ?? []).reduce<A | null>(
+    (found, f) => found ?? classify(f.vendor, f.code, f.detail ?? message),
     null,
-  ) ?? providerAlertFromFailure(result.resolvedVendor, result.response.status, message, now);
+  ) ?? classify(result.resolvedVendor, result.response.status, message);
 
   return {
     ok: false,
@@ -255,7 +269,8 @@ export async function probeByoProvider(
     tenantVendorKeys: resolved.vendorKeys,
     byoVendorPriority: resolved.vendorPriority,
   });
-  const outcome = await dispatchProbe(service, model, now);
+  const outcome = await dispatchProbe(service, model, (vendor, status, detail) =>
+    providerAlertFromFailure(vendor, status, detail, now));
 
   if (outcome.ok) {
     await clearProviderAuthAlert(env, tenantId, provider);
@@ -278,8 +293,7 @@ export async function probeByoProvider(
  * The probe's verdict for ONE named OpenRouter connection (migration 0382).
  *
  * Separate from {@link ByoProbeResult} because a connection is a different unit of account:
- * it has no provider card, no `ProviderAuthAlert` (the `openrouter` vendor maps to no
- * connectable provider — see `providerForVendor`), and it can be MANAGED-keyed, in which
+ * it is keyed by numeric id rather than a provider, and it can be MANAGED-keyed, in which
  * case what is under test is "do these model ids still route", not "is the tenant's
  * credential good". `ownKey` is what tells the two apart in the operator-facing copy.
  */
@@ -298,13 +312,15 @@ export interface OpenRouterConnectionProbeResult {
   ownKey: boolean;
   upstreamStatus?: number;
   error?: string;
+  /** The persisted owner-actionable alert, when the failure was one. */
+  alert?: ConnectionAuthAlert;
   checkedAt: string;
 }
 
 /**
  * Probe ONE OpenRouter connection by dispatching a tiny strict-pinned request down the same
  * path a real completion takes — the connection's own model list, on the connection's own
- * key when it has one.
+ * key when it has one — and persist the verdict.
  *
  * Why the proxy is built from `[connection]` alone rather than the tenant's whole credential
  * set: a test must answer a question about THIS registration. Seeded with every connection,
@@ -312,15 +328,18 @@ export interface OpenRouterConnectionProbeResult {
  * report green for a registration that serves nothing — the exact failure mode the provider
  * probe's strict pin exists to prevent.
  *
- * Unlike the provider probe this writes NO alert. There is no per-connection alert store and
- * `providerAlertFromFailure` returns null for `openrouter` by design; a connection's health is
- * reported to whoever asked, not persisted onto a card that does not exist.
+ * Side effects mirror {@link probeByoProvider} exactly, on the connection half of the alert
+ * keyspace: an owner-actionable failure records (and, unless suppressed, mails) an alert so
+ * the Integrations card stops claiming the registration is fine; a success clears any stale
+ * one; a transient blip leaves the prior verdict alone rather than flapping the UI.
  */
 export async function probeOpenRouterConnection(
   env: Env,
   tenantId: number,
   connectionId: number,
+  opts: Pick<ProbeOptions, 'notify'> = {},
 ): Promise<OpenRouterConnectionProbeResult> {
+  const notify = opts.notify ?? true;
   const checkedAt = new Date().toISOString();
   const now = Date.parse(checkedAt);
   const connections = await listOpenRouterConnections(env, tenantId);
@@ -329,6 +348,9 @@ export async function probeOpenRouterConnection(
   if (connection.models.length === 0) {
     return { connectionId, ok: false, status: 'no_test_model', ownKey: connection.hasKey, checkedAt };
   }
+  const raise = (alert: ConnectionAuthAlert, detail: string) => notify
+    ? raiseConnectionAuthAlert(env, tenantId, alert, connection.label, detail).then(() => undefined)
+    : recordConnectionAuthAlert(env, tenantId, alert);
 
   // Restrict the key map to THIS connection's ids. `resolveOpenRouterConnectionKeys` returns
   // the tenant-wide routing truth (first connection to claim a model owns it), so narrowing
@@ -340,11 +362,14 @@ export async function probeOpenRouterConnection(
       connection.models.filter((m) => resolved[m]).map((m) => [m, resolved[m]!]),
     );
     if (Object.keys(modelKeys).length === 0) {
-      return {
-        connectionId, ok: false, status: 'key_unresolved', ownKey: true, checkedAt,
-        error: 'The saved OpenRouter key could not be applied to any model in this connection — '
-          + 're-enter the key, or check whether a higher-priority connection already claims these models.',
-      };
+      // 100% owner-actionable and nothing was ever sent upstream — the same shape the
+      // provider probe gives an unresolvable credential, so it alerts rather than being
+      // reported as a bare "could not run".
+      const error = 'The saved OpenRouter key could not be applied to any model in this connection — '
+        + 're-enter the key, or check whether a higher-priority connection already claims these models.';
+      const alert: ConnectionAuthAlert = { connectionId, reason: 'unresolved', status: 0, vendor: 'openrouter', at: now };
+      await raise(alert, error);
+      return { connectionId, ok: false, status: 'key_unresolved', ownKey: true, error, alert, checkedAt };
     }
   }
 
@@ -357,14 +382,52 @@ export async function probeOpenRouterConnection(
     openRouterConnections: [connection],
     ...(Object.keys(modelKeys).length ? { openRouterModelKeys: modelKeys } : {}),
   });
-  const outcome = await dispatchProbe(service, connectionModelRef(bare), now);
+  const outcome = await dispatchProbe(service, connectionModelRef(bare), (vendor, status, detail) =>
+    connectionAlertFromFailure(connectionId, vendor, status, detail, now));
 
+  if (outcome.ok) {
+    await clearConnectionAuthAlert(env, tenantId, connectionId);
+    return { connectionId, ok: true, status: 'ready', model: bare, ownKey, upstreamStatus: outcome.upstreamStatus, checkedAt };
+  }
+
+  if (outcome.alert) await raise(outcome.alert, outcome.error ?? '');
   return {
-    connectionId, ok: outcome.ok, status: outcome.ok ? 'ready' : 'failed',
+    connectionId, ok: false, status: 'failed',
     model: bare, ownKey, upstreamStatus: outcome.upstreamStatus,
     ...(outcome.error ? { error: outcome.error } : {}),
+    ...(outcome.alert ? { alert: outcome.alert } : {}),
     checkedAt,
   };
+}
+
+/**
+ * Probe every OpenRouter connection a tenant holds, reporting the PRIOR alert alongside each
+ * verdict so the daily sweep can act on the transition rather than the state — the same
+ * contract {@link probeTenantByoProviders} follows, and the reason a registration that has
+ * been broken (and already reported) for a week stays email-quiet.
+ *
+ * Sequential for the same reason: each probe is a real upstream call, and a burst of parallel
+ * ones against a single OpenRouter account is a good way to earn a rate limit that then looks
+ * like a broken credential.
+ */
+export async function probeTenantOpenRouterConnections(
+  env: Env,
+  tenantId: number,
+  opts: Pick<ProbeOptions, 'notify'> = {},
+): Promise<Array<{ result: OpenRouterConnectionProbeResult; label: string; previousAlert: ConnectionAuthAlert | null }>> {
+  const connections = await listOpenRouterConnections(env, tenantId);
+  const out: Array<{ result: OpenRouterConnectionProbeResult; label: string; previousAlert: ConnectionAuthAlert | null }> = [];
+  for (const connection of connections) {
+    const previousAlert = await loadConnectionAuthAlert(env, tenantId, connection.id).catch(() => null);
+    const result = await probeOpenRouterConnection(env, tenantId, connection.id, opts)
+      .catch((err): OpenRouterConnectionProbeResult => ({
+        connectionId: connection.id, ok: false, status: 'failed', ownKey: connection.hasKey,
+        error: err instanceof Error ? err.message : 'probe failed',
+        checkedAt: new Date().toISOString(),
+      }));
+    out.push({ result, label: connection.label, previousAlert });
+  }
+  return out;
 }
 
 /**

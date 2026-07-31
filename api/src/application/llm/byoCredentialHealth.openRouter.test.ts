@@ -55,6 +55,7 @@ vi.mock('./LlmProxyService', async () => {
 });
 
 const { probeOpenRouterConnection } = await import('./byoCredentialHealth');
+const { loadConnectionAuthAlert, _resetMemoryProviderAuthAlerts } = await import('./providerAuthAlerts');
 
 const env = {} as never;
 
@@ -64,6 +65,7 @@ beforeEach(() => {
   dispatched.length = 0;
   for (const key of Object.keys(resolvedKeys)) delete resolvedKeys[key];
   upstream = { status: 200, body: '{"ok":true}' };
+  _resetMemoryProviderAuthAlerts();
 });
 
 describe('probeOpenRouterConnection', () => {
@@ -126,6 +128,48 @@ describe('probeOpenRouterConnection', () => {
 
     expect(result).toMatchObject({ ok: false, status: 'failed', upstreamStatus: 401 });
     expect(result.error).toContain('No auth credentials found');
+  });
+
+  it('persists a rejected registration so the card stops claiming it is fine', async () => {
+    connections.push({ id: 10, label: 'Revoked', models: ['openai/gpt-4.1'], hasKey: true, priority: 0 });
+    resolvedKeys['openai/gpt-4.1'] = 'sk-or-revoked';
+    upstream = { status: 401, body: JSON.stringify({ error: { message: 'invalid api key' } }) };
+
+    const result = await probeOpenRouterConnection(env, 7, 10);
+
+    expect(result.alert).toMatchObject({ connectionId: 10, reason: 'rejected', status: 401, vendor: 'openrouter' });
+    await expect(loadConnectionAuthAlert(env, 7, 10)).resolves.toMatchObject({ connectionId: 10, reason: 'rejected' });
+  });
+
+  it('clears a stale alert when the registration starts working again', async () => {
+    connections.push({ id: 11, label: 'Recovering', models: ['openai/gpt-4.1'], hasKey: false, priority: 0 });
+    upstream = { status: 403, body: 'forbidden' };
+    await probeOpenRouterConnection(env, 7, 11);
+    await expect(loadConnectionAuthAlert(env, 7, 11)).resolves.not.toBeNull();
+
+    upstream = { status: 200, body: '{"ok":true}' };
+    await probeOpenRouterConnection(env, 7, 11);
+    await expect(loadConnectionAuthAlert(env, 7, 11)).resolves.toBeNull();
+  });
+
+  it('leaves the prior verdict alone on a transient failure instead of flapping the card', async () => {
+    connections.push({ id: 12, label: 'Blip', models: ['openai/gpt-4.1'], hasKey: false, priority: 0 });
+    upstream = { status: 503, body: 'upstream unavailable' };
+
+    const result = await probeOpenRouterConnection(env, 7, 12);
+
+    expect(result.ok).toBe(false);
+    expect(result.alert).toBeUndefined();
+    await expect(loadConnectionAuthAlert(env, 7, 12)).resolves.toBeNull();
+  });
+
+  it('alerts on an unusable saved key even though nothing was sent upstream', async () => {
+    connections.push({ id: 13, label: 'Shadowed', models: ['openai/gpt-4.1'], hasKey: true, priority: 9 });
+
+    const result = await probeOpenRouterConnection(env, 7, 13);
+
+    expect(result).toMatchObject({ status: 'key_unresolved' });
+    await expect(loadConnectionAuthAlert(env, 7, 13)).resolves.toMatchObject({ reason: 'unresolved', status: 0 });
   });
 
   it('reports a missing or foreign connection as not_found without dispatching', async () => {

@@ -39,7 +39,7 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { notifyBrokenProviders } from './byoCredentialAlerting';
 import type { ByoCredentialAlertRow } from '../../infrastructure/email/EmailService';
-import { probeTenantByoProviders } from './byoCredentialHealth';
+import { probeTenantByoProviders, probeTenantOpenRouterConnections } from './byoCredentialHealth';
 
 /** How many tenants are probed concurrently. Each tenant's probes are sequential, so this
  *  bounds total in-flight upstream calls at the same number. Deliberately small: the
@@ -62,12 +62,18 @@ export interface ByoHealthSweepSummary {
   truncated: boolean;
 }
 
-/** Tenants with at least one connected provider — the only ones with anything to probe.
- *  One indexed scan of a small table; no per-tenant round-trip to discover the list. */
-async function tenantsWithConnectedProviders(db: ReturnType<typeof buildDatabase>): Promise<number[]> {
+/**
+ * Tenants with at least one rankable account of their own — the only ones with anything to
+ * probe. The UNION is load-bearing: a tenant whose entire BYO setup is OpenRouter
+ * connections has no `tenant_llm_provider_keys` row at all, so a provider-only scan swept
+ * exactly the tenants that needed it least and skipped the ones with nothing but
+ * connections. One indexed scan of each small table; no per-tenant round-trip.
+ */
+async function tenantsWithConnectedAccounts(db: ReturnType<typeof buildDatabase>): Promise<number[]> {
   const rows = (await db.execute(sql`
-    SELECT DISTINCT tenant_id
-    FROM tenant_llm_provider_keys
+    SELECT tenant_id FROM tenant_llm_provider_keys
+    UNION
+    SELECT tenant_id FROM tenant_openrouter_connections
     ORDER BY tenant_id
     LIMIT ${MAX_TENANTS_PER_SWEEP + 1}
   `)).rows as Array<{ tenant_id: number }>;
@@ -105,24 +111,48 @@ export async function runByoCredentialHealthForTenant(
   env: Env,
   tenantId: number,
 ): Promise<{ providersProbed: number; newlyBroken: number; recovered: number; emailed: number }> {
-  const probes = await probeTenantByoProviders(env, tenantId, { notify: false });
+  const [providerProbes, connectionProbes] = await Promise.all([
+    probeTenantByoProviders(env, tenantId, { notify: false }),
+    // OpenRouter connections are rankable BYO with no provider row, so a provider-only sweep
+    // left them permanently unverified — a revoked connection key stayed "connected" until
+    // someone noticed their agents had quietly moved onto the operator pool.
+    probeTenantOpenRouterConnections(env, tenantId, { notify: false }),
+  ]);
 
-  // TRANSITION, not state: only a provider that has an alert NOW and had none before is
+  // TRANSITION, not state: only an account that has an alert NOW and had none before is
   // news. `previousAlert` was read before the probe wrote, so this comparison is honest.
-  const newlyBroken: ByoCredentialAlertRow[] = probes
-    .filter((p) => p.result.alert && !p.previousAlert)
-    .map((p) => ({
-      provider: p.result.provider,
-      reason: p.result.alert!.reason,
-      status: p.result.alert!.status,
-      vendor: p.result.alert!.vendor,
-      detail: p.result.error ?? '',
-    }));
-  const recovered = probes.filter((p) => p.result.ok && p.previousAlert).length;
+  const newlyBroken: ByoCredentialAlertRow[] = [
+    ...providerProbes
+      .filter((p) => p.result.alert && !p.previousAlert)
+      .map((p) => ({
+        provider: p.result.provider,
+        reason: p.result.alert!.reason,
+        status: p.result.alert!.status,
+        vendor: p.result.alert!.vendor,
+        detail: p.result.error ?? '',
+      })),
+    // Named by LABEL: an operator holding several registrations must be told WHICH one
+    // stopped working, and a bare "openrouter" would be true and useless.
+    ...connectionProbes
+      .filter((p) => p.result.alert && !p.previousAlert)
+      .map((p) => ({
+        provider: `OpenRouter · ${p.label}`,
+        reason: p.result.alert!.reason,
+        status: p.result.alert!.status,
+        vendor: p.result.alert!.vendor,
+        detail: p.result.error ?? '',
+      })),
+  ];
+  const recovered = [...providerProbes, ...connectionProbes].filter((p) => p.result.ok && p.previousAlert).length;
 
   const notified = await notifyBrokenProviders(env, tenantId, newlyBroken);
 
-  return { providersProbed: probes.length, newlyBroken: newlyBroken.length, recovered, emailed: notified.length };
+  return {
+    providersProbed: providerProbes.length + connectionProbes.length,
+    newlyBroken: newlyBroken.length,
+    recovered,
+    emailed: notified.length,
+  };
 }
 
 /**
@@ -131,7 +161,7 @@ export async function runByoCredentialHealthForTenant(
  */
 export async function runByoCredentialHealthCron(env: Env): Promise<ByoHealthSweepSummary> {
   const db = buildDatabase(env);
-  const all = await tenantsWithConnectedProviders(db);
+  const all = await tenantsWithConnectedAccounts(db);
   const truncated = all.length > MAX_TENANTS_PER_SWEEP;
   const tenantIds = truncated ? all.slice(0, MAX_TENANTS_PER_SWEEP) : all;
   if (truncated) {

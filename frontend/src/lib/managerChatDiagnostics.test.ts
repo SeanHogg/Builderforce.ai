@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildManagerChatDiagnosticsReport,
   looksLikeToolNarration,
+  narratedToolNaming,
   managerChatFindings,
   summarizeTrace,
   type ManagerChatDiagnosticsInput,
@@ -92,11 +93,46 @@ describe('looksLikeToolNarration', () => {
   });
 });
 
+describe('narratedToolNaming', () => {
+  it('separates the two bugs that produce identical transcripts', () => {
+    // Told a name it never had → the prompt / persona mismatch.
+    expect(narratedToolNaming(['The tools required are manager.digest and manager.policy.'])).toBe('catalog');
+    // Told the RIGHT name and still would not call it → the model.
+    expect(narratedToolNaming(['tool call builtin_manager_digest with projectId is 11'])).toBe('advertised');
+    // Names both — it was reading a correct tool list, so the list is not the bug.
+    expect(narratedToolNaming(['builtin_manager_digest (manager.digest) returned nothing'])).toBe('advertised');
+    // Complained about tools without naming one — only the trace can say more.
+    expect(narratedToolNaming(['The required tools have not returned results yet.'])).toBe('none');
+  });
+
+  it('does not read a filename as a tool id', () => {
+    expect(narratedToolNaming(['The required tools failed: see package.json and tsconfig.json.'])).toBe('none');
+  });
+});
+
 describe('summarizeTrace', () => {
   it('counts model turns that emitted NO tool call — the only evidence of narration', () => {
     expect(summarizeTrace(NARRATED_TRACE)).toMatchObject({
       toolCalls: 0, toolErrors: 0, modelTurns: 2, turnsWithoutTools: 2, advertisedTools: 96,
     });
+  });
+
+  it('records which models ran and whether the loop ever switched', () => {
+    // One model, no failover: the loop's own remedy never ran. That is a different
+    // report than "two models both refused", and the findings must not conflate them.
+    expect(summarizeTrace(NARRATED_TRACE)).toMatchObject({ models: ['claude-opus-5'], failovers: 0 });
+
+    const withFailover: BrainChatTraceRow[] = [
+      ...NARRATED_TRACE,
+      traceRow({ id: 3, kind: 'failover', label: 'coder-1', resultJson: '{"notice":"switching"}' }),
+      traceRow({ id: 4, kind: 'llm', label: 'coder-1', turnSeq: 3, resultJson: JSON.stringify({ finishReason: 'stop', toolCalls: 0, advertisedTools: 96 }) }),
+    ];
+    const roll = summarizeTrace(withFailover);
+    expect(roll).toMatchObject({ models: ['claude-opus-5', 'coder-1'], failovers: 1 });
+    // A failover row is a DECISION, not a model turn — counting it as one would corrupt
+    // the "every turn was toolless" equality the stall finding depends on.
+    expect(roll.modelTurns).toBe(3);
+    expect(roll.turnsWithoutTools).toBe(3);
   });
 
   it('ranks the tools that ran and counts their failures separately', () => {
@@ -120,6 +156,43 @@ describe('managerChatFindings', () => {
     // …and where to look. The code guards were ALL green while this was broken — the
     // dead names were in the agent's persisted persona, which no deploy rewrites.
     expect(finding?.text).toContain('ide_agents.bio');
+  });
+
+  it('EXONERATES the tool list when the narration uses the advertised names', () => {
+    // The regression this guards: on 2026-07-31 a capture whose newest reply transcribed
+    // `builtin_manager_digest` — the name the model was actually given — still reported
+    // the name-mismatch cause, sending the reader to re-audit a prompt guard and a
+    // migration that had both been correct for a release. The evidence says the opposite.
+    const advertised = [
+      msg({ id: 1, role: 'user', content: 'What did you and the team accomplish today?' }),
+      msg({
+        id: 2, role: 'assistant',
+        content: 'The tools required are builtin_manager_digest and builtin_manager_policy; they have not returned results yet.',
+        metadata: JSON.stringify({ authoredBy: { kind: 'agent', ref: 'manager-t1', name: 'Manager' } }),
+      }),
+    ];
+    const found = managerChatFindings(input({ messages: advertised }));
+    const c = found.map((f) => f.code);
+    expect(c).toContain('tools_narrated_model_cannot_call');
+    expect(c).not.toContain('tools_narrated_never_called');
+
+    const finding = found.find((f) => f.code === 'tools_narrated_model_cannot_call');
+    expect(finding?.severity).toBe('critical');
+    expect(finding?.text).toContain('NOT the name-mismatch bug');
+    // It must point at the model that actually ran, and say that no other was tried.
+    expect(finding?.text).toContain('claude-opus-5');
+    expect(finding?.text).toContain('never switched models');
+    // …and must NOT send the reader after the persona again.
+    expect(finding?.text).not.toContain('ide_agents.bio');
+  });
+
+  it('reports the models that ran and whether the loop switched, never the design', () => {
+    const finding = managerChatFindings(input()).find((f) => f.code === 'every_turn_toolless');
+    // The claim that was false on the shipped capture: it asserted a failover had
+    // happened while printing a trace showing one model and none.
+    expect(finding?.text).toContain('a single model (claude-opus-5)');
+    expect(finding?.text).toContain('0 model failovers');
+    expect(finding?.text).toContain('no second model was ever tried');
   });
 
   it('separates "called nothing" from "calls failed" from "never got the tools"', () => {

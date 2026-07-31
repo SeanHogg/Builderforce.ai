@@ -3237,6 +3237,20 @@ export interface OpenRouterConnection {
   models: string[];
   hasKey: boolean;
   priority: number | null;
+  /** Present when this registration was rejected on a recent call or probe. Keyed by
+   *  connection id server-side, so a broken registration surfaces the same "needs
+   *  attention" prompt a connected provider does. */
+  authAlert?: ConnectionAuthAlert;
+}
+
+/** A rejected-registration notice. Same facts as {@link ProviderAuthAlert} minus the
+ *  provider id, which a connection does not have — `vendor` is always `openrouter`. */
+export interface ConnectionAuthAlert {
+  connectionId: number;
+  reason: ProviderAuthAlert['reason'];
+  status: number;
+  vendor: string;
+  at: number;
 }
 
 export interface OpenRouterConnectionTestResult {
@@ -3251,6 +3265,9 @@ export interface OpenRouterConnectionTestResult {
   testedAt?: string;
   error?: string;
   code?: string;
+  /** The alert the probe just persisted, echoed so the card can repaint from THIS
+   *  response instead of waiting out the list read's cache window. */
+  authAlert?: ConnectionAuthAlert;
   details?: { connectionId: number; model?: string; upstreamStatus?: number };
 }
 
