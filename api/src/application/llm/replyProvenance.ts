@@ -56,6 +56,7 @@ export function vendorAccountLabel(vendor: string | null | undefined): string {
     'xai-oauth': 'xAI',
     meta: 'Meta',
     moonshot: 'Moonshot',
+    'kimi-code': 'Kimi Code',
     qwen: 'Qwen',
     minimax: 'MiniMax',
     openrouter: 'OpenRouter',

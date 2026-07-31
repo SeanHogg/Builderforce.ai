@@ -8923,7 +8923,10 @@
         "blurb": "Fügen Sie einen Meta-AI-API-Schlüssel ein, um MUSE-Modelle (muse-spark-1.1) mit Ihrem eigenen Meta-AI-Konto auszuführen."
       },
       "kimi": {
-        "blurb": "Fügen Sie einen Kimi-Code-Aboschlüssel oder Moonshot-API-Schlüssel ein."
+        "blurb": "Fügen Sie einen Kimi-Code-Aboschlüssel ein, um Ihre kostenpflichtigen kimi.com-Codingmodelle zu verwenden."
+      },
+      "moonshot": {
+        "blurb": "Fügen Sie einen API-Schlüssel der Moonshot Open Platform ein."
       },
       "qwen": {
         "blurb": "Fügen Sie einen Alibaba-DashScope-API-Schlüssel für Qwen-Modelle ein."

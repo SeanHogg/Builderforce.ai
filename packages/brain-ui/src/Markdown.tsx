@@ -114,13 +114,13 @@ function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, lab
             );
           },
           code(props) {
-            const { inline, className, children } = props as {
-              inline?: boolean;
+            const { className, children } = props as {
               className?: string;
               children?: React.ReactNode;
             };
             const text = String(children ?? '').replace(/\n$/, '');
-            if (inline || (!className && !text.includes('\n'))) {
+            const isBlock = className != null;
+            if (!isBlock) {
               return <code className="bf-md__inline">{children}</code>;
             }
             return <CodeBlock code={text} onApplyCode={onApplyCode} onCreateFile={onCreateFile} labels={lab} />;

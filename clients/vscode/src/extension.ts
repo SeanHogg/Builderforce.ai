@@ -1009,6 +1009,8 @@ async function signOut(
 const BYO_PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
+  "kimi-code": "Kimi Code",
+  moonshot: "Moonshot AI",
   google: "Google",
   meta: "Meta",
   xai: "xAI",

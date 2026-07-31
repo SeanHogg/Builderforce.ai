@@ -81,8 +81,9 @@ import { OAUTH_SAFETY_MARGIN_MS } from './anthropicOAuth';
 const env = { NEON_DATABASE_URL: 'x', JWT_SECRET: 's' } as never;
 
 describe('BYO provider routing map', () => {
-  it('maps Kimi, Qwen, and MiniMax to their direct gateway vendors', () => {
-    expect(PROVIDER_VENDOR_MAP.kimi).toMatchObject({ vendorId: 'moonshot', envKey: 'MOONSHOT_API_KEY' });
+  it('maps Kimi Code, Moonshot, Qwen, and MiniMax to their direct gateway vendors', () => {
+    expect(PROVIDER_VENDOR_MAP.kimi).toMatchObject({ vendorId: 'kimi-code', envKey: 'KIMI_CODE_API_KEY' });
+    expect(PROVIDER_VENDOR_MAP.moonshot).toMatchObject({ vendorId: 'moonshot', envKey: 'MOONSHOT_API_KEY' });
     expect(PROVIDER_VENDOR_MAP.qwen).toMatchObject({ vendorId: 'qwen', envKey: 'QWEN_API_KEY' });
     expect(PROVIDER_VENDOR_MAP.minimax).toMatchObject({ vendorId: 'minimax', envKey: 'MINIMAX_API_KEY' });
     expect(PROVIDER_VENDOR_MAP.xai).toMatchObject({ vendorId: 'xai', envKey: 'XAI_API_KEY', oauth: true });

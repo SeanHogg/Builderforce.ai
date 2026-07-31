@@ -88,6 +88,8 @@ describe('byoModelsFor', () => {
       { provider: 'google' as const, vendor: 'googleai', prefix: 'googleai/' },
       { provider: 'openai' as const, vendor: 'openai', prefix: 'direct/openai/' },
       { provider: 'meta' as const, vendor: 'meta', prefix: 'direct/meta/' },
+      { provider: 'kimi' as const, vendor: 'kimi-code', prefix: 'direct/kimi-code/' },
+      { provider: 'moonshot' as const, vendor: 'moonshot', prefix: 'direct/moonshot/' },
       { provider: 'xai' as const, vendor: 'xai', prefix: 'direct/xai/' },
     ];
     for (const { provider, vendor, prefix } of cases) {

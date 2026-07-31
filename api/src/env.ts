@@ -98,6 +98,8 @@ export interface Env {
   PERPLEXITY_API_KEY?: string;
   /** Moonshot AI (Kimi) — api.moonshot.cn/v1. */
   MOONSHOT_API_KEY?: string;
+  /** Kimi Code subscription API — api.kimi.com/coding/v1. */
+  KIMI_CODE_API_KEY?: string;
   QWEN_API_KEY?: string;
   /** Hyperbolic — api.hyperbolic.xyz/v1. */
   HYPERBOLIC_API_KEY?: string;

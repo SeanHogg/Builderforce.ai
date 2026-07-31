@@ -1111,7 +1111,8 @@ export class LlmProxyService {
       // A tenant BYO OpenAI key overrides the operator OpenAI key (spread above)
       // for the `openai` vendor — marked tenant-funded → byo, $0 to us.
       ...(this.tenantVendorKeys.openai ? { OPENAI_API_KEY: this.tenantVendorKeys.openai } : {}),
-      ...(this.tenantVendorKeys.kimi ? { MOONSHOT_API_KEY: this.tenantVendorKeys.kimi } : {}),
+      ...(this.tenantVendorKeys.kimi ? { KIMI_CODE_API_KEY: this.tenantVendorKeys.kimi } : {}),
+      ...(this.tenantVendorKeys.moonshot ? { MOONSHOT_API_KEY: this.tenantVendorKeys.moonshot } : {}),
       ...(this.tenantVendorKeys.qwen ? { QWEN_API_KEY: this.tenantVendorKeys.qwen } : {}),
       ...(this.tenantVendorKeys.minimax ? { MINIMAX_API_KEY: this.tenantVendorKeys.minimax } : {}),
       ...(this.tenantVendorKeys.xai ? { XAI_API_KEY: this.tenantVendorKeys.xai } : {}),
