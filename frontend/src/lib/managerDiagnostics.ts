@@ -220,6 +220,41 @@ function tri(value: unknown): string {
   return String(value);
 }
 
+/**
+ * The EFFECTIVE column, which — unlike the two tier columns — can never legitimately say
+ * "inherit": it IS the resolved fold, so an absent value there means the deployed API does
+ * not report that key at all (the report ships from the frontend and can be newer than the
+ * Worker). Printing `tri()` there rendered that gap as "inherit", a real-looking answer in
+ * the one column a reader trusts most — observed on 2026-07-31, where `allowAutoStaffLanes`
+ * read `inherit / [project: inherit · workspace: inherit]` on an api build that predated the
+ * field, and would have read identically had the grant genuinely been withheld.
+ */
+function effective(value: unknown): string {
+  if (value === null || value === undefined) return 'NOT REPORTED by this API build';
+  return tri(value);
+}
+
+/**
+ * What a `lane_unconfigured` cohort means depends entirely on whether the manager was
+ * ALLOWED to configure the stage, so this sentence decides how the finding is read — and
+ * that is exactly why "absent" needs its own third branch rather than falling into "off".
+ * A falsy check would tell an operator the permission is withheld on an API build that
+ * never reports the field, sending them to a policy panel to turn off something already off.
+ */
+function autoStaffGrant(policy: ManagerPolicy): string {
+  // The type says `boolean` because the CURRENT API always folds a value; the widening is
+  // deliberate, because the wire is where that guarantee actually holds and an older
+  // deploy simply omits the key.
+  const grant = policy.allowAutoStaffLanes as boolean | undefined;
+  if (grant == null) {
+    return 'Whether the manager may configure such a stage on its own is NOT REPORTED by this API build (allowAutoStaffLanes arrived in api 2026.7.195) — read the grant off a capture from a current deploy before concluding the permission is withheld.';
+  }
+  if (grant) {
+    return 'The manager IS permitted to configure such a stage, so a cohort still standing means its remedy ran and did not clear — check the board-staffing block below for what it tried.';
+  }
+  return 'The manager is NOT permitted to configure a stage on its own (allowAutoStaffLanes is off), so it is reporting this deliberately rather than failing at it. Either declare a required role on the stage, staff an agent to it, or grant that permission on the Manager policy panel — with the caveat that granting it starts every ticket sitting there.';
+}
+
 // ── findings ────────────────────────────────────────────────────────────────
 
 /**
@@ -896,9 +931,7 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
       critical.push({
         severity: 'critical',
         code: 'lane_unconfigured',
-        text: `${unconfigured.count} ticket${unconfigured.count === 1 ? ' sits' : 's sit'} in a stage that authorises NO role at all — it declares no required role and has no agent staffed to it, so on this lifecycle-managed board nothing in it can ever be dispatched. This is NOT a role that failed to bind (that is managed_dispatch_refused, which the manager can staff its way out of); there is no role, so there is nothing to staff. ${policy.allowAutoStaffLanes
-          ? 'The manager IS permitted to configure such a stage, so a cohort still standing means its remedy ran and did not clear — check the board-staffing block below for what it tried.'
-          : 'The manager is NOT permitted to configure a stage on its own (allowAutoStaffLanes is off), so it is reporting this deliberately rather than failing at it. Either declare a required role on the stage, staff an agent to it, or grant that permission on the Manager policy panel — with the caveat that granting it starts every ticket sitting there.'} See the board-staffing block for which stages, and Example tickets: ${unconfigured.sampleTaskIds.join(', ')}.`,
+        text: `${unconfigured.count} ticket${unconfigured.count === 1 ? ' sits' : 's sit'} in a stage that authorises NO role at all — it declares no required role and has no agent staffed to it, so on this lifecycle-managed board nothing in it can ever be dispatched. This is NOT a role that failed to bind (that is managed_dispatch_refused, which the manager can staff its way out of); there is no role, so there is nothing to staff. ${autoStaffGrant(policy)} See the board-staffing block for which stages, and Example tickets: ${unconfigured.sampleTaskIds.join(', ')}.`,
       });
     }
 
@@ -1182,7 +1215,7 @@ function formatPolicy(policy: ManagerPolicy, config: ManagerConfig | null, tenan
     key,
     // Effective first (what the manager may actually do), then the two tiers that
     // produced it — the whole point is to see WHICH tier turned something off.
-    `${tri(policy[key])}   [project: ${config ? tri(config[key]) : 'no row'} · workspace: ${tri(tenantPolicy[key])}]`,
+    `${effective(policy[key])}   [project: ${config ? tri(config[key]) : 'no row'} · workspace: ${tri(tenantPolicy[key])}]`,
   ));
 }
 
