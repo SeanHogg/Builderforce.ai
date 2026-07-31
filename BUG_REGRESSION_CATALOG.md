@@ -18,7 +18,7 @@
 | #62 | Regression | ready | regression | high (inferred) | d02ff7ee | — | Title: `regression`; Seed task #62 | PWA versioning notification not automated; PR #31 |
 | #68 | `{"error":"No transactions support in neon-http driver"}` | ready | bug | medium (inferred) | 658608ba | #138 | Title: `error`; 500 Internal Server Error | Boards API POST fails; blocks board creation |
 | #165 | Autonomous Agent Not Processing Tasks in "To Do" Column | ready | bug | high | fdbbd9af | — | Title: "Not Processing" = behavioral defect; Priority: high | Agent Kevin (BA/PM) not picking up tasks; PR #83 |
-| #354 | Helcim checkout: recurring billing schedule not created | ready | bug | high | 6e83f382 | #134 | Description: `needs to be fixed`; Missing feature = billing defect | One-time charges only; blocks recurring revenue |
+| #354 | Helcim checkout: recurring billing schedule not created | ready | bug | high (inferred) | 6e83f382 | #134 | Description: `needs to be fixed`; Missing feature = billing defect | One-time charges only; blocks recurring revenue |
 
 ---
 
