@@ -63,8 +63,6 @@ interface StreamBean {
   chunks: unknown[];
 }
 
-const PRIORITY_ORDER: PriorityTier[] = ['critical', 'secondary', 'deferred'];
-
 // --------------- orchestrator ---------------
 
 export function ProgressiveRevealOrchestrator({
