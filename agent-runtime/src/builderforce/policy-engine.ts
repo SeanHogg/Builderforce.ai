@@ -6,6 +6,8 @@
  * engine automatically enforces them during execution.
  */
 
+import { evalPredicate, type EvalContext } from "./node-eval.js";
+
 export type PolicyType = "data-access" | "approval" | "compliance" | "retry-policy" | "timeout";
 
 export interface PolicyCondition {
