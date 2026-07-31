@@ -1,20 +1,13 @@
 /**
  * @file tool.ts
  * @module @builderforce/resource-gap-engine
- * @description Tool registration for Resource Gap Engine.
+ * @description Tool registration for Resource Gap Engine — FR-3 / FR-4 / FR-5.
  */
 
-import type {
-  AnyAgentTool,
-  BuilderForceAgentsPluginApi,
-} from "../../src/plugins/types.js";
-import {
-  ToolInputError,
-  jsonResult,
-} from "../../src/agents/tools/common.js";
+import type { AnyAgentTool, BuilderForceAgentsPluginApi } from "../../src/plugins/types.js";
+import { ToolInputError, jsonResult } from "../../src/agents/tools/common.js";
 import {
   DEFAULT_RESOURCE_GAP_CONFIG,
-  type Proficiency,
   type ResourceGapEngineConfig,
 } from "./configuration.js";
 import { computeGaps } from "./engine.js";
@@ -22,11 +15,9 @@ import type {
   DeploymentCandidate,
   DeploymentRecommendation,
   Employee,
-  EmployeeSkill,
   GapComputationResult,
   HiringRecommendation,
   ProjectDemand,
-  ProficiencyWeightEntry,
   Quarter,
   SkillGap,
   SkillProficiency,
@@ -38,11 +29,30 @@ import type {
   RecommendationStatus,
 } from "./types.js";
 
-// ── Recommendation engine ────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────
 
-function seniorityRank(s: SeniorityBand): number {
-  const order: SeniorityBand[] = ["junior", "mid", "senior", "staff", "principal"];
-  return order.indexOf(s);
+function resolveCostBand(config: ResourceGapEngineConfig) {
+  return config.costBand ?? config.costBands ?? config.costRange ?? DEFAULT_RESOURCE_GAP_CONFIG.costBand;
+}
+
+function resolveTimeToFill(config: ResourceGapEngineConfig) {
+  return config.timeToFill ?? DEFAULT_RESOURCE_GAP_CONFIG.timeToFill;
+}
+
+function resolveContractorThresholdMonths(config: ResourceGapEngineConfig): number {
+  return (
+    config.hireVsContractThresholdMonths ??
+    config.contractorThresholdMonths ??
+    DEFAULT_RESOURCE_GAP_CONFIG.hireVsContractThresholdMonths
+  );
+}
+
+function resolveSecondaryGapThreshold(config: ResourceGapEngineConfig): number {
+  return (
+    config.secondaryGapRiskThreshold ??
+    config.secondaryGapCoverageThreshold ??
+    DEFAULT_RESOURCE_GAP_CONFIG.secondaryGapRiskThreshold
+  );
 }
 
 function computeUrgency(
@@ -50,13 +60,12 @@ function computeUrgency(
   demandStartQuarter: Quarter,
   timeToFillDays: number,
 ): UrgencyTier {
-  // Parse demand quarter to date distance
-  const m = demandStartQuarter.match(/^(\d{4})-Q([1-4])$/i);
+  const m = (demandStartQuarter as string).match(/^(\d{4})-Q([1-4])$/i);
   let daysUntilDemand = 9999;
   if (m) {
     const year = Number(m[1]);
     const q = Number(m[2]);
-    const month = (q - 1) * 3; // Jan-based
+    const month = (q - 1) * 3;
     const demandDate = new Date(year, month, 1);
     const now = new Date();
     const diffMs = demandDate.getTime() - now.getTime();
@@ -69,16 +78,18 @@ function computeUrgency(
 }
 
 function quarterDiffMonths(startQ: Quarter, endQ: Quarter): number {
-  const parse = (q: Quarter) => {
+  const parse = (q: string) => {
     const mm = q.match(/^(\d{4})-Q([1-4])$/i);
     if (!mm) return null;
     return { year: Number(mm[1]), q: Number(mm[2]) };
   };
-  const s = parse(startQ);
-  const e = parse(endQ);
+  const s = parse(startQ as string);
+  const e = parse(endQ as string);
   if (!s || !e) return 12;
   return (e.year - s.year) * 12 + (e.q - s.q) * 3;
 }
+
+// ── FR-3 Hiring recommendations ──────────────────────────────────────
 
 function buildHiringRecommendations(
   gapResult: GapComputationResult,
@@ -88,29 +99,20 @@ function buildHiringRecommendations(
   const out: HiringRecommendation[] = [];
   let idCounter = 0;
 
-  // Build lookup for demand start dates by project gap
-  const demandLookup = new Map<string, ProjectDemand>();
-  for (const d of demands) demandLookup.set(d.projectId, d);
+  const costBand = resolveCostBand(config);
+  const ttfCfg = resolveTimeToFill(config);
+  const contractorThresholdMonths = resolveContractorThresholdMonths(config);
 
   for (const gap of gapResult.gaps) {
-    if (gap.severity === "low") continue; // AC-3: Critical and Moderate only per spec, but include logic for all severities optionally
+    if (gap.severity === "low") continue;
 
-    // Derive required proficiency from gap's max requirement approximated as 3+severity
-    const minProf = (gap.seniority ? 3 : 3) as SkillProficiency;
-
-    const targetTeam = gap.team ?? "engineering";
-    const demandQ = gap.quarter;
-
-    // Find matching demand to extract seniority and dates
-    const matchingDemand = demands.find(
-      (d) => d.team === gap.team || !gap.team,
-    );
-    const seniority: SeniorityBand =
-      gap.seniority ?? matchingDemand?.requiredSeniority ?? "mid";
-    const ttf = config.timeToFill.perSeniority[seniority] ?? 60;
-    const urgency = computeUrgency(gap.severity, demandQ, ttf);
+    const matchingDemand = demands.find((d) => !gap.team || d.team === gap.team);
+    const seniority: SeniorityBand = gap.seniority ?? matchingDemand?.requiredSeniority ?? "mid";
+    const ttf = ttfCfg.perSeniority?.[seniority] ?? 60;
+    const urgency = computeUrgency(gap.severity, gap.quarter, ttf);
 
     const roleTitle = `${seniority.charAt(0).toUpperCase() + seniority.slice(1)} ${gap.skillId} Engineer`;
+
     const demandForGap = matchingDemand;
     const durationMonths = demandForGap
       ? quarterDiffMonths(
@@ -119,22 +121,14 @@ function buildHiringRecommendations(
         )
       : 12;
 
-    const isPotentiallyContract =
-      durationMonths < config.contractorThresholdMonths;
+    const isPotentiallyContract = durationMonths < contractorThresholdMonths;
 
-    const costBandRaw =
-      config.costBands.perSeniorityFTE[seniority] ?? {
-        min: 90000,
-        max: 130000,
-        currency: "USD",
-      };
+    const bandForSen = costBand.perSeniorityFTE?.[seniority];
 
-    // Scale cost estimate by gapFTE
-    const costBand = {
-      min: Math.round(costBandRaw.min * gap.gapFTE),
-      max: Math.round(costBandRaw.max * gap.gapFTE),
-      currency: costBandRaw.currency,
-    };
+    const minProfFromDemand =
+      matchingDemand?.requiredSkills?.find(
+        (rs) => rs.skillId.toLowerCase() === gap.skillId.toLowerCase(),
+      )?.minProficiency ?? 3;
 
     out.push({
       id: `hire-${++idCounter}-${gap.skillId}-${gap.quarter}`,
@@ -145,80 +139,88 @@ function buildHiringRecommendations(
         location: gap.location,
         seniority: gap.seniority,
       },
-      type: isPotentiallyContract ? "contract" : "hire",
+      type: isPotentiallyContract ? ("contract" as const) : ("hire" as const),
       status: "open" as RecommendationStatus,
       roleTitle,
-      requiredSkills: [{ skillId: gap.skillId, minProficiency: minProf }],
+      requiredSkills: [
+        {
+          skillId: gap.skillId,
+          minProficiency: minProfFromDemand as SkillProficiency,
+        },
+      ],
       seniority,
-      targetTeam,
-      demandStartQuarter: demandQ,
-      demandStartDate: demandForGap?.demandStartQuarter,
+      targetTeam: gap.team ?? matchingDemand?.team ?? "engineering",
+      demandStartQuarter: gap.quarter,
+      demandStartDate: demandForGap?.demandStartDate,
       durationMonths,
-      urgency,
+      urgency: urgency as UrgencyTier,
       estimatedTimeToFillDays: ttf,
       isPotentiallyContract,
       contractorRationale: isPotentiallyContract
-        ? `Demand duration ${durationMonths} months < threshold ${config.contractorThresholdMonths} months; contractor more cost-effective`
+        ? `Demand duration ${durationMonths} months < threshold ${contractorThresholdMonths} months; contractor recommended`
         : undefined,
-      costBand,
+      costBand: bandForSen ?? undefined,
       createdAt: new Date().toISOString(),
     });
   }
 
-  // Ensure every Critical and Moderate gap has at least one hiring rec (AC-3)
+  // P1 first
+  const rank: Record<UrgencyTier, number> = { P1: 0, P2: 1, P3: 2 };
+  out.sort((a, b) => {
+    const r = rank[a.urgency] - rank[b.urgency];
+    if (r !== 0) return r;
+    return b.gap.skillId.localeCompare(a.gap.skillId);
+  });
+
   return out;
 }
 
-// FR-4 deployment
+// ── FR-4 Deployment recommendations ──────────────────────────────────
+
 function buildDeploymentRecommendations(
   gaps: SkillGap[],
   employees: Employee[],
   config: ResourceGapEngineConfig,
 ): DeploymentRecommendation[] {
   const recs: DeploymentRecommendation[] = [];
-  let idCounter = 0;
 
-  // Pre-index employee total availability by team for secondary gap check
   const teamAvailability = new Map<string, number>();
   const teamEmployees = new Map<string, Employee[]>();
-
-  for (const e of employees) {
-    const avail = Math.max(0, Math.min(e.availabilityPct / 100, 1));
-    teamAvailability.set(e.team, (teamAvailability.get(e.team) ?? 0) + avail);
-    if (!teamEmployees.has(e.team)) teamEmployees.set(e.team, []);
-    teamEmployees.get(e.team)!.push(e);
+  for (const emp of employees) {
+    const avail = Math.max(0, Math.min(emp.availabilityPct / 100, 1));
+    teamAvailability.set(emp.team, (teamAvailability.get(emp.team) ?? 0) + avail);
+    const arr = teamEmployees.get(emp.team) ?? [];
+    arr.push(emp);
+    teamEmployees.set(emp.team, arr);
   }
 
+  const secondaryGapCoverageThreshold = resolveSecondaryGapThreshold(config);
+
   for (const gap of gaps) {
-    // For each gap, find candidates
+    if (gap.severity === "low") continue;
+
     const candidates: DeploymentCandidate[] = [];
 
     for (const emp of employees) {
-      // Must have matching or adjacent skill
       const matchingSkill = emp.skills.find(
         (s) => s.skillId.toLowerCase() === gap.skillId.toLowerCase(),
       );
       if (!matchingSkill) continue;
 
-      // Sufficient proficiency — at least level where weight > 0
-      // Let's accept prof delta >= -2 (FR 5.1 near-match path is delta <=1 but deployment allows broader)
-      const reqProf = 3 as SkillProficiency; // conservative
-      const profDelta = (matchingSkill.proficiency as number) - reqProf;
+      const reqProf = 3 as SkillProficiency;
+      const profDelta = (matchingSkill.proficiency as number) - (reqProf as number);
       if (profDelta < -2) continue;
 
       const availFrac = Math.max(0, Math.min(emp.availabilityPct / 100, 1));
-      if (availFrac < 0.1) continue; // needs available capacity
+      if (availFrac < 0.1) continue;
 
-      // Skill match score: based on proficiency weighting + adjacency
       const isExact = matchingSkill.skillId.toLowerCase() === gap.skillId.toLowerCase();
       const matchScoreBase = isExact ? 1 : 0.7;
       const profRatio = profDelta >= 0 ? 1 : Math.max(0, 0.5 + profDelta * 0.25);
       const skillMatchScore = Math.max(0, Math.min(1, matchScoreBase * profRatio));
 
-      // Utilization rate: 1 - availability
       const utilizationRate = Math.max(0, Math.min(1, 1 - availFrac));
 
-      // Transition lead
       let transitionLeadTimeDays = 14;
       if (emp.currentProjectEndDate) {
         const endMs = Date.parse(emp.currentProjectEndDate);
@@ -228,16 +230,13 @@ function buildDeploymentRecommendations(
         }
       }
 
-      // Secondary gap risk: would removing this employee reduce source team coverage below 75%?
       const sourceTeamAvail = teamAvailability.get(emp.team) ?? 0;
       const postRedeploy = sourceTeamAvail - availFrac;
       const teamSize = teamEmployees.get(emp.team)?.length ?? 1;
-      const sourceTeamCoverageThreshold = config.secondaryGapCoverageThreshold;
-      // Simplistic coverage estimate: availability sum / team size approximates coverage
       const coverageAfter = teamSize > 0 ? postRedeploy / teamSize : 0;
-      const secondaryGapRisk = coverageAfter < sourceTeamCoverageThreshold;
+      const secondaryGapRisk = coverageAfter < secondaryGapCoverageThreshold;
       const secondaryGapDetail = secondaryGapRisk
-        ? `Moving ${emp.id} from ${emp.team} would reduce ${emp.team} coverage to ${Math.round(coverageAfter * 100)}% (below ${Math.round(sourceTeamCoverageThreshold * 100)}% threshold)`
+        ? `Moving ${emp.id} from ${emp.team} would reduce ${emp.team} coverage to ${Math.round(coverageAfter * 100)}% (below ${Math.round(secondaryGapCoverageThreshold * 100)}% threshold)`
         : undefined;
 
       candidates.push({
@@ -259,24 +258,23 @@ function buildDeploymentRecommendations(
       });
     }
 
-    // Rank candidates FR-4.2: skill match score, proficiency delta, utilization rate, transition lead time
     candidates.sort((a, b) => {
       const s = b.skillMatchScore - a.skillMatchScore;
       if (Math.abs(s) > 0.001) return s;
       const pd = b.proficiencyDelta - a.proficiencyDelta;
       if (pd !== 0) return pd;
-      const ur = a.utilizationRate - b.utilizationRate; // lower utilization preferred
+      const ur = a.utilizationRate - b.utilizationRate;
       if (Math.abs(ur) > 0.001) return ur;
       return a.transitionLeadTimeDays - b.transitionLeadTimeDays;
     });
 
     if (candidates.length === 0) continue;
 
-    const urgencyTier =
+    const urgencyTier: UrgencyTier =
       gap.severity === "critical" ? "P1" : gap.severity === "moderate" ? "P2" : "P3";
 
     recs.push({
-      id: `deploy-${++idCounter}-${gap.skillId}-${gap.quarter}`,
+      id: `deploy-${gap.skillId}-${gap.quarter}-${gap.team ?? "all"}`,
       gap: {
         skillId: gap.skillId,
         quarter: gap.quarter,
@@ -286,7 +284,7 @@ function buildDeploymentRecommendations(
       },
       type: "deploy",
       status: "open" as RecommendationStatus,
-      urgency: urgencyTier as UrgencyTier,
+      urgency: urgencyTier,
       candidates: candidates.slice(0, 10),
       topCandidateId: candidates[0]?.employeeId,
       createdAt: new Date().toISOString(),
@@ -296,7 +294,8 @@ function buildDeploymentRecommendations(
   return recs;
 }
 
-// FR-5 upskill
+// ── FR-5 Upskill ─────────────────────────────────────────────────────
+
 function buildUpskillRecommendations(
   gaps: SkillGap[],
   employees: Employee[],
@@ -312,18 +311,13 @@ function buildUpskillRecommendations(
       if (!matchingSkill) continue;
 
       const currentProf = matchingSkill.proficiency as SkillProficiency;
-      const targetProf = 4 as SkillProficiency; // assume target L4 for gap closure
+      const targetProf = 4 as SkillProficiency;
       const delta = (targetProf as number) - (currentProf as number);
 
-      // Near-match: proficiency delta ≤1 level (FR-5.1)
       if (delta <= 0 || delta > 1) continue;
 
-      // Ramp time heuristics
-      const rampMap: Record<number, number> = { 1: 45 };
-      const rampDays = rampMap[delta] ?? 60;
-
-      const category: LearningCategory =
-        delta === 1 ? "internal_training" : "mentorship";
+      const rampDays = 45;
+      const category: LearningCategory = "internal_training";
 
       const projectedReadiness = new Date(Date.now() + rampDays * 24 * 60 * 60 * 1000)
         .toISOString()
@@ -357,6 +351,8 @@ function buildUpskillRecommendations(
   return out;
 }
 
+// ── Tool factory ─────────────────────────────────────────────────────
+
 function validateEmployees(raw: unknown): Employee[] {
   if (!Array.isArray(raw)) throw new ToolInputError("employees must be an array");
   return raw as Employee[];
@@ -367,9 +363,8 @@ function validateDemands(raw: unknown): ProjectDemand[] {
   return raw as ProjectDemand[];
 }
 
-export function createResourceGapTool(
-  _api: BuilderForceAgentsPluginApi,
-): AnyAgentTool {
+export function createResourceGapTool(api: BuilderForceAgentsPluginApi): AnyAgentTool {
+  void api; // future use (logger, etc.)
   return {
     name: "resource_gap_analysis",
     label: "Resource Gap Analysis",
@@ -404,10 +399,8 @@ export function createResourceGapTool(
 
     async execute(_id: string, params: Record<string, unknown>) {
       const employees = validateEmployees(params["employees"] ?? params["demands"]);
-      // defensive: support both naming conventions
       const rawDemands =
         (params["project_demands"] as unknown) ??
-        (params["project_demands" as string] as unknown) ??
         (params["demands"] as unknown) ??
         (params["projectRequirements"] as unknown);
       const demands = validateDemands(rawDemands);
@@ -427,15 +420,6 @@ export function createResourceGapTool(
         config = {
           ...config,
           ...overrides,
-          proficiency: overrides.proficiency ?? config.proficiency,
-          taxonomy: overrides.taxonomy ?? config.taxonomy,
-          timeToFill: overrides.timeToFill ?? config.timeToFill,
-          costBands: overrides.costBands ?? config.costBands,
-          contractorThresholdMonths:
-            overrides.contractorThresholdMonths ?? config.contractorThresholdMonths,
-          secondaryGapCoverageThreshold:
-            overrides.secondaryGapCoverageThreshold ??
-            config.secondaryGapCoverageThreshold,
         };
       }
 
@@ -462,9 +446,8 @@ export function createResourceGapTool(
           criticalGaps: gapResult.gaps.filter((g) => g.severity === "critical").length,
           moderateGaps: gapResult.gaps.filter((g) => g.severity === "moderate").length,
           lowGaps: gapResult.gaps.filter((g) => g.severity === "low").length,
-          compoundingGaps: gapResult.gaps.filter(
-            (g) => (g.compoundingProjectCount ?? 0) >= 3,
-          ).length,
+          compoundingGaps: gapResult.gaps.filter((g) => (g.compoundingProjectCount ?? 0) >= 3)
+            .length,
           hiringRecs: hiringRecommendations.length,
           deploymentRecs: deploymentRecommendations.length,
           upskillRecs: upskillRecommendations.length,
