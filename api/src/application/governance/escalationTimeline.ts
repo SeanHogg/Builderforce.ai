@@ -122,7 +122,7 @@ export function buildTimeline(args: {
     const slaDays = lvl.slaDays ?? args.chainDefaultSlaDays ?? 3;
     const entered = enteredAtMap.get(idx) ?? null;
     const exited = exitedAtMap.get(idx) ?? null;
-    const iconInfo = resolveIconKey(lvl.iconKey ?? lvl.levelName);
+    const iconInfo = iconForLevel(lvl.levelName, lvl.iconKey ?? null);
 
     let status: TimelineItemStatus;
     if (idx < args.currentSequence) status = 'completed';
