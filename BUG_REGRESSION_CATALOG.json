@@ -111,7 +111,7 @@
     {
       "task_id": 354,
       "title": "Helcim checkout: recurring billing schedule not created",
-      "status": "backlog",
+      "status": "ready",
       "type": "bug",
       "severity": "high",
       "severity_source": "inferred",
