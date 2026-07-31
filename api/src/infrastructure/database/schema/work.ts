@@ -402,6 +402,11 @@ export const projectManagerConfigs = pgTable('project_manager_configs', {
   allowAgentReassignment:     boolean('allow_agent_reassignment'),
   agentReassignIdleHours:     integer('agent_reassign_idle_hours'),
   agentReassignMaxPerSession: integer('agent_reassign_max_per_session'),
+  /** May the manager staff a lane that authorises NO role at all (0386)? Nullable =
+   *  inherit. A lane with no requirement and no staffed agent can never dispatch on a
+   *  managed board, and the manager can fix that — but doing so turns an intake pile into
+   *  auto-dispatching work, so it is a grant rather than a default. */
+  allowAutoStaffLanes: boolean('allow_auto_staff_lanes'),
   lastRunAt:         timestamp('last_run_at'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),

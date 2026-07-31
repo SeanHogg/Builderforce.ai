@@ -36,6 +36,22 @@ Files: `api/src/application/llm/{byoCredentialHealth,providerAuthAlerts,byoCrede
 
 ---
 
+## 2026-07-31 — ✅ RESOLVED: `lane_unconfigured` — a lane nobody configured is not a staffing failure (migration 0386 · api 2026.7.195 · ui 2026.7.147)
+
+The staffing verdict named three lanes: `backlog` (299 tickets) and `blocked` (10) authorising **no role at all**, and `todo` (8) with agents that map to none. All 317 were being reported as `managed_no_role` — *"the stage authorises roles, but none resolves to an agent"* — which is not what was happening. There was no role. The taxonomy had one bucket for two opposite repairs, and the larger was hiding the smaller: the handful of tickets with a genuine binding failure were invisible inside a 306-ticket number.
+
+**The split.** New `lane_unconfigured` reason, in the dispatcher (`classifyResolvedAutoRun`) and the census (`classifyBulkAutoRunReason`) in that order, from the authority TIER that both already computed and both were discarding. `managed_no_role` now means a NAMED role failed to bind — which the manager's staffing ladder is keyed on and can fill. `lane_unconfigured` means there is no name, so the ladder has nothing to work with. An unresolved tier stays `managed_no_role` rather than becoming the more alarming reading; `null` must never mean `none`, which is the same discipline the census was repaired for hours earlier.
+
+**The remedy, behind a grant.** `staffUnfilledLanes` can now fix such a lane: `staffUnfilledRole` pins (or hires) a producer at project scope — which is what makes the roster report it role-capable, since `approverRoleKeyForLaneAgent` refuses any lane agent with an empty capable set — and then a `swimlane_agent_assignments` row binds it to that lane, turning `decideLaneApprovers` from tier `none` into tier `lane_agents`. Both writes are needed; the lane row alone produces a lane that still authorises nothing.
+
+**Why it is a grant and not a default.** Staffing an unconfigured lane STARTS everything sitting in it — on the measured board, 309 tickets in one pass, into a provider pool currently rejecting 91% of runs. An intake column left empty on purpose looks identical to one left empty by accident, and the platform cannot tell which. So `allowAutoStaffLanes` (0386) is withheld by default and folded most-restrictive-wins like `allowAutoMerge`: an explicit workspace `false` is a ceiling. **Reporting never depends on the grant, only acting does** — pinned by a source test, along with the gate wrapping only the write and `shape_unmatched` never being written to (that lane HAS requirements, so tier (a) wins and a staffed agent would never be consulted).
+
+`lane_unconfigured` escalates rather than being remedied per ticket, exactly like `human_gate`: it is a legitimate configuration, the manager must not decide otherwise, and the fix is one lane rather than the 299 tickets in it. The new finding states whether the grant was given, because a withheld permission and a broken remedy are indistinguishable from the cohort alone.
+
+Migration 0386 (nullable at both tiers, `IF NOT EXISTS`, commented). Toggle on the Manager policy panel and on workspace defaults, localized in all five catalogs with real translations, plus the board triage chip's own reason label. API 4292 tests + 12 guards; frontend 493 + 92.
+
+---
+
 ## 2026-07-31 — ✅ RESOLVED: the staffing verdict arrived, and everything it touched was unreadable (api 2026.7.194 · ui 2026.7.146)
 
 The first capture that carried the board-staffing verdict answered the 306-ticket question outright:

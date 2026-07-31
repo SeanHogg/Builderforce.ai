@@ -72,6 +72,19 @@ export type StallCause =
    * for weeks while the real defect was that no dispatch could be role-attributed.
    */
   | 'managed_no_role'
+  /**
+   * LIFECYCLE-MANAGED board: the stage authorizes NO role at all — it declares no
+   * requirement and staffs no agent — so there is nothing for a run to be attributed to.
+   *
+   * Split from `managed_no_role` for the same reason that one was split from `unassigned`:
+   * the two demand opposite repairs. `managed_no_role` is a named role that failed to bind
+   * and the manager's staffing ladder is keyed on that name; here there is no name, so the
+   * ladder has nothing to work with and the repair is to CONFIGURE the lane. Measured on
+   * project 11 (2026-07-31): 306 tickets read `managed_no_role`, 309 of the board's
+   * unauthorised tickets were in `backlog`/`blocked` — lanes nobody had ever set up — and
+   * the ~8 tickets with a genuine binding failure were invisible inside that number.
+   */
+  | 'lane_unconfigured'
   /** Candidate agents exist but none holds the lane's required capabilities. */
   | 'capability_gap'
   /** The lane gate is 'human' — autonomy is waiting on an approval nobody gave. */
@@ -283,6 +296,17 @@ export function diagnoseStall(input: StallInput): StallDiagnosis {
       return stalled(
         'managed_no_role', 'coordinate',
         `Stuck ${age}: this board is lifecycle-managed and this stage has no role-capable participant, so no run can be attributed to a role — coordinating the ticket to staff the stage. Assigning an owner will NOT help; the assignee is the Coordinator.`,
+      );
+    case 'lane_unconfigured':
+      // ESCALATE, like `human_gate` and for the same reason: an unconfigured lane is a
+      // legitimate state (an intake lane that is meant to be pulled from by hand looks
+      // exactly like one somebody forgot), and the manager must not decide which. The
+      // board-wide remedy exists and is gated on `allowAutoStaffLanes` — when that grant
+      // is given, `staffUnfilledLanes` fixes the LANE before triage ever sees the ticket,
+      // which is the right altitude: one lane, not the 299 tickets sitting in it.
+      return stalled(
+        'lane_unconfigured', 'escalate_human',
+        `Stuck ${age}: this board is lifecycle-managed and this stage authorises no role at all — it declares no required role and has no agent staffed to it, so nothing here can ever be dispatched. This is not a role that failed to bind; there is no role. Declare a required role on the stage, staff an agent to it, or grant the manager permission to staff unconfigured lanes.`,
       );
     case 'capability_mismatch':
       return stalled(
@@ -509,6 +533,7 @@ export const STALL_CAUSE_LABEL: Record<StallCause, string> = {
   never_started: 'Never started',
   unassigned: 'Nobody assigned',
   managed_no_role: 'No role can execute this stage',
+  lane_unconfigured: 'Stage authorises no role at all',
   capability_gap: 'No capable agent',
   human_gate: 'Awaiting human approval',
   failure_breaker: 'Halted after repeated failures',

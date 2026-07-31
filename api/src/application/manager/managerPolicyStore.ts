@@ -49,6 +49,7 @@ export async function getManagerConfigRow(
       allowAgentReassignment: projectManagerConfigs.allowAgentReassignment,
       agentReassignIdleHours: projectManagerConfigs.agentReassignIdleHours,
       agentReassignMaxPerSession: projectManagerConfigs.agentReassignMaxPerSession,
+      allowAutoStaffLanes: projectManagerConfigs.allowAutoStaffLanes,
       lastRunAt: projectManagerConfigs.lastRunAt,
     })
     .from(projectManagerConfigs)
@@ -87,6 +88,8 @@ export async function getTenantManagerDefaults(
         allowAgentReassignment: tenantManagerDefaults.allowAgentReassignment,
         agentReassignIdleHours: tenantManagerDefaults.agentReassignIdleHours,
         agentReassignMaxPerSession: tenantManagerDefaults.agentReassignMaxPerSession,
+        // Lane auto-staffing (0386) rides the same tier and the same fold.
+        allowAutoStaffLanes: tenantManagerDefaults.allowAutoStaffLanes,
       })
       .from(tenantManagerDefaults)
       .where(eq(tenantManagerDefaults.tenantId, tenantId))
@@ -141,6 +144,7 @@ export async function upsertTenantManagerDefaults(
       allowAgentReassignment: normalized.allowAgentReassignment ?? null,
       agentReassignIdleHours: normalized.agentReassignIdleHours ?? null,
       agentReassignMaxPerSession: normalized.agentReassignMaxPerSession ?? null,
+      allowAutoStaffLanes: normalized.allowAutoStaffLanes ?? null,
       updatedBy: opts?.updatedBy ?? null,
       updatedAt: now,
     })
@@ -159,6 +163,7 @@ export async function upsertTenantManagerDefaults(
         ...(normalized.allowAgentReassignment !== undefined ? { allowAgentReassignment: normalized.allowAgentReassignment } : {}),
         ...(normalized.agentReassignIdleHours !== undefined ? { agentReassignIdleHours: normalized.agentReassignIdleHours } : {}),
         ...(normalized.agentReassignMaxPerSession !== undefined ? { agentReassignMaxPerSession: normalized.agentReassignMaxPerSession } : {}),
+        ...(normalized.allowAutoStaffLanes !== undefined ? { allowAutoStaffLanes: normalized.allowAutoStaffLanes } : {}),
         ...(opts?.updatedBy !== undefined ? { updatedBy: opts.updatedBy } : {}),
         updatedAt: now,
       },
@@ -207,7 +212,7 @@ export async function upsertManagerConfig(
   db: Db,
   tenantId: number,
   projectId: number,
-  patch: Partial<Pick<ManagerConfigRow, 'managerRef' | 'enabled' | 'prMergePolicy' | 'autoAssign' | 'autoBusinessValue' | 'autoPrioritize' | 'autoSchedule' | 'managerType' | 'requireSignoffToComplete' | 'allowAutoMerge' | 'allowUnattendedCeremonies' | 'allowAgentReassignment' | 'agentReassignIdleHours' | 'agentReassignMaxPerSession'>>,
+  patch: Partial<Pick<ManagerConfigRow, 'managerRef' | 'enabled' | 'prMergePolicy' | 'autoAssign' | 'autoBusinessValue' | 'autoPrioritize' | 'autoSchedule' | 'managerType' | 'requireSignoffToComplete' | 'allowAutoMerge' | 'allowUnattendedCeremonies' | 'allowAgentReassignment' | 'agentReassignIdleHours' | 'agentReassignMaxPerSession' | 'allowAutoStaffLanes'>>,
 ): Promise<ManagerConfigRow> {
   const now = new Date();
   await db
@@ -241,6 +246,9 @@ export async function upsertManagerConfig(
       allowAgentReassignment: patch.allowAgentReassignment ?? null,
       agentReassignIdleHours: patch.agentReassignIdleHours ?? null,
       agentReassignMaxPerSession: patch.agentReassignMaxPerSession ?? null,
+      // 0386 — NULL on insert for the same reason as the two above: a brand-new project
+      // has never had an opinion about whether the manager may configure a lane for it.
+      allowAutoStaffLanes: patch.allowAutoStaffLanes ?? null,
       updatedAt: now,
     })
     .onConflictDoUpdate({
@@ -260,6 +268,7 @@ export async function upsertManagerConfig(
         ...(patch.allowAgentReassignment !== undefined ? { allowAgentReassignment: patch.allowAgentReassignment } : {}),
         ...(patch.agentReassignIdleHours !== undefined ? { agentReassignIdleHours: patch.agentReassignIdleHours } : {}),
         ...(patch.agentReassignMaxPerSession !== undefined ? { agentReassignMaxPerSession: patch.agentReassignMaxPerSession } : {}),
+        ...(patch.allowAutoStaffLanes !== undefined ? { allowAutoStaffLanes: patch.allowAutoStaffLanes } : {}),
         updatedAt: now,
       },
     });

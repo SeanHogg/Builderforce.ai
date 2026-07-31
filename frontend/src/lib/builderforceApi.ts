@@ -1419,6 +1419,10 @@ export type AutoRunReason =
    *  because the fix is different — assigning an owner does nothing on a managed
    *  board, where the assignee is the Coordinator rather than an executor. */
   | 'managed_no_role'
+  /** LIFECYCLE-MANAGED board: the stage authorizes NO role at all — no requirement
+   *  declared and no agent staffed — so there is nothing to bind rather than nothing
+   *  bound. The repair configures the lane; no amount of staffing reaches it (0386). */
+  | 'lane_unconfigured'
   | 'capability_mismatch'
   /** A live (pending/submitted/running/paused) run exists on the ticket. */
   | 'already_running'
@@ -1943,6 +1947,8 @@ export interface ManagerConfig {
   /** Ceremony autonomy for THIS project (0365). `null` = inherit the workspace default. */
   allowUnattendedCeremonies: boolean | null;
   allowAgentReassignment: boolean | null;
+  /** May the manager configure a lane that authorises NO role (0386)? `null` = inherit. */
+  allowAutoStaffLanes: boolean | null;
   agentReassignIdleHours: number | null;
   agentReassignMaxPerSession: number | null;
   managerType: ManagerTypeId;
@@ -1998,6 +2004,14 @@ export interface ManagerPolicy {
   agentReassignIdleHours: number;
   /** Hard cap on reassignments one ceremony may make. */
   agentReassignMaxPerSession: number;
+  /**
+   * May the manager staff a lane that authorises NO role at all (0386)?
+   *
+   * Such a lane can never dispatch on a lifecycle-managed board, and the manager can fix
+   * it — but doing so starts every ticket sitting in the lane, so the grant is withheld
+   * until an operator gives it. The gap is REPORTED either way.
+   */
+  allowAutoStaffLanes: boolean;
 }
 
 /**
@@ -2018,6 +2032,8 @@ export interface ManagerTenantDefaults {
   /** Ceremony autonomy (0365) — same tier, same fold, same null-means-inherit rule. */
   allowUnattendedCeremonies: boolean | null;
   allowAgentReassignment: boolean | null;
+  /** May the manager configure a lane that authorises NO role (0386)? `null` = inherit. */
+  allowAutoStaffLanes: boolean | null;
   agentReassignIdleHours: number | null;
   agentReassignMaxPerSession: number | null;
 }
@@ -2189,6 +2205,8 @@ export type ManagerConfigPatch = Partial<{
   /** Ceremony autonomy (0365) — tri-state for the same reason. */
   allowUnattendedCeremonies: boolean | null;
   allowAgentReassignment: boolean | null;
+  /** May the manager configure a lane that authorises NO role (0386)? `null` = inherit. */
+  allowAutoStaffLanes: boolean | null;
   agentReassignIdleHours: number | null;
   agentReassignMaxPerSession: number | null;
 }>;
@@ -2407,6 +2425,10 @@ export interface ManagerDailyDigest {
 export type StallCause =
   | 'live' | 'cooling_down' | 'moving' | 'never_started' | 'unassigned'
   | 'managed_no_role'
+  /** The stage authorises NO role at all — nothing declared, nobody staffed. Distinct
+   *  from `managed_no_role` because there is no role to fill: the repair configures the
+   *  lane rather than staffing a name (0386). */
+  | 'lane_unconfigured'
   | 'capability_gap' | 'human_gate' | 'failure_breaker' | 'missing_deliverable'
   | 'build_failed' | 'awaiting_signoff' | 'pr_conflict' | 'pr_unreconciled'
   | 'merge_withheld' | 'blocked' | 'unknown';

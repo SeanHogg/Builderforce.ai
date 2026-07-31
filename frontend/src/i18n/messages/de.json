@@ -6314,6 +6314,7 @@
         "cooldown_active": "Abkühlphase nach einem Lauf ohne Ergebnis — erneuter Versuch in Kürze",
         "no_agent": "Kein Agent zugewiesen",
         "managed_no_role": "Keine Rolle kann diese Phase ausführen",
+        "lane_unconfigured": "Stufe autorisiert keine Rolle",
         "no_board": "Kein Board konfiguriert",
         "no_lane": "Spur nicht konfiguriert",
         "terminal_lane": "Fertig — kein Lauf nötig",
@@ -6889,6 +6890,10 @@
       "allowAgentReassignment": {
         "label": "Liegengebliebene Arbeit an Agenten geben",
         "help": "Erlaubt einer Zeremonie, ein Ticket von einer abwesenden Person an einen Agenten zu übergeben. Fehlen allein genügt nie – das Ticket muss außerdem den unten genannten Zeitraum unberührt geblieben sein."
+      },
+      "allowAutoStaffLanes": {
+        "label": "Eine Stufe konfigurieren, die niemanden benennt",
+        "help": "Manche Stufen autorisieren überhaupt keine Rolle – keine Pflichtrolle deklariert, kein Agent zugewiesen –, sodass auf einem Lifecycle-verwalteten Board nichts, was dort liegt, jemals gestartet werden kann. Der Manager meldet diese Stufen immer; diese Option entscheidet, ob er eine davon zusätzlich beheben darf, indem er ihr einen Ausführenden zuweist. Die Erteilung startet alle Tickets, die dort bereits warten – eine bewusst leer gelassene Stufe (eine Eingangsspalte, aus der Sie von Hand ziehen) sollte es also bleiben."
       },
       "agentReassignIdleHours": {
         "label": "Erst nach Untätigkeit von",
