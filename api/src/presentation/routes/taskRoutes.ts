@@ -407,6 +407,45 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     return c.json({ members });
   });
 
+  // GET /api/tasks/unassigned-high-priority — FR1: the critical work nobody owns
+  // yet. Returns tasks with priority high|urgent, NO human assignee, not archived
+  // and not in a done-class lane, with pagination / project filter / sort. The
+  // response carries `cacheInfo.validForSeconds` (1800) so dashboards can cache.
+  //
+  // Registered BEFORE `/:id` so the static path isn't captured as a task id — a
+  // route declared after `/:id` would be swallowed by it and always 404.
+  router.get('/unassigned-high-priority', async (c) => {
+    // Reuse the shared positive-int parser: a non-numeric ?projectId= becomes
+    // undefined (no filter) rather than NaN, which would silently match no rows.
+    const projectId = parseProjectId(c.req.query('projectId'));
+
+    // Pagination — clamped so a hostile/garbled page size can't ask for the table.
+    const page = Math.max(1, Math.trunc(Number(c.req.query('page'))) || 1);
+    const pageSize = Math.min(100, Math.max(1, Math.trunc(Number(c.req.query('pageSize'))) || 20));
+
+    // Sorting — allowlisted; anything else falls back to the default rather than
+    // reaching the repository (which maps the value onto a column).
+    const sortByRaw = c.req.query('sortBy') ?? 'createdAt';
+    const sortBy = sortByRaw === 'dueDate' || sortByRaw === 'title' || sortByRaw === 'createdAt'
+      ? sortByRaw
+      : 'createdAt';
+    const sortOrderRaw = c.req.query('sortOrder') ?? 'desc';
+    const sortOrder = sortOrderRaw === 'asc' ? 'asc' : 'desc';
+
+    const result = await taskService.findUnassignedHighPriority(c.get('tenantId'), {
+      projectId,
+      page,
+      pageSize,
+      sortBy,
+      sortOrder,
+    });
+
+    // Mirror the recommended client cache onto a real HTTP cache header so proxies
+    // and browsers honour it too, not just clients that read the JSON body.
+    c.header('Cache-Control', `private, max-age=${result.cacheInfo.validForSeconds}`);
+    return c.json(result);
+  });
+
   // ── Task dependency edges (DAG; migration 0121) ───────────────────────────
   // Static/two-segment dependency paths are registered before `/:id` so they are
   // not captured as a task id.
