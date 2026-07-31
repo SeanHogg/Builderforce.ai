@@ -189,7 +189,7 @@ describe("Telemetry Reconstruction & Ledger Integrity Gate", () => {
 
   // ── GAP-OBS-02: Ledger drift ───────────────────────────────────────────
 
-  it("should fail when ledger totals do not agree — snapshot total ≠ usage_log total (GAP-O2)", () => {
+  it("should fail when ledger totals do not agree — snapshot total ≠ usage_log total (GAP-OBS-02)", () => {
     const result = cloudTelemetryReconstructionGate(executionId, {
       toolCount: 5,
       snapshotCount: 3,
