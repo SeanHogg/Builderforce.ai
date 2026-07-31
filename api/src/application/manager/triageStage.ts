@@ -988,19 +988,49 @@ export async function applyRemedy(
       // so until someone staffs the ticket. Counted, so it escalates rather than looping.
       if (!task.assignedAgentRef && task.assignedAgentHostId == null) return ineffective;
       const note = `\n\n[Manager recovery] PR #${args.prRow?.number ?? '?'} conflicts with the latest base branch. Sync the latest base, resolve every conflict while preserving both sets of intended changes, run the relevant checks, and update the existing PR.`;
-      await db.update(tasks).set({
-        status: TaskStatus.IN_PROGRESS,
-        completedAt: null,
-        description: task.description?.includes('[Manager recovery]')
-          ? task.description
-          : `${task.description ?? ''}${note}`.trim(),
-        updatedAt: new Date(),
-      }).where(eq(tasks.id, task.id));
+      // ALREADY HANDED BACK. The ticket is in progress and carries the brief, so this
+      // pass has nothing to write — and it ran every five minutes on a ticket measured at
+      // 18 days idle, which is a `tasks` row write per project per tick for zero change on
+      // a database budget that cannot afford it (see the Neon cost constraint).
+      const handedBack = task.status === TaskStatus.IN_PROGRESS
+        && !!task.description?.includes('[Manager recovery]');
+      if (!handedBack) {
+        await db.update(tasks).set({
+          status: TaskStatus.IN_PROGRESS,
+          completedAt: null,
+          description: task.description?.includes('[Manager recovery]')
+            ? task.description
+            : `${task.description ?? ''}${note}`.trim(),
+          updatedAt: new Date(),
+        }).where(eq(tasks.id, task.id));
+      }
       const started = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
         tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS,
         submittedBy: `${by}:conflict-resolution`,
       }).catch(() => false);
-      return { attempted: started, applied: started, startedRun: started, note: started ? ' Started its agent to resolve the conflict.' : '' };
+      // ── ATTEMPTED, WHETHER OR NOT A RUN STARTED ─────────────────────────────────
+      //
+      // This used to report `attempted: started`, and that is the `nothing` semantics
+      // applied to a remedy that had ALREADY DONE ITS WORK. Handing the branch back — the
+      // lane move plus the resolution brief — IS the remedy; starting the agent is how it
+      // gets picked up. `mayStartRun` already returned `nothing` above for the genuinely
+      // transient refusals (the per-pass cap, the tenant tick ceiling), so a refusal that
+      // reaches HERE comes from the ticket's own gate: no producer, a tripped breaker, a
+      // human gate. Those meet the identical world next pass and refuse identically —
+      // exactly the case `ineffective` exists for.
+      //
+      // The cost of the old reading was a ticket that could be neither worked nor handed
+      // over: measured on project 11 (2026-07-31), one `resolve_conflict` row sat at
+      // attempts=0 for 3 days while the register re-observed it every pass, because an
+      // attempt that is never counted can never reach the 3-attempt escalation ceiling.
+      return {
+        attempted: true,
+        applied: started,
+        startedRun: started,
+        note: started
+          ? ' Started its agent to resolve the conflict.'
+          : ' Handed the branch back with a resolution brief, but its own gate refused to start a run.',
+      };
     }
 
     default:
