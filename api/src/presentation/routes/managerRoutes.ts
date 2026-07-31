@@ -50,6 +50,28 @@ import { notSystemTask, SYSTEM_TASK_SOURCE_MANAGER } from '../../application/tas
 import { getTenantTokenAvailability } from '../../application/llm/tenantTokenAvailability';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 
+/**
+ * The `reason` a `merge_blocked` decision recorded, out of its raw `detail` TEXT.
+ *
+ * `manager_actions.detail` is a `text` column holding JSON, so this cannot be done in
+ * SQL: `detail->>'reason'` is a hard error (`operator does not exist: text ->> unknown`)
+ * and `detail::jsonb` throws on the first row whose text is not valid JSON. Parsing here
+ * makes a malformed row cost exactly that row's reason instead of the whole query — which
+ * is what happened when the SQL version's failure was swallowed and the surface printed
+ * "49 waiting on a person" above an empty list.
+ *
+ * A detail that is absent, malformed, or carries no `reason` simply has none to show; the
+ * PR is still listed, because being on this list at all is the actionable fact.
+ */
+function parseBlockedReason(detailRaw: string | null): string | null {
+  if (!detailRaw) return null;
+  try {
+    const parsed = JSON.parse(detailRaw) as { reason?: unknown };
+    return typeof parsed?.reason === 'string' ? parsed.reason : null;
+  } catch {
+    return null;
+  }
+}
 
 export function createManagerRoutes(
   db: Db,
@@ -254,8 +276,17 @@ export function createManagerRoutes(
         // is open, blocked, and no longer needed. Surfaced so the pile can be triaged in
         // two groups rather than read one row at a time.
         taskStatus: tasks.status,
-        reason: sql<string | null>`(
-          select a.detail->>'reason' from manager_actions a
+        // The raw `detail` TEXT, parsed below — not `detail->>'reason'`.
+        // `manager_actions.detail` is a `text` column holding JSON, so the JSON operator
+        // is a hard SQL error (`operator does not exist: text ->> unknown`) which the
+        // trailing `.catch(() => [])` then swallowed whole: the first capture after this
+        // shipped read "Pull requests waiting on a PERSON (49)" followed by "the endpoint
+        // returns the top 0 by value" — a count from one query and an empty list from
+        // another, with the failure invisible. Casting is not the fix either: `::jsonb`
+        // throws on any row whose detail is not valid JSON, which is the same outage one
+        // bad row away.
+        detailRaw: sql<string | null>`(
+          select a.detail from manager_actions a
           where a.pr_id = ${pullRequests.id} and a.action_type = 'merge_blocked'
           order by a.created_at desc limit 1
         )`,
@@ -280,7 +311,12 @@ export function createManagerRoutes(
       // does not outrank a scored one purely by being unknown.
       .orderBy(sql`${tasks.businessValue} desc nulls last`, desc(pullRequests.updatedAt))
       .limit(50)
-      .catch(() => []);
+      // Reported, not swallowed. A `.catch(() => [])` here is what made a broken query
+      // look like an empty pile beside a count of 49.
+      .catch((error) => {
+        reportCaughtError(error, { source: 'presentation/routes/managerRoutes.ts', operation: 'blockedPrs' });
+        return [];
+      });
     const [blockedPrCount] = await db
       .select({ n: sql<number>`count(*)::int` })
       .from(pullRequests)
@@ -378,8 +414,10 @@ export function createManagerRoutes(
         lastRunAt: config?.lastRunAt ?? null,
       },
       /** The blocked pile, RANKED by the business value of the ticket each PR would
-       *  deliver — see the query. Bounded; `stats.blockedPullRequests` is the total. */
-      blockedPrs,
+       *  deliver — see the query. Bounded; `stats.blockedPullRequests` is the total.
+       *  `reason` is parsed from the raw `detail` text here rather than in SQL, because
+       *  the column is `text` and a JSON operator on it is a hard error. */
+      blockedPrs: blockedPrs.map(({ detailRaw, ...pr }) => ({ ...pr, reason: parseBlockedReason(detailRaw) })),
       backlog,
       actions,
       runTasks,

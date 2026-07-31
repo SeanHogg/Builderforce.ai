@@ -100,6 +100,34 @@ export function classifyRunFailure(message: string | null | undefined): RunFailu
   const m = (message ?? '').trim();
   if (!m) return 'unknown';
 
+  // 0. UNWRAP THE CRASH WRAPPER FIRST.
+  //
+  // `cloudCrashReason(detail)` is not a cause — it is an envelope around one. Measured on
+  // project 11, 2026-07-31, on the first capture this classifier ever produced:
+  //
+  //   78× (48%) runtime_crash — "This cloud run's runtime crashed before reporting
+  //   completion: gateway error: Gateway 429 on model 'direct/meta/muse-spark-1.1' ·
+  //   chain: openrouter/moonshotai/kimi-k3 → …"
+  //
+  // Every one of those is a RATE LIMIT wearing a crash's clothes, and the report
+  // consequently split one cause across two rows — 78 "the runtime crashed" beside 72
+  // "rate limited" — when the honest reading is 150 of 164 failures (91%) being the free
+  // model pool returning 429. Splitting a dominant cause in half is worse than not
+  // classifying it: it makes the largest fact on the board look like two medium ones.
+  //
+  // So the envelope is opened and its CONTENTS classified. `runtime_crash` remains the
+  // answer only when the inner detail names nothing recognisable, which is the case it
+  // was always meant for.
+  const crash = /runtime crashed before reporting completion:\s*([\s\S]*)$/i.exec(m);
+  if (crash?.[1]) {
+    const inner = classifyRunFailure(
+      // Drop the trailing advice sentence the wrapper appends, or its "re-run the task"
+      // prose becomes part of what the inner probes read.
+      crash[1].split(/\.\s+(?:Only the steps above ran|The run is re-queued)/)[0] ?? crash[1],
+    );
+    return inner === 'unknown' ? 'runtime_crash' : inner;
+  }
+
   // 1. The platform's OWN named reasons, by their distinguishing phrase.
   if (isInfrastructureEviction(m)) return 'infra_eviction';
   if (/interrupted by a platform restart/i.test(m)) return 'infra_eviction';
