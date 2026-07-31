@@ -129,8 +129,8 @@ export function createCodeGapsTool(api: any): AnyAgentTool {
             sourceDocument: Type.Optional(Type.String({ description: "Associated source document Jira ticket, design doc" })),
             priority: Type.Optional(
               Type.String({
-                pattern: "^[P0-P3]$",
-                description: "Priority level",
+                pattern: "^P[0-3]$",
+                description: "Priority level (P0, P1, P2, P3)",
               })
             ),
           }),
