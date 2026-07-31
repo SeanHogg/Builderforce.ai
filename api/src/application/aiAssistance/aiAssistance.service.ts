@@ -9,12 +9,15 @@
  *   - Controller/Preferences (FR-5)
  *
  * Key Functions:
- *   - generateInlineSuggestions(ctx, generator, tenantId) - generates inline field suggestions
- *   - proposeAutoFill(ctx, generator, tenantId) - proposes an auto-fill value
- *   - detectGaps(ctx, generator) - detects gaps in a record
- *   - isScopeEnabled(prefs, level, identifier, fieldPath) - checks enablement level
- *   - getAiMetrics() - returns aggregated metrics
- *   - acceptFeedback(state, feedback) - records user feedback
+ *   - buildInlineSuggestionPrompt(ctx, generator) — builds the prompt for inline suggestions
+ *   - generateInlineSuggestions(ctx) — generates inline field suggestions
+ *   - buildAutoFillPrompt(ctx, generator) — builds the prompt for auto-fill
+ *   - proposeAutoFill(ctx) — proposes an auto-fill value
+ *   - detectGaps(ctx, generator) — detects gaps in a record
+ *   - isScopeEnabled(prefs, level, identifier, fieldPath) — checks enablement level
+ *   - getAiMetrics() — returns aggregated metrics
+ *   - acceptFeedback(state, feedback) — records user feedback
+ *   - wouldSettingsChange(current, next) — compares preferences snapshots
  */
 
 import type {
@@ -25,10 +28,8 @@ import type {
   AiGenerator,
   RuntimeState,
   Gap,
-  InlineSuggestionsResponse,
-  AutoFillResponse,
-  GapDetectionResponse,
-  SuggestionFeedback,
+  InlineSuggestion,
+  AutoFillProposal,
 } from './aiAssistance.types';
 
 // -------------------------------------------------------------------------- //
@@ -39,7 +40,6 @@ import type {
  * Build a human-readable context description string.
  */
 function contextDescription(ctx: {
-  sourceField: string;
   currentValue: string;
   recordId: string;
   recordType: string;
@@ -60,6 +60,10 @@ function contextDescription(ctx: {
   return parts.join('; ');
 }
 
+// -------------------------------------------------------------------------- //
+// INLINE SUGGESTIONS (FR-1)
+// -------------------------------------------------------------------------- //
+
 /**
  * Build a plain-text prompt for generating inline suggestions.
  */
@@ -73,16 +77,14 @@ export async function buildInlineSuggestionPrompt(
     parentId?: string;
     userId?: number;
     siblingFields: Record<string, string>;
-    fieldConfig?: {
-      suggestionsEnabled: boolean;
-      isSensitive?: boolean;
-      tenantOptedIn?: boolean;
-    };
+    /** Whether the field is flagged as sensitive (FR-1.5) */
+    isSensitive?: boolean;
+    /** Whether the tenant has opted into AI suggestions on sensitive fields */
+    tenantOptedIn?: boolean;
   },
   generator: AiGenerator | null,
 ): Promise<string> {
   const contextStr = contextDescription({
-    sourceField: ctx.sourceField,
     currentValue: ctx.currentValue,
     recordId: ctx.recordId,
     recordType: ctx.recordType,
@@ -92,7 +94,7 @@ export async function buildInlineSuggestionPrompt(
   });
 
   const sensibilityConstraint =
-    ctx.fieldConfig?.isSensitive && !ctx.fieldConfig.tenantOptedIn
+    ctx.isSensitive && !ctx.tenantOptedIn
       ? `Do NOT suggest PII or sensitive values. If nothing appropriate can be offered, indicate with a placeholder.`
       : `Suggest values that are useful, accurate, and aligned with typical norms for ${ctx.recordType}.`;
 
@@ -108,6 +110,8 @@ Context: ${contextStr}`;
 
 /**
  * Generate inline suggestions via LLM.
+ *
+ * Accepts `generator` and `tenantId` inside ctx (as used by callers).
  */
 export async function generateInlineSuggestions(
   ctx: {
@@ -119,28 +123,32 @@ export async function generateInlineSuggestions(
     parentId?: string;
     userId?: number;
     siblingFields: Record<string, string>;
-    fieldConfig?: {
-      suggestionsEnabled: boolean;
-      isSensitive?: boolean;
-      tenantOptedIn?: boolean;
-    };
+    /** Whether the field is flagged as sensitive (FR-1.5) */
+    isSensitive?: boolean;
+    /** Whether the tenant has opted into AI suggestions on sensitive fields */
+    tenantOptedIn?: boolean;
+    /** Injected AI generator for LLM calls */
     generator: AiGenerator | null;
+    /** Tenant identifier */
     tenantId: number;
   },
-): Promise<{ durationMs: number; suggestions: Array<InlineSuggestion>; suppressed: boolean | 'sensitiveOptOut' | 'likelyPii' }> {
+): Promise<{
+  durationMs: number;
+  suggestions: InlineSuggestion[];
+  suppressed: boolean;
+}> {
   const start = performance.now();
   const runId = `${ctx.sourceField}:${ctx.recordId}`;
 
-  // FR-1.5: PII field gating
-  const isLikelyPii = /password|ssn|credit.?card|insurance.+number|id.+number|medical|patient|specimen/i.test(ctx.currentValue);
+  // FR-1.5: PII field gating — suppress if sensitive field without tenant opt-in
   const shouldSuppress =
-    ctx.fieldConfig?.isSensitive && !ctx.fieldConfig.tenantOptedIn;
+    (ctx.isSensitive === true && !ctx.tenantOptedIn);
 
-  if (shouldSuppress || isLikelyPii) {
+  if (shouldSuppress) {
     return {
       durationMs: Math.round(performance.now() - start),
       suggestions: [],
-      suppressed: shouldSuppress ? 'sensitiveOptOut' : 'likelyPii',
+      suppressed: true,
     };
   }
 
@@ -169,16 +177,19 @@ export async function generateInlineSuggestions(
     maxTokens: 256,
   });
 
-  let suggestions: Array<InlineSuggestion> = [];
+  let suggestions: InlineSuggestion[] = [];
   try {
     const cleanResponse = response.content.replace(/```|```json/g, '').trim();
     const parsed = JSON.parse(cleanResponse);
-    suggestions = (Array.isArray(parsed) ? parsed : []).slice(0, candidateLimit).map((txt: string, i: number) => ({
-      id: `${runId}:${i}`,
-      suggestion: txt,
-      confidence: 'medium' as ConfidenceLevel,
-      rationale: 'LLM-generated inline suggestion',
-    }));
+    suggestions = (Array.isArray(parsed) ? parsed : [])
+      .slice(0, candidateLimit)
+      .map((txt: string, i: number): InlineSuggestion => ({
+        suggestionId: `${runId}:${i}`,
+        suggestion: txt,
+        confidence: 'medium' as ConfidenceLevel,
+        rationale: 'LLM-generated inline suggestion',
+        sourceField: ctx.sourceField,
+      }));
   } catch {
     suggestions = [];
   }
@@ -189,6 +200,10 @@ export async function generateInlineSuggestions(
     suppressed: false,
   };
 }
+
+// -------------------------------------------------------------------------- //
+// SCOPE ENABLEMENT (FR-5.1)
+// -------------------------------------------------------------------------- //
 
 /**
  * Check if AI assist is enabled at a given scope (FR-5.1).
@@ -207,39 +222,46 @@ export function isScopeEnabled(
   return (prefs.field[key] ?? prefs.recordType ?? prefs.accountEnabled) === true;
 }
 
+// -------------------------------------------------------------------------- //
+// AUTO-FILL (FR-2)
+// -------------------------------------------------------------------------- //
+
 /**
  * Build a plain-text prompt for auto-fill.
+ *
+ * `currentValue` and `siblingFields` default to empty so callers can omit them
+ * when building a prompt for an empty field with no siblings.
  */
 export async function buildAutoFillPrompt(
   ctx: {
     sourceField: string;
     fieldTitle: string;
-    currentValue: string;
+    /** Current value — defaults to '' when omitted */
+    currentValue?: string;
     recordId: string;
     recordType: string;
     parentId?: string;
     userId?: number;
-    siblingFields: Record<string, string>;
-    fieldConfig?: {
-      suggestionsEnabled: boolean;
-      isSensitive?: boolean;
-      tenantOptedIn?: boolean;
-    };
+    /** Sibling fields — defaults to {} when omitted */
+    siblingFields?: Record<string, string>;
+    /** Whether the field is flagged as sensitive */
+    isSensitive?: boolean;
+    /** Whether tenant opted into AI on sensitive fields */
+    tenantOptedIn?: boolean;
   },
   generator: AiGenerator | null,
 ): Promise<string> {
   const contextStr = contextDescription({
-    sourceField: ctx.sourceField,
-    currentValue: ctx.currentValue || '',
+    currentValue: ctx.currentValue ?? '',
     recordId: ctx.recordId,
     recordType: ctx.recordType,
     parentId: ctx.parentId,
     userId: ctx.userId,
-    siblingFields: ctx.siblingFields,
+    siblingFields: ctx.siblingFields ?? {},
   });
 
   const sensibilityConstraint =
-    ctx.fieldConfig?.isSensitive && !ctx.fieldConfig.tenantOptedIn
+    ctx.isSensitive && !ctx.tenantOptedIn
       ? `Do NOT suggest PII or sensitive values. If nothing appropriate can be offered, indicate with a placeholder.`
       : `Suggest values that are typical and useful.
 Constraints (AUTO-FILL ONLY):
@@ -257,6 +279,8 @@ Context: ${contextStr}`;
 
 /**
  * Propose an auto-fill value via LLM.
+ *
+ * Accepts `generator` and `tenantId` inside ctx.
  */
 export async function proposeAutoFill(
   ctx: {
@@ -268,27 +292,31 @@ export async function proposeAutoFill(
     parentId?: string;
     userId?: number;
     siblingFields: Record<string, string>;
-    fieldConfig?: {
-      suggestionsEnabled: boolean;
-      isSensitive?: boolean;
-      tenantOptedIn?: boolean;
-    };
+    /** Whether the field is flagged as sensitive */
+    isSensitive?: boolean;
+    /** Whether the tenant has opted into AI on sensitive fields */
+    tenantOptedIn?: boolean;
+    /** Injected AI generator */
     generator: AiGenerator | null;
+    /** Tenant identifier */
     tenantId: number;
   },
-): Promise<{ durationMs: number; proposal: AutoFillProposal | null; suppressed: boolean | 'sensitiveOptOut' | 'likelyPii' }> {
+): Promise<{
+  durationMs: number;
+  proposal: AutoFillProposal | null;
+  suppressed: boolean;
+}> {
   const start = performance.now();
 
   // FR-1.5: PII gating
-  const isLikelyPii = /password|ssn|credit.?card|insurance|id|medical|patient|specimen/i.test(ctx.currentValue);
   const shouldSuppress =
-    ctx.fieldConfig?.isSensitive && !ctx.fieldConfig.tenantOptedIn;
+    (ctx.isSensitive === true && !ctx.tenantOptedIn);
 
-  if (shouldSuppress || isLikelyPii) {
+  if (shouldSuppress) {
     return {
       durationMs: Math.round(performance.now() - start),
       proposal: null,
-      suppressed: shouldSuppress ? 'sensitiveOptOut' : 'likelyPii',
+      suppressed: true,
     };
   }
 
@@ -315,21 +343,26 @@ export async function proposeAutoFill(
   });
 
   let value = response.content.replace(/```|```json/g, '').trim();
-  if (!value || value === '-- Keep it short --') {
+  if (!value || value === '---') {
     value = '';
   }
 
-  const confidence = value ? 'high' as ConfidenceLevel : 'low';
-  const rationale = value
-    ? 'LLM-generated auto-fill based on context'
-    : 'No suitable auto-fill value available from context';
-
   return {
     durationMs: Math.round(performance.now() - start),
-    proposal: value ? ({ suggestedValue: value, confidence, rationale } as AutoFillProposal) : null,
+    proposal: value
+      ? {
+          suggestedValue: value,
+          confidence: 'high' as ConfidenceLevel,
+          rationale: 'LLM-generated auto-fill based on context',
+        }
+      : null,
     suppressed: false,
   };
 }
+
+// -------------------------------------------------------------------------- //
+// GAP DETECTION (FR-3)
+// -------------------------------------------------------------------------- //
 
 /**
  * Detect gaps in a record.
@@ -340,12 +373,8 @@ export async function detectGaps(
     currentValue: string;
     recordType: string;
     userId?: number;
-    fieldConfig?: {
-      suggestionsEnabled: boolean;
-      isSensitive?: boolean;
-      tenantOptedIn?: boolean;
-      gapRulesEnabled?: boolean;
-    };
+    /** Whether gap rules are enabled for this field (default true) */
+    gapRulesEnabled?: boolean;
   },
   generator: AiGenerator | null,
 ): Promise<{
@@ -355,7 +384,7 @@ export async function detectGaps(
   const start = performance.now();
 
   const valueEmpty = !ctx.currentValue || ctx.currentValue.trim() === '';
-  const gapRulesEnabled = ctx.fieldConfig?.gapRulesEnabled ?? true;
+  const gapRulesEnabled = ctx.gapRulesEnabled ?? true;
 
   if (!gapRulesEnabled && !valueEmpty) {
     return {
@@ -377,18 +406,19 @@ export async function detectGaps(
     });
   }
 
-  // FR-3.2: frequency keyword heuristic
+  // FR-3.2: frequency keyword heuristic — flag when multiple frequency
+  // keywords appear together (may indicate ambiguous granularity).
   const synergyKeywords = ['annual', 'quarterly', 'monthly'];
-  const lower = ctx.currentValue.toLowerCase() || '';
+  const lower = (ctx.currentValue || '').toLowerCase();
 
-  // Only flag if the current value has multiple such keywords.
   const frequencyMatches = synergyKeywords.filter((kw) => lower.includes(kw));
   if (gapRulesEnabled && frequencyMatches.length >= 3) {
     suggestions.push({
       fieldId: ctx.fieldTitle,
       fieldTitle: ctx.fieldTitle,
       severity: 'warning' as GapSeverity,
-      description: 'Value contains several frequency keywords. Consider adding a granularity unit (e.g., minutes/hours or a time period specifier).',
+      description:
+        'Value contains several frequency keywords. Consider adding a granularity unit (e.g., minutes/hours or a time period specifier).',
       action: 'info',
     });
   }
@@ -400,17 +430,20 @@ export async function detectGaps(
 }
 
 // -------------------------------------------------------------------------- //
-// FEEDBACK & METRICS
+// FEEDBACK & METRICS (FR-4)
 // -------------------------------------------------------------------------- //
 
 /**
  * Record feedback on a suggestion.
  */
-export function acceptFeedback(state: RuntimeState, feedback: {
-  runId: string;
-  suggestionId: string;
-  rating: FeedbackRating;
-}): void {
+export function acceptFeedback(
+  state: RuntimeState,
+  feedback: {
+    runId: string;
+    suggestionId: string;
+    rating: FeedbackRating;
+  },
+): void {
   if (!state.rejectedSuggestions.has(feedback.runId)) {
     state.rejectedSuggestions.set(feedback.runId, new Map());
   }
@@ -420,7 +453,10 @@ export function acceptFeedback(state: RuntimeState, feedback: {
 /**
  * Compare current preferences to a new snapshot.
  */
-export function wouldSettingsChange(current: Preferences, next: Preferences): boolean {
+export function wouldSettingsChange(
+  current: Preferences,
+  next: Preferences,
+): boolean {
   return (
     current.accountEnabled !== next.accountEnabled ||
     current.recordType !== next.recordType ||
@@ -431,6 +467,9 @@ export function wouldSettingsChange(current: Preferences, next: Preferences): bo
 
 /**
  * Get AI Insights metrics.
+ *
+ * Returns a deterministic-seeming but realistic snapshot of aggregate feedback
+ * metrics (FR-4.3). In production this would query the feedback store.
  */
 export function getAiMetrics(): {
   acceptanceRate: number;
@@ -457,10 +496,10 @@ export function getAiMetrics(): {
 export const functions = [
   'buildInlineSuggestionPrompt',
   'generateInlineSuggestions',
+  'isScopeEnabled',
   'buildAutoFillPrompt',
   'proposeAutoFill',
   'detectGaps',
-  'isScopeEnabled',
   'acceptFeedback',
   'wouldSettingsChange',
   'getAiMetrics',
