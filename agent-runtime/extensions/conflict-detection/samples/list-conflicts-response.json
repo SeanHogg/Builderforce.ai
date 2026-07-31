@@ -1,0 +1,113 @@
+{
+  "description": "Sample response for GET /conflicts?status=open — retrieves conflicts from the priority register with filtering by status per PRD. Visibility to all team members via API.",
+  "endpoint": "GET /conflicts?status=open&versionId=V1&severity=critical&page=1&limit=20",
+  "sampleRequestQuery": {
+    "status": "open",
+    "versionId": "V1",
+    "severity": "critical",
+    "page": 1,
+    "limit": 20
+  },
+  "sampleResponse": {
+    "statusCode": 200,
+    "body": {
+      "conflicts": [
+        {
+          "id": "alice__bob__engineering__V1",
+          "key": {
+            "stakeholderId1": "alice",
+            "stakeholderId2": "bob",
+            "teamId": "engineering",
+            "versionId": "V1"
+          },
+          "title": "Engineering Team — P0 Priority Conflict: Competing P0 requests",
+          "description": "Conflict detected on 2025-06-23T10:30:00.000Z in version V1.\nRule: Two distinct stakeholders assigned conflicting P0 priorities to the same team within the same review window.\nDetails:\n- Stakeholder \"Alice Smith\" (ID: alice) assigned priority P0 to team \"Engineering Team\".\n- Stakeholder \"Bob Johnson\" (ID: bob) assigned priority P0 to the same team \"Engineering Team\".\nImpact: Resource allocation conflict — team \"Engineering Team\" cannot satisfy two competing P0 priorities simultaneously. Requires manual resolution by conflict resolver.\nAttached to priority version(s): V1",
+          "summary": "Conflict: Stakeholder \"Alice Smith\" assigned P0 and stakeholder \"Bob Johnson\" assigned P0 to team \"Engineering Team\" within same review window. Rule violation: distinct stakeholders cannot both set P0 for same team in same window; requires manual resolution. [Version: V1]",
+          "severity": "critical",
+          "detectedAt": "2025-06-23T10:30:00.000Z",
+          "status": "open",
+          "conflictingPriorities": {
+            "stakeholder1": {
+              "stakeholderId": "alice",
+              "stakeholderName": "Alice Smith",
+              "role": "Product Manager",
+              "email": "alice@example.com"
+            },
+            "stakeholder2": {
+              "stakeholderId": "bob",
+              "stakeholderName": "Bob Johnson",
+              "role": "Engineering Manager",
+              "email": "bob@example.com"
+            },
+            "team": {
+              "teamId": "engineering",
+              "teamName": "Engineering Team",
+              "organization": "Product"
+            },
+            "priority1": "P0",
+            "priority2": "P0"
+          },
+          "stakeholders": [
+            {
+              "stakeholderId": "alice",
+              "stakeholderName": "Alice Smith",
+              "role": "Product Manager",
+              "email": "alice@example.com"
+            },
+            {
+              "stakeholderId": "bob",
+              "stakeholderName": "Bob Johnson",
+              "role": "Engineering Manager",
+              "email": "bob@example.com"
+            }
+          ],
+          "versionIds": ["V1"],
+          "sourceRequestIds": ["req-001", "req-002"],
+          "conflictCount": 2
+        },
+        {
+          "id": "carol__dave__design__V1",
+          "key": {
+            "stakeholderId1": "carol",
+            "stakeholderId2": "dave",
+            "teamId": "design",
+            "versionId": "V1"
+          },
+          "title": "Design Team — P0 Priority Conflict: Competing P0 requests",
+          "description": "Conflict detected on 2025-06-23T11:15:00.000Z in version V1. Stakeholder Carol Lee (carol) P0 vs Dave Kim (dave) P0 for Design Team.",
+          "summary": "Conflict: Stakeholder \"Carol Lee\" assigned P0 and stakeholder \"Dave Kim\" assigned P0 to team \"Design Team\" within same review window. Rule violation: distinct stakeholders cannot both set P0 for same team in same window; requires manual resolution. [Version: V1]",
+          "severity": "critical",
+          "detectedAt": "2025-06-23T11:15:00.000Z",
+          "status": "open",
+          "conflictingPriorities": {
+            "stakeholder1": { "stakeholderId": "carol", "stakeholderName": "Carol Lee", "role": "Design Director" },
+            "stakeholder2": { "stakeholderId": "dave", "stakeholderName": "Dave Kim", "role": "Product Owner" },
+            "team": { "teamId": "design", "teamName": "Design Team" },
+            "priority1": "P0",
+            "priority2": "P0"
+          },
+          "stakeholders": [
+            { "stakeholderId": "carol", "stakeholderName": "Carol Lee", "role": "Design Director" },
+            { "stakeholderId": "dave", "stakeholderName": "Dave Kim", "role": "Product Owner" }
+          ],
+          "versionIds": ["V1"],
+          "sourceRequestIds": ["req-003", "req-004"],
+          "conflictCount": 2
+        }
+      ],
+      "total": 2,
+      "page": 1,
+      "limit": 20,
+      "totalPages": 1,
+      "timestamp": "2025-06-23T12:00:00Z"
+    }
+  },
+  "notes": {
+    "labeling": "Each alert includes conflicting items (priority1 vs priority2, team), involved stakeholders (stakeholders array with names/roles), and detection date (detectedAt).",
+    "deduplication": "If same stakeholder-pair + team + version is detected again, no new alert is created; duplicatesFound counter increments.",
+    "summarization": "Each alert includes a concise summary explaining the rule violation and reasoning.",
+    "attachment": "versionIds field attaches alerts to relevant priority version(s).",
+    "visibility": "Visible to all team members via GET /conflicts API. Supports filtering by status per PRD.",
+    "manualResolution": "Conflict resolvers can manually resolve via POST /conflicts/:id/resolve with action resolve/acknowledge/dismiss."
+  }
+}
