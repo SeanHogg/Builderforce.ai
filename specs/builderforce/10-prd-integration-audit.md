@@ -141,11 +141,12 @@ Provide a real-time audit of integrations and data ingestion to:
 
 ## Annex: Schema Anchor for Platform Ingestion
 
-This PRD contains no artifact-approved merged schema; platform schema resides in specs/builderforce/10-integration-audit-schema.md (canonical for source-of-truth schema). This PRD is human-scored; merged artifacts follow a schema anchor pattern if required. Align with mapping below:
+The canonical schema for this feature resides in `Builderforce.ai/docs/information-security/14-integration-audit-schema.md`. This PRD is human-scored; the schema doc defines the authoritative data model.
 
-- In Scope.11: Status Classification maps to IntegrationStatus (Connected / Partial / Missing).
-- In Scope.12 & 4.3: Data Completeness Score maps to IntegrationCompletenessScore.totalWeightedScore and ScoreBreakdown components, to be governed by model defined in integration-audit-schema.md.
-- 4.4 Health Dashboard: conceptually represented by the IntegrationHealth model (one-to-one with the connection + score + gaps). Views: summary (connect/partial/missing counts, global score) via computed aggregates; per-integration detail (status, last_updated_at, totalWeightedScore, breakdown, category list).
-- 4.5 Recommendations: derived from gap categories and severity cues. This PRD’s recommendations are used to generate the recommendation field on IntegrationGap if needed and to drive prioritization by role.
+Mapping:
 
-Schema mapping notes are informational only and do not constitute a merged component. For strict artifact compliance, platform should reference specs/builderforce/10-integration-audit-schema.md and not this PRD’s schema section.
+- Section 4.2 Status Classification maps to `IntegrationStatus` (Connected / Partial / Missing).
+- Section 4.3 Data Completeness Score maps to `IntegrationCompletenessScore.totalWeightedScore` and `ScoreBreakdown` components, governed by the schema doc.
+- Section 4.4 Health Dashboard: conceptually represented by the `IntegrationHealth` model (one-to-one with the connection + score + gaps). Views: summary (connect/partial/missing counts, global score) via computed aggregates; per-integration detail (status, lastSync, totalWeightedScore, breakdown, category list).
+- Section 4.5 Recommendations: derived from gap categories and severity cues. Recommendations are surfaced through the `IntegrationGap.recommendation` field.
+- The health endpoint is documented in `docs/chip/integration-audit-contract.md` at `GET /api/v1/audit/health/:projectId`.
