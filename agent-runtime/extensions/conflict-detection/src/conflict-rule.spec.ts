@@ -1,181 +1,181 @@
 /**
- * Formal Conflict Rule Specification
- * 
- * Defines the formal specification for the conflict detection rule:
- * "Detect when two distinct stakeholders submit requests that assign
- * different P0 priorities to the same team within the same review window."
+ * Conflict Rule Specification — Formal Rule Definition
+ *
+ * Per PRD Section 1 - Conflict Detection Engine:
+ * "Implement a specific rule: Detect when two distinct stakeholders submit
+ * requests that assign different P0 priorities to the same team within the
+ * same review window."
+ *
+ * This file formally specifies that rule with complete constraints.
  */
 
-import { z } from 'zod';
 import type { ConflictRule } from './types.js';
+import { PRIORITY_LEVELS, type PriorityLevel } from './types.js';
 
 /**
- * Conflict Rule Spec: Formal Definition
+ * CONFLICT_RULE_SPEC — Formal Specification
+ *
+ * Name: team-p0-multi-stakeholder-conflict
+ * Rule Logic:
+ *   IF   stakeholder_1 != stakeholder_2
+ *   AND  priority(request_1) == P0
+ *   AND  priority(request_2) == P0
+ *   AND  team(request_1) == team(request_2)
+ *   AND  review_window(request_1) overlaps review_window(request_2)
+ *   THEN generate ConflictAlert
+ *
+ * This corresponds to the scenario where:
+ * - Two distinct stakeholders both set P0 for the same team
+ *   (implicitly conflicting because one team's P0 bandwidth is limited)
+ * - OR one stakeholder's P0 conflicts with another's P0 on same team
+ *
+ * Note on "different P0 priorities": interpreted as "distinct requests
+ * (different items) that both claim P0 for the same team in same window"
+ * — i.e. competing P0s. Alternative reading ("different priority levels
+ * where at least one is P0") is supported via config but defaults to P0-vs-P0.
  */
 export const CONFLICT_RULE_SPEC: ConflictRule = {
-  name: 'Stakeholder-Priority Conflict Detection',
-  description: 'Detect conflicts when two distinct stakeholders assign different P0 priorities to the same team within the same review window.',
+  name: 'team-p0-multi-stakeholder-conflict',
+  description:
+    'Detects when two distinct stakeholders submit requests assigning conflicting P0 priorities to the same team within the same review window. ' +
+    'Formally: IF stakeholder_1 <> stakeholder_2 AND priority(req1)=P0 AND priority(req2)=P0 AND team(req1)=team(req2) AND reviewWindow(req1) OVERLAPS reviewWindow(req2) THEN ConflictAlert. ' +
+    'This prevents resource double-booking for a single team at P0 within one review cycle.',
+
   severityLevels: [
     {
       level: 'critical',
-      condition: 'Both stakeholders assign P0 priority to the same team',
-      threshold: 1
+      condition: 'P0 vs P0 conflict on same team within same review window',
+      threshold: 1,
     },
     {
       level: 'high',
-      condition: 'One stakeholder assigns P0 while another assigns P1',
-      threshold: 1
+      condition: 'P0 vs P1 conflict on same team within same review window',
+      threshold: 2,
     },
     {
       level: 'medium',
-      condition: 'Different stakeholders assign regular priorities to same team',
-      threshold: 2
+      condition: 'Multiple high-priority assignments exceeding team capacity',
+      threshold: 3,
     },
-    {
-      level: 'low',
-      condition: 'Minor priority differences or no active conflicts',
-      threshold: 0
-    }
+  ],
+
+  stakeholderConstraints: {
+    mustBeDistinct: true,
+    maxConcurrentRequestsPerStakeholder: 10,
+  },
+
+  priorityConstraints: {
+    minThreshold: 'P0',
+    maxThreshold: 'P0',
+    exactMatch: true,
+  },
+
+  teamConstraints: {
+    allowMultipleTeams: false,
+    teamScope: 'single-team',
+  },
+
+  windowConstraints: {
+    defaultDays: 7,
+    maxWindowDays: 30,
+    allowOverlap: true,
+  },
+};
+
+/**
+ * Alternative / extended rule spec that also captures P0-vs-P1 cross conflicts
+ * Useful for broader prioritization governance
+ */
+export const CONFLICT_RULE_SPEC_EXTENDED: ConflictRule = {
+  name: 'team-p0-vs-any-conflict',
+  description:
+    'Extended rule: detects P0 vs P0 conflicts AND P0 vs P1 conflicts when stakeholders differ for same team within same review window.',
+  severityLevels: [
+    { level: 'critical', condition: 'P0 vs P0 same team same window', threshold: 1 },
+    { level: 'high', condition: 'P0 vs P1 same team same window', threshold: 1 },
   ],
   stakeholderConstraints: {
     mustBeDistinct: true,
-    maxConcurrentRequestsPerStakeholder: undefined // No limit for conflict detection
+    maxConcurrentRequestsPerStakeholder: 20,
   },
   priorityConstraints: {
-    minThreshold: 'P0' as PriorityLevel, // All conflicts must involve P0
-    maxThreshold: 'P0' as PriorityLevel, // Only P0 vs P0 conflicts are critical
-    exactMatch: false // P0 vs P1 or P0 vs P2 both qualify
+    minThreshold: 'P0',
+    maxThreshold: 'P1',
+    exactMatch: false,
   },
   teamConstraints: {
-    allowMultipleTeams: false, // Only same team
-    teamScope: 'organization-wide' // Check across all teams
+    allowMultipleTeams: false,
+    teamScope: 'single-team',
   },
   windowConstraints: {
-    defaultDays: 30, // 30-day review window
-    maxWindowDays: 90, // Cutoff for historical data
-    allowOverlap: true
-  }
+    defaultDays: 7,
+    maxWindowDays: 30,
+    allowOverlap: true,
+  },
 };
 
 /**
- * Validation schema for requests to be evaluated for conflict detection
+ * Priority ordering helper - P0 highest
  */
-const RequestValidationSchema = z.object({
-  id: z.string().min(1, 'Request ID is required'),
-  title: z.string().min(1, 'Request title is required'),
-  description: z.string().optional(),
-  priority: z.enum(['P0', 'P1', 'P2', 'P3'], { message: 'Priority must be P0, P1, P2, or P3' }),
-  stakeholderId: z.string().min(1, 'Stakeholder ID is required'),
-  stakeholder: z.object({
-    name: z.string().optional(),
-    role: z.string().optional(),
-    email: z.string().optional()
-  }).required('Stakeholder details are required'),
-  teamId: z.string().min(1, 'Team ID is required'),
-  team: z.object({
-    name: z.string().optional(),
-    organization: z.string().optional()
-  }).required('Team details are required'),
-  versionId: z.string().optional(),
-  reviewWindowStart: z.string().datetime({ message: 'Review window start must be a valid ISO 8601 datetime' }).optional(),
-  reviewWindowEnd: z.string().datetime({ message: 'Review window end must be a valid ISO 8601 datetime' }).optional(),
-  createdAt: z.string().datetime({ message: 'Created at must be a valid ISO 8601 datetime' }).required(),
-  updatedAt: z.string().datetime().optional(),
-  sourceSystem: z.string().optional()
-}).refine(
-  (data) => {
-    // Validate window if provided
-    if (data.reviewWindowStart && data.reviewWindowEnd) {
-      const start = new Date(data.reviewWindowStart).getTime();
-      const end = new Date(data.reviewWindowEnd).getTime();
-      return start < end;
-    }
-    return true;
-  },
-  { message: 'Review window start must be before end', path: ['reviewWindowEnd'] }
-);
+export function comparePriorities(a: PriorityLevel, b: PriorityLevel): number {
+  const order: Record<PriorityLevel, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
+  return (order[a] ?? 999) - (order[b] ?? 999);
+}
 
 /**
- * Validate that requests meet the criteria for conflict detection
+ * Check if a given priority is at or above a threshold (e.g. P0 <= threshold)
+ */
+export function isPriorityAtOrAbove(priority: PriorityLevel, threshold: PriorityLevel): boolean {
+  return comparePriorities(priority, threshold) <= 0;
+}
+
+/**
+ * Validate a raw request object before conflict detection
  */
 export function validateRequestsForConflictDetection(
-  requests: any[],
-  windowThresholdDays: number = 30
+  rawRequests: any[],
+  thresholdDays: number = 7
 ): any[] {
-  const result = RequestValidationSchema.array().parse(requests);
-  
-  // Convert to objects and normalize
-  return result.map(req => ({
-    id: req.id,
-    title: req.title,
-    description: req.description,
-    priority: req.priority as 'P0' | 'P1' | 'P2' | 'P3',
-    stakeholderId: req.stakeholderId,
-    stakeholder: req.stakeholder,
-    teamId: req.teamId,
-    team: req.team,
-    versionId: req.versionId,
-    reviewWindowStart: req.reviewWindowStart ? new Date(req.reviewWindowStart) : undefined,
-    reviewWindowEnd: req.reviewWindowEnd ? new Date(req.reviewWindowEnd) : undefined,
-    createdAt: new Date(req.createdAt),
-    updatedAt: req.updatedAt ? new Date(req.updatedAt) : undefined,
-    sourceSystem: req.sourceSystem
-  }));
-}
-
-/**
- * Evaluate conflicting requests against the rule
- * Returns true if the rule is triggered
- */
-export function evaluateAgainstRule(request: any): boolean {
-  // Rule requires:
-  // 1. Priority is P0
-  // 2. There are at least 2 requests
-  // 3. Requests are from distinct stakeholders
-  // 4. Requests are for the same team
-  // 5. Requests are within the same review window
-  
-  const priority = request.priority;
-  
-  // Condition 1: Priority must be P0
-  if (priority !== 'P0') {
-    return false;
+  if (!Array.isArray(rawRequests)) {
+    throw new Error('requests must be an array');
   }
-  
-  // Conditions 2, 3, 4, 5 will be evaluated during batch detection
-  // This function just checks the shared priority condition
-  
-  return true;
+  if (rawRequests.length === 0) {
+    return [];
+  }
+
+  return rawRequests.filter((req) => {
+    // Required fields per rule
+    if (!req.stakeholderId) return false;
+    if (!req.teamId) return false;
+    if (!req.priority) return false;
+    if (!PRIORITY_LEVELS.includes(req.priority as PriorityLevel)) return false;
+    return true;
+  });
 }
 
 /**
- * Get rule details for display
+ * Review window helpers
  */
-export function getRuleSpecification() {
-  return {
-    rule: CONFLICT_RULE_SPEC,
-    schema: RequestValidationSchema,
-    priorityCondition: `Rules are triggered when requests have priority '${CONFLICT_RULE_SPEC.priorityConstraints.minThreshold}'`,
-    stakeholderCondition: `Rules require distinct stakeholders (max ${CONFLICT_RULE_SPEC.stakeholderConstraints.maxConcurrentRequestsPerStakeholder} per stakeholder)`,
-    teamCondition: `Rules check conflicts within the same organization team`,
-    windowCondition: `Review window default: ${CONFLICT_RULE_SPEC.windowConstraints.defaultDays} days (max: ${CONFLICT_RULE_SPEC.windowConstraints.maxWindowDays} days)`
-  };
+export interface ReviewWindow {
+  start: Date;
+  end: Date;
 }
 
-/**
- * Export other helper types
- */
-export type {
-  PriorityLevel,
-  ConflictStatus,
-  ConflictSeverity,
-  Stakeholder,
-  Team,
-  PriorityRequest,
-  ConflictingPriorities,
-  ConflictKey,
-  ConflictAlert,
-  DetectConflictsRequest,
-  DetectConflictsResponse,
-  ResolveConflictRequest
-};
+export function parseReviewWindow(request: {
+  reviewWindowStart?: string;
+  reviewWindowEnd?: string;
+  versionId?: string;
+  createdAt?: string;
+}): ReviewWindow | null {
+  if (request.reviewWindowStart && request.reviewWindowEnd) {
+    return {
+      start: new Date(request.reviewWindowStart),
+      end: new Date(request.reviewWindowEnd),
+    };
+  }
+  return null;
+}
+
+export function windowsOverlap(w1: ReviewWindow, w2: ReviewWindow): boolean {
+  return w1.start.getTime() <= w2.end.getTime() && w2.start.getTime() <= w1.end.getTime();
+}
