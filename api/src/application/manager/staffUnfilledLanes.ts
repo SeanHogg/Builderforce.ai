@@ -51,9 +51,47 @@ export interface LaneStaffingOutcome {
   detail: string;
 }
 
+/**
+ * A lane that authorises NO role at all for some ticket shape it holds.
+ *
+ * ── THE GAP WITH NO NAME ─────────────────────────────────────────────────────────
+ * `unfilledRolesForBoard` can only report a role it can NAME — a role key that appears
+ * as an unbound approver. But `decideLaneApprovers` has three outcomes, and two of them
+ * produce NO approvers at all (`lane_unstaffed`, `lane_agents_not_role_capable`), as
+ * does a lane whose requirements are all scoped to ticket types this shape is not. In
+ * every one of those cases `pickManagedProducer` returns null, the ticket reports
+ * `managed_no_role`, and the staffing sweep has **nothing to put in its unfilled set** —
+ * so it returns empty, `describeLaneStaffing` returns '', and no decision is journalled.
+ *
+ * Measured on project 11 across four captures: `managed_no_role` at 294 → 304 → 305 of
+ * ~670 stalled tickets while `board_staffing` ran every pass (427ms) and the decision
+ * feed contained **zero `assign` decisions of any kind**. The surface told the reader to
+ * "look for an assign decision naming the roles it could not fill"; there was none,
+ * because the gap had no role to name. Silence meant "everything binds" and "the gap is
+ * nameless" indistinguishably — which is exactly why it survived four rounds of fixes.
+ *
+ * The manager cannot auto-fix this: there is no role key to pin or hire against, and
+ * inventing one would staff a lane the operator never described. So it is reported,
+ * loudly, with the lane and the number of tickets sitting in it.
+ */
+export interface UnauthorizedLane {
+  swimlaneId: string;
+  /**
+   * Why nothing was authorised — the three cases are genuinely different repairs:
+   * `lane_unstaffed` needs a requirement row or a staffed agent; `not_role_capable`
+   * has agents that map to no role; `shape_unmatched` has requirements that all exclude
+   * the ticket types actually sitting in the lane.
+   */
+  reason: 'lane_unstaffed' | 'lane_agents_not_role_capable' | 'shape_unmatched';
+  /** Managed tickets currently in this lane — what the gap is actually costing. */
+  ticketCount: number;
+}
+
 export interface LaneStaffingResult {
   /** Distinct roles this board authorises that resolved to no agent at all. */
   unfilledRoleKeys: string[];
+  /** Lanes that authorise nothing at all — see {@link UnauthorizedLane}. */
+  unauthorizedLanes: UnauthorizedLane[];
   /** Roles the manager actually filled this pass (pinned or hired). */
   filled: LaneStaffingOutcome[];
   /** Roles it could not fill — an unknown role key, or the hire budget was spent. */
@@ -69,8 +107,67 @@ export interface LaneStaffingResult {
 }
 
 const EMPTY: LaneStaffingResult = {
-  unfilledRoleKeys: [], filled: [], unfillable: [], hires: 0, error: null,
+  unfilledRoleKeys: [], unauthorizedLanes: [], filled: [], unfillable: [], hires: 0, error: null,
 };
+
+/**
+ * Both staffing gaps a board can have, from ONE probe of lanes × shapes.
+ *
+ * One function because the two questions share the whole traversal and — more
+ * importantly — because they are complements: a lane's roles are either named-and-
+ * unbound (staffable) or absent entirely (reportable). Answering them separately is what
+ * let the second one go unasked for four captures.
+ */
+export interface BoardStaffingGaps {
+  unfilledRoleKeys: string[];
+  unauthorizedLanes: Array<Omit<UnauthorizedLane, 'ticketCount'>>;
+}
+
+export function findBoardStaffingGaps(
+  lanes: Iterable<readonly [string, LaneAuthorityInputs]>,
+  shapes: readonly ManagedTaskScope[] = [],
+): BoardStaffingGaps {
+  const probes: ManagedTaskScope[] = [{}, ...shapes];
+  const unfilled = new Set<string>();
+  const unauthorized: Array<Omit<UnauthorizedLane, 'ticketCount'>> = [];
+
+  for (const [swimlaneId, inputs] of lanes) {
+    const bound = new Set<string>();
+    const unbound = new Set<string>();
+    let authorizedSomeShape = false;
+    let emptyForSomeShape = false;
+
+    for (const shape of probes) {
+      const authority = decideManagedLaneAuthority(inputs, shape);
+      if (authority.approvers.length === 0) emptyForSomeShape = true;
+      else authorizedSomeShape = true;
+      for (const approver of authority.approvers) {
+        if (approver.agentRef) bound.add(approver.roleKey);
+        else unbound.add(approver.roleKey);
+      }
+    }
+    for (const roleKey of unbound) if (!bound.has(roleKey)) unfilled.add(roleKey);
+
+    // A lane that authorised nothing for at least one shape it could hold. Reported even
+    // when ANOTHER shape authorises fine, because the ticket that matches the empty shape
+    // is still undispatchable — and that per-shape hole is invisible in a board-wide
+    // "does this lane work?" answer, which is the mistake one layer up (0383) already was.
+    if (emptyForSomeShape) {
+      unauthorized.push({
+        swimlaneId,
+        reason: inputs.requirements.length === 0 && inputs.laneAgents.length === 0
+          ? 'lane_unstaffed'
+          : inputs.requirements.length === 0
+            ? 'lane_agents_not_role_capable'
+            // Requirements exist and some shape resolved them — so what failed here is
+            // applicability, not staffing: the rows are scoped to ticket types or
+            // conditions that this lane's actual tickets do not match.
+            : authorizedSomeShape ? 'shape_unmatched' : 'lane_agents_not_role_capable',
+      });
+    }
+  }
+  return { unfilledRoleKeys: [...unfilled].sort(), unauthorizedLanes: unauthorized };
+}
 
 /**
  * Every role a board's lanes authorise that binds to NO agent. PURE.
@@ -138,21 +235,12 @@ export function unfilledRolesForBoard(
   //
   // Within ONE lane the union is still right: binding is shape-independent, and a lane
   // that authorises a role twice dispatches on either binding.
-  const probes: ManagedTaskScope[] = [{}, ...shapes];
-  const unfilled = new Set<string>();
-  for (const inputs of lanes) {
-    const bound = new Set<string>();
-    const unbound = new Set<string>();
-    for (const shape of probes) {
-      const authority = decideManagedLaneAuthority(inputs, shape);
-      for (const approver of authority.approvers) {
-        if (approver.agentRef) bound.add(approver.roleKey);
-        else unbound.add(approver.roleKey);
-      }
-    }
-    for (const roleKey of unbound) if (!bound.has(roleKey)) unfilled.add(roleKey);
-  }
-  return [...unfilled].sort();
+  // The ROLE half of {@link findBoardStaffingGaps} — one traversal, two questions, so
+  // the named and nameless gaps can never be computed from different views of a lane.
+  // Lane ids are irrelevant to this half, so callers with only values keep working.
+  let i = 0;
+  return findBoardStaffingGaps([...lanes].map((inputs) => [`${i++}`, inputs] as const), shapes)
+    .unfilledRoleKeys;
 }
 
 /**
@@ -195,17 +283,29 @@ export async function staffUnfilledLanes(
      *  The caller already holds the managed set, so this costs no query. Omitted ⇒ the
      *  unconditional probe only, which is the pre-0382 behaviour. */
     taskShapes?: readonly ManagedTaskScope[];
+    /** Managed tickets per swimlane id, so an unauthorised lane can report what the gap
+     *  actually costs. The caller already holds the managed set, so this costs no query. */
+    laneTicketCounts?: ReadonlyMap<string, number>;
   },
 ): Promise<LaneStaffingResult> {
   try {
     const lanes = await loadBoardLaneAuthorities(db, {
       tenantId: args.tenantId, projectId: args.projectId, boardId: args.boardId, env,
     });
-    const unfilledRoleKeys = unfilledRolesForBoard(lanes.values(), args.taskShapes ?? []);
-    if (unfilledRoleKeys.length === 0) return EMPTY;
+    const gaps = findBoardStaffingGaps(lanes.entries(), args.taskShapes ?? []);
+    const { unfilledRoleKeys } = gaps;
+    // Only lanes that actually HOLD tickets. A board template carries lanes nobody is
+    // using, and reporting an empty one as a defect every five minutes would bury the
+    // lane that is holding 200 tickets under noise nobody can act on.
+    const unauthorizedLanes: UnauthorizedLane[] = gaps.unauthorizedLanes
+      .map((l) => ({ ...l, ticketCount: args.laneTicketCounts?.get(l.swimlaneId) ?? 0 }))
+      .filter((l) => l.ticketCount > 0)
+      .sort((a, b) => b.ticketCount - a.ticketCount);
+
+    if (unfilledRoleKeys.length === 0 && unauthorizedLanes.length === 0) return EMPTY;
 
     const result: LaneStaffingResult = {
-      unfilledRoleKeys, filled: [], unfillable: [], hires: 0, error: null,
+      unfilledRoleKeys, unauthorizedLanes, filled: [], unfillable: [], hires: 0, error: null,
     };
     const maxHires = args.maxHires ?? MAX_HIRES_PER_PASS;
     for (const roleKey of unfilledRoleKeys) {
@@ -256,8 +356,27 @@ export function describeLaneStaffing(result: LaneStaffingResult): string {
     return `Could not inspect or staff this board's lifecycle roles: ${result.error}. `
       + 'Per-ticket recovery remains available, but the board-wide staffing gap needs attention.';
   }
-  if (result.filled.length === 0 && result.unfillable.length === 0) return '';
+  if (result.filled.length === 0 && result.unfillable.length === 0
+    && result.unauthorizedLanes.length === 0) return '';
   const parts: string[] = [];
+  // FIRST, because it is the largest and the least discoverable. This is the decision the
+  // diagnostics surface has been telling readers to look for and that did not exist: a
+  // lane authorising no role at all has no role key to appear in `unfilledRoleKeys`, so
+  // for four captures the manager reported nothing while 305 tickets could not dispatch.
+  if (result.unauthorizedLanes.length) {
+    const REPAIR: Record<UnauthorizedLane['reason'], string> = {
+      lane_unstaffed: 'the stage declares no required role and has no agent staffed to it — add a role requirement or staff an agent',
+      lane_agents_not_role_capable: 'agents are staffed to the stage but none of them can act as any role — give one a job role',
+      shape_unmatched: 'the stage\'s role requirements are all scoped to ticket types or conditions these tickets do not match — widen the requirement or re-type the tickets',
+    };
+    const held = result.unauthorizedLanes.reduce((n, l) => n + l.ticketCount, 0);
+    const worst = result.unauthorizedLanes.slice(0, 3)
+      .map((l) => `${l.swimlaneId} (${l.ticketCount} ticket${l.ticketCount === 1 ? '' : 's'}: ${REPAIR[l.reason]})`)
+      .join('; ');
+    parts.push(
+      `${result.unauthorizedLanes.length} stage${result.unauthorizedLanes.length === 1 ? '' : 's'} on this board authorise NO role for the tickets sitting in them, so ${held} ticket${held === 1 ? '' : 's'} cannot be dispatched at all and the manager cannot fix it automatically — there is no role to staff. ${worst}.`,
+    );
+  }
   if (result.filled.length) {
     const names = result.filled
       .map((f) => `${f.roleKey}${f.agentName ? ` → ${f.agentName}` : ''}${f.action === 'hired' ? ' (hired)' : ''}`)
