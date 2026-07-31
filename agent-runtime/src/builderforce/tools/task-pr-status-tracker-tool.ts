@@ -440,7 +440,7 @@ async function listOrgRepos(
 // ---------------------------------------------------------------------------
 
 export async function runTaskPrStatus(params: TaskPrStatusParams): Promise<TrackerReport> {
-  const { taskIds, owner, repo } = params;
+  const { taskIds, owner, repo, maxResultsPerTask } = params;
 
   if (!taskIds?.length) {
     throw new Error("taskIds must contain at least one task identifier. (F1)");
