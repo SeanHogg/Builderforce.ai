@@ -889,6 +889,18 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
   }
 
   // ── 6. Policy gates that HOLD finished work (a full backlog with nothing shipping) ──
+  // The merge queue's retirements, once they stop being a handful. This is WORK, not a
+  // fault — but it is work assigned to nobody, and it accrues silently in a decision feed
+  // where it reads as the manager being busy rather than as a queue for a person.
+  const blockedCount = stats.blockedPullRequests ?? 0;
+  if (blockedCount > 0) {
+    const closable = (overview.blockedPrs ?? []).filter((p) => p.taskStatus === 'done').length;
+    warning.push({
+      severity: 'warning',
+      code: 'prs_awaiting_human',
+      text: `${blockedCount} open pull request${blockedCount === 1 ? '' : 's'} ${blockedCount === 1 ? 'has' : 'have'} been retired to a HUMAN — the manager exhausted its retry ceiling and will not touch ${blockedCount === 1 ? 'it' : 'them'} on any future pass. Nothing here moves without a person. They are listed below ranked by the business value of the ticket each would deliver${closable > 0 ? `, and at least ${closable} of the listed ones can simply be CLOSED: their ticket is already done, so the branch is litter` : ''}.`,
+    });
+  }
   if (!policy.allowAutoMerge && stats.openPullRequests > 0) {
     warning.push({
       severity: 'warning',
@@ -1419,6 +1431,32 @@ export function buildManagerDiagnosticsReport(
   out.push(line('flagged (unmet role coverage)', share(stats.flagged, stats.total)));
   out.push(line('openPullRequests', stats.openPullRequests));
   out.push('');
+
+  // ── THE PILE THE MERGE QUEUE CREATES BY DESIGN ───────────────────────────────────
+  // Retiring a PR to a human is the CORRECT end for a branch that cannot merge, and it
+  // converts an invisible livelock into visible work. But `merge_blocked` is an entry in
+  // a time-ordered decision feed, which cannot tell the one PR worth opening from the
+  // three hundred that are not — so the pile is ranked here by the business value of the
+  // ticket each PR would deliver, the same way the board ranks everything else.
+  const blocked = overview.blockedPrs ?? [];
+  const blockedTotal = stats.blockedPullRequests ?? blocked.length;
+  if (blockedTotal > 0) {
+    out.push(`-- Pull requests waiting on a PERSON (${blockedTotal}) --`);
+    out.push('The manager tried these to its ceiling and STOPPED — no further pass will touch');
+    out.push('them. Highest-value ticket first, which is the order to work them in. A row whose');
+    out.push('ticket already reads done is a bulk-close candidate: the work landed another way');
+    out.push('and the branch is just litter.');
+    for (const [i, p] of blocked.entries()) {
+      const bv = p.businessValue == null ? 'bv=?' : `bv=${p.businessValue}`;
+      const done = p.taskStatus === 'done' ? '  [ticket already DONE — close this PR]' : '';
+      out.push(`${String(i + 1).padStart(3)}. PR #${p.number ?? '?'}  ${bv}  ${p.reason ?? 'blocked'}  ${p.taskKey ?? '(no ticket)'}  ${(p.title ?? '').slice(0, 60)}${done}`);
+      if (p.url) out.push(`       ${p.url}`);
+    }
+    if (blockedTotal > blocked.length) {
+      out.push(`     … ${blockedTotal - blocked.length} more not listed (the endpoint returns the top ${blocked.length} by value).`);
+    }
+    out.push('');
+  }
 
   out.push(`-- Management passes (${runTasks.length} most recent) --`);
   out.push(`outcome=died means the card is open past the ${formatAge(STALE_RUN_TASK_MS)} reap threshold: the`);

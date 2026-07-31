@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  describeLaneStaffing, unfilledRolesForBoard, distinctTaskShapes, type LaneStaffingResult,
+  describeLaneStaffing, unfilledRolesForBoard, findBoardStaffingGaps, distinctTaskShapes, type LaneStaffingResult,
 } from './staffUnfilledLanes';
 import { EMPTY_ROLE_ROSTER, buildRoleRoster } from '../kanban/roleCapability';
 import type { LaneAuthorityInputs } from '../kanban/managedLaneRoles';
@@ -145,7 +145,7 @@ describe('unfilledRolesForBoard', () => {
 
 describe('describeLaneStaffing', () => {
   const result = (over: Partial<LaneStaffingResult> = {}): LaneStaffingResult =>
-    ({ unfilledRoleKeys: [], filled: [], unfillable: [], hires: 0, error: null, ...over });
+    ({ unfilledRoleKeys: [], unauthorizedLanes: [], filled: [], unfillable: [], hires: 0, error: null, ...over });
 
   it('says nothing when there was nothing to staff — the steady state is silent', () => {
     expect(describeLaneStaffing(result())).toBe('');
@@ -287,5 +287,119 @@ describe('distinctTaskShapes', () => {
   it('normalizes absent fields so undefined and null are one shape, not two', () => {
     expect(distinctTaskShapes([{}, { taskType: null }, { taskType: null, actionType: null }]))
       .toEqual([{ taskType: null, actionType: null }]);
+  });
+});
+
+/**
+ * THE GAP WITH NO NAME — why `managed_no_role` survived four rounds of fixes.
+ *
+ * `unfilledRolesForBoard` can only report a role it can NAME: a role key appearing as an
+ * unbound approver. But `decideLaneApprovers` has outcomes that produce NO approvers at
+ * all — a lane with neither requirements nor staffed agents, staffed agents that map to
+ * no role, or requirements all scoped to ticket types the lane's tickets are not. Each
+ * one makes `pickManagedProducer` return null, which the evaluator reports as
+ * `managed_no_role` — and leaves the staffing sweep with nothing to put in its unfilled
+ * set, so it returned empty and journalled nothing.
+ *
+ * Measured on project 11 across four captures: `managed_no_role` at 294 → 304 → 305 of
+ * ~670 stalled tickets while `board_staffing` ran every pass (427ms) and the decision
+ * feed held ZERO `assign` decisions of any kind. The surface told readers to look for an
+ * assign decision naming the roles it could not fill; there was none, because the gap had
+ * no role to name. Silence meant "everything binds" and "the gap is nameless"
+ * indistinguishably — which is exactly how it survived.
+ */
+describe('findBoardStaffingGaps — the lanes that authorise NOTHING', () => {
+  it('reports a lane with no requirements and no agents, which has no role to staff', () => {
+    const gaps = findBoardStaffingGaps([['lane-a', lane({ laneKey: 'ready' })]]);
+    // Nothing NAMED — which is precisely why the old sweep reported nothing at all.
+    expect(gaps.unfilledRoleKeys).toEqual([]);
+    expect(gaps.unauthorizedLanes).toEqual([
+      { swimlaneId: 'lane-a', laneKey: 'ready', reason: 'lane_unstaffed' },
+    ]);
+  });
+
+  it('distinguishes agents-with-no-role from a lane nobody configured', () => {
+    const gaps = findBoardStaffingGaps([['lane-b', lane({
+      laneKey: 'in_progress',
+      laneAgents: [{ agentRef: 'c:1', agentName: 'Bob', position: 0, model: null } as never],
+    })]]);
+    // A different repair: give the agent a job role, rather than declare a requirement.
+    expect(gaps.unauthorizedLanes[0]).toMatchObject({ reason: 'lane_agents_not_role_capable' });
+  });
+
+  /**
+   * The subtle one, and the likeliest on a real board: requirements EXIST and bind fine
+   * for one ticket type while authorising nothing for another. A board-wide "does this
+   * lane work?" answer says yes and the tickets of the other type still cannot dispatch —
+   * the same per-shape hole the role half already had to be taught about.
+   */
+  it('reports a lane that authorises nothing for SOME shape it holds', () => {
+    const gaps = findBoardStaffingGaps(
+      [['lane-c', lane({
+        laneKey: 'ready',
+        requirements: [roleRequirement('architect', { ticketType: 'bug' })],
+        roster: rosterFor(['architect']),
+      })]],
+      [{ taskType: 'bug', actionType: null }, { taskType: 'story', actionType: null }],
+    );
+    // 'bug' binds architect; 'story' authorises nothing at all.
+    expect(gaps.unfilledRoleKeys).toEqual([]);
+    expect(gaps.unauthorizedLanes[0]).toMatchObject({ laneKey: 'ready', reason: 'shape_unmatched' });
+  });
+
+  it('stays silent on a lane that authorises a bound role for every shape', () => {
+    const gaps = findBoardStaffingGaps(
+      [['lane-d', lane({
+        laneKey: 'ready',
+        requirements: [roleRequirement('architect')],
+        roster: rosterFor(['architect']),
+      })]],
+      [{ taskType: 'bug', actionType: null }],
+    );
+    expect(gaps).toEqual({ unfilledRoleKeys: [], unauthorizedLanes: [] });
+  });
+
+  /** The two gaps are complements and must both be reported from one probe — a lane can
+   *  have a nameable unbound role AND authorise nothing for another shape. */
+  it('reports both halves of a board that has both problems', () => {
+    const gaps = findBoardStaffingGaps([
+      ['lane-e', lane({ laneKey: 'ready', requirements: [roleRequirement('architect')] })],
+      ['lane-f', lane({ laneKey: 'done' })],
+    ]);
+    expect(gaps.unfilledRoleKeys).toEqual(['architect']);
+    expect(gaps.unauthorizedLanes.map((l) => l.laneKey)).toEqual(['done']);
+  });
+
+  /** The role half must keep answering exactly as before — it is the same traversal now. */
+  it('agrees with unfilledRolesForBoard, which is now its role half', () => {
+    const lanes: Array<readonly [string, LaneAuthorityInputs]> = [
+      ['1', lane({ requirements: [roleRequirement('architect')] })],
+      ['2', lane({ requirements: [roleRequirement('validator')], roster: rosterFor(['validator']) })],
+    ];
+    expect(findBoardStaffingGaps(lanes).unfilledRoleKeys)
+      .toEqual(unfilledRolesForBoard(lanes.map(([, v]) => v)));
+  });
+});
+
+describe('describeLaneStaffing — the nameless gap must be said out loud', () => {
+  const result = (over: Partial<LaneStaffingResult> = {}): LaneStaffingResult =>
+    ({ unfilledRoleKeys: [], unauthorizedLanes: [], filled: [], unfillable: [], hires: 0, error: null, ...over });
+
+  it('names the stage, the cost, and the repair — not just that something is wrong', () => {
+    const text = describeLaneStaffing(result({
+      unauthorizedLanes: [
+        { swimlaneId: 'x', laneKey: 'ready', reason: 'lane_unstaffed', ticketCount: 200 },
+        { swimlaneId: 'y', laneKey: 'in_progress', reason: 'shape_unmatched', ticketCount: 105 },
+      ],
+    }));
+    expect(text).toContain('305 tickets');      // the cost, summed
+    expect(text).toContain('"ready"');           // the stage a human recognises
+    expect(text).toContain('cannot fix it automatically'); // there is no role to staff
+    expect(text).toMatch(/add a role requirement or staff an agent/);
+    expect(text).toMatch(/widen the requirement or re-type the tickets/);
+  });
+
+  it('still says nothing when the board is genuinely fine', () => {
+    expect(describeLaneStaffing(result())).toBe('');
   });
 });

@@ -76,6 +76,9 @@ export interface LaneStaffingOutcome {
  */
 export interface UnauthorizedLane {
   swimlaneId: string;
+  /** The lane's key — also the ticket status that lands in it, which is what makes this
+   *  reportable as a stage a human recognises rather than a uuid. */
+  laneKey: string | null;
   /**
    * Why nothing was authorised — the three cases are genuinely different repairs:
    * `lane_unstaffed` needs a requirement row or a staffed agent; `not_role_capable`
@@ -155,6 +158,7 @@ export function findBoardStaffingGaps(
     if (emptyForSomeShape) {
       unauthorized.push({
         swimlaneId,
+        laneKey: inputs.laneKey ?? null,
         reason: inputs.requirements.length === 0 && inputs.laneAgents.length === 0
           ? 'lane_unstaffed'
           : inputs.requirements.length === 0
@@ -283,8 +287,12 @@ export async function staffUnfilledLanes(
      *  The caller already holds the managed set, so this costs no query. Omitted ⇒ the
      *  unconditional probe only, which is the pre-0382 behaviour. */
     taskShapes?: readonly ManagedTaskScope[];
-    /** Managed tickets per swimlane id, so an unauthorised lane can report what the gap
-     *  actually costs. The caller already holds the managed set, so this costs no query. */
+    /**
+     * Managed tickets per LANE KEY — which is the ticket status, because that is how a
+     * ticket is mapped to a lane (`swimlanes.key === task.status`); `tasks` carries no
+     * swimlane column. Lets an unauthorised lane report what the gap actually costs, and
+     * the caller already holds the managed set so it costs no query.
+     */
     laneTicketCounts?: ReadonlyMap<string, number>;
   },
 ): Promise<LaneStaffingResult> {
@@ -298,7 +306,10 @@ export async function staffUnfilledLanes(
     // using, and reporting an empty one as a defect every five minutes would bury the
     // lane that is holding 200 tickets under noise nobody can act on.
     const unauthorizedLanes: UnauthorizedLane[] = gaps.unauthorizedLanes
-      .map((l) => ({ ...l, ticketCount: args.laneTicketCounts?.get(l.swimlaneId) ?? 0 }))
+      .map((l) => ({
+        ...l,
+        ticketCount: l.laneKey == null ? 0 : args.laneTicketCounts?.get(l.laneKey) ?? 0,
+      }))
       .filter((l) => l.ticketCount > 0)
       .sort((a, b) => b.ticketCount - a.ticketCount);
 
@@ -371,7 +382,7 @@ export function describeLaneStaffing(result: LaneStaffingResult): string {
     };
     const held = result.unauthorizedLanes.reduce((n, l) => n + l.ticketCount, 0);
     const worst = result.unauthorizedLanes.slice(0, 3)
-      .map((l) => `${l.swimlaneId} (${l.ticketCount} ticket${l.ticketCount === 1 ? '' : 's'}: ${REPAIR[l.reason]})`)
+      .map((l) => `"${l.laneKey ?? l.swimlaneId}" (${l.ticketCount} ticket${l.ticketCount === 1 ? '' : 's'}: ${REPAIR[l.reason]})`)
       .join('; ');
     parts.push(
       `${result.unauthorizedLanes.length} stage${result.unauthorizedLanes.length === 1 ? '' : 's'} on this board authorise NO role for the tickets sitting in them, so ${held} ticket${held === 1 ? '' : 's'} cannot be dispatched at all and the manager cannot fix it automatically — there is no role to staff. ${worst}.`,
