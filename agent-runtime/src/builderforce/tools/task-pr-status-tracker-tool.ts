@@ -54,6 +54,8 @@ export interface GhPullRequest {
   merged_at: string | null;
   user: { login: string } | null;
   created_at: string;
+  /** Repository the PR was found in ("owner/name"). Set when scanning multiple repos (F4). */
+  repo?: string;
 }
 
 export interface PrResult {
