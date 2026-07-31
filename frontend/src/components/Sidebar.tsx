@@ -78,32 +78,38 @@ const productNav: NavItem[] = PRODUCT_SECTIONS.map((s) => ({
 }));
 
 /** Renders the API Keys nav entry only for tenant owners. */
-function OwnerApiKeysNavItem({ collapsed, pathname, onNavigate }: NavSectionWiring) {
+function OwnerApiKeysNavItem({ pathname, onNavigate }: NavSectionWiring) {
   const tenant = getStoredTenant();
   if (tenant?.role !== 'owner') return null;
-  return <NavSection items={[apiKeysNavItem]} collapsed={collapsed} pathname={pathname} onNavigate={onNavigate} />;
+  return <NavSection items={[apiKeysNavItem]} pathname={pathname} onNavigate={onNavigate} />;
 }
 
 /** Renders the Platform Admin section only for superadmin users. */
-function PlatformAdminNavSection({ collapsed, pathname, onNavigate }: NavSectionWiring) {
+function PlatformAdminNavSection({ pathname, onNavigate }: NavSectionWiring) {
   const { user } = useAuth();
   if (!user?.isSuperadmin) return null;
   return (
     <>
       <div className="nav-section-label">ADMIN</div>
-      <NavSection items={[adminNavItem]} collapsed={collapsed} pathname={pathname} onNavigate={onNavigate} />
+      <NavSection items={[adminNavItem]} pathname={pathname} onNavigate={onNavigate} />
     </>
   );
 }
 
 interface NavSectionWiring {
-  collapsed: boolean;
   pathname: string;
   /** Called after a nav link is tapped (dismisses the mobile drawer). */
   onNavigate?: () => void;
 }
 
-function NavSection({ items, collapsed, pathname, onNavigate }: NavSectionWiring & { items: NavItem[] }) {
+/**
+ * Nav links. The label is ALWAYS rendered — hiding it is a CSS concern
+ * (`.nav.collapsed .nav-item-label`), scoped to the docked desktop rail. That is
+ * what lets the mobile drawer show icon + text even when the user's stored
+ * desktop preference is "collapsed"; when the label was removed from the DOM
+ * the drawer could only ever render bare icons.
+ */
+function NavSection({ items, pathname, onNavigate }: NavSectionWiring & { items: NavItem[] }) {
   return (
     <div className="nav-section">
       {items.map((item) => {
