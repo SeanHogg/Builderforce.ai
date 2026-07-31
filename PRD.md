@@ -1,5 +1,8 @@
 > **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #275
 > _Each agent that updates this PRD signs its change below._
+> 
+> **Implemented by:** Developer (code-creator) · PR #166
+> - GuidedInput.tsx, ExpressInput.tsx, InputModeForm.tsx, inputMode.ts
 
 # PRD: Guided & Express Input Modes
 
