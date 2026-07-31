@@ -75,6 +75,8 @@ export const ACTION_WINDOW_HEAD = 15;
 export const ACTION_WINDOW_TAIL = 35;
 export const STALL_WINDOW_HEAD = 20;
 export const STALL_WINDOW_TAIL = 40;
+/** Distinct triage sentences printed per cause before the rest are counted instead. */
+export const MAX_CAUSE_WORDINGS = 3;
 
 /** Everything the report needs, already gathered by the surface (pure in). */
 export interface ManagerDiagnosticsInput {
@@ -456,6 +458,122 @@ export function summarizePassLimits(actions: readonly ManagerAction[]): PassLimi
   return out;
 }
 
+/** One lane the board-staffing sweep found authorises nobody. */
+export interface UnauthorizedLaneReport {
+  laneKey: string | null;
+  reason: string;
+  ticketCount: number;
+}
+
+/** What the board-staffing sweep itself concluded, lifted out of the decision feed. */
+export interface BoardStaffingVerdict {
+  at: string;
+  /** The sweep's own sentence — authored by `describeLaneStaffing`, not re-derived here. */
+  summary: string;
+  unfilledRoleKeys: string[];
+  unauthorizedLanes: UnauthorizedLaneReport[];
+  filledRoleKeys: string[];
+  unfillableRoleKeys: string[];
+  hires: number;
+  error: string | null;
+}
+
+const strings = (value: unknown): string[] =>
+  (Array.isArray(value) ? value : []).filter((v): v is string => typeof v === 'string');
+
+/**
+ * The board-staffing verdict, promoted out of the appendix.
+ *
+ * `managed_no_role` is the largest cohort a managed board can carry, and the ONLY place
+ * the platform says why is the `assign` decision this sweep journals. That decision sits
+ * in the decision feed — the last prose section of the report, behind a 49-row PR pile and
+ * a 60-row register — so on the measured board (project 11, 306 tickets) the answer was
+ * consistently past whatever the report was pasted into, while the finding at the top
+ * instructed the reader to go and find it. Reading it here is what lets the finding SAY it.
+ *
+ * Returns null when the sweep journalled nothing, which is itself a verdict: with a
+ * standing cohort it means the sweep believes the board is fully staffed while the census
+ * says nothing can dispatch — see `managed_dispatch_refused`.
+ */
+export function summarizeBoardStaffing(
+  actions: readonly ManagerAction[],
+): BoardStaffingVerdict | null {
+  // Newest-first feed, and the sweep runs once per pass — so the first match is the most
+  // recent pass's answer. Board-scope: it carries no ticket.
+  for (const a of actions) {
+    if (a.actionType !== 'assign' || a.taskId != null) continue;
+    const d = parseActionDetail(a.detail);
+    if (!d || (!('unauthorizedLanes' in d) && !('unfilledRoleKeys' in d))) continue;
+    return {
+      at: a.createdAt,
+      summary: a.summary,
+      unfilledRoleKeys: strings(d.unfilledRoleKeys),
+      unauthorizedLanes: (Array.isArray(d.unauthorizedLanes) ? d.unauthorizedLanes : [])
+        .flatMap((lane): UnauthorizedLaneReport[] => {
+          if (typeof lane !== 'object' || lane == null) return [];
+          const row = lane as Record<string, unknown>;
+          return [{
+            laneKey: typeof row.laneKey === 'string' ? row.laneKey : null,
+            reason: typeof row.reason === 'string' ? row.reason : 'unknown',
+            ticketCount: typeof row.ticketCount === 'number' ? row.ticketCount : 0,
+          }];
+        }),
+      filledRoleKeys: (Array.isArray(d.filled) ? d.filled : []).flatMap((f) => {
+        const roleKey = typeof f === 'object' && f != null ? (f as Record<string, unknown>).roleKey : null;
+        return typeof roleKey === 'string' ? [roleKey] : [];
+      }),
+      unfillableRoleKeys: strings(d.unfillable),
+      hires: num(d.hires) ?? 0,
+      error: typeof d.error === 'string' ? d.error : null,
+    };
+  }
+  return null;
+}
+
+/**
+ * A few words for each lane-gap reason code — a LABEL, not a repair.
+ *
+ * The repair instructions live once, in the API's `describeLaneStaffing`, and reach this
+ * report as the sweep's own `summary`; this map only makes the reason code readable inline.
+ */
+const LANE_GAP_GLOSS: Record<string, string> = {
+  lane_unstaffed: 'no requirements and no staffed agents, so it authorises nobody',
+  lane_agents_not_role_capable: 'it has agents, but none maps to a role it authorises',
+  shape_unmatched: 'its requirements are all scoped to ticket types or conditions its own tickets do not match',
+};
+
+/** Turn the sweep's verdict into the sentence `managed_dispatch_refused` needs. PURE. */
+export function describeStaffingVerdict(
+  verdict: BoardStaffingVerdict | null,
+  actionCount: number,
+): string {
+  const contradiction = 'which contradicts this cohort — two halves of the platform answering the same question about the same board differently, and THAT is the defect to chase, not the tickets.';
+  if (verdict == null) {
+    return `The manager staffs unfilled board roles itself every pass, and it journalled NO board-staffing decision in the last ${actionCount} — the sweep found nothing to staff, ${contradiction}`;
+  }
+  if (verdict.error) {
+    return `The board-staffing sweep FAILED at ${verdict.at}: ${verdict.error}. Nothing was staffed, so this cohort is UNEXPLAINED rather than unstaffable — fix the read before touching a ticket.`;
+  }
+  const parts: string[] = [];
+  if (verdict.unauthorizedLanes.length > 0) {
+    const n = verdict.unauthorizedLanes.length;
+    const worst = verdict.unauthorizedLanes.slice(0, 3)
+      .map((l) => `'${l.laneKey ?? '(unnamed lane)'}' holding ${l.ticketCount} (${LANE_GAP_GLOSS[l.reason] ?? l.reason})`)
+      .join('; ');
+    parts.push(`The sweep at ${verdict.at} named ${n} stage${n === 1 ? '' : 's'} that authorise NO role at all: ${worst}. Hiring cannot fix those — there is no role to staff, so each lane needs a required role or a staffed agent before anything in it can move.`);
+  }
+  if (verdict.unfillableRoleKeys.length > 0) {
+    parts.push(`It could not fill ${verdict.unfillableRoleKeys.join(', ')} — an unrecognised role key, or the hire budget was spent.`);
+  }
+  if (verdict.filledRoleKeys.length > 0) {
+    parts.push(`It DID fill ${verdict.filledRoleKeys.join(', ')}${verdict.hires > 0 ? ` (${verdict.hires} hired)` : ''}, so re-read the cohort after the next pass before acting on it.`);
+  }
+  if (parts.length === 0) {
+    parts.push(`The sweep ran at ${verdict.at} and reported no unfilled role and no unauthorised lane, ${contradiction}`);
+  }
+  return parts.join(' ');
+}
+
 /** Group the activity feed by (type, summary) — the shape a retry loop makes. */
 interface RepeatedAction {
   actionType: string;
@@ -750,10 +868,16 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
         severity: 'critical',
         code: 'managed_dispatch_refused',
         // The manager now staffs the board's unfilled roles ITSELF, once per pass, ahead of
-      // every discretionary stage (`staffUnfilledLanes.ts`) — so a cohort that persists is
-      // no longer "somebody needs to staff this", it is "staffing ran and could not fix
-      // it". The advice has to say which, or a reader does work the platform already did.
-      text: `${managedCohort.count} ticket${managedCohort.count === 1 ? '' : 's'} on this lifecycle-managed board cannot dispatch at all: their stage authorises roles, but none resolves to an agent, so no run can be role-attributed and the dispatcher refuses every attempt. Assigning owners will NOT fix it — on a managed board the assignee is the Coordinator, never the executor. The manager staffs unfilled board roles itself every pass, so a cohort still standing means staffing RAN and could not clear it: look for an 'assign' decision naming the roles it could not fill (an unrecognised role key, or its hire budget spent), and staff or correct those by hand. Example tickets: ${managedCohort.sampleTaskIds.join(', ')}.`,
+        // every discretionary stage (`staffUnfilledLanes.ts`) — so a cohort that persists is
+        // no longer "somebody needs to staff this", it is "staffing ran and could not fix
+        // it". The advice has to say which, or a reader does work the platform already did.
+        //
+        // And it must say it HERE. This used to end with "look for an 'assign' decision
+        // naming the roles it could not fill" — an instruction to go and read the last
+        // prose section of a report that, on the board this finding was written for, did
+        // not survive being pasted anywhere. The verdict is on the wire either way; the
+        // only question was whether the finding quotes it or points at it.
+        text: `${managedCohort.count} ticket${managedCohort.count === 1 ? '' : 's'} on this lifecycle-managed board cannot dispatch at all: their stage authorises roles, but none resolves to an agent, so no run can be role-attributed and the dispatcher refuses every attempt. Assigning owners will NOT fix it — on a managed board the assignee is the Coordinator, never the executor. ${describeStaffingVerdict(summarizeBoardStaffing(actions), actions.length)} Example tickets: ${managedCohort.sampleTaskIds.join(', ')}.`,
       });
     }
 
@@ -1250,19 +1374,43 @@ function formatStalls(stalls: StallRegister, nowMs: number | null): string[] {
   out.push(line('maxAttempts (remedy ceiling)', stalls.maxAttempts));
   out.push(line('rows', stalls.rows.length));
   out.push('');
-  out.push('by cause:');
+  // ── THE DETAIL IS A PROPERTY OF THE CAUSE, NOT OF THE ROW ────────────────────────
+  // Triage writes one sentence per cause and stamps it onto every ticket carrying that
+  // cause, so a 60-row window spent ~18,000 characters restating ~6 sentences. That is
+  // most of what pushed this report past the length its reader could hold, and what got
+  // cut for it was the decision feed at the end — the section carrying the answer. Each
+  // distinct wording is printed ONCE here; the rows keep the cause column that indexes it.
+  const wordingsByCause = new Map<string, Set<string>>();
+  for (const r of stalls.rows) {
+    if (!r.detail) continue;
+    // The leading "Stuck N days:" is the row's OWN idle age, already in its `idle=` column
+    // — stripping it is what collapses N rows of the same sentence into one.
+    const wording = r.detail.replace(/^Stuck \d+ days?:\s*/i, '').trim();
+    if (!wording) continue;
+    const seen = wordingsByCause.get(r.cause) ?? new Set<string>();
+    seen.add(wording);
+    wordingsByCause.set(r.cause, seen);
+  }
+  out.push('by cause, with the wording triage recorded for it (printed ONCE per distinct');
+  out.push('sentence — every row below repeats its cause\'s wording verbatim, so the rows carry');
+  out.push('the cause column and nothing else):');
   if (stalls.byCause.length === 0) out.push('  (none)');
-  for (const c of stalls.byCause) out.push(`  ${c.cause}: ${c.count}`);
+  for (const c of stalls.byCause) {
+    out.push(`  ${c.cause}: ${c.count}`);
+    const wordings = [...(wordingsByCause.get(c.cause) ?? [])];
+    for (const w of wordings.slice(0, MAX_CAUSE_WORDINGS)) out.push(`      → ${capText(w, 400)}`);
+    if (wordings.length > MAX_CAUSE_WORDINGS) {
+      out.push(`      → … ${wordings.length - MAX_CAUSE_WORDINGS} further distinct wording${wordings.length - MAX_CAUSE_WORDINGS === 1 ? '' : 's'} for this cause not shown`);
+    }
+  }
   out.push('');
 
-  const rendered = stalls.rows.map((r: StallWatchRow, i) => {
-    const head = `${String(i + 1).padStart(3, ' ')}. #${r.taskId} ${capText(r.title, 80)}`
-      + `  status=${r.status}  cause=${r.cause}  remedy=${r.remedy}`
-      + `  attempts=${r.attempts}  idle=${formatAge(r.idleMs)}`
-      + `  firstSeen=${r.firstSeenAt}  lastAttempt=${r.lastAttemptAt ?? '—'}`
-      + (r.escalatedAt ? `  ESCALATED=${r.escalatedAt}` : '');
-    return r.detail ? `${head}\n     detail: ${capText(r.detail)}` : head;
-  });
+  const rendered = stalls.rows.map((r: StallWatchRow, i) =>
+    `${String(i + 1).padStart(3, ' ')}. #${r.taskId} ${capText(r.title, 80)}`
+    + `  status=${r.status}  cause=${r.cause}  remedy=${r.remedy}`
+    + `  attempts=${r.attempts}  idle=${formatAge(r.idleMs)}`
+    + `  firstSeen=${r.firstSeenAt}  lastAttempt=${r.lastAttemptAt ?? '—'}`
+    + (r.escalatedAt ? `  ESCALATED=${r.escalatedAt}` : ''));
   out.push(...windowRows(rendered, {
     head: STALL_WINDOW_HEAD,
     tail: STALL_WINDOW_TAIL,
@@ -1430,6 +1578,39 @@ export function buildManagerDiagnosticsReport(
   out.push(line('unowned', share(stats.unowned, stats.total)));
   out.push(line('flagged (unmet role coverage)', share(stats.flagged, stats.total)));
   out.push(line('openPullRequests', stats.openPullRequests));
+  out.push('');
+
+  // ── WHY MANAGED TICKETS CANNOT DISPATCH ──────────────────────────────────────────
+  // Above the PR pile, the register and the feed ON PURPOSE. This block is the answer to
+  // the largest cohort a managed board can carry, and it used to exist ONLY as one row in
+  // the decision feed — the last prose section, behind ~100 rows of appendix. On project 11
+  // the report ran past 50k characters and the answer was reliably the part that got cut.
+  const staffing = summarizeBoardStaffing(actions);
+  out.push('-- Board staffing (why managed tickets can or cannot dispatch) --');
+  out.push('On a lifecycle-managed board every run must be attributed to a role the stage');
+  out.push('authorises. The manager sweeps the whole board for unbindable roles once per pass,');
+  out.push('ahead of every discretionary stage — this is that sweep\'s own verdict. An empty');
+  out.push('one beside a large managed_no_role cohort is a CONTRADICTION, not a clean bill.');
+  if (staffing == null) {
+    out.push(`(no board-staffing decision in the last ${actions.length} — the sweep found nothing to staff, or it did not run)`);
+  } else {
+    out.push(line('reported at', staffing.at));
+    out.push(line('error', staffing.error ?? '(none)'));
+    out.push(line('roles that bind to no agent', staffing.unfilledRoleKeys.join(', ') || '(none)'));
+    out.push(line('roles it filled this pass', staffing.filledRoleKeys.join(', ') || '(none)'));
+    out.push(line('roles it could NOT fill', staffing.unfillableRoleKeys.join(', ') || '(none)'));
+    out.push(line('hires made', staffing.hires));
+    out.push('');
+    out.push('stages that authorise NO role (no role to staff — a human must configure these):');
+    if (staffing.unauthorizedLanes.length === 0) out.push('  (none reported)');
+    for (const l of staffing.unauthorizedLanes) {
+      out.push(`  ${l.laneKey ?? '(unnamed lane)'}  holding=${l.ticketCount}  reason=${l.reason} — ${LANE_GAP_GLOSS[l.reason] ?? 'unrecognised reason code'}`);
+    }
+    out.push('');
+    // The sweep's own sentence, which carries the repair instructions authored once in the
+    // API (`describeLaneStaffing`) rather than restated here.
+    out.push(`the sweep's own words: ${capText(staffing.summary, 1200)}`);
+  }
   out.push('');
 
   // ── THE PILE THE MERGE QUEUE CREATES BY DESIGN ───────────────────────────────────

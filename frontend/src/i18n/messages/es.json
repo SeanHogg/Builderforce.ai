@@ -8932,7 +8932,11 @@
         "revoked": "revocada",
         "expired": "caducada",
         "undecryptable": "credencial ilegible",
-        "unavailable": "no disponible"
+        "unavailable": "no disponible",
+        "failed": "con errores",
+        "not_found": "conexión no encontrada",
+        "no_test_model": "no hay ningún modelo seleccionado para probar",
+        "key_unresolved": "no se pudo usar la clave guardada"
       },
       "tokensUsed": "Tokens de IA usados",
       "periodLabel": "Últimos {period}"
