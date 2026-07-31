@@ -174,3 +174,71 @@ describe('applyRemedy — the executor-owned remedies stay behind their flags', 
     expect(mockLaneEntry).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * HANDING THE BRANCH BACK **IS** THE REMEDY — the run is how it gets picked up.
+ *
+ * `resolve_conflict` reported `attempted: started`, which applies the "a cap refused it
+ * before it could act" semantics to a remedy that had already moved the ticket and written
+ * a resolution brief into it. `mayStartRun` has already returned `nothing` for the genuinely
+ * transient refusals by the time we get here, so a decline at this point comes from the
+ * ticket's OWN gate — no producer, a tripped breaker, a human gate — which meets the
+ * identical world next pass and declines identically. That is what `ineffective` is for.
+ *
+ * The cost of the old reading was a ticket that could be neither worked nor handed over:
+ * measured on project 11 (2026-07-31, api 2026.7.194), one `resolve_conflict` row sat at
+ * attempts=0 while the register re-observed it for 3 days, because an attempt that is never
+ * counted can never reach the 3-attempt escalation ceiling.
+ */
+describe('applyRemedy — resolve_conflict counts the hand-back, not just the run', () => {
+  const written: Record<string, unknown>[] = [];
+  const writingDb = {
+    update: () => ({
+      set: (values: Record<string, unknown>) => {
+        written.push(values);
+        return { where: async () => undefined };
+      },
+    }),
+  } as unknown as Db;
+  const conflicted: TriageTask = { ...task, status: 'in_review', description: 'Ship the thing' };
+  const resolve = (over: Partial<Parameters<typeof applyRemedy>[3]> = {}) =>
+    applyRemedy(env, writingDb, runtime, {
+      tenantId: 1, projectId: 11, task: conflicted, policy, remedy: 'resolve_conflict',
+      signoff: null, prRow: null, mayStartRun: true, mayRaceExecutor: false, ...over,
+    });
+
+  beforeEach(() => { written.length = 0; });
+
+  it('counts an ATTEMPT even when the ticket’s own gate refuses to start a run', async () => {
+    mockLaneEntry.mockResolvedValue(false);
+    const result = await resolve();
+    // The distinction the escalation ceiling depends on: tried, did not work.
+    expect(result).toMatchObject({ attempted: true, applied: false, startedRun: false });
+    expect(result.note).toContain('resolution brief');
+    // …and the work it is being credited for genuinely happened.
+    expect(written).toHaveLength(1);
+    expect(written[0]).toMatchObject({ status: 'in_progress' });
+    expect(String(written[0]?.description)).toContain('[Manager recovery]');
+  });
+
+  it('reports APPLIED when the run does start', async () => {
+    mockLaneEntry.mockResolvedValue(true);
+    expect(await resolve()).toMatchObject({ attempted: true, applied: true, startedRun: true });
+  });
+
+  /**
+   * The same ticket comes back every five minutes until it moves or escalates. Re-writing a
+   * row that already says exactly this is a `tasks` write per project per tick for zero
+   * change — on the measured ticket, every pass for 18 days.
+   */
+  it('does not re-write a ticket already handed back', async () => {
+    mockLaneEntry.mockResolvedValue(false);
+    const already: TriageTask = {
+      ...conflicted, status: 'in_progress', description: 'Ship the thing\n\n[Manager recovery] PR #7 conflicts…',
+    };
+    const result = await resolve({ task: already });
+    expect(written).toHaveLength(0);
+    // Still an attempt: the hand-back stands, and the gate was asked again and refused.
+    expect(result).toMatchObject({ attempted: true, applied: false });
+  });
+});
