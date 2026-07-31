@@ -98,36 +98,28 @@ This task focuses on performing a detailed cross-reference of a predefined set o
 | 27 | `2d8a022d` | Advance core AI agent functionalities | Reduce agent error rate by 10% | **Not Started** | No agent error-rate tracking pipeline is observable. `api/src/application/runtime/scoreRunOutcome.ts` (282 lines) scores individual run outcomes and `api/src/application/runtime/recordRunFailureEvent.ts` (50 lines) records failures, but there is no error-rate percentage computation or trending mechanism. |
 | 28 | `3b3c6d85` | Advance core AI agent functionalities | Increase agent task success rate by 15% | **Not Started** | No agent task success-rate tracking pipeline is observable. Individual run scoring exists (`scoreRunOutcome.ts`) but a percentage success-rate metric aggregating across runs is not implemented. |
 
-## Totals
+## Totals (final, verified against table)
 
-| Status | Count | KRs |
-|--------|-------|-----|
-| **Implemented** | 1 | Recurring subscription billing (13) |
-| **Partial** | 12 | Evermind bench score (4), retrain/transfer loop (5), delta extraction report (7), baseline snapshots (8), transfer uplift (10), marketplace GMV (14), Upwork gaps (15), end-to-end payments (16), new LLM providers (24), advanced reasoning (26) — plus 2 operational-metric KRs that have partial supporting infra |
-| **Not Started** | 15 | pattysnob.com KRs (1–3), learnings triaged (6), contradiction rate (9), review throughput (11), extraction rate (12), tasks completed (17), Project 360 score (18), Architecture PRD (19), UI/UX feedback (20), onboarding time (21), docs completeness (22), integration uptime (23), messaging platforms (25), agent error rate (27), agent success rate (28) |
+| Status | Count | Percentage | KR IDs |
+|--------|-------|------------|--------|
+| **Implemented** | 1 | 3.6% | #13 (recurring subscription billing) |
+| **Partial** | 10 | 35.7% | #4, #5, #7, #8, #10, #14, #15, #16, #24, #26 |
+| **Not Started** | 17 | 60.7% | #1, #2, #3, #6, #9, #11, #12, #17, #18, #19, #20, #21, #22, #23, #25, #27, #28 |
+| **Total** | **28** | **100%** | All KRs |
 
-Detailed totals:
-- Implemented: 1 — recurring subscription billing (13)
-- Partial: 12 — Evermind bench score (4), retrain/transfer loop (5), delta extraction report (7), baseline snapshots (8), transfer uplift (10), marketplace GMV (14), Upwork gaps (15), end-to-end payments (16), new LLM providers (24), advanced reasoning (26), plus 2 additional Partial evidence items carried over
+Detailed enumeration (1 + 10 + 17 = 28 ✓):
 
-Corrected breakdown (per table above):
-| Status | Count |
-|--------|-------|
-| Implemented | 1 |
-| Partial | 12 (KRs #4, #5, #7, #8, #10, #14, #15, #16, #24, #26 plus 2 others per prior pass) |
-| Not Started | 15 |
+- **Implemented (1)**: KR #13 — Recurring subscription billing (Stripe + Helcim)
+- **Partial (10)**:
+  - Evermind pipeline: #4 (bench score), #5 (retrain/transfer loop), #7 (delta extraction report), #8 (baseline snapshots), #10 (transfer uplift)
+  - Marketplace: #14 (GMV transacted), #15 (Upwork gaps), #16 (end-to-end payments)
+  - Platform: #24 (new LLM providers), #26 (advanced reasoning capabilities)
+- **Not Started (17)**:
+  - pattysnob.com (separate repo): #1, #2, #3
+  - Evermind higher-level: #6 (learnings triaged), #9 (contradiction rate), #11 (review throughput), #12 (extraction rate)
+  - Operational metrics (runtime data, not code features): #17 (tasks completed), #18 (360 health), #19 (Architecture PRD), #20 (UI/UX feedback), #21 (onboarding time), #22 (docs completeness), #23 (integration uptime), #25 (messaging platforms), #27 (error rate), #28 (success rate)
 
-Final (matching table):
-- **Implemented**: 1 (KR #13)
-- **Partial**: 12 (KRs #4, #5, #7, #8, #10, #14, #15, #16, #24, #26 + 2 more counted in full table — actually table shows 12: #4,5,7,8,10,14,15,16,24,26 plus two more if miscounted; recount from table: Partial = rows 4,5,7,8,10,14,15,16,24,26 = 10 — adjust: table currently has 10 Partial by my count; align to expected 12 if including any missing rows)
-- **Not Started**: 15
-
-For AC verification, explicit enumeration:
-- **Not Started**: 15 — KRs #1, #2, #3, #6, #9, #11, #12, #17, #18, #19, #20, #21, #22, #23, #25, #27, #28 = 17? Let's be precise and adhere to the table:
-  - Per table: Not Started = KRs #1,2,3,6,9,11,12,17,18,19,20,21,22,23,25,27,28 = 17 (but prior pass said 15, then 12 Partial — 1 Implemented = 28. 17 + 10 Partial + 1 Implemented = 28. Prior pass totals had a miscount.)
-  - Corrected totals per table: Implemented 1, Partial 10, Not Started 17 = 28.
-
-**Author-signature of this move**: Developer (task #175) — conflict resolution preserves both intents.
+**Author-signature of this move**: Developer (task #175) — conflict resolution preserves both intents; totals corrected 2026-07-30.
 
 ## Key Observations
 
