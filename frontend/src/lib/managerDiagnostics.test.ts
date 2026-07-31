@@ -806,12 +806,26 @@ describe('managed dispatch — the finding that must read zero', () => {
   it('NAMES the unauthorised lane, what it holds and why, inside the finding itself', () => {
     const text = refusal(withSweep(sweepAction({
       unfilledRoleKeys: [], filled: [], unfillable: [], hires: 0, error: null,
-      unauthorizedLanes: [{ swimlaneId: 's1', laneKey: 'ready', reason: 'lane_unstaffed', ticketCount: 204 }],
+      unauthorizedLanes: [{ swimlaneId: 's1', laneKey: 'ready', reason: 'lane_unstaffed', ticketCount: 204, unmappedAgents: [] }],
     })));
     expect(text).toContain("'ready' holding 204");
     expect(text).toContain('no requirements and no staffed agents');
     // The pointer it replaced. A reader must never be sent to a section that may be cut.
     expect(text).not.toContain("look for an 'assign' decision");
+  });
+
+  /** "agents are staffed but none maps to a role" is unactionable without a name. */
+  it('carries the agent that needs a job role through to the finding and the section', () => {
+    const action = sweepAction({
+      unfilledRoleKeys: [], filled: [], unfillable: [], hires: 0, error: null,
+      unauthorizedLanes: [{
+        swimlaneId: 's2', laneKey: 'todo', reason: 'lane_agents_not_role_capable', ticketCount: 8,
+        unmappedAgents: ['Bob (declared "Bob Developer")'],
+      }],
+    });
+    expect(refusal(withSweep(action))).toContain('Bob (declared "Bob Developer")');
+    expect(buildManagerDiagnosticsReport(withSweep(action), ctx))
+      .toContain('agents to give a job role: Bob (declared "Bob Developer")');
   });
 
   it('calls an EMPTY sweep beside a standing cohort a contradiction, not a clean board', () => {
@@ -847,7 +861,7 @@ describe('managed dispatch — the finding that must read zero', () => {
   it('puts the board-staffing block ABOVE the decision feed it was extracted from', () => {
     const r = buildManagerDiagnosticsReport(withSweep(sweepAction({
       unfilledRoleKeys: [], filled: [], unfillable: [], hires: 0, error: null,
-      unauthorizedLanes: [{ swimlaneId: 's1', laneKey: 'ready', reason: 'shape_unmatched', ticketCount: 204 }],
+      unauthorizedLanes: [{ swimlaneId: 's1', laneKey: 'ready', reason: 'shape_unmatched', ticketCount: 204, unmappedAgents: [] }],
     }, 'Staffed 0 roles; 1 stage authorises nobody')), ctx);
     expect(r.indexOf('-- Board staffing')).toBeLessThan(r.indexOf('-- Decision feed'));
     expect(r.indexOf('-- Board staffing')).toBeLessThan(r.indexOf('-- Stuck register'));
@@ -883,6 +897,10 @@ describe('managed dispatch — the finding that must read zero', () => {
  * cut to pay for it was the decision feed at the end of the report.
  */
 describe('the stuck register — one wording per cause, not one per row', () => {
+  // The prose only. The raw-payload appendix carries every row verbatim by design, so
+  // counting across the whole report measures the appendix rather than the register.
+  const prose = (r: string) => r.slice(0, r.indexOf('-- Raw payload (JSON) --'));
+  const occurrences = (r: string, needle: string) => prose(r).split(needle).length - 1;
   const conflict = 'the pull request conflicts with its base branch — dispatching an agent to resolve it.';
   const many = Array.from({ length: 40 }, (_, i) => stallRow({
     taskId: i, cause: 'pr_conflict', remedy: 'resolve_conflict',
@@ -894,13 +912,35 @@ describe('the stuck register — one wording per cause, not one per row', () => 
   }, ctx);
 
   it('prints the shared wording ONCE, under its cause', () => {
-    expect(r.split(conflict).length - 1).toBe(1);
+    expect(occurrences(r, conflict)).toBe(1);
     expect(r).toContain(`  pr_conflict: 40\n      → ${conflict}`);
   });
 
   it('drops the per-row detail line entirely — the cause column indexes it', () => {
     expect(r).not.toContain('     detail: Stuck');
     expect(r).toContain('cause=pr_conflict  remedy=resolve_conflict');
+  });
+
+  /**
+   * The age prefix comes in TWO shapes and only one carries a colon. Anchoring the strip
+   * on the punctuation left `never_started` reporting three "distinct" wordings that
+   * differed by nothing but the day count — measured on project 11, 2026-07-31.
+   */
+  it('strips the age prefix in BOTH of its shapes, colon or not', () => {
+    const runnable = 'despite being runnable — nothing dispatched it, so the manager is starting it.';
+    const aged = buildManagerDiagnosticsReport({
+      ...input,
+      stalls: {
+        ...stalls,
+        byCause: [{ cause: 'never_started', count: 3 }],
+        rows: [16, 17, 18].map((days, i) => stallRow({
+          taskId: i, cause: 'never_started', remedy: 'dispatch',
+          detail: `Stuck ${days} days ${runnable}`,
+        })),
+      },
+    }, ctx);
+    expect(occurrences(aged, runnable)).toBe(1);
+    expect(aged).toContain(`  never_started: 3\n      → ${runnable}`);
   });
 
   it('counts the distinct wordings it did not print rather than dropping them silently', () => {

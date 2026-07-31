@@ -396,7 +396,13 @@ export function diagnoseStall(input: StallInput): StallDiagnosis {
   // hands the ticket to a human was unreachable. Asking the owed role is the action that
   // can actually move it.
   if (input.stageSignoff && input.stageSignoff.roleNames.length > 0) {
-    const roles = input.stageSignoff.roleNames.join(', ');
+    // SORTED, because this sentence is the ticket's stored `detail` and readers group by
+    // it. The slot rows arrive in whatever order the manifest query returned, so the same
+    // two roles rendered "(Product Owner, Architect)" on one ticket and "(Architect,
+    // Product Owner)" on the next — two spellings of one cause, which reads in any rollup
+    // as two distinct problems. Measured on project 11: 5 `awaiting_signoff` rows produced
+    // 3 "distinct" wordings that differed only in ordering.
+    const roles = [...input.stageSignoff.roleNames].sort().join(', ');
     return input.stageSignoff.dispatchable
       ? stalled(
         'awaiting_signoff', 'drive_signoff',

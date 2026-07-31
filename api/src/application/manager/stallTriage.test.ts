@@ -254,7 +254,23 @@ describe('diagnoseStall — a stage whose roles owe work, on ANY lane', () => {
       stageSignoff: { roleNames: ['Business Analyst', 'Architect'], dispatchable: true },
     }));
     expect(d).toMatchObject({ stalled: true, cause: 'awaiting_signoff', remedy: 'drive_signoff' });
-    expect(d.detail).toContain('Business Analyst, Architect');
+    expect(d.detail).toContain('Architect, Business Analyst');
+  });
+
+  /**
+   * THIS SENTENCE IS A GROUPING KEY, not just prose: it is stored as the watch row's
+   * `detail` and every rollup groups stall causes by it. The manifest query returns slots
+   * in no particular order, so the same two roles rendered "(Product Owner, Architect)" on
+   * one ticket and "(Architect, Product Owner)" on the next — one cause wearing two
+   * spellings, which reads downstream as two distinct problems. Measured on project 11
+   * (2026-07-31): 5 `awaiting_signoff` rows produced 3 wordings differing only in order.
+   */
+  it('renders the same role SET identically however the slots arrive', () => {
+    const detail = (roleNames: string[]) => diagnoseStall(base({
+      status: 'requirements', everRan: true, autoRunReason: 'same_lane_reentry',
+      stageSignoff: { roleNames, dispatchable: true },
+    })).detail;
+    expect(detail(['Product Owner', 'Architect'])).toBe(detail(['Architect', 'Product Owner']));
   });
 
   it('escalates when the stage\'s roles are unstaffed or human-owed', () => {
