@@ -140,7 +140,7 @@
     {
       "task_id": 353,
       "title": "Agent channels endpoint always returns `[]` (stub, no DB)",
-      "status": "backlog",
+      "status": "ready",
       "type": "ambiguous",
       "severity": "high",
       "severity_source": "inferred",
