@@ -637,14 +637,6 @@ export class AgentOrchestrator {
     if (violations.length > 0) {
       for (const v of violations) {
         logDebug(`[orchestrator] policy violation on task ${task.id}: ${v.message}`);
-        this.telemetry?.emit?.({
-          type: "policy_violation",
-          workflowId: workflow.id,
-          taskId: task.id,
-          policyId: v.policyId,
-          severity: v.severity,
-          message: v.message,
-        });
       }
     }
 
