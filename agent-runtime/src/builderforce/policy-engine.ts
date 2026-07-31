@@ -87,6 +87,15 @@ export class PolicyEngine {
   }
 
   /**
+   * Get all registered policies
+   * 
+   * @returns Array of all policies
+   */
+  getPolicies(): (PolicyDefinition & { conditions: PolicyCondition[] })[] {
+    return Array.from(this.policies.values());
+  }
+
+  /**
    * Find all active policies, optionally filtered by target role
    * 
    * @param targetRole - Optional role to filter policies for
