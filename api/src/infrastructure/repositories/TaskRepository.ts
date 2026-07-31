@@ -301,7 +301,7 @@ export class TaskRepository implements ITaskRepository {
       .select()
       .from(tasksTable)
       .where(and(...conditions))
-      .orderBy(orderFn(orderColumn))
+      .orderBy(...orderBy)
       .limit(pageSize)
       .offset(offset);
 
