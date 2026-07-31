@@ -931,6 +931,33 @@ async function loadFeatureScoreIndex(
   return { byName, maxScore };
 }
 
+/**
+ * Managed tickets per lane key (= status), for the WHOLE project.
+ *
+ * Deliberately not derived from the pass's managed window: that is capped at
+ * {@link MAX_RANKED}, so a count taken from it understates every lane and can drop a
+ * lane to zero — and a zero-count lane is filtered out of the staffing report entirely,
+ * which would hide the exact gap the report exists to name.
+ */
+async function laneTicketCountsByStatus(db: Db, projectId: number): Promise<Map<string, number>> {
+  const rows = await db
+    .select({ status: tasks.status, n: sql<number>`count(*)::int` })
+    .from(tasks)
+    .where(and(
+      eq(tasks.projectId, projectId),
+      eq(tasks.archived, false),
+      // The same set `loadManagedTasks` windows over, so the count answers the same
+      // question the window samples rather than a slightly different one.
+      inArray(tasks.status, NON_TERMINAL_TASK_STATUSES),
+    ))
+    .groupBy(tasks.status)
+    .catch((error) => {
+      reportCaughtError(error, { source: 'application/manager/ManagerService.ts', operation: 'laneTicketCountsByStatus' });
+      return [] as Array<{ status: string; n: number }>;
+    });
+  return new Map(rows.map((r) => [r.status, Number(r.n) || 0]));
+}
+
 function toRankable(t: ManagedTaskRow): RankableTask {
   return {
     taskId: t.id,
@@ -1082,13 +1109,17 @@ export async function runManagerForProject(
       // — which is how 293 tickets sat on `managed_no_role` while this stage reported
       // nothing to do. Deduplicated to a handful of pairs, so it costs no query.
       taskShapes: distinctTaskShapes(managed),
-      // What each lane's gap is COSTING, from the managed set already in hand. Keyed by
-      // STATUS because that is how a ticket maps to a lane — `swimlanes.key ===
-      // task.status`; `tasks` carries no swimlane column.
-      laneTicketCounts: managed.reduce((m, t) => {
-        m.set(t.status, (m.get(t.status) ?? 0) + 1);
-        return m;
-      }, new Map<string, number>()),
+      // What each lane's gap is COSTING. Keyed by STATUS, because that is how a ticket
+      // maps to a lane (`swimlanes.key === task.status`); `tasks` carries no swimlane
+      // column.
+      //
+      // From its OWN aggregate, not from `managed`. That set is capped at MAX_RANKED
+      // (300 of this project's 712 managed tickets), so counting from it both understates
+      // every lane AND — because a lane with a zero count is filtered out entirely —
+      // could hide a lane whose tickets all fall outside the window. One indexed GROUP BY
+      // over a column the pass already filters on is the right price for a number the
+      // whole finding is judged on.
+      laneTicketCounts: await laneTicketCountsByStatus(db, projectId),
     });
     const staffingDetail = describeLaneStaffing(laneStaffing);
     if (staffingDetail) {

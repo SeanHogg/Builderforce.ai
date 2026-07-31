@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-07-31 — ✅ RESOLVED: `managed_no_role` was a swallowed read, and the 91% failure rate is one cause not two (api 2026.7.191)
+
+### The 306-ticket cohort was a failed query reported as a verdict
+
+`loadCensusFacts` substituted `{ roleKeys: [], approvers: [], tier: 'none' }` whenever the bulk lane-authority map had no entry for a ticket's lane. `pickManagedProducer` reads that as null, which the ladder reports as `managed_no_role`. And the map's loader was itself wrapped in **`.catch(() => new Map())`** — so one failed read relabelled *every managed ticket on the board at once*.
+
+That is exactly what the data said and nobody could explain: `managed_no_role` at 294 → 306 across five captures, while the board-staffing sweep — **the same `loadBoardLaneAuthorities` call, in the same pass, without a swallow** — reported `unfilledRoleKeys: []` and no unauthorised lanes. Two code paths, identical inputs, opposite answers, because one of them turned a failure into the most alarming available verdict. `loadBoardLaneAuthorities`' own header warns that degrading its *roster* to empty "reproduces the exact pre-fix symptom — every role unbound, every ticket `managed_no_role`"; the caller reintroduced precisely that, one level up and for the whole board.
+
+Fixed by restoring the distinction the ladder was always built on: **`false` means "asked, the answer is no"; `null` means "could not ask"**, and only the first may produce `managed_no_role`. The verdict is now computed solely inside `if (inputs)`, so an absent entry leaves `null` and the ladder falls through to the next cause. The load failure is reported rather than swallowed. Guarded by both a ladder test and a source test, because the fabrication is a control-flow decision the pure ladder cannot see — it only ever receives the boolean the substitution produced.
+
+### The failure classifier split its own dominant cause in half
+
+Its first capture read `78× runtime_crash` beside `72× rate_limited` — but every one of those 78 was `cloudCrashReason("gateway error: Gateway 429 on model 'direct/meta/muse-spark-1.1' · chain: …")`. **`cloudCrashReason` is an envelope, not a cause.** The classifier matched the wrapper's phrase before the generic probes could see the 429 inside it, so the largest fact on the board — **150 of 164 failures (91%) being the free model pool returning 429** — was presented as two medium problems. Splitting a dominant cause in half is worse than not classifying it: it sends the reader after a runtime bug that does not exist.
+
+The wrapper is now opened and its *contents* classified, with the wrapper's own trailing advice sentence stripped first so its "re-run the task" prose cannot become the probe's input. `runtime_crash` survives only when the inner detail names nothing recognisable — the case it was always meant for.
+
+### Two bugs in yesterday's own work
+
+- **`blockedPrs` returned empty beside a count of 49.** `manager_actions.detail` is a `text` column, so `detail->>'reason'` is a hard SQL error — and the trailing `.catch(() => [])` hid it, printing "Pull requests waiting on a PERSON (49)" above "the endpoint returns the top 0 by value". Casting is not the fix either (`::jsonb` throws on the first non-JSON row, the same outage one bad row away): the raw text is selected and parsed per row, so a malformed detail costs that row's reason and nothing else. The catch now reports.
+- **Lane ticket counts came from the capped window.** `managed` holds at most `MAX_RANKED` (300) of this project's 712 tickets, so counts understated every lane — and because a zero-count lane is filtered out of the report entirely, a lane whose tickets all fell outside the window would have been hidden completely. Now its own indexed `GROUP BY`.
+
+Files: `api/src/application/manager/{stallCensus,ManagerService}.ts`, `api/src/application/runtime/runFailureReasons.ts`, `api/src/presentation/routes/managerRoutes.ts`, + tests in `stallCensus.test.ts` and `runFailureReasons.test.ts`.
+
+---
+
 ## 2026-07-31 — ✅ RESOLVED: three defects the merge queue's success made visible (api 2026.7.190)
 
 ### 1. `managed_no_role` — the staffing gap with no NAME
