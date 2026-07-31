@@ -56,6 +56,7 @@ const policy: ManagerPolicy = {
   requireSignoffToComplete: true,
   allowAutoMerge: false,
   allowUnattendedCeremonies: false,
+  allowAutoStaffLanes: false,
   allowAgentReassignment: false,
   agentReassignIdleHours: 48,
   agentReassignMaxPerSession: 3,
@@ -129,7 +130,7 @@ const overview: ManagerOverview = {
     managerRef: null, enabled: true, prMergePolicy: 'on_green',
     autoAssign: true, autoBusinessValue: true, autoPrioritize: true, autoSchedule: false,
     requireSignoffToComplete: true, allowAutoMerge: null,
-    allowUnattendedCeremonies: null, allowAgentReassignment: null,
+    allowUnattendedCeremonies: null, allowAgentReassignment: null, allowAutoStaffLanes: null,
     agentReassignIdleHours: null, agentReassignMaxPerSession: null,
     managerType: 'general', lastRunAt: iso(22 * MIN),
   },
@@ -886,6 +887,54 @@ describe('managed dispatch — the finding that must read zero', () => {
     expect(summarizeBoardStaffing([perTicket, board])?.unfilledRoleKeys).toEqual(['product-owner']);
     expect(summarizeBoardStaffing([perTicket])).toBeNull();
     expect(summarizeBoardStaffing(actions)).toBeNull();
+  });
+});
+
+/**
+ * A LANE NOBODY CONFIGURED IS NOT A STAFFING FAILURE (0386).
+ *
+ * Split from `managed_dispatch_refused` because the two demand opposite actions and the
+ * larger was hiding the smaller: measured on project 11, 306 tickets read `managed_no_role`
+ * while 309 board-wide sat in `backlog`/`blocked` — lanes that name no role, so there was
+ * never a role to fill. The finding must also say whether the manager was ALLOWED to fix
+ * it, because a withheld permission and a broken remedy look identical from the cohort.
+ */
+describe('the lane-unconfigured cohort', () => {
+  const withCohort = (over: Partial<ManagerPolicy> = {}): ManagerDiagnosticsInput => ({
+    ...input,
+    overview: { ...overview, policy: { ...policy, ...over } },
+    census: {
+      projectId: 11, managed: 712, stalled: 672, moving: 40, deepDiagnosed: 292,
+      computedAt: iso(MIN), findings: [],
+      cohorts: [{ cause: 'lane_unconfigured', count: 309, sampleTaskIds: [526, 529], maxIdleMs: 19 * DAY }],
+    },
+  });
+  const text = (over?: Partial<ManagerPolicy>) =>
+    managerFindings(withCohort(over), now).find((f) => f.code === 'lane_unconfigured')?.text ?? '';
+
+  it('raises a CRITICAL that says there is no role to staff, not a role that failed', () => {
+    expect(text()).toContain('309 tickets sit');
+    expect(text()).toContain('there is no role, so there is nothing to staff');
+    expect(text()).toContain('526, 529');
+  });
+
+  it('says the manager is DELIBERATELY not fixing it when the grant is withheld', () => {
+    expect(text()).toContain('is NOT permitted');
+    expect(text()).toContain('starts every ticket sitting there');
+  });
+
+  it('says its remedy RAN and did not clear when the grant IS given', () => {
+    const granted = text({ allowAutoStaffLanes: true });
+    expect(granted).toContain('IS permitted');
+    expect(granted).not.toContain('is NOT permitted');
+  });
+
+  it('carries the grant into the policy fold, so a reader can see which tier withheld it', () => {
+    expect(buildManagerDiagnosticsReport(withCohort(), ctx)).toContain('allowAutoStaffLanes: no');
+  });
+
+  it('is ABSENT once no ticket sits in an unconfigured stage', () => {
+    expect(managerFindings(input, now).some((f) => f.code === 'lane_unconfigured')).toBe(false);
   });
 });
 

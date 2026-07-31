@@ -136,6 +136,7 @@ export function createManagerRoutes(
     allowAgentReassignment?: boolean | null;
     agentReassignIdleHours?: number | null;
     agentReassignMaxPerSession?: number | null;
+    allowAutoStaffLanes?: boolean | null;
   };
 
   /**
@@ -173,7 +174,7 @@ export function createManagerRoutes(
     const bools = [
       'enabled', 'autoAssign', 'autoBusinessValue', 'autoPrioritize', 'autoSchedule',
       'requireSignoffToComplete', 'allowAutoMerge',
-      'allowUnattendedCeremonies', 'allowAgentReassignment',
+      'allowUnattendedCeremonies', 'allowAgentReassignment', 'allowAutoStaffLanes',
     ] as const;
     for (const key of bools) {
       const v = triStateBool(body[key]);
@@ -452,6 +453,8 @@ export function createManagerRoutes(
       allowAgentReassignment?: boolean | null;
       agentReassignIdleHours?: number | null;
       agentReassignMaxPerSession?: number | null;
+      /** May the manager configure a lane that authorises nothing (0386) — tri-state. */
+      allowAutoStaffLanes?: boolean | null;
     };
     const body = (await c.req.json<ConfigBody>().catch(() => ({} as ConfigBody)));
 
@@ -477,6 +480,8 @@ export function createManagerRoutes(
         ? { allowUnattendedCeremonies: triStateBool(body.allowUnattendedCeremonies) } : {}),
       ...(triStateBool(body.allowAgentReassignment) !== undefined
         ? { allowAgentReassignment: triStateBool(body.allowAgentReassignment) } : {}),
+      ...(triStateBool(body.allowAutoStaffLanes) !== undefined
+        ? { allowAutoStaffLanes: triStateBool(body.allowAutoStaffLanes) } : {}),
       ...(triStateNumber(body.agentReassignIdleHours, AGENT_REASSIGN_IDLE_HOURS_RANGE) !== undefined
         ? { agentReassignIdleHours: triStateNumber(body.agentReassignIdleHours, AGENT_REASSIGN_IDLE_HOURS_RANGE) } : {}),
       ...(triStateNumber(body.agentReassignMaxPerSession, AGENT_REASSIGN_MAX_PER_SESSION_RANGE) !== undefined

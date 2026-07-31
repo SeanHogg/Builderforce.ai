@@ -24,6 +24,7 @@ const facts = (over: Partial<CensusTicketFacts> = {}): CensusTicketFacts => ({
   consecutiveFailures: 0,
   lane: { gate: 'auto', isTerminal: false, staffed: false },
   managedProducerResolvable: null,
+  managedLaneAuthorityTier: null,
   stageOwedRoles: [],
   ...over,
 });
@@ -253,6 +254,35 @@ describe('classifyBulkAutoRunReason — unknown must not read as managed_no_role
       lane: managedLane, managedProducerResolvable: null,
     }));
     expect(verdict).not.toBe('managed_no_role');
+  });
+
+  /**
+   * TWO READINGS OF "NO PRODUCER", AND THEY ARE OPPOSITE REPAIRS.
+   *
+   * `managed_no_role` is a NAMED role that failed to bind — the manager's staffing ladder
+   * is keyed on that name and can fill it. `lane_unconfigured` is a lane that names no role
+   * at all, so the ladder has nothing to work with and the repair is to configure the lane.
+   * Measured on project 11 (2026-07-31): 306 tickets reported `managed_no_role`, of which
+   * 299 sat in `backlog` and 10 in `blocked` — lanes nobody had ever set up. Reporting them
+   * as a failed binding sent every reader after a staffing problem that did not exist and
+   * hid the handful of tickets that genuinely had one.
+   */
+  it('separates a lane that authorises NOTHING from a role that failed to bind', () => {
+    const unresolved = { lane: managedLane, managedProducerResolvable: false } as const;
+    expect(classifyBulkAutoRunReason(facts({ ...unresolved, managedLaneAuthorityTier: 'none' })))
+      .toBe('lane_unconfigured');
+    expect(classifyBulkAutoRunReason(facts({ ...unresolved, managedLaneAuthorityTier: 'requirements' })))
+      .toBe('managed_no_role');
+    expect(classifyBulkAutoRunReason(facts({ ...unresolved, managedLaneAuthorityTier: 'lane_agents' })))
+      .toBe('managed_no_role');
+  });
+
+  /** An unanswered tier must not read as `none` — the same substitution this whole block
+   *  exists to prevent, one field over. */
+  it('falls back to managed_no_role when the tier itself is unknown', () => {
+    expect(classifyBulkAutoRunReason(facts({
+      lane: managedLane, managedProducerResolvable: false, managedLaneAuthorityTier: null,
+    }))).toBe('managed_no_role');
   });
 
   it('never reports managed_no_role when a producer DID resolve', () => {

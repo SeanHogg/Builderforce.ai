@@ -486,6 +486,8 @@ export const tenantManagerDefaults = pgTable('tenant_manager_defaults', {
   allowAgentReassignment:     boolean('allow_agent_reassignment'),
   agentReassignIdleHours:     integer('agent_reassign_idle_hours'),
   agentReassignMaxPerSession: integer('agent_reassign_max_per_session'),
+  /** Workspace CEILING for lane auto-staffing (0386) — see the project column. */
+  allowAutoStaffLanes:        boolean('allow_auto_staff_lanes'),
   /** Who last changed the workspace autonomy posture — the governance question is
    *  "who granted the manager merge rights?", so the answer is stored. */
   updatedBy:         varchar('updated_by', { length: 36 }),

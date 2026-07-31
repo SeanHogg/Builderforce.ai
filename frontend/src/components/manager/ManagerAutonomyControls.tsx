@@ -47,6 +47,9 @@ export interface ManagerAutonomyValue {
    *  may it move an absent person's stale work onto an agent? */
   allowUnattendedCeremonies: TriState;
   allowAgentReassignment: TriState;
+  /** May the manager configure a lane that authorises NO role (0386)? Withheld by
+   *  default: staffing an unconfigured stage starts every ticket sitting in it. */
+  allowAutoStaffLanes: TriState;
   /** null = inherit the tier below. */
   agentReassignIdleHours: number | null;
   agentReassignMaxPerSession: number | null;
@@ -368,6 +371,18 @@ export function ManagerAutonomyControls({
         inheritedAs={inheritHint(inherited.autoAssign)}
         disabled={disabled}
         onChange={(v) => onChange({ autoAssign: v })}
+      />
+      {/* Directly after assignment, because it is the board-scope version of the same
+          question. Assignment staffs a TICKET; this staffs a STAGE that names nobody at
+          all — the one gap the manager reports every pass and cannot otherwise close. */}
+      <TriStateRow
+        label={t('policy.allowAutoStaffLanes.label')}
+        help={t('policy.allowAutoStaffLanes.help')}
+        value={value.allowAutoStaffLanes}
+        inheritable
+        inheritedAs={inheritHint(inherited.allowAutoStaffLanes)}
+        disabled={disabled}
+        onChange={(v) => onChange({ allowAutoStaffLanes: v })}
       />
 
       {/* CEREMONY AUTONOMY (0365) — the manager running a standup is the other thing it

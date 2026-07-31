@@ -94,6 +94,16 @@ export interface CensusTicketFacts {
    */
   managedProducerResolvable: boolean | null;
   /**
+   * The stage's authority TIER, when it could be resolved — `none` meaning the lane
+   * authorizes nothing at all (no requirement declared, no agent staffed).
+   *
+   * Carried so the census can tell `lane_unconfigured` from `managed_no_role`, which are
+   * opposite repairs: one configures a lane, the other staffs a named role. Null means the
+   * question was not answered, and must never be read as `none` — that substitution is the
+   * exact shape of the bug this module was repaired for on 2026-07-31.
+   */
+  managedLaneAuthorityTier: 'requirements' | 'lane_agents' | 'none' | null;
+  /**
    * Required manifest roles for the CURRENT stage that still owe work.
    *
    * The role KEYS are carried, not just a boolean, because `diagnoseStall` only reaches
@@ -173,7 +183,12 @@ export function classifyBulkAutoRunReason(f: CensusTicketFacts): AutoRunReason {
   // above staffing. A managed dispatch must be role-attributed, so "is the lane staffed"
   // is the wrong question — the right one is whether an authorized role resolves to an
   // agent, which is what this fact answers.
-  if (f.managedProducerResolvable === false) return 'managed_no_role';
+  // Two readings of "no producer", and they are opposite repairs — see
+  // `CensusTicketFacts.managedLaneAuthorityTier`. The more specific one first, exactly as
+  // `classifyResolvedAutoRun` orders them, so the census and the dispatcher agree.
+  if (f.managedProducerResolvable === false) {
+    return f.managedLaneAuthorityTier === 'none' ? 'lane_unconfigured' : 'managed_no_role';
+  }
   // Staffing. The owner fallback is suppressed on a review-class lane exactly as the
   // evaluator suppresses it — otherwise the census would report a review lane as
   // staffed by the very agent that authored the work.
@@ -384,6 +399,7 @@ export async function loadCensusFacts(
     // so the census cannot disagree with the dispatcher about whether a managed stage has
     // a runnable role.
     let managedProducerResolvable: boolean | null = null;
+    let managedLaneAuthorityTier: CensusTicketFacts['managedLaneAuthorityTier'] = null;
     if (managed && lane && !lane.isTerminal && !isReviewLane(t.status)) {
       const inputs = (laneAuthorities as Map<string, LaneAuthorityInputs>).get(lane.id);
       // ── ABSENT INPUTS ARE UNKNOWN, NOT "NO ROLE" ────────────────────────────────
@@ -408,6 +424,7 @@ export async function loadCensusFacts(
         const authority = decideManagedLaneAuthority(inputs, { taskType: t.taskType ?? null, actionType: t.actionType ?? null });
         const slots = (producerSlots as Map<string, ManagedProducerSlot[]>).get(`${t.id}:${t.status}`) ?? [];
         managedProducerResolvable = pickManagedProducer(authority, slots) != null;
+        managedLaneAuthorityTier = authority.tier;
       }
     }
     return {
@@ -421,6 +438,7 @@ export async function loadCensusFacts(
       consecutiveFailures: streakByTask.get(t.id) ?? 0,
       lane: lane ? { gate: lane.gate, isTerminal: lane.isTerminal, staffed: lane.staffed } : null,
       managedProducerResolvable,
+      managedLaneAuthorityTier,
       stageOwedRoles: (owedRoles as Map<string, string[]>).get(`${t.id}:${t.status}`) ?? [],
     };
   });
