@@ -1,11 +1,43 @@
 /**
- * Types for Scope Health feature — UI awareness model
+ * Types for Scope Health feature — self-contained domain model.
+ *
+ * This file is the SOLE type authority for the Scope Health feature.
+ * The hook (useScopeHealth.ts) and dashboard (ScopeHealthDashboard.tsx)
+ * import everything from here.
  */
 
-// Use minimal exported shapes; we don’t expose internal code in the PR.
+/* ── Core domain: Task (the work-item the metrics operate on) ─────────────── */
+
+export interface Task {
+  id: string;
+  title: string;
+  type?: 'task' | 'story' | 'bug' | 'epic';
+  status: 'backlog' | 'todo' | 'ready' | 'in-progress' | 'in-review' | 'done' | 'blocked';
+  parentTaskId?: string | number;
+  storyPoints?: number;
+  creator?: string;
+  createdAt: string; // ISO date string
+  completedAt?: string; // ISO date string
+  updatedAt?: string;
+}
+
+/* ── Configuration ──────────────────────────────────────────────────────── */
+
 export type CalculationMode = 'item_count' | 'story_points';
 
-// Baseline info with responsibly scoped projection fields
+export type TimeWindow =
+  | 'current_sprint'
+  | '7_days'
+  | '14_days'
+  | '30_days'
+  | 'current_quarter';
+
+export interface Period {
+  windowStart: string; // ISO date string
+  windowEnd: string;   // ISO date string
+  label: string;
+}
+
 export interface BaselineInfo {
   id: string;
   lockedAt: string; // ISO date string
@@ -13,16 +45,8 @@ export interface BaselineInfo {
   totalStoryPoints?: number;
 }
 
-export type TimeWindow = 'current_sprint' | '7_days' | '14_days' | '30_days' | 'current_quarter';
+/* ── Epic ───────────────────────────────────────────────────────────────── */
 
-// Period identifier (for historical analysis)
-export interface Period {
-  windowStart: string; // ISO date string
-  windowEnd: string; // ISO date string
-  label: string;
-}
-
-// Epic metadata (projection)
 export interface Epic {
   id: string;
   title: string;
@@ -32,15 +56,18 @@ export interface Epic {
   totalStoryPoints?: number;
   completedItems: number;
   completedStoryPoints?: number;
-  addedItems: number; // items created in this period
+  addedItems: number;       // items created in the current window
   addedStoryPoints?: number;
 }
+
+/* ── Status enums ───────────────────────────────────────────────────────── */
 
 export type EpicStatus = 'on_track' | 'at_risk' | 'off_track';
 export type RatioStatus = 'normal' | 'warning';
 export type CreepStatus = 'green' | 'yellow' | 'red';
 
-// Result shapes
+/* ── Metric results ─────────────────────────────────────────────────────── */
+
 export interface ScopeCreepScore {
   value: number; // percentage 0-100
   status: CreepStatus;
@@ -67,7 +94,7 @@ export interface EpicCompletion {
 }
 
 export interface ScopeHealthScore {
-  value: number;
+  value: number; // 0–100
   breakdown: {
     scopeCreep: number;
     ratio: number;
@@ -80,7 +107,8 @@ export interface ScopeHealthScore {
   };
 }
 
-// Configuration for calculations
+/* ── Config (exposed for embeddable / admin use) ────────────────────────── */
+
 export interface ScopeHealthConfig {
   calculateBy?: CalculationMode;
   defaultWindow?: TimeWindow;
