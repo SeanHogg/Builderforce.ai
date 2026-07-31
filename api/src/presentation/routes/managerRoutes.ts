@@ -31,6 +31,7 @@ import {
   recordManagerAction, createManagerCoachingTask, syncManagerRosterRole,
   getTenantManagerDefaults, upsertTenantManagerDefaults, type TenantManagerDefaultsPatch,
 } from '../../application/manager/ManagerService';
+import { latestStateDecision } from '../../application/manager/managerActionJournal';
 import { getStallRegister } from '../../application/manager/stallWatch';
 import { getStallCensus, invalidateStallCensus } from '../../application/manager/stallCensus';
 import { getDailyDigest } from '../../application/manager/dailyDigest';
@@ -348,6 +349,20 @@ export function createManagerRoutes(
 
     const actions = await listManagerActions(db, tenantId, projectId, 30);
 
+    // ── THE STANDING VERDICTS, WHATEVER THEIR AGE ───────────────────────────────────
+    // Two of the manager's decisions are STATES, not events, and are therefore journalled
+    // only when they change: the board-staffing sweep's verdict and the triage stage's
+    // ceiling picture. The moment that landed (api 2026.7.198) every reader that scanned
+    // the 30-row feed for them went blind — the diagnostics report printed "no
+    // board-staffing decision in the last 30 — the sweep found nothing to staff" beside a
+    // 306-ticket cohort of stages that authorise no role, which is the precise
+    // contradiction that block exists to catch. Asked for by name, they are always
+    // present, and their `createdAt` is what tells a reader how old the answer is.
+    const [boardStaffing, triageLimits] = await Promise.all([
+      latestStateDecision(db, { tenantId, projectId, actionType: 'assign' }).catch(() => null),
+      latestStateDecision(db, { tenantId, projectId, actionType: 'triage' }).catch(() => null),
+    ]);
+
     // Autonomy health: the cron manager sweep + the autonomous executor BOTH gate on
     // the tenant's token budget and silently skip a tenant that's out of it — so a
     // capped tenant sees its board freeze (no ranking, no assignment, no dispatch, no
@@ -421,6 +436,20 @@ export function createManagerRoutes(
       blockedPrs: blockedPrs.map(({ detailRaw, ...pr }) => ({ ...pr, reason: parseBlockedReason(detailRaw) })),
       backlog,
       actions,
+      /**
+       * The manager's STANDING verdicts — the two decisions journalled only when they
+       * change, so a reader can never conclude from an empty feed window that the
+       * sweep found nothing. Each carries its own timestamp: an old verdict is still
+       * the current answer, and how old it is, is the reader's to judge.
+       */
+      stateDecisions: {
+        boardStaffing: boardStaffing && {
+          summary: boardStaffing.summary, detail: boardStaffing.detail, createdAt: boardStaffing.createdAt,
+        },
+        triageLimits: triageLimits && {
+          summary: triageLimits.summary, detail: triageLimits.detail, createdAt: triageLimits.createdAt,
+        },
+      },
       runTasks,
       autonomy,
       managerTypes,

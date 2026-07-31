@@ -17,6 +17,29 @@
 
 ---
 
+## 2026-07-31 — ✅ RESOLVED: deduping a state blinded every reader of it, and the triage summary named the wrong ceiling (api 2026.7.200, ui 2026.7.152)
+
+Three defects, all read off the 11:26Z capture on api 2026.7.198 — the first pass after the state-dedupe shipped.
+
+**1. The board-staffing block went blind, one pass after the fix that quieted it.** The capture printed
+
+```
+-- Board staffing (why managed tickets can or cannot dispatch) --
+(no board-staffing decision in the last 30 — the sweep found nothing to staff, or it did not run)
+```
+
+beside a `lane_unconfigured` cohort of **306 tickets** — which is precisely the contradiction that block's own preamble tells the reader to chase, manufactured by the report itself. `summarizeBoardStaffing` and `summarizePassLimits` both work by scanning the newest-first feed for the first row carrying their answer, and that is only correct while the answer is re-journalled every pass. A verdict written once is not less true than one written 288 times a day; it is just no longer inside a 30-row window.
+
+The read moved with the write. `latestStateDecision` asks for a standing verdict **by name at any age** (board-scope only — `task_id is null`, so a per-ticket `assign` can never answer a board question), the overview endpoint returns both under `stateDecisions`, and `stateAwareFeed` prepends them for the summarizers — never merging them into `actions`, whose length is quoted as "the last N decisions", and degrading to exactly the old window scan against an older API. The block now stamps the verdict with its AGE and says the verdict is journalled on change, so an old timestamp reads as "this answer has held" rather than "the sweep stopped". `describeStaffingVerdict` no longer counts feed rows at all: null now means *never journalled for this project*, which is the only thing it can honestly mean.
+
+**2. The triage pass summary was itself the loop the report was reporting.** `decision_loop` fired on `"Unstuck 1 of 2 stalled tickets this pass — 1 waiting for the next one (max 10 new runs per pass)"` — **7× in the last 30 decisions**, 10:55:23 → 11:25:30 — while every one of those passes had unstuck a *different* ticket (-106, -145, -066, -209), each already on its own journalled row. The ceiling picture is a state; the work is the per-ticket rows. It now goes through `recordManagerActionOnChange` under `TRIAGE_PASS_STATE_KEY`, and is written **unconditionally** rather than only when something was deferred — with an on-change writer, a summary that only ever reports a block leaves the last block standing as the current answer forever, so the CLEAR has to be recordable too.
+
+**3. And it named the wrong ceiling.** Same seven rows: `{"dispatched":1,"dispatchCap":10}`. One run against a cap of ten did not exhaust the cap — the **tenant's 25-runs-per-tick pool** was already spent by the autonomous executor (40 runs completed that day) and the other sweeps that draw on it. A reader following the stated reason would have raised a number that was never reached. `deferralCeiling` (pure, unit-tested) distinguishes the two, the per-pass cap winning when both are spent because that is this project's own share; the sentence now says which one bit and the detail carries `deferredReason` plus both ceilings.
+
+Files: `api/src/application/manager/managerActionJournal.ts`, `triageStage.ts`, `ManagerService.ts`, `presentation/routes/managerRoutes.ts`, `frontend/src/lib/managerDiagnostics.ts`, `builderforceApi.ts`. Tests: `triageStage.decision.test.ts` (+4 ceiling attribution), `managerDiagnostics.test.ts` (+6 standing-verdict reads, age stamping, and the older-API fallback). No user-facing UI strings — the diagnostics capture is a plain-text export, not localized surface.
+
+---
+
 ## 2026-07-31 — ✅ RESOLVED: a ticket completed out from under its own open, unmerged PR — the retired-PR pile's generator (api 2026.7.198)
 
 **The measurement.** Project 11, one manager pass, two decisions 78ms apart:

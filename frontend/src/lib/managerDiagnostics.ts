@@ -493,6 +493,42 @@ export function summarizePassLimits(actions: readonly ManagerAction[]): PassLimi
   return out;
 }
 
+/**
+ * The feed the STATE summarizers read: the manager's standing verdicts, then the window.
+ *
+ * ── WHY EVERY STATE READER MUST GO THROUGH THIS ──────────────────────────────────
+ * `summarizeBoardStaffing` and `summarizePassLimits` both work by scanning a newest-first
+ * feed for the first row that carries their answer. That was correct only while those
+ * decisions were re-journalled every pass. They are now written when they CHANGE (api
+ * 2026.7.198) — which is the fix for the `decision_loop` finding they were tripping — and
+ * one pass later the report was printing "(no board-staffing decision in the last 30 —
+ * the sweep found nothing to staff)" beside 306 tickets in stages that authorise no role,
+ * i.e. the exact contradiction that block exists to detect, manufactured by the report
+ * itself.
+ *
+ * `overview.stateDecisions` asks the server for those verdicts BY NAME, at any age. They
+ * are prepended (never merged into `actions`, whose length is quoted as "the last N
+ * decisions") so a summarizer's first-match rule finds the standing answer, and so a
+ * pre-`stateDecisions` API degrades to exactly the old window scan.
+ */
+export function stateAwareFeed(overview: ManagerDiagnosticsInput['overview']): ManagerAction[] {
+  const standing = overview.stateDecisions;
+  if (!standing) return overview.actions as ManagerAction[];
+  const promote = (
+    kind: 'boardStaffing' | 'triageLimits',
+    actionType: ManagerAction['actionType'],
+  ): ManagerAction[] => {
+    const row = standing[kind];
+    return row
+      ? [{
+        id: `state:${kind}`, taskId: null, ticketKey: null, ticketTitle: null,
+        actionType, summary: row.summary, detail: row.detail, createdAt: row.createdAt,
+      }]
+      : [];
+  };
+  return [...promote('boardStaffing', 'assign'), ...promote('triageLimits', 'triage'), ...overview.actions];
+}
+
 /** One lane the board-staffing sweep found authorises nobody. */
 export interface UnauthorizedLaneReport {
   laneKey: string | null;
@@ -580,14 +616,19 @@ const LANE_GAP_GLOSS: Record<string, string> = {
   shape_unmatched: 'its requirements are all scoped to ticket types or conditions its own tickets do not match',
 };
 
-/** Turn the sweep's verdict into the sentence `managed_dispatch_refused` needs. PURE. */
-export function describeStaffingVerdict(
-  verdict: BoardStaffingVerdict | null,
-  actionCount: number,
-): string {
+/**
+ * Turn the sweep's verdict into the sentence `managed_dispatch_refused` needs. PURE.
+ *
+ * The null case no longer counts feed rows. The verdict is a STATE, journalled when it
+ * changes and read back by name through {@link stateAwareFeed} — so null means the sweep
+ * has never recorded one for this project, not merely that the last 30 decisions were
+ * about something else. Saying "in the last 30" of a deduped decision is how a report
+ * turns its own noise fix into a fabricated contradiction.
+ */
+export function describeStaffingVerdict(verdict: BoardStaffingVerdict | null): string {
   const contradiction = 'which contradicts this cohort — two halves of the platform answering the same question about the same board differently, and THAT is the defect to chase, not the tickets.';
   if (verdict == null) {
-    return `The manager staffs unfilled board roles itself every pass, and it journalled NO board-staffing decision in the last ${actionCount} — the sweep found nothing to staff, ${contradiction}`;
+    return `The manager staffs unfilled board roles itself every pass, and it has NEVER journalled a board-staffing verdict for this project — every sweep found nothing to staff, ${contradiction}`;
   }
   if (verdict.error) {
     return `The board-staffing sweep FAILED at ${verdict.at}: ${verdict.error}. Nothing was staffed, so this cohort is UNEXPLAINED rather than unstaffable — fix the read before touching a ticket.`;
@@ -915,7 +956,7 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
         // prose section of a report that, on the board this finding was written for, did
         // not survive being pasted anywhere. The verdict is on the wire either way; the
         // only question was whether the finding quotes it or points at it.
-        text: `${managedCohort.count} ticket${managedCohort.count === 1 ? '' : 's'} on this lifecycle-managed board cannot dispatch at all: their stage authorises roles, but none resolves to an agent, so no run can be role-attributed and the dispatcher refuses every attempt. Assigning owners will NOT fix it — on a managed board the assignee is the Coordinator, never the executor. ${describeStaffingVerdict(summarizeBoardStaffing(actions), actions.length)} Example tickets: ${managedCohort.sampleTaskIds.join(', ')}.`,
+        text: `${managedCohort.count} ticket${managedCohort.count === 1 ? '' : 's'} on this lifecycle-managed board cannot dispatch at all: their stage authorises roles, but none resolves to an agent, so no run can be role-attributed and the dispatcher refuses every attempt. Assigning owners will NOT fix it — on a managed board the assignee is the Coordinator, never the executor. ${describeStaffingVerdict(summarizeBoardStaffing(stateAwareFeed(overview)))} Example tickets: ${managedCohort.sampleTaskIds.join(', ')}.`,
       });
     }
 
@@ -1597,7 +1638,9 @@ export function buildManagerDiagnosticsReport(
   out.push('if every pass stops at its cap, and a remedy that must start a run does nothing at');
   out.push('all on a pass that does not own dispatch. Read from the journalled decisions, so an');
   out.push('unreported value means these decisions did not carry it — not that it is unlimited.');
-  out.push(...formatLimits(summarizePassLimits(actions)));
+  // The STANDING verdict first — the ceiling picture is journalled when it changes, so a
+  // window scan alone reports "(not reported)" on every pass that changed nothing.
+  out.push(...formatLimits(summarizePassLimits(stateAwareFeed(overview))));
   out.push('');
 
   out.push('-- Sign-off gate --');
@@ -1646,16 +1689,18 @@ export function buildManagerDiagnosticsReport(
   // the largest cohort a managed board can carry, and it used to exist ONLY as one row in
   // the decision feed — the last prose section, behind ~100 rows of appendix. On project 11
   // the report ran past 50k characters and the answer was reliably the part that got cut.
-  const staffing = summarizeBoardStaffing(actions);
+  const staffing = summarizeBoardStaffing(stateAwareFeed(overview));
   out.push('-- Board staffing (why managed tickets can or cannot dispatch) --');
   out.push('On a lifecycle-managed board every run must be attributed to a role the stage');
   out.push('authorises. The manager sweeps the whole board for unbindable roles once per pass,');
-  out.push('ahead of every discretionary stage — this is that sweep\'s own verdict. An empty');
-  out.push('one beside a large managed_no_role cohort is a CONTRADICTION, not a clean bill.');
+  out.push('ahead of every discretionary stage — this is that sweep\'s own verdict. It is');
+  out.push('journalled when it CHANGES, not every pass, so an older timestamp means the answer');
+  out.push('has held — not that the sweep stopped. An empty one beside a large');
+  out.push('managed_no_role cohort is a CONTRADICTION, not a clean bill.');
   if (staffing == null) {
-    out.push(`(no board-staffing decision in the last ${actions.length} — the sweep found nothing to staff, or it did not run)`);
+    out.push('(the sweep has never journalled a verdict for this project — it found nothing to staff on every pass since the board was created, or it has never run)');
   } else {
-    out.push(line('reported at', staffing.at));
+    out.push(line('reported at', stampWithAge(staffing.at, nowMs)));
     out.push(line('error', staffing.error ?? '(none)'));
     out.push(line('roles that bind to no agent', staffing.unfilledRoleKeys.join(', ') || '(none)'));
     out.push(line('roles it filled this pass', staffing.filledRoleKeys.join(', ') || '(none)'));

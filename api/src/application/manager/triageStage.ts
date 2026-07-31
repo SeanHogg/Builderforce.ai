@@ -200,6 +200,13 @@ export const TRIAGE_PROJECT_DISPATCH_SHARE = 0.4;
 export const MAX_TRIAGE_DISPATCHES_PER_RUN =
   Math.max(3, Math.ceil(MAX_TENANT_DISPATCHES_PER_TICK * TRIAGE_PROJECT_DISPATCH_SHARE));
 
+/**
+ * Identifies the triage stage's per-pass CEILING PICTURE in the decision journal, so it
+ * is written when it changes rather than once every five minutes — see
+ * `recordManagerActionOnChange`. Its per-ticket rows are unaffected: those are events.
+ */
+export const TRIAGE_PASS_STATE_KEY = 'triage_pass_limits';
+
 /** Remedies whose whole effect is to START a run — the ones the dispatch cap governs. */
 const DISPATCHING_REMEDIES = new Set(['dispatch', 'reset_breaker', 'drive_signoff', 'resolve_conflict']);
 
@@ -286,6 +293,29 @@ export function decideRemedyExecution(input: {
 }
 
 /**
+ * WHICH of the two ceilings stopped a remedy. PURE.
+ *
+ * {@link decideRemedyExecution} only has to know whether it may spend, so it takes one
+ * boolean. The pass SUMMARY has to say why it could not, and naming the wrong ceiling
+ * sends a reader to change a number that was never reached: measured on project 11,
+ * 2026-07-31, seven consecutive passes journalled "1 waiting for the next one (max 10 new
+ * runs per pass)" beside `{"dispatched":1,"dispatchCap":10}` — one run against a cap of
+ * ten, deferred because the TENANT's 25-per-tick pool was already spent by the autonomous
+ * executor and the other sweeps.
+ *
+ * The per-pass cap wins when both are spent: it is this project's own share, and reporting
+ * the workspace pool while the project has used its full allowance would send the reader
+ * one level too far out.
+ */
+export function deferralCeiling(input: {
+  passCapLeft: boolean;
+  tenantBudgetLeft: boolean;
+}): TriageOutcome['deferredReason'] {
+  if (input.passCapLeft && input.tenantBudgetLeft) return null;
+  return input.passCapLeft ? 'tenant_tick_budget' : 'pass_dispatch_cap';
+}
+
+/**
  * What performing a remedy achieved.
  *
  * `attempted` and `applied` ARE DIFFERENT, and conflating them broke the escalation
@@ -349,6 +379,18 @@ export interface TriageOutcome {
   dispatched: number;
   /** Stalled tickets whose remedy was deferred because a per-pass cap bit. */
   deferred: number;
+  /**
+   * WHICH ceiling actually bit — null when nothing was deferred.
+   *
+   * The pass summary used to name the per-pass cap unconditionally, and on the measured
+   * board that was simply the wrong ceiling: project 11, 2026-07-31, seven consecutive
+   * passes journalled "1 waiting for the next one (max 10 new runs per pass)" with
+   * `{"dispatched":1,"dispatchCap":10}` beside it. One run against a cap of ten did not
+   * exhaust the cap — the TENANT's shared 25-runs-per-tick pool was already spent by the
+   * autonomous executor (40 runs completed that day), and a reader following the stated
+   * reason would have raised the wrong number.
+   */
+  deferredReason: 'pass_dispatch_cap' | 'tenant_tick_budget' | null;
   /** Journal lines for the manager feed — one per ticket ACTED ON, never per observation. */
   journal: Array<{ taskId: number; summary: string; detail: Record<string, unknown> }>;
 }
@@ -477,7 +519,8 @@ export async function runStallTriage(
   const { tenantId, projectId, managed, policy } = ctx;
   const runs = ctx.runs ?? tenantDispatchReserver(createTickDispatchBudget(), tenantId);
   const out: TriageOutcome = {
-    stalled: 0, unstuck: 0, escalated: 0, resolved: 0, dispatched: 0, deferred: 0, journal: [],
+    stalled: 0, unstuck: 0, escalated: 0, resolved: 0, dispatched: 0, deferred: 0,
+    deferredReason: null, journal: [],
   };
   if (managed.length === 0) return out;
 
@@ -684,15 +727,19 @@ export async function runStallTriage(
 
       // Diagnosis and the register are never gated — a ticket the manager cannot act
       // on this pass is still recorded as stuck, which is the whole point.
+      // BOTH ceilings, and they are NOT interchangeable in the journal: the per-pass cap
+      // keeps one project from monopolising a tick, while the tenant reserver keeps the
+      // whole workspace — this sweep plus the autonomous executor plus the validator and
+      // QA sweeps — inside one shared bound. Which one bit is the difference between
+      // "raise this project's share" and "the workspace is out of runs for this tick".
+      const capLeft = out.dispatched < MAX_TRIAGE_DISPATCHES_PER_RUN;
+      const tenantLeft = runs.hasRoom();
       const plan = decideRemedyExecution({
         remedy: verdict.remedy,
         actionable: isManagerActionable(verdict.remedy),
         alreadyConducted,
         ownsDispatch: ctx.ownsDispatch,
-        // BOTH ceilings. The per-pass cap keeps one project from monopolising a tick; the
-        // tenant reserver keeps the whole workspace — this sweep plus the autonomous
-        // executor plus the validator and QA sweeps — inside one shared bound.
-        budgetLeft: out.dispatched < MAX_TRIAGE_DISPATCHES_PER_RUN && runs.hasRoom(),
+        budgetLeft: capLeft && tenantLeft,
       });
       if (plan.act) {
         const remedyArgs = (mayStartRun: boolean, mayRaceExecutor: boolean) => ({
@@ -724,7 +771,12 @@ export async function runStallTriage(
         outcomeNote = acted.note;
         if (acted.startedRun) out.dispatched += 1;
       }
-      if (plan.deferred) out.deferred += 1;
+      if (plan.deferred) {
+        out.deferred += 1;
+        // FIRST reason wins, so the summary names the ceiling that stopped the first
+        // deferral rather than whichever one the last ticket happened to hit.
+        out.deferredReason ??= deferralCeiling({ passCapLeft: capLeft, tenantBudgetLeft: tenantLeft });
+      }
 
       // `attempted`, NOT `applied`, drives the counter: the ceiling exists to catch a
       // remedy that RUNS AND DOES NOT WORK, and grading it on whether it worked meant
