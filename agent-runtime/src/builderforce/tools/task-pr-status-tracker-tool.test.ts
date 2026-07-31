@@ -107,6 +107,20 @@ describe("deduplicateByNumber (AC4)", () => {
   it("handles a single PR (AC4 singleton)", () => {
     expect(deduplicateByNumber([basePr({ number: 42, title: "only" })])).toHaveLength(1);
   });
+
+  it("preserves the repo a PR was found in, so org-wide scans stay attributable (F4)", () => {
+    const prs: GhPullRequest[] = [
+      basePr({ number: 1, repo: "org/alpha" }),
+      basePr({ number: 2, repo: "org/beta" }),
+      // Same PR number in a different repo is a distinct PR, but dedup is by
+      // number within a single task's result set — first occurrence wins.
+      basePr({ number: 1, repo: "org/gamma" }),
+    ];
+    const result = deduplicateByNumber(prs);
+    expect(result).toHaveLength(2);
+    expect(result.find((p) => p.number === 1)!.repo).toBe("org/alpha");
+    expect(result.find((p) => p.number === 2)!.repo).toBe("org/beta");
+  });
 });
 
 // ---------------------------------------------------------------------------
