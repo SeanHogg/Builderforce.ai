@@ -14,7 +14,7 @@ import { runOrchestrate, type OrchestrationContext } from "../shared-tools/node-
 const OrchestrateSchema = Type.Object({
   workflow: Type.String({
     description:
-      "Type of workflow: 'feature', 'bugfix', 'refactor', 'security_audit', 'planning', 'adversarial', or 'custom'. Use 'custom' to define your own steps.",
+      "Type of workflow: 'feature', 'bugfix', 'refactor', 'security_audit', 'quality_audit', 'pm_vision_audit', 'privacy_audit', 'planning', 'adversarial', 'prd_analysis', or 'custom'. Use 'custom' to define your own steps.",
   }),
   description: Type.String({
     description:
@@ -38,6 +38,8 @@ const OrchestrateSchema = Type.Object({
       { description: "Custom workflow steps (required if workflow='custom')" },
     ),
   ),
+  /** For prd_analysis workflow: require Impact Analysis step for large PRDs (AC.3) */
+  requireImpactAnalysis: Type.Optional(Type.Boolean({ description: "Require Impact Analysis step for PRD analysis workflows" })),
 });
 
 type OrchestrateParams = {
