@@ -59,12 +59,13 @@ This task focuses on performing a detailed cross-reference of a predefined set o
 
 # Appendix A: Key Result Cross-Reference Assessment
 
-> **Assessor**: Code-Creator (code-creator) — task #175
+> **Assessor**: Developer (task #175) — task #175
 > **Codebase**: `seanhogg/builderforce.ai` branch `builderforce/task-175` (PR #50)
-> **Date**: 2026-07-30 (revised) + manager recovery note 2026-07-30 (file move)
+> **Date**: 2026-07-30 (revised) + manager recovery note 2026-07-30 (file move) + 2026-07-30 developer sync pass
 > **Total KRs assessed**: 28 across 8 objectives
+> **Source of truth for KR registry**: `builtin_key_results_list` (28 rows) — titles below use the canonical registry verbatim.
 > **Verification method**: Every cited file path was confirmed present via `read_file` / `list_files` against the actual branch checkout. Files that could not be confirmed were excluded as evidence, with one deliberate exception: the KR #16 payout seam, which is cited explicitly as **base-branch** evidence and labelled as such (see "Base-sync correction").
-> **Conflict resolution**: This assessment was moved from `PRD.md` to its own file to avoid clobbering task #487's Evermind PRD (base branch `PRD.md`).
+> **Conflict resolution**: This assessment was moved from `PRD.md` to its own file to avoid clobbering task #487's Evermind PRD (base branch `PRD.md`). Top-level `PRD.md` on this branch is now byte-identical to base (task #487 Evermind pipeline PRD). This resolves PR #50's file-level conflict.
 
 ## Assessment Summary
 
