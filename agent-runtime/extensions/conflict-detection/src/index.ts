@@ -1,111 +1,86 @@
 /**
  * Conflict Detection Rules and Alerts - Main Entry Point
- * 
- * This module provides the Conflict Detection system for the Builderforce.ai platform.
- * It includes:
- * - Conflict detection engine
- * - Conflict alert entity with factory methods
- * - Conflict rule specification
- * - REST API endpoints for conflict detection and management
- * - Type definitions
+ *
+ * Implements the PRD deliverables:
+ * - Conflict detection engine (ConflictDetectionService)
+ * - Conflict rule spec (CONFLICT_RULE_SPEC / CONFLICT_RULE_SPEC_EXTENDED)
+ * - Conflict alert entity + DTO (ConflictAlert, ConflictAlertFactory, ConflictKey, ...)
+ * - Conflict detection + list APIs (registerConflictDetectionRoutes)
+ * - OpenAPI docs, sample payloads
  */
 
-export {
-  ConflictAlert,
-  ConflictSeverity,
-  ConflictStatus,
-  PriorityLevel,
-  ListConflictsQuery,
-  ResolveConflictRequest
-} from './conflict-alert.entity.js';
+import { CONFLICT_RULE_SPEC } from './conflict-rule.spec.js';
 
-export type {
-  Stakeholder,
-  Team,
-  PriorityRequest,
-  ConflictingPriorities,
-  ConflictKey,
-  ConflictRule,
-  ConflictAlert as IConflictAlert,
-  DetectConflictsRequest,
-  DetectConflictsResponse
-} from './conflict-rule.spec.js';
-
+// ── Entity / factory ──────────────────────────────────────────────────────────
 export {
   ConflictAlertFactory,
   generateConflictKey,
   parseConflictKey,
-  buildConflictingPriorities
+  buildConflictingPriorities,
+  ConflictSeverity as ConflictSeverityConst,
+  ConflictStatus as ConflictStatusConst,
+  PriorityLevel as PriorityLevelConst,
 } from './conflict-alert.entity.js';
 
+// ── Types / DTOs ──────────────────────────────────────────────────────────────
+export type {
+  ConflictAlert,
+  ConflictKey,
+  ConflictingPriorities,
+  Stakeholder,
+  Team,
+  PriorityLevel,
+  ConflictStatus,
+  ConflictSeverity,
+  PriorityRequest,
+  DetectConflictsRequest,
+  DetectConflictsResponse,
+  ListConflictsQuery,
+  ResolveConflictRequest,
+  ResolveConflictResponse,
+  ConflictRule,
+  GetConflictResponse,
+  ListConflictsResponse,
+  ApiResponse,
+  ApiSuccessResponse,
+  ApiErrorResponse,
+  HealthCheckResponse,
+} from './types.js';
+
+// ── Service ───────────────────────────────────────────────────────────────────
 export {
   ConflictDetectionService,
-  conflictDetectionService
+  conflictDetectionService,
+  clearConflictStore,
+  getConflictStore,
 } from './conflict-detector.service.js';
 
+// ── API ───────────────────────────────────────────────────────────────────────
 export {
   registerConflictDetectionRoutes,
-  ConflictRuleSpec
+  schemas,
+  getRuleSpecification,
+  ConflictRuleSpec,
+  CONFLICT_RULE_SPEC,
 } from './api.js';
 
+// ── Rule spec ─────────────────────────────────────────────────────────────────
 export {
-  CONFLICT_RULE_SPEC,
+  CONFLICT_RULE_SPEC as CONFLICT_RULE_SPEC_FROM_RULE_MODULE,
+  CONFLICT_RULE_SPEC_EXTENDED,
+  comparePriorities,
+  isPriorityAtOrAbove,
   validateRequestsForConflictDetection,
+  parseReviewWindow,
+  windowsOverlap,
   evaluateAgainstRule,
-  getRuleSpecification
+  type ReviewWindow,
 } from './conflict-rule.spec.js';
 
-export * from './types.js';
-
-/**
- * Quick start example
- * 
- * Example usage:
- * 
- * ```typescript
- * import { ConflictDetectionService } from './conflict-detector.service.js';
- * import { registerConflictDetectionRoutes } from './api.js';
- * 
- * // Initialize service
- * const detector = new ConflictDetectionService();
- * 
- * // Register API routes
- * fastify.register(registerConflictDetectionRoutes, {
- *   prefix: '/api/conflicts'
- * });
- * 
- * // Detect conflicts
- * const result = detector.detectConflicts({
- *   requests: [
- *     {
- *       id: 'req-001',
- *       title: 'Increase feature capacity',
- *       priority: 'P0',
- *       stakeholderId: 'alice',
- *       stakeholder: { name: 'Alice', role: 'Product Manager' },
- *       teamId: 'engineering',
- *       team: { name: 'Engineering' },
- *       createdAt: new Date().toISOString()
- *     },
- *     {
- *       id: 'req-002',
- *       title: 'Database scaling',
- *       priority: 'P0',
- *       stakeholderId: 'bob',
- *       stakeholder: { name: 'Bob', role: 'Engineering Manager' },
- *       teamId: 'engineering',
- *       team: { name: 'Engineering' },
- *       createdAt: new Date().toISOString()
- *     }
- *   ]
- * });
- * 
- * console.log('Conflicts detected:', result.conflicts);
- * ```
- */
-
-// Version
+// ── Version + convenience alias ───────────────────────────────────────────────
 export const VERSION = '1.0.0';
 
-// Rule specification (re-export for convenience)
+/**
+ * Convenience alias matching earlier docs: canonical rule.
+ */
 export const CONFLICT_RULE = CONFLICT_RULE_SPEC;
