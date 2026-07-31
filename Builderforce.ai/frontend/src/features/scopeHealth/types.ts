@@ -16,9 +16,10 @@ export interface Task {
   parentTaskId?: string | number;
   storyPoints?: number;
   creator?: string;
-  createdAt: string; // ISO date string
-  completedAt?: string; // ISO date string
-  updatedAt?: string;
+  createdAt: string;       // ISO date string
+  completedAt?: string;     // ISO date string — when the item was marked done
+  updatedAt?: string;       // ISO date string
+  dueDate?: string;         // ISO date string — deadline (used for epic timeline)
 }
 
 /* ── Configuration ──────────────────────────────────────────────────────── */
@@ -51,12 +52,13 @@ export interface Epic {
   id: string;
   title: string;
   owner?: string;
-  dueDate?: string; // ISO date string
+  dueDate?: string;        // ISO date string — deadline
+  createdAt?: string;      // ISO date string — when the epic was created
   totalItems: number;
   totalStoryPoints?: number;
   completedItems: number;
   completedStoryPoints?: number;
-  addedItems: number;       // items created in the current window
+  addedItems: number;      // items created in the current window
   addedStoryPoints?: number;
 }
 
@@ -83,6 +85,10 @@ export interface NewVsCompletedRatio {
   addedStoryPoints: number;
   completedItems: number;
   completedStoryPoints: number;
+  /** Items added (created) in the window — for drill-down (FR-2.4). */
+  addedInWindow: Task[];
+  /** Items completed in the window — for drill-down (FR-2.4). */
+  completedInWindow: Task[];
 }
 
 export interface EpicCompletion {
@@ -117,4 +123,18 @@ export interface ScopeHealthConfig {
     ratio: number;
     epicCompletion: number;
   };
+}
+
+/* ── Drill-down (FR-2.4) ───────────────────────────────────────────────── */
+
+export interface DrillDownItem {
+  id: string;
+  title: string;
+  type: string;
+  status: Task['status'];
+  storyPoints: number;
+  creator: string;
+  addedDate: string;
+  completedDate: string;
+  epicName: string;
 }
