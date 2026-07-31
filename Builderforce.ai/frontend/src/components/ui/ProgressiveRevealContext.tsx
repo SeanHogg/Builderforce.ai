@@ -191,6 +191,7 @@ export function ProgressiveRevealOrchestrator({
         data: null,
         error: null,
         timestamp: performance.now(),
+        timeoutMs,
         timeoutHandle: undefined,
         chunks: [],
       };
