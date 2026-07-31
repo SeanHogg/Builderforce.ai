@@ -458,9 +458,7 @@ export async function runTaskPrStatus(params: TaskPrStatusParams): Promise<Track
     }
 
     // Deduplicate by PR number (same PR may surface across strategies).
-    const dedupMap = new Map<number, GhPullRequest>();
-    for (const pr of allPrs) if (!dedupMap.has(pr.number)) dedupMap.set(pr.number, pr);
-    const deduped = Array.from(dedupMap.values());
+    const deduped = deduplicateByNumber(allPrs);
 
     const prResults: PrResult[] = deduped.map((pr) => ({
       number: pr.number,
@@ -469,7 +467,8 @@ export async function runTaskPrStatus(params: TaskPrStatusParams): Promise<Track
       state: classifyPrStatus(pr),
       author: pr.user?.login ?? null,
       createdAt: pr.created_at,
-      repo: repo,
+      // The repo the PR was actually found in — meaningful when scanning a whole org (F4).
+      repo: pr.repo ?? (repo ? `${owner}/${repo}` : undefined),
     }));
 
     // Sort by PR number descending (newest first typically).
