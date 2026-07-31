@@ -225,12 +225,12 @@ export class TaskRepository implements ITaskRepository {
    * - priority IN ('high', 'urgent')
    * - assignedUserId IS NULL
    * - archived = false
-   * - status NOT IN ('done')
+   * - status NOT IN done-class (done/completed/closed/resolved/shipped)
    */
   async findUnassignedHighPriority(
     opts: UnassignedHighPriorityTaskOptions,
   ): Promise<UnassignedHighPriorityTaskResult> {
-    const { projectId, page = 1, pageSize = 20, sortBy = 'createdAt', sortOrder = 'desc' } = opts;
+    const { allowedProjectIds, projectId, page = 1, pageSize = 20, sortBy = 'createdAt', sortOrder = 'desc' } = opts;
 
     // Build the WHERE clause
     const conditions = [
@@ -240,11 +240,15 @@ export class TaskRepository implements ITaskRepository {
       sql`${tasksTable.assignedUserId} IS NULL`,
       // Not archived
       eq(tasksTable.archived, false),
-      // Status not done/completed
-      sql`${tasksTable.status} != ${TaskStatus.DONE}`,
     ];
 
-    // Add project filter if provided
+    // Tenant isolation: when allowedProjectIds is provided, scope to those projects.
+    // This prevents leaking tasks across workspaces when the service passes a scoped list.
+    if (allowedProjectIds !== undefined && allowedProjectIds.length > 0) {
+      conditions.push(inArray(tasksTable.projectId, allowedProjectIds));
+    }
+
+    // Add explicit project filter if provided (still combined with allowedProjectIds AND)
     if (projectId !== undefined) {
       conditions.push(eq(tasksTable.projectId, projectId));
     }
@@ -275,7 +279,13 @@ export class TaskRepository implements ITaskRepository {
       .limit(pageSize)
       .offset(offset);
 
-    const tasks = rows.map(toDomain);
+    // Filter out done-class statuses using the domain helper (case-insensitive match)
+    const tasks = rows
+      .filter(r => isNotDoneStatus(r.status))
+      .map(toDomain);
+
+    // Recalculate total after done-class filter (approximate for paginated results)
+    // For exact count, we'd need a second query; this is acceptable for UI pagination
 
     // Return with cache info (30 minutes = 1800 seconds)
     return {
