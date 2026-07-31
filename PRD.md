@@ -128,3 +128,17 @@ _(see dedicated section below)_
 - **Customer-facing status pages** — this is an internal engineering tool only.
 - **Billing, seat management, or subscription tiers** — handled by platform infrastructure team.
 - **Historical data migration** from pre-existing dashboards beyond a configurable lookback window (default: 12 months).
+
+---
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
