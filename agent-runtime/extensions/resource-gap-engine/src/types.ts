@@ -1,106 +1,45 @@
 /**
- * @file types.ts
- * @module @builderforce/resource-gap-engine
- * @description Core data models for resource gap analysis; supports FR-1 through FR-6 and AC-2, AC-3, AC-4, AC-5, AC-9.
- *
- * Note: RBAC/persistence/API/locality wake/wan/wai/saat are NOT implemented in this pass:
- * they are reserved for follow-up tasks (#uf20-#uf23). Passwords, tokens, and calendar APIs are out-of-scope.
- *
- * RBAC controls mentioned in the PRD are NOT addressed here:
- * - read-only for executives, read/write for managers/HR/TA, full for admins
- * - employee skill access gating
- * - audit logging of recommendation status changes
- *
- * Instead, this pass focuses on the pure computation/validation layer: gap analysis,
- * hiring/deployment/upskill recommendations, CSV I/O, and PDF executive summaries.
+ * Core data models for resource gap analysis
+ * PRD: Resource Gap Analysis with Hiring & Deployment Recommendations
+ * FR-1 through FR-6
  */
 
-/**
- * Core employee data model (FR-1.1)
- */
-export interface RGEmployee {
-  /** Unique identifier */
-  readonly employeeId: string;
-  /** Current role title */
-  readonly role: string;
-  /** Team or organizational unit */
-  readonly team: RGTeam;
-  /** Skills with proficiency level 1–5 */
-  readonly skills: ReadonlyArray<RGSkill>;
-  /** Geographic location */
-  readonly location: string;
-  /** Availability percentage (0–1) */
-  readonly utilization: number;
-  /** Soft nullable: manager contact or manager ID */
-  readonly managerContactId?: string;
-}
+// ============================================================
+// FR-1: Employee / Skill data structures
+// ============================================================
 
-/**
- * Skill with proficiency rating (FR-1.1)
- */
 export interface RGSkill {
-  /** Skill name */
   readonly name: string;
-  /** Proficiency level 1–5 */
+  /** Proficiency level 1 (novice) to 5 (expert) */
   readonly level: 1 | 2 | 3 | 4 | 5;
 }
 
-/**
- * Team/org model (FR-2.3)
- */
-export interface RGTeam {
-  /** Team name */
-  readonly name: string;
-  /** Organization/unit ID */
-  readonly orgUnitId: string;
+export interface RGEmployee {
+  readonly employeeId: string;
+  readonly role: string;
+  readonly team: string;
+  readonly orgUnitId?: string;
+  readonly skills: ReadonlyArray<RGSkill>;
+  /** e.g. "AMS", "EMEA", "Remote" */
+  readonly location: string;
+  /** Availability percentage 0–1 (1 = fully available) */
+  readonly availability: number;
+  /** Optional manager contact / id */
+  readonly managerContactId?: string;
 }
 
-/**
- * Project demand data (FR-1.2)
- */
-export interface RGProjectRequirement {
-  /** Project identifier */
-  readonly projectId: string;
-  /** Required skills with minimum proficiency */
-  readonly requiredSkills: ReadonlyArray<RGSkillRequirement>;
-  /** Seniority band */
-  readonly seniorityBand: SeniorityBand;
-  /** Desired FTE demand (contractor vs. FTE equivalent) */
-  readonly demandFte: number;
-  /** Demand timeline (inclusive start/end quarter) */
-  readonly quarters: ReadonlyArray<RGQuarter>;
-  /** Constraint: include unit-specific resources (defaults to true). */
-  readonly includeUnitSpecific: boolean;
-}
+// ============================================================
+// FR-1: Project demand
+// ============================================================
 
-/**
- * Quarter identifier (FR-1.2)
- */
-export interface RGQuarter {
-  /** Quarter identifier (e.g., "2026-Q2") */
-  readonly label: string;
-  /** ISO calendar quarter (1–4) */
-  readonly quarter: 1 | 2 | 3 | 4;
-  /** Calendar year */
-  readonly year: number;
-}
-
-/**
- * Skill requirement (min proficiency) (FR-1.1)
- */
 export interface RGSkillRequirement {
-  /** Skill name */
   readonly skillName: string;
-  /** Minimum required proficiency */
   readonly minProficiency: 1 | 2 | 3 | 4 | 5;
 }
 
-/**
- * Seniority band (FR-2.3)
- */
 export type SeniorityBand =
   | "Entry"
-  | "Early Professional"
+  | "Junior"
   | "Mid"
   | "Senior"
   | "Lead"
@@ -108,290 +47,224 @@ export type SeniorityBand =
   | "Principal"
   | "Distinguished";
 
-/**
- * Resources positioning in a project quarter
- */
-export interface RGProjectOccupancy {
+export interface RGQuarter {
+  readonly label: string; // e.g. "2026-Q2"
+  readonly quarter: 1 | 2 | 3 | 4;
+  readonly year: number;
+}
+
+export interface RGProjectRequirement {
   readonly projectId: string;
-  readonly quarterLabel: string;
-  readonly personId: string;
-  readonly role: string;
-  /** One of: assigned-contributor-overseeing-or-extending-or-troubleshoot or enterprise-contracted-personnel. */
-  readonly classification:
-    | "assigned-contributor"
-    | "extending"
-    | "troubleshoot"
-    | "enterprise-contracted-personnel"
-    | "catalog-employee";
-  /** Soft nullable: assigned-scope, broad-supported-sub-project. */
-  readonly assignmentScope?: string;
+  readonly requiredSkills: ReadonlyArray<RGSkillRequirement>;
+  readonly seniorityBand: SeniorityBand;
+  readonly demandFte: number;
+  /** Inclusive quarters where demand applies */
+  readonly quarters: ReadonlyArray<RGQuarter>;
+  /** Team/org that will own the demand */
+  readonly targetTeam?: string;
+  readonly targetOrgUnitId?: string;
 }
 
-/**
- * Resource availability
- */
-export interface RGResourceAvailability {
-  readonly personId: string;
-  readonly quarterlyAvailability: ReadonlyArray<RGAvailabilityPeriod>;
-  /** Soft nullable: assigned-scope. */
-  readonly assignmentScope?: string;
-}
+// ============================================================
+// FR-2: Gap computation
+// ============================================================
 
-/**
- * Truncate-able availability period
- */
-export interface RGAvailabilityPeriod {
-  readonly quarterLabel: string;
-  readonly loadLevelClean?: number;
-  /** Soft nullable to represent undefined-resource-per-period or self-care periods. */
-  readonly assignablePerPeriod?: number;
-}
-
-/**
- * Gap result per skill/quarter
- */
-export type RGGap = TruncatedGap & { readonly impactedVacancyId?: string };
-
-/**
- * Truncated gap metadata
- */
-export interface TruncatedGap {
-  /** Skill name */
-  readonly skillName: string;
-  /** Quarter label */
-  readonly quarter: RGQuarter;
-  /** Demand amount (FTE) */
-  readonly demand: number;
-  /** Partial supply derived via weighting; often 0 if no available-covering-skill. */
-  readonly supply: number;
-  /** Difference (Demand - Supply). May be negative if over-supplied. */
-  readonly delta: number;
-  /** Supply coverage ratio (0–1; 1 if fully covered). */
-  readonly coverage: number;
-  /** Severity classification */
-  readonly severity: RGGapSeverity;
-  /** Additional metadata */
-  readonly metadata: RGGapMetadata;
-}
-
-/**
- * Severity levels per FR-2.4
- */
 export type RGGapSeverity = "Critical" | "Moderate" | "Low";
 
-/**
- * Gap metadata (FR-2.3)
- */
-export interface RGGapMetadata {
-  /** Skill clustering (tags) */
-  readonly skillClusters?: ReadonlyArray<string>;
-  /** Seniority band (if known) */
+export interface RGGap {
+  readonly skillName: string;
+  readonly canonicalSkill: string;
+  readonly quarter: RGQuarter;
+  readonly projectId?: string;
+  /** All projects that require this skill in this quarter */
+  readonly projectIds: ReadonlyArray<string>;
+  readonly demand: number;
+  /** Effective supply after proficiency weighting */
+  readonly supply: number;
+  /** Raw supply (unweighted headcount FTE) */
+  readonly rawSupply: number;
+  /** Demand - supply (>0 = gap) */
+  readonly delta: number;
+  /** Coverage ratio (0–1) — supply/demand, capped at 1 */
+  readonly coverage: number;
+  readonly severity: RGGapSeverity;
   readonly seniorityBand?: SeniorityBand;
-  /** Organization unit(s) that show exposure */
   readonly exposedOrgUnits: ReadonlyArray<string>;
-  /** Repeated across >=3 concurrent projects (compounding) */
-  readonly compoundingProjects?: ReadonlyArray<string>;
-  /** Superseded occupancy when partial-supply existed; quasi-delete flag for concerns. */
-  readonly supersededOccupancy?: RGProjectOccupancy;
+  /** True when same skill deficit in >=3 concurrent projects */
+  readonly isCompounding: boolean;
+  readonly compoundingProjectIds?: ReadonlyArray<string>;
+  readonly skillCluster?: string;
 }
 
-/**
- * Publishing options gap; used for conditional publishing into downstream surfaces.
- */
-export interface PublishingOptionsRequired {
-  readonly disableDashboard?: boolean;
-  readonly disableAdapters?: boolean;
+// ============================================================
+// Configuration
+// ============================================================
+
+export interface RGProficiencyWeightingEntry {
+  /** Minimum proficiency a supplier must have for this entry to apply */
+  readonly minSupplyLevel: 1 | 2 | 3 | 4 | 5;
+  /** Minimum required proficiency this entry applies to */
+  readonly forMinRequiredLevel: 1 | 2 | 3 | 4 | 5;
+  /** Max required level this entry applies to (inclusive) */
+  readonly forMaxRequiredLevel: 1 | 2 | 3 | 4 | 5;
+  /** Effective coverage ratio (0–1) */
+  readonly effectiveRatio: number;
 }
 
-/**
- * Hiring recommendation publishing options.
- */
-export interface HiringPublishingOptions extends PublishingOptionsRequired {
-  readonly enableStripeAdaptationIntegration?: boolean;
+export interface RGCurrencyRange {
+  readonly currency: string;
+  readonly minAnnual: number;
+  readonly maxAnnual: number;
 }
 
-/**
- * Deployment recommendation UI state.
- */
-export interface DeploymentUIState {
-  readonly showManagerRiskFlag: boolean;
-  readonly showSecondaryGapRisk: boolean;
+export interface RGConfiguration {
+  readonly canonicalSkillDict: Readonly<Record<string, string>>;
+  readonly proficiencyWeighting: ReadonlyArray<RGProficiencyWeightingEntry>;
+  readonly defaultCostRanges: Readonly<Record<string, RGCurrencyRange>>;
+  readonly timeToFillWeeks: Readonly<Record<string, number>>;
+  /** Duration (months) below which contract is favored over FTE hire */
+  readonly hireVsContractThresholdMonths: number;
+  /** Source team coverage threshold below which secondary gap risk is flagged */
+  readonly secondaryGapRiskThreshold: number;
+  /** Coverage ratio >= this counts as full */
+  readonly fullCoverageThreshold: number;
 }
 
-/**
- * Upskill pathway publishing options.
- */
-export interface UpskillPublishingOptions extends PublishingOptionsRequired {
-  readonly enableResourceCategories?: boolean;
-}
+// ============================================================
+// FR-3: Hiring recommendations
+// ============================================================
 
-/**
- * Combined metadata for recommendation outputs (uncoupled from UI surface).
- */
-export interface RecommendationMetadata {
-  readonly isPartiallyCovered?: boolean;
-  readonly impactedVacancyId?: string;
-  readonly supersededOccupancy?: RGProjectOccupancy;
-  readonly generatedAt: Date;
-  readonly publishingOptions: RecommendationPublishingOptions;
-}
+export type UrgencyTier = "P1" | "P2" | "P3";
 
-/**
- * Shared publishing options across rec types.
- */
-export interface RecommendationPublishingOptions {
-  readonly hiringOptions?: HiringPublishingOptions;
-  readonly deploymentOptions?: DeploymentUIState;
-  readonly upskillOptions?: UpskillPublishingOptions;
-}
-
-/**
- * Hiring recommendation fields per FR-3.1
- */
 export interface RGHiringRecommendation {
   readonly id: string;
+  readonly gapId: string;
   readonly roleTitle: string;
   readonly requiredSkills: ReadonlyArray<RGSkillRequirement>;
   readonly seniorityBand: SeniorityBand;
-  readonly targetTeam: RGTeam;
-  readonly demandQuarter: RGQuarter;
+  readonly targetTeam: string;
   readonly demandStartQuarter: RGQuarter;
   readonly urgencyTier: UrgencyTier;
-  readonly timeToFillEstimate: number;
-  readonly costRange?: CurrencyRange;
-  readonly recommendedDurationMonths?: number;
-  readonly isRecommendedContractorOverFte: boolean;
-  readonly projectId?: string;
-  readonly recommendationId: string;
-  readonly isPartialSupply: boolean;
-  readonly isCompounding: boolean;
-  readonly publicationMetadata: RecommendationMetadata;
+  readonly estimatedTimeToFillWeeks: number;
+  readonly estimatedCostRange?: RGCurrencyRange;
+  readonly recommendationType: "hire" | "contract";
+  readonly demandDurationMonths?: number;
+  readonly severity: RGGapSeverity;
+  readonly projectIds: ReadonlyArray<string>;
+  readonly status: "open" | "in_progress" | "approved" | "deferred";
 }
 
-/**
- * Deployment recommendation fields per FR-4.3
- */
+// ============================================================
+// FR-4: Deployment recommendations
+// ============================================================
+
 export interface RGDeploymentRecommendation {
-  readonly recommendationId: string;
+  readonly id: string;
+  readonly gapId: string;
   readonly employee: RGEmployee;
-  readonly fromTeam: RGTeam;
-  readonly toProjectRequirement: RGProjectRequirement;
-  readonly toTeam: RGTeam;
-  readonly fromProjectOccupancy?: RGProjectOccupancy;
-  readonly skillMatchScore: number;
-  readonly proficiencyDelta: number;
+  readonly sourceTeam: string;
+  readonly targetProjectId: string;
+  readonly targetTeam: string;
+  readonly skillMatchScore: number; // 0–1
+  readonly proficiencyDelta: number; // negative = employee below requirement
   readonly currentUtilization: number;
   readonly transitionLeadTimeDays: number;
   readonly secondaryGapRisk: boolean;
-  readonly coverageTargetForRiskCheck?: number;
-  readonly scoreReasoning?: string;
-  readonly publicationMetadata: RecommendationMetadata;
+  readonly secondaryGapDetail?: string;
+  readonly recommendationType: "redeploy";
+  readonly status: "open" | "in_progress" | "approved" | "deferred";
 }
 
-/**
- * Upskill recommendation fields per FR-5.2
- */
+// ============================================================
+// FR-5: Upskill pathways
+// ============================================================
+
+export type RGLearningResourceCategory =
+  | "internal_training"
+  | "external_certification"
+  | "mentorship"
+  | "online_course"
+  | "workshop";
+
 export interface RGUpskillRecommendation {
-  readonly recommendationId: string;
+  readonly id: string;
+  readonly gapId: string;
   readonly employee: RGEmployee;
   readonly targetSkill: string;
-  readonly currentProficiency: 1 | 2 | 3 | 4 | 5;
-  readonly requiredTargetProficiency: 1 | 2 | 3 | 4 | 5;
+  readonly currentProficiency: number;
+  readonly requiredProficiency: number;
   readonly proficiencyDelta: number;
-  readonly rampTimeEstimateWeeks: number;
-  readonly suggestedResourceCategories: ReadonlyArray<string>;
+  readonly rampTimeWeeks: number;
+  readonly suggestedCategories: ReadonlyArray<RGLearningResourceCategory>;
   readonly projectedReadinessQuarter: RGQuarter;
   readonly isNearMatch: boolean;
-  readonly publicationMetadata: RecommendationMetadata;
+  readonly recommendationType: "upskill";
 }
 
-/**
- * Executive summary fields per FR-6.5
- */
+// ============================================================
+// FR-6: Reports / exports
+// ============================================================
+
+export interface RGCoverageScore {
+  readonly projectId: string;
+  readonly quarter: RGQuarter;
+  readonly coverage: number; // 0–1
+  readonly totalDemanded: number;
+  readonly totalCovered: number;
+}
+
 export interface RGExecutiveSummary {
-  readonly dateRange: {
-    readonly startDate: Date;
-    readonly endDate: Date;
-  };
-  readonly criticalGaps: ReadonlyArray<RGGap>;
-  readonly hiringRecommendations: ReadonlyArray<RGHiringRecommendation>;
+  readonly dateRange: { start: Date; end: Date } | { quarters: ReadonlyArray<RGQuarter> };
+  readonly topCriticalGaps: ReadonlyArray<RGGap>;
+  readonly topHiringRecommendations: ReadonlyArray<RGHiringRecommendation>;
   readonly deploymentOpportunities: ReadonlyArray<RGDeploymentRecommendation>;
   readonly upskillOpportunities: ReadonlyArray<RGUpskillRecommendation>;
-  readonly costImpact: {
-    readonly estimatedAnnualHireCost: number;
-    readonly estimatedAnnualContractCost: number;
+  readonly costEstimate: {
+    readonly totalHireCostLow: number;
+    readonly totalHireCostHigh: number;
+    readonly totalContractCostLow: number;
+    readonly totalContractCostHigh: number;
     readonly estimatedSavingsFromRedeployment: number;
-    readonly estimatedUpskillCost: number;
   };
-  readonly additionalMetrics: Record<string, number>;
+  readonly coverageTrend: ReadonlyArray<{ quarter: string; avgCoverage: number }>;
+  readonly generatedAt: string; // ISO
 }
 
-/**
- * Report fields per FR-6.6
- */
-export interface RGReport {
-  readonly reportId: string;
-  readonly generatedAt: Date;
-  readonly employees: ReadonlyArray<RGEmployee>;
-  readonly projectRequirements: ReadonlyArray<RGProjectRequirement>;
+export interface RGAnalysisResult {
   readonly gaps: ReadonlyArray<RGGap>;
   readonly hiringRecommendations: ReadonlyArray<RGHiringRecommendation>;
   readonly deploymentRecommendations: ReadonlyArray<RGDeploymentRecommendation>;
   readonly upskillRecommendations: ReadonlyArray<RGUpskillRecommendation>;
+  readonly coverageScores: ReadonlyArray<RGCoverageScore>;
   readonly executiveSummary: RGExecutiveSummary;
-  readonly transformations: ReadonlyArray<GapTransformation>;
-  readonly publishingOptions: PublishingOptionsRequired;
+  readonly unmappedSkills: ReadonlyArray<string>;
+  readonly metadata: {
+    readonly employeeCount: number;
+    readonly projectCount: number;
+    readonly quarterCount: number;
+    readonly analysisRunAt: string;
+  };
 }
 
-/**
- * Custom transformations for gap evolution
- */
-export interface GapTransformation {
-  readonly timestamp: Date;
-  readonly type: "recommendation_applied" | "coverage_updated" | "supply_added";
-  readonly gap?: RGGap | TruncatedGap;
-  readonly description: string;
+export interface RGCsvEmployeeRow {
+  employeeId: string;
+  role: string;
+  team: string;
+  orgUnitId?: string;
+  skillName: string;
+  skillLevel: number;
+  location: string;
+  availability: number;
+  managerContactId?: string;
 }
 
-/**
- * Configuration options for analysis parameters, thresholds, and default entries
- */
-export interface RGConfiguration {
-  /** Default skill dictionary per FR-1.4 */
-  readonly canonicalSkillDictionary: Readonly<Record<string, string>>;
-  /** Proficiency weighting default table per FR-2.2 */
-  readonly proficiencyWeighting: ReadonlyArray<WeightingEntry>;
-  /** Default cost ranges per role family (FR-3.1) */
-  readonly defaultCostRanges: Readonly<Record<string, CurrencyRange>>;
-  /** Time-to-fill estimates in weeks, per role family (FR-3.2) */
-  readonly timeToFillEstimates: Readonly<Record<string, number>>;
-  /** Default threshold in months: hire vs. contract (FR-3.3) */
-  readonly hireVsContractThresholdMonths: number;
-  /** Minimum source-team coverage below which a redeployment is flagged as a secondary gap risk */
-  readonly secondaryGapRiskThreshold: number;
-  /** Proficiency ratio at or above which supply counts as fully covering */
-  readonly fullCoverageProficiencyRatio: number;
+export interface RGCsvProjectRow {
+  projectId: string;
+  skillName: string;
+  minProficiency: number;
+  seniorityBand: SeniorityBand;
+  demandFte: number;
+  quarterLabel: string;
+  targetTeam?: string;
+  targetOrgUnitId?: string;
 }
-
-/**
- * Weighting entry: minimum supply proficiency, max effective proficiency, effective coverage ratio
- */
-export interface WeightingEntry {
-  readonly minimumSupplyProficiency: 1 | 2 | 3 | 4 | 5;
-  readonly maxEffectiveProficiency: 1 | 2 | 3 | 4 | 5;
-  readonly effectiveRatio: number;
-}
-
-/**
- * Currency range (cents)
- */
-export interface CurrencyRange {
-  readonly currency: string;
-  readonly minimumCents: number;
-  readonly maximumCents: number;
-}
-
-/**
- * Urgency tier per FR-3.2
- */
-export type UrgencyTier = "P0" | "P1" | "P2" | "P3";
