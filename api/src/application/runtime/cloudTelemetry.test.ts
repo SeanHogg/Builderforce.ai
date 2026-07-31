@@ -130,7 +130,7 @@ describe("Telemetry Reconstruction & Ledger Integrity Gate", () => {
     expect(result.missingRecords).toContain("usage_snapshots missing");
   });
 
-  it("should fail when llm_usage_log is empty for the execution (GAP-O1)", () => {
+  it("should fail when llm_usage_log is empty for the execution (GAP-OBS-01)", () => {
     const result = cloudTelemetryReconstructionGate(executionId, {
       toolCount: 5,
       snapshotCount: 3,
