@@ -230,6 +230,7 @@ async function searchPrsForTaskId(
             merged_at: prDetail.merged_at,
             user: prDetail.user,
             created_at: prDetail.created_at,
+            repo: `${owner}/${repo}`,
           });
         }
       }
