@@ -5,7 +5,7 @@ import {
   TaskId, ProjectId, TaskStatus, TaskPriority, TaskType, AgentType,
   asTaskId, asProjectId, asAgentHostId,
 } from '../../domain/shared/types';
-import { isNotDoneStatus } from '../../domain/shared/doneClass';
+import { DONE_CLASS_STATUSES } from '../../domain/shared/doneClass';
 import { tasks as tasksTable } from '../database/schema';
 import type { Db } from '../database/connection';
 
