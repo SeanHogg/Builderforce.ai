@@ -55,7 +55,7 @@
     {
       "task_id": 467,
       "title": "Fix duplicate `padding` property breaking Next.js build",
-      "status": "backlog",
+      "status": "ready",
       "type": "bug",
       "severity": "critical",
       "severity_source": "existing",
