@@ -1,488 +1,501 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
+import { useToast } from '@/components/ToastProvider';
+import type { GuidedStep } from '@/lib/import-input-schema';
+import { BASE_FIELDS } from '@/lib/import-input-schema';
 
 /**
  * Guided (Interactive) Wizard Component
- * Implements FR-2: multi-step interactive form with inline validation and review step
+ * Implements FR-2: multi-step interactive form with inline validation, review, and confirmation.
  */
-export default function GuidedWizard({ userId, onCancel }: { userId: string | null; onCancel: () => void }) {
-  // Profile: i18n integration (v1.1). For now use plain English to avoid build breakage from missing keys.
-  const t = (key: string, fallback?: any): string => {
-    try {
-      return (window as any).__next_client_i18n__?.(key) || fallback || key;
-    } catch (e) {
-      return fallback || key;
-    }
-  };
 
-  // Hardcoded English labels for now
-  const modeLabel = 'Mode';
-  const guidedLabel = 'Guided';
-  const bulkLabel = 'Bulk';
-  const errorText: Record<string, string> = {
-    name: 'Name is required',
-    description: 'Description is required',
-    referenceId: 'Reference ID is required',
-    enabled: 'Enabled is required',
-    priority: 'Priority is required',
-    notes: 'Notes is required',
-  };
+interface GuidedWizardProps {
+  /** Values retained from a prior mode switch (FR-1.3). */
+  initialValues?: Record<string, string | null>;
+  /** Called whenever form data changes so the parent can persist for mode switching. */
+  onDataChange?: (data: Record<string, string | null>) => void;
+  /** Called when the user cancels (parent owns the confirm dialog). */
+  onCancel: () => void;
+}
 
-  const fieldTooltips: Record<string, string> = {
-    name: 'Unique, human-readable name (no special characters)',
-    description: 'Brief free-form description of the record (optional)',
-    referenceId: 'External system reference (optional)',
-    enabled: 'Toggle to enable/disable this record',
-    priority: 'Low, Medium, or High priority',
-    notes: 'Free-form notes',
-  };
+const STEPS: GuidedStep[] = ['step-info', 'step-fields', 'step-review', 'step-success'];
 
-  // Step types per FR-2.1
-  type Step = 'info' | 'fields' | 'review' | 'success';
+const STEP_LABEL_KEYS: Record<GuidedStep, string> = {
+  'step-info': 'stepInfo',
+  'step-fields': 'stepFields',
+  'step-review': 'stepReview',
+  'step-success': 'stepSuccess',
+};
 
-  // Initial state
-  const [step, setStep] = useState<Step>('info');
+export default function GuidedWizard({ initialValues, onDataChange, onCancel }: GuidedWizardProps) {
+  const t = useTranslations('import');
+  const confirmDialog = useConfirm();
+  const toast = useToast();
+
+  const [step, setStep] = useState<GuidedStep>('step-info');
   const [record, setRecord] = useState<Record<string, string | null>>({
-    name: '',
-    description: null,
-    referenceId: null,
-    enabled: null,
-    priority: null,
-    notes: null,
+    name: initialValues?.name ?? '',
+    description: initialValues?.description ?? null,
+    referenceId: initialValues?.referenceId ?? null,
+    enabled: initialValues?.enabled ?? null,
+    priority: initialValues?.priority ?? null,
+    notes: initialValues?.notes ?? null,
   });
-
-  // Validation state per FR-2.3 and per-field error tracking
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [touched, setTouched] = useState<Record<string, boolean>>({});
-
-  // Success state (FR-2.7): unique reference ID
+  const [errors, setErrors] = useState<Record<string, string | null>>({});
+  const [touched, setTouched] = useState<Set<string>>(new Set());
   const [referenceId, setReferenceId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const layoutMaxWidth = 800; // Local constant for this wizard
+  const updateRecord = useCallback(
+    (field: string, value: string | null) => {
+      setRecord((prev) => {
+        const next = { ...prev, [field]: value };
+        onDataChange?.(next);
+        return next;
+      });
+      setErrors((prev) => ({ ...prev, [field]: null }));
+    },
+    [onDataChange],
+  );
 
-  const requiredFields: Array<keyof typeof record> = ['name'];
-  const errorLabels = errorText;
-  const fieldHelp = fieldTooltips;
+  const handleBlur = useCallback((field: string) => {
+    setTouched((prev) => new Set(prev).add(field));
+    // Validate on blur (FR-2.3)
+    const value = record[field] ?? '';
+    const requiredFields = Object.entries(BASE_FIELDS)
+      .filter(([, f]) => f.required)
+      .map(([k]) => k);
 
-  const handleFieldChange = (field: keyof typeof record, value: string | null) => {
-    setRecord((prev) => ({ ...prev, [field]: value }));
-    setErrors((prev) => ({ ...prev, [field]: null }));
-  };
+    if (requiredFields.includes(field)) {
+      setErrors((prev) => {
+        const trimmed = (value ?? '').trim();
+        if (trimmed === '') {
+          return { ...prev, [field]: t(`fieldErrors.${field}`) };
+        }
+        return { ...prev, [field]: null };
+      });
+    }
+  }, [record, t]);
 
-  const handleFieldBlur = (field: keyof typeof record) => {
-    setTouched((prev) => ({ ...prev, [field]: true }));
-  };
+  const validateStep = useCallback((): boolean => {
+    const requiredFields = Object.entries(BASE_FIELDS)
+      .filter(([, f]) => f.required)
+      .map(([k]) => k);
 
-  const validateStep = (): boolean => {
-    const newErrors: Record<string, string> = {};
+    const newErrors: Record<string, string | null> = {};
     let isValid = true;
 
     for (const field of requiredFields) {
       const value = record[field] ?? '';
-      const trimmed = (value === null ? '' : value).trim();
-      if (trimmed === '') {
-        newErrors[field] = errorLabels[field];
+      if (String(value).trim() === '') {
+        newErrors[field] = t(`fieldErrors.${field}`);
         isValid = false;
       }
     }
-
     setErrors(newErrors);
     return isValid;
-  };
+  }, [record, t]);
 
-  const handleNextStep = () => {
-    if (step === 'fields') {
+  const stepIndex = useMemo(() => STEPS.indexOf(step), [step]);
+  const totalSteps = STEPS.length - 1; // success is final, not counted as a progress step
+
+  const handleNext = useCallback(async () => {
+    if (step === 'step-fields') {
       if (!validateStep()) return;
-      // Simulate backend submission (FR-2.6 review step, FR-2.7 success confirmation)
-      // In a full implementation, this would call an API endpoint
-      setStep('review');
-    } else if (step === 'review') {
-      setStep('success');
-      // Simulate success with a generated reference ID
-      setReferenceId(Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substr(2, 5));
+      setStep('step-review');
+    } else if (step === 'step-review') {
+      // Simulate submission
+      setSubmitting(true);
+      try {
+        // In production, call API here
+        await new Promise((r) => setTimeout(r, 600));
+        const id = Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 7);
+        setReferenceId(id);
+        setStep('step-success');
+        toast.success(t('guidedSubmitSuccess'));
+      } catch {
+        toast.error(t('guidedSubmitError'));
+      } finally {
+        setSubmitting(false);
+      }
+    } else if (step === 'step-info') {
+      setStep('step-fields');
     }
+  }, [step, validateStep, t, toast]);
+
+  const handleBack = useCallback(() => {
+    const idx = STEPS.indexOf(step);
+    if (idx > 0) setStep(STEPS[idx - 1]);
+  }, [step]);
+
+  const handleCancel = useCallback(async () => {
+    const confirmed = await confirmDialog({
+      title: t('cancelTitle'),
+      message: t('cancelMessage'),
+      destructive: true,
+      confirmLabel: t('discard'),
+      cancelLabel: t('keepEditing'),
+    });
+    if (confirmed) onCancel();
+  }, [confirmDialog, t, onCancel]);
+
+  const handleCreateAnother = useCallback(() => {
+    setRecord({ name: '', description: null, referenceId: null, enabled: null, priority: null, notes: null });
+    setErrors({});
+    setTouched(new Set());
+    setReferenceId(null);
+    setStep('step-info');
+    onDataChange?.({});
+  }, [onDataChange]);
+
+  const fieldError = (key: string): string | null => {
+    if (touched.has(key)) return errors[key] ?? null;
+    return null;
   };
 
-  const handlePreviousStep = () => {
-    if (step === 'success') {
-      setStep('review');
-    } else if (step === 'review') {
-      setStep('fields');
-    } else if (step === 'fields') {
-      setStep('info');
-    }
-  };
+  const inputStyle = (hasError: boolean): React.CSSProperties => ({
+    width: '100%',
+    padding: '10px 12px',
+    border: hasError ? '1px solid var(--coral-bright)' : '1px solid var(--border-subtle)',
+    borderRadius: 8,
+    fontSize: 14,
+    background: 'var(--bg-base)',
+    color: 'var(--text-primary)',
+    outline: 'none',
+    boxSizing: 'border-box',
+  });
 
-  const handleCancel = () => {
-    // FR-4.2: confirm dialog warning
-    const confirmed = window.confirm(t('guided.buttons.cancelConfirmation'));
-    if (confirmed) {
-      onCancel();
-    }
-  };
-
-  // Progress indicator (FR-2.1)
-  const progressStep = step === 'info' ? 0 : step === 'fields' ? 1 : step === 'review' ? 2 : 3;
-  const totalSteps = 3;
-
-  return (
-    <div style={{ maxWidth: layoutMaxWidth }}>
-      {/* Progress indicator */}
-      <div style={{ marginBottom: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-          <span>Step {progressStep} of {totalSteps}</span>
-        </div>
-        <div
-          style={{
-            width: '100%',
-            height: '4px',
-            backgroundColor: 'var(--border-color)',
-            marginTop: '8px',
-            borderRadius: '2px',
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              width: `${(progressStep / totalSteps) * 100}%`,
-              height: '100%',
-              backgroundColor: 'var(--primary-color)',
-            }}
-          />
+  // ── Step: info ──────────────────────────────────────────────
+  if (step === 'step-info') {
+    return (
+      <div>
+        <ProgressBar current={stepIndex} total={totalSteps} labels={STEPS.map((s) => t(STEP_LABEL_KEYS[s]))} />
+        <div style={cardStyle}>
+          <h2 style={h2Style}>{t('guidedInfoTitle')}</h2>
+          <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 24 }}>
+            {t('guidedInfoBody')}
+          </p>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button type="button" onClick={handleNext} style={primaryBtnStyle}>
+              {t('next')}
+            </button>
+            <button type="button" onClick={handleCancel} style={ghostBtnStyle}>
+              {t('cancel')}
+            </button>
+          </div>
         </div>
       </div>
+    );
+  }
 
-      {/* Step 0: Info/Overview (step-info) */}
-      {step === 'info' && (
-        <div style={{ padding: '24px', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '16px' }}>Welcome to the Guided Import</h2>
-          <p style={{ color: 'var(--text-muted)' }}>Enter your record details step by step with guidance and validation.</p>
-          <button
-            onClick={handleNextStep}
-            style={{
-              marginTop: '24px',
-              padding: '12px 24px',
-              backgroundColor: 'var(--primary-color)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '0.95rem',
-            }}
-          >
-            Next: Fields
-          </button>
-        </div>
-      )}
+  // ── Step: fields ────────────────────────────────────────────
+  if (step === 'step-fields') {
+    return (
+      <div>
+        <ProgressBar current={stepIndex} total={totalSteps} labels={STEPS.map((s) => t(STEP_LABEL_KEYS[s]))} />
 
-      {/* Step 1: Fields entry (step-fields) */}
-      {step === 'fields' && (
-        <div style={{ padding: '24px', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '16px' }}>Enter Record Details</h2>
+        <div style={cardStyle}>
+          <h2 style={h2Style}>{t('guidedFieldsTitle')}</h2>
 
           {/* Name (required) */}
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ fontWeight: '600', marginBottom: '8px', display: 'block' }}>
-              Name <span style={{ color: 'red' }}>*</span>
-            </label>
+          <FieldWrapper label={t('fieldName')} required tooltip={t('fieldTooltipName')} error={fieldError('name')}>
             <input
               type="text"
-              placeholder="Enter the record name"
               value={record.name ?? ''}
-              onChange={(e) => handleFieldChange('name', e.target.value)}
-              onBlur={() => handleFieldBlur('name')}
-              style={{
-                width: '100%',
-                padding: '10px',
-                border: errors.name ? '1px solid red' : '1px solid var(--border-color)',
-                borderRadius: '4px',
-                fontSize: '0.95rem',
-              }}
+              onChange={(e) => updateRecord('name', e.target.value)}
+              onBlur={() => handleBlur('name')}
+              style={inputStyle(!!fieldError('name'))}
+              placeholder={t('fieldPlaceholderName')}
+              aria-label={t('fieldName')}
+              aria-required="true"
+              aria-invalid={!!fieldError('name')}
             />
-            {errors.name && <div style={{ color: 'red', fontSize: '0.88rem', marginTop: '4px' }}>{errors.name}</div>}
-          </div>
+          </FieldWrapper>
 
           {/* Description */}
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ fontWeight: '600', marginBottom: '8px', display: 'block' }}>
-              Description
-            </label>
+          <FieldWrapper label={t('fieldDescription')} tooltip={t('fieldTooltipDescription')} error={fieldError('description')}>
             <textarea
-              placeholder="Enter a brief description"
               value={record.description ?? ''}
-              onChange={(e) => handleFieldChange('description', e.target.value)}
-              onBlur={() => handleFieldBlur('description')}
+              onChange={(e) => updateRecord('description', e.target.value)}
+              onBlur={() => handleBlur('description')}
               rows={4}
-              style={{
-                width: '100%',
-                padding: '10px',
-                border: errors.description ? '1px solid red' : '1px solid var(--border-color)',
-                borderRadius: '4px',
-                fontSize: '0.95rem',
-              }}
+              style={inputStyle(!!fieldError('description'))}
+              placeholder={t('fieldPlaceholderDescription')}
+              aria-label={t('fieldDescription')}
             />
-            {errors.description && (
-              <div style={{ color: 'red', fontSize: '0.88rem', marginTop: '4px' }}>{errors.description}</div>
-            )}
-            {record.description && (
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Think of 1–2 lines to summarize this record.
-              </div>
-            )}
-          </div>
+          </FieldWrapper>
 
           {/* Reference ID */}
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ fontWeight: '600', marginBottom: '8px', display: 'block' }}>
-              Reference ID
-            </label>
+          <FieldWrapper label={t('fieldReferenceId')} tooltip={t('fieldTooltipReferenceId')} error={fieldError('referenceId')}>
             <input
               type="text"
-              placeholder="e.g. GHI-2024-001"
               value={record.referenceId ?? ''}
-              onChange={(e) => handleFieldChange('referenceId', e.target.value)}
-              onBlur={() => handleFieldBlur('referenceId')}
-              style={{
-                width: '100%',
-                padding: '10px',
-                border: errors.referenceId ? '1px solid red' : '1px solid var(--border-color)',
-                borderRadius: '4px',
-                fontSize: '0.95rem',
-              }}
+              onChange={(e) => updateRecord('referenceId', e.target.value)}
+              onBlur={() => handleBlur('referenceId')}
+              style={inputStyle(!!fieldError('referenceId'))}
+              placeholder={t('fieldPlaceholderReferenceId')}
+              aria-label={t('fieldReferenceId')}
             />
-            {errors.referenceId && (
-              <div style={{ color: 'red', fontSize: '0.88rem', marginTop: '4px' }}>{errors.referenceId}</div>
-            )}
-          </div>
+          </FieldWrapper>
 
-          {/* Enabled toggle */}
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ fontWeight: '600', display: 'block', marginBottom: '8px' }}>Enabled</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Enabled */}
+          <FieldWrapper label={t('fieldEnabled')} tooltip={t('fieldTooltipEnabled')}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14 }}>
               <input
                 type="checkbox"
-                checked={record.enabled === true}
-                onChange={(e) => handleFieldChange('enabled', String(e.target.checked))}
-                style={{ fontSize: '1rem' }}
+                checked={record.enabled === 'true'}
+                onChange={(e) => updateRecord('enabled', String(e.target.checked))}
+                style={{ width: 18, height: 18 }}
               />
-              <span style={{ color: 'var(--text-muted)' }}>Enable this record</span>
-            </div>
-          </div>
+              <span style={{ color: 'var(--text-secondary)' }}>{t('fieldEnabledLabel')}</span>
+            </label>
+          </FieldWrapper>
 
           {/* Priority */}
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ fontWeight: '600', display: 'block', marginBottom: '8px' }}>Priority</label>
+          <FieldWrapper label={t('fieldPriority')} tooltip={t('fieldTooltipPriority')} error={fieldError('priority')}>
             <select
               value={record.priority ?? ''}
-              onChange={(e) => handleFieldChange('priority', e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px',
-                border: errors.priority ? '1px solid red' : '1px solid var(--border-color)',
-                borderRadius: '4px',
-                fontSize: '0.95rem',
-              }}
+              onChange={(e) => updateRecord('priority', e.target.value || null)}
+              style={inputStyle(!!fieldError('priority'))}
+              aria-label={t('fieldPriority')}
             >
-              <option value="">Select a priority</option>
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
+              <option value="">{t('fieldPlaceholderPriority')}</option>
+              <option value="Low">{t('priorityLow')}</option>
+              <option value="Medium">{t('priorityMedium')}</option>
+              <option value="High">{t('priorityHigh')}</option>
             </select>
-            {errors.priority && (
-              <div style={{ color: 'red', fontSize: '0.88rem', marginTop: '4px' }}>{errors.priority}</div>
-            )}
-          </div>
+          </FieldWrapper>
 
           {/* Notes */}
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ fontWeight: '600', display: 'block', marginBottom: '8px' }}>Notes</label>
+          <FieldWrapper label={t('fieldNotes')} tooltip={t('fieldTooltipNotes')}>
             <textarea
-              placeholder="Add any additional notes"
               value={record.notes ?? ''}
-              onChange={(e) => handleFieldChange('notes', e.target.value)}
-              onBlur={() => handleFieldBlur('notes')}
+              onChange={(e) => updateRecord('notes', e.target.value)}
+              onBlur={() => handleBlur('notes')}
               rows={4}
-              style={{
-                width: '100%',
-                padding: '10px',
-                border: errors.notes ? '1px solid red' : '1px solid var(--border-color)',
-                borderRadius: '4px',
-                fontSize: '0.95rem',
-              }}
+              style={inputStyle(false)}
+              placeholder={t('fieldPlaceholderNotes')}
+              aria-label={t('fieldNotes')}
             />
-            {errors.notes && (
-              <div style={{ color: 'red', fontSize: '0.88rem', marginTop: '4px' }}>{errors.notes}</div>
-            )}
-          </div>
+          </FieldWrapper>
 
-          <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'space-between' }}>
-            <button
-              onClick={handlePreviousStep}
-              style={{ padding: '8px 16px', border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer' }}
-            >
-              {t('guided.buttons.back')}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
+            <button type="button" onClick={handleBack} style={secondaryBtnStyle}>
+              {t('back')}
             </button>
-            <button
-              onClick={handleNextStep}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: 'var(--primary-color)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              {t('guided.buttons.next', { step: 'Fields' })}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Step 2: Review (step-review) */}
-      {step === 'review' && (
-        <div style={{ padding: '24px', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '16px' }}>Review Your Record</h2>
-          <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>Please confirm the details below before submitting.</p>
-
-          <div style={{ padding: '16px', backgroundColor: 'var(--bg-deep)', borderRadius: '8px', marginBottom: '24px' }}>
-            <h3 style={{ fontSize: '1.1rem', marginBottom: '16px' }}>Record Details</h3>
-            <div style={{ fontSize: '0.95rem' }}>
-              <div style={{ marginBottom: '8px' }}>
-                {/* Inline edit link per section */}
-                <strong>Name:</strong> <span>{record.name} <a href="#" style={{ color: 'var(--primary-color)', marginLeft: '12px' }}></a></span>
-              </div>
-              {record.description && (
-                <div style={{ marginBottom: '8px' }}>
-                  <strong>Description:</strong> <span>{record.description}</span>
-                </div>
-              )}
-              {record.referenceId && (
-                <div style={{ marginBottom: '8px' }}>
-                  <strong>Reference ID:</strong> <span>{record.referenceId}</span>
-                </div>
-              )}
-              <div style={{ marginBottom: '8px' }}>
-                <strong>Enabled:</strong> <span>{record.enabled ? 'Yes' : 'No'}</span>
-              </div>
-              {record.priority && (
-                <div style={{ marginBottom: '8px' }}>
-                  <strong>Priority:</strong> <span>{record.priority}</span>
-                </div>
-              )}
-              {record.notes && (
-                <div style={{ marginBottom: '8px' }}>
-                  <strong>Notes:</strong> <span>{record.notes}</span>
-                </div>
-              )}
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button type="button" onClick={handleCancel} style={ghostBtnStyle}>
+                {t('cancel')}
+              </button>
+              <button type="button" onClick={handleNext} style={primaryBtnStyle}>
+                {t('next')}
+              </button>
             </div>
           </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-            <button
-              onClick={handlePreviousStep}
-              style={{ padding: '8px 16px', border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer' }}
-            >
-              Edit
-            </button>
-            <button
-              onClick={handleNextStep}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: 'var(--primary-color)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              Submit
-            </button>
-          </div>
         </div>
-      )}
-
-      {/* Step 3: Success (step-success) - FR-2.7 */}
-      {step === 'success' && (
-        <div style={{ padding: '24px', border: '1px solid var(--border-color)', borderRadius: '8px', textAlign: 'center' }}>
-          <div style={{ fontSize: '3rem', color: 'green', marginBottom: '16px' }}>✓</div>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '16px' }}>Import Successful!</h2>
-          <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>Your record has been created and is now available in the system.</p>
-
-          <div style={{ padding: '16px', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '24px' }}>
-            <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Reference ID</div>
-            <div style={{ fontSize: '1.2rem', fontFamily: 'monospace' }}>{referenceId}</div>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <button
-              onClick={handleNextStep}
-              style={{
-                padding: '12px 24px',
-                backgroundColor: 'var(--primary-color)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-              }}
-            >
-              Create Another
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Navigation bar */}
-      <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'space-between' }}>
-        {step !== 'info' && (
-          <button
-            onClick={handlePreviousStep}
-            style={{ padding: '8px 16px', border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer' }}
-          >
-            {t('guided.buttons.back')}
-          </button>
-        )}
-        {step !== 'success' && (
-          <button
-            onClick={handleCancel}
-            style={{
-              padding: '8px 16px',
-              color: 'var(--text-muted)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
-          >
-            {t('guided.buttons.cancel')}
-          </button>
-        )}
-        {step !== 'info' && step !== 'success' && (
-          <button
-            onClick={handleNextStep}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: step === 'review' ? 'var(--primary-color)' : 'transparent',
-              color: step === 'review' ? 'white' : 'var(--primary-color)',
-              border: step === 'review' ? 'none' : '1px solid var(--primary-color)',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              marginLeft: 'auto',
-            }}
-          >
-            {t('guided.buttons.next', { step: ['Info', 'Fields', 'Review'][progressStep] })}
-          </button>
-        )}
       </div>
+    );
+  }
 
-      {/* FR-4.4: ARIA labels and semantic structure for accessibility */}
-      <nav aria-label={t('guided.buttons.progressLabel')} style={{ marginTop: '24px' }}>
-        <ol start={progressStep} style={{ listStyle: 'none', padding: 0, display: 'flex', gap: '16px' }}>
-          <li style={{ color: progressStep === 1 ? 'var(--primary-color)' : 'var(--text-muted)' }}>{t('guided.buttons.step0')}</li>
-          <li style={{ color: progressStep === 2 ? 'var(--primary-color)' : 'var(--text-muted)' }}>{t('guided.buttons.step1')}</li>
-          <li style={{ color: progressStep === 3 ? 'var(--primary-color)' : 'var(--text-muted)' }}>{t('guided.buttons.step2')}</li>
-        </ol>
-      </nav>
+  // ── Step: review ────────────────────────────────────────────
+  if (step === 'step-review') {
+    const entries = Object.entries(BASE_FIELDS).filter(([k]) => {
+      const v = record[k];
+      return v !== null && v !== undefined && String(v).trim() !== '';
+    });
+
+    return (
+      <div>
+        <ProgressBar current={stepIndex} total={totalSteps} labels={STEPS.map((s) => t(STEP_LABEL_KEYS[s]))} />
+
+        <div style={cardStyle}>
+          <h2 style={h2Style}>{t('guidedReviewTitle')}</h2>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
+            {t('guidedReviewBody')}
+          </p>
+
+          <div style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: 20, marginBottom: 24 }}>
+            {entries.map(([key]) => {
+              const field = BASE_FIELDS[key];
+              const value = key === 'enabled'
+                ? (record.enabled === 'true' ? t('yes') : t('no'))
+                : record[key] ?? '—';
+              return (
+                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border-subtle)', fontSize: 14 }}>
+                  <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{field.label}</span>
+                  <span style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span>{value}</span>
+                    {/* FR-2.6 inline edit link */}
+                    <button
+                      type="button"
+                      onClick={() => setStep('step-fields')}
+                      style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 13, textDecoration: 'underline' }}
+                      aria-label={`${t('edit')} ${field.label}`}
+                    >
+                      {t('edit')}
+                    </button>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <button type="button" onClick={handleBack} style={secondaryBtnStyle}>
+              {t('back')}
+            </button>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button type="button" onClick={handleCancel} style={ghostBtnStyle}>
+                {t('cancel')}
+              </button>
+              <button type="button" onClick={handleNext} disabled={submitting} style={primaryBtnStyle}>
+                {submitting ? t('submitting') : t('submit')}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step: success ───────────────────────────────────────────
+  return (
+    <div>
+      <div style={{ ...cardStyle, textAlign: 'center' }}>
+        <div style={{ fontSize: 48, color: 'var(--accent)', marginBottom: 16 }} aria-hidden="true">✓</div>
+        <h2 style={h2Style}>{t('guidedSuccessTitle')}</h2>
+        <p style={{ color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.6 }}>
+          {t('guidedSuccessBody')}
+        </p>
+
+        <div style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: 20, marginBottom: 24, display: 'inline-block', minWidth: 300 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {t('referenceIdLabel')}
+          </div>
+          <div style={{ fontSize: 18, fontFamily: 'monospace', color: 'var(--text-primary)', fontWeight: 700 }}>
+            {referenceId}
+          </div>
+        </div>
+
+        <div>
+          <button type="button" onClick={handleCreateAnother} style={primaryBtnStyle}>
+            {t('createAnother')}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
+
+// ── Sub-components ─────────────────────────────────────────────
+
+function ProgressBar({ current, total, labels }: { current: number; total: number; labels: string[] }) {
+  return (
+    <nav aria-label="Progress" style={{ marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
+        <span>{`${current} / ${total}`}</span>
+        <span>{labels[current]}</span>
+      </div>
+      <div style={{ width: '100%', height: 4, background: 'var(--border-subtle)', borderRadius: 2, overflow: 'hidden' }}>
+        <div
+          style={{
+            width: `${((current) / Math.max(total, 1)) * 100}%`,
+            height: '100%',
+            background: 'var(--accent)',
+            transition: 'width 0.3s ease',
+            borderRadius: 2,
+          }}
+        />
+      </div>
+    </nav>
+  );
+}
+
+function FieldWrapper({
+  label, required, tooltip, error, children,
+}: {
+  label: string; required?: boolean; tooltip?: string; error?: string | null; children: React.ReactNode;
+}) {
+  return (
+    <div style={{ marginBottom: 20 }} role="group" aria-labelledby={`field-label-${label}`}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <label id={`field-label-${label}`} style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+          {label}
+          {required && <span style={{ color: 'var(--coral-bright)', marginLeft: 4 }} aria-hidden="true">*</span>}
+        </label>
+        {tooltip && (
+          <span
+            title={tooltip}
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 18, height: 18, borderRadius: '50%', background: 'var(--border-subtle)',
+              fontSize: 11, color: 'var(--text-secondary)', cursor: 'help',
+            }}
+            aria-label={tooltip}
+            tabIndex={0}
+          >
+            ?
+          </span>
+        )}
+      </div>
+      {children}
+      {error && (
+        <div style={{ color: 'var(--coral-bright)', fontSize: 13, marginTop: 4 }} role="alert">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Shared styles ──────────────────────────────────────────────
+
+const cardStyle: React.CSSProperties = {
+  padding: 24,
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 12,
+  background: 'var(--bg-base)',
+};
+
+const h2Style: React.CSSProperties = {
+  fontSize: 18,
+  fontWeight: 700,
+  margin: '0 0 16px',
+  color: 'var(--text-primary)',
+};
+
+const primaryBtnStyle: React.CSSProperties = {
+  padding: '10px 22px',
+  background: 'var(--accent)',
+  color: '#fff',
+  border: 'none',
+  borderRadius: 8,
+  cursor: 'pointer',
+  fontSize: 14,
+  fontWeight: 600,
+};
+
+const secondaryBtnStyle: React.CSSProperties = {
+  padding: '10px 22px',
+  background: 'var(--bg-elevated)',
+  color: 'var(--text-primary)',
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 8,
+  cursor: 'pointer',
+  fontSize: 14,
+  fontWeight: 500,
+};
+
+const ghostBtnStyle: React.CSSProperties = {
+  padding: '10px 22px',
+  background: 'transparent',
+  color: 'var(--text-secondary)',
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 8,
+  cursor: 'pointer',
+  fontSize: 14,
+  fontWeight: 500,
+};
