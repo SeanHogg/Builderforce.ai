@@ -81,7 +81,7 @@ export function TeamHealthDashboard({ projectId }: { projectId: number }) {
 
   if (loading) {
     return (
-      <div className="th-dashboard" style={rootStyle}>
+      <div className="th-dashboard">
         <style>{DASHBOARD_CSS}</style>
         <div style={centeredStyle}>{t('loading')}</div>
       </div>
@@ -90,15 +90,17 @@ export function TeamHealthDashboard({ projectId }: { projectId: number }) {
 
   if (error || !data) {
     return (
-      <div className="th-dashboard" style={rootStyle}>
+      <div className="th-dashboard">
         <style>{DASHBOARD_CSS}</style>
         <div style={{ ...centeredStyle, color: '#f87171' }}>
           <span>{t('error')}</span>
           <button
             type="button"
             onClick={manualRefresh}
-            className="th-retry-btn"
-            style={retryBtnStyle}
+            style={{
+              background: 'transparent', color: 'inherit', border: '1px solid currentColor',
+              borderRadius: 6, padding: '4px 14px', fontSize: '0.8rem', cursor: 'pointer',
+            }}
           >
             {t('retry')}
           </button>
@@ -110,29 +112,28 @@ export function TeamHealthDashboard({ projectId }: { projectId: number }) {
   const { healthScore, contributors, blockers, agingWip, agents } = data;
 
   return (
-    <div className="th-dashboard" style={rootStyle}>
+    <div className="th-dashboard">
       <style>{DASHBOARD_CSS}</style>
 
       {/* ── Header row: title, score ring, refresh ─────────────────────── */}
-      <header style={headerStyle}>
+      <header className="th-dashboard-header">
         <div>
-          <h1 style={titleStyle}>{t('title')}</h1>
-          <p style={subtitleStyle}>{t('subtitle')}</p>
+          <h1 className="th-dashboard-title">{t('title')}</h1>
+          <p className="th-dashboard-subtitle">{t('subtitle')}</p>
         </div>
-        <div style={headerRightStyle}>
+        <div className="th-dashboard-header-right">
           <HealthScoreRing score={healthScore.overall} />
-          <div style={refreshGroupStyle}>
+          <div className="th-dashboard-refresh-group">
             <button
               type="button"
               onClick={manualRefresh}
               className="th-refresh-btn"
-              style={refreshBtnStyle}
               aria-label={t('refresh')}
             >
               {t('refreshLabel')}
             </button>
             {lastUpdatedLabel && (
-              <span style={lastUpdatedStyle}>
+              <span className="th-last-updated">
                 {t('lastUpdated')}: {lastUpdatedLabel}
               </span>
             )}
@@ -141,7 +142,7 @@ export function TeamHealthDashboard({ projectId }: { projectId: number }) {
       </header>
 
       {/* ── Component score summary bar ────────────────────────────────── */}
-      <div style={componentBarStyle}>
+      <div className="th-dashboard-component-bar">
         <ScoreChip
           label={t('sectionBlockers')}
           value={Math.round((1 - healthScore.components.blockers) * 100)}
@@ -165,7 +166,7 @@ export function TeamHealthDashboard({ projectId }: { projectId: number }) {
       </div>
 
       {/* ── Sections ───────────────────────────────────────────────────── */}
-      <div style={sectionsStyle}>
+      <div className="th-dashboard-sections">
         <WorkloadPanel contributors={contributors} config={healthScore.config} />
         <BlockersPanel blockers={blockers} config={healthScore.config} />
         <AgingWipPanel items={agingWip} config={healthScore.config} />
@@ -179,93 +180,22 @@ export function TeamHealthDashboard({ projectId }: { projectId: number }) {
 
 function ScoreChip({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="th-score-chip" style={scoreChipStyle}>
-      <div className="th-score-chip-ring" style={{ ...scoreChipRingStyle, borderColor: color }}>
+    <div className="th-score-chip">
+      <div className="th-score-chip-ring" style={{ borderColor: color }}>
         <span style={{ fontSize: '0.8rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
       </div>
-      <span style={scoreChipLabelStyle}>{label}</span>
+      <span className="th-score-chip-label">{label}</span>
     </div>
   );
 }
 
-/* ── Static styles ───────────────────────────────────────────────────────── */
-
-const rootStyle: React.CSSProperties = {
-  display: 'flex', flexDirection: 'column', gap: 20,
-  padding: '20px 24px', minHeight: '100%',
-  background: 'var(--bg-surface)', color: 'var(--text-primary)',
-};
+/* ── Styles ───────────────────────────────────────────────────────────────── */
 
 const centeredStyle: React.CSSProperties = {
   display: 'flex', flexDirection: 'column', alignItems: 'center',
   justifyContent: 'center', gap: 12, flex: 1, minHeight: 400,
   fontSize: '0.9rem', color: 'var(--text-muted)',
 };
-
-const retryBtnStyle: React.CSSProperties = {
-  background: 'transparent', color: 'inherit', border: '1px solid currentColor',
-  borderRadius: 6, padding: '4px 14px', fontSize: '0.8rem', cursor: 'pointer',
-};
-
-const headerStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-  flexWrap: 'wrap', gap: 16, flexShrink: 0,
-};
-
-const titleStyle: React.CSSProperties = {
-  margin: 0, fontFamily: 'var(--font-display)', fontWeight: 700,
-  fontSize: '1.4rem', lineHeight: 1.2,
-};
-
-const subtitleStyle: React.CSSProperties = {
-  margin: '4px 0 0', fontSize: '0.82rem', color: 'var(--text-muted)',
-  maxWidth: 480, lineHeight: 1.5,
-};
-
-const headerRightStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0,
-};
-
-const refreshGroupStyle: React.CSSProperties = {
-  display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4,
-};
-
-const refreshBtnStyle: React.CSSProperties = {
-  background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-  border: '1px solid var(--border-subtle)', borderRadius: 8,
-  padding: '6px 16px', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
-};
-
-const lastUpdatedStyle: React.CSSProperties = {
-  fontSize: '0.65rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums',
-};
-
-const componentBarStyle: React.CSSProperties = {
-  display: 'flex', gap: 12, flexWrap: 'wrap', flexShrink: 0,
-};
-
-const scoreChipStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 8,
-  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-  borderRadius: 10, padding: '8px 14px', minWidth: 0,
-};
-
-const scoreChipRingStyle: React.CSSProperties = {
-  width: 36, height: 36, borderRadius: '50%',
-  border: '3px solid', display: 'flex', alignItems: 'center',
-  justifyContent: 'center', flexShrink: 0,
-};
-
-const scoreChipLabelStyle: React.CSSProperties = {
-  fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)',
-  whiteSpace: 'nowrap',
-};
-
-const sectionsStyle: React.CSSProperties = {
-  display: 'flex', flexDirection: 'column', gap: 16, flex: 1, minHeight: 0,
-};
-
-/* ── Shared CSS (animations, utility classes) ──────────────────────────── */
 
 const DASHBOARD_CSS = `
 .th-dashboard {
@@ -274,6 +204,14 @@ const DASHBOARD_CSS = `
   --th-aging: #c98500;
   --th-agent: #3987e5;
   --th-green: #22c55e;
+  --th-ok: #22c55e;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px 24px;
+  min-height: 100%;
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 :root[data-theme='light'] .th-dashboard {
   --th-blocker: #e34948;
@@ -281,6 +219,59 @@ const DASHBOARD_CSS = `
   --th-aging: #eda100;
   --th-agent: #2a78d6;
   --th-green: #16a34a;
+}
+
+/* Header */
+.th-dashboard-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  flex-wrap: wrap; gap: 16px; flex-shrink: 0;
+}
+.th-dashboard-title {
+  margin: 0; font-family: var(--font-display); font-weight: 700;
+  font-size: 1.4rem; line-height: 1.2;
+}
+.th-dashboard-subtitle {
+  margin: 4px 0 0; font-size: 0.82rem; color: var(--text-muted);
+  max-width: 480px; line-height: 1.5;
+}
+.th-dashboard-header-right {
+  display: flex; align-items: center; gap: 20px; flex-shrink: 0;
+}
+.th-dashboard-refresh-group {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+}
+.th-last-updated {
+  font-size: 0.65rem; color: var(--text-muted); font-variant-numeric: tabular-nums;
+}
+.th-refresh-btn {
+  background: var(--bg-elevated); color: var(--text-primary);
+  border: 1px solid var(--border-subtle); border-radius: 8px;
+  padding: 6px 16px; font-size: 0.78rem; font-weight: 600; cursor: pointer;
+}
+.th-refresh-btn:hover { background: var(--border-subtle); }
+
+/* Component bar */
+.th-dashboard-component-bar {
+  display: flex; gap: 12px; flex-wrap: wrap; flex-shrink: 0;
+}
+.th-score-chip {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg-elevated); border: 1px solid var(--border-subtle);
+  border-radius: 10px; padding: 8px 14px; min-width: 0;
+}
+.th-score-chip-ring {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 3px solid; display: flex; align-items: center;
+  justifyContent: center; flex-shrink: 0;
+}
+.th-score-chip-label {
+  font-size: 0.72rem; font-weight: 600; color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Sections */
+.th-dashboard-sections {
+  display: flex; flex-direction: column; gap: 16px; flex: 1; min-height: 0;
 }
 
 /* Section panel shared */
@@ -298,6 +289,31 @@ const DASHBOARD_CSS = `
 }
 .th-panel-header:hover { background: var(--bg-elevated); }
 .th-panel-body { padding: 16px 18px; }
+
+/* Section (CollapsibleSection) */
+.th-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.th-section-header {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 14px 18px;
+  background: none; border: none; cursor: pointer;
+  color: var(--text-primary); font-size: 0.95rem;
+  font-weight: 700;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.th-section-header:hover { background: var(--bg-elevated); }
+.th-section-header:focus-visible { outline: 2px solid var(--th-agent); outline-offset: -2px; }
+.th-section-caret { font-size: 0.7rem; width: 14px; color: var(--text-muted); flex-shrink: 0; }
+.th-section-title { margin: 0; font-size: 0.88rem; font-weight: 700; }
+.th-section-badge {
+  padding: 1px 8px; border-radius: 999px;
+  font-size: 0.64rem; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.th-section-body { padding: 16px 18px; }
 
 /* Capacity bar */
 .th-capacity-bar { height: 10px; border-radius: 5px; background: var(--bg-elevated); overflow: hidden; flex: 1; min-width: 80px; }
@@ -327,14 +343,13 @@ const DASHBOARD_CSS = `
 }
 .th-action-btn:hover { background: var(--bg-elevated); }
 
-.th-retry-btn { background: transparent; color: inherit; border: 1px solid currentColor; border-radius: 6px; padding: 4px 14px; font-size: 0.78rem; cursor: pointer; }
-
 /* Scrollable table */
 .th-table-wrap { overflow-x: auto; }
 .th-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
 .th-table th { text-align: left; padding: 8px 12px; font-weight: 700; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); border-bottom: 1px solid var(--border-subtle); white-space: nowrap; }
 .th-table td { padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
 .th-table tr:last-child td { border-bottom: none; }
+.th-table tbody tr:hover { background: var(--bg-elevated); }
 
 /* Util chart */
 .th-util-chart { display: flex; align-items: flex-end; gap: 3px; height: 60px; }
@@ -343,6 +358,6 @@ const DASHBOARD_CSS = `
 .th-util-idle { background: var(--bg-elevated); }
 
 @media (max-width: 900px) {
-  .th-dashboard header { flex-direction: column; }
+  .th-dashboard-header { flex-direction: column; }
 }
 `;
