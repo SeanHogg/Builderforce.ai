@@ -47,6 +47,7 @@ type TaskPrStatusParams = {
   taskIds: string[];
   owner: string;
   repo?: string;
+  maxResultsPerTask?: number;
 };
 
 // ---------------------------------------------------------------------------
