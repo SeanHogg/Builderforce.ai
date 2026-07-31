@@ -51,8 +51,10 @@ const rosterFor = (roleKeys: string[]) => buildRoleRoster({
  * exists, it wraps only the write, and `shape_unmatched` is never written to at all.
  */
 describe('lane auto-staffing is gated, and only the WRITE is gated', () => {
+  // `.href`: the ambient `URL` here is the workers-types one, which is not assignable to
+  // node:url's `URL`. fileURLToPath accepts a string — same idiom as the sibling tests.
   const source = readFileSync(
-    fileURLToPath(new URL('./staffUnfilledLanes.ts', import.meta.url)), 'utf8',
+    fileURLToPath(new URL('./staffUnfilledLanes.ts', import.meta.url).href), 'utf8',
   );
 
   it('performs the lane write only under the explicit grant', () => {
