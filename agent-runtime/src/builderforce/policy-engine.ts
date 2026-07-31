@@ -261,7 +261,7 @@ export const DEFAULT_PRD_ANALYSIS_POLICIES: (PolicyDefinition & { conditions: Po
     conditions: [
       {
         type: "approval",
-        condition: "${prdSize} > 20000 and ${enableImpactAnalysis}",
+        condition: "${prdSize} > 20000 && ${enableImpactAnalysis}",
         action: "modify",
         message: "PRD exceeds 20,000 characters. Enforcing Impact Analysis step for cross-functional impact assessment.",
       },
