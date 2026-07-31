@@ -202,8 +202,8 @@ describe("Telemetry Reconstruction & Ledger Integrity Gate", () => {
     );
   });
 
-  it("should fail with ledger drift even when all tables have rows (GAP-O2)", () => {
-    // All three tables populated but ledgers disagree — GAP-O1 passes, GAP-O2 fails.
+  it("should fail with ledger drift even when all tables have rows (GAP-OBS-02)", () => {
+    // All three tables populated but ledgers disagree — GAP-OBS-01 passes, GAP-OBS-02 fails.
     const result = cloudTelemetryReconstructionGate(executionId, {
       toolCount: 10,
       snapshotCount: 5,
