@@ -79,6 +79,27 @@ describe('ProviderKeysSettings — rejected-account prompt', () => {
     expect(screen.queryByText(/providerKeys.authAlert.rejected/)).not.toBeInTheDocument();
   });
 
+  it('gives depleted SuperGrok usage its own reset/credits remediation', async () => {
+    mockApi([{
+      provider: 'xai', authType: 'oauth', priority: 0,
+      authAlert: alert({ provider: 'xai', reason: 'capacity', status: 403, vendor: 'xai-oauth' }),
+    }]);
+    vi.spyOn(api.providerKeysApi, 'status').mockImplementation(async (provider) => ({
+      provider, configured: provider === 'xai', usable: provider === 'xai',
+      status: provider === 'xai' ? 'capacity' : 'not_connected',
+      ...(provider === 'xai' ? {
+        authAlert: alert({ provider: 'xai', reason: 'capacity', status: 403, vendor: 'xai-oauth' }),
+      } : {}),
+      usage: { periodDays: 30, requests: 0, tokens: 0, lastUsedAt: null },
+    }));
+    render(<ProviderKeysSettings />);
+    expect(await screen.findByText(/providerKeys\.authAlert\.xaiCapacity 403/)).toBeInTheDocument();
+    expect(screen.getByText(/providerKeys\.status\.usageDepleted/)).toBeInTheDocument();
+    expect(screen.queryByText(/providerKeys\.authAlert\.xaiNotEntitled/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('xAI (Grok)').closest('button')!);
+    expect(await screen.findByText(/providerKeys\.diagnostic\.currentStatus providerKeys\.diagnostic\.state\.capacity/)).toBeInTheDocument();
+  });
+
   it('does NOT report a broken account as connected — the chip follows health, not storage', async () => {
     // The whole reason this page could show five green cards next to a failing Test
     // connection: the chip coloured itself off "a credential is stored", which stays true

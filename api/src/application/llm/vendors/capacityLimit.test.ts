@@ -20,6 +20,10 @@ describe('isCapacityLimitBody', () => {
       JSON.stringify({ error: { type: 'insufficient_quota', message: 'You exceeded your current quota' } }),
       'monthly spend limit exceeded',
       'billing hard limit reached',
+      // xAI SuperGrok weekly allowance (shown in Settings ▸ Usage).
+      'You hit your weekly limit. Extra Usage Credits are being used.',
+      'Weekly SuperGrok Limit: 100% used',
+      'Your weekly API usage allowance is depleted.',
     ];
     for (const body of capacityBodies) {
       expect(isCapacityLimitBody(body)).toBe(true);
