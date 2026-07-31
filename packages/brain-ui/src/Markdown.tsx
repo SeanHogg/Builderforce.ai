@@ -125,7 +125,7 @@ function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, lab
               const text = String(children ?? '').replace(/\n$/, '');
               return <CodeBlock code={text} onApplyCode={onApplyCode} onCreateFile={onCreateFile} labels={lab} />;
             }
-            // Handle inline code - fallback to empty code element if children is not provided
+            // Handle inline code - fallback to empty string if children is not provided
             return <code className="bf-md__inline">{children ?? ''}</code>;
           },
           pre({ children }) {
