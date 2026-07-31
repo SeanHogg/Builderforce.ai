@@ -1,0 +1,53 @@
+{
+  "description": "Sample payloads for POST /conflicts/:id/resolve — manual resolution by conflict resolver per PRD. Out of scope for automation; this endpoint allows manual decision.",
+  "endpoint": "POST /conflicts/:id/resolve",
+  "samples": [
+    {
+      "name": "Resolve — final decision",
+      "request": {
+        "path": "/conflicts/alice__bob__engineering__V1/resolve",
+        "body": {
+          "action": "resolve",
+          "note": "After review with both stakeholders: prioritizing DB scaling (Bob's request) due to critical security patch requirements. Alice agreed to defer feature X capacity to P1 for V1 and revisit in V2. Team capacity confirmed.",
+          "resolverUserId": "program-lead-1"
+        }
+      },
+      "expectedResponse": {
+        "statusCode": 200,
+        "body": {
+          "success": true,
+          "conflict": {
+            "id": "alice__bob__engineering__V1",
+            "status": "resolved",
+            "resolutionNote": "After review with both stakeholders: prioritizing DB scaling...",
+            "resolvedBy": "program-lead-1",
+            "resolvedAt": "2025-06-23T15:00:00Z"
+          },
+          "timestamp": "2025-06-23T15:00:00Z"
+        }
+      }
+    },
+    {
+      "name": "Acknowledge — needs discussion",
+      "request": {
+        "path": "/conflicts/alice__bob__engineering__V1/resolve",
+        "body": {
+          "action": "acknowledge",
+          "note": "Acknowledged. Scheduling meeting tomorrow with Alice, Bob, and Engineering lead to decide.",
+          "resolverUserId": "portfolio-manager-2"
+        }
+      }
+    },
+    {
+      "name": "Dismiss — false positive / different scope",
+      "request": {
+        "path": "/conflicts/alice__bob__engineering__V1/resolve",
+        "body": {
+          "action": "dismiss",
+          "note": "Different scope despite same team label — one is frontend, other is backend within engineering org. Not a true capacity conflict.",
+          "resolverUserId": "engineering-manager"
+        }
+      }
+    }
+  ]
+}
