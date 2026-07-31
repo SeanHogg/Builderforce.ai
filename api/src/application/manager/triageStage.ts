@@ -316,6 +316,37 @@ export function deferralCeiling(input: {
 }
 
 /**
+ * The pass summary's deferral clause. PURE.
+ *
+ * ── WHY THE COUNT DRIVES IT, NOT THE REASON ──────────────────────────────────────
+ * The first version of this sentence branched on `deferredReason`, so a deferral whose
+ * cause nothing had recorded printed the NO-deferral wording. Measured on project 11 the
+ * pass after it shipped (2026-07-31T11:45:30Z, api 2026.7.200):
+ *
+ *   "Unstuck 1 of 2 stalled tickets this pass. Nothing was deferred for want of a run."
+ *   {"stalled":2,"unstuck":1,"deferred":1,"deferredReason":null,...}
+ *
+ * — a sentence contradicted by the detail printed beside it, because the wall-clock shed
+ * increments `deferred` and was the one path that set no reason. `deferred` is the fact;
+ * the reason is an explanation of it, and an explanation going missing must degrade to
+ * saying less, never to denying the fact. So the count decides which clause is used and
+ * the reason only fills in "because …".
+ */
+export function describeTriageDeferral(
+  deferred: number,
+  reason: TriageOutcome['deferredReason'],
+  caps: { perPass: number; perTenantTick: number },
+): string {
+  if (deferred <= 0) return '. Nothing was deferred.';
+  const because = reason == null ? null : {
+    pass_wall_clock: 'this pass ran out of its wall-clock budget and handed the rest to the next one',
+    pass_dispatch_cap: `this project may start ${caps.perPass} new runs per pass and has used them all`,
+    tenant_tick_budget: `the workspace has spent its ${caps.perTenantTick} runs for this five-minute tick — the autonomous executor and the other sweeps draw on the same pool`,
+  }[reason];
+  return ` — ${deferred} waiting for the next one${because ? ` because ${because}` : ''}.`;
+}
+
+/**
  * What performing a remedy achieved.
  *
  * `attempted` and `applied` ARE DIFFERENT, and conflating them broke the escalation
@@ -380,17 +411,20 @@ export interface TriageOutcome {
   /** Stalled tickets whose remedy was deferred because a per-pass cap bit. */
   deferred: number;
   /**
-   * WHICH ceiling actually bit — null when nothing was deferred.
+   * WHICH ceiling actually bit — null only when nothing was deferred.
    *
-   * The pass summary used to name the per-pass cap unconditionally, and on the measured
-   * board that was simply the wrong ceiling: project 11, 2026-07-31, seven consecutive
-   * passes journalled "1 waiting for the next one (max 10 new runs per pass)" with
-   * `{"dispatched":1,"dispatchCap":10}` beside it. One run against a cap of ten did not
-   * exhaust the cap — the TENANT's shared 25-runs-per-tick pool was already spent by the
-   * autonomous executor (40 runs completed that day), and a reader following the stated
-   * reason would have raised the wrong number.
+   * The pass summary used to name the per-pass run cap unconditionally, and on the
+   * measured board that was the wrong ceiling twice over: project 11, 2026-07-31, seven
+   * consecutive passes journalled "1 waiting for the next one (max 10 new runs per pass)"
+   * with `{"dispatched":1,"dispatchCap":10}` beside it. One run against a cap of ten did
+   * not exhaust the cap, and the run ceilings were not what stopped it at all — the pass
+   * ran out of WALL CLOCK and shed the stage, which is a third cause entirely. A reader
+   * following the stated reason would have raised a number that was never reached.
+   *
+   * THREE causes, because they need three different repairs: give the stage more time,
+   * give this project a larger share of the tick, or give the workspace more runs.
    */
-  deferredReason: 'pass_dispatch_cap' | 'tenant_tick_budget' | null;
+  deferredReason: 'pass_wall_clock' | 'pass_dispatch_cap' | 'tenant_tick_budget' | null;
   /** Journal lines for the manager feed — one per ticket ACTED ON, never per observation. */
   journal: Array<{ taskId: number; summary: string; detail: Record<string, unknown> }>;
 }
@@ -605,6 +639,8 @@ export async function runStallTriage(
   // gap is a per-BOARD defect, so one hire typically unblocks a large cohort at once and
   // a per-ticket budget would provision the same role many times over.
   let hiresUsed = 0;
+  /** Tickets this pass actually reached — the rest of `batch` is what a shed defers. */
+  let examined = 0;
 
   for (const { task, idleMs } of batch) {
     // BETWEEN tickets, never mid-remedy — the same rule the PR stages follow, so a
@@ -616,9 +652,18 @@ export async function runStallTriage(
     // refuse to spend its own reservation and reproduce the starvation from the other end.
     if (ctx.budget?.exhausted()) {
       ctx.budget.shed('triage');
-      out.deferred += 1;
+      // EVERY ticket still in the batch is deferred, not one. Counting a single ticket
+      // here made the summary report "1 waiting for the next one" while up to
+      // MAX_TRIAGE_PER_RUN - 1 were, which understates the backlog exactly where a reader
+      // is deciding whether the stage is keeping up.
+      out.deferred += batch.length - examined;
+      // The wall clock, NOT a run ceiling — this is the first deferral site in the loop
+      // and it was the one firing on the measured board, while the sentence blamed a
+      // dispatch cap that still had nine of its ten slots free.
+      out.deferredReason ??= 'pass_wall_clock';
       break;
     }
+    examined += 1;
     try {
       // 3. DIAGNOSE — ask the canonical evaluators, never re-derive their verdicts.
       // `env` serves the evaluator's workspace-token lookup through the read-through

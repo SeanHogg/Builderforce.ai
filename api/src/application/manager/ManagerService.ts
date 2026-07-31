@@ -72,7 +72,8 @@ import { classifySignoffOwnership, resolveRequiredSignoffGate } from '../kanban/
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness, type CompletionShape, type TicketPrState } from './evaluateTicketReadiness';
 import {
-  runStallTriage, loadBulkSignals, MAX_TRIAGE_DISPATCHES_PER_RUN, TRIAGE_PASS_STATE_KEY,
+  runStallTriage, loadBulkSignals, describeTriageDeferral,
+  MAX_TRIAGE_DISPATCHES_PER_RUN, TRIAGE_PASS_STATE_KEY,
 } from './triageStage';
 import { MAX_REMEDY_ATTEMPTS } from './stallTriage';
 import { planMergeQueue, summarizeMergeQueue } from './prMergeQueue';
@@ -1657,21 +1658,16 @@ export async function runManagerForProject(
       // exactly as informative as the block: with an on-change writer, a summary that only
       // ever reports a deferral leaves the last one standing as the current answer forever.
       // `latestStateDecision` is how the surface reads it back regardless of age.
-      const deferralCause = triage.deferredReason === 'tenant_tick_budget'
-        // NOT the per-pass cap. Naming that one when the workspace pool is what ran out
-        // sends a reader to raise a number that was never reached (measured: 1 dispatch
-        // against a cap of 10, deferred anyway).
-        ? `the workspace has spent its ${MAX_TENANT_DISPATCHES_PER_TICK} runs for this five-minute tick — the autonomous executor and the other sweeps draw on the same pool`
-        : triage.deferredReason === 'pass_dispatch_cap'
-          ? `this project may start ${MAX_TRIAGE_DISPATCHES_PER_RUN} new runs per pass and has used them all`
-          : null;
       await recordManagerActionOnChange(db, {
         tenantId, projectId, runTaskId, actionType: 'triage',
         summary:
           `Unstuck ${triage.unstuck} of ${triage.stalled} stalled ${triage.stalled === 1 ? 'ticket' : 'tickets'} this pass`
-          + (deferralCause
-            ? ` — ${triage.deferred} waiting for the next one because ${deferralCause}.`
-            : '. Nothing was deferred for want of a run.'),
+          // The clause is driven by the COUNT, never by whether a cause was recorded —
+          // see `describeTriageDeferral` for the sentence that contradicted its own
+          // detail when it was the other way round.
+          + describeTriageDeferral(triage.deferred, triage.deferredReason, {
+            perPass: MAX_TRIAGE_DISPATCHES_PER_RUN, perTenantTick: MAX_TENANT_DISPATCHES_PER_TICK,
+          }),
         detail: {
           stalled: triage.stalled, unstuck: triage.unstuck, deferred: triage.deferred,
           escalated: triage.escalated, dispatched: triage.dispatched,
