@@ -33,7 +33,7 @@ import {
 export interface GuidedInputProps {
   schema: FormSchema;
   /** Called with the final payload when the user confirms on the review step. */
-  onSubmit: (values: Record<string, unknown>) => Promise<void>;
+  onSubmit: (values: Record<string, unknown>) => Promise<unknown>;
   /** Called when the user switches to Express mode (pass current values). */
   onSwitchToExpress?: (values: Record<string, unknown>) => void;
   /** Pre-populated values (e.g. from a prior Express session). */
