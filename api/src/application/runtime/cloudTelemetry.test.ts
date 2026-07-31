@@ -232,4 +232,16 @@ describe("Telemetry Reconstruction & Ledger Integrity Gate", () => {
     );
     expect(result.missingRecords).toHaveLength(4);
   });
+
+  // ── Gap Registry Integrity ───────────────────────────────────────────
+
+  it("should have exactly 50 gaps defined in the registry", async () => {
+    // Dynamic import to verify the registry is loadable and has 50 gaps
+    const { TOTAL_GAPS, GAP_REGISTRY, Gaps } = await import(
+      "../../../registries/cloudAgentValidationGaps"
+    );
+    expect(TOTAL_GAPS).toBe(50);
+    expect(Object.keys(GAP_REGISTRY).length).toBe(50);
+    expect(Object.values(Gaps).length).toBe(50);
+  });
 });
