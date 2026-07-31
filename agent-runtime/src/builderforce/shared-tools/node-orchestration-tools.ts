@@ -51,6 +51,8 @@ export interface OrchestrateOpts {
   workflow: string;
   description: string;
   customSteps?: Array<{ role: string; task: string; dependsOn?: string[] }>;
+  /** For prd_analysis workflow: require Impact Analysis step for large PRDs */
+  requireImpactAnalysis?: boolean;
 }
 
 /**
