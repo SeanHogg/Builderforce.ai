@@ -66,6 +66,16 @@ export interface TenantProxyResult {
    *  a registered OpenRouter connection. The single "is this tenant BYO?" test; a
    *  `byoVendors.size > 0` check alone misses a connection-only tenant. */
   hasByo: boolean;
+  /**
+   * The plan this proxy was built for, resolved here (or passed in by the caller).
+   *
+   * Returned because a multi-turn caller sometimes needs the plan POOL and not just a
+   * proxy — e.g. picking a different model after the current one proved it cannot emit
+   * tool calls needs `codingModelsForPlan(...)`. Without this the caller either re-reads
+   * the plan (a second DB round-trip for something already resolved) or guesses, and
+   * guessing is how a failover ends up pointing at a model the tenant cannot reach.
+   */
+  plan: { effectivePlan: 'free' | 'pro' | 'teams'; premiumOverride: boolean };
 }
 
 /** True when a resolved BYO api-key set has at least one usable key. */
@@ -139,7 +149,13 @@ export async function tenantProxyForPlan(
     ...(byoVendors.size > 0 ? { vendorCallTimeoutMs: PREMIUM_VENDOR_CALL_TIMEOUT_MS } : {}),
   });
 
-  return { proxy, byoVendors, registeredModels, hasByo: byoVendors.size > 0 || registeredModels.length > 0 };
+  return {
+    proxy,
+    byoVendors,
+    registeredModels,
+    hasByo: byoVendors.size > 0 || registeredModels.length > 0,
+    plan,
+  };
 }
 
 /**

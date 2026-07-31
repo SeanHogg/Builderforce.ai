@@ -50,6 +50,7 @@ import {
   stallRecoveryNudge,
   stallExhaustedNotice,
   modelFailoverNotice,
+  chooseStallFailover,
   MAX_ANNOUNCEMENT_RECOVERIES,
   MAX_MODEL_FAILOVERS,
   toolNamesMentionedIn,
@@ -1728,11 +1729,17 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         recoveriesUsed: announcementRecoveries,
       })
     ) {
-      // Record BOTH what we asked for and what actually answered: a gateway
-      // auto-select run pinned nothing, so `resolved` is the only id that identifies
-      // the model to skip.
-      for (const m of [activeModel, resolved]) if (m && m !== 'default' && !triedModels.includes(m)) triedModels.push(m);
-      const next = modelFailovers < MAX_MODEL_FAILOVERS ? pickFallbackModel?.(triedModels) : undefined;
+      // The SHARED decision — record both the asked-for and the resolved model (a
+      // gateway auto-select run pinned nothing, so `resolved` is the only id that
+      // identifies the model to skip), check the budget, pick a different route. The
+      // server-side addressed-reply loop calls the same function.
+      const next = chooseStallFailover({
+        activeModel,
+        resolvedModel: resolved,
+        tried: triedModels,
+        failoversUsed: modelFailovers,
+        pick: pickFallbackModel,
+      });
       if (next) {
         modelFailovers += 1;
         pushDurableStep(c, chatId, persistence, {

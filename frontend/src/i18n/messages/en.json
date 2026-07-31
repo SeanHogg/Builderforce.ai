@@ -8932,7 +8932,11 @@
         "revoked": "revoked",
         "expired": "expired",
         "undecryptable": "unreadable credential",
-        "unavailable": "unavailable"
+        "unavailable": "unavailable",
+        "failed": "failed",
+        "not_found": "connection not found",
+        "no_test_model": "no model selected to test",
+        "key_unresolved": "saved key could not be used"
       },
       "tokensUsed": "AI tokens used",
       "periodLabel": "Last {period}"

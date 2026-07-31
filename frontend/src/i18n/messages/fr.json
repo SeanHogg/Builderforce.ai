@@ -8932,7 +8932,11 @@
         "revoked": "révoquée",
         "expired": "expirée",
         "undecryptable": "identifiant illisible",
-        "unavailable": "indisponible"
+        "unavailable": "indisponible",
+        "failed": "en échec",
+        "not_found": "connexion introuvable",
+        "no_test_model": "aucun modèle sélectionné à tester",
+        "key_unresolved": "la clé enregistrée n'a pas pu être utilisée"
       },
       "tokensUsed": "Jetons IA utilisés",
       "periodLabel": "Derniers {period}"
