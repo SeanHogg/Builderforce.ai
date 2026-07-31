@@ -34,13 +34,21 @@ export interface CostBandConfig {
   perSeniorityFTE: Record<SeniorityBand, { min: number; max: number; currency?: string }>;
 }
 
+/**
+ * Full engine config - aligned with engine usage
+ */
 export interface ResourceGapEngineConfig {
   proficiency: ProficiencyConfig;
-  taxonomy: SkillTaxonomyConfig;
+  skillTaxonomy: SkillTaxonomyConfig;
   timeToFill: TimeToFillConfig;
-  costBands: CostBandConfig;
-  contractorThresholdMonths: number;
-  secondaryGapCoverageThreshold: number;
+  costBand: CostBandConfig;
+  hireVsContractThresholdMonths: number;
+  secondaryGapRiskThreshold: number;
+  // Back-compat aliases for older code paths
+  taxonomy?: SkillTaxonomyConfig;
+  costBands?: CostBandConfig;
+  contractorThresholdMonths?: number;
+  secondaryGapCoverageThreshold?: number;
 }
 
 function buildProficiencyEntries(): ProficiencyWeightEntry[] {
@@ -63,22 +71,30 @@ function buildProficiencyEntries(): ProficiencyWeightEntry[] {
   return entries;
 }
 
+const CANONICAL_DICTIONARY: CanonicalSkillEntry[] = [
+  { canonicalId: "JavaScript", cluster: "frontend", aliases: ["js", "javascript"] },
+  { canonicalId: "TypeScript", cluster: "frontend", aliases: ["ts", "typescript", "type-script"] },
+  { canonicalId: "React", cluster: "frontend", aliases: ["reactjs", "react.js", "React"] },
+  { canonicalId: "Node.js", cluster: "backend", aliases: ["node", "nodejs", "node.js"] },
+  { canonicalId: "Python", cluster: "backend", aliases: ["py", "python"] },
+  { canonicalId: "AWS", cluster: "cloud", aliases: ["aws", "amazon web services"] },
+  { canonicalId: "Golang", cluster: "backend", aliases: ["go", "golang"] },
+  { canonicalId: "Kubernetes", cluster: "cloud", aliases: ["k8s", "kubernetes"] },
+  { canonicalId: "Docker", cluster: "cloud", aliases: ["docker"] },
+  { canonicalId: "PostgreSQL", cluster: "data", aliases: ["postgres", "postgresql"] },
+  { canonicalId: "Product Management", cluster: "product", aliases: ["pm", "product management", "product_management"] },
+  { canonicalId: "Data Engineering", cluster: "data", aliases: ["data eng", "data engineering"] },
+  { canonicalId: "Machine Learning", cluster: "data", aliases: ["ml", "machine learning"] },
+];
+
 export const DEFAULT_RESOURCE_GAP_CONFIG: ResourceGapEngineConfig = {
   proficiency: { entries: buildProficiencyEntries() },
+  skillTaxonomy: {
+    dictionary: CANONICAL_DICTIONARY,
+    flagOriginalWhenUnmapped: true,
+  },
   taxonomy: {
-    dictionary: [
-      { canonicalId: "typescript", aliases: ["ts", "type-script"] },
-      { canonicalId: "react", aliases: ["reactjs", "react.js"] },
-      { canonicalId: "nodejs", aliases: ["node", "node.js"] },
-      { canonicalId: "python", aliases: ["py"] },
-      { canonicalId: "aws", aliases: ["amazon web services"] },
-      { canonicalId: "product_management", aliases: ["pm", "product management"] },
-      { canonicalId: "javascript", aliases: ["js", "javascript"] },
-      { canonicalId: "JavaScript", aliases: ["js"] },
-      { canonicalId: "TypeScript", aliases: ["ts"] },
-      { canonicalId: "React", aliases: ["react"] },
-      { canonicalId: "Python", aliases: ["py"] },
-    ],
+    dictionary: CANONICAL_DICTIONARY,
     flagOriginalWhenUnmapped: true,
   },
   timeToFill: {
@@ -90,6 +106,15 @@ export const DEFAULT_RESOURCE_GAP_CONFIG: ResourceGapEngineConfig = {
       principal: 120,
     },
   },
+  costBand: {
+    perSeniorityFTE: {
+      junior: { min: 60_000, max: 90_000, currency: "USD" },
+      mid: { min: 90_000, max: 130_000, currency: "USD" },
+      senior: { min: 130_000, max: 180_000, currency: "USD" },
+      staff: { min: 180_000, max: 250_000, currency: "USD" },
+      principal: { min: 250_000, max: 350_000, currency: "USD" },
+    },
+  },
   costBands: {
     perSeniorityFTE: {
       junior: { min: 60_000, max: 90_000, currency: "USD" },
@@ -99,7 +124,9 @@ export const DEFAULT_RESOURCE_GAP_CONFIG: ResourceGapEngineConfig = {
       principal: { min: 250_000, max: 350_000, currency: "USD" },
     },
   },
+  hireVsContractThresholdMonths: 6,
   contractorThresholdMonths: 6,
+  secondaryGapRiskThreshold: 0.75,
   secondaryGapCoverageThreshold: 0.75,
 };
 
@@ -115,11 +142,15 @@ export const DEFAULT_CANONICAL_SKILL_DICT: Record<string, string> = {
   "react.js": "React",
   py: "Python",
   python: "Python",
-  node: "nodejs",
-  "node.js": "nodejs",
-  nodejs: "nodejs",
-  aws: "aws",
-  "amazon web services": "aws",
+  node: "Node.js",
+  "node.js": "Node.js",
+  nodejs: "Node.js",
+  aws: "AWS",
+  "amazon web services": "AWS",
+  go: "Golang",
+  golang: "Golang",
+  k8s: "Kubernetes",
+  kubernetes: "Kubernetes",
 };
 
 export interface LegacyDefaultConfig {
@@ -153,8 +184,8 @@ export function buildDefaultConfiguration(): LegacyDefaultConfig {
       staff: 90,
       principal: 120,
     },
-    hireVsContractThresholdMonths: DEFAULT_RESOURCE_GAP_CONFIG.contractorThresholdMonths,
-    secondaryGapRiskThreshold: DEFAULT_RESOURCE_GAP_CONFIG.secondaryGapCoverageThreshold,
+    hireVsContractThresholdMonths: DEFAULT_RESOURCE_GAP_CONFIG.hireVsContractThresholdMonths,
+    secondaryGapRiskThreshold: DEFAULT_RESOURCE_GAP_CONFIG.secondaryGapRiskThreshold,
     fullCoverageProficiencyRatio: 1.0,
   };
 }
@@ -189,6 +220,10 @@ export function resolveCanonicalSkillId(
     if (entry.canonicalId.toLowerCase() === normalized) return entry.canonicalId;
     if (entry.aliases?.some((a) => a.toLowerCase() === normalized)) return entry.canonicalId;
   }
+  // Also check legacy dict
+  if (DEFAULT_CANONICAL_SKILL_DICT[normalized]) {
+    return DEFAULT_CANONICAL_SKILL_DICT[normalized];
+  }
   return rawSkillId;
 }
 
@@ -198,5 +233,7 @@ export function isUnmappedSkill(taxonomy: SkillTaxonomyConfig, rawSkillId: strin
     if (entry.canonicalId.toLowerCase() === normalized) return false;
     if (entry.aliases?.some((a) => a.toLowerCase() === normalized)) return false;
   }
+  // Check legacy dict too
+  if (DEFAULT_CANONICAL_SKILL_DICT[normalized]) return false;
   return true;
 }
