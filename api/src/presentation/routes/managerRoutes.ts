@@ -229,6 +229,73 @@ export function createManagerRoutes(
       .from(pullRequests)
       .where(and(eq(pullRequests.tenantId, tenantId), eq(pullRequests.projectId, projectId), eq(pullRequests.status, 'open')));
 
+    // ── PULL REQUESTS THE MANAGER HAS RETIRED TO A HUMAN ────────────────────────────
+    //
+    // The merge queue (0386) ends the conflict livelock by retiring a PR to a human once
+    // a ceiling is spent — 47 `merge_blocked` decisions on project 11 in the first day,
+    // against zero all-time before it. That is the correct outcome for branches racing
+    // one base, and it creates a pile: `merge_blocked` is an entry in a decision FEED,
+    // ordered by time, with no way to tell the one PR worth opening from 300 that are
+    // not. A queue nobody can rank is only marginally better than a livelock.
+    //
+    // So: rank it the way the board ranks everything else — by the business value of the
+    // ticket the PR would deliver. One indexed anti-join over the manager's own actions
+    // (idx_manager_actions_pr_scope, 0383) plus a left join for the ticket, bounded.
+    const blockedPrs = await db
+      .select({
+        id: pullRequests.id,
+        number: pullRequests.number,
+        url: pullRequests.url,
+        taskId: pullRequests.taskId,
+        taskKey: tasks.key,
+        title: tasks.title,
+        businessValue: tasks.businessValue,
+        // A ticket already finished by another route is the bulk-close candidate: its PR
+        // is open, blocked, and no longer needed. Surfaced so the pile can be triaged in
+        // two groups rather than read one row at a time.
+        taskStatus: tasks.status,
+        reason: sql<string | null>`(
+          select a.detail->>'reason' from manager_actions a
+          where a.pr_id = ${pullRequests.id} and a.action_type = 'merge_blocked'
+          order by a.created_at desc limit 1
+        )`,
+        blockedAt: sql<string | null>`(
+          select max(a.created_at) from manager_actions a
+          where a.pr_id = ${pullRequests.id} and a.action_type = 'merge_blocked'
+        )`,
+      })
+      .from(pullRequests)
+      .leftJoin(tasks, eq(tasks.id, pullRequests.taskId))
+      .where(and(
+        eq(pullRequests.tenantId, tenantId),
+        eq(pullRequests.projectId, projectId),
+        eq(pullRequests.status, 'open'),
+        sql`exists (
+          select 1 from manager_actions a
+          where a.tenant_id = ${tenantId} and a.project_id = ${projectId}
+            and a.pr_id = ${pullRequests.id} and a.action_type = 'merge_blocked'
+        )`,
+      ))
+      // Highest-value ticket first — the whole point. NULLS LAST so an unscored ticket
+      // does not outrank a scored one purely by being unknown.
+      .orderBy(sql`${tasks.businessValue} desc nulls last`, desc(pullRequests.updatedAt))
+      .limit(50)
+      .catch(() => []);
+    const [blockedPrCount] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(pullRequests)
+      .where(and(
+        eq(pullRequests.tenantId, tenantId),
+        eq(pullRequests.projectId, projectId),
+        eq(pullRequests.status, 'open'),
+        sql`exists (
+          select 1 from manager_actions a
+          where a.tenant_id = ${tenantId} and a.project_id = ${projectId}
+            and a.pr_id = ${pullRequests.id} and a.action_type = 'merge_blocked'
+        )`,
+      ))
+      .catch(() => [{ n: 0 }]);
+
     // The ranked backlog (what the team should work next, in order).
     const backlog = await db
       .select({
@@ -303,9 +370,16 @@ export function createManagerRoutes(
         undated: counts?.undated ?? 0,
         unowned: counts?.unowned ?? 0,
         openPullRequests: prCount?.open ?? 0,
+        /** Open PRs the manager has retired to a human — the pile the merge queue
+         *  creates by design. Counted separately from `openPullRequests` because they
+         *  need a person, not another pass. */
+        blockedPullRequests: blockedPrCount?.n ?? 0,
         flagged: counts?.flagged ?? 0,
         lastRunAt: config?.lastRunAt ?? null,
       },
+      /** The blocked pile, RANKED by the business value of the ticket each PR would
+       *  deliver — see the query. Bounded; `stats.blockedPullRequests` is the total. */
+      blockedPrs,
       backlog,
       actions,
       runTasks,

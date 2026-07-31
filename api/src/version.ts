@@ -9,4 +9,4 @@
  * every diagnostics report state an API version that had not been deployed for weeks and
  * cost a real debugging session chasing a phantom stale deploy.
  */
-export const API_VERSION = '2026.7.189';
+export const API_VERSION = '2026.7.190';
