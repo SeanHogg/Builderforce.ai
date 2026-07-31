@@ -293,20 +293,16 @@ export class TaskRepository implements ITaskRepository {
       .limit(pageSize)
       .offset(offset);
 
-    // Filter out done-class statuses using the domain helper (case-insensitive match)
-    const tasks = rows
-      .filter(r => isNotDoneStatus(r.status))
-      .map(toDomain);
+    // Done-class exclusion happens in SQL (see `conditions`), so `total` and the
+    // page slice agree. Filtering here instead would return short pages and a
+    // `total` that counts rows the caller never receives.
+    const tasks = rows.map(toDomain);
 
-    // Recalculate total after done-class filter (approximate for paginated results)
-    // For exact count, we'd need a second query; this is acceptable for UI pagination
-
-    // Return with cache info (30 minutes = 1800 seconds)
     return {
       tasks: tasks.map(t => t.toPlain()),
       total,
       cacheInfo: {
-        validForSeconds: 1800,
+        validForSeconds: UNASSIGNED_HIGH_PRIORITY_CACHE_SECONDS,
       },
     };
   }
