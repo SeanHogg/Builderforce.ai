@@ -1,57 +1,58 @@
-> **PRD** — drafted by Ada (Sr. Product Mgr) · task #505
+> **PRD** — drafted by CTO · task #487
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Conflict Detection Rules and Alerts
+# Evermind Knowledge & Learning Pipeline PRD
 
 ## Problem & Goal
-
-**Problem:** In the prioritization process, stakeholders frequently submit requests that implicitly conflict (e.g., assigning different P0 priorities to the same team's work within the same review window). These conflicts often go undetected until late in the process, leading to reactive manual resolution, delays, and misaligned priorities.
-
-**Goal:** To proactively detect and surface specific prioritization conflicts automatically, providing clear, contextualized alerts to facilitate timely, informed, and manual conflict resolution by relevant team members.
+Teams building memory-enabled agents lack a repeatable pipeline to baseline existing knowledge, extract new insights, review for quality, store durably, and transfer to downstream systems. The goal is to deliver a reliable, auditable pipeline that turns raw interactions into structured, transferable knowledge while minimizing hallucination and drift.
 
 ## Target Users / ICP Roles
-
-*   **Stakeholders / Requestors:** Individuals submitting prioritization requests (e.g., Product Managers, Team Leads, Business Owners).
-*   **Prioritization Reviewers:** Individuals responsible for reviewing and approving priorities (e.g., Product Owners, Engineering Managers, Portfolio Managers).
-*   **Conflict Resolvers:** Individuals with authority to resolve conflicting priorities (e.g., Senior Management, Program Leads).
+- Memory-engine maintainers and platform engineers
+- AI application developers integrating long-term memory
+- Knowledge operations roles responsible for review and governance
 
 ## Scope
-
-This PRD covers the implementation of a foundational conflict detection system, focusing on a specific rule, automatic alert generation, and necessary APIs.
+Implement the five-stage pipeline (baseline → extract → review → store → transfer) as a core workflow inside `memory-engine`. Cover orchestration, data models, review interfaces, and transfer adapters for the initial release.
 
 ## Functional Requirements
-
-1.  **Conflict Detection Engine:**
-    *   Implement a conflict detector component capable of evaluating defined rules.
-    *   Implement a specific rule: Detect when two *distinct stakeholders* submit requests that assign *different P0 priorities* to the *same team* within the *same review window*.
-    *   The rule definition shall be formally specified (Conflict Rule Spec).
-2.  **Conflict Alert Generation & Management:**
-    *   Automatically generate a conflict alert when the specified rule is triggered.
-    *   **Labeling:** Each alert must clearly label the conflicting items, the involved stakeholders, and the detection date.
-    *   **Deduplication:** Prevent the creation of duplicate alerts for the same underlying conflict.
-    *   **Summarization:** Generate a concise summary explaining the reasoning behind each detected conflict.
-    *   **Attachment:** Attach generated alerts to the relevant priority version(s) in the system.
-    *   **Visibility:** Ensure that detected conflict alerts are visible to all relevant team members (via API exposure).
-3.  **API & Data Layer:**
-    *   Define a Conflict Alert Data Transfer Object (DTO) structure.
-    *   Implement a Conflict Detection API endpoint (e.g., `POST /conflicts/detect`) to trigger or receive detection events.
-    *   Implement a Conflict List API endpoint (e.g., `GET /conflicts`) to retrieve conflicts from the priority register, supporting filtering by status.
-4.  **Documentation & Samples:**
-    *   Provide comprehensive OpenAPI documentation for all conflict-related API endpoints (list, create/detect).
-    *   Include sample payloads for creating/triggering conflicts and retrieving conflict lists.
+- **Baseline**: Snapshot current knowledge graph and vector store state with versioning.
+- **Extract**: Identify and pull candidate facts, entities, and relationships from new sessions or documents.
+- **Review**: Human-in-the-loop or automated quality gates for accuracy, relevance, and conflict detection.
+- **Store**: Persist reviewed items into the canonical knowledge store with provenance metadata.
+- **Transfer**: Export approved knowledge to external targets (vector DBs, graphs, downstream agents) via configurable adapters.
+- Provide CLI and SDK entry points for pipeline execution and status tracking.
+- Log every stage transition for auditability.
 
 ## Acceptance Criteria
-
-*   Given a scenario where two distinct stakeholders submit requests assigning different P0s to the same team within the same review window, a conflict alert **must** be automatically generated.
-*   The generated alert **must** include correct labels for conflicting items, involved stakeholders, and the precise detection date.
-*   Subsequent detections of an identical conflict **must not** result in new, duplicate alerts.
-*   Each conflict alert **must** contain a clear, understandable summary explaining the specific rule violation.
-*   The Conflict List API **must** return detected conflicts, including their labels, summaries, and associated priority versions, accessible to relevant users.
-*   All conflict API endpoints **must** be documented in OpenAPI, and provided sample payloads **must** be functional and accurate.
+- Pipeline completes an end-to-end run on a 100-session corpus with <5% manual intervention.
+- Baseline and store operations produce immutable snapshots retrievable by version.
+- Review step surfaces conflicts and requires explicit approval before storage.
+- Transfer adapters successfully sync to at least two target systems with zero data loss.
+- All stages expose metrics (latency, items processed, rejection rate) via Prometheus.
 
 ## Out of Scope
+- Advanced LLM fine-tuning or model training
+- Real-time streaming ingestion
+- Multi-tenant isolation or billing features
+- Mobile or non-engine client SDKs
+- Historical data migration from legacy systems
 
-*   Automated conflict resolution mechanisms; resolution remains a manual process performed by designated "conflict resolvers."
-*   Support for configuring or implementing additional conflict detection rules beyond the single specified rule.
-*   User Interface (UI) development for displaying or managing conflict alerts; this PRD focuses on the backend detection, API, and data structure.
-*   Real-time push notifications for conflict alerts. Visibility is achieved through API exposure.
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
