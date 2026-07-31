@@ -277,7 +277,7 @@ export class ConflictDetectionService {
       resolvedAt: new Date().toISOString(),
     };
 
-    // Update in store by key
+    // Update in store using the canonical key (which equals the alert id)
     const key = generateConflictKey(
       existing.key.stakeholderId1,
       existing.key.stakeholderId2,
@@ -285,8 +285,6 @@ export class ConflictDetectionService {
       existing.key.versionId
     );
     conflictStore.set(key, updated);
-    // Also index by id for direct lookup
-    if (key !== id) conflictStore.set(id, updated);
 
     return updated;
   }
