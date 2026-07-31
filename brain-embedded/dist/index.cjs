@@ -1700,6 +1700,8 @@ function byoReasonHint(reason) {
       return "its token expired and the refresh failed (often transient) \u2014 retry, or reconnect it under Settings \u25B8 API Keys";
     case "undecryptable":
       return "its stored credential could not be read \u2014 re-enter it under Settings \u25B8 API Keys";
+    case "unsupported-auth":
+      return "it is stored as a subscription (OAuth) but this provider only supports an API key \u2014 re-connect it with an API key under Settings \u25B8 API Keys";
     case "other-workspace":
       return "you connected this account in a DIFFERENT workspace \u2014 switch to that workspace, or connect it in this one under Settings \u25B8 API Keys";
     default:

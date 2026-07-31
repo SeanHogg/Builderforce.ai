@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-07-31 — ✅ RESOLVED: provider priority is drag-orderable, and the write behind it is now one statement (ui 2026.7.151, api 2026.7.199, brain-embedded 2026.7.58, vsix 2026.7.112)
+
+**Shipped.** `/settings/integrations` ▸ Provider priority reorders by dragging a row onto the position it should hold — the ↑/↓ buttons stay as the keyboard and touch path (native HTML5 drag fires on neither). One shared primitive, `frontend/src/lib/useDragReorder.ts` (`moveItem` + `useDragReorder`), owns drag state, the insert-at-target commit, and the nudge; both existing reorder surfaces run on it — `ReorderableList` in `ProviderKeysSettings.tsx` (BYO account precedence **and** the OpenRouter model cascade) and `ReorderableWidgetGrid` (whose duplicate `move()` + four hand-rolled handlers were deleted). A drag inserts at the target and slides the rest; a swap would have produced a different order than the one dropped as soon as the drag spanned more than one row. New copy `providerKeys.precedence.drag` / `.rowLabel` in all five catalogs.
+
+**Two adjacent register entries closed in the same pass, both on the write path the drag now exercises on every drop:**
+
+- `setTenantProviderPriorityRanks` was one UPDATE per provider. neon-http has no interactive transaction, so a failure midway left precedence half-applied — two providers sharing a rank, or the new #1 stamped while the rest kept the old order. It is now a single `UPDATE … SET priority = CASE provider WHEN … END … WHERE provider IN (…)`, which lands entirely or not at all.
+- `resolveTenantLlmCredentials` blamed the ciphertext for an auth-type mismatch: a row stored `auth_type='oauth'` for a provider with no OAuth resolver (google/meta/kimi/qwen/minimax) is skipped by `resolveTenantVendorKeys` and fell through to the `undecryptable` catch-all, sending the owner to re-save a credential that reads back perfectly. New reason `unsupported-auth` (+ `byoReasonHint` copy, + `diagnostic.state` copy ×5) says the auth *type* is wrong. The three-provider OAuth list that four call sites each re-spelled is now one `OAUTH_RESOLVERS` table exporting `OAUTH_CAPABLE_PROVIDERS`.
+
+**Tests.** `useDragReorder.test.ts` (8), `ProviderKeysSettings.dragReorder.test.tsx` (4 — dropped order persisted via `setPriority`, leader chip follows the drop, self-drop is a no-op, buttons still work), `tenantProviderKeyService.precedence.test.ts` (6 — one statement, CASE contents, both unresolved reasons).
+
+---
+
 ## 2026-07-31 — ✅ RESOLVED: a ticket completed out from under its own open, unmerged PR — the retired-PR pile's generator (api 2026.7.198)
 
 **The measurement.** Project 11, one manager pass, two decisions 78ms apart:

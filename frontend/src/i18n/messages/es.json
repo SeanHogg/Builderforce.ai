@@ -264,6 +264,9 @@
       "migratable": "Migración",
       "keyCount": "{count} clave(s)",
       "tapToConnect": "Toca para conectar",
+      "dataConsumed": "Datos consumidos",
+      "thisMonth": "Este mes",
+      "confirmDisconnect": "¿Desconectar {label}? Se eliminarán {count} credencial(es) guardada(s) y se detendrá cualquier sincronización en curso. El trabajo ya importado se conserva.",
       "category": {
         "pm": "Gestión de proyectos y trabajo",
         "scm": "Control de código fuente",
@@ -1089,7 +1092,16 @@
     "copy": "Copiar",
     "copied": "Copiado",
     "copyFailed": "Error al copiar",
-    "copyDiagnostics": "Copiar diagnóstico"
+    "copyDiagnostics": "Copiar diagnóstico",
+    "connectToggle": {
+      "connect": "Conectar",
+      "disconnect": "Desconectar",
+      "working": "Procesando…",
+      "connectAria": "Conectar {name}",
+      "disconnectAria": "Desconectar {name}",
+      "errorTitle": "No se pudo desconectar {name}",
+      "errorGeneric": "No se pudo desconectar. Inténtalo de nuevo."
+    }
   },
   "prdCreate": {
     "title": "Nuevo PRD",
@@ -8829,6 +8841,8 @@
       "connectedCount": "● {count} conexión(es)",
       "brokenCount": "{count} conexión(es) de OpenRouter",
       "modelCount": "{count} modelo(s) seleccionado(s)",
+      "costOwnKey": "Cargos de enrutamiento de Builderforce: {cost}. OpenRouter cobra los tokens a tu propia cuenta.",
+      "costManaged": "Facturado por Builderforce: {cost} (enrutamiento + tokens).",
       "ownKey": "Tu clave de OpenRouter",
       "managedKey": "Facturación de Builderforce",
       "edit": "Editar",
@@ -8847,7 +8861,8 @@
       "validation": "Introduce un nombre y selecciona al menos un modelo.",
       "saveError": "No se pudo guardar la conexión de OpenRouter",
       "removeError": "No se pudo eliminar la conexión de OpenRouter",
-      "confirmRemove": "¿Eliminar la conexión de OpenRouter «{label}»?"
+      "confirmRemove": "¿Eliminar la conexión de OpenRouter «{label}»?",
+      "confirmDisconnectAll": "¿Desconectar OpenRouter? Se eliminarán los {count} registro(s). Los agentes que los usan pasarán a los modelos gestionados de Builderforce."
     },
     "status": {
       "connected": "● {subscription} conectada",
@@ -8882,6 +8897,8 @@
       "title": "Prioridad de proveedores",
       "subtitle": "Cuando tienes conectada más de una cuenta, los agentes en la nube empiezan por el proveedor situado arriba y van pasando al siguiente de la lista si falla. Pon Meta en primer lugar para enrutar los agentes en la nube a través de él.",
       "leads": "Preferido",
+      "drag": "Arrastrar para reordenar",
+      "rowLabel": "{provider}, posición {position}. Arrastra para reordenar.",
       "moveUp": "Subir {provider}",
       "moveDown": "Bajar {provider}",
       "errSave": "No se pudo guardar la prioridad"
@@ -8928,7 +8945,7 @@
       "testing": "Probando…",
       "verified": "Conexión verificada.",
       "verifiedWith": "Conexión verificada con {model}.",
-      "usage": "Últimos 30 días: {requests} solicitudes · {tokens} tokens",
+      "usage": "Últimos {days} días: {requests} solicitudes · {tokens} tokens",
       "lastUsed": " · Último uso {when}",
       "failedFallback": "La prueba de conexión falló: {status}.",
       "failedGeneric": "La prueba de conexión falló",
@@ -8943,6 +8960,7 @@
         "revoked": "revocada",
         "expired": "caducada",
         "undecryptable": "credencial ilegible",
+        "unsupported-auth": "guardado como suscripción, pero este proveedor necesita una clave de API",
         "unavailable": "no disponible",
         "failed": "con errores",
         "upstream_error": "error del proveedor del modelo",

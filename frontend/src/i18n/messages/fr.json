@@ -264,6 +264,9 @@
       "migratable": "Migration",
       "keyCount": "{count} clé(s)",
       "tapToConnect": "Appuyez pour connecter",
+      "dataConsumed": "Données consommées",
+      "thisMonth": "Ce mois-ci",
+      "confirmDisconnect": "Déconnecter {label} ? Cela supprime {count} identifiant(s) enregistré(s) et arrête toute synchronisation en cours. Le travail déjà importé est conservé.",
       "category": {
         "pm": "Gestion de projet et du travail",
         "scm": "Gestion de code source",
@@ -1089,7 +1092,16 @@
     "copy": "Copier",
     "copied": "Copié",
     "copyFailed": "Échec de la copie",
-    "copyDiagnostics": "Copier le diagnostic"
+    "copyDiagnostics": "Copier le diagnostic",
+    "connectToggle": {
+      "connect": "Connecter",
+      "disconnect": "Déconnecter",
+      "working": "En cours…",
+      "connectAria": "Connecter {name}",
+      "disconnectAria": "Déconnecter {name}",
+      "errorTitle": "Impossible de déconnecter {name}",
+      "errorGeneric": "Échec de la déconnexion. Réessayez."
+    }
   },
   "prdCreate": {
     "title": "Nouveau PRD",
@@ -8829,6 +8841,8 @@
       "connectedCount": "● {count} connexion(s)",
       "brokenCount": "{count} connexion(s) OpenRouter",
       "modelCount": "{count} modèle(s) sélectionné(s)",
+      "costOwnKey": "Frais de routage Builderforce : {cost}. OpenRouter facture les jetons sur votre propre compte.",
+      "costManaged": "Facturé par Builderforce : {cost} (routage + jetons).",
       "ownKey": "Votre clé OpenRouter",
       "managedKey": "Facturation Builderforce",
       "edit": "Modifier",
@@ -8847,7 +8861,8 @@
       "validation": "Saisissez un nom et sélectionnez au moins un modèle.",
       "saveError": "Échec de l’enregistrement de la connexion OpenRouter",
       "removeError": "Échec de la suppression de la connexion OpenRouter",
-      "confirmRemove": "Supprimer la connexion OpenRouter « {label} » ?"
+      "confirmRemove": "Supprimer la connexion OpenRouter « {label} » ?",
+      "confirmDisconnectAll": "Déconnecter OpenRouter ? Cela supprime les {count} enregistrement(s). Les agents qui les utilisent basculeront vers les modèles gérés par Builderforce."
     },
     "status": {
       "connected": "● {subscription} connecté",
@@ -8882,6 +8897,8 @@
       "title": "Priorité des fournisseurs",
       "subtitle": "Lorsque plusieurs de vos comptes sont connectés, les agents cloud commencent par le fournisseur placé en tête et basculent vers le suivant en cas d'échec. Placez Meta en premier pour y acheminer les agents cloud.",
       "leads": "Prioritaire",
+      "drag": "Glisser pour réorganiser",
+      "rowLabel": "{provider}, position {position}. Faites glisser pour réorganiser.",
       "moveUp": "Monter {provider}",
       "moveDown": "Descendre {provider}",
       "errSave": "Échec de l'enregistrement de la priorité"
@@ -8928,7 +8945,7 @@
       "testing": "Test en cours…",
       "verified": "Connexion vérifiée.",
       "verifiedWith": "Connexion vérifiée avec {model}.",
-      "usage": "30 derniers jours : {requests} requêtes · {tokens} jetons",
+      "usage": "{days} derniers jours : {requests} requêtes · {tokens} jetons",
       "lastUsed": " · Dernière utilisation {when}",
       "failedFallback": "Échec du test de connexion : {status}.",
       "failedGeneric": "Échec du test de connexion",
@@ -8943,6 +8960,7 @@
         "revoked": "révoquée",
         "expired": "expirée",
         "undecryptable": "identifiant illisible",
+        "unsupported-auth": "enregistré comme abonnement, mais ce fournisseur nécessite une clé API",
         "unavailable": "indisponible",
         "failed": "en échec",
         "upstream_error": "erreur du fournisseur du modèle",

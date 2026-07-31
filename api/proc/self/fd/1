@@ -1,0 +1,8 @@
+// package.json
+var version = "2026.7.198";
+
+// src/version.ts
+var API_VERSION = version;
+export {
+  API_VERSION
+};
