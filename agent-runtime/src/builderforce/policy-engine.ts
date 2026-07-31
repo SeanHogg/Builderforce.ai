@@ -271,7 +271,6 @@ export const DEFAULT_PRD_ANALYSIS_POLICIES: (PolicyDefinition & { conditions: Po
     id: "data-access-validation",
     name: "Data Access Validation",
     description: "Ensure tasks requesting data access follow governance rules",
-    targetRole: null, // Global policy
     isGlobal: true,
     active: false, // Disabled by default
     updatedAt: new Date(),
