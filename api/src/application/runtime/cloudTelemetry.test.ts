@@ -106,7 +106,7 @@ describe("Telemetry Reconstruction & Ledger Integrity Gate", () => {
     expect(result.passes).toBe(true);
   });
 
-  // ── GAP-O1: Missing table rows ─────────────────────────────────────
+  // ── GAP-OBS-01: Missing table rows ─────────────────────────────────────
 
   it("should fail when tool_audit_events is empty for the execution (GAP-O1)", () => {
     const result = cloudTelemetryReconstructionGate(executionId, {
