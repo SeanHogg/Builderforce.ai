@@ -1,9 +1,14 @@
 /**
  * TELEMETRY RECONSTRUCTION & LEDGER INTEGRITY GATE
  * ================================================
- * Automated gate enforcing GAP-O1 (full run reconstruction from
- * tool_audit_events + usage_snapshots + llm_usage_log) and GAP-O2 (ledger
- * consistency between usage_snapshots and llm_usage_log per execution).
+ * Automated gate enforcing:
+ *   GAP-OBS-01 — full run reconstruction: tool_audit_events, usage_snapshots,
+ *                and llm_usage_log must all be joinable on execution_id with at
+ *                least one row each (standard metric set cannot be emitted
+ *                without complete underlying telemetry tables).
+ *   GAP-OBS-02 — ledger consistency: total token count from usage_snapshots
+ *                must equal total token count from llm_usage_log per execution
+ *                (distributed trace spans require consistent usage data).
  *
  * This file is an integration gate: it asserts no tool call or token row is
  * missing and that the two ledger tables sum to the same total for each
