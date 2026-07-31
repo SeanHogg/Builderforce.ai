@@ -11,6 +11,7 @@ import {
   openRouterConnectionsApi,
   providerKeysApi,
   type ByoPrecedenceEntry,
+  type ConnectionAuthAlert,
   type LlmUsageStats,
   type OpenRouterCatalogModel,
   type OpenRouterConnection,
@@ -263,7 +264,12 @@ function ProbeResultLine({ result }: { result: { message: string; ok: boolean } 
   );
 }
 
-function AuthAlertNotice({ alert, t }: { alert: ProviderAuthAlert; t: TFn }) {
+/** Everything this notice reads off an alert. Deliberately narrower than either alert type
+ *  so ONE notice renders a rejected provider account and a rejected OpenRouter registration
+ *  — the remediation depends on the REASON, never on which kind of account it was. */
+type RenderableAuthAlert = Pick<ProviderAuthAlert, 'reason' | 'status' | 'vendor'>;
+
+function AuthAlertNotice({ alert, t }: { alert: RenderableAuthAlert; t: TFn }) {
   const copyKey = alert.vendor === 'xai-oauth'
     ? alert.reason === 'not_entitled' ? 'authAlert.xaiNotEntitled'
       : alert.reason === 'capacity' ? 'authAlert.xaiCapacity'
@@ -556,10 +562,13 @@ function ProviderConnectionCard({
 function OpenRouterConnectionsPanel({
   connections,
   onChanged,
+  onHealthChange,
   t,
 }: {
   connections: OpenRouterConnection[];
   onChanged: () => Promise<unknown>;
+  /** Report a fresh health verdict (from a probe) up so the grid card repaints too. */
+  onHealthChange: (connectionId: number, alert: ConnectionAuthAlert | null) => void;
   t: TFn;
 }) {
   const [catalog, setCatalog] = useState<OpenRouterCatalogModel[]>([]);
@@ -642,6 +651,10 @@ function OpenRouterConnectionsPanel({
       const message = probeMessage(t, result);
       setTestResults((prev) => ({ ...prev, [connection.id]: { message, ok: result.ok } }));
       if (!result.ok) toast.error(message, { title: t('diagnostic.failedTitle', { label: connection.label }) });
+      // Repaint from THIS verdict — the probe just wrote (or cleared) the alert server-side,
+      // so the row and the grid card behind the drawer would otherwise keep showing the
+      // stale colour until the next full refresh.
+      onHealthChange(connection.id, result.authAlert ?? null);
     } catch (e) {
       const message = e instanceof Error ? e.message : t('diagnostic.failedGeneric');
       setTestResults((prev) => ({ ...prev, [connection.id]: { message, ok: false } }));
@@ -694,6 +707,9 @@ function OpenRouterConnectionsPanel({
               <div style={{ marginTop: 7, fontSize: 11.5, color: 'var(--text-secondary)', wordBreak: 'break-word' }}>
                 {connection.models.join(' → ')}
               </div>
+              {/* The registration is stored and looks healthy, but the gateway (or the daily
+                  sweep) saw it rejected — the reason this "connected" account serves nothing. */}
+              {connection.authAlert && <AuthAlertNotice alert={connection.authAlert} t={t} />}
             </div>
             <button
               type="button"
@@ -855,6 +871,19 @@ export function ProviderKeysSettings({
     }
   };
 
+  /** Apply a fresh probe verdict to ONE registration. The connections array stays the single
+   *  source for both the drawer rows and the grid card, so they cannot disagree about which
+   *  registrations need attention. */
+  const applyConnectionAlert = (connectionId: number, alert: ConnectionAuthAlert | null) =>
+    setOpenRouterConnections((prev) => prev.map((connection) => {
+      if (connection.id !== connectionId) return connection;
+      if (alert) return { ...connection, authAlert: alert };
+      const { authAlert: _cleared, ...healthy } = connection;
+      return healthy;
+    }));
+
+  const brokenConnections = openRouterConnections.filter((connection) => connection.authAlert).length;
+
   const precedenceLabels: Record<string, string> = Object.fromEntries(
     precedenceEntries.map((entry) => [entry.ref, precedenceEntryLabel(entry)]),
   );
@@ -877,10 +906,20 @@ export function ProviderKeysSettings({
                   <div style={sectionTitle}>OpenRouter</div>
                   <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t('openRouter.cardBlurb')}</div>
                 </div>
-                <span style={{ fontSize: 12, fontWeight: 650, color: openRouterConnections.length ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)' }}>
-                  {openRouterConnections.length
-                    ? t('openRouter.connectedCount', { count: openRouterConnections.length })
-                    : t('status.notConnected')}
+                {/* Registered ≠ working: a registration whose key was revoked or ran out of
+                    credit still stores and still lists, so a count alone would paint this
+                    green forever. A live alert downgrades it exactly as it does a provider. */}
+                <span style={{
+                  fontSize: 12, fontWeight: 650, whiteSpace: 'normal',
+                  color: brokenConnections ? 'var(--warning-text, #b45309)'
+                    : openRouterConnections.length ? 'rgba(34,197,94,0.9)'
+                    : 'var(--text-muted)',
+                }}>
+                  {brokenConnections
+                    ? t('status.needsAttention', { label: t('openRouter.brokenCount', { count: brokenConnections }) })
+                    : openRouterConnections.length
+                      ? t('openRouter.connectedCount', { count: openRouterConnections.length })
+                      : t('status.notConnected')}
                 </span>
               </button>
             )}
@@ -956,6 +995,7 @@ export function ProviderKeysSettings({
                 connections={openRouterConnections}
                 t={t}
                 onChanged={refresh}
+                onHealthChange={applyConnectionAlert}
               />
             </div>
           </SlideOutPanel>

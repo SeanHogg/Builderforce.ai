@@ -44,14 +44,17 @@ __export(src_exports, {
   accountUsedInTrace: () => accountUsedInTrace,
   activeMentionToken: () => activeMentionToken,
   allowanceState: () => allowanceState,
+  announcesUntakenAction: () => announcesUntakenAction,
   attachEvermindLearn: () => attachEvermindLearn,
   brainRequestError: () => brainRequestError,
   buildBrainTriageReport: () => buildBrainTriageReport,
   byoReasonHint: () => byoReasonHint,
   byoUnresolvedInTrace: () => byoUnresolvedInTrace,
   byoUnresolvedSummary: () => byoUnresolvedSummary,
+  catalogToolNamesMentionedIn: () => catalogToolNamesMentionedIn,
   chatErrorAction: () => chatErrorAction,
   chatWorkLinkingDirective: () => chatWorkLinkingDirective,
+  claimsMissingToolData: () => claimsMissingToolData,
   classifyModelFunding: () => classifyModelFunding,
   clearRunError: () => clearRunError,
   codeChangeFile: () => codeChangeFile,
@@ -129,6 +132,7 @@ __export(src_exports, {
   subscribeToChatMessages: () => subscribeToChatMessages,
   takePendingPrompt: () => takePendingPrompt,
   toolExposureInTrace: () => toolExposureInTrace,
+  toolNamesMentionedIn: () => toolNamesMentionedIn,
   toolSpecsFor: () => toolSpecsFor,
   traceWithPersistedSteps: () => traceWithPersistedSteps,
   useBrainActions: () => useBrainActions,
@@ -1355,7 +1359,7 @@ function resolveRecipient(choice, mention) {
 }
 
 // ../packages/agent-stall/src/index.ts
-var ANNOUNCE_SUBJECT = "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
+var ANNOUNCE_SUBJECT = "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to|'d need to| would need to| will need to| need to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
 var ANNOUNCE_FILLER = "(?:\\s+(?:now|then|first|next|quickly|briefly|just|also|actually|go ahead and|try to|attempt to))*";
 var ANNOUNCE_VERB = "(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|see|walk|trace|map)";
 var ANNOUNCE_GERUND = "(?:searching|fetching|retrieving|querying|loading|checking|looking|scanning|reading|listing|gathering|pulling|examining|inspecting|reviewing|analy[sz]ing)";
@@ -1390,6 +1394,9 @@ function announcesUntakenAction(text) {
 }
 var FILE_EXTENSION = "(?:ts|tsx|js|jsx|mjs|cjs|json|md|ya?ml|sql|toml|lock|txt|env|html|css|py|go|rs|sh|png|svg|csv|xml)\\b";
 var DOTTED_TOOL_IDENT = `\\b[a-z][a-z0-9_]{2,}\\.(?!${FILE_EXTENSION})[a-z][a-z0-9_]{2,}\\b`;
+function catalogToolNamesMentionedIn(text) {
+  return [...new Set(text.match(new RegExp(DOTTED_TOOL_IDENT, "gi")) ?? [])];
+}
 var UNCALLED_TOOL_CLAIM = new RegExp(
   [
     // "The tools required are X, Y and Z." / "The required tools are …"
@@ -1398,6 +1405,10 @@ var UNCALLED_TOOL_CLAIM = new RegExp(
     "\\btools?\\b[^.!?]{0,80}?\\b(?:have|has|had|were|was)(?:n'?t| not)\\s+(?:yet\\s+)?(?:return|returned|provided|available|run|called)",
     // "no tool results", "no results from the tools", "no tool outputs for project 11"
     "\\bno\\s+(?:new\\s+)?tools?\\s+(?:results?|outputs?|data|returns?)\\b",
+    // "No other tools provide the needed data." — the same claim aimed at the CATALOG
+    // rather than at the results: an inventory of what it would need, from a turn that
+    // called none of it. Observed as the closing sentence of the measured replies.
+    "\\bno\\s+other\\s+tools?\\b[^.!?]{0,40}?\\b(?:provide|provides|give|gives|return|returns|have|has|offer|offers)\\b",
     "\\bno\\s+results?\\s+(?:from|for)\\s+(?:the\\s+)?tools?\\b",
     // "tool outputs never provided" / "the tool results were never returned"
     "\\btools?\\s+(?:results?|outputs?)\\b[^.!?]{0,40}?\\b(?:never|not)\\s+(?:been\\s+)?(?:provided|returned|available)",
@@ -1423,11 +1434,14 @@ function stallRecoveryNudge(lastChance) {
     // ("the required tools have not returned results"). The second wording matters —
     // a model told only "you said you would call a tool" when it never said any such
     // thing tends to repeat the same excuse rather than act.
-    "Your last turn made zero tool calls. You either said you would call a tool and did not, or reported that tool results were missing \u2014 no results exist because you never made the call. Make the call NOW in this turn, then answer using its result. If no tool can give you that data, say plainly which data you are missing and answer with what you already have. Do not announce another call." + (lastChance ? " This is your last chance to act: you have now stated an intention without acting several times in a row. Either emit a tool call in this turn, or give your complete final answer from what you already know \u2014 an answer that only describes what you are about to do will be shown to the user as-is." : "")
+    "Your last turn made zero tool calls. You either said you would call a tool and did not, reported that tool results were missing \u2014 no results exist because you never made the call \u2014 or returned nothing at all. Make the call NOW in this turn, then answer using its result. If no tool can give you that data, say plainly which data you are missing and answer with what you already have. Do not announce another call, and do not reply with an empty message." + (lastChance ? " This is your last chance to act: you have now stated an intention without acting several times in a row. Either emit a tool call in this turn, or give your complete final answer from what you already know \u2014 an answer that only describes what you are about to do will be shown to the user as-is." : "")
   );
 }
+function isEmptyTurn(input) {
+  return input.toolCallCount === 0 && input.availableToolCount > 0 && input.text.trim() === "";
+}
 function isStalledTurn(input) {
-  return input.toolCallCount === 0 && input.availableToolCount > 0 && (announcesUntakenAction(input.text) || claimsMissingToolData(input.text));
+  return input.toolCallCount === 0 && input.availableToolCount > 0 && (announcesUntakenAction(input.text) || claimsMissingToolData(input.text) || isEmptyTurn(input));
 }
 function shouldRecoverStalledTurn(input) {
   return isStalledTurn(input) && input.recoveriesUsed < MAX_ANNOUNCEMENT_RECOVERIES;
@@ -1435,15 +1449,48 @@ function shouldRecoverStalledTurn(input) {
 function isExhaustedStall(input) {
   return isStalledTurn(input) && input.recoveriesUsed >= MAX_ANNOUNCEMENT_RECOVERIES;
 }
-var MAX_MODEL_FAILOVERS = 2;
-function modelFailoverNotice(from, to) {
-  const who = from && from !== "default" ? `\`${from}\`` : "The previous model";
-  return `${who} described tool calls instead of making them, ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row, so it cannot complete this request. Retrying on \`${to}\`.`;
+function whatItDid(emptyTurn) {
+  return emptyTurn ? `returned an empty turn \u2014 no tool call and no words \u2014 ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row` : `described tool calls instead of making them, ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row`;
 }
-function stallExhaustedNotice(model, tried) {
+function modelFailoverNotice(from, to, emptyTurn = false) {
+  const who = from && from !== "default" ? `\`${from}\`` : "The previous model";
+  return `${who} ${whatItDid(emptyTurn)}, so it cannot complete this request. Retrying on \`${to}\`.`;
+}
+function stallExhaustedNotice(model, tried, emptyTurn = false) {
   const who = model && model !== "default" ? `The model \`${model}\`` : "The model";
   const others = (tried ?? []).filter((m) => m && m !== model);
-  return `${who} described tool calls instead of making them, ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row, so nothing was actually run and the answer above is only a description of intended actions.` + (others.length ? ` This run already failed over from ${others.map((m) => `\`${m}\``).join(", ")}, so the problem is unlikely to be any single model \u2014 check that the tool catalog loaded (see the "Tools available to the model" line in a copied diagnostics report).` : " This is a model limitation, not a configuration error \u2014 pick a different model for this chat and send the message again.");
+  return `${who} ${whatItDid(emptyTurn)}, so nothing was actually run and ` + (emptyTurn ? "there is no answer above to show you." : "the answer above is only a description of intended actions.") + (others.length ? ` This run already failed over from ${others.map((m) => `\`${m}\``).join(", ")}, so the problem is unlikely to be any single model \u2014 check that the tool catalog loaded (see the "Tools available to the model" line in a copied diagnostics report).` : " This is a model limitation, not a configuration error \u2014 pick a different model for this chat and send the message again.");
+}
+function ids(list) {
+  return (list ?? []).map((m) => m.id).filter((id) => !!id);
+}
+function nextFallbackModel(surface, tried) {
+  if (!surface) return void 0;
+  const used = new Set(tried.filter(Boolean));
+  const byo = ids(surface.byo?.models);
+  const byoSet = new Set(byo);
+  const coding = (surface.codingModels ?? []).filter(Boolean);
+  const pool = ids(surface.data);
+  const tiers = [
+    coding.filter((m) => byoSet.has(m)),
+    coding,
+    byo,
+    pool
+  ];
+  for (const tier of tiers) {
+    const hit = tier.find((m) => !used.has(m));
+    if (hit) return hit;
+  }
+  return void 0;
+}
+var MAX_MODEL_FAILOVERS = 2;
+function chooseStallFailover(input) {
+  for (const m of [input.activeModel, input.resolvedModel]) {
+    if (m && m !== "default" && !input.tried.includes(m)) input.tried.push(m);
+  }
+  if (input.failoversUsed >= MAX_MODEL_FAILOVERS) return void 0;
+  const next = input.pick ? input.pick(input.tried) : nextFallbackModel(input.surface, input.tried);
+  return next && !input.tried.includes(next) ? next : void 0;
 }
 
 // src/persistedSteps.ts
@@ -3132,8 +3179,13 @@ ${chatWorkLinkingDirective(chatId)}`;
       availableToolCount: toolSpecs?.length ?? 0,
       recoveriesUsed: announcementRecoveries
     })) {
-      for (const m of [activeModel, resolved]) if (m && m !== "default" && !triedModels.includes(m)) triedModels.push(m);
-      const next = modelFailovers < MAX_MODEL_FAILOVERS ? pickFallbackModel?.(triedModels) : void 0;
+      const next = chooseStallFailover({
+        activeModel,
+        resolvedModel: resolved,
+        tried: triedModels,
+        failoversUsed: modelFailovers,
+        pick: pickFallbackModel
+      });
       if (next) {
         modelFailovers += 1;
         pushDurableStep(c, chatId, persistence, {
@@ -3615,30 +3667,6 @@ function fetchApiVersionVia(read, now = Date.now) {
   return inflight;
 }
 
-// src/modelFallback.ts
-function ids(list) {
-  return (list ?? []).map((m) => m.id).filter((id) => !!id);
-}
-function nextFallbackModel(surface, tried) {
-  if (!surface) return void 0;
-  const used = new Set(tried.filter(Boolean));
-  const byo = ids(surface.byo?.models);
-  const byoSet = new Set(byo);
-  const coding = (surface.codingModels ?? []).filter(Boolean);
-  const pool = ids(surface.data);
-  const tiers = [
-    coding.filter((m) => byoSet.has(m)),
-    coding,
-    byo,
-    pool
-  ];
-  for (const tier of tiers) {
-    const hit = tier.find((m) => !used.has(m));
-    if (hit) return hit;
-  }
-  return void 0;
-}
-
 // src/pendingPrompt.ts
 var PENDING_PROMPT_KEY = "bf_pending_prompt";
 function savePendingPrompt(text) {
@@ -3885,14 +3913,17 @@ function formatChatDiagnostics(d) {
   accountUsedInTrace,
   activeMentionToken,
   allowanceState,
+  announcesUntakenAction,
   attachEvermindLearn,
   brainRequestError,
   buildBrainTriageReport,
   byoReasonHint,
   byoUnresolvedInTrace,
   byoUnresolvedSummary,
+  catalogToolNamesMentionedIn,
   chatErrorAction,
   chatWorkLinkingDirective,
+  claimsMissingToolData,
   classifyModelFunding,
   clearRunError,
   codeChangeFile,
@@ -3970,6 +4001,7 @@ function formatChatDiagnostics(d) {
   subscribeToChatMessages,
   takePendingPrompt,
   toolExposureInTrace,
+  toolNamesMentionedIn,
   toolSpecsFor,
   traceWithPersistedSteps,
   useBrainActions,
