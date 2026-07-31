@@ -62,7 +62,7 @@ This task focuses on performing a detailed cross-reference of a predefined set o
 > **Codebase**: `seanhogg/builderforce.ai` branch `builderforce/task-175` (PR #50)
 > **Date**: 2026-07-30 (revised) + manager recovery note 2026-07-30 (file move)
 > **Total KRs assessed**: 28 across 8 objectives
-> **Verification method**: Every cited file path was confirmed present via `read_file` against the actual branch checkout. Files that could not be confirmed were excluded as evidence.
+> **Verification method**: Every cited file path was confirmed present via `read_file` / `list_files` against the actual branch checkout. Files that could not be confirmed were excluded as evidence, with one deliberate exception: the KR #16 payout seam, which is cited explicitly as **base-branch** evidence and labelled as such (see "Base-sync correction").
 > **Conflict resolution**: This assessment was moved from `PRD.md` to its own file to avoid clobbering task #487's Evermind PRD (base branch `PRD.md`).
 
 ## Assessment Summary
