@@ -23,6 +23,9 @@ import {
   createPlanningWorkflow,
   createRefactorWorkflow,
   createSecurityAuditWorkflow,
+  createQualityAuditWorkflow,
+  createPmVisionAuditWorkflow,
+  createPrivacyAuditWorkflow,
   globalOrchestrator,
   type SpawnSubagentContext,
   type WorkflowStep,
@@ -36,11 +39,17 @@ export type OrchestrationContext = SpawnSubagentContext & { taskId?: number };
 
 // ── orchestrate ──────────────────────────────────────────────────────────────────
 
-const WORKFLOW_REGISTRY: Record<string, (description: string, opts?: { requireImpactAnalysis?: boolean }) => WorkflowStep[]> = {
+const WORKFLOW_REGISTRY: Record<
+  string,
+  (description: string, opts?: { requireImpactAnalysis?: boolean }) => WorkflowStep[]
+> = {
   feature: createFeatureWorkflow,
   bugfix: createBugFixWorkflow,
   refactor: createRefactorWorkflow,
   security_audit: createSecurityAuditWorkflow,
+  quality_audit: createQualityAuditWorkflow,
+  pm_vision_audit: createPmVisionAuditWorkflow,
+  privacy_audit: createPrivacyAuditWorkflow,
   planning: createPlanningWorkflow,
   adversarial: createAdversarialReviewWorkflow,
   prd_analysis: (description: string, opts?: { requireImpactAnalysis?: boolean }) =>
@@ -90,11 +99,14 @@ function validateRole(role: string): string | null {
   return (
     `Unknown agent role: "${role}". Use a built-in role ` +
     `(code-creator, code-reviewer, test-generator, bug-analyzer, refactor-agent, ` +
-    `documentation-agent, architecture-advisor) or a hired-agent roleKey/id.`
+    `documentation-agent, architecture-advisor, validator-agent, security-agent) or a hired-agent roleKey/id.`
   );
 }
 
-export async function runOrchestrate(opts: OrchestrateOpts, context: OrchestrationContext): Promise<Record<string, unknown>> {
+export async function runOrchestrate(
+  opts: OrchestrateOpts,
+  context: OrchestrationContext,
+): Promise<Record<string, unknown>> {
   const { workflow, description, customSteps, requireImpactAnalysis } = opts;
   try {
     // Pull hired agents into the role registry before resolving any role.
@@ -281,4 +293,3 @@ export async function runSaveSessionHandoff(projectRoot: string, opts: SaveHando
     return { error: `Failed to save session handoff: ${error instanceof Error ? error.message : String(error)}` };
   }
 }
-
