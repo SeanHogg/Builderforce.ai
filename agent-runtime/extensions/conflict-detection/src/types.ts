@@ -1,28 +1,22 @@
 /**
- * Type Definitions
- * 
- * Core TypeScript types for the Conflict Detection Rules and Alerts system.
+ * Type Definitions — Conflict Detection Rules and Alerts
+ *
+ * Per PRD:
+ * - Conflict Alert DTO structure
+ * - Conflict Detection API request/response
+ * - Conflict Rule Spec
  */
 
-/**
- * Priority levels for requests
- */
 export type PriorityLevel = 'P0' | 'P1' | 'P2' | 'P3';
 export const PRIORITY_LEVELS: readonly PriorityLevel[] = ['P0', 'P1', 'P2', 'P3'] as const;
 
-/**
- * Conflict alert statuses
- */
 export type ConflictStatus = 'open' | 'acknowledged' | 'resolved' | 'dismissed';
-
-/**
- * Conflict severities
- */
 export type ConflictSeverity = 'critical' | 'high' | 'medium' | 'low';
 
-/**
- * Stakeholder information
- */
+// ──────────────────────────────────────────────────────────────────────────────
+// Core Entities
+// ──────────────────────────────────────────────────────────────────────────────
+
 export interface Stakeholder {
   stakeholderId: string;
   stakeholderName: string;
@@ -30,27 +24,28 @@ export interface Stakeholder {
   email?: string;
 }
 
-/**
- * Team information
- */
 export interface Team {
   teamId: string;
   teamName: string;
   organization?: string;
 }
 
-/**
- * Source request information
- */
 export interface PriorityRequest {
   id: string;
   title: string;
   description?: string;
   priority: PriorityLevel;
   stakeholderId: string;
-  stakeholder: Stakeholder;
+  stakeholder: {
+    name?: string;
+    role?: string;
+    email?: string;
+  };
   teamId: string;
-  team: Team;
+  team: {
+    name?: string;
+    organization?: string;
+  };
   versionId?: string;
   reviewWindowStart?: string;
   reviewWindowEnd?: string;
@@ -59,20 +54,15 @@ export interface PriorityRequest {
   sourceSystem?: string;
 }
 
-/**
- * Conflicting priorities representation
- */
 export interface ConflictingPriorities {
   stakeholder1: Stakeholder;
-  stakeholder2: Stakeholder;
+  stakeholder2?: Stakeholder;
+  stakeholder?: Stakeholder; // legacy alias
   team: Team;
   priority1: PriorityLevel;
   priority2: PriorityLevel;
 }
 
-/**
- * Conflict key - unique identifier for a conflict based on involved entities
- */
 export interface ConflictKey {
   stakeholderId1: string;
   stakeholderId2: string;
@@ -80,39 +70,89 @@ export interface ConflictKey {
   versionId?: string;
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Conflict Alert DTO — Per PRD Acceptance Criteria
+// ──────────────────────────────────────────────────────────────────────────────
+
 /**
- * Conflict alert - core entity for conflict management
+ * Conflict Alert DTO
+ *
+ * Requirements (from PRD):
+ * - Labeling: conflicting items, involved stakeholders, detection date
+ * - Summarization: reasoning behind conflict
+ * - Attachment: to relevant priority version(s)
+ * - Visibility: via API to all team members
+ *
+ * OpenAPI schema: ConflictAlert
  */
 export interface ConflictAlert {
+  /** Unique alert ID (stable, derived from conflict key) */
   id: string;
+
+  /** Stable deduplication key */
   key: ConflictKey;
+
+  /** Human-readable title labeling conflicting team/priorities */
   title: string;
+
+  /** Full description with labeled conflicting items, stakeholders, detection date */
   description: string;
+
+  /** Concise reasoning summary explaining rule violation */
   summary: string;
+
+  /** Severity classification */
   severity: ConflictSeverity;
+
+  /** ISO 8601 detection timestamp — per labeling requirement */
   detectedAt: string;
+
+  /** Workflow status */
   status: ConflictStatus;
+
+  /** Structured conflicting priorities with stakeholder details */
   conflictingPriorities: ConflictingPriorities;
+
+  /** List of involved stakeholders — labeling requirement */
   stakeholders: Stakeholder[];
+
+  /** Attached priority version(s) — per attachment requirement */
   versionIds: string[];
+
+  /** Source request IDs that triggered the conflict */
   sourceRequestIds: string[];
+
+  /** Number of unique conflicting source requests */
   conflictCount: number;
+
+  /** Optional resolution note (set when resolved/dismissed/acknowledged) */
   resolutionNote?: string;
+
+  /** User who resolved the conflict */
   resolvedBy?: string;
+
+  /** ISO 8601 resolution timestamp */
   resolvedAt?: string;
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// API DTOs
+// ──────────────────────────────────────────────────────────────────────────────
+
 /**
- * Conflict detection request
+ * POST /conflicts/detect — Request DTO
  */
 export interface DetectConflictsRequest {
+  /** Batch of priority requests to evaluate */
   requests: PriorityRequest[];
+  /** Optional scope to specific priority version (defines review window) */
   versionId?: string;
+  /** Override default review window size in days */
   windowThresholdDays?: number;
 }
 
 /**
- * Conflict detection response
+ * POST /conflicts/detect — Response DTO
  */
 export interface DetectConflictsResponse {
   success: boolean;
@@ -122,8 +162,53 @@ export interface DetectConflictsResponse {
 }
 
 /**
- * Conflict detection rule specification
+ * GET /conflicts — Query DTO (filtering by status per PRD)
  */
+export interface ListConflictsQuery {
+  /** Filter by status (PRD requires filtering by status) */
+  status?: ConflictStatus | 'all';
+  versionId?: string;
+  teamId?: string;
+  stakeholderId?: string;
+  severity?: ConflictSeverity;
+  page?: number;
+  limit?: number;
+}
+
+export interface ListConflictsResponse {
+  conflicts: ConflictAlert[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  timestamp: string;
+}
+
+export interface GetConflictResponse {
+  success: boolean;
+  conflict: ConflictAlert;
+  timestamp: string;
+}
+
+/**
+ * POST /conflicts/:id/resolve — Request DTO (manual resolution per PRD)
+ */
+export interface ResolveConflictRequest {
+  action: 'acknowledge' | 'resolve' | 'dismiss';
+  note?: string;
+  resolverUserId?: string;
+}
+
+export interface ResolveConflictResponse {
+  success: boolean;
+  conflict: ConflictAlert;
+  timestamp: string;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Rule Spec Types
+// ──────────────────────────────────────────────────────────────────────────────
+
 export interface ConflictRule {
   name: string;
   description: string;
@@ -152,31 +237,10 @@ export interface ConflictRule {
   };
 }
 
-/**
- * List conflicts query parameters
- */
-export interface ListConflictsQuery {
-  status?: ConflictStatus;
-  versionId?: string;
-  teamId?: string;
-  stakeholderId?: string;
-  severity?: ConflictSeverity;
-  page?: number;
-  limit?: number;
-}
+// ──────────────────────────────────────────────────────────────────────────────
+// Wrapper / Common
+// ──────────────────────────────────────────────────────────────────────────────
 
-/**
- * Resolve conflict request
- */
-export interface ResolveConflictRequest {
-  action: 'acknowledge' | 'resolve' | 'dismiss';
-  note?: string;
-  resolverUserId?: string;
-}
-
-/**
- * API response wrapper
- */
 export interface ApiSuccessResponse<T> {
   success: true;
   data: T;
@@ -192,9 +256,6 @@ export interface ApiErrorResponse {
 
 export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
 
-/**
- * Health check response
- */
 export interface HealthCheckResponse {
   status: 'healthy' | 'unhealthy' | 'degraded';
   service: string;
@@ -203,9 +264,6 @@ export interface HealthCheckResponse {
   details?: Record<string, any>;
 }
 
-/**
- * Pagination response
- */
 export interface PaginatedResponse<T> {
   data: T[];
   total: number;
@@ -217,9 +275,6 @@ export interface PaginatedResponse<T> {
   timestamp: string;
 }
 
-/**
- * Conflict notification payload
- */
 export interface ConflictNotificationPayload {
   conflictId: string;
   title: string;
@@ -231,9 +286,6 @@ export interface ConflictNotificationPayload {
   sourceSystem?: string;
 }
 
-/**
- * Audit log entry
- */
 export interface ConflictAuditEntry {
   id: string;
   conflictId: string;
