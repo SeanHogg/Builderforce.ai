@@ -213,6 +213,7 @@ import { createPulseRoutes } from './presentation/routes/pulseRoutes';
 import { createEmpFinopsRoutes } from './presentation/routes/empFinopsRoutes';
 import { createEmpMetricsRoutes } from './presentation/routes/empMetricsRoutes';
 import { createForecastRoutes } from './presentation/routes/forecastRoutes';
+import { createTrendRoutes } from './presentation/routes/trendRoutes';
 
 // Middleware
 import { addCorsToResponse, corsMiddleware, EXPOSED_HEADERS, ALLOWED_REQUEST_HEADERS } from './presentation/middleware/cors';
