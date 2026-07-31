@@ -147,7 +147,9 @@ export class PolicyEngine {
   /**
    * Evaluate a policy condition against context data
    * 
-   * Supports placeholder syntax: ${variable} will be replaced with context values.
+   * Supports comparison operators: ==, !=, >, <, >=, <=, contains, matches
+   * Supports ${variable} placeholders that are substituted before evaluation.
+   * Supports && and || logical operators.
    * 
    * @param condition - Condition string to evaluate
    * @param context - Context data for variable substitution
@@ -156,15 +158,29 @@ export class PolicyEngine {
    */
   evaluateCondition(condition: string, context: Record<string, any>, role: string): boolean {
     try {
-      // Replace ${variable} placeholders
-      let evaluated = condition.replace(
+      // Replace ${variable} placeholders with actual values
+      const substituted = condition.replace(
         /\$\{([^}]+)\}/g,
-        (match, varName) => String(context[varName] ?? role),
+        (match, varName) => {
+          const value = context[varName] ?? (varName === "role" ? role : "");
+          // Quote string values for safe evaluation
+          if (typeof value === "string" && !/^-?\d+(\.\d+)?$/.test(value)) {
+            return `"${value.replace(/"/g, '\\"')}"`;
+          }
+          return String(value);
+        },
       );
 
-      // Parse result safely - treat non-empty, non-null strings as true
-      const result = evaluated.trim();
-      return result !== "" && result !== "0" && result !== "false" && result !== "null" && result !== "undefined";
+      // Build evaluation context for evalPredicate
+      const evalCtx: EvalContext = { role };
+      for (const [key, value] of Object.entries(context)) {
+        if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+          evalCtx[key] = value;
+        }
+      }
+
+      // Use the safe predicate evaluator from node-eval
+      return evalPredicate(substituted, evalCtx);
     } catch {
       return false;
     }
