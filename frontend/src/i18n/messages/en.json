@@ -8930,6 +8930,8 @@
       "failedFallback": "Connection test failed: {status}.",
       "failedGeneric": "Connection test failed",
       "failedTitle": "{label} connection failed",
+      "upstreamTitle": "{label} — model provider error",
+      "testCost": "Testing sends one small real request, billed to the account being tested.",
       "state": {
         "ready": "ready",
         "capacity": "usage depleted",
@@ -8940,6 +8942,7 @@
         "undecryptable": "unreadable credential",
         "unavailable": "unavailable",
         "failed": "failed",
+        "upstream_error": "model provider error",
         "not_found": "connection not found",
         "no_test_model": "no model selected to test",
         "key_unresolved": "saved key could not be used"
