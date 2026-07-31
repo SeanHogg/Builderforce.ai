@@ -115,6 +115,40 @@ describe('ProviderKeysSettings — OpenRouter connection health', () => {
     expect(await screen.findByText(/providerKeys\.authAlert\.capacity 429/)).toBeInTheDocument();
   });
 
+  it('lets an operator choose which model is tried FIRST and persists that order', async () => {
+    // Order is routing, not presentation: position 1 is what agents run and what the probe
+    // tests, so an operator whose top model is having an outage must be able to demote it.
+    mockApi([connection({ models: ['moonshotai/kimi-k3', 'deepseek/deepseek-v4-pro'] })]);
+    const update = vi.spyOn(api.openRouterConnectionsApi, 'update')
+      .mockResolvedValue(connection({ models: ['deepseek/deepseek-v4-pro', 'moonshotai/kimi-k3'] }));
+    render(<ProviderKeysSettings />);
+    await openDrawer();
+    fireEvent.click(await screen.findByText('providerKeys.openRouter.edit'));
+
+    // Promote the second model over the first.
+    fireEvent.click(await screen.findByLabelText(/precedence\.moveUp.*deepseek\/deepseek-v4-pro/));
+    fireEvent.click(screen.getByText('providerKeys.save'));
+
+    await waitFor(() => expect(update).toHaveBeenCalledWith(1, expect.objectContaining({
+      models: ['deepseek/deepseek-v4-pro', 'moonshotai/kimi-k3'],
+    })));
+  });
+
+  it('drops a model from the registration without touching the rest of the order', async () => {
+    mockApi([connection({ models: ['a/one', 'b/two', 'c/three'] })]);
+    const update = vi.spyOn(api.openRouterConnectionsApi, 'update').mockResolvedValue(connection());
+    render(<ProviderKeysSettings />);
+    await openDrawer();
+    fireEvent.click(await screen.findByText('providerKeys.openRouter.edit'));
+
+    fireEvent.click(await screen.findByLabelText(/openRouter\.removeModel.*b\/two/));
+    fireEvent.click(screen.getByText('providerKeys.save'));
+
+    await waitFor(() => expect(update).toHaveBeenCalledWith(1, expect.objectContaining({
+      models: ['a/one', 'c/three'],
+    })));
+  });
+
   it('shows nothing health-related for a working registration', async () => {
     mockApi([connection()]);
     render(<ProviderKeysSettings />);
