@@ -537,6 +537,7 @@ export const taskPrStatusTool: AgentTool<typeof TaskPrStatusSchema, string> = {
   description:
     "Check Pull Request status for a set of task IDs across GitHub repositories. " +
     "Returns which tasks have all PRs merged, which have open PRs, and which have no PRs found. " +
+    "Use maxResultsPerTask to limit PRs per task (default 10). " +
     "Includes a human-readable text report. Requires GITHUB_TOKEN in the environment.",
   parameters: TaskPrStatusSchema,
   async execute(_toolCallId: string, params: TaskPrStatusParams): Promise<AgentToolResult<string>> {
