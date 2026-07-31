@@ -947,37 +947,5 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     return c.json({ task: task ? task.toPlain() : null });
   });
 
-  // GET /api/tasks/unassigned-high-priority
-  router.get('/unassigned-high-priority', async (c) => {
-    const requestParams = c.req.query('projectId');
-    const projectId = requestParams ? Number(requestParams) : undefined;
-
-    // Parse and validate pagination parameters
-    const page = Math.max(1, Number(c.req.query('page')) || 1);
-    const pageSize = Math.min(100, Math.max(1, Number(c.req.query('pageSize')) || 20));
-
-    // Parse and validate sorting parameters
-    const validSortBy = ['dueDate', 'title', 'createdAt'];
-    const sortByRaw = c.req.query('sortBy') || 'createdAt';
-    const sortBy = validSortBy.includes(sortByRaw) ? sortByRaw as 'dueDate' | 'title' | 'createdAt' : 'createdAt';
-
-    const validSortOrder = ['asc', 'desc'];
-    const sortOrderRaw = c.req.query('sortOrder') || 'desc';
-    const sortOrder = validSortOrder.includes(sortOrderRaw) ? sortOrderRaw as 'asc' | 'desc' : 'desc';
-
-    const tasks = await taskService.findUnassignedHighPriority(
-      c.get('tenantId'),
-      {
-        projectId,
-        page,
-        pageSize,
-        sortBy,
-        sortOrder,
-      }
-    );
-
-    return c.json(tasks);
-  });
-
   return router;
 }
