@@ -38,6 +38,7 @@ import {
   type LlmProxyService,
 } from './LlmProxyService';
 import { byoModelsFor } from './byoModelRouting';
+import { CASCADE_STATUSES } from './vendors/types';
 import {
   connectionModelRef,
   listOpenRouterConnections,
@@ -79,9 +80,10 @@ import { raiseConnectionAuthAlert, raiseProviderAuthAlert } from './byoCredentia
 export interface ByoProbeResult {
   provider: LlmProvider;
   ok: boolean;
-  /** `ready` on success, else a short machine status the UI localizes:
-   *  the unresolved reason, `not_connected`, `no_test_model`, or `failed`. */
-  status: 'ready' | 'not_connected' | 'no_test_model' | 'failed' | ByoUnresolvedReason;
+  /** `ready` on success, else a short machine status the UI localizes: the unresolved
+   *  reason, `not_connected`, `no_test_model`, `upstream_error` (the credential was
+   *  accepted and the model provider broke — NOT the owner's problem to fix), or `failed`. */
+  status: 'ready' | 'not_connected' | 'no_test_model' | 'upstream_error' | 'failed' | ByoUnresolvedReason;
   /** The model the probe pinned (absent when it never got that far). */
   model?: string;
   /** Upstream HTTP status, when a request was actually made. */
@@ -143,12 +145,19 @@ interface ProbeDispatch<A> {
   ok: boolean;
   /** The id the gateway actually dispatched (a strict pin, so normally the requested one). */
   resolvedModel: string;
+  /** The status the UPSTREAM returned, not the gateway's rolled-up envelope — the 502 the
+   *  model provider sent, rather than the 429/503 the cascade wrapper reports. */
   upstreamStatus: number;
   /** Human-readable failure detail — absent on success. */
   error?: string;
+  /** True when the failure is the transient class (429 without a capacity marker, 5xx,
+   *  timeout): the credential was ACCEPTED and something downstream of it broke. The
+   *  distinction IS the verdict — "your key is dead" and "the model provider had a bad
+   *  minute" demand opposite reactions, and collapsing them into "failed" is how a working
+   *  connection gets reported as broken. */
+  retryable: boolean;
   /** The owner-actionable alert this failure classifies to, when it is one. `undefined` for
-   *  a transient blip (429 without a capacity marker, 5xx, timeout), which must never paint
-   *  a card red or mail anyone. */
+   *  a transient blip, which must never paint a card red or mail anyone. */
   alert?: A;
 }
 
@@ -157,7 +166,32 @@ interface ProbeDispatch<A> {
  *  below is the part worth sharing; whose account it belongs to is the caller's business. */
 type ProbeClassifier<A> = (vendor: string, status: number, detail: string) => A | null;
 
+/**
+ * One extra attempt for a TRANSIENT failure, and only for a transient one.
+ *
+ * A strict pin makes a single attempt by design — that is what keeps the verdict about the
+ * credential under test rather than about whatever the cascade fell back to. The cost is that
+ * one flaky upstream response becomes a red card for a connection that works: observed live,
+ * where a `moonshotai/kimi-k3` probe rode the tenant's own key, reached OpenRouter, was
+ * billed, and came back 502 from the model provider.
+ *
+ * Exactly one retry, and never on a rejected credential: re-sending a 401/403 cannot change
+ * the answer and would spend the owner's money twice to learn nothing.
+ */
+const PROBE_RETRY_DELAY_MS = 300;
+
 async function dispatchProbe<A>(
+  service: LlmProxyService,
+  model: string,
+  classify: ProbeClassifier<A>,
+): Promise<ProbeDispatch<A>> {
+  const first = await attemptProbe(service, model, classify);
+  if (first.ok || !first.retryable) return first;
+  await new Promise((resolve) => setTimeout(resolve, PROBE_RETRY_DELAY_MS));
+  return attemptProbe(service, model, classify);
+}
+
+async function attemptProbe<A>(
   service: LlmProxyService,
   model: string,
   classify: ProbeClassifier<A>,
@@ -168,21 +202,20 @@ async function dispatchProbe<A>(
   };
   const result = await service.complete(body, undefined, newTraceId());
   if (result.response.status < 400) {
-    return { ok: true, resolvedModel: result.resolvedModel, upstreamStatus: result.response.status };
+    return { ok: true, resolvedModel: result.resolvedModel, upstreamStatus: result.response.status, retryable: false };
   }
 
   const payload = await result.response.clone().text();
   const message = upstreamMessage(payload);
-  // A 400/422 carries the upstream's own diagnostic verbatim, but a retryable failure
-  // (401/403/429/5xx) collapses into the gateway's cascade summary — which reads as a bare
-  // "failed" to the operator. Append the per-attempt upstream status so the reason is
-  // actionable, and use those attempts for classification: the top-level status is the
-  // gateway's rolled-up envelope, while the ATTEMPT carries the real 401/403/capacity.
-  const attemptDetail = result.failovers?.map((f) => `${f.vendor}/${f.model} → HTTP ${f.code}`).join('; ');
-  const error = [
-    message || `upstream HTTP ${result.response.status}`,
-    attemptDetail ? `(${attemptDetail})` : '',
-  ].filter(Boolean).join(' ');
+  // The ATTEMPT is the source of truth, not the envelope. A retryable failure collapses into
+  // the gateway's cascade summary ("AI vendor cascade exhausted (1 attempts: …)") — which
+  // states our routing internals at an operator who needed the provider's own status, and
+  // prints the internal `<vendor>/<ref>` form as `openrouter/openrouter/moonshotai/kimi-k3`.
+  // A strict pin has exactly ONE attempt, so read the real status and detail straight off it
+  // and keep the envelope prose only as a fallback.
+  const attempt = result.failovers?.[0];
+  const upstreamStatus = attempt?.code ?? result.response.status;
+  const error = attempt?.detail?.trim() || message || `upstream HTTP ${upstreamStatus}`;
 
   const alert = (result.failovers ?? []).reduce<A | null>(
     (found, f) => found ?? classify(f.vendor, f.code, f.detail ?? message),
@@ -192,10 +225,20 @@ async function dispatchProbe<A>(
   return {
     ok: false,
     resolvedModel: result.resolvedModel,
-    upstreamStatus: result.response.status,
+    upstreamStatus,
     error,
+    // An alert means the OWNER can act (rejected / unentitled / out of budget) — never a
+    // transient. Anything else in the failing range is the upstream having a bad minute.
+    retryable: !alert && isTransientProbeStatus(upstreamStatus),
     ...(alert ? { alert } : {}),
   };
+}
+
+/** Statuses that mean "the credential was accepted and something downstream of it broke" —
+ *  the gateway's own cascade set, so the probe and the router agree on what is transient.
+ *  `0` is the no-response/timeout case, which is equally not the credential's fault. */
+function isTransientProbeStatus(status: number): boolean {
+  return status === 0 || CASCADE_STATUSES.has(status);
 }
 
 /**
@@ -281,7 +324,7 @@ export async function probeByoProvider(
   // the owner should hear about it the moment anything notices — the Test button included.
   if (outcome.alert) await raise(outcome.alert, outcome.error ?? '');
   return {
-    provider, ok: false, status: 'failed', model,
+    provider, ok: false, status: outcome.retryable ? 'upstream_error' : 'failed', model,
     upstreamStatus: outcome.upstreamStatus,
     ...(outcome.error ? { error: outcome.error } : {}),
     ...(outcome.alert ? { alert: outcome.alert } : {}),
@@ -300,12 +343,17 @@ export async function probeByoProvider(
 export interface OpenRouterConnectionProbeResult {
   connectionId: number;
   ok: boolean;
-  /** `ready` on success, else a short machine status the UI localizes. `key_unresolved`
-   *  means the connection claims a key that could not be applied to any of its models —
-   *  either it no longer decrypts, or every one of its ids is already claimed by a
-   *  HIGHER-precedence connection, which is exactly the case where a green verdict would
-   *  have been a lie about which account pays. */
-  status: 'ready' | 'not_found' | 'no_test_model' | 'key_unresolved' | 'failed';
+  /** `ready` on success, else a short machine status the UI localizes.
+   *
+   *  `key_unresolved` — the connection claims a key that could not be applied to any of its
+   *  models (it no longer decrypts, or every one of its ids is already claimed by a
+   *  HIGHER-precedence connection), which is exactly the case where a green verdict would
+   *  have been a lie about which account pays.
+   *
+   *  `upstream_error` — the key WORKED: OpenRouter accepted it and the model provider then
+   *  errored (a 502 from Moonshot, say). Nothing about the registration is wrong, so calling
+   *  this "failed" sends the owner to re-enter a key that is fine. */
+  status: 'ready' | 'not_found' | 'no_test_model' | 'key_unresolved' | 'upstream_error' | 'failed';
   /** The bare OpenRouter id the probe pinned (absent when it never got that far). */
   model?: string;
   /** True when the dispatch rode the tenant's OWN OpenRouter key rather than ours. */
@@ -392,7 +440,7 @@ export async function probeOpenRouterConnection(
 
   if (outcome.alert) await raise(outcome.alert, outcome.error ?? '');
   return {
-    connectionId, ok: false, status: 'failed',
+    connectionId, ok: false, status: outcome.retryable ? 'upstream_error' : 'failed',
     model: bare, ownKey, upstreamStatus: outcome.upstreamStatus,
     ...(outcome.error ? { error: outcome.error } : {}),
     ...(outcome.alert ? { alert: outcome.alert } : {}),
