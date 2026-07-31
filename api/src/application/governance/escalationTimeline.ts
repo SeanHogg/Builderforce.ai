@@ -6,7 +6,7 @@
  */
 
 import { buildSlaClockDto, computeSlaDeadline, type SlaClockDto } from './escalationSlaClock';
-import { resolveIconKey, type EscalationIconKey } from './escalationIcons';
+import { iconForLevel, type EscalationIconKey } from './escalationIcons';
 
 export type TimelineItemStatus = 'completed' | 'active' | 'pending' | 'breached' | 'skipped';
 
