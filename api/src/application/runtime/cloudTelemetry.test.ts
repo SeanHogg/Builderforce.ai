@@ -187,7 +187,7 @@ describe("Telemetry Reconstruction & Ledger Integrity Gate", () => {
     expect(result.missingRecords).toContain("llm_usage_log missing");
   });
 
-  // ── GAP-O2: Ledger drift ───────────────────────────────────────────
+  // ── GAP-OBS-02: Ledger drift ───────────────────────────────────────────
 
   it("should fail when ledger totals do not agree — snapshot total ≠ usage_log total (GAP-O2)", () => {
     const result = cloudTelemetryReconstructionGate(executionId, {
