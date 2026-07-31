@@ -235,8 +235,8 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
                     marginTop: 4,
                   }}
                 >
-                  <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>🚀</span>
-                  {!collapsed && <span className="nav-item-label">Get Started</span>}
+                  <span className="nav-item-icon" aria-hidden="true">🚀</span>
+                  <span className="nav-item-label">Get Started</span>
                 </Link>
               </div>
             )}
