@@ -624,6 +624,30 @@ export class AgentOrchestrator {
     this.persistWorkflow(workflow);
     this.telemetry?.emitTaskStart(workflow.id, task.id, task.agentRole, task.description);
 
+    // FR.5: Enforce policies before task execution
+    const policyContext = {
+      workflowId: workflow.id,
+      taskId: task.id,
+      role: task.agentRole,
+      taskDescription: task.description,
+      prdSize: task.input.length,
+      enableImpactAnalysis: true,
+    };
+    const violations = this.enforcePoliciesForTask(task.id, task.agentRole, policyContext);
+    if (violations.length > 0) {
+      for (const v of violations) {
+        logDebug(`[orchestrator] policy violation on task ${task.id}: ${v.message}`);
+        this.telemetry?.emit?.({
+          type: "policy_violation",
+          workflowId: workflow.id,
+          taskId: task.id,
+          policyId: v.policyId,
+          severity: v.severity,
+          message: v.message,
+        });
+      }
+    }
+
     // LLM-logic & ETL nodes (memory / knowledge / train / transform / …) compiled
     // from a visual workflow definition run in-process via dedicated handlers
     // rather than being dispatched to an agent runtime. Reserved roles carry the
