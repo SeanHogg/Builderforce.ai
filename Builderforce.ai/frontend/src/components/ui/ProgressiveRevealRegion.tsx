@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useEffect, useId } from 'react';
 import { useProgressiveReveal } from './ProgressiveRevealContext';
 import { ShimmerPrimitive } from './Skeletons';
 import type { PriorityTier, Stage } from './types';
