@@ -227,6 +227,7 @@ function toDomain(row: Row): Task {
     startDate:         row.startDate ?? null,
     dueDate:           row.dueDate ?? null,
     persona:           row.persona ?? null,
+    featureSign:       (row.featureSign as TaskProps['featureSign']),
     archived:          row.archived,
     createdAt:         row.createdAt,
     updatedAt:         row.updatedAt,
