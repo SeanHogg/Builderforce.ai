@@ -1881,12 +1881,26 @@ html[data-theme='light'] .nebula {
     border-top: 1px solid var(--border);
   }
 
-  /* Tighter content padding + clearance for the bottom bar */
+  /* AC1 — the content column itself carries NO horizontal padding on mobile, so
+     it spans 100% of the viewport. Inner padding is owned by `.page-container` /
+     `.page-inner`, which keeps text off the bezel without insetting full-bleed
+     children (tables, boards, hero sections). The bottom padding is clearance
+     for the fixed bottom bar. */
   .content {
-    padding: 8px 6px calc(64px + env(safe-area-inset-bottom, 0px));
+    width: 100%;
+    max-width: 100%;
+    padding: 8px 0 calc(64px + env(safe-area-inset-bottom, 0px));
   }
 
-  .page-inner { padding: 12px 8px; max-width: 100%; margin: 0; }
+  .page-inner { padding: 12px 8px; max-width: 100%; width: 100%; margin: 0; }
+
+  /* Wide children (data tables, kanban columns) scroll inside the page instead
+     of stretching the shell and creating a horizontal rubber-band on the body. */
+  .table-wrap,
+  .scroll-x {
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
 
   .bs-shell { grid-template-columns: 1fr; height: auto; min-height: 0; }
   .bs-sidebar { max-height: 200px; border-right: none; border-bottom: 1px solid var(--border); }
