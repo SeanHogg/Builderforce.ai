@@ -96,6 +96,16 @@ describe('provider auth alerts', () => {
     expect(alert).toMatchObject({ provider: 'openai', reason: 'capacity', status: 429 });
   });
 
+  it('classifies xAI weekly-allowance depletion as CAPACITY even when xAI returns 403', () => {
+    const [alert] = authAlertsFromFailovers([{
+      vendor: 'xai-oauth', code: 403,
+      detail: 'You hit your weekly limit. Extra Usage Credits are being used.',
+    }]);
+    expect(alert).toMatchObject({
+      provider: 'xai', reason: 'capacity', status: 403, vendor: 'xai-oauth',
+    });
+  });
+
   it('ignores auth failures on vendors a tenant cannot connect', () => {
     expect(authAlertsFromFailovers([{ vendor: 'openrouter', code: 401 }])).toEqual([]);
   });

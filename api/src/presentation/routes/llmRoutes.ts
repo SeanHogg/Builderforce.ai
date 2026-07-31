@@ -1234,6 +1234,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       // A credential that decrypts but is refused upstream is not ready. Configuration
       // and health are separate signals; health wins in the operator-facing verdict.
       status: !configured ? 'not_connected'
+        : authAlert?.reason === 'capacity' ? 'capacity'
         : authAlert ? 'needs_attention'
         : usable ? 'ready'
         : (creds.unresolvedReasons[provider] ?? 'unavailable'),
@@ -1262,8 +1263,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       ok: false,
       status: probe.status,
       error: probe.error
-        ? probe.alert?.reason === 'not_entitled'
-          ? `${provider} connection test failed: this account cannot use ${probe.model ?? 'the selected model'} (HTTP ${probe.alert.status}). Check the account's SuperGrok/API access and usage allowance, or use an xAI API key.`
+        ? probe.alert?.reason === 'capacity'
+          ? `${provider} connection test paused: this account's weekly usage allowance is depleted (HTTP ${probe.alert.status}). Check the provider's Usage page for the reset time; to continue now, buy credits or enable auto top-up, or upgrade the provider plan.`
+          : probe.alert?.reason === 'not_entitled'
+          ? `${provider} connection test failed: this account cannot use ${probe.model ?? 'the selected model'} (HTTP ${probe.alert.status}). Check the account's SuperGrok/API access, or use an xAI API key.`
           : `${provider} connection test failed: ${probe.error}`
         : `${provider} connection test could not run: ${probe.status.replaceAll('_', ' ')}.`,
       code: 'provider_test_failed',
