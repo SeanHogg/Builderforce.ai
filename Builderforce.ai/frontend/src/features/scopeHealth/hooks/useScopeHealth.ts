@@ -1,8 +1,8 @@
 /**
- * React hook for computing Scope Health metrics
+ * React hook for computing Scope Health metrics.
  *
- * Provides an efficient way to compute and cache Scope Health scores
- * based on current tasks and period configuration.
+ * Pure calculations from task data — no API calls. Every metric recomputes
+ * reactively when tasks, period, or mode change.
  */
 
 import { useMemo } from 'react';
@@ -14,9 +14,10 @@ import type {
   ScopeHealthScore,
   BaselineInfo,
   CalculationMode,
-  TimeWindow,
   Period,
 } from '../types';
+
+/* ── Public parameter shape ────────────────────────────────────────────── */
 
 export interface UseScopeHealthParams {
   tasks: Task[];
@@ -25,208 +26,213 @@ export interface UseScopeHealthParams {
   baselineInfo?: BaselineInfo;
 }
 
+/* ── Helpers ───────────────────────────────────────────────────────────── */
+
+/** Elapsed ratio of a task window: how much time has passed. */
+function elapsedRatio(startISO: string, endISO: string): number {
+  const start = new Date(startISO).getTime();
+  const end = new Date(endISO).getTime();
+  const now = Date.now();
+  if (now <= start) return 0;
+  if (now >= end) return 1;
+  return (now - start) / (end - start);
+}
+
+/** Derive epic status per PRD FR-3.3 thresholds. */
+function deriveEpicStatus(
+  completionPct: number,
+  expectedPct: number,
+): { status: EpicCompletion['status']; delta: number } {
+  const delta = expectedPct - completionPct;
+  if (delta > 25) return { status: 'off_track', delta };
+  if (delta >= 10) return { status: 'at_risk', delta };
+  return { status: 'on_track', delta };
+}
+
+/** Build a Map<epicId, Task[]> from tasks that have parentTaskId. */
+function groupByEpic(tasks: Task[]): Map<string, Task[]> {
+  const map = new Map<string, Task[]>();
+  for (const t of tasks) {
+    if (t.parentTaskId != null) {
+      const id = String(t.parentTaskId);
+      const bucket = map.get(id);
+      if (bucket) bucket.push(t);
+      else map.set(id, [t]);
+    }
+  }
+  return map;
+}
+
+/* ── Hook ──────────────────────────────────────────────────────────────── */
+
 export function useScopeHealth({
   tasks,
   period,
   mode = 'item_count',
   baselineInfo,
 }: UseScopeHealthParams) {
-  // Filter tasks by epic (epic tasks have parentTaskId starting with 'epic')
-  const epicTasksMap = useMemo(() => {
-    const epicMap = new Map<string, Task[]>();
-    const epicPrefix = 'epic';
-    for (const task of tasks) {
-      if (task.parentTaskId && String(task.parentTaskId).startsWith(epicPrefix)) {
-        const epicId = String(task.parentTaskId);
-        if (!epicMap.has(epicId)) {
-          epicMap.set(epicId, []);
-        }
-        epicMap.get(epicId)!.push(task);
-      }
-    }
-    return epicMap;
-  }, [tasks]);
-
-  // Calculate Scope Creep Score
+  /* ── Scope Creep Score (FR-1.1) ───────────────────────────────────── */
   const scopeCreep = useMemo<ScopeCreepScore>(() => {
-    const baseline = baselineInfo || {
+    const baseline = baselineInfo ?? {
       id: 'baseline',
-      lockedAt: tasks[0]?.createdAt || new Date().toISOString(),
+      lockedAt: tasks.length > 0 ? tasks[0].createdAt : new Date().toISOString(),
       itemCount: tasks.length,
+      totalStoryPoints: tasks.reduce((s, t) => s + (t.storyPoints ?? 0), 0),
     };
-    // Find tasks added after baseline lock date
-    const baselineDate = new Date(baseline.lockedAt);
-    const postBaselineTasks = tasks.filter((t) => new Date(t.createdAt) > baselineDate);
 
-    const itemsAddedPostBaseline = postBaselineTasks.length;
-    const percentageChange = baseline.itemCount > 0
-      ? (itemsAddedPostBaseline / baseline.itemCount) * 100
-      : 0;
-    const value = Math.min(percentageChange, 100);
+    const baselineDate = new Date(baseline.lockedAt).getTime();
+    const added = tasks.filter((t) => new Date(t.createdAt).getTime() > baselineDate);
 
-    let status: 'green' | 'yellow' | 'red' = 'green';
-    if (value > 10) status = 'yellow';
-    if (value > 25) status = 'red';
+    const count = mode === 'story_points'
+      ? added.reduce((s, t) => s + (t.storyPoints ?? 0), 0)
+      : added.length;
+
+    const base = mode === 'story_points'
+      ? (baseline.totalStoryPoints ?? baseline.itemCount)
+      : baseline.itemCount;
+
+    const pct = base > 0 ? Math.min((count / base) * 100, 100) : 0;
+
+    let status: ScopeCreepScore['status'] = 'green';
+    if (pct > 25) status = 'red';
+    else if (pct > 10) status = 'yellow';
 
     return {
-      value,
+      value: pct,
       status,
       baselineItemCount: baseline.itemCount,
-      itemsAddedPostBaseline,
-      percentageChange,
+      itemsAddedPostBaseline: count,
+      percentageChange: pct,
     };
-  }, [tasks, baselineInfo]);
+  }, [tasks, baselineInfo, mode]);
 
-  // Calculate New vs Completed Ratio
+  /* ── New vs Completed Ratio (FR-2.1) ──────────────────────────────── */
   const ratio = useMemo<NewVsCompletedRatio>(() => {
-    const windowStart = new Date(period.windowStart).getTime();
-    const windowEnd = new Date(period.windowEnd).getTime();
+    const wStart = new Date(period.windowStart).getTime();
+    const wEnd = new Date(period.windowEnd).getTime();
 
-    const tasksInPeriod = tasks.filter((task) => {
-      const createdAt = new Date(task.createdAt).getTime();
-      const completedAt = task.completedAt ? new Date(task.completedAt).getTime() : windowEnd;
-      return createdAt >= windowStart && completedAt >= windowStart;
+    const inWindow = tasks.filter((t) => {
+      const created = new Date(t.createdAt).getTime();
+      return created >= wStart && created <= wEnd;
     });
+
+    const isDone = (t: Task) => t.status === 'done';
 
     if (mode === 'item_count') {
-      const addedItems = tasksInPeriod.filter((t) => !t.completedAt).length;
-      const completedItems = tasksInPeriod.filter((t) => t.completedAt).length;
-      const value = completedItems > 0 ? addedItems / completedItems : 0;
-      const status = value > 1.0 ? 'warning' : 'normal';
+      const added = inWindow.filter((t) => !isDone(t)).length;
+      const done = inWindow.filter((t) => isDone(t)).length;
+      const val = done > 0 ? added / done : (added > 0 ? Infinity : 0);
       return {
-        value,
-        status,
-        addedItems,
+        value: Number.isFinite(val) ? val : 0,
+        status: val > 1.0 ? 'warning' : 'normal',
+        addedItems: added,
         addedStoryPoints: 0,
-        completedItems,
+        completedItems: done,
         completedStoryPoints: 0,
       };
-    } else {
-      const addedStoryPoints = tasksInPeriod
-        .filter((t) => !t.completedAt)
-        .reduce((sum, t) => sum + (t.storyPoints || 0), 0);
-      const completedStoryPoints = tasksInPeriod
-        .filter((t) => t.completedAt)
-        .reduce((sum, t) => sum + (t.storyPoints || 0), 0);
-      const value = completedStoryPoints > 0 ? addedStoryPoints / completedStoryPoints : 0;
-      const status = value > 1.0 ? 'warning' : 'normal';
-      return {
-        value,
-        status,
-        addedItems: 0,
-        addedStoryPoints,
-        completedItems: 0,
-        completedStoryPoints,
-      };
     }
+
+    // story_points mode
+    const addedSP = inWindow.filter((t) => !isDone(t)).reduce((s, t) => s + (t.storyPoints ?? 0), 0);
+    const doneSP = inWindow.filter((t) => isDone(t)).reduce((s, t) => s + (t.storyPoints ?? 0), 0);
+    const val = doneSP > 0 ? addedSP / doneSP : (addedSP > 0 ? Infinity : 0);
+    return {
+      value: Number.isFinite(val) ? val : 0,
+      status: val > 1.0 ? 'warning' : 'normal',
+      addedItems: 0,
+      addedStoryPoints: addedSP,
+      completedItems: 0,
+      completedStoryPoints: doneSP,
+    };
   }, [tasks, period, mode]);
 
-  // Calculate epic completions
-  const epicCompletions = useMemo(() => {
-    return Array.from(epicTasksMap.entries()).map(([epicId, epicTasks]) => {
+  /* ── Epic Completions (FR-3.1–3.3) ───────────────────────────────── */
+  const epicCompletions = useMemo<EpicCompletion[]>(() => {
+    const epicMap = groupByEpic(tasks);
+    return Array.from(epicMap.entries()).map(([epicId, epicTasks]) => {
       const totalItems = epicTasks.length;
-      const completedItems = epicTasks.filter((t) => t.status === 'done').length;
+      const done = epicTasks.filter((t) => t.status === 'done').length;
 
       if (mode === 'item_count') {
-        const percentage = totalItems > 0 ? (completedItems / totalItems) * 100 : 0;
-        const completedStoryPoints = epicTasks.reduce((sum, t) => sum + (t.storyPoints || 0), 0);
-        const totalStoryPoints = epicTasks.reduce((sum, t) => sum + (t.storyPoints || 0), 0);
-
-        // Derive status
-        const expectedCompletionPercentage = 60;
-        const deltaPercentage = expectedCompletionPercentage - percentage;
-        let status: 'on_track' | 'at_risk' | 'off_track';
-        if (deltaPercentage > 25) status = 'off_track';
-        else if (deltaPercentage > -25) status = 'at_risk';
-        else status = 'on_track';
-
+        const pct = totalItems > 0 ? (done / totalItems) * 100 : 0;
+        const expected = elapsedRatio(
+          period.windowStart,
+          period.windowEnd,
+        ) * 100;
+        const { status, delta } = deriveEpicStatus(pct, expected);
         return {
           epic: {
             id: epicId,
-            title: epicTasks[0]?.title || 'Unknown Epic',
+            title: epicTasks[0]?.title ?? 'Unknown Epic',
             totalItems,
-            totalStoryPoints,
-            completedItems,
-            completedStoryPoints,
-            addedItems: 0,
-            addedStoryPoints: completedStoryPoints,
+            completedItems: done,
+            addedItems: totalItems,
           },
-          completionPercentage: percentage,
+          completionPercentage: pct,
           status,
-          expectedCompletionPercentage,
-          deltaPercentage,
-        };
-      } else {
-        const totalStoryPoints = totalItems > 0 ? epicTasks.reduce((sum, t) => sum + (t.storyPoints || 0), 0) : 0;
-        const completedStoryPoints = epicTasks
-          .filter((t) => t.status === 'done')
-          .reduce((sum, t) => sum + (t.storyPoints || 0), 0);
-        const percentage = totalStoryPoints > 0 ? (completedStoryPoints / totalStoryPoints) * 100 : 0;
-
-        const expectedCompletionPercentage = 60;
-        const deltaPercentage = expectedCompletionPercentage - percentage;
-        let status: 'on_track' | 'at_risk' | 'off_track';
-        if (deltaPercentage > 25) status = 'off_track';
-        else if (deltaPercentage > -25) status = 'at_risk';
-        else status = 'on_track';
-
-        return {
-          epic: {
-            id: epicId,
-            title: epicTasks[0]?.title || 'Unknown Epic',
-            totalItems,
-            totalStoryPoints,
-            completedItems: 0,
-            completedStoryPoints,
-            addedItems: epicTasks.length,
-            addedStoryPoints: totalStoryPoints,
-          },
-          completionPercentage: percentage,
-          status,
-          expectedCompletionPercentage,
-          deltaPercentage,
+          expectedCompletionPercentage: expected,
+          deltaPercentage: delta,
         };
       }
-    });
-  }, [epicTasksMap, mode]);
 
-  // Calculate composite score (weights: 40% creep, 30% ratio, 30% epic)
-  const compositeScore = useMemo<ScopeHealthScore>(() => {
-    const normalizedCreep = scopeCreep.value;
-    const normalizedRatio = ratio.value <= 2.0 ? (ratio.value / 2.0) * 100 : 100;
-    const normalizedEpicCompletion = epicCompletions.reduce((sum, e) => sum + e.completionPercentage, 0) / epicCompletions.length || 0;
-
-    if (epicCompletions.length === 0) {
+      // story_points mode
+      const totalSP = epicTasks.reduce((s, t) => s + (t.storyPoints ?? 0), 0);
+      const doneSP = epicTasks.filter((t) => t.status === 'done').reduce((s, t) => s + (t.storyPoints ?? 0), 0);
+      const pct = totalSP > 0 ? (doneSP / totalSP) * 100 : 0;
+      const expected = elapsedRatio(
+        period.windowStart,
+        period.windowEnd,
+      ) * 100;
+      const { status, delta } = deriveEpicStatus(pct, expected);
       return {
-        value: normalizedCreep * 0.4 + normalizedRatio * 0.3 + 0,
-        breakdown: {
-          scopeCreep: scopeCreep.value,
-          ratio: ratio.value,
-          epicCompletion: 0,
+        epic: {
+          id: epicId,
+          title: epicTasks[0]?.title ?? 'Unknown Epic',
+          totalItems,
+          totalStoryPoints: totalSP,
+          completedItems: done,
+          completedStoryPoints: doneSP,
+          addedItems: totalItems,
+          addedStoryPoints: totalSP,
         },
-        weights: { scopeCreep: 0.4, ratio: 0.3, epicCompletion: 0.3 },
+        completionPercentage: pct,
+        status,
+        expectedCompletionPercentage: expected,
+        deltaPercentage: delta,
       };
-    }
+    });
+  }, [tasks, period, mode]);
 
-    const value =
-      normalizedCreep * 0.4 +
-      normalizedRatio * 0.3 +
-      (normalizedEpicCompletion / epicCompletions.length) * 0.3;
+  /* ── Composite Scope Health Score (FR-4.1) ────────────────────────── */
+  const compositeScore = useMemo<ScopeHealthScore>(() => {
+    // Invert creep: 0% creep = 100 pts, 100% creep = 0 pts
+    const creepNorm = 100 - scopeCreep.value;
+
+    // Normalize ratio: <= 0.5 → 100 pts, >= 1.5 → 0 pts (linear ramp between)
+    const r = ratio.value;
+    const ratioNorm = Number.isFinite(r)
+      ? Math.max(0, Math.min(100, 100 - ((r - 0.5) / 1.0) * 100))
+      : 0;
+
+    // Epic avg: direct percentage (0–100)
+    const epicAvg = epicCompletions.length > 0
+      ? epicCompletions.reduce((s, e) => s + e.completionPercentage, 0) / epicCompletions.length
+      : 0;
+
+    const w = { scopeCreep: 0.4, ratio: 0.3, epicCompletion: 0.3 };
+    const value = creepNorm * w.scopeCreep + ratioNorm * w.ratio + epicAvg * w.epicCompletion;
 
     return {
       value,
-      breakdown: {
-        scopeCreep: scopeCreep.value,
-        ratio: ratio.value,
-        epicCompletion: normalizedEpicCompletion,
-      },
-      weights: { scopeCreep: 0.4, ratio: 0.3, epicCompletion: 0.3 },
+      breakdown: { scopeCreep: creepNorm, ratio: ratioNorm, epicCompletion: epicAvg },
+      weights: w,
     };
   }, [scopeCreep, ratio, epicCompletions]);
 
-  // Compute derived historical data if needed (future enhancement)
+  /* ── Health history (FR-4.3 placeholder) ──────────────────────────── */
   const healthHistory = useMemo(() => {
-    return []; // Future enhancement: array of historical scores with timestamps
+    // Future: derive from stored snapshots. For now, return the single point.
+    return [];
   }, [compositeScore]);
 
   return {
