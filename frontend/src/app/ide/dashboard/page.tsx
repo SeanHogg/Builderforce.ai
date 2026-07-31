@@ -122,7 +122,12 @@ export default function IDEDashboardPage() {
 
   return (
     <div style={{ flex: 1, color: 'var(--text-primary)' }}>
-      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '40px 24px' }}>
+      {/* AC1 — width/padding come from `.page-inner` (globals.css) rather than an
+          inline style, because an inline `max-width`/`margin: 0 auto` cannot be
+          overridden by the mobile media query and would leave this page capped
+          with a dead side gutter on a phone. The desktop cap is widened to 1200
+          here via a modifier class so the tier is unchanged above 767px. */}
+      <main className="page-inner page-inner-wide">
         <div style={{ marginBottom: 8 }}>
           <h1 style={{ fontSize: '1.6rem', fontWeight: 700, margin: 0 }}>IDE</h1>
           <p style={{ color: 'var(--text-secondary)', marginTop: 6, fontSize: 14 }}>
