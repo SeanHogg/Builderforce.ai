@@ -1,5 +1,5 @@
 /**
- * Type Definitions — Conflict Detection Rules and Alerts
+ * Type definitions — Conflict Detection Rules and Alerts
  *
  * Per PRD:
  * - Conflict Alert DTO structure
@@ -7,15 +7,15 @@
  * - Conflict Rule Spec
  */
 
+// ── Priority / Status / Severity ─────────────────────────────────────────────
+
 export type PriorityLevel = 'P0' | 'P1' | 'P2' | 'P3';
-export const PRIORITY_LEVELS: readonly PriorityLevel[] = ['P0', 'P1', 'P2', 'P3'] as const;
+export const PRIORITY_LEVELS: readonly PriorityLevel[] = ['P0', 'P1', 'P2', 'P3'];
 
 export type ConflictStatus = 'open' | 'acknowledged' | 'resolved' | 'dismissed';
 export type ConflictSeverity = 'critical' | 'high' | 'medium' | 'low';
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Core Entities
-// ──────────────────────────────────────────────────────────────────────────────
+// ── Core Entities ─────────────────────────────────────────────────────────────
 
 export interface Stakeholder {
   stakeholderId: string;
@@ -57,11 +57,17 @@ export interface PriorityRequest {
 export interface ConflictingPriorities {
   stakeholder1: Stakeholder;
   stakeholder2?: Stakeholder;
-  stakeholder?: Stakeholder; // legacy alias
   team: Team;
   priority1: PriorityLevel;
   priority2: PriorityLevel;
 }
+
+/**
+ * Opaque, length-delimited conflict deduplication key.
+ * base64url-encoded JSON (`k1`  = key) or compact delimited form;
+ * must not be broken by `split('__')` on ids that themselves contain `__`.
+ */
+export type ConflictKeyString = string;
 
 export interface ConflictKey {
   stakeholderId1: string;
@@ -70,102 +76,71 @@ export interface ConflictKey {
   versionId?: string;
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Conflict Alert DTO — Per PRD Acceptance Criteria
-// ──────────────────────────────────────────────────────────────────────────────
+// ── Conflict Alert DTO (exposed via API + OpenAPI) ───────────────────────────
 
 /**
  * Conflict Alert DTO
  *
- * Requirements (from PRD):
+ * Requirements per PRD:
  * - Labeling: conflicting items, involved stakeholders, detection date
  * - Summarization: reasoning behind conflict
  * - Attachment: to relevant priority version(s)
  * - Visibility: via API to all team members
- *
- * OpenAPI schema: ConflictAlert
  */
 export interface ConflictAlert {
-  /** Unique alert ID (stable, derived from conflict key) */
+  /** Unique alert ID — equals the canonical deduplication key. */
   id: string;
-
-  /** Stable deduplication key */
+  /** Structured view of the deduplication key. */
   key: ConflictKey;
-
-  /** Human-readable title labeling conflicting team/priorities */
+  /** Human-readable title labeling conflicting team/priorities. */
   title: string;
-
-  /** Full description with labeled conflicting items, stakeholders, detection date */
+  /** Detailed description with labeling per PRD. */
   description: string;
-
-  /** Concise reasoning summary explaining rule violation */
+  /** Concise reasoning summary explaining rule violation. */
   summary: string;
-
-  /** Severity classification */
+  /** Severity classification. */
   severity: ConflictSeverity;
-
-  /** ISO 8601 detection timestamp — per labeling requirement */
+  /** ISO 8601 detection timestamp — labeling requirement. */
   detectedAt: string;
-
-  /** Workflow status */
+  /** Workflow status. */
   status: ConflictStatus;
-
-  /** Structured conflicting priorities with stakeholder details */
+  /** Structured conflicting priorities with stakeholder details. */
   conflictingPriorities: ConflictingPriorities;
-
-  /** List of involved stakeholders — labeling requirement */
+  /** List of involved stakeholders — labeling requirement. */
   stakeholders: Stakeholder[];
-
-  /** Attached priority version(s) — per attachment requirement */
+  /** Attached priority version(s) — per attachment requirement. */
   versionIds: string[];
-
-  /** Source request IDs that triggered the conflict */
+  /** Source request IDs that triggered the conflict. */
   sourceRequestIds: string[];
-
-  /** Number of unique conflicting source requests */
+  /** Number of unique conflicting source requests. */
   conflictCount: number;
-
-  /** Optional resolution note (set when resolved/dismissed/acknowledged) */
+  /** Optional resolution note (when resolved/dismissed/acknowledged). */
   resolutionNote?: string;
-
-  /** User who resolved the conflict */
+  /** User who resolved the conflict. */
   resolvedBy?: string;
-
-  /** ISO 8601 resolution timestamp */
+  /** ISO 8601 resolution timestamp. */
   resolvedAt?: string;
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// API DTOs
-// ──────────────────────────────────────────────────────────────────────────────
+// ── API DTOs ──────────────────────────────────────────────────────────────────
 
-/**
- * POST /conflicts/detect — Request DTO
- */
 export interface DetectConflictsRequest {
-  /** Batch of priority requests to evaluate */
   requests: PriorityRequest[];
-  /** Optional scope to specific priority version (defines review window) */
+  /** Scope detection to specific priority version / review window. */
   versionId?: string;
-  /** Override default review window size in days */
+  /** Override default review window size in days. */
   windowThresholdDays?: number;
 }
 
-/**
- * POST /conflicts/detect — Response DTO
- */
 export interface DetectConflictsResponse {
   success: boolean;
   conflicts: ConflictAlert[];
   duplicatesFound: number;
   error?: string;
+  timestamp?: string;
 }
 
-/**
- * GET /conflicts — Query DTO (filtering by status per PRD)
- */
 export interface ListConflictsQuery {
-  /** Filter by status (PRD requires filtering by status) */
   status?: ConflictStatus | 'all';
   versionId?: string;
   teamId?: string;
@@ -190,9 +165,6 @@ export interface GetConflictResponse {
   timestamp: string;
 }
 
-/**
- * POST /conflicts/:id/resolve — Request DTO (manual resolution per PRD)
- */
 export interface ResolveConflictRequest {
   action: 'acknowledge' | 'resolve' | 'dismiss';
   note?: string;
@@ -205,9 +177,7 @@ export interface ResolveConflictResponse {
   timestamp: string;
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Rule Spec Types
-// ──────────────────────────────────────────────────────────────────────────────
+// ── Rule Spec Types ───────────────────────────────────────────────────────────
 
 export interface ConflictRule {
   name: string;
@@ -235,69 +205,4 @@ export interface ConflictRule {
     maxWindowDays: number;
     allowOverlap: boolean;
   };
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Wrapper / Common
-// ──────────────────────────────────────────────────────────────────────────────
-
-export interface ApiSuccessResponse<T> {
-  success: true;
-  data: T;
-  timestamp: string;
-}
-
-export interface ApiErrorResponse {
-  success: false;
-  error: string;
-  details?: any;
-  timestamp: string;
-}
-
-export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
-
-export interface HealthCheckResponse {
-  status: 'healthy' | 'unhealthy' | 'degraded';
-  service: string;
-  version: string;
-  timestamp: string;
-  details?: Record<string, any>;
-}
-
-export interface PaginatedResponse<T> {
-  data: T[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-  hasNextPage: boolean;
-  hasPreviousPage: boolean;
-  timestamp: string;
-}
-
-export interface ConflictNotificationPayload {
-  conflictId: string;
-  title: string;
-  summary: string;
-  severity: ConflictSeverity;
-  detectedAt: string;
-  stakeholders: string[];
-  versionId?: string;
-  sourceSystem?: string;
-}
-
-export interface ConflictAuditEntry {
-  id: string;
-  conflictId: string;
-  action: ConflictStatus | 'created' | 'acknowledged' | 'resolved' | 'dismissed' | 'commented';
-  previousStatus?: ConflictStatus;
-  newStatus?: ConflictStatus;
-  actor: {
-    type: 'system' | 'external' | 'internal';
-    userId: string;
-    username: string;
-  };
-  note?: string;
-  timestamp: string;
-  metadata?: Record<string, any>;
 }
