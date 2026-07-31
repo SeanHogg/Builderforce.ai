@@ -18,6 +18,7 @@ import { boards, swimlanes, tasks, taskStatusTransitions } from '../../infrastru
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { bumpWorkforceMetricsVersion } from '../metrics/workforceMetrics';
 import { releaseWorkItemWebhook } from '../seams/workItemWebhook';
+import { TaskStatus } from '../../domain/shared/types';
 import { isDoneLane } from '../../domain/shared/doneClass';
 
 type LaneInfo = { position: number; isTerminal: boolean };
