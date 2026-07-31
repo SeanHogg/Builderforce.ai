@@ -81,41 +81,27 @@ async function findSignatureOccurrences(
       "g"
     );
 
-    // Create a temporary file with the search term
-    const searchFile = `${rootPath}/.builderforce/_search-grep`;
-    await Deno.writeTextFile(searchFile, signature);
-
-    try {
-      // Use grep across all source files
-      const output = execSync(
-        `grep -R --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" --include="*.mjs" --include="*.json" --include="*.py" --include="*.java" --include="*.go" -l -E "${signature}" ${rootPath} 2>/dev/null || true`,
-        {
-          cwd: "/",
-          encoding: "utf-8",
-          timeout: 5000,
-          stdio: ["ignore", "pipe", "ignore"],
-        }
-      ).toString();
-
-      const matches = output
-        .split("\n")
-        .filter((line) => line.trim())
-        .map((filePath) => `${rootPath}/${filePath}`);
-
-      if (matches.length > 0) {
-        return {
-          filePath: matches[0],
-          matches: [],
-        };
+    // Use grep across all source files
+    const output = execSync(
+      `grep -R --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" --include="*.mjs" --include="*.json" --include="*.py" --include="*.java" --include="*.go" -l -E "${signature}" ${rootPath} 2>/dev/null || true`,
+      {
+        cwd: "/",
+        encoding: "utf-8",
+        timeout: 5000,
+        stdio: ["ignore", "pipe", "ignore"],
       }
-    } catch {
-      // Continue if grep fails
-    } finally {
-      try {
-        Deno.removeSync(searchFile);
-      } catch {
-        // Ignore
-      }
+    ).toString();
+
+    const matches = output
+      .split("\n")
+      .filter((line) => line.trim())
+      .map((filePath) => `${rootPath}/${filePath}`);
+
+    if (matches.length > 0) {
+      return {
+        filePath: matches[0],
+        matches: [],
+      };
     }
 
     return null;
