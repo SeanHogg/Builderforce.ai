@@ -9,6 +9,17 @@ import type {
 
 const prisma = new PrismaClient();
 
+/** Resolved result from a domain checker — issues, checks, and scored detail. */
+interface HealthCheckResult {
+  issues: string[];
+  checks: {
+    type: string;
+    name: string;
+    passed: boolean;
+    details?: Record<string, unknown>;
+  }[];
+}
+
 /**
  * Service layer for integration audit operations.
  * Handles fetching connection summaries, calculating health scores,
@@ -63,59 +74,55 @@ export const auditService = {
       });
 
       // Get gaps
-      const gaps = includeGaps
-        ? await prisma.integrationGap.findMany({
+      const gaps: IntegrationGap[] = includeGaps
+        ? ((await prisma.integrationGap.findMany({
             where: {
               tenantId,
               segmentId,
               integrationId: connection.id,
             },
             orderBy: { severity: 'desc' },
-          })
+          })) as unknown as IntegrationGap[])
         : [];
 
       // Generate recommendations from gaps
-      const recommendations = includeRecommendations
+      const recommendations: string[] = includeRecommendations
         ? this.generateRecommendations(connection, gaps)
         : [];
 
       // Apply score filters
       const reportScore = score?.totalWeightedScore ?? 0;
 
-      if (
-        minScore !== undefined && reportScore < minScore
-      ) {
+      if (minScore !== undefined && reportScore < minScore) {
         continue;
       }
 
-      if (
-        maxScore !== undefined && reportScore > maxScore
-      ) {
+      if (maxScore !== undefined && reportScore > maxScore) {
         continue;
       }
 
-      // Determine status based on score and gaps
-      const status = this.determineHealthStatus(connection, gaps);
+      // Apply status filter (check after computing)
+      const healthStatus = this.determineHealthStatus(connection, gaps);
+      if (status && healthStatus !== status) {
+        continue;
+      }
 
       healthSummaries.push({
         id: connection.id,
         integrationId: connection.id,
         connection,
+        type: connection.type as string,
+        name: connection.name,
         lastSync: connection.lastSync?.toISOString() ?? null,
-        status,
+        status: healthStatus,
         completenessScore: reportScore,
         gaps: includeGaps
           ? gaps.map((g) => ({
-              id: g.id,
-              integrationId: g.integrationId,
-              tenantId: g.tenantId,
-              segmentId: g.segmentId,
-              severity: g.severity as any,
-              category: g.category as any,
               description: g.description,
               recommendation: g.recommendation,
-              detectedAt: g.detectedAt.toISOString(),
-              resolvedAt: g.resolvedAt?.toISOString(),
+              severity: g.severity,
+              category: g.category,
+              detectedAt: g.detectedAt,
             }))
           : [],
         recommendations,
@@ -142,48 +149,38 @@ export const auditService = {
 
     // Check config completeness
     const config = connection.configuration as any;
-    const checks = [];
+    let result: HealthCheckResult | null = null;
 
     switch (connection.type) {
       case 'source-control':
-        checks.push(
-          this.checkSourceControlHealth(config)
-        );
+        result = await this.checkSourceControlHealth(config);
         break;
 
       case 'issue-tracker':
-        checks.push(
-          this.checkIssueTrackerHealth(config)
-        );
+        result = await this.checkIssueTrackerHealth(config);
         break;
 
       case 'communication':
-        checks.push(
-          this.checkCommunicationHealth(config)
-        );
+        result = await this.checkCommunicationHealth(config);
         break;
 
       case 'cicd':
-        checks.push(
-          this.checkCICDHealth(config)
-        );
+        result = await this.checkCICDHealth(config);
         break;
 
       case 'monitoring':
-        checks.push(
-          this.checkMonitoringHealth(config)
-        );
+        result = await this.checkMonitoringHealth(config);
         break;
 
       case 'calendar':
-        checks.push(
-          this.checkCalendarHealth(config)
-        );
+        result = await this.checkCalendarHealth(config);
         break;
     }
 
+    if (!result) return;
+
     // Calculate score
-    const score = await this.calculateCompletenessScore(connection, checks);
+    const score = await this.calculateCompletenessScore(connection, result);
 
     // Update or create score record
     await prisma.integrationCompletenessScore.upsert({
@@ -214,16 +211,16 @@ export const auditService = {
     });
 
     // Identify new gaps
-    await this.identifyGaps(connection, checks);
+    await this.identifyGaps(connection, result);
   },
 
   /**
    * Check GitHub/GitLab/Bitbucket integration health.
    */
-  private async checkSourceControlHealth(config: any) {
+  private async checkSourceControlHealth(config: any): Promise<HealthCheckResult> {
     const { webhooks, repoRefs } = config || {};
-    const checks = [];
-    let issues: string[] = [];
+    const checks: HealthCheckResult['checks'] = [];
+    const issues: string[] = [];
 
     // Check for repo references
     const repoCount = repoRefs ? Object.keys(repoRefs).length : 0;
@@ -263,10 +260,10 @@ export const auditService = {
   /**
    * Check Jira/Linear integration health.
    */
-  private async checkIssueTrackerHealth(config: any) {
+  private async checkIssueTrackerHealth(config: any): Promise<HealthCheckResult> {
     const { issueFilters, fieldClaims } = config || {};
-    const checks = [];
-    let issues: string[] = [];
+    const checks: HealthCheckResult['checks'] = [];
+    const issues: string[] = [];
 
     // Check for field mappings
     if (!fieldClaims || Object.keys(fieldClaims).length === 0) {
@@ -281,7 +278,7 @@ export const auditService = {
       issues.push('No status filters configured');
     } else if (statusesCount < expectedStatuses) {
       issues.push(
-        `Only ${statusesCount} status(esi) filtered, fewer than typical setup`
+        `Only ${statusesCount} status(es) filtered, fewer than typical setup`
       );
     }
 
@@ -306,17 +303,15 @@ export const auditService = {
   /**
    * Check Slack/Microsoft Teams integration health.
    */
-  private async checkCommunicationHealth(config: any) {
+  private async checkCommunicationHealth(config: any): Promise<HealthCheckResult> {
     const { channelLinks } = config || {};
-    const checks = [];
-    let issues: string[] = [];
+    const checks: HealthCheckResult['checks'] = [];
+    const issues: string[] = [];
 
     // Check for channel links
     const channelCount = channelLinks?.channels?.length ?? 0;
 
     if (channelCount === 0) {
-      issues.push('No channels linked');
-    } else if (channelCount < 1) {
       issues.push('No channels linked');
     }
 
@@ -334,10 +329,10 @@ export const auditService = {
   /**
    * Check CI/CD integration health.
    */
-  private async checkCICDHealth(config: any) {
+  private async checkCICDHealth(config: any): Promise<HealthCheckResult> {
     const { deploymentHooks } = config || {};
-    const checks = [];
-    let issues: string[] = [];
+    const checks: HealthCheckResult['checks'] = [];
+    const issues: string[] = [];
 
     // Check for deployment hooks
     const deploymentEventsCount = deploymentHooks?.events?.length ?? 0;
@@ -346,15 +341,17 @@ export const auditService = {
       issues.push('No deployment webhooks configured');
     }
 
-    // Check for environment targeting
-    check deploymentHooks?.targetEnvironment;
+    // Check for target environment configuration
+    if (!deploymentHooks?.targetEnvironment) {
+      issues.push('No target environment configured for deployments');
+    }
 
     // Check for recent deployments
     checks.push({
       type: 'data_flow',
       name: 'Deployment data import',
       passed: true,
-      details: { deploymentHadlers: deploymentEventsCount },
+      details: { deploymentHandlers: deploymentEventsCount },
     });
 
     return { issues, checks };
@@ -363,10 +360,10 @@ export const auditService = {
   /**
    * Check monitoring integration health.
    */
-  private async checkMonitoringHealth(config: any) {
+  private async checkMonitoringHealth(config: any): Promise<HealthCheckResult> {
     const { incidentAlerts } = config || {};
-    const checks = [];
-    let issues: string[] = [];
+    const checks: HealthCheckResult['checks'] = [];
+    const issues: string[] = [];
 
     // Check for incident alerts
     const alertChannelsCount = incidentAlerts?.channels?.length ?? 0;
@@ -388,10 +385,10 @@ export const auditService = {
   /**
    * Check calendar/project management integration health.
    */
-  private async checkCalendarHealth(config: any) {
+  private async checkCalendarHealth(config: any): Promise<HealthCheckResult> {
     const { calendarSync } = config || {};
-    const checks = [];
-    let issues: string[] = [];
+    const checks: HealthCheckResult['checks'] = [];
+    const issues: string[] = [];
 
     // Check for event sync configuration
     const eventTypesCount = calendarSync?.eventTypes?.length ?? 0;
@@ -425,12 +422,15 @@ export const auditService = {
       return 'PARTIAL';
     }
 
-    // If gaps exist but are low severity
+    // If medium severity gaps exist
+    const mediumGaps = gaps.filter((g) => g.severity === 'MEDIUM');
+    if (mediumGaps.length > 0) {
+      return 'PARTIAL';
+    }
+
+    // Low-severity gaps alone don't demote to partial
     if (gaps.length > 0) {
-      const lowSeverityGaps = gaps.filter((g) => g.severity === 'LOW');
-      if (lowSeverityGaps.length > 0) {
-        return 'PARTIAL';
-      }
+      // All remaining gaps are LOW — still connected but not pristine
     }
 
     // No gaps means connected
@@ -442,12 +442,12 @@ export const auditService = {
    */
   private async calculateCompletenessScore(
     connection: IntegrationConnection,
-    checks: any[]
+    result: HealthCheckResult
   ): Promise<CompletenessScore> {
     // Weight by integration type criticality
-    const weights = this.getServiceTierWeights(connection.tenantId);
+    const weights = await this.getServiceTierWeights(connection.tenantId);
 
-    const typeWeights = {
+    const typeWeights: Record<string, number> = {
       'source-control': weights.sourceControl,
       'issue-tracker': weights.issueTracker,
       'communication': weights.communication,
@@ -456,32 +456,25 @@ export const auditService = {
       'calendar': weights.calendar,
     };
 
-    const criticalityScore = typeWeights[connection.type] || 0;
+    const criticalityScore = typeWeights[connection.type] ?? 0;
 
-    // Calculate expected objects matched score
-    let expectedObjectsMatched = 0;
-    let expectedObjectsCount = 0;
-
-    for (const check of checks) {
-      if (check.issues && check.issues.some((i: string) => i.includes('missing'))) {
-        expectedObjectsCount++;
-        expectedObjectsMatched++;
-      } else {
-        expectedObjectsCount++;
-      }
-    }
-
+    // Calculate expected objects matched score from the health check result
+    // issues represent deficiencies; each issue reduces the objects score
+    const { issues, checks } = result;
+    const totalChecks = checks.length;
+    const passedChecks = checks.filter((c) => c.passed).length;
     const objectsScore =
-      expectedObjectsCount > 0 ? (expectedObjectsMatched / expectedObjectsCount) * 100 : 100;
+      totalChecks > 0 ? (passedChecks / totalChecks) * 100 : 100;
 
     // Calculate recency score (last sync vs 24h threshold)
-    let recencyScore = this.calculateRecencyScore(connection.lastSync);
+    const recencyScore = this.calculateRecencyScore(connection.lastSync);
 
     // Weighted total
-    const totalWeightedScore = (
-      objectsScore * 0.6 +
-      recencyScore * 0.4
-    ) * criticalityScore / Object.values(typeWeights).reduce((a, b) => a + b, 0);
+    const sumOfWeights = Object.values(typeWeights).reduce((a, b) => a + b, 0);
+    const totalWeightedScore =
+      sumOfWeights > 0
+        ? ((objectsScore * 0.6 + recencyScore * 100 * 0.4) * criticalityScore) / sumOfWeights
+        : 0;
 
     return {
       integrationId: connection.id,
@@ -490,13 +483,12 @@ export const auditService = {
       totalWeightedScore: Math.round(totalWeightedScore * 100) / 100,
       maxPossibleScore: 100,
       breakdown: {
-        expectedObjectsWeight: expectedObjectsCount,
-        expectedObjectsMatched: expectedObjectsMatched,
-        recencyScore: Math.round(recencyScore * 100) / 100,
-        criticalityScore: Math.round(criticalityScore * 100) / 100,
-        criticalityWeight: criticalityScore,
+        expectedObjectsCount: totalChecks,
+        expectedObjectsMatched: passedChecks,
         recencyWeight: 0.4,
-        expectedObjectsWeight: 0.6,
+        recencyScore: Math.round(recencyScore * 100) / 100,
+        criticalityWeight: criticalityScore,
+        criticalityScore: Math.round(criticalityScore * 100) / 100,
       },
       lastCalculated: new Date().toISOString(),
     };
@@ -508,7 +500,8 @@ export const auditService = {
   private calculateRecencyScore(lastSync: Date | null): number {
     if (!lastSync) return 0; // Never synced = no score
 
-    const hoursSinceSync = (Date.now() - new Date(lastSync).getTime()) / (1000 * 60 * 60);
+    const hoursSinceSync =
+      (Date.now() - new Date(lastSync).getTime()) / (1000 * 60 * 60);
 
     if (hoursSinceSync <= 24) {
       return 1; // Full score within 24 hours
@@ -524,8 +517,15 @@ export const auditService = {
   /**
    * Get service tier weights for scoring.
    */
-  private async getServiceTierWeights(tenantId: string): Promise<any> {
-    let weights = await prisma.serviceTierWeights.findUnique({
+  private async getServiceTierWeights(tenantId: string): Promise<{
+    sourceControl: number;
+    issueTracker: number;
+    communication: number;
+    cicd: number;
+    monitoring: number;
+    calendar: number;
+  }> {
+    const weights = await prisma.serviceTierWeights.findUnique({
       where: { tenantId },
     });
 
@@ -556,42 +556,75 @@ export const auditService = {
    */
   private async identifyGaps(
     connection: IntegrationConnection,
-    checks: any[]
+    result: HealthCheckResult
   ): Promise<void> {
     const now = new Date();
 
-    for (const check of checks) {
-      if (!check.passed) continue;
+    // Process issues from the health check result
+    for (const issue of result.issues) {
+      if (!issue || issue.length === 0) continue;
 
-      for (const issue of check.issues) {
-        const gapExists = await prisma.integrationGap.findFirst({
-          where: {
-            integrationId: connection.id,
+      const gapExists = await prisma.integrationGap.findFirst({
+        where: {
+          integrationId: connection.id,
+          tenantId: connection.tenantId,
+          segmentId: connection.segmentId,
+          category: this.classifyGapCategory(issue),
+          description: { contains: issue.substring(0, 50) },
+          resolvedAt: null,
+        },
+      });
+
+      if (!gapExists) {
+        const severity = this.determineGapSeverity(issue);
+
+        await prisma.integrationGap.create({
+          data: {
+            id: crypto.randomUUID(),
             tenantId: connection.tenantId,
             segmentId: connection.segmentId,
+            integrationId: connection.id,
+            severity,
             category: this.classifyGapCategory(issue),
-            description: { contains: issue.substring(0, 50) },
-            resolvedAt: null,
+            description: issue,
+            recommendation: this.generateRecommendation(issue, connection),
+            detectedAt: now,
           },
         });
+      }
+    }
 
-        if (!gapExists) {
-          const severity = this.determineGapSeverity(check.passed, issue);
+    // Also check for failed checks
+    for (const check of result.checks) {
+      if (check.passed) continue;
 
-          await prisma.integrationGap.create({
-            data: {
-              id: crypto.randomUUID(),
-              tenantId: connection.tenantId,
-              segmentId: connection.segmentId,
-              integrationId: connection.id,
-              severity,
-              category: this.classifyGapCategory(issue),
-              description: issue,
-              recommendation: this.generateRecommendation(issue, connection),
-              detectedAt: now,
-            },
-          });
-        }
+      const issue = `Check failed: ${check.name}`;
+      const gapExists = await prisma.integrationGap.findFirst({
+        where: {
+          integrationId: connection.id,
+          tenantId: connection.tenantId,
+          segmentId: connection.segmentId,
+          description: { contains: check.name.substring(0, 50) },
+          resolvedAt: null,
+        },
+      });
+
+      if (!gapExists) {
+        const severity = check.type === 'data_flow' ? 'HIGH' : 'MEDIUM';
+
+        await prisma.integrationGap.create({
+          data: {
+            id: crypto.randomUUID(),
+            tenantId: connection.tenantId,
+            segmentId: connection.segmentId,
+            integrationId: connection.id,
+            severity: severity as any,
+            category: 'MISCONFIGURATION',
+            description: issue,
+            recommendation: `Review ${connection.name} configuration to resolve: ${check.name}`,
+            detectedAt: now,
+          },
+        });
       }
     }
   },
@@ -608,14 +641,20 @@ export const auditService = {
       return 'WEBHOOK';
     }
     if (
+      issue.includes('stale') ||
+      issue.includes('recency') ||
+      issue.includes('recent')
+    ) {
+      return 'STALE_DATA';
+    }
+    if (
       issue.includes('missing') ||
-      issue.includes('no') ||
-      issue.includes('zero')
+      issue.includes('no ') ||
+      issue.includes('zero') ||
+      issue.includes('No ') ||
+      issue.includes('Only ')
     ) {
       return 'DATA_COMPLETENESS';
-    }
-    if (issue.includes('recency') || issue.includes('stale')) {
-      return 'STALE_DATA';
     }
     if (issue.includes('configuration') || issue.includes('mapping')) {
       return 'CONFIGURATION';
@@ -626,20 +665,21 @@ export const auditService = {
   /**
    * Determine gap severity.
    */
-  private determineGapSeverity(passed: boolean, issue: string): string {
-    if (!passed) {
-      if (issue.toLowerCase().includes('crITICAL') || issue.includes('fatal')) {
-        return 'CRITICAL';
-      }
-      if (
-        issue.toLowerCase().includes('data flow') ||
-        issue.includes('no deployment')
-      ) {
-        return 'HIGH';
-      }
-      if (issue.includes('fewer than') || issue.includes('poor')) {
-        return 'MEDIUM';
-      }
+  private determineGapSeverity(issue: string): string {
+    if (
+      issue.toLowerCase().includes('critical') ||
+      issue.includes('fatal')
+    ) {
+      return 'CRITICAL';
+    }
+    if (
+      issue.toLowerCase().includes('data flow') ||
+      issue.includes('no deployment')
+    ) {
+      return 'HIGH';
+    }
+    if (issue.includes('fewer than') || issue.includes('poor')) {
+      return 'MEDIUM';
     }
     return 'LOW';
   },
@@ -647,13 +687,16 @@ export const auditService = {
   /**
    * Generate recommendation for a gap.
    */
-  private generateRecommendation(issue: string, connection: IntegrationConnection): string {
+  private generateRecommendation(
+    issue: string,
+    connection: IntegrationConnection
+  ): string {
     const integrationName = connection.name;
 
     if (issue.includes('webhook')) {
       return `Configure ${integrationName} webhooks to track ${integrationName.toLowerCase()} events for complete audit data.`;
     }
-    if (issue.includes('missing') || issue.includes('no repos')) {
+    if (issue.includes('No repositories linked') || issue.includes('missing')) {
       return `Add repositories to integrate with ${integrationName} for complete data flow.`;
     }
     if (issue.includes('channels')) {
@@ -667,5 +710,15 @@ export const auditService = {
     }
 
     return `Review ${integrationName} integration configuration to complete the audit check.`;
+  },
+
+  /**
+   * Generate recommendations array from gaps.
+   */
+  private generateRecommendations(
+    connection: IntegrationConnection,
+    gaps: IntegrationGap[]
+  ): string[] {
+    return gaps.map((gap) => gap.recommendation);
   },
 };
