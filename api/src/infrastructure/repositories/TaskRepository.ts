@@ -9,6 +9,13 @@ import { DONE_CLASS_STATUSES } from '../../domain/shared/doneClass';
 import { tasks as tasksTable } from '../database/schema';
 import type { Db } from '../database/connection';
 
+/**
+ * Recommended client-cache lifetime for the FR1 unassigned-high-priority read,
+ * surfaced to callers as `cacheInfo.validForSeconds` and mirrored onto the
+ * `Cache-Control` header by the route. AC8 requires at least 1800 s (30 min).
+ */
+export const UNASSIGNED_HIGH_PRIORITY_CACHE_SECONDS = 1800;
+
 export class TaskRepository implements ITaskRepository {
   constructor(private readonly db: Db) {}
 
