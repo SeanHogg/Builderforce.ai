@@ -62,7 +62,7 @@ export {
   type ManagerConfigRowWithMeta, type TenantManagerDefaultsPatch,
 } from './managerPolicyStore';
 import { getEffectiveManagerPolicy, getManagerConfigRow, getProjectManagerState } from './managerPolicyStore';
-import { recordManagerAction, recordManagerActionOnChange } from './managerActionJournal';
+import { recordManagerAction, recordManagerActionOnChange, stateFingerprint } from './managerActionJournal';
 import { resolveManagerIdentity } from './managerIdentity';
 import { resolveManagerTypeById } from './managerTypes';
 import { listActiveManagerDirectives } from './managerDirectives';
@@ -71,7 +71,9 @@ import { assignTicketOwner } from './assignOwner';
 import { classifySignoffOwnership, resolveRequiredSignoffGate } from '../kanban/signoffGate';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness, type CompletionShape, type TicketPrState } from './evaluateTicketReadiness';
-import { runStallTriage, loadBulkSignals, MAX_TRIAGE_DISPATCHES_PER_RUN } from './triageStage';
+import {
+  runStallTriage, loadBulkSignals, MAX_TRIAGE_DISPATCHES_PER_RUN, TRIAGE_PASS_STATE_KEY,
+} from './triageStage';
 import { MAX_REMEDY_ATTEMPTS } from './stallTriage';
 import { planMergeQueue, summarizeMergeQueue } from './prMergeQueue';
 import { computeStallCensus, invalidateStallCensus } from './stallCensus';
@@ -90,7 +92,7 @@ import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
 import { TicketAuditService } from '../audit/ticketAuditService';
 import { coordinateTicket } from './coordinateTicket';
 import {
-  createTickDispatchBudget, tenantDispatchReserver,
+  createTickDispatchBudget, tenantDispatchReserver, MAX_TENANT_DISPATCHES_PER_TICK,
   type DispatchReserver, type TickDispatchBudget,
 } from '../runtime/tickDispatchBudget';
 import { recordActivity, cloudAgentActor, SYSTEM_ACTOR } from '../activity/activityLog';
@@ -1640,23 +1642,50 @@ export async function runManagerForProject(
           detail: entry.detail,
         });
       }
-      // Say so when a cap bit. A bounded pass that reports nothing reads as "the
-      // manager looked and everything was fine", which is exactly the false clean
-      // bill of health this whole stage exists to stop. One row per pass, not per
-      // deferred ticket — the register already carries the per-ticket state.
-      if (triage.deferred > 0) {
-        await recordManagerAction(db, {
-          tenantId, projectId, runTaskId, actionType: 'triage',
-          summary:
-            `Unstuck ${triage.unstuck} of ${triage.stalled} stalled ${triage.stalled === 1 ? 'ticket' : 'tickets'} this pass — ` +
-            `${triage.deferred} waiting for the next one (max ${MAX_TRIAGE_DISPATCHES_PER_RUN} new runs per pass).`,
-          detail: {
-            stalled: triage.stalled, unstuck: triage.unstuck, deferred: triage.deferred,
-            escalated: triage.escalated, dispatched: triage.dispatched,
-            dispatchCap: MAX_TRIAGE_DISPATCHES_PER_RUN, ownsDispatch: shouldDispatch,
-          },
-        });
-      }
+      // ── THE PASS'S CEILING PICTURE — a STATE, written when it changes ──────────
+      //
+      // Say so when a cap bit: a bounded pass that reports nothing reads as "the manager
+      // looked and everything was fine", which is the false clean bill of health this
+      // stage exists to stop. But saying it EVERY pass is its own defect — measured on
+      // project 11, 2026-07-31: the identical sentence 7× in the last 30 decisions
+      // (10:55:23 → 11:25:30), which the report's `decision_loop` finding then reported as
+      // a manager stuck in a loop while every pass was in fact unsticking a DIFFERENT
+      // ticket (-106, -145, -066, -209 — each already journalled on its own row). The
+      // ceiling picture is a state; the work is the per-ticket rows above.
+      //
+      // Written unconditionally rather than only when `deferred > 0`, because the CLEAR is
+      // exactly as informative as the block: with an on-change writer, a summary that only
+      // ever reports a deferral leaves the last one standing as the current answer forever.
+      // `latestStateDecision` is how the surface reads it back regardless of age.
+      const deferralCause = triage.deferredReason === 'tenant_tick_budget'
+        // NOT the per-pass cap. Naming that one when the workspace pool is what ran out
+        // sends a reader to raise a number that was never reached (measured: 1 dispatch
+        // against a cap of 10, deferred anyway).
+        ? `the workspace has spent its ${MAX_TENANT_DISPATCHES_PER_TICK} runs for this five-minute tick — the autonomous executor and the other sweeps draw on the same pool`
+        : triage.deferredReason === 'pass_dispatch_cap'
+          ? `this project may start ${MAX_TRIAGE_DISPATCHES_PER_RUN} new runs per pass and has used them all`
+          : null;
+      await recordManagerActionOnChange(db, {
+        tenantId, projectId, runTaskId, actionType: 'triage',
+        summary:
+          `Unstuck ${triage.unstuck} of ${triage.stalled} stalled ${triage.stalled === 1 ? 'ticket' : 'tickets'} this pass`
+          + (deferralCause
+            ? ` — ${triage.deferred} waiting for the next one because ${deferralCause}.`
+            : '. Nothing was deferred for want of a run.'),
+        detail: {
+          stalled: triage.stalled, unstuck: triage.unstuck, deferred: triage.deferred,
+          escalated: triage.escalated, dispatched: triage.dispatched,
+          deferredReason: triage.deferredReason,
+          dispatchCap: MAX_TRIAGE_DISPATCHES_PER_RUN,
+          tenantTickCap: MAX_TENANT_DISPATCHES_PER_TICK,
+          ownsDispatch: shouldDispatch,
+        },
+        stateKey: TRIAGE_PASS_STATE_KEY,
+        fingerprint: stateFingerprint([
+          triage.stalled, triage.unstuck, triage.deferred, triage.escalated,
+          triage.dispatched, triage.deferredReason ?? '', shouldDispatch,
+        ]),
+      });
     }
   }
   budget.mark('triage');

@@ -153,6 +153,57 @@ export async function recordManagerActionOnChange(
 }
 
 /**
+ * The newest decision of a given kind, HOWEVER OLD.
+ *
+ * ── THE READ THAT HAD TO MOVE WITH THE WRITE ─────────────────────────────────────
+ * Deduping a state fixes the feed and breaks every reader that was scanning the feed
+ * for it. Measured one pass after {@link recordManagerActionOnChange} shipped
+ * (project 11, 2026-07-31T11:26Z, api 2026.7.198): the diagnostics report's whole
+ * board-staffing block read
+ *
+ *   "(no board-staffing decision in the last 30 — the sweep found nothing to staff,
+ *    or it did not run)"
+ *
+ * while 306 tickets sat in stages that authorise no role — the exact contradiction that
+ * block exists to catch, manufactured by the fix that stopped the duplicate. A verdict
+ * written once is not less true than one written 288 times a day; it is just no longer
+ * inside a 30-row window, so the reader has to ask for it by name.
+ *
+ * Board-scope decisions only (`task_id is null`) — a per-ticket row of the same type is a
+ * different thing entirely, and mixing them is how a staffing verdict would be answered
+ * by an owner assignment. Index-backed by `idx_manager_actions_feed`.
+ */
+export interface ManagerStateDecision {
+  actionType: string;
+  summary: string;
+  detail: string | null;
+  createdAt: Date;
+}
+
+export async function latestStateDecision(
+  db: Db,
+  args: { tenantId: number; projectId: number; actionType: string },
+): Promise<ManagerStateDecision | null> {
+  const [row] = await db
+    .select({
+      actionType: managerActions.actionType,
+      summary: managerActions.summary,
+      detail: managerActions.detail,
+      createdAt: managerActions.createdAt,
+    })
+    .from(managerActions)
+    .where(and(
+      eq(managerActions.tenantId, args.tenantId),
+      eq(managerActions.projectId, args.projectId),
+      eq(managerActions.actionType, args.actionType),
+      isNull(managerActions.taskId),
+    ))
+    .orderBy(desc(managerActions.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
  * Read a marker back out of a stored `detail`.
  *
  * By REGEX, not `JSON.parse`: `detail` is truncated to 4000 characters on write, so a
