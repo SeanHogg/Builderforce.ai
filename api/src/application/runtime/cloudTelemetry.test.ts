@@ -32,10 +32,10 @@ interface TelemetryReconstructionResult {
  * In production this runs against a real Neon database seeded with test data;
  * the mock below exercises the contract so CI validates the logic shape.
  *
- * GAP-O1 CONTRACT: tool_audit_events, usage_snapshots, and llm_usage_log
+ * GAP-OBS-01 CONTRACT: tool_audit_events, usage_snapshots, and llm_usage_log
  * must all be joinable on execution_id with at least one row each.
  *
- * GAP-O2 CONTRACT: the total token count from usage_snapshots must equal
+ * GAP-OBS-02 CONTRACT: the total token count from usage_snapshots must equal
  * the total token count from llm_usage_log for a given execution.
  */
 export function cloudTelemetryReconstructionGate(
