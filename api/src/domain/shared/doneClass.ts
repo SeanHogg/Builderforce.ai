@@ -67,5 +67,9 @@ export function isDoneLane(
   lanes: Record<string, LaneTerminality | undefined>,
 ): boolean {
   if (status == null) return false;
-  return DONE_CLASS.has(status) || lanes[status]?.isTerminal === true;
+  // Done-class check mirrors isDoneStatus (case-insensitive + trim); the lane
+  // terminality check uses the raw key because swimlane ordinals are keyed by
+  // exact status string.
+  if (isDoneStatus(status)) return true;
+  return lanes[status]?.isTerminal === true;
 }
