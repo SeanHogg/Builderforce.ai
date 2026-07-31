@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS escalations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   entity_type VARCHAR(40) NOT NULL,                -- board_task / custom_issue / ticket
-  entity_id UUID NOT NULL,                         --entity: the escalation's subject
+  entity_id UUID NOT NULL,                         -- entity: the escalation's subject
   initiative_id INTEGER,                           -- team scope
   chain_id UUID REFERENCES escalation_chains(id) ON DELETE SET NULL,
 
@@ -58,11 +58,11 @@ CREATE TABLE IF NOT EXISTS escalations (
   current_level_owner_id VARCHAR(64),
 
   sla_deadline TIMESTAMP NOT NULL,                 -- when this level must be resolved
-  sl_breached BOOLEAN NOT NULL DEFAULT false,
+  sla_breached BOOLEAN NOT NULL DEFAULT false,
   sla_breach_timestamp TIMESTAMP,                  -- when SLA was breached
 
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  first escalation_at TIMESTAMP,
+  first_escalation_at TIMESTAMP,
   resolved_at TIMESTAMP,
   closed_at TIMESTAMP,
 
