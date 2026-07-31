@@ -50,7 +50,7 @@ export function cloudTelemetryReconstructionGate(
 ): TelemetryReconstructionResult {
   const missingRecords: string[] = [];
 
-  // GAP-O1: every table must have at least one row for the execution.
+  // GAP-OBS-01: every table must have at least one row for the execution.
   if (opts.toolCount < 1) {
     missingRecords.push("tool_audit_events missing");
   }
