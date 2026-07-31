@@ -493,7 +493,7 @@ export async function runTaskPrStatus(params: TaskPrStatusParams): Promise<Track
     const deduped = deduplicateByNumber(allPrs);
 
     // Apply maxResultsPerTask limit if specified
-    const maxResults = params.maxResultsPerTask ?? 10;
+    const maxResults = maxResultsPerTask ?? 10;
     const limitedPrs = deduped.slice(0, maxResults);
     if (deduped.length > maxResults) {
       diagnostics.push(`Task "${taskId}" has ${deduped.length} PRs; showing first ${maxResults}.`);
