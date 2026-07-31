@@ -1,12 +1,11 @@
 /**
  * Conflict Detection Engine
- * 
- * Implements the core conflict detection logic:
- * - Detects conflicts when two distinct stakeholders assign different P0 priorities
- *   to the same team within the same review window
+ *
+ * Implements the core conflict detection logic per PRD:
+ * - Rule: Detect when two DISTINCT stakeholders submit requests that assign
+ *   DIFFERENT P0 priorities to the SAME TEAM within the SAME REVIEW WINDOW
  * - Handles deduplication (prevent duplicate alerts for identical conflicts)
- * - Supports configurable review window sizes
- * - Returns detected conflicts ready for alert generation
+ * - Generates labeling, summary, and attaches alerts to priority versions
  */
 
 import type {
@@ -14,131 +13,202 @@ import type {
   ConflictAlert,
   DetectConflictsRequest,
   DetectConflictsResponse,
-  ConflictRule
+  ConflictRule,
 } from './types.js';
-import { buildConflictingPriorities, parseConflictKey } from './conflict-alert.entity.js';
-import { CONFLICT_RULE_SPEC, validateRequestsForConflictDetection } from './conflict-rule.spec.js';
+import {
+  ConflictAlertFactory,
+  generateConflictKey,
+  parseConflictKey,
+} from './conflict-alert.entity.js';
+import {
+  CONFLICT_RULE_SPEC,
+  validateRequestsForConflictDetection,
+} from './conflict-rule.spec.js';
+
+/**
+ * In-memory store for deduplication — in production backed by DB.
+ * Key: conflict key string -> alert
+ */
+const conflictStore = new Map<string, ConflictAlert>();
+
+export function clearConflictStore() {
+  conflictStore.clear();
+}
+
+export function getConflictStore() {
+  return conflictStore;
+}
 
 /**
  * Conflict Detection Service
  */
 export class ConflictDetectionService {
   private rule: ConflictRule = CONFLICT_RULE_SPEC as ConflictRule;
-  
+
   /**
    * Detect conflicts in a batch of priority requests
+   * Implements PRD rule: two distinct stakeholders, different P0 pri, same team, same window
    */
-  detectConflicts(
-    request: DetectConflictsRequest
-  ): DetectConflictsResponse {
+  detectConflicts(request: DetectConflictsRequest): DetectConflictsResponse {
     try {
       const requests = validateRequestsForConflictDetection(
         request.requests,
-        request.windowThresholdDays
+        request.windowThresholdDays ?? this.rule.windowConstraints.defaultDays
       );
-      
-      if (requests.length === 0) {
-        return {
-          success: true,
-          conflicts: [],
-          duplicatesFound: 0,
-          error: undefined
-        };
+
+      if (requests.length < 2) {
+        return { success: true, conflicts: [], duplicatesFound: 0 };
       }
-      
-      // Find all P0 requests first
-      const p0Requests = this.filterRequestsByPriority(requests, 'P0');
-      
-      if (p0Requests.length < 2) {
-        return {
-          success: true,
-          conflicts: [],
-          duplicatesFound: 0,
-          error: undefined
-        };
-      }
-      
-      // Group requests by team
-      const teamRequests = this.groupRequestsByTeam(p0Requests);
-      
-      // Detect conflicts for each team
-      const conflicts: ConflictAlert[] = [];
-      
-      for (const [teamId, teamItems] of Object.entries(teamRequests)) {
-        // Get stakeholder counts per team
-        const stakeholderCounts = new Map<string, number>();
-        for (const req of teamItems) {
-          const stakeholderId = req.stakeholderId || 'unknown';
-          stakeholderCounts.set(
-            stakeholderId,
-            (stakeholderCounts.get(stakeholderId) || 0) + 1
-          );
-        }
-        
-        // Find teams with multiple stakeholders
-        const multiStakeholderTeams = Array.from(stakeholderCounts.entries())
-          .filter(([_, count]) => count > 1)
-          .map(([stakeholderId]) => stakeholderId);
-        
-        // If only one stakeholder requesting P0 for this team, no conflict
-        if (multiStakeholderTeams.length === 0) {
+
+      // Group requests by team AND by review window proximity
+      const teamGroups = this.groupRequestsByTeamAndWindow(requests, request.windowThresholdDays);
+
+      const newConflicts: ConflictAlert[] = [];
+      let duplicatesFound = 0;
+
+      for (const teamId of Object.keys(teamGroups)) {
+        const teamRequests = teamGroups[teamId];
+
+        // Only consider P0 requests per PRD rule
+        // The spec says "assigning different P0 priorities" - means both are P0
+        // but requesting different things (implicit conflict) OR P0 vs P0
+        const p0Requests = teamRequests.filter((r) => r.priority === 'P0');
+
+        if (p0Requests.length < 2) {
           continue;
         }
-        
-        // Generate stakeholder pairs for conflict detection
-        const stakeholderPairs = this.generateStakeholderPairs(
-          multiStakeholderTeams,
-          teamItems
-        );
-        
-        // Detect conflicts for each pair
-        for (const pair of stakeholderPairs) {
-          const conflict = this.detectStakeholderPairConflict(
-            pair.stakeholder1,
-            pair.stakeholder2,
-            teamItems,
-            teamId,
-            request.versionId
-          );
-          
-          if (conflict) {
-            conflicts.push(conflict);
+
+        // Need at least 2 DISTINCT stakeholders
+        const stakeholderMap = new Map<string, PriorityRequest[]>();
+        for (const req of p0Requests) {
+          const sid = req.stakeholderId;
+          if (!stakeholderMap.has(sid)) {
+            stakeholderMap.set(sid, []);
+          }
+          stakeholderMap.get(sid)!.push(req);
+        }
+
+        const distinctStakeholders = Array.from(stakeholderMap.keys());
+        if (distinctStakeholders.length < 2) {
+          continue; // Same stakeholder, no conflict per rule
+        }
+
+        // Generate all distinct stakeholder pairs
+        for (let i = 0; i < distinctStakeholders.length; i++) {
+          for (let j = i + 1; j < distinctStakeholders.length; j++) {
+            const sid1 = distinctStakeholders[i];
+            const sid2 = distinctStakeholders[j];
+
+            const reqs1 = stakeholderMap.get(sid1)!;
+            const reqs2 = stakeholderMap.get(sid2)!;
+
+            // For each pair of requests from different stakeholders, check if same review window
+            for (const r1 of reqs1) {
+              for (const r2 of reqs2) {
+                if (!this.isInSameReviewWindow(r1, r2, request.windowThresholdDays)) {
+                  continue;
+                }
+
+                const conflictKey = generateConflictKey(sid1, sid2, teamId, request.versionId);
+
+                if (conflictStore.has(conflictKey)) {
+                  duplicatesFound++;
+                  continue;
+                }
+
+                // Create alert with full labeling, summary, detection date, attachment
+                const alert = ConflictAlertFactory.createAlert(
+                  {
+                    id: r1.stakeholderId,
+                    name: r1.stakeholder.name || r1.stakeholderId,
+                    role: r1.stakeholder.role,
+                    email: r1.stakeholder.email,
+                  } as any,
+                  {
+                    id: r2.stakeholderId,
+                    name: r2.stakeholder.name || r2.stakeholderId,
+                    role: r2.stakeholder.role,
+                    email: r2.stakeholder.email,
+                  } as any,
+                  {
+                    id: teamId,
+                    name: r1.team.name || r2.team.name || teamId,
+                    organization: r1.team.organization,
+                  } as any,
+                  teamId,
+                  r1.priority,
+                  r2.priority,
+                  [r1.id, r2.id],
+                  request.versionId
+                );
+
+                // Ensure detection date is set
+                alert.detectedAt = new Date().toISOString();
+
+                conflictStore.set(conflictKey, alert);
+                newConflicts.push(alert);
+              }
+            }
           }
         }
       }
-      
+
       return {
         success: true,
-        conflicts,
-        duplicatesFound: 0,
-        error: undefined
+        conflicts: newConflicts,
+        duplicatesFound,
       };
     } catch (error) {
       return {
         success: false,
         conflicts: [],
         duplicatesFound: 0,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
-  
+
   /**
-   * Filter requests by priority level
+   * Check if two requests are in the same review window
+   * Uses reviewWindowStart/End if present, otherwise createdAt proximity
    */
-  private filterRequestsByPriority(
-    requests: PriorityRequest[],
-    priority: string
-  ): PriorityRequest[] {
-    return requests.filter(req => req.priority === priority);
+  private isInSameReviewWindow(
+    r1: any,
+    r2: any,
+    windowThresholdDays?: number
+  ): boolean {
+    const threshold = windowThresholdDays ?? this.rule.windowConstraints.defaultDays;
+
+    // If explicit review windows exist, check overlap
+    if (r1.reviewWindowStart && r1.reviewWindowEnd && r2.reviewWindowStart && r2.reviewWindowEnd) {
+      const start1 = new Date(r1.reviewWindowStart).getTime();
+      const end1 = new Date(r1.reviewWindowEnd).getTime();
+      const start2 = new Date(r2.reviewWindowStart).getTime();
+      const end2 = new Date(r2.reviewWindowEnd).getTime();
+      // Windows overlap if one starts before the other ends
+      return start1 <= end2 && start2 <= end1;
+    }
+
+    // Otherwise use versionId as window proxy - same versionId = same window
+    if (r1.versionId && r2.versionId) {
+      return r1.versionId === r2.versionId;
+    }
+
+    // Fallback: createdAt proximity within threshold days
+    const createdDiff = Math.abs(new Date(r1.createdAt).getTime() - new Date(r2.createdAt).getTime());
+    const thresholdMs = threshold * 24 * 60 * 60 * 1000;
+    return createdDiff <= thresholdMs;
   }
-  
+
   /**
    * Group requests by team
    */
-  private groupRequestsByTeam(requests: PriorityRequest[]): Record<string, PriorityRequest[]> {
-    const grouped = {} as Record<string, PriorityRequest[]>;
-    
+  private groupRequestsByTeamAndWindow(
+    requests: any[],
+    _windowThresholdDays?: number
+  ): Record<string, any[]> {
+    const grouped: Record<string, any[]> = {};
+
     for (const req of requests) {
       const teamId = req.teamId || 'unknown';
       if (!grouped[teamId]) {
@@ -146,171 +216,88 @@ export class ConflictDetectionService {
       }
       grouped[teamId].push(req);
     }
-    
+
     return grouped;
   }
-  
+
   /**
-   * Generate unique stakeholder pairs (sorted to ensure consistent ordering)
+   * Get all stored conflicts (for list API)
    */
-  private generateStakeholderPairs(
-    stakeholderIds: string[],
-    requests: PriorityRequest[]
-  ): Array<{ stakeholder1: string; stakeholder2: string; requests: PriorityRequest[] }> {
-    const pairs: Array<{ stakeholder1: string; stakeholder2: string; requests: PriorityRequest[] }> = [];
-    const seen = new Set<string>();
-    const stakeholderRequestMap = new Map<string, PriorityRequest[]>();
-    
-    for (const req of requests) {
-      const ids = [req.stakeholderId, req.stakeholderId].sort();
-      const key = ids.join('|');
-      
-      if (!stakeholderRequestMap.has(key)) {
-        stakeholderRequestMap.set(key, []);
-      }
-      stakeholderRequestMap.get(key)!.push(req);
+  listConflicts(query: {
+    status?: string;
+    versionId?: string;
+    teamId?: string;
+    stakeholderId?: string;
+    severity?: string;
+  }): ConflictAlert[] {
+    let result = Array.from(conflictStore.values());
+
+    if (query.status && query.status !== 'all') {
+      result = result.filter((c) => c.status === query.status);
     }
-    
-    for (const [key, reqList] of stakeholderRequestMap.entries()) {
-      const [stakeholder1, stakeholder2] = key.split('|');
-      
-      // Only include if both stakeholders (no duplicates)
-      if (stakeholder1 === stakeholder2) {
-        continue;
-      }
-      
-      pairs.push({ stakeholder1, stakeholder2, requests: reqList });
+    if (query.versionId) {
+      result = result.filter((c) => c.versionIds.includes(query.versionId!));
     }
-    
-    return pairs;
-  }
-  
-  /**
-   * Detect conflict for a specific stakeholder pair
-   */
-  private detectStakeholderPairConflict(
-    stakeholder1Id: string,
-    stakeholder2Id: string,
-    teamRequests: PriorityRequest[],
-    teamId: string,
-    versionId?: string
-  ): ConflictAlert | null {
-    // Get the requests for both stakeholders
-    const request1 = teamRequests.find(req => req.stakeholderId === stakeholder1Id);
-    const request2 = teamRequests.find(req => req.stakeholderId === stakeholder2Id);
-    
-    if (!request1 || !request2) {
-      return null; // This shouldn't happen given our filtering, but be safe
+    if (query.teamId) {
+      result = result.filter((c) => c.key.teamId === query.teamId);
     }
-    
-    // Check if priorities are the same
-    if (request1.priority === request2.priority) {
-      // Different stakeholders with SAME P0 priority = still conflict (need negotiation)
-      return this.createConflictAlert(
-        request1,
-        request2,
-        teamId,
-        versionId
+    if (query.stakeholderId) {
+      result = result.filter((c) =>
+        c.stakeholders.some((s) => s.stakeholderId === query.stakeholderId)
       );
     }
-    
-    // Different priorities = also conflict
-    return this.createConflictAlert(
-      request1,
-      request2,
-      teamId,
-      versionId
+    if (query.severity) {
+      result = result.filter((c) => c.severity === query.severity);
+    }
+
+    // Sorted by detection date desc
+    return result.sort(
+      (a, b) => new Date(b.detectedAt).getTime() - new Date(a.detectedAt).getTime()
     );
   }
-  
-  /**
-   * Create a conflict alert from two requests
-   */
-  private createConflictAlert(
-    request1: PriorityRequest,
-    request2: PriorityRequest,
-    teamId: string,
-    versionId?: string
-  ): ConflictAlert {
-    // Build stakeholder objects
-    const stakeholder1: any = {
-      id: request1.stakeholderId,
-      name: request1.stakeholder.name || request1.stakeholderId || 'unknown',
-      role: request1.stakeholder.role
-    };
-    
-    const stakeholder2: any = {
-      id: request2.stakeholderId,
-      name: request2.stakeholder.name || request2.stakeholderId || 'unknown',
-      role: request2.stakeholder.role
-    };
-    
-    // Build team object
-    const team: any = {
-      id: teamId,
-      name: request1.team.name || teamId || 'unknown'
-    };
-    
-    // Create conflict alert using the factory
-    const alert = {
-      id: parseConflictKey(
-        `${stakeholder1.id}__${stakeholder2.id}__${teamId}${versionId ? '__' + versionId : ''}`
-      ),
-      key: parseConflictKey(
-        `${stakeholder1.id}__${stakeholder2.id}__${teamId}${versionId ? '__' + versionId : ''}`
-      ),
-      title: `${team.name} — P0 Priority Conflict`,
-      description: `Detected: ${stakeholder1.name} requested P${request1.priority === 'P0' ? '0' : '1'} for team ${team.name}, 
-${stakeholder2.name} requested P${request2.priority === 'P0' ? '0' : '1'} for same team. 
-Conflicting priorities detected.`,
-      summary: `${request1.priority} (stakeholder ${stakeholder1.name}, ${team.name}) vs ${request2.priority} (stakeholder ${stakeholder2.name}, ${team.name})`,
-      severity: 'critical',
-      detectedAt: new Date().toISOString(),
-      status: 'open',
-      conflictingPriorities: buildConflictingPriorities(
-        stakeholder1,
-        stakeholder2,
-        team,
-        request1.priority,
-        request2.priority,
-        teamId
-      ),
-      stakeholders: [
-        { stakeholderId: stakeholder1.id, stakeholderName: stakeholder1.name, role: stakeholder1.role },
-        { stakeholderId: stakeholder2.id, stakeholderName: stakeholder2.name, role: stakeholder2.role }
-      ],
-      versionIds: versionId ? [versionId] : [],
-      sourceRequestIds: [request1.id, request2.id],
-      conflictCount: 2
-    };
-    
-    // Note: This is a simplified conflict alert. In a full implementation,
-    // we'd integrate with a persistence layer to handle deduplication.
-    
-    return alert as ConflictAlert;
+
+  getConflictById(id: string): ConflictAlert | undefined {
+    return conflictStore.get(id) || Array.from(conflictStore.values()).find((c) => c.id === id);
   }
-  
-  /**
-   * Get the active conflict rule
-   */
+
+  resolveConflict(
+    id: string,
+    action: 'acknowledged' | 'resolved' | 'dismissed',
+    note?: string,
+    resolverUserId?: string
+  ): ConflictAlert | null {
+    const existing = this.getConflictById(id);
+    if (!existing) return null;
+
+    const updated: ConflictAlert = {
+      ...existing,
+      status: action as any,
+      resolutionNote: note,
+      resolvedBy: resolverUserId,
+      resolvedAt: new Date().toISOString(),
+    };
+
+    // Update in store by key
+    const key = generateConflictKey(
+      existing.key.stakeholderId1,
+      existing.key.stakeholderId2,
+      existing.key.teamId,
+      existing.key.versionId
+    );
+    conflictStore.set(key, updated);
+    // Also index by id for direct lookup
+    if (key !== id) conflictStore.set(id, updated);
+
+    return updated;
+  }
+
   getActiveRule(): ConflictRule {
     return this.rule;
   }
-  
-  /**
-   * Update conflict rule
-   */
+
   updateRule(rule: ConflictRule): ConflictRule {
     this.rule = rule;
     return this.rule;
-  }
-  
-  /**
-   * Validate if a version is within acceptable bounds (implementation detail)
-   */
-  private isVersionWithinValidBounds(versionId: string): boolean {
-    // Placeholder implementation - would check against actual version registry
-    return true;
   }
 }
 
