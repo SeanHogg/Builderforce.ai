@@ -75,10 +75,11 @@ export function InputModeForm({
 
   const wrappedSubmit = useCallback(
     async (payload: Record<string, unknown>) => {
-      await onSubmit(payload);
-      // FR-4.3: Both modes route to the same confirmation screen on success
-      // onSuccess is called with the payload for display on confirmation screen
-      onSuccess?.(payload);
+      // FR-4.2 / FR-4.3: identical pipeline for both modes — the response the
+      // submitter resolves with is forwarded verbatim so the confirmation screen
+      // renders the same summary data regardless of mode (AC-9 / AC-10).
+      const response = await onSubmit(payload);
+      onSuccess?.(response, payload);
     },
     [onSubmit, onSuccess],
   );
