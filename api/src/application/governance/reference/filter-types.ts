@@ -1,7 +1,7 @@
 /**
  * PRE-REMOVE: Filter type contracts for governance review.
  * 
- * This file is a placeholder for governance alignment purposes only.
+ * This file is for governance alignment purposes only.
  * DO NOT SHIP - See task #380 GAP P2-11.
  * 
  * This file is intentionally isolated from the application build pipeline.
@@ -13,7 +13,7 @@
  */
 
 /**
- * Placeholder filter type definitions.
+ * Filter type definitions for governance review.
  * These are provisional contracts for future filter implementation.
  * Currently NOT integrated into any application logic.
  */
@@ -31,7 +31,7 @@ export interface GovernanceFilterType {
 }
 
 /**
- * Placeholder filter configuration schema.
+ * Filter configuration schema for governance review.
  * @governance_only - Not used in production
  */
 export interface GovernanceFilterConfig {
@@ -42,7 +42,7 @@ export interface GovernanceFilterConfig {
 }
 
 /**
- * Placeholder taxonomy reference.
+ * Taxonomy reference entry for governance review.
  * @governance_only - Not used in production
  */
 export interface GovernanceTaxonomyEntry {
