@@ -201,21 +201,21 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
           {isAuthenticated ? (
             <>
               <div className="nav-section-label">MAIN</div>
-              <NavSection items={mainNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
+              <NavSection items={mainNav} pathname={path} onNavigate={onMobileClose} />
               <div className="nav-section-label">MESH</div>
-              <NavSection items={meshNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
+              <NavSection items={meshNav} pathname={path} onNavigate={onMobileClose} />
               <div className="nav-section-label">EXTENSIONS</div>
-              <NavSection items={extensionsNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
+              <NavSection items={extensionsNav} pathname={path} onNavigate={onMobileClose} />
               <div className="nav-section-label">SYSTEM</div>
-              <NavSection items={systemNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
-              <OwnerApiKeysNavItem collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
-              <PlatformAdminNavSection collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
+              <NavSection items={systemNav} pathname={path} onNavigate={onMobileClose} />
+              <OwnerApiKeysNavItem pathname={path} onNavigate={onMobileClose} />
+              <PlatformAdminNavSection pathname={path} onNavigate={onMobileClose} />
             </>
           ) : (
             <>
-              <NavSection items={publicNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
+              <NavSection items={publicNav} pathname={path} onNavigate={onMobileClose} />
               <div className="nav-section-label">What&apos;s inside</div>
-              <NavSection items={productNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
+              <NavSection items={productNav} pathname={path} onNavigate={onMobileClose} />
             </>
           )}
         </div>
