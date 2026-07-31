@@ -1,117 +1,82 @@
+import type { Deadline, HealthStatus } from '../../domain/deadlines/Deadline';
+
 /**
- * Health Engine: rule-based deadline health computation.
+ * Compute the health status for a deadline based on its due date, forecast,
+ * dependencies, and the configured warning buffer.
  *
- * Pure, testable function using local-invariant logic.
+ * Default buffer: 10% of total duration OR 5 business days, whichever is greater.
+ * Callers can override via `options.bufferDays` to provide a custom buffer.
  */
+export function computeHealthStatus(
+  deadline: Deadline,
+  options: { now?: Date; bufferDays?: number } = {},
+): HealthStatus {
+  const now = options.now ?? new Date();
+  const { bufferDays } = options;
 
-/** 
- * The interval in minutes to consider a deadline on track/untracked. Defaults to 15.
- */
-const HEALTH_METRIC_INTERVAL = 15;
-
-/** Utility: calculate minimum gap days to make relative differences opinionated. */
-export const MINIMUM_ASPECT_WINDOW_DAYS = 7; // Arbitrary higher bound to avoid 0-division noise.
-
-/**
- * Option: dynamic buffer width (time window before target qualifies as at-risk).
- */
-export const getDefaultWarningBuffer = (
-  atTargetDate: Date,
-  aheadOfTargetDate: Date
-): number => {
-  // heuristic: use 5 business days or a fraction of remaining duration
-  if (aheadOfTargetDate.getTime() <= atTargetDate.getTime()) return 5;
-  const distanceMs = atTargetDate.getTime() - aheadOfTargetDate.getTime();
-  const bufferDays = Math.round(distanceMs / (86_400_000 * efficiencyTruncate(durationBusinessDays(atTargetDate, aheadOfTargetDate))));
-  return Math.max(bufferDays, 5);
-};
-
-/** Helper: business-day truncation (NYSE/CME inclusivity simplified to total days for initial scope). */
-const efficiencyTruncate = (n: number): number => Math.min(MINIMUM_ASPECT_WINDOW_DAYS, n);
-/** Helper: duration in business days (simplified). */
-const durationBusinessDays = (start: Date, end: Date): number => {
-  // Simplified; future improvement can adjust for weekends/holidays.
-  const diffMs = end.getTime() - start.getTime();
-  return Math.max(1, Math.round(diffMs / (86_400_000)));
-};
-
-/**
- * Pure health status computation based on ingested metrics.
- *
- * @param deadlineSnapshot must include targetDate and optional forecastStart.
- * @param override disables auto-computation and forces a manual status.
- * @param options used to adjust buffer and interval tuning.
- * @returns on_track | at_risk | off_track | missed | manual_override.
- */
-export const computeHealthStatus = (
-  deadlineSnapshot: {
-    targetDate: Date;
-    // Optional: forecast capability (currently not used for status; reserved for future forecasting)
-    forecastStart?: Date | null;
-    // External metrics are reserved for future telemetry hooks; not used in status computation today.
-    externalMetrics?: undefined;
-    override: null | 'on_track' | 'at_risk' | 'off_track' | 'missed';
-  },
-  options?: {
-    warningBuffer?: number;
-    metricIntervalMinutes?: number;
-  }
-): 'on_track' | 'at_risk' | 'off_track' | 'missed' | 'manual_override' => {
-  const now = new Date();
-  const targetDateStartOfDay = new Date(deadlineSnapshot.targetDate.toDateString());
-
-  const effectiveDurationMs = durationBusinessDays(
-    new Date(Math.min(deadlineSnapshot.targetDate.getTime(), now.getTime())),
-    targetDateStartOfDay
-  );
-
-  const warningBufferHome =
-    options?.warningBuffer ?? Math.max(5, Math.round(effectiveDurationMs * 0.1));
-
-  if (deadlineSnapshot.override) {
-    return deadlineSnapshot.override;
+  // If a health override is active, it takes precedence
+  if (deadline.overrideActive) {
+    return deadline.effectiveStatus;
   }
 
-  const forecast = deadlineSnapshot.forecastStart;
+  // Hard "missed": due date has passed and we're not completed
+  if (now > deadline.dueDate && !deadline.completed) {
+    return 'missed';
+  }
 
-  // Missed: target date has passed without a forecast that lands on-or-before the deadline.
-  if (now > targetDateStartOfDay) {
-    if (!forecast || forecast > targetDateStartOfDay) {
-      return 'missed';
+  // Default: on_track until we have reason otherwise
+  let status: HealthStatus = 'on_track';
+
+  // Compute the warning buffer
+  const warnDays =
+    bufferDays ??
+    computeDefaultBuffer(deadline.createdAt, deadline.dueDate);
+
+  const warnDate = new Date(deadline.dueDate.getTime() - warnDays * 86_400_000);
+
+  // If we are past the warn date with no forecast or a forecast past due
+  if (now >= warnDate) {
+    if (!deadline.forecastDate || deadline.forecastDate > deadline.dueDate) {
+      status = 'at_risk';
+    } else {
+      status = 'on_track';
     }
   }
 
-  // Off track: forecast is after target (and on/after now).
-  if (forecast && forecast > targetDateStartOfDay && now <= targetDateStartOfDay) {
-    return 'off_track';
+  // If forecast exceeds due date, it's off track (unless already missed)
+  if (deadline.forecastDate && deadline.forecastDate > deadline.dueDate) {
+    status = 'off_track';
   }
 
-  // At risk: forecast is within the warning buffer.
-  const bufferStartMs = targetDateStartOfDay.getTime() - warningBufferHome * 86_400_000;
-  const bufferEndMs = targetDateStartOfDay.getTime();
-  if (
-    forecast &&
-    forecast >= bufferStartMs &&
-    forecast <= bufferEndMs &&
-    now <= targetDateStartOfDay
-  ) {
-    // Optionally enrich with metrics feedback (reserved for future telemetry).
-    return 'at_risk';
-  }
-
-  return 'on_track';
-};
+  return status;
+}
 
 /**
- * Constraint stubs for metrics (telemetry / alerts) placeholder infrastructure.
- * Will be wired once metrics integration is final.
+ * Default buffer: 10% of total duration, minimum 5 business days.
  */
-export const metricTriggers: Record<'health_milestone' | 'status_change', number> = {
-  health_milestone: 100, // magnetic interval in seconds for segmenting telemetry slices.
-  status_change: HEALTH_METRIC_INTERVAL,
-};
+function computeDefaultBuffer(createdAt: Date, dueDate: Date): number {
+  const durationDays =
+    (dueDate.getTime() - createdAt.getTime()) / (86_400_000);
+  const pctBuffer = Math.ceil(durationDays * 0.1);
+  return Math.max(pctBuffer, 5);
+}
 
-// Reserved for prometheus-like key placeholders (unimplemented for now).
-export const metricsKeyMetricsPairs = [
-  { key: 'deadline_computed_status', value: JSON.stringify('on_track | at_risk | off_track | missed | manual_override') }
-] as const;
+/**
+ * Recompute the health status for every deadline in an array and return the
+ * updated list. Callers are expected to persist the updates themselves.
+ */
+export async function recomputeHealthForAll(
+  deadlines: Deadline[],
+  options?: { now?: Date; bufferDays?: number },
+): Promise<Map<number, HealthStatus>> {
+  const results = new Map<number, HealthStatus>();
+
+  for (const dl of deadlines) {
+    const status = computeHealthStatus(dl, options);
+    if (status !== dl.healthStatus) {
+      results.set(dl.id, status);
+    }
+  }
+
+  return results;
+}
