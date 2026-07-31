@@ -61,7 +61,7 @@ export function cloudTelemetryReconstructionGate(
     missingRecords.push("llm_usage_log missing");
   }
 
-  // GAP-O2: ledger drift detection.
+  // GAP-OBS-02: ledger drift detection.
   if (opts.ledgerDrift) {
     missingRecords.push("ledger drift: snapshot total ≠ usage_log total");
   }
