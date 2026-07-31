@@ -220,6 +220,7 @@ export class Task {
   /** For an Epic: which reasoning step produced its children ('llm' | 'heuristic' | 'manual'). */
   get decompositionSource(): string | null { return this.props.decompositionSource; }
   get persona(): string | null { return this.props.persona; }
+  get featureSign(): FeatureSign { return this.props.featureSign; }
   get archived(): boolean { return this.props.archived; }
   get createdAt(): Date { return this.props.createdAt; }
   get updatedAt(): Date { return this.props.updatedAt; }
