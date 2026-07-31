@@ -20,7 +20,18 @@
  *   - SuggestionContext, InlineSuggestionsResponse, AutoFillResponse, GapDetectionResponse
  */
 
-export { functions } from './aiAssistance.service';
+export {
+  functions,
+  buildInlineSuggestionPrompt,
+  generateInlineSuggestions,
+  isScopeEnabled,
+  buildAutoFillPrompt,
+  proposeAutoFill,
+  detectGaps,
+  acceptFeedback,
+  wouldSettingsChange,
+  getAiMetrics,
+} from './aiAssistance.service';
 export type {
   AiGenerator,
   RuntimeState,
