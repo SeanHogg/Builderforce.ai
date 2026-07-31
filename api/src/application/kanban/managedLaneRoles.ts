@@ -72,6 +72,15 @@ export interface LaneAuthorityInputs {
   requirements: Array<{ kind: string; ref: string; ticketType: string | null; condition: string | null }>;
   laneAgents: LaneStaffedAgent[];
   /**
+   * The lane's `key` — which is also the ticket STATUS that lands in it (see the lane
+   * lookup in `evaluateAutoRun`: `swimlanes.key === task.status`). Optional so existing
+   * constructions stay valid; supplied by {@link loadBoardLaneAuthorities}.
+   *
+   * Carried so a staffing gap can be reported as the stage a human recognises ("ready")
+   * and correlated against the tickets sitting in it, rather than as a bare uuid.
+   */
+  laneKey?: string | null;
+  /**
    * The workspace roster — the SAME capability oracle the execution guard enforces.
    *
    * REQUIRED, deliberately. An optional roster is what let this seam reopen twice: the
@@ -400,13 +409,13 @@ export async function loadBoardLaneAuthorities(
       return EMPTY_ROLE_ROSTER;
     });
   const laneRows = await db
-    .select({ id: swimlanes.id })
+    .select({ id: swimlanes.id, key: swimlanes.key })
     .from(swimlanes)
     .where(and(eq(swimlanes.tenantId, args.tenantId), eq(swimlanes.boardId, args.boardId)));
   const laneIds = laneRows.map((l) => l.id);
   const out = new Map<string, LaneAuthorityInputs>();
   if (laneIds.length === 0) return out;
-  for (const id of laneIds) out.set(id, { requirements: [], laneAgents: [], roster });
+  for (const l of laneRows) out.set(l.id, { requirements: [], laneAgents: [], roster, laneKey: l.key });
 
   const [requirementRows, staffed] = await Promise.all([
     db
