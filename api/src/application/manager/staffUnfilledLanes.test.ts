@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import {
   describeLaneStaffing, unfilledRolesForBoard, findBoardStaffingGaps, distinctTaskShapes, type LaneStaffingResult,
@@ -37,6 +39,43 @@ const rosterFor = (roleKeys: string[]) => buildRoleRoster({
   pins: [],
   humans: [],
 } as never, 1);
+
+/**
+ * THE GRANT (0386) — reporting must never depend on it, acting always must.
+ *
+ * A lane that authorises NO role is reported by `findBoardStaffingGaps` unconditionally,
+ * and that is the part an operator needs whatever their policy says. ACTING on it —
+ * pinning a producer — starts every ticket sitting in the lane, which on the measured
+ * board was 299 tickets in `backlog` alone. So the write is behind `allowAutoStaffLanes`,
+ * and these pin the three properties no unit test of the pure half can see: the gate
+ * exists, it wraps only the write, and `shape_unmatched` is never written to at all.
+ */
+describe('lane auto-staffing is gated, and only the WRITE is gated', () => {
+  const source = readFileSync(
+    fileURLToPath(new URL('./staffUnfilledLanes.ts', import.meta.url)), 'utf8',
+  );
+
+  it('performs the lane write only under the explicit grant', () => {
+    expect(source).toMatch(/if \(args\.allowAutoStaffLanes\) \{[\s\S]*?staffLaneProducer\(/);
+  });
+
+  it('reports the unauthorised lanes BEFORE the gate, so a withheld grant still surfaces them', () => {
+    expect(source.indexOf('const unauthorizedLanes')).toBeLessThan(source.indexOf('if (args.allowAutoStaffLanes)'));
+  });
+
+  /** Tier (a) wins over lane staffing, so a staffed agent on a lane that HAS requirements
+   *  would never be consulted — the write would be a lie in the feed and a row nobody reads. */
+  it('never writes to a lane whose requirements simply do not match its tickets', () => {
+    expect(source).toMatch(/if \(lane\.reason === 'shape_unmatched'\) continue;/);
+  });
+
+  /** Capability comes from the ROSTER, not from the assignment row: `approverRoleKeyForLaneAgent`
+   *  refuses any lane agent whose capable set is empty. Writing only the lane row would
+   *  produce a lane that still authorises nothing — the exact bug being fixed. */
+  it('pins the ROLE before binding the lane, or the lane still authorises nothing', () => {
+    expect(source).toMatch(/staffUnfilledRole\([\s\S]*?\)[\s\S]*?insert\(swimlaneAgentAssignments\)/);
+  });
+});
 
 describe('unfilledRolesForBoard', () => {
   it('finds nothing on a board with no managed lanes', () => {

@@ -44,6 +44,9 @@ const REASON_TONE: Record<AutoRunReason, 'ok' | 'warn' | 'muted' | 'info'> = {
   // means no dispatch is possible at all until the stage gets a role-capable
   // participant, so it must not read as muted the way `no_agent` does.
   managed_no_role: 'warn',
+  // Stronger still: `managed_no_role` can be staffed its way out of, this one cannot —
+  // the stage names no role to staff, so somebody has to configure the lane (0386).
+  lane_unconfigured: 'warn',
   no_board: 'muted',
   no_lane: 'muted',
   terminal_lane: 'muted',

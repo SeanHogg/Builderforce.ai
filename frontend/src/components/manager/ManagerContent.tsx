@@ -93,6 +93,7 @@ function autonomyPatchToConfigPatch(patch: Partial<ManagerAutonomyValue>): Manag
   // rather than being narrowed to a boolean like the 0265 columns above.
   if (patch.allowUnattendedCeremonies !== undefined) out.allowUnattendedCeremonies = patch.allowUnattendedCeremonies;
   if (patch.allowAgentReassignment !== undefined) out.allowAgentReassignment = patch.allowAgentReassignment;
+  if (patch.allowAutoStaffLanes !== undefined) out.allowAutoStaffLanes = patch.allowAutoStaffLanes;
   if (patch.agentReassignIdleHours !== undefined) out.agentReassignIdleHours = patch.agentReassignIdleHours;
   if (patch.agentReassignMaxPerSession !== undefined) out.agentReassignMaxPerSession = patch.agentReassignMaxPerSession;
   return out;
@@ -330,6 +331,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
     // policy cannot express (it would report the inherited answer as this project's own).
     allowUnattendedCeremonies: config ? config.allowUnattendedCeremonies : null,
     allowAgentReassignment: config ? config.allowAgentReassignment : null,
+    allowAutoStaffLanes: config ? config.allowAutoStaffLanes : null,
     agentReassignIdleHours: config ? config.agentReassignIdleHours : null,
     agentReassignMaxPerSession: config ? config.agentReassignMaxPerSession : null,
   };

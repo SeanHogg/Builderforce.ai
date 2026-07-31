@@ -6314,6 +6314,7 @@
         "cooldown_active": "Pause après une exécution sans résultat — nouvelle tentative sous peu",
         "no_agent": "Aucun agent assigné",
         "managed_no_role": "Aucun rôle ne peut exécuter cette étape",
+        "lane_unconfigured": "L’étape n’autorise aucun rôle",
         "no_board": "Aucun tableau configuré",
         "no_lane": "Voie non configurée",
         "terminal_lane": "Terminé — aucune exécution",
@@ -6889,6 +6890,10 @@
       "allowAgentReassignment": {
         "label": "Confier le travail bloqué aux agents",
         "help": "Autorise une cérémonie à confier à un agent le ticket d’une personne absente. L’absence ne suffit jamais à elle seule : le ticket doit aussi être resté intact pendant la durée ci-dessous."
+      },
+      "allowAutoStaffLanes": {
+        "label": "Configurer une étape qui ne nomme personne",
+        "help": "Certaines étapes n’autorisent aucun rôle : aucun rôle requis déclaré, aucun agent affecté — donc sur un tableau piloté par le cycle de vie, rien de ce qui s’y trouve ne pourra jamais être lancé. Le manager signale toujours ces étapes ; cette option décide s’il peut en plus en corriger une en y affectant un exécutant. L’accorder démarre tous les tickets qui y attendent déjà : une étape laissée vide volontairement (une colonne d’entrée que vous dépilez à la main) devrait donc le rester."
       },
       "agentReassignIdleHours": {
         "label": "Seulement après une inactivité de",

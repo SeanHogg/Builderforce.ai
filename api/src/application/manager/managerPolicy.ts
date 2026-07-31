@@ -80,6 +80,7 @@ export interface ManagerPolicyOverride {
   allowAgentReassignment?: boolean | null;
   agentReassignIdleHours?: number | null;
   agentReassignMaxPerSession?: number | null;
+  allowAutoStaffLanes?: boolean | null;
 }
 
 /** The persisted config shape (a `project_manager_configs` row projection). */
@@ -108,6 +109,7 @@ export interface ManagerConfigRow {
   allowAgentReassignment?: boolean | null;
   agentReassignIdleHours?: number | null;
   agentReassignMaxPerSession?: number | null;
+  allowAutoStaffLanes?: boolean | null;
 }
 
 /**
@@ -128,6 +130,7 @@ export interface TenantManagerDefaultsRow {
   allowAgentReassignment: boolean | null;
   agentReassignIdleHours: number | null;
   agentReassignMaxPerSession: number | null;
+  allowAutoStaffLanes: boolean | null;
 }
 
 export interface EffectiveManagerPolicy {
@@ -234,6 +237,25 @@ export interface EffectiveManagerPolicy {
   /** Hard bound on reassignments ONE ceremony may make. Folded most-restrictive-wins —
    *  the SMALLEST opinion across the tiers. */
   agentReassignMaxPerSession: number;
+
+  /**
+   * MAY THE MANAGER STAFF A LANE NOBODY CONFIGURED (migration 0386)?
+   *
+   * A lane with no required role AND no staffed agent authorises nothing, so on a
+   * lifecycle-managed board no run in it can ever be role-attributed. The board-staffing
+   * sweep reports such a lane (`lane_unstaffed`) but cannot fix it: its remedy is keyed on
+   * a role KEY, and a lane authorising nothing has no key to name.
+   *
+   * When true, the sweep pins a capable roster agent to the lane, which is what makes its
+   * tickets dispatchable. NOT granted by default, and for the same reason as
+   * {@link allowAutoMerge}: measured on project 11, turning this on would have converted a
+   * 299-ticket `backlog` intake pile into auto-dispatching work in one pass. Whether an
+   * intake lane is *meant* to auto-start is a decision about how a team works, so the
+   * platform asks rather than assumes.
+   *
+   * A grant, folded most-restrictive-wins: an explicit workspace `false` is a ceiling.
+   */
+  allowAutoStaffLanes: boolean;
 }
 
 /**
@@ -275,6 +297,10 @@ export const DEFAULT_MANAGER_POLICY: EffectiveManagerPolicy = {
   agentReassignIdleHours: 48,
   // A standup that quietly re-homed a whole sprint would be indistinguishable from a bug.
   agentReassignMaxPerSession: 3,
+  // NOT granted by default (0386). Staffing an unconfigured lane starts everything sitting
+  // in it, and an intake lane is unconfigured on purpose about as often as it is by
+  // accident — the platform cannot tell which, so it asks.
+  allowAutoStaffLanes: false,
 };
 
 /**
@@ -461,6 +487,11 @@ export function resolveTieredManagerPolicy(tiers: {
     ),
     allowAgentReassignment: narrowestGrant(
       d.allowAgentReassignment, tenant?.allowAgentReassignment, project?.allowAgentReassignment,
+    ),
+    // A ceiling like the two above (0386): staffing an unconfigured lane starts everything
+    // sitting in it, so a workspace `false` must not be re-grantable by one project.
+    allowAutoStaffLanes: narrowestGrant(
+      d.allowAutoStaffLanes, tenant?.allowAutoStaffLanes, project?.allowAutoStaffLanes,
     ),
     // Longest wait wins: a project may be more patient than the workspace, never less.
     agentReassignIdleHours: tightestBound(

@@ -884,6 +884,24 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
       });
     }
 
+    // ── A LANE NOBODY CONFIGURED IS NOT A STAFFING FAILURE ──────────────────────
+    // Split out of `managed_dispatch_refused` (0386) because the two demand opposite
+    // actions and the larger one was hiding the smaller. Measured on project 11: 306
+    // tickets read `managed_no_role`, of which 309 board-wide sat in `backlog`/`blocked` —
+    // lanes that declare no role and staff no agent, so there was never a role to fill.
+    // This finding also has to say whether the manager was ALLOWED to fix it, or a reader
+    // cannot tell a withheld permission from a broken remedy.
+    const unconfigured = census.cohorts.find((c) => c.cause === 'lane_unconfigured');
+    if (unconfigured && unconfigured.count > 0) {
+      critical.push({
+        severity: 'critical',
+        code: 'lane_unconfigured',
+        text: `${unconfigured.count} ticket${unconfigured.count === 1 ? ' sits' : 's sit'} in a stage that authorises NO role at all — it declares no required role and has no agent staffed to it, so on this lifecycle-managed board nothing in it can ever be dispatched. This is NOT a role that failed to bind (that is managed_dispatch_refused, which the manager can staff its way out of); there is no role, so there is nothing to staff. ${policy.allowAutoStaffLanes
+          ? 'The manager IS permitted to configure such a stage, so a cohort still standing means its remedy ran and did not clear — check the board-staffing block below for what it tried.'
+          : 'The manager is NOT permitted to configure a stage on its own (allowAutoStaffLanes is off), so it is reporting this deliberately rather than failing at it. Either declare a required role on the stage, staff an agent to it, or grant that permission on the Manager policy panel — with the caveat that granting it starts every ticket sitting there.'} See the board-staffing block for which stages, and Example tickets: ${unconfigured.sampleTaskIds.join(', ')}.`,
+      });
+    }
+
     // The concentration finding — the one that reframes remediation entirely.
     const top = census.cohorts[0];
     if (top && census.stalled > 0 && top.count >= census.stalled * CONCENTRATED_COHORT_SHARE) {
@@ -1153,6 +1171,10 @@ const POLICY_KEYS: ReadonlyArray<keyof ManagerPolicy & keyof ManagerConfig> = [
   'requireSignoffToComplete', 'allowAutoMerge', 'prMergePolicy',
   'allowUnattendedCeremonies', 'allowAgentReassignment',
   'agentReassignIdleHours', 'agentReassignMaxPerSession',
+  // 0386. Decisive when reading a `lane_unconfigured` cohort: with the grant withheld the
+  // manager is REPORTING a gap it is deliberately not closing, which is a policy answer
+  // rather than a defect — and the two are indistinguishable without this row.
+  'allowAutoStaffLanes',
 ];
 
 function formatPolicy(policy: ManagerPolicy, config: ManagerConfig | null, tenantPolicy: ManagerPolicy): string[] {

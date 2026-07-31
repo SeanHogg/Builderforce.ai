@@ -6314,6 +6314,7 @@
         "cooldown_active": "En espera tras una ejecución sin resultado: se reintentará en breve",
         "no_agent": "Sin agente asignado",
         "managed_no_role": "Ningún rol puede ejecutar esta etapa",
+        "lane_unconfigured": "La etapa no autoriza ningún rol",
         "no_board": "Sin tablero configurado",
         "no_lane": "Carril no configurado",
         "terminal_lane": "Hecho — no requiere ejecución",
@@ -6889,6 +6890,10 @@
       "allowAgentReassignment": {
         "label": "Pasar trabajo estancado a los agentes",
         "help": "Permite que una ceremonia mueva una tarea de quien faltó a un agente. Faltar nunca basta por sí solo: la tarea también debe llevar sin tocarse el periodo indicado abajo."
+      },
+      "allowAutoStaffLanes": {
+        "label": "Configurar una etapa que no nombra a nadie",
+        "help": "Algunas etapas no autorizan ningún rol: no declaran un rol obligatorio ni tienen un agente asignado, así que en un tablero gestionado por ciclo de vida nada de lo que esté ahí podrá despacharse nunca. El manager siempre informa de estas etapas; esta opción decide si además puede arreglar una fijándole un ejecutor. Concederla pone en marcha todos los tickets que ya esperan ahí, de modo que una etapa dejada vacía a propósito (una columna de entrada de la que tiras a mano) debería seguir así."
       },
       "agentReassignIdleHours": {
         "label": "Solo tras estar inactiva",

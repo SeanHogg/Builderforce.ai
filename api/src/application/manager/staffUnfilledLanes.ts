@@ -34,8 +34,10 @@
  * staffing gap the moment it exists, and a stale "everything is staffed" verdict would
  * reproduce precisely the standstill it exists to end.
  */
+import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { swimlaneAgentAssignments } from '../../infrastructure/database/schema';
 import {
   decideManagedLaneAuthority, loadBoardLaneAuthorities,
   type LaneAuthorityInputs, type ManagedTaskScope,
@@ -311,6 +313,12 @@ export async function staffUnfilledLanes(
      * the caller already holds the managed set so it costs no query.
      */
     laneTicketCounts?: ReadonlyMap<string, number>;
+    /**
+     * The effective `allowAutoStaffLanes` grant (0386). When false — the default — a lane
+     * that authorises NO role is reported and left alone; when true the manager pins a
+     * producer to it. Reporting never depends on this, only acting does.
+     */
+    allowAutoStaffLanes?: boolean;
   },
 ): Promise<LaneStaffingResult> {
   try {
@@ -336,6 +344,37 @@ export async function staffUnfilledLanes(
       unfilledRoleKeys, unauthorizedLanes, filled: [], unfillable: [], hires: 0, error: null,
     };
     const maxHires = args.maxHires ?? MAX_HIRES_PER_PASS;
+
+    // ── THE LANE THAT AUTHORISES NOTHING — only with an explicit grant (0386) ────────
+    //
+    // The role ladder below cannot reach these: it is keyed on a role KEY, and a lane that
+    // authorises nothing has none to name. So for four captures the sweep reported a gap it
+    // was otherwise equipped to close, and 309 tickets sat in lanes nobody had configured.
+    //
+    // Gated because staffing an unconfigured lane STARTS everything sitting in it, and an
+    // intake lane looks identical whether it was left empty on purpose or by accident. That
+    // is a decision about how a team works, so `allowAutoStaffLanes` is false by default and
+    // this loop simply does not run — the lanes stay REPORTED either way, which is the part
+    // that must never depend on a permission.
+    if (args.allowAutoStaffLanes) {
+      for (const lane of unauthorizedLanes) {
+        // `shape_unmatched` is excluded deliberately: that lane HAS requirements, so tier
+        // (a) wins and a staffed agent would never be consulted. Its repair is to widen the
+        // requirement or re-type the tickets, and neither is the manager's call to make.
+        if (lane.reason === 'shape_unmatched') continue;
+        const outcome = await staffLaneProducer(env, db, {
+          tenantId: args.tenantId,
+          projectId: args.projectId,
+          swimlaneId: lane.swimlaneId,
+          laneKey: lane.laneKey,
+          hiresUsed: (args.hiresUsed ?? 0) + result.hires,
+          maxHires,
+        });
+        if (outcome.hired) result.hires += 1;
+        if (outcome.action === 'escalate') result.unfillable.push(outcome.outcome);
+        else result.filled.push(outcome.outcome);
+      }
+    }
     for (const roleKey of unfilledRoleKeys) {
       const staffed = await staffUnfilledRole(env, db, {
         tenantId: args.tenantId,
@@ -370,6 +409,98 @@ export async function staffUnfilledLanes(
       error: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300),
     };
   }
+}
+
+/**
+ * The role the manager pins to a lane that names none.
+ *
+ * `developer` because it is the catalog's PRODUCER: every other builtin is either upstream
+ * of the work (product-manager, business-analyst) or a review role, and dispatching a
+ * reviewer to author the thing it exists to judge is a run that cannot succeed and cannot
+ * then be reviewed — the same rule {@link pickManagedProducer} already applies when it
+ * prefers a producing approver over a reviewing one.
+ *
+ * A lane that wants a different role should DECLARE it; a declared requirement is tier (a)
+ * and outranks anything staffed here, so this default can never override an operator.
+ */
+export const LANE_PRODUCER_ROLE_KEY = 'developer';
+
+/**
+ * Give one unauthorised lane a producer, so its tickets become dispatchable.
+ *
+ * TWO writes, in this order, and both are needed:
+ *   1. {@link staffUnfilledRole} pins (or hires) an agent for {@link LANE_PRODUCER_ROLE_KEY}
+ *      at PROJECT scope. This is what makes the roster report it role-CAPABLE, and
+ *      `approverRoleKeyForLaneAgent` refuses any lane agent whose capable set is empty —
+ *      so writing only the lane row below would produce a lane that still authorises
+ *      nothing, which is the failure this function exists to fix.
+ *   2. A `swimlane_agent_assignments` row binds that agent to THIS lane, which is what
+ *      turns `decideLaneApprovers` from tier `none` into tier `lane_agents`.
+ *
+ * Never throws: a staffing failure must leave the pass running.
+ */
+async function staffLaneProducer(
+  env: Env,
+  db: Db,
+  args: {
+    tenantId: number; projectId: number; swimlaneId: string; laneKey: string | null;
+    hiresUsed: number; maxHires: number;
+  },
+): Promise<{ action: StaffingAction; hired: boolean; outcome: LaneStaffingOutcome }> {
+  const lane = args.laneKey ?? args.swimlaneId;
+  const staffed = await staffUnfilledRole(env, db, {
+    tenantId: args.tenantId,
+    projectId: args.projectId,
+    roleKey: LANE_PRODUCER_ROLE_KEY,
+    hiresUsed: args.hiresUsed,
+    maxHires: args.maxHires,
+  });
+  const outcome = (detail: string): LaneStaffingOutcome =>
+    ({ roleKey: LANE_PRODUCER_ROLE_KEY, action: staffed.action, agentName: staffed.agentName, detail });
+
+  if (staffed.action === 'escalate' || !staffed.agentRef) {
+    return {
+      action: 'escalate', hired: false,
+      outcome: outcome(`could not give stage "${lane}" a producer: ${staffed.detail}`),
+    };
+  }
+
+  // Idempotent per (lane, agent): the sweep runs every five minutes, and a second row for
+  // the same pairing would give the lane two approver candidates for one role — which
+  // `decideLaneApprovers` dedupes anyway, so the row would be pure write amplification on
+  // a budget that cannot afford it.
+  const [existing] = await db
+    .select({ id: swimlaneAgentAssignments.id })
+    .from(swimlaneAgentAssignments)
+    .where(and(
+      eq(swimlaneAgentAssignments.tenantId, args.tenantId),
+      eq(swimlaneAgentAssignments.swimlaneId, args.swimlaneId),
+      eq(swimlaneAgentAssignments.agentRef, staffed.agentRef),
+    ))
+    .limit(1);
+  if (!existing) {
+    await db.insert(swimlaneAgentAssignments).values({
+      tenantId: args.tenantId,
+      swimlaneId: args.swimlaneId,
+      agentKind: 'workforce',
+      agentRef: staffed.agentRef,
+      name: staffed.agentName,
+      // The DECLARED role. `approverRoleKeyForLaneAgent` prefers it over a merely-capable
+      // one, so naming it here is what makes the lane's producer deterministic rather than
+      // whatever the catalog happens to enumerate first.
+      role: LANE_PRODUCER_ROLE_KEY,
+      runtime: 'cloud',
+      position: 0,
+    });
+  }
+  return {
+    action: staffed.action,
+    hired: staffed.action === 'hired',
+    outcome: outcome(
+      `staffed stage "${lane}" with ${staffed.agentName ?? staffed.agentRef} as ${LANE_PRODUCER_ROLE_KEY}`
+      + `${staffed.action === 'hired' ? ' (hired for it)' : ''} — every ticket sitting in that stage can now be dispatched`,
+    ),
+  };
 }
 
 /**
