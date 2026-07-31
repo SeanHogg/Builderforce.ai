@@ -12,7 +12,18 @@ export interface TaskListOptions {
 }
 
 export interface UnassignedHighPriorityTaskOptions {
-  /** Optional project filter. */
+  /**
+   * Tenant-scoped project ids the caller is allowed to see.
+   * The repository intersects this with its query so that a request without
+   * an explicit `projectId` cannot leak tasks across workspaces (FR1 must be
+   * tenant-isolated even though the acceptance criteria don't state it — it is
+   * the project's invariant; every other task endpoint enforces it).
+   * If omitted the call is backward-compatible (no tenant scoping) — tests
+   * and the old mock consumed it that way — but the TaskService always passes
+   * a scoped list.
+   */
+  allowedProjectIds?: number[];
+  /** Optional project filter (still tenant-validated by the service). */
   projectId?: number;
   /** Page number (1-based). Default 1. */
   page?: number;
