@@ -1,222 +1,290 @@
 /**
- * @file configuration.ts
- * @module @builderforce/resource-gap-engine
- * @description Default configuration constants: canonical skill dictionary, proficiency weightings, cost ranges, time-to-fill estimates, thresholds.
- * This layer is pure data; no logic or side effects.
+ * Default configuration constants for Resource Gap Engine
+ * Pure data layer — no side-effects
  */
 
 import type {
   RGConfiguration,
-  WeightingEntry,
-  CurrencyRange,
-  RGSkill,
-  RGQuarter,
+  RGProficiencyWeightingEntry,
+  RGCurrencyRange,
 } from "./types.js";
 
-/**
- * Default canonical skill dictionary (FR-1.4)
- * Maps common aliases to a canonical name (lowercase) for normalization.
- */
+// ---------------------------------------------------------------------------
+// FR-1.4: canonical skill dictionary
+// Maps alias (lowercase-normalized) → canonical display name
+// ---------------------------------------------------------------------------
+
 export const DEFAULT_CANONICAL_SKILL_DICT: Readonly<Record<string, string>> = {
-  // Programming
-  "javascript": "JavaScript",
-  "ts": "TypeScript",
-  "tsx": "TypeScript JSX",
-  "js": "JavaScript",
-  "py": "Python",
-  "python": "Python",
-  "go": "Go",
-  "rust": "Rust",
-  "java": "Java",
+  // Programming languages
+  javascript: "JavaScript",
+  js: "JavaScript",
+  typescript: "TypeScript",
+  ts: "TypeScript",
+  tsx: "TypeScript",
+  python: "Python",
+  py: "Python",
+  go: "Go",
+  golang: "Go",
+  rust: "Rust",
+  java: "Java",
   "c++": "C++",
-  "csharp": "C#",
+  cpp: "C++",
+  csharp: "C#",
   "c#": "C#",
-  "php": "PHP",
-  "ruby": "Ruby",
-  "swift": "Swift",
-  "kotlin": "Kotlin",
-  "scala": "Scala",
-  "tsql": "T-SQL",
-  "sql": "SQL",
+  php: "PHP",
+  ruby: "Ruby",
+  swift: "Swift",
+  kotlin: "Kotlin",
+  scala: "Scala",
+  sql: "SQL",
+  tsql: "SQL",
 
   // Frontend / UI
-  "react": "React",
-  "angular": "Angular",
-  "vue": "Vue",
-  "next": "Next.js",
-  "nuxt": "Nuxt.js",
-  "svelte": "Svelte",
+  react: "React",
+  angular: "Angular",
+  vue: "Vue",
+  nextjs: "Next.js",
+  next: "Next.js",
+  nuxt: "Nuxt.js",
+  svelte: "Svelte",
 
-  // Backend / Infrastructure
-  "graphql": "GraphQL",
-  "rest": "REST",
-  "grpc": "gRPC",
-  "kubernetes": "Kubernetes",
-  "docker": "Docker",
-  "aws": "AWS",
-  "azure": "Azure",
-  "gcp": "GCP",
-  "terraform": "Terraform",
-  "ansible": "Ansible",
+  // Backend / infra
+  graphql: "GraphQL",
+  rest: "REST",
+  grpc: "gRPC",
+  kubernetes: "Kubernetes",
+  k8s: "Kubernetes",
+  docker: "Docker",
+  aws: "AWS",
+  azure: "Azure",
+  gcp: "GCP",
+
+  // Infra as code / DevOps
+  terraform: "Terraform",
+  ansible: "Ansible",
   "ci/cd": "CI/CD",
-  "devops": "DevOps",
+  ci: "CI/CD",
+  devops: "DevOps",
 
-  // Data / Analytics
-  "db": "Database",
-  "database": "Database",
-  "sql": "SQL",
-  "analytics": "Analytics",
-  "pandas": "pandas",
-  "hadoop": "Hadoop",
-  "spark": "Spark",
-  "postgres": "PostgreSQL",
-  "mysql": "MySQL",
-  "mongodb": "MongoDB",
+  // Data / analytics
+  database: "Database",
+  db: "Database",
+  analytics: "Analytics",
+  pandas: "Pandas",
+  hadoop: "Hadoop",
+  spark: "Spark",
+  postgresql: "PostgreSQL",
+  postgres: "PostgreSQL",
+  mysql: "MySQL",
+  mongodb: "MongoDB",
 
-  // QA / Testing
-  "testing": "Testing",
-  "junit": "JUnit",
-  "pytest": "pytest",
-  "jest": "Jest",
-  "cypress": "Cypress",
-  "selenium": "Selenium",
+  // QA / testing
+  testing: "Testing",
+  junit: "JUnit",
+  pytest: "Pytest",
+  jest: "Jest",
+  cypress: "Cypress",
+  selenium: "Selenium",
 
   // Engineering practices
-  "agile": "Agile",
-  "scrum": "Scrum",
-  "kanban": "Kanban",
-  "tdd": "Test-Driven Development",
-  "ci": "CI/CD",
+  agile: "Agile",
+  scrum: "Scrum",
+  kanban: "Kanban",
+  "test-driven development": "TDD",
+  tdd: "TDD",
+  "code review": "Code Review",
   "code-review": "Code Review",
 
-  // Cloud / DevOps (overlap)
-  "aws": "AWS",
-  "azure": "Azure",
-  "gcp": "GCP",
-  "docker": "Docker",
-  "k8s": "Kubernetes",
-  "kubernetes": "Kubernetes",
-
-  // General
-  "communication": "Communication",
-  "leadership": "Leadership",
-  "mentorship": "Mentorship",
+  // Soft skills
+  communication: "Communication",
+  leadership: "Leadership",
+  mentorship: "Mentorship",
+  "problem solving": "Problem Solving",
   "problem-solving": "Problem Solving",
 } as const;
 
-/**
- * Default proficiency weighting table (FR-2.2)
- * For a given required level (lev_req) and available level (lev_sup), compute effective coverage.
- * Example: if we need level 4 and we have level 3 with a 0.6 ratio, effective supply = 3 * 0.6 = 1.8 FTE.
- */
-export const DEFAULT_PROFICIENCY_WEIGHTING: ReadonlyArray<WeightingEntry> = [
-  // Level 4 required (supplies at or above minimum)
-  { minimumSupplyProficiency: 3, maxEffectiveProficiency: 4, effectiveRatio: 0.8 },
-  { minimumSupplyProficiency: 4, maxEffectiveProficiency: 5, effectiveRatio: 1.0 },
-  // Level 5 required (supplies at or above minimum)
-  { minimumSupplyProficiency: 4, maxEffectiveProficiency: 4, effectiveRatio: 0.8 },
-  { minimumSupplyProficiency: 5, maxEffectiveProficiency: 5, effectiveRatio: 1.0 },
+// ---------------------------------------------------------------------------
+// FR-2.2: proficiency weighting table
+// Given a required level (minProf), and a supply level (empProf), how much
+// of the supplier's availability counts? Rules are evaluated top-down.
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_PROFICIENCY_WEIGHTING: ReadonlyArray<RGProficiencyWeightingEntry> = [
+  // When only level-1 is required, any level covers fully
+  { minSupplyLevel: 1, forMinRequiredLevel: 1, forMaxRequiredLevel: 1, effectiveRatio: 1 },
+  // Level 2 required
+  { minSupplyLevel: 2, forMinRequiredLevel: 2, forMaxRequiredLevel: 2, effectiveRatio: 1 },
+  { minSupplyLevel: 1, forMinRequiredLevel: 2, forMaxRequiredLevel: 2, effectiveRatio: 0.4 },
+  // Level 3 required
+  { minSupplyLevel: 3, forMinRequiredLevel: 3, forMaxRequiredLevel: 3, effectiveRatio: 1 },
+  { minSupplyLevel: 2, forMinRequiredLevel: 3, forMaxRequiredLevel: 3, effectiveRatio: 0.6 },
+  { minSupplyLevel: 1, forMinRequiredLevel: 3, forMaxRequiredLevel: 3, effectiveRatio: 0.25 },
+  // Level 4 required
+  { minSupplyLevel: 4, forMinRequiredLevel: 4, forMaxRequiredLevel: 4, effectiveRatio: 1 },
+  { minSupplyLevel: 3, forMinRequiredLevel: 4, forMaxRequiredLevel: 4, effectiveRatio: 0.7 },
+  { minSupplyLevel: 2, forMinRequiredLevel: 4, forMaxRequiredLevel: 4, effectiveRatio: 0.35 },
+  { minSupplyLevel: 1, forMinRequiredLevel: 4, forMaxRequiredLevel: 4, effectiveRatio: 0.15 },
+  // Level 5 required
+  { minSupplyLevel: 5, forMinRequiredLevel: 5, forMaxRequiredLevel: 5, effectiveRatio: 1 },
+  { minSupplyLevel: 4, forMinRequiredLevel: 5, forMaxRequiredLevel: 5, effectiveRatio: 0.6 },
+  { minSupplyLevel: 3, forMinRequiredLevel: 5, forMaxRequiredLevel: 5, effectiveRatio: 0.3 },
+  { minSupplyLevel: 2, forMinRequiredLevel: 5, forMaxRequiredLevel: 5, effectiveRatio: 0.15 },
+  { minSupplyLevel: 1, forMinRequiredLevel: 5, forMaxRequiredLevel: 5, effectiveRatio: 0.05 },
 ] as const;
 
-/**
- * Default cost ranges per role family (FR-3.1)
- * Ranges are before-tax. Low-bound is 40% hourly to capture FTE ~8h/day × 2000h/yr ≈ 16k USD.
- */
-export const DEFAULT_COST_RANGES: Readonly<Record<string, CurrencyRange>> = {
-  "Senior-Engineer:FullTime": {
-    currency: "USD",
-    minimumCents: 160000,
-    maximumCents: 260000,
-  },
-  "Mid-Engineer:FullTime": {
-    currency: "USD",
-    minimumCents: 90000,
-    maximumCents: 150000,
-  },
-  "Junior-Engineer:FullTime": {
-    currency: "USD",
-    minimumCents: 55000,
-    maximumCents: 85000,
-  },
-  "Staff-Engineer:FullTime": {
-    currency: "USD",
-    minimumCents: 230000,
-    maximumCents: 350000,
-  },
-  "Principal-Engineer:FullTime": {
-    currency: "USD",
-    minimumCents: 350000,
-    maximumCents: 550000,
-  },
-  "Distinguished-Engineer:FullTime": {
-    currency: "USD",
-    minimumCents: 550000,
-    maximumCents: 900000,
-  },
-  "Lead-Engineer:FullTime": {
-    currency: "USD",
-    minimumCents: 180000,
-    maximumCents: 280000,
-  },
-  "Tech-lead-over-fullstack": {
-    currency: "USD",
-    minimumCents: 170000,
-    maximumCents: 270000,
-  },
-  // FTE roles where the role family is explicitly "FullTime" (e.g., Hire FTE vs Contract)
-  "FullTime": {
-    currency: "USD",
-    minimumCents: 55000,
-    maximumCents: 900000,
-  },
-  "Contractor:FullTime-equivalent": {
-    currency: "USD",
-    minimumCents: 40000,
-    maximumCents: 80000,
-  },
+// ---------------------------------------------------------------------------
+// FR-3.1: cost ranges per role family
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_COST_RANGES: Readonly<Record<string, RGCurrencyRange>> = {
+  Entry: { currency: "USD", minAnnual: 55_000, maxAnnual: 85_000 },
+  Junior: { currency: "USD", minAnnual: 55_000, maxAnnual: 85_000 },
+  Mid: { currency: "USD", minAnnual: 90_000, maxAnnual: 150_000 },
+  Senior: { currency: "USD", minAnnual: 130_000, maxAnnual: 200_000 },
+  Lead: { currency: "USD", minAnnual: 160_000, maxAnnual: 260_000 },
+  Staff: { currency: "USD", minAnnual: 200_000, maxAnnual: 320_000 },
+  Principal: { currency: "USD", minAnnual: 280_000, maxAnnual: 450_000 },
+  Distinguished: { currency: "USD", minAnnual: 400_000, maxAnnual: 700_000 },
+  Contractor: { currency: "USD", minAnnual: 80_000, maxAnnual: 160_000 },
+  Default: { currency: "USD", minAnnual: 90_000, maxAnnual: 180_000 },
 } as const;
 
-/**
- * Default time-to-fill estimates (FR-3.2)
- * Weeks to fill a role, when external. Use 2 weeks to 20 weeks depending on seniority.
- */
+// ---------------------------------------------------------------------------
+// FR-3.2: time-to-fill (weeks)
+// ---------------------------------------------------------------------------
+
 export const DEFAULT_TIME_TO_FILL_WEEKS: Readonly<Record<string, number>> = {
-  "Distinguished-Engineer:FullTime": 20,
-  "Principal-Engineer:FullTime": 18,
-  "Senior-Engineer:FullTime": 16,
-  "Lead-Engineer:FullTime": 16,
-  "Staff-Engineer:FullTime": 16,
-  "Mid-Engineer:FullTime": 10,
-  "Junior-Engineer:FullTime": 8,
-  "Tech-lead-over-fullstack": 16,
-  "FullTime": 10, // fallback
-  "Contractor:FullTime-equivalent": 6, // fast-tracked
+  Entry: 4,
+  Junior: 6,
+  Mid: 8,
+  Senior: 12,
+  Lead: 14,
+  Staff: 16,
+  Principal: 18,
+  Distinguished: 20,
+  Contractor: 4,
+  Default: 10,
 } as const;
 
-/**
- * Default configuration (FR-1.4, FR-2.2, FR-3.2, FR-3.3, FR-4.4)
- */
-export const DEFAULT_CONFIGURATION: Partial<RGConfiguration> = {
-  canonicalSkillDictionary: DEFAULT_CANONICAL_SKILL_DICT,
-  proficiencyWeighting: DEFAULT_PROFICIENCY_WEIGHTING,
-  defaultCostRanges: DEFAULT_COST_RANGES,
-  timeToFillEstimates: DEFAULT_TIME_TO_FILL_WEEKS,
-  hireVsContractThresholdMonths: 6, // hire vs contract threshold (FR-3.3)
-  secondaryGapRiskThreshold: 0.75, // risk flag >75% coverage (FR-4.4, AC-5)
-  fullCoverageProficiencyRatio: 1.0, // effective supply at or above against requirement is full FTE
-};
+// ---------------------------------------------------------------------------
+// Skill cluster map (FR-2.3 segmentation helper)
+// ---------------------------------------------------------------------------
 
-/**
- * Build a full configuration object from defaults (deep merge).
- */
+export const DEFAULT_SKILL_CLUSTERS: Readonly<Record<string, string>> = {
+  JavaScript: "Frontend",
+  TypeScript: "Frontend",
+  React: "Frontend",
+  Angular: "Frontend",
+  Vue: "Frontend",
+  "Next.js": "Frontend",
+  Python: "Backend",
+  Java: "Backend",
+  Go: "Backend",
+  Rust: "Backend",
+  "C#": "Backend",
+  SQL: "Data",
+  Database: "Data",
+  PostgreSQL: "Data",
+  MySQL: "Data",
+  MongoDB: "Data",
+  Spark: "Data",
+  Hadoop: "Data",
+  Analytics: "Data",
+  Pandas: "Data",
+  AWS: "Infra",
+  Azure: "Infra",
+  GCP: "Infra",
+  Kubernetes: "Infra",
+  Docker: "Infra",
+  Terraform: "Infra",
+  "CI/CD": "Infra",
+  DevOps: "Infra",
+  Testing: "QA",
+  JUnit: "QA",
+  Jest: "QA",
+  Pytest: "QA",
+  Cypress: "QA",
+  Selenium: "QA",
+  Leadership: "Management",
+  Communication: "Management",
+  Mentorship: "Management",
+  Agile: "Process",
+  Scrum: "Process",
+  Kanban: "Process",
+  TDD: "Process",
+  "Code Review": "Process",
+} as const;
+
+// ---------------------------------------------------------------------------
+// Full default config builder
+// ---------------------------------------------------------------------------
+
 export function buildDefaultConfiguration(): RGConfiguration {
   return {
-    canonicalSkillDictionary: DEFAULT_CANONICAL_SKILL_DICT,
+    canonicalSkillDict: DEFAULT_CANONICAL_SKILL_DICT,
     proficiencyWeighting: DEFAULT_PROFICIENCY_WEIGHTING,
     defaultCostRanges: DEFAULT_COST_RANGES,
-    timeToFillEstimates: DEFAULT_TIME_TO_FILL_WEEKS,
+    timeToFillWeeks: DEFAULT_TIME_TO_FILL_WEEKS,
     hireVsContractThresholdMonths: 6,
     secondaryGapRiskThreshold: 0.75,
-    fullCoverageProficiencyRatio: 1.0,
+    fullCoverageThreshold: 1.0,
   };
+}
+
+export const DEFAULT_CONFIGURATION: Readonly<RGConfiguration> = buildDefaultConfiguration();
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+export function normalizeSkillName(raw: string, dict: Readonly<Record<string, string>>): string {
+  const key = raw.trim().toLowerCase();
+  return dict[key] ?? raw.trim();
+}
+
+export function getEffectiveRatio(
+  supplyLevel: number,
+  requiredLevel: number,
+  table: ReadonlyArray<RGProficiencyWeightingEntry>,
+): number {
+  for (const entry of table) {
+    if (
+      supplyLevel >= entry.minSupplyLevel &&
+      requiredLevel >= entry.forMinRequiredLevel &&
+      requiredLevel <= entry.forMaxRequiredLevel
+    ) {
+      // Return first best-match (entries are ordered by minSupplyLevel desc in each required bracket logically,
+      // but we keep it explicit: higher minSupplyLevel → higher ratio)
+      if (supplyLevel === entry.minSupplyLevel) {
+        return entry.effectiveRatio;
+      }
+    }
+  }
+  // Fallback: find best applicable entry (highest minSupply <= supply)
+  let best: RGProficiencyWeightingEntry | undefined;
+  for (const entry of table) {
+    if (
+      supplyLevel >= entry.minSupplyLevel &&
+      requiredLevel >= entry.forMinRequiredLevel &&
+      requiredLevel <= entry.forMaxRequiredLevel
+    ) {
+      if (!best || entry.minSupplyLevel > best.minSupplyLevel) {
+        best = entry;
+      }
+    }
+  }
+  return best?.effectiveRatio ?? 0;
+}
+
+export function parseQuarterLabel(label: string): { quarter: 1 | 2 | 3 | 4; year: number } | null {
+  // Accepts "2026-Q2", "Q2-2026", "2026Q2", "2026 Q2"
+  const m = label.trim().match(/(?:(\d{4})[\s\-]*Q?([1-4]))|(?:Q([1-4])[\s\-]*(\d{4}))/i);
+  if (!m) return null;
+  if (m[1] && m[2]) {
+    return { quarter: Number(m[2]) as 1 | 2 | 3 | 4, year: parseInt(m[1], 10) };
+  }
+  if (m[3] && m[4]) {
+    return { quarter: Number(m[3]) as 1 | 2 | 3 | 4, year: parseInt(m[4], 10) };
+  }
+  return null;
 }
