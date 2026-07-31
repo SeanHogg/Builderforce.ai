@@ -147,9 +147,23 @@ The prior assessment (2026-07-30, signed by Code-Creator + Code-Reviewer) cited 
 - `api/src/application/marketplace/proposalEval.ts` — cited for KR 14; does not exist
 - `api/src/application/notifications/notify.ts` — cited for KRs 14; does not exist on this branch
 
-This revision uses only files confirmed present via direct `read_file` calls against the branch checkout.
+This revision uses only files confirmed present via direct `read_file` / `list_files` calls against the branch checkout.
+
+### Base-sync correction (payout seam)
+
+An earlier revision of this document asserted that `api/src/application/integrations/payments.ts` "does not exist" and that `api/src/env.ts` "contains no `PAYOUT_WEBHOOK_URL`". That assertion was **branch-accurate but base-stale**, and KR #16 has been corrected accordingly.
+
+Verification detail, because the two tools disagree here:
+
+- `search_code` resolves `api/src/application/integrations/payments.ts`, `api/src/presentation/routes/activityRoutes.ts`, and `PAYOUT_WEBHOOK_URL` in `api/src/env.ts`.
+- `read_file` and `list_files` scoped to `builderforce/task-175` report all three as **not present**.
+
+The repository-tooling indexes a **newer revision than this branch's checkout**, so `search_code` is showing the state of the base branch this PR is being synced onto. The payout seam is therefore real and inbound on `main`, not fabricated — but it is not evidence *from this branch*. KR #16 now cites it explicitly as base-branch evidence and stays `Partial`, since the escrow leg remains absent in either revision and "live in production" is not demonstrable from source alone.
+
+Any future pass re-verifying this document should treat a `search_code` hit that `read_file` cannot confirm as *base-branch state*, not as a missing file — and must not "correct" it back to `does not exist`.
 
 > **Signed**: Code-Creator (task #175) — 2026-07-30 (revised)
+> **Signed**: Developer (task #175) — base-sync pass: KR #16 payout evidence corrected against latest base; totals unchanged (verdict stays `Partial`).
 
 ---
 
