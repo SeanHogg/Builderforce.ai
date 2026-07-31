@@ -22,6 +22,8 @@ import { computeEngineeringInsights } from '../insights/engineeringInsights';
 import { buildConsumptionSnapshot } from '../consumption/meters';
 import { buildTenantDriftReport } from '../../presentation/routes/evalRoutes';
 import { millicentsToUsd } from '../../domain/shared/money';
+import { computeTrend } from '../insights/trendAnalysis';
+import { METRIC_REGISTRY } from '../dashboards/metricRegistry';
 
 const HOUR_MS = 3_600_000;
 
