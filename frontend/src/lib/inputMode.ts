@@ -372,3 +372,102 @@ export function buildInitialValues(schema: FormSchema): Record<string, unknown> 
   }
   return values;
 }
+
+// ---------------------------------------------------------------------------
+// Saved templates (FR-3.6)
+// ---------------------------------------------------------------------------
+
+const TEMPLATES_KEY = 'bf_input_templates';
+
+export interface SavedTemplate {
+  name: string;
+  values: Record<string, unknown>;
+  createdAt: string;
+}
+
+/** List all saved templates for the current user. */
+export function listSavedTemplates(): SavedTemplate[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(TEMPLATES_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Save a template with the given name. */
+export function saveTemplate(name: string, values: Record<string, unknown>): void {
+  if (typeof window === 'undefined') return;
+  const templates = listSavedTemplates();
+  const existing = templates.findIndex((t) => t.name === name);
+  const template: SavedTemplate = {
+    name,
+    values,
+    createdAt: new Date().toISOString(),
+  };
+  if (existing >= 0) {
+    templates[existing] = template;
+  } else {
+    templates.push(template);
+  }
+  localStorage.setItem(TEMPLATES_KEY, JSON.stringify(templates));
+}
+
+/** Delete a saved template by name. */
+export function deleteTemplate(name: string): void {
+  if (typeof window === 'undefined') return;
+  const templates = listSavedTemplates().filter((t) => t.name !== name);
+  localStorage.setItem(TEMPLATES_KEY, JSON.stringify(templates));
+}
+
+/** Load values from a saved template. */
+export function loadTemplate(name: string): Record<string, unknown> | null {
+  const templates = listSavedTemplates();
+  const found = templates.find((t) => t.name === name);
+  return found ? { ...found.values } : null;
+}
+
+// ---------------------------------------------------------------------------
+// Query parameter prefill (FR-3.6)
+// ---------------------------------------------------------------------------
+
+/** Parse URL query parameters into form values. */
+export function parseQueryPrefill(searchParams: URLSearchParams, schema: FormSchema): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  const allowedKeys = new Set<string>();
+
+  for (const group of schema.groups) {
+    for (const field of group.fields) {
+      allowedKeys.add(field.key);
+    }
+  }
+
+  for (const [key, val] of searchParams.entries()) {
+    if (allowedKeys.has(key) && val !== '') {
+      // Attempt to coerce to the appropriate type based on field definition
+      const def = schema.groups
+        .flatMap((g) => g.fields)
+        .find((f) => f.key === key);
+      values[key] = coercePayload(val, def?.type ?? 'text');
+    }
+  }
+
+  return values;
+}
+
+/** Coerce a string value to the appropriate type. */
+export function coercePayload(value: string, type: FieldDefinition['type']): unknown {
+  if (value === '') return '';
+
+  switch (type) {
+    case 'number':
+      return isNaN(Number(value)) ? value : Number(value);
+    case 'checkbox':
+      return value.toLowerCase() === 'true' || value === '1';
+    case 'date':
+      return value; // Keep as ISO string
+    default:
+      return value;
+  }
+}
