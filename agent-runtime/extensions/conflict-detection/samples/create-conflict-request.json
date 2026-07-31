@@ -1,0 +1,119 @@
+{
+  "description": "Sample payload for POST /conflicts/detect — triggers conflict detection. Demonstrates PRD rule: two distinct stakeholders, different P0 requests, same team, same review window.",
+  "endpoint": "POST /conflicts/detect",
+  "sample": {
+    "versionId": "V1",
+    "windowThresholdDays": 7,
+    "requests": [
+      {
+        "id": "req-001",
+        "title": "Increase feature X capacity for Q3 launch",
+        "description": "Priority P0 request from Product for frontend work",
+        "priority": "P0",
+        "stakeholderId": "alice",
+        "stakeholder": {
+          "name": "Alice Smith",
+          "role": "Product Manager",
+          "email": "alice@example.com"
+        },
+        "teamId": "engineering",
+        "team": {
+          "name": "Engineering Team",
+          "organization": "Product"
+        },
+        "versionId": "V1",
+        "reviewWindowStart": "2025-06-01T00:00:00Z",
+        "reviewWindowEnd": "2025-06-30T00:00:00Z",
+        "createdAt": "2025-06-23T08:00:00Z",
+        "updatedAt": "2025-06-23T09:00:00Z",
+        "sourceSystem": "priority_queue"
+      },
+      {
+        "id": "req-002",
+        "title": "Database scaling — critical infrastructure path",
+        "description": "P0 for same engineering team from different stakeholder",
+        "priority": "P0",
+        "stakeholderId": "bob",
+        "stakeholder": {
+          "name": "Bob Johnson",
+          "role": "Engineering Manager",
+          "email": "bob@example.com"
+        },
+        "teamId": "engineering",
+        "team": {
+          "name": "Engineering Team",
+          "organization": "Product"
+        },
+        "versionId": "V1",
+        "reviewWindowStart": "2025-06-01T00:00:00Z",
+        "reviewWindowEnd": "2025-06-30T00:00:00Z",
+        "createdAt": "2025-06-23T08:30:00Z",
+        "updatedAt": "2025-06-23T09:00:00Z",
+        "sourceSystem": "priority_queue"
+      }
+    ]
+  },
+  "expectedResponse": {
+    "statusCode": 201,
+    "body": {
+      "success": true,
+      "duplicatesFound": 0,
+      "timestamp": "2025-06-23T10:30:00Z",
+      "conflicts": [
+        {
+          "id": "alice__bob__engineering__V1",
+          "key": {
+            "stakeholderId1": "alice",
+            "stakeholderId2": "bob",
+            "teamId": "engineering",
+            "versionId": "V1"
+          },
+          "title": "Engineering Team — P0 Priority Conflict: Competing P0 requests",
+          "description": "Conflict detected on 2025-06-23T10:30:00.000Z in version V1. Rule: Two distinct stakeholders assigned conflicting P0 priorities to the same team within the same review window. Details: - Stakeholder \"Alice Smith\" (ID: alice) assigned priority P0 to team \"Engineering Team\". - Stakeholder \"Bob Johnson\" (ID: bob) assigned priority P0 to the same team \"Engineering Team\". Impact: Resource allocation conflict — team \"Engineering Team\" cannot satisfy two competing P0 priorities simultaneously. Requires manual resolution. Attached to priority version(s): V1",
+          "summary": "Conflict: Stakeholder \"Alice Smith\" assigned P0 and stakeholder \"Bob Johnson\" assigned P0 to team \"Engineering Team\" within same review window. Rule violation: distinct stakeholders cannot both set P0 for same team in same window; requires manual resolution. [Version: V1]",
+          "severity": "critical",
+          "detectedAt": "2025-06-23T10:30:00.000Z",
+          "status": "open",
+          "conflictingPriorities": {
+            "stakeholder1": {
+              "stakeholderId": "alice",
+              "stakeholderName": "Alice Smith",
+              "role": "Product Manager",
+              "email": "alice@example.com"
+            },
+            "stakeholder2": {
+              "stakeholderId": "bob",
+              "stakeholderName": "Bob Johnson",
+              "role": "Engineering Manager",
+              "email": "bob@example.com"
+            },
+            "team": {
+              "teamId": "engineering",
+              "teamName": "Engineering Team",
+              "organization": "Product"
+            },
+            "priority1": "P0",
+            "priority2": "P0"
+          },
+          "stakeholders": [
+            {
+              "stakeholderId": "alice",
+              "stakeholderName": "Alice Smith",
+              "role": "Product Manager",
+              "email": "alice@example.com"
+            },
+            {
+              "stakeholderId": "bob",
+              "stakeholderName": "Bob Johnson",
+              "role": "Engineering Manager",
+              "email": "bob@example.com"
+            }
+          ],
+          "versionIds": ["V1"],
+          "sourceRequestIds": ["req-001", "req-002"],
+          "conflictCount": 2
+        }
+      ]
+    }
+  }
+}
