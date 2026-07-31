@@ -141,7 +141,7 @@ describe("Telemetry Reconstruction & Ledger Integrity Gate", () => {
     expect(result.missingRecords).toContain("llm_usage_log missing");
   });
 
-  it("should fail when all three tables are empty (GAP-O1)", () => {
+  it("should fail when all three tables are empty (GAP-OBS-01)", () => {
     const result = cloudTelemetryReconstructionGate(executionId, {
       toolCount: 0,
       snapshotCount: 0,
