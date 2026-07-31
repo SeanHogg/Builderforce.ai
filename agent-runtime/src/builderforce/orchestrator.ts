@@ -161,6 +161,8 @@ export class AgentOrchestrator {
   private activeSpawnContext: SpawnSubagentContext | null = null;
   /** Guard so {@link resumeAllIncomplete} is idempotent (no double auto-resume). */
   private resumingInFlight = false;
+  /** Policy engine for governance enforcement (FR.4, FR.5) */
+  private policyEngine: PolicyEngine | null = null;
 
   /** Enable disk persistence for workflows and workflow telemetry. Call at gateway startup. */
   setProjectRoot(
