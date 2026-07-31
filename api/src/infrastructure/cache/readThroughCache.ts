@@ -44,13 +44,29 @@ const DEFAULT_KV_TTL_SECONDS = 300;
  * search and Project 360 readers already do) rather than lean on expiry.
  */
 const KV_MIN_TTL_SECONDS = 60;
+const KV_MAX_KEY_BYTES = 512;
+const KV_KEY_PREFIX = 'cache:';
+const textEncoder = new TextEncoder();
 
 function kvTtl(requested: number | undefined): number {
   return Math.max(requested ?? DEFAULT_KV_TTL_SECONDS, KV_MIN_TTL_SECONDS);
 }
 
-function kvKey(key: string): string {
-  return `cache:${key}`;
+/**
+ * Preserve existing storage keys while they fit Cloudflare's 512-byte limit.
+ * Oversized keys are content-addressed so every read/write/invalidation derives
+ * the same bounded key without truncation collisions.
+ */
+async function kvKey(key: string): Promise<string> {
+  const raw = `${KV_KEY_PREFIX}${key}`;
+  const bytes = textEncoder.encode(raw);
+  if (bytes.byteLength <= KV_MAX_KEY_BYTES) return raw;
+
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const hex = [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+  return `${KV_KEY_PREFIX}sha256:${hex}`;
 }
 
 /**
@@ -75,30 +91,40 @@ export async function getOrSetCached<T>(
   const l1Ttl = opts?.l1TtlMs ?? L1_TTL_MS;
 
   if (kv) {
+    const storageKey = await kvKey(key);
     try {
-      const cached = (await kv.get(kvKey(key), 'json')) as T | null;
+      const cached = (await kv.get(storageKey, 'json')) as T | null;
       if (cached != null) {
         l1.set(key, { value: cached, expiresAt: now + l1Ttl });
         return cached;
       }
     } catch (error) {
       // KV read failures never fail the request — fall through to the loader.
-    
-      reportCaughtError(error, { source: "infrastructure/cache/readThroughCache.ts", operation: "getOrSetCached" });
+
+      reportCaughtError(error, {
+        source: 'infrastructure/cache/readThroughCache.ts',
+        operation: 'getOrSetCached',
+        context: { cacheOperation: 'get', storageKey, sourceKeyBytes: textEncoder.encode(key).byteLength },
+      });
     }
   }
 
   const fresh = await loader();
   l1.set(key, { value: fresh, expiresAt: now + l1Ttl });
   if (kv) {
+    const storageKey = await kvKey(key);
     try {
-      await kv.put(kvKey(key), JSON.stringify(fresh), {
+      await kv.put(storageKey, JSON.stringify(fresh), {
         expirationTtl: kvTtl(opts?.kvTtlSeconds),
       });
     } catch (error) {
       // Best-effort write — a miss next time is acceptable.
-    
-      reportCaughtError(error, { source: "infrastructure/cache/readThroughCache.ts", operation: "getOrSetCached" });
+
+      reportCaughtError(error, {
+        source: 'infrastructure/cache/readThroughCache.ts',
+        operation: 'getOrSetCached',
+        context: { cacheOperation: 'put', storageKey, sourceKeyBytes: textEncoder.encode(key).byteLength },
+      });
     }
   }
   return fresh;
@@ -119,16 +145,21 @@ export async function peekCached<T>(env: Env, key: string): Promise<T | null> {
 
   const kv = env?.AUTH_CACHE_KV;
   if (kv) {
+    const storageKey = await kvKey(key);
     try {
-      const cached = (await kv.get(kvKey(key), 'json')) as T | null;
+      const cached = (await kv.get(storageKey, 'json')) as T | null;
       if (cached != null) {
         l1.set(key, { value: cached, expiresAt: now + L1_TTL_MS });
         return cached;
       }
     } catch (error) {
       // KV read failure → treat as a miss.
-    
-      reportCaughtError(error, { source: "infrastructure/cache/readThroughCache.ts", operation: "peekCached" });
+
+      reportCaughtError(error, {
+        source: 'infrastructure/cache/readThroughCache.ts',
+        operation: 'peekCached',
+        context: { cacheOperation: 'get', storageKey, sourceKeyBytes: textEncoder.encode(key).byteLength },
+      });
     }
   }
   return null;
@@ -149,14 +180,19 @@ export async function setCached<T>(
   l1.set(key, { value, expiresAt: Date.now() + (opts?.l1TtlMs ?? L1_TTL_MS) });
   const kv = env?.AUTH_CACHE_KV;
   if (kv) {
+    const storageKey = await kvKey(key);
     try {
-      await kv.put(kvKey(key), JSON.stringify(value), {
+      await kv.put(storageKey, JSON.stringify(value), {
         expirationTtl: kvTtl(opts?.kvTtlSeconds),
       });
     } catch (error) {
       // Best-effort — a miss next read just triggers a reconcile.
-    
-      reportCaughtError(error, { source: "infrastructure/cache/readThroughCache.ts", operation: "setCached" });
+
+      reportCaughtError(error, {
+        source: 'infrastructure/cache/readThroughCache.ts',
+        operation: 'setCached',
+        context: { cacheOperation: 'put', storageKey, sourceKeyBytes: textEncoder.encode(key).byteLength },
+      });
     }
   }
 }
@@ -253,6 +289,7 @@ export async function invalidateCached(env: Env, key: string): Promise<void> {
   l1.delete(key);
   const kv = env?.AUTH_CACHE_KV;
   if (kv) {
+    const storageKey = await kvKey(key);
     try {
       // KV allows one write per second per key, so a burst of writes bumping the
       // SAME version token 429s. "Wait for the TTL" is not an acceptable
@@ -260,9 +297,13 @@ export async function invalidateCached(env: Env, key: string): Promise<void> {
       // so a dropped bump leaves every data key that embedded the old token
       // serving stale reads for a day. Retrying past the per-key window is what
       // makes invalidation actually hold.
-      await retryTransient(() => kv.delete(kvKey(key)), isKvRateLimit);
+      await retryTransient(() => kv.delete(storageKey), isKvRateLimit);
     } catch (error) {
-      reportCaughtError(error, { source: "infrastructure/cache/readThroughCache.ts", operation: "invalidateCached" });
+      reportCaughtError(error, {
+        source: 'infrastructure/cache/readThroughCache.ts',
+        operation: 'invalidateCached',
+        context: { cacheOperation: 'delete', storageKey, sourceKeyBytes: textEncoder.encode(key).byteLength },
+      });
     }
   }
 }
