@@ -1797,6 +1797,10 @@ export const tasksApi = {
     request<Task>(`/api/tasks/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
+      // A lifecycle-managed board intentionally returns 409 when required role
+      // sign-offs still block Done. The board renders that explanation inline;
+      // it is a workflow decision, not a global support-ticket-worthy API fault.
+      expectedErrors: [409],
     }),
 
   delete: (id: number): Promise<void> =>

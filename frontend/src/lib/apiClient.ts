@@ -148,8 +148,16 @@ async function reportAndThrow(
   method: string,
   expectedErrors?: number[],
 ): Promise<never> {
-  const body = await res.json().catch(() => ({})) as { error?: string; code?: string; details?: unknown };
-  const message = body.error || res.statusText || `Request failed (${res.status})`;
+  const body = await res.json().catch(() => ({})) as {
+    error?: string;
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+  // APIs commonly return a stable machine-readable `error` plus a human-readable
+  // `message` (for example the task Done gate). Prefer the explanation in the UI
+  // while retaining `code` for diagnostics.
+  const message = body.message || body.error || res.statusText || `Request failed (${res.status})`;
   if (!expectedErrors?.includes(res.status)) {
     dispatchApiError({
       method: method.toUpperCase(),

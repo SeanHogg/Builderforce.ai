@@ -14,6 +14,7 @@ import {
   GitLabBoardProvider,
   BitbucketBoardProvider,
   RallyBoardProvider,
+  PermanentBoardProviderError,
   type FetchLike,
 } from './providers';
 import { BOARD_PROVIDER_IDS } from './providerCatalog';
@@ -89,6 +90,30 @@ describe('GitHubBoardProvider', () => {
     );
     await provider.pushUpdate('1', { title: 'New title' });
     expect(fetchFn).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a malformed repository scope before making a request', async () => {
+    const fetchFn: FetchLike = vi.fn();
+    const provider = new GitHubBoardProvider(
+      { credentials: { accessToken: 'tok' }, externalBoardId: 'repo-without-owner' },
+      fetchFn,
+    );
+
+    await expect(provider.fetchTicketsSince(null)).rejects.toMatchObject({
+      name: 'PermanentBoardProviderError',
+      code: 'invalid_scope',
+    });
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('classifies an inaccessible repository as a permanent configuration failure', async () => {
+    const fetchFn: FetchLike = vi.fn(async () => jsonResponse({ message: 'Not Found' }, 404));
+    const provider = new GitHubBoardProvider(
+      { credentials: { accessToken: 'tok' }, externalBoardId: 'owner/repo' },
+      fetchFn,
+    );
+
+    await expect(provider.fetchTicketsSince(null)).rejects.toBeInstanceOf(PermanentBoardProviderError);
   });
 });
 
