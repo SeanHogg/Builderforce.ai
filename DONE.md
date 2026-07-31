@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-07-31 — ✅ RESOLVED: the merge queue worked, and it uncovered a 91% run-failure rate nothing could explain (api 2026.7.189)
+
+**The 2026.7.185 queue did what it was built to do**, measured on project 11 the next morning:
+
+| | 07-30 | 07-31 |
+|---|---|---|
+| tickets finished | 3 | **11** |
+| `Stall triage skipped this pass` | 7 of last 30 decisions | **0** |
+| triage outcome | `Unstuck 0 of 2` | **`Unstuck 1 of 3`, every pass** |
+| `conflict_exhausted` retirements | 0, ever | 47 today |
+
+Freeing the PR stage let triage run, exactly as predicted. The queue's own machinery is visible in the feed: `deferred: "merge_queue"` holding branches behind the head, and `attempt: 3, maxAttempts: 3` — the ceiling being **reached** for the first time, which the least-recently-worked rotation had made unreachable. PRs #71→#76 retire in order.
+
+**And it exposed the real blocker.** With triage finally running, failed runs went 69 → **162 against 16 completed — a 91% failure rate** — and the report said nothing whatsoever about why. That is precisely the blind spot the pass budget had before `PassBudget.mark`: a number that proves something is wrong and cannot say what. Diagnosing the last one by inference was wrong twice in a single session, so this one gets an instrument instead of a hypothesis.
+
+`runFailureReasons.ts` classifies a terminal `executions.error_message` into 15 coarse classes **mapped from the platform's own reason constants** in `orphanReasons.ts`, so the class a run is counted under is the same distinction the platform already makes when deciding what to tell a human and whether the autonomy breaker should count the failure at all. The tests pin the two together: a reason whose wording drifts silently falls to `unknown`, and the rollup is worthless if its largest row is always that.
+
+Three decisions worth keeping:
+- **`unknown` is the useful answer, never a bug to tune away.** A wrong class sends the reader to the wrong subsystem, which is worse than an honest "unclassified" — so `unknown` rows carry a verbatim sample, which is what lets the *next* capture name the class.
+- **Named reasons are matched before generic keyword probes.** Every reason constant is prose containing words like "limit" and "crash" (`GITHUB_ACTIONS_NEVER_SCHEDULED_REASON` literally says "spending limit"), so probing first would misfile each one under whatever appeared in its advice sentence.
+- **`platform: true`** separates "this board is healthy and being interrupted" from "this board is broken" — the two demand opposite responses, and a deploy interrupting runs must never read as the ticket failing.
+
+Grouped in SQL (`left(error_message, 300)` + `group by`), classified in TS: a busy day is hundreds of failures over a handful of distinct messages, so grouping turns an unbounded row scan into ~10 rows. The 50-message cap is **reported** as `failuresUnaccounted` rather than silently making the table add up to less than the headline.
+
+**The finding that could not see this before.** `all_runs_failed_today` only fired when completions were exactly zero — so 162 failures beside 16 completions reported *nothing*, because one run in ten succeeding was enough to silence it. It is now a rate test (`failed >= half of terminal`), and it **names the dominant cause inline** instead of instructing the reader to go and read the error messages, which is what made this a research project rather than a finding.
+
+Files: `api/src/application/runtime/runFailureReasons.ts` (new, + test), `api/src/application/manager/dailyDigest.ts` (+ test), `frontend/src/lib/{managerDiagnostics,builderforceApi}.ts`.
+
+---
+
 ## 2026-07-30 — ✅ RESOLVED: managing a project is OPT-IN, and it is what makes the rotation terminate (api 2026.7.187)
 
 Operator direction: *"The manager for the tenant should just make sure and check the settings of each project's manager. If the settings for the project don't have a manager then the Tenant manager shouldn't try to manage the projects."*
