@@ -81,6 +81,17 @@ export function createPrdAnalysisWorkflow(
   return steps;
 }
 
+// ── Section keys that appear in PRD analysis reports ──────────────────────
+type PrdSectionKey = "requirements" | "dependencies" | "missingSections" | "risks" | "recommendations";
+
+const PRD_SECTION_HEADERS: Array<{ match: string; key: PrdSectionKey }> = [
+  { match: "## Key Requirements", key: "requirements" },
+  { match: "## Dependencies", key: "dependencies" },
+  { match: "## Missing Sections", key: "missingSections" },
+  { match: "## Risks", key: "risks" },
+  { match: "## Recommendations", key: "recommendations" },
+];
+
 /**
  * Parse a PRD Analysis Report to extract structured findings
  * 
@@ -99,58 +110,71 @@ export interface PrdAnalysisResult {
 }
 
 export function parsePrdAnalysisReport(analysisOutput: string): PrdAnalysisResult {
-  const result: PrdAnalysisResult = {
-    sections: [],
+  const lists: Record<PrdSectionKey, string[]> = {
     requirements: [],
     dependencies: [],
     missingSections: [],
     risks: [],
     recommendations: [],
-    taggedScope: "small",
-    hasImpactAnalysis: false,
   };
 
-  // Simple parser to extract sections from markdown report
-  const sections = [
-    { name: "## Key Requirements", key: "requirements" },
-    { name: "## Dependencies", key: "dependencies" },
-    { name: "## Missing Sections", key: "missingSections" },
-    { name: "## Risks", key: "risks" },
-    { name: "## Recommendations", key: "recommendations" },
-  ];
+  let currentSection: PrdSectionKey | null = null;
 
-  let currentSection = "";
   for (const line of analysisOutput.split("\n")) {
     const trimmed = line.trim();
 
     // Check for section headers
-    for (const { name, key } of sections) {
-      if (trimmed === name) {
+    for (const { match, key } of PRD_SECTION_HEADERS) {
+      if (trimmed === match) {
         currentSection = key;
-        result[key] = [];
-        continue;
+        lists[key] = [];
+        break;
       }
     }
 
-    // Collect content under current section
-    if (currentSection && advancedTrim(trimmed) && !trimmed.startsWith("#") && !trimmed.startsWith("-") && !trimmed.startsWith("*")) {
-      result[currentSection]?.push(trimmed);
+    // Collect content under current section (skip markdown headings & bullets)
+    if (
+      currentSection &&
+      advancedTrim(trimmed) &&
+      !trimmed.startsWith("#") &&
+      !trimmed.startsWith("-") &&
+      !trimmed.startsWith("*")
+    ) {
+      lists[currentSection].push(trimmed);
     }
   }
 
-  // Tag scope based on original PRD length
+  // Tag scope based on original PRD length (approximated by report length)
+  let taggedScope: "small" | "medium" | "large";
   if (analysisOutput.length >= 40_000) {
-    result.taggedScope = "large";
+    taggedScope = "large";
   } else if (analysisOutput.length >= PRD_IMPACT_ANALYSIS_THRESHOLD) {
-    result.taggedScope = "medium";
+    taggedScope = "medium";
   } else {
-    result.taggedScope = "small";
+    taggedScope = "small";
   }
 
   // Check if impact analysis was performed
-  result.hasImpactAnalysis = analysisOutput.includes("Impact Analysis") || analysisOutput.toLowerCase().includes("cross-functional impact");
+  const hasImpactAnalysis =
+    analysisOutput.includes("Impact Analysis") ||
+    analysisOutput.toLowerCase().includes("cross-functional impact");
 
-  return result;
+  return {
+    sections: [
+      ...lists.requirements,
+      ...lists.dependencies,
+      ...lists.missingSections,
+      ...lists.risks,
+      ...lists.recommendations,
+    ],
+    requirements: lists.requirements,
+    dependencies: lists.dependencies,
+    missingSections: lists.missingSections,
+    risks: lists.risks,
+    recommendations: lists.recommendations,
+    taggedScope,
+    hasImpactAnalysis,
+  };
 }
 
 function advancedTrim(str: string): boolean {
