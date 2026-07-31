@@ -1780,18 +1780,36 @@ html[data-theme='light'] .nebula {
   }
   .nav-mobile-close:hover { background: var(--bg-hover); color: var(--text); }
 
-  /* Drawer shows full labels regardless of the desktop collapse preference */
+  /* Drawer shows full labels regardless of the desktop collapse preference.
+     The `.nav.collapsed` overrides are confined to `min-width: 768px`, so these
+     plain selectors are no longer outranked — but they are written against
+     `.nav` too so the intent survives if the rail rules ever widen again. */
   .nav-main { padding: 12px; }
   .nav-footer { padding: 8px 12px; }
-  .nav-section-label {
+  .nav .nav-section-label {
     opacity: 1;
     pointer-events: auto;
     height: auto;
     margin-bottom: 6px;
     padding: 0 10px;
   }
-  .nav-item { padding: 10px 12px; justify-content: flex-start; gap: 10px; }
-  .nav-item-label { display: inline; }
+  .nav .nav-section { margin-bottom: 16px; }
+
+  /* AC3 — icon AND text left-aligned against the item's left edge. */
+  .nav .nav-item {
+    padding: 10px 12px;
+    justify-content: flex-start;
+    text-align: left;
+    gap: 12px;
+  }
+  .nav .nav-item-icon {
+    justify-content: flex-start;
+  }
+  /* AC2 — the text label is always present next to its icon in the drawer. */
+  .nav .nav-item-label {
+    display: inline;
+    white-space: normal;
+  }
 
   /* Hide the desktop collapse chevron in the drawer — the X closes it */
   .nav-collapse-toggle { display: none; }
