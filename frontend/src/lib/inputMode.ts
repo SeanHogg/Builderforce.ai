@@ -156,6 +156,8 @@ export function validateField(def: FieldDefinition, value: unknown): ValidationE
       }
       break;
     }
+    default:
+      break;
   }
 
   if (def.pattern && stringVal !== '') {
@@ -209,10 +211,7 @@ export interface PasteResult {
  *   "key","value"        (CSV header+row — first line keys, second values)
  *   key<TAB>value        (one per line, tab-separated)
  */
-export function parseDelimitedPaste(
-  text: string,
-  fieldKeys: Set<string>,
-): PasteResult {
+export function parseDelimitedPaste(text: string, fieldKeys: Set<string>): PasteResult {
   const values: Record<string, string> = {};
   const unmatched: string[] = [];
   const warnings: string[] = [];
@@ -223,8 +222,12 @@ export function parseDelimitedPaste(
     return { values, unmatched, warnings };
   }
 
-  // Detect CSV: first line starts with a quote and has commas
-  const isCsv = lines[0].includes(',') && (lines[0].startsWith('"') || lines.length === 1 || (lines.length >= 2 && lines[1].includes(',')));
+  // Detect CSV: first line has commas and at least two lines exist with commas
+  const isCsv =
+    lines[0].includes(',') &&
+    (lines[0].startsWith('"') ||
+      lines.length === 1 ||
+      (lines.length >= 2 && lines[1].includes(',')));
 
   if (isCsv && lines.length >= 2) {
     const parseCsvRow = (row: string): string[] => {
@@ -269,8 +272,9 @@ export function parseDelimitedPaste(
   for (const line of lines) {
     const colon = line.indexOf(':');
     const eq = line.indexOf('=');
-    const tab = line.indexOf('\t');
-    const sepIdx = [colon, eq, tab].filter((i) => i >= 0).sort((a, b) => a - b)[0];
+    const tabChar = line.indexOf('\t');
+    const candidates = [colon, eq, tabChar].filter((i) => i >= 0).sort((a, b) => a - b);
+    const sepIdx = candidates[0];
     if (sepIdx == null || sepIdx < 0) {
       unmatched.push(line.trim());
       continue;
@@ -351,12 +355,16 @@ export function markFormStart(): void {
 
 /** Emit a mode-related analytics event (no PII). */
 export function trackInputModeEvent(event: InputModeEvent): void {
-  trackActivity('input_mode', {
-    metadata: JSON.stringify({
-      ...event,
-      elapsedMs: formStartTime ? Date.now() - formStartTime : undefined,
-    }),
-  });
+  try {
+    trackActivity('input_mode', {
+      metadata: JSON.stringify({
+        ...event,
+        elapsedMs: formStartTime ? Date.now() - formStartTime : undefined,
+      }),
+    });
+  } catch {
+    // Best-effort; do not block UI on analytics failure.
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -433,7 +441,10 @@ export function loadTemplate(name: string): Record<string, unknown> | null {
 // ---------------------------------------------------------------------------
 
 /** Parse URL query parameters into form values. */
-export function parseQueryPrefill(searchParams: URLSearchParams, schema: FormSchema): Record<string, unknown> {
+export function parseQueryPrefill(
+  searchParams: URLSearchParams,
+  schema: FormSchema,
+): Record<string, unknown> {
   const values: Record<string, unknown> = {};
   const allowedKeys = new Set<string>();
 
@@ -445,10 +456,7 @@ export function parseQueryPrefill(searchParams: URLSearchParams, schema: FormSch
 
   for (const [key, val] of searchParams.entries()) {
     if (allowedKeys.has(key) && val !== '') {
-      // Attempt to coerce to the appropriate type based on field definition
-      const def = schema.groups
-        .flatMap((g) => g.fields)
-        .find((f) => f.key === key);
+      const def = schema.groups.flatMap((g) => g.fields).find((f) => f.key === key);
       values[key] = coercePayload(val, def?.type ?? 'text');
     }
   }
