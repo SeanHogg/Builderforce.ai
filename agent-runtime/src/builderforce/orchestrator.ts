@@ -8,6 +8,7 @@ import path from "node:path";
 import type { SpawnSubagentContext } from "../agents/subagent-spawn.js";
 import { logDebug } from "../logger.js";
 import { findAgentRole } from "./agent-roles.js";
+import { PolicyEngine, DEFAULT_PRD_ANALYSIS_POLICIES, type PolicyViolation } from "./policy-engine.js";
 import { PRD_FILE } from "./project-dir.js";
 import { isPrdTask, readPrdWip, writePrdWip } from "./prd-wip.js";
 import { applyTransform, etlContext, evalPredicate } from "./node-eval.js";
