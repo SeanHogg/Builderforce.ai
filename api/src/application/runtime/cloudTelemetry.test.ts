@@ -83,7 +83,7 @@ describe("Telemetry Reconstruction & Ledger Integrity Gate", () => {
     // No-op: in-memory test, nothing to clean up.
   });
 
-  // ── GAP-O1: Happy path ─────────────────────────────────────────────
+  // ── GAP-OBS-01: Happy path ─────────────────────────────────────────────
 
   it("should pass when all three tables contain rows for the given execution (GAP-O1)", () => {
     const result = cloudTelemetryReconstructionGate(executionId, {
