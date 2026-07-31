@@ -1,10 +1,14 @@
 {
   "name": "@builderforce/resource-gap-engine",
   "version": "0.0.1-alpha",
+  "private": true,
   "description": "Core engine for resource gap analysis with hiring, deployment, and upskill recommendations.",
   "type": "module",
   "devDependencies": {
     "@seanhogg/builderforce-agents": "workspace:*"
+  },
+  "peerDependencies": {
+    "@seanhogg/builderforce-agents": ">=2026.1.26"
   },
   "builderforce": {
     "extensions": [
