@@ -85,7 +85,7 @@ describe("Telemetry Reconstruction & Ledger Integrity Gate", () => {
 
   // ── GAP-OBS-01: Happy path ─────────────────────────────────────────────
 
-  it("should pass when all three tables contain rows for the given execution (GAP-O1)", () => {
+  it("should pass when all three tables contain rows for the given execution (GAP-OBS-01)", () => {
     const result = cloudTelemetryReconstructionGate(executionId, {
       toolCount: 5,
       snapshotCount: 3,
