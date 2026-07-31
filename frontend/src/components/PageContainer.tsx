@@ -10,7 +10,8 @@ type PageContainerProps = {
    * and data pages. `readable` ({@link READABLE_MAX}) caps multi-section form /
    * reading pages; `narrow` ({@link NARROW_MAX}) caps single-column detail /
    * editor pages. Capped tiers stay LEFT-aligned so there is never a dead gutter
-   * beside the sidebar.
+   * beside the sidebar, and on mobile the caps are ignored entirely (see the
+   * `.page-container` mobile rule in globals.css) so every page is 100% wide.
    */
   width?: 'full' | 'readable' | 'narrow';
   /** Override the default page padding (and any other container style). */
@@ -28,16 +29,20 @@ type PageContainerProps = {
  * Full-bleed routes (the IDE, the Brain page, the workflow builder canvas) manage
  * their own layout and intentionally do NOT use this.
  */
-export default function PageContainer({ width = 'full' // Ensure 100% width on all devices, style, className, children }: PageContainerProps) {
+export default function PageContainer({ width = 'full', style, className, children }: PageContainerProps) {
   return (
     <div
       // `.page-container` owns the padding so it can shrink on mobile (a media
       // query can't reach an inline `style`). A `style={{ padding }}` override
       // passed by a page still wins — inline beats the class.
+      //
+      // The width tier is a data attribute rather than an inline `max-width` for
+      // the same reason: the mobile media query has to be able to drop the cap
+      // so narrow/readable pages also run the full 100% of the viewport.
       className={`page-container${className ? ` ${className}` : ''}`}
+      data-width={width}
       style={{
         width: '100%',
-        maxWidth: width === 'readable' ? READABLE_MAX : width === 'narrow' ? NARROW_MAX : undefined,
         color: 'var(--text-primary)',
         ...style,
       }}
