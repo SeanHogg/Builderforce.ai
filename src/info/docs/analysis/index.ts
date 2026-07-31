@@ -101,9 +101,9 @@ export function planParallel(
   }
 
   // ---- Step 2: Build DAG & detect cycles (FR-2.1, FR-2.2, FR-5.1) ----
-  const dagResult = buildDependencyGraph(enriched);
-  if (dagResult.error) {
-    return { error: dagResult.error };
+  const dagResult = buildDAG(enriched);
+  if ("error_code" in dagResult) {
+    return { error: dagResult };
   }
   const graph = dagResult.graph!;
 
