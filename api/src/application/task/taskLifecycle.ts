@@ -18,11 +18,7 @@ import { boards, swimlanes, tasks, taskStatusTransitions } from '../../infrastru
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { bumpWorkforceMetricsVersion } from '../metrics/workforceMetrics';
 import { releaseWorkItemWebhook } from '../seams/workItemWebhook';
-import { TaskStatus } from '../../domain/shared/types';
-
-/** Lane keys that mean "done". Mirrors reportRoutes.DONE_CLASS_STATUSES; also
- *  any swimlane flagged `isTerminal` is treated as done-class at runtime. */
-const DONE_CLASS = new Set<string>([TaskStatus.DONE]);
+import { isDoneLane } from '../../domain/shared/doneClass';
 
 type LaneInfo = { position: number; isTerminal: boolean };
 type OrdinalMap = Record<string, LaneInfo>;
