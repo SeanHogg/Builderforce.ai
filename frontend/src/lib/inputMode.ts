@@ -352,7 +352,7 @@ export function markFormStart(): void {
 /** Emit a mode-related analytics event (no PII). */
 export function trackInputModeEvent(event: InputModeEvent): void {
   trackActivity('input_mode', {
-    detail: JSON.stringify({
+    metadata: JSON.stringify({
       ...event,
       elapsedMs: formStartTime ? Date.now() - formStartTime : undefined,
     }),
