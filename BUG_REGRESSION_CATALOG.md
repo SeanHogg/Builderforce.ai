@@ -1,6 +1,6 @@
 # Bug & Regression Catalog — Non-Done Tasks
 
-> **Generated**: 2026-07-11  
+> **Generated**: 2026-07-12  
 > **Source**: Project 11 (BuilderForce.AI) & Project 14 (Hired.Video)  
 > **PRD**: #191 — Bug & Regression Catalog — Non-Done Tasks  
 > **Idempotent**: Yes — re-running against the same data produces identical output.
