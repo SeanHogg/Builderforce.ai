@@ -107,6 +107,31 @@ vi.mock('@/components/ConfirmProvider', async (importOriginal) => {
 });
 
 /**
+ * Global toast default for the test environment.
+ *
+ * `useToast()` throws "must be used within a ToastProvider" with no provider in the tree,
+ * exactly as `useConfirm()` above does — so any component that reports a failure to the
+ * user (a connect/disconnect control, a probe button, a save) fails a test that renders it
+ * unwrapped, even when the test never triggers a toast. Same reasoning as the mocks above:
+ * stub it once here rather than at every render call site.
+ *
+ * The stub is INERT and records calls: a test asserting that something was reported should
+ * assert against these spies (or override per-file), not infer it from a thrown error.
+ */
+vi.mock('@/components/ToastProvider', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/ToastProvider')>();
+  const api = {
+    show: vi.fn(() => 'toast'),
+    success: vi.fn(() => 'toast'),
+    error: vi.fn(() => 'toast'),
+    info: vi.fn(() => 'toast'),
+    warning: vi.fn(() => 'toast'),
+    dismiss: vi.fn(),
+  };
+  return { ...actual, useToast: () => api };
+});
+
+/**
  * jsdom implements no ResizeObserver, so any component that measures itself to
  * fit its container (charts, the terminal, the mobile device simulator) throws
  * on mount under test while working fine in every real browser. Provide an inert

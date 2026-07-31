@@ -40,16 +40,18 @@ const connectionAlert = (over: Partial<ConnectionAuthAlert> = {}): ConnectionAut
 function mockApi(connections: OpenRouterConnection[]) {
   vi.spyOn(api.providerKeysApi, 'list').mockResolvedValue({ providers: [], details: [] });
   vi.spyOn(api.llmApi, 'usage').mockResolvedValue(null as unknown as api.LlmUsageStats);
-  vi.spyOn(api.openRouterConnectionsApi, 'list').mockResolvedValue({ connections });
+  vi.spyOn(api.openRouterConnectionsApi, 'list').mockResolvedValue({ connections, usageWindowDays: 30 });
   vi.spyOn(api.openRouterConnectionsApi, 'catalog').mockResolvedValue({ data: [] });
   vi.spyOn(api.openRouterConnectionsApi, 'precedence').mockResolvedValue({
     entries: connections.map((c) => ({ ref: `openrouter:${c.id}`, kind: 'connection' as const, connection: c, priority: c.priority })),
   });
 }
 
-/** Open the OpenRouter drawer the way an operator does — via its grid card. */
+/** Open the OpenRouter drawer the way an operator does — via its grid card. The card is a
+ *  `role="button"` div, not a `<button>`, so its own action controls stay real (see
+ *  {@link ClickableCard}); target the role rather than the tag. */
 async function openDrawer() {
-  fireEvent.click((await screen.findByText('OpenRouter')).closest('button')!);
+  fireEvent.click((await screen.findByText('OpenRouter')).closest('[role="button"]')!);
 }
 
 describe('ProviderKeysSettings — OpenRouter connection health', () => {
@@ -147,6 +149,42 @@ describe('ProviderKeysSettings — OpenRouter connection health', () => {
     await waitFor(() => expect(update).toHaveBeenCalledWith(1, expect.objectContaining({
       models: ['a/one', 'c/three'],
     })));
+  });
+
+  it('reports what each registration consumed, and whose money paid for it', async () => {
+    mockApi([connection({
+      hasKey: true,
+      usage: { requests: 42, tokens: 13500, costMillicents: 42_000, lastUsedAt: '2026-07-30T09:00:00.000Z' },
+    })]);
+    render(<ProviderKeysSettings />);
+    await openDrawer();
+
+    expect(await screen.findByText(/providerKeys\.diagnostic\.usage/)).toBeInTheDocument();
+    // On the tenant's OWN key our ledger holds only the routing surcharge — saying so is
+    // the difference between "$0.42 this month" and a number read as the whole bill.
+    expect(screen.getByText(/providerKeys\.openRouter\.costOwnKey/)).toBeInTheDocument();
+    expect(screen.queryByText(/providerKeys\.openRouter\.costManaged/)).not.toBeInTheDocument();
+  });
+
+  it('bills a managed-key registration as ours, not as the tenant\'s', async () => {
+    mockApi([connection({
+      hasKey: false,
+      usage: { requests: 5, tokens: 900, costMillicents: 6_000, lastUsedAt: null },
+    })]);
+    render(<ProviderKeysSettings />);
+    await openDrawer();
+
+    expect(await screen.findByText(/providerKeys\.openRouter\.costManaged/)).toBeInTheDocument();
+    expect(screen.queryByText(/providerKeys\.openRouter\.costOwnKey/)).not.toBeInTheDocument();
+  });
+
+  it('shows a registration that has served nothing as zero rather than blank', async () => {
+    // "Healthy but unused" is a real state — a blank strip would read as "no data".
+    mockApi([connection({ usage: { requests: 0, tokens: 0, costMillicents: 0, lastUsedAt: null } })]);
+    render(<ProviderKeysSettings />);
+    await openDrawer();
+
+    expect(await screen.findByText(/providerKeys\.diagnostic\.usage/)).toBeInTheDocument();
   });
 
   it('shows nothing health-related for a working registration', async () => {

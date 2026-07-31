@@ -3263,6 +3263,23 @@ export interface OpenRouterConnection {
    *  connection id server-side, so a broken registration surfaces the same "needs
    *  attention" prompt a connected provider does. */
   authAlert?: ConnectionAuthAlert;
+  /** What this registration consumed in the list's rolling window. Absent only when the
+   *  usage read failed — the list still renders, without the strip. */
+  usage?: OpenRouterConnectionUsage;
+}
+
+/** One registration's consumption over the list's rolling window. */
+export interface OpenRouterConnectionUsage {
+  requests: number;
+  tokens: number;
+  /**
+   * What BUILDERFORCE billed, in millicents (1/100000 USD). For a registration on the
+   * tenant's OWN key this is the flat routing surcharge only — OpenRouter bills their own
+   * account for the tokens, and that spend lives on their OpenRouter dashboard, not in our
+   * ledger. For a managed-key registration it is surcharge + token cost.
+   */
+  costMillicents: number;
+  lastUsedAt: string | null;
 }
 
 /** A rejected-registration notice. Same facts as {@link ProviderAuthAlert} minus the
@@ -3310,8 +3327,10 @@ export interface OpenRouterCatalogModel {
 }
 
 export const openRouterConnectionsApi = {
-  list: (): Promise<{ connections: OpenRouterConnection[] }> =>
-    request<{ connections: OpenRouterConnection[] }>('/llm/openrouter-connections'),
+  /** Registrations with their health alert and consumption attached — one read, because
+   *  "is it working" and "is it being used" are asked together. */
+  list: (): Promise<{ connections: OpenRouterConnection[]; usageWindowDays?: number }> =>
+    request<{ connections: OpenRouterConnection[]; usageWindowDays?: number }>('/llm/openrouter-connections'),
   catalog: (): Promise<{ data: OpenRouterCatalogModel[] }> =>
     request<{ data: OpenRouterCatalogModel[] }>('/llm/v1/catalog'),
   create: (body: { label: string; models: string[]; apiKey?: string }): Promise<OpenRouterConnection> =>

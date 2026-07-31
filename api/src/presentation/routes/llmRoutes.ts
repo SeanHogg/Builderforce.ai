@@ -87,7 +87,10 @@ import {
   deleteOpenRouterConnection,
   connectionModelRefs,
   listOpenRouterConnections,
+  openRouterConnectionUsage,
   upsertOpenRouterConnection,
+  USAGE_WINDOW_DAYS,
+  type OpenRouterConnectionUsage,
 } from '../../application/llm/openRouterConnectionService';
 import {
   listByoPrecedence,
@@ -1149,11 +1152,24 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // registration whose key was revoked or ran out of credit looks identical to a healthy
     // one here, and an operator who never clicks Test would never find out. Bounded fan-out
     // (≤20 connections) and each lookup is read-through cached.
-    const alerts = await Promise.all(
-      connections.map((connection) => loadConnectionAuthAlert(c.env, access.tenantId, connection.id).catch(() => null)),
-    );
+    //
+    // Usage rides the same read (ONE grouped scan for the whole tenant, 60s read-through) so
+    // "is it working" and "is it being used" are answered together — a registration that is
+    // healthy and has served nothing in 30 days is its own kind of problem, and until now
+    // this surface reported neither number.
+    const [alerts, usage] = await Promise.all([
+      Promise.all(connections.map((connection) =>
+        loadConnectionAuthAlert(c.env, access.tenantId, connection.id).catch(() => null))),
+      openRouterConnectionUsage(c.env, access.tenantId, connections)
+        .catch((): Record<number, OpenRouterConnectionUsage> => ({})),
+    ]);
     return c.json({
-      connections: connections.map((connection, i) => (alerts[i] ? { ...connection, authAlert: alerts[i] } : connection)),
+      connections: connections.map((connection, i) => ({
+        ...connection,
+        ...(alerts[i] ? { authAlert: alerts[i] } : {}),
+        ...(usage[connection.id] ? { usage: usage[connection.id] } : {}),
+      })),
+      usageWindowDays: USAGE_WINDOW_DAYS,
     });
   });
 
