@@ -32,6 +32,8 @@ export interface PolicyDefinition {
   description: string;
   /** Polices can target a specific role or be global */
   targetRole?: string;
+  /** Roles this policy applies to (alternative to targetRole for multiple roles) */
+  appliesTo?: string[];
   /** Whether this is a global policy apply to all workflows */
   isGlobal?: boolean;
   /** Active status */
@@ -45,6 +47,10 @@ export interface PolicyViolation {
   policyId: string;
   /** The step/context that triggered violation */
   stepId?: string;
+  /** The task ID that triggered violation */
+  taskId?: string;
+  /** The workflow ID that triggered violation */
+  workflowId?: string;
   /** Error message with variables substituted */
   message: string;
   /** Timestamp of violation */
