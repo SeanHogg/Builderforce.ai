@@ -1,290 +1,180 @@
 /**
- * Default configuration constants for Resource Gap Engine
- * Pure data layer — no side-effects
+ * Resource Gap Engine — configuration
+ *
+ * FR-2.2  proficiency weighting
+ * FR-3.2  urgency / time-to-fill table
+ * FR-1.4  canonical skill dictionary seed
+ *         (heavy lists should come from the caller via param/context)
  */
 
-import type {
-  RGConfiguration,
-  RGProficiencyWeightingEntry,
-  RGCurrencyRange,
-} from "./types.js";
+import type { ProficiencyWeightEntry, SeniorityBand } from "./types.js";
 
-// ---------------------------------------------------------------------------
-// FR-1.4: canonical skill dictionary
-// Maps alias (lowercase-normalized) → canonical display name
-// ---------------------------------------------------------------------------
+export type Proficiency = 1 | 2 | 3 | 4 | 5;
 
-export const DEFAULT_CANONICAL_SKILL_DICT: Readonly<Record<string, string>> = {
-  // Programming languages
-  javascript: "JavaScript",
-  js: "JavaScript",
-  typescript: "TypeScript",
-  ts: "TypeScript",
-  tsx: "TypeScript",
-  python: "Python",
-  py: "Python",
-  go: "Go",
-  golang: "Go",
-  rust: "Rust",
-  java: "Java",
-  "c++": "C++",
-  cpp: "C++",
-  csharp: "C#",
-  "c#": "C#",
-  php: "PHP",
-  ruby: "Ruby",
-  swift: "Swift",
-  kotlin: "Kotlin",
-  scala: "Scala",
-  sql: "SQL",
-  tsql: "SQL",
-
-  // Frontend / UI
-  react: "React",
-  angular: "Angular",
-  vue: "Vue",
-  nextjs: "Next.js",
-  next: "Next.js",
-  nuxt: "Nuxt.js",
-  svelte: "Svelte",
-
-  // Backend / infra
-  graphql: "GraphQL",
-  rest: "REST",
-  grpc: "gRPC",
-  kubernetes: "Kubernetes",
-  k8s: "Kubernetes",
-  docker: "Docker",
-  aws: "AWS",
-  azure: "Azure",
-  gcp: "GCP",
-
-  // Infra as code / DevOps
-  terraform: "Terraform",
-  ansible: "Ansible",
-  "ci/cd": "CI/CD",
-  ci: "CI/CD",
-  devops: "DevOps",
-
-  // Data / analytics
-  database: "Database",
-  db: "Database",
-  analytics: "Analytics",
-  pandas: "Pandas",
-  hadoop: "Hadoop",
-  spark: "Spark",
-  postgresql: "PostgreSQL",
-  postgres: "PostgreSQL",
-  mysql: "MySQL",
-  mongodb: "MongoDB",
-
-  // QA / testing
-  testing: "Testing",
-  junit: "JUnit",
-  pytest: "Pytest",
-  jest: "Jest",
-  cypress: "Cypress",
-  selenium: "Selenium",
-
-  // Engineering practices
-  agile: "Agile",
-  scrum: "Scrum",
-  kanban: "Kanban",
-  "test-driven development": "TDD",
-  tdd: "TDD",
-  "code review": "Code Review",
-  "code-review": "Code Review",
-
-  // Soft skills
-  communication: "Communication",
-  leadership: "Leadership",
-  mentorship: "Mentorship",
-  "problem solving": "Problem Solving",
-  "problem-solving": "Problem Solving",
-} as const;
-
-// ---------------------------------------------------------------------------
-// FR-2.2: proficiency weighting table
-// Given a required level (minProf), and a supply level (empProf), how much
-// of the supplier's availability counts? Rules are evaluated top-down.
-// ---------------------------------------------------------------------------
-
-export const DEFAULT_PROFICIENCY_WEIGHTING: ReadonlyArray<RGProficiencyWeightingEntry> = [
-  // When only level-1 is required, any level covers fully
-  { minSupplyLevel: 1, forMinRequiredLevel: 1, forMaxRequiredLevel: 1, effectiveRatio: 1 },
-  // Level 2 required
-  { minSupplyLevel: 2, forMinRequiredLevel: 2, forMaxRequiredLevel: 2, effectiveRatio: 1 },
-  { minSupplyLevel: 1, forMinRequiredLevel: 2, forMaxRequiredLevel: 2, effectiveRatio: 0.4 },
-  // Level 3 required
-  { minSupplyLevel: 3, forMinRequiredLevel: 3, forMaxRequiredLevel: 3, effectiveRatio: 1 },
-  { minSupplyLevel: 2, forMinRequiredLevel: 3, forMaxRequiredLevel: 3, effectiveRatio: 0.6 },
-  { minSupplyLevel: 1, forMinRequiredLevel: 3, forMaxRequiredLevel: 3, effectiveRatio: 0.25 },
-  // Level 4 required
-  { minSupplyLevel: 4, forMinRequiredLevel: 4, forMaxRequiredLevel: 4, effectiveRatio: 1 },
-  { minSupplyLevel: 3, forMinRequiredLevel: 4, forMaxRequiredLevel: 4, effectiveRatio: 0.7 },
-  { minSupplyLevel: 2, forMinRequiredLevel: 4, forMaxRequiredLevel: 4, effectiveRatio: 0.35 },
-  { minSupplyLevel: 1, forMinRequiredLevel: 4, forMaxRequiredLevel: 4, effectiveRatio: 0.15 },
-  // Level 5 required
-  { minSupplyLevel: 5, forMinRequiredLevel: 5, forMaxRequiredLevel: 5, effectiveRatio: 1 },
-  { minSupplyLevel: 4, forMinRequiredLevel: 5, forMaxRequiredLevel: 5, effectiveRatio: 0.6 },
-  { minSupplyLevel: 3, forMinRequiredLevel: 5, forMaxRequiredLevel: 5, effectiveRatio: 0.3 },
-  { minSupplyLevel: 2, forMinRequiredLevel: 5, forMaxRequiredLevel: 5, effectiveRatio: 0.15 },
-  { minSupplyLevel: 1, forMinRequiredLevel: 5, forMaxRequiredLevel: 5, effectiveRatio: 0.05 },
-] as const;
-
-// ---------------------------------------------------------------------------
-// FR-3.1: cost ranges per role family
-// ---------------------------------------------------------------------------
-
-export const DEFAULT_COST_RANGES: Readonly<Record<string, RGCurrencyRange>> = {
-  Entry: { currency: "USD", minAnnual: 55_000, maxAnnual: 85_000 },
-  Junior: { currency: "USD", minAnnual: 55_000, maxAnnual: 85_000 },
-  Mid: { currency: "USD", minAnnual: 90_000, maxAnnual: 150_000 },
-  Senior: { currency: "USD", minAnnual: 130_000, maxAnnual: 200_000 },
-  Lead: { currency: "USD", minAnnual: 160_000, maxAnnual: 260_000 },
-  Staff: { currency: "USD", minAnnual: 200_000, maxAnnual: 320_000 },
-  Principal: { currency: "USD", minAnnual: 280_000, maxAnnual: 450_000 },
-  Distinguished: { currency: "USD", minAnnual: 400_000, maxAnnual: 700_000 },
-  Contractor: { currency: "USD", minAnnual: 80_000, maxAnnual: 160_000 },
-  Default: { currency: "USD", minAnnual: 90_000, maxAnnual: 180_000 },
-} as const;
-
-// ---------------------------------------------------------------------------
-// FR-3.2: time-to-fill (weeks)
-// ---------------------------------------------------------------------------
-
-export const DEFAULT_TIME_TO_FILL_WEEKS: Readonly<Record<string, number>> = {
-  Entry: 4,
-  Junior: 6,
-  Mid: 8,
-  Senior: 12,
-  Lead: 14,
-  Staff: 16,
-  Principal: 18,
-  Distinguished: 20,
-  Contractor: 4,
-  Default: 10,
-} as const;
-
-// ---------------------------------------------------------------------------
-// Skill cluster map (FR-2.3 segmentation helper)
-// ---------------------------------------------------------------------------
-
-export const DEFAULT_SKILL_CLUSTERS: Readonly<Record<string, string>> = {
-  JavaScript: "Frontend",
-  TypeScript: "Frontend",
-  React: "Frontend",
-  Angular: "Frontend",
-  Vue: "Frontend",
-  "Next.js": "Frontend",
-  Python: "Backend",
-  Java: "Backend",
-  Go: "Backend",
-  Rust: "Backend",
-  "C#": "Backend",
-  SQL: "Data",
-  Database: "Data",
-  PostgreSQL: "Data",
-  MySQL: "Data",
-  MongoDB: "Data",
-  Spark: "Data",
-  Hadoop: "Data",
-  Analytics: "Data",
-  Pandas: "Data",
-  AWS: "Infra",
-  Azure: "Infra",
-  GCP: "Infra",
-  Kubernetes: "Infra",
-  Docker: "Infra",
-  Terraform: "Infra",
-  "CI/CD": "Infra",
-  DevOps: "Infra",
-  Testing: "QA",
-  JUnit: "QA",
-  Jest: "QA",
-  Pytest: "QA",
-  Cypress: "QA",
-  Selenium: "QA",
-  Leadership: "Management",
-  Communication: "Management",
-  Mentorship: "Management",
-  Agile: "Process",
-  Scrum: "Process",
-  Kanban: "Process",
-  TDD: "Process",
-  "Code Review": "Process",
-} as const;
-
-// ---------------------------------------------------------------------------
-// Full default config builder
-// ---------------------------------------------------------------------------
-
-export function buildDefaultConfiguration(): RGConfiguration {
-  return {
-    canonicalSkillDict: DEFAULT_CANONICAL_SKILL_DICT,
-    proficiencyWeighting: DEFAULT_PROFICIENCY_WEIGHTING,
-    defaultCostRanges: DEFAULT_COST_RANGES,
-    timeToFillWeeks: DEFAULT_TIME_TO_FILL_WEEKS,
-    hireVsContractThresholdMonths: 6,
-    secondaryGapRiskThreshold: 0.75,
-    fullCoverageThreshold: 1.0,
-  };
+export interface ProficiencyConfig {
+  /**
+   * Weighting entries keyed by (supply, required) → ratio.
+   * Gap uses weighted supply: sum(availability * weight) per skill per quarter.
+   *
+   * Default: L5→L5 = 1.0, L3→L5 = 0.5, etc.
+   * Supply ≥ required → 1.0, below → partial.
+   */
+  entries: ProficiencyWeightEntry[];
 }
 
-export const DEFAULT_CONFIGURATION: Readonly<RGConfiguration> = buildDefaultConfiguration();
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-export function normalizeSkillName(raw: string, dict: Readonly<Record<string, string>>): string {
-  const key = raw.trim().toLowerCase();
-  return dict[key] ?? raw.trim();
+export interface CanonicalSkillEntry {
+  canonicalId: string;
+  cluster?: string;
+  aliases?: string[];
 }
 
+export interface SkillTaxonomyConfig {
+  dictionary: CanonicalSkillEntry[];
+  /**
+   * When true (default false), unrecognized skills are flagged but
+   * still counted against gaps using original id.
+   */
+  flagOriginalWhenUnmapped?: boolean;
+}
+
+export interface TimeToFillConfig {
+  /** Days per seniority band — configurable per role family in FR-3.2 */
+  perSeniority: Record<SeniorityBand, number>;
+  /** Optional override per team / family key */
+  perFamily?: Record<string, number>;
+}
+
+export interface CostBandConfig {
+  perSeniorityFTE: Record<SeniorityBand, { min: number; max: number; currency?: string }>;
+}
+
+export interface ResourceGapEngineConfig {
+  proficiency: ProficiencyConfig;
+  taxonomy: SkillTaxonomyConfig;
+  timeToFill: TimeToFillConfig;
+  costBands: CostBandConfig;
+  /**
+   * Demand duration threshold (months) below which contractor is preferred — FR-3.3
+   * Default: 6.
+   */
+  contractorThresholdMonths: number;
+  /**
+   * Coverage threshold below which secondary-gap flag fires — FR-4.4 / AC-5
+   * Default: 0.75 (i.e. source team coverage < 75% post-redeployment).
+   */
+  secondaryGapCoverageThreshold: number;
+}
+
+function buildProficiencyEntries(): ProficiencyWeightEntry[] {
+  const entries: ProficiencyWeightEntry[] = [];
+  for (let req = 1 as Proficiency; req <= 5; req = (req + 1) as Proficiency) {
+    for (let sup = 1 as Proficiency; sup <= 5; sup = (sup + 1) as Proficiency) {
+      let ratio: number;
+      if (sup >= req) {
+        ratio = 1;
+      } else {
+        const delta = req - sup;
+        // Graduated partial supply: linear declining 0.75, 0.5, 0.25, 0
+        if (delta === 1) ratio = 0.75;
+        else if (delta === 2) ratio = 0.5;
+        else if (delta === 3) ratio = 0.25;
+        else ratio = 0;
+      }
+      entries.push({ supplyLevel: sup, requiredLevel: req, ratio });
+    }
+  }
+  return entries;
+}
+
+/** Global static defaults — keep self-contained, no host side-effects */
+export const DEFAULT_RESOURCE_GAP_CONFIG: ResourceGapEngineConfig = {
+  proficiency: { entries: buildProficiencyEntries() },
+  taxonomy: {
+    dictionary: [
+      { canonicalId: "typescript", aliases: ["ts", "type-script"] },
+      { canonicalId: "react", aliases: ["reactjs", "react.js"] },
+      { canonicalId: "nodejs", aliases: ["node", "node.js"] },
+      { canonicalId: "python", aliases: ["py"] },
+      { canonicalId: "aws", aliases: ["amazon web services"] },
+      { canonicalId: "product_management", aliases: ["pm", "product management"] },
+    ],
+    flagOriginalWhenUnmapped: true,
+  },
+  timeToFill: {
+    perSeniority: {
+      junior: 30,
+      mid: 45,
+      senior: 60,
+      staff: 90,
+      principal: 120,
+    },
+  },
+  costBands: {
+    perSeniorityFTE: {
+      junior: { min: 60_000, max: 90_000, currency: "USD" },
+      mid: { min: 90_000, max: 130_000, currency: "USD" },
+      senior: { min: 130_000, max: 180_000, currency: "USD" },
+      staff: { min: 180_000, max: 250_000, currency: "USD" },
+      principal: { min: 250_000, max: 350_000, currency: "USD" },
+    },
+  },
+  contractorThresholdMonths: 6,
+  secondaryGapCoverageThreshold: 0.75,
+};
+
+/**
+ * Return effective availability ratio for a specific supply/required proficiency pair.
+ *
+ * Resolution order:
+ *  1) Any explicit entry for exact (supplyLevel, requiredLevel) wins.
+ *  2) Otherwise, monotonic partial-supply fallback based on delta.
+ *  3) Supply absent → 0.
+ */
 export function getEffectiveRatio(
-  supplyLevel: number,
-  requiredLevel: number,
-  table: ReadonlyArray<RGProficiencyWeightingEntry>,
+  proficiency: ProficiencyConfig | undefined,
+  supplyLevel: Proficiency | undefined,
+  requiredLevel: Proficiency,
 ): number {
-  for (const entry of table) {
-    if (
-      supplyLevel >= entry.minSupplyLevel &&
-      requiredLevel >= entry.forMinRequiredLevel &&
-      requiredLevel <= entry.forMaxRequiredLevel
-    ) {
-      // Return first best-match (entries are ordered by minSupplyLevel desc in each required bracket logically,
-      // but we keep it explicit: higher minSupplyLevel → higher ratio)
-      if (supplyLevel === entry.minSupplyLevel) {
-        return entry.effectiveRatio;
-      }
-    }
-  }
-  // Fallback: find best applicable entry (highest minSupply <= supply)
-  let best: RGProficiencyWeightingEntry | undefined;
-  for (const entry of table) {
-    if (
-      supplyLevel >= entry.minSupplyLevel &&
-      requiredLevel >= entry.forMinRequiredLevel &&
-      requiredLevel <= entry.forMaxRequiredLevel
-    ) {
-      if (!best || entry.minSupplyLevel > best.minSupplyLevel) {
-        best = entry;
-      }
-    }
-  }
-  return best?.effectiveRatio ?? 0;
+  if (supplyLevel === undefined) return 0;
+  const entries = proficiency?.entries ?? DEFAULT_RESOURCE_GAP_CONFIG.proficiency.entries;
+
+  // Exact match — no dependence on iteration order of the entries list.
+  const exact = entries.find(
+    (e) => e.supplyLevel === supplyLevel && e.requiredLevel === requiredLevel,
+  );
+  if (exact) return exact.ratio;
+
+  // Ordered fallback.
+  if (supplyLevel >= requiredLevel) return 1;
+  const delta = requiredLevel - supplyLevel;
+  if (delta === 1) return 0.75;
+  if (delta === 2) return 0.5;
+  if (delta === 3) return 0.25;
+  return 0;
 }
 
-export function parseQuarterLabel(label: string): { quarter: 1 | 2 | 3 | 4; year: number } | null {
-  // Accepts "2026-Q2", "Q2-2026", "2026Q2", "2026 Q2"
-  const m = label.trim().match(/(?:(\d{4})[\s\-]*Q?([1-4]))|(?:Q([1-4])[\s\-]*(\d{4}))/i);
-  if (!m) return null;
-  if (m[1] && m[2]) {
-    return { quarter: Number(m[2]) as 1 | 2 | 3 | 4, year: parseInt(m[1], 10) };
+/**
+ * Canonical skill id from taxonomy + raw skill id.
+ * Returns original id when not found and flagOriginalWhenUnmapped is true,
+ * otherwise returns original id anyway (gap engine still operates on free-form).
+ */
+export function resolveCanonicalSkillId(
+  taxonomy: SkillTaxonomyConfig,
+  rawSkillId: string,
+): string {
+  const normalized = rawSkillId.trim().toLowerCase();
+  for (const entry of taxonomy.dictionary) {
+    if (entry.canonicalId.toLowerCase() === normalized) return entry.canonicalId;
+    if (entry.aliases?.some((a) => a.toLowerCase() === normalized)) return entry.canonicalId;
   }
-  if (m[3] && m[4]) {
-    return { quarter: Number(m[3]) as 1 | 2 | 3 | 4, year: parseInt(m[4], 10) };
+  return rawSkillId; // caller can still flag as unmapped
+}
+
+export function isUnmappedSkill(taxonomy: SkillTaxonomyConfig, rawSkillId: string): boolean {
+  const normalized = rawSkillId.trim().toLowerCase();
+  for (const entry of taxonomy.dictionary) {
+    if (entry.canonicalId.toLowerCase() === normalized) return false;
+    if (entry.aliases?.some((a) => a.toLowerCase() === normalized)) return false;
   }
-  return null;
+  return true;
 }
