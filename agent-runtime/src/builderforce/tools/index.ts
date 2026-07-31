@@ -13,3 +13,4 @@ export { agentFleetTool } from "./agent-fleet-tool.js";
 export { semanticSearchTool } from "./semantic-search-tool.js";
 export { createGithubIssueWorkflowTool } from "./github-issue-workflow-tool.js";
 export { askHumanTool } from "./ask-human-tool.js";
+export { taskPrStatusTool } from "./task-pr-status-tracker-tool.js";
