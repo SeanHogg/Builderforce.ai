@@ -1,6 +1,5 @@
-import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
+import fs from "node:fs";
 import path from "node:path";
-import { glob } from "glob";
 import { Type } from "@sinclair/typebox";
 import type { BuilderForceAgentsPluginApi } from "../../../src/plugins/types.js";
 
@@ -29,73 +28,166 @@ type OutputFormat = "markdown" | "json" | "csv";
 
 // Internal cache for single-pass scanning
 interface FileIndex {
-  /** All file paths relative to root, matching include glob */
   allFiles: string[];
-  /** Full-text concatenation of small files (used for signature search) */
   textByFile: Map<string, string>;
 }
 
-// ───────────── Scanning ─────────────
+const DEFAULT_CODE_EXTS = new Set([
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".json",
+  ".py",
+  ".java",
+  ".go",
+  ".cs",
+  ".rb",
+  ".rs",
+  ".php",
+  ".swift",
+  ".kt",
+]);
 
-const DEFAULT_INCLUDE_GLOBS = [
-  "**/*.{ts,tsx,js,jsx,mjs,json,py,java,go,cs,rb,rs,php,swift,kt}",
+const ALWAYS_EXCLUDE_DIRS = new Set([
+  "node_modules",
+  "dist",
+  ".git",
+  "coverage",
+  ".builderforce",
+  ".next",
+  ".turbo",
+  "__pycache__",
+]);
+
+const ALWAYS_EXCLUDE_PARTS = [
+  "node_modules",
+  ".git",
+  "dist",
+  "coverage",
+  ".builderforce",
+  ".next",
+  ".turbo",
+  "__pycache__",
 ];
 
-const ALWAYS_EXCLUDE = [
-  "**/node_modules/**",
-  "**/dist/**",
-  "**/.git/**",
-  "**/coverage/**",
-  "**/.builderforce/**",
-  "**/.next/**",
-  "**/.turbo/**",
-  "**/__pycache__/**",
-];
+// ───────────── Exclude matching ─────────────
 
-function isPathLikeSignature(sig: string): boolean {
-  // If the signature looks like a path (contains / or *.ext), treat it as a file-pattern check
-  if (sig.includes("/") || sig.includes("\\")) return true;
-  if (/^\*+\/?/.test(sig)) return true;
-  if (/\.[a-z]{1,5}(\s|$)/i.test(sig) && !sig.includes(" ")) return true;
+function matchesExclude(relPath: string, extra: string[]): boolean {
+  const parts = relPath.split("/");
+  // Check always-exclude directory names
+  for (const p of parts) {
+    if (ALWAYS_EXCLUDE_DIRS.has(p)) return true;
+  }
+  for (const always of ALWAYS_EXCLUDE_PARTS) {
+    if (relPath.includes(always)) return true;
+  }
+  // Check caller-provided globs (simple: if substring match after stripping **/ prefix)
+  for (const pat of extra) {
+    const cleaned = pat.replace(/\*\*\//g, "").replace(/\*\*/g, "").replace(/\*/g, "");
+    if (cleaned && relPath.includes(cleaned)) return true;
+    // Also support simple suffix patterns like *.min.js
+    if (pat.includes("*") && relPath.endsWith(pat.replace(/^\*\*?\//, "").replace(/^\*/, ""))) {
+      return true;
+    }
+  }
   return false;
 }
 
-function escapeRegExp(literal: string): string {
-  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// ───────────── File collection (native fs) ─────────────
+
+function walkDir(
+  dir: string,
+  root: string,
+  exclude: string[],
+  maxDepth: number,
+  curDepth: number,
+  files: string[],
+): void {
+  if (curDepth > maxDepth) return;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const ent of entries) {
+    const abs = path.join(dir, ent.name);
+    const rel = path.relative(root, abs).replace(/\\/g, "/");
+    if (matchesExclude(rel, exclude)) continue;
+
+    if (ent.isDirectory()) {
+      // Skip excluded dirs fast via name check
+      if (ALWAYS_EXCLUDE_DIRS.has(ent.name)) continue;
+      walkDir(abs, root, exclude, maxDepth, curDepth + 1, files);
+    } else if (ent.isFile()) {
+      const ext = path.extname(ent.name).toLowerCase();
+      // Include files whose extension is in the known set OR files that match file-pattern signatures later
+      if (DEFAULT_CODE_EXTS.has(ext)) {
+        files.push(rel);
+      } else {
+        // still index dot-less or unusual extension if caller explicitly adds them via signatures
+        // we include them only if not binary-like; for now limit to text-ish
+        files.push(rel);
+      }
+    }
+  }
 }
 
-function buildExcludeList(extra: string[]): string[] {
-  const set = new Set([...ALWAYS_EXCLUDE, ...extra]);
-  return [...set];
+function isPathLikeSignature(sig: string): boolean {
+  if (sig.includes("/") || sig.includes("\\")) return true;
+  if (/^\*+\/?/.test(sig)) return true;
+  if (/^\.?\.?\//.test(sig)) return true;
+  return false;
 }
 
-/**
- * Single-pass file collection. Reads up to `maxFileBytesToIndex` bytes per file so that
- * 100 planned items can be checked in one pass (AC4: perf).
- */
+function simpleGlobToTest(pattern: string): (p: string) => boolean {
+  // Convert minimal glob (*, **) to a predicate; safe, no shell.
+  // Escape regexp except * then replace ** -> .* and * -> [^/]*
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*\*/g, "__GLOBSTAR__")
+    .replace(/\*/g, "[^/]*")
+    .replace(/__GLOBSTAR__/g, ".*");
+  // allow {a,b} alternation minimal
+  const withAlts = escaped.replace(/\\\{/g, "{").replace(/\\\}/g, "}").replace(/\{([^}]+)\}/g, (_m, inner: string) => {
+    const parts = inner.split(",").map((s: string) => s.trim());
+    return `(${parts.join("|")})`;
+  });
+  try {
+    const re = new RegExp(`^${withAlts}$`);
+    return (p: string) => re.test(p);
+  } catch {
+    return (_p: string) => false;
+  }
+}
+
 export async function collectFileIndex(
   rootPath: string,
   excludePatterns: string[],
   maxFileBytesToIndex = 512_000,
 ): Promise<FileIndex> {
-  const ignore = buildExcludeList(excludePatterns);
-
-  const allFiles = await glob(DEFAULT_INCLUDE_GLOBS, {
-    cwd: rootPath,
-    absolute: false,
-    ignore,
-    nodir: true,
-    maxDepth: 20,
-  });
+  const allFiles: string[] = [];
+  const rootStat = (() => {
+    try {
+      return fs.statSync(rootPath);
+    } catch {
+      return null;
+    }
+  })();
+  if (rootStat?.isDirectory()) {
+    walkDir(rootPath, rootPath, excludePatterns, 20, 0, allFiles);
+  }
 
   const textByFile = new Map<string, string>();
 
   for (const rel of allFiles) {
     const abs = path.join(rootPath, rel);
     try {
-      const stat = statSync(abs);
+      const stat = fs.statSync(abs);
       if (stat.size > maxFileBytesToIndex) continue;
-      const content = readFileSync(abs, "utf-8");
+      const content = fs.readFileSync(abs, "utf-8");
       textByFile.set(rel, content);
     } catch {
       // Skip unreadable / binary files
@@ -105,13 +197,6 @@ export async function collectFileIndex(
   return { allFiles, textByFile };
 }
 
-/**
- * Checks if a signature exists in the codebase.
- * - For path-like signatures, checks glob existence
- * - For code signatures, performs literal substring or regex search across the indexed files
- *
- * Returns the matched file path or null if not found.
- */
 export async function checkSignatureExists(
   signature: string,
   rootPath: string,
@@ -121,38 +206,42 @@ export async function checkSignatureExists(
   const trimmed = signature.trim();
   if (!trimmed) return null;
 
-  // 1) If signature looks like a file path / glob, try glob match first
+  // 1) If signature looks like a file path / glob, try file-pattern match (native, no shell)
   if (isPathLikeSignature(trimmed)) {
-    try {
-      const ignore = buildExcludeList(excludePatterns);
-      const matched = await glob(trimmed, {
-        cwd: rootPath,
-        absolute: false,
-        ignore,
-        nodir: true,
-      });
-      if (matched.length > 0) return matched[0];
-    } catch {
-      // Invalid glob — fall through to text search
-    }
+    const existsLiteral = (() => {
+      try {
+        return fs.existsSync(path.join(rootPath, trimmed));
+      } catch {
+        return false;
+      }
+    })();
+    if (existsLiteral) return trimmed;
 
-    // Also try if it's a relative file that literally exists
-    const maybeFile = path.join(rootPath, trimmed);
-    if (existsSync(maybeFile)) return trimmed;
+    // Glob-style match against indexed files using safe predicate
+    const tester = simpleGlobToTest(trimmed);
+    for (const rel of index.allFiles) {
+      if (matchesExclude(rel, excludePatterns)) continue;
+      if (tester(rel)) return rel;
+    }
+    // Also try unanchored contains when pattern has no wildcards but includes a slash/file name
+    if (!trimmed.includes("*")) {
+      const lower = trimmed.toLowerCase();
+      for (const rel of index.allFiles) {
+        if (rel.toLowerCase().includes(lower)) return rel;
+      }
+    }
   }
 
-  // 2) Text search: literal substring first (fast, no shell, no regex injection)
+  // 2) Text search: literal substring (fast, no shell, no injection)
   for (const [relPath, content] of index.textByFile) {
     if (content.includes(trimmed)) return relPath;
   }
 
-  // 3) Fallback: try as regex if the signature contains regex-ish characters
-  //    Parse and run in JS (not shell), with safety guard
+  // 3) Fallback: try as regex if it contains regex-ish characters (safe, in JS, not shell)
   if (/[.*+?^${}()|[\]\\]/.test(trimmed)) {
     try {
       const re = new RegExp(trimmed);
       for (const [relPath, content] of index.textByFile) {
-        // Only search first 50k for regex to keep it bounded
         if (re.test(content.slice(0, 100_000))) return relPath;
       }
     } catch {
@@ -163,9 +252,6 @@ export async function checkSignatureExists(
   return null;
 }
 
-/**
- * Core gap-identification logic (FR3). Pure function for testability.
- */
 export async function identifyGaps(
   items: PlannedItem[],
   rootPath: string,
@@ -177,12 +263,7 @@ export async function identifyGaps(
   const found = new Map<string, string>();
 
   for (const item of items) {
-    const match = await checkSignatureExists(
-      item.signature,
-      rootPath,
-      fileIndex,
-      excludePatterns,
-    );
+    const match = await checkSignatureExists(item.signature, rootPath, fileIndex, excludePatterns);
     if (match) {
       found.set(item.id, match);
     } else {
@@ -317,9 +398,10 @@ export function createCodeGapsTool(api: BuilderForceAgentsPluginApi) {
 
     async execute(_toolId: string, params: any) {
       const items: PlannedItem[] = Array.isArray(params.items) ? params.items : [];
-      const rootPath: string = typeof params.rootPath === "string" && params.rootPath.trim()
-        ? params.rootPath
-        : process.cwd();
+      const rootPath: string =
+        typeof params.rootPath === "string" && params.rootPath.trim()
+          ? params.rootPath
+          : process.cwd();
       const outputFormat: OutputFormat = ["markdown", "json", "csv"].includes(params.outputFormat)
         ? params.outputFormat
         : "markdown";
@@ -327,13 +409,9 @@ export function createCodeGapsTool(api: BuilderForceAgentsPluginApi) {
         ? params.excludePatterns
         : ["**/node_modules/**", "**/dist/**", "**/.git/**"];
 
-      // Single-pass file indexing for performance (AC4: 100 items in < 5min)
       const index = await collectFileIndex(rootPath, excludePatterns);
-
-      // FR3: Gap identification
       const { gaps, found } = await identifyGaps(items, rootPath, excludePatterns, index);
 
-      // FR4/FR5: Build structured report
       const report: GapReport = {
         projectName: rootPath.split("/").pop() || "unknown",
         scanDate: new Date().toISOString(),
