@@ -58,6 +58,7 @@ interface StreamBean {
   data: unknown | null;
   error: Error | null;
   timestamp: number;
+  timeoutMs: number;
   timeoutHandle?: ReturnType<typeof setTimeout>;
   chunks: unknown[];
 }
