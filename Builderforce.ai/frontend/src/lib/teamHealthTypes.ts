@@ -16,6 +16,12 @@ export interface Contributor {
   avgTaskDurationSeconds: number;
 }
 
+/** Extended contributor load for Workload panel (FR-1) */
+export interface ContributorLoad extends Contributor {
+  activeTaskCount: number;
+  storyPoints: number;
+}
+
 /** Task metadata for health dashboard */
 export interface HealthTask {
   id: number;
@@ -75,28 +81,52 @@ export interface Blocker {
 /** Aging WIP item */
 export interface AgingWip {
   task: HealthTask;
-  ageInThresholds: number; // 1× threshold = 1, 2× = 2, 3×+ = 3
+  ageInThresholds: number; // 1x threshold = 1, 2x = 2, 3x+ = 3
   staleDays: number;
+}
+
+/** Return type for computeOverload */
+export interface OverloadResult {
+  level: 'ok' | 'warning' | 'critical';
+  pct: number;
+}
+
+/** Team Health Score breakdown for rendering */
+export interface ScoreDimension {
+  label: string;
+  score: number;
+}
+
+export interface HealthScoreBreakdown {
+  overall: number;
+  blockerScore: number;
+  overCapScore: number;
+  agingScore: number;
+  agentScore: number;
+  breakdown: ScoreDimension[];
 }
 
 /** Team Health Score configuration */
 export interface HealthScoreConfig {
   weights: {
-    blockers: number;
-    overload: number;
-    aging: number;
-    agentErrors: number;
+    blockerCount: number;
+    overCapacityPct: number;
+    agingWipCount: number;
+    agentErrorRate: number;
   };
   thresholds: {
-    taskAgingDays: number;
-    epicAgingDays: number;
-    overloadWarningPct: number;
-    overloadCriticalPct: number;
-    agentIdleQueueThresholdMin: number;
     blockerAgeThresholds: {
-      urgent: number; // P0/P1
-      high: number; // P2
+      urgent: number; // hours
+      high: number;
+      medium: number;
+      low: number;
+      unknown: number;
     };
+    agingWipThresholdDays: number;
+    agingWipEpicThresholdDays: number;
+    agentIdleQueueThresholdMin: number;
+    overloadWarningPct?: number; // e.g. 120
+    overloadCriticalPct?: number; // e.g. 150
   };
 }
 
@@ -126,14 +156,14 @@ export interface TeamHealthData {
   healthScore: {
     overall: number;
     components: {
-      blockers: number;
-      overload: number;
-      aging: number;
-      agentErrors: number;
+      blockerCount: number;
+      overCapacityPct: number;
+      agingWipCount: number;
+      agentErrorRate: number;
     };
     config: HealthScoreConfig;
   };
-  contributors: Contributor[];
+  contributors: ContributorLoad[];
   blockers: Blocker[];
   agingWip: AgingWip[];
   agents: AgentHealth[];
