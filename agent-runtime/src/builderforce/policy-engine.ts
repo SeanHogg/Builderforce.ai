@@ -277,7 +277,7 @@ export const DEFAULT_PRD_ANALYSIS_POLICIES: (PolicyDefinition & { conditions: Po
     conditions: [
       {
         type: "compliance",
-        condition: "${requestDataAccess} and not ${dataAccessCompliant}",
+        condition: "${requestDataAccess} && not ${dataAccessCompliant}",
         action: "alert",
         message: "Data access request not compliant with governance policy. Requires approval from data steward.",
       },
