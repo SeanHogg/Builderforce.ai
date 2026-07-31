@@ -11,7 +11,7 @@
 
 | Task ID | Title | Status | Type | Severity | Assignee | Linked Tasks | Source Signal | Notes |
 |---|---|---|---|---|---|---|---|---|
-| #57 | Fix the build | ready | bug | critical | d02ff7ee | — | Title: `fix` + `build`; Seed task #57; CI build breakage (API typecheck) | **Potential duplicate of #90** — same title "Fix the build" (API vs Frontend) |
+| #57 | Fix the build | in_progress | bug | critical | d02ff7ee | — | Title: `fix` + `build`; Seed task #57; CI build breakage (API typecheck) | **Potential duplicate of #90** — same title "Fix the build" (API vs Frontend) |
 | #66 | Fix the agent execution | in_review | bug | critical | d02ff7ee | — | Title: `fix`; Seed task #66; Core execution path defect | Agent runtime timeout errors; PR #28 |
 | #90 | Fix the build | in_review | bug | critical | d02ff7ee | — | Title: `fix` + `build`; Seed task #90; CI build breakage (Frontend typecheck) | **Potential duplicate of #57** — same title "Fix the build" (Frontend vs API) |
 | #467 | Fix duplicate `padding` property breaking Next.js build | backlog | bug | critical | fdbbd9af | — | Title: `fix` + `breaking` + `build`; Urgent priority | Next.js build failure; duplicate CSS property |
