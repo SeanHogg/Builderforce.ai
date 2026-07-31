@@ -24,10 +24,17 @@ import {
 
 export interface InputModeFormProps {
   schema: FormSchema;
-  /** Called with the final payload when the user submits through either mode. */
-  onSubmit: (values: Record<string, unknown>) => Promise<void>;
-  /** Called after successful submission — receives the parsed server response. */
-  onSuccess?: (response: unknown) => void;
+  /**
+   * Called with the final payload when the user submits through either mode.
+   * Whatever it resolves with is treated as the server response and handed to
+   * `onSuccess`, so both modes surface identical confirmation data (AC-10).
+   */
+  onSubmit: (values: Record<string, unknown>) => Promise<unknown>;
+  /**
+   * Called after a successful submission with the resolved server response and
+   * the submitted values. Both modes reach this with the same shape (FR-4.3).
+   */
+  onSuccess?: (response: unknown, values: Record<string, unknown>) => void;
   /** Pre-populated values (e.g. from URL params / template). */
   initialValues?: Record<string, unknown>;
   className?: string;
