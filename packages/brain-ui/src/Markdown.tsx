@@ -25,7 +25,7 @@ const DEFAULT_LABELS: MarkdownLabels = { copy: 'Copy', copied: 'Copied', apply: 
 /** A leading `// path: x` / `# path: x` / `<!-- path: x -->` comment, if present. */
 function detectPath(code: string): string {
   const first = code.split('\n', 1)[0] ?? '';
-  const m = first.match(/(?:\/\/|{#|<!--)\s*(?:path|file):\s*([^\s>]+)/i);
+  const m = first.match(/(?:\/\/|#|<!--)\s*(?:path|file):\s*([^\s>]+)/i);
   return m ? m[1].trim() : '';
 }
 
