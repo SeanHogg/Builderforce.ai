@@ -41,7 +41,7 @@
     {
       "task_id": 90,
       "title": "Fix the build",
-      "status": "in_review",
+      "status": "in_progress",
       "type": "bug",
       "severity": "critical",
       "severity_source": "heuristic",
