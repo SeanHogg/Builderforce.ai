@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideRemedyExecution, deferralCeiling } from './triageStage';
+import { decideRemedyExecution, deferralCeiling, describeTriageDeferral } from './triageStage';
 
 /**
  * These cover the gating bug that made the stuck register inert.
@@ -128,5 +128,44 @@ describe('deferralCeiling', () => {
     // Reporting the workspace pool here would send the reader one level too far out, to a
     // ceiling they cannot raise without also raising this project's share.
     expect(deferralCeiling({ passCapLeft: false, tenantBudgetLeft: false })).toBe('pass_dispatch_cap');
+  });
+});
+
+/**
+ * THE SENTENCE THAT CONTRADICTED ITS OWN DETAIL (api 2026.7.200, project 11, 11:45:30Z):
+ *
+ *   "Unstuck 1 of 2 stalled tickets this pass. Nothing was deferred for want of a run."
+ *   {"stalled":2,"unstuck":1,"deferred":1,"deferredReason":null,...}
+ *
+ * The clause branched on the REASON, and the wall-clock shed — the first deferral site in
+ * the loop, and the one actually firing on that board — recorded none. An explanation
+ * going missing must degrade to saying less, never to denying the fact.
+ */
+describe('describeTriageDeferral', () => {
+  const caps = { perPass: 10, perTenantTick: 25 };
+
+  it('never claims nothing was deferred while the counter says otherwise', () => {
+    const text = describeTriageDeferral(1, null, caps);
+    expect(text).toContain('1 waiting for the next one');
+    expect(text).not.toContain('Nothing was deferred');
+  });
+
+  it('says nothing was deferred only when the COUNT is zero', () => {
+    expect(describeTriageDeferral(0, null, caps)).toBe('. Nothing was deferred.');
+  });
+
+  it('names the wall clock — the cause the run ceilings could not express', () => {
+    expect(describeTriageDeferral(37, 'pass_wall_clock', caps))
+      .toContain('37 waiting for the next one because this pass ran out of its wall-clock budget');
+  });
+
+  it('names this project\'s per-pass run cap with its actual value', () => {
+    expect(describeTriageDeferral(2, 'pass_dispatch_cap', caps)).toContain('10 new runs per pass');
+  });
+
+  it('names the WORKSPACE pool, and says who else draws on it', () => {
+    const text = describeTriageDeferral(2, 'tenant_tick_budget', caps);
+    expect(text).toContain('25 runs for this five-minute tick');
+    expect(text).toContain('autonomous executor');
   });
 });

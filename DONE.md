@@ -17,6 +17,27 @@
 
 ---
 
+## 2026-07-31 — ✅ RESOLVED: the triage summary contradicted its own detail, and the deferral it reported was a THIRD cause (api 2026.7.201)
+
+Caught by the 11:52Z capture, one pass after 2026.7.200 deployed. The first row written by the new writer said:
+
+```
+Unstuck 1 of 2 stalled tickets this pass. Nothing was deferred for want of a run.
+{"stalled":2,"unstuck":1,"deferred":1,"deferredReason":null,"dispatchCap":10,"tenantTickCap":25,...}
+```
+
+A sentence denying the fact printed beside it. The clause branched on `deferredReason`, so a deferral whose cause nothing had recorded fell through to the NO-deferral wording.
+
+**The missing cause is the wall clock, and it is the one that was actually firing.** `runStallTriage` has three deferral sites, not two: the two run ceilings, and the pass wall-clock shed at the top of the loop — which is the FIRST one and the only one that recorded nothing. So the ceiling attribution shipped hours earlier was still naming a run cap on a board where runs were never the constraint: one dispatch against a cap of ten, deferred because the stage was shed for time. The three causes need three different repairs — give the stage more time, give this project a larger share of the tick, or give the workspace more runs — so `deferredReason` now carries `pass_wall_clock` alongside the two ceilings.
+
+**And the shed was under-counting.** It incremented `deferred` by one while abandoning the whole rest of the batch — up to `MAX_TRIAGE_PER_RUN - 1` tickets — so the summary could report "1 waiting for the next one" with 37 waiting, precisely where a reader is judging whether the stage keeps up. It now counts the un-examined remainder.
+
+**The sentence is driven by the COUNT, never by the reason.** `describeTriageDeferral` (pure, unit-tested) takes `deferred` first: zero yields "Nothing was deferred", anything else yields "N waiting for the next one", and the reason only fills in "because …". An explanation going missing degrades to saying less — it can no longer deny the fact — so a fourth deferral path added later cannot reintroduce this class of contradiction.
+
+Files: `api/src/application/manager/triageStage.ts`, `ManagerService.ts`. Tests: `triageStage.decision.test.ts` (+5, including the exact contradiction as a regression case).
+
+---
+
 ## 2026-07-31 — ✅ RESOLVED: deduping a state blinded every reader of it, and the triage summary named the wrong ceiling (api 2026.7.200, ui 2026.7.152)
 
 Three defects, all read off the 11:26Z capture on api 2026.7.198 — the first pass after the state-dedupe shipped.
@@ -34,7 +55,7 @@ The read moved with the write. `latestStateDecision` asks for a standing verdict
 
 **2. The triage pass summary was itself the loop the report was reporting.** `decision_loop` fired on `"Unstuck 1 of 2 stalled tickets this pass — 1 waiting for the next one (max 10 new runs per pass)"` — **7× in the last 30 decisions**, 10:55:23 → 11:25:30 — while every one of those passes had unstuck a *different* ticket (-106, -145, -066, -209), each already on its own journalled row. The ceiling picture is a state; the work is the per-ticket rows. It now goes through `recordManagerActionOnChange` under `TRIAGE_PASS_STATE_KEY`, and is written **unconditionally** rather than only when something was deferred — with an on-change writer, a summary that only ever reports a block leaves the last block standing as the current answer forever, so the CLEAR has to be recordable too.
 
-**3. And it named the wrong ceiling.** Same seven rows: `{"dispatched":1,"dispatchCap":10}`. One run against a cap of ten did not exhaust the cap — the **tenant's 25-runs-per-tick pool** was already spent by the autonomous executor (40 runs completed that day) and the other sweeps that draw on it. A reader following the stated reason would have raised a number that was never reached. `deferralCeiling` (pure, unit-tested) distinguishes the two, the per-pass cap winning when both are spent because that is this project's own share; the sentence now says which one bit and the detail carries `deferredReason` plus both ceilings.
+**3. And it named the wrong ceiling.** Same seven rows: `{"dispatched":1,"dispatchCap":10}`. One run against a cap of ten did not exhaust the cap, so the stated reason sent a reader to raise a number that was never reached. `deferralCeiling` (pure, unit-tested) distinguishes the per-pass run cap from the tenant's 25-per-tick pool, the per-pass cap winning when both are spent because that is this project's own share. *(The next capture showed the true cause on this board was neither — see the wall-clock entry below.)*
 
 Files: `api/src/application/manager/managerActionJournal.ts`, `triageStage.ts`, `ManagerService.ts`, `presentation/routes/managerRoutes.ts`, `frontend/src/lib/managerDiagnostics.ts`, `builderforceApi.ts`. Tests: `triageStage.decision.test.ts` (+4 ceiling attribution), `managerDiagnostics.test.ts` (+6 standing-verdict reads, age stamping, and the older-API fallback). No user-facing UI strings — the diagnostics capture is a plain-text export, not localized surface.
 
