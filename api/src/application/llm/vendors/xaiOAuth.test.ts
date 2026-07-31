@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { xaiOAuthModule } from './xaiOAuth';
+import { CAPACITY_LIMIT_MARKER, VendorRetryableError } from './types';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -15,6 +16,25 @@ describe('xAI SuperGrok OAuth vendor', () => {
     const result = await xaiOAuthModule.call({ apiKey: 'oauth-token', model: 'grok-4.5', messages: [{ role: 'user', content: 'Reply OK.' }] });
     expect(result.content).toBe('OK');
     expect(result.usage).toMatchObject({ prompt_tokens: 2, completion_tokens: 1 });
+  });
+
+  it('tags a depleted weekly SuperGrok allowance as capacity, not entitlement', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ error: { message: 'You hit your weekly limit. Extra Usage Credits are being used.' } }),
+      { status: 403 },
+    )));
+    let thrown: unknown;
+    try {
+      await xaiOAuthModule.call({
+        apiKey: 'oauth-token', model: 'grok-4.5',
+        messages: [{ role: 'user', content: 'Reply OK.' }],
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(VendorRetryableError);
+    expect((thrown as VendorRetryableError).status).toBe(403);
+    expect((thrown as VendorRetryableError).message).toContain(CAPACITY_LIMIT_MARKER);
   });
 
   /** Regression: this vendor used to drop `toolChoice` entirely, so a pinned tool

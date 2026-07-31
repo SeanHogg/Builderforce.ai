@@ -1,4 +1,4 @@
-import { VendorFatalError, VendorRetryableError, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
+import { CAPACITY_LIMIT_MARKER, VendorFatalError, VendorRetryableError, isCapacityLimitBody, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
 import { pseudoStreamFromCall } from './pseudoStream';
 import { buildResponsesBody, normalizeResponsesPayload, type ResponsesPayload } from './responsesApi';
 
@@ -11,6 +11,16 @@ async function call(params: VendorCallParams): Promise<VendorCallResult> {
   const response = await fetch(ENDPOINT, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${params.apiKey}` }, body: JSON.stringify(buildResponsesBody(params)), signal: params.signal });
   if (!response.ok) {
     const message = (await response.text()).slice(0, 1000);
+    // xAI reports a depleted weekly SuperGrok/API allowance as 403 — the same
+    // status it uses for a genuine entitlement rejection. Preserve the actual HTTP
+    // status, but tag the detail so cooldown + operator remediation classify it as
+    // capacity (wait for reset / buy credits), never "reconnect or upgrade access".
+    if (isCapacityLimitBody(message)) {
+      throw new VendorRetryableError(
+        'xai-oauth', params.model, response.status,
+        `${CAPACITY_LIMIT_MARKER} (upstream ${response.status}): ${message.slice(0, 200)}`,
+      );
+    }
     if (response.status === 400 || response.status === 422) throw new VendorFatalError('xai-oauth', response.status, message);
     throw new VendorRetryableError('xai-oauth', params.model, response.status, message);
   }

@@ -561,7 +561,7 @@ export const CAPACITY_LIMIT_MARKER = 'capacity/usage limit';
 export function isCapacityLimitBody(text: string | undefined | null): boolean {
   if (!text) return false;
   return (
-    /usage\s+limit|credit\s+balance|insufficient[_\s-]?quota|exceeded\s+your\s+(current\s+)?quota|spend(ing)?\s+limit|billing\s+(hard\s+)?limit|reached\s+your[^.]*\blimit/i.test(text)
+    /usage\s+limit|weekly\b[^.]{0,40}\blimit|hit\s+(?:your|the)\b[^.]{0,40}\blimit|credit\s+balance|extra\s+usage\s+credits|insufficient[_\s-]?quota|exceeded\s+your\s+(current\s+)?quota|(?:usage\s+)?allowance\b[^.]{0,30}\b(depleted|exhausted|used)|spend(ing)?\s+limit|billing\s+(hard\s+)?limit|reached\s+your[^.]*\blimit/i.test(text)
     || isAccountUnusableBody(text)
   );
 }
