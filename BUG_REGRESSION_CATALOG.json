@@ -97,7 +97,7 @@
     {
       "task_id": 165,
       "title": "Autonomous Agent Not Processing Tasks in \"To Do\" Column",
-      "status": "in_review",
+      "status": "ready",
       "type": "bug",
       "severity": "high",
       "severity_source": "existing",
