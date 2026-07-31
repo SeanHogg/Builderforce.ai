@@ -1,28 +1,44 @@
 'use client';
 
-import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ProgressiveRevealStream,
   PriorityTier,
   Stage,
   ProgressiveRevealContextValue,
-  ProgressiveRevealState,
+  ProgressiveRevealCallbacks,
 } from './types';
 
-const TIMEOUTS: Record<PriorityTier, number> = {
+// --------------- defaults ---------------
+
+const DEFAULT_TIMEOUTS: Record<PriorityTier, number> = {
   critical: 5000,
   secondary: 10000,
   deferred: 15000,
+};
+
+const DEFAULT_CALLBACKS: ProgressiveRevealCallbacks = {};
+
+// --------------- context (default value satisfies the type so consumers detect a missing provider reliably) ---------------
+
+const NOOP = () => {
+  if (process.env.NODE_ENV === 'development') {
+    // eslint-disable-next-line no-console
+    console.warn('ProgressiveReveal: called outside a <ProgressiveRevealOrchestrator> provider');
+  }
 };
 
 export const ProgressiveRevealContext = React.createContext<ProgressiveRevealContextValue>({
   currentStage: 0,
   lastTransitionAt: undefined,
   streams: new Map(),
-  register: () => {},
-  resolve: () => {},
-  fail: () => {},
-  reset: () => {},
+  callbacks: DEFAULT_CALLBACKS,
+  register: NOOP,
+  resolve: NOOP,
+  append: NOOP,
+  fail: NOOP,
+  retry: NOOP,
+  reset: NOOP,
   stage1Data: null,
   stage2Data: null,
   stage3Data: null,
@@ -31,208 +47,326 @@ export const ProgressiveRevealContext = React.createContext<ProgressiveRevealCon
   deferredCount: 0,
 });
 
+ProgressiveRevealContext.displayName = 'ProgressiveRevealContext';
+
+// --------------- internal bean (kept light — no Map-wrapping overhead) ---------------
+
 interface StreamBean {
   key: string;
   priority: PriorityTier;
   resolved: boolean;
+  data: unknown | null;
   error: Error | null;
   timestamp: number;
   timeoutHandle?: ReturnType<typeof setTimeout>;
+  chunks: unknown[];
 }
 
-const TIER_KEYS: PriorityTier[] = ['critical', 'secondary', 'deferred'];
+const PRIORITY_ORDER: PriorityTier[] = ['critical', 'secondary', 'deferred'];
 
-interface ReactiveState {
-  streams: Map<string, StreamBean>;
-  activities: {
-    [TIER_KEYS[0]]: number;
-    [TIER_KEYS[1]]: number;
-    [TIER_KEYS[2]]: number;
-  };
-  currentStage: Stage;
-  lastTransitionAt: number | undefined;
-  stage1Data: StreamBean | undefined;
-  stage2Data: StreamBean | undefined;
-  stage3Data: StreamBean | undefined;
-  criticalCount: number;
-  secondaryCount: number;
-  deferredCount: number;
-}
+// --------------- orchestrator ---------------
 
 export function ProgressiveRevealOrchestrator({
   children,
   callbacks,
 }: {
   children: React.ReactNode;
-  callbacks?: React.ComponentProps<typeof ProgressiveRevealContext.Provider>['value']['callbacks'];
+  callbacks?: ProgressiveRevealCallbacks;
 }) {
-  const [state, setState] = useState<ReactiveState>({
-    streams: new Map(),
-    activities: {
-      critical: 0,
-      secondary: 0,
-      deferred: 0,
-    },
+  // ---- mutable refs (avoids stale closure over state) ----
+  const streamsRef = useRef<Map<string, StreamBean>>(new Map());
+  const callbacksRef = useRef<ProgressiveRevealCallbacks>(callbacks ?? DEFAULT_CALLBACKS);
+  callbacksRef.current = callbacks ?? DEFAULT_CALLBACKS;
+
+  // ---- reactive state: subset needed for rendering ----
+  const [tick, setTick] = useState(0); // cheap render trigger
+
+  const [reactive, setReactive] = useState<{
+    currentStage: Stage;
+    lastTransitionAt: number | undefined;
+    stage1Data: unknown | null;
+    stage2Data: unknown | null;
+    stage3Data: unknown | null;
+    criticalCount: number;
+    secondaryCount: number;
+    deferredCount: number;
+  }>({
     currentStage: 0,
     lastTransitionAt: undefined,
-    stage1Data: undefined,
-    stage2Data: undefined,
-    stage3Data: undefined,
+    stage1Data: null,
+    stage2Data: null,
+    stage3Data: null,
     criticalCount: 0,
     secondaryCount: 0,
     deferredCount: 0,
   });
 
-  const activitiesRef = useRef(state.activities);
-  const lastStateRef = useRef(state);
+  // ---- helpers ----
 
-  const getTimeout = (priority: PriorityTier): number => TIMEOUTS[priority] ?? 10000;
+  const getTimeoutMs = useCallback((priority: PriorityTier): number => {
+    return DEFAULT_TIMEOUTS[priority] ?? 10000;
+  }, []);
 
-  const cleanupStream = (stream: StreamBean) => {
-    if (stream.timeoutHandle) clearTimeout(stream.timeoutHandle);
-  };
+  const latestStage = useCallback((streams: Map<string, StreamBean>): Stage => {
+    let max: Stage = 0;
+    streams.forEach(s => {
+      if (!s.resolved && s.chunks.length === 0) return;
+      switch (s.priority) {
+        case 'critical':
+          max = Math.max(max, 1);
+          break;
+        case 'secondary':
+          max = Math.max(max, 2);
+          break;
+        case 'deferred':
+          max = Math.max(max, 3);
+          break;
+      }
+    });
+    return max;
+  }, []);
 
-  const register = (key: string, priority: PriorityTier, overrideTimeout?: number) => {
-    const existing = state.streams.get(key);
-    if (existing) return;
+  const counts = useCallback(
+    (streams: Map<string, StreamBean>) => {
+      let criticalCount = 0;
+      let secondaryCount = 0;
+      let deferredCount = 0;
+      streams.forEach(s => {
+        if (s.resolved || s.chunks.length > 0) {
+          switch (s.priority) {
+            case 'critical':
+              criticalCount++;
+              break;
+            case 'secondary':
+              secondaryCount++;
+              break;
+            case 'deferred':
+              deferredCount++;
+              break;
+          }
+        }
+      });
+      return { criticalCount, secondaryCount, deferredCount };
+    },
+    [],
+  );
 
-    const timeoutMs = overrideTimeout ?? getTimeout(priority);
-    const timeoutHandle = setTimeout(() => {
-      const fresh = state.streams.get(key);
-      if (!fresh || fresh.resolved) return;
-      const err = new Error(`${key} timed out after ${timeoutMs}ms`);
-      fail(key, err);
-    }, timeoutMs);
+  /** Recompute reactive state from the ref and trigger a render. */
+  const sync = useCallback(() => {
+    const s = streamsRef.current;
+    const stage = latestStage(s);
+    const cnt = counts(s);
 
-    setState(old => ({
-      ...old,
-      streams: new Map([...old.streams, [key, {
+    const stage1Bean = s.get('critical');
+    const stage2Bean = s.get('secondary');
+    const stage3Bean = s.get('deferred');
+
+    setReactive(prev => ({
+      currentStage: stage,
+      lastTransitionAt: stage !== prev.currentStage ? performance.now() : prev.lastTransitionAt,
+      stage1Data: stage1Bean?.data ?? null,
+      stage2Data: stage2Bean?.data ?? null,
+      stage3Data: stage3Bean?.data ?? null,
+      criticalCount: cnt.criticalCount,
+      secondaryCount: cnt.secondaryCount,
+      deferredCount: cnt.deferredCount,
+    }));
+
+    setTick(t => t + 1);
+  }, [latestStage, counts]);
+
+  // ---- register ----
+
+  const register = useCallback(
+    (key: string, priority: PriorityTier, overrideTimeout?: number) => {
+      const s = streamsRef.current;
+      if (s.has(key)) return;
+
+      const timeoutMs = overrideTimeout ?? getTimeoutMs(priority);
+      const bean: StreamBean = {
         key,
         priority,
         resolved: false,
+        data: null,
         error: null,
         timestamp: performance.now(),
-        timeoutHandle,
-      }]]),
-    }));
-
-    activitiesRef.current = {
-      ...activitiesRef.current,
-      [priority]: activitiesRef.current[priority] + 1,
-    };
-
-    lastStateRef.current = {
-      ...lastStateRef.current,
-      currentStage: latestStage(state.streams),
-      lastTransitionAt: performance.now(),
-    };
-  };
-
-  const resolve = (key: string, data: unknown) => {
-    const fresh = state.streams.get(key);
-    if (!fresh || fresh.resolved) return;
-
-    cleanupStream(fresh);
-
-    const resolvedBean: StreamBean = { ...fresh, resolved: true, data, timestamp: performance.now(), timeoutHandle: undefined } as StreamBean;
-    setState(old => {
-      const next = new Map([...old.streams]);
-      next.set(key, resolvedBean);
-      return { ...old, streams: next };
-    });
-
-    callbacks?.onStreamResolve?.(resolvedBean as unknown as ProgressiveRevealStream);
-    activitiesRef.current = {
-      ...activitiesRef.current,
-      [fresh.priority]: activitiesRef.current[fresh.priority] + 1,
-    };
-
-    lastStateRef.current = {
-      ...lastStateRef.current,
-      currentStage: latestStage(state.streams),
-      lastTransitionAt: performance.now(),
-    };
-  };
-
-  const fail = (key: string, error: Error) => {
-    const fresh = state.streams.get(key);
-    if (!fresh || fresh.resolved) return;
-
-    cleanupStream(fresh);
-
-    const errBean: StreamBean = { ...fresh, error, timestamp: performance.now(), timeoutHandle: undefined } as StreamBean;
-    setState(old => {
-      const next = new Map([...old.streams]);
-      next.set(key, errBean);
-      return { ...old, streams: next };
-    });
-
-    callbacks?.onStreamTimeout?.(errBean as unknown as ProgressiveRevealStream);
-    lastStateRef.current = {
-      ...lastStateRef.current,
-      currentStage: latestStage(state.streams),
-      lastTransitionAt: performance.now(),
-    };
-  };
-
-  const reset = (key?: string) => {
-    if (key) {
-      const stream = state.streams.get(key);
-      if (stream && stream.timeoutHandle) clearTimeout(stream.timeoutHandle);
-      activitiesRef.current = {
-        ...activitiesRef.current,
-        [stream?.priority ?? 'critical']: Math.max(0, (activitiesRef.current[stream?.priority ?? 'critical'] ?? 0) - 1),
+        timeoutHandle: undefined,
+        chunks: [],
       };
-      const next = new Map(state.streams);
-      next.delete(key);
-      setState(old => ({ ...old, streams: next }));
-    } else {
-      let timers = 0;
-      state.streams.forEach(s => { if(s.timeoutHandle) { clearTimeout(s.timeoutHandle); timers++; }});
-      const zeroActivities = {
-        critical: 0,
-        secondary: 0,
-        deferred: 0,
-      };
-      setState(old => ({ ...old, streams: new Map(), activities: zeroActivities }));
-      activitiesRef.current = zeroActivities;
+
+      // Schedule timeout — capture the KEY, not the stale bean
+      bean.timeoutHandle = setTimeout(() => {
+        const fresh = streamsRef.current.get(key);
+        if (!fresh || fresh.resolved || fresh.error) return;
+        // need to call fail imperatively — use the captured ref callback
+        const err = new Error(`${key} timed out after ${timeoutMs}ms`);
+        const b = streamsRef.current.get(key);
+        if (b && !b.resolved && !b.error) {
+          if (b.timeoutHandle) clearTimeout(b.timeoutHandle);
+          b.error = err;
+          b.timeoutHandle = undefined;
+          b.timestamp = performance.now();
+          callbacksRef.current.onStreamTimeout?.(
+            b as unknown as ProgressiveRevealStream,
+          );
+          sync();
+        }
+      }, timeoutMs);
+
+      s.set(key, bean);
+      sync();
+    },
+    [getTimeoutMs, sync],
+  );
+
+  // ---- resolve ----
+
+  const resolve = useCallback(
+    (key: string, data: unknown) => {
+      const bean = streamsRef.current.get(key);
+      if (!bean || bean.resolved) return;
+
+      if (bean.timeoutHandle) {
+        clearTimeout(bean.timeoutHandle);
+        bean.timeoutHandle = undefined;
+      }
+      bean.resolved = true;
+      bean.data = data;
+      bean.timestamp = performance.now();
+
+      callbacksRef.current.onStreamResolve?.(
+        bean as unknown as ProgressiveRevealStream,
+      );
+      sync();
+    },
+    [sync],
+  );
+
+  // ---- append (FR-4: chunked / streaming data) ----
+
+  const append = useCallback(
+    (key: string, chunk: unknown) => {
+      const bean = streamsRef.current.get(key);
+      if (!bean) return;
+
+      bean.chunks.push(chunk);
+      bean.timestamp = performance.now();
+      // Do NOT mark resolved — stream may deliver more chunks later.
+      sync();
+    },
+    [sync],
+  );
+
+  // ---- fail ----
+
+  const fail = useCallback(
+    (key: string, error: Error) => {
+      const bean = streamsRef.current.get(key);
+      if (!bean || bean.resolved || bean.error) return;
+
+      if (bean.timeoutHandle) {
+        clearTimeout(bean.timeoutHandle);
+        bean.timeoutHandle = undefined;
+      }
+      bean.error = error;
+      bean.timestamp = performance.now();
+
+      callbacksRef.current.onStreamTimeout?.(
+        bean as unknown as ProgressiveRevealStream,
+      );
+      sync();
+    },
+    [sync],
+  );
+
+  // ---- retry (AC-8) ----
+
+  const retry = useCallback(
+    (key: string) => {
+      const bean = streamsRef.current.get(key);
+      if (!bean) return;
+      // Only reset failed / timed-out streams — not resolved ones.
+      if (!bean.error && bean.resolved) return;
+
+      if (bean.timeoutHandle) {
+        clearTimeout(bean.timeoutHandle);
+        bean.timeoutHandle = undefined;
+      }
+
+      streamsRef.current.delete(key);
+      sync();
+    },
+    [sync],
+  );
+
+  // ---- reset ----
+
+  const reset = useCallback(
+    (key?: string) => {
+      const s = streamsRef.current;
+      if (key) {
+        const bean = s.get(key);
+        if (bean?.timeoutHandle) clearTimeout(bean.timeoutHandle);
+        s.delete(key);
+      } else {
+        s.forEach(b => {
+          if (b.timeoutHandle) clearTimeout(b.timeoutHandle);
+        });
+        s.clear();
+      }
+      sync();
+    },
+    [sync],
+  );
+
+  // ---- re-compute stage whenever stage transitions happen (AC-10) ----
+
+  const prevStage = useRef<Stage>(0);
+  useEffect(() => {
+    const cur = reactive.currentStage;
+    if (cur !== prevStage.current) {
+      callbacksRef.current.onStageTransition?.(
+        prevStage.current,
+        cur,
+        performance.now(),
+      );
+      prevStage.current = cur;
     }
+  }, [reactive.currentStage]);
 
-    const freshPrevious = lastStateRef.current;
-    const recomputed = latestStage(state.streams);
-    lastStateRef.current = {
-      currentStage: recomputed,
-      lastTransitionAt: recomputed === freshPrevious.currentStage ? freshPrevious.lastTransitionAt : performance.now(),
+  // ---- cleanup on unmount ----
+  useEffect(() => {
+    return () => {
+      streamsRef.current.forEach(b => {
+        if (b.timeoutHandle) clearTimeout(b.timeoutHandle);
+      });
     };
-  };
+  }, []);
 
-  const value = useMemo(() => {
-    const s = state.streams;
-    const stage1 = s.get('critical');
-    const stage2 = s.get('secondary');
-    const stage3 = s.get('deferred');
+  // ---- context value (stable reference — only tick changes trigger consumers) ----
 
-    return {
-      currentStage: latestStage(s),
-      lastTransitionAt: lastStateRef.current.lastTransitionAt,
-      streams: s,
-      callbacks,
+  const value = useMemo<ProgressiveRevealContextValue>(
+    () => ({
+      currentStage: reactive.currentStage,
+      lastTransitionAt: reactive.lastTransitionAt,
+      streams: streamsRef.current,
+      callbacks: callbacksRef.current,
       register,
       resolve,
+      append,
       fail,
+      retry,
       reset,
-      stage1Data: stage1?.data ?? null,
-      stage2Data: stage2?.data ?? null,
-      stage3Data: stage3?.data ?? null,
-      criticalCount: activitiesRef.current.criticalResolved,
-      secondaryCount: activitiesRef.current.secondaryResolved,
-      deferredCount: activitiesRef.current.deferredResolved,
-    };
-  }, [state, lastStateRef.current, callbacks, register, resolve, fail, reset]);
-
-  useEffect(() => () => {
-    state.streams.forEach(s => { if(s.timeoutHandle) clearTimeout(s.timeoutHandle); });
-  }, [state.streams]);
+      stage1Data: reactive.stage1Data,
+      stage2Data: reactive.stage2Data,
+      stage3Data: reactive.stage3Data,
+      criticalCount: reactive.criticalCount,
+      secondaryCount: reactive.secondaryCount,
+      deferredCount: reactive.deferredCount,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tick, reactive, register, resolve, append, fail, retry, reset],
+  );
 
   return (
     <ProgressiveRevealContext.Provider value={value}>
@@ -241,21 +375,16 @@ export function ProgressiveRevealOrchestrator({
   );
 }
 
-function latestStage(streams: Map<string, StreamBean>): Stage {
-  let max = 0;
-  streams.forEach(s => {
-    if (!s.resolved) return;
-    switch (s.priority) {
-      case 'critical': max = Math.max(max, 1); break;
-      case 'secondary': max = Math.max(max, 2); break;
-      case 'deferred': max = Math.max(max, 3); break;
-    }
-  });
-  return max;
-}
+// --------------- hook ---------------
 
 export function useProgressiveReveal(): ProgressiveRevealContextValue {
   const ctx = useContext(ProgressiveRevealContext);
-  if (!ctx) throw new Error('useProgressiveReveal must be used within a ProgressiveRevealOrchestrator');
+  // ctx is never null because createContext provides a default —
+  // but we detect the default no-op to warn about a missing provider.
+  if (ctx.register === NOOP) {
+    throw new Error(
+      'useProgressiveReveal must be used within a <ProgressiveRevealOrchestrator>',
+    );
+  }
   return ctx;
 }
