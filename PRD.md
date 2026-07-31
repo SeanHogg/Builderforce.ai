@@ -61,3 +61,23 @@ This feature will focus on the identification, visualization, and basic notifica
 *   Automated commenting or bot interactions on stale tasks.
 *   Complex analytical dashboards or detailed reporting specifically for stale WIP beyond basic listing and counts.
 *   Integration with external messaging platforms (e.g., Slack, Microsoft Teams) for stale task notifications (notifications will be in-app or email only).
+
+---
+
+> **Implementation Notes (Developer — task #339 conflict resolution)**
+>
+> Merge conflict: `main` overwrote `PRD.md` with task #487's Evermind PRD after this branch
+> independently rewrote it with the Stale/Aging WIP PRD. Resolution: keep this branch's version
+> (the Stale/Aging WIP PRD — the intended deliverable for PR #238).
+>
+> Existing backend foundation already supports this PRD:
+> - `api/src/application/insights/bottleneckInsights.ts` — `summarizeAgingWip()` (72h default)
+> - `api/src/infrastructure/database/schema/work.ts` — `tasks.lastWorkedAt` column
+> - `api/src/application/insights/projectDeliverySignals.ts` — per-project `agingWip.stuckCount`
+>
+> Follow-up implementation tickets should cover:
+> - `tasks.staleThresholdHours` column (nullable, admin-configurable per project/tenant)
+> - Activity-log hooks: bump `lastWorkedAt` on status change, comment, assignee change, description/title update, sub-task status change (FR1.2)
+> - `/api/tasks?stale=true` filter (FR2.1)
+> - UI: stale badge/indicator + days-since display (FR2.2–FR2.3)
+> - Cron: daily stale-notify sweep (FR3.1–FR3.2)
