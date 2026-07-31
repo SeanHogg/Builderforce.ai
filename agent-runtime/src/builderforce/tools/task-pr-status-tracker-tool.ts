@@ -495,8 +495,12 @@ export async function runTaskPrStatus(params: TaskPrStatusParams): Promise<Track
       repo: pr.repo ?? (repo ? `${owner}/${repo}` : undefined),
     }));
 
-    // Sort by PR number descending (newest first typically).
-    prResults.sort((a, b) => b.number - a.number);
+    // Group by repo so an org-wide scan reads coherently, then newest-first within
+    // each repo. Comparing bare numbers across repos would interleave unrelated PRs.
+    prResults.sort((a, b) => {
+      const repoCmp = (a.repo ?? "").localeCompare(b.repo ?? "");
+      return repoCmp !== 0 ? repoCmp : b.number - a.number;
+    });
 
     const summary = deriveTaskSummary(prResults.map((p) => p.state));
     tasks.push({ taskId, prs: prResults, summary });
