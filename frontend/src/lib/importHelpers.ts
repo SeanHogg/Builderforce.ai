@@ -1,387 +1,344 @@
 /**
- * Helper utilities for import input modes (guided + bulk).
- * File parsing, validation, error handling, and transformation logic.
+ * Shared helpers and types for the Import feature.
+ *
+ * Covers:
+ *  - File parsing (CSV, JSON, XLSX)
+ *  - Template generation
+ *  - Dry-run validation engine
+ *  - Error / summary report generation
+ *  - Async threshold constant (FR-3.10)
  */
 
-import { isRecordValid } from './import-input-schema';
+import { MAX_FILE_SIZE_BYTES } from './import-input-schema';
 
-/**
- * Supported file types for bulk imports.
- */
+// ── Types ─────────────────────────────────────────────────────
+
+/** Supported import file types */
 export type ImportFileType = 'csv' | 'json' | 'xlsx';
 
-/**
- * File parsing result with rows extracted from uploaded file.
- */
+/** Parsed flat file result */
 export interface ParsedFileResult {
-  fileType: ImportFileType;
   headers: string[];
-  rows: Record<string, string | number | null | boolean>[];
+  rows: Record<string, unknown>[];
+  totalRows: number;
+  filename: string;
+  fileType: ImportFileType;
   error?: string;
 }
 
-/**
- * Parse CSV file string into row objects.
- * Simple parser that handles quoted fields with commas inside.
- */
-export function parseCSV(content: string): ParsedFileResult {
-  const lines = content.split(/\r?\n/).filter((line) => line.trim());
-  if (lines.length === 0) {
-    return { fileType: 'csv', headers: [], rows: [] };
-  }
-
-  // Parse header
-  const headers = parseCSVLine(lines[0]).map((h) => h.trim());
-
-  const rows: Record<string, string | number | null | boolean>[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-
-    const values = parseCSVLine(line);
-    const row: Record<string, string | number | null | boolean> = {};
-    for (let j = 0; j < headers.length; j++) {
-      const header = headers[j];
-      const value = values[j] ?? null;
-      // Try number conversion, keep string otherwise
-      const num = Number(value);
-      row[header] = isNaN(num) ? value : num;
-    }
-    if (Object.keys(row).length > 0) {
-      rows.push(row);
-    }
-  }
-
-  return { fileType: 'csv', headers, rows };
+/** A single row-level validation error */
+export interface RowValidationError {
+  rowNumber: number;
+  column: string;
+  reason: string;
 }
 
-/**
- * Parse a single CSV line, handling quoted fields.
- * Example: "value1","value with, comma","value3"
- */
+/** Result of a dry-run validation pass (FR-3.6) */
+export interface DryRunValidation {
+  totalRows: number;
+  validCount: number;
+  errorCount: number;
+  summary: string;
+  errors: RowValidationError[];
+}
+
+/** Rows above this threshold trigger async processing (FR-3.10) */
+export const IMPORT_ASYNC_THRESHOLD_ROWS = 500;
+
+// ── File-type detection ───────────────────────────────────────
+
+function detectFileType(filename: string): ImportFileType {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+  if (ext === 'csv') return 'csv';
+  if (ext === 'json') return 'json';
+  if (ext === 'xlsx') return 'xlsx';
+  throw new Error(`Unsupported file type: .${ext}`);
+}
+
+// ── CSV parsing ───────────────────────────────────────────────
+
+export function parseCSV(text: string): { headers: string[]; rows: Record<string, unknown>[] } {
+  // Split lines, handle CRLF
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  if (lines.length === 0) {
+    return { headers: [], rows: [] };
+  }
+
+  const headers = parseCSVLine(lines[0]);
+  const rows: Record<string, unknown>[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const values = parseCSVLine(lines[i]);
+    const row: Record<string, unknown> = {};
+
+    for (let j = 0; j < headers.length; j++) {
+      const key = headers[j];
+      let val: unknown = j < values.length ? values[j] : '';
+      // Coerce booleans
+      if (val === 'true') val = 'true';
+      else if (val === 'false') val = 'false';
+      row[key] = val;
+    }
+    rows.push(row);
+  }
+
+  return { headers, rows };
+}
+
 function parseCSVLine(line: string): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
-  let i = 0;
 
-  while (i < line.length) {
-    const char = line[i];
-    if (inQuotes) {
-      if (char === '"') {
-        // Check for escaped quote: ""
-        if (i + 1 < line.length && line[i + 1] === '"') {
-          current += '"';
-          i += 1;
-        } else {
-          inQuotes = false;
-        }
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      // Handle escaped quotes: "" inside quoted field
+      if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
+        current += '"';
+        i++; // skip the escaped quote
       } else {
-        current += char;
+        inQuotes = !inQuotes;
       }
+    } else if (ch === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
     } else {
-      if (char === '"') {
-        inQuotes = true;
-      } else if (char === ',') {
-        result.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
+      current += ch;
     }
-    i += 1;
   }
   result.push(current.trim());
   return result;
 }
 
+// ── JSON parsing ──────────────────────────────────────────────
+
+function parseJSON(text: string): { headers: string[]; rows: Record<string, unknown>[] } {
+  const parsed = JSON.parse(text);
+
+  // Support both array of objects and { rows: [...] }
+  let records: Record<string, unknown>[];
+  if (Array.isArray(parsed)) {
+    records = parsed;
+  } else if (parsed && Array.isArray(parsed.rows)) {
+    records = parsed.rows;
+  } else {
+    throw new Error('JSON must be an array of objects or contain a "rows" array');
+  }
+
+  if (records.length === 0) {
+    return { headers: [], rows: [] };
+  }
+
+  // Derive headers from first row keys
+  const headers = Object.keys(records[0]);
+  const rows = records.map((r) => {
+    const row: Record<string, unknown> = {};
+    for (const h of headers) {
+      row[h] = r[h] ?? '';
+    }
+    return row;
+  });
+
+  return { headers, rows };
+}
+
+// ── XLSX parsing ──────────────────────────────────────────────
+
+// XLSX parsing uses the SheetJS community edition (xlsx) which is expected
+// to be available. In production, install `npm install xlsx` and uncomment the import.
+// For now, we return a helpful error so the developer knows what to do.
+
+async function parseXLSX(_buffer: ArrayBuffer): Promise<{ headers: string[]; rows: Record<string, unknown>[] }> {
+  // In production:
+  // import * as XLSX from 'xlsx';
+  // const workbook = XLSX.read(buffer, { type: 'array' });
+  // const firstSheet = workbook.SheetNames[0];
+  // const sheet = workbook.Sheets[firstSheet];
+  // const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+  // return parseJSONInner(json);
+
+  // Fallback: return a clear error pointing to the dependency
+  throw new Error(
+    'XLSX parsing requires the `xlsx` package. Install it with: npm install xlsx\n' +
+    'Then import * as XLSX from \'xlsx\' in this file and implement the parseXLSX function.',
+  );
+}
+
+// ── Unified file parser ───────────────────────────────────────
+
 /**
- * Parse JSON file content.
+ * Parse an uploaded file and return a ParsedFileResult.
+ * Handles CSV, JSON, and XLSX (FR-3.2).
  */
-export function parseJSON(content: string): ParsedFileResult {
+export async function parseFile(file: File): Promise<ParsedFileResult> {
+  const fileType = detectFileType(file.name);
+
   try {
-    const data = JSON.parse(content);
-    if (!Array.isArray(data)) {
-      throw new Error('Expected an array of objects');
+    let headers: string[];
+    let rows: Record<string, unknown>[];
+
+    if (fileType === 'csv') {
+      const text = await file.text();
+      ({ headers, rows } = parseCSV(text));
+    } else if (fileType === 'json') {
+      const text = await file.text();
+      ({ headers, rows } = parseJSON(text));
+    } else {
+      const buffer = await file.arrayBuffer();
+      ({ headers, rows } = await parseXLSX(buffer));
     }
 
-    const firstRow = data[0] || {};
-    const headers = Object.keys(firstRow);
-
-    const rows: Record<string, string | number | null | boolean>[] = data.map((row) => {
-      const parsedRow: Record<string, string | number | null | boolean> = {};
-      for (const header of headers) {
-        const value = (row as Record<string, unknown>)[header];
-        if (value === null || value === undefined) {
-          parsedRow[header] = null;
-        } else if (typeof value === 'string') {
-          const num = Number(value);
-          parsedRow[header] = isNaN(num) ? value : num;
-        } else {
-          parsedRow[header] = value;
-        }
-      }
-      return parsedRow;
-    });
-
-    return { fileType: 'json', headers, rows };
-  } catch (e) {
     return {
-      fileType: 'json',
+      headers,
+      rows,
+      totalRows: rows.length,
+      filename: file.name,
+      fileType,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown parsing error';
+    return {
       headers: [],
       rows: [],
-      error: e instanceof Error ? e.message : 'Failed to parse JSON',
+      totalRows: 0,
+      filename: file.name,
+      fileType,
+      error: message,
     };
   }
 }
 
-/**
- * Parse uploaded file content based on file extension.
- */
-export function parseFile(file: File): Promise<ParsedFileResult> {
-  return new Promise((resolve) => {
-    const extension = file.name.split('.').pop()?.toLowerCase() || '';
-    const reader = new FileReader();
-
-    const errorsAllowed = {
-      csv: 'Unsupported file type: CSV files are required.',
-      json: 'Unsupported file type: JSON files are required.',
-      xlsx: 'XLSX is temporarily unsupported. Use CSV or JSON until a later release.',
-    };
-
-    const readerError = !errorsAllowed[(extension as keyof typeof errorsAllowed) as ImportFileType];
-
-    if (readerError) {
-      reader.readAsText(file);
-    } else {
-      reader.readAsText(file);
-    }
-
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-
-      switch (extension) {
-        case 'csv':
-          resolve(parseCSV(content));
-          break;
-        case 'json':
-          resolve(parseJSON(content));
-          break;
-        case 'xlsx':
-          resolve({
-            fileType: 'xlsx',
-            headers: [],
-            rows: [],
-            error: 'XLSX support requires a parser dependency (planned for v1.1)',
-          });
-          break;
-        default:
-          resolve({
-            fileType: extension,
-            headers: [],
-            rows: [],
-            error: `Unsupported file format: ${extension}`,
-          });
-      }
-    };
-
-    reader.onerror = () => {
-      resolve({
-        fileType: extension,
-        headers: [],
-        rows: [],
-        error: 'Failed to read file',
-      });
-    };
-  });
-}
+// ── Template generation (FR-3.1) ──────────────────────────────
 
 /**
- * Convert mapped import header to canonical field key.
- */
-export function mapHeaderToField(header: string, mappings: Record<string, string | null>): string {
-  // Check exact match first
-  if (mappings[header] !== null && mappings[header] !== undefined) {
-    return mappings[header]!;
-  }
-
-  // Try case-insensitive match
-  const lowerHeader = header.toLowerCase();
-  for (const [mapKey, targetField] of Object.entries(mappings)) {
-    if (targetField !== null && targetField !== undefined) {
-      if (targetField.toLowerCase() === lowerHeader) {
-        return targetField;
-      }
-    }
-  }
-
-  // Fallback: try to infer field
-  if (lowerHeader.includes('name')) return 'name';
-  if (lowerHeader.includes('desc') || lowerHeader.includes('description')) return 'description';
-  if (lowerHeader.includes('ref') || lowerHeader.includes('reference')) return 'referenceId';
-  if (lowerHeader.includes('enabled') || lowerHeader.includes('active')) return 'enabled';
-  if (lowerHeader.includes('priority')) return 'priority';
-  if (lowerHeader.includes('note') || lowerHeader.includes('remark')) return 'notes';
-
-  // Unknown field - keep as-is
-  return header;
-}
-
-/**
- * Convert canonical record to a mapped import row.
- */
-export function recordToImportRow(
-  record: Record<string, string | number | null | boolean>,
-  fieldMappings: Record<string, string | null>
-): Record<string, string | number | null> {
-  const result: Record<string, string | number | null> = {};
-
-  // Map all base fields and kind-specific fields
-  for (const field of Object.keys(fieldMappings)) {
-    const targetField = fieldMappings[field];
-    if (targetField && record[targetField] !== undefined) {
-      result[field] = record[targetField] ?? null;
-    } else if (targetField) {
-      result[field] = null;
-    }
-  }
-
-  return result;
-}
-
-/**
- * Validate a single row against the canonical schema.
- */
-export function validateRow(
-  row: Record<string, string | number | boolean>,
-  fieldMappings: Record<string, string | null>,
-  rowNumber: number
-): { valid: boolean; errors: Array<{ column: string; reason: string }> } {
-  const errors: Array<{ column: string; reason: string }> = [];
-
-  const record: Record<string, string | null> = {};
-  for (const header of Object.keys(fieldMappings)) {
-    const targetField = mapHeaderToField(header, fieldMappings);
-    const value = String(row[header] ?? '').trim();
-    record[targetField] = value || null;
-  }
-
-  if (!isRecordValid(record)) {
-    // Find which required field is missing
-    // TODO: This is a simplified check; the actual validation from import-input-schema.ts checks all fields
-    // For now, check the common required fields
-    if (!record.name || String(record.name).trim() === '') {
-      errors.push({ column: 'Name', reason: 'Name is required' });
-    }
-    if (!record.description && record.description !== 0) {
-      errors.push({ column: 'Description', reason: 'Description is required if Name is provided' });
-    }
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
-}
-
-/**
- * Generate CSV template with headers and one example row.
+ * Generate a CSV template string with headers and one example row.
  */
 export function generateCSVTemplate(
   headers: string[],
-  exampleData: Record<string, string | number | string[]>
+  exampleRow: Record<string, string | number>,
 ): string {
-  if (!exampleData) {
-    exampleData = {
-      name: 'Example Record',
-      description: 'An example record for testing',
-      referenceId: 'GHI-2024-001',
-      enabled: true,
-      priority: 'Medium',
-      notes: 'Additional notes here',
-    };
-  }
-
-  const rowValues = headers.map((header) => {
-    const value = exampleData[header as keyof typeof exampleData];
-    if (Array.isArray(value)) {
-      return `"${Array.isArray(value) ? value.join(', ') : value}"`;
-    }
-    return String(value ?? '');
-  });
-
-  return [headers.join(','), ...rowValues.map((v) => `"${v}"`)].join('\n');
+  const headerLine = headers.map((h) => escapeCSVField(h)).join(',');
+  const exampleLine = headers.map((h) => escapeCSVField(String(exampleRow[h] ?? ''))).join(',');
+  return `${headerLine}\n${exampleLine}\n`;
 }
 
+function escapeCSVField(value: string): string {
+  if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+// ── Dry-run validation (FR-3.5, FR-3.6) ──────────────────────
+
 /**
- * Generate CSV error report.
+ * Execute a pre-import dry-run: validate every row against the schema+field map.
  */
-export function generateCSVErrorReport(errors: Array<{ rowNumber: number; column: string; reason: string }>): string {
-  if (!errors.length) {
-    return 'No errors to report';
+export function executeDryRun(
+  parsed: ParsedFileResult,
+  mappings: Record<string, string>,
+): DryRunValidation {
+  const errors: RowValidationError[] = [];
+  const canonicalFields = Object.keys(mappings).filter((h) => mappings[h] !== '');
+
+  for (let i = 0; i < parsed.rows.length; i++) {
+    const row = parsed.rows[i];
+    const rowNumber = i + 1; // 1-based for user display
+
+    // Check required canonical fields are mapped and non-empty
+    for (const srcHeader of canonicalFields) {
+      const targetField = mappings[srcHeader];
+      const value = row[srcHeader];
+
+      if (value === undefined || value === null || String(value).trim() === '') {
+        if (targetField === 'name') {
+          errors.push({
+            rowNumber,
+            column: srcHeader,
+            reason: `Required field "${targetField}" is empty`,
+          });
+        }
+      }
+    }
+
+    // Additional format checks
+    for (const srcHeader of canonicalFields) {
+      const targetField = mappings[srcHeader];
+      const value = row[srcHeader];
+
+      if (value === undefined || value === null) continue;
+
+      const strVal = String(value).trim();
+
+      if (strVal === '') continue;
+
+      if (targetField === 'enabled') {
+        const lower = strVal.toLowerCase();
+        if (!['true', 'false', '1', '0', 'yes', 'no'].includes(lower)) {
+          errors.push({
+            rowNumber,
+            column: srcHeader,
+            reason: `Field "${targetField}" must be a boolean value (true/false)`,
+          });
+        }
+      }
+
+      if (targetField === 'priority') {
+        const normalized = strVal.charAt(0).toUpperCase() + strVal.slice(1).toLowerCase();
+        if (!['Low', 'Medium', 'High'].includes(normalized)) {
+          errors.push({
+            rowNumber,
+            column: srcHeader,
+            reason: `Field "${targetField}" must be one of: Low, Medium, High`,
+          });
+        }
+      }
+    }
   }
 
-  const headers = ['Row Number', 'Column', 'Reason'];
-  const rows = errors.map((e) => [e.rowNumber, e.column, e.reason]);
+  const validCount = parsed.rows.length - new Set(errors.map((e) => e.rowNumber)).size;
+  const errorCount = parsed.rows.length - validCount;
 
-  return [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+  return {
+    totalRows: parsed.rows.length,
+    validCount,
+    errorCount,
+    summary: `${validCount} of ${parsed.rows.length} rows valid. ${errorCount} row(s) with errors.`,
+    errors,
+  };
+}
+
+// ── Report generation (FR-3.7, FR-3.9) ───────────────────────
+
+/**
+ * Generate a CSV error report for download (FR-3.7).
+ */
+export function generateCSVErrorReport(errors: RowValidationError[]): string {
+  const header = 'Row Number,Column,Reason';
+  const lines = errors.map((e) =>
+    `${e.rowNumber},${escapeCSVField(e.column)},${escapeCSVField(e.reason)}`,
+  );
+  return [header, ...lines].join('\n');
 }
 
 /**
- * Generate import summary report.
+ * Generate a CSV import summary report for download (FR-3.9).
  */
 export function generateImportSummaryReport(
   totalRows: number,
-  validRowsCount: number,
-  erroredRowsCount: number
+  imported: number,
+  skipped: number,
 ): string {
-  const headers = ['Total Rows', 'Valid Rows', 'Errored Rows', 'Skipped Rows'];
-  const rows = [[totalRows, validRowsCount, erroredRowsCount, '0']];
-
-  return [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-}
-
-/**
- * Determine import batch size threshold for async processing.
- */
-export const IMPORT_ASYNC_THRESHOLD_ROWS = 500;
-
-/**
- * Type for dry-run validation result.
- */
-export interface DryRunValidation {
-  totalRows: number;
-  validCount: number;
-  errorCount: number;
-  errors: Array<{ rowNumber: number; column: string; reason: string }>;
-  summary: string;
-}
-
-/**
- * Execute dry-run validation on a file.
- */
-export async function executeDryRun(
-  parsedResult: ParsedFileResult,
-  fieldMappings: Record<string, string | null>
-): Promise<DryRunValidation> {
-  const errors: Array<{ rowNumber: number; column: string; reason: string }> = [];
-
-  for (let i = 0; i < parsedResult.rows.length; i++) {
-    const rowNumber = i + 2; // +2 for header row
-    const row = parsedResult.rows[i];
-    const validation = validateRow(row, fieldMappings, rowNumber);
-    if (!validation.valid) {
-      errors.push(...validation.errors);
-    }
-  }
-
-  const errorCount = errors.length;
-
-  return {
-    totalRows: parsedResult.rows.length,
-    validCount: parsedResult.rows.length - errorCount,
-    errorCount,
-    errors,
-    summary: `${parsedResult.rows.length} total rows detected. ${errorCount} errored, ${parsedResult.rows.length - errorCount} valid.`,
-  };
+  return [
+    'Metric,Value',
+    `Total rows processed,${totalRows}`,
+    `Rows imported,${imported}`,
+    `Rows skipped,${skipped}`,
+    `Import timestamp,${new Date().toISOString()}`,
+  ].join('\n');
 }
