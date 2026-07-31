@@ -113,11 +113,10 @@ function NavSection({ items, collapsed, pathname, onNavigate }: NavSectionWiring
             key={item.href + item.label}
             href={item.href}
             onClick={onNavigate}
-            className={`nav-item ${active ? 'active' : ''} ${item.highlight ? 'nav-item-highlight' : ''} ${item.mobileOnly ? 'nav-item-mobile-only' : ''} flex items-center`}
-            style={{ textAlign: 'left', justifyContent: 'flex-start' }}
+            className={`nav-item ${active ? 'active' : ''} ${item.highlight ? 'nav-item-highlight' : ''} ${item.mobileOnly ? 'nav-item-mobile-only' : ''}`}
           >
-            <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{item.icon}</span>
-            {!collapsed && <span className="nav-item-label" style={{ marginLeft: '12px' }}>{item.label}</span>}
+            <span className="nav-item-icon" aria-hidden="true">{item.icon}</span>
+            <span className="nav-item-label">{item.label}</span>
           </Link>
         );
       })}
