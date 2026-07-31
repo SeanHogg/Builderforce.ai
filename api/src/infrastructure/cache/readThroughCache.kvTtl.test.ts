@@ -75,3 +75,38 @@ describe('invalidateCached rate-limit retry', () => {
     expect(del).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('readThroughCache KV key bounds', () => {
+  beforeEach(() => __clearL1CacheForTests());
+
+  it('preserves existing short storage keys', async () => {
+    const get = vi.fn(async (_key: string, _type: string) => null);
+    const put = vi.fn(async (_key: string, _value: string, _options?: unknown) => undefined);
+    const env = { AUTH_CACHE_KV: { get, put, delete: vi.fn() } } as unknown as Env;
+
+    await getOrSetCached(env, 'compatible-key', async () => 'value');
+
+    expect(get).toHaveBeenCalledWith('cache:compatible-key', 'json');
+    expect(put.mock.calls[0]?.[0]).toBe('cache:compatible-key');
+  });
+
+  it('content-addresses oversized keys consistently for reads, writes, and invalidation', async () => {
+    const get = vi.fn(async (_key: string, _type: string) => null);
+    const put = vi.fn(async (_key: string, _value: string, _options?: unknown) => undefined);
+    const del = vi.fn(async (_key: string) => undefined);
+    const env = { AUTH_CACHE_KV: { get, put, delete: del } } as unknown as Env;
+    const sourceKey = `search:${'é'.repeat(400)}`;
+
+    await getOrSetCached(env, sourceKey, async () => ({ ok: true }));
+    await invalidateCached(env, sourceKey);
+
+    const readKey = String(get.mock.calls[0]?.[0]);
+    const writeKey = String(put.mock.calls[0]?.[0]);
+    const deleteKey = String(del.mock.calls[0]?.[0]);
+    expect(readKey).toMatch(/^cache:sha256:[0-9a-f]{64}$/);
+    expect(new TextEncoder().encode(readKey).byteLength).toBeLessThanOrEqual(512);
+    expect(writeKey).toBe(readKey);
+    expect(deleteKey).toBe(readKey);
+    expect(readKey).not.toContain('é');
+  });
+});

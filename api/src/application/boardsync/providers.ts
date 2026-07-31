@@ -111,6 +111,37 @@ export interface ProviderConfig {
   externalBoardId?: string | null;
 }
 
+export class PermanentBoardProviderError extends Error {
+  readonly permanent = true;
+
+  constructor(
+    message: string,
+    readonly code: 'invalid_scope' | 'not_found',
+  ) {
+    super(message);
+    this.name = 'PermanentBoardProviderError';
+  }
+}
+
+export function isPermanentBoardProviderError(error: unknown): error is PermanentBoardProviderError {
+  return error instanceof PermanentBoardProviderError;
+}
+
+function githubRepoScope(externalBoardId: string | null | undefined): string {
+  const scope = (externalBoardId ?? '').trim();
+  const parts = scope.split('/');
+  if (
+    parts.length !== 2
+    || parts.some((part) => !part || part === '.' || part === '..' || /\s|[?#]/.test(part))
+  ) {
+    throw new PermanentBoardProviderError(
+      'github provider requires externalBoardId "owner/repo"',
+      'invalid_scope',
+    );
+  }
+  return parts.map(encodeURIComponent).join('/');
+}
+
 /** Build the normalized ticket field bag + content hash from raw normalized parts. */
 function buildTicket(
   source: string,
@@ -172,8 +203,7 @@ export class GitHubBoardProvider implements BoardProvider {
   constructor(private readonly cfg: ProviderConfig, private readonly fetchFn: FetchLike) {}
 
   async fetchTicketsSince(cursor: string | null): Promise<FetchPage> {
-    const repo = (this.cfg.externalBoardId ?? '').trim();
-    if (!repo) throw new Error('github provider requires externalBoardId "owner/repo"');
+    const repo = githubRepoScope(this.cfg.externalBoardId);
     const token = String(this.cfg.credentials.accessToken ?? '');
 
     const params = new URLSearchParams({
@@ -192,6 +222,12 @@ export class GitHubBoardProvider implements BoardProvider {
         Accept: 'application/vnd.github+json',
       },
     });
+    if (res.status === 404) {
+      throw new PermanentBoardProviderError(
+        `GitHub repository "${decodeURIComponent(repo)}" was not found or is not accessible to this credential`,
+        'not_found',
+      );
+    }
     if (!res.ok) throw new Error(`GitHub issues fetch failed: ${res.status}`);
 
     const raw = (await res.json()) as GitHubIssueRaw[];
@@ -218,7 +254,7 @@ export class GitHubBoardProvider implements BoardProvider {
   }
 
   async pushUpdate(externalId: string, changeSet: ChangeSet): Promise<void> {
-    const repo = (this.cfg.externalBoardId ?? '').trim();
+    const repo = githubRepoScope(this.cfg.externalBoardId);
     const token = String(this.cfg.credentials.accessToken ?? '');
     const patch: Record<string, unknown> = {};
     if (changeSet.title !== undefined) patch.title = changeSet.title;
@@ -236,6 +272,12 @@ export class GitHubBoardProvider implements BoardProvider {
       },
       body: JSON.stringify(patch),
     });
+    if (res.status === 404) {
+      throw new PermanentBoardProviderError(
+        `GitHub repository "${decodeURIComponent(repo)}" or issue "${externalId}" was not found or is not accessible to this credential`,
+        'not_found',
+      );
+    }
     if (!res.ok) throw new Error(`GitHub issue update failed: ${res.status}`);
   }
 
@@ -249,10 +291,18 @@ export class GitHubBoardProvider implements BoardProvider {
     // "owner/repo" so a staged project maps straight onto a connection scope.
     const projects: DiscoveredProject[] = [];
     if (scope) {
-      const res = await this.fetchFn(`https://api.github.com/repos/${scope}`, { headers });
+      const repo = githubRepoScope(scope);
+      const res = await this.fetchFn(`https://api.github.com/repos/${repo}`, { headers });
       if (res.ok) {
         const r = (await res.json()) as { full_name: string; description?: string; html_url?: string; open_issues_count?: number };
         projects.push({ externalId: r.full_name, key: r.full_name, name: r.full_name, description: r.description ?? null, url: r.html_url ?? null, itemCount: r.open_issues_count ?? null });
+      } else if (res.status === 404) {
+        throw new PermanentBoardProviderError(
+          `GitHub repository "${scope}" was not found or is not accessible to this credential`,
+          'not_found',
+        );
+      } else {
+        throw new Error(`GitHub repo fetch failed: ${res.status}`);
       }
     } else {
       const res = await this.fetchFn('https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member', { headers });

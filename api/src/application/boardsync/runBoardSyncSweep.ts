@@ -16,12 +16,12 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * due-filter (connection counts are small, per-tenant).
  */
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { boardConnections } from '../../infrastructure/database/schema';
 import { SyncEngine, type StoredConnection } from './SyncEngine';
 import { createDrizzleStore, loadConnectionCredentials } from './drizzleStore';
-import { createBoardProvider } from './providers';
+import { createBoardProvider, isPermanentBoardProviderError } from './providers';
 import { isItsmProvider, syncItsmConnection } from './itsmIngest';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -122,7 +122,27 @@ export async function runBoardSyncSweep(env: BoardSyncSweepEnv): Promise<BoardSy
       drained += drainResult.succeeded;
     } catch (e) {
       errors++;
-      reportCaughtError(e, { source: "application/boardsync/runBoardSyncSweep.ts", operation: "runBoardSyncSweep", context: { logMessage: `[cron:board-sync] connection ${conn.id} failed`, details: e } });
+      const degraded = isPermanentBoardProviderError(e);
+      if (degraded) {
+        await db
+          .update(boardConnections)
+          .set({ status: 'degraded', updatedAt: new Date() })
+          .where(and(
+            eq(boardConnections.id, conn.id),
+            eq(boardConnections.tenantId, conn.tenantId),
+          ));
+      }
+      reportCaughtError(e, {
+        source: 'application/boardsync/runBoardSyncSweep.ts',
+        operation: 'runBoardSyncSweep',
+        context: {
+          logMessage: `[cron:board-sync] connection ${conn.id} failed`,
+          tenantId: conn.tenantId,
+          connectionId: conn.id,
+          provider: conn.provider,
+          connectionStatus: degraded ? 'degraded' : conn.status,
+        },
+      });
     }
   }
 

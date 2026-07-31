@@ -836,6 +836,9 @@ interface ManagedTaskRow {
   source: string | null;
   /** The rank already persisted — the RANK stage writes only the tickets whose rank moved. */
   managerRank: number | null;
+  /** Which stage the ticket is sitting in — lets board staffing say what an
+   *  unauthorised lane is actually COSTING instead of naming a bare lane id. */
+  swimlaneId: string | null;
 }
 
 /**
@@ -870,6 +873,10 @@ export function managedTasksQuery(db: Db, projectId: number) {
       // rather than re-stamping an identical order every five minutes. One column on a
       // query the pass already runs — see the stage for what it was costing.
       managerRank: tasks.managerRank,
+      // The stage each ticket sits in. Board staffing correlates its unauthorised lanes
+      // against this, so a gap is reported as "this stage is holding 200 tickets" rather
+      // than a lane id nobody can weigh.
+      swimlaneId: tasks.swimlaneId,
     })
     .from(tasks)
     .where(and(
@@ -1081,6 +1088,11 @@ export async function runManagerForProject(
       // — which is how 293 tickets sat on `managed_no_role` while this stage reported
       // nothing to do. Deduplicated to a handful of pairs, so it costs no query.
       taskShapes: distinctTaskShapes(managed),
+      // What each lane's gap is COSTING, from the managed set already in hand.
+      laneTicketCounts: managed.reduce((m, t) => {
+        if (t.swimlaneId) m.set(t.swimlaneId, (m.get(t.swimlaneId) ?? 0) + 1);
+        return m;
+      }, new Map<string, number>()),
     });
     const staffingDetail = describeLaneStaffing(laneStaffing);
     if (staffingDetail) {
@@ -1092,6 +1104,9 @@ export async function runManagerForProject(
           unfilledRoleKeys: laneStaffing.unfilledRoleKeys,
           filled: laneStaffing.filled.map((f) => ({ roleKey: f.roleKey, action: f.action, agentName: f.agentName })),
           unfillable: laneStaffing.unfillable.map((u) => u.roleKey),
+          // The gap with no role key — the reason this decision did not exist at all
+          // while 305 tickets sat undispatchable. Carries the lane, why, and the cost.
+          unauthorizedLanes: laneStaffing.unauthorizedLanes,
           hires: laneStaffing.hires,
           error: laneStaffing.error,
         },
