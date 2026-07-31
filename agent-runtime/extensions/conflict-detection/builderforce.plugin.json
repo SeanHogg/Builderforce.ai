@@ -1,12 +1,16 @@
 {
-  "name": "builderforce-conflict-detection",
-  "version": "1.0.0",
-  "description": "Conflict Detection Rules and Alerts system - detects prioritization conflicts between stakeholders",
-  "main": "index.ts",
-  "types": "index.ts",
-  "configSchema": "config-schema.ts",
-  "bandwagon": {
-    "products": ["BuilderForce.AI"],
-    "teamId": null
+  "id": "conflict-detection",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "windowThresholdDays": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 30,
+        "default": 7,
+        "description": "Fallback review-window size in days, used when requests carry no explicit review window or priority version."
+      }
+    }
   }
 }
