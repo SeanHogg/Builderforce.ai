@@ -952,10 +952,18 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const requestParams = c.req.query('projectId');
     const projectId = requestParams ? Number(requestParams) : undefined;
 
-    const page = Number(c.req.query('page')) || 1;
-    const pageSize = Number(c.req.query('pageSize')) || 20;
-    const sortBy = c.req.query('sortBy') || 'createdAt';
-    const sortOrder = c.req.query('sortOrder') || 'desc';
+    // Parse and validate pagination parameters
+    const page = Math.max(1, Number(c.req.query('page')) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(c.req.query('pageSize')) || 20));
+
+    // Parse and validate sorting parameters
+    const validSortBy = ['dueDate', 'title', 'createdAt'];
+    const sortByRaw = c.req.query('sortBy') || 'createdAt';
+    const sortBy = validSortBy.includes(sortByRaw) ? sortByRaw as 'dueDate' | 'title' | 'createdAt' : 'createdAt';
+
+    const validSortOrder = ['asc', 'desc'];
+    const sortOrderRaw = c.req.query('sortOrder') || 'desc';
+    const sortOrder = validSortOrder.includes(sortOrderRaw) ? sortOrderRaw as 'asc' | 'desc' : 'desc';
 
     const tasks = await taskService.findUnassignedHighPriority(
       c.get('tenantId'),
