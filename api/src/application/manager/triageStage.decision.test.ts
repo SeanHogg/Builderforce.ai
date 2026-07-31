@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideRemedyExecution } from './triageStage';
+import { decideRemedyExecution, deferralCeiling } from './triageStage';
 
 /**
  * These cover the gating bug that made the stuck register inert.
@@ -98,5 +98,35 @@ describe('decideRemedyExecution — when the manager must not act at all', () =>
         }
       }
     }
+  });
+});
+
+/**
+ * WHICH ceiling bit, said out loud.
+ *
+ * Measured on project 11, 2026-07-31 (api 2026.7.198): seven consecutive passes journalled
+ * "1 waiting for the next one (max 10 new runs per pass)" with
+ * `{"dispatched":1,"dispatchCap":10}` beside it. One run against a cap of ten did not
+ * exhaust the cap — the workspace's 25-runs-per-tick pool was already spent by the
+ * autonomous executor (40 runs completed that day) — so the sentence sent a reader to
+ * raise a number that had never been reached.
+ */
+describe('deferralCeiling', () => {
+  it('names nothing while both ceilings have room', () => {
+    expect(deferralCeiling({ passCapLeft: true, tenantBudgetLeft: true })).toBeNull();
+  });
+
+  it('names the WORKSPACE pool when this project still had per-pass room', () => {
+    expect(deferralCeiling({ passCapLeft: true, tenantBudgetLeft: false })).toBe('tenant_tick_budget');
+  });
+
+  it('names this project\'s per-pass cap when that is the one spent', () => {
+    expect(deferralCeiling({ passCapLeft: false, tenantBudgetLeft: true })).toBe('pass_dispatch_cap');
+  });
+
+  it('prefers the per-pass cap when BOTH are spent — the project used its own share', () => {
+    // Reporting the workspace pool here would send the reader one level too far out, to a
+    // ceiling they cannot raise without also raising this project's share.
+    expect(deferralCeiling({ passCapLeft: false, tenantBudgetLeft: false })).toBe('pass_dispatch_cap');
   });
 });

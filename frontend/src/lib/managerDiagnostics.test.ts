@@ -837,7 +837,11 @@ describe('managed dispatch — the finding that must read zero', () => {
   });
 
   it('says the sweep journalled NOTHING when it did — the same contradiction, one step earlier', () => {
-    expect(refusal(withSweep(null))).toContain('NO board-staffing decision');
+    // Phrased as "never", never as "not in the last N": the verdict is journalled on
+    // change, so counting feed rows would report a silent sweep on every quiet pass.
+    const text = refusal(withSweep(null));
+    expect(text).toContain('NEVER journalled a board-staffing verdict');
+    expect(text).toContain('contradicts this cohort');
   });
 
   it('reports a FAILED sweep as unexplained rather than unstaffable', () => {
@@ -871,9 +875,87 @@ describe('managed dispatch — the finding that must read zero', () => {
     expect(r).toContain("the sweep's own words: Staffed 0 roles; 1 stage authorises nobody");
   });
 
-  it('says the sweep is silent rather than rendering an empty staffing block', () => {
+  it('says the sweep has NEVER reported rather than rendering an empty staffing block', () => {
     const r = buildManagerDiagnosticsReport(withSweep(null), ctx);
-    expect(r).toContain('no board-staffing decision in the last');
+    expect(r).toContain('has never journalled a verdict for this project');
+    // Never again by counting feed rows: the verdict is deduped, so "in the last 30" would
+    // report a silent sweep every time nothing about the board changed.
+    expect(r).not.toContain('no board-staffing decision in the last');
+  });
+
+  /**
+   * THE READ THAT HAD TO MOVE WITH THE WRITE (api 2026.7.198 → 2026.7.199).
+   *
+   * Deduping the staffing verdict fixed the `decision_loop` it was tripping and blinded
+   * this block one pass later: project 11, 2026-07-31T11:26Z printed "(no board-staffing
+   * decision in the last 30 — the sweep found nothing to staff)" beside 306 tickets in
+   * stages that authorise no role — the exact contradiction the block exists to catch,
+   * manufactured by the report itself. The verdict is now asked for BY NAME.
+   */
+  const standing = (detail: Record<string, unknown>, at = iso(3 * 60 * MIN)): ManagerDiagnosticsInput => ({
+    ...cohort,
+    overview: {
+      ...overview,
+      // Deliberately NOT in `actions`: the whole point is a verdict too old for the window.
+      actions,
+      stateDecisions: {
+        boardStaffing: { summary: 'Board staffing swept', detail: JSON.stringify(detail), createdAt: at },
+        triageLimits: null,
+      },
+    },
+  });
+
+  it('reads the standing verdict even when it is far outside the decision window', () => {
+    const r = buildManagerDiagnosticsReport(standing({
+      unfilledRoleKeys: [], filled: [], unfillable: [], hires: 0, error: null,
+      unauthorizedLanes: [{ swimlaneId: 's1', laneKey: 'backlog', reason: 'lane_unstaffed', ticketCount: 299, unmappedAgents: [] }],
+    }), ctx);
+    expect(r).toContain('backlog  holding=299  reason=lane_unstaffed');
+    expect(r).not.toContain('has never journalled a verdict');
+  });
+
+  it('stamps the standing verdict with its AGE, so an old answer reads as old not absent', () => {
+    const r = buildManagerDiagnosticsReport(standing({ unfilledRoleKeys: ['architect'], unauthorizedLanes: [] }), ctx);
+    expect(r).toMatch(/reported at: .*ago\)/);
+    expect(r).toContain('journalled when it CHANGES');
+  });
+
+  it('feeds the standing verdict to the cohort FINDING, not just the appendix block', () => {
+    const text = refusal(standing({
+      unfilledRoleKeys: [], filled: [], unfillable: [], hires: 0, error: null,
+      unauthorizedLanes: [{ swimlaneId: 's1', laneKey: 'backlog', reason: 'lane_unstaffed', ticketCount: 299, unmappedAgents: [] }],
+    }));
+    expect(text).toContain("'backlog' holding 299");
+    expect(text).not.toContain('has NEVER journalled');
+  });
+
+  it('promotes the standing triage limits so the ceiling picture survives its dedupe', () => {
+    const withLimits: ManagerDiagnosticsInput = {
+      ...cohort,
+      overview: {
+        ...overview,
+        actions,
+        stateDecisions: {
+          boardStaffing: null,
+          triageLimits: {
+            summary: 'Unstuck 1 of 2 stalled tickets this pass',
+            detail: '{"stalled":2,"unstuck":1,"deferred":1,"dispatchCap":10,"ownsDispatch":false}',
+            createdAt: iso(3 * 60 * MIN),
+          },
+        },
+      },
+    };
+    const r = buildManagerDiagnosticsReport(withLimits, ctx);
+    expect(r).toContain('triage dispatch cap (billable runs per pass): 10');
+    expect(r).toContain('stalled tickets seen last triage: 2');
+  });
+
+  it('degrades to the window scan when the API is older than this client', () => {
+    // `stateDecisions` absent — every pre-2026.7.199 API. The old behaviour, unchanged.
+    const r = buildManagerDiagnosticsReport(withSweep(sweepAction({
+      unfilledRoleKeys: [], unauthorizedLanes: [{ swimlaneId: 's1', laneKey: 'todo', reason: 'lane_unstaffed', ticketCount: 8, unmappedAgents: [] }],
+    })), ctx);
+    expect(r).toContain('todo  holding=8');
   });
 
   it('reads the BOARD-scope sweep, never a per-ticket assign that happens to share the type', () => {

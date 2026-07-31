@@ -2153,6 +2153,13 @@ export interface ManagerBlockedPr {
   blockedAt: string | null;
 }
 
+/** One standing manager verdict — a decision written only when its answer changes. */
+export interface ManagerStateDecision {
+  summary: string;
+  detail: string | null;
+  createdAt: string;
+}
+
 export interface ManagerOverview {
   config: ManagerConfig | null;
   policy: ManagerPolicy;
@@ -2173,6 +2180,21 @@ export interface ManagerOverview {
   stats: ManagerStats;
   backlog: ManagerBacklogItem[];
   actions: ManagerAction[];
+  /**
+   * The manager's STANDING verdicts, whatever their age.
+   *
+   * Two of its decisions are STATES rather than events — the board-staffing sweep's
+   * verdict and the triage stage's ceiling picture — so they are journalled only when
+   * they change. Everything that used to find them by scanning `actions` went blind the
+   * moment that landed: the diagnostics report announced "no board-staffing decision in
+   * the last 30" beside a 306-ticket cohort of stages authorising no role. Read them from
+   * here, never from the feed window, and show `createdAt` so an old answer reads as old
+   * rather than as absent. Optional — an older API omits it.
+   */
+  stateDecisions?: {
+    boardStaffing: ManagerStateDecision | null;
+    triageLimits: ManagerStateDecision | null;
+  };
   /** The manager's own run tasks (open / in-progress / done), newest first. */
   runTasks: ManagerRunTask[];
   /** Autonomy health — whether the cron sweeps are paused (e.g. tenant out of tokens). */
