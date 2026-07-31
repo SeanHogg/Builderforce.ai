@@ -25,7 +25,6 @@ import {
   parseJsonUpload,
   trackInputModeEvent,
   validateAll,
-  validateField,
   type FieldDefinition,
   type FormSchema,
   type InputMode,
