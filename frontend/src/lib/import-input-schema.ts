@@ -64,6 +64,13 @@ export const BASE_FIELDS: Record<string, FieldDirective> = {
     tooltip: 'Low, Medium, or High priority (null = unused).',
     examplePattern: 'High',
   },
+  notes: {
+    key: 'notes',
+    label: 'Notes',
+    required: false,
+    tooltip: 'Free-form notes (optional).',
+    examplePattern: 'Enter additional details',
+  },
 };
 
 /** Supported record kinds and their available fields. */
