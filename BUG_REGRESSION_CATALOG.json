@@ -127,7 +127,7 @@
     {
       "task_id": 69,
       "title": "Agent Assigned to Board > Dragged ticket to swimlane > no indicator that agent is running",
-      "status": "in_review",
+      "status": "in_progress",
       "type": "ambiguous",
       "severity": "medium",
       "severity_source": "inferred",
