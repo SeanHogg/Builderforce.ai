@@ -8930,6 +8930,8 @@
       "failedFallback": "连接测试失败：{status}。",
       "failedGeneric": "连接测试失败",
       "failedTitle": "{label} 连接失败",
+      "upstreamTitle": "{label} — 模型提供方出错",
+      "testCost": "测试会发送一次真实的小请求，费用计入被测试的账户。",
       "state": {
         "ready": "就绪",
         "capacity": "用量已耗尽",
@@ -8940,6 +8942,7 @@
         "undecryptable": "凭据无法读取",
         "unavailable": "不可用",
         "failed": "失败",
+        "upstream_error": "模型提供方出错",
         "not_found": "未找到该连接",
         "no_test_model": "未选择可测试的模型",
         "key_unresolved": "无法使用已保存的密钥"

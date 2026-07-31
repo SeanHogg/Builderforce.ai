@@ -1221,14 +1221,21 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     if (probe.ok) {
       return c.json({ ok: true, status: probe.status, model: probe.model, ownKey: probe.ownKey, testedAt: probe.checkedAt });
     }
+    // An upstream 5xx means the OPPOSITE of a broken registration: the key was accepted and
+    // the model provider then errored. Reporting that as "test failed" sends an owner to
+    // re-enter a key that is fine — so it gets its own sentence naming the model, the status
+    // and the fact that their credential worked.
+    const account = probe.ownKey ? 'your OpenRouter key' : 'Builderforce managed billing';
     return c.json({
       ok: false,
       status: probe.status,
       model: probe.model,
       ownKey: probe.ownKey,
-      error: probe.error
-        ? `OpenRouter connection test failed: ${probe.error}`
-        : `OpenRouter connection test could not run: ${probe.status.replaceAll('_', ' ')}.`,
+      error: probe.status === 'upstream_error'
+        ? `${account} worked — OpenRouter accepted it and routed the request. The model provider then returned HTTP ${probe.upstreamStatus} for ${probe.model}, twice. That is an upstream outage on that model, not a problem with this connection: retry shortly, or put a different model first in this registration.`
+        : probe.error
+          ? `OpenRouter connection test failed: ${probe.error}`
+          : `OpenRouter connection test could not run: ${probe.status.replaceAll('_', ' ')}.`,
       code: 'openrouter_connection_test_failed',
       testedAt: probe.checkedAt,
       // Echo the alert the probe just persisted so the card repaints from THIS response
@@ -1319,7 +1326,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     return c.json({
       ok: false,
       status: probe.status,
-      error: probe.error
+      error: probe.status === 'upstream_error'
+        ? `Your ${provider} credential worked — it was accepted and the request was routed. ${probe.model ?? 'The model'} then returned HTTP ${probe.upstreamStatus}, twice. That is an upstream outage on that model, not a problem with this account: retry shortly.`
+        : probe.error
         ? probe.alert?.reason === 'capacity'
           ? `${provider} connection test paused: this account's weekly usage allowance is depleted (HTTP ${probe.alert.status}). Check the provider's Usage page for the reset time; to continue now, buy credits or enable auto top-up, or upgrade the provider plan.`
           : probe.alert?.reason === 'not_entitled'

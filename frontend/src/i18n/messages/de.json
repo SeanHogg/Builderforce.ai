@@ -8930,6 +8930,8 @@
       "failedFallback": "Verbindungstest fehlgeschlagen: {status}.",
       "failedGeneric": "Verbindungstest fehlgeschlagen",
       "failedTitle": "{label}-Verbindung fehlgeschlagen",
+      "upstreamTitle": "{label} — Fehler des Modellanbieters",
+      "testCost": "Der Test sendet eine kleine echte Anfrage, die dem getesteten Konto berechnet wird.",
       "state": {
         "ready": "bereit",
         "capacity": "Nutzung aufgebraucht",
@@ -8940,6 +8942,7 @@
         "undecryptable": "Anmeldedaten unlesbar",
         "unavailable": "nicht verfügbar",
         "failed": "fehlgeschlagen",
+        "upstream_error": "Fehler des Modellanbieters",
         "not_found": "Verbindung nicht gefunden",
         "no_test_model": "kein Modell zum Testen ausgewählt",
         "key_unresolved": "gespeicherter Schlüssel konnte nicht verwendet werden"
