@@ -1,5 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const deliveryCollectors = vi.hoisted(() => ({
+  dora: vi.fn(async (_db: unknown, _tenantId: number, days: number) => ({
+    windowDays: days, deploymentFrequencyPerDay: 0, totalDeployments: 0,
+    leadTimeHours: 0, changeFailureRatePct: 0, mttrHours: 0, series: [],
+  })),
+  bottlenecks: vi.fn(async (_db: unknown, _tenantId: number, days: number) => ({
+    windowDays: days, sampleSize: 0, byStage: [], slowestStage: null,
+    rework: { reworkRate: 0, reworkedTasks: 0, totalReopens: 0, totalRedos: 0 },
+    agingWip: { thresholdHours: 72, stuckCount: 0, oldest: [] },
+  })),
+  lifecycle: vi.fn(async (_db: unknown, _tenantId: number, days: number) => ({
+    windowDays: days, sampleSize: 0, totalAvgHours: 0, byPhase: [], trend: [],
+  })),
+}));
+
+vi.mock('../../application/metrics/workforceMetrics', () => ({ computeDora: deliveryCollectors.dora }));
+vi.mock('../../application/insights/bottleneckInsights', () => ({ computeBottleneckInsights: deliveryCollectors.bottlenecks }));
+vi.mock('../../application/insights/lifecycleInsights', () => ({ computeLifecycleInsights: deliveryCollectors.lifecycle }));
+
 const TENANT = 88;
 const SEGMENT = 'seg-default';
 vi.mock('../middleware/authMiddleware', () => ({
@@ -10,6 +29,13 @@ vi.mock('../middleware/authMiddleware', () => ({
     await next();
   },
   requireRole: () => async (_c: any, next: any) => next(),
+}));
+
+// The premium lenses sit behind requirePlanFeature('advancedInsights'), which resolves
+// the tenant's plan from the real database. These tests cover the lens reads, not the
+// paywall, and pass a fake db rather than an env — so stub the gate to "entitled".
+vi.mock('../middleware/insightPlanGate', () => ({
+  requirePlanFeature: () => async (_c: any, next: any) => next(),
 }));
 
 import { createInsightsRoutes } from './insightsRoutes';
@@ -52,6 +78,18 @@ describe('insightsRoutes — lens reads', () => {
     const res = await createInsightsRoutes(db).request('/dora?days=30');
     expect(res.status).toBe(200);
     expect((await res.json() as any).windowDays).toBe(30);
+  });
+
+  it('threads projectId through every delivery rollup collector', async () => {
+    const { db } = makeDb();
+    const router = createInsightsRoutes(db);
+    await router.request('/dora?days=14&projectId=321');
+    await router.request('/bottlenecks?days=14&projectId=321');
+    await router.request('/delivery/lifecycle?days=14&projectId=321');
+
+    expect(deliveryCollectors.dora).toHaveBeenLastCalledWith(db, TENANT, 14, 321);
+    expect(deliveryCollectors.bottlenecks).toHaveBeenLastCalledWith(db, TENANT, 14, 321);
+    expect(deliveryCollectors.lifecycle).toHaveBeenLastCalledWith(db, TENANT, 14, 321);
   });
 
   it('GET /finance returns spend + budgets for the period', async () => {

@@ -13,6 +13,10 @@ export interface ChangeItem {
   path: string;
   change: FileChangeKind;
   agent?: string;
+  executionId?: number | null;
+  createdAt?: string;
+  models?: string[];
+  modelUsage?: Array<{ model: string; byo: boolean; provider: string | null }>;
 }
 
 export const CHANGE_COLOR: Record<FileChangeKind, string> = {
@@ -30,12 +34,20 @@ export function ChangeRow({
   path,
   change,
   agent,
+  executionId,
+  createdAt,
+  models,
+  modelUsage,
   onOpen,
   openLabel,
 }: {
   path: string;
   change: FileChangeKind;
   agent?: string;
+  executionId?: number | null;
+  createdAt?: string;
+  models?: string[];
+  modelUsage?: Array<{ model: string; byo: boolean; provider: string | null }>;
   onOpen: () => void;
   openLabel: string;
 }) {
@@ -52,7 +64,18 @@ export function ChangeRow({
     >
       <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: CHANGE_COLOR[change], width: 64, flexShrink: 0 }}>{change}</span>
       <span style={{ flex: 1, fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--coral-bright)', wordBreak: 'break-all' }}>{path}</span>
-      {agent && <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }} title={agent}>{agent}</span>}
+      {(agent || executionId != null || createdAt || models?.length || modelUsage?.length) && (
+        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, maxWidth: '42%' }}>
+          {agent && <span title={agent}>{agent}</span>}
+          <span>
+            {executionId != null ? `Execution #${executionId}` : ''}
+            {modelUsage?.length
+              ? `${executionId != null ? ' · ' : ''}${modelUsage.map((u) => `${u.model} · ${u.byo ? `BYO key/account${u.provider ? ` (${u.provider})` : ''}` : 'BuilderForce-managed key'}`).join(', ')}`
+              : models?.length ? `${executionId != null ? ' · ' : ''}${models.join(', ')} · key source unavailable` : ''}
+          </span>
+          {createdAt && <time dateTime={createdAt}>{new Date(createdAt).toLocaleString()}</time>}
+        </span>
+      )}
     </button>
   );
 }
@@ -100,7 +123,10 @@ export function TaskChangesPanel({
   // Return to the list whenever the scope changes (execution switch / task switch).
   useEffect(() => { setOpenChange(null); }, [resetKey, taskId]);
 
-  const list: ChangeItem[] = changes ?? (fetched ?? []).map((f) => ({ path: f.path, change: f.change, agent: f.agent }));
+  const list: ChangeItem[] = changes ?? (fetched ?? []).map((f) => ({
+    path: f.path, change: f.change, agent: f.agent, executionId: f.executionId,
+    createdAt: f.createdAt, models: f.models, modelUsage: f.modelUsage,
+  }));
   const loading = selfFetch && fetched === null;
 
   return (
@@ -131,6 +157,10 @@ export function TaskChangesPanel({
             path={f.path}
             change={f.change}
             agent={f.agent}
+            executionId={f.executionId}
+            createdAt={f.createdAt}
+            models={f.models}
+            modelUsage={f.modelUsage}
             openLabel={t('viewInEditor')}
             onOpen={() => setOpenChange({ path: f.path, change: f.change })}
           />

@@ -53,7 +53,7 @@ export interface Project {
   name: string;
   description?: string | null;
   template?: string | null;
-  /** Active IDE modality: 'designer' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults to 'designer'. */
+  /** Active IDE modality: 'designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults to 'designer'. */
   modality?: string | null;
   /** Where the project was born — 'ide' | 'imported' | 'external'. Drives the origin badge. */
   origin?: string | null;
@@ -115,7 +115,7 @@ export interface IdeProject {
   id: number;
   publicId: string;
   name: string;
-  /** 'designer' | 'video' | 'llm' | 'voice'. */
+  /** 'designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice'. */
   modality: string;
   status: string;
   /** The parent Project this build is grouped under, or null when ungrouped. */
@@ -310,8 +310,9 @@ export interface PublishedAgent {
   preferred_runtime?: 'cloud' | 'host' | null;
   /** Agent runtime engine — always the current version (read-only denormalized value). */
   engine?: 'builderforce-v3';
-  /** Cloud execution surface (migration 0105): durable DO vs long-lived Cloudflare Container. */
-  runtime_surface?: 'durable' | 'container';
+  /** Cloud execution surface (migration 0105): durable DO, long-lived Cloudflare
+   *  Container, or the linked repo's own GitHub Actions runners. */
+  runtime_surface?: 'durable' | 'container' | 'github_actions';
   price_cents?: number;
   pricing_model?: 'flat_fee' | 'consumption';
   price_unit?: string | null;

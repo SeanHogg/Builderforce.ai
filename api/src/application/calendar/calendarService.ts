@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Calendar service — token lifecycle + meeting⇆event sync on top of the provider
  * adapters. Keeps token refresh in ONE place so both the calendar routes (list
@@ -110,5 +111,7 @@ export async function deleteMeetingEvent(
   if (!p) return;
   const token = await freshAccessToken(db, env, conn);
   if (!token) return;
-  try { await p.deleteEvent(token, conn.calendarId, eventId); } catch { /* best effort */ }
+  try { await p.deleteEvent(token, conn.calendarId, eventId); } catch (error) { /* best effort */ 
+    reportCaughtError(error, { source: "application/calendar/calendarService.ts", operation: "deleteMeetingEvent" });
+  }
 }

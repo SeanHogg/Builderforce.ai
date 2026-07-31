@@ -29,6 +29,40 @@ export function classifyReplyAccount(byoFunded: boolean, hasConnectedAccount: bo
   return hasConnectedAccount ? 'shared_byo_unused' : 'shared';
 }
 
+/**
+ * How a connected account is NAMED to its owner — `anthropic` → "Claude".
+ *
+ * One map, because the empty-reply diagnostic had two: one for the account that SERVED
+ * the turn and a separate inline ternary for the account that FAILED, covering different
+ * vendors. So the same sentence could call one connected account "Claude" and another
+ * "provider", and every BYO vendor added since (Meta, Moonshot, Qwen, MiniMax, xAI) fell
+ * through to the generic word in one branch and to the raw id in the other.
+ *
+ * Falls back to the gateway vendor id rather than "provider": a user reading "your
+ * connected meta account" can act on it; "your connected provider account" — the literal
+ * text of a shipped support ticket — tells them nothing about which one to check.
+ * `''` (nothing resolved) is the only case that stays generic.
+ */
+export function vendorAccountLabel(vendor: string | null | undefined): string {
+  const v = (vendor ?? '').trim();
+  if (!v) return 'provider';
+  const labels: Record<string, string> = {
+    anthropic: 'Claude',
+    openai: 'OpenAI',
+    'openai-codex': 'OpenAI',
+    googleai: 'Google',
+    google: 'Google',
+    xai: 'xAI',
+    'xai-oauth': 'xAI',
+    meta: 'Meta',
+    moonshot: 'Moonshot',
+    qwen: 'Qwen',
+    minimax: 'MiniMax',
+    openrouter: 'OpenRouter',
+  };
+  return labels[v] ?? v;
+}
+
 /** Provenance persisted on an assistant message (JSON under the `provenance` key). */
 export interface ReplyProvenance {
   model: string;

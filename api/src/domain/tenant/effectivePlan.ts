@@ -15,6 +15,18 @@ import { TenantPlan, TenantBillingStatus } from '../shared/types';
  * Pure + dependency-free so the domain entity, the plan-limits guard, and the LLM
  * gateway resolver all share ONE implementation.
  */
+/**
+ * The plan a request is actually served under, as a plain string union.
+ *
+ * The LLM gateway threads this through pool selection, attempt budgets and
+ * timeouts, where a lightweight union is easier to work with than the
+ * {@link TenantPlan} enum. It was declared THREE times independently
+ * (`LlmProxyService`, `ImageProxyService`, and the pool module) — three copies of
+ * a two-value contract that any new tier would have to be added to in all three.
+ * This is the one declaration; the others re-export it.
+ */
+export type EffectivePlan = 'free' | 'pro' | 'teams';
+
 export interface EffectivePlanInput {
   /** The tenant's nominal plan (free/pro/teams). */
   plan: TenantPlan;

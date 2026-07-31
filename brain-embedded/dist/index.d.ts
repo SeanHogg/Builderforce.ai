@@ -1,4 +1,7 @@
-import * as react from 'react';
+import * as react_jsx_runtime from 'react/jsx-runtime';
+import { ChatErrorAction } from './chatError.js';
+export { BrainRequestError, ChatErrorActionKind, brainRequestError, chatErrorAction } from './chatError.js';
+export { ModelFallbackSurface, announcesUntakenAction, catalogToolNamesMentionedIn, claimsMissingToolData, nextFallbackModel, toolNamesMentionedIn } from '@builderforce/agent-stall';
 
 /**
  * Shared data shapes for the brain core. These define the contract the host
@@ -12,6 +15,14 @@ interface BrainChat {
     projectId: number | null;
     /** Where the chat was created (e.g. 'brainstorm' | 'ide' | 'project'). */
     origin?: string;
+    /**
+     * What this chat is MAKING — a capability id from the host's registry
+     * ('document' | 'slides' | 'dataviz' | 'spreadsheet' | 'website' | 'design' |
+     * 'mobile' | 'animation' | 'game3d'). Shapes the system prompt and the export
+     * format. `null`/absent = no capability. Opaque here: the package stores and
+     * forwards it, the host owns the catalogue.
+     */
+    capability?: string | null;
     createdAt: string;
     updatedAt: string;
 }
@@ -23,6 +34,19 @@ interface BrainChat {
  * it to render a TRUTHFUL `learn` step, replacing the old client-side heuristic guess
  * (which both false-positived and, for a connected-but-empty Evermind, false-negatived).
  */
+/** Per-Evermind learn result — mirrors the api `EvermindTargetOutcome`. A surface's
+ *  project can fan out to MANY Everminds (its own head + the IDE builds grouped under
+ *  it); each is named BY ID so the operator can triage which one did/didn't learn. */
+interface EvermindLearnTarget {
+    /** The Evermind-bearing project id (the build's storage project, or the surface project). */
+    projectId: number;
+    /** Immutable version ref `evermind/project/<t>/<p>/v<version>`; null when unseeded. */
+    ref: string | null;
+    version: number;
+    name: string;
+    learned: boolean;
+    reason: 'not-attached' | 'not-seeded' | 'frozen' | 'too-short' | null;
+}
 interface EvermindLearnOutcome {
     learned: boolean;
     version: number;
@@ -34,6 +58,12 @@ interface EvermindLearnOutcome {
      *   `frozen` Evermind is read-only · `too-short` no teachable assistant text.
      */
     reason?: 'not-attached' | 'not-seeded' | 'frozen' | 'too-short' | null;
+    /**
+     * Per-Evermind breakdown WITH IDs — present when the chat is project-attached. A
+     * project can target 0, 1, or many Everminds; this names each so "which Evermind
+     * (didn't) learn" is triageable instead of a single ambiguous "this project".
+     */
+    targets?: EvermindLearnTarget[];
 }
 /** A single message within a chat. */
 interface BrainMessage {
@@ -112,6 +142,88 @@ interface ChatInputAttachment {
 type BrainModality = string;
 
 /**
+ * The SINGLE source of truth for the composer's "Effort" control.
+ *
+ * Effort used to be prose-only (a system-prompt nudge), so picking Quick vs
+ * Thorough changed nothing measurable about the request. It now drives THREE
+ * things, and every consumer — the UI that describes an effort level to the
+ * user, and the request builder that puts it on the wire — reads them from
+ * here, so the numbers can never drift apart:
+ *
+ *   1. `maxTokens`  → the request's `max_tokens` (previously a hardcoded 4096
+ *                     for every turn regardless of effort).
+ *   2. `reasoningLevel` → the level sent when the Thinking toggle is ON.
+ *   3. the system-prompt nudge (kept — but no longer the ONLY effect).
+ *
+ * ── Why the wire field is VENDOR-NEUTRAL ────────────────────────────────────
+ * The client must NOT emit vendor-specific reasoning params. The gateway's
+ * `reasoningCapability.ts` is the one conservative registry mapping a model id
+ * to the CORRECT vendor param (Anthropic `thinking` for bare `claude-*` only;
+ * OpenAI `reasoning_effort` for o-series/gpt-5; everything else dropped), and a
+ * blanket Anthropic `thinking` sent to a strict OpenAI-compatible coder 400s the
+ * whole run. The client frequently does not even know the model — the picker's
+ * default is "auto (let the gateway choose)".
+ *
+ * So we send INTENT ONLY (`reasoning: { level }`) and the gateway maps it
+ * against the model it actually RESOLVED. {@link ReasoningLevel} deliberately
+ * uses the same member names as the server's `AgentThinkLevel` union so the
+ * gateway can feed it straight into `reasoningParamsForModel` with no second
+ * translation table.
+ *
+ * `balanced` + Thinking OFF is the neutral default and produces a request
+ * byte-identical to the pre-change one (max_tokens 4096, no `reasoning` key).
+ */
+/** How hard the model should work on the next turn — the composer's `/` menu. */
+type Effort = 'quick' | 'balanced' | 'thorough';
+/**
+ * Vendor-neutral reasoning intent. Member names match the server's
+ * `AgentThinkLevel` (from `@builderforce/agent-tools`) so the gateway maps them
+ * without translating. Intentionally NOT imported from that package: this SDK
+ * is published standalone and dependency-free.
+ */
+type ReasoningLevel = 'off' | 'low' | 'medium' | 'high';
+/** The vendor-neutral reasoning field carried on the wire. */
+interface ReasoningIntent {
+    level: ReasoningLevel;
+}
+/** Everything one effort level decides. */
+interface EffortProfile {
+    effort: Effort;
+    /** `max_tokens` for the completion — the answer-length/cost lever. */
+    maxTokens: number;
+    /** The level sent as `reasoning.level` when Thinking is ON. */
+    reasoningLevel: Exclude<ReasoningLevel, 'off'>;
+    /**
+     * The extended-thinking token budget the gateway's registry maps
+     * `reasoningLevel` to. Mirrors `THINK_BUDGET_TOKENS` in
+     * `api/src/application/llm/reasoningCapability.ts` (low 2048 / medium 8192 /
+     * high 16384). DISPLAY ONLY — never sent, so the client cannot drift the
+     * server's actual budget; it exists so the menu can tell the user what the
+     * toggle really costs.
+     */
+    thinkingBudgetTokens: number;
+    /**
+     * The system-prompt nudge for this level, or '' for the neutral default.
+     * Kept alongside the real params (belt and braces for models whose family the
+     * server registry drops the reasoning param for).
+     */
+    directive: string;
+}
+/** The profile for an effort level. Unknown/absent input falls back to `balanced`. */
+declare function effortProfile(effort: Effort | undefined): EffortProfile;
+/** Is this a known effort level? Guards a persisted/user-supplied string. */
+declare function isEffort(value: unknown): value is Effort;
+/**
+ * The vendor-neutral reasoning intent for a run, or `undefined` when Thinking is
+ * OFF — in which case the caller omits the field entirely and the request stays
+ * byte-identical to one from before this feature existed.
+ */
+declare function reasoningForRun(o: {
+    effort: Effort;
+    thinking: boolean;
+}): ReasoningIntent | undefined;
+
+/**
  * The single tool-capable, streaming chat-completion client for the Brain.
  *
  * Targets the OpenAI-compatible gateway `POST {baseUrl}/llm/v1/chat/completions`
@@ -132,6 +244,7 @@ type BrainModality = string;
  * those into the same structured shape (so they actually execute) and strips the
  * markup from the visible text — see `xmlToolCalls.ts`.
  */
+
 /** Injected auth + endpoint config. Built once by BrainProvider from BrainConfig.transport. */
 interface BrainTransport {
     /** Gateway base URL, e.g. https://api.builderforce.ai (no trailing slash). */
@@ -217,6 +330,21 @@ interface StreamHandlers {
     }): void;
     onDone?(finishReason: string | null): void;
 }
+/**
+ * Caller-supplied provenance for a completion, forwarded to the gateway as the
+ * request body's `metadata` object. Every field is optional; the server treats a
+ * missing `chatId` as "not chat traffic" and records nothing.
+ */
+interface CompletionMetadata {
+    /** The Brain chat this completion is serving — the audit emit's switch. */
+    chatId?: number;
+    /** The chat's project, when it has one (scopes the audit row). */
+    projectId?: number;
+    /** Stable identifier of the answering agent. Defaults server-side to `brain-default`. */
+    agentRef?: string;
+    /** Display name of the answering agent. Defaults server-side to `Brain`. */
+    agentName?: string;
+}
 interface StreamChatOptions {
     messages: ChatCompletionMessage[];
     tools?: BrainToolSpec[];
@@ -224,6 +352,29 @@ interface StreamChatOptions {
     model?: string;
     temperature?: number;
     maxTokens?: number;
+    /**
+     * Vendor-neutral reasoning INTENT for this completion. Emitted on the wire as
+     * `reasoning: { level }` and mapped SERVER-side against the model the gateway
+     * actually resolved (`reasoningParamsForModel`), which knows which families
+     * accept Anthropic `thinking` vs OpenAI `reasoning_effort` and drops it for the
+     * rest. The client must never emit a vendor param itself: the model is often
+     * `auto`, and an Anthropic-only `thinking` sent to an OpenAI-compatible coder
+     * 400s the run. Omit (or `{ level: 'off' }`) to leave the body unchanged.
+     */
+    reasoning?: ReasoningIntent;
+    /**
+     * Caller identity for this completion, emitted verbatim as the wire body's
+     * `metadata` object. The gateway reads it in `recordBrainChatModelActivity`
+     * (`api/src/presentation/routes/llmRoutes.ts`) to write the audit-log row that
+     * names WHICH MODEL served this turn — the default-agent twin of the addressed
+     * agent's `BrainService.agentReply` emit. `chatId` is the key that switches the
+     * emit on; without it the server no-ops.
+     *
+     * Only populated fields should be set: an EMPTY object (or `undefined`) omits
+     * the `metadata` key from the body entirely, so anonymous/unsaved runs stay
+     * byte-identical to a pre-feature request (same discipline as `reasoning`).
+     */
+    metadata?: CompletionMetadata;
     signal?: AbortSignal;
     /** Auth + endpoint. Injected by BrainProvider; callers via the hook never set this directly. */
     transport: BrainTransport;
@@ -279,6 +430,14 @@ interface StreamChatResult {
      * is self-explaining instead of looking like "nothing connected".
      */
     byoUnresolved?: string;
+    /**
+     * BYO providers that hit a usage/capacity cap this turn (from
+     * `x-builderforce-provider-cap`, comma-separated) — e.g. the tenant's Anthropic
+     * key hit its monthly spend limit, or Meta MUSE quota was exhausted. Only set
+     * when the tenant's OWN key hit the cap (never the shared operator pool). The
+     * client should prompt the user to manage their provider keys in settings.
+     */
+    providerCap?: string;
     /** Token usage for this completion, when the gateway reported it. */
     usage?: CompletionUsage;
 }
@@ -302,11 +461,13 @@ interface BrainPersistenceAdapter {
     createChat(body: {
         title?: string;
         projectId?: number | null;
+        capability?: string | null;
     }): Promise<BrainChat>;
     updateChat(id: number, body: {
         title?: string;
         projectId?: number | null;
         visibility?: 'shared' | 'locked';
+        capability?: string | null;
     }): Promise<BrainChat>;
     deleteChat(id: number): Promise<unknown>;
     summarizeChat(id: number): Promise<{
@@ -315,6 +476,14 @@ interface BrainPersistenceAdapter {
         error: string;
     }>;
     getMessages(chatId: number, limit?: number): Promise<BrainMessage[]>;
+    /** Subscribe to durable message invalidations for one chat. The callback carries
+     * no data; the hook reconciles from persistence as the source of truth. */
+    subscribeMessages?(chatId: number, onChanged: () => void): () => void;
+    /** Advance the caller's unread high-water mark for a chat to `seq` (a message's
+     * seq; omit to mark everything read). Called when a chat is OPEN/mounted so an
+     * unread badge clears — on either surface, since it's the same server chat.
+     * Optional: a guest/offline backend that has no unread concept simply omits it. */
+    markChatRead?(chatId: number, seq?: number): Promise<unknown>;
     sendMessages(chatId: number, messages: Array<{
         role: string;
         content: string;
@@ -364,7 +533,7 @@ interface BrainRuntime {
 declare function BrainProvider({ config, children, }: {
     config: BrainConfig;
     children: React.ReactNode;
-}): react.JSX.Element;
+}): react_jsx_runtime.JSX.Element;
 /** Consume the resolved brain runtime. Throws if no BrainProvider is mounted. */
 declare function useBrainConfig(): BrainRuntime;
 
@@ -440,13 +609,52 @@ interface EvermindRecallResult {
     items: EvermindRecallItem[];
 }
 /**
- * The single hook a host injects into the run loop. Bound to the active chat's
- * project; returns null when the chat isn't project-scoped or recall is
- * unavailable (so the loop simply skips the memory steps).
+ * A memory-first answer that lets the run loop SKIP the paid model entirely — either
+ * an exact-repeat Q&A cache hit or the project's Evermind SSM. Returned by the opt-in
+ * {@link EvermindRunHooks.answer} hook; null means "memory can't answer, run the LLM".
+ */
+interface MemoryFirstAnswer {
+    /** The answer text to adopt as the assistant turn. */
+    text: string;
+    /** Where it came from — drives the "no LLM" provenance/step. */
+    source: 'qa-cache' | 'evermind';
+    /** Evermind head version, when `source === 'evermind'`. */
+    evermindVersion?: number;
+    /**
+     * WHICH Evermind answered (project id), when `source === 'evermind'`. A project can
+     * target several heads (its own plus the IDE builds grouped under it), so without
+     * this the timeline could not say which one served — and a chat whose OWN project
+     * reports inference OFF could still be answered by a sibling head with no way to
+     * tell. Recorded on the trace step so a memory hit is triageable.
+     */
+    evermindProjectId?: number;
+}
+/**
+ * The hooks a host injects into the run loop. Bound to the active chat's project.
+ * `recall` grounds the answer (RAG); the OPTIONAL `answer`/`cacheAnswer` pair adds the
+ * memory-first short-circuit — answer from the project's own memory (Q&A cache or
+ * Evermind) BEFORE spending a model call, and remember a fresh (question→answer) pair
+ * so the next exact repeat is free. All return null / no-op when the chat isn't
+ * project-scoped or memory is unavailable, so the loop simply falls through to the LLM.
  */
 interface EvermindRunHooks {
     /** Recall the project's learned memories most relevant to `query`. */
     recall(query: string): Promise<EvermindRecallResult | null>;
+    /**
+     * Try to answer `query` from memory WITHOUT the LLM; null → run the model.
+     *
+     * `opts.toolsAvailable` tells the resolver whether THIS run can call tools. It must
+     * be honest: the Evermind SSM has no tool-calling, so when tools are available the
+     * server serves only the Q&A cache (a replay of an answer a real model produced) and
+     * never a fresh SSM generation — otherwise a request whose answer lives behind a tool
+     * call ("which tickets are in the backlog?") gets answered from stale weights while
+     * the tools that could answer it are never called.
+     */
+    answer?(query: string, opts: {
+        toolsAvailable: boolean;
+    }): Promise<MemoryFirstAnswer | null>;
+    /** Remember a (question → answer) pair so an exact repeat short-circuits next time. */
+    cacheAnswer?(query: string, answer: string): void | Promise<void>;
 }
 /**
  * Assistant text shorter than this isn't a teaching signal, so the server won't
@@ -497,7 +705,7 @@ interface BrainActionsContextValue {
 }
 declare function BrainActionsProvider({ children }: {
     children: React.ReactNode;
-}): react.JSX.Element;
+}): react_jsx_runtime.JSX.Element;
 /** Consume the registry (used by the Brain panel/conversation hook). */
 declare function useBrainActions(): BrainActionsContextValue;
 /**
@@ -508,7 +716,34 @@ declare function useBrainActions(): BrainActionsContextValue;
  */
 declare function useRegisterBrainActions(actions: BrainAction[]): void;
 
-/** What a tool call resolved to — handed to {@link UseMcpExtensionsOptions.onToolResult}. */
+/**
+ * The gateway MCP catalog — fetching it, and turning it into callable actions.
+ *
+ * A tenant registers MCP servers in the portal; the gateway advertises their tools at
+ * `GET /llm/v1/mcp/tools` and relays calls at `POST /llm/v1/mcp/call` (server-to-server,
+ * so the MCP secret never reaches the client). This is the whole of that logic, with NO
+ * React in it.
+ *
+ * It lives apart from {@link useMcpExtensions} — which is now a thin hook over it —
+ * because the catalog is the single largest determinant of whether the Brain can answer
+ * anything at all, and it therefore has to be reachable from places React is not: the
+ * headless VS Code probe that reproduces a chat run from a terminal, and the offline
+ * scenario harness that asserts on what a run was offered. Two copies of "how do we
+ * build the tool list" would be two copies of the thing most worth testing.
+ */
+
+/** One tool as the gateway advertises it. */
+interface McpToolEntry {
+    extensionId: string;
+    tool: string;
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+    /** Whether the tool writes. Drives the confirm-before-mutate gate. Undefined
+     *  (external MCP servers don't advertise it) ⇒ treated as mutating (fail safe). */
+    mutates?: boolean;
+}
+/** What a tool call resolved to — handed to the caller's `onToolResult`. */
 interface McpToolResultInfo {
     /** Flat advertised name the model called (e.g. `builtin_tasks_create`). */
     name: string;
@@ -520,6 +755,27 @@ interface McpToolResultInfo {
     /** True when the relay call succeeded (no transport error / `{error}` result). */
     ok: boolean;
 }
+/**
+ * Fetch the tenant's advertised MCP tools.
+ *
+ * THROWS on any failure rather than resolving to an empty list. That is deliberate: a
+ * silent empty catalog leaves the Brain with zero data tools, so every answer degrades
+ * to "I don't have that data" — indistinguishable, from the outside, from a weak model.
+ * Callers record the reason (the hook publishes it to `mcpToolStatus`; the probe prints
+ * it) so a zero is always explained.
+ *
+ * @param skipExtensionIds extensions the host already registers natively, so the Brain
+ * doesn't get the same capability twice.
+ */
+declare function fetchMcpToolEntries(transport: Pick<BrainTransport, 'baseUrl' | 'getToken'>, skipExtensionIds?: readonly string[]): Promise<McpToolEntry[]>;
+/**
+ * Turn advertised catalog entries into {@link BrainAction}s whose `run()` posts the call
+ * through the gateway relay. Pure over its inputs (module-level create-dedupe aside), so
+ * the React hook, the headless probe and the offline harness all produce byte-identical
+ * tool behaviour.
+ */
+declare function mcpActionsFrom(entries: readonly McpToolEntry[], transport: Pick<BrainTransport, 'baseUrl' | 'getToken'>, onToolResult?: (info: McpToolResultInfo) => void): BrainAction[];
+
 interface UseMcpExtensionsOptions {
     /**
      * Extension ids to drop from the fetched tool list. A host that already
@@ -540,6 +796,86 @@ interface UseMcpExtensionsOptions {
 declare function useMcpExtensions(options?: UseMcpExtensionsOptions): {
     loading: boolean;
     toolCount: number;
+    error: string | null;
+};
+
+/**
+ * The one conversion from a registered {@link BrainAction} to the OpenAI `tools[]` entry
+ * the model is shown.
+ *
+ * It lived inline in the React actions registry, which was fine while the registry was
+ * the only thing that ever needed it. It no longer is: a headless runner (the VS Code
+ * probe, the offline scenario harness) assembles the same action list and must advertise
+ * it identically — a second copy of this mapping would be a second definition of what
+ * the model can see, which is the single fact those runners exist to reproduce.
+ *
+ * Type-only import of `BrainAction`, so nothing here pulls React into a Node process.
+ */
+
+/** Advertise these actions to the model. Order is preserved. */
+declare function toolSpecsFor(actions: readonly BrainAction[]): BrainToolSpec[];
+
+/**
+ * Streaming parser for tool calls a model writes inline in its *text* output.
+ *
+ * Some models (and weaker gateway-routed ones) don't emit native OpenAI
+ * `tool_calls` deltas — they write the call into the content stream as markup.
+ * There is no single convention, so this handles every dialect seen in the wild:
+ *
+ *   <tool_call>delete_task<arg_key>id</arg_key><arg_value>75</arg_value></tool_call>
+ *   <function_call>{"name":"delete_task","arguments":{"id":75}}</function_call>
+ *   <tool_use>delete_task {"id":75}</tool_use>
+ *   <invoke name="delete_task"><parameter name="id">75</parameter></invoke>
+ *   <function=delete_task>{"id":75}</function>
+ *
+ * Left untouched that markup (a) renders as literal tags in the chat bubble — the
+ * "garbled reply" symptom — and (b), worse, means the call NEVER executes, because
+ * the agent loop only runs structured `toolCalls`. This filter lifts every dialect
+ * into the same `AssembledToolCall` shape the native path produces AND strips the
+ * markup from the visible text so only clean narration reaches the UI.
+ *
+ * It is a streaming filter: deltas arrive in arbitrary chunks (a tag can split
+ * across two reads), so it holds back any text that is — or might be the start of —
+ * an opening tag, emitting only text that is safe to display.
+ *
+ * Deliberately NOT handled: a bare ```json fenced block. A fenced block is far more
+ * often legitimate content (the model showing the user a payload) than a call, and
+ * swallowing those would eat real answers.
+ */
+/** A tool call lifted out of text, in the native `AssembledToolCall` shape. */
+interface ParsedXmlToolCall {
+    id: string;
+    name: string;
+    /** Raw JSON argument string (parse with `JSON.parse`). */
+    args: string;
+}
+/**
+ * Stateful streaming filter. Feed `push(delta)`; it returns the clean text safe
+ * to display now (markup withheld). Call `flush()` once at end-of-stream.
+ */
+declare class XmlToolCallFilter {
+    private buf;
+    private inside;
+    private insideName;
+    private innerBuf;
+    private clean;
+    private calls;
+    private seq;
+    /** Close the call currently being accumulated and record it. */
+    private commit;
+    /** Feed a content delta; returns clean (markup-free) text to emit now. */
+    push(delta: string): string;
+    /** End of stream: flush held-back text and close any unterminated call. */
+    flush(): string;
+    /** The full clean text accumulated so far. */
+    cleanText(): string;
+    /** Tool calls lifted out of the text. */
+    toolCalls(): ParsedXmlToolCall[];
+}
+/** One-shot convenience for non-streamed content (the no-reader fallback). */
+declare function extractXmlToolCalls(raw: string): {
+    text: string;
+    toolCalls: ParsedXmlToolCall[];
 };
 
 interface BrainPageContext {
@@ -592,7 +928,7 @@ interface BrainContextValue extends BrainPageContext {
 }
 declare function BrainContextProvider({ children }: {
     children: React.ReactNode;
-}): react.JSX.Element;
+}): react_jsx_runtime.JSX.Element;
 /** Read/update the ambient Brain context. Throws if no provider is mounted. */
 declare function useBrainContext(): BrainContextValue;
 /**
@@ -640,8 +976,12 @@ interface UseBrainChats {
     create(opts?: {
         title?: string;
         projectId?: number | null;
+        capability?: string | null;
     }): Promise<BrainChat | null>;
     rename(id: number, title: string): Promise<void>;
+    /** Set (or clear, with null) what the chat is making. Persisted on the chat, so
+     *  the choice follows the conversation across surfaces instead of the browser. */
+    setCapability(id: number, capability: string | null): Promise<void>;
     /**
      * Auto-name a still-untitled chat (title === {@link DEFAULT_CHAT_TITLE}) from its
      * first user message, so "New chat" becomes the topic once the conversation begins.
@@ -809,6 +1149,13 @@ interface BrainTraceEvent {
     resultBytes?: number;
     /** `tool` steps: true when the result sent to the model was truncated. */
     truncated?: boolean;
+    /**
+     * True when this event was RECONSTRUCTED from a durable step row rather than
+     * recorded live this session (see `persistedSteps.traceWithPersistedSteps`).
+     * Diagnostics uses it to tell a fully-observed run from a partially-recovered
+     * one, so mismatched coverage is labelled instead of silently averaged in.
+     */
+    recovered?: boolean;
 }
 /**
  * Did a tool result represent a failure?
@@ -827,6 +1174,92 @@ interface BrainTraceEvent {
  * failure.
  */
 declare function isFailedToolResult(result: unknown): boolean;
+/**
+ * Structural honesty check for the "it said it updated the file but didn't" failure:
+ * an assistant message that CLAIMS a file/attachment write while NO file-write tool
+ * call succeeded in the run. Pure over the recorded trace + visible messages, so the
+ * web report and the VS Code transcript flag it identically. The Brain system prompt
+ * tells the model not to fake a save; this makes a violation visible in every triage
+ * capture (and is reusable by a run-loop guard).
+ */
+declare function detectUnbackedWriteClaim(events: BrainTraceEvent[], messages: BrainMessage[]): boolean;
+/**
+ * The ticket twin of {@link detectUnbackedWriteClaim}: an assistant turn that CLAIMS it
+ * created/filed/linked a ticket, gap, or task while NO create/link tool call succeeded
+ * this run — the "it said it linked the gap to the chat, but the chat shows no link"
+ * failure. The run loop links a REAL create deterministically (autoLinkCreatedItem), so
+ * a claim with no successful create/link tool means nothing was actually filed or
+ * linked. Pure over the recorded trace + visible messages, so both copy surfaces flag
+ * it identically.
+ */
+declare function detectUnbackedTicketClaim(events: BrainTraceEvent[], messages: BrainMessage[]): boolean;
+/**
+ * The "it doesn't execute, it just dies" signature: an assistant turn that NARRATES a
+ * tool call — announcing it in prose, or writing the bare call as text — while the run
+ * recorded ZERO tool steps.
+ *
+ * This is a model fault, not a user one: the agent loop only runs structured
+ * `toolCalls` (plus the inline dialects `xmlToolCalls` lifts), so a model that writes
+ * its intent as plain text achieves nothing. Without this detector the triage block
+ * scores such a run "healthy" (no errors, no truncation, no context pressure), which
+ * is exactly backwards.
+ *
+ * Deliberately reuses `announcesUntakenAction` — the SAME detector the run loop gates
+ * its stall recovery on. Diagnostics that disagreed with the loop about what counts as
+ * a stall would be worse than none: a report could call a run healthy while the loop
+ * had spent three recovery turns on it.
+ *
+ * Pure over the merged trace + visible messages, so both copy surfaces flag it
+ * identically.
+ */
+declare function detectAnnouncedButUnmadeToolCall(events: BrainTraceEvent[], messages: BrainMessage[]): boolean;
+/** How many times this run re-prompted a model that announced a call without making one. */
+declare function stallRecoveriesInTrace(events: BrainTraceEvent[]): number;
+/** How many times this run switched MODELS because one wouldn't emit tool calls. */
+declare function modelFailoversInTrace(events: BrainTraceEvent[]): number;
+/** True when the stall survived every recovery AND every failover this run. */
+declare function stallUnrecoveredInTrace(events: BrainTraceEvent[]): boolean;
+/** Tool-catalog exposure for a run, read off the `llm` turns the loop records. */
+interface ToolExposure {
+    /** Tools advertised on the LAST measured turn (what the model could call at the end). */
+    lastTurn: number | null;
+    /** Fewest tools advertised on any measured turn — a zero here explains everything. */
+    min: number | null;
+    /** Size of the whole registered catalog the selection drew from. */
+    catalog: number | null;
+}
+/**
+ * How many tools the model was actually OFFERED, per turn, versus how many exist.
+ *
+ * The chat-diagnostics header can only report the registry-wide total and the per-turn
+ * CEILING (`up to 64 advertised`). That is not the same question: a turn that was handed
+ * ZERO tools and a turn that was handed sixty-four and ignored them produce byte-identical
+ * reports, and only one of them is the model's fault. The loop now records the real
+ * per-turn number, and this reads it back. Nulls when the run predates the field.
+ */
+declare function toolExposureInTrace(events: BrainTraceEvent[]): ToolExposure;
+/**
+ * Tools the model WROTE OUT by name on a turn that made no call, which it had never been
+ * advertised — recorded per-turn by the run loop (only it holds both halves).
+ *
+ * This is the signal that separates two failures the old report collapsed into one
+ * "the model won't emit tool calls, try another":
+ *   - the model narrated a tool it COULD see  ⇒ genuinely a model/provider fault;
+ *   - the model narrated a tool it could NOT see ⇒ our per-turn tool selection dropped
+ *     the tool the prompt told it to call, and no model can emit a call for a function
+ *     it was never given. Swapping models does nothing.
+ * De-duplicated, first-seen order.
+ */
+declare function narratedUnadvertisedInTrace(events: BrainTraceEvent[]): string[];
+/** One turn the memory-first short-circuit answered — the LLM was never called. */
+interface MemoryAnsweredTurn {
+    /** `evermind` = the project's SSM GENERATED the reply; `qa-cache` = a stored answer was replayed. */
+    source: 'evermind' | 'qa-cache';
+    /** Evermind head version that served it (evermind source only). */
+    version?: number;
+    /** WHICH project's Evermind served it — a project can target several heads. */
+    projectId?: number;
+}
 /**
  * An `evermind/…` (or project-/tenant-pinned) model id means a tenant's own
  * Evermind artifact answered the turn rather than a stock pool model. Matches the
@@ -928,15 +1361,70 @@ interface BrainDiagnostics {
     downgradeEvents: number;
     /** Turns that ended on `length` or produced empty text. */
     emptyOrLengthFinishes: number;
-    /** Best-effort verdict — the header a triager reads first. */
-    likelyCause: 'context-exhaustion' | 'model-degradation' | 'inconclusive';
+    /**
+     * True when a turn NARRATED a tool call ("I'll call the tool…", `builtin_…`) while
+     * the run made none — the model isn't emitting structured `toolCalls`, so nothing
+     * ever executes. See {@link detectAnnouncedButUnmadeToolCall}.
+     */
+    announcedUnmadeToolCall: boolean;
+    /** How many times the loop re-prompted a model that announced a call without making one. */
+    stallRecoveries: number;
+    /** How many times the loop switched MODELS after one burned its whole stall budget. */
+    modelFailovers: number;
+    /** True when the stall survived every recovery and every failover — the run gave up. */
+    stallUnrecovered: boolean;
+    /** How many tools the model was offered on the last measured turn (null ⇒ not recorded). */
+    advertisedToolsLastTurn: number | null;
+    /** Fewest tools offered on any measured turn — a 0 explains a whole run by itself. */
+    advertisedToolsMin: number | null;
+    /** Size of the registered catalog the per-turn selection drew from. */
+    catalogTools: number | null;
+    /**
+     * Tools the model named in prose on a call-less turn that it was never advertised.
+     * Non-empty means the request was impossible as framed — see
+     * {@link narratedUnadvertisedInTrace}.
+     */
+    narratedUnadvertisedTools: string[];
+    /**
+     * Turns the memory-first short-circuit answered WITHOUT calling a model (see
+     * {@link memoryAnswersInTrace}). A run made only of these has no turns, no tokens
+     * and no tool calls — the exact shape of a "the model won't call tools" run, which
+     * is why it must be named rather than left to inference.
+     */
+    memoryAnswers: MemoryAnsweredTurn[];
+    /**
+     * True when tool steps were RECOVERED from durable history but no `llm` turn
+     * covers them — i.e. the chat predates durable turn records (or was reopened),
+     * so the turn/token figures describe only this session while the tool figures
+     * describe the whole conversation. Reported so the two aren't read as one run's
+     * totals: "Turns: 2 · Tool calls: 44" is nonsense unless the mismatch is named.
+     */
+    turnCoveragePartial: boolean;
+    /**
+     * Best-effort verdict — the header a triager reads first. `healthy` is distinct
+     * from `inconclusive`: the former means there is no failure to explain, the
+     * latter that there IS one but the signals don't separate A from B. Collapsing
+     * both into "inconclusive" made a clean run read as an unsolved problem.
+     *
+     * `tool-calls-not-emitted` outranks the rest: a run that narrated its calls did
+     * nothing at all, and every other signal on it reads clean.
+     *
+     * `no-tools-advertised` and `tool-not-advertised` outrank even that, because they are
+     * OUR fault rather than the model's, and the remedy ("pick a different model") that
+     * `tool-calls-not-emitted` prescribes is actively wrong for them.
+     */
+    likelyCause: 'memory-answered' | 'no-tools-advertised' | 'tool-not-advertised' | 'tool-calls-not-emitted' | 'context-exhaustion' | 'model-degradation' | 'inconclusive' | 'healthy';
 }
 /**
  * Derive {@link BrainDiagnostics} from a recorded trace. Pure — no clock, no I/O
  * — so both the web report and the VS Code transcript compute the identical
  * block from the same events (single source of truth for A-vs-B triage).
+ *
+ * `messages` is the visible conversation. It is optional only so older callers keep
+ * compiling; without it the narrated-tool-call verdict can't be reached, so every
+ * surface should pass it.
  */
-declare function computeBrainDiagnostics(events: BrainTraceEvent[], requestedModel?: string): BrainDiagnostics;
+declare function computeBrainDiagnostics(events: BrainTraceEvent[], requestedModel?: string, messages?: BrainMessage[]): BrainDiagnostics;
 /**
  * Render {@link BrainDiagnostics} as transcript lines. Shared by both copy
  * surfaces so the "Diagnostics" block is identical on web and in VS Code. Emits
@@ -985,6 +1473,24 @@ interface UseBrainConversationOptions {
     systemPrompt?: string;
     /** Override the model (e.g. run the Brain as a specific assigned agent). */
     model?: string;
+    /**
+     * Pick the next model when the current one burns its stall budget without emitting
+     * a tool call. Hosts pass `(tried) => nextFallbackModel(surface, tried)` using the
+     * `/llm/v1/models` surface they already cache. Omit to keep the run on one model
+     * and stop with an explanation instead of switching.
+     */
+    pickFallbackModel?: (tried: readonly string[]) => string | undefined;
+    /**
+     * `max_tokens` for this conversation's completions — the host's Effort control
+     * (see `effort.ts`, the single effort→params map). Omit for the 4096 default.
+     */
+    maxTokens?: number;
+    /**
+     * Vendor-neutral reasoning intent (the host's Thinking toggle). Build it with
+     * `reasoningForRun({ effort, thinking })` so the level tracks Effort. Omit /
+     * `undefined` ⇒ no `reasoning` field on the wire at all.
+     */
+    reasoning?: ReasoningIntent;
     /** Tool specs from the page-action registry. */
     toolSpecs?: BrainToolSpec[];
     /** Dispatch a tool call to the registry. */
@@ -1037,6 +1543,13 @@ interface UseBrainConversation {
     reloadMessages: () => void;
     sending: boolean;
     error: string;
+    /**
+     * What the user can DO about {@link error}: reconnect an expired session, upgrade
+     * a plan, or add a card. Decided ONCE from the gateway's structured error body
+     * (see `chatErrorAction`), so an error banner renders the fix without
+     * pattern-matching the message text. Null when only dismissing applies.
+     */
+    errorAction: ChatErrorAction | null;
     /** Live assistant delta buffer (rendered as a trailing bubble while streaming). */
     streamingText: string;
     copiedMessageId: number | null;
@@ -1095,6 +1608,13 @@ interface UseBrainConversation {
      */
     byoUnresolved: string[];
     /**
+     * BYO providers that hit a usage/capacity cap this run (e.g. Anthropic monthly
+     * spend limit, Meta MUSE quota exhausted). A mounted view renders a "manage your
+     * API keys" banner so the user can top up or switch providers. Empty when no cap
+     * was hit this run.
+     */
+    providerCap: string[];
+    /**
      * Assemble a paste-able triage report of the active chat's execution — the LLM
      * steps, the full tool chain (args + results), intermediate assistant messages,
      * every error, and the visible transcript. `agentLabel` names the persona the
@@ -1104,6 +1624,13 @@ interface UseBrainConversation {
     buildTriageReport(agentLabel?: string, surface?: string): string;
 }
 declare function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation;
+
+/**
+ * Shared reconnecting WebSocket invalidation client for Brain chat messages.
+ * Both BuilderForce web and VSIX adapters use this implementation so auth,
+ * reconnect, cleanup, and frame handling cannot drift between surfaces.
+ */
+declare function subscribeToChatMessages(baseUrl: string, getToken: () => string | null, chatId: number, onChanged: () => void): () => void;
 
 /**
  * Module-level Brain run engine — the agent tool-loop, hoisted OUT of React so a
@@ -1146,6 +1673,20 @@ interface BrainRunRequest {
     resolvedSystemPrompt: string;
     tools?: BrainToolSpec[];
     model?: string;
+    /**
+     * Pick the next model to try when the current one has burned its whole stall budget
+     * without emitting a single tool call — i.e. re-prompting it is spent and only a
+     * DIFFERENT model can finish the request.
+     *
+     * The loop is deliberately surface-agnostic here: the host holds the cached
+     * `/llm/v1/models` surface and answers with `nextFallbackModel(surface, tried)`, so
+     * the ordering (own account + tool-calling pool first) lives in ONE shared function
+     * rather than in each host. Return undefined — or omit the callback — to keep the
+     * previous behaviour: stop and explain, instead of switching.
+     *
+     * `tried` holds every model already attempted this run, requested and resolved.
+     */
+    pickFallbackModel?: (tried: readonly string[]) => string | undefined;
     runTool?: (name: string, args: unknown) => Promise<unknown>;
     /** Pure predicate: true → pause the loop for an explicit user confirmation. */
     needsConfirm?: (req: {
@@ -1153,6 +1694,18 @@ interface BrainRunRequest {
         args: unknown;
     }) => boolean;
     stream: BrainStreamFn;
+    /**
+     * `max_tokens` for this run's completions — the composer's Effort level (see
+     * `effort.ts`). Absent keeps `streamChatCompletion`'s 4096 default.
+     */
+    maxTokens?: number;
+    /**
+     * Vendor-neutral reasoning intent for this run (the composer's Thinking toggle,
+     * at the Effort level's intensity). Absent ⇒ no `reasoning` key on the wire.
+     * Applies to the MODEL-FACING turns only — the internal transcript summarizer
+     * is a mechanical compaction, never a "think harder" job.
+     */
+    reasoning?: ReasoningIntent;
     persistence: BrainRunPersistence;
     onActivity?: (chatId: number) => void;
     /** Seed the rich transcript from prior persisted history (first turn only). */
@@ -1193,6 +1746,15 @@ interface BrainRunSnapshot {
     running: boolean;
     streamingText: string;
     error: string;
+    /**
+     * What the user can DO about {@link error}, when the failure was actionable —
+     * an expired session (reconnect), a plan that doesn't cover the request
+     * (upgrade), or billing that needs a card (validate_card). Derived ONCE here
+     * from the thrown error's structured gateway fields via {@link chatErrorAction},
+     * so a mounted view renders the right button without re-parsing error prose.
+     * Null when nothing but dismissing applies.
+     */
+    errorAction: ChatErrorAction | null;
     pendingConfirm: {
         name: string;
         args: unknown;
@@ -1225,6 +1787,14 @@ interface BrainRunSnapshot {
      * when everything resolved (or nothing is connected).
      */
     byoUnresolved: string[];
+    /**
+     * BYO providers whose key hit a usage/capacity cap on any turn of this run
+     * (from `x-builderforce-provider-cap`) — e.g. the tenant's Anthropic key hit its
+     * monthly spend limit, or Meta MUSE quota was exhausted. A mounted view shows a
+     * "manage your API keys" banner so the user knows to top up or switch providers.
+     * Accumulated across turns; reset fresh each run. Empty when no cap was hit.
+     */
+    providerCap: string[];
 }
 /**
  * A snapshot of which chats are live right now, split by whether they are actively
@@ -1236,6 +1806,11 @@ interface GlobalRunState {
     running: number[];
     awaiting: number[];
 }
+/**
+ * Drop all run state. For tests/teardown only — there's no per-chat eviction in
+ * normal operation (transcripts are session-lived grounding, as before).
+ */
+declare function resetBrainRunStore(): void;
 /**
  * Subscribe to ANY run-state change across all chats (a run starting, finishing,
  * or pausing on a confirm — in any chat, mounted or not). Returns an unsubscribe
@@ -1283,6 +1858,125 @@ declare function resolveRunConfirm(chatId: number, ok: boolean): void;
  * (set before any await), so two callers in the same tick can't both pass it.
  */
 declare function startRun(chatId: number, req: BrainRunRequest): Promise<void>;
+
+/**
+ * persistedSteps — the READER for the durable tool/memory step rows the agent
+ * loop writes, and the counterpart to `brainRunStore.persistStep`.
+ *
+ * A run's `trace` is IN-MEMORY ONLY: it lives on the run cell and is gone the
+ * moment the chat is closed, remounted, or resumed in another window. That is
+ * exactly why every tool/memory step is ALSO persisted as a `role:'tool'` message
+ * whose `metadata` carries `{ kind:'step', … }`.
+ *
+ * Every consumer that wants "the steps of this conversation" therefore has to read
+ * BOTH sources and de-duplicate. The timeline already did; the triage diagnostics
+ * did not — it counted the live `trace` alone, so a copied transcript of a reopened
+ * chat rendered 20 tool calls from the persisted rows while the Diagnostics block
+ * above it said `Tool calls: 0`, `Tool results: 0 B`, and — starved of signal —
+ * `Likely cause: Inconclusive`. Both now go through {@link traceWithPersistedSteps}.
+ */
+
+/** A tool/memory step in the shape shared by a live `trace` event and its durable
+ *  persisted copy — so ONE builder covers both sources. */
+interface PersistedStep {
+    category: string;
+    label: string;
+    args?: unknown;
+    result?: unknown;
+    isError?: boolean;
+    durationMs?: number;
+    /** `tool` steps: pre-trim byte size of the full result (the stored copy is capped). */
+    resultBytes?: number;
+    /** `tool` steps: the result the model saw was truncated. */
+    truncated?: boolean;
+    /** `llm` steps: token usage the gateway reported for the turn. */
+    usage?: {
+        prompt?: number;
+        completion?: number;
+        total?: number;
+    };
+    /** `llm` steps: OpenAI finish_reason. */
+    finishReason?: string | null;
+    /** `llm` steps: length of the assistant text the turn produced. */
+    textChars?: number;
+    /** `llm` steps: time-to-first-token. */
+    ttftMs?: number;
+}
+/**
+ * Identity of a step across the live trace and its durable copy: same category +
+ * label + client timestamp. Lets a step present in BOTH be handled once, while a
+ * prior run's step — present only in the messages — still counts.
+ */
+declare function stepSig(category: string, label: string, tsIso: string | undefined): string;
+/**
+ * Parse a persisted `role:'tool'` step message's metadata into a {@link PersistedStep}
+ * plus its client timestamp. Null when the row isn't a well-formed step (so it is
+ * never rendered as an assistant bubble or counted as a tool call).
+ */
+declare function parseStepMessage(metadata: string | null): {
+    step: PersistedStep;
+    tsIso?: string;
+} | null;
+/**
+ * The FULL step + turn history of a conversation as trace events: the live
+ * in-memory `trace` plus every durable step row the messages carry that the trace
+ * doesn't already hold (deduped by {@link stepSig}). Ordered by timestamp so a
+ * reader sees the run in sequence.
+ *
+ * Feed this — not the bare `trace` — to `computeBrainDiagnostics` so a reloaded or
+ * resumed chat reports the tool calls it actually made.
+ *
+ * `persistStep` stores the diagnostics scalars alongside each step — the pre-trim
+ * `resultBytes` + `truncated` flag on a tool step, and `usage` / `finishReason` /
+ * `textChars` on an `llm` turn — so a recovered run reports the same tool counts,
+ * payload sizes, token peaks and finish reasons a live one does. Only the step
+ * RESULT payload is lossy (capped at `STEP_RESULT_CAP` in the stored copy).
+ */
+declare function traceWithPersistedSteps(messages: BrainMessage[], trace: BrainTraceEvent[]): BrainTraceEvent[];
+
+/**
+ * The deployed API version, read once per session from `/health`.
+ *
+ * A support capture with no build stamp is ambiguous in the worst way: a dump taken
+ * minutes BEFORE a deploy is byte-identical to one taken after, so a fixed bug reads
+ * as unfixed. Every surface therefore stamps `UI x · API y` onto its diagnostics.
+ *
+ * The surfaces REACH `/health` differently — the web app hits the api origin
+ * unauthenticated, the VS Code webview goes through its configured gateway base — so
+ * the caller supplies the read and this module owns the part that must not be
+ * duplicated: a session cache plus in-flight coalescing, so the footer, the sidebar
+ * and a diagnostics capture cost one request between them.
+ */
+/**
+ * How long a resolved version stays good.
+ *
+ * IT USED TO BE FOREVER, and that reproduced the EXACT failure the header above says
+ * this module exists to prevent. `cached` was set once per page load and never
+ * invalidated, so a tab open across a deploy stamped every later capture with the build
+ * it started on. Measured 2026-07-29: a diagnostics capture taken twelve hours after
+ * `2026.7.181` shipped reported `apiVersion: 2026.7.180`, and the fixes in that build —
+ * visibly present in the very decision payloads inside the same report — were read as
+ * never deployed. A stamp that lies about which build produced the evidence is worse
+ * than no stamp: it is the one field a reader cannot cross-check.
+ *
+ * A minute is long enough to keep the property the cache was added for (the footer, the
+ * sidebar and a capture still cost ONE request between them) and short enough that no
+ * capture can name a build that is no longer running.
+ */
+declare const API_VERSION_TTL_MS = 60000;
+/** Drop the memoized version — for tests, and for a surface that knows it just
+ *  reconnected to a different deployment. */
+declare function resetApiVersionCache(): void;
+/**
+ * Resolve the API version through `read`, memoizing a success for
+ * {@link API_VERSION_TTL_MS}. Resolves null when `/health` is unreachable — a
+ * diagnostics capture must never fail because a version lookup did.
+ *
+ * `now` is injectable so the expiry is unit-testable without a clock.
+ */
+declare function fetchApiVersionVia(read: () => Promise<{
+    version?: string;
+} | null>, now?: () => number): Promise<string | null>;
 
 /**
  * Chat ⇄ work linking — the single source for (a) the system-prompt directive that
@@ -1461,8 +2155,14 @@ type ProvenanceAccount = 'own' | 'shared' | 'shared_byo_unused';
 interface MessageProvenance {
     /** The model the gateway ACTUALLY used (resolved, post-failover). */
     model: string;
-    /** Which account served it — see {@link ProvenanceAccount}. */
-    account: ProvenanceAccount;
+    /**
+     * Which account served it — see {@link ProvenanceAccount}. OPTIONAL: the
+     * gateway reports it via `x-builderforce-account`, which an older gateway (or a
+     * CORS setup that doesn't expose the header) omits. Requiring it used to drop
+     * the whole record, so a turn's MODEL — the thing users most need when output
+     * quality collapses — went unreported too. Absent = "model known, account not".
+     */
+    account?: ProvenanceAccount;
     /** Vendor that owns `model` (e.g. `anthropic`), when known — names the account
      *  in tooltips ("your connected Claude account"). */
     vendor?: string;
@@ -1479,8 +2179,9 @@ interface MessageProvenance {
  *  wants to nudge the user to check their connection. */
 declare function isConnectedAccountUnused(prov: MessageProvenance | null | undefined): boolean;
 /** Parse a message's persisted provenance, or `null` when it carries none (older
- *  turns, or turns whose gateway didn't report an account). Defensive: a malformed
- *  or partial blob yields `null` rather than throwing. */
+ *  turns). The MODEL is the only required field — a turn whose gateway didn't
+ *  report an account still names the model that answered. Defensive: a malformed
+ *  blob yields `null` rather than throwing. */
 declare function parseMessageProvenance(msg: {
     metadata?: string | null;
 }): MessageProvenance | null;
@@ -1491,6 +2192,33 @@ declare function parseMessageProvenance(msg: {
  * `persistence.sendMessages`. Mirrors `withDirectedMetadata`.
  */
 declare function withProvenanceMetadata(provenance: MessageProvenance | null | undefined, base?: Record<string, unknown>): string | undefined;
+
+/**
+ * The model id the most recent completion ACTUALLY resolved to.
+ *
+ * The gateway auto-selects per turn (a connected BYO account, the learned reorder, or
+ * a cascade failover can all change which model answers), and it reports the winner on
+ * the `x-builderforce-model` response header — which `streamChatCompletion` already
+ * surfaces as `StreamChatResult.resolvedModel`. That value was previously only used for
+ * after-the-fact triage, so the assistant itself had no way to answer "what model are
+ * you running on?" — it would guess, or say it didn't know.
+ *
+ * Recording it here lets the `builtin_session_current_model` MCP tool be answered with
+ * the EXACT model that served the turn instead of the plan default: the MCP bridge reads
+ * this and passes it as the tool's `model` argument (an MCP call is a separate request,
+ * so the server cannot see the chat's resolved model on its own).
+ *
+ * Module-level by design, matching the surface: both hosts (the web Brain and the VS
+ * Code extension) are single-user processes, and the tool call always lands immediately
+ * after the turn that set this. It is therefore "the active conversation's last model" in
+ * practice. Deliberately NOT per-chat state — that would need threading through every
+ * hook for no behavioural gain at this granularity.
+ */
+/** Record the model a completion resolved to. Ignores empty values so a turn that
+ *  reported no model leaves the previous (still-accurate) answer intact. */
+declare function setLastResolvedModel(model: string | undefined | null): void;
+/** The model the last completion resolved to, or undefined before any turn has run. */
+declare function getLastResolvedModel(): string | undefined;
 
 /**
  * chatDiagnostics — a pure serializer for the "Copy diagnostics" action.
@@ -1522,6 +2250,76 @@ interface ChatDiagnosticsEvermind {
     /** ISO timestamp of the last merge, or null if never — the panel's "Last learned". */
     lastLearnedAt?: string | null;
 }
+/** One metered resource, mirroring the `/api/consumption` meter snapshot shape. */
+interface ChatDiagnosticsMeter {
+    /** 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'cloud_runs' */
+    key: string;
+    /** 'tokens' | 'bytes' | 'events' | 'fetches' | 'runs' */
+    unit: string;
+    used: number;
+    /** Monthly allowance; -1 = unlimited. */
+    limit: number;
+    unlimited: boolean;
+    /** Remaining this month; -1 when unlimited. */
+    remaining: number;
+    /** 0–100; 0 when unlimited. */
+    percentUsed: number;
+}
+/**
+ * WHO the user is to the platform and WHAT they are allowed to spend — the half of
+ * "why is this chat behaving like that?" that identity + Evermind state can't answer.
+ *
+ * The motivating case is a brand-new signup: free plan, no card, a small token
+ * allowance and no premium/frontier entitlement. From the outside that looks
+ * indistinguishable from a broken install ("it picked a weak model", "it stopped
+ * answering") — so the report states the plan, the billing status, the month-to-date
+ * meters, and the model entitlement explicitly, and the Signals section names the
+ * consequence rather than leaving the reader to infer it.
+ */
+interface ChatDiagnosticsAccount {
+    /** Effective plan key ('free' | 'pro' | …) as the API resolves it. */
+    plan?: string | null;
+    /** Billing status ('none' = no payment method on file, 'trialing', 'active', …). */
+    billingStatus?: string | null;
+    /** Current metering period — when the allowances reset. */
+    periodStart?: string | null;
+    resetsAt?: string | null;
+    /** Month-to-date usage vs allowance for every metered resource. */
+    meters?: ChatDiagnosticsMeter[];
+    /** The model in force for this chat (absent ⇒ the gateway routes per turn). */
+    model?: string | null;
+    /** Which purse funds `model`: 'byo:<vendor>' | 'plan' | 'premium' | 'auto'. */
+    modelFunding?: string | null;
+    /** Whether the plan entitles the tenant to premium/frontier models. */
+    canUsePremiumModels?: boolean;
+    /** How many models the plan pool currently offers. */
+    planModelCount?: number;
+    /** Connected bring-your-own provider keys (empty ⇒ every turn is plan-funded). */
+    byoProviders?: string[];
+    /** Client build + gateway it is talking to, so a report pins the exact surface. */
+    extensionVersion?: string | null;
+    baseUrl?: string | null;
+}
+/**
+ * WHICH purse funds a model, as a machine key: `auto` (no pin — the gateway routes per
+ * turn), `byo:<vendor>` (the tenant's own connected account), `plan` (in the plan pool,
+ * included), or `premium` (metered at cost + per-request fee).
+ *
+ * ONE decision, two consumers: the chat header renders a localized sentence from it and
+ * the diagnostics report records it. Kept here (not in a UI file) so the sentence a user
+ * READS and the key a support report SHOWS can never disagree.
+ */
+declare function classifyModelFunding(model: string | null | undefined, surface: {
+    data?: Array<{
+        id?: string;
+    }>;
+    byo?: {
+        models?: Array<{
+            id?: string;
+            vendor?: string;
+        }>;
+    };
+} | null | undefined): string;
 /** Everything the diagnostics block needs — already gathered by the host (pure in). */
 interface ChatDiagnosticsData {
     surface?: string;
@@ -1555,7 +2353,47 @@ interface ChatDiagnosticsData {
         linkType?: string;
         status?: string;
     }>;
+    /** Plan, quota and model entitlement for the signed-in tenant (see the interface). */
+    account?: ChatDiagnosticsAccount | null;
+    /**
+     * How many tools the model could actually call, and why not more. Without this
+     * a tool-less Brain ("I don't have that data", zero tool calls) is
+     * indistinguishable from a model that simply chose not to call anything — the
+     * exact ambiguity that made a silent MCP-catalog failure impossible to diagnose.
+     */
+    tools?: {
+        count: number;
+        error?: string | null;
+        loading?: boolean;
+    } | null;
+    /**
+     * Which BUILD produced this capture. Without it a dump taken minutes before a
+     * deploy is indistinguishable from one taken after, so a fixed bug reads as
+     * unfixed — which is exactly what happened while debugging chat #71.
+     */
+    versions?: {
+        ui?: string | null;
+        api?: string | null;
+    } | null;
 }
+/** How close a metered allowance is to stopping turns. */
+type AllowanceState = 'ok' | 'warn' | 'exhausted';
+/**
+ * Classify a token allowance. THE single definition of the thresholds — the
+ * diagnostics signals below and any host banner must agree on when to warn, or a
+ * user gets a scary banner and a calm report (or vice versa).
+ *
+ * Takes the structural meter shape, so hosts can pass their own
+ * `/api/consumption` snapshot meter without converting it.
+ *
+ * `unlimited` is authoritative: a tenant the gateway does not cap must never be
+ * told it is out of tokens, however large `used` grows.
+ */
+declare function allowanceState(meter: {
+    unlimited: boolean;
+    remaining: number;
+    percentUsed: number;
+} | null | undefined): AllowanceState;
 /**
  * Render the diagnostics block as Markdown lines (no trailing blank line). Every field
  * is best-effort: an absent value is shown as "unknown"/"none" rather than omitted, so
@@ -1563,4 +2401,161 @@ interface ChatDiagnosticsData {
  */
 declare function formatChatDiagnostics(d: ChatDiagnosticsData): string[];
 
-export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatInputAttachment, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type EvermindLearnOutcome, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolResultInfo, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, startRun, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+/**
+ * Last-known state of the MCP tool catalog fetch — a module singleton, mirroring
+ * `lastResolvedModel`.
+ *
+ * Why this exists: `useMcpExtensions` fetches the gateway's tool catalog, and a
+ * failure there (401, 500, network) used to collapse silently to an EMPTY tool
+ * list. The Brain then has no data tools, so every answer becomes "I don't have
+ * that data" / "calling the tool now" followed by nothing — indistinguishable from
+ * a weak model, and invisible in the diagnostics dump.
+ *
+ * The hook publishes here; the diagnostics reporter reads it, so "how many tools
+ * did the model actually have?" is always answerable after the fact.
+ */
+interface McpToolStatus {
+    /** Tools registered into the Brain's loop (0 = the model can call nothing). */
+    count: number;
+    /** Why the catalog fetch failed, when it did. Null on success. */
+    error: string | null;
+    /** True until the first fetch settles. */
+    loading: boolean;
+}
+declare function setMcpToolStatus(next: McpToolStatus): void;
+declare function getMcpToolStatus(): McpToolStatus;
+
+/**
+ * Per-turn tool selection.
+ *
+ * The Brain's catalog has grown to ~300 tools (205 first-party `builtin_*` entries
+ * plus tenant MCP servers and navigation). Sending ALL of them on every turn is
+ * the failure mode this module exists to fix:
+ *
+ *   - Most providers degrade sharply past ~128 tool definitions, and small
+ *     free-pool models routinely respond to an oversized catalog by emitting NO
+ *     tool calls at all — observed live: a chart request answered with "I do not
+ *     have the task status data", zero tool calls, three times running, with 308
+ *     tools advertised.
+ *   - Every definition carries a JSON schema, so the catalog alone can dominate
+ *     the prompt budget before the conversation is even considered.
+ *
+ * The selection is LEXICAL and deterministic — no embeddings, no extra round trip,
+ * no network. It scores each tool against the live turn's text and keeps the best
+ * `limit`, while pinning anything the run has already touched so a multi-step task
+ * never loses a tool mid-flight.
+ *
+ * Safety posture: when in doubt, INCLUDE. A catalog at or under the limit is
+ * returned untouched, so small deployments behave exactly as before.
+ */
+
+/**
+ * How many tools to advertise per turn. Comfortably under the ~128 threshold where
+ * providers start to degrade, while leaving room for a broad request to still see
+ * several domains at once.
+ */
+declare const DEFAULT_TOOL_LIMIT = 64;
+interface SelectToolsOptions {
+    /** The turn's text — typically the latest user message. */
+    query: string;
+    /** Max tools to advertise. Defaults to {@link DEFAULT_TOOL_LIMIT}. */
+    limit?: number;
+    /**
+     * Tool names already called in this run. Always kept regardless of score, so a
+     * multi-step task cannot lose a tool it is mid-way through using.
+     */
+    pinned?: Iterable<string>;
+    /**
+     * Tool names the SYSTEM PROMPT instructs the model to call. Kept ahead of
+     * everything else, because advertising less than the prompt promises is a
+     * contradiction the model can only resolve by narrating a call it cannot make.
+     */
+    required?: Iterable<string>;
+}
+interface ToolSelection {
+    tools: BrainToolSpec[];
+    /** True when the catalog was trimmed (i.e. selection actually applied). */
+    trimmed: boolean;
+    /** Size of the catalog before selection — recorded in the run trace. */
+    available: number;
+}
+/**
+ * Choose the tools to advertise for one turn.
+ *
+ * Order of inclusion: pinned tools first (continuity), then by descending
+ * relevance, then — if the limit is still unmet — catalog order, so a vague query
+ * ("help me") still gets a usable, stable set rather than an arbitrary one.
+ */
+declare function selectToolsForTurn(tools: BrainToolSpec[] | undefined, options: SelectToolsOptions): ToolSelection;
+
+/**
+ * The tool ROUTER — the escape hatch that makes per-turn tool selection lossless.
+ *
+ * The problem with advertising a relevance-picked subset of a ~317-tool catalog is
+ * not that it picks badly; it is that picking AT ALL is lossy and the model has no
+ * way to know. A tool that misses the cut simply does not exist from where the model
+ * is standing, so a request that needs it ends in a narrated call or an "I don't have
+ * that data" — with no signal that the capability was there all along, one rank below
+ * the cut. Worse, the cut is recomputed per turn, so a tool can be present on one
+ * turn and gone on the next.
+ *
+ * The fix is a different DATA STRUCTURE rather than a better ranking: keep advertising
+ * the relevant leaves for ergonomics, and additionally advertise three small, FIXED
+ * tools that together reach every tool in the catalog:
+ *
+ *   find     → search the full catalog by keyword          (name + description only)
+ *   describe → fetch one tool's exact JSON schema           (so args can be built)
+ *   invoke   → call any tool in the catalog by name         (dispatch to the real one)
+ *
+ * Cost is three schemas per turn instead of 317, and the guarantee flips: nothing is
+ * ever unreachable, only less convenient. This is progressive disclosure — the model
+ * pays a round trip for the long tail and nothing for the hot set.
+ *
+ * Everything resolves against the in-memory catalog the run already holds, so `find`
+ * and `describe` cost no network at all.
+ */
+
+/** Advertised names of the three router tools. Stable — the model learns them. */
+declare const TOOL_ROUTER_FIND = "builtin_tools_find";
+declare const TOOL_ROUTER_DESCRIBE = "builtin_tools_describe";
+declare const TOOL_ROUTER_INVOKE = "builtin_tools_invoke";
+/** True when `name` is one of the router's own tools (not a catalog tool). */
+declare function isRouterTool(name: string): boolean;
+/**
+ * The three router specs. Their descriptions are written AT the model: they have to
+ * make it obvious that a missing tool is a lookup away, because a model that does not
+ * know the catalog is bigger than its tool list will never think to look.
+ */
+declare function routerToolSpecs(catalogSize: number): BrainToolSpec[];
+/** One catalog entry as `find` reports it. */
+interface ToolCatalogMatch {
+    name: string;
+    description: string;
+}
+/**
+ * Keyword search over the FULL catalog. Ranks a name match above a description match
+ * (the same weighting `selectTools` uses — the model should see the tool whose NAME is
+ * about tickets before one that merely mentions them).
+ */
+declare function findTools(catalog: BrainToolSpec[], query: string, limit?: number): ToolCatalogMatch[];
+/** The exact spec for one catalog tool, or null when the name is unknown. */
+declare function describeTool(catalog: BrainToolSpec[], name: string): BrainToolSpec | null;
+/**
+ * Run a router call against the in-memory catalog.
+ *
+ * `find` and `describe` are answered locally (no network). `invoke` unwraps to a real
+ * catalog call and is dispatched by the caller through `runTool`, so every guard the
+ * normal path applies — confirmation gate, dedupe, audit, auto-link — still applies to
+ * a routed call. Returns `{ dispatch }` for that case rather than calling anything
+ * itself, keeping this module pure.
+ */
+declare function handleRouterCall(catalog: BrainToolSpec[], name: string, args: unknown): {
+    result: unknown;
+} | {
+    dispatch: {
+        name: string;
+        args: unknown;
+    };
+};
+
+export { ADDRESSED_TO_META_KEY, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AllowanceState, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, ChatErrorAction, type ChatInputAttachment, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PersistedStep, type PreparedImage, type ProvenanceAccount, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolExposure, type ToolSelection, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, allowanceState, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mcpActionsFrom, mentionRecipient, modelFailoversInTrace, modelsUsedInTrace, narratedUnadvertisedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parseStepMessage, prepareImageDataUrl, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, routerToolSpecs, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolExposureInTrace, toolSpecsFor, traceWithPersistedSteps, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };

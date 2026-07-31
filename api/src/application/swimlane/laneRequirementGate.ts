@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Lane requirement gating — pillar 2 of the Agentic Workforce Kanban.
  *
@@ -14,36 +15,58 @@
  *            (the lane's normal agent runs once the ticket re-enters satisfied).
  *   'hard' → block the lane's normal auto-run until every required reviewer has
  *            signed off, even when no reviewer agent can be resolved (waits for a human).
+ *
+ * TWO SOURCES OF "WHO APPROVES THIS LANE". Requirement rows are the FIRST source, not
+ * the only one: measured in production, 1 of 11 boards has any, so on the other 10 this
+ * gate used to return `none` before reaching a single dispatch. The fallback is the
+ * lane's STAFFING (`swimlane_agent_assignments`), resolved by the shared, documented
+ * precedence in {@link resolveLaneApprovers} — see `laneApprover.ts` for the whole rule
+ * and why the fall-through remains fail-closed. Both sources converge on the SAME
+ * round-trip contract ({@link requestRoleRun}), so a board with a template and a board
+ * with only staffing produce the same accountability record.
  */
 import { and, asc, eq } from 'drizzle-orm';
 import {
-  boards,
-  ideAgents,
   swimlaneAgentAssignments,
   swimlaneRequirements,
   swimlanes,
+  tasks,
   ticketRoleSignoffs,
 } from '../../infrastructure/database/schema';
+import { requirementApplies } from '../kanban/types';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import type { TicketAuditService } from '../audit/ticketAuditService';
-import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
-import { agentMatchesRole, normalizeRoleText } from '../kanban/roleMatch';
-import { BUILTIN_ROLES } from '../kanban/roleCatalog';
+import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
+import { normalizeRoleText } from '../kanban/roleMatch';
+import { roleDisplayName } from '../kanban/roleCatalog';
+import { resolveRoleCapableAgents } from '../kanban/roleCapability';
+import { TicketParticipantsService } from '../kanban/ticketParticipants';
+import { isParticipantSatisfied } from '../kanban/participantStates';
+import { requestRoleRun } from '../kanban/requestRoleRun';
+import { findCanonicalBoard } from './canonicalBoard';
+import { decideLaneAgentApproval, laneApprovalOwed, resolveLaneApprovers, type StaffedLaneApprover } from './laneApprover';
 
 export interface LaneGateOutcome {
-  /** Suppress the lane's normal auto-run this hop (a reviewer round-trip is owed). */
+  /** Suppress the lane's normal auto-run this hop (a reviewer round-trip or producer
+   *  dispatch is owed, or a hard gate is unmet). */
   blocked: boolean;
   flagged: boolean;
   dispatchedReviewers: string[];
+  /** Role-capable producers dispatched AS their role on a hard producer stage. */
+  dispatchedProducers: string[];
 }
 
-const roleName = (key: string): string => BUILTIN_ROLES.find((r) => r.key === key)?.name ?? key;
+// Display names come from the ONE resolver in `roleCatalog` (this module used to keep a
+// private copy that returned the raw key for tenant-custom roles).
+const roleName = roleDisplayName;
 
-/** Resolve a runnable agent for a role: a staffed lane agent first, else a tenant
- *  agent whose title/skills match. Null when no agent can fill the role. */
-async function resolveRoleAgent(db: Db, tenantId: number, boardId: string, roleKey: string): Promise<string | null> {
+/** Resolve a runnable agent for a role: a staffed lane agent first, else the
+ *  first ROLE-CAPABLE agent (explicit pin → role_keys → builtin_kind → fuzzy —
+ *  the first-class capability resolver, superseding the old fuzzy-only match).
+ *  Null when no agent can fill the role. */
+async function resolveRoleAgent(env: Env, db: Db, tenantId: number, projectId: number, boardId: string, roleKey: string): Promise<string | null> {
   const nk = normalizeRoleText(roleKey);
   const staffed = await db
     .select({ agentRef: swimlaneAgentAssignments.agentRef, role: swimlaneAgentAssignments.role })
@@ -52,12 +75,141 @@ async function resolveRoleAgent(db: Db, tenantId: number, boardId: string, roleK
     .where(eq(swimlanes.boardId, boardId));
   for (const s of staffed) if (s.agentRef && normalizeRoleText(s.role) === nk) return s.agentRef;
 
-  const agents = await db
-    .select({ id: ideAgents.id, name: ideAgents.name, title: ideAgents.title, skills: ideAgents.skills })
-    .from(ideAgents)
-    .where(eq(ideAgents.tenantId, tenantId));
-  for (const a of agents) if (agentMatchesRole(a, roleKey, roleName(roleKey))) return a.id;
-  return null;
+  const [capable] = await resolveRoleCapableAgents(env, db, tenantId, projectId, roleKey);
+  return capable?.ref ?? null;
+}
+
+/** A live run already owns this ticket — never pile a second one on top of it. */
+async function hasLiveRun(runtimeService: RuntimeService, taskId: number): Promise<boolean> {
+  const execs = await runtimeService.listByTask(taskId).catch(() => []);
+  return execs
+    .map((e) => e.toPlain())
+    .some((e) => ['pending', 'submitted', 'running', 'paused'].includes(e.status));
+}
+
+/**
+ * TIER (b) — approval driven by the lane's ASSIGNED AGENT, for the boards (10 of 11 in
+ * production) that declare no `swimlane_requirements` rows at all.
+ *
+ * Three properties make this safe to run on every lane entry of every un-templated
+ * board:
+ *
+ *  1. IT NEVER PREEMPTS THE WORK. The approval is owed only once the lane's work has
+ *     actually run — which the manifest records for us, because `attributeRunToManifest`
+ *     advances the slot to `in_progress` when a run for that role/stage finalizes. While
+ *     the slot is still `assigned` this returns a non-blocking outcome so the lane's
+ *     NORMAL agent runs first. Dispatching a reviewer before the work exists would have
+ *     replaced implementation with a review on all 10 boards — a regression far worse
+ *     than the missing sign-off.
+ *  2. IT ALWAYS LEAVES A SLOT BEHIND. The required participant is materialised even when
+ *     nothing is dispatched, so `decideSignoffGate` has a real, named thing to wait for
+ *     instead of an empty manifest, and the AI Manager's `driveOutstandingSignoffs` can
+ *     drive the same slot from the review lane.
+ *  3. IT FAILS CLOSED. No resolvable approver ⇒ no slot, no dispatch, no block — and an
+ *     empty manifest keeps `decideSignoffGate` shut. Absence of an approver is never
+ *     treated as approval.
+ *
+ * Best-effort throughout (the caller's contract): every step swallows its own failure.
+ */
+async function enforceLaneAgentApproval(
+  env: Env,
+  db: Db,
+  runtimeService: RuntimeService,
+  participants: TicketParticipantsService,
+  args: {
+    tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string;
+    taskTitle: string | null;
+    /** Human-initiated tick — see the same field on {@link enforceLaneRequirements}. */
+    force?: boolean;
+  },
+  lane: { id: string; requirementGate: string; isTerminal: boolean },
+): Promise<LaneGateOutcome> {
+  const none: LaneGateOutcome = { blocked: false, flagged: false, dispatchedReviewers: [], dispatchedProducers: [] };
+  // A terminal (Done) lane has nothing left to approve — the ticket is finalized, and a
+  // review run dispatched here could only burn tokens on a decision nobody can act on.
+  if (lane.isTerminal) return none;
+
+  // ONE resolver, shared with the manager and the managed-execution guard. Passing no
+  // requirement refs is what selects tier (b); it is the caller's job to have already
+  // established that tier (a) is empty for THIS ticket.
+  const decision = await resolveLaneApprovers(db, { tenantId: args.tenantId, swimlaneId: lane.id, requirementRoleKeys: [] })
+    .catch(() => null);
+  if (!decision?.approverResolved) return none;
+
+  // Materialise the required reviewer slot(s) — idempotent on the slot unique index
+  // (taskId, stageKey, roleKey, responsibility, source), so re-entering the lane upserts
+  // rather than duplicating. `reviewer` responsibility is deliberate: a reviewer slot
+  // completes only on a recorded VERDICT, whereas an owner/contributor slot completes on
+  // a run with PR evidence — and the point here is the sign-off, not the delivery.
+  const approvers = decision.approvers.flatMap((a): StaffedLaneApprover[] =>
+    a.agentRef ? [{ ...a, agentRef: a.agentRef }] : []);
+  for (const approver of approvers) {
+    await participants.addParticipant(env, args.tenantId, args.taskId, {
+      roleKey: approver.roleKey,
+      responsibility: 'reviewer',
+      stageKey: args.status,
+      source: 'lane_agent',
+      assignee: { kind: 'agent', ref: approver.agentRef, name: approver.agentName ?? approver.agentRef },
+      note: `Lane '${args.status}' declares no role requirements — its assigned agent ${approver.agentName ?? approver.agentRef} is accountable for sign-off as ${approver.roleName}.`,
+    }).catch(() => null);
+  }
+
+  const manifest = await participants.listParticipants(env, args.tenantId, args.taskId).catch(() => []);
+  const stateByRole = new Map(manifest.filter((p) => p.stageKey === args.status).map((p) => [p.roleKey, p.state]));
+
+  // Cheap pre-check on the SAME shared rule the full decision applies, so the common case
+  // (the lane's work has not run yet) costs nothing extra — this path is reached on nearly
+  // every lane entry, and the two queries below are only worth paying for once an approval
+  // is genuinely outstanding.
+  if (laneApprovalOwed(approvers, stateByRole).length === 0) return none;
+
+  // Roles that have ALREADY recorded any verdict, and whether a run already owns the
+  // ticket — the two loop/idempotency guards the decision needs.
+  const answered = new Set(
+    (await db
+      .select({ roleKey: ticketRoleSignoffs.roleKey })
+      .from(ticketRoleSignoffs)
+      .where(eq(ticketRoleSignoffs.taskId, args.taskId))
+      .catch(() => []))
+      .map((v) => v.roleKey),
+  );
+  const decided = decideLaneAgentApproval({
+    approvers,
+    stateByRole,
+    answered,
+    hasLiveRun: await hasLiveRun(runtimeService, args.taskId),
+    requirementGate: lane.requirementGate,
+  });
+  if (decided.owed.length === 0) return none;
+
+  const dispatchedReviewers: string[] = [];
+  if (decided.ask) {
+    const approver = decided.ask;
+    const execId = await requestRoleRun(env, db, runtimeService, participants, {
+      tenantId: args.tenantId,
+      projectId: args.projectId,
+      taskId: args.taskId,
+      taskTitle: args.taskTitle,
+      roleKey: approver.roleKey,
+      roleName: approver.roleName,
+      agentRef: approver.agentRef,
+      model: approver.model,
+      laneKey: args.status,
+      kind: 'reviewer',
+      submittedBy: composeDispatcherLabel(args.submittedBy, 'lane-approver', approver.roleKey),
+      ...(args.force ? { force: true } : {}),
+    });
+    if (execId != null) dispatchedReviewers.push(approver.roleKey);
+  }
+
+  return {
+    // A dispatch that failed to produce an execution must not suppress the lane's normal
+    // agent — only a real in-flight approval run (or an unmet 'hard' gate) does.
+    blocked: dispatchedReviewers.length > 0 || (decided.blocked && !decided.ask),
+    flagged: decided.flagged,
+    dispatchedReviewers,
+    dispatchedProducers: [],
+  };
 }
 
 /**
@@ -70,36 +222,69 @@ export async function enforceLaneRequirements(
   db: Db,
   runtimeService: RuntimeService,
   auditService: TicketAuditService,
-  args: { tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string },
+  args: {
+    tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string;
+    /**
+     * A HUMAN asked for this tick ("Dispatch reviewers"), so the role asks override the
+     * failure breaker and the re-run cooldown exactly as "Run now" does. Without it the
+     * button is inert on the tickets that need it most: a ticket whose last runs failed
+     * has its reviewer dispatch refused, so the click reports "dispatched: false" and
+     * the operator has no way to ask a reviewer at all. Autonomous callers leave it
+     * unset — the breaker is what stops them re-asking a failing ticket forever.
+     */
+    force?: boolean;
+  },
 ): Promise<LaneGateOutcome> {
-  const none: LaneGateOutcome = { blocked: false, flagged: false, dispatchedReviewers: [] };
+  const none: LaneGateOutcome = { blocked: false, flagged: false, dispatchedReviewers: [], dispatchedProducers: [] };
+  const participants = new TicketParticipantsService(db);
   try {
-    const [board] = await db.select({ id: boards.id }).from(boards).where(eq(boards.projectId, args.projectId)).limit(1);
+    const board = await findCanonicalBoard(db, args.projectId, args.tenantId);
     if (!board) return none;
     const [lane] = await db
-      .select({ id: swimlanes.id, requirementGate: swimlanes.requirementGate })
+      .select({ id: swimlanes.id, requirementGate: swimlanes.requirementGate, isTerminal: swimlanes.isTerminal })
       .from(swimlanes)
       .where(and(eq(swimlanes.boardId, board.id), eq(swimlanes.key, args.status)))
       .limit(1);
     if (!lane) return none;
 
     // Always compute the audit so entering any lane refreshes coverage / the flag.
-    await auditService.computeAudit(env, args.tenantId, args.taskId).catch(() => {});
+    await auditService.computeAudit(env, args.tenantId, args.taskId).catch((error) => {
+      reportCaughtError(error, { source: "application/swimlane/laneRequirementGate.ts", operation: "enforceLaneRequirements" });
+    });
 
     if (lane.requirementGate === 'off') return none;
 
-    // Required reviewer requirements on THIS lane.
-    const reqRows = await db
-      .select({ kind: swimlaneRequirements.kind, ref: swimlaneRequirements.ref, responsibility: swimlaneRequirements.responsibility, isRequired: swimlaneRequirements.isRequired })
+    // Requirements on THIS lane, scoped to the ticket's type/condition (a Security
+    // ticket requires the security role; a docs ticket doesn't require QA).
+    const [taskRow] = await db.select({ title: tasks.title, taskType: tasks.taskType, actionType: tasks.actionType }).from(tasks).where(eq(tasks.id, args.taskId)).limit(1);
+    const allReqRows = await db
+      .select({ kind: swimlaneRequirements.kind, ref: swimlaneRequirements.ref, responsibility: swimlaneRequirements.responsibility, isRequired: swimlaneRequirements.isRequired, ticketType: swimlaneRequirements.ticketType, condition: swimlaneRequirements.condition, quorum: swimlaneRequirements.quorum })
       .from(swimlaneRequirements)
       .where(eq(swimlaneRequirements.swimlaneId, lane.id))
       .orderBy(asc(swimlaneRequirements.position));
+    const reqRows = allReqRows.filter((r) => requirementApplies({ ticketType: r.ticketType, condition: r.condition }, { taskType: taskRow?.taskType ?? null, actionType: taskRow?.actionType ?? null }));
     const requiredReviewers = reqRows.filter(
       (r) => r.isRequired && (r.kind === 'review' || (r.kind === 'role' && r.responsibility === 'reviewer')),
     );
-    if (requiredReviewers.length === 0) return none;
+    // Reviewer quorum for this lane: smallest declared quorum, capped at the set size;
+    // default = the set size (all reviewers must approve — the legacy rule).
+    const declaredQuorums = requiredReviewers.map((r) => r.quorum).filter((q): q is number => typeof q === 'number' && q > 0);
+    const reviewerQuorum = Math.min(requiredReviewers.length || 1, declaredQuorums.length ? Math.min(...declaredQuorums) : (requiredReviewers.length || 1));
+    // Producers = required role requirements a role must PRODUCE (owner/contributor,
+    // or a bare role which we treat as owner). Now first-class gating (past reviewers).
+    const requiredProducers = reqRows.filter(
+      (r) => r.isRequired && r.kind === 'role' && (r.responsibility == null || r.responsibility === 'owner' || r.responsibility === 'contributor'),
+    );
+    // TIER (b): this lane declares nothing that applies to this ticket. Rather than the
+    // old unconditional `return none` — which is why 10 of 11 boards never produced a
+    // single sign-off — fall through to the lane's ASSIGNED AGENT as the approver.
+    if (requiredReviewers.length === 0 && requiredProducers.length === 0) {
+      return await enforceLaneAgentApproval(env, db, runtimeService, participants, {
+        ...args, taskTitle: taskRow?.title ?? null,
+      }, lane);
+    }
 
-    // Which reviewer roles have an approving sign-off already?
+    // Reviewer sign-off state (latest verdict per role).
     const signoffs = await db
       .select({ roleKey: ticketRoleSignoffs.roleKey, verdict: ticketRoleSignoffs.verdict, createdAt: ticketRoleSignoffs.createdAt })
       .from(ticketRoleSignoffs)
@@ -107,55 +292,114 @@ export async function enforceLaneRequirements(
       .orderBy(asc(ticketRoleSignoffs.createdAt));
     const latest = new Map<string, string>();
     for (const s of signoffs) latest.set(s.roleKey, s.verdict);
-    // Unmet = any required reviewer without an APPROVED sign-off (drives the flag +
-    // hard block). To-dispatch = reviewers NEVER engaged (no sign-off row at all) —
-    // once a reviewer records ANY verdict we stop re-dispatching, so repeated lane
-    // entries can't spawn an endless reviewer loop. A 'changes_requested' verdict
-    // therefore keeps the ticket flagged for the Developer to resolve without
-    // re-summoning the reviewer every hop.
-    const unmet = requiredReviewers.filter((r) => latest.get(r.ref) !== 'approved');
-    if (unmet.length === 0) return none;
-    const toDispatch = requiredReviewers.filter((r) => !latest.has(r.ref));
 
-    // Dispatch the un-engaged reviewer role agents (round-trip). Guard against piling
-    // up runs: if a live run already exists on the ticket, only flag this hop.
-    const execs = await runtimeService.listByTask(args.taskId).catch(() => []);
-    const hasLive = execs
-      .map((e) => e.toPlain())
-      .some((e) => ['pending', 'submitted', 'running', 'paused'].includes(e.status));
+    // Live-run guard: never pile up runs — if one is in flight, only flag this hop.
+    const hasLive = await hasLiveRun(runtimeService, args.taskId);
 
     const dispatchedReviewers: string[] = [];
-    if (!hasLive) {
+    const dispatchedProducers: string[] = [];
+
+    // The ticket's manifest state for THIS lane — loaded ONCE and shared by both blocks
+    // below. The producer block used to load it privately and the reviewer block had no
+    // slot awareness at all, which is the bug the reviewer filter below fixes.
+    const manifest = await participants.listParticipants(env, args.tenantId, args.taskId).catch(() => []);
+    const stateByRole = new Map(manifest.filter((p) => p.stageKey === args.status).map((p) => [p.roleKey, p.state]));
+
+    // ── Reviewers (quorum-aware round-trip) ─────────────────────────────────
+    // The reviewer SET is met once `reviewerQuorum` approvals land (2-of-3 advances on
+    // the 2nd approval, not the 1st). To-dispatch = reviewers not yet ASKED and not yet
+    // ANSWERED — both halves are required for loop safety, see the filter below.
+    const approvedReviewers = requiredReviewers.filter((r) => latest.get(r.ref) === 'approved').length;
+    const reviewerSetUnmet = requiredReviewers.length > 0 && approvedReviewers < reviewerQuorum;
+    if (reviewerSetUnmet && !hasLive) {
+      // `!latest.has(ref)` alone is not a loop guard, only a de-duplicator for reviewers
+      // that ANSWERED. A reviewer run that COMPLETES WITHOUT recording a verdict writes
+      // no ledger row, so this filter re-selected it on every sweep tick, forever — and
+      // because those runs succeed, neither the consecutive-failure breaker nor the
+      // re-run cooldown (which both key on FAILED runs) ever saw them. One un-recorded
+      // verdict was therefore an unbounded paid dispatch loop.
+      //
+      // `in_progress` is the slot state `markRoleInProgress` writes the moment a reviewer
+      // is dispatched, so it is the record that this lane already asked. One ask per
+      // reviewer per stage; re-asking is the AI Manager's `driveOutstandingSignoffs`,
+      // which is bounded, journalled to `manager_actions`, and escalates through stall
+      // triage — the path that is supposed to own retries.
+      const toDispatch = requiredReviewers.filter((r) => !latest.has(r.ref) && stateByRole.get(r.ref) !== 'in_progress');
       for (const req of toDispatch) {
-        const agentRef = await resolveRoleAgent(db, args.tenantId, board.id, req.ref);
+        const agentRef = await resolveRoleAgent(env, db, args.tenantId, args.projectId, board.id, req.ref);
         if (!agentRef) continue;
-        const payload = JSON.stringify({
-          cloudAgentRef: agentRef,
-          laneKey: args.status,
-          reviewRole: req.ref,
-          reviewInstruction:
-            `You are the ${roleName(req.ref)} reviewing ticket #${args.taskId} at lane '${args.status}'. ` +
-            `Review the implementation against the PRD and acceptance criteria, then record your sign-off ` +
-            `(POST /api/kanban/tasks/${args.taskId}/signoff with roleKey='${req.ref}', verdict 'approved' or 'changes_requested'). ` +
-            `If you request changes, describe the fixes for the Developer to resolve.`,
-        });
-        const deferred: Promise<unknown>[] = [];
-        await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
-          taskId: args.taskId,
+        // ONE shared request contract with the lane-agent path and the AI Manager. The
+        // hand-written string this replaced never told the agent to pass `laneKey`, so
+        // its verdict landed in the ledger keyed to no lane and matched no manifest slot
+        // — see `kanban/signoffRequest.ts`.
+        // Attribution (§5.6) + the activity row are the shared primitive's job, and it
+        // performs BOTH only when a run actually started.
+        const execId = await requestRoleRun(env, db, runtimeService, participants, {
           tenantId: args.tenantId,
-          payload,
-          submittedBy: `${args.submittedBy}:reviewer:${req.ref}`,
-        }).catch(() => {});
-        await Promise.allSettled(deferred);
+          projectId: args.projectId,
+          taskId: args.taskId,
+          taskTitle: taskRow?.title ?? null,
+          roleKey: req.ref,
+          roleName: roleName(req.ref),
+          agentRef,
+          laneKey: args.status,
+          kind: 'reviewer',
+          submittedBy: composeDispatcherLabel(args.submittedBy, 'reviewer', req.ref),
+          ...(args.force ? { force: true } : {}),
+        });
+        // A REFUSED dispatch is not an ask: leave the reviewer selectable next hop rather
+        // than reporting a round-trip that never started.
+        if (execId == null) continue;
         dispatchedReviewers.push(req.ref);
         break; // one reviewer per hop — keeps the round-trip serial and loop-safe
       }
     }
 
-    // Block the lane's normal agent when a reviewer round-trip is owed: a reviewer
-    // was dispatched this hop, OR the gate is 'hard' and the requirement is unmet.
-    const blocked = dispatchedReviewers.length > 0 || lane.requirementGate === 'hard';
-    return { blocked, flagged: true, dispatchedReviewers };
+    // ── Producers ───────────────────────────────────────────────────────────
+    // Dispatch the ROLE-CAPABLE producer AS the role when the producer stage isn't
+    // engaged yet, so the correct role produces the work (not a wrong-role owner or
+    // nothing). Loop-safe: an in_progress/completed producer slot is never re-dispatched.
+    let producerUnmet = false;
+    if (requiredProducers.length > 0) {
+      for (const req of requiredProducers) {
+        const st = stateByRole.get(req.ref);
+        if (st && isParticipantSatisfied(st)) continue;
+        producerUnmet = true;
+        const canDispatch = !hasLive && dispatchedReviewers.length === 0 && dispatchedProducers.length === 0 && st !== 'in_progress';
+        if (!canDispatch) continue;
+        const agentRef = await resolveRoleAgent(env, db, args.tenantId, args.projectId, board.id, req.ref);
+        if (!agentRef) continue;
+        // ONE shared contract with the reviewer paths. The string this replaced named
+        // neither the `kanban.signoff` tool nor `laneKey`, so a producer that finished
+        // real work still left its slot unsatisfied — see `kanban/signoffRequest.ts`.
+        const execId = await requestRoleRun(env, db, runtimeService, participants, {
+          tenantId: args.tenantId,
+          projectId: args.projectId,
+          taskId: args.taskId,
+          taskTitle: taskRow?.title ?? null,
+          roleKey: req.ref,
+          roleName: roleName(req.ref),
+          agentRef,
+          laneKey: args.status,
+          kind: 'producer',
+          submittedBy: composeDispatcherLabel(args.submittedBy, 'producer', req.ref),
+          ...(args.force ? { force: true } : {}),
+        });
+        if (execId == null) continue;
+        dispatchedProducers.push(req.ref);
+      }
+    }
+
+    if (dispatchedReviewers.length === 0 && dispatchedProducers.length === 0 && !reviewerSetUnmet && !producerUnmet) return none;
+
+    // Block the lane's normal agent when a role round-trip is owed (dispatched this hop)
+    // OR a hard gate is unmet (reviewer quorum short / producer not completed).
+    const blocked = dispatchedReviewers.length > 0 || dispatchedProducers.length > 0
+      // A managed ticket never falls through to a generic lane executor while its
+      // named producer is outstanding, even when the stage's advancement gate is soft.
+      || (board.lifecycleManaged && producerUnmet)
+      || (lane.requirementGate === 'hard' && (reviewerSetUnmet || producerUnmet));
+    return { blocked, flagged: reviewerSetUnmet || producerUnmet, dispatchedReviewers, dispatchedProducers };
   } catch {
     return none;
   }

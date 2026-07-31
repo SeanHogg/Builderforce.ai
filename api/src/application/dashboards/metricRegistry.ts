@@ -202,6 +202,15 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
       return (await computeQualityInsights(db, tenantId, days)).prodIncidents.mttrHours;
     },
   },
+  'quality.incidents': {
+    label: 'Production incidents',
+    unit: '',
+    description: 'Production incidents (excluding alert-only) opened over the window — answers "do we have a breach?".',
+    goodWhenUp: false,
+    async compute(db, tenantId, days) {
+      return (await computeQualityInsights(db, tenantId, days)).prodIncidents.count;
+    },
+  },
 
   // ── People (computePeopleInsights) ─────────────────────────────────────────
   'people.attrition': {

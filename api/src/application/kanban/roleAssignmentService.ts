@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Roster role assignments — the explicit "pin an existing agent / human member /
  * hired contractor to a role" primitive. Complements the INFERRED coverage the
@@ -113,7 +114,9 @@ export class RoleAssignmentService {
         summary: `Assigned ${body.assigneeName?.trim() || assigneeRef} to ${roleKey}`,
         metadata: { assigneeKind: body.assigneeKind, assigneeRef, projectId },
       });
-    } catch { /* best-effort audit */ }
+    } catch (error) { /* best-effort audit */ 
+      reportCaughtError(error, { source: "application/kanban/roleAssignmentService.ts", operation: "create" });
+    }
     return { id, roleKey, assigneeKind: body.assigneeKind, assigneeRef, assigneeName: body.assigneeName?.trim() || null, projectId };
   }
 

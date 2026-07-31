@@ -3,8 +3,9 @@ import { runAgent } from "./agent";
 import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
 import { getCurrentUserId, createBrainChat, appendBrainMessages, updateBrainChatProject } from "./bfApi";
 import { formatEvermindLearnStep } from "@seanhogg/builderforce-brain-embedded";
+import { formatChatError } from "./upgradeAction";
 import { getGroundingSummary } from "./grounding";
-import { getEditorContext } from "./editorContext";
+import { getEditorContextLive } from "./editorContext";
 import { editorContextDirective } from "./idePersona";
 import { resolveEffectiveModel } from "./modelState";
 import { getSelectedProject } from "./projectState";
@@ -56,9 +57,11 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     // TONE, not just the affective appraisal. Best-effort; '' at rest or offline.
     const userId = (await getCurrentUserId(ctx.secrets)) ?? undefined;
     const limbicBlock = await fetchLimbicBlock(ctx.secrets, request.prompt, userId ? { userId } : undefined);
-    // Live editor context (active file / selection / open tabs) so the agent resolves
-    // "this file" / "the selection" to what's actually open — read fresh each turn.
-    const editorCtx = editorContextDirective(getEditorContext());
+    // Live editor context (active file / selection / open tabs) PLUS the absolute
+    // workspace root and its git repo, so the agent resolves "this file" / "the
+    // selection" to what's open and knows where the code lives instead of asking.
+    // Read fresh each turn; awaited so git is resolved on the very first turn.
+    const editorCtx = editorContextDirective(await getEditorContextLive());
     const messages: ChatMessage[] = [...buildSystemMessages(root, getGroundingSummary(), editorCtx, limbicBlock)];
     // Reconstruct prior turns from the native chat history.
     for (const turn of context.history) {
@@ -122,7 +125,12 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
         onText: (delta) => { assistantText += delta; stream.markdown(delta); },
         onToolStart: (label) => stream.progress(label),
         onToolResult: (label, ok) => stream.markdown(`\n\n${ok ? "✓" : "✗"} ${label}\n\n`),
-        onError: (message) => stream.markdown(`\n\n**Error:** ${message}\n`),
+        // An entitlement failure gets the fix appended as a link (Upgrade / Add a
+        // card) — same verdict the webview banner renders as a button, so the two
+        // chat surfaces never disagree about what a block means. Falls back to the
+        // bare message for an ordinary error.
+        onError: (message, cause) =>
+          stream.markdown(`\n\n**Error:** ${formatChatError(cause ?? message)}\n`),
       },
     );
 
@@ -139,7 +147,8 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
       // Self-heal: if the server says this chat isn't bound to a project but the IDE has
       // an active one, adopt it so the NEXT turn trains that project's Evermind (parity
       // with the webview's adopt-on-open — the native participant otherwise leaves a chat
-      // created before a project was selected permanently project-less).
+      // created before a project was selected permanently project-less). Both are gated on
+      // an ACTIVE project: with none selected there is nothing to adopt.
       if (outcome?.reason === "not-attached" && activeProject) {
         await updateBrainChatProject(ctx.secrets, brainChatId, activeProject.id);
       }

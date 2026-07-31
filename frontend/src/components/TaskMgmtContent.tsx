@@ -38,6 +38,8 @@ import {
 import { BoardConfigPanel } from './board/BoardConfigPanel';
 import { AssigneeProfilesProvider } from './workforce/AssigneeProfilesContext';
 import AssigneeHovercard, { AssigneePersonalityInline } from './workforce/AssigneeHovercard';
+import { MemberProfileEditor } from './workforce/MemberProfileEditor';
+import type { MemberKind } from '@/lib/builderforceApi';
 import { AgentChip, ACTIVE_EXECUTION_STATUSES } from './board/AgentChip';
 import { SwimlaneTriageButton } from './board/SwimlaneTriageButton';
 import { trackActivity } from '@/lib/activity/tracker';
@@ -52,6 +54,10 @@ import { MoveToBoardControl } from './MoveToBoardControl';
 import { AgentTab } from './agent/AgentTab';
 import { TaskChangesPanel } from './agent/TaskChangesPanel';
 import { TaskPrdTab } from './task/TaskPrdTab';
+import { AccountabilityTab } from './task/AccountabilityTab';
+import { TaskBadges } from './task/TaskBadges';
+import { TicketContextStrip } from './task/TicketContextStrip';
+import { TicketLifecyclePanel } from './task/TicketLifecyclePanel';
 import { RunTaskButton } from './task/RunTaskButton';
 import { ApprovalResolveControl } from './humanRequests/ApprovalResolveControl';
 import { ChatMessageContent } from './ChatMessageContent';
@@ -66,7 +72,7 @@ import {
   taskStatusLabel,
   taskStatusBadgeClass,
 } from '@/lib/taskStatus';
-import { taskTypeBadgeClass, taskTypeLabelKey } from '@/lib/taskType';
+import { TASK_PRIORITIES, taskPriorityBadgeClass } from '@/lib/taskPriority';
 
 type TaskView = 'board' | 'table' | 'calendar' | 'gantt';
 
@@ -77,13 +83,7 @@ interface BoardColumn {
   label: string;
   agents: SwimlaneAgent[];
 }
-const PRIORITIES: TaskPriority[] = ['low', 'medium', 'high', 'urgent'];
-const PRIORITY_CLASS: Record<TaskPriority, string> = {
-  low: 'badge-gray',
-  medium: 'badge-blue',
-  high: 'badge-yellow',
-  urgent: 'badge-red',
-};
+const PRIORITIES = TASK_PRIORITIES;
 
 export interface TaskMgmtContentProps {
   /** When set, tasks are scoped to this project and project filter is hidden. */
@@ -189,6 +189,9 @@ export function TaskMgmtContent({
   // role or check was skipped). Fetched once per project (server-side cached) and
   // rendered as a flag chip on the card — no per-card round-trip.
   const [flaggedIds, setFlaggedIds] = useState<Set<number>>(new Set());
+  // Participation progress per ticket (X of Y required roles complete) — the
+  // Coordinated Role Participation %-complete chip. One cached project fetch.
+  const [participantProgress, setParticipantProgress] = useState<Map<number, { completed: number; required: number; percent: number }>>(new Map());
   const [projects, setProjects] = useState<Project[]>(projectsProp ?? globalScope?.projects ?? []);
   const [agentHostsList, setAgentHostsList] = useState<AgentHost[]>([]);
   const [cloudAgentsList, setCloudAgentsList] = useState<CloudAgentTarget[]>([]);
@@ -203,6 +206,12 @@ export function TaskMgmtContent({
   // Standup mode: pivot the board so rows = teammates/agents and columns = stages,
   // surfacing each person's in-flight work at a glance. Board-view only, session-only.
   const [groupByAssignee, setGroupByAssignee] = useState(false);
+  // Assignee swimlanes can contain hundreds of cards. Keep every row collapsed
+  // until the viewer explicitly opens it; this state is intentionally session-only.
+  const [expandedAssigneeRows, setExpandedAssigneeRows] = useState<Set<string>>(new Set());
+  const [profileAssignee, setProfileAssignee] = useState<{
+    kind: MemberKind; refId: string; name: string; tasks: Task[];
+  } | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterProject, setFilterProject] = useState<string>(projectId != null ? String(projectId) : '');
   const [filterPriority, setFilterPriority] = useState<string>('');
@@ -229,7 +238,10 @@ export function TaskMgmtContent({
   // Live ceremony overlay (standup/planning round-table) for the selected board.
   const [ceremony, setCeremony] = useState<CeremonyMode | null>(null);
   const [prdOpen, setPrdOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<'details' | 'agent' | 'changes' | 'prd'>('details');
+  const [drawerTab, setDrawerTab] = useState<'details' | 'agent' | 'changes' | 'prd' | 'accountability'>('details');
+  // Ticket whose LIFECYCLE / AUTONOMY PROOF panel is open (opened from the drawer
+  // header, stacks above the drawer). null = closed.
+  const [lifecycleTaskId, setLifecycleTaskId] = useState<number | null>(null);
   // Inline per-field editing in the task drawer. Only one field is editable at a
   // time; `fieldDraft` holds the in-progress value (string for text/date inputs).
   const [editingField, setEditingField] = useState<
@@ -251,28 +263,75 @@ export function TaskMgmtContent({
     setDrawerTask(t);
   }, []);
 
-  // Deep-link to a ticket's DETAIL drawer via a `?task=<id>` query param — the target
-  // the Brain ChatTicketsPanel "Open" now routes to for a linked task/epic/gap (so the
-  // chip opens the ticket's details, not just the board). Opens once per id after the
-  // matching task has loaded, then strips the param so closing the drawer doesn't
-  // re-open it and the URL stays clean. A ref guards against re-opening on re-render.
+  // Swap the drawer to a ticket's parent Epic. The Epic is usually already in the
+  // loaded board, but it can sit outside the active filter (or on a collapsed
+  // lane), so fall back to fetching it rather than making the link a dead end.
+  const openEpic = useCallback((epicId: number) => {
+    const known = tasks.find((t) => t.id === epicId);
+    if (known) { openTask(known); return; }
+    tasksApi.get(epicId).then(openTask).catch(() => {});
+  }, [tasks, openTask]);
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const deepLinkedTaskRef = useRef<string | null>(null);
+
+  // Close the drawer AND strip a lingering `?task=` deep-link param, so the board
+  // URL stays clean and the drawer can't re-open on the next render. Every
+  // user-facing close affordance (overlay, close button) goes through this.
+  // Programmatic closes (delete/move) call setDrawerTask(null) directly — the row
+  // is gone, so there's no deep-link left to honour.
+  const closeDrawer = useCallback(() => {
+    setDrawerTask(null);
+    // The lifecycle audit is a child of the drawer — it must not outlive it.
+    setLifecycleTaskId(null);
+    if (searchParams?.get('task')) {
+      const params = new URLSearchParams(Array.from(searchParams.entries()));
+      params.delete('task');
+      const qs = params.toString();
+      router.replace(qs ? `?${qs}` : '?', { scroll: false });
+    }
+  }, [searchParams, router]);
+
+  // Deep-link to a ticket's DETAIL drawer via a `?task=<id>` query param — the target
+  // the Brain ChatTicketsPanel "Open" routes to for a linked task/epic/gap (so the
+  // chip opens the ticket's details, not just the board). Resolve from the loaded
+  // board list when the ticket is present (instant), otherwise FETCH it directly:
+  // the global ProjectScope resolving `?project=` and the scoped task list loading
+  // race, so at the moment this runs the target may not yet be in `tasks` (or may sit
+  // in a different project scope). A list-only lookup would silently no-op there.
+  // We deliberately KEEP the `?task=` param in place while the drawer is open
+  // (closeDrawer strips it) so a transient remount during auth/scope hydration
+  // RE-opens the drawer instead of dropping to the bare board — the "redirects back
+  // with no panel" symptom. The ref guards against re-opening the same id per mount.
   useEffect(() => {
     const raw = searchParams?.get('task');
-    if (!raw || deepLinkedTaskRef.current === raw) return;
+    if (!raw) return;
     const id = Number(raw);
-    if (!Number.isInteger(id)) return;
-    const match = tasks.find((t) => t.id === id);
-    if (!match) return; // not on this board yet — wait for load (or a foreign id we ignore)
-    deepLinkedTaskRef.current = raw;
-    openTask(match);
-    const params = new URLSearchParams(Array.from(searchParams.entries()));
-    params.delete('task');
-    const qs = params.toString();
-    router.replace(qs ? `?${qs}` : '?', { scroll: false });
-  }, [searchParams, tasks, openTask, router]);
+    if (!Number.isInteger(id) || id <= 0) return;
+    if (drawerTask?.id === id) return;             // already open on this ticket
+    if (deepLinkedTaskRef.current === raw) return; // handled this id already this mount
+    const inList = tasks.find((t) => t.id === id);
+    if (inList) {
+      deepLinkedTaskRef.current = raw;
+      openTask(inList);
+      return;
+    }
+    // Not in the (scoped) list — fetch it directly. GET /api/tasks/:id is tenant-
+    // scoped server-side (404s for a foreign / other-tenant id), so an inaccessible
+    // id just leaves the board unchanged. Guarded so a late resolve can't open a
+    // drawer the list-path already opened.
+    let alive = true;
+    tasksApi.get(id)
+      .then((full) => {
+        if (alive && full && deepLinkedTaskRef.current !== raw) {
+          deepLinkedTaskRef.current = raw;
+          openTask(full);
+        }
+      })
+      .catch(() => { /* not found / not accessible — leave the board as-is */ });
+    return () => { alive = false; };
+  }, [searchParams, tasks, openTask, drawerTask?.id]);
 
   // Load whether the open ticket is already published to the marketplace, so the
   // drawer can show a "Published" badge + Unpublish, or offer to publish. Best-effort:
@@ -321,7 +380,7 @@ export function TaskMgmtContent({
     if (!opts?.background) setLoading(true);
     setError(null);
     try {
-      const [tasksData, agentHostsData, runTargets, membersData, projectWf] = await Promise.all([
+      const [tasksData, agentHostsData, runTargets, membersData, projectWf, assignable] = await Promise.all([
         tasksApi.list(projectId),
         agentHosts.list().catch(() => []),
         // Cloud agents assignable to a ticket (active, cloud-capable ide_agents).
@@ -334,6 +393,10 @@ export function TaskMgmtContent({
         // picker to their members. Falls back to the full roster when no team is
         // assigned (scopedToTeams=false) or in the all-projects view (no projectId).
         projectId != null ? getProjectWorkforce(projectId).catch(() => null) : Promise.resolve(null),
+        // The unified assignable workforce — its `hires` are active freelance-marketplace
+        // engagements (cross-tenant humans) that `tasksApi.assignees()` (tenant members)
+        // doesn't return, so a hired freelancer can be assigned a ticket on the board.
+        kanbanApi.assignable().catch(() => ({ agents: [], humans: [], hires: [] as Array<{ ref: string; name: string }> })),
       ]);
       setTasks(tasksData);
       // When a project has teams assigned, the assignable workforce is exactly
@@ -345,7 +408,12 @@ export function TaskMgmtContent({
         : null;
       setAgentHostsList(teamSet ? agentHostsData.filter((h) => teamSet.has(`host_agent:${h.id}`)) : agentHostsData);
       setCloudAgentsList(teamSet ? runTargets.cloudAgents.filter((a) => teamSet.has(`cloud_agent:${a.ref}`)) : runTargets.cloudAgents);
-      setMembersList(teamSet ? membersData.filter((m) => teamSet.has(`human:${m.id}`)) : membersData);
+      // Team members (team-scoped when the board is), then union in freelance hires —
+      // explicit project engagements that should be assignable regardless of team
+      // scoping — deduped by id. A hire's ref is a users.id, so `u:<id>` decodes right.
+      const scopedMembers = teamSet ? membersData.filter((m) => teamSet.has(`human:${m.id}`)) : membersData;
+      const hireMembers = assignable.hires.map((h) => ({ id: h.ref, name: h.name }));
+      setMembersList([...scopedMembers, ...hireMembers.filter((h) => !scopedMembers.some((m) => m.id === h.id))]);
       // Always resolve the full project list (unless the parent supplied one or
       // the global scope already holds it): it backs both the project filter and
       // the "Move to board" destinations, needed even in the scoped view. When a
@@ -426,6 +494,9 @@ export function TaskMgmtContent({
     kanbanApi.flaggedForProject(effectiveProjectId)
       .then((rows) => { if (alive) setFlaggedIds(new Set(rows.map((r) => r.taskId))); })
       .catch(() => { if (alive) setFlaggedIds(new Set()); });
+    kanbanApi.participantsSummary(effectiveProjectId)
+      .then((rows) => { if (alive) setParticipantProgress(new Map(rows.map((r) => [r.taskId, { completed: r.completed, required: r.required, percent: r.percent }]))); })
+      .catch(() => { if (alive) setParticipantProgress(new Map()); });
     return () => { alive = false; };
   }, [effectiveProjectId, tasks]);
 
@@ -567,6 +638,36 @@ export function TaskMgmtContent({
       return a.name.localeCompare(b.name);
     });
   }, [filtered, taskAssigneeName]);
+
+  const openAssigneeProfile = useCallback((key: string, name: string) => {
+    if (!key) return;
+    const prefix = key.slice(0, 2);
+    const refId = key.slice(2);
+    const kind: MemberKind | null = prefix === 'u:' ? 'human' : prefix === 'c:' ? 'cloud_agent' : prefix === 'h:' ? 'host_agent' : null;
+    if (kind && refId) {
+      setProfileAssignee({
+        kind,
+        refId,
+        name,
+        // The profile is an assignee-level view, so include every task currently
+        // loaded for this board even when board filters hide some of them.
+        tasks: tasks.filter((task) => assigneeSelectValue(
+          task.assignedAgentHostId,
+          task.assignedAgentRef,
+          task.assignedUserId,
+        ) === key),
+      });
+    }
+  }, [tasks]);
+
+  const toggleAssigneeRow = useCallback((key: string) => {
+    setExpandedAssigneeRows((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   // Latest execution per task → which agent is actively running (or last ran) it.
   const latestExecByTask = useMemo(() => {
@@ -892,83 +993,12 @@ export function TaskMgmtContent({
             flexWrap: 'wrap',
           }}
         >
-          <span style={{ fontFamily: 'var(--font-mono)' }}>{task.key}</span>
-          <span
-            className={PRIORITY_CLASS[task.priority]}
-            style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, textTransform: 'capitalize' }}
-          >
-            {task.priority}
-          </span>
-          {taskTypeBadgeClass(task.taskType) && (
-            <span
-              className={taskTypeBadgeClass(task.taskType)!}
-              style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4 }}
-            >
-              {tCommon(taskTypeLabelKey(task.taskType))}
-            </span>
-          )}
-          {task.reviewCount ? (
-            <span
-              title={
-                task.lastReviewVerdict === 'complete'
-                  ? tCommon('reviewComplete')
-                  : task.lastReviewVerdict === 'gaps'
-                    ? tCommon('reviewGaps')
-                    : undefined
-              }
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 3,
-                fontSize: 10,
-                padding: '2px 6px',
-                borderRadius: 4,
-                background: 'var(--bg-elevated)',
-                color:
-                  task.lastReviewVerdict === 'gaps'
-                    ? '#f59e0b'
-                    : task.lastReviewVerdict === 'complete'
-                      ? '#22c55e'
-                      : 'var(--text-secondary)',
-                fontWeight: 600,
-              }}
-            >
-              {task.lastReviewVerdict === 'complete'
-                ? '✓'
-                : task.lastReviewVerdict === 'gaps'
-                  ? '⚠'
-                  : '↻'}{' '}
-              {tCommon('reviewedTimes', { count: task.reviewCount })}
-            </span>
-          ) : null}
-          {flaggedIds.has(task.id) && (
-            <span
-              title={tBoard('audit.flaggedTitle')}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10,
-                padding: '2px 6px', borderRadius: 4, background: 'var(--danger-bg, #fee2e2)',
-                color: 'var(--danger-text, #991b1b)', fontWeight: 700,
-              }}
-            >
-              ⚑ {tBoard('audit.flagged')}
-            </span>
-          )}
-          {task.businessValue != null && (
-            <span
-              title={task.businessValueRationale ?? tBoard('businessValue.badgeTitle')}
-              style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--surface-interactive, var(--bg-elevated))', color: 'var(--text-secondary)', fontWeight: 700 }}
-            >
-              {tBoard('businessValue.badge', { value: task.businessValue })}
-            </span>
-          )}
-          {task.specCount ? (
-            <span
-              title={`${task.specCount} linked PRD${task.specCount > 1 ? 's' : ''}`}
-              style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
-            >
-              📄 PRD{task.specCount > 1 ? ` ×${task.specCount}` : ''}
-            </span>
-          ) : null}
+          <TaskBadges
+            task={task}
+            showKey
+            flagged={flaggedIds.has(task.id)}
+            participants={participantProgress.get(task.id) ?? null}
+          />
           {runs.length > 0 ? (
             // One chip per agent that has touched this task, newest run first, so
             // history reads left-to-right: a freshly-queued agent (Bob · pending)
@@ -1320,49 +1350,82 @@ export function TaskMgmtContent({
                   {column.label}
                 </div>
               ))}
-              {assigneeRows.map((row) => (
-                <Fragment key={row.key || 'unassigned'}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: 'var(--text-primary)',
-                      padding: '8px 4px',
-                      borderTop: '1px solid var(--border-subtle)',
-                    }}
-                  >
-                    <AssigneeHovercard selectValue={row.key}>{row.name}</AssigneeHovercard>
-                    <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>
-                      {row.tasks.length}
-                    </span>
-                  </div>
-                  {boardColumns.map((column) => {
-                    const cellTasks = byManagerRank(row.tasks.filter((t) => t.status === column.status));
-                    return (
-                      <div
-                        key={column.id}
-                        onDragOver={onDragOver}
-                        onDrop={(e) => onDrop(e, column.status)}
-                        style={{
-                          background: 'var(--bg-deep)',
-                          border: '1px dashed var(--border-subtle)',
-                          borderRadius: 10,
-                          padding: 8,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 8,
-                          minHeight: 56,
-                          borderTop: '1px solid var(--border-subtle)',
-                        }}
+              {assigneeRows.map((row) => {
+                const rowStateKey = row.key || 'unassigned';
+                const expanded = expandedAssigneeRows.has(rowStateKey);
+                return (
+                  <Fragment key={rowStateKey}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: 'var(--text-primary)',
+                        padding: '8px 4px',
+                        borderTop: '1px solid var(--border-subtle)',
+                        gridColumn: expanded ? undefined : '1 / -1',
+                        // An expanded assignee can own hundreds of cards. Keep the
+                        // row identity visible while its tall grid row scrolls, then
+                        // let the next assignee naturally replace it at the boundary.
+                        position: expanded ? 'sticky' : undefined,
+                        top: expanded ? 0 : undefined,
+                        alignSelf: expanded ? 'start' : undefined,
+                        zIndex: expanded ? 2 : undefined,
+                        background: expanded ? 'var(--bg-surface)' : undefined,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleAssigneeRow(rowStateKey)}
+                        aria-expanded={expanded}
+                        aria-label={tTask(expanded ? 'collapseAssigneeRow' : 'expandAssigneeRow', { name: row.name })}
+                        style={{ border: 0, padding: 2, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', lineHeight: 1 }}
                       >
-                        {cellTasks.map((task) => renderTaskCard(task))}
-                      </div>
-                    );
-                  })}
-                </Fragment>
-              ))}
+                        <span aria-hidden>{expanded ? '▾' : '▸'}</span>
+                      </button>
+                      {row.key ? (
+                        <AssigneeHovercard selectValue={row.key}>
+                          <a
+                            href={`#assignee-${encodeURIComponent(row.key)}`}
+                            onClick={(event) => { event.preventDefault(); openAssigneeProfile(row.key, row.name); }}
+                            style={{ color: 'var(--accent)', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                          >
+                            {row.name}
+                          </a>
+                        </AssigneeHovercard>
+                      ) : row.name}
+                      <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>
+                        {row.tasks.length}
+                      </span>
+                    </div>
+                    {expanded && boardColumns.map((column) => {
+                      const cellTasks = byManagerRank(row.tasks.filter((t) => t.status === column.status));
+                      return (
+                        <div
+                          key={column.id}
+                          onDragOver={onDragOver}
+                          onDrop={(e) => onDrop(e, column.status)}
+                          style={{
+                            background: 'var(--bg-deep)',
+                            border: '1px dashed var(--border-subtle)',
+                            borderRadius: 10,
+                            padding: 8,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 8,
+                            minHeight: 56,
+                            borderTop: '1px solid var(--border-subtle)',
+                          }}
+                        >
+                          {cellTasks.map((task) => renderTaskCard(task))}
+                        </div>
+                      );
+                    })}
+                  </Fragment>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1611,25 +1674,13 @@ export function TaskMgmtContent({
                         )}
                       </td>
                       <td style={{ padding: '10px 12px' }}>
-                        <span
-                          className={PRIORITY_CLASS[task.priority]}
-                          style={{
-                            fontSize: 10,
-                            padding: '2px 6px',
-                            borderRadius: 4,
-                            textTransform: 'capitalize',
-                          }}
-                        >
-                          {task.priority}
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <TaskBadges
+                            task={task}
+                            flagged={flaggedIds.has(task.id)}
+                            participants={participantProgress.get(task.id) ?? null}
+                          />
                         </span>
-                        {task.businessValue != null && (
-                          <span
-                            title={task.businessValueRationale ?? tBoard('businessValue.badgeTitle')}
-                            style={{ marginLeft: 6, fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--surface-interactive, var(--bg-elevated))', color: 'var(--text-secondary)', fontWeight: 700 }}
-                          >
-                            {tBoard('businessValue.badge', { value: task.businessValue })}
-                          </span>
-                        )}
                       </td>
                       {!projectId && (
                         <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>
@@ -1918,7 +1969,7 @@ export function TaskMgmtContent({
               inset: 0,
               zIndex: 10002,
             }}
-            onClick={() => setDrawerTask(null)}
+            onClick={closeDrawer}
           />
           <div
             className="slide-panel-drawer"
@@ -1991,7 +2042,27 @@ export function TaskMgmtContent({
                   {drawerTask.key}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {/* LIFECYCLE / AUTONOMY PROOF — "did this ticket move itself, or did a
+                  person push it every hop?". Opens the audit slide-out over the drawer.
+                  Suppressed on a restricted ticket like every other drill-down, since
+                  its lane history would leak what the mask hides. The label collapses
+                  to the icon on a phone so the header stays on one row. */}
+              {!drawerTask.restricted && (
+              <button
+                type="button"
+                className="drawer-action"
+                onClick={() => setLifecycleTaskId(drawerTask.id)}
+                aria-label={tTask('lifecycleAction')}
+                title={tTask('lifecycleActionTitle')}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden style={{ width: 17, height: 17, stroke: 'currentColor', fill: 'none', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }}>
+                  <circle cx="12" cy="12" r="9" />
+                  <polyline points="12 7 12 12 16 14" />
+                </svg>
+                <span className="drawer-action-label">{tTask('lifecycleAction')}</span>
+              </button>
+              )}
               {!drawerTask.restricted && (
               <button
                 type="button"
@@ -2021,7 +2092,7 @@ export function TaskMgmtContent({
               )}
               <button
                 type="button"
-                onClick={() => setDrawerTask(null)}
+                onClick={closeDrawer}
                 style={{
                   width: 36,
                   height: 36,
@@ -2048,7 +2119,7 @@ export function TaskMgmtContent({
                 notice replaces all tab content. */}
             {!drawerTask.restricted && (
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, overflowX: 'auto' }}>
-              {([['details', tTask('details')], ['agent', tTask('tabAgent')], ['changes', tTask('tabChanges')], ['prd', tTask('tabPrd')]] as const).map(([id, label]) => (
+              {([['details', tTask('details')], ['agent', tTask('tabAgent')], ['changes', tTask('tabChanges')], ['prd', tTask('tabPrd')], ['accountability', tTask('tabAccountability')]] as const).map(([id, label]) => (
                 <button
                   key={id}
                   type="button"
@@ -2086,6 +2157,10 @@ export function TaskMgmtContent({
             ) : drawerTab === 'prd' ? (
               <div style={{ flex: 1, overflow: 'auto' }}>
                 <TaskPrdTab taskId={drawerTask.id} projectId={drawerTask.projectId} />
+              </div>
+            ) : drawerTab === 'accountability' ? (
+              <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+                <AccountabilityTab taskId={drawerTask.id} />
               </div>
             ) : (
             <>
@@ -2150,13 +2225,30 @@ export function TaskMgmtContent({
                     onClick={() => setEditingField('priority')}
                     onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('priority'); }}
                     title={tTask('changePriorityTitle')}
-                    className={PRIORITY_CLASS[drawerTask.priority]}
+                    className={taskPriorityBadgeClass(drawerTask.priority)}
                     style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, cursor: 'pointer' }}
                   >
                     {drawerTask.priority}
                   </span>
                 )}
+                {/* The SAME badges the board card carries. Opening a ticket used to
+                    drop them (the flag, the sign-off rollup, the PRD count), so the
+                    card said more than the ticket did. One shared component now. */}
+                <TaskBadges
+                  task={drawerTask}
+                  showPriority={false}
+                  flagged={flaggedIds.has(drawerTask.id)}
+                  participants={participantProgress.get(drawerTask.id) ?? null}
+                />
               </div>
+              {/* Epic / %-complete / objective alignment + the blockers that hold it
+                  up — above the fold, so none of it needs a trip to another tab. */}
+              <TicketContextStrip
+                taskId={drawerTask.id}
+                onOpenEpic={openEpic}
+                onOpenTab={setDrawerTab}
+                onChanged={() => load({ background: true })}
+              />
               {(drawerTask.gitBranch || drawerTask.githubPrUrl) && (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>{tTask('branchAndPr')}</div>
@@ -2512,6 +2604,11 @@ export function TaskMgmtContent({
         </>
       )}
 
+      {/* Lifecycle / autonomy proof for the drawer ticket. Rendered outside the
+          drawer markup so it survives the drawer's own overflow clipping, and
+          stacked above it (see the panel's zIndex). */}
+      <TicketLifecyclePanel taskId={lifecycleTaskId} onClose={() => setLifecycleTaskId(null)} />
+
       {effectiveProjectId != null && (
         <BoardConfigPanel
           open={boardConfigOpen}
@@ -2519,6 +2616,16 @@ export function TaskMgmtContent({
           projectId={effectiveProjectId}
           projectName={effectiveProjectName}
           initialTab={boardConfigTab}
+        />
+      )}
+
+      {profileAssignee && (
+        <MemberProfileEditor
+          kind={profileAssignee.kind}
+          refId={profileAssignee.refId}
+          name={profileAssignee.name}
+          tasks={profileAssignee.tasks}
+          onClose={() => setProfileAssignee(null)}
         />
       )}
 

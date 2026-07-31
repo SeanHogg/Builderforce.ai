@@ -19,6 +19,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { Select } from '@/components/Select';
 import type { ImportedRepoFile } from '@/lib/builderforceApi';
 
 const MAX_ROWS = 300;
@@ -89,15 +90,15 @@ export function RepoContextPicker({ sources, onPick, onClose }: {
           {sources.length > 1 && (
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
               {t('source')}
-              <select
+              <Select
                 value={source?.id ?? ''}
                 onChange={(e) => setSourceId(e.target.value)}
-                style={{ padding: '7px 9px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)' }}
+                style={{ width: '100%', padding: '7px 9px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)' }}
               >
                 {sources.map((s) => (
                   <option key={s.id} value={s.id}>{s.label}</option>
                 ))}
-              </select>
+              </Select>
             </label>
           )}
           <input

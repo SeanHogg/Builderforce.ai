@@ -12,6 +12,7 @@
 import { asc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { boards, swimlanes } from '../../infrastructure/database/schema';
+import { findCanonicalBoard } from './canonicalBoard';
 
 /** Minimal lane shape the ordering needs. */
 export interface LanePosition {
@@ -19,6 +20,32 @@ export interface LanePosition {
   position: number;
   /** Whether this lane finalizes the ticket (a Done/terminal lane). */
   isTerminal?: boolean;
+}
+
+/**
+ * Lane keys that are PARKED — off the delivery path — rather than a stage work flows
+ * through.
+ *
+ * `swimlanes` has `is_terminal` but no flag for this, and the omission was load-bearing:
+ * the default seed AND the SDLC template both place `blocked` at position 5, i.e. between
+ * `in_review` (4) and `done` (6). Because {@link resolveNextLaneKey} walked raw positions,
+ * a run completing in review advanced the ticket INTO `blocked` — measured on 10 of 13
+ * production boards, 20 system moves across 19 tickets.
+ *
+ * That is a one-way trap, not a delay: `autonomousExecutionSweep.RUNNABLE_STATUSES`
+ * deliberately excludes `blocked` ("a blocked ticket waits on a dependency, not an
+ * agent"), so from the moment autonomy put a ticket there, autonomy would never look at
+ * it again. Only a human drag could rescue it.
+ *
+ * Skipping these lanes when resolving the NEXT lane is the fix. It does not stop a human
+ * (or a rule) from deliberately moving a ticket to `blocked` — it stops completion from
+ * doing so by accident, which is the only path that was ever creating them.
+ */
+export const PARKED_LANE_KEYS: ReadonlySet<string> = new Set(['blocked', 'on_hold', 'cancelled']);
+
+/** True when a lane is parked — off the delivery path. */
+export function isParkedLane(key: string): boolean {
+  return PARKED_LANE_KEYS.has(key);
 }
 
 /**
@@ -34,12 +61,23 @@ export interface LanePosition {
  * This fix is about honouring the configured order of the WORKING lanes.
  */
 export function resolveNextLaneKey(lanes: LanePosition[], fromStatus: string): string | null {
-  const sorted = [...lanes].sort((a, b) => a.position - b.position);
+  // Tie-break on `key` so lanes that share a position (which the board API and the MCP
+  // tool both allow — `position: body.position ?? 0`) resolve deterministically instead of
+  // depending on row order. Measured: board ad030733 has `ready` and `todo` both at 1.
+  const sorted = [...lanes].sort((a, b) => a.position - b.position || a.key.localeCompare(b.key));
   const idx = sorted.findIndex((l) => l.key === fromStatus);
   if (idx === -1) return null;
-  const next = sorted[idx + 1];
-  if (!next || next.isTerminal) return null;
-  return next.key;
+  // Walk FORWARD past parked lanes. `blocked` sitting between review and Done is the
+  // default board layout, so without this the normal completion path advances tickets
+  // into the one lane the autonomous sweep refuses to scan. See {@link PARKED_LANE_KEYS}.
+  for (let i = idx + 1; i < sorted.length; i += 1) {
+    const next = sorted[i];
+    if (!next) break;
+    if (isParkedLane(next.key)) continue;
+    // A terminal lane still stops the auto-advance (reaching Done stays explicit).
+    return next.isTerminal ? null : next.key;
+  }
+  return null;
 }
 
 /**
@@ -52,11 +90,7 @@ export function resolveNextLaneKey(lanes: LanePosition[], fromStatus: string): s
  * resolves the same lanes.
  */
 export async function resolveNextTaskStatus(db: Db, projectId: number, fromStatus: string): Promise<string | null> {
-  const [board] = await db
-    .select({ id: boards.id })
-    .from(boards)
-    .where(eq(boards.projectId, projectId))
-    .limit(1);
+  const board = await findCanonicalBoard(db, projectId);
   if (!board) return null;
 
   const lanes = await db

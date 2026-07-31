@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useFormatter, useTranslations } from 'next-intl';
 import {
   EvermindConsole,
@@ -9,11 +9,13 @@ import {
   type EvermindConsoleLabels,
 } from '@seanhogg/builderforce-brain-ui';
 import { usePermission } from '@/lib/rbac';
+import { fetchProject } from '@/lib/api';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { listEvermindModels } from '@/lib/studioModelsApi';
 import { useLlmModels } from '@/lib/useLlmModels';
 import {
   getProjectEvermindContributions,
+  listProjectEvermindTargets,
   seedProjectEvermindFromModel,
   setProjectEvermindInference,
   setProjectEvermindMode,
@@ -21,6 +23,12 @@ import {
   teachProjectEvermindFromText,
   flushProjectEvermind,
   validateProjectEvermind,
+  probeProjectEvermind,
+  reseedProjectEvermind,
+  reindexProjectEvermind,
+  cleanupProjectEvermind,
+  analyzeProjectEvermind,
+  applyProjectEvermindFindings,
 } from '@/lib/projectEvermindApi';
 import { useEvermindValidation } from './EvermindValidationContext';
 
@@ -37,9 +45,23 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
   const format = useFormatter();
   const { allowed: canManage } = usePermission('project.manageEvermind');
   // Resolve the scoped project's name (DRY — from the shared projects list, no
-  // prop-drilling through the 5 host call sites) so the console header names WHICH
-  // project's Evermind this is. Undefined for a project not in the list (header omits it).
-  const projectName = useOptionalProjectScope()?.projects.find((p) => p.id === projectId)?.name;
+  // prop-drilling through the host call sites) so the console header names WHICH
+  // project's Evermind this is.
+  const scopedName = useOptionalProjectScope()?.projects.find((p) => p.id === projectId)?.name;
+  // IDE builds are backed by a hidden `is_ide_storage` project, which the shared
+  // list deliberately filters out — so every IDE host (Designer/Voice/Video/agent
+  // panel) fell through to a nameless header. Fetch the project directly in that
+  // case only; the list covers every other host with no request at all.
+  const [fetchedName, setFetchedName] = useState<string | undefined>();
+  useEffect(() => {
+    if (scopedName || !Number.isFinite(projectId)) return;
+    let cancelled = false;
+    fetchProject(projectId)
+      .then((p) => { if (!cancelled) setFetchedName(p.name); })
+      .catch(() => { /* header just omits the name */ });
+    return () => { cancelled = true; };
+  }, [scopedName, projectId]);
+  const projectName = scopedName ?? fetchedName;
   // Frontier teacher gate + options. Gate: the server's unified frontier-access rule
   // (superadmin || premium override || connected BYO account || paid plan) — NOT bare
   // `isPaid` — so a superadmin or a BYO tenant is never shown a false "paid plans only"
@@ -63,6 +85,21 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     teach: async (text, prompt) => { await teachProjectEvermindFromText(projectId, text, prompt); },
     flush: async () => { const r = await flushProjectEvermind(projectId); return { merged: r.merged, version: r.version }; },
     validate: (prompt) => validateProjectEvermind(projectId, prompt),
+    loadTargets: () => listProjectEvermindTargets(projectId),
+    // Test bench + maintenance + knowledge audit. All plain REST on this project, so
+    // the web host implements every one; the console self-gates on their presence.
+    probe: (prompt) => probeProjectEvermind(projectId, prompt),
+    reseed: async (slug) => { const r = await reseedProjectEvermind(projectId, slug); return { version: r.version }; },
+    reindex: async () => {
+      const r = await reindexProjectEvermind(projectId);
+      return { reindexed: r.reindexed, skipped: r.skipped, version: r.version };
+    },
+    cleanup: async () => {
+      const r = await cleanupProjectEvermind(projectId);
+      return { discarded: r.discarded, cachedAnswers: r.cachedAnswers };
+    },
+    analyze: () => analyzeProjectEvermind(projectId),
+    applyFindings: (findings) => applyProjectEvermindFindings(projectId, findings),
   }), [projectId, teacherModels, canUseFrontierModels]);
 
   const labels = useMemo<Partial<EvermindConsoleLabels>>(() => ({
@@ -70,8 +107,22 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     description: t('description'),
     loading: t('loading'),
     managerOnlyHint: t('managerOnlyHint'),
+    inheritedHint: t('inheritedHint'),
     statusSeeded: (v) => t('statusSeeded', { version: v }),
     statusUnseeded: t('statusUnseeded'),
+    quarantinedBadge: t('quarantinedBadge'),
+    quarantinedHint: (reason) => t('quarantinedHint', { reason }),
+    targetsTitle: t('targetsTitle'),
+    targetsHint: t('targetsHint'),
+    targetsEmpty: t('targetsEmpty'),
+    targetSelfBadge: t('targetSelfBadge'),
+    targetBuildBadge: t('targetBuildBadge'),
+    targetSeeded: (version) => t('targetSeeded', { version }),
+    targetUnseeded: t('targetUnseeded'),
+    targetInferenceOn: t('targetInferenceOn'),
+    targetConnected: t('targetConnected'),
+    targetFrozen: t('targetFrozen'),
+    targetProjectId: (id) => t('targetProjectId', { id }),
     evalDelta: (pct) => t('evalDelta', { pct }),
     evalFlat: t('evalFlat'),
     evalTooltip: (version, base, next, size) => t('evalTooltip', { version, base, next, size }),
@@ -134,6 +185,70 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     hideDetail: t('hideDetail'),
     detailPromptLabel: t('detailPromptLabel'),
     detailTextLabel: t('detailTextLabel'),
+    // Test bench
+    testTitle: t('testTitle'),
+    testHint: t('testHint'),
+    testPlaceholder: t('testPlaceholder'),
+    testRunCta: t('testRunCta'),
+    testReadinessCta: t('testReadinessCta'),
+    testRunning: t('testRunning'),
+    testResultReadiness: (passed, total) => t('testResultReadiness', { passed, total }),
+    testResultPrompt: t('testResultPrompt'),
+    testServable: t('testServable'),
+    testRefused: t('testRefused'),
+    testRefusedBecause: (detail) => t('testRefusedBecause', { detail }),
+    testEmptyOutput: t('testEmptyOutput'),
+    testVerdictReady: t('testVerdictReady'),
+    testVerdictNotReady: t('testVerdictNotReady'),
+    // Maintenance
+    maintenanceTitle: t('maintenanceTitle'),
+    maintenanceHint: t('maintenanceHint'),
+    reseedLabel: t('reseedLabel'),
+    reseedHint: t('reseedHint'),
+    reseedCta: t('reseedCta'),
+    reseedConfirm: t('reseedConfirm'),
+    reseedStarterOption: t('reseedStarterOption'),
+    reseedDone: (version) => t('reseedDone', { version }),
+    reindexLabel: t('reindexLabel'),
+    reindexHint: t('reindexHint'),
+    reindexCta: t('reindexCta'),
+    reindexDone: (count) => t('reindexDone', { count }),
+    cleanupLabel: t('cleanupLabel'),
+    cleanupHint: t('cleanupHint'),
+    cleanupCta: t('cleanupCta'),
+    cleanupConfirm: t('cleanupConfirm'),
+    cleanupDone: (discarded, cached) => t('cleanupDone', { discarded, cached }),
+    // Knowledge analyzer
+    analyzeTitle: t('analyzeTitle'),
+    analyzeHint: t('analyzeHint'),
+    analyzeCta: t('analyzeCta'),
+    analyzing: t('analyzing'),
+    analyzeClean: (analyzed) => t('analyzeClean', { analyzed }),
+    analyzeSummary: (issues, analyzed, model) => t('analyzeSummary', { issues, analyzed, model }),
+    analyzeSummaryLocal: (issues, analyzed) => t('analyzeSummaryLocal', { issues, analyzed }),
+    analyzeVerdict: (verdict) => t('analyzeVerdict', { verdict }),
+    analyzeCorrectionLabel: t('analyzeCorrectionLabel'),
+    analyzeSelectAll: t('analyzeSelectAll'),
+    analyzeSelectNone: t('analyzeSelectNone'),
+    analyzeApplyCta: (count) => t('analyzeApplyCta', { count }),
+    analyzeApplying: t('analyzeApplying'),
+    analyzeApplied: (corrected, forgotten, version) => t('analyzeApplied', { corrected, forgotten, version }),
+    analyzeSkipped: (count) => t('analyzeSkipped', { count }),
+    // Tabs
+    tabsLabel: t('tabsLabel'),
+    tabTeach: t('tabTeach'),
+    tabTest: t('tabTest'),
+    tabCheck: t('tabCheck'),
+    tabMaintain: t('tabMaintain'),
+    // Diagnostics export (the report BODY is an unlocalized technical artifact —
+    // see diagnosticsReport.ts; these controls are localized like everything else).
+    diagnosticsTitle: t('diagnosticsTitle'),
+    diagnosticsHint: t('diagnosticsHint'),
+    diagnosticsCta: t('diagnosticsCta'),
+    diagnosticsCopied: t('diagnosticsCopied'),
+    diagnosticsShow: t('diagnosticsShow'),
+    diagnosticsHide: t('diagnosticsHide'),
+    diagnosticsManualHint: t('diagnosticsManualHint'),
     refresh: t('refresh'),
     errorGeneric: t('errorGeneric'),
   }), [t, format]);

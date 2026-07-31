@@ -62,6 +62,25 @@ export const PROVIDER_META: Record<IntegrationProvider, ProviderMeta> = {
   monday: { label: 'monday.com', baseUrl: false, secrets: [{ key: 'token', label: 'API token' }], board: { externalId: 'required', hint: 'Board ID (numeric)' } },
   asana: { label: 'Asana', baseUrl: false, secrets: [{ key: 'accessToken', label: 'Personal access token' }], board: { externalId: 'required', hint: 'Project GID' } },
   clickup: { label: 'ClickUp', baseUrl: false, secrets: [{ key: 'token', label: 'API token', placeholder: 'pk_…' }], board: { externalId: 'required', hint: 'List ID' } },
+  // Not a board/ticket source: this key gives CLOUD AGENTS the `web_search` tool. They
+  // can already read a URL you give them; a search key lets them find one. Search bills
+  // per query, so the key is yours — with none saved, agents stay fetch-only.
+  brave_search: { label: 'Brave Search (agent web search)', baseUrl: false, secrets: [{ key: 'apiKey', label: 'Subscription token', placeholder: 'BSA…' }] },
+  // Google connectors — OAuth offline credentials (client id/secret + a refresh
+  // token from Google's OAuth playground or your own consent flow). Gmail backs
+  // the email workflow node; Drive can back a project's file storage.
+  gmail: { label: 'Gmail', baseUrl: false, secrets: [
+    { key: 'clientId', label: 'OAuth client ID', type: 'text', placeholder: '…apps.googleusercontent.com' },
+    { key: 'clientSecret', label: 'OAuth client secret' },
+    { key: 'refreshToken', label: 'OAuth refresh token' },
+    { key: 'fromEmail', label: 'Send-as email', type: 'text', placeholder: 'you@gmail.com' },
+  ] },
+  google_drive: { label: 'Google Drive', baseUrl: false, secrets: [
+    { key: 'clientId', label: 'OAuth client ID', type: 'text', placeholder: '…apps.googleusercontent.com' },
+    { key: 'clientSecret', label: 'OAuth client secret' },
+    { key: 'refreshToken', label: 'OAuth refresh token' },
+    { key: 'rootFolderId', label: 'Root folder ID (optional)', type: 'text', placeholder: 'blank = Drive root' },
+  ] },
 };
 
 const cardStyle: React.CSSProperties = {
@@ -103,6 +122,15 @@ export interface IntegrationCredentialsManagerProps {
   heading?: string | null;
 }
 
+/** Keep a provider-specific drawer from leaking unrelated workspace keys. */
+export function filterCredentialsByProvider(
+  credentials: IntegrationCredential[],
+  providerFilterKey: string,
+): IntegrationCredential[] {
+  const allowedProviders = new Set(providerFilterKey.split('|'));
+  return credentials.filter((credential) => allowedProviders.has(credential.provider));
+}
+
 export function IntegrationCredentialsManager({ projectId, providers, heading }: IntegrationCredentialsManagerProps) {
   const confirm = useConfirm();
   const tc = useTranslations('common');
@@ -111,6 +139,9 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
   const canManage = role === 'owner' || role === 'manager';
 
   const providerList = providers ?? (Object.keys(PROVIDER_META) as IntegrationProvider[]);
+  // A stable primitive keeps the loader in sync when a gallery drawer switches
+  // providers even though callers commonly pass a fresh one-item array.
+  const providerFilterKey = providerList.join('|');
 
   const [scoped, setScoped] = useState<IntegrationCredential[]>([]);
   const [inherited, setInherited] = useState<IntegrationCredential[]>([]);
@@ -140,12 +171,20 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
       ? integrationsApi.list({ scope: 'global' })
       : Promise.resolve<IntegrationCredential[]>([]);
     Promise.all([scopedP, inheritedP])
-      .then(([s, i]) => { setScoped(s); setInherited(i); })
+      .then(([s, i]) => {
+        setScoped(filterCredentialsByProvider(s, providerFilterKey));
+        setInherited(filterCredentialsByProvider(i, providerFilterKey));
+      })
       .catch(() => setError(t('loadError')))
       .finally(() => setLoading(false));
-  }, [canManage, projectId]);
+  }, [canManage, projectId, providerFilterKey]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    setProvider(providerList[0]);
+    setAdding(false);
+    setEditingId(null);
+  }, [providerFilterKey]);
 
   if (!canManage) return null;
 

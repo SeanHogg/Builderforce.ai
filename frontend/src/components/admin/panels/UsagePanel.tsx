@@ -24,6 +24,7 @@ import {
 import { Select } from '@/components/Select';
 import { llmChat } from '@/lib/builderforceApi';
 import { errText, fmtDateTime, fmtNum, AdminError, AdminLoading } from '../adminShared';
+import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 export default function UsagePanel() {
   const t = useTranslations('admin');
@@ -42,7 +43,8 @@ export default function UsagePanel() {
   const [usageAiPrompt, setUsageAiPrompt] = useState('');
   const [usageAiLoading, setUsageAiLoading] = useState(false);
   const [usageAiError, setUsageAiError] = useState('');
-  const [usageAiCopied, setUsageAiCopied] = useState(false);
+  // 2000ms confirmation (the hook's default), owned by the shared hook.
+  const usageAiCopy = useCopyToClipboard();
 
   const setErrorMsg = setError;
 
@@ -141,7 +143,8 @@ export default function UsagePanel() {
     if (!llmUsage) return;
     setUsageAiLoading(true);
     setUsageAiError('');
-    setUsageAiCopied(false);
+    // No copy-state reset here any more: the shared hook clears its own `copied` flag
+    // on a timer, so re-running the analysis no longer has to do it by hand.
     try {
       // Pull the real catalog so the AI can't invent model ids and we can
       // verify "already at position 0" claims. Each entry now carries `vendor`
@@ -418,13 +421,9 @@ export default function UsagePanel() {
 
   const copyUsageAiPrompt = async () => {
     if (!usageAiPrompt) return;
-    try {
-      await navigator.clipboard.writeText(usageAiPrompt);
-      setUsageAiCopied(true);
-      setTimeout(() => setUsageAiCopied(false), 2000);
-    } catch (e) {
-      setUsageAiError(e instanceof Error ? e.message : String(e));
-    }
+    // The old catch surfaced the raw DOMException text; the shared write reports
+    // failure as `false`, so the user now gets a localized message instead.
+    if (!await usageAiCopy.copy(usageAiPrompt)) setUsageAiError(t('common.copyFailed'));
   };
 
   if (loading && !llmUsage) return <AdminLoading />;
@@ -453,7 +452,7 @@ export default function UsagePanel() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div className="health-label">{t('usage.claudePromptLabel')}</div>
                 <button type="button" className="btn-ghost" onClick={copyUsageAiPrompt}>
-                  {usageAiCopied ? `✓ ${t('common.copied')}` : t('common.copy')}
+                  {usageAiCopy.copied ? `✓ ${t('common.copied')}` : t('common.copy')}
                 </button>
               </div>
               <textarea

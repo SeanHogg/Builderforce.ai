@@ -60,6 +60,20 @@ function useSourceBody() {
   return { data, state, t };
 }
 
+/**
+ * True when the window HAS usage but none of it cost the platform anything —
+ * i.e. the tenant's own connected keys funded it (BYO rows are recorded with
+ * cost 0 by design).
+ *
+ * The cost-charted cards below rank by spend, so a BYO tenant's rows all fall out
+ * of a bare `cost > 0` filter. Without this the card would claim "no spend" —
+ * indistinguishable from "nothing ran". Shared so both cost cards tell the same
+ * story from the same rule.
+ */
+function isByoFundedOnly(rows: ReadonlyArray<{ totalTokens: number; estimatedCostUsd: number }>): boolean {
+  return rows.some((r) => r.totalTokens > 0) && rows.every((r) => r.estimatedCostUsd <= 0);
+}
+
 // ── Widget bodies (the WidgetCard owns the frame/title/pin) ─────────────────────
 
 function LlmTokensCard(_props: WidgetCardProps) {
@@ -106,10 +120,11 @@ function LlmSpendCard(_props: WidgetCardProps) {
   return <Stat value={usd(data.totals.estimatedCostUsd)} sub={t('llmUsage.spendSub')} />;
 }
 
-const SOURCE_LABEL: Record<DashboardUsage['byKind'][number]['kind'], string> = {
-  cloud: 'Cloud',
-  'on-prem': 'On-prem',
-  web: 'Web / SDK',
+/** Translation key per source bucket — the catalogs own the wording. */
+const SOURCE_LABEL_KEY: Record<DashboardUsage['byKind'][number]['kind'], string> = {
+  cloud: 'llmUsage.sourceCloud',
+  'on-prem': 'llmUsage.sourceOnPrem',
+  web: 'llmUsage.sourceWeb',
 };
 
 function LlmBySourceCard(_props: WidgetCardProps) {
@@ -117,8 +132,10 @@ function LlmBySourceCard(_props: WidgetCardProps) {
   if (!data) return state;
   const segments = data.byKind
     .filter((k) => k.estimatedCostUsd > 0)
-    .map((k, i) => ({ key: k.kind, label: SOURCE_LABEL[k.kind], value: k.estimatedCostUsd, color: colorAt(i) }));
-  if (segments.length === 0) return <Muted>{t('llmUsage.noSpend')}</Muted>;
+    .map((k, i) => ({ key: k.kind, label: t(SOURCE_LABEL_KEY[k.kind]), value: k.estimatedCostUsd, color: colorAt(i) }));
+  if (segments.length === 0) {
+    return <Muted>{t(isByoFundedOnly(data.byKind) ? 'llmUsage.byoFundedOnly' : 'llmUsage.noSpend')}</Muted>;
+  }
   return (
     <DonutChart
       segments={segments}
@@ -138,7 +155,9 @@ function LlmByProjectCard(_props: WidgetCardProps) {
     .slice()
     .sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd)
     .map((p, i) => ({ key: String(p.projectId ?? 'none'), label: p.projectName, value: p.estimatedCostUsd, color: colorAt(i) }));
-  if (rows.length === 0) return <Muted>{t('llmUsage.noProjects')}</Muted>;
+  if (rows.length === 0) {
+    return <Muted>{t(isByoFundedOnly(data.perProject) ? 'llmUsage.byoFundedOnly' : 'llmUsage.noProjects')}</Muted>;
+  }
   return <BarChart data={rows} maxRows={6} formatValue={(v) => usd(v)} ariaLabel={t('llmUsage.byProject')} />;
 }
 

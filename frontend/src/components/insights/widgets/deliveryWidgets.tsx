@@ -12,10 +12,9 @@
  * per window), render only their body (the WidgetCard chrome supplies frame +
  * title + pin), and drill back into the matching Delivery slide-out panel.
  *
- * Mirrors aiImpactWidgets.tsx exactly. The delivery cards use the tenant-wide,
- * window-keyed delivery collectors (lifecycle + derived sprint velocity) since a
- * dashboard widget only receives the shared `days` window — not a picked
- * deliverable — which is also what the lens shows tenant-wide.
+ * Mirrors aiImpactWidgets.tsx exactly. The delivery cards use the global project
+ * selection plus the shared `days` window, matching the Delivery hub and its
+ * drill-down panels.
  */
 
 import { useTranslations } from 'next-intl';
@@ -33,20 +32,24 @@ import { BandedMetricBar, type MetricTier } from '@/components/charts/BandedMetr
 import { colorAt } from '@/components/charts/chartColors';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { hrs, pct } from '../format';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 
 // ── Shared, deduped collector reads (one request per source × window) ──────────
 
 /** One shared read of the DORA four-keys collector per window. */
 function useDora(days: number) {
-  return useSharedSource<DoraInsights>(`dora:${days}`, () => insightsApi.dora(days));
+  const { currentProjectId } = useProjectScope();
+  return useSharedSource<DoraInsights>(`dora:${days}:p:${currentProjectId ?? 0}`, () => insightsApi.dora(days, currentProjectId));
 }
 /** One shared read of the life-cycle (cycle time) collector per window. */
 function useLifecycle(days: number) {
-  return useSharedSource<LifecycleInsights>(`lifecycle:${days}`, () => insightsApi.lifecycle(days));
+  const { currentProjectId } = useProjectScope();
+  return useSharedSource<LifecycleInsights>(`lifecycle:${days}:p:${currentProjectId ?? 0}`, () => insightsApi.lifecycle(days, currentProjectId));
 }
-/** One shared read of the derived sprint-velocity collector (tenant-wide). */
+/** One shared read of the derived sprint-velocity collector per project/window. */
 function useVelocity(days: number) {
-  return useSharedSource<VelocityInsights>(`velocity:${days}`, () => agileMetricsApi.derivedVelocity());
+  const { currentProjectId } = useProjectScope();
+  return useSharedSource<VelocityInsights>(`velocity:${days}:p:${currentProjectId ?? 0}`, () => agileMetricsApi.derivedVelocity(currentProjectId));
 }
 
 // Both lenses live behind the same Delivery hub slide-out.
@@ -269,7 +272,7 @@ function SprintTableCard({ days }: WidgetCardProps) {
 // ── Registry ─────────────────────────────────────────────────────────────────
 
 export const DELIVERY_WIDGETS: WidgetDef[] = [
-  // Delivery (cycle time + velocity, tenant-wide window-keyed collectors)
+  // Delivery (cycle time + velocity, project/window-keyed collectors)
   { id: 'delivery.cycle-time', group: 'delivery', titleKey: 'delivCycleTime', capability: CAP_DELIVERY, size: 'sm', Card: CycleTimeCard, drill: DRILL_DELIVERY },
   { id: 'delivery.velocity', group: 'delivery', titleKey: 'delivVelocity', capability: CAP_DELIVERY, size: 'sm', Card: VelocityCard, drill: DRILL_DELIVERY },
   { id: 'delivery.estimation', group: 'delivery', titleKey: 'delivEstimation', capability: CAP_DELIVERY, size: 'sm', Card: EstimationCard, drill: DRILL_DELIVERY },

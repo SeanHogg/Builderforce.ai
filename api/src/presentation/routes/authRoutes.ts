@@ -2,7 +2,12 @@ import { Hono, type Context } from 'hono';
 import { and, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { AuthService } from '../../application/auth/AuthService';
 import { DeviceAuthService } from '../../application/auth/DeviceAuthService';
-import type { HonoEnv } from '../../env';
+import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
+import { credentialSecret } from '../../application/integrations/credentialCrypto';
+import { sendWelcomeEmail, sendAccountTypeSelectedEmail } from '../../infrastructure/email/EmailService';
+import { sendTransactionalEmail } from '../../application/email/sendEmail';
+import { headerHints, rememberUserLocale } from '../../application/email/emailLocaleResolver';
+import { localeFromHeaders } from '../../infrastructure/email/emailLocale';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { TenantRole, type UserId } from '../../domain/shared/types';
 import {
@@ -37,7 +42,7 @@ import {
 } from '../../infrastructure/auth/MfaService';
 import { revokeTenantApiKeyByRawKey } from '../../application/llm/tenantApiKeyService';
 import { issueVerificationCode, verifyVerificationCode, type VerifyResult } from '../../application/auth/EmailVerificationService';
-import { checkTermsAcceptance } from '../middleware/termsEnforcement';
+import { checkTermsAcceptance, invalidateAcceptedTermsVersion } from '../../application/legal/termsAcceptance';
 import { getActiveLegalDoc } from '../../application/legal/legalDocsService';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
@@ -48,6 +53,32 @@ import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfi
 function parsePsychometric(raw: string | null | undefined): unknown {
   if (!raw) return null;
   try { return JSON.parse(raw) as unknown; } catch { return null; }
+}
+
+/** Resumable setup-wizard progress, recorded by STEP ID (see migration 0343). */
+export interface OnboardingProgress {
+  track: 'builder' | 'hired';
+  completed: string[];
+  activeStep: string | null;
+}
+
+const ONBOARDING_TRACKS = ['builder', 'hired'] as const;
+
+/** Parse + validate stored progress; anything malformed degrades to null so a bad
+ *  row can never break the wizard (it just restarts at step 1). */
+export function parseOnboardingProgress(raw: string | null | undefined): OnboardingProgress | null {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw) as Partial<OnboardingProgress>;
+    if (!ONBOARDING_TRACKS.includes(v.track as (typeof ONBOARDING_TRACKS)[number])) return null;
+    return {
+      track: v.track as OnboardingProgress['track'],
+      completed: Array.isArray(v.completed) ? v.completed.filter((s): s is string => typeof s === 'string').slice(0, 32) : [],
+      activeStep: typeof v.activeStep === 'string' ? v.activeStep : null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 type TokenPayload = {
@@ -207,7 +238,7 @@ async function persistToken(
 
 async function assertMfa(
   db: Db,
-  envSecret: string,
+  env: Env,
   user: typeof users.$inferSelect,
   code?: string,
   recoveryCode?: string,
@@ -215,7 +246,9 @@ async function assertMfa(
   if (!user.mfaEnabled || !user.mfaSecretEnc) return false;
 
   if (code) {
-    const secret = await decryptSecretFromStorage(user.mfaSecretEnc, envSecret);
+    // M2: read under the dedicated credential secret, JWT_SECRET as legacy fallback
+    // (versioned dual-read) so pre-migration MFA rows still decrypt.
+    const secret = await decryptSecretFromStorage(user.mfaSecretEnc, credentialSecret(env), { legacySecret: env.JWT_SECRET });
     const validTotp = await verifyTotpCode(secret, code);
     if (validTotp) return true;
   }
@@ -444,7 +477,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
   router.get('/legal/terms/status', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const terms = await getActiveLegalDoc(db, 'terms');
-    const status = await checkTermsAcceptance(db, userId);
+    const status = await checkTermsAcceptance(db, userId, c.env);
     return c.json({
       requiredVersion: status.requiredVersion ?? terms.version,
       acceptedVersion: status.acceptedVersion,
@@ -478,6 +511,11 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
           updatedAt: sql`now()`,
         },
       });
+
+    // The auth middlewares serve this from the read-through cache, so the accept
+    // MUST invalidate it — otherwise the user keeps getting 428 until the TTL
+    // lapses, on the one screen that is supposed to unblock them.
+    await invalidateAcceptedTermsVersion(c.env, userId);
 
     return c.json({
       acceptedVersion: terms.version,
@@ -538,7 +576,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       userCode,
       userId,
       tenantId: body.tenantId,
-      envSecret: c.env.JWT_SECRET,
+      envSecret: credentialSecret(c.env),
     });
     if (!res.ok) return c.json({ error: res.error }, res.error === 'no_tenant' ? 409 : 400);
     return c.json({ ok: true, decision: 'approve' });
@@ -560,7 +598,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
   router.post('/device/token', async (c) => {
     const body = await c.req.json<{ device_code?: string }>();
     if (!body.device_code) return c.json({ error: 'device_code is required' }, 400);
-    const res = await deviceAuth.poll(body.device_code, c.env.JWT_SECRET);
+    const res = await deviceAuth.poll(body.device_code, credentialSecret(c.env), c.env.JWT_SECRET);
     switch (res.state) {
       case 'approved':
         return c.json({ access_key: res.accessKey, tenant_id: res.tenantId, token_type: 'bearer' }, 200);
@@ -703,6 +741,11 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         // The register form is an explicit role choice, so mark it selected now —
         // the onboarding gate must never re-prompt a password signup.
         accountTypeSelectedAt: sql`now()`,
+        // Capture the language THIS signup is happening in (NEXT_LOCALE cookie, then
+        // Accept-Language) so the very first email — the verification code, sent a
+        // few lines below — is already in it. Null when the request gives no usable
+        // hint; the resolver then falls back per its documented chain.
+        locale: localeFromHeaders(headerHints(c.req)),
       })
       .returning();
 
@@ -712,6 +755,9 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       { userId: created.id, documentType: 'terms', version: termsDoc.version },
       { userId: created.id, documentType: 'privacy', version: privacyDoc.version },
     ]);
+    // Registration accepts terms implicitly — drop any cached "not accepted" so
+    // the very first authenticated call after signup isn't gated with a 428.
+    await invalidateAcceptedTermsVersion(c.env, created.id);
 
     // A freelancer gets a for-hire profile stub immediately (private + unpublished
     // until they fill it in) and is auto-provisioned a hired.video job-seeker
@@ -725,7 +771,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     // issued until the user enters the 6-digit code we email now. This is what
     // stops fake / unowned-email signups. The client flips to the code-entry step
     // on `verificationRequired` and calls /web/register/verify to obtain a session.
-    await issueVerificationCode(db, c.env, created, { force: true, anonId });
+    await issueVerificationCode(db, c.env, created, { force: true, anonId, headers: headerHints(c.req) });
 
     return c.json({
       verificationRequired: true,
@@ -772,6 +818,29 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         .update(users)
         .set({ emailVerifiedAt: sql`now()`, updatedAt: sql`now()` })
         .where(eq(users.id, user.id));
+
+      // First successful verification is when a password signup becomes a real
+      // account — the welcome goes here, not at the (still-unverified) insert.
+      // Guarded by the `!user.emailVerifiedAt` branch, so a re-submit can't
+      // send it twice. Fire-and-forget: mail failure must not fail the session.
+      // The role was chosen on the register form, so the welcome carries the
+      // role-specific next steps directly — no follow-up account-type email.
+      // `stored: user.locale` skips the resolver's lookup: the row is already in
+      // hand, and it was captured at register time from this same browser.
+      void sendTransactionalEmail(
+        c.env,
+        db,
+        user.email,
+        ({ locale }) => sendWelcomeEmail(
+          c.env,
+          user.email,
+          user.displayName ?? user.username ?? '',
+          resolveAppBaseUrl(c.env),
+          user.accountType === 'freelancer' ? 'freelancer' : 'standard',
+          locale,
+        ),
+        { storedLocale: user.locale, headers: headerHints(c.req) },
+      );
     }
 
     const expiresIn = body.trustDevice === true ? 30 * 86_400 : 86_400;
@@ -813,7 +882,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (email) {
       const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
       if (user && !user.emailVerifiedAt && !user.isSuspended) {
-        const res = await issueVerificationCode(db, c.env, user);
+        const res = await issueVerificationCode(db, c.env, user, { headers: headerHints(c.req) });
         if (!res.sent && res.cooldownSeconds) {
           return c.json({ ok: true, cooldownSeconds: res.cooldownSeconds });
         }
@@ -852,7 +921,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     // (cooldown-guarded) and route the client into the same code-entry step instead
     // of issuing a session. Keeps a half-finished fake signup from ever logging in.
     if (!user.emailVerifiedAt) {
-      await issueVerificationCode(db, c.env, user);
+      await issueVerificationCode(db, c.env, user, { headers: headerHints(c.req) });
       return c.json({ verificationRequired: true, email: user.email }, 403);
     }
 
@@ -944,7 +1013,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       return c.json({ error: 'MFA is not enabled for this account' }, 400);
     }
 
-    const valid = await assertMfa(db, c.env.JWT_SECRET, user, body.code, body.recoveryCode);
+    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
     const superadmin = canUseSuperAdmin(user);
@@ -989,7 +1058,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const user = await authService.getMe(userId);
     if (!user) return c.json({ error: 'User not found' }, 404);
     const [full] = await db
-      .select({ mfaEnabled: users.mfaEnabled, onboardingCompletedAt: users.onboardingCompletedAt, psychometric: users.psychometric, accountType: users.accountType, accountTypeSelectedAt: users.accountTypeSelectedAt, availableForHire: users.availableForHire })
+      .select({ mfaEnabled: users.mfaEnabled, onboardingCompletedAt: users.onboardingCompletedAt, onboardingProgress: users.onboardingProgress, psychometric: users.psychometric, accountType: users.accountType, accountTypeSelectedAt: users.accountTypeSelectedAt, availableForHire: users.availableForHire })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
@@ -998,6 +1067,9 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         ...user,
         mfaEnabled: full?.mfaEnabled ?? false,
         onboardingCompletedAt: full?.onboardingCompletedAt ?? null,
+        // Which setup steps are already done — lets the wizard resume instead of
+        // restarting at step 1 (0343).
+        onboardingProgress: parseOnboardingProgress(full?.onboardingProgress),
         psychometric: parsePsychometric(full?.psychometric),
         // Account type + whether the user has explicitly chosen it (Build vs
         // Hired). The onboarding gate forces the choice when not yet selected.
@@ -1021,6 +1093,15 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const [existing] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!existing) return c.json({ error: 'User not found' }, 404);
 
+    // The locale-capture point for OAuth / magic-link accounts. Their signup was a
+    // cross-site redirect where the app's locale header and NEXT_LOCALE cookie are
+    // unavailable, so `users.locale` is usually still NULL here. This is the first
+    // request that comes from the APP itself (and therefore carries
+    // X-Builderforce-Locale), and it happens before the account-type email is sent
+    // a few lines below — so that mail is already in the right language.
+    // Non-destructive: it only fills an empty locale, never overwrites a choice.
+    await rememberUserLocale(c.env, db, userId, headerHints(c.req)).catch(() => null);
+
     // Already chosen — return as-is so the client can just advance.
     if (existing.accountTypeSelectedAt) {
       return c.json({ user: toUserResponse(existing), alreadySelected: true });
@@ -1043,6 +1124,24 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (accountType === 'freelancer') {
       await provisionFreelancer(c, row);
     }
+
+    // The role-specific next steps. Only reachable past the idempotency guard
+    // above, so the choice — and this email — happen exactly once per account.
+    // Fire-and-forget: mail must not fail the role selection.
+    void sendTransactionalEmail(
+      c.env,
+      db,
+      row.email,
+      ({ locale }) => sendAccountTypeSelectedEmail(
+        c.env,
+        row.email,
+        row.displayName ?? row.username ?? '',
+        resolveAppBaseUrl(c.env),
+        accountType,
+        locale,
+      ),
+      { storedLocale: row.locale, headers: headerHints(c.req) },
+    );
 
     return c.json({ user: toUserResponse(row) });
   });
@@ -1071,6 +1170,21 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       await Promise.all(memberships.map((m) => invalidateCached(c.env, assigneeProfilesCacheKey(m.tenantId))));
     }
     return c.json({ user: toUserResponse(row) });
+  });
+
+  // PUT /api/auth/me/onboarding/progress — records which setup steps are done, so
+  // a user who closes the wizard mid-way resumes where they left off (0343).
+  // Idempotent full-state write; validated so a malformed body can't poison the row.
+  router.put('/me/onboarding/progress', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as UserId;
+    const body = await c.req.json<Partial<OnboardingProgress>>().catch(() => ({} as Partial<OnboardingProgress>));
+    const progress = parseOnboardingProgress(JSON.stringify(body));
+    if (!progress) return c.json({ error: 'Invalid onboarding progress' }, 400);
+    await db
+      .update(users)
+      .set({ onboardingProgress: JSON.stringify(progress), updatedAt: sql`now()` })
+      .where(eq(users.id, userId));
+    return c.json({ progress });
   });
 
   // POST /api/auth/me/onboarding/complete — marks onboarding as done, stores intent
@@ -1212,7 +1326,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (user.mfaEnabled) return c.json({ error: 'MFA is already enabled' }, 409);
 
     const secret = generateTotpSecret();
-    const encrypted = await encryptSecretForStorage(secret, c.env.JWT_SECRET);
+    const encrypted = await encryptSecretForStorage(secret, credentialSecret(c.env), { upgrade: true });
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     await db
@@ -1260,11 +1374,11 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       return c.json({ error: 'MFA setup session expired. Start setup again.' }, 400);
     }
 
-    const secret = await decryptSecretFromStorage(user.mfaTempSecretEnc, c.env.JWT_SECRET);
+    const secret = await decryptSecretFromStorage(user.mfaTempSecretEnc, credentialSecret(c.env), { legacySecret: c.env.JWT_SECRET });
     const valid = await verifyTotpCode(secret, body.code);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
-    const encryptedSecret = await encryptSecretForStorage(secret, c.env.JWT_SECRET);
+    const encryptedSecret = await encryptSecretForStorage(secret, credentialSecret(c.env), { upgrade: true });
     const recoveryCodes = generateRecoveryCodes(10);
 
     await replaceRecoveryCodes(db, user.id, recoveryCodes);
@@ -1303,7 +1417,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (!user) return c.json({ error: 'User not found' }, 404);
     if (!user.mfaEnabled) return c.json({ enabled: false });
 
-    const valid = await assertMfa(db, c.env.JWT_SECRET, user, body.code, body.recoveryCode);
+    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
     await db.delete(userMfaRecoveryCodes).where(eq(userMfaRecoveryCodes.userId, user.id));
@@ -1340,7 +1454,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (!user) return c.json({ error: 'User not found' }, 404);
     if (!user.mfaEnabled) return c.json({ error: 'MFA is not enabled' }, 400);
 
-    const valid = await assertMfa(db, c.env.JWT_SECRET, user, body.code, body.recoveryCode);
+    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
     const recoveryCodes = generateRecoveryCodes(10);

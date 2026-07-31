@@ -1,4 +1,101 @@
 {
+  "marketingDeck": {
+    "seo": {
+      "title": "终极演示 — Builderforce",
+      "description": "跟随五个步骤，见证一个想法如何变成一个正在运行、已部署并经过测试的应用，由人类与 AI 智能体组成的团队来运营。",
+      "ogTitle": "终极演示：几分钟内构建、部署并扩展"
+    },
+    "ui": {
+      "start": "开始演示",
+      "next": "下一步",
+      "prev": "上一步",
+      "restart": "重新开始",
+      "progress": "{current} / {total}",
+      "progressLabel": "演示进度",
+      "seeLabel": "你将看到",
+      "ctaPrimary": "开始构建",
+      "ctaSecondary": "预约演示"
+    },
+    "slides": [
+      {
+        "kind": "intro",
+        "eyebrow": "终极演示",
+        "title": "构建、部署、扩展——一气呵成。",
+        "tagline": "五个步骤，把一个想法一路带到正在运行的产品，由人类与 AI 智能体组成的团队运营。跟着做吧。"
+      },
+      {
+        "kind": "scenario",
+        "chapter": "01",
+        "eyebrow": "登录",
+        "title": "零配置，你已经进来了。",
+        "tagline": "没有表单，没有设置——只需一个账户。",
+        "steps": [
+          "创建账户或登录",
+          "直接进入你的默认工作区",
+          "一个默认项目已经在等着你"
+        ],
+        "see": "几秒钟内就进入一个可用的工作区——无论在网页端还是 VS Code 中。"
+      },
+      {
+        "kind": "scenario",
+        "chapter": "02",
+        "eyebrow": "描述它",
+        "title": "说出你想要的，看着它被构建出来。",
+        "tagline": "在「我们要构建什么？」中输入你的想法。",
+        "steps": [
+          "用自然语言描述你的应用",
+          "进入 Builder，你的提示已一并带入",
+          "AI 为你搭建一个完整、可运行的应用"
+        ],
+        "see": "实时预览随即亮起一个可用的应用——仅凭一句话。"
+      },
+      {
+        "kind": "scenario",
+        "chapter": "03",
+        "eyebrow": "部署与测试",
+        "title": "一键上线，自动测试。",
+        "tagline": "发布，然后让智能体为它做全面检验。",
+        "steps": [
+          "点击发布——你的应用几秒内就在一个网址上线",
+          "智能测试器自动以已部署的应用为目标",
+          "检查结果以可直接修复的工单返回"
+        ],
+        "see": "无需离开 Builder，即完成部署与质量检查。"
+      },
+      {
+        "kind": "scenario",
+        "chapter": "04",
+        "eyebrow": "扩展团队",
+        "title": "邀请成员，雇佣智能体，同一个团队。",
+        "tagline": "人类与 AI 智能体在同一个看板上协作。",
+        "steps": [
+          "邀请一位同事加入你的工作区",
+          "为你的团队添加一个 AI 智能体",
+          "把工作分配给某个人或某个智能体——同一个选择器"
+        ],
+        "see": "一个由人类与智能体组成的混合团队，在同一个共享看板上协作。"
+      },
+      {
+        "kind": "scenario",
+        "chapter": "05",
+        "eyebrow": "领导团队",
+        "title": "精简的团队，增强的劳动力。",
+        "tagline": "少数几名开发者指挥一支智能体舰队。",
+        "steps": [
+          "为各泳道配置合适的智能体",
+          "把工单拖入泳道即可自动运行一个智能体",
+          "实时引导运行，并在它们工作时回答其提问"
+        ],
+        "see": "少数几名开发者编排着一支承担繁重工作的智能体队伍。"
+      },
+      {
+        "kind": "outro",
+        "eyebrow": "这就是惊艳时刻",
+        "title": "从想法到产品再到团队——只需几分钟。",
+        "tagline": "你刚刚见证了一句提示如何变成一个已部署、已测试的应用，由人类与 AI 智能体组成的团队运营。现在轮到你了。"
+      }
+    ]
+  },
   "contentManager": {
     "migrate": {
       "moving": "正在将您的内容迁移到知识库…",
@@ -121,6 +218,15 @@
     "assignTeam": "分配一个小组…",
     "assign": "分配",
     "boardNameLabel": "看板名称",
+    "templateHeading": "看板模板",
+    "templateLabel": "看板模板",
+    "templateHint": "应用模板将替换此看板的泳道、角色要求、关卡和协调生命周期设置。",
+    "templateApply": "应用模板",
+    "templateApplying": "正在应用…",
+    "templateConfirmTitle": "应用看板模板？",
+    "templateConfirmMessage": "将“{name}”应用到此看板？现有泳道配置将被替换。工单及其历史记录会保留。",
+    "templateLoadError": "无法加载看板模板",
+    "templateApplyError": "无法应用看板模板",
     "maxConcurrent": "最大并发工单数",
     "hideDoneItems": "隐藏已完成项",
     "standupTimer": "站会轮次计时器",
@@ -158,6 +264,9 @@
       "migratable": "可迁移",
       "keyCount": "{count} 个密钥",
       "tapToConnect": "点击连接",
+      "dataConsumed": "已消耗数据量",
+      "thisMonth": "本月",
+      "confirmDisconnect": "确定断开 {label} 的连接吗？这将删除 {count} 个已保存的凭据并停止正在进行的同步。已导入的工作内容会保留。",
       "category": {
         "pm": "项目与工作管理",
         "scm": "源代码管理",
@@ -258,6 +367,22 @@
       "back": "返回",
       "next": "下一步",
       "working": "处理中…"
+    },
+    "page": {
+      "title": "集成 / API 密钥",
+      "subtitle": "在一处连接模型提供商与业务工具、管理开发者密钥并控制提供商优先级。",
+      "searchPlaceholder": "搜索集成与 API 密钥…",
+      "categoryLabel": "类别",
+      "priorityChip": "优先级 · {leader}",
+      "priorityNone": "无",
+      "embedHeading": "嵌入式集成",
+      "category": {
+        "all": "全部",
+        "models": "模型提供商",
+        "apps": "应用集成",
+        "developer": "开发者 API 密钥",
+        "embed": "嵌入"
+      }
     }
   },
   "nav": {
@@ -274,7 +399,7 @@
       "dashboard": "仪表板",
       "brainstorm": "头脑风暴",
       "projects": "项目",
-      "ide": "IDE",
+      "ide": "Builder",
       "workflows": "工作流",
       "workforce": "人才 / 团队",
       "insights": "洞察",
@@ -290,7 +415,9 @@
       "myWorkspace": "我的工作台",
       "marketplace": "市场",
       "incidents": "事件",
-      "monitoring": "监控"
+      "monitoring": "监控",
+      "reliability": "可靠性",
+      "agentOps": "智能体运维"
     },
     "tab": {
       "projects": "项目",
@@ -340,7 +467,7 @@
       "logs": "日志",
       "qa": "智能体 QA",
       "home": "主页",
-      "integrations": "集成",
+      "integrations": "集成 / API 密钥",
       "manager": "经理",
       "roles": "角色",
       "talent": "人才",
@@ -365,8 +492,16 @@
       "escalation": "升级",
       "contacts": "联系人",
       "boards": "看板",
-      "reporting": "报告"
-    }
+      "monitors": "监控器",
+      "reporting": "报告",
+      "rfp": "RFP 响应",
+      "feedback": "反馈",
+      "autonomy": "自主",
+      "coordination": "协同",
+      "memory": "记忆",
+      "rehearsal": "预演"
+    },
+    "primaryAria": "主导航"
   },
   "alerts": {
     "title": "告警",
@@ -440,12 +575,16 @@
     }
   },
   "ceremonies": {
-    "selectProject": "选择一个项目以开始仪式。"
+    "selectProject": "选择一个项目以开始仪式。",
+    "viewLive": "实时圆桌",
+    "viewSchedules": "定期安排",
+    "viewSwitchLabel": "仪式视图",
+    "viewHistory": "历史记录"
   },
   "projectCard": {
     "details": "详情",
     "taskBoard": "任务看板",
-    "openIde": "在 IDE 中打开",
+    "openIde": "在 Builder 中打开",
     "deleteProject": "删除项目",
     "agentLabel": "智能体：",
     "tasks": "{count, plural, other {# 个任务}}",
@@ -465,7 +604,26 @@
     "healthNoDataAria": "项目健康度 — 暂无交付数据",
     "doneAria": "已完成 {pct}% — {total} 个任务中已完成 {completed} 个",
     "donePct": "完成 {pct}%",
-    "health360": "项目 360"
+    "health360": "项目 360",
+    "originBuilder": "Builder",
+    "originImported": "已导入",
+    "originBuilderTitle": "在 Builder 中创建",
+    "originImportedTitle": "从仓库导入",
+    "openChat": "打开项目聊天",
+    "configTitle": "完成配置",
+    "configDone": "已配置",
+    "configTodo": "待办",
+    "configAria": "配置完成 {pct}%",
+    "config_vision": "愿景",
+    "config_goals": "目标",
+    "config_deadline": "截止日期",
+    "config_owner": "负责人",
+    "config_tasks": "任务",
+    "config_architecture": "架构",
+    "configPct": "已配置 {pct}%",
+    "configMissingList": "尚需配置：{items}",
+    "brainstormGoals": "头脑风暴目标",
+    "brainstormGoalsPrompt": "帮我为项目“{name}”头脑风暴出清晰的目标。先询问它的范围和成功标准，然后提出 3–5 个可转化为目标的具体目标。"
   },
   "projectInspection": {
     "title": "检查",
@@ -651,8 +809,8 @@
     "modalityProject": "{label} 项目",
     "modality": {
       "designer": {
-        "label": "设计器",
-        "tagline": "通过预览、代码和实时开发服务器生成并构建应用。",
+        "label": "网站",
+        "tagline": "通过预览、代码和实时开发服务器生成并构建网站或网页应用。",
         "runLabel": "运行"
       },
       "video": {
@@ -674,6 +832,16 @@
         "label": "语音",
         "tagline": "克隆并设计自定义语音，然后用它合成语音。",
         "runLabel": "生成"
+      },
+      "mobile": {
+        "label": "移动端",
+        "tagline": "构建手机应用并在设备模拟器中预览，然后扫码在自己的手机上打开。",
+        "runLabel": "运行"
+      },
+      "webmobile": {
+        "label": "网页 + 移动端",
+        "tagline": "用一套代码同时构建网页应用和移动应用——并排预览两者。",
+        "runLabel": "运行"
       }
     },
     "all": "全部",
@@ -683,10 +851,10 @@
     "noProjectsFilter": "没有符合此筛选条件的项目。请在上方新建一个。",
     "noProjectsYet": "暂无项目。请在上方选择一种类型来创建第一个项目。",
     "deleteFailed": "删除项目失败",
-    "title": "IDE",
-    "subtitle": "新建一个 IDE 项目或打开现有项目。",
-    "newIdeProject": "新建 IDE 项目",
-    "yourIdeProjects": "你的 IDE 项目",
+    "title": "Builder",
+    "subtitle": "新建一个 Builder 项目或打开现有项目。",
+    "newIdeProject": "新建 Builder 项目",
+    "yourIdeProjects": "你的 Builder 项目",
     "comingSoon": "即将推出",
     "soon": "即将",
     "newModalityProject": "新建{label}项目",
@@ -703,16 +871,16 @@
     "projectNamePlaceholder": "我的精彩项目",
     "parentOptional": "归入某个项目（可选）",
     "parentProject": "上级项目",
-    "parentProjectHint": "将此 IDE 项目归入某个项目，或保持未分组。",
-    "ideProjectSettings": "IDE 项目设置",
+    "parentProjectHint": "将此 Builder 项目归入某个项目，或保持未分组。",
+    "ideProjectSettings": "Builder 项目设置",
     "openProjectsAria": "打开项目",
     "editNameHint": "编辑项目名称（失焦或按回车保存）",
-    "projectDetailsTitle": "IDE 项目详情",
+    "projectDetailsTitle": "Builder 项目详情",
     "projectSettingsAria": "项目设置",
     "settingsRepoTitle": "设置与代码库",
     "blockOnFailHint": "开启后，当上次检查失败时将阻止运行",
     "runChecksHint": "在浏览器中运行类型检查、代码检查和构建以验证代码",
-    "detailedConfigHint": "该项目的记忆、模型、推理、个性和语音在 IDE 的面板中配置。在此可重命名并设置其父项目。",
+    "detailedConfigHint": "该项目的记忆、模型、推理、个性和语音在 Builder 的面板中配置。在此可重命名并设置其父项目。",
     "createOpen": "创建并打开",
     "creating": "正在创建…",
     "cancel": "取消",
@@ -748,7 +916,68 @@
     "recipeBlankDesc": "在工作室中从零开始训练的最小模型。",
     "recipeSeedModelLabel": "用于初始化的已发布模型",
     "recipeSeedSelect": "选择一个模型…",
-    "recipeSeedNoModels": "尚无已发布的模型"
+    "recipeSeedNoModels": "尚无已发布的模型",
+    "centerPreview": "预览",
+    "centerCode": "代码",
+    "device": {
+      "simulateOnWeb": "网页模拟",
+      "deviceLabel": "设备",
+      "rotate": "旋转",
+      "reload": "重新加载预览",
+      "openInTab": "在新标签页中打开",
+      "tryOnDevice": "在设备上试用",
+      "previewTitle": "移动应用预览",
+      "emptyTitle": "尚未运行",
+      "emptyHint": "点击“运行”启动开发服务器，即可在此查看您的应用。",
+      "panelTitle": "在手机上预览",
+      "panelIntro": "模拟器运行在当前浏览器标签页内，因此手机无法访问。请改为扫描已发布的构建版本。",
+      "checking": "正在检查已发布的构建…",
+      "qrAlt": "已发布应用网址的二维码",
+      "copyLink": "复制链接",
+      "copied": "已复制",
+      "openLink": "打开",
+      "step1": "在手机上打开相机应用。",
+      "step2": "对准上方的二维码。",
+      "step3": "点击通知即可打开您的应用。",
+      "lastPublished": "上次发布于 {when}",
+      "republishHint": "修改后请重新发布——二维码始终有效，它总是指向最新的构建版本。",
+      "notPublishedTitle": "尚未发布",
+      "notPublishedBody": "发布此应用以获得手机可以打开的链接，大约需要一分钟。",
+      "goToPublish": "前往发布"
+    },
+    "publish": {
+      "title": "发布到网络",
+      "description": "构建此应用并托管在子域名上。静态托管——您的应用在浏览器中运行。",
+      "subdomain": "子域名",
+      "building": "正在构建…",
+      "uploading": "正在上传…",
+      "publish": "发布",
+      "republish": "重新发布",
+      "published": "已发布 ✓",
+      "liveSite": "线上站点",
+      "preview": "预览",
+      "fileCount": "{count, plural, other {# 个文件}}",
+      "invalidSubdomain": "请输入有效的子域名（字母、数字和连字符）。",
+      "failed": "发布失败"
+    },
+    "deploy": {
+      "title": "从 GitHub 部署",
+      "description": "让 GitHub Actions 在每次推送时构建此项目并部署到这里——无需保持 Builder 打开。",
+      "checking": "正在检查已连接的代码仓库…",
+      "needsRepo": "请先在“设置 → 代码仓库”中为此项目连接一个 GitHub 仓库。",
+      "needsGitHub": "此项目连接的不是 GitHub 仓库。GitHub Actions 部署需要 GitHub 仓库。",
+      "repoLabel": "仓库：",
+      "enable": "启用 GitHub 部署",
+      "reapply": "更新工作流",
+      "enabling": "正在写入工作流…",
+      "enableFailed": "无法启用 GitHub 部署。",
+      "enabledOn": "已在 {branch} 分支添加 {path}。下次推送到该分支时将构建并部署。",
+      "viewRuns": "在 GitHub 上查看工作流运行记录",
+      "viewWorkflow": "显示工作流文件"
+    },
+    "askAi": "问 AI",
+    "previewWeb": "网页",
+    "previewMobile": "移动端"
   },
   "tools": {
     "outOf5": "满分 5.0",
@@ -855,7 +1084,24 @@
     "clearanceNeededBody": "这是一个受限的安全事项。您没有查看其详情的权限。请向工作区所有者或管理员申请访问权限。",
     "typeProduct": "产品",
     "typeDesign": "设计",
-    "typeIncident": "事件"
+    "typeIncident": "事件",
+    "requiresRoleHint": "{role, select, viewer {需要观察者角色} developer {需要开发者角色} manager {需要管理者角色} owner {需要所有者角色} other {需要 {role} 角色}}",
+    "requiresDeveloperRole": "需要开发者角色",
+    "closePanel": "关闭面板",
+    "panel": "面板",
+    "copy": "复制",
+    "copied": "已复制",
+    "copyFailed": "复制失败",
+    "copyDiagnostics": "复制诊断信息",
+    "connectToggle": {
+      "connect": "连接",
+      "disconnect": "断开连接",
+      "working": "处理中…",
+      "connectAria": "连接 {name}",
+      "disconnectAria": "断开 {name} 的连接",
+      "errorTitle": "无法断开 {name} 的连接",
+      "errorGeneric": "断开连接失败，请重试。"
+    }
   },
   "prdCreate": {
     "title": "新建 PRD",
@@ -974,6 +1220,12 @@
     "merging": "正在合并…"
   },
   "memberProfile": {
+    "tabs": {
+      "overview": "概览",
+      "timeLogs": "时间日志",
+      "tasks": "任务"
+    },
+    "noTasks": "没有分配给此用户的任务。",
     "subtitle": "{kind} · 能力与可用性",
     "syncing": "正在同步…",
     "syncFromGoogleCalendar": "从 Google 日历同步",
@@ -1034,7 +1286,7 @@
       "cloud_runs": "云端运行",
       "ingestion": "数据",
       "error_events": "错误",
-      "outbound_fetches": "在线率"
+      "outbound_fetches": "出站请求"
     },
     "unlimited": "无限制",
     "freePerMo": "每月免费 {amount}",
@@ -1101,7 +1353,73 @@
     },
     "accountTab": "账户",
     "sessionsTab": "会话",
-    "subnavLabel": "设置分区"
+    "subnavLabel": "设置分区",
+    "emailTab": "邮件",
+    "emailPrefs": {
+      "title": "邮件偏好设置",
+      "whatWeSend": "我们会发送什么",
+      "error": "无法更新您的邮件偏好设置，请重试。",
+      "language": "邮件语言",
+      "languageAuto": "自动检测",
+      "languageHelp": "我们撰写邮件所使用的语言。与上方的应用界面语言相互独立。",
+      "languageTitle": "语言",
+      "languageDetail": "我们会使用该语言与您联系。若设置为自动检测，则使用您注册时所用的语言，无法确定时回退为英语。",
+      "optionalTitle": "可选邮件",
+      "optionalHelp": "关闭您不希望收到的内容。",
+      "optionalDetail": "这些是由我们主动发送的邮件。您可以逐项关闭，并且每一封都附有退订链接。",
+      "productUpdates": "产品动态",
+      "productUpdatesHelp": "新功能与重要变更。",
+      "onboardingTips": "使用技巧与指南",
+      "onboardingTipsHelp": "偶尔提供的建议，帮助您更好地使用 Builderforce。",
+      "digests": "摘要与汇总",
+      "digestsHelp": "定期汇总您各个项目中的动态。",
+      "alwaysOnTitle": "始终发送",
+      "alwaysOnBody": "这些邮件属于您账户的组成部分。即使您退订了其他所有邮件，它们仍会照常发送。",
+      "alwaysOn": {
+        "signIn": "登录链接与免密登录链接",
+        "verification": "邮箱验证码",
+        "invites": "工作区与对话邀请",
+        "security": "安全与账户访问通知"
+      },
+      "transactionalNote": "账户与安全类邮件始终会发送——它们是账户正常运作的一部分，因此未列在上方。",
+      "unsubscribedTitle": "您已退订",
+      "unsubscribedBody": "您当前不会收到任何可选邮件。账户与安全相关的通知仍会发送。",
+      "resubscribeCta": "重新订阅",
+      "resubscribeTitle": "重新订阅可选邮件",
+      "resubscribeConfirm": "您将根据已开启的类别重新开始接收可选邮件。是否继续？"
+    },
+    "spendLimits": "支出限额",
+    "spendTitle": "团队 AI 支出限额",
+    "spendDescription": "为每个席位设置每月 AI 支出上限。没有自带模型密钥的席位将按 OpenRouter 费率在 Builderforce 上运行——达到上限后其付费用量将暂停，接近上限时会通知您和该成员。",
+    "spendTeamsOnlyTitle": "Teams 套餐功能",
+    "spendTeamsOnly": "按席位支出限额为 Teams 套餐功能。升级即可为每位成员设置每月 AI 预算。",
+    "spendDefaultTitle": "默认席位预算",
+    "spendDefaultDescription": "适用于没有单独限额的所有席位。留空表示无默认值。",
+    "spendDefaultLabel": "默认每月预算（美元）",
+    "spendNoDefaultPlaceholder": "无限额",
+    "spendPerSeatMonth": "每席位／每月",
+    "spendDefaultHint": "金额以美元计。由成员自带模型密钥（BYO）承担的用量不计入。",
+    "spendSeatsTitle": "席位",
+    "spendResetsOn": "支出将于 {date} 重置。",
+    "spendNoSeats": "暂无活跃成员。",
+    "spendOfCap": "{spent} / {cap}",
+    "spendUnlimitedUsage": "{spent} · 无限额",
+    "spendModeLabel": "预算模式",
+    "spendModeInherit": "使用默认",
+    "spendModeUnlimited": "无限额",
+    "spendModeCustom": "自定义",
+    "spendAmountPlaceholder": "金额",
+    "spendAmountLabel": "每月预算（美元）",
+    "spendSave": "保存",
+    "spendSaving": "保存中…",
+    "spendSaved": "已保存",
+    "spendSaveFailed": "无法保存",
+    "managerDefaults": "AI 经理",
+    "managerDefaultsTitle": "工作区 AI 经理默认设置",
+    "managerDefaultsSubtitle": "AI 经理在本工作区所有项目中的默认行为。各项目可在自己的“经理”标签页中进一步调整，但绝不能自行获得你在此处保留的权限。",
+    "managerDefaultsError": "无法加载工作区 AI 经理默认设置。",
+    "managerDefaultsProjectHint": "若只想更改某一个项目：",
+    "managerDefaultsProjectLink": "打开该项目的经理设置"
   },
   "pmo": {
     "title": "项目组合（PMO）",
@@ -1310,7 +1628,9 @@
         "crossTeam": "跨团队",
         "crossTeamDesc": "将每个团队与其他团队排名",
         "delayTaxonomy": "延误原因",
-        "delayTaxonomyDesc": "工作为何延误"
+        "delayTaxonomyDesc": "工作为何延误",
+        "autonomy": "自主健康度",
+        "autonomyDesc": "工作是否自行完成？按创建者划分的生命周期漏斗、自主与人工移动之比，以及自主执行停滞之处。"
       },
       "summary": {
         "cycleTime": "平均周期时间",
@@ -1723,7 +2043,12 @@
       "activeUsers": "活跃用户",
       "cost": "成本",
       "tokensSub": "所有模型合计",
-      "tokensByModel": "各模型令牌用量"
+      "tokensByModel": "各模型令牌用量",
+      "byIntegration": "各集成用量",
+      "platformKey": "Builderforce（平台密钥）",
+      "fundedOwnKey": "自有密钥",
+      "fundedPlatform": "平台",
+      "requests": "请求数"
     },
     "devexhub": {
       "title": "开发者体验",
@@ -2054,6 +2379,78 @@
       "title": "此视图需要更高的套餐",
       "body": "高级洞察不包含在您的 {plan} 套餐中。升级即可解锁预测、异常检测和高管视图。",
       "cta": "查看套餐"
+    },
+    "autonomy": {
+      "title": "自主健康度",
+      "subtitle": "AI 管理者和团队成员创建的工单，真的能自主走完整个生命周期吗？按创建者对比漏斗，看清究竟是谁在推动看板，并找出自主执行中断的关卡。",
+      "scopeAll": "本工作区的全部项目。",
+      "scopeProject": "范围：{project}。",
+      "coverage": {
+        "full": "完整覆盖——已审计最近 {days} 天内创建的全部 {n} 个工单。",
+        "truncated": "仅为抽样——审计上限为最近 {days} 天内的 {n} 个工单，因此这些数字只覆盖最新的工单，而非全部。"
+      },
+      "origin": {
+        "label": "创建者",
+        "agent": "智能体",
+        "manager_card": "管理者卡片",
+        "human": "人工",
+        "system": "自动化",
+        "unknown": "无归属"
+      },
+      "stage": {
+        "created": "已创建",
+        "dispatched": "曾被派发",
+        "progressed": "自主推进过",
+        "terminal": "到达完成",
+        "fullyAutonomous": "完全自主"
+      },
+      "allOrigins": "所有来源",
+      "conversion": "端到端",
+      "ticketsCreated": "已创建 {n} 个",
+      "endToEnd": "在零人工移动的情况下到达完成（{n} 个工单）。",
+      "funnelAria": "由{origin}创建的工单的自主漏斗——共 {n} 个工单，按占创建数的比例显示。",
+      "originMixAria": "本时间窗内创建的工单，按创建者划分。",
+      "hopsAutonomous": "自主移动",
+      "hopsHuman": "人工移动",
+      "hopsOfTotal": "{n} 次移动中自主占 {share}",
+      "hopSplitAria": "{origin}的泳道移动：自主 {a} 次，人工 {h} 次。",
+      "stallAria": "阻塞 {n} 个停滞工单的关卡，按工单数排序。",
+      "noTickets": "本时间窗内没有创建任何工单。",
+      "noHops": "本时间窗内没有记录到泳道移动。",
+      "noStalls": "没有停滞——不存在未完成且无任务运行的工单。",
+      "stat": {
+        "fully": "自主完成",
+        "fullySub": "{total} 个工单中有 {n} 个在无人工介入下到达完成",
+        "dispatchedSub": "{total} 个工单中有 {n} 个至少运行过一次",
+        "hopShare": "由自主完成的移动",
+        "hopShareSub": "自主 {a} 次，人工 {h} 次泳道移动",
+        "stalled": "停滞在关卡",
+        "stalledSub": "占工单 {share}——未完成且无任务运行",
+        "neverStartedSub": "占工单 {share}——从未运行、从未移动"
+      },
+      "gateShort": {
+        "unrecorded": "从未评估"
+      },
+      "gate": {
+        "will_run": "已为这些工单派发运行。",
+        "no_board": "该项目没有看板，自主执行无法解析到对应泳道。",
+        "no_lane": "看板上没有与工单状态匹配的泳道，自主执行无从触发。",
+        "terminal_lane": "工单位于终止（完成）泳道，永不自动运行。",
+        "human_gate": "该泳道需人工把关——须有人批准或点击“立即运行”。",
+        "no_agent": "该泳道未配置智能体，且负责人无法执行此阶段。请为泳道配置智能体，或用“立即运行”显式派发。",
+        "managed_no_role": "该看板由生命周期管理，因此每次运行都必须归属于该阶段授权的角色——而此处没有任何已授权角色能解析到智能体。指派负责人无济于事：负责人是协调者，而非执行者。请为泳道配置人员、固定角色，或让协调者解析该阶段的参与者。",
+        "capability_mismatch": "所有候选智能体都缺少该泳道要求的技能。",
+        "already_running": "工单已有正在进行的运行，因此未派发新的运行。",
+        "run_cap_exhausted": "最近连续多次运行不是失败就是没有产出任何成果，自主执行已停止重新派发。人工“立即运行”可覆盖。",
+        "cooldown_active": "上次运行失败或毫无产出，工单进入退避等待期，之后才会再次自主尝试。",
+        "not_executable": "属于系统或协调事务——按设计从不派发给智能体。",
+        "pending_approval": "外部请求需先由人工在分诊中接受，智能体才可处理。",
+        "unrecorded": "从未记录任何自动运行决策——自主执行从未评估过这些工单。",
+        "lane_requirement_gate": "该泳道要求的角色签核尚未完成，因此需求关卡改为派发该评审者，并在评审通过前暂停泳道的常规代理。",
+        "same_lane_reentry": "刚结束的运行已经服务于该泳道，因此循环保护阻止了立即重新派发。当前没有任何运行在执行。",
+        "tenant_token_limit": "工作区已用完令牌额度，因此其所有工单的自主执行都已暂停，直到额度重置或升级套餐。",
+        "cloud_run_limit": "工作区已用完本月云端运行额度。重试无法解除——请升级套餐或等待重置。本地和 VS Code 运行不受限制。"
+      }
     }
   },
   "cloudAgentForm": {
@@ -2078,9 +2475,10 @@
     "surface": "运行时载体",
     "surfaceLabel": {
       "durable": "持久（云端、按需无服务器）",
-      "container": "长时运行的 Cloudflare 容器（用于超长任务）"
+      "container": "长时运行的 Cloudflare 容器（用于超长任务）",
+      "github_actions": "GitHub Actions（在你仓库的运行器上执行）"
     },
-    "surfaceHelp": "两者都在云端（全部 Cloudflare）运行完整任务。持久型按需在 Durable Object 上逐步执行——默认选项。长时运行的 Cloudflare 容器会为超长、连续的任务保持进程运行（在容器基础设施启用前会回退到持久型）。",
+    "surfaceHelp": "三者都会在远端运行完整任务。持久型按需在 Durable Object 上逐步执行——默认选项。长时运行的 Cloudflare 容器会为超长、连续的任务保持进程运行（在容器基础设施启用前会回退到持久型）。GitHub Actions 会在你所关联仓库自己的运行器上执行智能体，拥有真实的文件系统与工具链，时限为 60 分钟——需要仓库中已提交 Builderforce 智能体工作流（.github/workflows/builderforce-agent.yml），否则该次运行会回退到持久型。",
     "baseModel": "基础模型（可选）",
     "baseModelDefault": "builderforce.ai 默认（最佳编码模型）",
     "baseModelHelp": "该智能体运行所用的工具调用 + 编码模型——选择你的某个 LLM 或模型池中的模型。一次运行会为整个任务固定一个模型；保留默认则使用套餐的最佳编码模型。",
@@ -2103,7 +2501,7 @@
     "statusPublished": "已发布",
     "statusDraft": "草稿",
     "loadingCapabilities": "正在加载能力…",
-    "capabilitiesHint": "在此处分配的技能和角色将随此智能体运行到任何环境——IDE、工作流、本地或云端——不受任何项目限制。",
+    "capabilitiesHint": "在此处分配的技能和角色将随此智能体运行到任何环境——Builder、工作流、本地或云端——不受任何项目限制。",
     "pricingIntro": "设定价格即可将 <strong>{name}</strong> 发布到市场。填 0 表示免费上架。",
     "pricingModel": "定价模式",
     "pricingFlatFee": "统一收费",
@@ -2279,8 +2677,8 @@
     "brainHint": "使用 Brain 为此项目生成 PRD 和可执行的任务操作。",
     "integrationKeys": "项目集成密钥",
     "workspaceTitle": "工作区",
-    "workspaceDesc": "此项目的工作区和文件系统。打开 IDE 以编辑文件。",
-    "openInIde": "在 IDE 中打开",
+    "workspaceDesc": "此项目的工作区和文件系统。打开 Builder 以编辑文件。",
+    "openInIde": "在 Builder 中打开",
     "dueDateLabel": "截止日期",
     "dueDateHint": "设置项目截止日期。留空则使用最晚的任务截止日期。",
     "deadline": "截止时间",
@@ -2309,7 +2707,9 @@
       "task": "任务",
       "roadmap": "路线图"
     },
-    "exportCsv": "导出 CSV"
+    "exportCsv": "导出 CSV",
+    "milestoneTip": "里程碑 — 仅设置了一个日期",
+    "derivedTip": "日期根据其中的项目推算得出"
   },
   "reconcile": {
     "loading": "正在加载工作项…",
@@ -2382,7 +2782,23 @@
     },
     "performance": {
       "activityTitle": "贡献活动",
-      "activitySub": "全团队活动——人类通过 git/PR，智能体通过遥测数据。"
+      "activitySub": "全团队活动——人类通过 git/PR，智能体通过遥测数据。",
+      "title": "绩效",
+      "scorecards": "成员记分卡",
+      "scorecardsSub": "· 最近 {days} 天 · 点击行可编辑能力/可用性",
+      "loading": "加载中…",
+      "noActivity": "此时间段内没有活动。",
+      "colMember": "成员",
+      "colAssigned": "已分配",
+      "colCompleted": "已完成",
+      "colRedo": "返工",
+      "colReopen": "重新打开",
+      "colCycle": "周期时间",
+      "colPickup": "领取耗时",
+      "colIdleDone": "完成后闲置",
+      "colHygiene": "看板规范",
+      "colEngage": "参与度",
+      "colEffective": "效能"
     },
     "consolidate": {
       "title": "合并人员",
@@ -2411,7 +2827,9 @@
       "security": "安全",
       "product_manager": "产品",
       "designer": "设计师",
-      "incident_manager": "事件经理"
+      "incident_manager": "事件经理",
+      "cto": "技术总监",
+      "product_owner": "产品负责人"
     },
     "teams": {
       "heading": "团队",
@@ -2511,7 +2929,24 @@
     "errUnhireFailed": "解雇失败",
     "errRemoveMember": "移除成员失败",
     "errChangeRole": "更改角色失败",
-    "errRevokeInvite": "撤销邀请失败"
+    "errRevokeInvite": "撤销邀请失败",
+    "copiedExclaim": "已复制！",
+    "manifest": {
+      "assignedConfig": "已分配的配置",
+      "copyManifest": "复制清单",
+      "emptyNote": "未分配技能或人设",
+      "noneAssigned": "未分配",
+      "personas": "人设",
+      "skills": "技能",
+      "content": "内容"
+    },
+    "quickstart": {
+      "title": "连接新代理",
+      "intro": "已为 <b>{name}</b> 预先配置。在任意机器上运行此命令——代理会自动安装并直接注册到该工作组。",
+      "osUnix": "macOS / Linux",
+      "osWindows": "Windows",
+      "noToken": "此会话中没有工作区令牌——代理会在首次运行时提示你选择工作组。"
+    }
   },
   "knowledge": {
     "headingSops": "标准作业程序",
@@ -2769,6 +3204,7 @@
       "reopen": "重新打开"
     },
     "loadMore": "加载更多",
+    "aggregateConsumption": "错误 · 所有采集器",
     "setup": {
       "title": "错误采集器",
       "subtitle": "连接错误的来源——每个项目一个采集器。",
@@ -2781,6 +3217,7 @@
       "creating": "创建中…",
       "tenantName": "租户采集器",
       "tenantScope": "所有项目（租户级）",
+      "collectorConsumption": "错误 · {name}",
       "snippetNote": "采集密钥仅在创建时显示一次。请将此片段嵌入项目中的每个应用。",
       "sdkSnippet": "浏览器 SDK",
       "otlpEndpoint": "OTLP 端点",
@@ -2792,6 +3229,10 @@
       "paused": "已暂停",
       "pause": "暂停",
       "resume": "恢复",
+      "test": "测试",
+      "testing": "测试中…",
+      "testSucceeded": "已收到测试错误。此采集器配置正确。",
+      "testFailed": "采集器测试失败",
       "delete": "删除",
       "confirmDelete": "删除此采集器？已采集的错误将保留。",
       "lastEvent": "最近事件",
@@ -2945,9 +3386,11 @@
       "daysAgo": "{n} 天前"
     },
     "heading": "我们要构建什么？",
-    "subheading": "先在 <brainstorm>头脑风暴</brainstorm> 中构思，然后作为项目执行并在 IDE 中构建——或通过 <tasks>任务</tasks> 和 <workforce>人才团队</workforce> 代理分配工作。",
+    "subheading": "先在 <brainstorm>头脑风暴</brainstorm> 中构思，然后作为项目执行并在 Builder 中构建——或通过 <tasks>任务</tasks> 和 <workforce>人才团队</workforce> 代理分配工作。",
     "promptPlaceholder": "用 Material UI 组件构建一个预算跟踪器……",
     "brainStorm": "头脑风暴",
+    "build": "构建",
+    "building": "正在启动…",
     "agentsConnected": "{count, plural, other {已连接 # 个代理}}",
     "noAgents": "未连接代理 —",
     "setUpInWorkforce": "在人才团队中设置",
@@ -2967,7 +3410,7 @@
     "tabs": {
       "projects": "项目",
       "workforce": "人才 / 团队",
-      "ide": "IDE",
+      "ide": "Builder",
       "ideas": "想法 / 头脑风暴",
       "quality": "质量",
       "knowledge": "知识库"
@@ -3007,7 +3450,7 @@
       "agentsHeading": "代理（{count}）",
       "noPeople": "没有成员在线。",
       "noAgents": "没有代理在线。",
-      "inIde": "在 IDE 中",
+      "inIde": "在 Builder 中",
       "activeSession": "活动会话",
       "manage": "管理团队",
       "agent": {
@@ -3068,7 +3511,8 @@
       "hours": "工时",
       "labor": "人工",
       "aiSpend": "AI 支出",
-      "qualified": "合格"
+      "qualified": "合格",
+      "optionalPh": "（可选）"
     },
     "soc": {
       "coverage": "控制覆盖率",
@@ -3148,13 +3592,14 @@
       "wfPerformance": "团队 · 绩效",
       "marketplace": "市场",
       "tools": "工具",
-      "ide": "IDE",
+      "ide": "Builder",
       "alerts": "告警",
       "logs": "日志",
       "quality": "质量",
       "integrations": "集成",
       "content": "内容",
       "ceremonies": "仪式",
+      "incidents": "事件",
       "wfPlan": "人力计划",
       "empAllocation": "工作分配",
       "empCollaboration": "协作",
@@ -3162,7 +3607,8 @@
       "empCost": "人力成本",
       "empPerformers": "绩效",
       "empInitiatives": "战略分布",
-      "forecast": "预测"
+      "forecast": "预测",
+      "autonomy": "自主"
     },
     "title": {
       "aiProductivity": "AI 生产力评分",
@@ -3174,6 +3620,7 @@
       "aiModelShare": "模型运行占比",
       "aiMergeRate": "各模型合并率",
       "aiComparison": "多工具评估",
+      "aiByIntegration": "各集成用量",
       "aiShareTrend": "采用与占比趋势",
       "delivCycleTime": "周期时间",
       "delivVelocity": "速度",
@@ -3236,7 +3683,7 @@
       "catalogMarketplaceTopEval": "评分最高的代理",
       "catalogToolsByCategory": "按类别划分的工具",
       "ideByModality": "按模态划分的构建",
-      "ideRecency": "IDE 构建",
+      "ideRecency": "Builder 构建",
       "obsAlertFires": "每日告警触发",
       "obsAlertRuleHealth": "告警规则健康度",
       "obsLogVolume": "事件量",
@@ -3249,6 +3696,10 @@
       "obsContentByKind": "按类型分布的文档",
       "obsCeremonyCadence": "仪式节奏",
       "obsCeremonyBalance": "仪式发言分布",
+      "incStatus": "未解决事件",
+      "incSeverity": "按严重程度划分的事件",
+      "incSystems": "按系统划分的事件",
+      "incMttr": "平均解决时间",
       "wfpCostSplit": "招聘 vs 智能体成本",
       "wfpCapacity": "产能对比 WIP",
       "wfpGap": "可分配余量",
@@ -3262,7 +3713,18 @@
       "forecastCycleProjection": "预测周期时间",
       "forecastCfrProjection": "预测变更失败",
       "forecastAnomalies": "未处理异常",
-      "forecastCostTrend": "花费预测"
+      "forecastCostTrend": "花费预测",
+      "autoFully": "自主完成",
+      "autoDispatched": "曾被派发",
+      "autoHopShare": "由自主完成的移动",
+      "autoStalled": "停滞在关卡",
+      "autoNeverStarted": "从未启动",
+      "autoOriginFunnel": "按来源划分的生命周期漏斗",
+      "autoHopSplit": "自主与人工移动对比",
+      "autoStallGates": "自主执行停滞之处",
+      "autoOriginMix": "谁在创建工作",
+      "autoFunnelTable": "自主漏斗（表格）",
+      "autoCoverage": "审计覆盖范围"
     },
     "loading": "加载中…",
     "overview": {
@@ -3293,7 +3755,11 @@
       "bySource": "按来源成本",
       "spendSub": "预估，最近 7 天",
       "byProject": "按项目支出",
-      "noProjects": "暂无项目支出"
+      "noProjects": "暂无项目支出",
+      "byoFundedOnly": "无平台支出——所有用量均由你连接的密钥承担",
+      "sourceCloud": "云端",
+      "sourceOnPrem": "本地部署",
+      "sourceWeb": "Web / SDK"
     },
     "catalog": {
       "noInstalls": "暂无安装",
@@ -3345,8 +3811,8 @@
     },
     "ide": {
       "builds": "个构建",
-      "buildsSub": "IDE 构建",
-      "noProjects": "暂无 IDE 构建"
+      "buildsSub": "Builder 构建",
+      "noProjects": "暂无 Builder 构建"
     },
     "obs": {
       "noFirings": "暂无触发",
@@ -3381,6 +3847,19 @@
       "humanTalk": "人类",
       "agentTalk": "AI 代理",
       "completed": "已完成"
+    },
+    "inc": {
+      "noIncidents": "无事件",
+      "ofTotal": "共 {total} 个（时间范围内）",
+      "openNudge": "{count} 个需要关注",
+      "allClear": "一切正常",
+      "incidents": "事件",
+      "unclassified": "未分类",
+      "mttrSub": "平均解决时间",
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
     },
     "reorder": {
       "drag": "拖动以重新排序",
@@ -3595,6 +4074,22 @@
     "detailTitle": "已学记忆",
     "detailTask": "任务",
     "detailLearned": "已学内容",
+    "detailTeacher": "教师模型",
+    "detailTeacherSelf": "自主学习",
+    "detailTeacherUnknown": "前沿模型",
+    "detailNoAnswer": "本任务未学到任何内容——教师模型没有给出回答。",
+    "faultBadge": "未蒸馏",
+    "faultTitle": "教师模型没有给出回答",
+    "faultBody": "教师模型未回答此任务（{reason}），因此没有从中学到任何内容。",
+    "faultBodyWithModel": "{model} 未回答此任务（{reason}），因此没有从中学到任何内容。",
+    "faultHint": "请检查已固定的教师模型和前沿模型额度，然后重新教授该任务。",
+    "faultNotPinned": "未固定教师模型",
+    "faultBudget": "前沿模型令牌额度已用尽",
+    "faultTooShort": "任务过短，无法教授",
+    "faultGateway": "模型网关返回错误",
+    "faultEmpty": "教师模型返回了空回答",
+    "faultException": "教师模型调用失败",
+    "faultUnknown": "未记录原因",
     "detailKind": "类型",
     "detailVersion": "版本",
     "detailWeight": "权重",
@@ -3736,7 +4231,31 @@
     "membersTab": "成员",
     "agentsTab": "智能体",
     "auditTab": "SOC 2",
-    "subnavLabel": "安全分区"
+    "subnavLabel": "安全分区",
+    "policiesTab": "策略",
+    "webTab": "网站扫描",
+    "webTitle": "网站安全扫描",
+    "webSubtitle": "指向您的在线网站，立即获取安全问题。每个问题都会创建为工单，供团队修复。",
+    "webUrlLabel": "网站网址",
+    "webUrlPlaceholder": "https://your-site.com",
+    "webSave": "保存",
+    "webRunNow": "运行扫描",
+    "webRunning": "扫描中…",
+    "webScore": "安全评分",
+    "webScoreDelta": "较上次扫描 {delta}",
+    "webBaselineFirst": "首次扫描——这是您的基线。",
+    "webNewFindings": "{count} 个新增",
+    "webResolved": "{count} 个已解决",
+    "webFindingsFiled": "已创建 {count} 个工单",
+    "webNoIssues": "未发现问题——您的网站通过了所有检查。",
+    "webHistory": "扫描历史",
+    "webNoHistory": "暂无扫描。请在上方运行首次扫描。",
+    "webRecommendation": "建议",
+    "sev_critical": "严重",
+    "sev_high": "高",
+    "sev_medium": "中",
+    "sev_low": "低",
+    "sev_info": "信息"
   },
   "catalogInsights": {
     "total": {
@@ -3773,8 +4292,9 @@
     "viewWorkflows": "查看工作流",
     "workflows": "工作流",
     "workflowsWithCount": "工作流（{count}）",
-    "openIde": "在 IDE 中打开",
-    "delete": "删除"
+    "openIde": "在 Builder 中打开",
+    "delete": "删除",
+    "openChat": "打开项目聊天"
   },
   "diagnosticsStrip": {
     "title": "诊断",
@@ -5101,7 +5621,8 @@
         "question": "我能购买或出售看板模板吗？",
         "answer": "可以。将一套交付流程——泳道、必需角色、审阅关卡和推荐名单——打包为看板模板并发布到市场出售或共享。任何团队都可以一键将经过验证的模板安装到项目中，继承一套受治理、按角色放行的工作流，而无需从零构建。"
       }
-    ]
+    ],
+    "newsletterPlaceholder": "your@email.com"
   },
   "pricing": {
     "seo": {
@@ -5146,26 +5667,23 @@
     "labelSeats": "席位",
     "labelBillingEmail": "账单邮箱",
     "placeholderBillingEmail": "billing@example.com",
-    "labelCardBrand": "卡片品牌",
-    "labelCardLast4": "卡号后 4 位",
     "redirectNote": "您将被重定向到我们的支付服务商，以安全地输入您的卡片详情。",
     "total": "合计：${price}/{unit}",
     "totalForSeats": "{seats, plural, one {共 # 个席位} other {共 # 个席位}}",
     "unitYear": "年",
     "unitMonth": "月",
     "errorBillingEmailRequired": "账单邮箱为必填项。",
-    "errorCardLast4": "卡号后 4 位必须正好是 4 位数字。",
     "errorUpgradeFailed": "升级失败",
     "cancel": "取消",
-    "activating": "正在激活…",
     "redirecting": "正在重定向…",
-    "activatePlan": "激活 {plan}",
     "continueToPayment": "继续付款",
     "planComparison": "套餐对比",
     "colFeature": "功能",
     "priceFree": "$0",
     "priceProMonthly": "${price}/月",
     "priceTeamsMonthly": "${price}/席位/月",
+    "teamsVolumeNote": "至少 {min} 个席位",
+    "teamsSeatMinimum": "至少 {min} 个席位 — Teams 面向整个组织采用批量定价。",
     "teamsCostNoteYear": "${perSeat}/席位/年 — 按 ${total}/年 计费",
     "teamsCostNoteMonth": "${perSeat}/席位/月 — 按 ${total}/月 计费",
     "managedAddon": "附加组件：<b>托管 AgentHost</b> — 每个托管 AgentHost ${price}/月。我们为您运行 BuilderForce Agents 实例 — 无需 Docker，无需 DevOps。",
@@ -5525,7 +6043,9 @@
       "learnSkipReasonFrozen": "该项目的 Evermind 已冻结（只读）",
       "reconcileTitle": "已在 Evermind v{version} 中协调 {count} 条已学习记忆",
       "reconcileHint": "回答重述了这些召回的学习内容，因此会对其进行更新（写通式认知）。",
-      "stop": "停止"
+      "stop": "停止",
+      "learnTargetContributed": "已贡献到 {name}（项目 #{projectId} v{version}）",
+      "learnTargetSkipped": "已跳过 {name}（项目 #{projectId}）— {reason}"
     },
     "tickets": {
       "none": "尚未关联任何工单。",
@@ -5572,6 +6092,15 @@
       "lockHint": "共享聊天对整个团队可见；锁定后仅其成员可见。",
       "mergeHint": "将其他聊天合并到此聊天。其消息、工单和代理都会转移到这里；来源聊天将被归档。",
       "mergeNoOthers": "没有可合并的其他聊天。",
+      "questions": "问题",
+      "noQuestions": "没有待回答的问题。",
+      "answerPlaceholder": "输入您的回答…",
+      "submitAnswer": "回答",
+      "answering": "正在发送…",
+      "showTickets": "显示关联工单",
+      "hideTickets": "隐藏关联工单",
+      "ticketCount": "{n, plural, other {# 个工单}}",
+      "overallAria": "总体进度：完成 {pct}%",
       "mergeAction": "将 {n} 个合并到此处",
       "mergedN": "已合并 {n} 个聊天。",
       "kind": {
@@ -5587,7 +6116,7 @@
     },
     "approveAll": "全部批准",
     "newChat": "+ 新建",
-    "messagePlaceholder": "给 Brain 发消息…",
+    "messagePlaceholder": "你想完成什么？",
     "searchChats": "搜索对话…",
     "confirmActionAria": "确认操作",
     "wantsTo": "Brain 想要<b>{action}</b>。批准后即可执行。",
@@ -5620,8 +6149,81 @@
     "addToProject": "添加到项目…",
     "createNewProject": "+ 创建新项目",
     "brainTitle": "Brain",
-    "emptyHint": "开始一个新会话，或选择一个已有会话。",
+    "emptyHint": "告诉我你想完成什么，我来帮你实现。",
     "startNewChat": "开始新会话",
+    "capabilities": {
+      "makingLabel": "创作",
+      "pickerAria": "你想创作什么？",
+      "none": "不限",
+      "tilesHintBrainstorm": "……或从你想创作的内容开始",
+      "tilesHintIde": "……或从你想构建的内容开始",
+      "document": {
+        "label": "文档",
+        "hint": "撰写包含标题、章节和表格的结构化文档。",
+        "starter": "撰写一份文档，总结本项目当前的进展状况。"
+      },
+      "slides": {
+        "label": "幻灯片",
+        "hint": "制作演示文稿，每个章节一页幻灯片。",
+        "starter": "制作一套幻灯片，总结本项目当前的进展状况。"
+      },
+      "dataviz": {
+        "label": "数据可视化",
+        "hint": "将数据转化为内嵌图表，并在下方附上数据。",
+        "starter": "用图表展示本项目任务在各状态中的分布。"
+      },
+      "spreadsheet": {
+        "label": "电子表格",
+        "hint": "用带公式与合计的表格建立数字模型。",
+        "starter": "制作一个电子表格，列出本项目的未完成任务及负责人、状态和已用时长。"
+      },
+      "website": {
+        "label": "网站",
+        "hint": "以可直接创建的真实文件构建网页应用或网站。",
+        "starter": "为本项目构建一个落地页。"
+      },
+      "design": {
+        "label": "设计",
+        "hint": "设计界面——布局、间距、字体与主题变量。",
+        "starter": "为本项目设计主界面，并同时支持浅色和深色主题。"
+      },
+      "mobile": {
+        "label": "移动端",
+        "hint": "构建移动优先、具有原生导航体验的应用。",
+        "starter": "为本项目构建一个移动端首页。"
+      },
+      "animation": {
+        "label": "动画",
+        "hint": "添加有目的的动效，明确时长与缓动曲线。",
+        "starter": "为本项目的主界面添加入场动画。"
+      },
+      "game3d": {
+        "label": "3D 游戏",
+        "hint": "构建 3D 游戏——场景、相机、输入与游戏循环。",
+        "starter": "构建一个可以用相机自由移动查看的简单 3D 场景。"
+      },
+      "export": {
+        "docx": "下载 Word",
+        "pptx": "下载 PowerPoint",
+        "csv": "下载 CSV",
+        "working": "准备中……",
+        "failed": "导出失败",
+        "untitled": "未命名"
+      },
+      "missing": {
+        "body": "这条回复没有包含{capability}——模型只返回了一个标题。",
+        "retry": "重新请求",
+        "retryPrompt": "刚才的回复中没有{capability}。请在本次回复中直接给出完整的{capability}。"
+      }
+    },
+    "messageActions": {
+      "copy": "复制",
+      "copied": "已复制！",
+      "goodResponse": "回答很好",
+      "badResponse": "回答不佳",
+      "thumbsUp": "点赞",
+      "thumbsDown": "点踩"
+    },
     "newProjectPlaceholder": "新项目名称",
     "createAndAssign": "创建并分配",
     "actingAs": "身份",
@@ -5647,10 +6249,32 @@
     "assignChatToProjectAria": "将会话分配到项目",
     "addProject": "+ 项目",
     "workflowsArrow": "工作流 →",
-    "openInIde": "在 IDE 中打开 →",
+    "openInIde": "在 Builder 中打开 →",
     "brainModality": "Brain — {modality}",
     "brainAs": "以 {name} 身份运行的 Brain",
-    "chatHistory": "会话历史"
+    "chatHistory": "会话历史",
+    "upgrade": "升级",
+    "upgradeToPlan": "升级到 {plan}",
+    "addCard": "添加银行卡",
+    "cardValidationFailed": "银行卡验证失败。",
+    "allowance": {
+      "exhausted": "本周期的 AI 令牌额度已用完（{used} / {limit}）。在 {resets} 重置前，对话会失败或中途停止。",
+      "nearLimit": "AI 令牌额度已使用 {percent}%——距 {resets} 还剩 {remaining}。较长的回答可能被截断。",
+      "upgrade": "升级",
+      "connectAccount": "连接你自己的账户",
+      "dismiss": "关闭"
+    },
+    "queuedCount": "已排队 {count} 条消息",
+    "onboardMe": "帮我快速上手",
+    "onboardMePrompt": "我是新用户——帮我快速上手。询问我想构建什么，说明用量和费用的运作方式，根据我的时间安排推荐免费版还是专业版，并在我有现成的 AI 账户时帮我连接。",
+    "providerCapBanner": "你的 {providers} API 密钥已达用量上限——本次运行已回退到共享模型池。",
+    "manageApiKeys": "管理你的 API 密钥 →"
+  },
+  "chatMessage": {
+    "copy": "复制",
+    "apply": "应用 →",
+    "createFile": "创建文件",
+    "downloadAs": "下载 {ext}"
   },
   "modelExport": {
     "subtitle": "将已发布的模型导出为可移植产物——Hugging Face 仓库、ONNX、safetensors 或 GGUF——并下载。模型在服务器端生成，无需令牌。",
@@ -5697,11 +6321,20 @@
         "already_running": "已在运行",
         "human_gate": "等待人工批准",
         "capability_mismatch": "智能体缺少所需技能",
+        "run_cap_exhausted": "多次运行毫无产出——已暂停以待人工检查",
+        "cloud_run_limit": "本月云端运行额度已用完 — 升级后可继续运行",
+        "cooldown_active": "上次运行没有产出，正在冷却——稍后自动重试",
         "no_agent": "未分配智能体",
+        "managed_no_role": "没有角色可执行此阶段",
+        "lane_unconfigured": "该阶段未授权任何角色",
         "no_board": "未配置看板",
         "no_lane": "泳道未配置",
         "terminal_lane": "已完成 — 无需运行",
-        "not_executable": "系统任务 — 不由智能体运行"
+        "not_executable": "系统任务 — 不由智能体运行",
+        "pending_approval": "外部请求——等待人工批准",
+        "lane_requirement_gate": "等待角色签核",
+        "same_lane_reentry": "刚完成此阶段",
+        "tenant_token_limit": "工作区令牌已用尽 — 请升级或等待重置"
       }
     },
     "businessValue": {
@@ -5714,8 +6347,10 @@
     },
     "audit": {
       "flagged": "已标记",
-      "flaggedTitle": "此工单跳过了必需的角色或诊断——需要复核"
-    }
+      "flaggedTitle": "此工单跳过了必需的角色或诊断——需要复核",
+      "participantsTitle": "必需角色参与情况：已完成 & 必需"
+    },
+    "prdBadgeTitle": "{count, plural, other {# 个关联的 PRD}}"
   },
   "projectsContent": {
     "errLoad": "加载项目失败。请检查连接后重试。",
@@ -5915,6 +6550,19 @@
     "description": "为该项目配备专属的自学习模型。启用后，项目的智能体将在其上运行，并随着每个完成的任务变得更强——在云端、本地和编辑器之间共享。",
     "statusSeeded": "已启用 · v{version}",
     "statusUnseeded": "尚未设置",
+    "quarantinedBadge": "已隔离",
+    "quarantinedHint": "此 Evermind 因输出不连贯而自动停用（{reason}）。请将其重新训练至连贯性达标后再启用推理。",
+    "targetsTitle": "此项目下的 Evermind",
+    "targetsHint": "此项目为其贡献学习的所有 Evermind。",
+    "targetsEmpty": "尚未为此项目解析出任何 Evermind。",
+    "targetSelfBadge": "本项目",
+    "targetBuildBadge": "IDE 构建",
+    "targetSeeded": "v{version}",
+    "targetUnseeded": "未初始化",
+    "targetInferenceOn": "推理",
+    "targetConnected": "已连接",
+    "targetFrozen": "已冻结",
+    "targetProjectId": "项目 #{id}",
     "noModels": "请先在 LLM Studio 中发布一个已训练的模型，然后在此启用。",
     "pickModelLabel": "选择一个已发布的模型来驱动该项目",
     "enableCta": "启用",
@@ -5979,7 +6627,66 @@
     "validateMethod": "{method, select, embedding {语义召回} other {词法召回（回退）}}",
     "evalDelta": "相比上版 {pct}%",
     "evalFlat": "无变化",
-    "evalTooltip": "对 v{version} 的回归检查：在 {size, plural, other {# 个先前任务}} 上的留出损失 {base} → {next}。"
+    "evalTooltip": "对 v{version} 的回归检查：在 {size, plural, other {# 个先前任务}} 上的留出损失 {base} → {next}。",
+    "inheritedHint": "此构建共享其父项目的 Evermind，因此父项目学到的一切在这里都可用。训练和设置请在父项目中进行。",
+    "testTitle": "测试台",
+    "testHint": "向模型提问并查看它实际写出的内容，评判标准与真实回复完全一致。在任何人与它对话之前，用这里确认模型是否值得启用。",
+    "testPlaceholder": "向模型提问，例如“总结一下这个项目的现状。”",
+    "testRunCta": "运行提问",
+    "testReadinessCta": "就绪检查",
+    "testRunning": "生成中…",
+    "testResultReadiness": "就绪检查 — {total} 条回答中有 {passed} 条可用",
+    "testResultPrompt": "模型的输出",
+    "testServable": "可用",
+    "testRefused": "已拒绝",
+    "testRefusedBecause": "这段内容不会展示给用户：{detail}。",
+    "testEmptyOutput": "（模型没有输出）",
+    "testVerdictReady": "该模型的输出足够连贯，可以用于回复。",
+    "testVerdictNotReady": "该模型还不够连贯，暂时不能用于回复。请继续教学、指定教师模型，或在下方重建模型。",
+    "maintenanceTitle": "维护",
+    "maintenanceHint": "当模型出问题时用于修复和整理。这些操作都不会删除项目中的工作内容。",
+    "reseedLabel": "替换模型",
+    "reseedHint": "在保留项目的前提下，从一个已知良好的基础模型重新开始。当模型把自己训练成胡言乱语时使用。重新通过就绪检查之前，回复功能会保持关闭。",
+    "reseedCta": "替换…",
+    "reseedConfirm": "要用全新的基础模型替换该模型的大脑吗？它目前学到的内容将不再影响回答。此操作无法撤销。",
+    "reseedStarterOption": "全新入门基础模型（未训练）",
+    "reseedDone": "模型已替换 — 当前为 v{version}。重新开启回复前请先运行就绪检查。",
+    "reindexLabel": "重建召回索引",
+    "reindexHint": "按当前模型重新归档每一条记忆。记忆是在学习时归档的，模型变化后召回会逐渐偏移 — 如果它开始召回错误内容，请重建索引。",
+    "reindexCta": "重建索引",
+    "reindexDone": "已重新归档 {count} 条记忆。",
+    "cleanupLabel": "清理",
+    "cleanupHint": "丢弃已排队但尚未学习的内容，并清除缓存的回答，使重复的问题重新作答。已学到的知识不受影响。",
+    "cleanupCta": "清理",
+    "cleanupConfirm": "要丢弃所有已排队但尚未学习的内容，并清除缓存的回答吗？",
+    "cleanupDone": "已丢弃 {discarded} 项排队内容，并清除 {cached} 条缓存回答。",
+    "analyzeTitle": "检查已学到的内容",
+    "analyzeHint": "回读模型学到的全部内容，交由前沿模型检查其中的错误、过时事实和无意义内容 — 然后通过教授更正来修复问题。",
+    "analyzeCta": "检查知识",
+    "analyzing": "检查中…",
+    "analyzeClean": "已检查 {analyzed} 条记忆 — 未发现问题。",
+    "analyzeSummary": "{analyzed} 条记忆中有 {issues} 条需要处理（由 {model} 检查）。",
+    "analyzeSummaryLocal": "{analyzed} 条记忆中有 {issues} 条需要处理。",
+    "analyzeVerdict": "{verdict, select, incoherent {胡言乱语} incorrect {错误} outdated {已过时} unusable {不是答案} redundant {重复} other {正常}}",
+    "analyzeCorrectionLabel": "将被替换为",
+    "analyzeSelectAll": "全选",
+    "analyzeSelectNone": "清除选择",
+    "analyzeApplyCta": "修复选中的 {count} 项",
+    "analyzeApplying": "修复中…",
+    "analyzeApplied": "已修复：更正 {corrected} 条，遗忘 {forgotten} 条。模型当前为 v{version}。",
+    "analyzeSkipped": "有 {count} 项无法应用。",
+    "tabsLabel": "Evermind 控制项",
+    "tabTeach": "教学",
+    "tabTest": "测试",
+    "tabCheck": "检查",
+    "tabMaintain": "维护",
+    "diagnosticsTitle": "诊断信息",
+    "diagnosticsHint": "复制此面板上的全部内容——模型状态、实际生成的输出、已学到的知识以及发现的问题——生成可粘贴给技术支持或 AI 助手的文本。",
+    "diagnosticsCta": "复制诊断信息",
+    "diagnosticsCopied": "已复制到剪贴板。",
+    "diagnosticsShow": "显示报告",
+    "diagnosticsHide": "隐藏报告",
+    "diagnosticsManualHint": "此处无法自动复制——报告已在下方选中，请按 Ctrl/Cmd+C 复制。"
   },
   "topbar": {
     "cart": "购物车",
@@ -6056,6 +6763,11 @@
       "noExpiry": "永不过期",
       "markDone": "完成"
     },
+    "notConfigured": {
+      "title": "此项目尚未设置经理",
+      "body": "本页的功能目前都不会运行。定时任务只会处理拥有自身经理设置的项目，在设置完成之前，“立即运行经理”也会被跳过。下方的策略表可能仍显示“已启用”——那只是没有自身设置的项目所回退到的内置默认值，并不代表经理正在运行。",
+      "cta": "设置经理"
+    },
     "autonomyPaused": {
       "title": "自主管理已暂停",
       "daily": "此工作区已达到每日 token 限额，因此自动管理器和智能体已暂停，直至额度重置。在此期间，待办列表不会重新排序，无人认领的工作不会被分配或派发，Evermind 也不会从新的运行中学习。你仍可在下方手动运行管理器。升级你的套餐以获得更高的每日额度。",
@@ -6085,14 +6797,26 @@
       "unscored": "待评估",
       "unranked": "待排序",
       "unowned": "无负责人",
-      "openPullRequests": "开放的 PR"
+      "openPullRequests": "开放的 PR",
+      "flagged": "覆盖缺口",
+      "undated": "无日期"
     },
     "chart": {
       "title": "按优先级分组的待办",
       "caption": "开放工作在各优先级上的分布。",
       "empty": "暂无开放工单可展示。"
     },
+    "subnav": {
+      "label": "经理板块",
+      "overview": "概览",
+      "backlog": "待办列表",
+      "activity": "活动",
+      "policy": "策略",
+      "stuck": "停滞",
+      "ask": "提问"
+    },
     "insightNudge": "还有 {unscored} 个工单待评估业务价值，{unranked} 个尚未排序——运行经理以补齐。",
+    "coverageNudge": "有 {flagged} 个工单缺少必需的角色或评审人——经理将在下一轮自动为其配置人员。",
     "policy": {
       "title": "如何管理此待办列表",
       "subtitle": "决定由谁运行待办列表以及自动化程度。您可随时更改。",
@@ -6134,7 +6858,70 @@
         "queue": {
           "label": "交给人工",
           "help": "绝不自动合并——保留每个请求供人工审查和合并。"
-        }
+        },
+        "needsAuthority": "只有在允许经理合并之后，时机设置才会生效；目前合并仍需真人处理。"
+      },
+      "allowAutoMerge": {
+        "label": "允许经理合并拉取请求",
+        "help": "这是“是否可以合并”的授权，与下面的合并时机是两回事。关闭时，经理仍会完成全部准备和检查工作，但把合并交给真人。"
+      },
+      "requireSignoff": {
+        "label": "完成前需要签核",
+        "help": "默认关闭，需手动开启。开启后，只有在每位必需的审查人都已签核后，工单才会完成、其拉取请求才会合并，并且经理会持续催促仍未签核的角色。没有任何人被要求审查的工单永远不满足条件。"
+      },
+      "tri": {
+        "on": "开启",
+        "off": "关闭",
+        "inherit": "使用默认值",
+        "builtinIs": "内置默认值：{value}",
+        "workspaceIs": "工作区默认值：{value}"
+      },
+      "effective": {
+        "title": "当前实际生效",
+        "help": "综合各级设置后经理实际会做的事。涉及权限时，以最严格的设置为准。",
+        "managingOn": "正在管理待办列表",
+        "managingOff": "管理已暂停",
+        "mergeGranted": "可以合并拉取请求",
+        "mergeWithheld": "合并需等待真人处理",
+        "signoffRequired": "完成前必须签核",
+        "signoffOptional": "无需签核",
+        "ceremoniesUnattended": "可在无人时举行仪式",
+        "ceremoniesNeedPeople": "仪式需要有人出席",
+        "reassignGranted": "可重新分配闲置 {hours} 小时以上的工作",
+        "reassignWithheld": "缺席者保留自己的工作"
+      },
+      "workspaceDefaultsHint": "凡是保持“使用默认值”的项，都会遵循“设置 → AI 经理”中的工作区默认值。",
+      "ceremonies": {
+        "sectionTitle": "仪式",
+        "sectionHelp": "当管理者主持站会或规划会而相关成员不在场时，它可以做什么。"
+      },
+      "allowUnattendedCeremonies": {
+        "label": "无人时也可举行仪式",
+        "help": "允许管理者主持无人加入的计划站会。关闭时：会议仍会被记录并显示无人出席，但不会代表团队做出任何决定。"
+      },
+      "allowAgentReassignment": {
+        "label": "将停滞的工作交给智能体",
+        "help": "允许仪式把缺席成员的工单转交给智能体。仅仅缺席永远不够——该工单还必须已闲置下方设定的时长。"
+      },
+      "allowAutoStaffLanes": {
+        "label": "配置无人负责的阶段",
+        "help": "某些阶段完全不授权任何角色——既未声明必需角色，也未配置代理——因此在生命周期托管的看板上，停留其中的工单永远无法被派发。管理者始终会报告这些阶段；此项决定它是否还可以通过为该阶段指派执行者来自行修复。授予该权限会启动所有已在此等待的工单，因此若某个阶段是有意留空的（例如需要手动拉取的收件列），则应保持原样。"
+      },
+      "agentReassignIdleHours": {
+        "label": "仅在闲置超过",
+        "help": "工单必须闲置多久，缺席负责人对它的归属才会失效。该时长足够长，正常的缺席永远不会触发。",
+        "unit": "小时",
+        "inherited": "正在使用继承值：{value} 小时"
+      },
+      "agentReassignMaxPerSession": {
+        "label": "每场仪式最多",
+        "help": "单场仪式最多可转交的工单数量上限，避免一次站会悄悄重新分配整个迭代。",
+        "unit": "个工单",
+        "inherited": "正在使用继承值：{value}"
+      },
+      "autoSchedule": {
+        "label": "为工作安排时间表",
+        "help": "按排序结果为没有日期的工单设置开始与截止日期，并遵循任务之间的阻塞关系。绝不会修改你自己设定的日期。"
       }
     },
     "backlog": {
@@ -6155,8 +6942,17 @@
       "assign": "已分配",
       "score_value": "已评估",
       "dispatch": "已派发",
+      "sync_pr": "PR 已更新",
       "merge_pr": "已合并 PR",
-      "flag": "已标记"
+      "flag": "已标记",
+      "coordinate": "已配置角色",
+      "schedule": "已排期",
+      "merge_blocked": "合并被阻止",
+      "merge_failed": "合并被拒绝",
+      "pr_conflict": "PR 存在冲突",
+      "triage": "已分诊",
+      "escalate": "已升级",
+      "systemic": "平台问题"
     },
     "runTasks": {
       "title": "经理任务",
@@ -6177,6 +6973,157 @@
       "title": "最近活动",
       "working": "经理正在工作 — 正在实时流式显示决策…",
       "empty": "经理尚未采取任何操作。"
+    },
+    "stalls": {
+      "title": "停滞的工单",
+      "caption": "经理无法完成的工作、原因，以及它已经尝试过的措施。同一措施尝试 {maxAttempts} 次仍未推动工单后，经理将停止重试并移交给您。",
+      "loading": "正在检查哪些工单停滞…",
+      "empty": "没有停滞的工单——每个工单要么在推进，要么已完成。",
+      "error": "无法加载停滞列表。",
+      "retry": "重试",
+      "byCause": "阻碍工作的原因",
+      "needsYou": "需要您处理",
+      "lastTried": "上次尝试于 {when}",
+      "attemptsOf": "{max} 次中的第 {attempts} 次",
+      "idleDays": "{days} 天",
+      "idleToday": "不到一天",
+      "stat": {
+        "working": "经理正在处理",
+        "escalated": "已移交给人工"
+      },
+      "col": {
+        "ticket": "工单",
+        "cause": "停滞原因",
+        "doing": "经理正在做什么",
+        "attempts": "尝试次数",
+        "stuckFor": "停滞时长"
+      },
+      "cause": {
+        "live": "运行中",
+        "cooling_down": "退避等待中",
+        "moving": "推进中",
+        "never_started": "从未启动",
+        "unassigned": "无人负责",
+        "managed_no_role": "没有角色可执行此阶段",
+        "capability_gap": "没有具备能力的智能体",
+        "human_gate": "等待人工审批",
+        "failure_breaker": "反复失败后已停止",
+        "missing_deliverable": "未产出交付物",
+        "build_failed": "构建未通过",
+        "awaiting_signoff": "等待签核",
+        "pr_conflict": "合并请求存在冲突",
+        "pr_unreconciled": "合并请求状态不一致",
+        "merge_withheld": "策略限制合并",
+        "blocked": "被阻塞",
+        "unknown": "未分类"
+      },
+      "copyDiagnosticsAria": "复制完整的 AI 经理诊断信息 — 策略层级、自主运行状况、待办统计、每次管理运行、每项决策以及每个停滞的工单"
+    },
+    "census": {
+      "title": "停滞普查",
+      "caption": "本项目的每一张工单，按阻塞原因分类——不仅限于管理器已深入诊断的那些。",
+      "loading": "正在统计停滞情况…",
+      "empty": "没有停滞：所有工单都在推进或已完成。",
+      "error": "无法加载停滞普查。",
+      "retry": "重试",
+      "coverageNote": "共有 {stalled} 张工单停滞，其中 {diagnosed} 张已完成深入诊断。其余已计入此处，但尚未逐一排查。",
+      "computedAt": "统计于 {when}。",
+      "stat": {
+        "managed": "活跃工单",
+        "stalled": "停滞",
+        "moving": "推进中",
+        "deepDiagnosed": "已深入诊断"
+      },
+      "cohorts": {
+        "title": "全部工单中，是什么在阻塞工作",
+        "aria": "按原因分组的停滞工单"
+      },
+      "findings": {
+        "title": "平台问题",
+        "caption": "当大量工单因同一原因停滞时，这是一个缺陷，而非许多工单各自的问题。管理器会诊断该缺陷并创建工单来修复它。",
+        "headline": "{count} 张工单因“{cause}”停滞",
+        "remediation": "修复方案：",
+        "sourceAi": "由模型诊断",
+        "sourceHeuristic": "依据实测数据诊断",
+        "openTicket": "打开 {key}",
+        "raised": "发现于 {when}"
+      }
+    },
+    "today": {
+      "title": "今日",
+      "loading": "正在读取今日工作…",
+      "error": "无法加载今日摘要。",
+      "retry": "重试",
+      "updated": "更新于{when}",
+      "lastPass": "上次管理巡检：{when}。",
+      "viewActivity": "查看全部决策",
+      "headline": {
+        "team": "团队完成了{shipped, plural, =0 {零个工单} other {# 个工单}}，合并了{merged, plural, =0 {零个拉取请求} other {# 个拉取请求}}，共完成{runs, plural, =0 {零次代理运行} other {# 次代理运行}}。",
+        "manager": "你执行了{passes, plural, =0 {零次管理巡检} other {# 次管理巡检}}，做出了{decisions, plural, =0 {零项决策} other {# 项决策}}。",
+        "quiet": "今天还没有任何进展。",
+        "quietYesterday": "昨天：完成{shipped, plural, =0 {零个工单} other {# 个工单}}，合并{merged, plural, =0 {零个拉取请求} other {# 个拉取请求}}，管理决策{decisions, plural, =0 {零项} other {# 项}}。"
+      },
+      "stat": {
+        "shipped": "今日完成",
+        "shippedSub": "今日新建 {opened} 个",
+        "merged": "已合并 PR",
+        "mergedSub": "今日新开 {opened} 个",
+        "runs": "代理运行完成",
+        "runsSub": "{failed} 次失败",
+        "moves": "向前推进次数",
+        "movesSub": "人工 {human} 次 · 代理 {agent} 次",
+        "movesSubWithSystem": "人工 {human} 次 · 代理 {agent} 次 · 无归属 {system} 次",
+        "decisions": "管理决策",
+        "decisionsSub": "今日{passes, plural, =0 {零次巡检} other {# 次巡检}}"
+      },
+      "shipped": {
+        "title": "今日完成",
+        "empty": "今天还没有工单进入完成阶段。",
+        "unowned": "未分配",
+        "more": "另有 {n} 个"
+      },
+      "decisions": {
+        "title": "管理者做了哪些决策",
+        "empty": "管理者今天尚未做出决策。",
+        "aria": "今日管理决策（按类型）"
+      },
+      "contributors": {
+        "title": "今天谁在推动工作",
+        "caption": "人与代理同列。三项计数分开显示，因为完成工单、完成运行与推进阶段并非同一种工作单位。",
+        "metrics": "完成 {shipped} · 运行 {runs} · 推进 {moves}"
+      },
+      "attention": {
+        "title": "{open, plural, other {# 项工作正在等待人工处理}} · 今日新增 {today} 项",
+        "since": "升级于{when}",
+        "open": "打开阻塞登记表"
+      }
+    },
+    "health": {
+      "title": "待办健康度",
+      "caption": "看板的当前状态——哪些工单仍缺少价值评分、排序、日期或负责人。"
+    },
+    "ask": {
+      "title": "向管理者提问",
+      "caption": "直接向管理者提问。它会先查阅自己的记录——完成了什么、做了哪些决策、什么被卡住、以及它实际被授权做什么——然后再回答。",
+      "loading": "正在打开对话…",
+      "error": "管理者暂时无法回答。",
+      "empty": "还没有提问。可以从下面的问题开始。",
+      "placeholder": "询问今天的情况、某个工单，或某件事为何没有推进…",
+      "send": "提问",
+      "sending": "提问中…",
+      "you": "你",
+      "fallbackName": "管理者",
+      "thinking": "{name} 正在查阅记录…",
+      "answeredBy": "由 {name} 回答",
+      "answeredByDesignated": "由本项目指定的管理者 {name} 回答",
+      "noAgent": "此工作区尚未设置管理者代理，因此这里无人可以回答。请在“策略”中指定一位管理者，对话即可开启。",
+      "compactPrompt": "今天不太理想？可以问问 {name}。",
+      "starter": {
+        "today": "你和团队今天完成了什么？",
+        "blocked": "为什么完成得这么少——是什么阻塞了工作？",
+        "plan": "接下来你打算如何解除阻塞？"
+      },
+      "copyDiagnosticsAria": "复制对话及管理者的工具调用记录"
     }
   },
   "project360": {
@@ -6884,6 +7831,8 @@
     "taskCount": "{count, plural, other {# 个任务}}",
     "byStage": "按阶段",
     "byAssignee": "按负责人",
+    "expandAssigneeRow": "展开分配给{name}的任务",
+    "collapseAssigneeRow": "折叠分配给{name}的任务",
     "startStandup": "开始站会",
     "startPlanning": "开始规划",
     "viewPrdAria": "查看 PRD",
@@ -6901,6 +7850,7 @@
     "deleteTask": "删除任务",
     "tabAgent": "智能体 / 能力",
     "tabPrd": "PRD",
+    "tabAccountability": "签核与问责",
     "changeStatusTitle": "点击更改状态",
     "changePriorityTitle": "点击更改优先级",
     "viewCodeChangesTitle": "在 GitHub 上查看代码更改",
@@ -6914,7 +7864,116 @@
     "errMove": "移动失败",
     "tabChanges": "变更",
     "release": "发布版本",
-    "delayReason": "延误原因"
+    "delayReason": "延误原因",
+    "lifecycleAction": "生命周期",
+    "lifecycleActionTitle": "生命周期与自主性证据 —— 这张工单是自己推进的，还是每一步都靠人推动？"
+  },
+  "ticketLifecycle": {
+    "title": "生命周期 / 自主性证据",
+    "loading": "正在汇总证据链…",
+    "errorTitle": "无法加载该工单的生命周期",
+    "retry": "重试",
+    "openedAt": "创建时间",
+    "currentLane": "当前泳道",
+    "origin": {
+      "label": "创建者",
+      "human": "由人创建",
+      "agent": "由智能体创建（AI 管理者）",
+      "system": "由自动化创建",
+      "manager_card": "AI 管理者的梳理卡片",
+      "unknown": "无记录"
+    },
+    "verdict": {
+      "fullyAutonomous": "全程自主完成 —— 0 次人工泳道流转",
+      "fullyAutonomousDetail": "自主流程完成了 {hops, plural, other {# 次泳道流转}} 并到达终态泳道，全程无人推动过它。",
+      "partialStalled": "部分自主 —— 已停滞",
+      "partialStalledDetail": "自主流程完成了 {hops, plural, other {# 次泳道流转}}，但工单尚未完成，且当前没有任何运行。",
+      "partialRunning": "部分自主 —— 仍在推进",
+      "partialRunningDetail": "自主流程完成了 {hops, plural, other {# 次泳道流转}}，目前有一次运行正在进行。",
+      "humanDriven": "由人推动 —— 自主性从未推动过这张工单",
+      "humanDrivenDetail": "每一次泳道流转都由人完成（共 {hops} 次）。记录中没有任何一次自主流转。",
+      "assisted": "在人工协助下完成",
+      "assistedDetail": "工单到达了终态泳道，但 {totalHops} 次泳道流转中有 {humanHops} 次由人完成。",
+      "noMovement": "从未流转",
+      "noMovementDetail": "这张工单一次都没有换过泳道 —— 人和自主流程都没有推动过它。",
+      "liveRun": "正在运行",
+      "managerCardTitle": "协调卡片",
+      "managerCard": "AI 管理者创建这类卡片用于梳理待办，自主流程按设计有意拒绝派发它们。因此“没有运行”在这里是预期行为，而不是故障。"
+    },
+    "stall": {
+      "title": "它为何停在这里",
+      "unrecorded": "没有记录到任何拦截原因 —— 还没有任何流程尝试运行这张工单。",
+      "laneGate": "泳道闸门",
+      "gate": {
+        "auto": "自动",
+        "human": "需人工审批"
+      },
+      "staffed": "泳道上配置的代理",
+      "noneStaffed": "无",
+      "candidate": "“立即运行”将调度",
+      "noCandidate": "无可运行者",
+      "streak": "连续失败的运行次数",
+      "streakValue": "{count} 次（自主执行在 {limit} 次时停止）",
+      "cooldown": "剩余冷却时间",
+      "capabilityMismatch": "能力不匹配"
+    },
+    "stats": {
+      "title": "流转与运行",
+      "autonomousHops": "自主流转",
+      "autonomousHopsHint": "由智能体或自动化写入的泳道流转。",
+      "humanHops": "人工流转",
+      "humanHopsHint": "由人完成的泳道流转。",
+      "runsDispatched": "已派发运行",
+      "runsCompleted": "成功运行",
+      "runsFailed": "失败运行",
+      "backwardHops": "返工流转",
+      "backwardHopsHint": "向后的泳道流转 —— 工作被退回重做。"
+    },
+    "timeline": {
+      "title": "证据链",
+      "help": "每一行都标注了它读取自哪张表，因此这是证据，而非叙述。",
+      "empty": "该工单尚无生命周期事件记录。",
+      "laneMove": "{from} → {to}",
+      "laneEntered": "进入 {to}",
+      "backward": "返工",
+      "run": "运行 #{id}",
+      "dispatchedBy": "由 {who} 调度"
+    },
+    "kind": {
+      "created": "已创建",
+      "lane_moved": "泳道流转",
+      "run_dispatched": "已派发运行",
+      "run_completed": "运行完成",
+      "run_failed": "运行失败",
+      "autorun_dispatched": "自动运行已派发",
+      "autorun_skipped": "自动运行被拒",
+      "autorun_error": "自动运行出错",
+      "autorun_awaiting_approval": "自动运行待批准",
+      "role_event": "角色事件"
+    },
+    "source": {
+      "activity_log": "活动 / 审计日志",
+      "task_status_transitions": "泳道流转日志",
+      "executions": "运行记录",
+      "tool_audit_events": "自动运行决策审计",
+      "aria": "来源：{label}"
+    },
+    "copyDiagnosticsAria": "复制此工单的完整生命周期诊断信息，包含所有事件、运行 ID 和门控原因",
+    "failures": {
+      "title": "故障分析",
+      "help": "按原因归类的失败运行。同一原因以固定间隔反复出现属于重试循环，而非一系列互不相关的失败。",
+      "runs": "{count, plural, other {# 次运行以同样方式失败}}",
+      "cadence": "约每 {interval} 一次",
+      "cadenceOnce": "仅发生一次",
+      "window": "首次 {first} · 最近 {last}",
+      "dispatchedBy": "由 {who} 调度",
+      "runIds": "运行：{ids}"
+    },
+    "dispatchers": {
+      "title": "由谁调度这些运行",
+      "help": "启动每次运行的子系统。除泳道触发器之外的调度方都绕过了其连续失败熔断器。",
+      "counts": "{runs} 次运行 · {completed} 次完成 · {failed} 次失败"
+    }
   },
   "taskChanges": {
     "allChanges": "所有变更",
@@ -6944,6 +8003,7 @@
     "sub": {
       "health": "运行状况",
       "directory": "目录",
+      "sessions": "会话",
       "security": "安全",
       "emulation": "模拟会话",
       "tenants": "工作区",
@@ -6960,7 +8020,12 @@
       "errors": "错误",
       "audit": "审计日志",
       "apiKeys": "API 密钥",
-      "token": "超级管理员令牌"
+      "token": "超级管理员令牌",
+      "feedback": "反馈",
+      "releaseNotes": "更新日志",
+      "demoFunnel": "演示漏斗",
+      "salesLeads": "销售线索",
+      "cron": "定时任务"
     },
     "common": {
       "loading": "加载中…",
@@ -7040,12 +8105,41 @@
       "errorVolume": "错误量"
     },
     "errors": {
-      "lastN": "最近 {n} 条错误",
       "noErrorsRecorded": "未记录任何错误。",
       "time": "时间",
-      "method": "方法",
       "path": "路径",
-      "message": "消息"
+      "message": "消息",
+      "tenant": "工作区",
+      "kind": "类型",
+      "source": "来源",
+      "operation": "操作",
+      "count": "事件数",
+      "tenants": "工作区数",
+      "lastSeen": "最近出现",
+      "sample": "最新消息",
+      "statTotal": "异常总数",
+      "statUnhandled": "返回 500",
+      "statHandled": "已处理",
+      "statFaults": "不同故障",
+      "topFaults": "最频繁的故障",
+      "window": "时间范围",
+      "window_all": "全部时间",
+      "window_h1": "最近 1 小时",
+      "window_h24": "最近 24 小时",
+      "window_d7": "最近 7 天",
+      "window_d30": "最近 30 天",
+      "handledFilter": "处理状态",
+      "handled_all": "全部",
+      "handled_unhandled": "未处理",
+      "handled_handled": "已处理",
+      "sourceFilter": "来源模块",
+      "allSources": "所有来源",
+      "searchPlaceholder": "搜索来源、路径或消息…",
+      "clearFault": "清除故障筛选",
+      "scopedTo": "正在显示 {source} · {operation}",
+      "context": "上下文",
+      "stack": "堆栈跟踪",
+      "pagination": "第 {from}–{to} 条，共 {total} 条"
     },
     "token": {
       "shareWarning": "此 Web 令牌授予您当前会话的超级管理员 API 访问权限。仅与可信工具共享。",
@@ -7132,6 +8226,22 @@
         "colDuration": "时长",
         "durationActive": "活跃"
       }
+    },
+    "sessions": {
+      "title": "采用会话",
+      "subtitle": "匿名 Brain 和免费工具访客，包括账户和付费转化。",
+      "count": "{count} 个会话",
+      "empty": "未找到访客会话。",
+      "visitor": "访客",
+      "engagement": "互动",
+      "firstSeen": "首次访问",
+      "lastSeen": "最近访问",
+      "conversion": "转化",
+      "brainMessages": "{count} 条 Brain 消息",
+      "tokensAndTools": "{tokens} tokens · {tools} 次工具运行",
+      "guest": "访客",
+      "registered": "已注册",
+      "paid": "已付费"
     },
     "usage": {
       "aiAnalyze": "AI 分析",
@@ -7399,7 +8509,14 @@
     },
     "permissions": {
       "title": "角色与权限",
-      "colPermission": "权限"
+      "colPermission": "权限",
+      "enforced": "已强制",
+      "advisory": "仅供参考",
+      "granted": "已授予",
+      "denied": "已拒绝",
+      "enforcedHint": "每次请求都会校验此权限，覆盖设置将立即生效。",
+      "advisoryHint": "此权限尚未在请求时校验——该路由仅由角色层级把关，因此修改此行只会改变本表格的显示。",
+      "enforcementNote": "标记为“已强制”的行会在每次请求时校验，覆盖设置立即生效。标记为“仅供参考”的行仅由角色层级把关：修改它们只会改变本表格，不会改变成员的实际权限。"
     },
     "modules": {
       "title": "平台模块",
@@ -7558,6 +8675,157 @@
       "requestBody": "请求体",
       "responseBody": "响应体",
       "callerMetadata": "调用方元数据"
+    },
+    "releaseNotes": {
+      "digestTitle": "每周产品更新邮件",
+      "unsentCount": "{count, plural, other {# 条已发布但尚未发送邮件的更新}}",
+      "digestSent": "已向 {sent} 位用户发送 {notes} 条更新（{suppressed} 位已退订）。",
+      "sendDigest": "立即发送",
+      "sendDigestConfirm": "现在就向所有已同意接收的用户发送每一条已发布但尚未发送的更新日志吗？",
+      "editNote": "编辑更新日志",
+      "newNote": "新建更新日志",
+      "phVersion": "版本（例如 2026.7.93）",
+      "phTitle": "标题——用通俗的语言说明带来的价值",
+      "phBody": "它为用户带来什么。空行分隔段落。",
+      "savePublish": "保存并发布",
+      "saveDraft": "保存草稿",
+      "allNotes": "全部更新（{count}）",
+      "thTitle": "标题",
+      "thVersion": "版本",
+      "thCategory": "类别",
+      "thStatus": "状态",
+      "thEmailed": "已发送邮件",
+      "published": "已发布",
+      "draft": "草稿",
+      "publish": "发布",
+      "unpublish": "取消发布",
+      "deleteConfirm": "确定删除更新日志“{title}”吗？此操作无法撤销。",
+      "sendNote": "立即发送",
+      "resendNote": "重新发送",
+      "sendNoteHint": "立即将此更新发送给所有已同意接收的用户——之后将不会包含在每周汇总中。",
+      "resendNoteHint": "此更新已发送过。再次发送给所有已同意接收的用户。",
+      "sendNoteConfirm": "现在就将更新日志“{title}”发送给所有已同意接收的用户吗？之后它将不会包含在每周汇总中。",
+      "resendNoteConfirm": "此更新已发送过。现在再次将“{title}”发送给所有已同意接收的用户吗？"
+    },
+    "demoFunnel": {
+      "title": "演示转化漏斗",
+      "subtitle": "按角色划分的匿名演示账户互动（最近 30 天）。",
+      "persona": "角色",
+      "total": "合计",
+      "convRate": "{rate}% 注册",
+      "recentTitle": "最近事件",
+      "empty": "暂无演示活动。",
+      "when": "时间",
+      "event": "事件",
+      "path": "路径",
+      "personas": {
+        "ai-team": "AI 软件团队",
+        "insights": "工程 ROI 与洞察",
+        "pmo": "PMO 指挥中心",
+        "talent": "人才与市场",
+        "governance": "安全、架构与治理"
+      },
+      "stages": {
+        "demo_start": "已开始",
+        "page_view": "页面浏览",
+        "convert_prompt_shown": "已显示提示",
+        "convert_clicked": "点击注册",
+        "book_demo_opened": "打开预约",
+        "lead_submitted": "已提交线索",
+        "exit_prompt_shown": "显示退出",
+        "demo_exit": "已退出"
+      }
+    },
+    "salesLeads": {
+      "title": "销售线索",
+      "subtitle": "来自营销网站的预约演示与退出意向线索。",
+      "count": "{count} 条线索",
+      "filterAll": "所有状态",
+      "contact": "联系人",
+      "interest": "兴趣",
+      "source": "来源",
+      "received": "接收时间",
+      "statusHeader": "状态",
+      "empty": "暂无线索。",
+      "mailSubject": "您的 Builderforce 演示",
+      "status": {
+        "new": "新",
+        "contacted": "已联系",
+        "qualified": "已认定",
+        "closed": "已关闭"
+      },
+      "personas": {
+        "ai-team": "AI 软件团队",
+        "insights": "工程 ROI 与洞察",
+        "pmo": "PMO 指挥中心",
+        "talent": "人才与市场",
+        "governance": "安全、架构与治理"
+      }
+    },
+    "cron": {
+      "title": "定时任务",
+      "subtitle": "Cloudflare 只把定时触发器发送给 Worker，而不会发送到某个 URL。可在此直接强制执行，无需等待工作闸门。",
+      "forceNote": "在此执行会绕过 KV 工作闸门，且不会重置底线计时器，因此强制执行绝不会延迟下一次真实的定时触发。若要测试闸门本身，请使用“标记待处理工作”。",
+      "gate": {
+        "heading": "KV 工作闸门",
+        "checkedAt": "检查时间：{at}",
+        "wouldRun": "下一次触发将执行数据库扫描",
+        "wouldSkip": "下一次触发将跳过 —— Postgres 保持休眠",
+        "reason": {
+          "signal": "有写入操作标记了待处理工作",
+          "floor": "已达到底线间隔",
+          "idle": "没有任何标记，且底线尚未到期",
+          "kv-unavailable": "KV 不可用，闸门按放行处理"
+        },
+        "floorInterval": "底线间隔",
+        "overridden": "已被覆盖",
+        "lastFloor": "上次底线扫描",
+        "nextFloor": "下次底线扫描",
+        "never": "从未",
+        "asap": "下一次触发",
+        "explainIdle": "闸门空闲并不代表没有待处理的工作。只有当工单真正通过其闸门时才会发出标记，所以一块全是停滞工单的看板不会发出任何标记，只能等待底线扫描。",
+        "kvUnbound": "未绑定 AUTH_CACHE_KV，闸门按放行处理，因此每次触发都会执行扫描。",
+        "signalled": "已标记待处理工作 —— 下一次定时触发将执行扫描。"
+      },
+      "actions": {
+        "runFrequent": "▶ 执行 5 分钟触发",
+        "signal": "⚑ 标记待处理工作",
+        "run": "执行",
+        "runGroup": "▶ 执行整组",
+        "running": "执行中…"
+      },
+      "cadence": {
+        "frequent": "高频触发",
+        "daily": "每日",
+        "weekly-mon": "每周（周一）",
+        "weekly-fri": "每周（周五）",
+        "everyFiveMinutes": "每 5 分钟（受工作闸门控制）"
+      },
+      "table": {
+        "sweep": "任务",
+        "description": "作用",
+        "lastRun": "上次强制执行"
+      },
+      "badge": {
+        "dispatches": "会启动智能体运行",
+        "unavailable": "在此环境中已禁用"
+      },
+      "outcome": {
+        "ok": "成功，耗时 {ms} 毫秒",
+        "noop": "无事可做",
+        "failed": "失败",
+        "timedOut": "已超过 {ms} 毫秒仍在运行 —— 请查看日志获取结果",
+        "skipped": "已跳过（已禁用）"
+      },
+      "result": {
+        "heading": "已强制执行 {target}：",
+        "summary": "{total} 个任务中有 {ok} 个完成，耗时 {ms} 毫秒 · 启动了 {dispatched} 次智能体运行"
+      },
+      "confirm": {
+        "title": "要强制执行定时任务吗？",
+        "dispatch": "执行“{target}”会在所有工作区启动真实的智能体运行（所选任务中有 {count} 个会派发工作）。这会消耗额度，并非演练。",
+        "confirmLabel": "立即执行"
+      }
     }
   },
   "providerKeys": {
@@ -7565,10 +8833,43 @@
     "subtitle": "连接您自己的 Anthropic、OpenAI 或 Google 账户。已连接的提供商将使用您自己的账户为智能体提供支持，并决定每个选择器中的模型选项——在您本机上的使用（本地部署和 VS Code）免费；云端智能体的使用仍会计费。凭据将加密存储，且不会再次显示。",
     "loading": "加载中…",
     "errorPrefix": "错误：{message}",
+    "openRouter": {
+      "title": "OpenRouter 连接",
+      "subtitle": "创建多个命名注册，每个注册可包含一个或多个模型，并与已连接的 AI 账户一起排序。",
+      "cardBlurb": "为每个注册选择一个或多个 OpenRouter 模型，并与提供商账户一起设置优先级。",
+      "add": "添加连接",
+      "connectedCount": "● {count} 个连接",
+      "brokenCount": "{count} 个 OpenRouter 连接",
+      "modelCount": "已选择 {count} 个模型",
+      "costOwnKey": "Builderforce 路由费用：{cost}。令牌费用由 OpenRouter 向您自己的账户收取。",
+      "costManaged": "由 Builderforce 计费：{cost}（路由 + 令牌）。",
+      "ownKey": "您的 OpenRouter 密钥",
+      "managedKey": "Builderforce 托管计费",
+      "edit": "编辑",
+      "empty": "尚无 OpenRouter 连接。",
+      "createTitle": "注册 OpenRouter 模型",
+      "editTitle": "编辑 OpenRouter 连接",
+      "name": "连接名称",
+      "apiKey": "OpenRouter API 密钥（可选）",
+      "clearKey": "移除已保存的密钥并使用 Builderforce 托管计费",
+      "billing": "每次请求都经由 Builderforce 路由，并收取 0.01 美元平台费。使用自己的密钥时，OpenRouter 收取令牌费用；不提供密钥时，Builderforce 还会收取 OpenRouter 令牌成本。",
+      "orderTitle": "模型顺序",
+      "orderHint": "智能体会先运行最上面的模型，失败后依次向下切换。“测试连接”测试的是最上面那个。",
+      "removeModel": "从此连接中移除 {model}",
+      "search": "搜索 OpenRouter 模型…",
+      "selected": "已选择 {count} 个模型",
+      "validation": "请输入连接名称并至少选择一个模型。",
+      "saveError": "无法保存 OpenRouter 连接",
+      "removeError": "无法移除 OpenRouter 连接",
+      "confirmRemove": "移除 OpenRouter 连接“{label}”？",
+      "confirmDisconnectAll": "确定断开 OpenRouter 吗？这将移除全部 {count} 个注册。使用它们的智能体将回退到 Builderforce 的托管模型。"
+    },
     "status": {
       "connected": "● 已连接 {subscription}",
       "keyConfigured": "● 已配置 {label} API 密钥",
-      "notConnected": "○ 未连接"
+      "notConnected": "○ 未连接",
+      "usageDepleted": "▲ {label} — 用量已耗尽",
+      "needsAttention": "▲ {label} — 需要处理"
     },
     "disconnect": "断开连接",
     "remove": "移除",
@@ -7592,24 +8893,111 @@
     "errStartConnect": "启动连接失败",
     "errConnectSubscription": "连接订阅失败",
     "errRemove": "移除凭据失败",
+    "precedence": {
+      "title": "提供商优先级",
+      "subtitle": "当连接了多个账户时，云代理会优先使用排在最前面的提供商，并沿列表向下依次故障转移。将 Meta 排在首位即可让云代理通过它路由。",
+      "leads": "首选",
+      "drag": "拖动以重新排序",
+      "rowLabel": "{provider}，第 {position} 位。拖动以重新排序。",
+      "moveUp": "上移 {provider}",
+      "moveDown": "下移 {provider}",
+      "errSave": "保存优先级失败"
+    },
     "provider": {
       "anthropic": {
         "blurb": "连接您的 Claude Pro/Max 订阅（无需按令牌计费），或粘贴 Anthropic API 密钥。",
-        "subscription": "Claude 订阅"
+        "subscription": "Claude 订阅",
+        "pastePrompt": "在 Claude 标签页批准后，粘贴完整的 <code>code#state</code> 值。",
+        "pastePlaceholder": "粘贴 Claude 代码…"
       },
       "openai": {
-        "blurb": "粘贴 OpenAI API 密钥，在您自己的 OpenAI 账户上运行 GPT 模型。"
+        "blurb": "连接您的 ChatGPT/Codex 订阅，或粘贴 OpenAI API 密钥。",
+        "subscription": "ChatGPT/Codex 订阅",
+        "pastePrompt": "登录后，从地址栏复制完整的 <code>http://localhost:1455/auth/callback?code=…&state=…</code> URL 并粘贴到这里。",
+        "pastePlaceholder": "粘贴 OpenAI 重定向 URL…"
       },
       "google": {
         "blurb": "粘贴 Google AI (Gemini) API 密钥，在您自己的 Google 账户上运行 Gemini 模型。"
+      },
+      "meta": {
+        "blurb": "粘贴 Meta AI API 密钥，在您自己的 Meta AI 账户上运行 MUSE 模型（muse-spark-1.1）。"
+      },
+      "kimi": {
+        "blurb": "粘贴 Kimi Code 订阅密钥或 Moonshot API 密钥。"
+      },
+      "qwen": {
+        "blurb": "粘贴阿里云 DashScope API 密钥以运行 Qwen 模型。"
+      },
+      "minimax": {
+        "blurb": "粘贴 MiniMax API 密钥以运行 MiniMax 模型。"
+      },
+      "xai": {
+        "blurb": "连接符合条件的 SuperGrok 订阅或粘贴 xAI API 密钥。",
+        "subscription": "SuperGrok 订阅",
+        "pastePrompt": "批准访问后，复制 xAI 页面显示的代码并粘贴到这里。",
+        "pastePlaceholder": "粘贴 xAI 登录代码…"
       }
+    },
+    "diagnostic": {
+      "currentStatus": "当前状态：{status}",
+      "checking": "检查中…",
+      "test": "测试连接",
+      "testing": "测试中…",
+      "verified": "连接验证成功。",
+      "verifiedWith": "已通过 {model} 验证连接。",
+      "usage": "最近 {days} 天：{requests} 次请求 · {tokens} 个令牌",
+      "lastUsed": " · 上次使用 {when}",
+      "failedFallback": "连接测试失败：{status}。",
+      "failedGeneric": "连接测试失败",
+      "failedTitle": "{label} 连接失败",
+      "upstreamTitle": "{label} — 模型提供方出错",
+      "testCost": "测试会发送一次真实的小请求，费用计入被测试的账户。",
+      "state": {
+        "ready": "就绪",
+        "capacity": "用量已耗尽",
+        "needs_attention": "需要处理",
+        "not_connected": "未连接",
+        "revoked": "已撤销",
+        "expired": "已过期",
+        "undecryptable": "凭据无法读取",
+        "unsupported-auth": "已存储为订阅账户，但该提供商需要 API 密钥",
+        "unavailable": "不可用",
+        "failed": "失败",
+        "upstream_error": "模型提供方出错",
+        "not_found": "未找到该连接",
+        "no_test_model": "未选择可测试的模型",
+        "key_unresolved": "无法使用已保存的密钥"
+      },
+      "tokensUsed": "已使用的 AI 令牌",
+      "periodLabel": "最近 {period}"
+    },
+    "authAlert": {
+      "title": "未被使用",
+      "notEntitled": "该账户已成功登录，但服务商拒绝了请求（{status}），因为当前套餐不包含此功能。请改用套餐包含该功能的账户重新连接，或升级套餐。",
+      "xaiNotEntitled": "xAI 已接受登录，但拒绝了 Grok API 访问（{status}）。请确认该账户具有符合条件的 SuperGrok 套餐且每周用量尚有余额，或连接 xAI API 密钥。",
+      "xaiCapacity": "您的每周 SuperGrok API 用量已耗尽（{status}）。重置后 Grok 将恢复；如需立即继续，请购买额外用量点数、启用自动充值或升级到 SuperGrok Heavy。无需重新连接账户。",
+      "rejected": "服务商拒绝了此凭据（{status}）。它可能已过期、被吊销，或已在别处轮换——请重新连接该账户。",
+      "capacity": "凭据本身有效，但账户额度已用尽（{status}）——可能是消费上限或余额为零。请充值或提高上限，无需重新连接。",
+      "unresolved": "存储的凭据完全无法使用——它已被吊销、已过期，或保存在其他工作区。请在此重新连接。"
     }
   },
   "modelSelect": {
     "yourLlms": "您的 LLM",
     "connectedProviders": "已连接的提供商",
     "models": "模型",
-    "current": "{model}（当前）"
+    "current": "{model}（当前）",
+    "premiumModels": "高级 — 任意 OpenRouter 模型（成本 + 每次请求 1 美分）",
+    "premiumOption": "{name} · 输入 {price}/M",
+    "premiumUnlockTitle": "解锁高级模型",
+    "premiumUnlockCardBody": "添加账单信息并验证银行卡后，即可选择任意付费 OpenRouter 模型。按 OpenRouter 原价另加每次请求 1 美分计费。此操作不会扣款，也不会升级套餐。",
+    "premiumUnlockUpgradeBody": "高级模型（任意付费 OpenRouter 模型，按 OpenRouter 成本另加每次请求 1 美分计费）需要付费方案并已验证银行卡。",
+    "premiumValidateCard": "添加账单和银行卡",
+    "premiumValidating": "正在打开…",
+    "premiumPending": "等待确认",
+    "premiumPendingHint": "请在支付服务商处完成验证，然后重新加载。",
+    "premiumFailedHint": "该银行卡无法验证，请换一张。",
+    "premiumUpgrade": "升级到 Pro",
+    "premiumUnlockFailed": "无法启动银行卡验证。"
   },
   "runAgentControl": {
     "agentTitle": "智能体",
@@ -7682,7 +9070,16 @@
       "system": "系统",
       "unknown": "未知"
     },
+    "model": {
+      "tooltip": "由模型 {model} 提供服务",
+      "accountOwn": "自有账户",
+      "accountShared": "共享资源池",
+      "accountSharedUnused": "共享资源池（未使用自有账户）"
+    },
     "verb": {
+      "agent": {
+        "replied": "在对话中回复"
+      },
       "task": {
         "created": "创建了工单",
         "updated": "更新了工单",
@@ -7835,7 +9232,8 @@
     "running": "运行中",
     "awaiting": "待回答",
     "needsYou": "{count} 项待您回答",
-    "runningCount": "{count} 项运行中"
+    "runningCount": "{count} 项运行中",
+    "unread": "{count} 条未读消息"
   },
   "onboarding": {
     "welcome": "欢迎使用 Builderforce",
@@ -7870,6 +9268,18 @@
       },
       "invite": {
         "label": "邀请团队"
+      },
+      "talentProfile": {
+        "label": "个人资料"
+      },
+      "resume": {
+        "label": "简历"
+      },
+      "publish": {
+        "label": "发布"
+      },
+      "findWork": {
+        "label": "寻找工作"
       }
     },
     "ticketing": {
@@ -7905,7 +9315,15 @@
       "runningAll": "正在运行审计…",
       "run": "运行所选审计",
       "viewReports": "查看报告",
-      "notifyHint": "每份报告准备就绪时我们会通知你。你可以离开此页面 — 审计会继续运行。"
+      "notifyHint": "每份报告准备就绪时我们会通知你。你可以离开此页面 — 审计会继续运行。",
+      "webHeading": "扫描您的在线网站",
+      "webIntro": "已有网站？输入网址即可立即进行安全扫描——发现的问题会转为可修复的工单。",
+      "webPlaceholder": "https://your-site.com",
+      "webButton": "扫描网站",
+      "webScanning": "扫描中…",
+      "webResult": "评分 {score}/100 — 已创建 {count} 个工单",
+      "webView": "查看结果",
+      "webError": "扫描失败。请检查网址后重试。"
     },
     "closeOnboarding": "关闭引导",
     "workspaceReady": "工作区已就绪",
@@ -7938,6 +9356,25 @@
       "monetize": "用 AI 代理赚钱",
       "automate": "自动化我的开发流程",
       "learn": "学习和探索"
+    },
+    "welcomeHired": "欢迎来到 Builderforce",
+    "subtitleHired": "只需几步，即可开始接单。",
+    "talentProfile": {
+      "intro": "雇主会按这些字段搜索——填写得越完整，你出现的机会越多。"
+    },
+    "resumeStep": {
+      "intro": "上传简历，我们可以为你自动填写标题、简介和技能。",
+      "skipHint": "可选——你也可以稍后在个人资料中添加。"
+    },
+    "publishStep": {
+      "intro": "发布后，你将出现在人才市场中。你可以随时取消发布。"
+    },
+    "findWorkStep": {
+      "intro": "设置完成。以下是接单的地方。",
+      "gigs": "浏览职位",
+      "gigsHint": "与你的技能和费率匹配的空缺职位。",
+      "timecard": "记录工时",
+      "timecardHint": "提交工时单并跟踪已收款项。"
     }
   },
   "soc2": {
@@ -8135,7 +9572,10 @@
     "errorCreateSprint": "创建冲刺失败",
     "errorStart": "无法开始会话",
     "errorAdvance": "无法进入下一位",
-    "errorComplete": "无法结束会话"
+    "errorComplete": "无法结束会话",
+    "startSession": "开始站会",
+    "startSessionHint": "开始本次站会",
+    "startSessionFacilitatorOnly": "只有主持人可以开始"
   },
   "meetings": {
     "title": "会议",
@@ -8298,7 +9738,8 @@
     "commonQuestions": "常见问题",
     "pillLora": "🧠 LoRA 训练",
     "pillRegistry": "🤖 智能体注册库",
-    "pillEval": "🔬 AI 评估"
+    "pillEval": "🔬 AI 评估",
+    "emailPlaceholder": "you@example.com"
   },
   "gigs": {
     "publish": {
@@ -8584,6 +10025,10 @@
   },
   "agentExecution": {
     "runThisTask": "运行此任务",
+    "coordinateThisTicket": "协调此工单",
+    "coordinateNow": "分配并运行下一个角色",
+    "coordinating": "正在协调…",
+    "coordinateHint": "负责人协调此生命周期。BuilderForce 会验证清单并运行下一个必需角色，绝不会默认让负责人执行工作。",
     "awaitingApproval": "此任务需先获得批准方可运行：{reason}",
     "executions": "执行记录",
     "ticketSpendTooltip": "所有运行的工单花费：{requests} 次 LLM 调用共 {tokens} 个 token。汇总至此项目，再汇总至账户。",
@@ -8620,7 +10065,15 @@
     "noFileChangesYet": "尚无文件变更。",
     "noFileChangesRecorded": "此次运行未记录任何文件变更。",
     "noToolCalls": "未记录任何工具调用。",
-    "failedToRerun": "重新运行失败"
+    "failedToRerun": "重新运行失败",
+    "revert": "回滚运行",
+    "reverting": "正在回滚…",
+    "revertHint": "关闭本次运行创建的拉取请求并删除它写入的分支。若有其他改动，将被拒绝。",
+    "revertConfirmTitle": "要回滚此次运行吗？",
+    "revertConfirmMessage": "这将关闭运行 #{id} 创建的拉取请求，并删除它写入的分支。此操作无法撤销。如果拉取请求已合并，或分支被其他人改动过，操作将被拒绝。",
+    "revertConfirmAction": "回滚运行",
+    "revertDone": "已回滚 — 已删除分支 {branch}（{commits} 个提交）。",
+    "failedToRevert": "回滚此次运行失败"
   },
   "aiTraining": {
     "title": "AI 模型训练",
@@ -8974,8 +10427,8 @@
     "noKey": "无密钥",
     "test": "测试",
     "testing": "正在测试…",
-    "importTitle": "将此仓库的文件导入 IDE 工作区，以便您在浏览器中编辑和运行它们",
-    "importToIde": "导入到 IDE",
+    "importTitle": "将此仓库的文件导入 Builder 工作区，以便您在浏览器中编辑和运行它们",
+    "importToIde": "导入到 Builder",
     "importing": "正在导入…",
     "copyConfigTitle": "复制此仓库的配置（不含密钥），用于诊断失败的测试",
     "copied": "已复制！",
@@ -8992,7 +10445,20 @@
     "workspaceSuffix": "，工作区",
     "setAsDefault": "设为项目的默认仓库",
     "saveChanges": "保存更改",
-    "addRepository": "添加仓库"
+    "addRepository": "添加仓库",
+    "enableAgentRuns": "启用代理运行",
+    "agentRunsEnabled": "代理运行已启用",
+    "enablingAgentRuns": "正在启用…",
+    "enableAgentRunsTitle": "将 Builderforce 代理工作流提交到此仓库，使代理可在您自己的 GitHub Actions 运行器上执行",
+    "reenableAgentRunsTitle": "已启用——重新运行将用最新版本覆盖该工作流文件",
+    "confirmReenableActions": "此操作将重写默认分支上的 .github/workflows/builderforce-agent.yml，并丢弃您对其所做的任何修改。是否继续？",
+    "actionsEnabled": "代理工作流已提交至 {path}",
+    "actionsEnableFailed": "无法提交代理工作流",
+    "backfillAlerts": "回填告警",
+    "backfillingAlerts": "正在回填…",
+    "backfillAlertsTitle": "将此仓库所有未处理的代码扫描和 Dependabot 告警导入为安全发现。可安全重复运行。",
+    "alertsBackfilled": "已导入 {count} 条安全发现（{deduped} 条此前已记录）",
+    "alertsBackfillFailed": "无法导入安全告警"
   },
   "workflowsContent": {
     "noRunsYet": "暂无运行",
@@ -9080,6 +10546,16 @@
       "escalation": "升级",
       "contacts": "联系人"
     },
+    "workflows": {
+      "title": "运行手册与工作流",
+      "blurb": "针对此事件运行自定义工作流，或查看其事件触发的工作流。",
+      "pick": "工作流",
+      "pickPlaceholder": "选择工作流…",
+      "run": "运行工作流",
+      "create": "创建工作流",
+      "runs": "此事件的运行记录",
+      "noRuns": "尚无工作流运行记录。"
+    },
     "severity": {
       "sev1": "SEV1",
       "sev2": "SEV2",
@@ -9139,6 +10615,8 @@
       "publishedNote": "已为此事件发布根因分析。",
       "prompt": "此事件已解决。请将根因分析发布到知识库。",
       "formTitle": "发布根因分析",
+      "fishTitle": "为何会发生？",
+      "fishAria": "{title} 的鱼骨根因分析图",
       "summary": "摘要",
       "summaryPlaceholder": "用一段话概述该事件……",
       "rootCause": "根本原因",
@@ -9175,7 +10653,7 @@
     "memberDisplayName": "显示名称",
     "memberRef": "成员引用",
     "memberRefPlaceholder": "u:123 / contact:abc / c:acme",
-    "memberRefHelp": "引用平台用户 (u:<id>)、业务联系人 (contact:<id>) 或公司 (c:<slug>)。",
+    "memberRefHelp": "引用平台用户 (u:'<id>')、业务联系人 (contact:'<id>') 或公司 (c:'<slug>')。",
     "addMember": "添加成员",
     "removeMember": "移除成员",
     "rotationName": "名称",
@@ -9218,7 +10696,18 @@
     "deleteContactConfirm": "删除联系人“{name}”？",
     "oncallSubtitle": "值班轮换决定当事件触发时最先呼叫谁。",
     "escalationSubtitle": "升级策略会依次通过各目标和渠道升级，直到有人响应。",
-    "contactsSubtitle": "在事件期间可呼叫或升级至的业务联系人。"
+    "contactsSubtitle": "在事件期间可呼叫或升级至的业务联系人。",
+    "implicated": {
+      "title": "受牵连的交付工单",
+      "help": "其变更导致本次事故的交付工单——每个都附带问责信息，便于 RCA 查看流程在何处被跳过或豁免。",
+      "loading": "加载中…",
+      "empty": "尚未关联受牵连的工单。",
+      "signed": "{done}/{total} 已签核",
+      "gaps": "{count} 项缺口",
+      "remove": "移除",
+      "add": "关联工单",
+      "addPlaceholder": "工单 #"
+    }
   },
   "monitoring": {
     "boardsTitle": "主动监控",
@@ -9252,6 +10741,13 @@
     "fieldIntervalSeconds": "间隔（秒）",
     "fieldUrl": "URL",
     "fieldExpectedStatus": "预期状态码",
+    "fieldMethod": "方法",
+    "fieldHeaders": "请求标头",
+    "headersPlaceholder": "Authorization: Bearer …",
+    "headersHint": "每行一个“标头: 值”——随健康检查一起发送。",
+    "fieldBodyMatch": "响应体须包含",
+    "bodyMatchPlaceholder": "\"status\":\"ok\"",
+    "bodyMatchHint": "可选：如果响应体不包含此文本，则判定为故障。",
     "fieldMetric": "指标",
     "fieldComparator": "比较符",
     "fieldThreshold": "阈值",
@@ -9346,5 +10842,974 @@
     "statusError": "错误",
     "errFailed": "邀请失败",
     "laterHint": "你也可以稍后在<link>工作团队</link>邀请队友。"
+  },
+  "accountability": {
+    "loading": "正在加载问责信息…",
+    "signedHeader": "{total} 个必需角色中已有 {done} 个签核",
+    "unassigned": "未分配",
+    "addedBadge": "新增",
+    "gaps": {
+      "title": "{count} 项问责缺口",
+      "outstandingTitle": "{count} 个角色尚未签核",
+      "kind": {
+        "unsigned": "未签核",
+        "unstaffed": "资源缺口",
+        "no_contribution": "无贡献记录",
+        "waived": "已豁免",
+        "changes_requested": "要求修改"
+      },
+      "detail": {
+        "unsigned": "所需角色尚未签核。",
+        "pending": "尚未开始。",
+        "assigned": "已分配，工作尚未开始。",
+        "in_progress": "工作进行中，尚未记录签核。",
+        "unstaffed": "没有可胜任该必需角色的资源。",
+        "changes_requested": "已要求修改，尚未解决。",
+        "no_contribution": "批准时未关联任何工作成果——存在走过场的风险。",
+        "waived": "已豁免：{reason}",
+        "waived_no_reason": "已豁免但未记录理由。"
+      }
+    },
+    "table": {
+      "title": "签核与问责",
+      "role": "角色",
+      "who": "签核人",
+      "state": "状态",
+      "verdict": "裁定",
+      "when": "时间",
+      "comments": "备注",
+      "contribution": "贡献",
+      "empty": "此工单暂无必需角色。",
+      "action": "操作"
+    },
+    "verdict": {
+      "approved": "已批准",
+      "changes_requested": "要求修改",
+      "waived": "已豁免",
+      "delegated": "已委派"
+    },
+    "state": {
+      "pending": "待处理",
+      "assigned": "已分配",
+      "in_progress": "进行中",
+      "completed": "已完成",
+      "changes_requested": "要求修改",
+      "waived": "已豁免",
+      "skipped": "已跳过",
+      "unstaffed": "缺人手"
+    },
+    "responsibility": {
+      "owner": "负责人",
+      "reviewer": "评审人",
+      "contributor": "参与者"
+    },
+    "assess": {
+      "title": "资源评估",
+      "help": "为此工单添加模板之外所需的角色（如设计师、安全工程师）。若没有可用的合格资源，将标记为资源缺口。",
+      "rolePlaceholder": "选择角色…",
+      "notePlaceholder": "为何需要此角色？（可选）",
+      "add": "添加必需角色",
+      "materialize": "创建工作项",
+      "materializeHelp": "为每个资源生成一个子任务，使进度汇总到此工单。"
+    },
+    "contribution": {
+      "pr": "PR",
+      "run": "运行 #{id}",
+      "prd": "PRD 第 {revision} 版",
+      "test": "测试 {id}",
+      "files": "{count, plural, other {# 个文件}}"
+    },
+    "signoff": {
+      "action": "签署",
+      "cancel": "取消",
+      "confirm": "以{role}身份签署",
+      "recording": "记录中…",
+      "summaryPlaceholder": "你检查了什么？（可选）",
+      "reasonRequired": "豁免原因（必填）",
+      "help": "只有具备该角色能力的成员才能以此角色签署；工作区会记录签署人、时间及依据。"
+    }
+  },
+  "rfpPage": {
+    "title": "RFP 响应",
+    "subtitle": "以联合品牌方案回应 RFQ/RFP，基于您的项目组合——能力清单、损益、交付计划与风险。",
+    "newRequest": "新建响应",
+    "needDeveloper": "需要开发者角色",
+    "loading": "加载中…",
+    "empty": "暂无 RFP 请求。创建一个以起草联合品牌方案。",
+    "validation": "标题为必填项。",
+    "creating": "创建中…",
+    "create": "创建并起草",
+    "cancel": "取消",
+    "noOrg": "未命名组织",
+    "sourceNew": "全新构建",
+    "sourceExisting": "基于某个项目",
+    "quoted": "报价 {price}",
+    "notGenerated": "尚未生成",
+    "scanFresh": "最新扫描",
+    "status": {
+      "draft": "草稿",
+      "analyzing": "分析中",
+      "ready": "就绪",
+      "submitted": "已提交"
+    },
+    "field": {
+      "title": "标题",
+      "titlePlaceholder": "例如：客户门户重建",
+      "requesterOrg": "请求方组织",
+      "requesterOrgPlaceholder": "谁发起了 RFP",
+      "requesterBrand": "请求方品牌色",
+      "requesterBrandHint": "发起方的配色——将与您的配色在方案中融合。",
+      "primary": "主色",
+      "secondary": "辅色",
+      "accent": "强调色",
+      "logoUrl": "徽标 URL",
+      "requirements": "需求",
+      "requirementsPlaceholder": "粘贴 RFP/RFQ 需求…",
+      "sourceMode": "依据",
+      "project": "项目",
+      "selectProject": "选择一个项目…",
+      "economics": "经济测算",
+      "margin": "利润率",
+      "marketing": "营销",
+      "contingency": "应急"
+    },
+    "backToList": "返回请求列表",
+    "generating": "生成中…",
+    "regenerate": "重新生成",
+    "generate": "生成响应",
+    "generatingHint": "正在运行时效性扫描、匹配您的项目组合并起草方案…",
+    "noResponseYet": "尚未生成方案。点击\"生成\"以起草。",
+    "scanRefreshed": "已刷新扫描",
+    "scanCurrent": "扫描为最新",
+    "groundedOn": "基于 {project}",
+    "greenfield": "全新项目——根据需求提出",
+    "scanAge": "上次扫描于 {days} 天前",
+    "sec": {
+      "summary": "执行摘要",
+      "capabilities": "能力与方案",
+      "economics": "投资与商务",
+      "plan": "交付计划",
+      "risks": "主要风险",
+      "dependencies": "依赖项",
+      "portfolio": "相似项目",
+      "document": "品牌方案"
+    },
+    "capabilitiesGreenfield": "全新项目——能力根据需求提出。",
+    "col": {
+      "component": "组件",
+      "responsibility": "职责"
+    },
+    "stack": "技术栈",
+    "quotedPrice": "报价",
+    "marginNote": "{pct}% 利润率 · {weeks} 周工作量。",
+    "deliveryWindow": "交付：{start} → {end}（{weeks} 周）。",
+    "severity": {
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "depType": {
+      "internal": "内部",
+      "external": "外部",
+      "third_party": "第三方"
+    },
+    "downloadDoc": "下载"
+  },
+  "planBadge": {
+    "tier": {
+      "free": "免费版",
+      "pro": "专业版",
+      "teams": "团队版"
+    },
+    "freeHint": "您使用的是免费套餐 — 对话运行在 BuilderForce 内置模型上。点击查看套餐并升级。",
+    "paidHint": "您的工作区使用 {plan} 套餐。点击管理您的套餐。",
+    "tokensLeft": "剩余 {count} 个 token",
+    "noTokens": "token 已用完",
+    "upgrade": "升级"
+  },
+  "billing": {
+    "cardOnFileTitle": "已绑定的银行卡",
+    "cardOnFileHint": "高级模型访问权限通过此卡验证。更换将启动新的 0 美元验证。",
+    "cardPendingHint": "正在等待您的银行确认此卡。通过后将立即解锁高级模型。",
+    "cardNoDetails": "银行卡信息不可用",
+    "cardStatusValidated": "已验证",
+    "cardStatusPending": "验证中…",
+    "cardStatusFailed": "验证失败",
+    "replaceCard": "更换银行卡",
+    "retryCard": "重试",
+    "cardWorking": "处理中…",
+    "replaceCardTitle": "要更换银行卡吗？",
+    "replaceCardWarning": "在新卡通过验证之前，您当前的银行卡将继续有效，因此高级模型不会中断。新卡确认后，旧卡将被自动移除。",
+    "retryCardMessage": "我们将启动新的 0 美元验证，不会向您的卡扣款。",
+    "replaceCardConfirm": "继续",
+    "cardValidationFailed": "无法启动银行卡验证，请重试。",
+    "removeCard": "移除银行卡",
+    "removeCardTitle": "要移除您的银行卡吗？",
+    "removeCardWarning": "高级模型将被关闭，我们也将不再存储您的银行卡。您的套餐和包含的模型不受影响。您可以随时重新添加银行卡。",
+    "removeCardConfirm": "移除银行卡",
+    "removeCardFailed": "无法移除银行卡，请重试。"
+  },
+  "policyPacks": {
+    "title": "策略包",
+    "subtitle": "约束智能体的治理关卡。关卡在其作用范围内的下一次运行时生效——运行时会在每次工具调用时强制执行。",
+    "newPack": "新建策略包",
+    "error": "错误：{message}",
+    "genericError": "出现了问题。",
+    "loading": "正在加载策略包…",
+    "empty": "尚无策略包。创建一个，开始管控智能体可以执行的操作。",
+    "effectiveTitle": "当前生效",
+    "effectiveEmpty": "没有关卡适用于全工作区范围的运行，智能体不受管控。",
+    "effectiveCount": "有 {count} 个关卡适用于全工作区范围的运行。",
+    "enabled": "已启用",
+    "disabled": "已停用",
+    "noGates": "此策略包中没有关卡。",
+    "remove": "移除",
+    "scopeTenant": "适用于所有项目和智能体",
+    "scopeProject": "项目：{project}",
+    "scopeAgent": "智能体：{agent}",
+    "scopeProjectAgent": "{project} · {agent}",
+    "anyTool": "任意工具",
+    "fieldName": "名称",
+    "fieldNamePlaceholder": "例如：生产环境安全",
+    "fieldDescription": "描述",
+    "fieldProject": "项目",
+    "allProjects": "所有项目",
+    "fieldAgent": "智能体",
+    "allAgents": "所有智能体",
+    "fieldEnabled": "启用此策略包",
+    "saving": "正在保存…",
+    "createPack": "创建策略包",
+    "savePack": "保存更改",
+    "deletePack": "删除策略包",
+    "deletePackTitle": "删除策略包",
+    "deletePackConfirm": "要删除“{name}”及其所有关卡吗？智能体将不再受其约束。",
+    "gatesTitle": "关卡",
+    "gatesHelp": "每个关卡匹配一次工具调用，并决定后续行为：给出指令、暂停等待审批，或直接拒绝。",
+    "addGateTitle": "添加关卡",
+    "fieldGateKey": "关卡 ID",
+    "fieldGateKeyPlaceholder": "例如：no-shell-in-prod",
+    "fieldTool": "工具",
+    "toolHelp": "使用 * 管控所有工具——这就是设置默认拒绝策略的方式。",
+    "fieldEffect": "效果",
+    "fieldDirective": "指令",
+    "fieldDirectivePlaceholder": "用通俗的语言说明智能体必须怎么做。",
+    "fieldReason": "原因",
+    "fieldReasonPlaceholder": "为何要管控——将展示给智能体和审批人。",
+    "addGate": "添加关卡",
+    "deleteGateTitle": "删除关卡",
+    "deleteGateConfirm": "要删除关卡“{key}”吗？",
+    "effect": {
+      "inject-directive": "指令",
+      "require-approval": "审批",
+      "block": "阻止"
+    },
+    "effectHelp": {
+      "inject-directive": "在智能体的提示中加入一条具有约束力的指令，工具仍会执行。",
+      "require-approval": "智能体在使用该工具前会暂停并请求人工批准。",
+      "block": "智能体将直接拒绝该工具并说明原因。"
+    }
+  },
+  "ceremonySchedules": {
+    "title": "周期性仪式",
+    "subtitle": "按固定节奏运行站会和规划会。每个排定的仪式都会自动开始，圆桌席位已就座。",
+    "newSchedule": "新建计划",
+    "editSchedule": "编辑计划",
+    "empty": "尚无周期性仪式。添加一个计划，你的站会就会自动开始。",
+    "enabled": "启用中",
+    "paused": "已暂停",
+    "pause": "暂停",
+    "resume": "恢复",
+    "colKind": "仪式",
+    "colCadence": "节奏",
+    "colNextRun": "下次运行",
+    "colLastRun": "上次运行",
+    "colStatus": "状态",
+    "colActions": "操作",
+    "colRoster": "圆桌",
+    "kind_standup": "站会",
+    "kind_planning": "规划会",
+    "scope_members": "项目成员",
+    "scope_roster": "固定名单",
+    "preset_weekdays9": "工作日 09:00",
+    "preset_weekdays10": "工作日 10:00",
+    "preset_daily9": "每天 09:00",
+    "preset_mondays10": "每周一 10:00",
+    "preset_fridays16": "每周五 16:00",
+    "presetCustom": "自定义计划…",
+    "fieldKind": "仪式",
+    "fieldCadence": "频率",
+    "fieldCron": "Cron 表达式",
+    "cronHelp": "五个字段：分钟、小时、日、月、星期。上方预设会自动填写；如需更精确的设置可自行修改。",
+    "fieldTimezone": "时区",
+    "fieldRoster": "参与人员",
+    "rosterHelp": "“项目成员”会让该项目所有活跃成员就座，发言最少的人优先。“固定名单”则始终安排同一批人。",
+    "fieldMaxParticipants": "最多席位",
+    "fieldTurnSeconds": "每轮发言秒数",
+    "turnSecondsPlaceholder": "使用看板默认值",
+    "fieldEnabled": "计划已启用",
+    "enabledHelp": "暂停的计划会保留设置，但不会开启仪式。",
+    "fieldAutoDispatch": "仪式结束后启动智能体工作",
+    "autoDispatchHelp": "会话完成后，本项目中由智能体负责的工单会自动交给对应的智能体。",
+    "confirmDelete": "要删除这个周期性仪式吗？已经运行过的会话会被保留。",
+    "errorLoad": "无法加载计划。",
+    "errorSave": "无法保存计划。",
+    "errorDelete": "无法删除计划。"
+  },
+  "permissionDebugger": {
+    "title": "权限调试器",
+    "copyAll": "全部复制",
+    "copyAllHint": "以 JSON 复制全部",
+    "exportCsv": "导出 CSV",
+    "exportCsvHint": "导出为 CSV",
+    "close": "关闭",
+    "role": "角色：",
+    "activeCount": "已启用：{granted} / {total} 项权限",
+    "deniedCount": "{count} 项被拒绝",
+    "softGatedCount": "{count} 项软限制",
+    "empty": "此视图中没有权限。",
+    "tab": {
+      "page": "页面",
+      "user": "用户",
+      "role": "角色",
+      "missing": "缺失"
+    },
+    "col": {
+      "permission": "权限",
+      "status": "状态",
+      "source": "来源",
+      "count": "数量",
+      "apiEndpoint": "API 端点"
+    },
+    "status": {
+      "granted": "已授予",
+      "denied": "已拒绝",
+      "soft-gate": "软限制"
+    }
+  },
+  "githubActionsSurface": {
+    "notReadyTitle": "此项目尚未配置 GitHub Actions",
+    "notReadyBody": "此项目的默认仓库中缺少 Builderforce 代理工作流，因此运行将回退到持久化云执行器。请打开“源代码管理”设置，并对该仓库选择“启用代理运行”。",
+    "noGithubRepoBody": "此项目未关联 GitHub 仓库，因此无处运行 GitHub Actions。运行将回退到持久化云执行器。请在“源代码管理”设置中关联一个 GitHub 仓库。"
+  },
+  "feedback": {
+    "page": {
+      "title": "反馈",
+      "subtitle": "收集功能请求、缺陷和想法，并在开展任何工作之前进行审查。"
+    },
+    "tab": {
+      "label": "反馈",
+      "tooltip": "向我们发送反馈"
+    },
+    "kind": {
+      "feature": "功能请求",
+      "bug": "缺陷报告",
+      "idea": "想法",
+      "other": "其他"
+    },
+    "status": {
+      "new": "新",
+      "approved": "已批准",
+      "declined": "已拒绝"
+    },
+    "form": {
+      "title": "向我们发送反馈",
+      "intro": "告诉我们如何做得更好。功能请求、缺陷、尚未成形的想法——都欢迎。",
+      "destination": "将进入 {project} 待办列表以供审查。",
+      "kind": "类型",
+      "summary": "摘要",
+      "summaryPlaceholder": "一句话——你想要什么？",
+      "details": "详情",
+      "detailsPlaceholder": "你想做什么，遇到了什么障碍？",
+      "gateNote": "你的请求将提交给相关人员审查——不会自动构建任何内容。",
+      "submit": "发送反馈",
+      "submitting": "发送中…",
+      "close": "关闭",
+      "another": "再发一条",
+      "successTitle": "谢谢",
+      "successBody": "你的请求已提交，团队将进行审查。",
+      "errorRequired": "请在发送前描述你的反馈。",
+      "errorGeneric": "发送反馈时出错，请重试。"
+    },
+    "setup": {
+      "intro": "每个项目一个收集器——一段可嵌入的代码片段，可将任何应用中的功能请求、缺陷和想法汇集到该项目的待办列表。",
+      "pickProject": "选择一个项目以配置其反馈收集器。",
+      "enable": "启用反馈收集",
+      "enableAction": "启用",
+      "namePlaceholder": "收集器名称",
+      "creating": "创建中…",
+      "created": "收集器已创建",
+      "dismiss": "关闭",
+      "keyOnce": "立即复制你的接入密钥——它只显示一次且不会被存储。",
+      "ingestKey": "接入密钥",
+      "curlSnippet": "用 curl 测试",
+      "snippet": "嵌入代码片段",
+      "endpoint": "提交端点",
+      "snippetNote": "将此粘贴到任何应用中即可添加反馈选项卡。",
+      "copy": "复制",
+      "enabled": "已启用",
+      "paused": "已暂停",
+      "pause": "暂停",
+      "resume": "恢复",
+      "delete": "删除",
+      "confirmDelete": "删除此反馈收集器？该代码片段将停止接受提交。",
+      "lastSubmission": "最近提交",
+      "options": "选项",
+      "autoCreateTask": "每次提交都创建一张待办卡片",
+      "autoCreateTaskHint": "关闭后，提交仍会被记录并可供审查，但不会在看板上添加卡片。",
+      "dailyLimit": "每日提交上限",
+      "dailyLimitHint": "此代码片段在滚动的 24 小时内接受的提交数量（防滥用上限）。",
+      "allowedOrigins": "允许的来源",
+      "allowedOriginsHint": "以逗号分隔的可提交站点列表，或用 * 表示任意。",
+      "loading": "加载中…",
+      "loadFailed": "加载反馈收集器失败。",
+      "createFailed": "创建收集器失败。",
+      "saveFailed": "保存更改失败。"
+    },
+    "triage": {
+      "intro": "审查每条请求，批准以允许开展工作，或拒绝。在你批准之前不会运行任何内容。",
+      "filter": "显示",
+      "statusAll": "全部",
+      "loading": "加载中…",
+      "loadFailed": "加载提交内容失败。",
+      "reviewFailed": "记录你的决定失败。",
+      "empty": "这里还没有反馈。",
+      "approve": "批准",
+      "decline": "拒绝",
+      "working": "处理中…",
+      "confirmDecline": "拒绝此请求？它的工单将从看板归档。",
+      "gatedNote": "外部请求——等待你的批准。在你批准之前，任何代理都不会接手。",
+      "showMore": "展开",
+      "showLess": "收起"
+    },
+    "admin": {
+      "title": "产品反馈",
+      "subtitle": "从每个工作区的反馈收集器汇集的功能请求、缺陷和想法。"
+    }
+  },
+  "onboardingPill": {
+    "title": "账户设置进度",
+    "ariaLabel": "账户设置完成 {pct}%",
+    "label": "设置 {pct}%",
+    "panelTitle": "完成账户设置",
+    "progressLabel": "设置进度",
+    "percentDone": "已完成 {pct}%",
+    "intro": "完成这些步骤以充分利用你的工作区。进度会自动保存。",
+    "statusDone": "已完成",
+    "statusTodo": "待办",
+    "continueSetup": "继续设置",
+    "reviewSetup": "查看设置"
+  },
+  "globalError": {
+    "collapse": "收起",
+    "expandDetails": "展开详情",
+    "report": "上报到项目",
+    "copyTicket": "复制支持工单",
+    "dismiss": "关闭"
+  },
+  "reportError": {
+    "title": "上报错误",
+    "intro": "将错误提交到某个项目。它会与自动采集的错误一起出现在该项目的质量列表中。",
+    "projectLabel": "项目",
+    "projectPlaceholder": "选择一个项目…",
+    "titleLabel": "标题",
+    "titlePlaceholder": "简要摘要（可选）",
+    "messageLabel": "发生了什么？",
+    "messagePlaceholder": "描述错误、你当时的操作，以及有助于复现的任何信息。",
+    "levelLabel": "严重程度",
+    "level_fatal": "致命",
+    "level_error": "错误",
+    "level_warning": "警告",
+    "level_info": "信息",
+    "noProjects": "你还没有项目——请先创建一个项目再上报错误。",
+    "reported": "错误已上报到项目。",
+    "failed": "无法上报该错误。",
+    "cancel": "取消",
+    "submit": "上报错误",
+    "submitting": "上报中…"
+  },
+  "activate": {
+    "title": "连接你的编辑器",
+    "loading": "加载中…",
+    "working": "处理中…",
+    "redirecting": "正在跳转到登录…",
+    "confirmIntro": "你的编辑器正在请求访问权限。请确认此代码与 VS Code 中显示的一致：",
+    "approve": "批准",
+    "deny": "拒绝",
+    "approved": "✓ 已批准。请返回 VS Code，它会自动完成登录。",
+    "denied": "请求已拒绝。你可以关闭此标签页。",
+    "keyIntro": "这是你的编辑器密钥。请复制并粘贴到 VS Code 中：",
+    "copyKey": "复制密钥",
+    "copied": "✓ 已复制",
+    "keyFine": "请妥善保管此密钥。你可以随时在“设置 → API 密钥”中撤销它。",
+    "tryAgain": "重试",
+    "errorNoTenant": "你的账户还没有工作区。请先创建一个，然后重试。",
+    "errorAlreadyResolved": "此代码已被使用或已过期。请在编辑器中重新发起登录。",
+    "errorApprove": "无法批准该设备（{status}）。",
+    "errorDeny": "无法拒绝该设备（{status}）。",
+    "errorCreateKey": "无法创建密钥（{status}）。",
+    "errorNetwork": "网络错误。请重试。",
+    "errorNoKey": "未返回密钥。请重试。"
+  },
+  "marketingNav": {
+    "beta": "BETA",
+    "primaryNav": "主导航",
+    "home": "首页",
+    "product": "产品",
+    "resources": "资源",
+    "talentWorkforce": "人才 / 智能劳动力",
+    "agents": "智能体",
+    "models": "模型",
+    "pricing": "定价",
+    "blog": "博客",
+    "diagnosticsTools": "诊断与工具",
+    "soc2Audits": "SOC 2 与系统审计",
+    "promptLibrary": "提示词库",
+    "compare": "对比",
+    "integrations": "集成",
+    "mediaKit": "媒体资料包",
+    "signIn": "登录",
+    "getStarted": "立即开始 →",
+    "toggleMenu": "切换菜单"
+  },
+  "media": {
+    "seo": {
+      "title": "媒体资料包 — 销售演示文稿与营销素材",
+      "description": "下载 Builderforce.ai 销售演示文稿（可打印 PDF 或 PowerPoint），以及每页幻灯片的 PNG 营销素材。",
+      "ogTitle": "Builderforce.ai 媒体资料包"
+    },
+    "eyebrow": "媒体资料包",
+    "title": "Builderforce.ai 演示文稿 — 随时分享。",
+    "intro": "按需下载产品与平台演示文稿 — 可打印的 PDF、可编辑的 PowerPoint，或将每页幻灯片作为 PNG 插入您自己的文档与文章。",
+    "deckAlt": "Builderforce.ai 产品演示文稿封面",
+    "download": "下载",
+    "assets": {
+      "pdf": {
+        "name": "销售演示文稿（PDF）",
+        "desc": "完整 26 页产品与平台概览 — 适合打印与邮件发送。"
+      },
+      "pptx": {
+        "name": "销售演示文稿（PowerPoint）",
+        "desc": "同一份演示文稿的 PPTX 版本，便于演示或嵌入您自己的材料。"
+      },
+      "slides": {
+        "name": "全部幻灯片（PNG）",
+        "desc": "每页幻灯片均为 2560×1440 PNG — 可单独作为营销素材分享。"
+      }
+    },
+    "usageNote": "在撰写或介绍 Builderforce.ai 时，欢迎按原样分享这些材料。Builderforce.ai 名称与标识仍为注册商标；请勿修改幻灯片或暗示官方背书。"
+  },
+  "authCallback": {
+    "title": "登录失败",
+    "backToLogin": "返回登录",
+    "signingIn": "正在为您登录…",
+    "errorMissingParams": "身份验证失败：缺少参数。",
+    "errorInvalidState": "身份验证失败：状态无效或已过期。请重试。",
+    "errorAuthFailed": "与提供商的身份验证失败。请重试。",
+    "errorNoEmail": "您的提供商账户没有经过验证的电子邮件地址。",
+    "errorAccountNotFound": "账户未找到或已被禁用。",
+    "errorAccountSuspended": "您的账户已被暂停。请联系支持团队。",
+    "errorProviderUnavailable": "此登录提供商当前不可用。",
+    "errorAlreadyLinkedOther": "此提供商账户已关联到另一个 Builderforce 账户。",
+    "errorUnexpected": "发生了意外错误。请重试。",
+    "errorNoCode": "未收到登录代码。请重试。",
+    "errorProfile": "无法加载您的账户资料。请重新登录。"
+  },
+  "footer": {
+    "builtBy": "开发者",
+    "navLabel": "页脚",
+    "termsOfUse": "使用条款",
+    "privacyPolicy": "隐私政策",
+    "whatsNewHint": "查看新功能",
+    "colProduct": "产品",
+    "colPlatform": "平台",
+    "colGetStarted": "开始使用",
+    "linkProduct": "产品",
+    "linkCompare": "对比",
+    "linkPricing": "价格",
+    "linkMediaKit": "媒体资料包",
+    "linkEvermind": "Evermind LLM",
+    "linkWorkforceRegistry": "工作力注册表",
+    "linkAgents": "BuilderForce Agents",
+    "linkDiagnostics": "诊断与工具",
+    "linkSoc2": "SOC 2 与系统审计",
+    "linkBlog": "博客",
+    "linkLiveDemo": "实时演示",
+    "linkSignIn": "登录",
+    "linkGetStarted": "开始使用"
+  },
+  "whatsNew": {
+    "title": "新功能",
+    "loading": "加载中…",
+    "error": "无法加载更新日志，请稍后重试。",
+    "empty": "暂无更新，敬请期待。",
+    "categories": {
+      "new": "新功能",
+      "improvement": "改进",
+      "fix": "修复"
+    }
+  },
+  "demo": {
+    "personas": {
+      "ai-team": "AI 软件团队",
+      "insights": "工程 ROI 与洞察",
+      "pmo": "PMO 指挥中心",
+      "talent": "人才与市场",
+      "governance": "安全、架构与治理"
+    },
+    "bannerAria": "演示会话控制",
+    "badge": "实时演示",
+    "bannerText": "您正在体验实时演示——{name}",
+    "bookOrJoin": "加入或预约演示",
+    "createAccount": "创建账户",
+    "exit": "退出演示",
+    "convertTitle": "把它变成你的工作区",
+    "convertLead": "您刚刚用示例数据体验了{persona}演示。创建免费账户即可用自己的项目来做同样的事——或与我们的团队联系。",
+    "benefit1": "接入你自己的代码库、工单和团队",
+    "benefit2": "AI 智能体提交真实的拉取请求",
+    "benefit3": "免费开始——无需信用卡",
+    "createAccountFree": "创建免费账户",
+    "talkToSales": "联系销售",
+    "bookLead": "想要引导式讲解？预约演示。",
+    "exitTitle": "在您离开之前",
+    "exitLead": "想用自己的数据继续探索，或让我们为您讲解一遍？",
+    "exitBookLead": "与我们的团队预约演示",
+    "showcase": {
+      "heading": "试用实时演示——无需注册",
+      "lead": "选择适合你的场景，直接进入预置数据的工作区。这是真实产品，已加载示例数据。",
+      "launch": "启动演示",
+      "launching": "正在启动……",
+      "error": "无法启动演示，请重试。",
+      "note": "演示为共享环境，会定期重置，无需账户。您所做的更改是临时的。",
+      "personas": {
+        "ai-team": {
+          "title": "AI 软件团队",
+          "audience": "面向工程团队",
+          "desc": "AI 智能体与人类共享工作的实时冲刺看板——观看智能体领取工单、进行规划并提交拉取请求。"
+        },
+        "insights": {
+          "title": "工程 ROI 与洞察",
+          "audience": "面向副总裁与 CTO",
+          "desc": "交付健康度、AI 影响和每张工单成本——展示 AI 辅助交付真正回报的数据。"
+        },
+        "pmo": {
+          "title": "PMO 指挥中心",
+          "audience": "面向项目与交付负责人",
+          "desc": "从公司目标到智能体执行工单的一套带日期的层级结构：组合、OKR、甘特图和敏捷仪式。"
+        },
+        "talent": {
+          "title": "人才与市场",
+          "audience": "面向代理机构与自由职业者",
+          "desc": "在一个看板上混合编排你的团队、雇佣的自由职业者和 AI 智能体——通过同一流程雇佣任一方。"
+        },
+        "governance": {
+          "title": "安全、架构与治理",
+          "audience": "面向安全与合规",
+          "desc": "每周一次的 SOC 2 审计会创建整改工单、不可篡改的审计轨迹，以及每次部署的策略门禁。"
+        }
+      }
+    },
+    "tour": {
+      "ariaLabel": "产品导览",
+      "welcomeTitle": "欢迎体验演示",
+      "finishTitle": "一切就绪",
+      "finishBody": "快速导览到此结束。准备好用你自己的项目和团队来试试了吗？",
+      "stepOf": "第 {current} / {total} 步",
+      "takeTour": "开始导览",
+      "next": "下一步",
+      "back": "上一步",
+      "skip": "跳过导览",
+      "finish": "完成",
+      "close": "关闭",
+      "getStarted": "免费开始",
+      "welcome": {
+        "ai-team": "一起看看 AI 智能体如何在共享看板上作为真正的团队成员协作。",
+        "insights": "一起看看 AI 辅助交付的真实成本与回报。",
+        "pmo": "一起看看从公司目标到智能体执行工单的完整路径。",
+        "talent": "一起看看如何在一个看板上管理你的团队、自由职业者和 AI 智能体。",
+        "governance": "一起看看持续的 SOC 2 审计、整改与审计轨迹。"
+      },
+      "nav": {
+        "dashboard": {
+          "title": "构建任何东西",
+          "body": "用自然语言描述你的需求，AI 智能体即刻开始构建——无需任何配置。"
+        },
+        "projects": {
+          "title": "共享看板",
+          "body": "人类与 AI 智能体共用一个看板。把工单拖到 Ready，智能体便会规划、编写代码并提交拉取请求。"
+        },
+        "workforce": {
+          "title": "你的工作力",
+          "body": "AI 智能体和人都是一等团队成员——并肩分配工作、雇佣与管理。"
+        },
+        "insights": {
+          "title": "洞察与 ROI",
+          "body": "交付健康度、AI 影响与每张工单的成本——清楚看到 AI 辅助交付的回报。"
+        },
+        "quality": {
+          "title": "质量与可靠性",
+          "body": "错误、DORA 指标与自动化 QA，确保不会上线有问题的代码。"
+        },
+        "knowledge": {
+          "title": "知识与治理",
+          "body": "SOP、流程与政策，具备版本管理和阅读确认，可作为审计证据。"
+        }
+      }
+    }
+  },
+  "bookDemo": {
+    "badge": "联系我们",
+    "pageTitle": "预约演示",
+    "pageLead": "与我们的团队一起在您自己的用例上体验 Builderforce——或立即进入自助式实时演示。",
+    "formHeading": "与销售预约",
+    "formSub": "简单介绍一下您自己，我们会联系您安排讲解。",
+    "selfServeHeading": "或者现在自己试用",
+    "selfServeSub": "无需注册、无需等待——探索预置数据的演示工作区。",
+    "selfServe1": "真实产品，真实示例数据",
+    "selfServe2": "面向五类买家的五个场景",
+    "selfServe3": "随时转为您自己的账户",
+    "selfServeCta": "浏览实时演示",
+    "nameLabel": "姓名",
+    "namePlaceholder": "您的姓名",
+    "emailLabel": "工作邮箱",
+    "emailPlaceholder": "you@company.com",
+    "companyLabel": "公司",
+    "companyPlaceholder": "公司名称",
+    "interestLabel": "我感兴趣的是",
+    "interestAny": "尚不确定",
+    "messageLabel": "有什么需要我们了解的吗？",
+    "messagePlaceholder": "您的目标、团队规模、时间安排……",
+    "submit": "申请演示",
+    "submitting": "正在发送……",
+    "error": "出了点问题，请重试。",
+    "successTitle": "谢谢——我们会与您联系",
+    "successBody": "我们的团队将很快与您联系，安排讲解。",
+    "personas": {
+      "ai-team": "AI 软件团队",
+      "insights": "工程 ROI 与洞察",
+      "pmo": "PMO 指挥中心",
+      "talent": "人才与市场",
+      "governance": "安全、架构与治理"
+    }
+  },
+  "ceremonyHistory": {
+    "loading": "加载中…",
+    "errorLoad": "无法加载仪式历史记录。",
+    "filterAll": "全部",
+    "filterStandup": "站会",
+    "filterPlanning": "规划会",
+    "count": "已记录 {count} 场",
+    "emptyTitle": "尚未举行过任何仪式",
+    "emptyHelp": "站会或规划会结束后，会在这里显示出席情况以及发生的变更。",
+    "loadMore": "加载更早记录",
+    "durationMinutes": "{minutes} 分钟",
+    "attended": "{expected} 人中有 {present} 人出席",
+    "missed": "{count} 人缺席",
+    "reassigned": "重新分配 {count} 项",
+    "dispatched": "启动 {count} 次智能体运行",
+    "detailTitle": "{kind} · {when}",
+    "whoWasHere": "出席人员",
+    "whatHappened": "发生了什么",
+    "noParticipants": "本次仪式没有任何参与者。",
+    "noJournal": "本次仪式没有任何记录。",
+    "seatHuman": "成员",
+    "seatAgent": "智能体",
+    "seatAdHoc": "临时加入",
+    "spoke": "发言 {seconds} 秒",
+    "kind": {
+      "standup": "站会",
+      "planning": "规划会"
+    },
+    "closeReason": {
+      "facilitator": "由成员结束",
+      "unattended": "由管理者主持",
+      "no_humans": "无人出席",
+      "expired": "已超时"
+    },
+    "concludedBy": {
+      "manager": "由管理者主持",
+      "system": "自动结束"
+    },
+    "attendance": {
+      "unknown": "未知",
+      "present": "出席",
+      "absent": "缺席",
+      "excused": "非必需"
+    },
+    "errorCorrect": "无法更新出席记录。",
+    "correctAria": "{name} 的出席情况",
+    "sourcePto": "已批准的休假",
+    "sourceManual": "由管理者更正"
+  },
+  "observability": {
+    "agents": "代理",
+    "agentsHint": "点击某个代理查看其诊断信息。选择多个可进行对比。",
+    "selectAll": "全选",
+    "clear": "清除",
+    "loadingAgents": "正在加载代理…",
+    "agentFallback": "代理",
+    "agentNumbered": "代理 {id}",
+    "cloudAgentFallback": "云代理",
+    "scopedFromPanel": "{name}（来自面板的范围限定）",
+    "noAgents": "暂无代理。请在<link>工作团队</link>中注册自托管代理，或创建云代理——两者运行后都会显示在这里。",
+    "online": "在线",
+    "offline": "离线",
+    "viewLabel": "视图：",
+    "logView": "日志视图",
+    "timelineView": "时间线视图",
+    "conn": {
+      "connecting": "连接中",
+      "connected": "已连接",
+      "offline": "离线",
+      "disconnected": "已断开"
+    },
+    "refreshing": "正在刷新…",
+    "refreshCloud": "刷新云端",
+    "autoScroll": "自动滚动",
+    "copyTriage": "复制排查信息",
+    "copyReport": "复制报告（含差异）",
+    "copyTriageTitle": "将完整的排查报告（代理、遥测、错误、日志）复制到剪贴板",
+    "copyReportTitle": "将完整报告——材料/PRD、代码改动（差异）、遥测、错误和日志——复制到剪贴板",
+    "cloudNote": "云代理通过网关在服务端运行（没有实时中继流）；其日志行由执行遥测派生而来。请使用“刷新云端”获取最新内容。",
+    "registerThenSelect": "请先注册或创建一个代理，然后在上方选择它。",
+    "selectForLogs": "在上方选择一个或多个代理以查看诊断信息。",
+    "waitingForLogs": "正在等待日志输出…",
+    "timeline": "时间线",
+    "categoryFilterPlaceholder": "类别筛选（例如 llm、thinking）",
+    "refresh": "刷新",
+    "viewGantt": "甘特图",
+    "viewList": "列表",
+    "loadingTimeline": "正在加载时间线…",
+    "noTimelineEvents": "暂无时间线事件",
+    "noTimelineHint": "代理运行后，工具调用审计事件和工作流任务将显示在这里。",
+    "registerFirst": "请先注册或创建一个代理。",
+    "goToWorkforce": "前往工作团队 →",
+    "selectForTimeline": "在上方选择一个或多个代理以查看执行时间线。",
+    "errLoadAgents": "加载代理失败",
+    "errLoadDiagnostics": "加载诊断信息失败"
+  },
+  "embedInstall": {
+    "heading": "在你的宿主应用中安装",
+    "intro": "宿主应用的开发者安装该软件包，并在每个页面渲染一个组件，同时传入你签发的 SSO/租户 JWT。令牌通过 <code>postMessage</code> 传递给 iframe——绝不会出现在 URL 中。",
+    "stepInstall": "1 · 安装",
+    "stepMount": "2 · 挂载界面",
+    "mountableViews": "可挂载视图（{count}）",
+    "noCapabilities": "尚未启用任何能力——请在上方开启 产品 / 敏捷 / 安全 以暴露视图。",
+    "copyInstall": "复制安装命令",
+    "copySnippet": "复制代码片段",
+    "copiedFlash": "✓ 已复制"
+  },
+  "ticketContext": {
+    "thisTicket": "本工单",
+    "thisEpic": "本史诗",
+    "parentEpic": "所属史诗",
+    "signoffs": "签署",
+    "basisLane": "第 {index} 阶段，共 {total} 阶段",
+    "basisSignoff": "已签署 {done}/{total}",
+    "basisChildren": "子项已完成 {done}/{total}",
+    "basisWeight": "权重 {weight}%",
+    "partOfEpic": "所属史诗",
+    "epicChildren": "已完成 {done}/{total} 项",
+    "waitingOn": "等待",
+    "gapsOnly": "{count, plural, other {# 项问责缺口}}",
+    "dispatchReviewers": "派发审核人",
+    "dispatching": "派发中…",
+    "reviewSignoffs": "查看签署",
+    "objective": "目标",
+    "noObjective": "尚未关联任何目标。请在规划看板中关联，使其价值可衡量。",
+    "objectiveAttained": "达成度",
+    "objectiveShare": "本工单占该目标关联交付的 <b>{share}%</b>（已完成 {done}/{total}）。",
+    "objectiveInherited": "继承自本工单的范围——没有直接的交付关联。",
+    "via": {
+      "task": "直接关联",
+      "epic": "经由史诗",
+      "project": "项目目标",
+      "initiative": "举措目标"
+    }
+  },
+  "agentOps": {
+    "loading": "加载中…",
+    "close": "关闭",
+    "genericError": "出现了问题。",
+    "coordination": {
+      "title": "协同",
+      "subtitle": "多个智能体可以同时处理同一个工单并共用一个分支。这里显示当前谁占用了哪些文件，以及它们互相留下的说明。",
+      "ticketLabel": "工单编号",
+      "ticketPlaceholder": "例如 412",
+      "inspect": "查看工单",
+      "empty": "输入工单编号，即可查看其智能体占用了哪些文件以及彼此的说明。",
+      "leasesTitle": "当前被占用的文件",
+      "noLeases": "该工单上没有智能体占用任何文件。",
+      "notesTitle": "共享工作区",
+      "noNotes": "该工单上没有智能体留下说明。",
+      "resource": "文件",
+      "holder": "占用者",
+      "mode": "锁类型",
+      "reason": "原因",
+      "exclusive": "独占",
+      "shared": "共享",
+      "release": "强制释放",
+      "releaseTitle": "强制释放该文件？",
+      "releaseConfirm": "{holder} 仍占用 {resource}。释放后其他智能体可立即写入该文件——只有在确认占用者已停止时才这样做。"
+    },
+    "memory": {
+      "title": "记忆",
+      "subtitle": "智能体所相信的全部事实，包括其传播范围、来源以及何时失效。按当前项目范围显示——正是此处运行的智能体能够回忆到的内容。",
+      "tableTitle": "已记住的事实",
+      "empty": "智能体尚未在此范围内存储任何事实。",
+      "key": "键",
+      "fact": "事实",
+      "scope": "范围",
+      "origin": "来源",
+      "expiry": "过期时间",
+      "durable": "永不",
+      "lapsed": "已失效",
+      "fromRun": "运行 #{id}",
+      "scopeTenant": "整个工作区",
+      "scopeProject": "本项目",
+      "scopeTicket": "工单 #{id}",
+      "forget": "忘记",
+      "forgetTitle": "忘记该事实？",
+      "forgetConfirm": "智能体将不再回忆「{key}」。如果存在同名的更大范围版本，该版本将重新可见。",
+      "purge": "清理已失效",
+      "purgeTitle": "清理已失效的事实？",
+      "purgeConfirm": "删除已过期的事实。它们失效时智能体就已停止回忆，因此对运行没有任何影响。",
+      "statTotal": "范围内事实",
+      "statTotalHint": "此处运行的智能体可回忆的内容。",
+      "statScoped": "窄范围",
+      "statScopedHint": "仅限本项目或单个工单内的事实。",
+      "statExpiring": "设有过期时间",
+      "statExpiringHint": "将自动失效的限时事实。",
+      "statLapsed": "已失效",
+      "statLapsedHint": "不再被回忆，等待清理。"
+    },
+    "rehearsal": {
+      "title": "预演",
+      "subtitle": "针对工单真实运行智能体，但抑制所有副作用——不提交、不开合并请求、不写记忆、不呼叫任何人——然后查看它本会做什么。",
+      "startTitle": "运行预演",
+      "kind": "类型",
+      "kindDryRun": "空跑",
+      "kindReplay": "回放",
+      "kindTrial": "试验",
+      "ticket": "工单",
+      "ticketPlaceholder": "例如 412",
+      "agent": "智能体",
+      "agentPlaceholder": "留空则使用该工单指派的智能体",
+      "startHint": "预演会消耗模型令牌，因此限制为短时运行。试验会让同一智能体在本项目最近更新的若干工单上依次预演。",
+      "start": "运行预演",
+      "running": "运行中…",
+      "historyTitle": "历史预演",
+      "empty": "尚无预演。在修改提示词、策略包或模型固定之前先运行一次。",
+      "wouldWrite": "本会写入",
+      "stepCount": "{count} 项副作用",
+      "outcome": "结果",
+      "finished": "已完成",
+      "unfinished": "步数用尽",
+      "failed": "失败",
+      "viewReport": "报告",
+      "reportTitle": "智能体本会做的事",
+      "frozenAt": "读取代码库的版本",
+      "suppressedTitle": "被抑制的副作用",
+      "noSteps": "智能体没有产生任何副作用——既未写代码，也未存储任何内容。"
+    }
   }
 }

@@ -70,6 +70,10 @@ vi.mock('@/lib/api', () => ({
   deleteFile: vi.fn(),
   fetchFiles: vi.fn(async () => []),
   updateProject: vi.fn(async () => ({})),
+  // The Video centre pane embeds <ProjectEvermindPanel>, which resolves an IDE
+  // build's name by fetching it (IDE storage projects are hidden from the
+  // shared projects list).
+  fetchProject: vi.fn(async () => ({ id: 1, name: 'Test' })),
 }));
 vi.mock('@/lib/auth', () => ({ getStoredTenantToken: () => 'tok' }));
 vi.mock('@/lib/apiClient', () => ({ getApiBaseUrl: () => 'http://test' }));
@@ -84,6 +88,8 @@ vi.mock('./AgentPublishPanel', () => ({ AgentPublishPanel: () => <div /> }));
 vi.mock('./SitePublishPanel', () => ({ SitePublishPanel: () => <div /> }));
 vi.mock('./AgentStateViewer', () => ({ AgentStateViewer: () => <div /> }));
 vi.mock('./PreviewFrame', () => ({ PreviewFrame: () => <div data-testid="center-preview-frame" /> }));
+vi.mock('./ide/DevicePreview', () => ({ DevicePreview: () => <div data-testid="center-device-preview" /> }));
+vi.mock('./ide/MobileDevicePanel', () => ({ MobileDevicePanel: () => <div data-testid="mobile-device-panel" /> }));
 vi.mock('./ide/IdeProjectsSlideOutPanel', () => ({ IdeProjectsSlideOutPanel: () => <div /> }));
 vi.mock('./brain/BrainPanel', () => ({ BrainPanel: () => <div /> }));
 vi.mock('./IdeSettingsPanel', () => ({ IdeSettingsPanel: () => <div /> }));
@@ -142,5 +148,21 @@ describe('IDENew center-panel modality switch', () => {
     expect(screen.queryByTestId('center-finetune-panel')).toBeNull();
     // The designer center is the Preview frame (default centerView = 'preview').
     expect(screen.getByTestId('center-preview-frame')).toBeTruthy();
+    // ...and it has no device slide-out; that belongs to Mobile.
+    expect(screen.queryByTestId('mobile-device-panel')).toBeNull();
+  });
+
+  // Mobile shares Designer's Preview/Code chrome but frames the preview in a
+  // device bezel, so the swap has to be the DevicePreview and not the plain one.
+  it('mobile modality mounts the device preview instead of the plain frame', () => {
+    render(<IDE project={makeProject('mobile')} initialFiles={[]} />);
+    expect(screen.getByTestId('center-device-preview')).toBeTruthy();
+    expect(screen.queryByTestId('center-preview-frame')).toBeNull();
+    expect(screen.queryByTestId('center-studio-panel')).toBeNull();
+  });
+
+  it('mobile modality mounts the scan-to-phone slide-out', () => {
+    render(<IDE project={makeProject('mobile')} initialFiles={[]} />);
+    expect(screen.getByTestId('mobile-device-panel')).toBeTruthy();
   });
 });

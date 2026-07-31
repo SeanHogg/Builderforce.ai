@@ -1,0 +1,597 @@
+/**
+ * staffUnfilledLanes — staff a BOARD's unfilled lifecycle roles once, instead of
+ * rediscovering the same gap on 293 tickets one at a time.
+ *
+ * ── THE ARITHMETIC THAT MADE THE PER-TICKET REMEDY UNABLE TO WIN ─────────────────
+ * `staffUnfilledRole` already fixes this cause correctly: it pins a capable teammate to
+ * the role (or hires one) at PROJECT scope, so every ticket blocked on that role is
+ * unblocked by a single write. But it was only reachable from `applyRemedy('coordinate')`
+ * — a PER-TICKET remedy, inside the deep triage stage, which is
+ *
+ *   • capped at a handful of tickets per pass, and
+ *   • the LAST stage of the pass, so it is the one shed when the budget runs out.
+ *
+ * Measured on project 11 (2026-07-28, api 2026.7.171): the `managed_no_role` cohort stood
+ * at **293 of 678 stalled tickets** with the oldest idle 16 days, while the pass journal
+ * showed `Stall triage skipped this pass` on repeat and every register row's `lastAttempt`
+ * was seven hours stale against a five-minute cadence. A project-scope fix reached only
+ * through a per-ticket, capped, routinely-shed stage is a fix the board cannot receive.
+ *
+ * The cohort's size was never the problem. Its CAUSE is per-LANE — "this stage authorises
+ * a role and nobody on the roster can act as it" — and a board has a few dozen lanes, not
+ * 678 tickets. Asking the question once per lane turns a 293-ticket backlog into at most a
+ * couple of writes, in three queries, in well under a second.
+ *
+ * ── WHY IT IS SAFE TO RUN EVERY PASS ─────────────────────────────────────────────
+ * It is idempotent and it is cheap. A lane whose roles all bind resolves to nothing to do,
+ * and the common steady state is exactly that: one bulk authority read
+ * ({@link loadBoardLaneAuthorities}, three queries for the whole board) and no writes. Only
+ * an actually-unfillable role reaches {@link staffUnfilledRole}, which itself prefers
+ * pinning an existing capable agent over hiring and is bounded by
+ * {@link MAX_HIRES_PER_PASS} across the whole sweep.
+ *
+ * Deliberately NOT cached: this is a WRITE path whose whole purpose is to notice a
+ * staffing gap the moment it exists, and a stale "everything is staffed" verdict would
+ * reproduce precisely the standstill it exists to end.
+ */
+import { and, eq } from 'drizzle-orm';
+import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
+import { swimlaneAgentAssignments } from '../../infrastructure/database/schema';
+import {
+  decideManagedLaneAuthority, loadBoardLaneAuthorities,
+  type LaneAuthorityInputs, type ManagedTaskScope,
+} from '../kanban/managedLaneRoles';
+import { MAX_HIRES_PER_PASS, staffUnfilledRole, type StaffingAction } from './staffUnfilledRole';
+import { stateFingerprint } from './managerActionJournal';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
+
+/** What staffing one role achieved, for the manager feed. */
+export interface LaneStaffingOutcome {
+  roleKey: string;
+  action: StaffingAction;
+  agentName: string | null;
+  detail: string;
+}
+
+/**
+ * A lane that authorises NO role at all for some ticket shape it holds.
+ *
+ * ── THE GAP WITH NO NAME ─────────────────────────────────────────────────────────
+ * `unfilledRolesForBoard` can only report a role it can NAME — a role key that appears
+ * as an unbound approver. But `decideLaneApprovers` has three outcomes, and two of them
+ * produce NO approvers at all (`lane_unstaffed`, `lane_agents_not_role_capable`), as
+ * does a lane whose requirements are all scoped to ticket types this shape is not. In
+ * every one of those cases `pickManagedProducer` returns null, the ticket reports
+ * `managed_no_role`, and the staffing sweep has **nothing to put in its unfilled set** —
+ * so it returns empty, `describeLaneStaffing` returns '', and no decision is journalled.
+ *
+ * Measured on project 11 across four captures: `managed_no_role` at 294 → 304 → 305 of
+ * ~670 stalled tickets while `board_staffing` ran every pass (427ms) and the decision
+ * feed contained **zero `assign` decisions of any kind**. The surface told the reader to
+ * "look for an assign decision naming the roles it could not fill"; there was none,
+ * because the gap had no role to name. Silence meant "everything binds" and "the gap is
+ * nameless" indistinguishably — which is exactly why it survived four rounds of fixes.
+ *
+ * The manager cannot auto-fix this: there is no role key to pin or hire against, and
+ * inventing one would staff a lane the operator never described. So it is reported,
+ * loudly, with the lane and the number of tickets sitting in it.
+ */
+export interface UnauthorizedLane {
+  swimlaneId: string;
+  /** The lane's key — also the ticket status that lands in it, which is what makes this
+   *  reportable as a stage a human recognises rather than a uuid. */
+  laneKey: string | null;
+  /**
+   * Why nothing was authorised — the three cases are genuinely different repairs:
+   * `lane_unstaffed` needs a requirement row or a staffed agent; `not_role_capable`
+   * has agents that map to no role; `shape_unmatched` has requirements that all exclude
+   * the ticket types actually sitting in the lane.
+   */
+  reason: 'lane_unstaffed' | 'lane_agents_not_role_capable' | 'shape_unmatched';
+  /** Managed tickets currently in this lane — what the gap is actually costing. */
+  ticketCount: number;
+  /**
+   * The agents staffed to this lane that resolved to NO role, `name (declared role)`.
+   *
+   * Only meaningful for `lane_agents_not_role_capable`, and it is the whole repair for
+   * that reason: "agents are staffed but none can act as any role" is unactionable until
+   * a reader knows WHICH agent to give a job role to. Empty for the other two reasons —
+   * `lane_unstaffed` has no agents by definition.
+   */
+  unmappedAgents: string[];
+}
+
+export interface LaneStaffingResult {
+  /** Distinct roles this board authorises that resolved to no agent at all. */
+  unfilledRoleKeys: string[];
+  /** Lanes that authorise nothing at all — see {@link UnauthorizedLane}. */
+  unauthorizedLanes: UnauthorizedLane[];
+  /** Roles the manager actually filled this pass (pinned or hired). */
+  filled: LaneStaffingOutcome[];
+  /** Roles it could not fill — an unknown role key, or the hire budget was spent. */
+  unfillable: LaneStaffingOutcome[];
+  /** Hires made, so the caller can debit the sweep-wide budget. */
+  hires: number;
+  /**
+   * Why the board-wide staffing sweep could not be evaluated. This must be visible:
+   * returning an indistinguishable empty success hid 294 undispatchable tickets while
+   * every pass appeared to find nothing to staff.
+   */
+  error: string | null;
+}
+
+const EMPTY: LaneStaffingResult = {
+  unfilledRoleKeys: [], unauthorizedLanes: [], filled: [], unfillable: [], hires: 0, error: null,
+};
+
+/**
+ * Both staffing gaps a board can have, from ONE probe of lanes × shapes.
+ *
+ * One function because the two questions share the whole traversal and — more
+ * importantly — because they are complements: a lane's roles are either named-and-
+ * unbound (staffable) or absent entirely (reportable). Answering them separately is what
+ * let the second one go unasked for four captures.
+ */
+export interface BoardStaffingGaps {
+  unfilledRoleKeys: string[];
+  unauthorizedLanes: Array<Omit<UnauthorizedLane, 'ticketCount'>>;
+}
+
+export function findBoardStaffingGaps(
+  lanes: Iterable<readonly [string, LaneAuthorityInputs]>,
+  shapes: readonly ManagedTaskScope[] = [],
+): BoardStaffingGaps {
+  const probes: ManagedTaskScope[] = [{}, ...shapes];
+  const unfilled = new Set<string>();
+  const unauthorized: Array<Omit<UnauthorizedLane, 'ticketCount'>> = [];
+
+  for (const [swimlaneId, inputs] of lanes) {
+    const bound = new Set<string>();
+    const unbound = new Set<string>();
+    let authorizedSomeShape = false;
+    let emptyForSomeShape = false;
+
+    for (const shape of probes) {
+      const authority = decideManagedLaneAuthority(inputs, shape);
+      if (authority.approvers.length === 0) emptyForSomeShape = true;
+      else authorizedSomeShape = true;
+      for (const approver of authority.approvers) {
+        if (approver.agentRef) bound.add(approver.roleKey);
+        else unbound.add(approver.roleKey);
+      }
+    }
+    for (const roleKey of unbound) if (!bound.has(roleKey)) unfilled.add(roleKey);
+
+    // A lane that authorised nothing for at least one shape it could hold. Reported even
+    // when ANOTHER shape authorises fine, because the ticket that matches the empty shape
+    // is still undispatchable — and that per-shape hole is invisible in a board-wide
+    // "does this lane work?" answer, which is the mistake one layer up (0383) already was.
+    if (emptyForSomeShape) {
+      const reason = inputs.requirements.length === 0 && inputs.laneAgents.length === 0
+        ? 'lane_unstaffed'
+        : inputs.requirements.length === 0
+          ? 'lane_agents_not_role_capable'
+          // Requirements exist and some shape resolved them — so what failed here is
+          // applicability, not staffing: the rows are scoped to ticket types or
+          // conditions that this lane's actual tickets do not match.
+          : authorizedSomeShape ? 'shape_unmatched' : 'lane_agents_not_role_capable';
+      unauthorized.push({
+        swimlaneId,
+        laneKey: inputs.laneKey ?? null,
+        reason,
+        // WHICH agent needs a job role. Measured on project 11: the `todo` lane reported
+        // `lane_agents_not_role_capable` holding 8 tickets and named nobody, which is the
+        // same "go and look for it" flaw this whole traversal exists to remove — one
+        // level further down.
+        unmappedAgents: reason !== 'lane_agents_not_role_capable' ? [] : inputs.laneAgents
+          .filter((a) => a.capableRoleKeys.length === 0)
+          .map((a) => `${a.agentName ?? a.agentRef}${a.declaredRole ? ` (declared "${a.declaredRole}")` : ''}`),
+      });
+    }
+  }
+  return { unfilledRoleKeys: [...unfilled].sort(), unauthorizedLanes: unauthorized };
+}
+
+/**
+ * Every role a board's lanes authorise that binds to NO agent. PURE.
+ *
+ * Scoped by the ticket SHAPES the board actually holds. The original version asked the
+ * unconditional question only — "which roles can never bind for a plain task?" — on the
+ * reasoning that a conditional requirement should be left to the per-ticket remedy so
+ * this step could never hire for a role the board does not universally need. That
+ * reasoning was wrong in one decisive way: the per-ticket remedy is capped and routinely
+ * shed, which is the whole reason this board-scope sweep exists. Deferring the
+ * conditional roles to it deferred them to nothing, and they were the ones actually
+ * blocking the board (see the comment in the body for the measurement).
+ *
+ * Hiring for a role no ticket needs is still impossible, because the shapes come from the
+ * board's own managed tickets: a role is probed only if some real ticket's type/action
+ * makes its requirement apply.
+ *
+ * A role counts as unfilled only when EVERY approver slot carrying it is unbound, under
+ * every shape — but that union is taken PER LANE, never across the board. One lane may
+ * authorise the same role twice and binding it once is enough to dispatch THAT lane; a
+ * different lane binding it proves nothing about this one.
+ */
+export function unfilledRolesForBoard(
+  lanes: Iterable<LaneAuthorityInputs>,
+  shapes: readonly ManagedTaskScope[] = [],
+): string[] {
+  // EVALUATE AGAINST THE TICKET SHAPES ACTUALLY ON THE BOARD, not one synthetic ticket.
+  //
+  // This used to ask `decideManagedLaneAuthority(inputs, {})` — a single empty task — and
+  // that silently hid a whole class of role. Lane requirements are filtered by
+  // `requirementApplies`, which scopes them by `ticketType` and by an optional `condition`
+  // (`is_security`, `has_ui_change`, `is_data_change`). Against `{}` the task type
+  // defaults to 'task' and the action type is undefined, so EVERY requirement scoped to
+  // another ticket type and EVERY conditional requirement evaluated false. Their roles
+  // were therefore never reported unfilled, never staffed, and never even named in the
+  // manager feed.
+  //
+  // The result was a board sweep that answered "everything binds" while the tickets said
+  // otherwise: project 11 held `managed_no_role` at 293 of 673 stalled tickets for days
+  // with only 3 `assign` decisions in a whole day, because a security ticket's reviewer
+  // or a frontend ticket's UI approver is invisible to a probe that is neither.
+  //
+  // The empty shape stays in the set so an unconditional requirement is still covered on
+  // a board with no tickets at all. The cross-product is small and pure — a few dozen
+  // lanes by a handful of distinct shapes, no IO — and the caller passes shapes it has
+  // already loaded.
+  // ── THE UNION IS PER LANE, NOT PER BOARD ─────────────────────────────────────────
+  //
+  // The board-wide `bound` set was the second reason this sweep reported "everything
+  // binds" while the tickets said otherwise, and it survived the shape fix above because
+  // it hides in the same loop. Binding has TWO sources (`bindStaffedAgentsToRoles`): the
+  // workspace ROSTER, which is board-wide, and the LANE's own staffed agents, which are
+  // not. So a role bound on one lane by an agent staffed to that lane was recorded as
+  // bound for the WHOLE board — and every other lane authorising the same role, with no
+  // roster candidate and no staffing of its own, was filtered right back out of the
+  // unfilled set. The project-scope pin that would have fixed those lanes (the roster is
+  // where `staffUnfilledRole` writes) was therefore never made.
+  //
+  // Measured on project 11, 2026-07-29 (api 2026.7.180, i.e. WITH the shape fix live):
+  // `managed_no_role` standing at 294 of 670 stalled tickets, oldest idle 17 days, while
+  // this stage journalled ZERO `assign` decisions in 429 decisions that day — the exact
+  // signature of a sweep that believes it has nothing to do. The stalled tickets sat on
+  // `ready` (Requirements & Design) owing `product-owner`, a role bound elsewhere on the
+  // board by a lane-staffed agent.
+  //
+  // Within ONE lane the union is still right: binding is shape-independent, and a lane
+  // that authorises a role twice dispatches on either binding.
+  // The ROLE half of {@link findBoardStaffingGaps} — one traversal, two questions, so
+  // the named and nameless gaps can never be computed from different views of a lane.
+  // Lane ids are irrelevant to this half, so callers with only values keep working.
+  let i = 0;
+  return findBoardStaffingGaps([...lanes].map((inputs) => [`${i++}`, inputs] as const), shapes)
+    .unfilledRoleKeys;
+}
+
+/**
+ * The DISTINCT ticket shapes a board actually holds. PURE.
+ *
+ * Deduplicated because requirement applicability depends only on (taskType, actionType) —
+ * 678 tickets collapse to a handful of pairs, which is what keeps the probe above a
+ * trivial pure loop rather than a per-ticket sweep.
+ */
+export function distinctTaskShapes(
+  tasks: readonly { taskType?: string | null; actionType?: string | null }[],
+): ManagedTaskScope[] {
+  const seen = new Map<string, ManagedTaskScope>();
+  for (const t of tasks) {
+    const taskType = t.taskType ?? null;
+    const actionType = t.actionType ?? null;
+    const key = `${taskType ?? ''}|${actionType ?? ''}`;
+    if (!seen.has(key)) seen.set(key, { taskType, actionType });
+  }
+  return [...seen.values()];
+}
+
+/**
+ * Fill every role this project's board authorises but cannot bind.
+ *
+ * Never throws — a staffing failure must leave the pass running, exactly as the per-ticket
+ * remedy does.
+ */
+export async function staffUnfilledLanes(
+  env: Env,
+  db: Db,
+  args: {
+    tenantId: number;
+    projectId: number;
+    boardId: string;
+    /** Hires already made this sweep, so the budget spans every project in the tick. */
+    hiresUsed?: number;
+    maxHires?: number;
+    /** The distinct ticket shapes on this board — see {@link unfilledRolesForBoard}.
+     *  The caller already holds the managed set, so this costs no query. Omitted ⇒ the
+     *  unconditional probe only, which is the pre-0382 behaviour. */
+    taskShapes?: readonly ManagedTaskScope[];
+    /**
+     * Managed tickets per LANE KEY — which is the ticket status, because that is how a
+     * ticket is mapped to a lane (`swimlanes.key === task.status`); `tasks` carries no
+     * swimlane column. Lets an unauthorised lane report what the gap actually costs, and
+     * the caller already holds the managed set so it costs no query.
+     */
+    laneTicketCounts?: ReadonlyMap<string, number>;
+    /**
+     * The effective `allowAutoStaffLanes` grant (0386). When false — the default — a lane
+     * that authorises NO role is reported and left alone; when true the manager pins a
+     * producer to it. Reporting never depends on this, only acting does.
+     */
+    allowAutoStaffLanes?: boolean;
+  },
+): Promise<LaneStaffingResult> {
+  try {
+    const lanes = await loadBoardLaneAuthorities(db, {
+      tenantId: args.tenantId, projectId: args.projectId, boardId: args.boardId, env,
+    });
+    const gaps = findBoardStaffingGaps(lanes.entries(), args.taskShapes ?? []);
+    const { unfilledRoleKeys } = gaps;
+    // Only lanes that actually HOLD tickets. A board template carries lanes nobody is
+    // using, and reporting an empty one as a defect every five minutes would bury the
+    // lane that is holding 200 tickets under noise nobody can act on.
+    const unauthorizedLanes: UnauthorizedLane[] = gaps.unauthorizedLanes
+      .map((l) => ({
+        ...l,
+        ticketCount: l.laneKey == null ? 0 : args.laneTicketCounts?.get(l.laneKey) ?? 0,
+      }))
+      .filter((l) => l.ticketCount > 0)
+      .sort((a, b) => b.ticketCount - a.ticketCount);
+
+    if (unfilledRoleKeys.length === 0 && unauthorizedLanes.length === 0) return EMPTY;
+
+    const result: LaneStaffingResult = {
+      unfilledRoleKeys, unauthorizedLanes, filled: [], unfillable: [], hires: 0, error: null,
+    };
+    const maxHires = args.maxHires ?? MAX_HIRES_PER_PASS;
+
+    // ── THE LANE THAT AUTHORISES NOTHING — only with an explicit grant (0386) ────────
+    //
+    // The role ladder below cannot reach these: it is keyed on a role KEY, and a lane that
+    // authorises nothing has none to name. So for four captures the sweep reported a gap it
+    // was otherwise equipped to close, and 309 tickets sat in lanes nobody had configured.
+    //
+    // Gated because staffing an unconfigured lane STARTS everything sitting in it, and an
+    // intake lane looks identical whether it was left empty on purpose or by accident. That
+    // is a decision about how a team works, so `allowAutoStaffLanes` is false by default and
+    // this loop simply does not run — the lanes stay REPORTED either way, which is the part
+    // that must never depend on a permission.
+    if (args.allowAutoStaffLanes) {
+      for (const lane of unauthorizedLanes) {
+        // `shape_unmatched` is excluded deliberately: that lane HAS requirements, so tier
+        // (a) wins and a staffed agent would never be consulted. Its repair is to widen the
+        // requirement or re-type the tickets, and neither is the manager's call to make.
+        if (lane.reason === 'shape_unmatched') continue;
+        const outcome = await staffLaneProducer(env, db, {
+          tenantId: args.tenantId,
+          projectId: args.projectId,
+          swimlaneId: lane.swimlaneId,
+          laneKey: lane.laneKey,
+          hiresUsed: (args.hiresUsed ?? 0) + result.hires,
+          maxHires,
+        });
+        if (outcome.hired) result.hires += 1;
+        if (outcome.action === 'escalate') result.unfillable.push(outcome.outcome);
+        else result.filled.push(outcome.outcome);
+      }
+    }
+    for (const roleKey of unfilledRoleKeys) {
+      const staffed = await staffUnfilledRole(env, db, {
+        tenantId: args.tenantId,
+        projectId: args.projectId,
+        roleKey,
+        hiresUsed: (args.hiresUsed ?? 0) + result.hires,
+        maxHires,
+      });
+      const outcome: LaneStaffingOutcome = {
+        roleKey,
+        action: staffed.action,
+        agentName: staffed.agentName,
+        detail: staffed.detail,
+      };
+      if (staffed.action === 'hired') result.hires += 1;
+      if (staffed.action === 'escalate') result.unfillable.push(outcome);
+      else result.filled.push(outcome);
+    }
+    return result;
+  } catch (error) {
+    // A staffing sweep that cannot read the board is not a reason to abandon the pass;
+    // the per-ticket remedy still covers the same cause, more slowly. It IS a reason to
+    // journal the failure: the former empty result was indistinguishable from "all roles
+    // are staffed" and concealed the exact project-wide defect this sweep owns.
+    reportCaughtError(error, {
+      source: 'application/manager/staffUnfilledLanes.ts',
+      operation: 'staffUnfilledLanes',
+      context: { tenantId: args.tenantId, projectId: args.projectId, boardId: args.boardId },
+    });
+    return {
+      ...EMPTY,
+      error: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300),
+    };
+  }
+}
+
+/**
+ * The role the manager pins to a lane that names none.
+ *
+ * `developer` because it is the catalog's PRODUCER: every other builtin is either upstream
+ * of the work (product-manager, business-analyst) or a review role, and dispatching a
+ * reviewer to author the thing it exists to judge is a run that cannot succeed and cannot
+ * then be reviewed — the same rule {@link pickManagedProducer} already applies when it
+ * prefers a producing approver over a reviewing one.
+ *
+ * A lane that wants a different role should DECLARE it; a declared requirement is tier (a)
+ * and outranks anything staffed here, so this default can never override an operator.
+ */
+export const LANE_PRODUCER_ROLE_KEY = 'developer';
+
+/**
+ * Give one unauthorised lane a producer, so its tickets become dispatchable.
+ *
+ * TWO writes, in this order, and both are needed:
+ *   1. {@link staffUnfilledRole} pins (or hires) an agent for {@link LANE_PRODUCER_ROLE_KEY}
+ *      at PROJECT scope. This is what makes the roster report it role-CAPABLE, and
+ *      `approverRoleKeyForLaneAgent` refuses any lane agent whose capable set is empty —
+ *      so writing only the lane row below would produce a lane that still authorises
+ *      nothing, which is the failure this function exists to fix.
+ *   2. A `swimlane_agent_assignments` row binds that agent to THIS lane, which is what
+ *      turns `decideLaneApprovers` from tier `none` into tier `lane_agents`.
+ *
+ * Never throws: a staffing failure must leave the pass running.
+ */
+async function staffLaneProducer(
+  env: Env,
+  db: Db,
+  args: {
+    tenantId: number; projectId: number; swimlaneId: string; laneKey: string | null;
+    hiresUsed: number; maxHires: number;
+  },
+): Promise<{ action: StaffingAction; hired: boolean; outcome: LaneStaffingOutcome }> {
+  const lane = args.laneKey ?? args.swimlaneId;
+  const staffed = await staffUnfilledRole(env, db, {
+    tenantId: args.tenantId,
+    projectId: args.projectId,
+    roleKey: LANE_PRODUCER_ROLE_KEY,
+    hiresUsed: args.hiresUsed,
+    maxHires: args.maxHires,
+  });
+  const outcome = (detail: string): LaneStaffingOutcome =>
+    ({ roleKey: LANE_PRODUCER_ROLE_KEY, action: staffed.action, agentName: staffed.agentName, detail });
+
+  if (staffed.action === 'escalate' || !staffed.agentRef) {
+    return {
+      action: 'escalate', hired: false,
+      outcome: outcome(`could not give stage "${lane}" a producer: ${staffed.detail}`),
+    };
+  }
+
+  // Idempotent per (lane, agent): the sweep runs every five minutes, and a second row for
+  // the same pairing would give the lane two approver candidates for one role — which
+  // `decideLaneApprovers` dedupes anyway, so the row would be pure write amplification on
+  // a budget that cannot afford it.
+  const [existing] = await db
+    .select({ id: swimlaneAgentAssignments.id })
+    .from(swimlaneAgentAssignments)
+    .where(and(
+      eq(swimlaneAgentAssignments.tenantId, args.tenantId),
+      eq(swimlaneAgentAssignments.swimlaneId, args.swimlaneId),
+      eq(swimlaneAgentAssignments.agentRef, staffed.agentRef),
+    ))
+    .limit(1);
+  if (!existing) {
+    await db.insert(swimlaneAgentAssignments).values({
+      tenantId: args.tenantId,
+      swimlaneId: args.swimlaneId,
+      agentKind: 'workforce',
+      agentRef: staffed.agentRef,
+      name: staffed.agentName,
+      // The DECLARED role. `approverRoleKeyForLaneAgent` prefers it over a merely-capable
+      // one, so naming it here is what makes the lane's producer deterministic rather than
+      // whatever the catalog happens to enumerate first.
+      role: LANE_PRODUCER_ROLE_KEY,
+      runtime: 'cloud',
+      position: 0,
+    });
+  }
+  return {
+    action: staffed.action,
+    hired: staffed.action === 'hired',
+    outcome: outcome(
+      `staffed stage "${lane}" with ${staffed.agentName ?? staffed.agentRef} as ${LANE_PRODUCER_ROLE_KEY}`
+      + `${staffed.action === 'hired' ? ' (hired for it)' : ''} — every ticket sitting in that stage can now be dispatched`,
+    ),
+  };
+}
+
+/**
+ * Identifies WHICH state a board-staffing verdict is, so two states sharing the `assign`
+ * action type can never suppress each other's journal entry.
+ */
+export const BOARD_STAFFING_STATE_KEY = 'board_staffing';
+
+/**
+ * The identity of a board-staffing verdict. PURE.
+ *
+ * ── WHY A VERDICT NEEDS AN IDENTITY ──────────────────────────────────────────────
+ * This sweep runs on every pass and, in the steady state on a board a human has not
+ * touched, produces the IDENTICAL verdict every time. Measured on project 11,
+ * 2026-07-31: "3 stages on this board authorise NO role … 317 tickets …" journalled 3× in
+ * the last 30 decisions (07:55:06 → 09:00:02) with nothing about the board having changed
+ * — a `manager_actions` row per project per five minutes for an unchanged, unactionable
+ * condition, on a board deliberately held on Neon's free tier, crowding real decisions out
+ * of both the 30-item feed and the 200-row window. The report's own `decision_loop`
+ * finding fires on it.
+ *
+ * ── WHAT IT MUST CARRY, AND WHY ──────────────────────────────────────────────────
+ * Everything the sentence is computed from: the lanes, their reasons, the ticket counts,
+ * the unmapped agents, the role keys and the error. The fingerprint IS the contract — a
+ * key narrower than the verdict would suppress a genuine change (a lane draining from 299
+ * to 4, a new stage falling unconfigured, the sweep starting to fail) as "already said",
+ * and a suppressed defect is worse than a duplicated one. Sorted where the underlying set
+ * has no meaningful order, so an incidental reordering does not read as a change.
+ */
+export function laneStaffingFingerprint(result: LaneStaffingResult): string {
+  return stateFingerprint([
+    result.error ?? '',
+    [...result.unfilledRoleKeys].sort().join(','),
+    [...result.unfillable].map((u) => u.roleKey).sort().join(','),
+    [...result.filled].map((f) => `${f.roleKey}:${f.action}:${f.agentName ?? ''}`).sort().join(','),
+    [...result.unauthorizedLanes]
+      .map((l) => `${l.laneKey ?? l.swimlaneId}:${l.reason}:${l.ticketCount}:${[...l.unmappedAgents].sort().join('/')}`)
+      .sort()
+      .join(','),
+  ]);
+}
+
+/**
+ * One plain sentence for the manager feed, or '' when there was nothing to say. PURE.
+ *
+ * Names the COHORT effect rather than the write, because that is the fact a reader needs:
+ * a pinned role is uninteresting; "every ticket waiting on Architect can now dispatch" is
+ * the thing that changed.
+ */
+export function describeLaneStaffing(result: LaneStaffingResult): string {
+  if (result.error) {
+    return `Could not inspect or staff this board's lifecycle roles: ${result.error}. `
+      + 'Per-ticket recovery remains available, but the board-wide staffing gap needs attention.';
+  }
+  if (result.filled.length === 0 && result.unfillable.length === 0
+    && result.unauthorizedLanes.length === 0) return '';
+  const parts: string[] = [];
+  // FIRST, because it is the largest and the least discoverable. This is the decision the
+  // diagnostics surface has been telling readers to look for and that did not exist: a
+  // lane authorising no role at all has no role key to appear in `unfilledRoleKeys`, so
+  // for four captures the manager reported nothing while 305 tickets could not dispatch.
+  if (result.unauthorizedLanes.length) {
+    const REPAIR: Record<UnauthorizedLane['reason'], string> = {
+      lane_unstaffed: 'the stage declares no required role and has no agent staffed to it — add a role requirement or staff an agent',
+      lane_agents_not_role_capable: 'agents are staffed to the stage but none of them can act as any role — give one a job role',
+      shape_unmatched: 'the stage\'s role requirements are all scoped to ticket types or conditions these tickets do not match — widen the requirement or re-type the tickets',
+    };
+    const held = result.unauthorizedLanes.reduce((n, l) => n + l.ticketCount, 0);
+    const lanes = result.unauthorizedLanes.length;
+    const worst = result.unauthorizedLanes.slice(0, 3)
+      .map((l) => `"${l.laneKey ?? l.swimlaneId}" (${l.ticketCount} ticket${l.ticketCount === 1 ? '' : 's'}: ${REPAIR[l.reason]}${l.unmappedAgents.length ? ` — ${l.unmappedAgents.join(', ')}` : ''})`)
+      .join('; ');
+    parts.push(
+      `${lanes} stage${lanes === 1 ? ' on this board authorises' : 's on this board authorise'} NO role for the tickets sitting in them, so ${held} ticket${held === 1 ? '' : 's'} cannot be dispatched at all and the manager cannot fix it automatically — there is no role to staff. ${worst}.`,
+    );
+  }
+  if (result.filled.length) {
+    const names = result.filled
+      .map((f) => `${f.roleKey}${f.agentName ? ` → ${f.agentName}` : ''}${f.action === 'hired' ? ' (hired)' : ''}`)
+      .join(', ');
+    parts.push(
+      `Staffed ${result.filled.length} lifecycle role${result.filled.length === 1 ? '' : 's'} this board authorises but could not fill (${names}) — `
+      + 'every ticket held at those stages can now be dispatched with a role attribution.',
+    );
+  }
+  if (result.unfillable.length) {
+    parts.push(
+      `${result.unfillable.length} role${result.unfillable.length === 1 ? '' : 's'} still cannot be filled automatically `
+      + `(${result.unfillable.map((u) => u.roleKey).join(', ')}) — a human needs to staff or correct them.`,
+    );
+  }
+  return parts.join(' ');
+}

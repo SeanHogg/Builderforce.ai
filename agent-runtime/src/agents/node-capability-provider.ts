@@ -29,7 +29,7 @@ import {
   writeFile as fsWriteFile,
 } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve as resolvePath, sep } from "node:path";
-import { filterByGlob } from "@builderforce/agent-tools";
+import { filterByGlob, normalizeScopeDir, isUnderScopeDir } from "@builderforce/agent-tools";
 import type {
   Capability,
   CapabilityProvider,
@@ -243,11 +243,12 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         let matches = (r.results ?? []).map((m) => ({ path: m.filePath, ...m }));
         // Honor an optional subdirectory scope by prefix-filtering the ripgrep hits,
         // so `search_code`'s `path` argument narrows results here too (parity with the
-        // editor provider that scopes its walk natively).
-        if (scope && scope.trim()) {
-          const prefix = scope.trim().replace(/^[./]+|\/+$/g, "");
-          matches = matches.filter((m) => typeof m.path === "string" && m.path.split("\\").join("/").startsWith(`${prefix}/`));
-        }
+        // editor provider that scopes its walk natively). Normalization + prefix-match
+        // are the ONE shared helpers so this can't drift from the other providers. The
+        // ripgrep result set is complete (not a capped ranked page), so filtering it is
+        // lossless — unlike the cloud GitHub-API path, which must scope in the query.
+        const scopeDir = normalizeScopeDir(scope);
+        if (scopeDir) matches = matches.filter((m) => typeof m.path === "string" && isUnderScopeDir(m.path, scopeDir));
         return { ok: true, query, total: matches.length, matches };
       },
     },

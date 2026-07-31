@@ -592,7 +592,7 @@ export default function MarketplacePageClient() {
         {/* Talent-only sub-filters (discipline + sort) mirror the retired /talent page. */}
         {category === 'talent' && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
-            <select
+            <Select
               style={filterControlStyle}
               value={talentDiscipline}
               onChange={(e) => setTalentDiscipline(e.target.value)}
@@ -600,8 +600,8 @@ export default function MarketplacePageClient() {
             >
               <option value="">{tt('filter.allDisciplines')}</option>
               {TALENT_DISCIPLINES.map((d) => <option key={d} value={d}>{tdis(`discipline.${d}`)}</option>)}
-            </select>
-            <select
+            </Select>
+            <Select
               style={filterControlStyle}
               value={talentSort}
               onChange={(e) => setTalentSort(e.target.value)}
@@ -611,7 +611,7 @@ export default function MarketplacePageClient() {
               <option value="rating">{tt('filter.sortRating')}</option>
               <option value="rate_asc">{tt('filter.sortRateAsc')}</option>
               <option value="rate_desc">{tt('filter.sortRateDesc')}</option>
-            </select>
+            </Select>
           </div>
         )}
         {category !== 'publish' && category !== 'talent' && category !== 'gigs' && (

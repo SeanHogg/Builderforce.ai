@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * ChatTicketService — the single source of logic for tying Brain chats to work
  * items, computing a chat's ticket health, tracing chat↔ticket lineage, and
@@ -36,6 +37,7 @@ import { AgentAssignmentService } from '../agent/AgentAssignmentService';
 import { resolveChatAccess } from './chatAccess';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { broadcastBrainChatChanged } from '../../infrastructure/relay/broadcastRoom';
 
 const CHAT_SCOPE = 'chat';
 
@@ -46,9 +48,18 @@ export type TicketKind = (typeof TICKET_KINDS)[number];
 export type LinkType = 'linked' | 'created';
 
 /** Lifecycle phases a run can narrate into its linked chats. `started`/`completed`/`failed`
- *  come from `RuntimeService.update`; `paused` (ask_human) and `cancelled` are posted from the
- *  two sites that write the execution row directly and bypass `update`. */
-export type RunMilestonePhase = 'started' | 'completed' | 'failed' | 'paused' | 'cancelled';
+ *  come from `RuntimeService.update`; `paused` (ask_human), `resumed` (the answer arriving),
+ *  and `cancelled` are posted from the sites that write the execution row directly and bypass
+ *  `update`; `failed` is ALSO posted by the orphan/stale reapers so a run that dies silently
+ *  still reports its death to the humans driving the linked chats. */
+export type RunMilestonePhase = 'started' | 'completed' | 'failed' | 'paused' | 'resumed' | 'cancelled';
+
+/** Chat-ticket kind for a task row's `task_type` — epics and gaps keep their own kind,
+ *  everything else addresses as 'task'. Shared by every run-milestone producer
+ *  (RuntimeService, the stale-execution reaper) so `chat_ticket_links` lookups agree. */
+export function ticketKindForTaskType(taskType?: string | null): 'epic' | 'gap' | 'task' {
+  return taskType === 'epic' || taskType === 'gap' ? taskType : 'task';
+}
 
 export interface TicketHealth {
   kind: TicketKind;
@@ -57,7 +68,28 @@ export interface TicketHealth {
   label: string;
   /** Raw status string of the work item (free-form for tasks). */
   status: string;
-  /** 0–100 completion. Leaf task = done?100:0; container = completed/total. */
+  /**
+   * 0–100 completion percentage. Leaf task/gap = done?100:0 (50 while
+   * in_progress/in_review); container (epic/initiative/portfolio) = round(done/total);
+   * objective = rounded key-result rollup; roadmap/spec = 100 when its own status
+   * is terminal.
+   *
+   * `progressPct === 100` EMISSION RULE — the authoritative completion signal:
+   * - Emitted ONLY once the work item is fully complete: for a leaf, when it is
+   *   marked done (`completedAt != null` OR status ∈ {done, completed, archived});
+   *   for a container, when EVERY child/target that counts is complete
+   *   (`done === total`). It is NEVER reported before completion — an item that is
+   *   in progress reports a value < 100 (e.g. 50), never 100.
+   * - Idempotent, not "fired once": health is derived live on every read (this
+   *   value is deliberately uncached), so a completed item reports 100 on every
+   *   subsequent read. Consumers must treat 100 as an idempotent terminal state,
+   *   not a one-shot event, and must not assume it is delivered exactly once.
+   * - Values approaching 100 (e.g. 99) are NOT completion. Only an exact 100 is the
+   *   completion signal; do not treat a near-100 value as done.
+   * - `progressPct === 100` corresponds to `done === total` and, for a leaf, to a
+   *   terminal `status`. Both agree by construction — there is no state where
+   *   `progressPct` is 100 while the item is not complete.
+   */
   progressPct: number;
   done: number;
   total: number;
@@ -501,7 +533,9 @@ export class ChatTicketService {
       try {
         const [t] = await this.db.select({ agentRef: tasks.assignedAgentRef }).from(tasks).where(eq(tasks.id, Number(input.ref))).limit(1);
         if (t?.agentRef) await this.onTicketAgentAssigned(tenantId, input.kind, input.ref, t.agentRef, { chatId });
-      } catch { /* best-effort: a handoff failure must never break linking */ }
+      } catch (error) { /* best-effort: a handoff failure must never break linking */ 
+        reportCaughtError(error, { source: "application/brain/ChatTicketService.ts", operation: "linkTicket" });
+      }
     }
 
     const health = await this.ticketHealthBatch(tenantId, [{ kind: input.kind, ref: input.ref }]);
@@ -565,26 +599,23 @@ export class ChatTicketService {
       if (!owned) return { error: `Source chat ${sid} not found` };
     }
 
-    // Current max seq on the target, so appended messages continue the sequence.
-    const [maxRow] = await this.db
-      .select({ maxSeq: sql<number>`COALESCE(MAX(${brainChatMessages.seq}), 0)` })
-      .from(brainChatMessages).where(eq(brainChatMessages.chatId, input.targetChatId));
-    let seq = Number(maxRow?.maxSeq ?? 0);
-
     // Gather source messages, ordered chronologically across all sources.
     const srcMsgs = await this.db
-      .select({ role: brainChatMessages.role, content: brainChatMessages.content, metadata: brainChatMessages.metadata, createdAt: brainChatMessages.createdAt, seq: brainChatMessages.seq })
+      .select({ role: brainChatMessages.role, content: brainChatMessages.content, metadata: brainChatMessages.metadata, eventKey: brainChatMessages.eventKey, createdAt: brainChatMessages.createdAt, seq: brainChatMessages.seq })
       .from(brainChatMessages)
       .where(inArray(brainChatMessages.chatId, sources))
       .orderBy(brainChatMessages.createdAt, brainChatMessages.seq);
 
     let messagesMoved = 0;
     for (const m of srcMsgs) {
-      seq += 1;
-      await this.db.insert(brainChatMessages).values({
-        chatId: input.targetChatId, role: m.role, content: m.content, metadata: m.metadata, seq,
-      });
-      messagesMoved += 1;
+      const [inserted] = await this.db.insert(brainChatMessages).values({
+        chatId: input.targetChatId, role: m.role, content: m.content,
+        metadata: m.metadata, eventKey: m.eventKey,
+      }).onConflictDoNothing().returning({ id: brainChatMessages.id });
+      if (inserted) {
+        await this.db.update(brainChatMessages).set({ seq: inserted.id }).where(eq(brainChatMessages.id, inserted.id));
+        messagesMoved += 1;
+      }
     }
 
     // Move ticket links to the target (skip ones already present on the target).
@@ -663,14 +694,22 @@ export class ChatTicketService {
 
   /** Append a system-authored assistant line to a chat (dispatch notices + run milestones).
    *  metadata is a JSON string column (matches BrainService's JSON.stringify convention). */
-  private async postSystemMessage(chatId: number, content: string, metadata?: Record<string, unknown>): Promise<void> {
-    const [maxRow] = await this.db
-      .select({ maxSeq: sql<number>`COALESCE(MAX(${brainChatMessages.seq}), 0)` })
-      .from(brainChatMessages).where(eq(brainChatMessages.chatId, chatId));
-    const seq = Number(maxRow?.maxSeq ?? 0) + 1;
-    await this.db.insert(brainChatMessages).values({
-      chatId, role: 'assistant', content, metadata: metadata ? JSON.stringify(metadata) : null, seq,
-    });
+  private async postSystemMessage(
+    tenantId: number,
+    chatId: number,
+    content: string,
+    metadata?: Record<string, unknown>,
+    eventKey?: string,
+  ): Promise<void> {
+    // The generated PK is the database's atomic append order. Copying it to `seq`
+    // avoids the racy MAX(seq)+1 read used by concurrent agent publishers.
+    const [inserted] = await this.db.insert(brainChatMessages).values({
+      chatId, role: 'assistant', content, metadata: metadata ? JSON.stringify(metadata) : null,
+      eventKey: eventKey ?? null,
+    }).onConflictDoNothing().returning({ id: brainChatMessages.id });
+    if (!inserted) return;
+    await this.db.update(brainChatMessages).set({ seq: inserted.id }).where(eq(brainChatMessages.id, inserted.id));
+    await broadcastBrainChatChanged(this.env.SESSION_ROOM, tenantId, chatId);
   }
 
   /**
@@ -707,6 +746,7 @@ export class ChatTicketService {
       });
       if (name === undefined) name = await this.agentDisplayName(tenantId, agentRef);
       await this.postSystemMessage(
+        tenantId,
         t.chatId,
         `🤖 **${name}** has been assigned to ${kind} #${ref}. Progress will appear here as it works.`,
         { agentDispatch: true, agentRef, ticketKind: kind, ticketRef: ref },
@@ -726,7 +766,7 @@ export class ChatTicketService {
   /** Human line for a run milestone. */
   private static runMilestoneText(
     name: string, kind: string, ref: string,
-    input: { phase: RunMilestonePhase; toStatus?: string | null; resultText?: string | null; errorMessage?: string | null },
+    input: { phase: RunMilestonePhase; toStatus?: string | null; resultText?: string | null; errorMessage?: string | null; questionText?: string | null },
   ): string {
     if (input.phase === 'started') return `▶️ **${name}** started working on ${kind} #${ref}.`;
     if (input.phase === 'completed') {
@@ -734,23 +774,18 @@ export class ChatTicketService {
       const note = ChatTicketService.firstLine(input.resultText);
       return `✅ **${name}** finished ${kind} #${ref}${lane}.${note ? ` ${note}` : ''}`;
     }
-    // Paused (ask_human) and cancelled bypass RuntimeService.update, so these are posted
-    // from the two direct-write sites — full-lifecycle narration, not just start/finish/fail.
-    if (input.phase === 'paused') return `🙋 **${name}** paused on ${kind} #${ref} — waiting on a human answer to continue.`;
+    // Paused (ask_human), resumed, and cancelled bypass RuntimeService.update, so these are
+    // posted from the direct-write sites — full-lifecycle narration, not just start/finish/fail.
+    if (input.phase === 'paused') {
+      const q = ChatTicketService.firstLine(input.questionText);
+      return q
+        ? `🙋 **${name}** paused on ${kind} #${ref} — needs a human answer: ${q}`
+        : `🙋 **${name}** paused on ${kind} #${ref} — waiting on a human answer to continue.`;
+    }
+    if (input.phase === 'resumed') return `▶️ **${name}** resumed work on ${kind} #${ref} — a human answered its question.`;
     if (input.phase === 'cancelled') return `⏹️ **${name}**'s run on ${kind} #${ref} was cancelled.`;
     const why = ChatTicketService.firstLine(input.errorMessage);
     return `⚠️ **${name}**'s run on ${kind} #${ref} failed.${why ? ` ${why}` : ''}`;
-  }
-
-  /** Has a milestone with this per-execution+phase key already been posted to the chat?
-   *  (metadata is a JSON string; `runMilestone` is written first so the LIKE is exact.) */
-  private async milestonePosted(chatId: number, key: string): Promise<boolean> {
-    const [hit] = await this.db
-      .select({ id: brainChatMessages.id })
-      .from(brainChatMessages)
-      .where(and(eq(brainChatMessages.chatId, chatId), sql`${brainChatMessages.metadata} LIKE ${`%"runMilestone":"${key}"%`}`))
-      .limit(1);
-    return !!hit;
   }
 
   /**
@@ -768,6 +803,13 @@ export class ChatTicketService {
       kind: string; ref: string; agentRef?: string | null;
       phase: RunMilestonePhase; executionId: number;
       toStatus?: string | null; resultText?: string | null; errorMessage?: string | null; agentName?: string;
+      /** The `ask_human` question a `paused` milestone narrates, so the human sees WHAT
+       *  the agent is blocked on in the chat itself (not just that it is blocked). */
+      questionText?: string | null;
+      /** Disambiguates REPEATABLE phases (`paused`/`resumed` can occur once per
+       *  question cycle) inside the per-execution+phase idempotency key — pass the
+       *  approval id so each Q&A cycle narrates exactly once. Single-shot phases omit it. */
+      eventNonce?: string | null;
     },
   ): Promise<void> {
     try {
@@ -778,15 +820,19 @@ export class ChatTicketService {
       if (chats.length === 0) return;
       const name = input.agentName
         ?? (input.agentRef ? await this.agentDisplayName(tenantId, input.agentRef) : 'The agent');
-      const key = `${executionId}:${phase}`;
+      const key = `${executionId}:${phase}${input.eventNonce ? `:${input.eventNonce}` : ''}`;
       const text = ChatTicketService.runMilestoneText(name, kind, ref, input);
-      for (const c of chats) {
-        if (await this.milestonePosted(c.chatId, key)) continue;
-        await this.postSystemMessage(c.chatId, text, {
+      await Promise.all(chats.map((c) => this.postSystemMessage(tenantId, c.chatId, text, {
           runMilestone: key, ticketKind: kind, ticketRef: ref, phase, executionId, agentRef: input.agentRef ?? null,
-        });
-      }
-    } catch { /* best-effort: chat narration must never break a run */ }
+        }, `run:${key}`)));
+    } catch (error) {
+      // Narration remains best-effort, but delivery failures must be observable.
+      reportCaughtError(error, { source: "application/brain/ChatTicketService.ts", operation: "postRunMilestone", context: { logMessage: '[brain:run-milestone] publish failed', details: {
+        tenantId, executionId: input.executionId, phase: input.phase,
+        ticketKind: input.kind, ticketRef: input.ref,
+        error: error instanceof Error ? error.message : String(error),
+      } } });
+    }
   }
 }
 

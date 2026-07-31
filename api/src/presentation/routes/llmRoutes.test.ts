@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Context } from 'hono';
 import type { HonoEnv } from '../../env';
+import type { LlmProvider, TenantLlmCredentials } from '../../application/llm/tenantProviderKeyService';
 
 // Hoisted mocks — vi.mock must declare the spies via vi.hoisted so the
 // factory closures see them.
@@ -10,6 +11,15 @@ const mocks = vi.hoisted(() => ({
   signJwt:    vi.fn(),
   buildDatabase: vi.fn(),
   llmProxyForPlan: vi.fn(),
+  resolveTenantLlmCredentials: vi.fn<() => Promise<TenantLlmCredentials>>(async () => ({
+    anthropicOAuthToken: null,
+    openaiCodexAuth: null,
+    xaiOAuthToken: null,
+    vendorKeys: {},
+    configuredProviders: [],
+    unresolvedReasons: {},
+    vendorPriority: [],
+  })),
 }));
 
 vi.mock('../../infrastructure/auth/HashService', () => ({
@@ -20,7 +30,10 @@ vi.mock('../../infrastructure/auth/JwtService', () => ({
   verifyJwt: mocks.verifyJwt,
   signJwt: mocks.signJwt,
 }));
-vi.mock('../../infrastructure/database/connection', () => ({ buildDatabase: mocks.buildDatabase }));
+vi.mock('../../infrastructure/database/connection', () => ({
+  buildDatabase: mocks.buildDatabase,
+  buildTransactionalDatabase: (...args: unknown[]) => mocks.buildDatabase(...args),
+}));
 // Partial mock — keep every real LlmProxyService export (ChatCompletionRequest,
 // reorderPoolByShape, modelPoolForPlan, …) and override only the network call.
 vi.mock('../../application/llm/LlmProxyService', async (orig) => ({
@@ -28,17 +41,75 @@ vi.mock('../../application/llm/LlmProxyService', async (orig) => ({
   llmProxyForPlan: mocks.llmProxyForPlan,
 }));
 // Partial mock — keep the real provider-key exports and only stub the OAuth
-// resolver (it makes a raw neon() call the db mock doesn't cover) so the
-// completion path reaches proxyForCompletion.
+// resolver (its Drizzle read isn't covered by the db mock) so the completion
+// path reaches proxyForCompletion.
 vi.mock('../../application/llm/tenantProviderKeyService', async (orig) => ({
   ...(await orig<typeof import('../../application/llm/tenantProviderKeyService')>()),
   resolveAnthropicOAuthToken: async () => null,
+  resolveTenantLlmCredentials: mocks.resolveTenantLlmCredentials,
 }));
 
 // Imports must follow the vi.mock calls above so the mocks are in place.
 const { requireTenantAccess } = await import('./llmRoutes');
+// `byoModelsFor` lives in the application layer (byoModelRouting) so the model picker,
+// the credential probe and the daily sweep share ONE projection — an application-layer
+// probe importing it from a route module would have been a layering inversion.
+const { byoModelsFor } = await import('../../application/llm/byoModelRouting');
+const { vendorForModel } = await import('../../application/llm/vendors');
 const { sanitizeToolName, restoreToolName, sanitizeToolCallId, sanitizeRequestToolCalls, restoreResponseToolNames, StreamingToolNameRestorer } =
   await import('../../application/llm/toolNameSanitizer');
+
+beforeEach(() => {
+  mocks.resolveTenantLlmCredentials.mockResolvedValue({
+    anthropicOAuthToken: null,
+    openaiCodexAuth: null,
+    xaiOAuthToken: null,
+    vendorKeys: {},
+    configuredProviders: [],
+    unresolvedReasons: {},
+    vendorPriority: [],
+  });
+});
+
+/** A connected-provider row as `listTenantProviderKeys` returns it. */
+const connected = (provider: LlmProvider, authType: 'api_key' | 'oauth' = 'api_key') =>
+  ({ provider, authType, priority: null });
+
+describe('byoModelsFor', () => {
+  it('uses the bare direct-Anthropic ids, not the OpenRouter anthropic namespace', () => {
+    const models = byoModelsFor([connected('anthropic')]);
+    expect(models.map((m) => m.id)).toContain('claude-sonnet-5');
+    expect(models.some((m) => m.id.startsWith('anthropic/'))).toBe(false);
+    expect(models.every((m) => vendorForModel(m.id) === 'anthropic')).toBe(true);
+  });
+
+  it('projects bespoke and OpenAI-compatible providers onto tenant-keyed routes', () => {
+    const cases = [
+      { provider: 'google' as const, vendor: 'googleai', prefix: 'googleai/' },
+      { provider: 'openai' as const, vendor: 'openai', prefix: 'direct/openai/' },
+      { provider: 'meta' as const, vendor: 'meta', prefix: 'direct/meta/' },
+      { provider: 'xai' as const, vendor: 'xai', prefix: 'direct/xai/' },
+    ];
+    for (const { provider, vendor, prefix } of cases) {
+      const models = byoModelsFor([connected(provider)]);
+      expect(models.length).toBeGreaterThan(0);
+      expect(models.every((m) => m.id.startsWith(prefix))).toBe(true);
+      expect(models.every((m) => vendorForModel(m.id) === vendor)).toBe(true);
+    }
+  });
+
+  it('a SUBSCRIPTION-connected provider lists its OAuth route, not the api-key one', () => {
+    // The tenant has no OpenAI/xAI api key — offering `direct/openai/…` would hand the
+    // picker (and the strict-pin gate) models their credential cannot dispatch.
+    const codex = byoModelsFor([connected('openai', 'oauth')]);
+    expect(codex.length).toBeGreaterThan(0);
+    expect(codex.every((m) => m.id.startsWith('openai-codex/'))).toBe(true);
+
+    const grok = byoModelsFor([connected('xai', 'oauth')]);
+    expect(grok.length).toBeGreaterThan(0);
+    expect(grok.every((m) => m.id.startsWith('xai-oauth/'))).toBe(true);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Tool-call sanitizer — one gateway-side pass that makes tool NAMES (reversible
@@ -387,6 +458,67 @@ const fakeExecutionCtx = {
   passThroughOnException: () => undefined,
 } as unknown as ExecutionContext;
 
+describe('POST /provider-keys/:provider/test', () => {
+  beforeEach(() => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(mockDb({
+      keyRow: { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'pro', billingStatus: 'active', tokenDailyLimitOverride: null },
+    }));
+    mocks.resolveTenantLlmCredentials.mockResolvedValue({
+      anthropicOAuthToken: null,
+      openaiCodexAuth: null,
+      xaiOAuthToken: null,
+      vendorKeys: { anthropic: 'sk-ant-test' },
+      configuredProviders: ['anthropic'],
+      unresolvedReasons: {},
+      vendorPriority: ['anthropic'],
+    });
+  });
+
+  it('returns a handled 200 result when the upstream credential test fails', async () => {
+    mocks.llmProxyForPlan.mockReturnValue({
+      complete: vi.fn(async () => ({
+        response: new Response(JSON.stringify({ error: { message: 'invalid x-api-key' } }), { status: 401 }),
+      })),
+    });
+    const req = new Request('http://test.local/provider-keys/anthropic/test', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_test' },
+    });
+
+    const res = await buildApp().request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      ok: false,
+      status: 'failed',
+      code: 'provider_test_failed',
+      error: 'anthropic connection test failed: invalid x-api-key',
+      details: { provider: 'anthropic', model: 'claude-sonnet-5', upstreamStatus: 401 },
+    });
+  });
+
+  it('returns a handled 200 result when the configured credential is unusable', async () => {
+    mocks.resolveTenantLlmCredentials.mockResolvedValue({
+      anthropicOAuthToken: null,
+      openaiCodexAuth: null,
+      xaiOAuthToken: null,
+      vendorKeys: {},
+      configuredProviders: ['anthropic'],
+      unresolvedReasons: { anthropic: 'revoked' },
+      vendorPriority: ['anthropic'],
+    });
+    const req = new Request('http://test.local/provider-keys/anthropic/test', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_test' },
+    });
+
+    const res = await buildApp().request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: false, status: 'revoked' });
+  });
+});
+
 describe('POST /v1/chat/completions strict-pin gate', () => {
   beforeEach(() => {
     mocks.hashSecret.mockReset();
@@ -624,6 +756,96 @@ describe('POST /v1/chat/completions monthly token cap', () => {
     const res = await buildApp().request(plainRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
 
     expect(res.status).not.toBe(429);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The unpinned free-plan turn — end to end through the real route.
+//
+// A free tenant's VSIX chat used to 402 on EVERY turn: the client filled in a
+// hardcoded `openai/gpt-4o-mini` whenever the user hadn't picked a model, and
+// that is a PAID OpenRouter model, so the premium gate refused a model the user
+// never chose ("Premium models … require a validated card on file"). The client
+// fix was to OMIT `model` entirely and let the gateway route the plan's pool.
+//
+// The pure-function half of that contract is covered in
+// LlmProxyService.unpinnedFreePlan.test.ts. THIS drives the actual Hono handler,
+// so the assertion is about the route's real gate order rather than a helper in
+// isolation — the closest thing to the live run short of credentials.
+// ---------------------------------------------------------------------------
+describe('POST /v1/chat/completions unpinned free-plan turn', () => {
+  beforeEach(() => {
+    mocks.hashSecret.mockReset();
+    mocks.buildDatabase.mockReset();
+  });
+
+  /** A free tenant, comfortably under both token caps. */
+  function freeTenantDb() {
+    return mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'free', billingStatus: 'none', tokenDailyLimitOverride: null },
+      usageRow:  { day: 100, month: 100 },
+    });
+  }
+
+  function chatRequest(body: Record<string, unknown>) {
+    return new Request('http://test.local/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_plain', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it('does NOT 402 when the body carries no model at all', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(freeTenantDb());
+
+    const res = await buildApp().request(
+      chatRequest({ messages: [{ role: 'user', content: 'hi' }] }),
+      {}, baseEnv as Record<string, unknown>, fakeExecutionCtx,
+    );
+
+    // Past the premium gate AND the strict-pin gate (both 402) → stops only at
+    // the missing-OPENROUTER_API_KEY check.
+    expect(res.status).not.toBe(402);
+    expect(res.status).toBe(503);
+  });
+
+  it('REGRESSION: the same turn WITH the old hardcoded fallback is refused 402', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(freeTenantDb());
+
+    const res = await buildApp().request(
+      chatRequest({ model: 'openai/gpt-4o-mini', messages: [{ role: 'user', content: 'hi' }] }),
+      {}, baseEnv as Record<string, unknown>, fakeExecutionCtx,
+    );
+
+    // This is the exact failure the user reported, reproduced through the route.
+    // If it ever stops being a 402 the client fix's rationale needs revisiting.
+    expect(res.status).toBe(402);
+    const body = await res.json() as { code?: string; unlock?: string; requiredPlan?: string };
+    expect(body.code).toBe('premium_model_not_allowed');
+    // A Free account is sent to billing/card setup, never an upgrade wall.
+    expect(body.unlock).toBe('validate_card');
+    expect(body.requiredPlan).toBe('free');
+  });
+
+  it('does not 402 an unpinned turn that also asks for tools (the IDE chat shape)', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(freeTenantDb());
+
+    // The VSIX always sends tools; that switches the gateway to the CODING pool,
+    // which is a different pool lookup and therefore worth its own assertion.
+    const res = await buildApp().request(
+      chatRequest({
+        messages: [{ role: 'user', content: 'hi' }],
+        tools: [{ type: 'function', function: { name: 'read_file', parameters: { type: 'object', properties: {} } } }],
+      }),
+      {}, baseEnv as Record<string, unknown>, fakeExecutionCtx,
+    );
+
+    expect(res.status).not.toBe(402);
+    expect(res.status).toBe(503);
   });
 });
 

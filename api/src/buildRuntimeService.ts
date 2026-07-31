@@ -1,3 +1,4 @@
+import { reportCaughtError } from './application/observability/caughtErrorReporter';
 /**
  * Composition-root factory for {@link RuntimeService}.
  *
@@ -25,6 +26,10 @@ import { syncExecutionTaskLifecycle } from './application/task/taskLifecycle';
 import { maybeAutoRunOnLaneEntry } from './presentation/routes/taskRoutes';
 import { resolveNextTaskStatus } from './application/swimlane/nextLane';
 import { ChatTicketService } from './application/brain/ChatTicketService';
+import { attributeRunToManifest } from './application/kanban/attributeRunToManifest';
+import { coordinateCompletedStage } from './application/manager/coordinateTicket';
+import { findCanonicalBoard } from './application/swimlane/canonicalBoard';
+import { resolvePolicyGates } from './application/governance/policyPackService';
 
 export function buildRuntimeService(env: Env, db: Db): RuntimeService {
   // eslint-disable-next-line prefer-const -- the lane-auto callback closes over the
@@ -67,7 +72,41 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
       kind: info.taskType, ref: String(info.taskId), agentRef: info.agentRef,
       phase: info.phase, executionId: info.executionId,
       toStatus: info.toStatus, resultText: info.resultText, errorMessage: info.errorMessage,
-    }).catch(() => {}),
+      questionText: info.questionText, eventNonce: info.eventNonce,
+    }).catch((error) => {
+      reportCaughtError(error, { source: "buildRuntimeService.ts", operation: "buildRuntimeService" });
+    }),
+    // Coordinated Role Participation attribution: a terminal run records that the role
+    // it ran AS participated on the ticket's manifest (linked to the execution), then
+    // attests what that finished run MEANS — producer credit written to the sign-off
+    // ledger, or a reviewer's non-answer counted toward escalation. Best-effort.
+    (info) => attributeRunToManifest(env, db, info),
+    async (info) => {
+      const board = await findCanonicalBoard(db, info.projectId, info.tenantId);
+      if (!board?.lifecycleManaged) return { managed: false, toStatus: info.fromStatus };
+
+      // Attribution must precede verification: the Coordinator evaluates the
+      // manifest produced by this exact execution, then and only then may advance.
+      if (info.status === 'completed' || info.status === 'failed') {
+        await attributeRunToManifest(env, db, {
+          tenantId: info.tenantId, taskId: info.taskId, projectId: info.projectId,
+          executionId: info.executionId, status: info.status,
+          actAsRole: info.actAsRole, laneServed: info.laneServed,
+        });
+      }
+      if (info.status !== 'completed') return { managed: true, toStatus: info.fromStatus };
+      const result = await coordinateCompletedStage(env, db, runtimeService, {
+        tenantId: info.tenantId, projectId: info.projectId, taskId: info.taskId,
+        fromStatus: info.laneServed ?? info.fromStatus,
+      });
+      return { managed: result.managed, toStatus: result.toStatus };
+    },
+    // Governance: resolve the tenant's effective policy gates for the run being
+    // submitted. This is what closes the loop between an authored policy pack
+    // (migration 0348) and `evaluatePolicyGate` at the engine's tool seam — the
+    // enforcement machinery already existed but never received gates. Cached
+    // read-through, invalidated on every pack/gate write.
+    (scope) => resolvePolicyGates(env, db, scope),
   );
   return runtimeService;
 }

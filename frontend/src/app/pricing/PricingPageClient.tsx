@@ -1,7 +1,5 @@
 'use client';
 
-import { Select } from '@/components/Select';
-
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -12,6 +10,8 @@ import JsonLd from '@/components/JsonLd';
 import PageContainer from '@/components/PageContainer';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { PremiumModelUnlock } from '@/components/llm/PremiumModelUnlock';
+import { CardOnFile } from '@/components/llm/CardOnFile';
 import { pricingSchema } from '@/lib/structured-data';
 
 type Plan = 'free' | 'pro' | 'teams';
@@ -26,7 +26,6 @@ interface Subscription {
   billingPaymentLast4: string | null;
   billingUpdatedAt: string | null;
   seatCount: number | null;
-  paymentProvider: string;
   pricing: {
     pro: { monthly: number; yearly: number; yearlySavingsPercent: number };
     teams: { perSeatMonthly: number; perSeatYearly: number; yearlySavingsPercent: number; minimumSeats: number };
@@ -141,9 +140,7 @@ export default function PricingPageClient() {
   const [upgradeTarget, setUpgradeTarget] = useState<'pro' | 'teams' | null>(null);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [billingEmail, setBillingEmail] = useState('');
-  const [seats, setSeats] = useState(3);
-  const [cardBrand, setCardBrand] = useState('visa');
-  const [cardLast4, setCardLast4] = useState('');
+  const [seats, setSeats] = useState(5); // ≥ Teams volume minimum (server: PRICING.teams.minimumSeats)
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const [downgrading, setDowngrading] = useState(false);
@@ -184,7 +181,6 @@ export default function PricingPageClient() {
     setUpgradeTarget(target);
   }, [searchParams, tenantId]);
 
-  const isManualProvider = !sub || sub.paymentProvider === 'manual';
   const effectivePlan = sub?.effectivePlan ?? 'free';
   // Anonymous marketing visitor (no tenant) gets sales-tone copy; a signed-in
   // tenant gets the billing-console framing ("manage your subscription").
@@ -194,6 +190,16 @@ export default function PricingPageClient() {
   const proYearly   = sub?.pricing.pro.yearly ?? 290;
   const teamMonthly = sub?.pricing.teams.perSeatMonthly ?? 20;
   const teamYearly  = sub?.pricing.teams.perSeatYearly ?? 192;
+  // Teams is volume-priced below Pro per seat, earned by a seat-block minimum.
+  // Surfacing the minimum is what keeps the lower per-seat price from reading as
+  // a typo; the seat input and checkout both clamp to it.
+  const teamMinSeats = sub?.pricing.teams.minimumSeats ?? 5;
+
+  // Keep the seat count at or above the volume minimum whenever it's known —
+  // covers both the initial load and a plan-pricing refresh.
+  useEffect(() => {
+    setSeats((s) => (s < teamMinSeats ? teamMinSeats : s));
+  }, [teamMinSeats]);
 
   const upgradePrice = upgradeTarget === 'teams'
     ? (billingCycle === 'yearly' ? teamYearly * seats : teamMonthly * seats)
@@ -215,9 +221,6 @@ export default function PricingPageClient() {
     e.preventDefault();
     if (!tenantId || upgrading || !upgradeTarget) return;
     if (!billingEmail.trim()) { setUpgradeError(t('errorBillingEmailRequired')); return; }
-    if (isManualProvider && (!cardLast4.trim() || !/^\d{4}$/.test(cardLast4))) {
-      setUpgradeError(t('errorCardLast4')); return;
-    }
     setUpgrading(true);
     setUpgradeError(null);
     try {
@@ -230,17 +233,15 @@ export default function PricingPageClient() {
           billingCycle,
           billingEmail: billingEmail.trim(),
           ...(upgradeTarget === 'teams' && { seats }),
-          ...(isManualProvider && { billingPaymentBrand: cardBrand, billingPaymentLast4: cardLast4.trim() }),
         }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string };
         throw new Error(body.error ?? `${res.status}`);
       }
-      const result = await res.json() as { checkoutUrl: string | null };
-      if (result.checkoutUrl) { window.location.href = result.checkoutUrl; return; }
-      setUpgradeTarget(null);
-      await fetchSub();
+      // Every checkout is hosted — Stripe always returns a URL to redirect to.
+      const result = await res.json() as { checkoutUrl: string };
+      window.location.href = result.checkoutUrl;
     } catch (e) {
       setUpgradeError(e instanceof Error ? e.message : t('errorUpgradeFailed'));
     } finally {
@@ -366,6 +367,16 @@ export default function PricingPageClient() {
               </button>
             )}
           </div>
+
+          {/* Billing details and card validation are independent of upgrades. Free
+              tenants can add a funding instrument here for metered OpenRouter usage. */}
+          <PremiumModelUnlock />
+
+          {/* The after state: the card premium access actually rides on, and the
+              only way to replace it. PremiumModelUnlock covers "no card yet"; this
+              covers pending / validated / failed. Both self-gate, so exactly one
+              renders for any given card status. */}
+          <CardOnFile />
           </>
           )}
 
@@ -402,11 +413,12 @@ export default function PricingPageClient() {
                   <div>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelSeats')}</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <input type="number" min={1} value={seats}
-                        onChange={(e) => setSeats(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      <input type="number" min={teamMinSeats} value={seats}
+                        onChange={(e) => setSeats(Math.max(teamMinSeats, parseInt(e.target.value, 10) || teamMinSeats))}
                         style={{ width: 80, padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8 }} />
                       {teamsCostNote && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{teamsCostNote}</span>}
                     </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>{t('teamsSeatMinimum', { min: teamMinSeats })}</div>
                   </div>
                 )}
 
@@ -417,32 +429,9 @@ export default function PricingPageClient() {
                     style={{ width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, boxSizing: 'border-box' }} />
                 </div>
 
-                {isManualProvider && (
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelCardBrand')}</label>
-                      <Select value={cardBrand} onChange={(e) => setCardBrand(e.target.value)}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
-                        {['visa', 'mastercard', 'amex', 'discover', 'other'].map((b) => (
-                          <option key={b} value={b}>{b.charAt(0).toUpperCase() + b.slice(1)}</option>
-                        ))}
-                      </Select>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelCardLast4')}</label>
-                      <input type="text" required value={cardLast4}
-                        onChange={(e) => setCardLast4(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                        placeholder="4242" maxLength={4}
-                        style={{ width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, boxSizing: 'border-box', fontFamily: 'var(--font-mono)' }} />
-                    </div>
-                  </div>
-                )}
-
-                {!isManualProvider && (
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
-                    {t('redirectNote')}
-                  </div>
-                )}
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
+                  {t('redirectNote')}
+                </div>
 
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
                   {t('total', { price: upgradePrice, unit: billingCycle === 'yearly' ? t('unitYear') : t('unitMonth') })}
@@ -458,9 +447,7 @@ export default function PricingPageClient() {
                   </button>
                   <button type="submit" disabled={upgrading}
                     style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, background: upgradeTarget === 'teams' ? '#60a5fa' : 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: upgrading ? 'wait' : 'pointer' }}>
-                    {upgrading
-                      ? (isManualProvider ? t('activating') : t('redirecting'))
-                      : (isManualProvider ? t('activatePlan', { plan: upgradeTarget === 'teams' ? 'Teams' : 'Pro' }) : t('continueToPayment'))}
+                    {upgrading ? t('redirecting') : t('continueToPayment')}
                   </button>
                 </div>
               </form>
@@ -485,6 +472,7 @@ export default function PricingPageClient() {
                     </th>
                     <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: '#60a5fa', borderBottom: '1px solid var(--border-subtle)', minWidth: 110 }}>
                       Teams<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{t('priceTeamsMonthly', { price: teamMonthly })}</span>
+                      <br /><span style={{ fontWeight: 400, fontSize: 10, color: 'var(--text-muted)' }}>{t('teamsVolumeNote', { min: teamMinSeats })}</span>
                       <div style={{ marginTop: 8 }}><PlanCta plan="teams" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} /></div>
                     </th>
                   </tr>

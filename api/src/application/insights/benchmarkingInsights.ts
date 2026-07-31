@@ -193,6 +193,7 @@ export async function computeBenchmarking(
   db: Db,
   tenantId: number,
   days: number,
+  projectId?: number,
 ): Promise<BenchmarkingResult> {
   const { industry, sizeBand } = await getBenchmarkProfile(db, tenantId);
 
@@ -214,8 +215,8 @@ export async function computeBenchmarking(
 
   // Live tenant values from the existing collectors.
   const [dora, eng] = await Promise.all([
-    computeDora(db, tenantId, days),
-    computeEngineeringInsights(db, tenantId, days),
+    computeDora(db, tenantId, days, projectId),
+    computeEngineeringInsights(db, tenantId, days, projectId),
   ]);
 
   // AI adoption proxy: share of DORA lead-time deliveries that ran through an AI

@@ -6,7 +6,9 @@ import { Select } from '@/components/Select';
 
 import type { AgentRuntimeSupport, AgentRuntimeSurface } from '@/lib/api';
 import { ModelSelect } from '@/components/llm/ModelSelect';
+import { PremiumModelUnlock } from '@/components/llm/PremiumModelUnlock';
 import PsychometricEditor from '@/components/PsychometricEditor';
+import { GithubActionsSurfaceNotice } from '@/components/repos/githubActionsSurface';
 import type { PsychometricProfile } from '@/lib/psychometric';
 
 /**
@@ -31,8 +33,9 @@ export interface CloudAgentFormState {
   baseModel: string;
   runtimeSupport: AgentRuntimeSupport;
   preferredRuntime: 'cloud' | 'host';
-  /** Cloud execution surface — durable DO vs long-lived node. (The engine is not
-   *  user-selectable: every agent runs the current engine version.) */
+  /** Cloud execution surface — durable DO, long-lived node, or the repo's own
+   *  GitHub Actions runners. (The engine is not user-selectable: every agent runs
+   *  the current engine version.) */
   runtimeSurface: AgentRuntimeSurface;
   /** This agent's OWN personality (Pro). Compiled at run time into prompt directives,
    *  sampling temperature, and limbic setpoints. Undefined = no personality set. */
@@ -57,7 +60,7 @@ export const RUNTIME_LABELS: Record<AgentRuntimeSupport, string> = {
 };
 
 const RUNTIME_SUPPORT_KEYS: AgentRuntimeSupport[] = ['cloud', 'host', 'both'];
-const RUNTIME_SURFACE_KEYS: AgentRuntimeSurface[] = ['durable', 'container'];
+const RUNTIME_SURFACE_KEYS: AgentRuntimeSurface[] = ['durable', 'container', 'github_actions'];
 
 export const btnPrimary: React.CSSProperties = { padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' };
 export const btnSubtle: React.CSSProperties = { padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' };
@@ -138,6 +141,11 @@ export function CloudAgentRuntimeFields({ form, onChange }: FieldGroupProps) {
           ))}
         </Select>
         <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('surfaceHelp')}</p>
+        {/* Warns when "GitHub Actions" is picked for a project whose repo has no
+            agent workflow — otherwise dispatch silently degrades to the durable
+            executor and only says so in the run timeline afterwards. Resolves its
+            own readiness (no canX prop to compute or get stale). */}
+        <GithubActionsSurfaceNotice surface={form.runtimeSurface} />
       </div>
       <div>
         <label style={labelStyle}>{t('baseModel')}</label>
@@ -150,6 +158,9 @@ export function CloudAgentRuntimeFields({ form, onChange }: FieldGroupProps) {
           style={inputStyle}
         />
         <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('baseModelHelp')}</p>
+        {/* Renders only when premium needs billing details/card validation —
+            it decides its own visibility, so no entitlement prop-drilling here. */}
+        <div style={{ marginTop: 10 }}><PremiumModelUnlock /></div>
       </div>
     </div>
   );

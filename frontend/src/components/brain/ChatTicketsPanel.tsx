@@ -17,11 +17,12 @@ import {
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketLinkVM,
 } from '@seanhogg/builderforce-brain-ui';
 import {
-  brain, tasksApi,
+  brain, tasksApi, approvalsApi,
   type BrainChat, type ChatTicketLink, type ChatAgentInvite,
 } from '@/lib/builderforceApi';
 import { loadAgentPool } from '@/lib/agentPool';
 import { onBrainDataChanged } from '@/lib/brain/brainDataEvent';
+import { usePermission } from '@/lib/rbac';
 
 export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
   chatId: number;
@@ -30,7 +31,17 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
   onChanged?: () => void;
 }) {
   const t = useTranslations('brain.tickets');
+  const tc = useTranslations('common');
   const router = useRouter();
+  // "Tag to execute" DISPATCHES a run, so it needs the same DEVELOPER+ gate as
+  // every other run control. The button lives in the shared surface-agnostic
+  // @seanhogg/builderforce-brain-ui package (it also renders in the VS Code
+  // webview, which has no tenant-role context), so it can't be wrapped in
+  // <RoleGate> from here. Instead the package asks the HOST via the adapter's
+  // `canRunTicket` probe below, which disables and explains the control exactly
+  // like every other gated affordance — rather than the click-time refusal this
+  // used to be. Nothing is hidden.
+  const { allowed: canDispatchRun } = usePermission('runtime.execute');
 
   // Open a linked work item in its own view. Routes to the surface the item lives on
   // (board for task/epic/gap + spec-in-project; Portfolio ▸ OKRs tab for the strategy
@@ -75,6 +86,8 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
     none: t('none'), spawned: t('spawned'), run: t('run'), open: t('open'), lineage: t('lineage'), unlink: t('unlink'),
     pickAgent: t('pickAgent'), lineageTitle: t('lineageTitle'), lineageEmpty: t('lineageEmpty'), merged: t('merged'),
     runNoAgent: t('runNoAgent'), runFailed: t('runFailed'), link: t('link'), agents: t('agents'), merge: t('merge'),
+    questions: t('questions'), noQuestions: t('noQuestions'), answerPlaceholder: t('answerPlaceholder'),
+    submitAnswer: t('submitAnswer'), answering: t('answering'),
     linkFailed: t('linkFailed'), kindLabel: t('kindLabel'), pickTicket: t('pickTicket'), searchTicket: t('searchTicket'),
     searching: t('searching'), noMatches: t('noMatches'), refine: t('refine'), linkTypeLabel: t('linkTypeLabel'),
     linkTypeLinked: t('linkTypeLinked'), linkTypeCreated: t('linkTypeCreated'), linkAction: t('linkAction'),
@@ -83,8 +96,11 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
     removePerson: t('removePerson'), inviteSent: t('inviteSent'), invitePending: t('invitePending'),
     visibilityShared: t('visibilityShared'), visibilityLocked: t('visibilityLocked'), lockHint: t('lockHint'),
     mergeHint: t('mergeHint'), mergeNoOthers: t('mergeNoOthers'),
+    showTickets: t('showTickets'), hideTickets: t('hideTickets'),
     kind: { task: t('kind.task'), epic: t('kind.epic'), gap: t('kind.gap'), objective: t('kind.objective'), initiative: t('kind.initiative'), portfolio: t('kind.portfolio'), roadmap: t('kind.roadmap'), spec: t('kind.spec') },
     ringAria: (label, pct) => t('ringAria', { label, pct }),
+    ticketCount: (n) => t('ticketCount', { n }),
+    overallAria: (pct) => t('overallAria', { pct }),
     runStarted: (agent) => t('runStarted', { agent }),
     mergeAction: (n) => t('mergeAction', { n }),
     mergedN: (n) => t('mergedN', { n }),
@@ -106,15 +122,30 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
     // Server-side typeahead per tier (debounced by the shared LinkForm) — replaces
     // the old "fetch every task/objective/initiative/portfolio/roadmap/spec up front".
     searchTickets: (kind, query, pid) => brain.searchTickets(kind, query, pid),
+    // The shared package can't read a tenant role, so the web host answers the
+    // capability probe for it. This is what actually DISABLES the Run affordance;
+    // the throw below stays as the enforcement backstop (a stale render, or a role
+    // that changed between paint and click, must still be refused).
+    canRunTicket: () => ({ allowed: canDispatchRun, reason: tc('requiresDeveloperRole') }),
     runTicket: async (kind, ref, agentRef) => {
       // "Tag to execute": ensure the agent participates, assign it to the ticket,
       // then start a run — reuses the board's dispatch (assignee + run-now).
+      if (!canDispatchRun) throw new Error(tc('requiresDeveloperRole'));
       await brain.inviteChatAgent(chatId, { agentRef }).catch(() => {});
       await tasksApi.update(Number(ref), { assignedAgentRef: agentRef });
       const res = await tasksApi.runNow(Number(ref));
       return { started: !!res.executionId, agentName: res.agentRef };
     },
-  }), [chatId]);
+    listQuestions: async (id) => {
+      const [links, pending] = await Promise.all([
+        brain.listChatTickets(id),
+        approvalsApi.list({ status: 'pending' }),
+      ]);
+      const taskIds = new Set(links.filter((tk) => tk.kind === 'task' || tk.kind === 'epic' || tk.kind === 'gap').map((tk) => Number(tk.ref)));
+      return pending.filter((q) => (q.kind === 'question' || q.kind === 'feedback') && q.taskId != null && taskIds.has(q.taskId));
+    },
+    answerQuestion: (id, responseText) => approvalsApi.decide(id, { status: 'answered', responseText }).then(() => undefined),
+  }), [chatId, canDispatchRun, tc]);
 
   return (
     <div style={{ margin: '0 12px' }}>

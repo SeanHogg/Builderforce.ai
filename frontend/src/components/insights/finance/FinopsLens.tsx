@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
+import { Select } from '@/components/Select';
 import { usePermission, type Capability } from '@/lib/rbac';
 import {
   getRdTaxConfig,
@@ -165,7 +166,7 @@ function RdSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; ca
           <label style={{ fontSize: 12, gridColumn: '1 / -1' }}>
             {t('rd.qualifiedActionTypes')}
             <input value={actions} onChange={(e) => setActions(e.target.value)} disabled={!canManage}
-              placeholder="(optional)"
+              placeholder={t('rd.optionalPh')}
               style={{ width: '100%', marginTop: 4, padding: 8, borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
           </label>
         </div>
@@ -299,14 +300,14 @@ function SocSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; c
                 <td style={td}>{ctrl.category}</td>
                 <td style={td}>
                   <RoleGate capability={FINOPS_CAP}>
-                    <select
+                    <Select
                       value={ctrl.status}
                       disabled={busy || !canManage}
                       onChange={(e) => void patch(ctrl, { status: e.target.value as SocControlStatus })}
                       style={{ padding: 4, borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
                     >
                       {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{t(`soc.status.${s}`)}</option>)}
-                    </select>
+                    </Select>
                   </RoleGate>
                 </td>
                 <td style={td}>

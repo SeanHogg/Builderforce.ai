@@ -12,6 +12,7 @@ import {
   type BenchmarkRating,
 } from '@/lib/benchmarkingApi';
 import { usePmData } from '@/lib/pm/usePmData';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { PmCard, PmEmpty, PmError } from '@/components/pm/pmShared';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { DaysWindowSelect } from './LensShell';
@@ -85,13 +86,14 @@ const selectStyle: React.CSSProperties = {
  */
 export function BenchmarkingLens() {
   const t = useTranslations('insights');
+  const { currentProjectId } = useProjectScope();
   const [days, setDays] = useState(30);
   const [profileTick, setProfileTick] = useState(0);
   const [saving, setSaving] = useState(false);
 
   const { data, error } = usePmData<BenchmarkingResult>(
-    () => benchmarkingApi.get(days),
-    [days, profileTick],
+    () => benchmarkingApi.get(days, currentProjectId),
+    [days, profileTick, currentProjectId],
   );
 
   const saveProfile = useCallback(async (patch: { industry?: string; sizeBand?: string }) => {

@@ -8,6 +8,8 @@
  * Throws on any non-2xx (body → statusText → `HTTP <status>`) and parses JSON
  * (204 ⇒ `undefined`) — the SAME `/api/*` contract the web app's clients use.
  */
+import { BrainRequestError, brainRequestError } from '@seanhogg/builderforce-brain-embedded';
+
 export type AuthedFetch = <T>(path: string, init?: RequestInit) => Promise<T>;
 
 export function authedFetch(
@@ -39,10 +41,17 @@ export function authedFetch(
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       // Prefer a structured `{ error }` / `{ message }` payload so a server diagnostic
-      // (e.g. an agent that couldn't reply) surfaces as a sentence, not raw JSON.
-      let msg = body;
-      try { const j = JSON.parse(body) as { error?: string; message?: string }; msg = j?.error || j?.message || body; } catch { /* not JSON — use the text */ }
-      throw new Error(msg || res.statusText || `HTTP ${res.status}`);
+      // (e.g. an agent that couldn't reply) surfaces as a sentence, not raw JSON — and
+      // keep the entitlement fields a plan gate sends (`code`/`unlock`/`requiredPlan`)
+      // so the caller can offer Upgrade / Add-a-card. Same error primitive the chat
+      // stream uses, so both paths classify through `chatErrorAction`.
+      try {
+        throw brainRequestError(res.status, JSON.parse(body), res.statusText);
+      } catch (e) {
+        if (e instanceof BrainRequestError) throw e;
+        // Not JSON — fall back to the raw text.
+        throw new Error(body || res.statusText || `HTTP ${res.status}`);
+      }
     }
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;

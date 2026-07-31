@@ -39,6 +39,29 @@ export enum TaskStatus {
   BLOCKED = 'blocked',
 }
 
+/**
+ * The statuses a ticket is still WORKABLE in — i.e. everything the manager grooms,
+ * ranks, staffs, triages and counts as active.
+ *
+ * One definition because it was three: `ManagerService`, `runManagerSweep` and
+ * `managerRoutes` each carried a private copy of the identical array. Three copies of
+ * "which tickets are still open" is exactly the drift that lets the sweep pick up a
+ * project the pass then considers empty, or a count on one surface disagree with the
+ * board on another.
+ *
+ * `blocked` is deliberately INCLUDED: a blocked ticket has not left the board, it is
+ * waiting on something, and the manager's whole job is to notice that.
+ */
+export const NON_TERMINAL_TASK_STATUSES: string[] = [
+  TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY,
+  TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW, TaskStatus.BLOCKED,
+];
+
+/** True when the ticket has left the board (done, cancelled, or any non-workable state). */
+export function isTerminalTaskStatus(status: string | null | undefined): boolean {
+  return !NON_TERMINAL_TASK_STATUSES.includes(status ?? '');
+}
+
 export enum TaskPriority {
   LOW     = 'low',
   MEDIUM  = 'medium',

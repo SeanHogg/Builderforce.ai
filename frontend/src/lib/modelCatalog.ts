@@ -13,7 +13,7 @@
  */
 
 import { BRAND } from './content';
-import { getApiBaseUrl } from './apiClient';
+import { apiRequest } from './apiClient';
 
 export type ModelTier = 'FREE' | 'PRO' | 'STANDARD' | 'PREMIUM' | 'ULTRA';
 
@@ -139,11 +139,10 @@ function toRecord(m: CatalogModel): ModelRecord {
 let inflight: Promise<ModelRecord[]> | null = null;
 
 async function fetchCatalog(): Promise<ModelRecord[]> {
-  const res = await fetch(`${getApiBaseUrl()}/llm/v1/catalog`, {
+  const json = await apiRequest<{ data?: CatalogModel[] }>('/llm/v1/catalog', {
+    auth: 'none',
     headers: { Accept: 'application/json' },
   });
-  if (!res.ok) throw new Error(`Catalog request failed (${res.status})`);
-  const json = (await res.json()) as { data?: CatalogModel[] };
   return Array.isArray(json.data) ? json.data.map(toRecord) : [];
 }
 
@@ -164,6 +163,35 @@ export async function getModelCatalog(): Promise<ModelRecord[]> {
   } catch {
     return [...BUILDERFORCE_MODELS];
   }
+}
+
+/**
+ * Is `record` a PREMIUM model — one of the paid OpenRouter models a tenant unlocks
+ * with billing details + a validated card, billed at OpenRouter cost + a flat 1¢/request?
+ *
+ * Mirrors the server's `isPremiumModelSelection`: a PAID model that the plan's own
+ * pool does NOT already route. The gateway marks pool membership on every catalog
+ * record (`pool: 'free' | 'pro'`), so "no pool + costs money" is exactly the premium
+ * long tail — the curated in-plan coders (`pool: 'pro'`) are already free to pick on
+ * a paid plan and must not be surcharged. One definition, so the picker can never
+ * offer something the gateway would reject (or vice versa).
+ */
+export function isPremiumModel(record: ModelRecord): boolean {
+  if (record.isBuilderforce) return false;
+  if (record.pool) return false; // already routed by the free/pro plan pool
+  return record.pricing.prompt > 0 || record.pricing.completion > 0;
+}
+
+/**
+ * Every PREMIUM model, cheapest-first (input price), for the model picker's premium
+ * group. Reuses the cached `/llm/v1/catalog` fetch — the premium list is deliberately
+ * NOT a second endpoint, so there is one catalog source and one dedupe.
+ */
+export async function getPremiumModelCatalog(): Promise<ModelRecord[]> {
+  const all = await getModelCatalog();
+  return all
+    .filter(isPremiumModel)
+    .sort((a, b) => (a.pricing.prompt + a.pricing.completion) - (b.pricing.prompt + b.pricing.completion));
 }
 
 // ---------------------------------------------------------------------------

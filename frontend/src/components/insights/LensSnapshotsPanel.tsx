@@ -18,6 +18,7 @@ import {
   type LensSnapshotMeta,
   type SnapshotCadence,
 } from '@/lib/personaCadenceApi';
+import { Select } from '@/components/Select';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20,
@@ -101,12 +102,12 @@ export function LensSnapshotsPanel() {
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>{t('subtitle')}</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <select style={selectStyle} value={captureLens} onChange={(e) => setCaptureLens(e.target.value)} aria-label={t('lens')}>
+          <Select style={selectStyle} value={captureLens} onChange={(e) => setCaptureLens(e.target.value)} aria-label={t('lens')}>
             {lensList.map((l) => <option key={l} value={l}>{t(`lensNames.${l}`)}</option>)}
-          </select>
-          <select style={selectStyle} value={captureCadence} onChange={(e) => setCaptureCadence(e.target.value as SnapshotCadence)} aria-label={t('cadence')}>
+          </Select>
+          <Select style={selectStyle} value={captureCadence} onChange={(e) => setCaptureCadence(e.target.value as SnapshotCadence)} aria-label={t('cadence')}>
             {cadences.map((c) => <option key={c} value={c}>{t(c)}</option>)}
-          </select>
+          </Select>
           <button type="button" style={btn} onClick={() => void captureNow()} disabled={busy || !captureLens}>
             {busy ? t('capturing') : t('captureNow')}
           </button>
@@ -115,10 +116,10 @@ export function LensSnapshotsPanel() {
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('filterLens')}</span>
-        <select style={selectStyle} value={lensFilter} onChange={(e) => setLensFilter(e.target.value)} aria-label={t('filterLens')}>
+        <Select style={selectStyle} value={lensFilter} onChange={(e) => setLensFilter(e.target.value)} aria-label={t('filterLens')}>
           <option value="">{t('allLenses')}</option>
           {lensList.map((l) => <option key={l} value={l}>{t(`lensNames.${l}`)}</option>)}
-        </select>
+        </Select>
       </div>
 
       {error && <div style={{ fontSize: 12, color: 'var(--coral-bright, #f4726e)', marginBottom: 10 }}>{error}</div>}

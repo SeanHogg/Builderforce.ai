@@ -15,7 +15,8 @@
 #   - Edit api/src/*     → wrangler dev hot-reloads worker
 #
 # Prerequisites the stack does NOT provision (intentional):
-#   - NEON_DATABASE_URL must be set in api/.dev.vars (or env). The api uses
+#   - NEON_DATABASE_URL and NEON_TRANSACTIONAL_DATABASE_URL must be set in
+#     api/.dev.vars (or env). The api uses
 #     @neondatabase/serverless HTTP transport — see Gap Register for why
 #     we don't bundle a local Postgres.
 #   - JWT_SECRET and OPENROUTER_API_KEY also live in api/.dev.vars.
@@ -34,7 +35,7 @@ services:
   # Each runs `npm install` once then `tsup --watch` for the stack's lifetime.
   # ---------------------------------------------------------------------------
   sdk-watch:
-    image: node:20-bookworm-slim
+    image: node:22-bookworm-slim
     working_dir: /sdk
     command:
       - sh
@@ -58,7 +59,7 @@ services:
   # then watches both — engine in the background, embedded in the foreground.
   # A single container avoids two services racing on the studio-dist volume.
   studio-watch:
-    image: node:20-bookworm-slim
+    image: node:22-bookworm-slim
     working_dir: /studio
     command:
       - sh
@@ -94,7 +95,8 @@ services:
     environment:
       ENVIRONMENT: development
       CORS_ORIGINS: http://localhost:3000
-      # NEON_DATABASE_URL, JWT_SECRET, OPENROUTER_API_KEY come from api/.dev.vars
+      # NEON_DATABASE_URL, NEON_TRANSACTIONAL_DATABASE_URL, JWT_SECRET,
+      # OPENROUTER_API_KEY come from api/.dev.vars
     ports:
       - "8787:8787"
     volumes:

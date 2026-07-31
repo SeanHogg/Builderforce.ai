@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Board webhook routes — /api/board-webhooks
  *
@@ -16,7 +17,7 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { boardConnections } from '../../infrastructure/database/schema';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { SyncEngine, type StoredConnection } from '../../application/boardsync/SyncEngine';
 import { createDrizzleStore, loadConnectionCredentials } from '../../application/boardsync/drizzleStore';
@@ -58,8 +59,10 @@ export function createBoardWebhookRoutes(db: Db): Hono<HonoEnv> {
         if (probe && typeof probe.challenge === 'string') {
           return c.json({ challenge: probe.challenge });
         }
-      } catch {
+      } catch (error) {
         /* fall through to normal signed handling */
+      
+        reportCaughtError(error, { source: "presentation/routes/boardWebhookRoutes.ts", operation: "createBoardWebhookRoutes" });
       }
     }
 
@@ -108,7 +111,7 @@ export function createBoardWebhookRoutes(db: Db): Hono<HonoEnv> {
     const credentials = loaded?.credentials ?? {};
     const baseUrl = loaded?.baseUrl ?? null;
 
-    const store = createDrizzleStore(db);
+    const store = createDrizzleStore(db, c.env as Env);
     const engine = new SyncEngine(store, (sc: StoredConnection) =>
       createBoardProvider(
         sc.provider,

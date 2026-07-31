@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Limbic gateway route.
  *
@@ -103,8 +104,10 @@ export function createLimbicRoutes(db: Db): Hono<HonoEnv> {
     let body: LimbicBlockBody = {};
     try {
       body = (await c.req.json()) as LimbicBlockBody;
-    } catch {
+    } catch (error) {
       /* empty / non-JSON body → neutral appraisal, no profile */
+    
+      reportCaughtError(error, { source: "presentation/routes/limbicRoutes.ts", operation: "createLimbicRoutes" });
     }
     const text = typeof body.text === 'string' ? body.text : '';
 
