@@ -40,8 +40,16 @@ export interface RiskScoreConfig {
   reevaluationInterval: number;
 }
 
+export interface Artifact {
+  id?: string;
+  type: string;
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export const DEFAULT_CONFIG: RiskScoreConfig = {
   metrics: [],
   overrideAllowed: true,
-  reevaluationInterval: 5
+  reevaluationInterval: 5,
 };
