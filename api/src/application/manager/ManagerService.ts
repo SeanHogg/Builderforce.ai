@@ -90,6 +90,7 @@ import {
   type DispatchReserver, type TickDispatchBudget,
 } from '../runtime/tickDispatchBudget';
 import { recordActivity, cloudAgentActor, SYSTEM_ACTOR } from '../activity/activityLog';
+import { completeTaskOnMerge } from '../task/taskLifecycle';
 
 /** Statuses an agent could pick up (Blocked waits on a dependency, not an agent). */
 const RUNNABLE: string[] = [
@@ -836,9 +837,6 @@ interface ManagedTaskRow {
   source: string | null;
   /** The rank already persisted — the RANK stage writes only the tickets whose rank moved. */
   managerRank: number | null;
-  /** Which stage the ticket is sitting in — lets board staffing say what an
-   *  unauthorised lane is actually COSTING instead of naming a bare lane id. */
-  swimlaneId: string | null;
 }
 
 /**
@@ -873,10 +871,6 @@ export function managedTasksQuery(db: Db, projectId: number) {
       // rather than re-stamping an identical order every five minutes. One column on a
       // query the pass already runs — see the stage for what it was costing.
       managerRank: tasks.managerRank,
-      // The stage each ticket sits in. Board staffing correlates its unauthorised lanes
-      // against this, so a gap is reported as "this stage is holding 200 tickets" rather
-      // than a lane id nobody can weigh.
-      swimlaneId: tasks.swimlaneId,
     })
     .from(tasks)
     .where(and(
@@ -1088,9 +1082,11 @@ export async function runManagerForProject(
       // — which is how 293 tickets sat on `managed_no_role` while this stage reported
       // nothing to do. Deduplicated to a handful of pairs, so it costs no query.
       taskShapes: distinctTaskShapes(managed),
-      // What each lane's gap is COSTING, from the managed set already in hand.
+      // What each lane's gap is COSTING, from the managed set already in hand. Keyed by
+      // STATUS because that is how a ticket maps to a lane — `swimlanes.key ===
+      // task.status`; `tasks` carries no swimlane column.
       laneTicketCounts: managed.reduce((m, t) => {
-        if (t.swimlaneId) m.set(t.swimlaneId, (m.get(t.swimlaneId) ?? 0) + 1);
+        m.set(t.status, (m.get(t.status) ?? 0) + 1);
         return m;
       }, new Map<string, number>()),
     });
@@ -1923,9 +1919,31 @@ async function coordinatePullRequests(
 
         // readiness.action === 'complete' — every check passed.
         const canOpenPr = !!t.gitBranch && !t.githubPrUrl && (!!t.assignedAgentRef || t.assignedAgentHostId != null);
-        await db.update(tasks)
-          .set({ status: TaskStatus.DONE, completedAt: new Date(), updatedAt: new Date() })
-          .where(eq(tasks.id, t.id));
+        // ── THROUGH THE ONE COMPLETION PATH, NOT A SECOND `db.update` ───────────────
+        // This was `db.update(tasks).set({ status: DONE, completedAt: now })`, which
+        // stamps the ticket and records NO lane hop — and `task_status_transitions` is
+        // the only place the schema names who moved a ticket. The digest reads
+        // `completed_at` for its headline and transitions for everything else, so the
+        // two disagreed outright: project 11, 2026-07-31 reported **11 tickets finished,
+        // 0 forward lane moves (by people: 0 · by agents: 0), and every contributor at
+        // `finished=0`** — three numbers describing the same eleven events, two of them
+        // empty. The missing rows also cost the lifecycle ledger and the autonomy audit,
+        // which read transitions rather than the stamp.
+        //
+        // `completeTaskOnMerge` is the shared path that already closes exactly this gap
+        // — its own header says it exists because "the plain db.update the manager used
+        // skipped the metrics". A second completion path was the whole defect, so this
+        // one is deleted rather than taught to record its own hop: the ordinals, the
+        // backward test, the done-class fold, the idempotent already-done check and the
+        // producer-fallback attribution all stay in one place.
+        await completeTaskOnMerge(env, db, {
+          tenantId, taskId: t.id,
+          // Named so the fallback does not have to guess; `resolveCompletionActor`
+          // credits the ticket's most recent executor when this is absent, which is the
+          // right answer on a managed board where the assignee is the Coordinator.
+          actorAgentRef: t.assignedAgentRef,
+          actorAgentHostId: t.assignedAgentHostId,
+        });
         if (canOpenPr) {
           await dispatchTaskFinalize(env as never, db, tenantId, t.id, {
             assignedAgentHostId: t.assignedAgentHostId,

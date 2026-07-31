@@ -2054,6 +2054,9 @@ export interface ManagerStats {
   undated: number;
   unowned: number;
   openPullRequests: number;
+  /** Of those, the ones the manager RETIRED to a human — it will not try them again.
+   *  Optional: an older API omits it. */
+  blockedPullRequests?: number;
   /** Tickets whose required role/reviewer coverage is unmet (the manager staffs these). */
   flagged: number;
   lastRunAt: string | null;
@@ -2113,9 +2116,33 @@ export interface ManagerAutonomy {
 }
 
 /** The full manager overview returned by GET /api/manager/:projectId. */
+/**
+ * An open pull request the manager has RETIRED to a human (0386): a ceiling was spent
+ * and the manager stopped trying. Ranked by the business value of the ticket it would
+ * deliver, because the merge queue turns a livelock into a pile and a pile nobody can
+ * rank is only marginally better than the livelock.
+ */
+export interface ManagerBlockedPr {
+  id: string;
+  number: number | null;
+  url: string | null;
+  taskId: number | null;
+  taskKey: string | null;
+  title: string | null;
+  businessValue: number | null;
+  /** `done` here means the PR is a bulk-close candidate — its ticket finished elsewhere. */
+  taskStatus: string | null;
+  /** Why the manager gave up: sync_exhausted | merge_failed_exhausted | conflict_exhausted. */
+  reason: string | null;
+  blockedAt: string | null;
+}
+
 export interface ManagerOverview {
   config: ManagerConfig | null;
   policy: ManagerPolicy;
+  /** Open PRs waiting on a person, highest-value ticket first. Optional — an older API
+   *  omits it entirely, so always `?? []`. */
+  blockedPrs?: ManagerBlockedPr[];
   /**
    * Whether the scheduled sweep will actually run this project — the server's answer
    * from the one shared predicate, never re-derived on the client.

@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-07-31 — ✅ RESOLVED: three defects the merge queue's success made visible (api 2026.7.190)
+
+### 1. `managed_no_role` — the staffing gap with no NAME
+
+305 of 671 stalled tickets (45%), unchanged across four captures (294 → 304 → 305) while every other cohort moved, `board_staffing` ran every pass (427ms), and the decision feed held **zero `assign` decisions of any kind**. The surface told readers to "look for an `assign` decision naming the roles it could not fill" — there was none.
+
+Root cause: `unfilledRolesForBoard` can only report a role it can **name** — a role key appearing as an unbound approver. But `decideLaneApprovers` has outcomes that produce *no approvers at all*: `lane_unstaffed` (no requirements, no staffed agents), `lane_agents_not_role_capable` (agents that map to no role), and — the likeliest on a real board — requirements all scoped to ticket types the lane's tickets are not. Each makes `pickManagedProducer` return null, which the evaluator reports as `managed_no_role`, and leaves the sweep with nothing to put in its unfilled set. It returned empty, `describeLaneStaffing` returned `''`, nothing was journalled. **Silence meant "everything binds" and "the gap is nameless" indistinguishably** — which is exactly how it survived three previous fixes to this same function.
+
+`findBoardStaffingGaps` now answers both questions from one traversal (they are complements: a lane's roles are either named-and-unbound, or absent entirely). The nameless gap cannot be auto-fixed — there is no role key to pin or hire against, and inventing one would staff a lane the operator never described — so it is **reported**, with the stage a human recognises (the lane key, which is also the ticket status), the ticket count it is holding, and the specific repair for each of the three reasons. Only lanes actually holding tickets are reported, so an unused template lane cannot bury the one holding 200.
+
+### 2. Eleven tickets finished, zero lane moves, nobody credited
+
+`tickets finished: 11` beside `forward lane moves: 0 (by people: 0 · by agents: 0)` and every contributor at `finished=0` — three numbers describing the same eleven events, two of them empty.
+
+The conduct stage completed tickets with a bare `db.update(tasks).set({ status: DONE, completedAt: now })`, recording **no lane hop** — and `task_status_transitions` is the only place the schema names who moved a ticket. The digest reads `completed_at` for its headline and transitions for everything else, so they disagreed outright. The missing rows also cost the lifecycle ledger and the autonomy audit, which read transitions rather than the stamp.
+
+The fix is a deletion, not an addition: `completeTaskOnMerge` already exists as "the SINGLE completion path", and its own header says it exists because *"the plain db.update the manager used skipped the metrics"* — the manager had simply grown a second one. Routing through it restores the ordinals, the backward test, the done-class fold, the idempotent already-done check **and** `resolveCompletionActor`'s producer fallback, which credits the executor rather than the Coordinator.
+
+### 3. The retired-PR pile had nothing ranking it
+
+The merge queue retires a PR to a human once a ceiling is spent — 47 `merge_blocked` decisions on project 11 in the first day against zero all-time before. That is the correct end for branches racing one base, and it converts an invisible livelock into a pile: `merge_blocked` is an entry in a time-ordered decision **feed**, which cannot tell the one PR worth opening from the three hundred that are not.
+
+`GET /api/manager/:projectId` now returns `blockedPrs` **ranked by the business value of the ticket each PR would deliver** (NULLS LAST, so an unscored ticket does not outrank a scored one by being unknown), plus `stats.blockedPullRequests`. The diagnostics report renders it as its own section, and flags rows whose ticket **already reads done** — those are bulk-close candidates where the work landed another way and the branch is just litter. A `prs_awaiting_human` finding says the count and how many are closable outright.
+
+Files: `api/src/application/manager/{staffUnfilledLanes,ManagerService}.ts`, `api/src/application/kanban/managedLaneRoles.ts`, `api/src/presentation/routes/managerRoutes.ts`, `frontend/src/lib/{managerDiagnostics,builderforceApi}.ts`, + `staffUnfilledLanes.test.ts`.
+
+---
+
 ## 2026-07-31 — ✅ RESOLVED: the merge queue worked, and it uncovered a 91% run-failure rate nothing could explain (api 2026.7.189)
 
 **The 2026.7.185 queue did what it was built to do**, measured on project 11 the next morning:
