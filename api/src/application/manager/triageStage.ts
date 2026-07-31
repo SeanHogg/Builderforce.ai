@@ -617,7 +617,12 @@ export async function runStallTriage(
           taskType: task.taskType,
           actionType: task.actionType,
           hasBranch: !!task.gitBranch,
-          hasPr: !!task.githubPrUrl,
+          // The recorded PR row, not `tasks.github_pr_url` — that column is stamped when a
+          // PR opens and never cleared, so it cannot tell an open pull request from one
+          // that merged weeks ago, and this is the input that decides whether the ticket
+          // still owes a merge. Carrying the URL with no row left means nothing is open.
+          prState: prRow ? (prRow.status === 'open' ? 'open' : 'settled') : (task.githubPrUrl ? 'settled' : 'none'),
+          hasAssignee: !!task.assignedAgentRef || task.assignedAgentHostId != null,
           buildStatus: normalizeBuildStatus(prRow?.buildStatus),
           hasLiveRun: signals.liveTaskIds.has(task.id),
           signoff,
@@ -648,7 +653,12 @@ export async function runStallTriage(
         // The non-review half of the same question: this stage's owed roles.
         stageSignoff: stageSignoffFor(task.status, signoff, stageOwnership, TaskStatus.IN_REVIEW),
         pr: prRow ? { open: prRow.status === 'open', providerClosed, conflicted } : null,
-        mergeWithheld: !policy.allowAutoMerge && prRow?.status === 'open' && readiness === 'complete',
+        // `await_merge`, not `complete`: a ticket whose PR is still open no longer reports
+        // `complete` at all (that conflation is what completed tickets out from under
+        // their own unmerged branches). `await_merge` IS "everything passed and only the
+        // merge is left", which is exactly the population this gate asks about — matching
+        // on `complete` here would have made merge_withheld permanently undiagnosable.
+        mergeWithheld: !policy.allowAutoMerge && prRow?.status === 'open' && readiness === 'await_merge',
       });
 
       if (!diagnosis.stalled) {

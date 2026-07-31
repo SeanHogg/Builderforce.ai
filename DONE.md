@@ -4,6 +4,65 @@
 
 ---
 
+## 2026-07-31 — ✅ RESOLVED: a ticket completed out from under its own open, unmerged PR — the retired-PR pile's generator (api 2026.7.198)
+
+**The measurement.** Project 11, one manager pass, two decisions 78ms apart:
+
+```
+09:00:04.193  ticket -085  "Deliverable and build checks passed — completing.
+                            Closed "Onboarding Wizard UX …" (no branch to merge)."   {"openedPr":false}
+09:00:04.271  the merge stage retires that same ticket's PR #103 as conflict_exhausted
+```
+
+The ticket had a branch **and** an open pull request, so both halves of that sentence were false. `ManagerService.ts:1956` asked `!!t.gitBranch && !t.githubPrUrl && …assigned…` to decide whether to OPEN a pull request, then printed the negative branch as though it also meant there was nothing to MERGE — and completed the ticket either way. That is the generator of the human-owed PR pile: **49 → 52 → 72 → 75 in roughly two days**, with 5 of its top 10 rows already flagged *"ticket already DONE — close this PR"*.
+
+**The fix is a fifth question in the pure evaluator, not another inline branch.** `decideTicketReadiness` received `hasPr` and used it for the build checks (lines 111, 125) but never asked whether an open PR still had to land. It now takes a three-valued `prState` (`none` | `open` | `settled`) read from the recorded `pull_requests` row rather than `tasks.github_pr_url` — that column is stamped when a PR opens and never cleared, so it cannot tell an open PR from one that merged weeks ago — and an open PR yields the new `await_merge` action. A ticket is done when there is nothing left to land; the merge stage immediately below in the same pass owns the outcome, and it either merges (completing the ticket through the shared `completeTaskOnMerge` path) or spends its ceiling and hands the PR to a person, saying so once.
+
+**And the sentence now says which closure actually applied.** The evaluator returns a `CompletionShape` — `open_pr` · `pr_settled` · `branch_unopened` · `no_deliverable` — so `ManagerService` no longer re-derives the completion policy inline, and "(no branch to merge)" is printed only for the one case where it is true. `branch_unopened` (a pushed branch with nobody assigned to open a PR as) was previously reported with the same false sentence.
+
+**Kept honest downstream.** `await_merge` also had to reach the two consumers that read the readiness verdict, or the fix would have traded one wrong answer for another:
+- `triageStage`'s `mergeWithheld` gate matched `readiness === 'complete'`, which after this change can never be true for an open PR — it would have made `merge_withheld` permanently undiagnosable. It matches `await_merge`, which is exactly "everything passed and only the merge is left".
+- `diagnoseStall` falls `await_merge` through to the two PR-specific diagnoses (`pr_conflict`, `merge_withheld`) and then answers it explicitly as NOT stalled: a clean branch with every check green is waiting on a bounded process that always ends, and the per-ticket remedies would make it worse — `dispatch` starts a billable run on finished work and `resolve_conflict` hands an agent a branch that is not conflicting. Anything the queue cannot resolve leaves by one of the two checks above, so nothing is hidden.
+- The conduct stage claims the ticket in `conductedTaskIds` before deferring, so triage cannot start a second billable run against the branch the merge queue is already working.
+
+Deliberately **not** journalled per pass: the merge stage is the single writer for a pull request's fate, and a second row per review ticket per pass would add up to 20 rows every five minutes to a table already growing ~3.5k rows a day per project.
+
+Files: `api/src/application/manager/evaluateTicketReadiness.ts`, `ManagerService.ts`, `triageStage.ts`, `stallTriage.ts`. Tests: `evaluateTicketReadiness.test.ts` (+11 — the open-PR deferral and all four completion shapes).
+
+---
+
+## 2026-07-31 — ✅ RESOLVED: the board-staffing sweep re-journalled an identical unactionable verdict every pass, forever (api 2026.7.198)
+
+**The measurement.** The diagnostics report's own `decision_loop` finding fired on it: the identical `assign` verdict — *"3 stages on this board authorise NO role … 317 tickets …"* — **3× in the last 30 decisions**, first 07:55:06, last 09:00:02, with nothing about the board having changed in between. That is one `manager_actions` write per project per five-minute tick for an unchanged condition the manager is *deliberately* not permitted to fix (`allowAutoStaffLanes` correctly reads `no [project: inherit · workspace: no]`), on a board held under $5/month on Neon Free — and it crowds real decisions out of both the 30-item feed and the 200-row window.
+
+**Events are journalled every time; states are journalled when they change.** A sweep that WROTE something (pinned a role, hired for one) is an event and still records unconditionally. A sweep that only *reported* — the common case, and the only case while the grant is off — is a state, and now goes through the new `recordManagerActionOnChange`: it reads the newest `assign` row for the project, compares the fingerprint stored in its `detail`, and writes only on a difference. The previous verdict is read back from the feed rather than held in memory or KV because a pass is a fresh Worker invocation every five minutes; the feed is the only memory it has.
+
+**The fingerprint is the contract, per the "counters scoped to their contract" discipline.** `laneStaffingFingerprint` carries every input the sentence is computed from — each lane's key, its reason, the tickets it is holding, its unmapped agents, the unfilled and unfillable role keys, and the sweep's own error — sorted where the underlying set has no meaningful order. A key narrower than the verdict would suppress a genuine change (a lane draining 299 → 4, a new stage falling unconfigured, the sweep starting to fail) as "already said", and a suppressed defect is strictly worse than a duplicated one. The helper **fails open** for the same reason: an unparsable row, a read error or a different state at the head all record the action.
+
+**Truncation-proof by construction.** The markers are serialised *first* into `detail` and read back with a regex rather than `JSON.parse`, because `detail` is capped at 4000 characters — a fingerprint that can be truncated away is one that silently stops matching, which would have quietly restored the every-pass duplicate.
+
+`recordManagerAction` moved to the new leaf module with it (re-exported from `ManagerService`, the same arrangement `managerPolicyStore` uses) so the manager's largest module does not import itself through a helper that has to read the feed. The two existing "state, not event" dedupes are deliberately **not** migrated onto it: the ticket audit compares against the verdict on `ticket_audits`, and the PR loop's `merge_blocked` dedupe reads counters from a grouped scan it makes anyway — both get their previous state for free, and routing them through this helper would add a query to replace a free comparison.
+
+Files: `api/src/application/manager/managerActionJournal.ts` (new), `staffUnfilledLanes.ts`, `ManagerService.ts`. Tests: `staffUnfilledLanes.test.ts` (+8 — fingerprint stability, order-independence, and re-arming on count / new lane / reason / error / role changes).
+
+---
+
+## 2026-07-30 — ✅ RESOLVED: OpenRouter registrations reported health but never consumption (api 2026.7.197, ui 2026.7.150)
+
+A registration could be green and have served nothing for a month — wrong model order, or out-ranked by a higher-precedence account — and no surface said so. The provider drawer had had a 30-day requests/tokens strip since it was built; connections had nothing, so the one question an operator asks after "is it connected?" had no answer here.
+
+**Attribution is by MODEL, folded per read.** `openRouterModelUsage` runs ONE grouped scan over `llm_usage_log` for the tenant's `openrouter/%` rows — not a query per registration, of which a tenant may hold 20 — and is keyed by dispatched ref, so the aggregate is independent of the current registration set and its order and stays correct across a precedence edit, a rename, or a model moving between registrations. `attributeUsageToConnections` (pure, unit-tested) folds it using the SAME first-claim rule as `connectionModelRefs` and `resolveOpenRouterConnectionKeys`: a model listed by two registrations belongs to the higher-priority one. Any other rule double-counts and reports a tenant more consumption than they had. The `LIKE` is a cheap prefilter, never the attribution rule — only ids a registration actually lists are assigned, so a pool model whose OpenRouter org happens to be `openrouter/…` cannot be misattributed. Read-through cached 60s, riding the same list read that already fetches each row's alert, so health and usage arrive together.
+
+**Whose money, stated.** On a KEYED registration our ledger holds only the flat routing surcharge — `computeRecordedCostMillicents` forces token cost to 0 for a BYO row, because OpenRouter bills the tenant's own account and that spend lives on their dashboard, not ours. Printing one number without saying which is how "$0.42" gets read as the whole month's bill, so the copy branches: routing-charges-only for a keyed registration, routing + tokens for a managed one.
+
+**Shared, not duplicated.** `UsageStrip` renders the consumption line on both the provider drawer and every registration; `diagnostic.usage` became window-parameterised (`{days}`) and both surfaces pass the period their own API measured, rather than a `30` baked into five catalogs. A registration with no traffic renders explicit zeroes — "healthy but unused" is a state to show, and a blank strip reads as "no data".
+
+Also fixed in passing: two `ProviderKeysSettings.authAlert` tests broken by the concurrent `ClickableCard` refactor (grid cards are now `role="button"` divs, so `.closest('button')` found nothing).
+
+Files: `api/src/application/llm/openRouterConnectionService.ts`, `presentation/routes/llmRoutes.ts`, `frontend/src/components/ProviderKeysSettings.tsx`, `frontend/src/lib/builderforceApi.ts`, all five i18n catalogs. Tests: `openRouterConnectionService.test.ts` (9, +3 attribution), `ProviderKeysSettings.openRouter.test.tsx` (10, +3 usage).
+
+---
+
 ## 2026-07-31 — ✅ RESOLVED: the manager's reply loop never actually failed over, and threw away the evidence when it failed (api 2026.7.193, ui 2026.7.145, brain-embedded 2026.7.57, agent-stall 2026.7.6)
 
 A support capture from chat 86 read like the name-mismatch bug all over again — narrated tools, zero calls — and the report on it said so outright. Both were wrong, and each was wrong for its own reason.

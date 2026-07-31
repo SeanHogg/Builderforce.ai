@@ -62,6 +62,7 @@ export {
   type ManagerConfigRowWithMeta, type TenantManagerDefaultsPatch,
 } from './managerPolicyStore';
 import { getEffectiveManagerPolicy, getManagerConfigRow, getProjectManagerState } from './managerPolicyStore';
+import { recordManagerAction, recordManagerActionOnChange } from './managerActionJournal';
 import { resolveManagerIdentity } from './managerIdentity';
 import { resolveManagerTypeById } from './managerTypes';
 import { listActiveManagerDirectives } from './managerDirectives';
@@ -69,13 +70,16 @@ import { RoleAssignmentService, type AssigneeKind } from '../kanban/roleAssignme
 import { assignTicketOwner } from './assignOwner';
 import { classifySignoffOwnership, resolveRequiredSignoffGate } from '../kanban/signoffGate';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
-import { decideTicketReadiness } from './evaluateTicketReadiness';
+import { decideTicketReadiness, type CompletionShape, type TicketPrState } from './evaluateTicketReadiness';
 import { runStallTriage, loadBulkSignals, MAX_TRIAGE_DISPATCHES_PER_RUN } from './triageStage';
 import { MAX_REMEDY_ATTEMPTS } from './stallTriage';
 import { planMergeQueue, summarizeMergeQueue } from './prMergeQueue';
 import { computeStallCensus, invalidateStallCensus } from './stallCensus';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
-import { staffUnfilledLanes, describeLaneStaffing, distinctTaskShapes } from './staffUnfilledLanes';
+import {
+  staffUnfilledLanes, describeLaneStaffing, distinctTaskShapes,
+  laneStaffingFingerprint, BOARD_STAFFING_STATE_KEY,
+} from './staffUnfilledLanes';
 import { loadPassRotation, savePassRotation } from './passRotation';
 import { invalidateDailyDigest } from './dailyDigest';
 import { raiseSystemicFindings } from './systemicDiagnosis';
@@ -383,39 +387,14 @@ export interface ManagerRunSummary {
 }
 
 
-/** Append a manager decision to the audit feed. Best-effort. `runTaskId` links the
- *  decision to the board task representing a manual run (null for cron sweeps). */
-export async function recordManagerAction(
-  db: Db,
-  a: {
-    tenantId: number; projectId: number; taskId?: number | null; runTaskId?: number | null;
-    actionType: string; summary: string; detail?: unknown;
-    /**
-     * The PULL REQUEST this action was about (0383). REQUIRED in practice for every
-     * {@link PR_ACTION_TYPES} write — the loop's ceilings and rotation count on this
-     * column, and a PR action journalled without it is invisible to both, which is
-     * exactly the unbounded merge loop 0383 documents.
-     */
-    prId?: string | null;
-  },
-): Promise<void> {
-  try {
-    await db.insert(managerActions).values({
-      tenantId: a.tenantId,
-      projectId: a.projectId,
-      taskId: a.taskId ?? null,
-      prId: a.prId ?? null,
-      runTaskId: a.runTaskId ?? null,
-      actionType: a.actionType,
-      summary: a.summary.slice(0, 500),
-      detail: a.detail !== undefined ? JSON.stringify(a.detail).slice(0, 4000) : null,
-    });
-  } catch (error) {
-    /* the audit feed is best-effort — a write miss must not fail the pass */
-  
-    reportCaughtError(error, { source: "application/manager/ManagerService.ts", operation: "recordManagerAction" });
-  }
-}
+// The journal WRITER lives in its own leaf store — `recordManagerActionOnChange` has to
+// read the feed before writing to it, and this module is where nearly every writer lives.
+// Re-exported because ManagerService has always been the manager's public surface and
+// every existing caller imports it from here (same arrangement as managerPolicyStore).
+export {
+  recordManagerAction, recordManagerActionOnChange, stateFingerprint,
+  type ManagerActionInput,
+} from './managerActionJournal';
 
 export interface ManagerActionRow {
   id: string; taskId: number | null; ticketKey: string | null; ticketTitle: string | null;
@@ -1128,7 +1107,7 @@ export async function runManagerForProject(
     const staffingDetail = describeLaneStaffing(laneStaffing);
     if (staffingDetail) {
       summary.remediated += laneStaffing.filled.length;
-      await recordManagerAction(db, {
+      const action = {
         tenantId, projectId, taskId: null, runTaskId, actionType: 'assign',
         summary: staffingDetail,
         detail: {
@@ -1141,6 +1120,20 @@ export async function runManagerForProject(
           hires: laneStaffing.hires,
           error: laneStaffing.error,
         },
+      };
+      // ── EVENT OR STATE? ─────────────────────────────────────────────────────────
+      // A sweep that WROTE something (pinned a role, hired for one) is an event: it
+      // happened once, at a time, and it belongs in the feed every time it happens. A
+      // sweep that only reported — the common case, and the only case while
+      // `allowAutoStaffLanes` is off — is a STATE, and re-journalling an unchanged state
+      // every five minutes is the measured `decision_loop`: the same 317-ticket verdict
+      // three times in the last 30 decisions. Reported once, then again the moment the
+      // lanes, their counts, their reason or the sweep's own error actually change.
+      if (laneStaffing.filled.length > 0) await recordManagerAction(db, action);
+      else await recordManagerActionOnChange(db, {
+        ...action,
+        stateKey: BOARD_STAFFING_STATE_KEY,
+        fingerprint: laneStaffingFingerprint(laneStaffing),
       });
     }
   }
@@ -1837,8 +1830,20 @@ async function coordinatePullRequests(
           inArray(pullRequests.taskId, reviewReady.map((t) => t.id)),
         ))
       : [];
-    const buildByTask = new Map<number, string | null>();
-    for (const r of reviewPrBuild) if (r.taskId != null) buildByTask.set(r.taskId, r.buildStatus);
+    // ── WHAT EACH REVIEW TICKET'S PULL REQUEST IS DOING ─────────────────────────────
+    // An OPEN row wins over every other row a ticket has: a ticket can carry an old
+    // closed PR and a live one, and it is the live one that decides both whether there is
+    // anything left to land and whose build verdict matters. Reading "the last row the
+    // scan happened to return" is how a settled PR's green build could speak for an open
+    // PR that had not built at all.
+    const prByTask = new Map<number, { state: TicketPrState; buildStatus: string | null }>();
+    for (const r of reviewPrBuild) {
+      if (r.taskId == null) continue;
+      const open = r.status === 'open';
+      const current = prByTask.get(r.taskId);
+      if (current?.state === 'open' && !open) continue;
+      prByTask.set(r.taskId, { state: open ? 'open' : 'settled', buildStatus: r.buildStatus });
+    }
 
     for (const t of reviewReady) {
       // BETWEEN tickets, never mid-ticket: a conduct/merge already begun always
@@ -1852,12 +1857,18 @@ async function coordinatePullRequests(
         const signoff = await resolveRequiredSignoffGate(env, db, {
           tenantId, taskId: t.id, requireSignoff: policy.requireSignoffToComplete,
         });
+        const pr = prByTask.get(t.id);
         const readiness = decideTicketReadiness({
           taskType: t.taskType,
           actionType: t.actionType,
           hasBranch: !!t.gitBranch,
-          hasPr: !!t.githubPrUrl,
-          buildStatus: normalizeBuildStatus(buildByTask.get(t.id)),
+          // The RECORDED pull request decides this, not `tasks.github_pr_url`: that column
+          // is stamped when a PR opens and never cleared, so it cannot tell an open PR
+          // from one that merged weeks ago. A ticket carrying the URL with no row left is
+          // 'settled' — there is no pull request for the merge stage to act on.
+          prState: pr?.state ?? (t.githubPrUrl ? 'settled' : 'none'),
+          hasAssignee: !!t.assignedAgentRef || t.assignedAgentHostId != null,
+          buildStatus: normalizeBuildStatus(pr?.buildStatus),
           hasLiveRun: liveTaskIds.has(t.id),
           signoff,
           requireSignoff: policy.requireSignoffToComplete,
@@ -1867,10 +1878,20 @@ async function coordinatePullRequests(
         if (readiness.action === 'wait_for_run' || readiness.action === 'wait_for_build') {
           continue; // transient by definition — re-evaluated next pass, no noise
         }
-        // Past the transient checks this pass WILL act on the ticket, so claim it:
-        // TRIAGE still diagnoses and registers it (the stuck list must be complete)
-        // but must not re-apply a remedy on top of the one about to run here.
+        // Past the transient checks this pass WILL act on the ticket — here or, for an
+        // open PR, in the merge stage below — so claim it: TRIAGE still diagnoses and
+        // registers it (the stuck list must be complete) but must not re-apply a remedy
+        // on top of the one about to run. That matters most for `await_merge`: triage's
+        // `resolve_conflict` remedy starts a BILLABLE run against the same branch the
+        // merge queue is already working.
         conductedTaskIds.add(t.id);
+
+        // AN OPEN PULL REQUEST STILL HAS TO LAND. Not completed here, and not journalled
+        // here either: the merge stage immediately below is the single writer for a PR's
+        // fate (merged, conflicting, or retired to a human), and duplicating that verdict
+        // once per review ticket per pass would add up to 20 rows every five minutes to a
+        // table already growing ~3.5k rows a day per project.
+        if (readiness.action === 'await_merge') continue;
 
         // Expected a deliverable and there is none, or the build is red: this ticket is
         // not reviewable, it is unfinished. Send it BACK to implementation and start its
@@ -1952,8 +1973,13 @@ async function coordinatePullRequests(
           continue;
         }
 
-        // readiness.action === 'complete' — every check passed.
-        const canOpenPr = !!t.gitBranch && !t.githubPrUrl && (!!t.assignedAgentRef || t.assignedAgentHostId != null);
+        // readiness.action === 'complete' — every check passed, including "there is
+        // nothing left to land". WHICH closure applies is decided by the pure evaluator
+        // (`CompletionShape`), not re-derived here: the inline `hasBranch && !hasPr` this
+        // replaces was used to choose whether to OPEN a pull request and then reported as
+        // if it also meant there was nothing to MERGE, which is how ticket -085 was
+        // journalled "(no branch to merge)" 78ms before its own PR #103 was retired.
+        const canOpenPr = readiness.completion === 'open_pr';
         // ── THROUGH THE ONE COMPLETION PATH, NOT A SECOND `db.update` ───────────────
         // This was `db.update(tasks).set({ status: DONE, completedAt: now })`, which
         // stamps the ticket and records NO lane hop — and `task_status_transitions` is
@@ -1989,13 +2015,22 @@ async function coordinatePullRequests(
           });
           summary.prsConducted += 1;
         }
+        // ONE SENTENCE PER CLOSURE. "(no branch to merge)" used to be printed for all of
+        // them, and it was true for exactly one — a reader could not tell a genuinely
+        // empty ticket from one closing on top of an unmerged branch.
+        const CLOSURE: Record<Exclude<CompletionShape, 'open_pr'>, string> = {
+          no_deliverable: `Closed "${t.title}" — no branch and no pull request, so there was nothing to merge.`,
+          pr_settled: `Closed "${t.title}" — its pull request has already landed.`,
+          branch_unopened: `Closed "${t.title}" — branch ${t.gitBranch} was never opened as a pull request and no agent is assigned to open one, so nothing was merged.`,
+        };
         await recordManagerAction(db, {
           tenantId, projectId, taskId: t.id, runTaskId, actionType: 'flag',
           summary: canOpenPr
             ? `${readiness.detail} Opened PR for "${t.title}".`
-            : `${readiness.detail} Closed "${t.title}" (no branch to merge).`,
+            : `${readiness.detail} ${CLOSURE[(readiness.completion ?? 'no_deliverable') as Exclude<CompletionShape, 'open_pr'>]}`,
           detail: {
             action: readiness.action,
+            completion: readiness.completion,
             signoffGate: signoff.reason,
             requiredCount: signoff.requiredCount,
             satisfiedCount: signoff.satisfiedCount,
