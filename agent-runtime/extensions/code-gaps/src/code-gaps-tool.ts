@@ -3,7 +3,7 @@ import path from "node:path";
 import { Type } from "@sinclair/typebox";
 import type { BuilderForceAgentsPluginApi } from "../../../src/plugins/types.js";
 
-// ───────────── Types ─────────────
+// ───────────── Types (FR1) ─────────────
 
 export interface PlannedItem {
   id: string;
@@ -26,7 +26,7 @@ interface GapReport {
 
 type OutputFormat = "markdown" | "json" | "csv";
 
-// Internal cache for single-pass scanning
+// Internal cache for single-pass scanning (AC4 perf)
 interface FileIndex {
   allFiles: string[];
   textByFile: Map<string, string>;
@@ -76,18 +76,15 @@ const ALWAYS_EXCLUDE_PARTS = [
 
 function matchesExclude(relPath: string, extra: string[]): boolean {
   const parts = relPath.split("/");
-  // Check always-exclude directory names
   for (const p of parts) {
     if (ALWAYS_EXCLUDE_DIRS.has(p)) return true;
   }
   for (const always of ALWAYS_EXCLUDE_PARTS) {
     if (relPath.includes(always)) return true;
   }
-  // Check caller-provided globs (simple: if substring match after stripping **/ prefix)
   for (const pat of extra) {
     const cleaned = pat.replace(/\*\*\//g, "").replace(/\*\*/g, "").replace(/\*/g, "");
     if (cleaned && relPath.includes(cleaned)) return true;
-    // Also support simple suffix patterns like *.min.js
     if (pat.includes("*") && relPath.endsWith(pat.replace(/^\*\*?\//, "").replace(/^\*/, ""))) {
       return true;
     }
@@ -95,7 +92,7 @@ function matchesExclude(relPath: string, extra: string[]): boolean {
   return false;
 }
 
-// ───────────── File collection (native fs) ─────────────
+// ───────────── File collection (native fs, no shell) ─────────────
 
 function walkDir(
   dir: string,
@@ -118,19 +115,10 @@ function walkDir(
     if (matchesExclude(rel, exclude)) continue;
 
     if (ent.isDirectory()) {
-      // Skip excluded dirs fast via name check
       if (ALWAYS_EXCLUDE_DIRS.has(ent.name)) continue;
       walkDir(abs, root, exclude, maxDepth, curDepth + 1, files);
     } else if (ent.isFile()) {
-      const ext = path.extname(ent.name).toLowerCase();
-      // Include files whose extension is in the known set OR files that match file-pattern signatures later
-      if (DEFAULT_CODE_EXTS.has(ext)) {
-        files.push(rel);
-      } else {
-        // still index dot-less or unusual extension if caller explicitly adds them via signatures
-        // we include them only if not binary-like; for now limit to text-ish
-        files.push(rel);
-      }
+      files.push(rel);
     }
   }
 }
@@ -143,18 +131,18 @@ function isPathLikeSignature(sig: string): boolean {
 }
 
 function simpleGlobToTest(pattern: string): (p: string) => boolean {
-  // Convert minimal glob (*, **) to a predicate; safe, no shell.
-  // Escape regexp except * then replace ** -> .* and * -> [^/]*
   const escaped = pattern
     .replace(/[.+^${}()|[\]\\]/g, "\\$&")
     .replace(/\*\*/g, "__GLOBSTAR__")
     .replace(/\*/g, "[^/]*")
     .replace(/__GLOBSTAR__/g, ".*");
-  // allow {a,b} alternation minimal
-  const withAlts = escaped.replace(/\\\{/g, "{").replace(/\\\}/g, "}").replace(/\{([^}]+)\}/g, (_m, inner: string) => {
-    const parts = inner.split(",").map((s: string) => s.trim());
-    return `(${parts.join("|")})`;
-  });
+  const withAlts = escaped
+    .replace(/\\\{/g, "{")
+    .replace(/\\\}/g, "}")
+    .replace(/\{([^}]+)\}/g, (_m, inner: string) => {
+      const parts = inner.split(",").map((s: string) => s.trim());
+      return `(${parts.join("|")})`;
+    });
   try {
     const re = new RegExp(`^${withAlts}$`);
     return (p: string) => re.test(p);
@@ -183,6 +171,11 @@ export async function collectFileIndex(
   const textByFile = new Map<string, string>();
 
   for (const rel of allFiles) {
+    const ext = path.extname(rel).toLowerCase();
+    // Only index code-like files for content; file-pattern check uses allFiles
+    if (ext === "" || !DEFAULT_CODE_EXTS.has(ext)) {
+      // still check for binary-like via size, but include for file-pattern matches
+    }
     const abs = path.join(rootPath, rel);
     try {
       const stat = fs.statSync(abs);
@@ -190,7 +183,7 @@ export async function collectFileIndex(
       const content = fs.readFileSync(abs, "utf-8");
       textByFile.set(rel, content);
     } catch {
-      // Skip unreadable / binary files
+      // Skip unreadable / binary
     }
   }
 
@@ -206,7 +199,6 @@ export async function checkSignatureExists(
   const trimmed = signature.trim();
   if (!trimmed) return null;
 
-  // 1) If signature looks like a file path / glob, try file-pattern match (native, no shell)
   if (isPathLikeSignature(trimmed)) {
     const existsLiteral = (() => {
       try {
@@ -217,13 +209,11 @@ export async function checkSignatureExists(
     })();
     if (existsLiteral) return trimmed;
 
-    // Glob-style match against indexed files using safe predicate
     const tester = simpleGlobToTest(trimmed);
     for (const rel of index.allFiles) {
       if (matchesExclude(rel, excludePatterns)) continue;
       if (tester(rel)) return rel;
     }
-    // Also try unanchored contains when pattern has no wildcards but includes a slash/file name
     if (!trimmed.includes("*")) {
       const lower = trimmed.toLowerCase();
       for (const rel of index.allFiles) {
@@ -232,12 +222,12 @@ export async function checkSignatureExists(
     }
   }
 
-  // 2) Text search: literal substring (fast, no shell, no injection)
+  // Literal substring search (fast, no injection)
   for (const [relPath, content] of index.textByFile) {
     if (content.includes(trimmed)) return relPath;
   }
 
-  // 3) Fallback: try as regex if it contains regex-ish characters (safe, in JS, not shell)
+  // Regex fallback (safe, in-JS)
   if (/[.*+?^${}()|[\]\\]/.test(trimmed)) {
     try {
       const re = new RegExp(trimmed);
