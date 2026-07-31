@@ -8930,6 +8930,8 @@
       "failedFallback": "Échec du test de connexion : {status}.",
       "failedGeneric": "Échec du test de connexion",
       "failedTitle": "Échec de la connexion à {label}",
+      "upstreamTitle": "{label} — erreur du fournisseur du modèle",
+      "testCost": "Le test envoie une petite requête réelle, facturée au compte testé.",
       "state": {
         "ready": "prête",
         "capacity": "quota épuisé",
@@ -8940,6 +8942,7 @@
         "undecryptable": "identifiant illisible",
         "unavailable": "indisponible",
         "failed": "en échec",
+        "upstream_error": "erreur du fournisseur du modèle",
         "not_found": "connexion introuvable",
         "no_test_model": "aucun modèle sélectionné à tester",
         "key_unresolved": "la clé enregistrée n'a pas pu être utilisée"

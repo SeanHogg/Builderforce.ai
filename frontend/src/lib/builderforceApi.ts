@@ -3278,8 +3278,10 @@ export interface ConnectionAuthAlert {
 export interface OpenRouterConnectionTestResult {
   ok: boolean;
   /** `key_unresolved` = the saved key could not be applied to any of this connection's
-   *  models (it no longer decrypts, or a higher-priority connection already claims them). */
-  status: 'ready' | 'not_found' | 'no_test_model' | 'key_unresolved' | 'failed';
+   *  models (it no longer decrypts, or a higher-priority connection already claims them).
+   *  `upstream_error` = the key WORKED and the model provider then errored — an outage on
+   *  that model, not a broken registration. */
+  status: 'ready' | 'not_found' | 'no_test_model' | 'key_unresolved' | 'upstream_error' | 'failed';
   /** The bare OpenRouter id the probe pinned. */
   model?: string;
   /** True when the dispatch rode the tenant's OWN OpenRouter key rather than the managed one. */

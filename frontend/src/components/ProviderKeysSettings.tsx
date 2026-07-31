@@ -233,33 +233,63 @@ function stateLabel(t: TFn, status: string): string {
   return label === `diagnostic.state.${status}` ? status.replaceAll('_', ' ') : label;
 }
 
+/** How loudly a verdict should read. `warn` is the case that matters: the credential WORKED
+ *  and something downstream of it broke, which must not be painted as a failed connection —
+ *  red there sends an owner to re-enter a key that is fine. */
+type ProbeTone = 'ok' | 'warn' | 'error';
+
+export interface ProbeVerdict {
+  message: string;
+  tone: ProbeTone;
+}
+
 /**
  * Probe verdict → the one line an operator reads.
  *
  * Shared by the provider card and the OpenRouter connection rows: both run the same probe
- * primitive server-side, so a green/red verdict must read the same way on both surfaces —
- * the moment one of them formats its own message they start explaining identical failures
- * differently.
+ * primitive server-side, so a verdict must read the same way on both surfaces — the moment
+ * one of them formats its own message they start explaining identical failures differently.
  */
-function probeMessage(
+function probeVerdict(
   t: TFn,
   result: { ok: boolean; status: string; model?: string; error?: string },
-): string {
+): ProbeVerdict {
   if (result.ok) {
-    return result.model ? t('diagnostic.verifiedWith', { model: result.model }) : t('diagnostic.verified');
+    return {
+      tone: 'ok',
+      message: result.model ? t('diagnostic.verifiedWith', { model: result.model }) : t('diagnostic.verified'),
+    };
   }
-  return result.error ?? t('diagnostic.failedFallback', { status: stateLabel(t, result.status) });
+  return {
+    // An upstream outage is not this account's fault and not this operator's job to fix.
+    tone: result.status === 'upstream_error' ? 'warn' : 'error',
+    message: result.error ?? t('diagnostic.failedFallback', { status: stateLabel(t, result.status) }),
+  };
 }
 
 /** The verdict line under a Test button — same colour rules and a11y role wherever a probe
- *  reports back. */
-function ProbeResultLine({ result }: { result: { message: string; ok: boolean } }) {
+ *  reports back. Amber for an upstream outage, red only for something the owner can fix. */
+function ProbeResultLine({ result }: { result: ProbeVerdict }) {
+  const color = result.tone === 'ok' ? 'rgba(34,197,94,0.9)'
+    : result.tone === 'warn' ? 'var(--warning-text, #b45309)'
+    : 'var(--error, #ef4444)';
   return (
     <div
-      role={result.ok ? 'status' : 'alert'}
-      style={{ fontSize: 11.5, color: result.ok ? 'rgba(34,197,94,0.9)' : 'var(--error, #ef4444)', marginTop: 7 }}
+      role={result.tone === 'error' ? 'alert' : 'status'}
+      style={{ fontSize: 11.5, color, marginTop: 7, lineHeight: 1.5 }}
     >
       {result.message}
+    </div>
+  );
+}
+
+/** "This costs real money" — shown wherever a Test button is, because a probe is a genuine
+ *  upstream request billed to the account under test, and an operator who clicks it should
+ *  not discover that from their provider's spend dashboard afterwards. */
+function ProbeCostNote({ t }: { t: TFn }) {
+  return (
+    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
+      {t('diagnostic.testCost')}
     </div>
   );
 }
@@ -364,7 +394,7 @@ function ProviderConnectionCard({
   const [oauthState, setOauthState] = useState('');
   const [diagnostic, setDiagnostic] = useState<ProviderDiagnostic | null>(null);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ message: string; ok: boolean } | null>(null);
+  const [testResult, setTestResult] = useState<ProbeVerdict | null>(null);
   const confirm = useConfirm();
   const toast = useToast();
 
@@ -375,9 +405,12 @@ function ProviderConnectionCard({
     setTesting(true); setTestResult(null); setError(null);
     try {
       const result = await providerKeysApi.test(config.id);
-      const message = probeMessage(t, result);
-      setTestResult({ message, ok: result.ok });
-      if (!result.ok) toast.error(message, { title: t('diagnostic.failedTitle', { label: config.label }) });
+      const verdict = probeVerdict(t, result);
+      setTestResult(verdict);
+      // An upstream outage is a warning, not an error: the account is fine and there is
+      // nothing here for the owner to fix.
+      if (verdict.tone === 'error') toast.error(verdict.message, { title: t('diagnostic.failedTitle', { label: config.label }) });
+      else if (verdict.tone === 'warn') toast.warning(verdict.message, { title: t('diagnostic.upstreamTitle', { label: config.label }) });
       // Repaint the whole page's health from THIS verdict — the probe just wrote (or
       // cleared) the alert server-side, so the grid behind the drawer would otherwise keep
       // showing the stale colour until its next full refresh.
@@ -385,7 +418,7 @@ function ProviderConnectionCard({
       await loadDiagnostic();
     } catch (e) {
       const message = e instanceof Error ? e.message : t('diagnostic.failedGeneric');
-      setTestResult({ message, ok: false });
+      setTestResult({ message, tone: 'error' });
       toast.error(message, { title: t('diagnostic.failedTitle', { label: config.label }) });
     } finally { setTesting(false); }
   };
@@ -480,6 +513,7 @@ function ProviderConnectionCard({
           })}
           {diagnostic?.usage.lastUsedAt ? t('diagnostic.lastUsed', { when: new Date(diagnostic.usage.lastUsedAt).toLocaleString() }) : ''}
         </div>
+        <ProbeCostNote t={t} />
         {testResult && <ProbeResultLine result={testResult} />}
         {/* Dispatch-observed rejection — the reason this "connected" account is not
             actually serving anything. Sits under the status strip because that is
@@ -584,7 +618,7 @@ function OpenRouterConnectionsPanel({
   // Per-connection probe state, keyed by id: a tenant may hold up to 20 registrations and
   // testing one must not blank out or block the verdict on another.
   const [testingId, setTestingId] = useState<number | null>(null);
-  const [testResults, setTestResults] = useState<Record<number, { message: string; ok: boolean }>>({});
+  const [testResults, setTestResults] = useState<Record<number, ProbeVerdict>>({});
   const confirm = useConfirm();
   const toast = useToast();
 
@@ -648,16 +682,17 @@ function OpenRouterConnectionsPanel({
     setError(null);
     try {
       const result = await openRouterConnectionsApi.test(connection.id);
-      const message = probeMessage(t, result);
-      setTestResults((prev) => ({ ...prev, [connection.id]: { message, ok: result.ok } }));
-      if (!result.ok) toast.error(message, { title: t('diagnostic.failedTitle', { label: connection.label }) });
+      const verdict = probeVerdict(t, result);
+      setTestResults((prev) => ({ ...prev, [connection.id]: verdict }));
+      if (verdict.tone === 'error') toast.error(verdict.message, { title: t('diagnostic.failedTitle', { label: connection.label }) });
+      else if (verdict.tone === 'warn') toast.warning(verdict.message, { title: t('diagnostic.upstreamTitle', { label: connection.label }) });
       // Repaint from THIS verdict — the probe just wrote (or cleared) the alert server-side,
       // so the row and the grid card behind the drawer would otherwise keep showing the
       // stale colour until the next full refresh.
       onHealthChange(connection.id, result.authAlert ?? null);
     } catch (e) {
       const message = e instanceof Error ? e.message : t('diagnostic.failedGeneric');
-      setTestResults((prev) => ({ ...prev, [connection.id]: { message, ok: false } }));
+      setTestResults((prev) => ({ ...prev, [connection.id]: { message, tone: 'error' } }));
       toast.error(message, { title: t('diagnostic.failedTitle', { label: connection.label }) });
     } finally {
       setTestingId(null);
@@ -692,6 +727,8 @@ function OpenRouterConnectionsPanel({
         <button type="button" style={buttonPrimary} onClick={() => begin()} disabled={busy}>
           {t('openRouter.add')}
         </button>
+        {/* Stated once for the whole panel, above the rows each Test button sits on. */}
+        <ProbeCostNote t={t} />
       </div>
 
       {connections.map((connection) => (
