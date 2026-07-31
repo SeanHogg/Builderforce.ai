@@ -208,26 +208,18 @@ describe("buildTextReport (AC5: clear & concise human-readable output + F5)", ()
 // ---------------------------------------------------------------------------
 
 describe("runTaskPrStatus validation (AC6)", () => {
-  it.skipIf(typeof process.env.GITHUB_TOKEN !== "string" || typeof process.env.GH_TOKEN !== "string")(
-    "skipped — token present",
-    () => {},
-  );
-
-  // We test the sync guard by calling the function's leading validation without any network.
-  // runTaskPrStatus itself is async and starts with the two throw-guards we wrote for AC6.
-  // We cannot import+call it in a fully isolated way without mocking fetch/GITHUB_TOKEN.
-  // The validation guards are still exercised by importing runTaskPrStatus and running it with
-  // no token and verifying the error messages are informative (AC6).
+  // These guards run BEFORE any network call or token lookup, so they are
+  // deterministic regardless of whether GITHUB_TOKEN is present in the env.
 
   it("throws informative error when taskIds is empty (F1 + AC6)", async () => {
-    const { runTaskPrStatus } = await import("./task-pr-status-tracker-tool.js");
     await expect(runTaskPrStatus({ taskIds: [], owner: "org" })).rejects.toThrow(/taskIds/);
   });
 
   it("throws informative error when owner is empty (F4 + AC6)", async () => {
-    const { runTaskPrStatus } = await import("./task-pr-status-tracker-tool.js");
-    await expect(runTaskPrStatus({ taskIds: ["T-1"], owner: "" } as never).catch((e) => { throw e; })).rejects.toThrow(
-      /owner/i,
-    );
+    await expect(runTaskPrStatus({ taskIds: ["T-1"], owner: "" })).rejects.toThrow(/owner/i);
+  });
+
+  it("throws informative error when owner is only whitespace (F4 + AC6)", async () => {
+    await expect(runTaskPrStatus({ taskIds: ["T-1"], owner: "   " })).rejects.toThrow(/owner/i);
   });
 });
