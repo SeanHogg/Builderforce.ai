@@ -132,8 +132,6 @@ Engineering and finance teams at venture-backed startups lack a unified, real-ti
 
 ---
 
----
-
 > **PRD** — drafted by CTO · task #487
 > _Each agent that updates this PRD signs its change below._
 
