@@ -88,6 +88,15 @@ export interface UnauthorizedLane {
   reason: 'lane_unstaffed' | 'lane_agents_not_role_capable' | 'shape_unmatched';
   /** Managed tickets currently in this lane — what the gap is actually costing. */
   ticketCount: number;
+  /**
+   * The agents staffed to this lane that resolved to NO role, `name (declared role)`.
+   *
+   * Only meaningful for `lane_agents_not_role_capable`, and it is the whole repair for
+   * that reason: "agents are staffed but none can act as any role" is unactionable until
+   * a reader knows WHICH agent to give a job role to. Empty for the other two reasons —
+   * `lane_unstaffed` has no agents by definition.
+   */
+  unmappedAgents: string[];
 }
 
 export interface LaneStaffingResult {
@@ -156,17 +165,25 @@ export function findBoardStaffingGaps(
     // is still undispatchable — and that per-shape hole is invisible in a board-wide
     // "does this lane work?" answer, which is the mistake one layer up (0383) already was.
     if (emptyForSomeShape) {
+      const reason = inputs.requirements.length === 0 && inputs.laneAgents.length === 0
+        ? 'lane_unstaffed'
+        : inputs.requirements.length === 0
+          ? 'lane_agents_not_role_capable'
+          // Requirements exist and some shape resolved them — so what failed here is
+          // applicability, not staffing: the rows are scoped to ticket types or
+          // conditions that this lane's actual tickets do not match.
+          : authorizedSomeShape ? 'shape_unmatched' : 'lane_agents_not_role_capable';
       unauthorized.push({
         swimlaneId,
         laneKey: inputs.laneKey ?? null,
-        reason: inputs.requirements.length === 0 && inputs.laneAgents.length === 0
-          ? 'lane_unstaffed'
-          : inputs.requirements.length === 0
-            ? 'lane_agents_not_role_capable'
-            // Requirements exist and some shape resolved them — so what failed here is
-            // applicability, not staffing: the rows are scoped to ticket types or
-            // conditions that this lane's actual tickets do not match.
-            : authorizedSomeShape ? 'shape_unmatched' : 'lane_agents_not_role_capable',
+        reason,
+        // WHICH agent needs a job role. Measured on project 11: the `todo` lane reported
+        // `lane_agents_not_role_capable` holding 8 tickets and named nobody, which is the
+        // same "go and look for it" flaw this whole traversal exists to remove — one
+        // level further down.
+        unmappedAgents: reason !== 'lane_agents_not_role_capable' ? [] : inputs.laneAgents
+          .filter((a) => a.capableRoleKeys.length === 0)
+          .map((a) => `${a.agentName ?? a.agentRef}${a.declaredRole ? ` (declared "${a.declaredRole}")` : ''}`),
       });
     }
   }
@@ -381,11 +398,12 @@ export function describeLaneStaffing(result: LaneStaffingResult): string {
       shape_unmatched: 'the stage\'s role requirements are all scoped to ticket types or conditions these tickets do not match — widen the requirement or re-type the tickets',
     };
     const held = result.unauthorizedLanes.reduce((n, l) => n + l.ticketCount, 0);
+    const lanes = result.unauthorizedLanes.length;
     const worst = result.unauthorizedLanes.slice(0, 3)
-      .map((l) => `"${l.laneKey ?? l.swimlaneId}" (${l.ticketCount} ticket${l.ticketCount === 1 ? '' : 's'}: ${REPAIR[l.reason]})`)
+      .map((l) => `"${l.laneKey ?? l.swimlaneId}" (${l.ticketCount} ticket${l.ticketCount === 1 ? '' : 's'}: ${REPAIR[l.reason]}${l.unmappedAgents.length ? ` — ${l.unmappedAgents.join(', ')}` : ''})`)
       .join('; ');
     parts.push(
-      `${result.unauthorizedLanes.length} stage${result.unauthorizedLanes.length === 1 ? '' : 's'} on this board authorise NO role for the tickets sitting in them, so ${held} ticket${held === 1 ? '' : 's'} cannot be dispatched at all and the manager cannot fix it automatically — there is no role to staff. ${worst}.`,
+      `${lanes} stage${lanes === 1 ? ' on this board authorises' : 's on this board authorise'} NO role for the tickets sitting in them, so ${held} ticket${held === 1 ? '' : 's'} cannot be dispatched at all and the manager cannot fix it automatically — there is no role to staff. ${worst}.`,
     );
   }
   if (result.filled.length) {

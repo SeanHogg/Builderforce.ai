@@ -314,17 +314,35 @@ describe('findBoardStaffingGaps — the lanes that authorise NOTHING', () => {
     // Nothing NAMED — which is precisely why the old sweep reported nothing at all.
     expect(gaps.unfilledRoleKeys).toEqual([]);
     expect(gaps.unauthorizedLanes).toEqual([
-      { swimlaneId: 'lane-a', laneKey: 'ready', reason: 'lane_unstaffed' },
+      { swimlaneId: 'lane-a', laneKey: 'ready', reason: 'lane_unstaffed', unmappedAgents: [] },
     ]);
   });
 
-  it('distinguishes agents-with-no-role from a lane nobody configured', () => {
+  /**
+   * NAMING THE AGENT IS THE WHOLE REPAIR for this reason. "Agents are staffed to the stage
+   * but none of them can act as any role" tells a reader a role is missing and not which
+   * agent to give it to — the same "go and look for it" flaw the traversal exists to
+   * remove, one level further down. Measured on project 11 (2026-07-31): the `todo` lane
+   * reported this reason holding 8 tickets and named nobody.
+   */
+  it('distinguishes agents-with-no-role from a lane nobody configured, and NAMES them', () => {
     const gaps = findBoardStaffingGaps([['lane-b', lane({
       laneKey: 'in_progress',
-      laneAgents: [{ agentRef: 'c:1', agentName: 'Bob', position: 0, model: null } as never],
+      laneAgents: [
+        { agentRef: 'c:1', agentName: 'Bob', declaredRole: 'Bob Developer', position: 0, model: null, capableRoleKeys: [] },
+        { agentRef: 'c:2', agentName: null, declaredRole: null, position: 1, model: null, capableRoleKeys: [] },
+      ],
     })]]);
     // A different repair: give the agent a job role, rather than declare a requirement.
-    expect(gaps.unauthorizedLanes[0]).toMatchObject({ reason: 'lane_agents_not_role_capable' });
+    expect(gaps.unauthorizedLanes[0]).toMatchObject({
+      reason: 'lane_agents_not_role_capable',
+      unmappedAgents: ['Bob (declared "Bob Developer")', 'c:2'],
+    });
+  });
+
+  it('leaves the agent list empty for a reason that has no agents to name', () => {
+    const gaps = findBoardStaffingGaps([['lane-g', lane({ laneKey: 'backlog' })]]);
+    expect(gaps.unauthorizedLanes[0]).toMatchObject({ reason: 'lane_unstaffed', unmappedAgents: [] });
   });
 
   /**
@@ -356,7 +374,7 @@ describe('findBoardStaffingGaps — the lanes that authorise NOTHING', () => {
       })]],
       [{ taskType: 'bug', actionType: null }],
     );
-    expect(gaps).toEqual({ unfilledRoleKeys: [], unauthorizedLanes: [] });
+    expect(gaps).toEqual<typeof gaps>({ unfilledRoleKeys: [], unauthorizedLanes: [] });
   });
 
   /** The two gaps are complements and must both be reported from one probe — a lane can
@@ -388,8 +406,8 @@ describe('describeLaneStaffing — the nameless gap must be said out loud', () =
   it('names the stage, the cost, and the repair — not just that something is wrong', () => {
     const text = describeLaneStaffing(result({
       unauthorizedLanes: [
-        { swimlaneId: 'x', laneKey: 'ready', reason: 'lane_unstaffed', ticketCount: 200 },
-        { swimlaneId: 'y', laneKey: 'in_progress', reason: 'shape_unmatched', ticketCount: 105 },
+        { swimlaneId: 'x', laneKey: 'ready', reason: 'lane_unstaffed', ticketCount: 200, unmappedAgents: [] },
+        { swimlaneId: 'y', laneKey: 'in_progress', reason: 'shape_unmatched', ticketCount: 105, unmappedAgents: [] },
       ],
     }));
     expect(text).toContain('305 tickets');      // the cost, summed
@@ -397,6 +415,20 @@ describe('describeLaneStaffing — the nameless gap must be said out loud', () =
     expect(text).toContain('cannot fix it automatically'); // there is no role to staff
     expect(text).toMatch(/add a role requirement or staff an agent/);
     expect(text).toMatch(/widen the requirement or re-type the tickets/);
+    expect(text).toContain('2 stages on this board authorise NO role');
+  });
+
+  it('names the agent to give a job role, and agrees with itself on ONE stage', () => {
+    const text = describeLaneStaffing(result({
+      unauthorizedLanes: [{
+        swimlaneId: 'z', laneKey: 'todo', reason: 'lane_agents_not_role_capable', ticketCount: 8,
+        unmappedAgents: ['Bob (declared "Bob Developer")'],
+      }],
+    }));
+    expect(text).toContain('Bob (declared "Bob Developer")');
+    // "1 stage … authorise" was in the live feed. A sentence an operator is meant to act
+    // on should not read as machine output.
+    expect(text).toContain('1 stage on this board authorises NO role');
   });
 
   it('still says nothing when the board is genuinely fine', () => {

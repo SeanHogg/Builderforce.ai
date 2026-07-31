@@ -89,7 +89,7 @@
 | 2 | [On-Prem Runtime, Engine & Tooling](#2--on-prem-runtime-engine--tooling) | ~9 |
 | 3 | [LLM Gateway, Routing & Cost](#3--llm-gateway-routing--cost) | ~24 |
 | 4 | [Evermind / SSM](#4--evermind--ssm) | ~19 (all blocked) |
-| 5 | [Brain & Chat](#5--brain--chat) | ~13 |
+| 5 | [Brain & Chat](#5--brain--chat) | ~14 (+1 Ask-the-Manager vendor-path narrowing 2026-07-31) |
 | 6 | [Workforce, Boards, Kanban & Ceremonies](#6--workforce-boards-kanban--ceremonies) | ~14 |
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | ~16 (lane-move actor attribution RESOLVED 2026-07-27 → DONE.md) |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | ~10 |
@@ -99,7 +99,7 @@
 | 12 | [VS Code Extension](#12--vs-code-extension) | ~9 (+3 VSIX harness 2026-07-25) |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | ~7 |
 | 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | ~20 (+2 formatting/RSC 2026-07-26) |
-| 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | ~20 (+9 Drizzle-migration residuals 2026-07-25, +5 missing agentic bounded contexts 2026-07-26 (3 of 8 SHIPPED → DONE.md), +3 build-guard/permissions 2026-07-26, +4 architecture-pass residuals 2026-07-26; the 8 DDD/SOLID/DRY items all SHIPPED → DONE.md) |
+| 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | ~21 (+1 flaky api full-suite vitest 2026-07-31, +9 Drizzle-migration residuals 2026-07-25, +5 missing agentic bounded contexts 2026-07-26 — 3 of 8 SHIPPED → DONE.md, +3 build-guard/permissions 2026-07-26, +4 architecture-pass residuals 2026-07-26; the 8 DDD/SOLID/DRY items all SHIPPED → DONE.md) |
 
 ---
 
@@ -325,6 +325,7 @@
 ### Ask-the-Manager — open verification after the persisted-persona repair (0379)
 
 - **Verify a live manager turn now emits tool calls on project 11 / chat 86.** The zero-tool-call capture (api 2026.7.172, `xai-oauth/grok-4.3`, 7 turns / 102 tools / 0 calls) is explained by the persisted persona reciting dead catalog ids — `ide_agents.bio` written by migration 0376, unreachable by the code fix — and repaired by `0379` + the tool-free persona (see DONE.md 2026-07-28). What that capture CANNOT distinguish is whether the vendor path also contributes: the same trace is produced by "the prompt named nothing callable" and by "this model/vendor will not tool-call here". The confirming evidence is a fresh Ask-the-Manager capture showing `tool calls: > 0`, taken at least five minutes after the deploy (the resolved persona is read-through cached, 300s KV / 60s L1). If it is STILL zero with a persona that names no tool, the remaining suspect is the xAI Responses path (`vendors/xaiOAuth.ts` → `responsesApi.ts`) — instrument `buildResponsesBody` against a real 102-tool payload rather than re-reading the prompt. **BLOCKER: needs a live turn.**
+- **ANSWERED on the prompt half, 2026-07-31 — the remaining suspect is now the live one.** A fresh capture (chat 86, api 2026.7.172+) came back at zero tool calls again, but its newest reply transcribed **`builtin_manager_digest`** — the ADVERTISED name — where the pre-0379 replies had recited `manager.digest`. That is positive evidence the persona repair took and the prompt names nothing dead, and it moves the whole remaining suspicion onto the vendor/model path. The report no longer conflates the two (`narratedToolNaming`; see DONE.md 2026-07-31). So the open item is narrowed: **instrument `buildResponsesBody` (`vendors/xaiOAuth.ts` → `responsesApi.ts`) against a real 102-tool payload** and confirm whether the tool array survives the Responses translation at that size — the model may never be seeing the definitions it is being asked to call. Note the same chat has since resolved onto `direct/meta/muse-spark-1.1`, so a repeat may not even be on xAI. **BLOCKER: needs a live turn on a known vendor + the request body as sent upstream.**
 
 ### Brain data tools — open question on chat #71
 
@@ -641,6 +642,10 @@
 ---
 
 ## 15 · 🛠️ Platform — DB, CI/CD, Migrations, Cost & Tech-debt
+
+### 🎲 `api` full-suite vitest run is FLAKY — a different file fails each run
+
+- **The full `pnpm --filter api test` run fails 1–2 tests, and it is a DIFFERENT file every time; each one passes in isolation.** Observed 2026-07-31 across three consecutive full runs of 4,283 tests: run 1 failed `manager/staffUnfilledLanes.test.ts` (3 assertions) + `manager/stallTriage.test.ts`; run 2 failed `infrastructure/database/orderByNullPlacement.test.ts`; the failing files then passed cleanly on their own (`staffUnfilledLanes` 33/33, the whole `manager` dir 422/422, `orderByNullPlacement` 2/2). The failures are not assertion drift — the same assertion passes seconds later — so a green isolated run proves nothing about CI, and a red CI run cannot currently be trusted to mean a real regression. Both suspects are cheap to check first: the run reports ~820s of *import* time against 108s wall-clock, so worker-pool contention is plausible; and several of the affected files read SOURCE off disk (`orderByNullPlacement` scans schema files, the manager tests build fixtures), which under that I/O load is the classic partial-read. Fix: run with `--pool=threads --poolOptions.threads.singleThread` and with `--sequence.shuffle=false` to see whether it is concurrency or ordering, then isolate whichever module-global the setup file is not resetting. Unblocks: trusting CI on this package at all. **BLOCKER: not reproducible on demand — it needs several full runs to catch, and the failing file is different each time, so there is no single case to bisect yet.**
 
 ### 💤 Neon compute cost — KV cron work-gate residuals
 
