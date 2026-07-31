@@ -68,8 +68,10 @@ export function InputModeForm({
 
   const wrappedSubmit = useCallback(
     async (payload: Record<string, unknown>) => {
-      const response = await onSubmit(payload);
-      onSuccess?.(response);
+      await onSubmit(payload);
+      // FR-4.3: Both modes route to the same confirmation screen on success
+      // onSuccess is called with the payload for display on confirmation screen
+      onSuccess?.(payload);
     },
     [onSubmit, onSuccess],
   );
