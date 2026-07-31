@@ -32,6 +32,12 @@ const built: Array<Record<string, unknown>> = [];
 let upstream: { status: number; body: string } = { status: 200, body: '{"ok":true}' };
 /** Models `.complete()` was asked to dispatch. */
 const dispatched: string[] = [];
+/** Hook to change `upstream` between attempts — how a transient failure is modelled. */
+let onDispatch: ((attempt: number) => void) | null = null;
+/** The per-attempt status/detail the gateway reports in `failovers[0]`, which is where the
+ *  REAL upstream status lives when the envelope is a rolled-up cascade summary. */
+let failoverStatus: number | null = null;
+let failoverDetail: string | null = null;
 
 vi.mock('./LlmProxyService', async () => {
   const actual = await vi.importActual<typeof import('./LlmProxyService')>('./LlmProxyService');
@@ -42,11 +48,20 @@ vi.mock('./LlmProxyService', async () => {
       return {
         complete: vi.fn(async (body: { model: string }) => {
           dispatched.push(body.model);
+          onDispatch?.(dispatched.length);
+          const failed = upstream.status >= 400;
           return {
             response: new Response(upstream.body, { status: upstream.status }),
             resolvedModel: body.model,
             resolvedVendor: 'openrouter',
-            failovers: [],
+            failovers: failed
+              ? [{
+                  model: body.model,
+                  vendor: 'openrouter',
+                  code: failoverStatus ?? upstream.status,
+                  ...(failoverDetail ? { detail: failoverDetail } : {}),
+                }]
+              : [],
           };
         }),
       };
@@ -65,6 +80,9 @@ beforeEach(() => {
   dispatched.length = 0;
   for (const key of Object.keys(resolvedKeys)) delete resolvedKeys[key];
   upstream = { status: 200, body: '{"ok":true}' };
+  onDispatch = null;
+  failoverStatus = null;
+  failoverDetail = null;
   _resetMemoryProviderAuthAlerts();
 });
 
@@ -128,6 +146,61 @@ describe('probeOpenRouterConnection', () => {
 
     expect(result).toMatchObject({ ok: false, status: 'failed', upstreamStatus: 401 });
     expect(result.error).toContain('No auth credentials found');
+  });
+
+  it('does NOT re-send a rejected credential — one 401 is the whole answer', async () => {
+    connections.push({ id: 20, label: 'Rejected', models: ['openai/gpt-4.1'], hasKey: false, priority: null });
+    upstream = { status: 401, body: 'invalid api key' };
+
+    await probeOpenRouterConnection(env, 7, 20);
+
+    // Retrying would spend the owner's money twice to learn the same thing.
+    expect(dispatched).toHaveLength(1);
+  });
+
+  it('retries a transient upstream failure once and reports READY when it clears', async () => {
+    // The live case: the key worked, OpenRouter routed it, and Moonshot returned 502. One
+    // flaky response must not be reported as a broken connection.
+    connections.push({ id: 21, label: 'Flaky', models: ['moonshotai/kimi-k3'], hasKey: false, priority: null });
+    upstream = { status: 502, body: 'provider error' };
+    onDispatch = (n) => { if (n === 2) upstream = { status: 200, body: '{"ok":true}' }; };
+
+    const result = await probeOpenRouterConnection(env, 7, 21);
+
+    expect(dispatched).toHaveLength(2);
+    expect(result).toMatchObject({ ok: true, status: 'ready' });
+  });
+
+  it('calls a persistent 502 an UPSTREAM error, not a failed connection', async () => {
+    connections.push({ id: 22, label: 'Down', models: ['moonshotai/kimi-k3'], hasKey: true, priority: null });
+    resolvedKeys['moonshotai/kimi-k3'] = 'sk-or-tenant';
+    upstream = { status: 502, body: 'provider error' };
+
+    const result = await probeOpenRouterConnection(env, 7, 22);
+
+    expect(dispatched).toHaveLength(2);
+    // The credential was ACCEPTED. Nothing here is the owner's to fix, so no alert is
+    // recorded and the card must not go red.
+    expect(result).toMatchObject({ ok: false, status: 'upstream_error', upstreamStatus: 502, ownKey: true });
+    expect(result.alert).toBeUndefined();
+    await expect(loadConnectionAuthAlert(env, 7, 22)).resolves.toBeNull();
+  });
+
+  it('reports the provider status, not the gateway cascade envelope', async () => {
+    connections.push({ id: 23, label: 'Enveloped', models: ['moonshotai/kimi-k3'], hasKey: false, priority: null });
+    // What the gateway actually returns for an exhausted strict pin: a 429 envelope whose
+    // prose names our routing internals, wrapping the real 502 in the attempt.
+    upstream = { status: 429, body: JSON.stringify({ error: { message: 'AI vendor cascade exhausted (1 attempts: openrouter/openrouter/moonshotai/kimi-k3=502)' } }) };
+    failoverStatus = 502;
+    failoverDetail = 'Provider returned error';
+
+    const result = await probeOpenRouterConnection(env, 7, 23);
+
+    expect(result.upstreamStatus).toBe(502);
+    expect(result.error).toBe('Provider returned error');
+    // The doubled internal ref is exactly what an operator should never be shown.
+    expect(result.error).not.toContain('openrouter/openrouter');
+    expect(result.error).not.toContain('cascade exhausted');
   });
 
   it('persists a rejected registration so the card stops claiming it is fine', async () => {

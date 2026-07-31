@@ -22,6 +22,22 @@ Files: `packages/agent-stall/src/index.ts` (+`modelFallback` merged in, `brain-e
 
 ---
 
+## 2026-07-30 — ✅ RESOLVED: a working OpenRouter connection was reported as broken, and its model order was unsettable (api 2026.7.196, ui 2026.7.149)
+
+Follow-up to the health work below, driven by a live run: the Test button on a "Kimi (open router)" registration returned `AI vendor cascade exhausted (1 attempts: openrouter/openrouter/moonshotai/kimi-k3=502)`. The OpenRouter dashboard for the same key proved the probe was **correct end-to-end** — key used, model routed, tenant billed 15 seconds earlier. What was wrong was everything the operator was then told.
+
+**A transient upstream failure was reported as a broken connection.** A strict pin makes one attempt by design (that is what keeps the verdict about the credential under test), so a single 502 from Moonshot became a red card on a registration that works. `dispatchProbe` now retries **once**, and only when the failure is the transient class (`CASCADE_STATUSES` ∪ status 0) with no owner-actionable alert — never a 401/403, where re-sending would spend the owner's money twice to learn the same thing. A failure that survives the retry is reported as `upstream_error`, a new verdict distinct from `failed`: amber not red, `toast.warning` not `toast.error`, no alert recorded, and copy that leads with *your key worked* before naming the model and status. "Your key is dead" and "the model provider had a bad minute" demand opposite reactions, and collapsing them into "failed" is how a working account gets condemned.
+
+**The message stated our routing internals.** The gateway's cascade envelope wraps the real status, so the operator saw a 429/`cascade exhausted` summary printing the internal `<vendor>/<ref>` form as `openrouter/openrouter/moonshotai/kimi-k3` — twice. A strict pin has exactly ONE attempt, so the probe now reads status and detail straight off `failovers[0]` and keeps the envelope prose only as a fallback.
+
+**Testing spends real money and never said so.** A probe is a genuine upstream request billed to the account under test; an operator should not discover that from their provider's spend dashboard. `ProbeCostNote` says it next to every Test button, provider cards included.
+
+**Model order was routing the user could not set.** Position 1 in a registration IS the cascade seed — what agents run and what the probe tests — but the only editor was a checkbox list over ~400 catalog rows, which can express *which* models and never *which first*. The selection now gets a ranked editor with ↑/↓, a "leads" badge and per-row remove, built on `ReorderableList` extracted from `PrecedencePanel` — the same idiom, since account precedence and model order are the same "position 1 wins" contract.
+
+Files: `api/src/application/llm/byoCredentialHealth.ts`, `presentation/routes/llmRoutes.ts`, `frontend/src/components/ProviderKeysSettings.tsx`, `frontend/src/lib/builderforceApi.ts`, all five i18n catalogs. Tests: `byoCredentialHealth.openRouter.test.ts` (15, +4 for retry/upstream/envelope), `ProviderKeysSettings.openRouter.test.tsx` (7, +2 for reorder/remove).
+
+---
+
 ## 2026-07-30 — ✅ RESOLVED: OpenRouter connections had no health at all — no Test button, no alert, no sweep (api 2026.7.193, ui 2026.7.145)
 
 An OpenRouter registration (0382) is rankable BYO with no provider row, and every credential-health surface was keyed by `LlmProvider`. So a connection whose own `sk-or-…` key was revoked, rotated or out of credit raised nothing, showed nothing, and was never probed — the tenant found out when the cascade quietly failed over onto the operator key and their agents stopped using the account they were paying for. The provider cards had earned an answer to "is this actually working?" the day a page of green chips sat next to a failing Test button; connections were still living in the world before that.
