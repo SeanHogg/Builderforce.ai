@@ -182,8 +182,6 @@ export enum Gaps {
   O4_A = "GAP-O4-A",
   /** Reaper not detecting stalled executions within deadline window (P1). */
   O4_B = "GAP-O4-B",
-  /** Reaper emitting false-positive dead-execution marks (P1). */
-  O4_C = "GAP-O4-C",
 }
 
 /**
