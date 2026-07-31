@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl';
 import { MermaidDiagram } from './MermaidDiagram';
 import { downloadText } from '@/lib/download';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
+import { splitThinkSegments } from '@seanhogg/builderforce-brain-ui';
 
 /** Fences whose content is a file the user will want to keep, → its extension. */
 const SAVEABLE_FENCE: Record<string, { ext: string; mime: string }> = {
@@ -52,13 +53,15 @@ export function ChatMessageContent({
 }: ChatMessageContentProps) {
   const router = useRouter();
   const t = useTranslations('chatMessage');
+  const segments = splitThinkSegments(content);
   const components: Components = {
     code({ node, className, children, ...props }) {
-      const isBlock = className != null;
+      const raw = String(children ?? '');
+      const isBlock = className != null || raw.endsWith('\n');
       if (isBlock) {
         const match = /language-([\w./-]+)/.exec(className ?? '');
         const lang = match ? match[1] : '';
-        const code = String(children).replace(/\n$/, '');
+        const code = raw.replace(/\n$/, '');
         // Render Mermaid fences as diagrams (benefits Brain/IDE chat too).
         if (lang === 'mermaid') {
           return <MermaidDiagram code={code} />;
@@ -160,9 +163,18 @@ export function ChatMessageContent({
 
   return (
     <div style={{ wordBreak: 'break-word' }} className="chat-message-markdown">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {content}
-      </ReactMarkdown>
+      {segments.map((segment, index) => segment.kind === 'thought' ? (
+        <details key={`${segment.kind}-${index}`} style={{ margin: '6px 0 10px', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+          <summary style={{ cursor: 'pointer', userSelect: 'none', fontStyle: 'italic' }}>Thought</summary>
+          <div style={{ margin: '6px 0 0 12px', paddingLeft: 10, borderLeft: '2px solid var(--border-subtle)' }}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{segment.content}</ReactMarkdown>
+          </div>
+        </details>
+      ) : (
+        <ReactMarkdown key={`${segment.kind}-${index}`} remarkPlugins={[remarkGfm]} components={components}>
+          {segment.content}
+        </ReactMarkdown>
+      ))}
     </div>
   );
 }

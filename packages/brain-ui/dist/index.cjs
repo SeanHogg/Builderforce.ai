@@ -67,6 +67,7 @@ __export(src_exports, {
   parseAskUser: () => parseAskUser,
   selectPendingAskUser: () => selectPendingAskUser,
   serializeAskUser: () => serializeAskUser,
+  splitThinkSegments: () => splitThinkSegments,
   streamingNode: () => streamingNode,
   stripAskUser: () => stripAskUser,
   useChatParticipants: () => useChatParticipants,
@@ -82,6 +83,29 @@ var import_builderforce_brain_embedded2 = require("@seanhogg/builderforce-brain-
 var import_react = __toESM(require("react"), 1);
 var import_react_markdown = __toESM(require("react-markdown"), 1);
 var import_remark_gfm = __toESM(require("remark-gfm"), 1);
+
+// src/thinkBlocks.ts
+function splitThinkSegments(content) {
+  if (!/<\/?think\s*>/i.test(content)) return [{ kind: "answer", content }];
+  const segments = [];
+  const tags = /<\/?think\s*>/gi;
+  let kind = "answer";
+  let offset = 0;
+  let match;
+  const push = (end) => {
+    const value = content.slice(offset, end).trim();
+    if (value) segments.push({ kind, content: value });
+  };
+  while ((match = tags.exec(content)) !== null) {
+    push(match.index);
+    kind = match[0].startsWith("</") ? "answer" : "thought";
+    offset = match.index + match[0].length;
+  }
+  push(content.length);
+  return segments.length > 0 ? segments : [{ kind: "answer", content }];
+}
+
+// src/Markdown.tsx
 var import_jsx_runtime = require("react/jsx-runtime");
 var DEFAULT_LABELS = { copy: "Copy", copied: "Copied", apply: "Apply", createFile: "Create file" };
 function detectPath(code) {
@@ -120,44 +144,42 @@ function CodeBlock({
 }
 function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, labels }) {
   const lab = (0, import_react.useMemo)(() => ({ ...DEFAULT_LABELS, ...labels }), [labels]);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "bf-md", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-    import_react_markdown.default,
-    {
-      remarkPlugins: [import_remark_gfm.default],
-      components: {
-        a({ href, children, ...rest }) {
-          const target = href ?? "";
-          if (target && !isExternal(target) && onInternalLink) {
-            return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "a",
-              {
-                href: target,
-                onClick: (e) => {
-                  e.preventDefault();
-                  onInternalLink(target);
-                },
-                ...rest,
-                children
-              }
-            );
+  const segments = (0, import_react.useMemo)(() => splitThinkSegments(content), [content]);
+  const components = {
+    a({ href, children, ...rest }) {
+      const target = href ?? "";
+      if (target && !isExternal(target) && onInternalLink) {
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "a",
+          {
+            href: target,
+            onClick: (e) => {
+              e.preventDefault();
+              onInternalLink(target);
+            },
+            ...rest,
+            children
           }
-          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: target, target: "_blank", rel: "noopener noreferrer", ...rest, children });
-        },
-        code(props) {
-          const { inline, className, children } = props;
-          const text2 = String(children ?? "").replace(/\n$/, "");
-          if (inline || !className && !text2.includes("\n")) {
-            return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { className: "bf-md__inline", children });
-          }
-          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CodeBlock, { code: text2, onApplyCode, onCreateFile, labels: lab });
-        },
-        pre({ children }) {
-          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_jsx_runtime.Fragment, { children });
-        }
-      },
-      children: content
+        );
+      }
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: target, target: "_blank", rel: "noopener noreferrer", ...rest, children });
+    },
+    code(props) {
+      const { className, children } = props;
+      const raw = String(children ?? "");
+      const text2 = raw.replace(/\n$/, "");
+      const isBlock = className != null || raw.endsWith("\n");
+      if (!isBlock) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { className: "bf-md__inline", children });
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CodeBlock, { code: text2, onApplyCode, onCreateFile, labels: lab });
+    },
+    pre({ children }) {
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_jsx_runtime.Fragment, { children });
     }
-  ) });
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "bf-md", children: segments.map((segment, index) => segment.kind === "thought" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("details", { className: "bf-md__think", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("summary", { children: "Thought" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "bf-md__think-body", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react_markdown.default, { remarkPlugins: [import_remark_gfm.default], components, children: segment.content }) })
+  ] }, `${segment.kind}-${index}`) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react_markdown.default, { remarkPlugins: [import_remark_gfm.default], components, children: segment.content }, `${segment.kind}-${index}`)) });
 }
 var Markdown = import_react.default.memo(MarkdownInner);
 
@@ -4039,6 +4061,7 @@ function Row2({ item, onAction }) {
   parseAskUser,
   selectPendingAskUser,
   serializeAskUser,
+  splitThinkSegments,
   streamingNode,
   stripAskUser,
   useChatParticipants,

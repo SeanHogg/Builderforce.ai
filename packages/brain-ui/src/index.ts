@@ -12,6 +12,8 @@ export type { BrainTimelineProps, BrainTimelineLabels } from './BrainTimeline';
 
 export { Markdown } from './Markdown';
 export type { MarkdownProps, MarkdownLabels } from './Markdown';
+export { splitThinkSegments } from './thinkBlocks';
+export type { ThinkSegment } from './thinkBlocks';
 
 export {
   QuestionCard,

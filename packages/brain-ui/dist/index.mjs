@@ -6,6 +6,29 @@ import { parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance } fr
 import React, { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+// src/thinkBlocks.ts
+function splitThinkSegments(content) {
+  if (!/<\/?think\s*>/i.test(content)) return [{ kind: "answer", content }];
+  const segments = [];
+  const tags = /<\/?think\s*>/gi;
+  let kind = "answer";
+  let offset = 0;
+  let match;
+  const push = (end) => {
+    const value = content.slice(offset, end).trim();
+    if (value) segments.push({ kind, content: value });
+  };
+  while ((match = tags.exec(content)) !== null) {
+    push(match.index);
+    kind = match[0].startsWith("</") ? "answer" : "thought";
+    offset = match.index + match[0].length;
+  }
+  push(content.length);
+  return segments.length > 0 ? segments : [{ kind: "answer", content }];
+}
+
+// src/Markdown.tsx
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 var DEFAULT_LABELS = { copy: "Copy", copied: "Copied", apply: "Apply", createFile: "Create file" };
 function detectPath(code) {
@@ -44,44 +67,42 @@ function CodeBlock({
 }
 function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, labels }) {
   const lab = useMemo(() => ({ ...DEFAULT_LABELS, ...labels }), [labels]);
-  return /* @__PURE__ */ jsx("div", { className: "bf-md", children: /* @__PURE__ */ jsx(
-    ReactMarkdown,
-    {
-      remarkPlugins: [remarkGfm],
-      components: {
-        a({ href, children, ...rest }) {
-          const target = href ?? "";
-          if (target && !isExternal(target) && onInternalLink) {
-            return /* @__PURE__ */ jsx(
-              "a",
-              {
-                href: target,
-                onClick: (e) => {
-                  e.preventDefault();
-                  onInternalLink(target);
-                },
-                ...rest,
-                children
-              }
-            );
+  const segments = useMemo(() => splitThinkSegments(content), [content]);
+  const components = {
+    a({ href, children, ...rest }) {
+      const target = href ?? "";
+      if (target && !isExternal(target) && onInternalLink) {
+        return /* @__PURE__ */ jsx(
+          "a",
+          {
+            href: target,
+            onClick: (e) => {
+              e.preventDefault();
+              onInternalLink(target);
+            },
+            ...rest,
+            children
           }
-          return /* @__PURE__ */ jsx("a", { href: target, target: "_blank", rel: "noopener noreferrer", ...rest, children });
-        },
-        code(props) {
-          const { inline, className, children } = props;
-          const text2 = String(children ?? "").replace(/\n$/, "");
-          if (inline || !className && !text2.includes("\n")) {
-            return /* @__PURE__ */ jsx("code", { className: "bf-md__inline", children });
-          }
-          return /* @__PURE__ */ jsx(CodeBlock, { code: text2, onApplyCode, onCreateFile, labels: lab });
-        },
-        pre({ children }) {
-          return /* @__PURE__ */ jsx(Fragment, { children });
-        }
-      },
-      children: content
+        );
+      }
+      return /* @__PURE__ */ jsx("a", { href: target, target: "_blank", rel: "noopener noreferrer", ...rest, children });
+    },
+    code(props) {
+      const { className, children } = props;
+      const raw = String(children ?? "");
+      const text2 = raw.replace(/\n$/, "");
+      const isBlock = className != null || raw.endsWith("\n");
+      if (!isBlock) return /* @__PURE__ */ jsx("code", { className: "bf-md__inline", children });
+      return /* @__PURE__ */ jsx(CodeBlock, { code: text2, onApplyCode, onCreateFile, labels: lab });
+    },
+    pre({ children }) {
+      return /* @__PURE__ */ jsx(Fragment, { children });
     }
-  ) });
+  };
+  return /* @__PURE__ */ jsx("div", { className: "bf-md", children: segments.map((segment, index) => segment.kind === "thought" ? /* @__PURE__ */ jsxs("details", { className: "bf-md__think", children: [
+    /* @__PURE__ */ jsx("summary", { children: "Thought" }),
+    /* @__PURE__ */ jsx("div", { className: "bf-md__think-body", children: /* @__PURE__ */ jsx(ReactMarkdown, { remarkPlugins: [remarkGfm], components, children: segment.content }) })
+  ] }, `${segment.kind}-${index}`) : /* @__PURE__ */ jsx(ReactMarkdown, { remarkPlugins: [remarkGfm], components, children: segment.content }, `${segment.kind}-${index}`)) });
 }
 var Markdown = React.memo(MarkdownInner);
 
@@ -3965,6 +3986,7 @@ export {
   parseAskUser,
   selectPendingAskUser,
   serializeAskUser,
+  splitThinkSegments,
   streamingNode,
   stripAskUser,
   useChatParticipants,
