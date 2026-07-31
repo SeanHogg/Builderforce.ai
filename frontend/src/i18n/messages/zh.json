@@ -264,6 +264,9 @@
       "migratable": "可迁移",
       "keyCount": "{count} 个密钥",
       "tapToConnect": "点击连接",
+      "dataConsumed": "已消耗数据量",
+      "thisMonth": "本月",
+      "confirmDisconnect": "确定断开 {label} 的连接吗？这将删除 {count} 个已保存的凭据并停止正在进行的同步。已导入的工作内容会保留。",
       "category": {
         "pm": "项目与工作管理",
         "scm": "源代码管理",
@@ -1089,7 +1092,16 @@
     "copy": "复制",
     "copied": "已复制",
     "copyFailed": "复制失败",
-    "copyDiagnostics": "复制诊断信息"
+    "copyDiagnostics": "复制诊断信息",
+    "connectToggle": {
+      "connect": "连接",
+      "disconnect": "断开连接",
+      "working": "处理中…",
+      "connectAria": "连接 {name}",
+      "disconnectAria": "断开 {name} 的连接",
+      "errorTitle": "无法断开 {name} 的连接",
+      "errorGeneric": "断开连接失败，请重试。"
+    }
   },
   "prdCreate": {
     "title": "新建 PRD",
@@ -8829,6 +8841,8 @@
       "connectedCount": "● {count} 个连接",
       "brokenCount": "{count} 个 OpenRouter 连接",
       "modelCount": "已选择 {count} 个模型",
+      "costOwnKey": "Builderforce 路由费用：{cost}。令牌费用由 OpenRouter 向您自己的账户收取。",
+      "costManaged": "由 Builderforce 计费：{cost}（路由 + 令牌）。",
       "ownKey": "您的 OpenRouter 密钥",
       "managedKey": "Builderforce 托管计费",
       "edit": "编辑",
@@ -8847,7 +8861,8 @@
       "validation": "请输入连接名称并至少选择一个模型。",
       "saveError": "无法保存 OpenRouter 连接",
       "removeError": "无法移除 OpenRouter 连接",
-      "confirmRemove": "移除 OpenRouter 连接“{label}”？"
+      "confirmRemove": "移除 OpenRouter 连接“{label}”？",
+      "confirmDisconnectAll": "确定断开 OpenRouter 吗？这将移除全部 {count} 个注册。使用它们的智能体将回退到 Builderforce 的托管模型。"
     },
     "status": {
       "connected": "● 已连接 {subscription}",
@@ -8882,6 +8897,8 @@
       "title": "提供商优先级",
       "subtitle": "当连接了多个账户时，云代理会优先使用排在最前面的提供商，并沿列表向下依次故障转移。将 Meta 排在首位即可让云代理通过它路由。",
       "leads": "首选",
+      "drag": "拖动以重新排序",
+      "rowLabel": "{provider}，第 {position} 位。拖动以重新排序。",
       "moveUp": "上移 {provider}",
       "moveDown": "下移 {provider}",
       "errSave": "保存优先级失败"
@@ -8928,7 +8945,7 @@
       "testing": "测试中…",
       "verified": "连接验证成功。",
       "verifiedWith": "已通过 {model} 验证连接。",
-      "usage": "最近 30 天：{requests} 次请求 · {tokens} 个令牌",
+      "usage": "最近 {days} 天：{requests} 次请求 · {tokens} 个令牌",
       "lastUsed": " · 上次使用 {when}",
       "failedFallback": "连接测试失败：{status}。",
       "failedGeneric": "连接测试失败",
@@ -8943,6 +8960,7 @@
         "revoked": "已撤销",
         "expired": "已过期",
         "undecryptable": "凭据无法读取",
+        "unsupported-auth": "已存储为订阅账户，但该提供商需要 API 密钥",
         "unavailable": "不可用",
         "failed": "失败",
         "upstream_error": "模型提供方出错",

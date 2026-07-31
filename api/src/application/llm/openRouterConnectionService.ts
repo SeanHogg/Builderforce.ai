@@ -221,6 +221,130 @@ export async function resolveOpenRouterConnectionKeys(env: Env, tenantId: number
   return out;
 }
 
+/** Rolling window every connection's usage strip reports over — the same 30 days the
+ *  provider credential drawer uses, so the two surfaces are comparable at a glance. */
+export const USAGE_WINDOW_DAYS = 30;
+
+/** What one registration consumed in the window. */
+export interface OpenRouterConnectionUsage {
+  requests: number;
+  tokens: number;
+  /**
+   * What BUILDERFORCE billed, in millicents (1/100000 USD).
+   *
+   * For a KEYED registration this is the flat routing surcharge only: OpenRouter charges the
+   * tenant's own account for the tokens, and that spend lives on their OpenRouter dashboard,
+   * not in our ledger (`computeRecordedCostMillicents` forces the token cost to 0 for a BYO
+   * row). For a managed-key registration it is surcharge + metered token cost. Labelling it
+   * "your OpenRouter spend" either way would be wrong for the case that matters most.
+   */
+  costMillicents: number;
+  lastUsedAt: string | null;
+}
+
+const usageCacheKey = (tenantId: number): string => `openrouter-model-usage:${tenantId}`;
+
+/** Per-model totals, keyed by the dispatched `openrouter/<id>` ref. */
+type ModelUsageRow = { requests: number; tokens: number; costMillicents: number; lastUsedAt: string | null };
+
+/**
+ * Usage for every OpenRouter-routed model this tenant has run in the window, keyed by ref.
+ *
+ * Deliberately keyed by MODEL and not by connection: the aggregate is then independent of the
+ * current registration set and its ORDER, so it stays correct (and cacheable) across a
+ * precedence edit, a rename, or a model being moved between registrations. Attribution to a
+ * connection happens in {@link attributeUsageToConnections}, in memory, per read.
+ *
+ * ONE grouped scan rather than a query per registration — a tenant may hold 20. The `LIKE`
+ * is a cheap prefilter, not the attribution rule: only ids a connection actually lists are
+ * ever assigned, so a pool model whose own OpenRouter org happens to be `openrouter/…`
+ * cannot be misattributed.
+ *
+ * Read-through cached for 60s: this rides the settings list read, which the drawer re-reads
+ * on every open, while the underlying counters move continuously — a short window collapses
+ * the burst without ever showing a number that is meaningfully stale.
+ */
+async function openRouterModelUsage(env: Env, tenantId: number): Promise<Record<string, ModelUsageRow>> {
+  return getOrSetCached(env, usageCacheKey(tenantId), async () => {
+    try {
+      const db = buildDatabase(env);
+      const result = await db.execute(sql`
+        SELECT model,
+               COUNT(*)::int                          AS requests,
+               COALESCE(SUM(total_tokens), 0)::bigint AS tokens,
+               COALESCE(SUM(cost_usd_millicents), 0)::bigint AS cost_millicents,
+               MAX(created_at)                        AS last_used_at
+        FROM llm_usage_log
+        WHERE tenant_id = ${tenantId}
+          AND model LIKE 'openrouter/%'
+          AND created_at >= NOW() - (${USAGE_WINDOW_DAYS} || ' days')::interval
+        GROUP BY model
+      `);
+      const out: Record<string, ModelUsageRow> = {};
+      for (const raw of (result.rows ?? []) as Array<Record<string, unknown>>) {
+        out[String(raw.model)] = {
+          requests: Number(raw.requests ?? 0),
+          tokens: Number(raw.tokens ?? 0),
+          costMillicents: Number(raw.cost_millicents ?? 0),
+          lastUsedAt: raw.last_used_at ? new Date(raw.last_used_at as string).toISOString() : null,
+        };
+      }
+      return out;
+    } catch (error) {
+      // Usage is an ENRICHMENT on the connection list. A failed read must degrade to "no
+      // usage yet", never take down credential management with it.
+      reportCaughtError(error, { source: 'application/llm/openRouterConnectionService.ts', operation: 'openRouterModelUsage' });
+      return {};
+    }
+  }, { kvTtlSeconds: 60 });
+}
+
+/**
+ * Fold per-model usage onto the registrations that own those models.
+ *
+ * Uses the SAME first-claim rule as {@link connectionModelRefs} and
+ * {@link resolveOpenRouterConnectionKeys}: when two registrations list the same id, the
+ * higher-priority one owns it. Any other rule would double-count a shared model and report a
+ * tenant more consumption than they had.
+ *
+ * Pure, so the ordering rule is testable without a database.
+ */
+export function attributeUsageToConnections(
+  connections: readonly OpenRouterConnection[],
+  modelUsage: Readonly<Record<string, ModelUsageRow>>,
+): Record<number, OpenRouterConnectionUsage> {
+  const claimed = new Set<string>();
+  const out: Record<number, OpenRouterConnectionUsage> = {};
+  for (const connection of connections) {
+    const total: OpenRouterConnectionUsage = { requests: 0, tokens: 0, costMillicents: 0, lastUsedAt: null };
+    for (const model of connection.models) {
+      const ref = connectionModelRef(model);
+      if (claimed.has(ref)) continue;
+      claimed.add(ref);
+      const row = modelUsage[ref];
+      if (!row) continue;
+      total.requests += row.requests;
+      total.tokens += row.tokens;
+      total.costMillicents += row.costMillicents;
+      if (row.lastUsedAt && (!total.lastUsedAt || row.lastUsedAt > total.lastUsedAt)) {
+        total.lastUsedAt = row.lastUsedAt;
+      }
+    }
+    out[connection.id] = total;
+  }
+  return out;
+}
+
+/** Usage per registration for one tenant — the composition every consumer calls. */
+export async function openRouterConnectionUsage(
+  env: Env,
+  tenantId: number,
+  connections: readonly OpenRouterConnection[],
+): Promise<Record<number, OpenRouterConnectionUsage>> {
+  if (connections.length === 0) return {};
+  return attributeUsageToConnections(connections, await openRouterModelUsage(env, tenantId));
+}
+
 export interface UpsertOpenRouterConnectionInput {
   /** Omit to CREATE; supply to update that connection in place. */
   id?: number;

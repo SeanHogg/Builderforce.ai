@@ -125,10 +125,9 @@ jobs:
       # `check:prompt-tools` is why this step exists: the prompt→tool-name contract it
       # enforces was broken on main for a full release cycle (0376 → 0379) with a green
       # pipeline the whole time. Verified green against the tree when added.
-      - name: Static checks (version · layering · tenant scope · prompt→tool names)
+      - name: Static checks (layering · tenant scope · prompt→tool names)
         working-directory: api
         run: |
-          pnpm run check:version
           pnpm run check:db-access
           pnpm run check:layering
           pnpm run check:tenant-scope

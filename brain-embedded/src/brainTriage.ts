@@ -395,6 +395,8 @@ export function byoReasonHint(reason: string): string {
       return 'its token expired and the refresh failed (often transient) — retry, or reconnect it under Settings ▸ API Keys';
     case 'undecryptable':
       return 'its stored credential could not be read — re-enter it under Settings ▸ API Keys';
+    case 'unsupported-auth':
+      return 'it is stored as a subscription (OAuth) but this provider only supports an API key — re-connect it with an API key under Settings ▸ API Keys';
     case 'other-workspace':
       return 'you connected this account in a DIFFERENT workspace — switch to that workspace, or connect it in this one under Settings ▸ API Keys';
     default:

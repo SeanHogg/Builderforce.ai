@@ -5,7 +5,11 @@ import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useToast } from '@/components/ToastProvider';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { ClickableCard } from '@/components/ClickableCard';
+import { ConnectToggleButton } from '@/components/integrations/ConnectToggleButton';
+import { millicentsToUsd } from '@/lib/spendLimits';
 import { ConsumptionMeterCard } from '@/components/UsageMeter';
+import { useDragReorder } from '@/lib/useDragReorder';
 import {
   llmApi,
   openRouterConnectionsApi,
@@ -86,6 +90,14 @@ const dividerLine: React.CSSProperties = { flex: 1, height: 1, background: 'var(
 
 type TFn = ReturnType<typeof useTranslations>;
 
+/** Ledger millicents → a displayable USD amount. Sub-cent spend is real (the routing
+ *  surcharge is 1¢/request, token costs are fractions), so it keeps 4 decimals rather than
+ *  rounding a month of genuine usage to "$0.00". */
+function formatUsd(millicents: number): string {
+  const usd = millicentsToUsd(millicents);
+  return `$${usd >= 0.01 || usd === 0 ? usd.toFixed(2) : usd.toFixed(4)}`;
+}
+
 /** Provider display label by id — literal brand names (not translated). */
 const PROVIDER_LABEL: Record<LlmProvider, string> = {
   anthropic: 'Anthropic (Claude)',
@@ -147,6 +159,9 @@ function precedenceLeaderLabel(
  *
  * `onRemove` is optional: precedence rows are removed by disconnecting the account, while a
  * model row can be dropped from the registration in place.
+ *
+ * Reordering is drag-first (shared {@link useDragReorder}) with the ↑/↓ buttons kept as the
+ * keyboard- and touch-accessible path — native HTML5 drag fires on neither.
  */
 function ReorderableList({
   keys,
@@ -162,24 +177,27 @@ function ReorderableList({
   t: TFn;
 }) {
   const labelFor = (key: string) => labels[key] ?? key;
-  const move = (index: number, dir: -1 | 1) => {
-    const target = index + dir;
-    if (target < 0 || target >= keys.length) return;
-    const next = [...keys];
-    [next[index], next[target]] = [next[target], next[index]];
-    onReorder(next);
-  };
+  const drag = useDragReorder(keys, onReorder);
 
   return (
     <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
       {keys.map((key, i) => (
         <li
           key={key}
+          {...drag.dragHandleProps(key)}
+          {...drag.dropTargetProps(key)}
+          aria-label={t('precedence.rowLabel', { provider: labelFor(key), position: i + 1 })}
           style={{
             display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', flexWrap: 'wrap',
             background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8,
+            cursor: 'grab', opacity: drag.draggingKey === key ? 0.4 : 1,
+            outline: drag.dropKey === key ? '2px dashed var(--coral-bright, #f4726e)' : 'none',
+            outlineOffset: 2, transition: 'opacity 120ms ease',
           }}
         >
+          {/* Affordance only — the whole row is the drag source, so the grip needs no
+              handlers of its own (and must not steal the row's aria-label). */}
+          <span aria-hidden="true" title={t('precedence.drag')} style={{ fontSize: 13, lineHeight: 1, color: 'var(--text-muted)' }}>⠿</span>
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', minWidth: 18, textAlign: 'center' }}>{i + 1}</span>
           <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', minWidth: 0, wordBreak: 'break-word' }}>
             {labelFor(key)}
@@ -191,7 +209,7 @@ function ReorderableList({
           )}
           <button
             type="button"
-            onClick={() => move(i, -1)}
+            onClick={() => drag.nudge(key, -1)}
             disabled={i === 0}
             aria-label={t('precedence.moveUp', { provider: labelFor(key) })}
             style={{ ...buttonPrimary, padding: '2px 9px', opacity: i === 0 ? 0.4 : 1 }}
@@ -200,7 +218,7 @@ function ReorderableList({
           </button>
           <button
             type="button"
-            onClick={() => move(i, 1)}
+            onClick={() => drag.nudge(key, 1)}
             disabled={i === keys.length - 1}
             aria-label={t('precedence.moveDown', { provider: labelFor(key) })}
             style={{ ...buttonPrimary, padding: '2px 9px', opacity: i === keys.length - 1 ? 0.4 : 1 }}
@@ -328,6 +346,40 @@ function ProbeResultLine({ result }: { result: ProbeVerdict }) {
   );
 }
 
+/**
+ * "What has this account actually served?" — the consumption line, shared by the provider
+ * drawer and every OpenRouter registration.
+ *
+ * Health and USAGE are different questions and an operator needs both: a registration can be
+ * perfectly healthy and have served nothing for a month (wrong model order, out-ranked by a
+ * higher-precedence account), which no green chip will ever tell you. The window is passed in
+ * rather than baked into the copy so both surfaces report the period their own API measured.
+ */
+function UsageStrip({
+  t, days, requests, tokens, lastUsedAt, children,
+}: {
+  t: TFn;
+  days: number;
+  requests: number;
+  tokens: number;
+  lastUsedAt: string | null;
+  /** Extra billing detail appended by a caller that has one (an OpenRouter registration
+   *  knows whose money paid; a provider credential does not). */
+  children?: React.ReactNode;
+}) {
+  return (
+    <div style={{ fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+      {t('diagnostic.usage', {
+        days,
+        requests: requests.toLocaleString(),
+        tokens: tokens.toLocaleString(),
+      })}
+      {lastUsedAt ? t('diagnostic.lastUsed', { when: new Date(lastUsedAt).toLocaleString() }) : ''}
+      {children}
+    </div>
+  );
+}
+
 /** "This costs real money" — shown wherever a Test button is, because a probe is a genuine
  *  upstream request billed to the account under test, and an operator who clicks it should
  *  not discover that from their provider's spend dashboard afterwards. */
@@ -413,6 +465,29 @@ function ProviderStatusChip({
 }
 
 /**
+ * THE disconnect action for one BYO provider account — the confirm wording and the removal
+ * call in a single place, shared by the grid card's Disconnect button and the drawer's.
+ *
+ * What an operator loses differs by how the account was connected (a Pro/Max subscription
+ * vs a pasted key), so the wording branches; the moment two surfaces branch on that
+ * separately they start warning about different consequences for the same click.
+ *
+ * Resolves `false` when the operator cancels, `true` once the credential is gone, and
+ * throws when removal fails so each surface reports it the way it reports its other errors.
+ */
+function useProviderDisconnect(t: TFn) {
+  const confirm = useConfirm();
+  return async (config: ProviderConfig, authType: ProviderAuthType | null): Promise<boolean> => {
+    const message = authType === 'oauth'
+      ? t('confirmRemoveSubscription', { subscription: config.supportsOauth ? t(`provider.${config.id}.subscription`) : config.label })
+      : t('confirmRemoveKey', { label: config.label });
+    if (!(await confirm({ message, destructive: true }))) return false;
+    await providerKeysApi.remove(config.id);
+    return true;
+  };
+}
+
+/**
  * One provider's connect card. Owns its own draft/busy/connect state and decides
  * its own UI from the provider config (OAuth block only when supported). Reports
  * the resolved auth type up so the parent's status stays in one place.
@@ -440,7 +515,7 @@ function ProviderConnectionCard({
   const [diagnostic, setDiagnostic] = useState<ProviderDiagnostic | null>(null);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<ProbeVerdict | null>(null);
-  const confirm = useConfirm();
+  const disconnect = useProviderDisconnect(t);
   const toast = useToast();
 
   const loadDiagnostic = () => providerKeysApi.status(config.id).then(setDiagnostic).catch((e: Error) => setError(e.message));
@@ -519,14 +594,9 @@ function ProviderConnectionCard({
   };
 
   const remove = async () => {
-    const msg = authType === 'oauth'
-      ? t('confirmRemoveSubscription', { subscription })
-      : t('confirmRemoveKey', { label: config.label });
-    if (!(await confirm(msg))) return;
     setBusy(true); setError(null);
     try {
-      await providerKeysApi.remove(config.id);
-      onChange(null);
+      if (await disconnect(config, authType)) onChange(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('errRemove'));
     } finally {
@@ -551,13 +621,13 @@ function ProviderConnectionCard({
             {testing ? t('diagnostic.testing') : t('diagnostic.test')}
           </button>
         </div>
-        <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-          {t('diagnostic.usage', {
-            requests: (diagnostic?.usage.requests ?? 0).toLocaleString(),
-            tokens: (diagnostic?.usage.tokens ?? 0).toLocaleString(),
-          })}
-          {diagnostic?.usage.lastUsedAt ? t('diagnostic.lastUsed', { when: new Date(diagnostic.usage.lastUsedAt).toLocaleString() }) : ''}
-        </div>
+        <UsageStrip
+          t={t}
+          days={diagnostic?.usage.periodDays ?? 30}
+          requests={diagnostic?.usage.requests ?? 0}
+          tokens={diagnostic?.usage.tokens ?? 0}
+          lastUsedAt={diagnostic?.usage.lastUsedAt ?? null}
+        />
         <ProbeCostNote t={t} />
         {testResult && <ProbeResultLine result={testResult} />}
         {/* Dispatch-observed rejection — the reason this "connected" account is not
@@ -640,11 +710,15 @@ function ProviderConnectionCard({
 
 function OpenRouterConnectionsPanel({
   connections,
+  usageWindowDays,
   onChanged,
   onHealthChange,
   t,
 }: {
   connections: OpenRouterConnection[];
+  /** Rolling window the server measured the usage over — reported rather than assumed, so
+   *  the copy can never claim a period the numbers don't cover. */
+  usageWindowDays: number;
   onChanged: () => Promise<unknown>;
   /** Report a fresh health verdict (from a probe) up so the grid card repaints too. */
   onHealthChange: (connectionId: number, alert: ConnectionAuthAlert | null) => void;
@@ -802,6 +876,29 @@ function OpenRouterConnectionsPanel({
               <div style={{ marginTop: 7, fontSize: 11.5, color: 'var(--text-secondary)', wordBreak: 'break-word' }}>
                 {connection.models.join(' → ')}
               </div>
+              {/* Consumption sits beside health because "healthy" and "being used" are
+                  different questions, and a registration that has served nothing in the
+                  window is its own kind of problem. */}
+              <div style={{ marginTop: 7 }}>
+                <UsageStrip
+                  t={t}
+                  days={usageWindowDays}
+                  requests={connection.usage?.requests ?? 0}
+                  tokens={connection.usage?.tokens ?? 0}
+                  lastUsedAt={connection.usage?.lastUsedAt ?? null}
+                >
+                  {/* WHOSE money, spelled out. On a keyed registration our ledger only ever
+                      holds the routing surcharge — the tokens are billed by OpenRouter to
+                      the tenant's own account and are visible on their dashboard, not ours.
+                      Printing one number without saying which is how "$0.02" gets read as
+                      the whole cost of the month. */}
+                  <span style={{ display: 'block', marginTop: 3 }}>
+                    {connection.hasKey
+                      ? t('openRouter.costOwnKey', { cost: formatUsd(connection.usage?.costMillicents ?? 0) })
+                      : t('openRouter.costManaged', { cost: formatUsd(connection.usage?.costMillicents ?? 0) })}
+                  </span>
+                </UsageStrip>
+              </div>
               {/* The registration is stored and looks healthy, but the gateway (or the daily
                   sweep) saw it rejected — the reason this "connected" account serves nothing. */}
               {connection.authAlert && <AuthAlertNotice alert={connection.authAlert} t={t} />}
@@ -908,12 +1005,17 @@ export function ProviderKeysSettings({
   onLeaderChange?: (leaderLabel: string | null) => void;
 }) {
   const t = useTranslations('providerKeys');
+  const confirm = useConfirm();
+  const disconnectProvider = useProviderDisconnect(t);
   const [authByProvider, setAuthByProvider] = useState<Partial<Record<LlmProvider, ProviderAuthType>>>({});
   // BYO precedence — connected providers, most-preferred first. Seeded from the backend
   // order (priority asc, unset last), then kept in sync as providers connect/disconnect.
   const [order, setOrder] = useState<string[]>([]);
   const [precedenceEntries, setPrecedenceEntries] = useState<ByoPrecedenceEntry[]>([]);
   const [openRouterConnections, setOpenRouterConnections] = useState<OpenRouterConnection[]>([]);
+  // Server-reported so the usage copy states the period the numbers actually cover; the
+  // 30-day default only applies before the first read lands.
+  const [usageWindowDays, setUsageWindowDays] = useState(30);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeProvider, setActiveProvider] = useState<LlmProvider | null>(null);
@@ -943,7 +1045,7 @@ export function ProviderKeysSettings({
           priority: detail.priority,
         }));
         const [connectionResult, precedenceResult] = await Promise.all([
-          openRouterConnectionsApi.list().catch(() => ({ connections: [] })),
+          openRouterConnectionsApi.list().catch(() => ({ connections: [], usageWindowDays: undefined })),
           openRouterConnectionsApi.precedence().catch(() => ({ entries: fallbackEntries })),
         ]);
         const map: Partial<Record<LlmProvider, ProviderAuthType>> = {};
@@ -955,6 +1057,7 @@ export function ProviderKeysSettings({
         setAuthByProvider(map);
         setAlertByProvider(alerts);
         setOpenRouterConnections(connectionResult.connections);
+        if (connectionResult.usageWindowDays) setUsageWindowDays(connectionResult.usageWindowDays);
         setPrecedenceEntries(precedenceResult.entries);
         const refs = precedenceResult.entries.map((entry) => entry.ref);
         setOrder(refs);
@@ -998,6 +1101,33 @@ export function ProviderKeysSettings({
       return healthy;
     }));
 
+  /**
+   * Reflect a connect/disconnect for ONE provider across everything this page derives from
+   * it: the auth map, its (now stale) alert, and its place in the precedence list. Shared by
+   * the drawer and the card's Disconnect button — a second copy is how the grid ends up
+   * still warning about an account that was just removed.
+   */
+  const applyAuthChange = (provider: LlmProvider, authType: ProviderAuthType | null) => {
+    setAuthByProvider((prev) => { const next = { ...prev }; if (authType === null) delete next[provider]; else next[provider] = authType; return next; });
+    // A reconnect/removal clears the server-side alert, so drop the local one too rather
+    // than leaving the card warning about work just done.
+    setAlertByProvider((prev) => { const next = { ...prev }; delete next[provider]; return next; });
+    syncOrder(provider, authType);
+    const nextOrder = authType === null ? order.filter((id) => id !== provider)
+      : order.includes(provider) ? order
+      : [...order, provider];
+    onLeaderChange?.(precedenceLeaderLabel(precedenceEntries, nextOrder));
+  };
+
+  /** Disconnect OpenRouter as a whole — the card states ONE connected/not-connected fact for
+   *  the registration set, so its Disconnect must clear the set. Per-registration removal
+   *  stays in the drawer, where each one is named. */
+  const disconnectOpenRouter = async () => {
+    if (!(await confirm({ message: t('openRouter.confirmDisconnectAll', { count: openRouterConnections.length }), destructive: true }))) return;
+    await Promise.all(openRouterConnections.map((connection) => openRouterConnectionsApi.remove(connection.id)));
+    await refresh();
+  };
+
   const brokenConnections = openRouterConnections.filter((connection) => connection.authAlert).length;
 
   const precedenceLabels: Record<string, string> = Object.fromEntries(
@@ -1017,30 +1147,39 @@ export function ProviderKeysSettings({
         <>
           <div style={viewMode === 'card' ? wrapStyle : { display: 'flex', flexDirection: 'column', gap: 10 }}>
             {(!search.trim() || 'openrouter models routing'.includes(search.trim().toLowerCase())) && (
-              <button type="button" onClick={() => setOpenRouterOpen(true)} style={{ ...cardStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: viewMode === 'table' ? 'row' : 'column', alignItems: viewMode === 'table' ? 'center' : 'stretch', gap: 10 }}>
+              <ClickableCard ariaLabel="OpenRouter" onClick={() => setOpenRouterOpen(true)} style={{ ...cardStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: viewMode === 'table' ? 'row' : 'column', alignItems: viewMode === 'table' ? 'center' : 'stretch', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={sectionTitle}>OpenRouter</div>
                   <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t('openRouter.cardBlurb')}</div>
                 </div>
-                {/* Registered ≠ working: a registration whose key was revoked or ran out of
-                    credit still stores and still lists, so a count alone would paint this
-                    green forever. A live alert downgrades it exactly as it does a provider. */}
-                <span style={{
-                  fontSize: 12, fontWeight: 650, whiteSpace: 'normal',
-                  color: brokenConnections ? 'var(--warning-text, #b45309)'
-                    : openRouterConnections.length ? 'rgba(34,197,94,0.9)'
-                    : 'var(--text-muted)',
-                }}>
-                  {brokenConnections
-                    ? t('status.needsAttention', { label: t('openRouter.brokenCount', { count: brokenConnections }) })
-                    : openRouterConnections.length
-                      ? t('openRouter.connectedCount', { count: openRouterConnections.length })
-                      : t('status.notConnected')}
-                </span>
-              </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  {/* Registered ≠ working: a registration whose key was revoked or ran out of
+                      credit still stores and still lists, so a count alone would paint this
+                      green forever. A live alert downgrades it exactly as it does a provider. */}
+                  <span style={{
+                    flex: 1, minWidth: 0,
+                    fontSize: 12, fontWeight: 650, whiteSpace: 'normal',
+                    color: brokenConnections ? 'var(--warning-text, #b45309)'
+                      : openRouterConnections.length ? 'rgba(34,197,94,0.9)'
+                      : 'var(--text-muted)',
+                  }}>
+                    {brokenConnections
+                      ? t('status.needsAttention', { label: t('openRouter.brokenCount', { count: brokenConnections }) })
+                      : openRouterConnections.length
+                        ? t('openRouter.connectedCount', { count: openRouterConnections.length })
+                        : t('status.notConnected')}
+                  </span>
+                  <ConnectToggleButton
+                    connected={openRouterConnections.length > 0}
+                    name="OpenRouter"
+                    onConnect={() => setOpenRouterOpen(true)}
+                    onDisconnect={disconnectOpenRouter}
+                  />
+                </div>
+              </ClickableCard>
             )}
             {visibleProviders.map((p) => (
-              <button key={p.id} type="button" onClick={() => setActiveProvider(p.id)} style={{ ...cardStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: viewMode === 'table' ? 'row' : 'column', alignItems: viewMode === 'table' ? 'center' : 'stretch', gap: 10 }}>
+              <ClickableCard key={p.id} ariaLabel={p.label} onClick={() => setActiveProvider(p.id)} style={{ ...cardStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: viewMode === 'table' ? 'row' : 'column', alignItems: viewMode === 'table' ? 'center' : 'stretch', gap: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={sectionTitle}>{p.label}</div>
@@ -1064,15 +1203,25 @@ export function ProviderKeysSettings({
                     />
                   )}
                 </div>
-                <ProviderStatusChip
-                  label={p.label}
-                  subscription={p.supportsOauth ? t(`provider.${p.id}.subscription`) : p.label}
-                  authType={authByProvider[p.id] ?? null}
-                  {...(alertByProvider[p.id] ? { alert: alertByProvider[p.id]! } : {})}
-                  t={t}
-                  style={{ whiteSpace: 'normal' }}
-                />
-              </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <ProviderStatusChip
+                    label={p.label}
+                    subscription={p.supportsOauth ? t(`provider.${p.id}.subscription`) : p.label}
+                    authType={authByProvider[p.id] ?? null}
+                    {...(alertByProvider[p.id] ? { alert: alertByProvider[p.id]! } : {})}
+                    t={t}
+                    style={{ flex: 1, minWidth: 0, whiteSpace: 'normal' }}
+                  />
+                  <ConnectToggleButton
+                    connected={authByProvider[p.id] != null}
+                    name={p.label}
+                    onConnect={() => setActiveProvider(p.id)}
+                    onDisconnect={async () => {
+                      if (await disconnectProvider(p, authByProvider[p.id] ?? null)) applyAuthChange(p.id, null);
+                    }}
+                  />
+                </div>
+              </ClickableCard>
             ))}
           </div>
 
@@ -1090,15 +1239,7 @@ export function ProviderKeysSettings({
                       if (alert) next[p.id] = alert; else delete next[p.id];
                       return next;
                     })}
-                    onChange={(authType) => {
-                      setAuthByProvider((prev) => { const next = { ...prev }; if (authType === null) delete next[p.id]; else next[p.id] = authType; return next; });
-                      // A reconnect/removal clears the server-side alert, so drop the local
-                      // one too rather than leaving the card warning about work just done.
-                      setAlertByProvider((prev) => { const next = { ...prev }; delete next[p.id]; return next; });
-                      syncOrder(p.id, authType);
-                      const nextOrder = authType === null ? order.filter((id) => id !== p.id) : order.includes(p.id) ? order : [...order, p.id];
-                      onLeaderChange?.(precedenceLeaderLabel(precedenceEntries, nextOrder));
-                    }}
+                    onChange={(authType) => applyAuthChange(p.id, authType)}
                   />
                 </div>
               </SlideOutPanel>
@@ -1109,6 +1250,7 @@ export function ProviderKeysSettings({
             <div style={{ padding: 20 }}>
               <OpenRouterConnectionsPanel
                 connections={openRouterConnections}
+                usageWindowDays={usageWindowDays}
                 t={t}
                 onChanged={refresh}
                 onHealthChange={applyConnectionAlert}

@@ -264,6 +264,9 @@
       "migratable": "Migration",
       "keyCount": "{count} key(s)",
       "tapToConnect": "Tap to connect",
+      "dataConsumed": "Data consumed",
+      "thisMonth": "This month",
+      "confirmDisconnect": "Disconnect {label}? This deletes {count} stored credential(s) and stops any ongoing sync. Work already imported stays.",
       "category": {
         "pm": "Project & work management",
         "scm": "Source control",
@@ -1089,7 +1092,16 @@
     "copy": "Copy",
     "copied": "Copied",
     "copyFailed": "Copy failed",
-    "copyDiagnostics": "Copy diagnostics"
+    "copyDiagnostics": "Copy diagnostics",
+    "connectToggle": {
+      "connect": "Connect",
+      "disconnect": "Disconnect",
+      "working": "Working…",
+      "connectAria": "Connect {name}",
+      "disconnectAria": "Disconnect {name}",
+      "errorTitle": "Couldn’t disconnect {name}",
+      "errorGeneric": "Disconnect failed. Try again."
+    }
   },
   "prdCreate": {
     "title": "New PRD",
@@ -8829,6 +8841,8 @@
       "connectedCount": "● {count} connection(s)",
       "brokenCount": "{count} OpenRouter connection(s)",
       "modelCount": "{count} selected model(s)",
+      "costOwnKey": "Builderforce routing charges: {cost}. OpenRouter bills your own account for the tokens.",
+      "costManaged": "Billed by Builderforce: {cost} (routing + tokens).",
       "ownKey": "Your OpenRouter key",
       "managedKey": "Builderforce managed billing",
       "edit": "Edit",
@@ -8847,7 +8861,8 @@
       "validation": "Enter a connection name and select at least one model.",
       "saveError": "Failed to save OpenRouter connection",
       "removeError": "Failed to remove OpenRouter connection",
-      "confirmRemove": "Remove the OpenRouter connection “{label}”?"
+      "confirmRemove": "Remove the OpenRouter connection “{label}”?",
+      "confirmDisconnectAll": "Disconnect OpenRouter? This removes all {count} registration(s). Agents using them fall back to Builderforce's managed models."
     },
     "status": {
       "connected": "● {subscription} connected",
@@ -8882,6 +8897,8 @@
       "title": "Provider priority",
       "subtitle": "When more than one of your accounts is connected, cloud agents lead with the provider at the top and fail over down the list. Put Meta first to route cloud agents through it.",
       "leads": "Leads",
+      "drag": "Drag to reorder",
+      "rowLabel": "{provider}, position {position}. Drag to reorder.",
       "moveUp": "Move {provider} up",
       "moveDown": "Move {provider} down",
       "errSave": "Failed to save priority"
@@ -8928,7 +8945,7 @@
       "testing": "Testing…",
       "verified": "Connection verified.",
       "verifiedWith": "Connection verified with {model}.",
-      "usage": "Last 30 days: {requests} requests · {tokens} tokens",
+      "usage": "Last {days} days: {requests} requests · {tokens} tokens",
       "lastUsed": " · Last used {when}",
       "failedFallback": "Connection test failed: {status}.",
       "failedGeneric": "Connection test failed",
@@ -8943,6 +8960,7 @@
         "revoked": "revoked",
         "expired": "expired",
         "undecryptable": "unreadable credential",
+        "unsupported-auth": "stored as a subscription, but this provider needs an API key",
         "unavailable": "unavailable",
         "failed": "failed",
         "upstream_error": "model provider error",

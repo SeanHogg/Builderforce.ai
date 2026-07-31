@@ -96,7 +96,7 @@ describe('ProviderKeysSettings — rejected-account prompt', () => {
     expect(await screen.findByText(/providerKeys\.authAlert\.xaiCapacity 403/)).toBeInTheDocument();
     expect(screen.getByText(/providerKeys\.status\.usageDepleted/)).toBeInTheDocument();
     expect(screen.queryByText(/providerKeys\.authAlert\.xaiNotEntitled/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText('xAI (Grok)').closest('button')!);
+    fireEvent.click(screen.getByText('xAI (Grok)').closest('[role="button"]')!);
     expect(await screen.findByText(/providerKeys\.diagnostic\.currentStatus providerKeys\.diagnostic\.state\.capacity/)).toBeInTheDocument();
   });
 
@@ -120,7 +120,7 @@ describe('ProviderKeysSettings — rejected-account prompt', () => {
       usage: { periodDays: 30, requests: 0, tokens: 0, lastUsedAt: null },
     }));
     render(<ProviderKeysSettings />);
-    fireEvent.click((await screen.findByText('xAI (Grok)')).closest('button')!);
+    fireEvent.click((await screen.findByText('xAI (Grok)')).closest('[role="button"]')!);
     expect(await screen.findByText(/providerKeys\.diagnostic\.currentStatus providerKeys\.diagnostic\.state\.needs_attention/)).toBeInTheDocument();
     expect(screen.getAllByText(/providerKeys\.authAlert\.xaiNotEntitled 403/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/providerKeys\.diagnostic\.currentStatus providerKeys\.diagnostic\.state\.ready/)).not.toBeInTheDocument();

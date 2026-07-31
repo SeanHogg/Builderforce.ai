@@ -136,14 +136,36 @@ export interface ResolvedByoCredentials {
  * gate, and the strict-pin gate — so what the gateway SEEDS can never name a vendor the
  * gateway then FILTERS OUT.
  */
+/**
+ * THE list of providers that can be connected as a consumer SUBSCRIPTION (OAuth), and how to
+ * tell whether that subscription resolved on a given credential set.
+ *
+ * One list, four readers (`resolvedAuthTypeFor`, `byoVendorIdsFromCredentials`,
+ * `providersFromCredentials`, and the `unsupported-auth` classification in
+ * {@link resolveTenantLlmCredentials}). Each reader used to re-spell the same three
+ * `provider === … && creds.<field>` lines, so wiring a FOURTH OAuth provider meant finding
+ * every copy — and the copy that got missed would silently drop that tenant's subscription.
+ */
+const OAUTH_RESOLVERS: ReadonlyArray<{
+  provider: LlmProvider;
+  resolved: (creds: ResolvedByoCredentials) => boolean;
+}> = [
+  { provider: 'anthropic', resolved: (creds) => Boolean(creds.anthropicOAuthToken) },
+  { provider: 'openai', resolved: (creds) => Boolean(creds.openaiCodexAuth) },
+  { provider: 'xai', resolved: (creds) => Boolean(creds.xaiOAuthToken) },
+];
+
+/** Providers a tenant can connect as an OAuth subscription. A row stored `auth_type='oauth'`
+ *  for anything else has no resolver and can never produce a credential — see
+ *  {@link ByoUnresolvedReason}'s `unsupported-auth`. */
+export const OAUTH_CAPABLE_PROVIDERS: ReadonlySet<LlmProvider> = new Set(OAUTH_RESOLVERS.map((r) => r.provider));
+
 /** How a provider authenticates in a RESOLVED credential set — `oauth` when its
  *  subscription token resolved this call, `api_key` otherwise. Pair with
  *  {@link byoVendorIdFor} when you need the dispatch vendor for ONE provider. */
 export function resolvedAuthTypeFor(provider: LlmProvider, creds: ResolvedByoCredentials): ProviderAuthType {
-  if (provider === 'anthropic' && creds.anthropicOAuthToken) return 'oauth';
-  if (provider === 'openai' && creds.openaiCodexAuth) return 'oauth';
-  if (provider === 'xai' && creds.xaiOAuthToken) return 'oauth';
-  return 'api_key';
+  const entry = OAUTH_RESOLVERS.find((r) => r.provider === provider);
+  return entry?.resolved(creds) ? 'oauth' : 'api_key';
 }
 
 export function byoVendorIdsFromCredentials(creds: ResolvedByoCredentials): Set<string> {
@@ -152,19 +174,19 @@ export function byoVendorIdsFromCredentials(creds: ResolvedByoCredentials): Set<
   for (const p of Object.keys(keys) as LlmProvider[]) {
     if (keys[p]) set.add(byoVendorIdFor(p, 'api_key'));
   }
-  if (creds.anthropicOAuthToken) set.add(byoVendorIdFor('anthropic', 'oauth'));
-  if (creds.openaiCodexAuth) set.add(byoVendorIdFor('openai', 'oauth'));
-  if (creds.xaiOAuthToken) set.add(byoVendorIdFor('xai', 'oauth'));
+  for (const { provider, resolved } of OAUTH_RESOLVERS) {
+    if (resolved(creds)) set.add(byoVendorIdFor(provider, 'oauth'));
+  }
   return set;
 }
 
 /** The connected providers implied by a resolved credential set — the api-keys
- *  present plus a live Anthropic subscription. */
+ *  present plus every live subscription. */
 export function providersFromCredentials(creds: TenantLlmCredentials): LlmProvider[] {
   const set = new Set<LlmProvider>((Object.keys(creds.vendorKeys) as LlmProvider[]).filter((p) => creds.vendorKeys[p]));
-  if (creds.anthropicOAuthToken) set.add('anthropic');
-  if (creds.openaiCodexAuth) set.add('openai');
-  if (creds.xaiOAuthToken) set.add('xai');
+  for (const { provider, resolved } of OAUTH_RESOLVERS) {
+    if (resolved(creds)) set.add(provider);
+  }
   return [...set];
 }
 
@@ -295,11 +317,16 @@ async function loadProviderRow(
  *   • `revoked`         — the OAuth refresh returned 401/403; the token is dead → reconnect.
  *   • `expired`         — past real expiry and the refresh failed transiently (retryable).
  *   • `undecryptable`   — the stored blob won't decrypt/parse (key rotation / corruption).
+ *   • `unsupported-auth`— the row is stored `auth_type='oauth'` for a provider that has no
+ *                         OAuth resolver ({@link OAUTH_CAPABLE_PROVIDERS}), so it can never
+ *                         resolve however intact the blob is → re-enter it as an API key.
+ *                         Distinct from `undecryptable` on purpose: that one sends the owner
+ *                         to re-save a credential that was never the problem.
  *   • `other-workspace` — NOT connected in THIS tenant, but the SAME user has it connected
  *                         under a DIFFERENT workspace they belong to (a tenant mismatch —
  *                         they connected it somewhere else). Detected separately, per-user.
  */
-export type ByoUnresolvedReason = 'revoked' | 'expired' | 'undecryptable' | 'other-workspace';
+export type ByoUnresolvedReason = 'revoked' | 'expired' | 'undecryptable' | 'unsupported-auth' | 'other-workspace';
 
 /** Result of resolving a tenant's Anthropic credential: the usable auth (or null) plus,
  *  when a credential ROW exists but couldn't be used, WHY. `reason` is undefined both when
@@ -537,8 +564,16 @@ export async function resolveTenantLlmCredentials(env: Env, tenantId: number): P
   if (leadingConnection && (usableProviderRanks.length === 0 || connectionRank < providerRank)) {
     creds.preferredOpenRouterModel = connectionModelRefs([leadingConnection])[0];
   }
+  const storedAuthTypes = new Map(configured.map((p) => [p.provider, p.authType]));
   for (const p of creds.configuredProviders) {
     if (usable.has(p)) continue;
+    // A row stored as a SUBSCRIPTION for a provider with no OAuth resolver is skipped by
+    // `resolveTenantVendorKeys` (api-key rows only) and has no resolver to report a reason,
+    // so the old catch-all blamed the ciphertext. It reads fine — the auth TYPE is wrong.
+    if (storedAuthTypes.get(p) === 'oauth' && !OAUTH_CAPABLE_PROVIDERS.has(p)) {
+      creds.unresolvedReasons[p] = 'unsupported-auth';
+      continue;
+    }
     creds.unresolvedReasons[p] = p === 'anthropic'
       ? (anthropicRes.reason ?? 'undecryptable')
       : p === 'openai' ? (openaiRes.reason ?? 'undecryptable')
@@ -654,24 +689,37 @@ export async function listTenantProviderKeys(
  *
  * Only rows that already exist (a connected provider) are updated; ordering an un-connected
  * provider is a no-op.
+ *
+ * ONE statement, not one UPDATE per provider: neon-http has no interactive transaction, so a
+ * per-provider loop that failed midway left the precedence HALF-APPLIED — two providers
+ * sharing a rank, or a tenant's #1 stamped while the rest kept the old order. A single
+ * `CASE` update either lands entirely or not at all, and the drag-to-reorder UI issues one
+ * of these on every drop.
  */
 export async function setTenantProviderPriorityRanks(
   env: Env,
   tenantId: number,
   ranks: ReadonlyMap<LlmProvider, number | null>,
 ): Promise<void> {
-  if (ranks.size === 0) return;
+  const entries = [...ranks].filter(([provider]) => isSupportedProvider(provider));
+  if (entries.length === 0) return;
   const db = buildDatabase(env);
-  for (const [provider, priority] of ranks) {
-    if (!isSupportedProvider(provider)) continue;
-    await db
-      .update(tenantLlmProviderKeys)
-      .set({ priority, updatedAt: sql`NOW()` })
-      .where(and(
-        eq(tenantLlmProviderKeys.tenantId, tenantId),
-        eq(tenantLlmProviderKeys.provider, provider),
-      ));
-  }
+  // `::int` on each arm so a NULL rank ("unset → catalog-tier fallback") doesn't leave
+  // Postgres inferring the CASE result type from an untyped parameter.
+  const cases = sql.join(
+    entries.map(([provider, priority]) => sql`WHEN ${provider} THEN ${priority}::int`),
+    sql` `,
+  );
+  await db
+    .update(tenantLlmProviderKeys)
+    .set({
+      priority: sql`CASE ${tenantLlmProviderKeys.provider} ${cases} ELSE ${tenantLlmProviderKeys.priority} END`,
+      updatedAt: sql`NOW()`,
+    })
+    .where(and(
+      eq(tenantLlmProviderKeys.tenantId, tenantId),
+      inArray(tenantLlmProviderKeys.provider, entries.map(([provider]) => provider)),
+    ));
 }
 
 /**

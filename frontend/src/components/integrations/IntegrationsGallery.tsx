@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { ClickableCard } from '@/components/ClickableCard';
+import { ConnectToggleButton } from '@/components/integrations/ConnectToggleButton';
 import { ConsumptionMeterCard } from '@/components/UsageMeter';
 import { IntegrationCredentialsManager, PROVIDER_META } from '@/components/integrations/IntegrationCredentialsManager';
 import { MigrationWizard } from '@/components/integrations/MigrationWizard';
@@ -62,6 +64,7 @@ export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search
   const t = useTranslations('integrations');
   const role = getStoredTenant()?.role;
   const canManage = role === 'owner' || role === 'manager';
+  const confirm = useConfirm();
   const consumption = useConsumption();
   const ingestionMeter = consumption?.meters.find((meter) => meter.key === 'ingestion');
 
@@ -119,6 +122,30 @@ export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search
 
   const openProvider = (id: string) => { setActiveProvider(id); setPanelTab('credentials'); };
 
+  /**
+   * Disconnect one provider from the workspace.
+   *
+   * The card states ONE fact — connected or not — so its Disconnect has to make that fact
+   * false, which means both halves of "connected": the stored credentials AND the board
+   * connections polling with them. Dropping only the credentials leaves connections that
+   * keep listing and keep failing with nothing left to authenticate against.
+   *
+   * Imported work is untouched; the confirm says so, because "disconnect Jira" is otherwise
+   * easy to read as "delete everything that came from Jira".
+   */
+  const disconnectProvider = async (p: BoardProviderMeta) => {
+    const creds = credsByProvider.get(p.id) ?? [];
+    const ok = await confirm({
+      message: t('gallery.confirmDisconnect', { label: p.label, count: creds.length }),
+      destructive: true,
+    });
+    if (!ok) return;
+    const connections = await boardConnectionsApi.list().catch(() => [] as BoardConnection[]);
+    await Promise.all(connections.filter((c) => c.provider === p.id).map((c) => boardConnectionsApi.remove(c.id)));
+    await Promise.all(creds.map((c) => integrationsApi.remove(c.id)));
+    loadCreds();
+  };
+
   if (loading) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('gallery.loading')}</div>;
 
   return (
@@ -132,7 +159,7 @@ export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search
             {grouped.get(cat)!.map((p) => {
               const count = credsByProvider.get(p.id)?.length ?? 0;
               return (
-                <button key={p.id} type="button" style={{ ...cardStyle, ...(viewMode === 'table' ? { flexDirection: 'row', alignItems: 'center' } : {}) }} onClick={() => openProvider(p.id)}>
+                <ClickableCard key={p.id} ariaLabel={p.label} style={{ ...cardStyle, ...(viewMode === 'table' ? { flexDirection: 'row', alignItems: 'center' } : {}) }} onClick={() => openProvider(p.id)}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -158,13 +185,25 @@ export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search
                           limit: -1, unlimited: true, remaining: -1, percentUsed: 0,
                         }}
                         isFree={false}
-                        title="Data consumed"
+                        title={t('gallery.dataConsumed')}
                         usageOnly
-                        periodLabel="This month"
+                        periodLabel={t('gallery.thisMonth')}
                       />
                     )}
                   </div>
-                </button>
+                  {/* Acting on the card's own state, without hunting for the right tab inside
+                      it. Read-only members still see the state; only a manager can change it. */}
+                  {canManage && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <ConnectToggleButton
+                        connected={count > 0}
+                        name={p.label}
+                        onConnect={() => openProvider(p.id)}
+                        onDisconnect={() => disconnectProvider(p)}
+                      />
+                    </div>
+                  )}
+                </ClickableCard>
               );
             })}
           </div>

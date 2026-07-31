@@ -264,6 +264,9 @@
       "migratable": "Migration",
       "keyCount": "{count} Schlüssel",
       "tapToConnect": "Zum Verbinden tippen",
+      "dataConsumed": "Verbrauchte Daten",
+      "thisMonth": "Diesen Monat",
+      "confirmDisconnect": "{label} trennen? Dadurch werden {count} gespeicherte Zugangsdaten gelöscht und laufende Synchronisierungen gestoppt. Bereits importierte Arbeit bleibt erhalten.",
       "category": {
         "pm": "Projekt- & Arbeitsmanagement",
         "scm": "Versionsverwaltung",
@@ -1089,7 +1092,16 @@
     "copy": "Kopieren",
     "copied": "Kopiert",
     "copyFailed": "Kopieren fehlgeschlagen",
-    "copyDiagnostics": "Diagnose kopieren"
+    "copyDiagnostics": "Diagnose kopieren",
+    "connectToggle": {
+      "connect": "Verbinden",
+      "disconnect": "Trennen",
+      "working": "Wird ausgeführt…",
+      "connectAria": "{name} verbinden",
+      "disconnectAria": "{name} trennen",
+      "errorTitle": "{name} konnte nicht getrennt werden",
+      "errorGeneric": "Trennen fehlgeschlagen. Bitte erneut versuchen."
+    }
   },
   "prdCreate": {
     "title": "Neues PRD",
@@ -8829,6 +8841,8 @@
       "connectedCount": "● {count} Verbindung(en)",
       "brokenCount": "{count} OpenRouter-Verbindung(en)",
       "modelCount": "{count} ausgewählte(s) Modell(e)",
+      "costOwnKey": "Builderforce-Routing-Gebühren: {cost}. Die Token berechnet OpenRouter Ihrem eigenen Konto.",
+      "costManaged": "Von Builderforce berechnet: {cost} (Routing + Token).",
       "ownKey": "Ihr OpenRouter-Schlüssel",
       "managedKey": "Builderforce-Abrechnung",
       "edit": "Bearbeiten",
@@ -8847,7 +8861,8 @@
       "validation": "Geben Sie einen Namen ein und wählen Sie mindestens ein Modell.",
       "saveError": "OpenRouter-Verbindung konnte nicht gespeichert werden",
       "removeError": "OpenRouter-Verbindung konnte nicht entfernt werden",
-      "confirmRemove": "OpenRouter-Verbindung „{label}“ entfernen?"
+      "confirmRemove": "OpenRouter-Verbindung „{label}“ entfernen?",
+      "confirmDisconnectAll": "OpenRouter trennen? Dadurch werden alle {count} Registrierungen entfernt. Agenten, die sie nutzen, greifen auf die verwalteten Modelle von Builderforce zurück."
     },
     "status": {
       "connected": "● {subscription} verbunden",
@@ -8882,6 +8897,8 @@
       "title": "Anbieter-Priorität",
       "subtitle": "Wenn mehrere Ihrer Konten verbunden sind, beginnen Cloud-Agenten mit dem obersten Anbieter und wechseln bei Ausfall die Liste hinab. Setzen Sie Meta an die erste Stelle, um Cloud-Agenten darüber zu leiten.",
       "leads": "Bevorzugt",
+      "drag": "Zum Umsortieren ziehen",
+      "rowLabel": "{provider}, Position {position}. Zum Umsortieren ziehen.",
       "moveUp": "{provider} nach oben",
       "moveDown": "{provider} nach unten",
       "errSave": "Priorität konnte nicht gespeichert werden"
@@ -8928,7 +8945,7 @@
       "testing": "Wird getestet…",
       "verified": "Verbindung bestätigt.",
       "verifiedWith": "Verbindung mit {model} bestätigt.",
-      "usage": "Letzte 30 Tage: {requests} Anfragen · {tokens} Token",
+      "usage": "Letzte {days} Tage: {requests} Anfragen · {tokens} Token",
       "lastUsed": " · Zuletzt verwendet {when}",
       "failedFallback": "Verbindungstest fehlgeschlagen: {status}.",
       "failedGeneric": "Verbindungstest fehlgeschlagen",
@@ -8943,6 +8960,7 @@
         "revoked": "widerrufen",
         "expired": "abgelaufen",
         "undecryptable": "Anmeldedaten unlesbar",
+        "unsupported-auth": "als Abonnement gespeichert, dieser Anbieter benötigt jedoch einen API-Schlüssel",
         "unavailable": "nicht verfügbar",
         "failed": "fehlgeschlagen",
         "upstream_error": "Fehler des Modellanbieters",
