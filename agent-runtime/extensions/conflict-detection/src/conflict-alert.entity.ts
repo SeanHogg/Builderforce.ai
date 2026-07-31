@@ -1,8 +1,11 @@
 /**
  * Conflict Alert Entity
- * 
+ *
  * Represents a detected conflict alert with full labeling, deduplication support,
- * and resolution tracking.
+ * and resolution tracking. Implements PRD requirements:
+ * - Labeling: conflicting items, stakeholders, detection date
+ * - Summarization: reasoning behind conflict
+ * - Attachment: to priority version(s)
  */
 
 import type {
@@ -11,12 +14,15 @@ import type {
   ConflictingPriorities,
   Stakeholder,
   Team,
-  PriorityLevel
+  PriorityLevel,
 } from './types.js';
-import { CONFLICT_RULE_SPEC } from './conflict-rule.spec.js';
+
+export type { ConflictAlert, ConflictKey, PriorityLevel };
 
 /**
- * Helper to generate conflict keys
+ * Generate stable conflict key for deduplication
+ * Format: stakeholderId1__stakeholderId2__teamId[__versionId]
+ * Stakeholders sorted lexicographically to ensure stable keys
  */
 export function generateConflictKey(
   stakeholderId1: string,
@@ -24,13 +30,10 @@ export function generateConflictKey(
   teamId: string,
   versionId?: string
 ): string {
-  // Sort stakeholder IDs to ensure consistent ordering
-  const sortedStakeholders = [stakeholderId1, stakeholderId2].sort();
-  const keyParts = [
-    sortedStakeholders[0],
-    sortedStakeholders[1],
-    teamId
-  ];
+  const sortedStakeholders = [stakeholderId1, stakeholderId2].sort((a, b) =>
+    a.localeCompare(b)
+  );
+  const keyParts = [sortedStakeholders[0], sortedStakeholders[1], teamId];
   if (versionId) {
     keyParts.push(versionId);
   }
@@ -38,107 +41,97 @@ export function generateConflictKey(
 }
 
 /**
- * Create a conflict key object from generated string
+ * Parse conflict key string into structured object
  */
 export function parseConflictKey(keyString: string): ConflictKey {
   const parts = keyString.split('__');
   if (parts.length < 3) {
-    throw new Error(`Invalid conflict key format: ${keyString}`);
+    throw new Error(`Invalid conflict key format: ${keyString}. Expected at least 3 parts separated by '__'`);
   }
-  
+
   const stakeholderId1 = parts[0];
   const stakeholderId2 = parts[1];
   const teamId = parts[2];
   const versionId = parts[3] || undefined;
-  
+
   return {
     stakeholderId1,
     stakeholderId2,
     teamId,
-    versionId
+    versionId,
   };
 }
 
 /**
- * Conflicting Priorities Builder
+ * Build conflicting priorities structure
  */
 export function buildConflictingPriorities(
-  stakeholder1: Stakeholder | Partial<Stakeholder>,
-  stakeholder2: Stakeholder | Partial<Stakeholder>,
-  team: Team | Partial<Team>,
+  stakeholder1: Partial<Stakeholder & { id?: string; userId?: string; name?: string }>,
+  stakeholder2: Partial<Stakeholder & { id?: string; userId?: string; name?: string }>,
+  team: Partial<Team & { id?: string; name?: string }>,
   priority1: PriorityLevel,
   priority2: PriorityLevel,
   teamId: string
 ): ConflictingPriorities {
   return {
     stakeholder1: {
-      stakeholderId: stakeholder1.id || stakeholder1.userId || 'unknown',
-      stakeholderName: stakeholder1.name || `Stakeholder ${stakeholder1.id || 'unknown'}`,
-      role: stakeholder1.role
+      stakeholderId: (stakeholder1 as any).stakeholderId || (stakeholder1 as any).id || (stakeholder1 as any).userId || 'unknown',
+      stakeholderName: (stakeholder1 as any).stakeholderName || (stakeholder1 as any).name || `Stakeholder ${(stakeholder1 as any).id || 'unknown'}`,
+      role: (stakeholder1 as any).role,
+      email: (stakeholder1 as any).email,
+    },
+    stakeholder2: {
+      stakeholderId: (stakeholder2 as any).stakeholderId || (stakeholder2 as any).id || (stakeholder2 as any).userId || 'unknown',
+      stakeholderName: (stakeholder2 as any).stakeholderName || (stakeholder2 as any).name || `Stakeholder ${(stakeholder2 as any).id || 'unknown'}`,
+      role: (stakeholder2 as any).role,
+      email: (stakeholder2 as any).email,
     },
     team: {
       teamId: teamId,
-      teamName: team.name || `Team ${team.id || 'unknown'}`
+      teamName: (team as any).teamName || (team as any).name || `Team ${teamId}`,
+      organization: (team as any).organization,
     },
     priority1,
-    priority2
+    priority2,
   };
 }
 
 /**
- * Conflict Alert Factory
+ * Conflict Alert Factory - creates properly labeled alerts per PRD
  */
 export class ConflictAlertFactory {
   /**
-   * Create a new ConflictAlert
+   * Create a new ConflictAlert with full labeling, summarization, attachment
    */
   static createAlert(
-    stakeholder1: Stakeholder | Partial<Stakeholder>,
-    stakeholder2: Stakeholder | Partial<Stakeholder>,
-    team: Team | Partial<Team>,
+    stakeholder1: Partial<Stakeholder & { id?: string; userId?: string; name?: string }>,
+    stakeholder2: Partial<Stakeholder & { id?: string; userId?: string; name?: string }>,
+    team: Partial<Team & { id?: string; name?: string }>,
     teamId: string,
     priority1: PriorityLevel,
     priority2: PriorityLevel,
     sourceRequestIds: string[],
     versionId?: string
   ): ConflictAlert {
-    const conflictKey = generateConflictKey(
-      stakeholder1.id || stakeholder1.userId || 'unknown',
-      stakeholder2.id || stakeholder2.userId || 'unknown',
-      teamId,
-      versionId
-    );
-    
-    // Generate summary
-    const summary = this.buildSummary(
-      stakeholder1.name || stakeholder1.id || 'unknown',
-      stakeholder2.name || stakeholder2.id || 'unknown',
-      (team.name || `Team ${team.id}`),
-      priority1,
-      priority2
-    );
-    
-    // Determine severity
-    const severity = this.determineSeverity(priority1, priority2);
-    
+    const sid1 = (stakeholder1 as any).stakeholderId || (stakeholder1 as any).id || (stakeholder1 as any).userId || 'unknown';
+    const sid2 = (stakeholder2 as any).stakeholderId || (stakeholder2 as any).id || (stakeholder2 as any).userId || 'unknown';
+
+    const conflictKey = generateConflictKey(sid1, sid2, teamId, versionId);
+    const keyObj = parseConflictKey(conflictKey);
+
+    const sName1 = (stakeholder1 as any).stakeholderName || (stakeholder1 as any).name || sid1;
+    const sName2 = (stakeholder2 as any).stakeholderName || (stakeholder2 as any).name || sid2;
+    const tName = (team as any).teamName || (team as any).name || teamId;
+
     const now = new Date();
-    
+
     return {
       id: conflictKey,
-      key: parseConflictKey(conflictKey),
-      title: this.buildTitle(teamId, team.name, priority1, priority2),
-      description: this.buildDescription(
-        stakeholder1.id || stakeholder1.userId,
-        stakeholder2.id || stakeholder2.userId,
-        stakeholder1.name || stakeholder1.id,
-        stakeholder2.name || stakeholder2.id,
-        (team.name || `Team ${team.id}`),
-        priority1,
-        priority2,
-        now
-      ),
-      summary,
-      severity,
+      key: keyObj,
+      title: this.buildTitle(tName, priority1, priority2),
+      description: this.buildDescription(sid1, sid2, sName1, sName2, tName, priority1, priority2, now, versionId),
+      summary: this.buildSummary(sName1, sName2, tName, priority1, priority2, versionId),
+      severity: this.determineSeverity(priority1, priority2),
       detectedAt: now.toISOString(),
       status: 'open',
       conflictingPriorities: buildConflictingPriorities(
@@ -151,37 +144,42 @@ export class ConflictAlertFactory {
       ),
       stakeholders: [
         {
-          stakeholderId: stakeholder1.id || stakeholder1.userId || 'unknown',
-          stakeholderName: stakeholder1.name || stakeholder1.id || 'unknown',
-          role: stakeholder1.role
+          stakeholderId: sid1,
+          stakeholderName: sName1,
+          role: (stakeholder1 as any).role,
+          email: (stakeholder1 as any).email,
         },
         {
-          stakeholderId: stakeholder2.id || stakeholder2.userId || 'unknown',
-          stakeholderName: stakeholder2.name || stakeholder2.id || 'unknown',
-          role: stakeholder2.role
-        }
+          stakeholderId: sid2,
+          stakeholderName: sName2,
+          role: (stakeholder2 as any).role,
+          email: (stakeholder2 as any).email,
+        },
       ],
       versionIds: versionId ? [versionId] : [],
       sourceRequestIds,
-      conflictCount: 1
+      conflictCount: new Set(sourceRequestIds).size,
     };
   }
-  
+
   /**
-   * Build alert title
+   * Build alert title with clear team and rule violation labeling
    */
   private static buildTitle(
-    teamId: string,
-    teamName: string | undefined,
+    teamName: string,
     priority1: PriorityLevel,
     priority2: PriorityLevel
   ): string {
-    const teamLabel = teamName || `Team ${teamId}`;
-    return `${teamLabel} — P0 Priority Conflict`;
+    // Per PRD: labeling conflicting items clearly
+    if (priority1 === 'P0' && priority2 === 'P0') {
+      return `${teamName} — P0 Priority Conflict: Competing P0 requests`;
+    }
+    return `${teamName} — Priority Conflict: ${priority1} vs ${priority2}`;
   }
-  
+
   /**
-   * Build alert description
+   * Build detailed description with all PRD labeling requirements:
+   * conflicting items, stakeholders, detection date
    */
   private static buildDescription(
     stakeholderId1: string,
@@ -191,65 +189,97 @@ export class ConflictAlertFactory {
     teamName: string,
     priority1: PriorityLevel,
     priority2: PriorityLevel,
-    detectedAt: Date
+    detectedAt: Date,
+    versionId?: string
   ): string {
-    return `Discovered on ${detectedAt.toISOString()}. Two stakeholders assigned P0 priorities to ${teamName}. 
-Stakeholder ${stakeholderName1} (ID: ${stakeholderId1}) set priority ${priority1}. 
-Stakeholder ${stakeholderName2} (ID: ${stakeholderId2}) set priority ${priority2}. 
-This conflict must be resolved manually to prevent resource allocation issues.`;
+    const versionLabel = versionId ? ` in version ${versionId}` : '';
+    return [
+      `Conflict detected on ${detectedAt.toISOString()}${versionLabel}.`,
+      `Rule: Two distinct stakeholders assigned conflicting P0 priorities to the same team within the same review window.`,
+      ``,
+      `Details:`,
+      `- Stakeholder "${stakeholderName1}" (ID: ${stakeholderId1}) assigned priority ${priority1} to team "${teamName}".`,
+      `- Stakeholder "${stakeholderName2}" (ID: ${stakeholderId2}) assigned priority ${priority2} to the same team "${teamName}".`,
+      `- Both requests target the same team within the same review window, triggering rule ${priority1} vs ${priority2} conflict.`,
+      ``,
+      `Impact: Resource allocation conflict — team "${teamName}" cannot satisfy two competing P0 priorities simultaneously. Requires manual resolution by conflict resolver.`,
+      versionId ? `Attached to priority version(s): ${versionId}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
-  
+
   /**
-   * Build concise summary
+   * Build concise summary explaining reasoning (PRD requirement)
    */
   private static buildSummary(
     stakeholderName1: string,
     stakeholderName2: string,
     teamName: string,
     priority1: PriorityLevel,
-    priority2: PriorityLevel
+    priority2: PriorityLevel,
+    versionId?: string
   ): string {
-    return `${priority1} (stakeholder ${stakeholderName1}, ${teamName}) vs ${priority2} (stakeholder ${stakeholderName2}, ${teamName})`;
+    const base = `Conflict: Stakeholder "${stakeholderName1}" assigned ${priority1} and stakeholder "${stakeholderName2}" assigned ${priority2} to team "${teamName}" within same review window. Rule violation: distinct stakeholders cannot both set P0 for same team in same window; requires manual resolution.`;
+    return versionId ? `${base} [Version: ${versionId}]` : base;
   }
-  
+
   /**
    * Determine severity from priorities
    */
-  private static determineSeverity(priority1: PriorityLevel, priority2: PriorityLevel): 'critical' | 'high' | 'medium' | 'low' {
-    // P0 to P0 -> Critical
+  private static determineSeverity(
+    priority1: PriorityLevel,
+    priority2: PriorityLevel
+  ): 'critical' | 'high' | 'medium' | 'low' {
     if (priority1 === 'P0' && priority2 === 'P0') {
       return 'critical';
     }
-    
-    // P0 to P1 -> High
     if (priority1 === 'P0' || priority2 === 'P0') {
       return 'high';
     }
-    
-    // P1 to P1 -> Medium
     if (priority1 === 'P1' && priority2 === 'P1') {
       return 'medium';
     }
-    
-    // P1 to P2 or P0 to P2 etc -> Low
     return 'low';
   }
-  
-  /**
-   * Determine conflict count from source requests
-   */
-  static getConflictCount(sourceRequestIds: string[]): number {
-    // For detection, we count unique sources
-    return new Set(sourceRequestIds).size;
-  }
-  
-  /**
-   * Calculate severity from conflict count
-   * (More conflicts of same type = higher urgency)
-   */
-  static getSeverityByCount(count: number): 'critical' | 'high' | 'medium' | 'low' {
-    if (count >= 3) return 'critical';
-    if (count >= 2) return 'high';
-    return 'medium';
-  }
 }
+
+/**
+ * Re-export common types/enums for convenience
+ */
+export const ConflictSeverity = {
+  CRITICAL: 'critical' as const,
+  HIGH: 'high' as const,
+  MEDIUM: 'medium' as const,
+  LOW: 'low' as const,
+};
+
+export const ConflictStatus = {
+  OPEN: 'open' as const,
+  ACKNOWLEDGED: 'acknowledged' as const,
+  RESOLVED: 'resolved' as const,
+  DISMISSED: 'dismissed' as const,
+};
+
+export const PriorityLevel = {
+  P0: 'P0' as const,
+  P1: 'P1' as const,
+  P2: 'P2' as const,
+  P3: 'P3' as const,
+};
+
+export type ListConflictsQuery = {
+  status?: 'open' | 'acknowledged' | 'resolved' | 'dismissed' | 'all';
+  versionId?: string;
+  teamId?: string;
+  stakeholderId?: string;
+  severity?: 'critical' | 'high' | 'medium' | 'low';
+  page?: number;
+  limit?: number;
+};
+
+export type ResolveConflictRequest = {
+  action: 'acknowledge' | 'resolve' | 'dismiss';
+  note?: string;
+  resolverUserId?: string;
+};
