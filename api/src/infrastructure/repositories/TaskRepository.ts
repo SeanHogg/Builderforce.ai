@@ -92,6 +92,7 @@ export class TaskRepository implements ITaskRepository {
         startDate:         plain.startDate ?? undefined,
         dueDate:           plain.dueDate ?? undefined,
         persona:           plain.persona ?? undefined,
+        featureSign:       plain.featureSign,
         archived:          plain.archived,
       })
       .returning();
