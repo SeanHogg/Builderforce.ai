@@ -209,6 +209,24 @@ describe("buildTextReport (AC5: clear & concise human-readable output + F5)", ()
     expect(report).toContain("not ready");
   });
 
+  it("shows which repo each PR lives in when scanning an org (F4 + AC5)", () => {
+    const report = buildTextReport({
+      tasks: [
+        {
+          taskId: "ORG-7",
+          prs: [
+            { ...prMerged(3, "backend part"), repo: "org/alpha" },
+            { ...prOpen(4, "frontend part"), repo: "org/beta" },
+          ],
+          summary: "PR(s) Open",
+        },
+      ],
+      summary: { totalTasks: 1, allMerged: 0, someOpen: 1, noPrFound: 0 },
+    });
+    expect(report).toContain("(org/alpha)");
+    expect(report).toContain("(org/beta)");
+  });
+
   it("renders 'ready for release' for All PRs Merged (AC1 + F5 summary)", () => {
     const report = buildTextReport({
       tasks: [{ taskId: "REL-1", prs: [prMerged(1, "done")], summary: "All PRs Merged" }],
