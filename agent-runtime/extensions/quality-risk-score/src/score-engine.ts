@@ -2,14 +2,6 @@ import type { QualityMetric, RiskScoreConfig } from './config.js';
 
 export type RiskLevel = 'High' | 'Medium' | 'Low';
 
-export interface Artifact {
-  id?: string;
-  type: string;
-  name: string;
-  description?: string;
-  metadata?: Record<string, unknown>;
-}
-
 export interface CalculatedScore {
   level: RiskLevel;
   score: number; // 0-100
@@ -119,7 +111,10 @@ export function calculateScore(
     contributions[m.name] = {
       value: m.value,
       weight: m.weight,
-      contribution: totalWeight > 0 ? Math.round((risk * m.weight) / totalWeight * 100) : 0,
+      contribution:
+        totalWeight > 0
+          ? Math.round((risk * m.weight) / totalWeight * 100)
+          : 0,
     };
   }
 
