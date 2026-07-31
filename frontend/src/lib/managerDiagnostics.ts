@@ -836,11 +836,24 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
 
     // Every run failing is a different problem from no runs at all, and the two are
     // indistinguishable in any count that only reports completions.
-    if (runs.completed === 0 && runs.failed > 0) {
+    // A MAJORITY failing is the same defect as all of them failing, and the old
+    // `completed === 0` test could not see it: a board running 162 failures beside 16
+    // completions reported nothing at all, because one run in ten succeeding was enough
+    // to silence the finding. The rate is what matters, not the zero.
+    const terminalRuns = runs.completed + runs.failed;
+    if (runs.failed > 0 && terminalRuns > 0 && runs.failed >= terminalRuns / 2) {
+      const pct = Math.round((runs.failed / terminalRuns) * 100);
+      // Name the dominant cause rather than telling the reader to go and find it — the
+      // rollup already knows, and "read the error messages" is the instruction that made
+      // this a research project instead of a finding.
+      const top = (runs.failureReasons ?? [])[0];
+      const cause = top
+        ? ` The dominant cause is ${top.reason} — ${top.label} — accounting for ${top.count} of them${top.platform ? ', which is the platform getting in the way rather than the work failing' : ''}.${top.sample ? ` Sample: “${top.sample}”` : ''}`
+        : ' No failure-reason breakdown was returned, so the cause is unclassified — read the executions directly.';
       critical.push({
         severity: 'critical',
-        code: 'all_runs_failed_today',
-        text: `Every agent run that finished today FAILED (${runs.failed} failed, 0 completed). This is not a staffing or scheduling problem — work is being dispatched and dying. Read the executions' error messages before acting on any other finding: three consecutive failures also trip the per-ticket breaker (run_cap_exhausted), which then presents as a dispatch problem and sends the reader after the wrong cause.`,
+        code: runs.completed === 0 ? 'all_runs_failed_today' : 'most_runs_failed_today',
+        text: `${pct}% of the agent runs that finished today FAILED (${runs.failed} failed, ${runs.completed} completed). This is not a staffing or scheduling problem — work is being dispatched and dying.${cause} Three consecutive failures also trip the per-ticket breaker (run_cap_exhausted), which then presents as a dispatch problem and sends the reader after the wrong cause.`,
       });
     }
 
@@ -1162,6 +1175,20 @@ function formatDigest(digest: ManagerDailyDigest): string[] {
   out.push(line('  pull requests opened today', team.prs.opened));
   out.push(line('  agent runs completed', team.runs.completed));
   out.push(line('  agent runs failed', team.runs.failed));
+  // WHY they failed, immediately under the count. A bare "failed: 162" proves something
+  // is wrong and cannot say what — the same blind spot the pass budget had before it
+  // timed its own stages, and one that was diagnosed by guessing twice, wrongly, in a
+  // single session. Indented under the count because it is that number's breakdown.
+  for (const r of team.runs.failureReasons ?? []) {
+    const share = team.runs.failed > 0 ? ` (${Math.round((r.count / team.runs.failed) * 100)}%)` : '';
+    out.push(`    ${r.count}×${share} ${r.reason} — ${r.label}${r.platform ? ' [platform, not the ticket]' : ''}`);
+    // Only `unknown` and the crash classes carry raw text, and for `unknown` it is the
+    // entire value of the row: it is what lets the NEXT capture name the class.
+    if (r.sample) out.push(`        ${r.sample}`);
+  }
+  if (team.runs.failuresUnaccounted) {
+    out.push(`    ${team.runs.failuresUnaccounted}× (not classified — beyond the 50 most common distinct messages)`);
+  }
   out.push(line('  forward lane moves', `${team.laneMoves.forward} (by people: ${team.laneMoves.byHuman} · by agents: ${team.laneMoves.byAgent}${team.laneMoves.bySystem ? ` · unattributed: ${team.laneMoves.bySystem}` : ''})`));
   out.push(line('  backward lane moves (redo)', team.laneMoves.backward));
   out.push('');
