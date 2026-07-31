@@ -12,9 +12,6 @@
 ALTER TABLE tasks
 ADD COLUMN IF NOT EXISTS feature_sign VARCHAR(24) NOT NULL DEFAULT 'NOT_STARTED';
 
--- Create unique constraint to prevent note: this allows any value but we document the enum above
-CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_feature_sign ON tasks(tenant_id, feature_sign) WHERE status = 'backlog' OR status = 'todo';
-
 -- Validate feature_sign values on INSERT/UPDATE to ensure only valid tags
 CREATE OR REPLACE FUNCTION validate_feature_sign()
 RETURNS TRIGGER AS $$
