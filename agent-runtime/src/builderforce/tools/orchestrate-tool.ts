@@ -46,6 +46,7 @@ type OrchestrateParams = {
   workflow: string;
   description: string;
   customSteps?: Array<{ role: string; task: string; dependsOn?: string[] }>;
+  requireImpactAnalysis?: boolean;
 };
 
 export function createOrchestrateTool(options?: {
