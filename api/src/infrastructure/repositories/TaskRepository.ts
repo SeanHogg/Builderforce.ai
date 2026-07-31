@@ -240,11 +240,25 @@ export class TaskRepository implements ITaskRepository {
       sql`${tasksTable.assignedUserId} IS NULL`,
       // Not archived
       eq(tasksTable.archived, false),
+      // Not in a done-class lane. `tasks.status` is a FREE-FORM board lane key, so
+      // excluding only 'done' silently returns finished work from every board that
+      // spells its terminal lane differently ('completed', 'closed', 'resolved', …).
+      // Matched case-insensitively/trimmed to mirror isDoneStatus(), because
+      // imported boards carry keys like 'Done' or 'Closed '.
+      sql`LOWER(TRIM(${tasksTable.status})) NOT IN (${sql.join(
+        DONE_CLASS_STATUSES.map((s) => sql`${s}`),
+        sql`, `,
+      )})`,
     ];
 
     // Tenant isolation: when allowedProjectIds is provided, scope to those projects.
     // This prevents leaking tasks across workspaces when the service passes a scoped list.
-    if (allowedProjectIds !== undefined && allowedProjectIds.length > 0) {
+    // An EMPTY allowed list means the tenant owns no projects — it must match nothing,
+    // not fall through to an unscoped (cross-tenant) query.
+    if (allowedProjectIds !== undefined) {
+      if (allowedProjectIds.length === 0) {
+        return { tasks: [], total: 0, cacheInfo: { validForSeconds: UNASSIGNED_HIGH_PRIORITY_CACHE_SECONDS } };
+      }
       conditions.push(inArray(tasksTable.projectId, allowedProjectIds));
     }
 
