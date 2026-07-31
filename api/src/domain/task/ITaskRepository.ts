@@ -12,10 +12,16 @@ export interface TaskListOptions {
 }
 
 export interface UnassignedHighPriorityTaskOptions {
-  /**
-   * Optional project filter.
-   */
+  /** Optional project filter. */
   projectId?: number;
+  /** Page number (1-based). Default 1. */
+  page?: number;
+  /** Items per page. Default 20. */
+  pageSize?: number;
+  /** Sort column. Default 'createdAt'. */
+  sortBy?: 'dueDate' | 'title' | 'createdAt';
+  /** Sort direction. Default 'desc'. */
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface UnassignedHighPriorityTaskResult {
@@ -58,4 +64,14 @@ export interface ITaskRepository {
    * concurrent callers will skip locked rows.
    */
   dequeueNextReady(projectIds: ProjectId[]): Promise<Task | null>;
+  /**
+   * FR1: Return unassigned high-priority tasks with pagination, project
+   * filtering, and sorting. Filters: priority IN ('high','urgent'),
+   * assignedUserId IS NULL, archived = false, status NOT IN ('done').
+   * Response includes cacheInfo.validForSeconds (≥1800 s) so clients can
+   * comfortably cache the result.
+   */
+  findUnassignedHighPriority(
+    opts: UnassignedHighPriorityTaskOptions,
+  ): Promise<UnassignedHighPriorityTaskResult>;
 }
