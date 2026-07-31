@@ -9,4 +9,7 @@ export * from "./code-map.js";
 export * from "./agent-roles.js";
 export * from "./orchestrator.js";
 export * from "./personas.js";
+export * from "./shared-workflow-context.js";
+export * from "./prd-analysis-workflow.js";
+export * from "./policy-engine.js";
 export * from "./tools/index.js";
