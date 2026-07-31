@@ -347,7 +347,7 @@ export class TaskService {
    * - priority is 'high' or 'critical'
    * - assignedUserId is NULL
    * - archived is false
-   * - status is not 'done' or 'completed'
+   * - status is not done-class (done/completed/closed/resolved/shipped)
    */
   async findUnassignedHighPriority(
     callerTenantId: number,
@@ -359,6 +359,10 @@ export class TaskService {
       sortOrder?: 'asc' | 'desc';
     } = {}
   ) {
+    // Get all projects in this tenant for tenant isolation (FR1 must be tenant-isolated)
+    const tenantProjects = await this.projects.findByTenant(asTenantId(callerTenantId));
+    const allowedProjectIds = tenantProjects.map(p => Number(p.id));
+
     // Verify caller has access to the requested project(s)
     let validProjectId: ProjectId | undefined;
     if (opts.projectId !== undefined) {
@@ -373,6 +377,7 @@ export class TaskService {
     }
 
     return this.tasks.findUnassignedHighPriority({
+      allowedProjectIds,
       projectId: validProjectId ? validProjectId : undefined,
       page: opts.page || 1,
       pageSize: opts.pageSize || 20,
