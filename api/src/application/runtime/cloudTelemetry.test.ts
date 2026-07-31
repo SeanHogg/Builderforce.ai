@@ -96,7 +96,7 @@ describe("Telemetry Reconstruction & Ledger Integrity Gate", () => {
     expect(result.missingRecords).toHaveLength(0);
   });
 
-  it("should pass with exactly one row per table (GAP-O1 boundary)", () => {
+  it("should pass with exactly one row per table (GAP-OBS-01 boundary)", () => {
     const result = cloudTelemetryReconstructionGate(executionId, {
       toolCount: 1,
       snapshotCount: 1,
