@@ -492,7 +492,14 @@ export async function runTaskPrStatus(params: TaskPrStatusParams): Promise<Track
     // Deduplicate by PR number (same PR may surface across strategies).
     const deduped = deduplicateByNumber(allPrs);
 
-    const prResults: PrResult[] = deduped.map((pr) => ({
+    // Apply maxResultsPerTask limit if specified
+    const maxResults = params.maxResultsPerTask ?? 10;
+    const limitedPrs = deduped.slice(0, maxResults);
+    if (deduped.length > maxResults) {
+      diagnostics.push(`Task "${taskId}" has ${deduped.length} PRs; showing first ${maxResults}.`);
+    }
+
+    const prResults: PrResult[] = limitedPrs.map((pr) => ({
       number: pr.number,
       title: pr.title,
       url: pr.html_url,
