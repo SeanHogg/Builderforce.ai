@@ -96,7 +96,9 @@ import {
 } from '../../application/llm/byoPrecedence';
 import { CAPACITY_LIMIT_MARKER } from '../../application/llm/vendors/types';
 import {
+  clearConnectionAuthAlert,
   clearProviderAuthAlert,
+  loadConnectionAuthAlert,
   loadProviderAuthAlert,
 } from '../../application/llm/providerAuthAlerts';
 import { raiseProviderAuthAlertsFromFailovers } from '../../application/llm/byoCredentialAlerting';
@@ -1142,7 +1144,17 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   router.get('/openrouter-connections', async (c) => {
     let access: TenantAccess;
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
-    return c.json({ connections: await listOpenRouterConnections(c.env, access.tenantId) });
+    const connections = await listOpenRouterConnections(c.env, access.tenantId);
+    // Attach the rejected-account notice for the same reason the provider LIST does: a
+    // registration whose key was revoked or ran out of credit looks identical to a healthy
+    // one here, and an operator who never clicks Test would never find out. Bounded fan-out
+    // (≤20 connections) and each lookup is read-through cached.
+    const alerts = await Promise.all(
+      connections.map((connection) => loadConnectionAuthAlert(c.env, access.tenantId, connection.id).catch(() => null)),
+    );
+    return c.json({
+      connections: connections.map((connection, i) => (alerts[i] ? { ...connection, authAlert: alerts[i] } : connection)),
+    });
   });
 
   router.post('/openrouter-connections', async (c) => {
@@ -1184,6 +1196,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       const status = result.reason === 'not_found' ? 404 : result.reason === 'duplicate_label' ? 409 : 400;
       return c.json({ error: result.reason, code: result.reason }, status);
     }
+    // An edited registration — a replaced key, a corrected model list — invalidates the old
+    // rejection notice, exactly as replacing a provider key does. Otherwise the card keeps
+    // telling the operator to fix something they just fixed.
+    await clearConnectionAuthAlert(c.env, access.tenantId, id);
     return c.json(result.connection);
   });
 
@@ -1215,6 +1231,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         : `OpenRouter connection test could not run: ${probe.status.replaceAll('_', ' ')}.`,
       code: 'openrouter_connection_test_failed',
       testedAt: probe.checkedAt,
+      // Echo the alert the probe just persisted so the card repaints from THIS response
+      // instead of waiting for the list read's cache window to lapse.
+      ...(probe.alert ? { authAlert: probe.alert } : {}),
       details: { connectionId: probe.connectionId, model: probe.model, upstreamStatus: probe.upstreamStatus },
     });
   });
@@ -1225,6 +1244,8 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid connection id' }, 400);
     const deleted = await deleteOpenRouterConnection(c.env, access.tenantId, id);
+    // Nothing left to fix — retire the alert with the registration.
+    if (deleted) await clearConnectionAuthAlert(c.env, access.tenantId, id);
     return deleted ? c.json({ ok: true }) : c.json({ error: 'not_found' }, 404);
   });
 

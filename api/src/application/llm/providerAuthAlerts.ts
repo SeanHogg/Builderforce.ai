@@ -62,6 +62,30 @@ const ALERT_READ_TTL_SECONDS = 60;
 
 export type ProviderAuthAlertReason = 'not_entitled' | 'rejected' | 'capacity' | 'unresolved';
 
+/**
+ * WHOSE credential an alert is about.
+ *
+ * A tenant holds two structurally different kinds of rankable account, and both break the
+ * same ways. A provider is keyed by its id; an OpenRouter CONNECTION (migration 0382) has no
+ * provider row at all — it is keyed by numeric id — so keying this store on `LlmProvider`
+ * alone meant a connection whose own `sk-or-…` key was revoked or out of credit raised
+ * nothing and its card showed nothing. The tenant only found out when the cascade quietly
+ * failed over onto the operator key.
+ */
+export type AuthAlertSubject =
+  | { kind: 'provider'; provider: LlmProvider }
+  | { kind: 'connection'; connectionId: number };
+
+/** An alert about ONE named OpenRouter connection. Same fields as a provider alert minus the
+ *  provider id, which a connection does not have — `vendor` is always `openrouter`. */
+export interface ConnectionAuthAlert {
+  connectionId: number;
+  reason: ProviderAuthAlertReason;
+  status: number;
+  vendor: string;
+  at: number;
+}
+
 export interface ProviderAuthAlert {
   provider: LlmProvider;
   /** Which remediation to show. `not_entitled` = the account authenticated but the
@@ -152,14 +176,40 @@ export function providerAlertFromFailure(
 ): ProviderAuthAlert | null {
   const provider = providerForVendor(vendor);
   if (!provider) return null;
+  const reason = authAlertReason(status, detail);
+  if (!reason) return null;
+  return { provider, reason, status, vendor, at: now };
+}
+
+/**
+ * The REASON half of the classification, with no opinion about whose credential failed.
+ *
+ * Split out because an OpenRouter connection fails in exactly these ways and yet
+ * {@link providerForVendor} returns null for `openrouter` — correctly, since no settings card
+ * connects "OpenRouter the provider". Sharing the rules (rather than re-deriving them for the
+ * connection surface) is what stops a revoked connection key being called `rejected` on one
+ * surface and `not_entitled` on the other.
+ */
+export function authAlertReason(status: number, detail?: string): ProviderAuthAlertReason | null {
   const text = (detail ?? '').toLowerCase();
-  const reason: ProviderAuthAlertReason | null =
-    text.includes(CAPACITY_LIMIT_MARKER.toLowerCase()) || isCapacityLimitBody(text) ? 'capacity'
+  return text.includes(CAPACITY_LIMIT_MARKER.toLowerCase()) || isCapacityLimitBody(text) ? 'capacity'
     : text.includes(CODEX_AUTH_MARKER) || status === 403 ? 'not_entitled'
     : status === 401 ? 'rejected'
     : null;
+}
+
+/** The same classification for ONE OpenRouter connection. `null` = a transient blip that must
+ *  not paint the card or mail anyone, exactly as on the provider path. */
+export function connectionAlertFromFailure(
+  connectionId: number,
+  vendor: string,
+  status: number,
+  detail?: string,
+  now: number = Date.now(),
+): ConnectionAuthAlert | null {
+  const reason = authAlertReason(status, detail);
   if (!reason) return null;
-  return { provider, reason, status, vendor, at: now };
+  return { connectionId, reason, status, vendor, at: now };
 }
 
 /**
@@ -187,13 +237,25 @@ export function authAlertsFromFailovers(
 // Storage
 // ---------------------------------------------------------------------------
 
-function alertKey(tenantId: number, provider: LlmProvider): string {
-  return `byoauth:${tenantId}:${provider}`;
+/**
+ * The storage key for one alert subject.
+ *
+ * The PROVIDER form is unchanged (`byoauth:<tenant>:<provider>`) — widening the keyspace must
+ * not orphan alerts already sitting in KV under the old shape. Connections take a
+ * `connection:<id>` segment, which can never collide because no provider id contains a colon.
+ */
+function alertKey(tenantId: number, subject: AuthAlertSubject): string {
+  return subject.kind === 'provider'
+    ? `byoauth:${tenantId}:${subject.provider}`
+    : `byoauth:${tenantId}:connection:${subject.connectionId}`;
 }
 
 /** Per-isolate fallback for environments without `AUTH_CACHE_KV` (unit tests, local
  *  dev). Values carry their own expiry because a Map has no TTL. */
-const memoryAlerts = new Map<string, { alert: ProviderAuthAlert; until: number }>();
+const memoryAlerts = new Map<string, { alert: AuthAlert; until: number }>();
+
+/** Either flavour of stored alert. */
+export type AuthAlert = ProviderAuthAlert | ConnectionAuthAlert;
 
 /** Test seam — drop in-memory alerts between cases. */
 export function _resetMemoryProviderAuthAlerts(): void {
@@ -229,7 +291,26 @@ export async function recordProviderAuthAlert(
   tenantId: number,
   alert: ProviderAuthAlert,
 ): Promise<void> {
-  const key = alertKey(tenantId, alert.provider);
+  return recordAuthAlert(env, tenantId, { kind: 'provider', provider: alert.provider }, alert);
+}
+
+/** Persist ONE connection's alert — the connection-shaped twin of
+ *  {@link recordProviderAuthAlert}, sharing its store, TTL and never-throws contract. */
+export async function recordConnectionAuthAlert(
+  env: ProviderAuthAlertEnv,
+  tenantId: number,
+  alert: ConnectionAuthAlert,
+): Promise<void> {
+  return recordAuthAlert(env, tenantId, { kind: 'connection', connectionId: alert.connectionId }, alert);
+}
+
+async function recordAuthAlert(
+  env: ProviderAuthAlertEnv,
+  tenantId: number,
+  subject: AuthAlertSubject,
+  alert: AuthAlert,
+): Promise<void> {
+  const key = alertKey(tenantId, subject);
   memoryAlerts.set(key, { alert, until: alert.at + ALERT_TTL_SECONDS * 1000 });
   // Drop the read-through entry so the settings page reflects a fresh rejection
   // on its next poll instead of serving a cached "healthy" for up to a minute.
@@ -257,8 +338,35 @@ export async function loadProviderAuthAlert(
   tenantId: number,
   provider: LlmProvider,
 ): Promise<ProviderAuthAlert | null> {
-  const key = alertKey(tenantId, provider);
-  return getOrSetCached<ProviderAuthAlert | null>(
+  return loadAuthAlert(
+    env, tenantId, { kind: 'provider', provider },
+    (parsed): parsed is ProviderAuthAlert => isSupportedProvider((parsed as ProviderAuthAlert).provider),
+  );
+}
+
+/** Read the live alert for ONE OpenRouter connection, or `null` when it is healthy. Same
+ *  store, cache window and degradation as the provider read. */
+export async function loadConnectionAuthAlert(
+  env: ProviderAuthAlertEnv,
+  tenantId: number,
+  connectionId: number,
+): Promise<ConnectionAuthAlert | null> {
+  return loadAuthAlert(
+    env, tenantId, { kind: 'connection', connectionId },
+    (parsed): parsed is ConnectionAuthAlert => typeof (parsed as ConnectionAuthAlert).connectionId === 'number',
+  );
+}
+
+async function loadAuthAlert<T extends AuthAlert>(
+  env: ProviderAuthAlertEnv,
+  tenantId: number,
+  subject: AuthAlertSubject,
+  // A stored value is validated against the shape the CALLER expects, so a hand-edited or
+  // legacy KV entry degrades to "healthy" instead of being handed back mis-typed.
+  isValid: (parsed: AuthAlert) => parsed is T,
+): Promise<T | null> {
+  const key = alertKey(tenantId, subject);
+  return getOrSetCached<T | null>(
     env as unknown as Env,
     key,
     async () => {
@@ -266,18 +374,18 @@ export async function loadProviderAuthAlert(
         try {
           const raw = await env.AUTH_CACHE_KV.get(key);
           if (raw) {
-            const parsed = JSON.parse(raw) as ProviderAuthAlert;
-            if (isSupportedProvider(parsed.provider)) return parsed;
+            const parsed = JSON.parse(raw) as AuthAlert;
+            if (isValid(parsed)) return parsed;
           }
           return null;
-        } catch (error) { /* fall through to the in-memory copy */ 
-          reportCaughtError(error, { source: "application/llm/providerAuthAlerts.ts", operation: "loadProviderAuthAlert" });
+        } catch (error) { /* fall through to the in-memory copy */
+          reportCaughtError(error, { source: "application/llm/providerAuthAlerts.ts", operation: "loadAuthAlert" });
         }
       }
       const local = memoryAlerts.get(key);
       if (!local) return null;
       if (Date.now() >= local.until) { memoryAlerts.delete(key); return null; }
-      return local.alert;
+      return isValid(local.alert) ? local.alert : null;
     },
     { kvTtlSeconds: ALERT_READ_TTL_SECONDS },
   );
@@ -293,7 +401,25 @@ export async function clearProviderAuthAlert(
   tenantId: number,
   provider: LlmProvider,
 ): Promise<void> {
-  const key = alertKey(tenantId, provider);
+  return clearAuthAlert(env, tenantId, { kind: 'provider', provider });
+}
+
+/** Drop ONE connection's alert — on a successful probe, or when the registration is edited
+ *  or removed, so a fixed connection stops warning about work the operator just did. */
+export async function clearConnectionAuthAlert(
+  env: ProviderAuthAlertEnv,
+  tenantId: number,
+  connectionId: number,
+): Promise<void> {
+  return clearAuthAlert(env, tenantId, { kind: 'connection', connectionId });
+}
+
+async function clearAuthAlert(
+  env: ProviderAuthAlertEnv,
+  tenantId: number,
+  subject: AuthAlertSubject,
+): Promise<void> {
+  const key = alertKey(tenantId, subject);
   memoryAlerts.delete(key);
   await invalidateCached(env as unknown as Env, key).catch((error) => { /* advisory */ 
     reportCaughtError(error, { source: "application/llm/providerAuthAlerts.ts", operation: "clearProviderAuthAlert" });

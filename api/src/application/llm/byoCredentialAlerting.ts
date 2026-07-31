@@ -37,9 +37,12 @@ import { sendTransactionalEmail } from '../email/sendEmail';
 import { sendByoCredentialAlertEmail, type ByoCredentialAlertRow } from '../../infrastructure/email/EmailService';
 import {
   authAlertsFromFailovers,
+  loadConnectionAuthAlert,
   loadProviderAuthAlert,
+  recordConnectionAuthAlert,
   recordProviderAuthAlert,
   type AuthFailoverLike,
+  type ConnectionAuthAlert,
   type ProviderAuthAlert,
 } from './providerAuthAlerts';
 
@@ -62,11 +65,54 @@ export async function raiseProviderAuthAlert(
   alert: ProviderAuthAlert,
   detail = '',
 ): Promise<RaiseAlertOutcome> {
-  const previous = await loadProviderAuthAlert(env, tenantId, alert.provider).catch(() => null);
-  await recordProviderAuthAlert(env, tenantId, alert);
+  return raiseAuthAlert(
+    env, tenantId, alert.provider,
+    () => loadProviderAuthAlert(env, tenantId, alert.provider),
+    () => recordProviderAuthAlert(env, tenantId, alert),
+    alert, detail,
+  );
+}
+
+/**
+ * The same "record, and tell the owner the FIRST time it breaks" contract for ONE named
+ * OpenRouter connection.
+ *
+ * `label` is what the mail names, because a connection has no brand to fall back on: an
+ * operator holding "Cheap coders" and "Frontier" must be told WHICH registration stopped
+ * working, and a bare "openrouter" would be true and useless.
+ */
+export async function raiseConnectionAuthAlert(
+  env: Env,
+  tenantId: number,
+  alert: ConnectionAuthAlert,
+  label: string,
+  detail = '',
+): Promise<RaiseAlertOutcome> {
+  return raiseAuthAlert(
+    env, tenantId, `OpenRouter · ${label}`,
+    () => loadConnectionAuthAlert(env, tenantId, alert.connectionId),
+    () => recordConnectionAuthAlert(env, tenantId, alert),
+    alert, detail,
+  );
+}
+
+/** Shared transition rule: record always, mail only on healthy → broken. Both subjects run
+ *  it so "when do I hear about it?" cannot answer differently per account kind. */
+async function raiseAuthAlert(
+  env: Env,
+  tenantId: number,
+  /** How the account is NAMED in the mail — a provider id, or `OpenRouter · <label>`. */
+  displayName: string,
+  loadPrevious: () => Promise<unknown>,
+  record: () => Promise<void>,
+  alert: { reason: string; status: number; vendor: string },
+  detail: string,
+): Promise<RaiseAlertOutcome> {
+  const previous = await loadPrevious().catch(() => null);
+  await record();
   if (previous) return { transitioned: false, notified: [] };
   const notified = await notifyBrokenProviders(env, tenantId, [{
-    provider: alert.provider,
+    provider: displayName,
     reason: alert.reason,
     status: alert.status,
     vendor: alert.vendor,
