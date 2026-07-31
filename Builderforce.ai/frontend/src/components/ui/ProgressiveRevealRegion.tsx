@@ -65,7 +65,6 @@ export function ProgressiveRevealRegion({
   const stream = orchestrator.streams.get(effectiveKey);
   const isLoading = !stream || (!stream.resolved && !stream.error);
   const hasError = stream?.error ?? null;
-  const hasData = stream?.resolved === true;
   const chunks = stream?.chunks ?? [];
 
   // Determine if this region should show content based on its priority tier
