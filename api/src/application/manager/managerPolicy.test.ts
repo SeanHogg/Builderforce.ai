@@ -41,6 +41,8 @@ const tenantRow = (o: Partial<TenantManagerDefaultsRow> = {}): TenantManagerDefa
   allowAgentReassignment: null,
   agentReassignIdleHours: null,
   agentReassignMaxPerSession: null,
+  // Lane auto-staffing (0386) — likewise a grant with no opinion by default.
+  allowAutoStaffLanes: null,
   ...o,
 });
 
@@ -162,6 +164,45 @@ describe('allowAutoMerge', () => {
       tenant: tenantRow({ allowAutoMerge: true }),
       project: legacy,
     }).allowAutoMerge).toBe(true);
+  });
+});
+
+/**
+ * LANE AUTO-STAFFING (0386) — a grant, not a knob.
+ *
+ * Measured on project 11 (2026-07-31): `backlog` held 299 tickets and `blocked` 10, both
+ * authorising no role at all. The manager can fix that (pin a producer to the lane), and
+ * doing so would have started 309 tickets in one pass. Whether an intake lane is MEANT to
+ * auto-start is a decision about how a team works, so it folds like `allowAutoMerge`:
+ * withheld by default, and an explicit workspace `false` is a ceiling.
+ */
+describe('allowAutoStaffLanes', () => {
+  it('is withheld unless somebody grants it', () => {
+    expect(DEFAULT_MANAGER_POLICY.allowAutoStaffLanes).toBe(false);
+    expect(resolveTieredManagerPolicy({}).allowAutoStaffLanes).toBe(false);
+    expect(resolveTieredManagerPolicy({ tenant: tenantRow(), project: projectRow() })
+      .allowAutoStaffLanes).toBe(false);
+  });
+
+  it('is granted when a tier says so and the other has no opinion', () => {
+    expect(resolveTieredManagerPolicy({
+      tenant: tenantRow({ allowAutoStaffLanes: true }), project: projectRow(),
+    }).allowAutoStaffLanes).toBe(true);
+    expect(resolveTieredManagerPolicy({
+      project: projectRow({ allowAutoStaffLanes: true }),
+    }).allowAutoStaffLanes).toBe(true);
+  });
+
+  it('treats an explicit workspace NO as a ceiling one project cannot re-grant', () => {
+    expect(resolveTieredManagerPolicy({
+      tenant: tenantRow({ allowAutoStaffLanes: false }),
+      project: projectRow({ allowAutoStaffLanes: true }),
+    }).allowAutoStaffLanes).toBe(false);
+  });
+
+  it('reads a row written before the column existed as "no opinion", never as a grant', () => {
+    const { allowAutoStaffLanes: _omitted, ...legacy } = projectRow({ allowAutoStaffLanes: true });
+    expect(resolveEffectiveManagerPolicy(legacy).allowAutoStaffLanes).toBe(false);
   });
 });
 

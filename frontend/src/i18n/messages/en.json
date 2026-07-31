@@ -6314,6 +6314,7 @@
         "cooldown_active": "Cooling down after an unproductive run — retrying shortly",
         "no_agent": "No agent assigned",
         "managed_no_role": "No role can execute this stage",
+        "lane_unconfigured": "Stage authorises no role",
         "no_board": "No board configured",
         "no_lane": "Lane not configured",
         "terminal_lane": "Done — no run needed",
@@ -6889,6 +6890,10 @@
       "allowAgentReassignment": {
         "label": "Hand stale work to agents",
         "help": "Lets a ceremony move a ticket from someone who missed it onto an agent. Missing a ceremony is never enough on its own — the ticket must also have sat untouched for the period below."
+      },
+      "allowAutoStaffLanes": {
+        "label": "Configure a stage that names nobody",
+        "help": "Some stages authorise no role at all — no required role declared, no agent staffed — so on a lifecycle-managed board nothing sitting in them can ever be dispatched. The manager always reports these; this decides whether it may also fix one by pinning a producer to the stage. Granting it starts every ticket already waiting there, so a stage left empty on purpose (an intake column you pull from by hand) should stay that way."
       },
       "agentReassignIdleHours": {
         "label": "Only after the ticket is idle for",

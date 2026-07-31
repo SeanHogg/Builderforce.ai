@@ -1120,6 +1120,10 @@ export async function runManagerForProject(
       // over a column the pass already filters on is the right price for a number the
       // whole finding is judged on.
       laneTicketCounts: await laneTicketCountsByStatus(db, projectId),
+      // The 0386 grant. Off by default, so the sweep REPORTS an unconfigured lane and
+      // leaves it alone — staffing one starts every ticket sitting in it, and the platform
+      // cannot tell an intake lane left empty on purpose from one left empty by accident.
+      allowAutoStaffLanes: policy.allowAutoStaffLanes,
     });
     const staffingDetail = describeLaneStaffing(laneStaffing);
     if (staffingDetail) {

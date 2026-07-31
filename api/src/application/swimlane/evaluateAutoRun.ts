@@ -49,6 +49,7 @@ export type AutoRunReason =
   | 'human_gate'          // the lane gate is 'human' — waits for explicit approval / Run now
   | 'no_agent'            // no lane-staffed agent AND no owner agent — nothing to run as
   | 'managed_no_role'     // LIFECYCLE-MANAGED board: no role this stage authorizes resolves to an agent, and a managed run must be role-attributed
+  | 'lane_unconfigured'   // LIFECYCLE-MANAGED board: this stage authorizes NO role at all — no requirement declared and no agent staffed, so there is nothing to bind rather than nothing bound
   | 'capability_mismatch' // every candidate agent lacks the lane's required capabilities
   | 'already_running'     // a live (pending/submitted/running/paused) run already exists on the ticket
   | 'same_lane_reentry'   // the run that just finished already SERVED this lane — the loop guard suppressed an immediate re-dispatch into it
@@ -79,6 +80,7 @@ export const AUTO_RUN_REASON_TEXT: Record<AutoRunReason, string> = {
   human_gate: 'No run: this lane is human-gated — a person must approve it or use Run now.',
   no_agent: 'No run: the lane has no staffed agent and the ticket owner is not eligible to execute this stage. Staff the lane, or dispatch explicitly with Run now.',
   managed_no_role: 'No run: this board is lifecycle-managed, so every run must be attributed to a role the stage authorizes — and no authorized role resolves to an agent here. The ticket\'s assignee is the Coordinator, never the executor, so assigning someone does NOT fix this: staff the lane, pin the role, or let the Coordinator resolve the stage\'s participant.',
+  lane_unconfigured: 'No run: this board is lifecycle-managed and this stage authorizes NO role at all — it declares no required role and has no agent staffed to it, so there is nothing for a run to be attributed to. This is a lane that was never configured, not a role that failed to bind: declare a required role on the stage, staff an agent to it, or grant the manager `allowAutoStaffLanes` so it may pin one itself.',
   capability_mismatch: 'No run: every candidate agent lacks the capabilities this lane requires.',
   already_running: 'No new run: this ticket already has a live execution. If that run is PAUSED it is waiting on an answer to an agent question — it holds the ticket until answered (or until the 72-hour paused deadline releases it), so answering it is what unblocks the ticket.',
   same_lane_reentry: 'No new run: the run that just finished already served this lane, so the loop guard suppressed an immediate re-dispatch into the same lane. Nothing is executing right now.',
@@ -109,7 +111,7 @@ export const AUTO_RUN_REASON_TEXT: Record<AutoRunReason, string> = {
  */
 export const EVALUATED_AUTO_RUN_REASONS: ReadonlySet<AutoRunReason> = new Set<AutoRunReason>([
   'will_run', 'no_board', 'no_lane', 'terminal_lane', 'human_gate', 'no_agent',
-  'managed_no_role', 'capability_mismatch', 'already_running', 'same_lane_reentry',
+  'managed_no_role', 'lane_unconfigured', 'capability_mismatch', 'already_running', 'same_lane_reentry',
   'run_cap_exhausted', 'cooldown_active', 'not_executable', 'pending_approval', 'tenant_token_limit',
 ]);
 
@@ -483,12 +485,28 @@ export function classifyResolvedAutoRun(input: {
    * staffing problem while the real one was that no dispatch could be attributed.
    */
   managedNoRole?: boolean;
+  /**
+   * The stronger, more specific half of {@link managedNoRole}: the stage authorizes NO
+   * role at all, because it declares no requirement and staffs no agent.
+   *
+   * Split out because the two demand OPPOSITE repairs and were being reported as one.
+   * `managed_no_role` means a named role failed to bind — the manager can staff it, and
+   * its whole staffing ladder is keyed on that role's key. `lane_unconfigured` means there
+   * is no role to name, so that ladder has nothing to work with and reports a gap it
+   * cannot close. Measured on project 11 (2026-07-31): 306 tickets read `managed_no_role`,
+   * of which 299 were in `backlog` and 10 in `blocked` — lanes nobody had ever configured.
+   * Reporting them as a failed binding sent every reader after a staffing problem that did
+   * not exist, and hid the ~8 tickets that genuinely had one.
+   */
+  managedLaneUnconfigured?: boolean;
   /** Consecutive most-recent UNPRODUCTIVE runs on the ticket (see {@link trailingUnproductiveStreak}). */
   consecutiveFailures?: number;
   /** Cooldown still owed since the last unproductive run (see {@link autoRunCooldownRemainingMs}). */
   cooldownRemainingMs?: number;
 }): { reason: AutoRunReason; canRunNow: boolean } {
   if (input.gate === 'human') return { reason: 'human_gate', canRunNow: false };
+  // The more specific reading first: "there is no role here" outranks "no role bound".
+  if (input.managedLaneUnconfigured) return { reason: 'lane_unconfigured', canRunNow: false };
   if (input.managedNoRole) return { reason: 'managed_no_role', canRunNow: false };
   if (!input.decisionAutoRun) return { reason: input.hasCapabilityMismatch ? 'capability_mismatch' : 'no_agent', canRunNow: false };
   // The loop guard and the live-run guard are DIFFERENT facts and now say so. Both
@@ -678,6 +696,12 @@ export async function evaluateTaskAutoRun(
   // no-self-review guarantee the owner fallback has always had.
   let managedRole: ManagedRoleAttribution | null = null;
   let unfilledRoleKeys: string[] = [];
+  // The authority TIER, kept for the same reason `unfilledRoleKeys` is: it is what
+  // separates "no role bound" from "no role exists here", and discarding it made those two
+  // opposite repairs indistinguishable. Null when the resolution never ran or failed —
+  // which must NOT read as `none`, or a failed read becomes the most alarming verdict
+  // available (the mistake `stallCensus` had to be repaired for on 2026-07-31).
+  let managedLaneTier: 'requirements' | 'lane_agents' | 'none' | null = null;
   if (board.lifecycleManaged && !isReviewLane(status)) {
     const resolved = await resolveManagedProducer(db, {
       tenantId: args.tenantId,
@@ -702,6 +726,7 @@ export async function evaluateTaskAutoRun(
       // are the roles that must be staffed for this stage to ever dispatch, and they are
       // the only actionable fact in a `managed_no_role` verdict.
       unfilledRoleKeys = resolved?.authority.roleKeys ?? [];
+      managedLaneTier = resolved?.authority.tier ?? null;
     }
   }
 
@@ -717,6 +742,7 @@ export async function evaluateTaskAutoRun(
     return finishEvaluation({
       db, runtimeService, args, status, assignedAgentRef, gate, staffedAgentRefs,
       agents: managedAgents, managedNoRole: !managedRole,
+      managedLaneUnconfigured: !managedRole && managedLaneTier === 'none',
       lifecycleManaged: true, managedRole, unfilledRoleKeys,
     });
   }
@@ -742,7 +768,8 @@ export async function evaluateTaskAutoRun(
   return finishEvaluation({
     db, runtimeService, args, status, assignedAgentRef, gate, staffedAgentRefs,
     agents: withOwnerAgentFallback(qualifiedLaneAgents, { agentRef: ownerFallbackRef }),
-    managedNoRole: false, lifecycleManaged: false, managedRole: null, unfilledRoleKeys: [],
+    managedNoRole: false, managedLaneUnconfigured: false,
+    lifecycleManaged: false, managedRole: null, unfilledRoleKeys: [],
   });
 }
 
@@ -766,6 +793,8 @@ async function finishEvaluation(input: {
   staffedAgentRefs: string[];
   agents: LaneAgentLike[];
   managedNoRole: boolean;
+  /** See {@link classifyResolvedAutoRun} — the stage authorizes no role AT ALL. */
+  managedLaneUnconfigured?: boolean;
   lifecycleManaged: boolean;
   managedRole: ManagedRoleAttribution | null;
   unfilledRoleKeys: string[];
@@ -803,6 +832,7 @@ async function finishEvaluation(input: {
     consecutiveFailures,
     cooldownRemainingMs,
     managedNoRole: input.managedNoRole,
+    managedLaneUnconfigured: input.managedLaneUnconfigured ?? false,
   });
 
   // WORKSPACE TOKEN GATE — last, and only for a ticket that would otherwise run.

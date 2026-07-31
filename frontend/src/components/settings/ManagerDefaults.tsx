@@ -113,6 +113,7 @@ function ManagerDefaultsInner() {
     autoSchedule: stored?.autoSchedule ?? null,
     allowUnattendedCeremonies: stored?.allowUnattendedCeremonies ?? null,
     allowAgentReassignment: stored?.allowAgentReassignment ?? null,
+    allowAutoStaffLanes: stored?.allowAutoStaffLanes ?? null,
     agentReassignIdleHours: stored?.agentReassignIdleHours ?? null,
     agentReassignMaxPerSession: stored?.agentReassignMaxPerSession ?? null,
   };
