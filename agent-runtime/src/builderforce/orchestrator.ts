@@ -1227,6 +1227,55 @@ export class AgentOrchestrator {
       this.resumingInFlight = false;
     }
   }
+
+  /**
+   * FR.5: Enforce policies for a task before execution.
+   * Returns an array of policy violations, if any.
+   */
+  private enforcePoliciesForTask(
+    taskId: string,
+    role: string,
+    context: {
+      workflowId: string;
+      taskId: string;
+      role: string;
+      taskDescription: string;
+      prdSize: number;
+      enableImpactAnalysis: boolean;
+    },
+  ): PolicyViolation[] {
+    if (!this.policyEngine) {
+      return [];
+    }
+
+    const violations: PolicyViolation[] = [];
+    const policies = this.policyEngine.getPolicies();
+
+    for (const policy of policies) {
+      // Check if policy applies to this role
+      if (policy.appliesTo && !policy.appliesTo.includes(role)) {
+        continue;
+      }
+
+      // Evaluate policy conditions
+      if (policy.conditions) {
+        for (const condition of policy.conditions) {
+          const result = this.policyEngine.evaluateCondition(condition, context);
+          if (!result) {
+            violations.push({
+              policyId: policy.id,
+              message: `Policy violation: ${policy.name} - ${condition.description}`,
+              severity: policy.severity,
+              taskId: context.taskId,
+              workflowId: context.workflowId,
+            });
+          }
+        }
+      }
+    }
+
+    return violations;
+  }
 }
 
 /**
