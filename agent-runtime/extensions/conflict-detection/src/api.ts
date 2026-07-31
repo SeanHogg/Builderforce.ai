@@ -376,3 +376,6 @@ function generateMockConflicts(
   
   return result;
 }
+
+// Re-export ConflictRuleSpec for convenience
+export { CONFLICT_RULE_SPEC, getRuleSpecification, ConflictRuleSpec } from './conflict-rule.spec.js';
