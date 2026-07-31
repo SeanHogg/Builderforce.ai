@@ -222,8 +222,8 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
             {!isAuthenticated && (
               <div className="nav-section" style={{ marginBottom: 0 }}>
                 <Link href="/login" className="nav-item" onClick={onMobileClose}>
-                  <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>🔑</span>
-                  {!collapsed && <span className="nav-item-label">Sign In</span>}
+                  <span className="nav-item-icon" aria-hidden="true">🔑</span>
+                  <span className="nav-item-label">Sign In</span>
                 </Link>
                 <Link
                   href="/register"
