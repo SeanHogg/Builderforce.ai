@@ -83,9 +83,9 @@
     {
       "task_id": 68,
       "title": "{\"error\":\"No transactions support in neon-http driver\"}",
-      "status": "in_review",
+      "status": "ready",
       "type": "bug",
-      "severity": "high",
+      "severity": "medium",
       "severity_source": "inferred",
       "assignee": "658608ba",
       "linked_tasks": [138],
