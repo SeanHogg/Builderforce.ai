@@ -1761,8 +1761,23 @@ html[data-theme='light'] .nebula {
   .topbar-hamburger:hover { background: var(--bg-hover); }
   .topbar-auth-cta { display: none; }
 
-  /* The docked rail column collapses to zero — the sidebar becomes a drawer. */
+  /* AC1 — the docked rail column collapses to zero and the sidebar becomes an
+     off-canvas drawer, so content starts at x=0 and spans the full viewport.
+     `.shell.nav-collapsed` must be zeroed EXPLICITLY: it re-declares the whole
+     `grid-template-columns` using `--shell-nav-width-collapsed` (52px), so
+     overriding only `--shell-nav-width` left a 52px dead strip down the left
+     for any user whose stored preference was "collapsed" — the large empty
+     space this ticket is about. */
   :root { --shell-nav-width: 0px; }
+
+  .shell,
+  .shell.nav-collapsed {
+    grid-template-columns: 0 minmax(0, 1fr);
+  }
+
+  /* The drawer is `position: fixed`, so it no longer occupies its grid cell;
+     without this the zero-width column would still clip its border. */
+  .nav { border-right: none; }
 
   .nav {
     position: fixed;
