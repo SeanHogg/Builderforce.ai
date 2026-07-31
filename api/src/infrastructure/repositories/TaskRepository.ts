@@ -1,5 +1,5 @@
-import { eq, inArray, and, sql, asc } from 'drizzle-orm';
-import { ITaskRepository, TaskListOptions } from '../../domain/task/ITaskRepository';
+import { eq, inArray, and, sql, asc, desc } from 'drizzle-orm';
+import { ITaskRepository, TaskListOptions, UnassignedHighPriorityTaskOptions, UnassignedHighPriorityTaskResult } from '../../domain/task/ITaskRepository';
 import { Task } from '../../domain/task/Task';
 import {
   TaskId, ProjectId, TaskStatus, TaskPriority, TaskType, AgentType,
