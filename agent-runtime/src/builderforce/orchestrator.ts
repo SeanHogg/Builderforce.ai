@@ -1228,30 +1228,6 @@ export class AgentOrchestrator {
     }
   }
 
-  /**
-   * FR.5: Enforce policies for a task before execution.
-   * Returns an array of policy violations, if any.
-   */
-  private enforcePoliciesForTask(
-    taskId: string,
-    role: string,
-    context: {
-      workflowId: string;
-      taskId: string;
-      role: string;
-      taskDescription: string;
-      prdSize: number;
-      enableImpactAnalysis: boolean;
-    },
-  ): PolicyViolation[] {
-    if (!this.policyEngine) {
-      return [];
-    }
-
-    // Use the built-in enforcePolicies method from PolicyEngine
-    const violations = this.policyEngine.enforcePolicies(taskId, role, context);
-    return violations;
-  }
 }
 
 /**
