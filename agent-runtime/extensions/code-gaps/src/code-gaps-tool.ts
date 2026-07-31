@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { writeFileSync, unlinkSync, existsSync } from "node:fs";
 import { glob } from "glob";
 import type { AnyAgentTool } from "../../../src/agents/tools/common.js";
 
