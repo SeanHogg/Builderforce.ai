@@ -1162,9 +1162,32 @@ html[data-theme='light'] .nebula {
    instead of leaving a wide side gutter. */
 .page-container {
   padding: 24px;
+  width: 100%;
 }
+
+/* Width tiers. Kept LEFT-aligned (no `margin: 0 auto`) so a capped page never
+   opens a dead gutter beside the sidebar. Set from PageContainer's `width` prop
+   via `data-width` — as a class rather than an inline style so the mobile query
+   below can actually drop the cap. */
+.page-container[data-width='readable'] {
+  max-width: 1100px;
+}
+
+.page-container[data-width='narrow'] {
+  max-width: 720px;
+}
+
 @media (max-width: 767px) {
-  .page-container {
+  /* AC1 — every content page runs the full 100% of the viewport on mobile.
+     The width caps are meaningless on a phone (they are wider than the screen)
+     but they are dropped explicitly so no tier can reintroduce a side gutter. */
+  .page-container,
+  .page-container[data-width='readable'],
+  .page-container[data-width='narrow'] {
+    max-width: 100%;
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
     padding: 12px 8px;
   }
 }
