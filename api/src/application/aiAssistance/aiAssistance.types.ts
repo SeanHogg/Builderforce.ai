@@ -27,6 +27,27 @@ export interface EnablementConfig {
   field: Record<string, boolean | null>;
 }
 
+/**
+ * AI Generator interface — injected so the service stays testable.
+ * `embed` and `complete` mirror the LLM gateway contract.
+ */
+export interface AiGenerator {
+  embed(input: string | string[]): Promise<{ embedding: number[]; tokenCount: number }>;
+  complete(params: {
+    modelId: string;
+    messages: Array<{ role: string; content: string }>;
+    maxTokens?: number;
+  }): Promise<{ id: string; content: string; finishReason: string }>;
+}
+
+/**
+ * Runtime state for tracking rejected suggestions within a session.
+ */
+export interface RuntimeState {
+  runId: string;
+  rejectedSuggestions: Map<string, Map<string, boolean>>;
+}
+
 /** AI suggestion displayed inline within a field */
 export interface InlineSuggestion {
   /** ID uniquely identifying this suggestion instance */
