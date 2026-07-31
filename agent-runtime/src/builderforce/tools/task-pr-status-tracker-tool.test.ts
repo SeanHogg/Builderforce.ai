@@ -17,6 +17,7 @@ import {
   deduplicateByNumber,
   buildReportSummary,
   buildTextReport,
+  runTaskPrStatus,
   type GhPullRequest,
   type TaskStatusEntry,
   type PrResult,
