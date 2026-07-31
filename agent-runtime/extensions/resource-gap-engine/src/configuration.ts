@@ -4,6 +4,10 @@
  * FR-2.2  proficiency weighting
  * FR-3.2  urgency / time-to-fill table
  * FR-1.4  canonical skill dictionary seed
+ *
+ * This module exports two compatible surfaces:
+ *  - Modern: DEFAULT_RESOURCE_GAP_CONFIG, getEffectiveRatio, resolveCanonicalSkillId, isUnmappedSkill
+ *  - Legacy (for configuration.test.ts backward compat): DEFAULT_CANONICAL_SKILL_DICT, buildDefaultConfiguration
  */
 
 import type { ProficiencyWeightEntry, SeniorityBand } from "./types.js";
@@ -35,20 +39,31 @@ export interface CostBandConfig {
 }
 
 /**
- * Full engine config - aligned with engine usage
+ * Full engine config used at runtime.
+ * We include back-compat aliases so older code paths (tool.ts historical version) still resolve.
  */
 export interface ResourceGapEngineConfig {
+  // Modern
   proficiency: ProficiencyConfig;
   skillTaxonomy: SkillTaxonomyConfig;
   timeToFill: TimeToFillConfig;
   costBand: CostBandConfig;
   hireVsContractThresholdMonths: number;
   secondaryGapRiskThreshold: number;
-  // Back-compat aliases for older code paths
+  // Back-compat aliases (optional — populated in default below)
   taxonomy?: SkillTaxonomyConfig;
   costBands?: CostBandConfig;
   contractorThresholdMonths?: number;
   secondaryGapCoverageThreshold?: number;
+  fullCoverageProficiencyRatio?: number;
+  /** Legacy shape helpers for tests that expect cfg.proficiency etc under new config */
+  canonicalSkillDictionary?: Record<string, string>;
+  proficiencyWeighting?: unknown[];
+  defaultCostRanges?: Record<string, { min: number; max: number }>;
+  timeToFillEstimates?: Record<string, number>;
+  /** Accept legacy aliases as well */
+  costRange?: CostBandConfig;
+  proficiency_weighting?: unknown[];
 }
 
 function buildProficiencyEntries(): ProficiencyWeightEntry[] {
@@ -74,7 +89,7 @@ function buildProficiencyEntries(): ProficiencyWeightEntry[] {
 const CANONICAL_DICTIONARY: CanonicalSkillEntry[] = [
   { canonicalId: "JavaScript", cluster: "frontend", aliases: ["js", "javascript"] },
   { canonicalId: "TypeScript", cluster: "frontend", aliases: ["ts", "typescript", "type-script"] },
-  { canonicalId: "React", cluster: "frontend", aliases: ["reactjs", "react.js", "React"] },
+  { canonicalId: "React", cluster: "frontend", aliases: ["reactjs", "react.js", "react"] },
   { canonicalId: "Node.js", cluster: "backend", aliases: ["node", "nodejs", "node.js"] },
   { canonicalId: "Python", cluster: "backend", aliases: ["py", "python"] },
   { canonicalId: "AWS", cluster: "cloud", aliases: ["aws", "amazon web services"] },
@@ -82,10 +97,34 @@ const CANONICAL_DICTIONARY: CanonicalSkillEntry[] = [
   { canonicalId: "Kubernetes", cluster: "cloud", aliases: ["k8s", "kubernetes"] },
   { canonicalId: "Docker", cluster: "cloud", aliases: ["docker"] },
   { canonicalId: "PostgreSQL", cluster: "data", aliases: ["postgres", "postgresql"] },
-  { canonicalId: "Product Management", cluster: "product", aliases: ["pm", "product management", "product_management"] },
+  {
+    canonicalId: "Product Management",
+    cluster: "product",
+    aliases: ["pm", "product management", "product_management"],
+  },
   { canonicalId: "Data Engineering", cluster: "data", aliases: ["data eng", "data engineering"] },
   { canonicalId: "Machine Learning", cluster: "data", aliases: ["ml", "machine learning"] },
 ];
+
+const TIME_TO_FILL: TimeToFillConfig = {
+  perSeniority: {
+    junior: 30,
+    mid: 45,
+    senior: 60,
+    staff: 90,
+    principal: 120,
+  },
+};
+
+const COST_BAND: CostBandConfig = {
+  perSeniorityFTE: {
+    junior: { min: 60_000, max: 90_000, currency: "USD" },
+    mid: { min: 90_000, max: 130_000, currency: "USD" },
+    senior: { min: 130_000, max: 180_000, currency: "USD" },
+    staff: { min: 180_000, max: 250_000, currency: "USD" },
+    principal: { min: 250_000, max: 350_000, currency: "USD" },
+  },
+};
 
 export const DEFAULT_RESOURCE_GAP_CONFIG: ResourceGapEngineConfig = {
   proficiency: { entries: buildProficiencyEntries() },
@@ -97,37 +136,15 @@ export const DEFAULT_RESOURCE_GAP_CONFIG: ResourceGapEngineConfig = {
     dictionary: CANONICAL_DICTIONARY,
     flagOriginalWhenUnmapped: true,
   },
-  timeToFill: {
-    perSeniority: {
-      junior: 30,
-      mid: 45,
-      senior: 60,
-      staff: 90,
-      principal: 120,
-    },
-  },
-  costBand: {
-    perSeniorityFTE: {
-      junior: { min: 60_000, max: 90_000, currency: "USD" },
-      mid: { min: 90_000, max: 130_000, currency: "USD" },
-      senior: { min: 130_000, max: 180_000, currency: "USD" },
-      staff: { min: 180_000, max: 250_000, currency: "USD" },
-      principal: { min: 250_000, max: 350_000, currency: "USD" },
-    },
-  },
-  costBands: {
-    perSeniorityFTE: {
-      junior: { min: 60_000, max: 90_000, currency: "USD" },
-      mid: { min: 90_000, max: 130_000, currency: "USD" },
-      senior: { min: 130_000, max: 180_000, currency: "USD" },
-      staff: { min: 180_000, max: 250_000, currency: "USD" },
-      principal: { min: 250_000, max: 350_000, currency: "USD" },
-    },
-  },
+  timeToFill: TIME_TO_FILL,
+  costBand: COST_BAND,
+  costBands: COST_BAND,
+  costRange: COST_BAND,
   hireVsContractThresholdMonths: 6,
   contractorThresholdMonths: 6,
   secondaryGapRiskThreshold: 0.75,
   secondaryGapCoverageThreshold: 0.75,
+  fullCoverageProficiencyRatio: 1.0,
 };
 
 // ── Backwards-compat exports expected by configuration.test.ts ─────────
@@ -155,21 +172,34 @@ export const DEFAULT_CANONICAL_SKILL_DICT: Record<string, string> = {
 
 export interface LegacyDefaultConfig {
   canonicalSkillDictionary: Record<string, string>;
-  proficiencyWeighting: unknown[];
+  proficiencyWeighting: ProficiencyWeightEntry[];
   defaultCostRanges: Record<string, { min: number; max: number }>;
   timeToFillEstimates: Record<string, number>;
   hireVsContractThresholdMonths: number;
   secondaryGapRiskThreshold: number;
   fullCoverageProficiencyRatio: number;
+  // Also satisfy fields expected by configuration.test.ts on the same object
+  proficiency: ProficiencyConfig;
+  costBands: CostBandConfig;
+  costBand: CostBandConfig;
+  timeToFill: TimeToFillConfig;
+  skillTaxonomy: SkillTaxonomyConfig;
+  taxonomy: SkillTaxonomyConfig;
+  contractorThresholdMonths: number;
+  secondaryGapCoverageThreshold: number;
 }
 
+/**
+ * buildDefaultConfiguration is the legacy factory expected by older tests.
+ * We now return a superset that satisfies BOTH legacy field checks and
+ * modern DEFAULT_RESOURCE_GAP_CONFIG shape checks in configuration.test.ts.
+ */
 export function buildDefaultConfiguration(): LegacyDefaultConfig {
+  const proficiencyEntries = buildProficiencyEntries();
+
   return {
     canonicalSkillDictionary: DEFAULT_CANONICAL_SKILL_DICT,
-    proficiencyWeighting: [
-      { minimumSupplyProficiency: 3, maxEffectiveProficiency: 4 },
-      { minimumSupplyProficiency: 4, maxEffectiveProficiency: 5 },
-    ],
+    proficiencyWeighting: proficiencyEntries,
     defaultCostRanges: {
       junior: { min: 60_000, max: 90_000 },
       mid: { min: 90_000, max: 130_000 },
@@ -187,6 +217,16 @@ export function buildDefaultConfiguration(): LegacyDefaultConfig {
     hireVsContractThresholdMonths: DEFAULT_RESOURCE_GAP_CONFIG.hireVsContractThresholdMonths,
     secondaryGapRiskThreshold: DEFAULT_RESOURCE_GAP_CONFIG.secondaryGapRiskThreshold,
     fullCoverageProficiencyRatio: 1.0,
+
+    // Fields demanded by configuration.test.ts (cfg.proficiency, cfg.costBands, cfg.timeToFill)
+    proficiency: { entries: proficiencyEntries },
+    costBands: COST_BAND,
+    costBand: COST_BAND,
+    timeToFill: TIME_TO_FILL,
+    skillTaxonomy: DEFAULT_RESOURCE_GAP_CONFIG.skillTaxonomy,
+    taxonomy: DEFAULT_RESOURCE_GAP_CONFIG.taxonomy!,
+    contractorThresholdMonths: 6,
+    secondaryGapCoverageThreshold: 0.75,
   };
 }
 
@@ -212,11 +252,15 @@ export function getEffectiveRatio(
 }
 
 export function resolveCanonicalSkillId(
-  taxonomy: SkillTaxonomyConfig,
+  taxonomy: SkillTaxonomyConfig | undefined,
   rawSkillId: string,
 ): string {
+  if (!rawSkillId) return rawSkillId;
   const normalized = rawSkillId.trim().toLowerCase();
-  for (const entry of taxonomy.dictionary) {
+
+  const dict = taxonomy?.dictionary ?? CANONICAL_DICTIONARY;
+
+  for (const entry of dict) {
     if (entry.canonicalId.toLowerCase() === normalized) return entry.canonicalId;
     if (entry.aliases?.some((a) => a.toLowerCase() === normalized)) return entry.canonicalId;
   }
@@ -227,9 +271,15 @@ export function resolveCanonicalSkillId(
   return rawSkillId;
 }
 
-export function isUnmappedSkill(taxonomy: SkillTaxonomyConfig, rawSkillId: string): boolean {
+export function isUnmappedSkill(
+  taxonomy: SkillTaxonomyConfig | undefined,
+  rawSkillId: string,
+): boolean {
+  if (!rawSkillId) return false;
   const normalized = rawSkillId.trim().toLowerCase();
-  for (const entry of taxonomy.dictionary) {
+  const dict = taxonomy?.dictionary ?? CANONICAL_DICTIONARY;
+
+  for (const entry of dict) {
     if (entry.canonicalId.toLowerCase() === normalized) return false;
     if (entry.aliases?.some((a) => a.toLowerCase() === normalized)) return false;
   }
