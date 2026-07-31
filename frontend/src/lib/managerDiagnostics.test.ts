@@ -936,6 +936,54 @@ describe('the lane-unconfigured cohort', () => {
   it('is ABSENT once no ticket sits in an unconfigured stage', () => {
     expect(managerFindings(input, now).some((f) => f.code === 'lane_unconfigured')).toBe(false);
   });
+
+  /**
+   * AN ABSENT ANSWER IS NOT A "NO".
+   *
+   * This report ships from the frontend and is routinely pasted from a browser newer than
+   * the deployed Worker, so a key the API does not yet fold arrives `undefined` — and a
+   * falsy check turns that into the confident sentence "the manager is NOT permitted",
+   * sending an operator to a policy panel to switch off something already off. Observed on
+   * 2026-07-31, where `allowAutoStaffLanes` printed as though the grant had been withheld
+   * on an api build that predated the column entirely.
+   */
+  describe('when the deployed API does not report the grant at all', () => {
+    const silent = () => {
+      const stripped = { ...policy } as Partial<ManagerPolicy>;
+      delete stripped.allowAutoStaffLanes;
+      return stripped as ManagerPolicy;
+    };
+    const cohortWithSilentApi = (): ManagerDiagnosticsInput => ({
+      ...withCohort(),
+      overview: { ...withCohort().overview, policy: silent() },
+    });
+
+    it('claims neither permission nor refusal', () => {
+      const t = managerFindings(cohortWithSilentApi(), now).find((f) => f.code === 'lane_unconfigured')?.text ?? '';
+      expect(t).toContain('NOT REPORTED by this API build');
+      expect(t).not.toContain('is NOT permitted');
+      expect(t).not.toContain('IS permitted');
+    });
+
+    // The policy-fold ROW, not the finding sentence — both mention the key, and matching
+    // the looser one is how the first cut of this test passed while asserting nothing.
+    const policyRow = (i: ManagerDiagnosticsInput) =>
+      buildManagerDiagnosticsReport(i, ctx).split('\n').find((l) => /^\s*allowAutoStaffLanes:/.test(l)) ?? '';
+
+    /** The EFFECTIVE column is the resolved fold — it can never legitimately say "inherit". */
+    it('does not print "inherit" in the effective column', () => {
+      const row = policyRow(cohortWithSilentApi());
+      expect(row).toContain('NOT REPORTED by this API build');
+      expect(row).not.toMatch(/allowAutoStaffLanes:\s*inherit/);
+    });
+
+    /** …while the two TIER columns keep saying "inherit", where it is the real answer. */
+    it('still reads a reported "no" as no', () => {
+      const row = policyRow(withCohort());
+      expect(row).toMatch(/allowAutoStaffLanes:\s*no\b/);
+      expect(row).toContain('project: inherit');
+    });
+  });
 });
 
 /**

@@ -36,6 +36,22 @@ Files: `api/src/application/llm/{byoCredentialHealth,providerAuthAlerts,byoCrede
 
 ---
 
+## 2026-07-31 — ✅ RESOLVED: a remedy that did its work reported it had never been tried (api 2026.7.195 · ui 2026.7.148)
+
+`remedy_never_attempted` came back on a capture where the register showed a `resolve_conflict` row at `attempts=0` after 18 days — re-diagnosed every five minutes, never escalated. The remedy was running fine. It was reporting itself away.
+
+**`attempted` is not "did it work", it is "did the world get asked".** `resolve_conflict` returned `attempted: started` — the same value as `applied` — which applies "a cap refused this before it could act" semantics to a remedy that had already moved the ticket to `in_progress` and written a `[Manager recovery]` resolution brief into its description. By the time control reaches that branch, `mayStartRun` has already screened out the genuinely transient refusals; a decline here comes from the ticket's OWN gate (no producer, a tripped breaker, a human gate), which meets the identical world next pass and declines identically. That is `ineffective`, not `nothing`. And an attempt that is never counted can never reach `MAX_REMEDY_ATTEMPTS` — so the ticket was neither worked nor handed to a human, which is the exact livelock the ceiling exists to end.
+
+**The hand-back IS the remedy; the run is only how it gets picked up.** `attempted: true` unconditionally now, `applied` still tracking whether a run started, and the note says which happened rather than going silent on the refusal.
+
+**It was also rewriting the same row every pass.** The branch re-issued the identical `tasks` UPDATE on a ticket already sitting in `in_progress` with the brief already in its description — a write per project per tick for zero change, on a database budget that is being deliberately held under $5/month. It now detects the hand-back it already performed and skips the write while still counting the attempt.
+
+**And the diagnostics report stopped answering a question it could not see.** The EFFECTIVE policy column is the resolved fold — it can never legitimately read `inherit` — but it shared the tri-state formatter with the two tier columns, so a key the deployed API does not fold yet printed as a real answer. Observed the same day: `allowAutoStaffLanes: inherit [project: inherit · workspace: inherit]` on an api build that predated the column, indistinguishable from a grant deliberately withheld. The report ships from the frontend and is routinely pasted from a browser newer than the Worker, so absent-vs-off is a standing condition, not an edge case. The effective column now says `NOT REPORTED by this API build`, and the `lane_unconfigured` finding gained a third branch instead of letting a falsy check tell an operator to switch off something already off.
+
+Files: `api/src/application/manager/triageStage.ts`, `frontend/src/lib/managerDiagnostics.ts`. Tests: `triageStage.remedy.test.ts` (+3 — the attempt counts, the write does not repeat), `managerDiagnostics.test.ts` (95). API 4295 + 12 guards; frontend `tsgo` clean.
+
+---
+
 ## 2026-07-31 — ✅ RESOLVED: `lane_unconfigured` — a lane nobody configured is not a staffing failure (migration 0386 · api 2026.7.195 · ui 2026.7.147)
 
 The staffing verdict named three lanes: `backlog` (299 tickets) and `blocked` (10) authorising **no role at all**, and `todo` (8) with agents that map to none. All 317 were being reported as `managed_no_role` — *"the stage authorises roles, but none resolves to an agent"* — which is not what was happening. There was no role. The taxonomy had one bucket for two opposite repairs, and the larger was hiding the smaller: the handful of tickets with a genuine binding failure were invisible inside a 306-ticket number.
