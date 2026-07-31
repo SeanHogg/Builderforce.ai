@@ -11,7 +11,7 @@ import type {
 import { buildDAG } from "./dag";
 import { computeWaves } from "./waves";
 import { inferDependencies } from "./inference";
-import { parseTaskList } from "./ingestion";
+import { parseTasks } from "./ingestion";
 import {
   toJson,
   toYaml,
