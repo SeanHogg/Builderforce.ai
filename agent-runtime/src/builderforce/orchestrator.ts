@@ -1248,32 +1248,8 @@ export class AgentOrchestrator {
       return [];
     }
 
-    const violations: PolicyViolation[] = [];
-    const policies = this.policyEngine.getPolicies();
-
-    for (const policy of policies) {
-      // Check if policy applies to this role
-      if (policy.appliesTo && !policy.appliesTo.includes(role)) {
-        continue;
-      }
-
-      // Evaluate policy conditions
-      if (policy.conditions) {
-        for (const condition of policy.conditions) {
-          const result = this.policyEngine.evaluateCondition(condition, context);
-          if (!result) {
-            violations.push({
-              policyId: policy.id,
-              message: `Policy violation: ${policy.name} - ${condition.description}`,
-              severity: policy.severity,
-              taskId: context.taskId,
-              workflowId: context.workflowId,
-            });
-          }
-        }
-      }
-    }
-
+    // Use the built-in enforcePolicies method from PolicyEngine
+    const violations = this.policyEngine.enforcePolicies(taskId, role, context);
     return violations;
   }
 }
