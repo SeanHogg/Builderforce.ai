@@ -121,7 +121,7 @@ Detailed enumeration (1 + 10 + 17 = 28 ✓):
   - Evermind higher-level: #6 (learnings triaged), #9 (contradiction rate), #11 (review throughput), #12 (extraction rate)
   - Operational metrics (runtime data, not code features): #17 (tasks completed), #18 (360 health), #19 (Architecture PRD), #20 (UI/UX feedback), #21 (onboarding time), #22 (docs completeness), #23 (integration uptime), #25 (messaging platforms), #27 (error rate), #28 (success rate)
 
-**Author-signature of this move**: Developer (task #175) — conflict resolution preserves both intents; totals corrected 2026-07-30.
+**Author-signature of this move**: Developer (task #175) — conflict resolution preserves both intents; totals corrected 2026-07-30. Second developer pass (2026-07-30): verified PRD.md byte-identical to base (task #487 Evermind pipeline PRD), re-checked KR #4/#5/#7/#8/#13/#14/#16/#24/#26 evidence against actual branch listing, corrected 2 KR titles to verbatim registry text, confirmed all 28 KR IDs match `builtin_key_results_list` exactly, fixed AC5 verifiability note. Totals unchanged.
 
 ## Key Observations
 
