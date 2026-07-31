@@ -15,6 +15,7 @@ describe('chatWorkLinkingDirective', () => {
     // Both operator requirements are present, wired to THIS chat's id.
     expect(d).toContain('builtin_chats_link_ticket (chatId=42, linkType="created")');
     expect(d).toContain('builtin_tickets_from_delta (chatId=42');
+    expect(d).toContain('pass its numeric ref as taskId');
     expect(d).toContain('builtin_tasks_create');
     expect(d).toContain('builtin_tasks_assignees');
     expect(d).toContain('builtin_kanban_assess_resource');

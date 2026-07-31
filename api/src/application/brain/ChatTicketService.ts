@@ -514,12 +514,15 @@ export class ChatTicketService {
 
     const seg = await resolveSegment(this.db, tenantId);
     const linkType: LinkType = input.linkType === 'created' ? 'created' : 'linked';
-    const [existing] = await this.db.select({ id: chatTicketLinks.id }).from(chatTicketLinks)
+    const [existing] = await this.db.select({ id: chatTicketLinks.id, linkType: chatTicketLinks.linkType }).from(chatTicketLinks)
       .where(and(eq(chatTicketLinks.chatId, chatId), eq(chatTicketLinks.ticketKind, input.kind), eq(chatTicketLinks.ticketRef, input.ref))).limit(1);
 
     let row;
     if (existing) {
-      [row] = await this.db.update(chatTicketLinks).set({ linkType }).where(eq(chatTicketLinks.id, existing.id)).returning();
+      // A later delta may re-link a ticket originally CREATED by this chat. Keep
+      // that stronger lineage instead of downgrading it to a generic link.
+      const effectiveLinkType = existing.linkType === 'created' ? 'created' : linkType;
+      [row] = await this.db.update(chatTicketLinks).set({ linkType: effectiveLinkType }).where(eq(chatTicketLinks.id, existing.id)).returning();
     } else {
       [row] = await this.db.insert(chatTicketLinks).values({
         tenantId, segmentId: seg, chatId, ticketKind: input.kind, ticketRef: input.ref,

@@ -625,6 +625,21 @@
   padding: 1px 4px;
   border-radius: 4px;
 }
+.bf-md__think {
+  margin: 6px 0 10px;
+  color: var(--bf-text-muted, #8a8a8a);
+  font-size: 0.78rem;
+}
+.bf-md__think summary {
+  cursor: pointer;
+  user-select: none;
+  font-style: italic;
+}
+.bf-md__think-body {
+  margin: 6px 0 0 12px;
+  padding-left: 10px;
+  border-left: 2px solid var(--bf-border, rgba(127, 127, 127, 0.28));
+}
 .bf-md__code {
   position: relative;
   margin: 8px 0;

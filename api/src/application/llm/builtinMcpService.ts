@@ -776,11 +776,11 @@ const CATALOG: BuiltinTool[] = [
   // ---- Work-delta capture + Validator review (0270) ----
   {
     tool: 'tickets.from_delta', mutates: true,
-    description: 'Record a code CHANGE you just made as a classified work delta AND open the associated ticket so the work is visible on the board. Call this whenever your turn added or changed code (a feature, fix, or bug repair) that is not already tracked by an existing ticket. kind: improvement (new/better behaviour) | fix (repaired something) | bug (a defect you are logging). Pass files you touched and, when working in a Brain chat, the chatId so the ticket is tied back to this conversation. The ticket opens in review and completes automatically when the change is merged + deployed.',
+    description: 'Record a code CHANGE you just made as a classified work delta so it is visible on the board. If an existing ticket already tracks the work, pass taskId and the delta attaches to it without creating a duplicate; otherwise an associated ticket is opened. kind: improvement (new/better behaviour) | fix (repaired something) | bug (a defect you are logging). Pass files you touched and, when working in a Brain chat, the chatId so the ticket is tied back to this conversation. A newly-created ticket opens in review and completes automatically when the change is merged + deployed.',
     parameters: obj({
       projectId: N, summary: S, detail: S,
       kind: { type: 'string', enum: ['improvement', 'fix', 'bug'] },
-      files: { type: 'array', items: S }, modality: S, chatId: N,
+      files: { type: 'array', items: S }, modality: S, chatId: N, taskId: N,
       createTicket: B,
     }, ['projectId', 'summary']),
     run: async (ctx, a) => {
@@ -794,6 +794,7 @@ const CATALOG: BuiltinTool[] = [
         files,
         modality: a.modality != null ? str(a.modality) : 'mcp',
         chatId: a.chatId != null ? num(a.chatId) : null,
+        taskId: a.taskId != null ? num(a.taskId) : null,
         createdBy: ctx.userId ?? null,
         createTicket: typeof a.createTicket === 'boolean' ? a.createTicket : true,
       });

@@ -20,8 +20,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * written) but is not yet merged/deployed. The merge/deploy → ticket-complete wiring
  * (githubWebhookRoutes / repoRoutes finalize) flips it to Done once it ships.
  */
-import { eq } from 'drizzle-orm';
-import { workDeltas, tasks as tasksTable } from '../../infrastructure/database/schema';
+import { and, eq, sql } from 'drizzle-orm';
+import { workDeltas, tasks as tasksTable, projects as projectsTable } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import { TaskService } from '../task/TaskService';
 import { ProjectService } from '../project/ProjectService';
@@ -59,6 +59,8 @@ export interface RecordDeltaInput {
   modality?: string;
   /** Brain chat that produced the change (ties the ticket to the conversation). */
   chatId?: number | null;
+  /** Existing project ticket that already tracks this change. Reused, never duplicated. */
+  taskId?: number | null;
   /** User id or agent ref that authored the turn. */
   createdBy?: string | null;
   /** Create+link a ticket for the delta (default true). When false, only the
@@ -71,6 +73,39 @@ export interface RecordDeltaResult {
   kind: DeltaKind;
   taskId: number | null;
   taskKey: string | null;
+  /** True when the delta was attached to an already-existing project ticket. */
+  deduped: boolean;
+}
+
+/** Match the same project + normalized-title idempotency contract as tasks.create. */
+function normalizedTitle(value: string): string {
+  return value.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+async function existingTaskForDelta(
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  summary: string,
+  taskId?: number | null,
+): Promise<{ id: number; key: string } | null> {
+  // Task titles are capped at 500 characters when created below, so compare the
+  // same representation. Whitespace/case normalization mirrors tasks.create.
+  const title = normalizedTitle(summary.slice(0, 500));
+  const [row] = await db
+    .select({ id: tasksTable.id, key: tasksTable.key })
+    .from(tasksTable)
+    .innerJoin(projectsTable, eq(projectsTable.id, tasksTable.projectId))
+    .where(and(
+      eq(tasksTable.projectId, projectId),
+      eq(tasksTable.archived, false),
+      eq(projectsTable.tenantId, tenantId),
+      taskId != null
+        ? eq(tasksTable.id, taskId)
+        : sql`lower(regexp_replace(btrim(${tasksTable.title}), '[[:space:]]+', ' ', 'g')) = ${title}`,
+    ))
+    .limit(1);
+  return row ? { id: Number(row.id), key: row.key } : null;
 }
 
 /**
@@ -123,30 +158,47 @@ export class WorkDeltaService {
 
     let taskId: number | null = null;
     let taskKey: string | null = null;
+    let deduped = false;
 
     if (input.createTicket !== false) {
-      const bodyParts: string[] = [];
-      if (input.detail) bodyParts.push(input.detail);
-      if (files && files.length) bodyParts.push(`\n\nFiles touched:\n${files.map((f) => `- ${f}`).join('\n')}`);
-      bodyParts.push(`\n\n_Auto-captured from a ${modality} chat delta (${kind})._`);
-      // The change is already written — open it in review, pending merge/deploy.
-      const created = await this.tasks.createTask({
-        projectId: input.projectId,
-        title: summary.slice(0, 500),
-        description: bodyParts.join(''),
-        priority: priorityForKind(kind),
-      }, tenantId);
-      taskId = Number(created.id);
-      taskKey = created.key;
-      // Place it in the review lane WITHOUT firing the lane's autonomous agent —
-      // the work exists; it just needs to ship. Direct status write (no lifecycle
-      // side-effects) keeps this off the auto-run path.
-      await this.db.update(tasksTable).set({ status: TaskStatus.IN_REVIEW, updatedAt: new Date() }).where(eq(tasksTable.id, taskId));
+      // A chat may create/assign the ticket first and then record the code delta.
+      // Reuse that ticket under the same idempotency rule as tasks.create instead
+      // of minting a second task for the same work (the Brain/VSIX duplicate path).
+      const existing = await existingTaskForDelta(this.db, tenantId, input.projectId, summary, input.taskId);
+      if (input.taskId != null && !existing) {
+        throw new Error(`taskId ${input.taskId} is not an active ticket in project ${input.projectId}`);
+      }
+      if (existing) {
+        taskId = existing.id;
+        taskKey = existing.key;
+        deduped = true;
+      } else {
+        const bodyParts: string[] = [];
+        if (input.detail) bodyParts.push(input.detail);
+        if (files && files.length) bodyParts.push(`\n\nFiles touched:\n${files.map((f) => `- ${f}`).join('\n')}`);
+        bodyParts.push(`\n\n_Auto-captured from a ${modality} chat delta (${kind})._`);
+        // The change is already written — open it in review, pending merge/deploy.
+        const created = await this.tasks.createTask({
+          projectId: input.projectId,
+          title: summary.slice(0, 500),
+          description: bodyParts.join(''),
+          priority: priorityForKind(kind),
+        }, tenantId);
+        taskId = Number(created.id);
+        taskKey = created.key;
+        // Place it in the review lane WITHOUT firing the lane's autonomous agent —
+        // the work exists; it just needs to ship. Direct status write (no lifecycle
+        // side-effects) keeps this off the auto-run path.
+        await this.db.update(tasksTable).set({ status: TaskStatus.IN_REVIEW, updatedAt: new Date() }).where(eq(tasksTable.id, taskId));
+      }
 
-      // Tie the ticket back to the conversation that spawned it (lineage).
+      // Tie the ticket back to the conversation. An existing ticket is linked,
+      // while a ticket minted by this delta is marked as created by the chat.
       if (input.chatId != null) {
         await this.chatTickets
-          .linkTicket(tenantId, input.chatId, userId, { kind: 'task', ref: String(taskId), linkType: 'created', createdBy })
+          .linkTicket(tenantId, input.chatId, userId, {
+            kind: 'task', ref: String(taskId), linkType: deduped ? 'linked' : 'created', createdBy,
+          })
           .catch((error) => { /* best-effort lineage; never fail the delta on a link error */ 
             reportCaughtError(error, { source: "application/delta/WorkDeltaService.ts", operation: "record" });
           });
@@ -188,6 +240,6 @@ export class WorkDeltaService {
       reportCaughtError(error, { source: "application/delta/WorkDeltaService.ts", operation: "record" });
     }
 
-    return { deltaId: row!.id, kind, taskId, taskKey };
+    return { deltaId: row!.id, kind, taskId, taskKey, deduped };
   }
 }

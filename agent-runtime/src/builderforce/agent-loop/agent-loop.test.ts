@@ -182,7 +182,13 @@ describe("native Agent loop", () => {
       expect(produced.filter(isNudge)).toHaveLength(MAX_ANNOUNCEMENT_RECOVERIES);
       // Giving up must be LOUD. Ending on the promise alone leaves an autonomous run
       // looking like a clean completion that happened to do nothing.
-      const tail = String(produced.at(-1)?.content ?? "");
+      const tailMessage = produced.filter((m) => m.role === "assistant").at(-1) as
+        | AssistantMessage
+        | undefined;
+      const tail = tailMessage?.content
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n") ?? "";
       expect(tail).toContain("nothing was actually run");
       expect(tail).toContain("pick a different model");
     });
