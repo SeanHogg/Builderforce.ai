@@ -28,7 +28,7 @@ Tasks that may represent bugs/regressions but lack clear signal keywords. These 
 
 | Task ID | Title | Status | Type | Severity | Signal Attempted | Notes |
 |---|---|---|---|---|---|---|
-| #69 | Agent Assigned to Board > Dragged ticket to swimlane > no indicator that agent is running | in_progress | ambiguous | medium | No bug keyword in title; behavioral UI defect suspected | User-visible defect — agent executes but card shows no progress indicator |
+| #69 | Agent Assigned to Board > Dragged ticket to swimlane > no indicator that agent is running | in_progress | ambiguous | medium (inferred) | No bug keyword in title; behavioral UI defect suspected | User-visible defect — agent executes but card shows no progress indicator |
 | #353 | Agent channels endpoint always returns `[]` (stub, no DB) | ready | ambiguous | high | No bug keyword; endpoint returns empty array — may be intentional stub | Empty response from production endpoint may mask a regression |
 | #355 | Helcim webhook mapping is a placeholder | ready | ambiguous | high | No bug keyword in title; body describes incorrect mapping | `APPROVED` webhooks incorrectly map to `subscription.activated` — defect if data is live |
 
