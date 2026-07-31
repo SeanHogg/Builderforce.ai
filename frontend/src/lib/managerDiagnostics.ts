@@ -463,6 +463,8 @@ export interface UnauthorizedLaneReport {
   laneKey: string | null;
   reason: string;
   ticketCount: number;
+  /** Staffed agents that map to no role — the whole repair for `lane_agents_not_role_capable`. */
+  unmappedAgents: string[];
 }
 
 /** What the board-staffing sweep itself concluded, lifted out of the decision feed. */
@@ -516,6 +518,7 @@ export function summarizeBoardStaffing(
             laneKey: typeof row.laneKey === 'string' ? row.laneKey : null,
             reason: typeof row.reason === 'string' ? row.reason : 'unknown',
             ticketCount: typeof row.ticketCount === 'number' ? row.ticketCount : 0,
+            unmappedAgents: strings(row.unmappedAgents),
           }];
         }),
       filledRoleKeys: (Array.isArray(d.filled) ? d.filled : []).flatMap((f) => {
@@ -558,7 +561,7 @@ export function describeStaffingVerdict(
   if (verdict.unauthorizedLanes.length > 0) {
     const n = verdict.unauthorizedLanes.length;
     const worst = verdict.unauthorizedLanes.slice(0, 3)
-      .map((l) => `'${l.laneKey ?? '(unnamed lane)'}' holding ${l.ticketCount} (${LANE_GAP_GLOSS[l.reason] ?? l.reason})`)
+      .map((l) => `'${l.laneKey ?? '(unnamed lane)'}' holding ${l.ticketCount} (${LANE_GAP_GLOSS[l.reason] ?? l.reason}${l.unmappedAgents.length ? `: ${l.unmappedAgents.join(', ')}` : ''})`)
       .join('; ');
     parts.push(`The sweep at ${verdict.at} named ${n} stage${n === 1 ? '' : 's'} that authorise NO role at all: ${worst}. Hiring cannot fix those — there is no role to staff, so each lane needs a required role or a staffed agent before anything in it can move.`);
   }
@@ -1383,9 +1386,12 @@ function formatStalls(stalls: StallRegister, nowMs: number | null): string[] {
   const wordingsByCause = new Map<string, Set<string>>();
   for (const r of stalls.rows) {
     if (!r.detail) continue;
-    // The leading "Stuck N days:" is the row's OWN idle age, already in its `idle=` column
-    // — stripping it is what collapses N rows of the same sentence into one.
-    const wording = r.detail.replace(/^Stuck \d+ days?:\s*/i, '').trim();
+    // The leading "Stuck N days" is the row's OWN idle age, already in its `idle=` column
+    // — stripping it is what collapses N rows of the same sentence into one. It appears in
+    // TWO shapes: "Stuck 27 days: <cause>" and "Stuck 18 days despite being runnable — …",
+    // and matching only the first left `never_started` reporting three wordings that
+    // differed by nothing but the day count. Anchor on the age, not on the punctuation.
+    const wording = r.detail.replace(/^Stuck \d+ (?:days?|hours?|minutes?)\s*:?\s*/i, '').trim();
     if (!wording) continue;
     const seen = wordingsByCause.get(r.cause) ?? new Set<string>();
     seen.add(wording);
@@ -1605,6 +1611,7 @@ export function buildManagerDiagnosticsReport(
     if (staffing.unauthorizedLanes.length === 0) out.push('  (none reported)');
     for (const l of staffing.unauthorizedLanes) {
       out.push(`  ${l.laneKey ?? '(unnamed lane)'}  holding=${l.ticketCount}  reason=${l.reason} — ${LANE_GAP_GLOSS[l.reason] ?? 'unrecognised reason code'}`);
+      if (l.unmappedAgents.length) out.push(`      agents to give a job role: ${l.unmappedAgents.join(', ')}`);
     }
     out.push('');
     // The sweep's own sentence, which carries the repair instructions authored once in the
