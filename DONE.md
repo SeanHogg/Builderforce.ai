@@ -36,6 +36,32 @@ Files: `api/src/application/llm/{byoCredentialHealth,providerAuthAlerts,byoCrede
 
 ---
 
+## 2026-07-31 — ✅ RESOLVED: the staffing verdict arrived, and everything it touched was unreadable (api 2026.7.194 · ui 2026.7.146)
+
+The first capture that carried the board-staffing verdict answered the 306-ticket question outright:
+
+```
+backlog  holding=299  reason=lane_unstaffed
+blocked  holding=10   reason=lane_unstaffed
+todo     holding=8    reason=lane_agents_not_role_capable
+```
+
+Three lanes, 317 tickets, and **it is a board configuration, not a platform defect** — the intake lane declares no required role and has no agent staffed to it, so nothing can ever leave it on a lifecycle-managed board. Four things that verdict exposed, all fixed here:
+
+**`lane_agents_not_role_capable` named no agent.** "Agents are staffed to the stage but none of them can act as any role" tells a reader a role is missing and not *which agent to give it to* — the same "go and look for it" flaw the traversal exists to remove, one level further down. `UnauthorizedLane.unmappedAgents` now carries `name (declared "role")` for every staffed agent whose `capableRoleKeys` is empty, straight from inputs the traversal already holds — no new query — and it reaches the decision, the finding and the report section.
+
+**"1 stage on this board authorise NO role."** A sentence an operator is meant to act on should not read as machine output.
+
+**The sign-off sentence was a grouping key rendered in random order.** `stallTriage` joined `stageSignoff.roleNames` as the manifest query returned them, so the same two roles rendered `(Product Owner, Architect)` on one ticket and `(Architect, Product Owner)` on the next. That string is the watch row's stored `detail`, and every rollup groups by it — so one cause wore two spellings and counted as two problems. Measured on project 11: 5 `awaiting_signoff` rows produced 3 "distinct" wordings differing only in ordering. Sorted, with a test asserting the same role SET renders identically however the slots arrive.
+
+**The register's age-prefix strip (shipped hours earlier, ui 2026.7.143) matched only half the sentences it had to.** The prefix has two shapes — `Stuck 27 days: <cause>` and `Stuck 18 days despite being runnable — …` — and anchoring on the colon left `never_started` reporting three wordings that differed by nothing but the day count. Anchored on the age instead. The accompanying test now counts occurrences in the PROSE only: the raw-payload appendix repeats every row verbatim by design, so counting across the whole report measures the appendix rather than the register.
+
+Also synced `API_VERSION` (2026.7.191) to `package.json` (2026.7.193) — the two had drifted on main, which `check:version` exists to catch because `/health` and every diagnostics capture report the constant, not the manifest.
+
+Files: `api/src/application/manager/staffUnfilledLanes.ts`, `stallTriage.ts` (+ both test files), `frontend/src/lib/managerDiagnostics.ts` (+ tests). API 4282 tests + 12 guards green; frontend 493.
+
+---
+
 ## 2026-07-31 — ✅ RESOLVED: the diagnostics report put the answer where it got cut (ui 2026.7.143)
 
 The capture that followed the census fix arrived **truncated at 50,000 characters**, and what it lost was the decision feed — the last prose section. That is the only place the board-staffing sweep records *why* a managed lane authorises nobody, and the critical finding at the top of the same report ended with "**look for an `assign` decision naming the roles it could not fill**". The report was instructing its reader to go and read a section that was no longer there.
