@@ -48,8 +48,15 @@ export async function invalidateSwimlaneOrdinals(env: Env, projectId: number): P
   await invalidateCached(env, ordinalsCacheKey(projectId));
 }
 
+/**
+ * "Finished" for lifecycle purposes: the shared done-class (see
+ * domain/shared/doneClass) OR a swimlane this board explicitly flags terminal.
+ * Delegates to {@link isDoneLane} so a tenant that renames its terminal lane is
+ * folded in once, rather than here and in the three other modules that used to
+ * carry their own copy of this rule.
+ */
 function isDoneClass(status: string, ordinals: OrdinalMap): boolean {
-  return DONE_CLASS.has(status) || ordinals[status]?.isTerminal === true;
+  return isDoneLane(status, ordinals);
 }
 
 export interface RecordTransitionInput {
