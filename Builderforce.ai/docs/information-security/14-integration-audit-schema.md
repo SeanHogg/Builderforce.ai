@@ -3,7 +3,6 @@
 This document defines the database schema for the integration audit and health dashboard feature. It includes models for integration connections, health data, gaps, and score calculations.
 
 ## Data Model Overview
-
 The primary audit tables:
 
 1. `IntegrationConnections` — Tracks which integrations are connected to the system
@@ -24,10 +23,10 @@ Represents a connected third-party service integration (GitHub, Jira, Slack, etc
 model IntegrationConnection {
   id                String   @id @default(uuid())
   tenantId          String
-  segmentId         String
+  projectId         Int
 
   // Integration identity
-  type              IntegrationType  @default(SOURCE_CONTROL)
+  type              IntegrationType  @default(source-control)
   provider          IntegrationProvider
   externalId        String                    // provider-specific ID
   name              String
@@ -47,19 +46,19 @@ model IntegrationConnection {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  @@index([tenantId, segmentId])
-  @@index([tenantId, segmentId, type])
-  @@index([tenantId, segmentId, connectedAt])
+  @@index([tenantId, projectId])
+  @@index([tenantId, projectId, type])
+  @@index([tenantId, projectId, connectedAt])
   @@map("integration_connections")
 }
 
 enum IntegrationType {
-  SOURCE_CONTROL
-  ISSUE_TRACKER
-  COMMUNICATION
-  CI_CD
-  MONITORING
-  CALENDAR
+  source-control
+  issue-tracker
+  communication
+  cicd
+  monitoring
+  calendar
 }
 
 enum IntegrationProvider {
@@ -84,7 +83,7 @@ model IntegrationConfiguration {
   id              String   @id @default(uuid())
   integrationId   String   @unique
   tenantId        String
-  segmentId       String
+  projectId       Int
 
   // Structured by provider
   webhooks        Json?    // { github: { repo_id: ..., events: [...] } }
@@ -98,7 +97,7 @@ model IntegrationConfiguration {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  @@index([tenantId, segmentId])
+  @@index([tenantId, projectId])
   @@map("integration_configurations")
 }
 ```
@@ -113,7 +112,7 @@ Individual validation checks performed on each integration (e.g., webhook trigge
 model IntegrationCheck {
   id        String   @id @default(uuid())
   tenantId  String
-  segmentId String
+  projectId Int
   integrationId String
 
   checkType  String  // e.g., 'webhook_trigger', 'data_flow', 'recent_activity'
@@ -122,8 +121,8 @@ model IntegrationCheck {
   details    Json?
   occurredAt DateTime @default(now())
 
-  @@index([tenantId, segmentId, integrationId])
-  @@index([tenantId, segmentId, occurredAt])
+  @@index([tenantId, projectId, integrationId])
+  @@index([tenantId, projectId, occurredAt])
   @@map("integration_checks")
 }
 ```
@@ -138,7 +137,7 @@ Captures identified issues with lower severity gaps.
 model IntegrationGap {
   id           String   @id @default(uuid())
   tenantId     String
-  segmentId    String
+  projectId    Int
   integrationId String
 
   severity     GapSeverity  @default(MEDIUM)
@@ -150,9 +149,9 @@ model IntegrationGap {
   resolvedAt   DateTime?
   resolvedBy   String?  // userId or resolved_at
 
-  @@index([tenantId, segmentId, integrationId])
-  @@index([tenantId, segmentId, severity])
-  @@index([tenantId, segmentId, detectedAt])
+  @@index([tenantId, projectId, integrationId])
+  @@index([tenantId, projectId, severity])
+  @@index([tenantId, projectId, detectedAt])
   @@map("integration_gaps")
 }
 
@@ -183,7 +182,7 @@ Stores calculated data completeness scores (0-100) with component breakdown.
 model IntegrationCompletenessScore {
   id                  String   @id @default(uuid())
   tenantId            String
-  segmentId           String
+  projectId           Int
   integrationId       String   @unique
 
   totalWeightedScore  Decimal  @db.Decimal(5,2)  // 0-100
@@ -263,3 +262,11 @@ IntegrationCompletenessScore 1──* ScoreBreakdown (one-to-one, unique)
 | ENTERPRISE  | 0.15 | 0.20 | 0.10 | 0.25 | 0.15 | 0.10 |
 
 These weights can be adjusted per tenant via the `ServiceTierWeights` model or immutable defaults in service code.
+
+---
+
+## Alignment Notes
+
+- `projectId` is used instead of `segmentId` — this feature is project-scoped.
+- Enum values in `IntegrationType` use kebab-case (e.g., `source-control`, `issue-tracker`, `cicd`) matching the frontend types in `Builderforce.ai/frontend/src/types/integration.ts`.
+- The health endpoint (`/api/v1/audit/health/:projectId`) returns data keyed by `projectId`.
