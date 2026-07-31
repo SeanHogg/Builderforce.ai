@@ -106,3 +106,36 @@ export interface ErrorDetail {
   /** For circular dependencies: the cycle path; for unknown refs: the bad IDs */
   cause: string[];
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// API response types (FR-6.1)
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+
+/** Supported output format for the API */
+export type PlanOutputFormat = "json" | "yaml" | "markdown" | "dot" | "mermaid";
+
+/** The plan object with optional dependency graph embedded */
+export interface ParallelPlanWithGraph extends ParallelPlan {
+  /** Embed the dependency graph for convenience (FR-4) */
+  graph: DependencyGraph;
+}
+
+/**
+ * The result of planParallel — either a plan or an error, never both.
+ * This is the structured API response (FR-6.1, FR-5.1).
+ */
+export interface PlanOutput {
+  plan?: ParallelPlanWithGraph;
+  formatted?: string;
+  error?: PlanError;
+  warnings?: string[];
+}
+
+/**
+ * Structured error object (FR-5.1, AC-7).
+ */
+export interface PlanError {
+  error_code: string;
+  message: string;
+  details?: Record<string, unknown>;
+}
