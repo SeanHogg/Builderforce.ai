@@ -34,6 +34,7 @@ export type EscalationStatusDto = {
   currentLevelEffectiveLevel: number | null;
   currentOwnerKind: string | null;
   currentOwnerId: string | null;
+  currentOwnerName: string | null;
 
   triggeredAt: string;
   currentLevelEnteredAt: string | null;
@@ -49,7 +50,9 @@ export type EscalationStatusDto = {
 
   createdByUserId: string | null;
   relatedTaskId: number | null;
-  relatedProjectId: string | null;
+  // updatedAt is intentionally a string for API serialization
+  createdAt: string;
+  updatedAt: string;
 
   reminder24hSentAt: string | null;
   reminder4hSentAt: string | null;
@@ -68,11 +71,21 @@ export type EscalationResolutionDto = {
 export type EscalationLogEntryDto = {
   id: string;
   escalationId: string;
+  logIndex: number;
   action: string;
   sequenceIndex: number;
-  performedByUserId: string | null;
+  effectiveLevel: number | null;
+  levelName: string | null;
+  ownerKind: string | null;
+  ownerId: string | null;
+  ownerDisplayName: string | null;
+  resolutionOutcome: string | null;
+  slaBreached: boolean;
+  stepsTaken: string | null;
+  recommendedOptions: unknown;
   message: string | null;
-  payload: unknown | null;
+  actorKind: string;
+  actorId: string | null;
   createdAt: string;
 };
 
@@ -104,12 +117,30 @@ export type EscalationChainLevelDto = {
   isTerminal: boolean;
   iconKey: string | null;
   createdAt: string;
-  updatedAt: string;
+};
+
+export type EscalationTriggerInput = {
+  initiativeId?: string | null;
+  teamScope?: string;
+  chainId?: string | null;
+  title: string;
+  description?: string | null;
+  priority?: EscalationPriority;
+  entityKind?: 'board_task' | 'initiative' | 'security' | 'compliance' | 'custom';
+  entityId?: string | null;
+  boardTaskId?: number | null;
+};
+
+export type EscalationResolveInput = {
+  outcome: string;
+  stepsTaken: string[];
+  resolutionOptions: Array<{ title: string; description?: string }>;
+  notes?: string | null;
 };
 
 export function normalizePriority(v: unknown): EscalationPriority {
   const s = typeof v === 'string' ? v.toLowerCase() : '';
-  if (s === 'critical' || s === 'high' || s === 'medium' || s === 'low') return s;
+  if (s === 'critical' || s === 'high' || s === 'medium' || s === 'low') return s as EscalationPriority;
   return 'medium';
 }
 
