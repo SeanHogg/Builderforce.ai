@@ -147,23 +147,19 @@ export function listContextKeys(ctx: WorkflowContext): string[] {
  * New entries overwrite existing ones with the same key.
  * 
  * @param target - Target context to merge into
- * @param source - Source context to merge from
+ * @param source - Source context to merge from (may omit entries/timestamps)
  * @param overwrite - Whether to overwrite existing keys (default true)
  * @returns Updated target context
  */
 export function mergeContext(
   target: WorkflowContext,
-  source: Omit<WorkflowContext, "entries" | "createdAt" | "updatedAt">,
+  source: Partial<WorkflowContext>,
   overwrite: boolean = true,
 ): WorkflowContext {
-  // Ensure we're working with a real context if source is from merge
-  if (!source.entries) {
-    source.entries = new Map();
-    if (source.createdAt) source.createdAt = new Date();
-    if (source.updatedAt) source.updatedAt = new Date();
-  }
+  // Guard: source may arrive without entries or timestamps (partial context).
+  const sourceEntries = source.entries ?? new Map();
 
-  for (const [key, entry] of source.entries.entries()) {
+  for (const [key, entry] of sourceEntries.entries()) {
     if (overwrite || !target.entries.has(key)) {
       target.entries.set(key, entry);
     }
