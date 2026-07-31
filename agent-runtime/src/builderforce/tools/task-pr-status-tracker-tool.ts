@@ -106,9 +106,33 @@ export function deriveTaskSummary(prStates: Array<PrResult["state"]>): TaskStatu
   return "PR(s) Open";
 }
 
+/**
+ * Identity of a pull request within a report.
+ *
+ * PR numbers are allocated PER REPOSITORY, so a number alone is not unique once an
+ * org-wide scan (F4) is in play: `org/alpha#12` and `org/beta#12` are different PRs.
+ * Keying on `repo#number` keeps them distinct; PRs with no repo attribution (the
+ * single-repo path, where every PR is from the same repo) fall back to the bare
+ * number so behaviour there is unchanged.
+ */
+function prIdentity(pr: GhPullRequest): string {
+  return pr.repo ? `${pr.repo}#${pr.number}` : `#${pr.number}`;
+}
+
+/**
+ * Remove PRs that the several search strategies surfaced more than once.
+ *
+ * De-duplicating by number ALONE would silently discard a genuine PR from a second
+ * repository that happened to share a number. That is not cosmetic: dropping an open
+ * PR can flip a task's summary from "PR(s) Open" to "All PRs Merged" and report work
+ * as release-ready when it is not (AC1/AC2/AC4). First occurrence wins.
+ */
 export function deduplicateByNumber(prs: GhPullRequest[]): GhPullRequest[] {
-  const seen = new Map<number, GhPullRequest>();
-  for (const pr of prs) if (!seen.has(pr.number)) seen.set(pr.number, pr);
+  const seen = new Map<string, GhPullRequest>();
+  for (const pr of prs) {
+    const key = prIdentity(pr);
+    if (!seen.has(key)) seen.set(key, pr);
+  }
   return Array.from(seen.values());
 }
 
