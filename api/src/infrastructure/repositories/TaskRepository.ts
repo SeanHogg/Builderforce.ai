@@ -216,6 +216,75 @@ export class TaskRepository implements ITaskRepository {
       .returning();
     return updated ? toDomain(updated) : null;
   }
+
+  /**
+   * FR1: Find unassigned high-priority tasks with pagination, project filtering, and sorting.
+   *
+   * Filters:
+   * - priority IN ('high', 'urgent')
+   * - assignedUserId IS NULL
+   * - archived = false
+   * - status NOT IN ('done')
+   */
+  async findUnassignedHighPriority(
+    opts: UnassignedHighPriorityTaskOptions,
+  ): Promise<UnassignedHighPriorityTaskResult> {
+    const { projectId, page = 1, pageSize = 20, sortBy = 'createdAt', sortOrder = 'desc' } = opts;
+
+    // Build the WHERE clause
+    const conditions = [
+      // Priority: high or urgent
+      inArray(tasksTable.priority, [TaskPriority.HIGH, TaskPriority.URGENT]),
+      // Not assigned to a user
+      sql`${tasksTable.assignedUserId} IS NULL`,
+      // Not archived
+      eq(tasksTable.archived, false),
+      // Status not done/completed
+      sql`${tasksTable.status} != ${TaskStatus.DONE}`,
+    ];
+
+    // Add project filter if provided
+    if (projectId !== undefined) {
+      conditions.push(eq(tasksTable.projectId, projectId));
+    }
+
+    // Build ORDER BY clause
+    const orderColumn = sortBy === 'dueDate'
+      ? tasksTable.dueDate
+      : sortBy === 'title'
+        ? tasksTable.title
+        : tasksTable.createdAt;
+    const orderFn = sortOrder === 'asc' ? asc : desc;
+
+    // Get total count
+    const [countResult] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(tasksTable)
+      .where(and(...conditions));
+
+    const total = Number(countResult?.count ?? 0);
+
+    // Get paginated results
+    const offset = (page - 1) * pageSize;
+    const rows = await this.db
+      .select()
+      .from(tasksTable)
+      .where(and(...conditions))
+      .orderBy(orderFn(orderColumn))
+      .limit(pageSize)
+      .offset(offset);
+
+    const tasks = rows.map(toDomain);
+
+    // Return with cache info (30 minutes = 1800 seconds)
+    return {
+      tasks: tasks.map(t => t.toPlain()),
+      total,
+      cacheInfo: {
+        validForSeconds: 1800,
+      },
+    };
+  }
 }
 
 // ---------------------------------------------------------------------------
