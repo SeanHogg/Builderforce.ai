@@ -359,7 +359,7 @@ export function ExpressInput({
           >
             {showPaste ? '▲ Hide' : '▼'} Paste to Fill
           </button>
-          <button type="button" onClick={() => fileInputRef.current?.click()} style={{ ...toolButtonStyle, marginLeft: 8 }}>
+          <button type="button" onClick={() => fileInputRef.current?.click()} style={{ ...toolButtonStyle, marginLeft: 8 }} aria-label="Upload CSV or JSON file">
             📄 Upload File
           </button>
           <input
