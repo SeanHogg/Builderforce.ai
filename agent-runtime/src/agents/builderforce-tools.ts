@@ -225,6 +225,7 @@ export function createBuilderForceAgentsTools(options?: BuilderForceAgentsToolsO
     }),
     workflowStatusTool,
     gitHistoryTool,
+    taskPrStatusTool,
   ];
 
   const pluginTools = resolvePluginTools({
