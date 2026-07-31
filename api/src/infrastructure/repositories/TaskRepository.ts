@@ -274,13 +274,18 @@ export class TaskRepository implements ITaskRepository {
       conditions.push(eq(tasksTable.projectId, projectId));
     }
 
-    // Build ORDER BY clause
-    const orderColumn = sortBy === 'dueDate'
-      ? tasksTable.dueDate
+    // Build ORDER BY clause. `dueDate` is nullable, and Postgres defaults undated
+    // rows to first on DESC — which would bury every real deadline behind the
+    // tasks that have none. Pin them last in BOTH directions, matching the
+    // `NULLS LAST` convention dequeueNextReady already uses. A stable tiebreak on
+    // `id` keeps pagination deterministic across pages when the sort key ties
+    // (equal titles / same due date), otherwise a row can repeat or be skipped.
+    const direction = sortOrder === 'asc' ? sql`ASC` : sql`DESC`;
+    const orderBy = sortBy === 'dueDate'
+      ? [sql`${tasksTable.dueDate} ${direction} NULLS LAST`, asc(tasksTable.id)]
       : sortBy === 'title'
-        ? tasksTable.title
-        : tasksTable.createdAt;
-    const orderFn = sortOrder === 'asc' ? asc : desc;
+        ? [sql`${tasksTable.title} ${direction}`, asc(tasksTable.id)]
+        : [sql`${tasksTable.createdAt} ${direction}`, asc(tasksTable.id)];
 
     // Get total count
     const [countResult] = await this.db
