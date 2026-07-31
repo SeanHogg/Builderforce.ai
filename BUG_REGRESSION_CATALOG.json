@@ -69,7 +69,7 @@
     {
       "task_id": 62,
       "title": "Regression",
-      "status": "in_review",
+      "status": "ready",
       "type": "regression",
       "severity": "high",
       "severity_source": "inferred",
