@@ -28,7 +28,7 @@ import { vendorForModel } from '../llm/vendors';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from '../llm/builtinMcpService';
-import { shouldRecoverStalledTurn, isExhaustedStall, stallRecoveryNudge, stallExhaustedNotice, modelFailoverNotice, chooseStallFailover, MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS, type ModelFallbackSurface } from '@builderforce/agent-stall';
+import { shouldRecoverStalledTurn, isExhaustedStall, isEmptyTurn, stallRecoveryNudge, stallExhaustedNotice, modelFailoverNotice, chooseStallFailover, MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS, type ModelFallbackSurface } from '@builderforce/agent-stall';
 import {
   BRAIN_ORIGIN, TEAM_ORIGIN, MANAGER_ORIGIN, ACCESSIBLE_ORIGINS,
   resolveChatAccess, syncPendingMemberships as syncPendingMembershipsShared,
@@ -1191,16 +1191,20 @@ export class BrainService {
 
       if (toolCalls.length === 0) {
         // The model ANNOUNCED an action and then ended the turn without taking it
-        // ("I'll search the codebase…" → finish: stop, 0 tool calls). Breaking here
-        // returns the promise to the user as the answer. Re-prompt instead, bounded
-        // per reply by the shared budget. Same gate + wording as the Brain run loop
-        // and the on-prem/cloud agent loop (`@builderforce/agent-stall`).
+        // ("I'll search the codebase…" → finish: stop, 0 tool calls) — or returned
+        // nothing at all. Breaking here hands the user a promise, or a 400, as the
+        // answer. Re-prompt instead, bounded per reply by the shared budget. Same gate
+        // + wording as the Brain run loop and the cloud agent loop (`agent-stall`).
         const stallInput = {
           text: content,
           toolCallCount: 0,
           availableToolCount: tools.length,
           recoveriesUsed: announcementRecoveries,
         };
+        // Which SHAPE, so the notices describe what actually happened. A blank turn told
+        // the operator its model had "described tool calls instead of making them" —
+        // narration they could not find anywhere in the transcript, because there was none.
+        const blank = isEmptyTurn(stallInput);
         if (shouldRecoverStalledTurn(stallInput)) {
           announcementRecoveries += 1;
           convo.push({ role: 'assistant', content });
@@ -1236,7 +1240,7 @@ export class BrainService {
               kind: 'failover',
               label: next,
               args: { from: lastModel || activeModel || null, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
-              result: { notice: modelFailoverNotice(lastModel || activeModel, next) },
+              result: { notice: modelFailoverNotice(lastModel || activeModel, next, blank) },
               turnSeq: iterations,
             });
             activeModel = next;
@@ -1247,7 +1251,10 @@ export class BrainService {
             convo.push({ role: 'user', content: stallRecoveryNudge(false) });
             continue;
           }
-          text = `${content}\n\n${stallExhaustedNotice(lastModel, triedModels)}`;
+          // A blank turn leaves no `content` to lead with, so the notice IS the reply —
+          // and it is a far better one than the 400 this used to fall through to.
+          const notice = stallExhaustedNotice(lastModel, triedModels, blank);
+          text = content ? `${content}\n\n${notice}` : notice;
           break;
         }
         text = content;

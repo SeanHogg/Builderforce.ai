@@ -1,24 +1,27 @@
 /**
  * Untaken tool call — detection + recovery, shared by every agent loop.
  *
- * Recovery has two halves and BOTH live in this package: the re-prompt budget and the
- * user-facing notices below, and the model SELECTOR in `./modelFallback` (re-exported
- * at the bottom). They were split across two packages once, and the server loop —
- * unable to import the browser-only half — hand-rolled its own selection and got it
- * wrong. See `modelFallback.ts` for that failure.
+ * Recovery has two halves and BOTH live in this file: the re-prompt budget with its
+ * user-facing notices, and the MODEL FAILOVER section at the bottom. They were split
+ * across two packages once — the selector lived in a React package — and the server
+ * reply loop, unable to import it, hand-rolled its own and shipped a failover branch
+ * that could not run. See {@link chooseStallFailover}.
  *
  * The failure it fixes: a turn ends with `stopReason: stop` and ZERO tool calls while
  * tools were available, and a loop that treats "no tool calls" as "done" hands the user
- * words instead of a result. It wears three faces, all of them observed on
- * `xai-oauth/grok-4.3` and all of them a model-behaviour class rather than a vendor bug:
+ * words instead of a result. It wears four faces, all of them observed in production and
+ * all of them a model-behaviour class rather than a vendor bug:
  *
  *   1. the PROMISE — `"I'll search the codebase for the handler."`
  *   2. the PSEUDO-CALL — `"run tool builtin_chats_list_tickets with chatId is 85"`
  *   3. the MISSING-DATA CLAIM — `"The required tools have not returned results yet."`
+ *   4. the BLANK TURN — nothing at all: no call, no words.
  *
  * The third is the one that reads like an answer, and it is why the manager's
  * accountability chat shipped "I have no data" to a person asking it to account for a
- * dead board (project 11 / chat 86, 2026-07-28: 7 turns, 102 tools, 0 calls).
+ * dead board (project 11 / chat 86, 2026-07-28: 7 turns, 102 tools, 0 calls). The
+ * fourth is the one that reads like a blip, and it is why the same chat answered a
+ * 400 saying "this usually clears on a retry" four days running (2026-07-31).
  *
  * Deliberately zero-dependency, framework-free and free of Node builtins: the Brain
  * run loop imports this into a BROWSER bundle (VS Code webview / Next.js client)
@@ -244,11 +247,12 @@ export function stallRecoveryNudge(lastChance: boolean): string {
     // ("the required tools have not returned results"). The second wording matters —
     // a model told only "you said you would call a tool" when it never said any such
     // thing tends to repeat the same excuse rather than act.
-    'Your last turn made zero tool calls. You either said you would call a tool and did not, or reported'
-    + ' that tool results were missing — no results exist because you never made the call.'
+    'Your last turn made zero tool calls. You either said you would call a tool and did not, reported'
+    + ' that tool results were missing — no results exist because you never made the call — or returned'
+    + ' nothing at all.'
     + ' Make the call NOW in this turn, then answer using its result. If no tool can give you that data,'
     + ' say plainly which data you are missing and answer with what you already have.'
-    + ' Do not announce another call.'
+    + ' Do not announce another call, and do not reply with an empty message.'
     + (lastChance
       ? ' This is your last chance to act: you have now stated an intention without acting several times in'
         + ' a row. Either emit a tool call in this turn, or give your complete final answer from what you'
@@ -270,16 +274,41 @@ export interface StalledTurnInput {
 }
 
 /**
- * Is this turn a stall at all — tools were offered, none were called, and the text
- * either only promises or blames the absence of results it never asked for? The
- * budget-independent half, so the two gates below cannot drift on WHAT a stall is
- * while disagreeing only on what to do about it.
+ * The FOURTH shape, and the emptiest: the model produced no tool call AND no words.
+ *
+ * It reads like a transient blip and is treated as one — every loop here breaks out and
+ * either shows "No response." or asks the same model for one more, tool-free, synthesis.
+ * But a turn offered tools, asked a question, and answering with silence is not a
+ * finished answer under any reading; it is the same "would not act" failure with the
+ * narration stripped off, and the same remedy (re-prompt, then a different model) works
+ * on it. Measured on the manager's accountability chat, 2026-07-31: the connected account
+ * errored, the run landed on another model, that model returned an empty turn, the
+ * tool-free synthesis re-asked THE SAME model and got another one — and the operator got
+ * a 400 reading "produced no reply … this usually clears on a retry" for the fourth time
+ * in four days. Nothing had retried anything.
+ *
+ * Requires `availableToolCount > 0` like the others: a turn with nothing to call is a
+ * plain completion, and an empty one there is the caller's problem, not a stall.
+ */
+export function isEmptyTurn(input: StalledTurnInput): boolean {
+  return input.toolCallCount === 0 && input.availableToolCount > 0 && input.text.trim() === '';
+}
+
+/**
+ * Is this turn a stall at all — tools were offered, none were called, and the model
+ * either only promised, blamed the absence of results it never asked for, or said
+ * nothing whatsoever? The budget-independent half, so the two gates below cannot drift
+ * on WHAT a stall is while disagreeing only on what to do about it.
  */
 function isStalledTurn(input: StalledTurnInput): boolean {
   return (
     input.toolCallCount === 0
     && input.availableToolCount > 0
-    && (announcesUntakenAction(input.text) || claimsMissingToolData(input.text))
+    && (
+      announcesUntakenAction(input.text)
+      || claimsMissingToolData(input.text)
+      || isEmptyTurn(input)
+    )
   );
 }
 
@@ -309,16 +338,29 @@ export function isExhaustedStall(input: StalledTurnInput): boolean {
 }
 
 /**
+ * WHAT the spent model actually did, in the notices' words.
+ *
+ * Split out because the notices below assert it and there are now two answers. Telling an
+ * operator a model "described tool calls instead of making them" when it in fact returned
+ * a blank turn sends them looking for narration that is not in the transcript — the same
+ * class of misdirection as a report naming the wrong cause. One phrase, both notices.
+ */
+function whatItDid(emptyTurn: boolean): string {
+  return emptyTurn
+    ? `returned an empty turn — no tool call and no words — ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row`
+    : `described tool calls instead of making them, ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row`;
+}
+
+/**
  * The run switched models because the previous one would not emit tool calls. Shown
  * on the timeline, so the swap is visible rather than a silent change of who is
  * answering — a chat that quietly changes model is its own support ticket.
+ *
+ * @param emptyTurn the spent model returned nothing at all rather than narrating.
  */
-export function modelFailoverNotice(from: string | null | undefined, to: string): string {
+export function modelFailoverNotice(from: string | null | undefined, to: string, emptyTurn = false): string {
   const who = from && from !== 'default' ? `\`${from}\`` : 'The previous model';
-  return (
-    `${who} described tool calls instead of making them, ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row,`
-    + ` so it cannot complete this request. Retrying on \`${to}\`.`
-  );
+  return `${who} ${whatItDid(emptyTurn)}, so it cannot complete this request. Retrying on \`${to}\`.`;
 }
 
 /**
@@ -331,13 +373,14 @@ export function modelFailoverNotice(from: string | null | undefined, to: string)
  *
  * @param model the model that actually answered last, when the loop resolved one.
  * @param tried every model attempted this run, when the loop failed over.
+ * @param emptyTurn the run ended on blank turns rather than on narration.
  */
-export function stallExhaustedNotice(model?: string | null, tried?: readonly string[]): string {
+export function stallExhaustedNotice(model?: string | null, tried?: readonly string[], emptyTurn = false): string {
   const who = model && model !== 'default' ? `The model \`${model}\`` : 'The model';
   const others = (tried ?? []).filter((m) => m && m !== model);
   return (
-    `${who} described tool calls instead of making them, ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row,`
-    + ' so nothing was actually run and the answer above is only a description of intended actions.'
+    `${who} ${whatItDid(emptyTurn)}, so nothing was actually run and `
+    + (emptyTurn ? 'there is no answer above to show you.' : 'the answer above is only a description of intended actions.')
     + (others.length
       ? ` This run already failed over from ${others.map((m) => `\`${m}\``).join(', ')}, so the problem`
         + ' is unlikely to be any single model — check that the tool catalog loaded (see the'
@@ -347,7 +390,144 @@ export function stallExhaustedNotice(model?: string | null, tried?: readonly str
   );
 }
 
-// Which model to try NEXT once the budget above is spent, and the budget for switching.
-// Same package as the policy it serves, so no loop can reach one half without the other.
-export { nextFallbackModel, chooseStallFailover, MAX_MODEL_FAILOVERS } from './modelFallback';
-export type { ModelFallbackSurface, StallFailoverInput } from './modelFallback';
+// ---------------------------------------------------------------------------
+// MODEL FAILOVER — which model takes over once the recovery budget above is spent.
+//
+// In this module rather than its own file because the package is consumed as SOURCE by a
+// Node16-resolution build (agent-runtime) as well as by three bundlers, and its export map
+// is a single entry; a relative import here would have to carry a `.js` extension that the
+// four resolvers disagree about. It began life in `brain-embedded`, a React package, which
+// put it out of reach of the SERVER reply loop — see `chooseStallFailover` for what that
+// loop hand-rolled instead.
+// ---------------------------------------------------------------------------
+
+/**
+ * The gateway model surface, as `/llm/v1/models` returns it and both browser hosts
+ * cache it. Structurally a superset of what `classifyModelFunding` takes, so one
+ * cached object feeds both. A SERVER caller composes the same shape from the pool
+ * constants it already has (see `BrainService.agentReply`).
+ */
+export interface ModelFallbackSurface {
+  /** The plan pool — every model this tenant may select. */
+  data?: Array<{ id?: string }>;
+  /** The curated tool-calling / coding subset of the pool. */
+  codingModels?: string[];
+  /** Models reachable through the tenant's OWN connected accounts (BYO). */
+  byo?: { models?: Array<{ id?: string; vendor?: string }> };
+}
+
+/** Non-empty ids from a list of `{ id }` records, in surface order. */
+function ids(list: Array<{ id?: string }> | undefined): string[] {
+  return (list ?? []).map((m) => m.id).filter((id): id is string => !!id);
+}
+
+/**
+ * The next model to try, or undefined when nothing untried is left.
+ *
+ * Preference order, and why:
+ *  1. **BYO ∩ coding pool** — the tenant's own connected account (so the retry costs
+ *     nothing against the plan allowance) AND curated for tool calling, which is the
+ *     capability that just failed. Best on both axes.
+ *  2. **Coding pool** — curated for tool calling, plan-funded. We are failing over
+ *     *because of* tool calling, so this outranks an arbitrary BYO model.
+ *  3. **Anything else untried** — BYO first, then the rest of the plan pool.
+ *
+ * A caller driving an AGENTIC turn should leave `data` unset: tier 4 is the general
+ * plan pool, and falling a tool-loop onto a non-coder produces a run that flails and
+ * ships nothing (the same reasoning as the gateway's coding-only backstop chain).
+ *
+ * `tried` holds every model already attempted this run, including the original pin.
+ * A caller that pinned nothing (gateway auto-select) should pass its resolved model,
+ * so the failover cannot hand back the model that just failed.
+ */
+export function nextFallbackModel(
+  surface: ModelFallbackSurface | null | undefined,
+  tried: readonly string[],
+): string | undefined {
+  if (!surface) return undefined;
+  const used = new Set(tried.filter(Boolean));
+  const byo = ids(surface.byo?.models);
+  const byoSet = new Set(byo);
+  const coding = (surface.codingModels ?? []).filter(Boolean);
+  const pool = ids(surface.data);
+
+  const tiers = [
+    coding.filter((m) => byoSet.has(m)),
+    coding,
+    byo,
+    pool,
+  ];
+  for (const tier of tiers) {
+    const hit = tier.find((m) => !used.has(m));
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/**
+ * How many times ONE run may swap MODELS after a model burns its whole stall budget.
+ * Small on purpose: each switch replays the turn, and a run that two different models
+ * have already failed to act on is not going to be rescued by a third — at that point
+ * the honest move is to stop and say so, not to walk the catalog on the tenant's money.
+ *
+ * Lives beside the selector it bounds (and is re-exported from `./index`), so a caller
+ * cannot reach the budget without also reaching the picker that spends it — which is how
+ * one loop ended up enforcing the budget over a failover that never happened.
+ */
+export const MAX_MODEL_FAILOVERS = 2;
+
+/** What a loop knows when a model has just burned its whole stall budget. */
+export interface StallFailoverInput {
+  /** The model the loop ASKED for this turn — undefined on a gateway auto-select turn. */
+  activeModel?: string | null;
+  /** The model that actually ANSWERED, as the gateway resolved it. */
+  resolvedModel?: string | null;
+  /** Models already burned this run. MUTATED: the two above are appended. */
+  tried: string[];
+  /** Failovers already spent this run. */
+  failoversUsed: number;
+  /**
+   * Where a replacement comes from. A caller that HOLDS the model surface passes
+   * `surface`; a caller whose host owns the choice (the browser run loop, which is
+   * handed a `pickFallbackModel` by whichever app mounted it) passes `pick`. `pick`
+   * wins when both are present. Neither ⇒ no failover, which is the correct answer for
+   * a host that never wired one up.
+   */
+  surface?: ModelFallbackSurface | null;
+  pick?: ((tried: readonly string[]) => string | undefined) | undefined;
+}
+
+/**
+ * The whole "this model is spent — who takes over?" decision, in one place.
+ *
+ * Three steps that must happen together, and did not:
+ *
+ *  1. **Record both ids.** An unpinned turn asked for nothing, so `activeModel` is
+ *     undefined and `resolvedModel` is the ONLY id naming the model to skip. Recording
+ *     just one leaves the failover free to hand back the model that just failed.
+ *  2. **Check the budget.** {@link MAX_MODEL_FAILOVERS}: a run two models have already
+ *     failed is not rescued by a third, and walking the catalog costs the tenant money.
+ *  3. **Pick a genuinely different model** — never "unpin and hope the cascade differs".
+ *
+ * Both the browser run loop and the server addressed-reply loop had hand-written copies
+ * of this. The server's got step 3 wrong (`if (budget && activeModel) { activeModel =
+ * undefined }`), which reads as a failover and is unreachable on the unpinned default
+ * path — the ONE path a tenant with a connected account takes. The observable result was
+ * a chat that burned 11 turns on a single model, never failed over, and closed by telling
+ * the user to go pick a different model by hand.
+ *
+ * Returns the model to switch to, or `undefined` when the run should stop and say so.
+ */
+export function chooseStallFailover(input: StallFailoverInput): string | undefined {
+  for (const m of [input.activeModel, input.resolvedModel]) {
+    if (m && m !== 'default' && !input.tried.includes(m)) input.tried.push(m);
+  }
+  if (input.failoversUsed >= MAX_MODEL_FAILOVERS) return undefined;
+  const next = input.pick
+    ? input.pick(input.tried)
+    : nextFallbackModel(input.surface, input.tried);
+  // A `pick` supplied by a host is outside this package's control, so the promise the
+  // caller relies on — "never the model that just failed" — is enforced here rather
+  // than assumed of every implementation.
+  return next && !input.tried.includes(next) ? next : undefined;
+}

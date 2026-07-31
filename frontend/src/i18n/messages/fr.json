@@ -8822,6 +8822,7 @@
       "cardBlurb": "Sélectionnez un ou plusieurs modèles OpenRouter par inscription et classez-les avec vos comptes connectés.",
       "add": "Ajouter une connexion",
       "connectedCount": "● {count} connexion(s)",
+      "brokenCount": "{count} connexion(s) OpenRouter",
       "modelCount": "{count} modèle(s) sélectionné(s)",
       "ownKey": "Votre clé OpenRouter",
       "managedKey": "Facturation Builderforce",

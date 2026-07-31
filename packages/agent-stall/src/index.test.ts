@@ -4,6 +4,8 @@ import {
   claimsMissingToolData,
   shouldRecoverStalledTurn,
   isExhaustedStall,
+  isEmptyTurn,
+  catalogToolNamesMentionedIn,
   stallRecoveryNudge,
   stallExhaustedNotice,
   modelFailoverNotice,
@@ -270,7 +272,49 @@ describe('isExhaustedStall', () => {
   });
 });
 
+/**
+ * The fourth shape. A turn with tools available that returns neither a call nor a word
+ * is the same "would not act" failure with the narration stripped off — and it used to
+ * fall straight out of every loop as a transient blip. On the manager's chat that blip
+ * reached the operator as a 400 saying "this usually clears on a retry", four days
+ * running, while nothing had retried anything.
+ */
+describe('isEmptyTurn', () => {
+  const base = { text: '', toolCallCount: 0, availableToolCount: 43, recoveriesUsed: 0 };
+
+  it('recognises a turn that produced neither a call nor a word', () => {
+    expect(isEmptyTurn(base)).toBe(true);
+    expect(isEmptyTurn({ ...base, text: '   \n  ' })).toBe(true);
+  });
+
+  it('is not an empty turn when the model said something, or acted', () => {
+    expect(isEmptyTurn({ ...base, text: 'Nothing merged today.' })).toBe(false);
+    expect(isEmptyTurn({ ...base, toolCallCount: 1 })).toBe(false);
+  });
+
+  it('leaves a plain completion alone — no tools offered is not a stall', () => {
+    // An empty answer from a turn with nothing to call is the caller's problem; this
+    // package only speaks to turns that COULD have acted.
+    expect(isEmptyTurn({ ...base, availableToolCount: 0 })).toBe(false);
+  });
+
+  it('is recovered and then failed over like every other stall shape', () => {
+    expect(shouldRecoverStalledTurn(base)).toBe(true);
+    expect(isExhaustedStall({ ...base, recoveriesUsed: MAX_ANNOUNCEMENT_RECOVERIES })).toBe(true);
+  });
+});
+
 describe('stallExhaustedNotice', () => {
+  it('describes a BLANK turn as blank, not as narration that was never there', () => {
+    const blank = stallExhaustedNotice('direct/meta/muse-spark-1.1', [], true);
+    expect(blank).toContain('returned an empty turn');
+    expect(blank).not.toContain('described tool calls');
+    // There is no prose above it to mistake for work — say so rather than referring
+    // the reader to an "answer above" that does not exist.
+    expect(blank).toContain('no answer above');
+    expect(blank).not.toContain('description of intended actions');
+  });
+
   it('names the model, because switching model is the only remedy that works', () => {
     expect(stallExhaustedNotice('xai-oauth/grok-4.3')).toContain('xai-oauth/grok-4.3');
     expect(stallExhaustedNotice('xai-oauth/grok-4.3')).toContain('pick a different model');
@@ -355,7 +399,10 @@ describe('stallRecoveryNudge', () => {
   it('always demands the call be made in this turn', () => {
     for (const last of [false, true]) {
       expect(stallRecoveryNudge(last)).toContain('made zero tool calls');
-      expect(stallRecoveryNudge(last)).toContain('Do not announce another call.');
+      expect(stallRecoveryNudge(last)).toContain('Do not announce another call');
+      // It has to cover every shape it is sent for, or the model reads a correction
+      // aimed at something it did not do and repeats itself. A blank turn is one.
+      expect(stallRecoveryNudge(last)).toContain('do not reply with an empty message');
     }
   });
 

@@ -224,11 +224,27 @@ export function managerChatFindings(input: ManagerChatDiagnosticsInput): Manager
   const narrating = replies.filter((m) => looksLikeToolNarration(m.content));
 
   // THE finding this report exists for. A reply that describes the calls it needs, from a
-  // turn that emitted none, is not the model being unhelpful — it could not find the tools
-  // it was told to call, or it was never given them.
-  if (narrating.length > 0 && roll.toolCalls === 0) {
+  // turn that emitted none, is not the model being unhelpful — but WHICH bug it is depends
+  // on the NAMES in that reply, and this used to assert one cause for both.
+  //
+  // Naming the catalog id (`manager.digest`) means the manager was handed a string that
+  // matches nothing in its tool list. Naming the ADVERTISED id (`builtin_manager_digest`)
+  // means it was handed the right one and would not use it — the prompt, the catalog and
+  // the persona are all fine and the MODEL is the problem. The two fixes share nothing,
+  // and the first version of this finding asserted the name mismatch unconditionally: on
+  // a capture whose newest reply recited advertised names it sent the reader off to
+  // re-audit prompts and a migration that had already been correct for a release.
+  const narrated = narratedToolNaming(narrating.map((m) => m.content));
+  const toolsNote = roll.advertisedTools != null ? ` (this turn advertised ${roll.advertisedTools} tools)` : '';
+  const stallHeadline = `${narrating.length} repl${narrating.length === 1 ? 'y' : 'ies'} describe the tools the manager needs while the trace records ZERO tool calls${roll.modelTurns > 0 ? ` across ${roll.modelTurns} model turn${roll.modelTurns === 1 ? '' : 's'}` : ''}.`;
+  if (narrating.length > 0 && roll.toolCalls === 0 && narrated === 'advertised') {
+    // The evidence EXONERATES the tool list: the manager typed the exact names it was
+    // given. Say so first, or the reader re-opens the prompt guards for nothing.
+    push('critical', 'tools_narrated_model_cannot_call',
+      `${stallHeadline} It named them by their ADVERTISED names (builtin_manager_digest), which is exactly what the model's tool list contains — so the prompt, the tool catalog and the agent's persona are all CORRECT and this is NOT the name-mismatch bug (0376/0379). The model transcribed the calls as prose instead of emitting them${toolsNote}. Fix it at the model: ${roll.models.length > 0 ? `these turns ran on ${roll.models.join(', ')}` : 'see the trace below'} — set a stronger, reliably tool-calling base model for this agent in Workforce. ${roll.failovers === 0 && roll.models.length <= 1 ? 'Note that the loop never switched models on its own, so no second model was ever tried here.' : `The loop already switched models ${roll.failovers} time${roll.failovers === 1 ? '' : 's'}, so a single weak model is not the whole story — check that the tool payload is reaching the vendor at all.`}`);
+  } else if (narrating.length > 0 && roll.toolCalls === 0) {
     push('critical', 'tools_narrated_never_called',
-      `${narrating.length} repl${narrating.length === 1 ? 'y' : 'ies'} describe the tools the manager needs while the trace records ZERO tool calls${roll.modelTurns > 0 ? ` across ${roll.modelTurns} model turn${roll.modelTurns === 1 ? '' : 's'}` : ''}. The manager is naming tools it never invoked. The cause is a NAME MISMATCH: something instructed it to call a tool by its catalog id (manager.digest) while the model is advertised a transformed name (builtin_manager_digest), so the instruction points at nothing and the model narrates instead. Two places say that, and the second is the one that hides: the CODE that builds the turn (guarded by check-prompt-tool-names + agentReplyPrompt.test), and the agent's PERSISTED PERSONA — ide_agents.bio is compiled straight into the system prompt, was written once per tenant by a migration, and is not corrected by any deploy (this exact row recited dead ids for a full release after the code was fixed; see migration 0379). If the code guards are green, read the answering agent's bio${roll.advertisedTools != null ? ` (this turn advertised ${roll.advertisedTools} tools)` : ''}.`);
+      `${stallHeadline} The manager is naming tools it never invoked${narrated === 'catalog' ? ', by their CATALOG ids' : ''}. The cause is a NAME MISMATCH: something instructed it to call a tool by its catalog id (manager.digest) while the model is advertised a transformed name (builtin_manager_digest), so the instruction points at nothing and the model narrates instead. Two places say that, and the second is the one that hides: the CODE that builds the turn (guarded by check-prompt-tool-names + agentReplyPrompt.test), and the agent's PERSISTED PERSONA — ide_agents.bio is compiled straight into the system prompt, was written once per tenant by a migration, and is not corrected by any deploy (this exact row recited dead ids for a full release after the code was fixed; see migration 0379). If the code guards are green, read the answering agent's bio${toolsNote}.`);
   } else if (roll.toolCalls === 0 && replies.length > 0 && roll.modelTurns > 0) {
     push('critical', 'no_tools_called',
       `The manager produced ${replies.length} repl${replies.length === 1 ? 'y' : 'ies'} across ${roll.modelTurns} model turn${roll.modelTurns === 1 ? '' : 's'} and called NO tools at all${roll.advertisedTools != null ? `, despite being advertised ${roll.advertisedTools}` : ''}. Every accountability answer it gave is therefore ungrounded — it did not read the digest, the decisions, the census or the policy.`);
@@ -245,9 +261,18 @@ export function managerChatFindings(input: ManagerChatDiagnosticsInput): Manager
 
   // A turn that emitted no tool calls is normal ONCE (the final synthesis). Every turn
   // doing it, with tools available, is the stall.
+  //
+  // What the loop DID about it is read from the trace, never assumed. This finding used
+  // to state that the loop "re-prompts and then fails over to another model" and reason
+  // from there — while the trace it was printing directly below showed eleven turns on a
+  // single model and not one failover. It was describing the design, not the run.
   if (roll.modelTurns > 1 && roll.turnsWithoutTools === roll.modelTurns && roll.toolCalls === 0) {
+    const oneModel = roll.models.length <= 1;
     push('warning', 'every_turn_toolless',
-      `All ${roll.modelTurns} model turns ended without emitting a tool call. The reply loop's stall recovery re-prompts and then fails over to another model; that this still produced nothing suggests the tools are unusable to the model rather than that one model was weak.`);
+      `All ${roll.modelTurns} model turns ended without emitting a tool call${roll.models.length > 0 ? `, on ${roll.models.length === 1 ? `a single model (${roll.models[0]})` : `${roll.models.length} models (${roll.models.join(', ')})`}` : ''}. `
+      + (oneModel
+        ? `The loop's stall recovery re-prompts, and after that it is meant to abandon the model and try another — but the trace records ${roll.failovers} model failover${roll.failovers === 1 ? '' : 's'}, so no second model was ever tried. Nothing here yet distinguishes "this model cannot tool-call" from "the tools are unusable"; retry on a different model to find out.`
+        : `The loop re-prompted and then failed over ${roll.failovers} time${roll.failovers === 1 ? '' : 's'}, and every model still produced nothing — which points at the tool payload rather than at any one model being weak.`));
   }
 
   if (replies.length > 0 && input.trace.length === 0) {
@@ -255,12 +280,17 @@ export function managerChatFindings(input: ManagerChatDiagnosticsInput): Manager
       'The trace is empty. Replies produced before server-side trace capture shipped carry no rows — ask the manager one more question and re-capture to get a trace for it.');
   }
 
-  const models = new Set(
-    input.messages.map((m) => provenanceOf(m)?.model).filter((m): m is string => !!m),
-  );
+  // Both sources, because they answer different questions and the second one only exists
+  // in the trace: message provenance covers turns that PRODUCED a reply, while the trace
+  // covers every model that ran — including the ones on a turn that came back empty and
+  // therefore posted no message at all.
+  const models = new Set([
+    ...input.messages.map((m) => provenanceOf(m)?.model).filter((m): m is string => !!m),
+    ...roll.models,
+  ]);
   if (models.size > 0) {
     push('info', 'models_used',
-      `Replies were served by: ${[...models].join(', ')}. A weak model that cannot tool-call produces the same empty answers as a broken tool list — the distinction is whether the trace shows calls being attempted.`);
+      `Models that ran in this chat: ${[...models].join(', ')}${roll.failovers > 0 ? ` (the loop switched models ${roll.failovers} time${roll.failovers === 1 ? '' : 's'} after a model would not emit tool calls)` : ''}. A weak model that cannot tool-call produces the same empty answers as a broken tool list — the distinction is whether the trace shows calls being attempted.`);
   }
 
   return [...critical, ...warning, ...info];
@@ -297,6 +327,10 @@ function formatTrace(trace: readonly BrainChatTraceRow[], roll: TraceRollup): st
   out.push(line('model turns', roll.modelTurns));
   out.push(line('model turns that emitted NO tool call', roll.turnsWithoutTools));
   out.push(line('tools advertised to the model', roll.advertisedTools));
+  // The two lines that say whether the loop's own remedy ran. A stalled chat on ONE model
+  // with ZERO failovers is a different report than the same chat after two failovers.
+  out.push(line('models that ran', roll.models.length > 0 ? roll.models.join(', ') : null));
+  out.push(line('model failovers (a model would not tool-call, so the loop switched)', roll.failovers));
   out.push('');
   out.push('by tool:');
   if (roll.byTool.length === 0) {

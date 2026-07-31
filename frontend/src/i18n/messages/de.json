@@ -8822,6 +8822,7 @@
       "cardBlurb": "Wählen Sie pro Registrierung ein oder mehrere OpenRouter-Modelle und priorisieren Sie sie mit Ihren Anbieter-Konten.",
       "add": "Verbindung hinzufügen",
       "connectedCount": "● {count} Verbindung(en)",
+      "brokenCount": "{count} OpenRouter-Verbindung(en)",
       "modelCount": "{count} ausgewählte(s) Modell(e)",
       "ownKey": "Ihr OpenRouter-Schlüssel",
       "managedKey": "Builderforce-Abrechnung",

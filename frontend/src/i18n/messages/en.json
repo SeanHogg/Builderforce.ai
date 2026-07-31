@@ -8822,6 +8822,7 @@
       "cardBlurb": "Select one or many OpenRouter models per registration, then prioritize them alongside your connected provider accounts.",
       "add": "Add connection",
       "connectedCount": "● {count} connection(s)",
+      "brokenCount": "{count} OpenRouter connection(s)",
       "modelCount": "{count} selected model(s)",
       "ownKey": "Your OpenRouter key",
       "managedKey": "Builderforce managed billing",
