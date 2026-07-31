@@ -10,6 +10,7 @@ import {
   workflowStatusTool,
   gitHistoryTool,
   askHumanTool,
+  taskPrStatusTool,
 } from "../builderforce/tools/index.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { resolvePluginTools } from "../plugins/tools.js";
