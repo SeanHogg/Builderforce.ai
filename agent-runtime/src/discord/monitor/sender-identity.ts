@@ -71,12 +71,3 @@ export function resolveDiscordSenderIdentity(params: {
     isPluralKit: false,
   };
 }
-
-export function resolveDiscordSenderLabel(params: {
-  author: User;
-  // oxlint-disable-next-line typescript/no-explicit-any
-  member?: any;
-  pluralkitInfo?: PluralKitMessageInfo | null;
-}): string {
-  return resolveDiscordSenderIdentity(params).label;
-}

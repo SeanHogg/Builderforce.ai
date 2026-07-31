@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/>
+      <stop offset="55%" stop-color="#13152F"/>
+      <stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/>
+    </linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/>
+    </linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/>
+    </linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="rgba(139,108,255,0)"/>
+      <stop offset="50%" stop-color="rgba(139,108,255,0.55)"/>
+      <stop offset="100%" stop-color="rgba(61,214,245,0)"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#3DD6F5">MESH WEBRTC</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Your video flows peer-to-peer</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- signaling server (below the title, centered) -->
+  <rect x="640" y="214" width="320" height="76" rx="16" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.14)" stroke-dasharray="6 6"/>
+  <text x="800" y="248" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="700" fill="#EEF0FA">Server: signaling + STUN only</text>
+  <text x="800" y="274" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#8891AE">(TURN when configured) — no media passes through</text>
+  <g stroke="rgba(255,255,255,0.14)" stroke-width="1.5" stroke-dasharray="5 5">
+    <line x1="700" y1="292" x2="520" y2="400"/>
+    <line x1="900" y1="292" x2="1080" y2="400"/>
+  </g>
+
+  <!-- peers -->
+  <g>
+    <circle cx="480" cy="470" r="70" fill="rgba(61,214,245,0.12)" stroke="url(#coolGrad)" stroke-width="2"/>
+    <text x="480" y="458" text-anchor="middle" font-size="40">🧑</text>
+    <text x="480" y="506" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8">Peer A</text>
+  </g>
+  <g>
+    <circle cx="1120" cy="470" r="70" fill="rgba(169,139,255,0.12)" stroke="url(#violetGrad)" stroke-width="2"/>
+    <text x="1120" y="458" text-anchor="middle" font-size="40">🧑</text>
+    <text x="1120" y="506" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8">Peer B</text>
+  </g>
+  <g>
+    <circle cx="800" cy="660" r="70" fill="rgba(255,143,122,0.12)" stroke="url(#coralGrad)" stroke-width="2"/>
+    <text x="800" y="648" text-anchor="middle" font-size="40">🧑</text>
+    <text x="800" y="696" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8">Peer C</text>
+  </g>
+
+  <!-- direct media links -->
+  <g stroke-width="4" fill="none" stroke-linecap="round">
+    <line x1="550" y1="470" x2="1050" y2="470" stroke="url(#coolGrad)"/>
+    <line x1="527" y1="528" x2="753" y2="618" stroke="url(#coralGrad)"/>
+    <line x1="1073" y1="528" x2="847" y2="618" stroke="url(#violetGrad)"/>
+  </g>
+  <text x="800" y="452" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="700" fill="#3DD6F5">media (audio + video), direct</text>
+
+  <!-- takeaway bar -->
+  <rect x="120" y="740" width="1360" height="70" rx="16" fill="rgba(91,240,188,0.08)" stroke="rgba(91,240,188,0.35)"/>
+  <text x="150" y="783" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" fill="#EEF0FA">✔ Cameras, mics, SDP offers and ICE candidates flow client-to-client. <tspan font-weight="800" fill="#5BF0BC">Media never touches our infrastructure.</tspan></text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Live standups, planning and retros on your board</text>
+</svg>

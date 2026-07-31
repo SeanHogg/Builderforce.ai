@@ -28,15 +28,12 @@ import { teams, teamMembers, teamProjects, projects } from '../../infrastructure
 import { TenantRole } from '../../domain/shared/types';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { loadProjectTeamMembers } from '../../application/metrics/assigneeRecommender';
+import { resolveLiveMemberNames } from '../../application/workforce/liveMemberNames';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 const MEMBER_KINDS = ['human', 'cloud_agent', 'host_agent'] as const;
 type MemberKind = (typeof MEMBER_KINDS)[number];
-
-/** Cached team list (membership/projects change rarely). Invalidated on every
- *  write below so a change is reflected immediately; the KV TTL is the backstop. */
-const teamsCacheKey = (tenantId: number): string => `teams:tenant:${tenantId}`;
 
 /** Cached "teams attached to this project" (read by the Board-config Teams tab).
  *  Reflects team_projects rows + each team's name/description, so it is
@@ -53,9 +50,6 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
   router.use('*', requireRole(TenantRole.MANAGER));
-
-  const invalidate = (c: { env: unknown }, tenantId: number) =>
-    invalidateCached(c.env as Env, teamsCacheKey(tenantId));
 
   // Both project-scoped reads (attached-teams + assignable-workforce) for one project.
   const invalidateProjectCaches = (c: { env: unknown }, tenantId: number, projectId: number) =>
@@ -76,27 +70,34 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
   };
 
   // GET /api/teams — list with member + project counts (single grouped query,
-  // no per-team fan-out). Cached read-through.
+  // no per-team fan-out).
+  //
+  // Deliberately NOT read-through cached. The per-card member/project counts must
+  // be strongly consistent with the (uncached, authoritative) detail view — a
+  // cached list drifted from the detail is the exact "card says 1 member, panel
+  // shows 6" bug, because cache invalidation on write is only eventually
+  // consistent across isolates (L1 is per-isolate; KV delete propagates with a
+  // lag). This is a tiny tenant-scoped indexed read (a handful of team rows + two
+  // correlated COUNTs over team_id-indexed junction tables), so serving it fresh
+  // costs microseconds and carries no fan-out. The hot, cache-worthy reads — the
+  // by-project attached-teams and assignable-workforce lookups the assignee picker
+  // hits — remain cached below.
   router.get('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const rows = await getOrSetCached(
-      c.env as Env,
-      teamsCacheKey(tenantId),
-      async () =>
-        db
-          .select({
-            id:           teams.id,
-            name:         teams.name,
-            description:  teams.description,
-            createdAt:    teams.createdAt,
-            updatedAt:    teams.updatedAt,
-            memberCount:  sql<number>`(SELECT COUNT(*)::int FROM ${teamMembers} WHERE ${teamMembers.teamId} = ${teams.id})`,
-            projectCount: sql<number>`(SELECT COUNT(*)::int FROM ${teamProjects} WHERE ${teamProjects.teamId} = ${teams.id})`,
-          })
-          .from(teams)
-          .where(eq(teams.tenantId, tenantId))
-          .orderBy(teams.name),
-    );
+    const rows = await db
+      .select({
+        id:           teams.id,
+        name:         teams.name,
+        description:  teams.description,
+        avatarUrl:    teams.avatarUrl,
+        createdAt:    teams.createdAt,
+        updatedAt:    teams.updatedAt,
+        memberCount:  sql<number>`(SELECT COUNT(*)::int FROM ${teamMembers} WHERE ${teamMembers.teamId} = ${teams.id})`,
+        projectCount: sql<number>`(SELECT COUNT(*)::int FROM ${teamProjects} WHERE ${teamProjects.teamId} = ${teams.id})`,
+      })
+      .from(teams)
+      .where(eq(teams.tenantId, tenantId))
+      .orderBy(teams.name);
     return c.json({ teams: rows });
   });
 
@@ -112,7 +113,6 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .values({ tenantId, name, description: body.description?.trim() || null })
       .returning();
 
-    await invalidate(c, tenantId);
     return c.json(team, 201);
   });
 
@@ -151,7 +151,9 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       c.env as Env,
       teamsWorkforceCacheKey(tenantId, projectId),
       async () => {
-        const members = await loadProjectTeamMembers(db, projectId, tenantId);
+        // Resolve names live so a renamed human/agent shows its current name, not the
+        // snapshot taken when they were added to the team (member_name drift).
+        const members = await resolveLiveMemberNames(db, await loadProjectTeamMembers(db, projectId, tenantId));
         return {
           scopedToTeams: members.length > 0,
           workforce: members.map((m) => ({ kind: m.memberKind, ref: m.memberRef, name: m.memberName })),
@@ -172,7 +174,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(teams.id, id), eq(teams.tenantId, tenantId)));
     if (!team) return c.json({ error: 'Team not found' }, 404);
 
-    const members = await db
+    const members = await resolveLiveMemberNames(db, await db
       .select({
         id:         teamMembers.id,
         memberKind: teamMembers.memberKind,
@@ -182,7 +184,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       })
       .from(teamMembers)
       .where(eq(teamMembers.teamId, id))
-      .orderBy(teamMembers.memberName);
+      .orderBy(teamMembers.memberName));
 
     const attachedProjects = await db
       .select({
@@ -205,7 +207,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const id = Number(c.req.param('id'));
 
-    const body = await c.req.json<{ name?: string; description?: string | null }>();
+    const body = await c.req.json<{ name?: string; description?: string | null; avatarUrl?: string | null }>();
     const patch: Partial<typeof teams.$inferInsert> = { updatedAt: new Date() };
     if (body.name !== undefined) {
       const name = body.name.trim();
@@ -214,6 +216,9 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
     }
     if (body.description !== undefined) {
       patch.description = body.description?.trim() || null;
+    }
+    if (body.avatarUrl !== undefined) {
+      patch.avatarUrl = body.avatarUrl?.trim() || null;
     }
 
     const [updated] = await db
@@ -225,7 +230,6 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
 
     // Rename changes what the by-project read returns for every attached project.
     await invalidateProjectsForTeam(c, c.get('tenantId') as number, id);
-    await invalidate(c, tenantId);
     return c.json(updated);
   });
 
@@ -243,7 +247,6 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .returning({ id: teams.id });
     if (!deleted) return c.json({ error: 'Team not found' }, 404);
 
-    await invalidate(c, tenantId);
     return c.json({ deleted: true });
   });
 
@@ -274,7 +277,6 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
 
     // Membership feeds the per-project assignable-workforce read.
     await invalidateProjectsForTeam(c, c.get('tenantId') as number, id);
-    await invalidate(c, tenantId);
     return c.json(member, 201);
   });
 
@@ -291,7 +293,6 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(teamMembers.id, memberId), eq(teamMembers.teamId, id)));
 
     await invalidateProjectsForTeam(c, c.get('tenantId') as number, id);
-    await invalidate(c, tenantId);
     return c.json({ deleted: true });
   });
 
@@ -320,7 +321,6 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .returning();
 
     await invalidateProjectCaches(c, c.get('tenantId') as number, projectId);
-    await invalidate(c, tenantId);
     return c.json(link ?? { error: 'Project already attached' }, link ? 201 : 409);
   });
 
@@ -337,7 +337,6 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(teamProjects.teamId, id), eq(teamProjects.projectId, projectId)));
 
     await invalidateProjectCaches(c, c.get('tenantId') as number, projectId);
-    await invalidate(c, tenantId);
     return c.json({ deleted: true });
   });
 

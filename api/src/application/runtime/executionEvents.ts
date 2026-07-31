@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Per-execution live event hub — the in-isolate WebSocket fan-out for a single
  * execution's stream (status changes, assistant/user messages, file changes).
@@ -69,7 +70,11 @@ export function notifyExecutionSubscribers(executionId: number, event: Execution
   // Board-level fan-out runs FIRST and unconditionally — it must fire even when no
   // one holds this execution's per-run socket, so a card's agent chip advances on
   // the board for someone who never opened the drawer. Best-effort; never throws.
-  try { executionBoardSink?.(event); } catch { /* best-effort board push */ }
+  try {
+    executionBoardSink?.(event);
+  } catch (error) {
+    reportCaughtError(error, { source: "application/runtime/executionEvents.ts", operation: "notifyExecutionSubscribers", context: { logMessage: '[execution-events] board broadcast failed', details: { executionId, eventType: event.type, error } } });
+  }
 
   const set = executionSubscribers.get(executionId);
   if (!set || set.size === 0) return;
@@ -78,8 +83,10 @@ export function notifyExecutionSubscribers(executionId: number, event: Execution
   for (const socket of set) {
     try {
       socket.send(payload);
-    } catch {
+    } catch (error) {
       // ignore broken sockets; close handlers clean up subscriptions.
+    
+      reportCaughtError(error, { source: "application/runtime/executionEvents.ts", operation: "notifyExecutionSubscribers" });
     }
   }
 }

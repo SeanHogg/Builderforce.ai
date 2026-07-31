@@ -22,6 +22,7 @@ export type AssignmentScope =
   | 'security'
   | 'swimlane'
   | 'brain'
+  | 'chat'      // an agent invited into a specific Brain chat (scopeId = chat id)
   | 'global';
 
 export type ExecutionScope = 'project' | 'global';

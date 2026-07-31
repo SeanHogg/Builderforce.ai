@@ -66,24 +66,6 @@ export async function getPublishedSkill(slug: string): Promise<PublishedSkill | 
   }
 }
 
-/**
- * Fetch one published persona's display name for SSR/metadata (e.g. the
- * `/personas/[slug]` OG card). Mirrors {@link getPublishedSkill}; hits the same
- * public `GET /api/personas/:slug` the detail page falls back to. Null on miss.
- */
-export async function getPublishedPersonaName(slug: string): Promise<string | null> {
-  try {
-    const res = await fetch(`${API_BASE}/api/personas/${encodeURIComponent(slug)}`);
-    if (!res.ok) return null;
-    const body = (await res.json()) as Record<string, unknown>;
-    const p = (body.persona as Record<string, unknown>) ?? body;
-    const name = p?.name ?? p?.slug;
-    return typeof name === 'string' && name ? name : null;
-  } catch {
-    return null;
-  }
-}
-
 /** Published skill slugs for the sitemap. Best-effort; empty on error. */
 export async function listPublishedSkillSlugs(limit = 500): Promise<string[]> {
   try {

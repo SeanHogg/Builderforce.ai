@@ -3,6 +3,7 @@
 import { Select } from '@/components/Select';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import {
   promptLibraryApi,
@@ -14,7 +15,10 @@ import {
 import { getStoredUser } from '@/lib/auth';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { CatalogInsightsBar, type CatalogInsightsItem } from '@/components/CatalogInsightsBar';
+import { PromptVersionDiff } from '@/components/prompts/PromptVersionDiff';
+import type { PromptAnalysis } from '@/lib/builderforceApi';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
+import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -26,6 +30,7 @@ const card: React.CSSProperties = {
 type Tab = 'public' | 'mine';
 
 export default function PromptsPage() {
+  const t = useTranslations('promptsPage');
   const isAuthed = !!getStoredUser();
   const [tab, setTab] = useState<Tab>('public');
   const [prompts, setPrompts] = useState<PromptSummary[]>([]);
@@ -82,13 +87,15 @@ export default function PromptsPage() {
   const applyPrompt = async (p: PromptPublicView) => {
     try {
       const fresh = await promptLibraryApi.usePublic(p.slug);
-      await navigator.clipboard.writeText(fresh.body).catch(() => {});
-      setToast('Prompt copied to clipboard');
+      // Shared write; a refused clipboard resolves false rather than throwing, so the
+      // usage-count update below still runs exactly as it did with the old `.catch(() => {})`.
+      await copyTextToClipboard(fresh.body);
+      setToast(t('copiedToast'));
       setSelected(fresh);
       setPrompts((prev) => prev.map((x) => (x.slug === p.slug ? { ...x, usageCount: fresh.usageCount } : x)));
       setTimeout(() => setToast(null), 2500);
     } catch (e) {
-      setToast(e instanceof Error ? e.message : 'Failed to use prompt');
+      setToast(e instanceof Error ? e.message : t('useFailed'));
       setTimeout(() => setToast(null), 2500);
     }
   };
@@ -96,15 +103,14 @@ export default function PromptsPage() {
   return (
     <div className="page-inner">
       <div style={{ textAlign: 'center', marginBottom: 28 }}>
-        <h1 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>Prompt Library</h1>
+        <h1 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>{t('title')}</h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: 14, maxWidth: 600, margin: '0 auto' }}>
-          Ready-to-use prompt templates for entrepreneurs, testing, coding, business analysis, and marketing research.
-          Copy any prompt in one click{isAuthed ? ', or publish your own to share with everyone.' : ' — sign in to publish and star your own.'}
+          {t('subtitle')}{isAuthed ? t('subtitleAuthed') : t('subtitleGuest')}
         </p>
         {isAuthed && (
           <div style={{ marginTop: 16 }}>
             <button type="button" className="btn btn-primary" onClick={() => setShowCreate((v) => !v)}>
-              {showCreate ? 'Close' : '+ New prompt'}
+              {showCreate ? t('close') : t('newPrompt')}
             </button>
           </div>
         )}
@@ -119,8 +125,8 @@ export default function PromptsPage() {
 
       {/* Tabs + view toggle */}
       <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-        <button type="button" className={`btn ${tab === 'public' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('public')}>Public gallery</button>
-        {isAuthed && <button type="button" className={`btn ${tab === 'mine' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('mine')}>My prompts</button>}
+        <button type="button" className={`btn ${tab === 'public' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('public')}>{t('tabPublic')}</button>
+        {isAuthed && <button type="button" className={`btn ${tab === 'mine' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('mine')}>{t('tabMine')}</button>}
         <div style={{ marginLeft: 'auto' }}>
           <ViewToggle value={viewMode} onChange={setViewMode} />
         </div>
@@ -133,15 +139,15 @@ export default function PromptsPage() {
             type="search"
             className="input"
             style={{ maxWidth: 320 }}
-            placeholder="Search prompts…"
+            placeholder={t('searchPlaceholder')}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') loadPublic(q); }}
           />
           <Select className="input" style={{ maxWidth: 150 }} value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
-            <option value="popular">Most used</option>
-            <option value="recent">Newest</option>
-            <option value="featured">Featured</option>
+            <option value="popular">{t('sortPopular')}</option>
+            <option value="recent">{t('sortRecent')}</option>
+            <option value="featured">{t('sortFeatured')}</option>
           </Select>
         </div>
       )}
@@ -153,10 +159,11 @@ export default function PromptsPage() {
           primaryMetric="usage"
           secondaryMetric="stars"
           groupKind="category"
+          showTrend={isAuthed}
         />
       )}
 
-      {loading && <div style={card}>Loading prompts…</div>}
+      {loading && <div style={card}>{t('loading')}</div>}
       {error && <div style={{ ...card, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
 
       {!loading && !error && viewMode === 'card' && (
@@ -165,23 +172,23 @@ export default function PromptsPage() {
             <button key={p.id} onClick={() => openDetail(p)} style={{ ...card, textAlign: 'left', cursor: 'pointer' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
                 <span style={{ fontWeight: 700, fontSize: 15 }}>{p.title}</span>
-                {p.isFeatured && <span title="Featured">⭐</span>}
+                {p.isFeatured && <span title={t('featured')}>⭐</span>}
               </div>
               {p.description && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 10px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.description}</p>}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
                 {p.category && <span className="badge badge-gray">{p.category}</span>}
-                {p.tags.slice(0, 3).map((t) => <span key={t} className="badge badge-gray">#{t}</span>)}
+                {p.tags.slice(0, 3).map((tag) => <span key={tag} className="badge badge-gray">#{tag}</span>)}
               </div>
               <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--text-muted)' }}>
-                <span>▶ {p.usageCount.toLocaleString()} uses</span>
+                <span>▶ {t('usesCount', { n: p.usageCount })}</span>
                 <span>★ {p.starCount}</span>
-                {p.authorName && <span>by {p.authorName}</span>}
+                {p.authorName && <span>{t('byAuthor', { name: p.authorName })}</span>}
               </div>
             </button>
           ))}
           {prompts.length === 0 && (
             <div style={{ ...card, gridColumn: '1 / -1', color: 'var(--text-muted)' }}>
-              {tab === 'mine' ? 'You have no prompts yet. Click “+ New prompt” to create one.' : 'No public prompts found.'}
+              {tab === 'mine' ? t('emptyMine') : t('emptyPublic')}
             </div>
           )}
         </div>
@@ -190,19 +197,19 @@ export default function PromptsPage() {
       {!loading && !error && viewMode === 'table' && (
         prompts.length === 0 ? (
           <div style={{ ...card, color: 'var(--text-muted)' }}>
-            {tab === 'mine' ? 'You have no prompts yet. Click “+ New prompt” to create one.' : 'No public prompts found.'}
+            {tab === 'mine' ? t('emptyMine') : t('emptyPublic')}
           </div>
         ) : (
           <div style={tableWrapStyle}>
             <table style={tableStyle}>
               <thead>
                 <tr style={theadRowStyle}>
-                  <th style={thStyle}>Title</th>
-                  <th style={thStyle}>Category</th>
-                  <th style={thStyle}>Uses</th>
-                  <th style={thStyle}>Stars</th>
-                  <th style={thStyle}>Author</th>
-                  <th style={thStyle}>Actions</th>
+                  <th style={thStyle}>{t('colTitle')}</th>
+                  <th style={thStyle}>{t('colCategory')}</th>
+                  <th style={thStyle}>{t('colUses')}</th>
+                  <th style={thStyle}>{t('colStars')}</th>
+                  <th style={thStyle}>{t('colAuthor')}</th>
+                  <th style={thStyle}>{t('colActions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -211,7 +218,7 @@ export default function PromptsPage() {
                     <td style={{ ...tdStyle, fontWeight: 600 }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         {p.title}
-                        {p.isFeatured && <span title="Featured">⭐</span>}
+                        {p.isFeatured && <span title={t('featured')}>⭐</span>}
                       </span>
                     </td>
                     <td style={tdMutedStyle}>{p.category ?? '—'}</td>
@@ -219,7 +226,7 @@ export default function PromptsPage() {
                     <td style={tdMutedStyle}>{p.starCount}</td>
                     <td style={tdMutedStyle}>{p.authorName ?? '—'}</td>
                     <td style={tdStyle}>
-                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => openDetail(p)}>View</button>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => openDetail(p)}>{t('view')}</button>
                     </td>
                   </tr>
                 ))}
@@ -248,7 +255,13 @@ export default function PromptsPage() {
 }
 
 function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPublicView; isAuthed: boolean; onClose: () => void; onUse: () => void }) {
+  const t = useTranslations('promptsPage');
   const [starred, setStarred] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [analysis, setAnalysis] = useState<PromptAnalysis | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
   const id = (prompt as PromptPublicView & { id: string }).id;
 
   const toggleStar = async () => {
@@ -256,6 +269,29 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
       if (starred) { await promptLibraryApi.unstar(id); setStarred(false); }
       else { await promptLibraryApi.star(id); setStarred(true); }
     } catch { /* ignore */ }
+  };
+
+  const runAnalyze = async () => {
+    setAnalyzing(true);
+    setAnalyzeError(null);
+    setSaved(false);
+    try {
+      setAnalysis(await promptLibraryApi.analyze(id));
+    } catch (e) {
+      setAnalyzeError(e instanceof Error ? e.message : t('analysisFailed'));
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const saveSuggestion = async () => {
+    if (!analysis?.suggestion) return;
+    try {
+      await promptLibraryApi.addVersion(id, { body: analysis.suggestion, notes: 'Analyzer suggestion' });
+      setSaved(true);
+    } catch (e) {
+      setAnalyzeError(e instanceof Error ? e.message : t('saveFailed'));
+    }
   };
 
   return (
@@ -269,20 +305,45 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '8px 0 16px' }}>
           {prompt.category && <span className="badge badge-gray">{prompt.category}</span>}
           {prompt.tags.map((t) => <span key={t} className="badge badge-gray">#{t}</span>)}
-          {prompt.model && <span className="badge badge-gray">model: {prompt.model}</span>}
+          {prompt.model && <span className="badge badge-gray">{t('modelBadge', { model: prompt.model })}</span>}
         </div>
 
-        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-          <button type="button" className="btn btn-primary" onClick={onUse}>Use this prompt (copy)</button>
-          {isAuthed && id && <button type="button" className="btn btn-secondary" onClick={toggleStar}>{starred ? '★ Starred' : '☆ Star'}</button>}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-primary" onClick={onUse}>{t('usePromptCopy')}</button>
+          {isAuthed && id && <button type="button" className="btn btn-secondary" onClick={toggleStar}>{starred ? t('starred') : t('star')}</button>}
+          {isAuthed && id && <button type="button" className="btn btn-secondary" onClick={() => setShowHistory(true)}>{t('history')}</button>}
+          {isAuthed && id && (
+            <button type="button" className="btn btn-secondary" onClick={runAnalyze} disabled={analyzing}>
+              {analyzing ? t('analyzing') : t('analyze')}
+            </button>
+          )}
         </div>
 
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>PROMPT (v{prompt.currentVersion})</div>
+        {analyzeError && <div style={{ color: 'var(--danger, #e5484d)', fontSize: 13, marginBottom: 12 }}>{analyzeError}</div>}
+
+        {analysis && (
+          <div style={{ ...card, marginBottom: 16, borderColor: 'var(--coral-bright, #f4726e)' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('suggestionTitle')}</div>
+            {analysis.rationale && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 10px' }}>{analysis.rationale}</p>}
+            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 13, fontFamily: 'ui-monospace, monospace', maxHeight: 280, overflowY: 'auto', margin: 0 }}>{analysis.suggestion}</pre>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
+              <button type="button" className="btn btn-primary btn-sm" onClick={saveSuggestion} disabled={saved}>
+                {saved ? t('savedVersion') : t('saveAsVersion')}
+              </button>
+              {/* Fire-and-forget as before — no confirmation state on this button. */}
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => { void copyTextToClipboard(analysis.suggestion); }}>{t('copySuggestion')}</button>
+            </div>
+          </div>
+        )}
+
+        {showHistory && id && <PromptVersionDiff promptId={id} open={showHistory} onClose={() => setShowHistory(false)} />}
+
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>{t('promptVersionLabel', { v: prompt.currentVersion })}</div>
         <pre style={{ ...card, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 13, fontFamily: 'ui-monospace, monospace', maxHeight: 360, overflowY: 'auto' }}>{prompt.body}</pre>
 
         {prompt.variables.length > 0 && (
           <>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', margin: '16px 0 6px' }}>VARIABLES</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', margin: '16px 0 6px' }}>{t('variablesLabel')}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {prompt.variables.map((v) => (
                 <div key={v.name} style={{ ...card, padding: 10, fontSize: 13 }}>
@@ -295,9 +356,9 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
         )}
 
         <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-muted)', marginTop: 16 }}>
-          <span>▶ {prompt.usageCount.toLocaleString()} uses</span>
+          <span>▶ {t('usesCount', { n: prompt.usageCount })}</span>
           <span>★ {prompt.starCount}</span>
-          {prompt.authorName && <span>by {prompt.authorName}</span>}
+          {prompt.authorName && <span>{t('byAuthor', { name: prompt.authorName })}</span>}
         </div>
       </div>
     </div>
@@ -305,6 +366,7 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
 }
 
 function CreatePromptForm({ onCreated, onError }: { onCreated: () => void; onError: (e: string) => void }) {
+  const t = useTranslations('promptsPage');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
@@ -316,7 +378,7 @@ function CreatePromptForm({ onCreated, onError }: { onCreated: () => void; onErr
   const authorName = getStoredUser()?.name ?? getStoredUser()?.email ?? undefined;
 
   const submit = async () => {
-    if (!title.trim() || !body.trim()) { onError('Title and prompt body are required'); return; }
+    if (!title.trim() || !body.trim()) { onError(t('createValidation')); return; }
     setSaving(true);
     try {
       const payload: CreatePromptBody = {
@@ -332,7 +394,7 @@ function CreatePromptForm({ onCreated, onError }: { onCreated: () => void; onErr
       await promptLibraryApi.create(payload);
       onCreated();
     } catch (e) {
-      onError(e instanceof Error ? e.message : 'Failed to create prompt');
+      onError(e instanceof Error ? e.message : t('createFailed'));
     } finally {
       setSaving(false);
     }
@@ -340,32 +402,34 @@ function CreatePromptForm({ onCreated, onError }: { onCreated: () => void; onErr
 
   return (
     <div style={{ ...card, marginBottom: 20 }}>
-      <h2 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 12px' }}>New prompt</h2>
+      <h2 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 12px' }}>{t('createTitle')}</h2>
       <div style={{ display: 'grid', gap: 10 }}>
-        <input className="input" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <input className="input" placeholder="Short description" value={description} onChange={(e) => setDescription(e.target.value)} />
+        <input className="input" placeholder={t('phTitle')} value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input className="input" placeholder={t('phDescription')} value={description} onChange={(e) => setDescription(e.target.value)} />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <input className="input" placeholder="Category (e.g. code-review)" value={category} onChange={(e) => setCategory(e.target.value)} />
-          <input className="input" placeholder="Tags (comma separated)" value={tags} onChange={(e) => setTags(e.target.value)} />
+          <input className="input" placeholder={t('phCategory')} value={category} onChange={(e) => setCategory(e.target.value)} />
+          <input className="input" placeholder={t('phTags')} value={tags} onChange={(e) => setTags(e.target.value)} />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <Select className="input" value={visibility} onChange={(e) => setVisibility(e.target.value as typeof visibility)}>
-            <option value="private">Private (only me)</option>
-            <option value="tenant">Team</option>
-            <option value="public">Public (everyone)</option>
+            <option value="private">{t('visPrivate')}</option>
+            <option value="tenant">{t('visTenant')}</option>
+            <option value="public">{t('visPublic')}</option>
           </Select>
-          <input className="input" placeholder="Recommended model (optional)" value={model} onChange={(e) => setModel(e.target.value)} />
+          <input className="input" placeholder={t('phModel')} value={model} onChange={(e) => setModel(e.target.value)} />
         </div>
+        {/* The `{{variable}}` token is passed as an ICU argument so the braces never
+            have to be escaped inside the message catalogs. */}
         <textarea
           className="input"
           style={{ minHeight: 160, fontFamily: 'ui-monospace, monospace' }}
-          placeholder={'Prompt body. Use {{variable}} placeholders.'}
+          placeholder={t('phBody', { ph: '{{variable}}' })}
           value={body}
           onChange={(e) => setBody(e.target.value)}
         />
         <div>
           <button type="button" className="btn btn-primary" onClick={submit} disabled={saving}>
-            {saving ? 'Saving…' : 'Create prompt'}
+            {saving ? t('savingLabel') : t('createSubmit')}
           </button>
         </div>
       </div>

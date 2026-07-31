@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { Task, AgentHost } from '@/lib/builderforceApi';
 import { AgentCapabilitiesContent } from '../AgentCapabilitiesContent';
+import { KanbanRosterCard } from '../kanban/KanbanRosterCard';
 import { AgentExecutionPanel } from './AgentExecutionPanel';
 
 /**
@@ -57,7 +58,12 @@ export function AgentTab({ projectId, agentHostId, tenantId, task, agentHosts, o
           )}
         </div>
       ) : (
-        <div style={{ padding: 20 }}>
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Recommended roster — the accurate multi-agent view (agents assigned to
+              each role), moved here from the Analytics tab. The Agents list below
+              only reflects agents explicitly attached via "+ Add Agent", so the
+              roster is where the full team shows. */}
+          <KanbanRosterCard projectId={projectId} />
           <AgentCapabilitiesContent projectId={projectId} agentHostId={agentHostId} tenantId={tenantId} />
         </div>
       )}

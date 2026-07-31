@@ -1,11 +1,14 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type { PublishedAgent } from '@/lib/types';
 import { formatAgentPrice } from '@/lib/agentPresentation';
 import { isAgentOwner } from '@/lib/agentPermissions';
 import { useAuth } from '@/lib/AuthContext';
 import { StatusBadge } from '@/components/StatusBadge';
+import { BuiltinKindBadge } from '@/components/BuiltinKindBadge';
 import { SkillTags } from '@/components/SkillTags';
+import PersonalitySummary from '@/components/PersonalitySummary';
 import { WorkforceCard } from './WorkforceCard';
 import { RUNTIME_LABELS } from './CloudAgentFormFields';
 import { AgentOwnerActions } from './AgentOwnerActions';
@@ -77,8 +80,9 @@ export function AgentCard({
   unhiring?: boolean;
 }) {
   const { tenant } = useAuth();
+  const t = useTranslations('marketplace');
   const owner = isAgentOwner(agent, tenant?.id);
-  const subtitle = agent.title && agent.title !== agent.name ? agent.title : 'Workforce agent';
+  const subtitle = agent.title && agent.title !== agent.name ? agent.title : t('action.workforceAgent');
   const evalScore = agentEvalScore(agent);
 
   return (
@@ -86,21 +90,31 @@ export function AgentCard({
       avatar={<span style={{ fontSize: 24 }}>🤖</span>}
       name={agent.name}
       subtitle={subtitle}
-      pill={{ kind: owner ? 'cloud' : 'marketplace', label: 'Agent' }}
-      badges={owner ? <StatusBadge variant={agent.published ? 'published' : 'draft'} /> : undefined}
+      pill={{ kind: owner ? 'cloud' : 'marketplace', label: t('card.agentPill') }}
+      badges={
+        <>
+          {/* Type indicator for built-in agents — stays visible next to whatever
+              name the team renamed the agent to. Renders null for ordinary agents. */}
+          <BuiltinKindBadge kind={agent.builtin_kind} />
+          {owner ? <StatusBadge variant={agent.published ? 'published' : 'draft'} /> : null}
+        </>
+      }
       body={
         <>
           {agent.bio && <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, flex: 1 }}>{agent.bio}</div>}
           <SkillTags skills={agent.skills} max={5} />
+          {/* This agent's personality — same read-only readout the human MemberCard
+              shows; self-hides when the agent carries no personality. */}
+          <PersonalitySummary profile={agent.psychometric ?? undefined} />
           {/* Runtime + price pills — pricing is shown on every card. */}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 11 }}>
             <span style={runtimePillStyle}>
               {RUNTIME_LABELS[agent.runtime_support ?? 'cloud']}
-              {owner && agent.runtime_support === 'both' && agent.preferred_runtime ? ` · prefers ${agent.preferred_runtime}` : ''}
+              {owner && agent.runtime_support === 'both' && agent.preferred_runtime ? ` · ${t('card.prefers', { runtime: agent.preferred_runtime })}` : ''}
             </span>
             <span style={pricePillStyle}>{formatAgentPrice(agent)}</span>
             {evalScore != null && (
-              <span style={evalPillStyle} title="AI evaluation score (0-1)">Eval {evalScore.toFixed(2)}</span>
+              <span style={evalPillStyle} title={t('card.evalTitle')}>{t('card.eval', { score: evalScore.toFixed(2) })}</span>
             )}
           </div>
           {/* Assigned configuration + Copy manifest — on every agent card (an empty
@@ -113,18 +127,18 @@ export function AgentCard({
         <>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-              {agent.hire_count != null ? `Hired ${agent.hire_count}×` : null}
+              {agent.hire_count != null ? t('card.hired', { count: agent.hire_count }) : null}
               {/* "In use" (active holders) is an owner-only signal — never shown to
                   non-owners, who can't see how/whether others are using it. */}
-              {owner && agent.active_hires != null ? ` · ${agent.active_hires} in use` : null}
+              {owner && agent.active_hires != null ? ` · ${t('card.inUse', { count: agent.active_hires })}` : null}
             </div>
             {!owner && (hired ? (
               <button type="button" className="btn btn-secondary btn-sm" disabled={unhiring} onClick={() => onUnhire?.(agent.id)}>
-                {unhiring ? 'Unhiring…' : 'Unhire'}
+                {unhiring ? t('action.unhiring') : t('action.unhire')}
               </button>
             ) : (
               <button type="button" className="btn btn-primary btn-sm" disabled={hiring} onClick={() => onHire?.(agent.id)}>
-                {hiring ? 'Hiring…' : 'Hire'}
+                {hiring ? t('action.hiring') : t('action.hire')}
               </button>
             ))}
           </div>

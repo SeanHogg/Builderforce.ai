@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Outbound webhook emitter for the cross-domain (channel-3) seams (spec 05 §4.3).
  *
@@ -204,7 +205,9 @@ export async function emitWebhookEvent(db: Db, input: EmitInput, deps: EmitDeps 
         }
       } catch (err) {
         await recordDeliveryFailure(db, delivery.id, 1, timestamp, err)
-          .catch(() => { /* never let bookkeeping throw into the emit path */ });
+          .catch((error) => { /* never let bookkeeping throw into the emit path */ 
+            reportCaughtError(error, { source: "application/seams/webhookService.ts", operation: "emitWebhookEvent" });
+          });
       }
     }),
   );
@@ -264,7 +267,9 @@ export async function runWebhookRetrySweep(env: Env, nowMs: number = Date.now(),
         .update(webhookDeliveries)
         .set({ nextRetryAt: null, lastError: !row.active ? 'subscription inactive' : 'no stored payload' })
         .where(eq(webhookDeliveries.id, row.id))
-        .catch(() => { /* bookkeeping best-effort */ });
+        .catch((error) => { /* bookkeeping best-effort */ 
+          reportCaughtError(error, { source: "application/seams/webhookService.ts", operation: "runWebhookRetrySweep" });
+        });
       continue;
     }
 
@@ -292,7 +297,9 @@ export async function runWebhookRetrySweep(env: Env, nowMs: number = Date.now(),
       }
     } catch (err) {
       await recordDeliveryFailure(db, row.id, attempts, nowSec, err)
-        .catch(() => { /* never let bookkeeping throw into the sweep */ });
+        .catch((error) => { /* never let bookkeeping throw into the sweep */ 
+          reportCaughtError(error, { source: "application/seams/webhookService.ts", operation: "runWebhookRetrySweep" });
+        });
     }
   }
 

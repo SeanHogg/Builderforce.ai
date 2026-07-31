@@ -20,6 +20,7 @@
  */
 
 import { forecastVsTarget, type DeliveryStatus } from './deliveryInsights';
+import { clampScore } from '../../domain/shared/numbers';
 
 const DAY_MS = 86_400_000;
 
@@ -58,12 +59,11 @@ export interface ScenarioResult {
   effortPersonWeeks: number | null;
 }
 
-const clampPct = (n: number): number => Math.max(0, Math.min(100, n));
 
 /** Pure: baseline + levers → a graded projection. */
 export function buildScenario(base: ScenarioBaseline, params: ScenarioParams): ScenarioResult {
   const developers = Math.max(0, Math.floor(params.developers));
-  const attentionPct = clampPct(params.attentionPct);
+  const attentionPct = clampScore(params.attentionPct);
   const scopeDelta = Math.floor(params.scopeDelta);
 
   const baselineDevs = Math.max(1, base.activeContributors);

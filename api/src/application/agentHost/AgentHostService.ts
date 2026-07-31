@@ -24,15 +24,6 @@ export class AgentHostService {
     return agentHosts;
   }
 
-  async updateDeclaredCapabilities(agentHostId: number, tenantId: number, capabilities: string[]): Promise<AgentHost | null> {
-    const agentHost = await this.getAgentHostForTenant(agentHostId, tenantId);
-    if (!agentHost) return null;
-
-    // Currently our repository does not support updates, so we defer to callers.
-    // This method exists to encapsulate business rules in the future.
-    return agentHost;
-  }
-
   async verifyApiKey(agentHostId: number, apiKey: string): Promise<AgentHost | null> {
     return this.agentHostRepo.verifyApiKey(asAgentHostId(agentHostId), apiKey);
   }

@@ -294,6 +294,16 @@ export interface ChatCompletionResponse {
      * to group by without parsing model-id prefixes.
      */
     resolvedVendor?: string;
+    /**
+     * Present only when this turn was served by a **premium** model selection — an
+     * explicit pin on a paid OpenRouter model outside your plan's pool, which requires
+     * a paid plan plus a validated card. The value is the FLAT per-request surcharge in
+     * millicents (1/100000 USD) added on top of the metered OpenRouter token cost, so
+     * the billed total is "OpenRouter's own price + this". Absent for plan-pool, free,
+     * and BYO turns, and absent when a premium pin failed over to a plan model (you
+     * only pay the surcharge when the premium model actually answered).
+     */
+    premiumSurchargeMillicents?: number;
     /** How many vendor retries happened inside the failover chain. */
     retries?: number;
     /**

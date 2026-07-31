@@ -24,17 +24,23 @@ import { AuditRepository }      from './infrastructure/repositories/AuditReposit
 // Application services
 import { ProjectService }  from './application/project/ProjectService';
 import { TaskService }     from './application/task/TaskService';
+import { TaskType }        from './domain/shared/types';
+import { llmEpicDecomposer } from './application/task/EpicDecomposer';
 import { TenantService }   from './application/tenant/TenantService';
 import { AuthService }     from './application/auth/AuthService';
 import { AgentService }    from './application/agent/AgentService';
 import { buildRuntimeService } from './buildRuntimeService';
 import { recommendTopAssignee } from './application/metrics/assigneeRecommender';
+import { addDependency } from './application/task/taskDependencies';
+import { asProjectId } from './domain/shared/types';
+import { bumpCacheVersion } from './infrastructure/cache/readThroughCache';
 import { AuditService }    from './application/audit/AuditService';
 import { AgentHostService }     from './application/agentHost/AgentHostService';
 
 // Routes
 import { createProjectRoutes }     from './presentation/routes/projectRoutes';
 import { createTaskRoutes } from './presentation/routes/taskRoutes';
+import { createManagerRoutes } from './presentation/routes/managerRoutes';
 import { createVscodeRoutes } from './presentation/routes/vscodeRoutes';
 import { setExecutionBoardSink }   from './application/runtime/executionEvents';
 import { makeExecutionBoardSink }  from './application/runtime/executionBoardBroadcast';
@@ -43,13 +49,17 @@ import { createTenantRoutes }      from './presentation/routes/tenantRoutes';
 import { createSegmentRoutes }     from './presentation/routes/segmentRoutes';
 import { createEmbedRoutes }       from './presentation/routes/embedRoutes';
 import { createGovernanceRoutes }  from './presentation/routes/governanceRoutes';
+import { createAgentOpsRoutes }    from './presentation/routes/agentOpsRoutes';
 import { createProductRoutes }     from './presentation/routes/productRoutes';
 import { createAgileRoutes }       from './presentation/routes/agileRoutes';
+import { createMeetingRoutes }     from './presentation/routes/meetingRoutes';
+import { createCalendarRoutes }    from './presentation/routes/calendarRoutes';
 import { createRoiRoutes }         from './presentation/routes/roiRoutes';
 import { createPmoRoutes }         from './presentation/routes/pmoRoutes';
 import { createTimeRoutes }        from './presentation/routes/timeRoutes';
 import { createInsightsRoutes }    from './presentation/routes/insightsRoutes';
 import { createAiImpactRoutes }    from './presentation/routes/aiImpactRoutes';
+import { createAutonomyRoutes }    from './presentation/routes/autonomyRoutes';
 import { createBenchmarkingRoutes } from './presentation/routes/benchmarkingRoutes';
 import { createRecommendationsRoutes } from './presentation/routes/recommendationsRoutes';
 import { createDevexRoutes }       from './presentation/routes/devexRoutes';
@@ -57,6 +67,7 @@ import { createDashboardsRoutes }  from './presentation/routes/dashboardsRoutes'
 import { createDashboardPinsRoutes } from './presentation/routes/dashboardPinsRoutes';
 import { createFinopsRoutes }      from './presentation/routes/finopsRoutes';
 import { createDeckRoutes }        from './presentation/routes/deckRoutes';
+import { createExportRoutes }      from './presentation/routes/exportRoutes';
 import { createAlertRoutes }       from './presentation/routes/alertRoutes';
 import { createInnovationRoutes }  from './presentation/routes/innovationRoutes';
 import { createSeamRoutes }        from './presentation/routes/seamRoutes';
@@ -70,7 +81,14 @@ import { createRuntimeRoutes }     from './presentation/routes/runtimeRoutes';
 import { createAuditRoutes }       from './presentation/routes/auditRoutes';
 import { createMarketplaceRoutes } from './presentation/routes/marketplaceRoutes';
 import { createToolRoutes } from './presentation/routes/toolRoutes';
+import { createRfpRoutes } from './presentation/routes/rfpRoutes';
 import { ToolService } from './application/tools/ToolService';
+import { AuditRunner } from './application/tools/AuditRunner';
+import { createMarketingRoutes } from './presentation/routes/marketingRoutes';
+import { createGuestRoutes } from './presentation/routes/guestRoutes';
+import { createDemoRoutes } from './presentation/routes/demoRoutes';
+import { GuestChatService } from './application/guest/GuestChatService';
+import { MarketingService } from './application/marketing/MarketingService';
 import { createAgentHostRoutes }        from './presentation/routes/agentHostRoutes';
 import { AgentHostRepository }          from './infrastructure/repositories/AgentHostRepository';
 import { IAgentHostRepository }         from './domain/agentHost/IAgentHostRepository';
@@ -79,8 +97,17 @@ import { createArtifactAssignmentRoutes } from './presentation/routes/artifactAs
 import { createProjectAgentRoutes } from './presentation/routes/projectAgentRoutes';
 import { createMarketplaceStatsRoutes } from './presentation/routes/marketplaceStatsRoutes';
 import { createWorkforceRoutes }        from './presentation/routes/workforceRoutes';
+import { createFreelancerRoutes, createEngagementRoutes } from './presentation/routes/freelancerRoutes';
+import { createActivityRoutes, createTimecardRoutes } from './presentation/routes/activityRoutes';
+import { createJobRoutes, createNotificationRoutes } from './presentation/routes/jobRoutes';
+import { createEmailPreferenceRoutes } from './presentation/routes/emailPreferenceRoutes';
+import { createReleaseNoteRoutes } from './presentation/routes/releaseNoteRoutes';
+import { runReleaseDigest } from './application/email/releaseDigest';
+import { createFreelancerMessagingRoutes } from './presentation/routes/freelancerMessagingRoutes';
+import { createGigMarketplaceRoutes, createEngagementBoardRoutes, createDeliverableRoutes } from './presentation/routes/gigMarketplaceRoutes';
 import { createLimbicRoutes }           from './presentation/routes/limbicRoutes';
 import { createPersonaRoutes }          from './presentation/routes/personaRoutes';
+import { createPersonalityRoutes }      from './presentation/routes/personalityRoutes';
 import { createLlmRoutes }          from './presentation/routes/llmRoutes';
 import { createTenantModelRoutes }  from './presentation/routes/tenantModelRoutes';
 import { createSemanticCacheRoutes } from './presentation/routes/semanticCacheRoutes';
@@ -102,12 +129,13 @@ import { createContributorRoutes }  from './presentation/routes/contributorRoute
 import { runRepoActivitySweep }      from './application/contributors/runRepoActivitySweep';
 import { createDevTeamRoutes }      from './presentation/routes/devTeamRoutes';
 import { createTeamRoutes }         from './presentation/routes/teamRoutes';
-import { createReportRoutes, buildScheduledReport } from './presentation/routes/reportRoutes';
+import { createReportRoutes } from './presentation/routes/reportRoutes';
 import { createAnalyticsRoutes }    from './presentation/routes/analyticsRoutes';
 import { createPromptLibraryRoutes } from './presentation/routes/promptLibraryRoutes';
 import { createBrainRoutes }       from './presentation/routes/brainRoutes';
 import { createBrainFilesRoutes }  from './presentation/routes/brainFilesRoutes';
 import { createSitesRoutes, tryServeHostedSite } from './presentation/routes/sitesRoutes';
+import { maybeHandlePreviewIngress } from './application/runtime/previewIngress';
 import { createIdeRoutes }         from './presentation/routes/ideRoutes';
 import { createCompileRoutes }     from './presentation/routes/compileRoutes';
 import { createIdeProjectRoutes }  from './presentation/routes/ideProjectRoutes';
@@ -117,23 +145,30 @@ import { buildPaymentProvider }    from './infrastructure/payment';
 import { createWebhookRoutes }     from './presentation/routes/webhookRoutes';
 import { createManagedAgentHostRoutes }     from './presentation/routes/managedAgentHostRoutes';
 import { createGitHubWebhookRoutes }   from './presentation/routes/githubWebhookRoutes';
+import { createGitHubActionsRoutes }   from './presentation/routes/githubActionsRoutes';
+import { createDeployRoutes }          from './presentation/routes/deployRoutes';
 import { createGitLabWebhookRoutes }   from './presentation/routes/gitlabWebhookRoutes';
 import { createBitbucketWebhookRoutes } from './presentation/routes/bitbucketWebhookRoutes';
 import { createCostForecastRoutes }    from './presentation/routes/costForecastRoutes';
 import { createDashboardRoutes }       from './presentation/routes/dashboardRoutes';
 import { createConsumptionRoutes }     from './presentation/routes/consumptionRoutes';
 import { createEvalRoutes }            from './presentation/routes/evalRoutes';
+import { createDatasetRoutes }         from './presentation/routes/datasetRoutes';
 import { createTeamMemoryRoutes }      from './presentation/routes/teamMemoryRoutes';
 import { createPublicApiRoutes }       from './presentation/routes/publicApiRoutes';
 import { createStudioRoutes }          from './presentation/routes/studioWeightRoutes';
 import { createEvermindModelRoutes }   from './presentation/routes/evermindModelRoutes';
 import { createProjectEvermindRoutes, createProjectEvermindAgentRoutes }  from './presentation/routes/projectEvermindRoutes';
+import { createProjectFactsRoutes, createProjectFactsAgentRoutes }  from './presentation/routes/projectFactsRoutes';
 // Cloud Agent Boards — agentic swimlanes, external board sync, PRD versioning, multi-repo PRs
 import { createBoardRoutes }           from './presentation/routes/boardRoutes';
+import { createKanbanRoutes }          from './presentation/routes/kanbanRoutes';
 import { createBoardConnectionRoutes } from './presentation/routes/boardConnectionRoutes';
 import { createMigrationRoutes } from './presentation/routes/migrationRoutes';
 import { createBoardWebhookRoutes }    from './presentation/routes/boardWebhookRoutes';
 import { createQualityRoutes }         from './presentation/routes/qualityRoutes';
+import { createFeedbackRoutes }        from './presentation/routes/feedbackRoutes';
+import { createFeedbackIngestRoutes }  from './presentation/routes/feedbackIngestRoutes';
 import { createQualityIngestRoutes }   from './presentation/routes/qualityIngestRoutes';
 import { createPrdRoutes }             from './presentation/routes/prdRoutes';
 import { createRepoRoutes }            from './presentation/routes/repoRoutes';
@@ -142,6 +177,7 @@ import { createGitProxyRoutes }        from './presentation/routes/gitProxyRoute
 import { createAgentAssignmentRoutes } from './presentation/routes/agentAssignmentRoutes';
 import { createSecurityReviewRoutes } from './presentation/routes/securityReviewRoutes';
 import { createKnowledgeRoutes } from './presentation/routes/knowledgeRoutes';
+import { createKnowledgeMarketRoutes } from './presentation/routes/knowledgeMarketRoutes';
 
 import { API_VERSION } from './version';
 import {
@@ -149,25 +185,49 @@ import {
   OPENAPI_TITLE,
   OPENAPI_DESCRIPTION,
 } from './openapi/schema';
-import { runVendorHealthCron } from './application/llm/vendorHealthCron';
-import { runRetentionPurge } from './application/maintenance/retentionPurge';
-import { runEvalDriftSweep } from './application/eval/runEvalDriftSweep';
-import { runAlertSweep } from './application/alerts/runAlertSweep';
-import { runDueTriggers } from './application/workflow/runDueTriggers';
-import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
-import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
-import { runWebhookRetrySweep } from './application/seams/webhookService';
-import { runBoardSyncSweep } from './application/boardsync/runBoardSyncSweep';
-import { runParkedWorkflowSweep } from './application/swimlane/resumeParkedWorkflows';
-import { runQaExplorationSweep } from './application/qa/runQaExplorationSweep';
-import { runDueReports } from './application/reports/runDueReports';
+import { evaluateCronGate, openCronTick } from './application/runtime/cronWorkSignal';
+import { createTickDispatchBudget } from './application/runtime/tickDispatchBudget';
+// Every scheduled sweep is declared ONCE in cronSweeps.ts and invoked through the
+// shared runner, so the cron handler below and the superadmin force-run route
+// (POST /api/admin/cron/:target) can never drift. See cronSweepRunner.ts.
+import { CRON_SWEEPS } from './cronSweeps';
+import {
+  cadenceForCron,
+  dispatchCronSweeps,
+  sweepsForCadence,
+} from './application/runtime/cronSweepRunner';
+import { createIncidentRoutes } from './presentation/routes/incidentRoutes';
+import { createMonitoringRoutes } from './presentation/routes/monitoringRoutes';
+import { createMonitorWebhookRoutes } from './presentation/routes/monitorWebhookRoutes';
 import { handleInboundEmail } from './application/workflow/inboundEmail';
+// ── Insights-everywhere + enterprise-lens extensions (integration batch) ──
+import { createCatalogAnalyticsRoutes } from './presentation/routes/catalogAnalyticsRoutes';
+import { createFactsRoutes } from './presentation/routes/factsRoutes';
+import { createPromptAnalyzerRoutes } from './presentation/routes/promptAnalyzerRoutes';
+import { createMemberPersonaRoutes } from './presentation/routes/memberPersonaRoutes';
+import { createLensSnapshotRoutes } from './presentation/routes/lensSnapshotRoutes';
+import { createWorkforcePlanRoutes } from './presentation/routes/workforcePlanRoutes';
+import { createEmpFeatureRoutes } from './presentation/routes/empFeatureRoutes';
+import { createReleasesRoutes } from './presentation/routes/releasesRoutes';
+import { createPulseRoutes } from './presentation/routes/pulseRoutes';
+import { createEmpFinopsRoutes } from './presentation/routes/empFinopsRoutes';
+import { createEmpMetricsRoutes } from './presentation/routes/empMetricsRoutes';
+import { createForecastRoutes } from './presentation/routes/forecastRoutes';
 
 // Middleware
-import { addCorsToResponse, corsMiddleware } from './presentation/middleware/cors';
+import { addCorsToResponse, corsMiddleware, EXPOSED_HEADERS, ALLOWED_REQUEST_HEADERS } from './presentation/middleware/cors';
 import { errorHandler }   from './presentation/middleware/errorHandler';
 import { rateLimitMiddleware } from './presentation/middleware/rateLimitMiddleware';
 import { emulationMiddleware } from './presentation/middleware/emulationMiddleware';
+import {
+  reportCaughtError,
+  reportUnhandledError,
+  configureCaughtErrorReporter,
+  runWithCaughtErrorContext,
+} from './application/observability/caughtErrorReporter';
+import { persistCaughtError } from './infrastructure/observability/persistCaughtError';
+
+configureCaughtErrorReporter(persistCaughtError);
 
 // Durable Objects (must be re-exported so the Workers runtime can instantiate them)
 export { AgentHostRelayDO } from './infrastructure/relay/AgentHostRelayDO';
@@ -198,18 +258,32 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   const userRepo      = new UserRepository(db);
   const agentRepo     = new AgentRepository(db);
   const skillRepo      = new SkillRepository(db);
-  const auditRepo     = new AuditRepository(db);
+  const auditRepo     = new AuditRepository(db, env);
   const agentHostRepo      = new AgentHostRepository(db);
 
-  // --- Payment provider (selected by PAYMENT_PROVIDER env var, defaults to "manual") ---
+  // --- Payments (Stripe only; missing secrets fail per-route, never at boot) ---
   const paymentProvider = buildPaymentProvider(env);
 
   // --- Application ---
-  const projectService  = new ProjectService(projectRepo);
-  const taskService     = new TaskService(taskRepo, projectRepo, undefined,
-    (projectId) => recommendTopAssignee(env, db, projectId));
+  const projectService  = new ProjectService(projectRepo, taskRepo);
+  const taskService     = new TaskService(taskRepo, projectRepo, llmEpicDecomposer(env),
+    (projectId, roleKey) => recommendTopAssignee(env, db, projectId, roleKey ? { roleKey } : {}),
+    // Epic fan-out records its planned SEQUENCE as real precedence edges, through the
+    // same validated writer (DAG guard, same-project check) the REST/MCP paths use —
+    // a decomposition's order is data, not a detail of the plan that produced it.
+    async (projectId, predecessorTaskId, successorTaskId) => {
+      const project = await projectRepo.findById(asProjectId(projectId));
+      if (!project) return;
+      const result = await addDependency(db, project.tenantId as number, successorTaskId, predecessorTaskId);
+      if (result.ok) await bumpCacheVersion(env, `task-deps-version:project:${projectId}`).catch((error) => {
+        reportCaughtError(error, { source: "index.ts", operation: "taskService" });
+      });
+    });
   const tenantService   = new TenantService(tenantRepo, paymentProvider);
   const toolService     = new ToolService(db);
+  const auditRunner     = new AuditRunner(db, toolService, taskService);
+  const marketingService = new MarketingService(db);
+  const guestChatService = new GuestChatService(db);
   const authService     = new AuthService(userRepo, tenantRepo, auditRepo, env.JWT_SECRET);
   const agentService    = new AgentService(agentRepo, skillRepo, auditRepo);
   // RuntimeService.update is the single canonical execution-status transition;
@@ -230,7 +304,24 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // --- Presentation ---
   const app = new Hono<HonoEnv>();
 
+  app.use('*', (c, next) => runWithCaughtErrorContext({
+    env: c.env,
+    method: c.req.method,
+    path: new URL(c.req.url).pathname,
+    waitUntil: (task) => c.executionCtx.waitUntil(task),
+  }, next));
+
   app.use('*', corsMiddleware);
+
+  // Live container-preview ingress (Replit-parity phase 2, flag-gated). A request on
+  // `preview.builderforce.ai` is proxied (HTTP + WebSocket) through the run's container
+  // DO to a dev server it started. Inert (404) unless PREVIEW_INGRESS_ENABLED is set —
+  // runs BEFORE site-hosting so the reserved `preview` label reaches the proxy, not R2.
+  app.use('*', async (c, next) => {
+    const res = await maybeHandlePreviewIngress(c.env, c.req.raw);
+    if (res) return res;
+    return next();
+  });
 
   // Published-site hosting: a request whose Host is a `<sub>.builderforce.ai`
   // hosting subdomain (delivered by the worker's wildcard route) is served
@@ -245,6 +336,14 @@ export function buildApp(env: Env): Hono<HonoEnv> {
 
   // Rate limiting applied after auth middleware resolves tenantId
   app.use('/api/*', rateLimitMiddleware as Parameters<typeof app.use>[1]);
+  // The metered LLM gateway (`/llm/*`) and the public `/v1/*` surface (seam +
+  // semantic cache) carry per-tenant billable traffic just like `/api/*`, so they
+  // get the same per-tenant sliding-window limit. Mounted BEFORE their routers
+  // (app.route('/llm'|'/v1', …) below) so every gateway path is throttled. The
+  // middleware resolves the tenant from the machine-key/JWT bearer and falls
+  // through for anonymous callers, so intentionally-public paths stay unlimited.
+  app.use('/llm/*', rateLimitMiddleware as Parameters<typeof app.use>[1]);
+  app.use('/v1/*',  rateLimitMiddleware as Parameters<typeof app.use>[1]);
   // Emulation token interception — runs before authMiddleware in each router.
   // When X-Emulation-Token is present, validates the emulation JWT, enforces
   // read-only mode, and sets userId/tenantId/role from the emulation identity.
@@ -258,7 +357,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
     const doc = {
       openapi: OPENAPI_VERSION,
       info: { title: OPENAPI_TITLE, description: OPENAPI_DESCRIPTION, version: API_VERSION },
-      servers: [{ url: 'https://api.builderforce.ai', description: 'Production' }],
+      servers: [
+        { url: 'https://builderforce.ai/gateway', description: 'Production (primary domain — one whitelisted host for all traffic; prefer this)' },
+        { url: 'https://api.builderforce.ai', description: 'Production (direct API subdomain)' },
+      ],
       paths: {
         '/api/agent-hosts': {
           post: { summary: 'Register a BuilderForce Agents instance', operationId: 'registerAgentHost', tags: ['AgentHosts'] },
@@ -312,18 +414,57 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Public workforce registry (browse published agents without login)
   app.route('/api/workforce', createWorkforceRoutes());
 
+  // Freelance worker marketplace: for-hire human profiles (public browse without
+  // login for public profiles), cross-tenant engagements (hire/interview/terminate),
+  // and the activity-signal → billable-timecard pipeline.
+  app.route('/api/freelancers', createFreelancerRoutes());
+  app.route('/api/engagements', createEngagementRoutes(db));
+  app.route('/api/activity', createActivityRoutes(db));
+  app.route('/api/timecards', createTimecardRoutes());
+  // Two-sided marketplace: job postings + proposals (bidding) and the in-app feed.
+  app.route('/api/jobs', createJobRoutes());
+  app.route('/api/notifications', createNotificationRoutes());
+
+  // Email language + consent. The /unsubscribe leg is intentionally PUBLIC (no
+  // session) — it is the CAN-SPAM opt-out link carried in every lifecycle mail.
+  app.route('/api/email-preferences', createEmailPreferenceRoutes(db));
+  // Platform release notes — public published changelog (footer "What's new"
+  // panel) + superadmin authoring + manual weekly-digest trigger.
+  app.route('/api/release-notes', createReleaseNoteRoutes(db));
+  // Gig Marketplace (0293): publish a ticket as a gig, a hired freelancer's scoped
+  // board access, and deliverable proposals the employer AI-evaluates.
+  app.route('/api/marketplace', createGigMarketplaceRoutes(db));
+  app.route('/api/engagement-board', createEngagementBoardRoutes(db));
+  app.route('/api/deliverables', createDeliverableRoutes(db));
+  // In-platform messaging (0298): employer<->freelancer threads scoped to an
+  // engagement / job / proposal, with attachments + notification-fed unread counts.
+  app.route('/api/conversations', createFreelancerMessagingRoutes(db));
+
   // Limbic affective layer — serves the shared compiler's directive block to
   // clients that can't bundle it (the VS Code built-in agent).
-  app.route('/api/limbic', createLimbicRoutes());
+  app.route('/api/limbic', createLimbicRoutes(db));
 
   // Diagnostics & Tools — list/get/compute are public (free preview);
   // save/runs apply auth + manager role inside the router.
-  app.route('/api/tools', createToolRoutes(toolService));
+  app.route('/api/tools', createToolRoutes(toolService, auditRunner, db, runtimeService));
+  // RFP / RFQ Response — pre-sales proposal generation (PRD 15). Reuses the diagnostics
+  // scan (freshness gate) + audit runner (re-scan) grounded in the same toolService.
+  app.route('/api/rfp', createRfpRoutes(db, toolService, auditRunner));
+  app.route('/api/marketing', createMarketingRoutes(marketingService));
+  app.route('/api/guest', createGuestRoutes(guestChatService));
+  // Sales-cycle demo accounts — public one-click persona demo sessions, funnel
+  // telemetry, book-a-demo leads, and the (guarded) deploy-hook reseed.
+  app.route('/api/demo', createDemoRoutes());
 
   // Signed vision attachments — public, but each object is gated by a short-lived
   // HMAC (?exp&sig minted at /api/brain/uploads/sign). Lets an upstream LLM
   // provider fetch an oversize image without the tenant JWT. No JWT here.
   app.route('/api/brain-files', createBrainFilesRoutes());
+
+  // Monitor-signal webhooks — public, gated per-monitor by a secret token; the
+  // tenant is resolved from the monitor row. External monitoring tools POST breach/
+  // heartbeat signals here. No tenant JWT.
+  app.route('/api/monitor-webhooks', createMonitorWebhookRoutes(db));
 
   // Published IDE (Designer) sites — public static hosting from R2. Served at
   // <sub>.builderforce.ai via the wildcard route; the path form
@@ -338,11 +479,22 @@ export function buildApp(env: Env): Hono<HonoEnv> {
 
   // GitHub webhook — raw body required for HMAC verification, no JWT
   app.route('/api/webhooks', createGitHubWebhookRoutes(db, runtimeService));
+  // The GitHub Actions execution surface: the runner script it downloads, and the
+  // OIDC-authenticated op callback it drives the agent loop through. Deliberately
+  // NOT under authMiddleware — an Actions runner has no tenant JWT; it proves
+  // identity with a short-lived GitHub OIDC token instead (see the route file).
+  app.route('/api/runtime/github-actions', createGitHubActionsRoutes(db, runtimeService));
 
-  // GitLab + Bitbucket activity webhooks — ingest commits/MRs/PRs/issues into
-  // activity_events (token / HMAC verified), the live twins of the cron poller.
-  app.route('/api/webhooks', createGitLabWebhookRoutes(db));
-  app.route('/api/webhooks', createBitbucketWebhookRoutes(db));
+  // GitHub Actions deploy ingress — no JWT: a CI runner has no tenant token.
+  // Authenticated by a GitHub OIDC token (which repo is calling) and authorized
+  // by the repo↔project binding. See deployRoutes.ts.
+  app.route('/api/deploy', createDeployRoutes());
+
+  // GitLab + Bitbucket webhooks — ingest commits/MRs/PRs/issues into activity_events
+  // (token / HMAC verified), the live twins of the cron poller, AND feed pipeline /
+  // build-status results into the same CI → auto-fix loop as GitHub.
+  app.route('/api/webhooks', createGitLabWebhookRoutes(db, runtimeService));
+  app.route('/api/webhooks', createBitbucketWebhookRoutes(db, runtimeService));
 
   // Public workflow trigger entrypoints (webhook) — addressed by per-trigger
   // token, optional HMAC; no JWT. Mounted with the other public webhook routes.
@@ -351,6 +503,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Public Quality error ingest — keyed (bfq_ ingest key) or HMAC-signed webhooks;
   // no JWT. Tenant/project are resolved from the credential, never the request.
   app.route('/api/quality-ingest', createQualityIngestRoutes(db));
+
+  // Public Product Feedback ingest — keyed (bff_ ingest key); no JWT. The
+  // embeddable feedback snippet posts here from any application that carries it.
+  app.route('/api/feedback-ingest', createFeedbackIngestRoutes(db));
 
   // Anonymous landing-prompt handoff: POST / is public (pre-auth); /claim applies
   // web-auth per-route so it can associate the row to the now-known user.
@@ -377,6 +533,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/project-agents', createProjectAgentRoutes(db));
   app.route('/api/marketplace-stats', createMarketplaceStatsRoutes(db));
   app.route('/api/personas', createPersonaRoutes(db));
+  // Personality LEARNING + TRACKING (Gaps 6 & 7) — usage events + outcome-driven
+  // trait reinforcement (propose/apply/dismiss). Reinforcement reads real run
+  // outcomes (run_model_outcomes) so a suggestion is LIVE from real data.
+  app.route('/api/personality', createPersonalityRoutes(db));
 
   // Chat persistence (agentHost-auth writes + tenant-JWT reads)
   app.route('/api', createChatRoutes(db));
@@ -384,14 +544,32 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Protected endpoints (JWT injected by authMiddleware inside each router)
   app.route('/api/projects', createProjectRoutes(projectService, db));
   app.route('/api/tasks',    createTaskRoutes(taskService, db, runtimeService));
+  app.route('/api/kanban',   createKanbanRoutes(db, async (args) => {
+    // Materialize a participation-manifest work item as a child task (%-complete rollup).
+    const child = await taskService.createTask({
+      projectId: args.projectId, title: args.title, taskType: TaskType.TASK, parentTaskId: args.parentTaskId,
+      assignedAgentRef: args.assignedAgentRef ?? null, assignedUserId: args.assignedUserId ?? null,
+    }, args.tenantId);
+    return { id: Number(child.id) };
+  }));
+  // The Manager surface owns an accountability CHAT (0376), so it needs the Brain
+  // service — the chat is an ordinary Brain chat and the manager answers through the
+  // ordinary addressed-agent reply loop, rather than a second conversation system.
+  app.route('/api/manager',  createManagerRoutes(db, runtimeService, brainService));
   app.route('/api/vscode',   createVscodeRoutes(db, tenantService));
   app.route('/api/members',  createMemberRoutes(db));
   app.route('/api/tenants',  createTenantRoutes(tenantService, db));
   app.route('/api/segments', createSegmentRoutes(db));
   app.route('/api/embed',    createEmbedRoutes(db));
   app.route('/api/governance', createGovernanceRoutes(db));
+  // Agent Ops: coordination (leases + blackboard), memory governance, rehearsal (0370-0372).
+  app.route('/api/agent-ops',  createAgentOpsRoutes(db));
   app.route('/api/product',  createProductRoutes(db));
   app.route('/api/agile',    createAgileRoutes(db));
+  // Live video/audio collaboration: meetings (WebRTC mesh + scheduling) and the
+  // per-user calendar connections that back scheduling.
+  app.route('/api/meetings', createMeetingRoutes(db));
+  app.route('/api/calendar', createCalendarRoutes(db));
   app.route('/api/roi',      createRoiRoutes(db));
   app.route('/api/pmo',      createPmoRoutes(db));
   app.route('/api/time',     createTimeRoutes(db));
@@ -399,6 +577,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Additional insight lenses (each is its own router mounted on the same prefix;
   // Hono merges them — distinct subpaths, each carries its own authMiddleware).
   app.route('/api/insights',   createAiImpactRoutes(db));
+  app.route('/api/insights',   createAutonomyRoutes(db));
   app.route('/api/insights',   createBenchmarkingRoutes(db));
   app.route('/api/insights',   createRecommendationsRoutes(db));
   app.route('/api/devex',      createDevexRoutes(db));
@@ -406,6 +585,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/dashboard-pins', createDashboardPinsRoutes(db));
   app.route('/api/finops',     createFinopsRoutes(db));
   app.route('/api/decks',      createDeckRoutes(db));
+  app.route('/api/exports',    createExportRoutes());
   app.route('/api/alerts',     createAlertRoutes(db));
   app.route('/api/innovation', createInnovationRoutes(db));
   app.route('/api/bi',       createBiRoutes(db));
@@ -435,12 +615,26 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/reports',         createReportRoutes(db));
   app.route('/api/analytics',       createAnalyticsRoutes(db));
   app.route('/api/prompts',         createPromptLibraryRoutes(db));
+  // ── Insights-everywhere + enterprise-lens extensions (integration batch) ──
+  app.route('/api/members',           createEmpMetricsRoutes(db));       // EMP-12..20 member metrics
+  app.route('/api/member-personas',   createMemberPersonaRoutes(db));    // persona-role 2D RBAC
+  app.route('/api/insights',          createLensSnapshotRoutes(db));     // annual-calendar lens snapshots
+  app.route('/api/insights',          createEmpFeatureRoutes(db));       // cross-team benchmark, delay taxonomy, export
+  app.route('/api/workforce',         createWorkforcePlanRoutes(db));    // blended human+agent workforce planning
+  app.route('/api/finops',            createEmpFinopsRoutes(db));        // R&D derived-vs-reported reconciliation
+  app.route('/api/releases',          createReleasesRoutes(db));         // EMP-10a release picker
+  app.route('/api/pulse',             createPulseRoutes(db));            // EMP-15 pulse survey
+  app.route('/api/catalog-analytics', createCatalogAnalyticsRoutes(db)); // catalog adoption trends
+  app.route('/api/facts',             createFactsRoutes(db));            // FACTS library
+  app.route('/api/prompt-analyzer',   createPromptAnalyzerRoutes(db));   // prompt telemetry → improved version
+  app.route('/api/insights',          createForecastRoutes(db));         // forecasting + anomaly lens
   app.route('/api/managed-agent-hosts',   createManagedAgentHostRoutes(db));
   app.route('/api/managed-claws',          createManagedAgentHostRoutes(db)); // @deprecated back-compat alias
   app.route('/api/cost-forecast',   createCostForecastRoutes(db));
   app.route('/api/dashboard',       createDashboardRoutes(db));
   app.route('/api/consumption',     createConsumptionRoutes(db));
   app.route('/api/eval',            createEvalRoutes(db));
+  app.route('/api/dataset',         createDatasetRoutes(db));
   app.route('/api/brain',     createBrainRoutes(brainService, db));
   // Order matters: the team-memory mesh lives at the static /api/teams/memory and
   // MUST be registered before the Workforce Teams CRUD, whose GET /:id would
@@ -455,6 +649,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/studio/models', createEvermindModelRoutes(db));
   app.route('/api/projects',  createProjectEvermindRoutes(db));
   app.route('/api/agent/projects', createProjectEvermindAgentRoutes(db));
+  app.route('/api/projects',  createProjectFactsRoutes(db));
+  app.route('/api/agent/projects', createProjectFactsAgentRoutes(db));
   app.route('/api/studio',    createStudioRoutes());
 
   // Cloud Agent Boards
@@ -465,13 +661,17 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/migrations',        createMigrationRoutes(db));
   // Product Quality / error observability (tenant JWT) — error groups + fix dispatch.
   app.route('/api/quality',           createQualityRoutes(db, taskService, runtimeService));
+  app.route('/api/feedback',          createFeedbackRoutes(db));
   app.route('/api/prd',               createPrdRoutes(db));
   app.route('/api/repos',             createRepoRoutes(db));
   app.route('/api/agent-runtime',     createAgentRuntimeRoutes(db));
   app.route('/api/git-proxy',         createGitProxyRoutes(db));
   app.route('/api/agent-assignments', createAgentAssignmentRoutes(db));
   app.route('/api/security',          createSecurityReviewRoutes(db));
+  app.route('/api/incidents',         createIncidentRoutes(db));
+  app.route('/api/monitoring',        createMonitoringRoutes(db));
   app.route('/api/knowledge',         createKnowledgeRoutes(db));
+  app.route('/api/knowledge-market',  createKnowledgeMarketRoutes(db)); // PUBLIC browse (logged-out)
 
   app.onError(errorHandler);
   app.notFound((c) => addCorsToResponse(c, c.json({ error: 'Not found' }, 404)));
@@ -494,6 +694,29 @@ interface ForwardableEmailLike {
   readonly raw?: unknown;
 }
 
+/**
+ * Same-origin gateway prefix. Requests that arrive via `builderforce.ai/gateway/*`
+ * (a Cloudflare route pointing the primary apex at this worker — see wrangler.toml)
+ * carry a `/gateway` path prefix that we strip here, BEFORE any routing or CORS
+ * handling, so the entire API surface is byte-identical whether a caller reached us
+ * on api.builderforce.ai or on the whitelisted primary domain. Corporate firewalls
+ * that block the `api.` subdomain but allow the apex use this path. Requests that
+ * arrive directly on api.builderforce.ai have no prefix and pass through untouched.
+ */
+const GATEWAY_PATH_PREFIX = '/gateway';
+
+function stripGatewayPrefix(request: Request): Request {
+  const url = new URL(request.url);
+  if (url.pathname === GATEWAY_PATH_PREFIX) {
+    url.pathname = '/';
+  } else if (url.pathname.startsWith(`${GATEWAY_PATH_PREFIX}/`)) {
+    url.pathname = url.pathname.slice(GATEWAY_PATH_PREFIX.length);
+  } else {
+    return request;
+  }
+  return new Request(url.toString(), request);
+}
+
 function optionCorsAllowOrigin(origin: string | null, corsOrigins: string | undefined): string {
   if (!origin) return '*';
   if (corsOrigins === '*') return '*';
@@ -504,111 +727,55 @@ function optionCorsAllowOrigin(origin: string | null, corsOrigins: string | unde
 
 export default {
   /**
-   * Cloudflare scheduled() handler — fires on cron triggers declared in
-   * api/wrangler.toml `[triggers] crons`:
-   *   - `0 9 * * *`  daily LLM vendor health probe (change-detected, email-quiet).
-   *   - every-5-min tick: workflow-trigger sweep — fire due schedule + rss
-   *     triggers, then advance any pending cloud-runtime workflows.
+   * Cloudflare scheduled() handler — fires on the cron triggers declared in
+   * api/wrangler.toml `[triggers] crons`. It owns exactly two decisions:
    *
-   * Each branch is isolated so a failure in one can't poison the others. We key
-   * off `event.cron` so the expensive vendor probe only runs on the daily tick.
-   */
+   *   1. WHICH sweeps this tick runs — `event.cron` maps to a cadence group over
+   *      the shared CRON_SWEEPS registry, so the expensive daily/weekly work never
+   *      runs on the every-5-minute tick.
+   *   2. WHETHER the frequent tick runs at all — the KV work-gate that lets Neon
+   *      compute autosuspend.
+   *
+   * Everything else — per-sweep isolation, log lines, the shared dispatch budget —
+   * belongs to the runner, so the superadmin force-run route
+   * (POST /api/admin/cron/:target) executes the identical set of sweeps BY
+   * CONSTRUCTION instead of keeping a second copy of this fan-out in step.
+  */
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    if (event.cron === '0 9 * * *') {
-      ctx.waitUntil(
-        runVendorHealthCron(env).catch((err) => {
-          console.error('[cron:llm-health] failed', err);
-        }),
-      );
-      // Daily retention purge of unbounded diagnostic/telemetry log tables
-      // (llm_traces, llm_failover_log, llm_health_probes, qa_journey_events).
-      ctx.waitUntil(
-        runRetentionPurge(env).catch((err) => {
-          console.error('[cron:retention] failed', err);
-        }),
-      );
-      // Daily semantic-eval drift sweep — flag per-(action_type, model) quality
-      // regressions over the persisted faithfulness/relevance scores (Layer 6).
-      ctx.waitUntil(
-        runEvalDriftSweep(env).catch((err) => {
-          console.error('[cron:eval-drift] failed', err);
-        }),
-      );
-      // Daily threshold-alert sweep — evaluate every enabled alert rule and fire
-      // (Slack/email + alert_event) the ones that trip, respecting cooldown.
-      ctx.waitUntil(
-        runAlertSweep(env).catch((err) => {
-          console.error('[cron:alerts] failed', err);
-        }),
-      );
-    }
-    // Trigger sweep + cloud executor run on the frequent tick. (Also run when no
-    // cron string is supplied, e.g. a manual `wrangler` invocation.)
-    if (event.cron !== '0 9 * * *') {
-      ctx.waitUntil(
-        runDueTriggers(env)
-          .then(() => processPendingCloudWorkflows(env))
-          .catch((err) => {
-            console.error('[cron:wf-triggers] failed', err);
-          }),
-      );
-      // Fail executions stranded in running/pending by a crashed host or dropped
-      // dispatch, so stuck rows can't accumulate (no heartbeat timeout exists).
-      ctx.waitUntil(
-        reapStaleExecutions(env).catch((err) => {
-          console.error('[cron:exec-reaper] failed', err);
-        }),
-      );
-      // Redeliver failed outbound webhook deliveries with capped exponential
-      // backoff (at-least-once semantics for the cross-domain seam events).
-      ctx.waitUntil(
-        runWebhookRetrySweep(env).catch((err) => {
-          console.error('[cron:webhook-retry] failed', err);
-        }),
-      );
-      // Poll active external board connections whose interval has elapsed +
-      // drain their reverse-sync outbox (inbound polling + reliable writeback).
-      ctx.waitUntil(
-        runBoardSyncSweep(env).catch((err) => {
-          console.error('[cron:board-sync] failed', err);
-        }),
-      );
-      // Resume tickets parked on a run_workflow lane action whose spawned
-      // workflow has now settled (advance on success / needs_attention on fail).
-      ctx.waitUntil(
-        runParkedWorkflowSweep(env).catch((err) => {
-          console.error('[cron:wf-gate] failed', err);
-        }),
-      );
-      // Agentic Tester scheduler — enqueue a heatmap-derived exploration for
-      // every due qa_schedules row (the platform-native "run QA on a schedule"
-      // surface; a runner claims the queued exploration).
-      ctx.waitUntil(
-        runQaExplorationSweep(env).catch((err) => {
-          console.error('[cron:qa-sweep] failed', err);
-        }),
-      );
-      // Engineering-activity producer — poll each connected repo's commits / PRs /
-      // reviews into activity_events (backfills history on first sync, then
-      // incremental), so the consolidation + rollup surfaces are fed with zero
-      // per-repo webhook setup.
-      ctx.waitUntil(
-        runRepoActivitySweep(env).catch((err) => {
-          console.error('[cron:repo-activity] failed', err);
-        }),
-      );
-      // Scheduled report digests — generate + email every due report_schedules row
-      // (standup / code-review / executive / portfolio rollup), advancing each
-      // row's next_run_at. buildScheduledReport is injected so the sweep stays a
-      // pure application-layer consumer (no presentation import).
-      ctx.waitUntil(
-        runDueReports(env, (db, s, now) =>
-          buildScheduledReport(db, s.reportType, s.tenantId, s.segmentId ?? '', now),
-        ).catch((err) => {
-          console.error('[cron:reports] failed', err);
-        }),
-      );
-    }
+    return runWithCaughtErrorContext({
+      env,
+      method: 'CRON',
+      path: `cron:${event.cron}`,
+      waitUntil: (task) => ctx.waitUntil(task),
+    }, async () => {
+      const cadence = cadenceForCron(event.cron);
+      const sweeps = sweepsForCadence(CRON_SWEEPS, cadence);
+      if (sweeps.length === 0) return;
+
+      if (cadence === 'frequent') {
+        // KV work-gate — the single change that lets Neon compute autosuspend.
+        // Reads KV ONLY (no Postgres): SKIP the whole DB fan-out below on an idle
+        // platform so the endpoint scales to zero, RUN it when a write signalled
+        // pending work (dispatch within 5 min) or the floor interval elapsed
+        // (safety net for a missed signal). Fails open. See cronWorkSignal.ts.
+        const tickNowMs = Date.now();
+        const gate = await evaluateCronGate(env, tickNowMs);
+        if (!gate.run) {
+          // Nothing pending and the floor is not due — leave Postgres asleep.
+          return;
+        }
+        // Consume the signal + stamp the floor BEFORE firing sweeps, so a paced
+        // backlog re-signalled mid-tick survives the consume and keeps the next
+        // tick hot.
+        await openCronTick(env, tickNowMs, gate.floorDue);
+      }
+
+      // ONE per-tenant dispatch ceiling for this whole tick, shared by every sweep
+      // that can start a billable run. Each sweep used to enforce its own private
+      // 25/tenant, so the ceilings never composed and a tenant could take 25 from
+      // the executor plus more from the manager in the same five minutes.
+      dispatchCronSweeps(sweeps, { env, budget: createTickDispatchBudget() }, (p) => ctx.waitUntil(p));
+    });
   },
 
   /**
@@ -616,14 +783,21 @@ export default {
    * `inbound-email` workflow triggers (local-part = trigger token). Requires the
    * Email Routing binding to be provisioned (see Gap Register). Typed loosely so
    * the build doesn't depend on the email-types being present.
-   */
+  */
   async email(message: ForwardableEmailLike, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(
-      (async () => {
+    return runWithCaughtErrorContext({
+      env,
+      method: 'EMAIL',
+      path: `email:${message.to}`,
+      waitUntil: (task) => ctx.waitUntil(task),
+    }, async () => {
+      ctx.waitUntil((async () => {
         let text = '';
         try {
           if (message.raw) text = await new Response(message.raw as ReadableStream).text();
-        } catch { /* best-effort body read */ }
+        } catch (error) { /* best-effort body read */ 
+          reportCaughtError(error, { source: "index.ts", operation: "email" });
+        }
         const result = await handleInboundEmail(env, {
           to: message.to,
           from: message.from,
@@ -631,10 +805,17 @@ export default {
           text,
         });
         if (!result.ok) console.warn('[email:wf-trigger] not dispatched:', result.error);
-      })().catch((err) => console.error('[email:wf-trigger] failed', err)),
-    );
+      })().catch((error) => reportCaughtError(error, {
+        source: 'index.ts',
+        operation: 'email workflow trigger',
+      })));
+    });
   },
-  fetch(request: Request, env: Env, ctx: ExecutionContext): Response | Promise<Response> {
+  async fetch(rawRequest: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    // Normalize the same-origin gateway path (builderforce.ai/gateway/*) → the bare
+    // API surface before anything else looks at the request. No-op for direct
+    // api.builderforce.ai traffic.
+    const request = stripGatewayPrefix(rawRequest);
     // Handle OPTIONS without building the app so we never require NEON_DATABASE_URL for preflight.
     if (request.method === 'OPTIONS') {
       const origin = request.headers.get('Origin');
@@ -648,15 +829,45 @@ export default {
           // will block the preflight: `Idempotency-Key` (cron retries),
           // `X-Emulation-Token` (admin emulation flow), `X-AgentHost-Signature`
           // (agentHost-relay HMAC).
-          'Access-Control-Allow-Headers': 'Content-Type,Authorization,Idempotency-Key,X-Emulation-Token,X-AgentHost-Signature',
-          // Echo the daily-budget snapshot headers so SDK consumers in the
-          // browser can pre-emptively throttle without a second fetch.
-          'Access-Control-Expose-Headers': 'x-request-id,x-builderforce-model,x-builderforce-retries,x-builderforce-product,x-builderforce-effective-plan,x-builderforce-daily-tokens-used,x-builderforce-daily-tokens-limit,x-builderforce-daily-tokens-remaining',
+          'Access-Control-Allow-Headers': ALLOWED_REQUEST_HEADERS,
+          // Shared list — the middleware sets the SAME value on the actual
+          // response, which is the placement browsers actually honour.
+          'Access-Control-Expose-Headers': EXPOSED_HEADERS,
           'Access-Control-Max-Age': '86400',
           Vary: 'Origin',
         },
       });
     }
-    return buildApp(env).fetch(request, env, ctx);
+    // Guard the composition root + top-level dispatch. buildApp() (DB/client
+    // construction, service wiring) and any throw that escapes Hono would
+    // otherwise bubble to the Workers runtime as a bare Error 1101 page WITH NO
+    // CORS HEADERS — which browsers surface as a misleading "No
+    // Access-Control-Allow-Origin header is present" / net::ERR_FAILED on EVERY
+    // endpoint at once, hiding the real 500. Return a CORS'd JSON 500 instead so
+    // the browser can read the actual failure and the login page shows a real error.
+    try {
+      return await buildApp(env).fetch(request, env, ctx);
+    } catch (err) {
+      await reportUnhandledError(err, {
+        source: 'index.ts',
+        operation: 'top-level fetch',
+      }, {
+        env,
+        method: request.method,
+        path: new URL(request.url).pathname,
+      });
+      const origin = request.headers.get('Origin');
+      const allow = optionCorsAllowOrigin(origin, env.CORS_ORIGINS);
+      const message = err instanceof Error ? err.message : String(err);
+      return new Response(JSON.stringify({ error: message }), {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': allow,
+          'Access-Control-Expose-Headers': 'x-request-id',
+          Vary: 'Origin',
+        },
+      });
+    }
   },
 } satisfies ExportedHandler<Env>;

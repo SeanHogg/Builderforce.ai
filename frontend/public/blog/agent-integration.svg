@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">BUILDERFORCE AGENTS &#183; MARKETPLACE</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Train, publish, hire, call &#8212; the marketplace loop</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- Step 1: Train -->
+  <rect x="80" y="280" width="300" height="300" rx="24" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="80" y="280" width="6" height="300" rx="3" fill="url(#coolGrad)"/>
+  <circle cx="230" cy="352" r="36" fill="rgba(61,214,245,0.14)" stroke="rgba(61,214,245,0.5)" stroke-width="1.5"/>
+  <text x="230" y="366" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#3DD6F5">1</text>
+  <text x="230" y="446" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#EEF0FA">Train</text>
+  <text x="230" y="486" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#A6ADC8"><tspan x="230" dy="0">Teach a narrow specialist;</tspan><tspan x="230" dy="26">the AI judge scores it.</tspan></text>
+  <text x="230" y="552" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" letter-spacing="1" font-weight="700" fill="#8891AE">YOUR SPECIALIST</text>
+
+  <!-- Step 2: Publish -->
+  <rect x="460" y="280" width="300" height="300" rx="24" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="460" y="280" width="6" height="300" rx="3" fill="url(#violetGrad)"/>
+  <circle cx="610" cy="352" r="36" fill="rgba(169,139,255,0.14)" stroke="rgba(169,139,255,0.5)" stroke-width="1.5"/>
+  <text x="610" y="366" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#A98BFF">2</text>
+  <text x="610" y="446" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#EEF0FA">Publish</text>
+  <text x="610" y="486" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#A6ADC8"><tspan x="610" dy="0">List on the Workforce</tspan><tspan x="610" dy="26">Registry: skills + score.</tspan></text>
+  <text x="610" y="552" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" letter-spacing="1" font-weight="700" fill="#8891AE">WORKFORCE REGISTRY</text>
+
+  <!-- Step 3: Hire -->
+  <rect x="840" y="280" width="300" height="300" rx="24" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="840" y="280" width="6" height="300" rx="3" fill="url(#mintGrad)"/>
+  <circle cx="990" cy="352" r="36" fill="rgba(91,240,188,0.14)" stroke="rgba(91,240,188,0.5)" stroke-width="1.5"/>
+  <text x="990" y="366" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#5BF0BC">3</text>
+  <text x="990" y="446" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#EEF0FA">Hire</text>
+  <text x="990" y="486" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#A6ADC8"><tspan x="990" dy="0">Bring it into a project;</tspan><tspan x="990" dy="26">it inherits full context.</tspan></text>
+  <text x="990" y="552" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" letter-spacing="1" font-weight="700" fill="#8891AE">PROJECT ROSTER</text>
+
+  <!-- Step 4: Call -->
+  <rect x="1220" y="280" width="300" height="300" rx="24" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="1220" y="280" width="6" height="300" rx="3" fill="url(#amberGrad)"/>
+  <circle cx="1370" cy="352" r="36" fill="rgba(255,206,107,0.16)" stroke="rgba(255,206,107,0.55)" stroke-width="1.5"/>
+  <text x="1370" y="366" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#FFCE6B">4</text>
+  <text x="1370" y="446" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#EEF0FA">Call</text>
+  <text x="1370" y="486" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#A6ADC8"><tspan x="1370" dy="0">Agent-to-agent request</tspan><tspan x="1370" dy="26">&#8594; result; supervisor merges.</tspan></text>
+  <text x="1370" y="552" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" letter-spacing="1" font-weight="700" fill="#8891AE">REQUEST / RESPONSE</text>
+
+  <!-- forward arrows -->
+  <line x1="384" y1="430" x2="452" y2="430" stroke="#8B6CFF" stroke-width="2.5"/>
+  <path d="M456 430 l-12 -6 v12 z" fill="#8B6CFF"/>
+  <line x1="764" y1="430" x2="832" y2="430" stroke="#8B6CFF" stroke-width="2.5"/>
+  <path d="M836 430 l-12 -6 v12 z" fill="#8B6CFF"/>
+  <line x1="1144" y1="430" x2="1212" y2="430" stroke="#8B6CFF" stroke-width="2.5"/>
+  <path d="M1216 430 l-12 -6 v12 z" fill="#8B6CFF"/>
+
+  <!-- return loop arrow -->
+  <path d="M1370 580 L1370 660 Q1370 680 1350 680 L250 680 Q230 680 230 660 L230 584" fill="none" stroke="url(#hairline)" stroke-width="3"/>
+  <path d="M230 580 l-6 12 h12 z" fill="#8B6CFF"/>
+  <text x="800" y="672" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" font-weight="700" fill="#A6ADC8">Retrain &amp; publish v2 &#8212; keep v1 as fallback; the network compounds</text>
+
+  <text x="800" y="748" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#8891AE">Every hop is a BuilderForce Agents invocation &#8212; logged, token-metered, and traced in Observability</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Compose narrow specialists into pipelines that outdo any single model</text>
+</svg>

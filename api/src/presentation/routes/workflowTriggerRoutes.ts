@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Public workflow trigger entrypoints — /api/workflow-triggers
  *
@@ -90,8 +91,10 @@ export function createWorkflowTriggerRoutes(db: Db): Hono<HonoEnv> {
     let payload: unknown = rawBody;
     try {
       payload = rawBody ? JSON.parse(rawBody) : {};
-    } catch {
+    } catch (error) {
       /* non-JSON body — pass the raw string through as payload */
+    
+      reportCaughtError(error, { source: "presentation/routes/workflowTriggerRoutes.ts", operation: "createWorkflowTriggerRoutes" });
     }
 
     const result = await fireAddressedTrigger(db, row, payload, `webhook:${row.nodeId}`);

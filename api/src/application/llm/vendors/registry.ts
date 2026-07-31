@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../observability/caughtErrorReporter';
 /**
  * Vendor registry — single source of truth for which vendor owns which model,
  * how to classify a model's tier, and how to walk a multi-vendor cascade.
@@ -14,8 +15,11 @@ import { googleAiModule } from './googleai';
 import { nvidiaModule } from './nvidia';
 import { ollamaModule } from './ollama';
 import { openRouterModule } from './openrouter';
+import { openAiCodexModule } from './openaiCodex';
+import { xaiOAuthModule } from './xaiOAuth';
 import { openAICompatibleModules, openAICompatibleModulesById } from './openaiCompatibleVendors';
 import { registerSchemaDialectResolver } from '../jsonSchemaSanitize';
+import { reasoningParamsForModel } from '../reasoningCapability';
 import {
   VendorRetryableError,
   VendorFatalError,
@@ -55,7 +59,7 @@ import {
 // vendor count to 30+ (the "30+ model providers" marketing claim) without
 // touching the tuned free/paid cascade. See openaiCompatibleVendors.ts.
 const MODULES: ReadonlyArray<VendorModule> = [
-  cerebrasModule, ollamaModule, nvidiaModule, cloudflareModule, openRouterModule, googleAiModule, anthropicModule,
+  cerebrasModule, ollamaModule, nvidiaModule, cloudflareModule, openRouterModule, googleAiModule, anthropicModule, openAiCodexModule, xaiOAuthModule,
   // `evermind` is autoRoute:false (explicit `evermind/<ref>` pin only), so its
   // position never affects the auto-selected FREE/PRO pool ordering.
   evermindModule,
@@ -73,6 +77,8 @@ const MODULES_BY_ID: Record<VendorId, VendorModule> = {
   googleai:   googleAiModule,
   cloudflare: cloudflareModule,
   anthropic:  anthropicModule,
+  'openai-codex': openAiCodexModule,
+  'xai-oauth': xaiOAuthModule,
   evermind:   evermindModule,
 };
 
@@ -109,6 +115,8 @@ const VENDOR_PREFIXES: ReadonlyArray<{ prefix: string; vendor: VendorId }> = [
   // ref may itself contain `/` (it's an R2 key prefix) — parseVendorPrefix takes
   // everything after `evermind/` as the model id, which is exactly the ref.
   { prefix: 'evermind/',   vendor: 'evermind' },
+  { prefix: 'openai-codex/', vendor: 'openai-codex' },
+  { prefix: 'xai-oauth/', vendor: 'xai-oauth' },
   // Cloudflare model ids natively start with `@cf/...` so they're
   // self-identifying without a `cloudflare/` URL-style prefix. We still accept
   // `cloudflare/@cf/...` for symmetry with the other vendors — callers who
@@ -168,10 +176,51 @@ export function tierForModel(modelId: string): AiModelTier {
   return MODULES_BY_ID[vendorId].tierFor(modelId);
 }
 
+/**
+ * Can this model id do FUNCTION/TOOL CALLING at all? Reads the ONE declaration
+ * ({@link VendorModule.supportsTools}) off the vendor the id routes to, so every
+ * caller that is about to pin a model onto a TOOL-DRIVEN run asks the same
+ * question in the same place.
+ *
+ * Why this exists: a tool-less backend handed `tools` does not error — it answers
+ * in prose — so an agent loop pinned to it narrates the calls it can never emit
+ * and silently does no work (observed with a project-Evermind hard pin on a cloud
+ * agent run). Callers use this to REFUSE the pin up front; the vendor additionally
+ * hard-rejects a tool-bearing request as a backstop.
+ *
+ * Defaults to `true` for every vendor that does not opt out, so adding a vendor
+ * never silently marks it tool-less.
+ */
+export function modelSupportsTools(modelId: string): boolean {
+  return MODULES_BY_ID[vendorForModel(modelId)].supportsTools !== false;
+}
+
 export function catalogEntry(modelId: string): (VendorModelEntry & { vendor: VendorId }) | null {
   const hit = INDEX.get(modelId);
   if (!hit) return null;
   return { ...hit.entry, vendor: hit.vendor };
+}
+
+/**
+ * Does this model id actually ROUTE somewhere — an explicit vendor prefix, or a
+ * catalog entry?
+ *
+ * {@link vendorForModel} can never answer this: it falls back to
+ * `DEFAULT_VENDOR` for anything unrecognised, so a typo'd id looks routable and
+ * is dispatched to a vendor that has never heard of it. That failure is silent
+ * and permanent — a project pinned its Evermind teacher to `xai/grok-4.5` (the
+ * routable forms are `direct/xai/…` and `xai-oauth/…`), which fell through to
+ * the default vendor and returned HTTP 503 on every coordinator alarm: ~1,977
+ * identical faults over four days, none of them self-correcting.
+ *
+ * Call this wherever a model id is ACCEPTED FROM A USER — pins, teacher
+ * selection, agent configuration — so an unroutable id is refused at the write
+ * instead of failing forever at dispatch.
+ */
+export function isRoutableModel(modelId: string): boolean {
+  const id = modelId.trim();
+  if (!id) return false;
+  return parseVendorPrefix(id) !== null || INDEX.has(id);
 }
 
 export function getCatalog(): ReadonlyArray<VendorModelEntry & { vendor: VendorId }> {
@@ -356,7 +405,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
   params: DispatchParams,
   cfg: SurfaceConfig<R>,
 ): Promise<R & { modelUsed: string; vendorUsed: VendorId; attempts: DispatchAttempt[] }> {
-  const { env, modelChain, ...rest } = params;
+  const { env, modelChain, reasoningIntent, ...rest } = params;
   if (modelChain.length === 0) {
     throw new Error(`${cfg.fnName}: modelChain is empty`);
   }
@@ -372,15 +421,32 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
       skippedNoStream.push(`${vendorId}:${model}`);
       continue;
     }
-    const apiKey = mod.apiKeyFrom(env);
+    const apiKey = vendorId === 'openrouter'
+      ? (env.OPENROUTER_MODEL_KEYS?.[vendorModel] ?? mod.apiKeyFrom(env))
+      : mod.apiKeyFrom(env);
     if (!apiKey) {
       skippedNoKey.push(`${vendorId}:${model}`);
       continue;
     }
 
+    // Derive the reasoning param for THIS candidate, not for the chain. The full
+    // chain id (prefix intact) is what classifies: `claude-opus-4-8` is the direct
+    // Anthropic vendor (native `thinking`), while `openrouter/anthropic/claude-…`
+    // speaks the OpenAI shape and correctly resolves to nothing. A family with no
+    // reasoning support yields `undefined` → this attempt's body is untouched, so
+    // the conservative "drop when unknown" default survives on every failover hop.
+    const reasoningParams = reasoningIntent
+      ? reasoningParamsForModel(model, reasoningIntent.execParams, { isFirstTurn: reasoningIntent.isFirstTurn })
+      : undefined;
+
     const startedAt = Date.now();
     try {
-      const result = await cfg.invoke(mod, { ...rest, apiKey, model: vendorModel });
+      const result = await cfg.invoke(mod, {
+        ...rest,
+        apiKey,
+        model: vendorModel,
+        ...(reasoningParams ? { extraBody: { ...rest.extraBody, ...reasoningParams } } : {}),
+      });
       cfg.validate?.(result, vendorId, vendorModel);
       // `modelUsed` echoes what the caller asked for (with prefix preserved).
       return { ...result, modelUsed: model, vendorUsed: vendorId, attempts };
@@ -410,16 +476,12 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
           model, vendor: vendorId, status: 422, error: err.message, durationMs,
           kind: 'schema', reason: SCHEMA_TOO_COMPLEX_REASON, upstreamStatus: err.status,
         });
-        console.warn(
-          `[vendors] ${cfg.logTag}${vendorId}/${model} rejected json_schema as too complex (upstream ${err.status}); trying next vendor (${attempts.length}/${modelChain.length})`,
-        );
+        reportCaughtError(err, { source: "application/llm/vendors/registry.ts", operation: "dispatchInternal", level: 'warning', context: { logMessage: `[vendors] ${cfg.logTag}${vendorId}/${model} rejected json_schema as too complex (upstream ${err.status}); trying next vendor (${attempts.length}/${modelChain.length})` } });
         continue;
       }
       if (err instanceof VendorRetryableError) {
         attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message) });
-        console.warn(
-          `[vendors] ${cfg.logTag}${vendorId}/${model} returned ${err.status}; trying next in chain (${attempts.length}/${modelChain.length} failed)`,
-        );
+        reportCaughtError(err, { source: "application/llm/vendors/registry.ts", operation: "dispatchInternal", level: 'warning', context: { logMessage: `[vendors] ${cfg.logTag}${vendorId}/${model} returned ${err.status}; trying next in chain (${attempts.length}/${modelChain.length} failed)` } });
         continue;
       }
       // Request-error (400/422) VendorFatalError: the payload is bad for THIS
@@ -430,9 +492,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
       // a misleading 429). recordFailure no-ops request_error, so no model cools.
       if (err instanceof VendorFatalError && (err.status === 400 || err.status === 422)) {
         attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message) });
-        console.warn(
-          `[vendors] ${cfg.logTag}${vendorId}/${model} returned ${err.status} (request error); trying next vendor (${attempts.length}/${modelChain.length})`,
-        );
+        reportCaughtError(err, { source: "application/llm/vendors/registry.ts", operation: "dispatchInternal", level: 'warning', context: { logMessage: `[vendors] ${cfg.logTag}${vendorId}/${model} returned ${err.status} (request error); trying next vendor (${attempts.length}/${modelChain.length})` } });
         continue;
       }
       throw err; // other VendorFatalError (or anything else) — bubble up

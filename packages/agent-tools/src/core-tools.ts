@@ -12,8 +12,16 @@
  */
 
 import type {
+  LeaseClaimResult,
+  LeaseListResult,
+  LeaseMode,
+  LeaseReleaseResult,
+  MemoryForgetResult,
   MemoryRecallResult,
   MemoryRememberResult,
+  MemoryScopeKind,
+  WorkspaceNoteResult,
+  WorkspaceReadResult,
   RepoDeleteResult,
   RepoEditResult,
   RepoListResult,
@@ -30,17 +38,27 @@ import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
 export const listFilesTool: ToolDefinition = defineTool({
   name: "list_files",
   description:
-    'List repo files (recursively) on the ticket branch so you can discover the existing codebase before editing. Optionally pass a subdirectory to scope the listing.',
+    'List repo files (recursively) on the ticket branch so you can discover the existing codebase before editing. Optionally pass `path` to scope to a subdirectory. To FIND A FILE BY NAME, pass `glob` — e.g. `ROADMAP.md` (matches that filename at any depth, case-insensitive) or `src/**/*.test.ts`. Use `glob` instead of concluding a file is missing: a large repo\'s unfiltered listing is summarized to directories, but a `glob` always returns the matching files in full.',
   parameters: {
     type: "object",
     properties: {
       path: { type: "string", description: 'Optional repo-relative subdirectory to scope to, e.g. "src/components".' },
+      glob: { type: "string", description: 'Optional filename/glob filter, e.g. "ROADMAP.md", "*.md", or "src/**/*.ts". Case-insensitive; a name with no "/" matches the basename at any depth.' },
     },
   },
   requires: ["repo.read"],
   async execute(args, ctx): Promise<ToolResult> {
     const sub = typeof args.path === "string" ? args.path : undefined;
-    const r = (await ctx.caps.repoRead!.listFiles(sub)) as RepoListResult;
+    const glob = typeof args.glob === "string" && args.glob.trim() ? args.glob.trim() : undefined;
+    const r = (await ctx.caps.repoRead!.listFiles(sub, glob)) as RepoListResult;
+    if (glob && r.ok && (r.paths?.length ?? 0) === 0) {
+      return {
+        data: {
+          ...r,
+          note: `No file matches glob "${glob}". Try a broader pattern (e.g. "*${glob.replace(/[*?/]/g, "")}*"), or list_files without a glob to see the tree. 0 matches means no such file exists — do not claim one is missing without trying a broader glob first.`,
+        } as unknown as Record<string, unknown>,
+      };
+    }
     return { data: r as unknown as Record<string, unknown> };
   },
 });
@@ -48,11 +66,12 @@ export const listFilesTool: ToolDefinition = defineTool({
 export const searchCodeTool: ToolDefinition = defineTool({
   name: "search_code",
   description:
-    'Search the ENTIRE repo for a string/symbol in one call (indexed code search) — use this FIRST to find where something is referenced instead of reading files one by one. Returns matching file paths with line fragments. 0 results means the term does not appear in the indexed codebase (so "remove all references to X" with 0 results means there is nothing to remove — say so, do not invent a change). Recently-pushed code may lag the index; confirm a specific file with read_file. Then read_file the matches you intend to edit.',
+    'Search the repo for a string/symbol in one call — use this FIRST to find where something is referenced instead of reading files one by one. Returns matching file paths with line fragments. Pass `query` as an EXACT substring/regex (a symbol, import path, or config key), NOT a natural-language phrase — a multi-word phrase rarely appears verbatim on one line and will match nothing. On a large monorepo, scope the search with `path` (a subdirectory) to search just that subtree. 0 results with `truncated:false` means the term does not appear (so "remove all references to X" then means there is nothing to remove — say so, do not invent a change); 0 results with `truncated:true` means the search was cut short before scanning everything — narrow it with `path` or a more specific `query` and try again, do NOT conclude the term is absent. Then read_file the matches you intend to edit.',
   parameters: {
     type: "object",
     properties: {
-      query: { type: "string", description: "Exact text or symbol to find, e.g. a model id, function name, import path, or config key." },
+      query: { type: "string", description: "Exact text or symbol to find, e.g. a model id, function name, import path, or config key. NOT a natural-language phrase." },
+      path: { type: "string", description: 'Optional repo-relative subdirectory to restrict the search to, e.g. "packages/brain-ui". Use this to avoid truncation on a big repo.' },
     },
     required: ["query"],
   },
@@ -60,27 +79,58 @@ export const searchCodeTool: ToolDefinition = defineTool({
   async execute(args, ctx): Promise<ToolResult> {
     const query = typeof args.query === "string" ? args.query : "";
     if (!query.trim()) return { data: { ok: false, error: "query is required" } };
-    const r = (await ctx.caps.repoRead!.searchCode(query)) as RepoSearchResult;
+    const scope = typeof args.path === "string" && args.path.trim() ? args.path.trim() : undefined;
+    const r = (await ctx.caps.repoRead!.searchCode(query, scope)) as RepoSearchResult;
     if (r.ok && r.total === 0) {
-      return {
-        data: {
-          ...r,
-          note: "No matches in the indexed codebase — the term is not referenced. If the task was to remove/replace it, there is nothing to change; say so instead of inventing an edit.",
-        },
-      };
+      // A truncated 0-result is NOT a "not found" — the search hit its scan budget
+      // before covering the whole tree. Saying "the term is not referenced" here is
+      // the false negative that sent the agent reading files blind; be honest instead.
+      const note = r.truncated
+        ? `Search was truncated before scanning the whole${scope ? " subtree" : " repo"} — this is NOT proof the term is absent. Re-run scoped to a subdirectory via \`path\`${scope ? " (a narrower one)" : ""}, or use a more specific \`query\`.`
+        : `No matches${scope ? ` under "${scope}"` : ""} — the term is not referenced${scope ? " there (try without `path` to search the whole repo)" : ""}. If the task was to remove/replace it, there is nothing to change; say so instead of inventing an edit.`;
+      return { data: { ...r, note } };
     }
     return { data: r as unknown as Record<string, unknown> };
   },
 });
 
+/** Default line window for `read_file` — a large file returns a bounded slice the
+ *  model pages through with `offset`/`limit`, instead of dumping (or failing) on it. */
+export const READ_DEFAULT_LINE_LIMIT = 2000;
+
+/**
+ * Window file content to a 1-based line range, reporting whether more remains. This
+ * is the SINGLE place large-file pagination lives, so every surface (cloud, on-prem,
+ * VS Code) behaves identically: `read_file` returns the requested slice plus a
+ * `truncated` flag + a "read the next chunk" note when the file is longer than the
+ * window. A provider only has to return the file's content (or its own truncated
+ * chunk); the windowing math is here, once.
+ */
+export function windowFileContent(
+  content: string,
+  opts?: { offset?: number; limit?: number },
+): { content: string; truncated: boolean; totalLines: number; offset: number; returnedLines: number } {
+  const lines = content.split("\n");
+  const totalLines = lines.length;
+  const start = opts?.offset && opts.offset > 1 ? Math.min(Math.floor(opts.offset), totalLines + 1) : 1;
+  const limit = opts?.limit && opts.limit > 0 ? Math.floor(opts.limit) : READ_DEFAULT_LINE_LIMIT;
+  const slice = lines.slice(start - 1, start - 1 + limit);
+  const end = start - 1 + slice.length; // last line number included
+  return { content: slice.join("\n"), truncated: end < totalLines, totalLines, offset: start, returnedLines: slice.length };
+}
+
 export const readFileTool: ToolDefinition = defineTool({
   name: "read_file",
   description:
-    "Read the FULL current contents of a repo file on the ticket branch. Always read a file before editing it so you preserve existing code and only change what is needed.",
+    "Read a repo file on the ticket branch. Returns up to " +
+    READ_DEFAULT_LINE_LIMIT +
+    " lines at a time: a large file comes back as a paginated line window (never a hard failure), and the result's `truncated`/`totalLines` tell you when more remains — read the next chunk by calling again with `offset`. Always read a file before editing it so you preserve existing code and only change what is needed.",
   parameters: {
     type: "object",
     properties: {
       path: { type: "string", description: 'Repo-relative path, e.g. "src/feature.ts".' },
+      offset: { type: "number", description: "1-based line to start reading from (for paging through a large file). Default 1." },
+      limit: { type: "number", description: `Max lines to return. Default ${READ_DEFAULT_LINE_LIMIT}. Read the next window with offset = previous offset + returned lines.` },
     },
     required: ["path"],
   },
@@ -88,15 +138,31 @@ export const readFileTool: ToolDefinition = defineTool({
   async execute(args, ctx): Promise<ToolResult> {
     const path = typeof args.path === "string" ? args.path : "";
     if (!path) return { data: { ok: false, error: "path is required" } };
+    const offset = typeof args.offset === "number" && args.offset > 0 ? Math.floor(args.offset) : undefined;
+    const limit = typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : undefined;
     const r = (await ctx.caps.repoRead!.readFile(path)) as RepoReadResult;
-    return { data: r as unknown as Record<string, unknown> };
+    if (!r.ok) return { data: r as unknown as Record<string, unknown> };
+    const win = windowFileContent(r.content ?? "", { offset, limit });
+    const data: RepoReadResult = {
+      ok: true,
+      path: r.path ?? path,
+      content: win.content,
+      truncated: win.truncated || r.truncated === true,
+      totalLines: win.totalLines,
+      offset: win.offset,
+    };
+    if (win.truncated) {
+      const lastLine = win.offset + win.returnedLines - 1;
+      data.note = `Showing lines ${win.offset}–${lastLine} of ${win.totalLines}. To continue, call read_file again with offset ${lastLine + 1}.`;
+    }
+    return { data: data as unknown as Record<string, unknown> };
   },
 });
 
 export const writeFileTool: ToolDefinition = defineTool({
   name: "write_file",
   description:
-    "Create or update a file on the ticket branch as a reviewable pending change (a PR is opened/updated for the run). Use once per deliverable file. Provide the FULL file content.",
+    "Create or update a file, writing its complete contents. How the write lands depends on the surface: in an editor/on-prem workspace it edits the file in place; in a cloud/review run it is staged on the ticket branch as a reviewable pending change. Do NOT narrate a specific mechanism (e.g. \"opened a PR\") — just state what the file now contains. Use once per deliverable file. Provide the FULL file content.",
   parameters: {
     type: "object",
     properties: {
@@ -203,6 +269,17 @@ export const memoryRememberTool: ToolDefinition = defineTool({
       content: { type: "string", description: "The fact, as one concise line." },
       tags: { type: "array", items: { type: "string" }, description: "Optional tags for grouping/filtering." },
       importance: { type: "number", description: "0–1; higher surfaces earlier. Default 0.5." },
+      scope: {
+        type: "string",
+        enum: ["tenant", "project", "ticket"],
+        description:
+          "How widely this fact should be visible. 'ticket' = only this ticket's runs; 'project' (default) = every run on this project; 'tenant' = the whole workspace. Prefer the NARROWEST scope that is still true — a project convention is 'project', not 'tenant'.",
+      },
+      ttl_days: {
+        type: "number",
+        description:
+          "Forget automatically after this many days. Use it for anything time-bound (a release date, a temporary workaround, an in-flight migration). Omit only for facts that stay true indefinitely.",
+      },
     },
     required: ["key", "content"],
   },
@@ -214,8 +291,132 @@ export const memoryRememberTool: ToolDefinition = defineTool({
     const tags = Array.isArray(args.tags) ? args.tags.filter((t): t is string => typeof t === "string") : undefined;
     const importance =
       typeof args.importance === "number" && Number.isFinite(args.importance) ? args.importance : undefined;
-    const r = (await ctx.caps.memory!.remember(key, content, { tags, importance })) as MemoryRememberResult;
+    // The model may only NARROW or name a scope — the surface resolves which concrete
+    // project/ticket that means from the run, so a scope string can never aim a write
+    // at another project.
+    const scope = MEMORY_SCOPES.includes(args.scope as MemoryScopeKind) ? (args.scope as MemoryScopeKind) : undefined;
+    const ttlDays =
+      typeof args.ttl_days === "number" && Number.isFinite(args.ttl_days) && args.ttl_days > 0 ? args.ttl_days : undefined;
+    const r = (await ctx.caps.memory!.remember(key, content, { tags, importance, scope, ttlDays })) as MemoryRememberResult;
     return { data: r as unknown as Record<string, unknown> };
+  },
+});
+
+const MEMORY_SCOPES: readonly MemoryScopeKind[] = ["tenant", "project", "ticket"];
+
+export const memoryForgetTool: ToolDefinition = defineTool({
+  name: "memory_forget",
+  description:
+    "Delete one stored fact from cross-run memory by its key. Use when a fact you (or an earlier run) stored has become WRONG — a decision was reversed, a workaround was removed, a convention changed. Correcting a fact is memory_remember with the same key; this is for facts that should no longer exist at all.",
+  parameters: {
+    type: "object",
+    properties: { key: { type: "string", description: "The key of the fact to delete." } },
+    required: ["key"],
+  },
+  requires: ["memory", "memory.forget"],
+  async execute(args, ctx): Promise<ToolResult> {
+    const key = typeof args.key === "string" ? args.key : "";
+    if (!key.trim()) return { data: { ok: false, error: "key is required" } };
+    const r = (await ctx.caps.memory!.forget!(key)) as MemoryForgetResult;
+    return { data: r as unknown as Record<string, unknown> };
+  },
+});
+
+// ── Multi-agent coordination ─────────────────────────────────────────────────────
+// These four exist because a ticket stage can dispatch SEVERAL agents at once. The
+// surface enforces write leases implicitly, so these tools are not load-bearing for
+// safety — they let an agent reserve work BEFORE doing it and see what its peers are
+// doing, which is what turns a refused write into a plan instead of a retry loop.
+
+export const claimResourceTool: ToolDefinition = defineTool({
+  name: "claim_resource",
+  description:
+    "Reserve a shared resource before you work on it, so a peer agent working the same ticket does not change it underneath you. Pass a file path ('src/app.ts'), a directory ('src/api/'), or 'repo' for the whole tree. Returns granted:false with the current holder when someone else has it — then work on something else, or leave a workspace_note explaining what you need. Writes to a path held by another agent are refused whether or not you claim first.",
+  parameters: {
+    type: "object",
+    properties: {
+      resource: { type: "string", description: "What to reserve: a repo-relative file path, a directory, or 'repo'." },
+      mode: {
+        type: "string",
+        enum: ["exclusive", "shared"],
+        description: "'exclusive' (default) to write it; 'shared' to signal you are reading it and block others' exclusive claims.",
+      },
+      reason: { type: "string", description: "One line on why you need it — shown to the peer agent that gets refused." },
+    },
+    required: ["resource"],
+  },
+  requires: ["coordinate"],
+  async execute(args, ctx): Promise<ToolResult> {
+    const resource = typeof args.resource === "string" ? args.resource : "";
+    if (!resource.trim()) return { data: { ok: false, error: "resource is required" } };
+    const mode: LeaseMode | undefined = args.mode === "shared" || args.mode === "exclusive" ? args.mode : undefined;
+    const reason = typeof args.reason === "string" ? args.reason : undefined;
+    const r = (await ctx.caps.coordination!.claim(resource, { mode, reason })) as LeaseClaimResult;
+    return { data: r as unknown as Record<string, unknown> };
+  },
+});
+
+export const releaseResourceTool: ToolDefinition = defineTool({
+  name: "release_resource",
+  description:
+    "Release a resource you claimed, so a peer agent can take it. Do this as soon as you are finished with it rather than holding it to the end of the run. Every lease this run holds is released automatically when the run ends, so this is an optimisation, not a requirement.",
+  parameters: {
+    type: "object",
+    properties: { resource: { type: "string", description: "The resource string you claimed." } },
+    required: ["resource"],
+  },
+  requires: ["coordinate"],
+  async execute(args, ctx): Promise<ToolResult> {
+    const resource = typeof args.resource === "string" ? args.resource : "";
+    if (!resource.trim()) return { data: { ok: false, error: "resource is required" } };
+    const r = (await ctx.caps.coordination!.release(resource)) as LeaseReleaseResult;
+    return { data: r as unknown as Record<string, unknown> };
+  },
+});
+
+export const workspaceNoteTool: ToolDefinition = defineTool({
+  name: "workspace_note",
+  description:
+    "Publish a short note on the shared workspace for this ticket, readable by every agent working it (now or later in the ticket's lifecycle). Use it to declare intent ('I own the DB migration'), hand off a finding, or record a decision a peer must not contradict. Reusing a key overwrites that note. This is WORKING state for the current ticket — durable cross-ticket knowledge belongs in memory_remember.",
+  parameters: {
+    type: "object",
+    properties: {
+      key: { type: "string", description: "Short stable identifier, e.g. 'owns-migration' or 'api-contract'." },
+      content: { type: "string", description: "The note, in one or two lines." },
+    },
+    required: ["key", "content"],
+  },
+  requires: ["coordinate"],
+  async execute(args, ctx): Promise<ToolResult> {
+    const key = typeof args.key === "string" ? args.key : "";
+    const content = typeof args.content === "string" ? args.content : "";
+    if (!key.trim() || !content.trim()) return { data: { ok: false, error: "key and content are required" } };
+    const r = (await ctx.caps.coordination!.postNote(key, content)) as WorkspaceNoteResult;
+    return { data: r as unknown as Record<string, unknown> };
+  },
+});
+
+export const workspaceReadTool: ToolDefinition = defineTool({
+  name: "workspace_read",
+  description:
+    "Read the shared workspace for this ticket — notes posted by peer agents plus the resources they currently hold. Call this EARLY when a ticket may be staffed by more than one agent, so you plan around what others already own instead of colliding with them.",
+  parameters: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "Optional filter; omit to read everything." },
+      limit: { type: "number", description: "Max notes to return (default 20)." },
+    },
+  },
+  requires: ["coordinate"],
+  async execute(args, ctx): Promise<ToolResult> {
+    const query = typeof args.query === "string" && args.query.trim() ? args.query : undefined;
+    const limit = typeof args.limit === "number" && Number.isFinite(args.limit) ? args.limit : undefined;
+    const [notes, leases] = await Promise.all([
+      ctx.caps.coordination!.readNotes(query, limit) as Promise<WorkspaceReadResult>,
+      ctx.caps.coordination!.listClaims() as Promise<LeaseListResult>,
+    ]);
+    if (!notes.ok) return { data: notes as unknown as Record<string, unknown> };
+    return { data: { ok: true, notes: notes.notes ?? [], heldResources: leases.ok ? (leases.leases ?? []) : [] } };
   },
 });
 
@@ -254,7 +455,11 @@ export const webSearchTool: ToolDefinition = defineTool({
   async execute(args, ctx): Promise<ToolResult> {
     const query = typeof args.query === "string" ? args.query : "";
     if (!query.trim()) return { data: { ok: false, error: "query is required" } };
-    const r = (await ctx.caps.web!.search(query)) as WebSearchResult;
+    // `web.search` is in the surface's capability set, so the registry only reaches
+    // here when a search backing is wired (see WebCapability — `search` is optional
+    // precisely so a fetch-only surface can omit `web.search`).
+    if (!ctx.caps.web?.search) return { data: { ok: false, error: "web search is not available on this surface" } };
+    const r = (await ctx.caps.web.search(query)) as WebSearchResult;
     return { data: r as unknown as Record<string, unknown> };
   },
 });
@@ -262,7 +467,7 @@ export const webSearchTool: ToolDefinition = defineTool({
 const runChecksTool: ToolDefinition = defineTool({
   name: "run_checks",
   description:
-    "Statically validate the files you have written: it parses your committed JSON and YAML config files in-place and reports any syntax errors to fix BEFORE finishing. IMPORTANT: this serverless executor has NO shell, so it does NOT run the build, project-wide type-check, lint, or tests — those run in CI on the pull request your changes open (the source of truth). Call this after writing config files. Never claim the build/type-check/lint/tests passed — you cannot run those here; only the JSON/YAML syntax check is real.",
+    "Statically validate the files you have written: it parses committed JSON/YAML and runs the platform's shell-free changed-source quality policies, returning structured path/line/rule diagnostics to fix BEFORE finishing. The same validation runs automatically at finish, so it cannot be skipped. IMPORTANT: this serverless executor has NO shell, so it does NOT run the full build, project-wide type-check, lint, or tests — those run in CI on the pull request (the source of truth). Never claim those checks passed.",
   parameters: { type: "object", properties: {} },
   requires: ["static-check"],
   async execute(_args, ctx): Promise<ToolResult> {
@@ -501,6 +706,11 @@ export const CORE_TOOLS: readonly ToolDefinition[] = [
   webSearchTool,
   memoryRecallTool,
   memoryRememberTool,
+  memoryForgetTool,
+  claimResourceTool,
+  releaseResourceTool,
+  workspaceNoteTool,
+  workspaceReadTool,
   askHumanTool,
   finishTool,
 ];

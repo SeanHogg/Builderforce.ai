@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import {
   contributorsApi, tasksApi,
   type ContributorRow, type DuplicateGroup, type MergePreview, type MergeRecord,
@@ -23,11 +25,12 @@ const btn = (primary = false): React.CSSProperties => ({
   background: primary ? 'var(--accent, #6366f1)' : 'var(--bg-base)',
   color: primary ? '#fff' : 'var(--text-secondary)',
 });
-const REASON_LABEL: Record<DuplicateGroup['reason'], string> = {
-  email: 'Same email', identity_email: 'Same source email', name: 'Same name',
-};
-
 export function ContributorConsolidation() {
+  const t = useTranslations('contributorMerge');
+  const tc = useTranslations('common');
+  const REASON_LABEL: Record<DuplicateGroup['reason'], string> = {
+    email: t('reasonEmail'), identity_email: t('reasonIdentityEmail'), name: t('reasonName'),
+  };
   const [contributors, setContributors] = useState<ContributorRow[] | null>(null);
   const [groups, setGroups] = useState<DuplicateGroup[]>([]);
   const [merges, setMerges] = useState<MergeRecord[]>([]);
@@ -60,33 +63,33 @@ export function ContributorConsolidation() {
 
   const byId = useMemo(() => new Map((contributors ?? []).map((c) => [c.id, c])), [contributors]);
 
-  const doPreview = async (s: number, t: number) => {
+  const doPreview = async (s: number, tgt: number) => {
     setError(null);
-    try { setPreview(await contributorsApi.mergePreview(s, t)); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Preview failed'); }
+    try { setPreview(await contributorsApi.mergePreview(s, tgt)); }
+    catch (e) { setError(e instanceof Error ? e.message : t('previewFailed')); }
   };
 
-  const doMerge = async (s: number, t: number) => {
+  const doMerge = async (s: number, tgt: number) => {
     setBusy(true); setError(null);
     try {
-      await contributorsApi.merge(s, t);
+      await contributorsApi.merge(s, tgt);
       setPreview(null); setSourceId(''); setTargetId('');
       load();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Merge failed'); }
+    } catch (e) { setError(e instanceof Error ? e.message : t('mergeFailed')); }
     finally { setBusy(false); }
   };
 
   const doRevert = async (mergeId: string) => {
     setBusy(true); setError(null);
     try { await contributorsApi.revertMerge(mergeId); load(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Revert failed'); }
+    catch (e) { setError(e instanceof Error ? e.message : t('revertFailed')); }
     finally { setBusy(false); }
   };
 
   const doLink = async (contributorId: number, userId: string | null) => {
     setBusy(true); setError(null);
     try { await contributorsApi.linkUser(contributorId, userId); load(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Link failed'); }
+    catch (e) { setError(e instanceof Error ? e.message : t('linkFailed')); }
     finally { setBusy(false); }
   };
 
@@ -96,12 +99,12 @@ export function ContributorConsolidation() {
 
       {/* Suggested duplicates */}
       <div style={cardStyle}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 4px' }}>Suggested duplicates</h3>
+        <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 4px' }}>{t('suggestedDuplicates')}</h3>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px' }}>
-          People that look like the same person across sources. Pick who to keep — the others merge into them across every project. Reversible.
+          {t('suggestedDuplicatesDesc')}
         </p>
         {groups.length === 0 ? (
-          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No likely duplicates found.</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('noDuplicates')}</div>
         ) : groups.map((g) => (
           <div key={`${g.reason}:${g.key}`} style={{ borderTop: '1px solid var(--border-subtle)', padding: '10px 0' }}>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
@@ -117,9 +120,9 @@ export function ContributorConsolidation() {
                     if (others.length === 1) doPreview(others[0].id, survivor.id);
                   }}
                   style={{ ...btn(), textAlign: 'left' }}
-                  title="Keep this profile; merge the others into it"
+                  title={t('keepThisTitle')}
                 >
-                  Keep <b>{survivor.displayName}</b>{survivor.userId ? ' 🔗' : ''}
+                  {t('keep')} <b>{survivor.displayName}</b>{survivor.userId ? ' 🔗' : ''}
                 </button>
               ))}
             </div>
@@ -129,30 +132,30 @@ export function ContributorConsolidation() {
 
       {/* Manual merge */}
       <div style={cardStyle}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px' }}>Merge two profiles</h3>
+        <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px' }}>{t('mergeTwoProfiles')}</h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <Select value={sourceId} onChange={(e) => setSourceId(e.target.value ? Number(e.target.value) : '')} style={selectStyle}>
-            <option value="">Merge this…</option>
+            <option value="">{t('mergeThis')}</option>
             {(contributors ?? []).map((c) => <option key={c.id} value={c.id}>{c.displayName}</option>)}
           </Select>
-          <span style={{ color: 'var(--text-muted)' }}>→ into →</span>
+          <span style={{ color: 'var(--text-muted)' }}>{t('intoArrow')}</span>
           <Select value={targetId} onChange={(e) => setTargetId(e.target.value ? Number(e.target.value) : '')} style={selectStyle}>
-            <option value="">…keep this</option>
+            <option value="">{t('keepThisOption')}</option>
             {(contributors ?? []).filter((c) => c.id !== sourceId).map((c) => <option key={c.id} value={c.id}>{c.displayName}</option>)}
           </Select>
           <button
             disabled={busy || !sourceId || !targetId}
             onClick={() => sourceId && targetId && doPreview(sourceId, targetId)}
             style={btn(true)}
-          >Preview</button>
+          >{t('preview')}</button>
         </div>
       </div>
 
       {/* Link contributors to Builderforce users */}
       <div style={cardStyle}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 4px' }}>Link to a workspace user</h3>
+        <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 4px' }}>{t('linkToUser')}</h3>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px' }}>
-          Binding a profile to a Builderforce user attaches their external activity and platform/VS Code engagement to one person.
+          {t('linkToUserDesc')}
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {(contributors ?? []).map((c) => (
@@ -164,7 +167,7 @@ export function ContributorConsolidation() {
                 onChange={(e) => doLink(c.id, e.target.value || null)}
                 style={selectStyle}
               >
-                <option value="">— not linked —</option>
+                <option value="">{t('notLinked')}</option>
                 {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </Select>
             </div>
@@ -175,46 +178,56 @@ export function ContributorConsolidation() {
       {/* Merge history */}
       {merges.length > 0 && (
         <div style={cardStyle}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px' }}>Merge history</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px' }}>{t('mergeHistory')}</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {merges.map((m) => (
               <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
                 <span style={{ flex: 1, color: 'var(--text-secondary)' }}>
                   {byId.get(m.sourceContributorId ?? -1)?.displayName ?? `#${m.sourceContributorId}`} → {byId.get(m.targetContributorId ?? -1)?.displayName ?? `#${m.targetContributorId}`}
-                  <span style={{ color: 'var(--text-muted)' }}> · {m.movedActivityCount} events · {new Date(m.mergedAt).toLocaleDateString()}</span>
+                  <span style={{ color: 'var(--text-muted)' }}> · {t('eventsCount', { count: m.movedActivityCount })} · {new Date(m.mergedAt).toLocaleDateString()}</span>
                 </span>
                 {m.status === 'reverted'
-                  ? <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>reverted</span>
-                  : <button disabled={busy} onClick={() => doRevert(m.id)} style={btn()}>Undo</button>}
+                  ? <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('reverted')}</span>
+                  : <button disabled={busy} onClick={() => doRevert(m.id)} style={btn()}>{t('undo')}</button>}
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Preview / confirm modal */}
-      {preview && (
-        <div style={overlay} onClick={() => setPreview(null)}>
-          <div style={{ ...cardStyle, maxWidth: 460, width: '90%' }} onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 12px' }}>Confirm merge</h3>
-            <p style={{ fontSize: 13, margin: '0 0 12px' }}>
-              Merge <b>{preview.source.displayName}</b> into <b>{preview.target.displayName}</b>. This moves all activity to the survivor across every project. You can undo it later.
+      {/* Preview / confirm merge — a slide-out panel, not a modal: a merge is
+          reversible and logged (Undo lives in the history above), so it isn't a
+          terminal/destructive confirm. */}
+      <SlideOutPanel
+        open={preview != null}
+        onClose={() => setPreview(null)}
+        title={t('confirmMerge')}
+        width="min(560px, 96vw)"
+      >
+        {preview && (
+          <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <p style={{ fontSize: 13, margin: 0 }}>
+              {t.rich('mergeSentence', {
+                source: preview.source.displayName,
+                target: preview.target.displayName,
+                b: (chunks) => <b>{chunks}</b>,
+              })}
             </p>
-            <ul style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 16px', paddingLeft: 18 }}>
-              <li>{preview.movedActivityCount} activity events re-attributed</li>
-              <li>{preview.movedIdentityCount} source identities moved{preview.dedupedIdentityCount ? `, ${preview.dedupedIdentityCount} duplicate removed` : ''}</li>
-              <li>{preview.movedTeamCount} team membership(s) moved{preview.dedupedTeamCount ? `, ${preview.dedupedTeamCount} duplicate removed` : ''}</li>
-              {preview.willInheritUserLink && <li>Survivor inherits the source&apos;s workspace-user link</li>}
+            <ul style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, paddingLeft: 18 }}>
+              <li>{t('activityMoved', { count: preview.movedActivityCount })}</li>
+              <li>{t('identitiesMoved', { count: preview.movedIdentityCount })}{preview.dedupedIdentityCount ? `, ${t('duplicatesRemoved', { count: preview.dedupedIdentityCount })}` : ''}</li>
+              <li>{t('teamMoved', { count: preview.movedTeamCount })}{preview.dedupedTeamCount ? `, ${t('duplicatesRemoved', { count: preview.dedupedTeamCount })}` : ''}</li>
+              {preview.willInheritUserLink && <li>{t('inheritsUserLink')}</li>}
             </ul>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button onClick={() => setPreview(null)} style={btn()}>Cancel</button>
+              <button onClick={() => setPreview(null)} style={btn()}>{tc('cancel')}</button>
               <button disabled={busy} onClick={() => doMerge(preview.source.id, preview.target.id)} style={btn(true)}>
-                {busy ? 'Merging…' : 'Merge'}
+                {busy ? t('merging') : t('merge')}
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </SlideOutPanel>
     </div>
   );
 }
@@ -223,8 +236,4 @@ const selectStyle: React.CSSProperties = {
   fontSize: 13, padding: '5px 8px', borderRadius: 8,
   border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)',
   maxWidth: 260,
-};
-const overlay: React.CSSProperties = {
-  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex',
-  alignItems: 'center', justifyContent: 'center', zIndex: 1000,
 };

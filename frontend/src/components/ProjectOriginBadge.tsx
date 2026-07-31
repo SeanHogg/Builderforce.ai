@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
 
 /**
@@ -8,17 +9,18 @@ import type { Project } from '@/lib/types';
  * 'imported'), so every consumer (card, table, details) can drop it in
  * unconditionally without computing visibility itself.
  */
-const BADGES: Record<string, { label: string; icon: string }> = {
-  ide: { label: 'Designer', icon: '🎨' },
-  imported: { label: 'Imported', icon: '📥' },
+const BADGES: Record<string, { labelKey: 'originBuilder' | 'originImported'; titleKey: 'originBuilderTitle' | 'originImportedTitle'; icon: string }> = {
+  ide: { labelKey: 'originBuilder', titleKey: 'originBuilderTitle', icon: '🌐' },
+  imported: { labelKey: 'originImported', titleKey: 'originImportedTitle', icon: '📥' },
 };
 
 export function ProjectOriginBadge({ origin, style }: { origin?: string | null; style?: React.CSSProperties }) {
+  const t = useTranslations('projectCard');
   const badge = origin ? BADGES[origin] : undefined;
   if (!badge) return null;
   return (
     <span
-      title={origin === 'ide' ? 'Started in the IDE (Designer)' : 'Imported from a repository'}
+      title={t(badge.titleKey)}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 4,
         fontSize: 11, fontWeight: 600, lineHeight: 1.4,
@@ -29,7 +31,7 @@ export function ProjectOriginBadge({ origin, style }: { origin?: string | null; 
       }}
     >
       <span aria-hidden>{badge.icon}</span>
-      {badge.label}
+      {t(badge.labelKey)}
     </span>
   );
 }

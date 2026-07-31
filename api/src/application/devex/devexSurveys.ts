@@ -14,6 +14,7 @@
 
 import { pgTable, serial, integer, uuid, varchar, text, jsonb, boolean, timestamp, index } from 'drizzle-orm/pg-core';
 import { tenants, segments } from '../../infrastructure/database/schema';
+import { fnv1a32 as fnv1a } from '../../domain/shared/strings';
 
 // ---------------------------------------------------------------------------
 // Domain types
@@ -207,15 +208,6 @@ export function respondentHash(userId: string, campaignId: number): string {
   const h3 = fnv1a(`${input}:b`, 0x811c9dc5);
   const h4 = fnv1a(`${input}:b`, 0x01000193);
   return [h1, h2, h3, h4].map((h) => (h >>> 0).toString(16).padStart(8, '0')).join('').slice(0, 64);
-}
-
-function fnv1a(str: string, seed: number): number {
-  let h = seed >>> 0;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return h >>> 0;
 }
 
 // ---------------------------------------------------------------------------

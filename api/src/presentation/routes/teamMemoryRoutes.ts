@@ -11,25 +11,11 @@
 import { Hono } from 'hono';
 import { and, desc, eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { agentHosts, teamMemory } from '../../infrastructure/database/schema';
-import { verifySecret } from '../../infrastructure/auth/HashService';
+import { teamMemory } from '../../infrastructure/database/schema';
+import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-
-async function verifyAgentHostApiKey(
-  db: Db,
-  agentHostId: number,
-  key: string | undefined,
-): Promise<{ id: number; tenantId: number } | null> {
-  if (!key) return null;
-  const [agentHost] = await db
-    .select({ id: agentHosts.id, tenantId: agentHosts.tenantId, apiKeyHash: agentHosts.apiKeyHash })
-    .from(agentHosts)
-    .where(eq(agentHosts.id, agentHostId));
-  if (!agentHost) return null;
-  const valid = await verifySecret(key, agentHost.apiKeyHash);
-  return valid ? agentHost : null;
-}
+import { parseJsonArray } from '../../domain/shared/json';
 
 export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -113,7 +99,7 @@ export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
 
     const entries = rows.map((r) => ({
       ...r,
-      tags: (() => { try { return JSON.parse(r.tags) as string[]; } catch { return [] as string[]; } })(),
+      tags: parseJsonArray<string>(r.tags),
     }));
 
     return c.json({ entries, total: entries.length });

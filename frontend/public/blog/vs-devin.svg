@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">SELF-HOSTED, AUDITABLE AUTONOMY</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Proprietary cloud at $500/mo vs. own it, MIT</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- Left card: Devin -->
+  <rect x="80" y="210" width="680" height="560" rx="24" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="80" y="210" width="6" height="560" rx="3" fill="url(#coralGrad)"/>
+  <text x="118" y="256" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" letter-spacing="2" font-weight="700" fill="#FF8F7A">DEVIN</text>
+  <text x="118" y="298" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="28" font-weight="900" fill="#EEF0FA">Proprietary cloud, one agent</text>
+  <text x="118" y="376" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="52" font-weight="900" fill="#F0574A">$500<tspan font-size="26" font-weight="700" fill="#A6ADC8">/mo floor</tspan></text>
+  <text x="120" y="410" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#8891AE">Cloud only &#8212; your code goes to their infra</text>
+  <line x1="110" y1="440" x2="730" y2="440" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+
+  <text x="120" y="488" font-size="24" fill="#F0574A">&#10007;</text>
+  <text x="158" y="488" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#A6ADC8">Your code lives on their cloud</text>
+  <text x="120" y="546" font-size="24" fill="#F0574A">&#10007;</text>
+  <text x="158" y="546" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#A6ADC8">Single autonomous agent</text>
+  <text x="120" y="604" font-size="24" fill="#F0574A">&#10007;</text>
+  <text x="158" y="604" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#A6ADC8">Model choice made for you</text>
+  <text x="120" y="662" font-size="26" fill="#FFCE6B">&#9888;</text>
+  <text x="158" y="662" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#A6ADC8">Governance is basic</text>
+  <text x="120" y="720" font-size="24" fill="#F0574A">&#10007;</text>
+  <text x="158" y="720" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#A6ADC8">Retry-only recovery</text>
+
+  <!-- Right card: Builderforce -->
+  <rect x="840" y="210" width="680" height="560" rx="24" fill="rgba(91,240,188,0.07)" stroke="rgba(91,240,188,0.40)" stroke-width="1.5"/>
+  <rect x="840" y="210" width="6" height="560" rx="3" fill="url(#mintGrad)"/>
+  <text x="878" y="256" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" letter-spacing="2" font-weight="700" fill="#5BF0BC">BUILDERFORCE.AI</text>
+  <text x="878" y="298" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="28" font-weight="900" fill="#EEF0FA">Self-hosted, you own it</text>
+  <text x="878" y="376" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="52" font-weight="900" fill="#5BF0BC">Free<tspan font-size="26" font-weight="700" fill="#A6ADC8"> &#183; MIT-licensed</tspan></text>
+  <text x="880" y="410" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#8891AE">Runs on your machines &#8212; no per-seat cloud floor</text>
+  <line x1="870" y1="440" x2="1490" y2="440" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+
+  <text x="880" y="488" font-size="24" fill="#5BF0BC">&#10003;</text>
+  <text x="920" y="488" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#EEF0FA">Your code + agents on your infra, air-gapped</text>
+  <text x="880" y="546" font-size="24" fill="#5BF0BC">&#10003;</text>
+  <text x="920" y="546" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#EEF0FA">7 specialist roles + dependency DAG</text>
+  <text x="880" y="604" font-size="24" fill="#5BF0BC">&#10003;</text>
+  <text x="920" y="604" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#EEF0FA">30+ providers incl. local Ollama</text>
+  <text x="880" y="662" font-size="24" fill="#5BF0BC">&#10003;</text>
+  <text x="920" y="662" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#EEF0FA">Approval gates + a full audit trail</text>
+  <text x="880" y="720" font-size="24" fill="#5BF0BC">&#10003;</text>
+  <text x="920" y="720" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#EEF0FA">Self-healing recovery + fleet mesh</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Governance you can show an auditor &#8212; who approved what, on your own infrastructure</text>
+</svg>

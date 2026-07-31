@@ -22,6 +22,7 @@ import {
   buildOpenAIChatBody,
   executeChatCompletion,
   executeChatCompletionStream,
+  forwardCallOpts,
   type AiModelTier,
   type VendorCallParams,
   type VendorCallResult,
@@ -36,7 +37,9 @@ import {
  *  fields — the only thing the OpenAI-compatible factory needs to read. Every
  *  member of `VendorEnv` is a `string | null` key, so this is just its keyset
  *  (kept as a named alias for intent at call sites). */
-export type VendorApiKeyEnv = keyof VendorEnv & string;
+export type VendorApiKeyEnv = {
+  [K in keyof VendorEnv]-?: Exclude<VendorEnv[K], null | undefined> extends string ? K : never
+}[keyof VendorEnv] & string;
 
 export interface OpenAICompatibleVendorOptions {
   /** Registry id (must be a member of {@link VendorId}). */
@@ -114,9 +117,7 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
         model: params.model,
         body: { ...buildBody(params), stream: false },
         ...(headers ? { headers } : {}),
-        ...(params.title ? { title: params.title } : {}),
-        ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-        ...(params.signal ? { signal: params.signal } : {}),
+        ...forwardCallOpts(params),
       });
     },
   };
@@ -130,9 +131,7 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
         model: params.model,
         body: buildBody(params),
         ...(headers ? { headers } : {}),
-        ...(params.title ? { title: params.title } : {}),
-        ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-        ...(params.signal ? { signal: params.signal } : {}),
+        ...forwardCallOpts(params),
       });
   }
 

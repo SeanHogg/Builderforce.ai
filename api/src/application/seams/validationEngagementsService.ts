@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Validation-engagements proxy (BuilderForce → host, spec 05 §4.2 PM-4).
  *
@@ -47,8 +48,10 @@ function readHostBi(settingsRaw: string | null | undefined): HostBiConfig | null
     if (typeof baseUrl === 'string' && /^https:\/\//.test(baseUrl) && typeof token === 'string' && token) {
       return { baseUrl: baseUrl.replace(/\/+$/, ''), token };
     }
-  } catch {
+  } catch (error) {
     /* fall through */
+  
+    reportCaughtError(error, { source: "application/seams/validationEngagementsService.ts", operation: "readHostBi" });
   }
   return null;
 }

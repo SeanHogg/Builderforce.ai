@@ -19,35 +19,14 @@ import { Hono } from 'hono';
 import { and, desc, eq, gte, isNotNull } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { evaluateResponse, type EvalJudge } from '../../application/eval/semanticEval';
+import { gatewayJudge } from '../../application/eval/gatewayJudge';
 import { detectGroupDrift, type ScoredSample } from '../../application/eval/driftMonitor';
-import { llmProxyForPlan } from '../../application/llm/LlmProxyService';
+import { evaluateVariant } from '../../application/eval/variantEval';
 import { resolveTenantPlan } from './llmRoutes';
 import { runModelOutcomes } from '../../infrastructure/database/schema';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-
-/** Builds an LLM-as-judge bound to the tenant's plan + metered gateway. A judge
- *  failure returns '' so evaluateResponse degrades to the lexical backend. */
-function gatewayJudge(env: Env, effectivePlan: 'free' | 'pro' | 'teams', premiumOverride: boolean): EvalJudge {
-  return async (prompt: string): Promise<string> => {
-    const service = llmProxyForPlan(env, effectivePlan, premiumOverride);
-    const result = await service.complete({
-      // temperature 0 → deterministic, repeatable verdicts.
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0,
-      max_tokens: 200,
-    } as never);
-    try {
-      const body = (await result.response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-      return body.choices?.[0]?.message?.content ?? '';
-    } catch {
-      return '';
-    }
-  };
-}
 
 export function createEvalRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -90,6 +69,23 @@ export function createEvalRoutes(db: Db): Hono<HonoEnv> {
       { kvTtlSeconds: 300, l1TtlMs: 60_000 },
     );
     return c.json(report);
+  });
+
+  // ── GET /api/eval/variant-compare ─────────────────────────────────────────
+  // Fine-tune-vs-base A/B: compares two models' outcome scores for an action
+  // type and returns the comparison + the promote/hold decision. The gate the
+  // Evermind auto-routing promotion needs. Cached on the outcomes version token.
+  router.get('/variant-compare', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const baseModel = c.req.query('base');
+    const candidateModel = c.req.query('candidate');
+    if (!baseModel || !candidateModel) {
+      return c.json({ error: 'base and candidate model query params are required' }, 400);
+    }
+    const actionType = c.req.query('actionType') || undefined;
+    const windowDays = Number(c.req.query('windowDays')) || 60;
+    const result = await evaluateVariant(c.env as Env, db, { tenantId, baseModel, candidateModel, actionType, windowDays });
+    return c.json(result);
   });
 
   return router;

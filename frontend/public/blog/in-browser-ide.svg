@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#3DD6F5">IN-BROWSER IDE</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Full-stack development, no local setup</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- window -->
+  <rect x="120" y="230" width="1360" height="560" rx="20" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <circle cx="156" cy="264" r="7" fill="#F0574A"/><circle cx="180" cy="264" r="7" fill="#FFCE6B"/><circle cx="204" cy="264" r="7" fill="#5BF0BC"/>
+  <text x="232" y="270" font-family="Consolas, ui-monospace, monospace" font-size="16" fill="#8891AE">freelance-tool — WebContainers</text>
+  <line x1="120" y1="292" x2="1480" y2="292" stroke="rgba(255,255,255,0.08)"/>
+
+  <!-- pane dividers -->
+  <line x1="430" y1="292" x2="430" y2="790" stroke="rgba(255,255,255,0.08)"/>
+  <line x1="1090" y1="292" x2="1090" y2="790" stroke="rgba(255,255,255,0.08)"/>
+  <rect x="120" y="292" width="310" height="498" fill="rgba(255,255,255,0.015)"/>
+
+  <!-- LEFT: file explorer -->
+  <text x="150" y="330" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" letter-spacing="1.5" font-weight="700" fill="#8891AE">FILE EXPLORER</text>
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8">
+    <text x="150" y="378">📁 src</text>
+    <text x="180" y="410">📁 app</text>
+    <text x="180" y="442">📁 api</text>
+    <text x="180" y="474">📁 tests</text>
+    <text x="150" y="506">📁 docs</text>
+    <text x="180" y="538" fill="#EEF0FA">📄 PRD.md</text>
+    <text x="180" y="570">📄 ARCHITECTURE.md</text>
+    <text x="150" y="602">📄 package.json</text>
+  </g>
+  <text x="150" y="700" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#5BF0BC">● live · synced to R2</text>
+
+  <!-- CENTER: Monaco editor -->
+  <rect x="450" y="308" width="230" height="34" rx="8" fill="rgba(61,214,245,0.10)"/>
+  <text x="470" y="331" font-family="Consolas, ui-monospace, monospace" font-size="16" fill="#3DD6F5">app/api/route.ts</text>
+  <text x="704" y="331" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#8891AE">Monaco editor · TS language server</text>
+  <g font-family="Consolas, ui-monospace, monospace" font-size="17">
+    <text x="452" y="392"><tspan fill="#A98BFF">export async function</tspan><tspan fill="#3DD6F5"> GET</tspan><tspan fill="#7E88A8">(req) {</tspan></text>
+    <text x="480" y="424"><tspan fill="#7E88A8">const rows = </tspan><tspan fill="#A98BFF">await</tspan><tspan fill="#7E88A8"> db.query(sql)</tspan></text>
+    <text x="480" y="456"><tspan fill="#A98BFF">return</tspan><tspan fill="#7E88A8"> Response.json(rows)</tspan></text>
+    <text x="452" y="488" fill="#7E88A8">}</text>
+    <text x="452" y="540" fill="#5BF0BC">// ✓ npm run dev — port 3000 live in Preview</text>
+    <text x="452" y="572" fill="#F0574A">// terminal: run any command in the container</text>
+  </g>
+
+  <!-- RIGHT: panel toggle + AI chat -->
+  <rect x="1106" y="308" width="116" height="34" rx="8" fill="rgba(255,255,255,0.05)"/>
+  <text x="1164" y="331" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#8891AE">Preview</text>
+  <rect x="1228" y="308" width="116" height="34" rx="8" fill="rgba(255,255,255,0.05)"/>
+  <text x="1286" y="331" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#8891AE">Terminal</text>
+  <rect x="1350" y="308" width="116" height="34" rx="8" fill="url(#violetGrad)"/>
+  <text x="1408" y="331" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="700" fill="#0A0B1E">AI Chat</text>
+
+  <!-- user bubble -->
+  <rect x="1200" y="372" width="266" height="60" rx="14" fill="rgba(61,214,245,0.10)" stroke="rgba(61,214,245,0.25)"/>
+  <text x="1440" y="408" text-anchor="end" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" fill="#CDE9F5">Why is the API returning 500?</text>
+  <!-- AI bubble -->
+  <rect x="1114" y="452" width="300" height="128" rx="14" fill="rgba(169,139,255,0.10)" stroke="rgba(169,139,255,0.28)"/>
+  <text x="1134" y="486" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" fill="#E4DDFB"><tspan x="1134" dy="0">The handler is missing an</tspan><tspan x="1134" dy="26">await on db.query(). It reads</tspan><tspan x="1134" dy="26">terminal + file context to</tspan><tspan x="1134" dy="26">find it.</tspan></text>
+  <text x="1114" y="616" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#5BF0BC">✓ edit applied — with your approval</text>
+  <text x="1114" y="700" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#8891AE"><tspan x="1114" dy="0">Agent edits arrive here as</tspan><tspan x="1114" dy="22">live changes, too</tspan></text>
+
+  <text x="800" y="768" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#8891AE">WebContainers runtime · real Node.js in the tab · Yjs real-time collaboration</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">A browser IDE that is also a window into your agent's work</text>
+</svg>

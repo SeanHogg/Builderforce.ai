@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * builderforceLLM — multi-vendor LLM proxy.
  *
@@ -28,6 +29,7 @@ import {
   dispatchVendorStream,
   kindForStatus,
   autoRoutableModelsByTier,
+  parseVendorPrefix,
   tierForModel,
   vendorForModel,
   vendorKeyBound,
@@ -42,6 +44,18 @@ import {
   type VendorEnv,
   type VendorId,
 } from './vendors';
+// Consumed by the service below AND re-exported at the bottom of this file, so
+// callers that still import them from 'LlmProxyService' keep working.
+import { checkResponseFormatConformance } from './responseFormat';
+import {
+  capabilitiesForModel,
+  inferShape,
+  isQualityCriticalUseCase,
+  reorderPoolByShape,
+  reorderPoolForCoding,
+  reorderPoolForQuality,
+  stripStandardFields,
+} from './poolRouting';
 import { composeFreeCappedCascade, buildCooldownPredicate } from './cascadeComposer';
 import { sanitizeRequestToolCalls, restoreResponseToolNames, restoreStreamToolNames } from './toolNameSanitizer';
 import {
@@ -52,466 +66,57 @@ import {
   recordFailure,
 } from '../../infrastructure/auth/cooldownStore';
 import { validateJsonSchema } from './jsonSchemaValidator';
+import { parseClientReasoningIntent } from './reasoningCapability';
+import { estimateTokensFromChars } from './tokenUsage';
 import type { ActionType } from './actionTypes';
+import { PROVIDER_VENDOR_MAP, byoVendorIdsFromCredentials, type TenantVendorKeys } from './tenantProviderKeyService';
+import {
+  bareModelId,
+  connectionModelRefs,
+  type OpenRouterConnection,
+} from './openRouterConnectionService';
+import {
+  loadDemotedVendors,
+  recordVendorUpstreamFault,
+  recordVendorUpstreamSuccess,
+} from './vendors/vendorHealth';
 
-// ---------------------------------------------------------------------------
-// Pool composition (derived from vendor catalogs — single source of truth)
+// ─────────────────────────────────────────────────────────────────────────────
+// Collaborators split out of this file (2026-07-26). Re-exported here so the
+// modules that import them from 'LlmProxyService' are unaffected — the split is
+// about where the code LIVES, not about churning every call site.
 //
-// Multi-vendor by construction. `modelsByTier` walks every registered vendor
-// in registry MODULES order (cerebras → ollama → nvidia → openrouter), so the
-// free pool naturally starts with sub-200ms TTFT Cerebras entries and ends
-// with the highest-variance OpenRouter free tier. When a vendor's key isn't
-// bound, its models stay in the pool but are filtered out at dispatch by
-// `dispatchVendor`'s no-key skip — and surfaced as `available: false` in
-// `status()` so the admin UI doesn't claim availability for unbound vendors.
-// ---------------------------------------------------------------------------
-
-// `autoRoutableModelsByTier` (not `modelsByTier`) is the pool composer: it walks
-// the same registry order but DROPS vendors that opt out of auto-routing
-// (`autoRoute: false`, currently Ollama). A non-auto-route vendor stays in the
-// catalog — reachable via an explicit `ollama/<id>` pin — but is never a model a
-// FREE/PRO cascade can silently fall onto. (Fixes: a cloud coding agent cascading
-// into `ollama/gpt-oss:120b`, which 400s on the tool payload.)
-
-/**
- * The vendor whose models lead every PAID list. Cloudflare Workers AI bills in
- * "neurons" with the first ~10,000/day FREE, so draining a paid pool through
- * Cloudflare BEFORE any metered vendor makes that overflow effectively free up to
- * the daily allowance. Single source for the lead-vendor choice so the general
- * paid pool and the coding pools never disagree on which vendor to prefer.
- */
-export const PAID_LEAD_VENDOR: VendorId = 'cloudflare';
-
-/**
- * Reorder a model pool so `vendor`'s models lead, preserving each group's relative
- * order. Used to surface the free-daily-allowance vendor ({@link PAID_LEAD_VENDOR})
- * first in PAID pools so metered spend is deferred until its allowance is spent.
- * No-op for a vendor with no models in the pool (e.g. an unbound Cloudflare key
- * still leaves the rest of the pool in registry order).
- */
-export function leadPoolWithVendor(pool: readonly string[], vendor: VendorId): string[] {
-  const lead = pool.filter((m) => vendorForModel(m) === vendor);
-  if (lead.length === 0) return [...pool];
-  const rest = pool.filter((m) => vendorForModel(m) !== vendor);
-  return [...lead, ...rest];
-}
-
-/** Auto-routable free-tier model ids across every registered cloud vendor. */
-export const FREE_MODEL_POOL: readonly string[] = autoRoutableModelsByTier('FREE');
-
-/**
- * Auto-routable paid-tier model ids (STANDARD / PREMIUM / ULTRA) across vendors,
- * LED BY {@link PAID_LEAD_VENDOR} (Cloudflare) so its free daily neuron allowance
- * is spent before any metered vendor; the remaining paid models follow in registry
- * (TTFT) order.
- */
-export const PRO_PAID_MODEL_POOL: readonly string[] =
-  leadPoolWithVendor(autoRoutableModelsByTier('STANDARD', 'PREMIUM', 'ULTRA'), PAID_LEAD_VENDOR);
-
-/** Pro tries free first (cost-optimized), falls over to paid. */
-export const PRO_MODEL_POOL: readonly string[] = [...FREE_MODEL_POOL, ...PRO_PAID_MODEL_POOL];
-
-/**
- * Curated agentic-coding pool — models that reliably (a) honour multi-turn
- * `tools` / `tool_choice` round-trips AND (b) write competent code. This is the
- * SINGLE SOURCE OF TRUTH for "what can drive a cloud coding agent":
- *   - a cloud execution pins its model from here (see `runCloudToolLoop`),
- *   - the user-facing cloud-agent model picker is filtered to this list,
- *   - `TOOL_CAPABLE_MODELS` / `STRUCTURED_OUTPUT_MODELS` are DERIVED from it,
- * so the picker, the runtime default, and the capability-reorder can never drift
- * apart again (the bug this replaces: the capability sets pinned the retired
- * `anthropic/claude-3.7-sonnet`, scoring every current Anthropic model 0 so it
- * never floated up for a tools request).
- *
- * Ordered best-first across plans: PREMIUM coding models lead (Pro tenants land
- * here), then the strongest FREE tool-capable models as the Free-plan / fallback
- * tail. Every id MUST exist in a vendor catalog — `LlmProxyService.codingPool.test`
- * asserts this so a catalog rename trips CI instead of silently degrading routing.
- */
-// Every id below is verified against the live OpenRouter /models API (all are
-// tool-capable). The cloud gateway dispatches free runs on the OpenRouter free
-// key, so the FREE tail must be real OpenRouter `:free` slugs — NOT vendor-direct
-// NIM/Cerebras ids that 404 there. Keep this in sync with the live API, not from
-// memory (`LlmProxyService.codingPool.test` asserts every id is in the catalog).
-export const CODING_MODEL_POOL: readonly string[] = [
-  // PAID, CLOUDFLARE FIRST — every `@cf/*` coder is FREE up to the daily neuron
-  // allowance (Cloudflare = PAID_LEAD_VENDOR), so a paid coding run spends that
-  // free allowance BEFORE any metered coder. This is also why Anthropic is no
-  // longer the lead: the metered coders (OpenRouter-routed Anthropic/OpenAI/etc.)
-  // follow the free Cloudflare neurons. All `@cf/*` ids are verified function-
-  // calling-capable against the live Cloudflare catalog (see cloudflare.ts).
-  //
-  // Ordered BIG-CONTEXT-FIRST, not just by quality: a coding context routinely
-  // exceeds a small window, so a small-window model leading the pool 413s on the
-  // first turn (the 97K-into-32K bug). glm-4.7-flash (128K) leads as the cost-
-  // effective big-window coder; kimi (256K) handles the largest contexts; the 32K
-  // qwen3-30b is LAST (a 413 there cascades up, see CASCADE_STATUSES).
-  '@cf/zai-org/glm-4.7-flash',                 // 128K ctx, STANDARD — big-window coder (Cloudflare) — Pro coding default
-  '@cf/moonshotai/kimi-k2.7-code',             // 256K ctx, PREMIUM — frontier code model for huge contexts (Cloudflare)
-  '@cf/qwen/qwen3-30b-a3b-fp8',                // 32K ctx, STANDARD — small/fast; great first pass for SMALL tasks
-  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',  // 24K ctx, STANDARD — small/fast; great first pass for SMALL tasks
-  // PAID, METERED — strong agentic coders reachable by Pro tenants on the credited key.
-  'anthropic/claude-sonnet-4.6',
-  'openai/gpt-4.1',
-  'xiaomi/mimo-v2.5',                          // Programming #1 on OpenRouter, $0.14/$0.28
-  'qwen/qwen3.7-plus',                         // agentic coder + vision, $0.40/$1.60
-  'deepseek/deepseek-v4-flash',               // fast cheap coder, $0.10/$0.20
-  // FREE — strong agentic coders on the OpenRouter free key (the cloud default).
-  // Standardized lead: MiniMax M2.7 is the top free SWE-bench agentic coder, so it
-  // sits first here and becomes CODING_DEFAULT_MODEL (the first FREE pool entry).
-  // Sourced from NVIDIA NIM (`minimaxai/minimax-m2.7`), where M2.7 is FREE — on
-  // OpenRouter it's a PAID slug, so NIM is the only free home. This needs
-  // NVIDIA_API_KEY bound on the gateway; if it's unbound the NIM default no-key-
-  // skips at dispatch and the run fails over to the OpenRouter `:free` tail below,
-  // so M2.5:free sits immediately after as the always-reachable failover.
-  'minimaxai/minimax-m2.7',                   // SWE-bench-leading free coder (NVIDIA NIM) — standardized default
-  'minimax/minimax-m2.5:free',                // prior-gen MiniMax (OpenRouter free) — always-reachable failover
-  'z-ai/glm-5.1',                             // strong agentic coder (NVIDIA NIM, free)
-  'nex-agi/nex-n2-pro:free',                  // agentic MoE (Qwen3.5 arch), tool use
-  'nvidia/nemotron-3-ultra-550b-a55b:free',   // Programming #6, 1M context
-  'openrouter/owl-alpha',                     // agentic, Claude Code-compatible
-  'poolside/laguna-m.1:free',                 // flagship coding-agent model
-  'qwen/qwen3-coder:free',
-  'qwen/qwen3-next-80b-a3b-instruct:free',
-  // DIRECT-ANTHROPIC reliability floor (NVIDIA-of-last-resort). Served by the
-  // `anthropic` vendor on the operator's CLAUDE_API_KEY — a vendor-diverse path
-  // independent of OpenRouter. These are `autoRoute: false`, so they never enter a
-  // plan pool or the user-facing picker (codingModelsForPlan excludes them); they
-  // are listed here ONLY so the cloud loop recognises them as real coders (not a
-  // "degraded onto a non-coder" backstop) and so the capability-reorder sets treat
-  // them as tool/structured-output capable. Routing onto them happens via
-  // CODING_PREMIUM_FALLBACK_MODELS, never auto-selection.
-  'claude-sonnet-4-6',
-  'claude-opus-4-8',
-];
-
-/**
- * Default driver for a cloud run that has no explicit model selection. The cloud
- * gateway (`ideProxy`) dispatches on the FREE key, so the default must be a model
- * that is actually reachable there — the highest-priority CODING_MODEL_POOL entry
- * that also lives in FREE_MODEL_POOL. Paid coding models stay available via an
- * explicit (strict-pinned) user/agent selection.
- */
-export const CODING_DEFAULT_MODEL: string =
-  CODING_MODEL_POOL.find((m) => FREE_MODEL_POOL.includes(m)) ?? FREE_MODEL_POOL[0] ?? '';
-
-/**
- * True when `model` is a real catalog id (any vendor, any tier). Callers that
- * hard-pin a model (`modelStrict`) use this to avoid enforcing a typo'd / retired
- * id — which would 503 with no failover — and fall back to a safe default instead.
- */
-export function isKnownModel(model: string | undefined): boolean {
-  return typeof model === 'string' && model.trim().length > 0 && catalogEntry(model.trim()) !== null;
-}
-
-/**
- * Canonical strict-pin resolver — the single source of truth for "did this
- * request ask to hard-pin its model?" Both the request body (`modelStrict`
- * — the gateway-internal flag cloud coding agents set, OR `strict` — the
- * public SDK alias) and an optional `?strict=true` query param feed in here.
- *
- * Strict pin only applies when a non-empty `model` is also present; without a
- * named model there's nothing to pin, so it's a no-op (the gateway routes
- * by shape as usual). Callers normalize via this helper so the entitlement
- * gate, `complete()`'s dispatch branch, and the trace logger never diverge on
- * what counts as strict.
- */
-export function resolveStrictPin(
-  body: { model?: unknown; modelStrict?: unknown; strict?: unknown },
-  queryStrict?: boolean,
-): boolean {
-  const hasModel = typeof body.model === 'string' && body.model.length > 0;
-  if (!hasModel) return false;
-  return body.modelStrict === true || body.strict === true || queryStrict === true;
-}
-
-/**
- * Per-request inner-timeout override — lets a NON-premium tenant opt a single
- * long call into the extended vendor budget without flipping plans or premium
- * routing. Carried as `body._builderforce.vendorTimeoutMs` (the gateway-internal
- * passthrough envelope, stripped before vendor dispatch).
- *
- * Returns the requested value clamped to `(0, MAX_VENDOR_CALL_TIMEOUT_MS]`, or
- * `undefined` when absent / non-positive / non-numeric — in which case the
- * caller falls back to the proxy's configured `vendorCallTimeoutMs` (plan
- * default). The clamp keeps a one-off override from holding a Worker isolate
- * open longer than the premium path's own ceiling.
- */
-export function resolveVendorTimeoutOverride(
-  body: Record<string, unknown>,
-): number | undefined {
-  const envelope = body['_builderforce'];
-  if (!envelope || typeof envelope !== 'object') return undefined;
-  const raw = (envelope as Record<string, unknown>).vendorTimeoutMs;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return undefined;
-  return Math.min(Math.floor(n), MAX_VENDOR_CALL_TIMEOUT_MS);
-}
-
-/**
- * Per-request prompt-cache retention opt-in — lets a bursty tenant with a large
- * stable prefix keep it warm across idle gaps longer than the 5-minute ephemeral
- * default. Carried as `body._builderforce.cacheTtl` ('1h'); any other value
- * (including absent) resolves to the 5-minute default. Honoured only for
- * caching-capable (Anthropic-family) models by the OpenRouter vendor module —
- * see promptCaching.ts. Returns `'1h'` or `undefined` (= default 5m).
- */
-export function resolveCacheTtl(body: Record<string, unknown>): '1h' | undefined {
-  const envelope = body['_builderforce'];
-  if (!envelope || typeof envelope !== 'object') return undefined;
-  return (envelope as Record<string, unknown>).cacheTtl === '1h' ? '1h' : undefined;
-}
-
-/**
- * Premium routing pool — top PREMIUM-tier models only, used when a tenant has
- * `premium_override` set. Skips FREE and STANDARD entirely so a single attempt
- * lands on a high-quality model. Three candidates so the cascade has fallback
- * room within the extended outer budget (180s SDK / 60s per-vendor).
- *
- * Derived from `modelsByTier('PREMIUM')` so adding a new PREMIUM model to any
- * vendor catalog automatically extends the candidate list — and the first three
- * in registry order become the active premium cascade.
- */
-const PREMIUM_PRIORITY_COUNT = 3;
-export const PREMIUM_PRIORITY_POOL: readonly string[] =
-  autoRoutableModelsByTier('PREMIUM').slice(0, PREMIUM_PRIORITY_COUNT);
-
-/**
- * Per-vendor-call timeout for premium routing. PREMIUM-tier models on long-
- * context inputs (resume tailoring, structured job extraction) routinely take
- * 30-50s end-to-end; the default 25s budget kills these prematurely. Paired
- * with the extended SDK outer budget so all three premium candidates can be
- * tried within one request.
- */
-export const PREMIUM_VENDOR_CALL_TIMEOUT_MS = 60_000;
-
-/**
- * Per-vendor-call timeout for the FREE plan. Free-tier upstreams that haven't
- * started streaming within ~15s are, empirically, going to burn the full 25s
- * default and time out anyway (see the all-`408` free attempts in trace
- * `llm-71b468dd-...`, 2026-06-07). Shrinking the per-attempt budget lets a
- * saturated free pool fail fast so the request reaches the guaranteed paid
- * backstop within the caller's deadline instead of spending 2×25s up front.
- * Paid/premium routing keeps the longer budget — those calls are worth waiting
- * for. The backstop itself overrides this with `PREMIUM_VENDOR_CALL_TIMEOUT_MS`.
- */
-export const FREE_VENDOR_CALL_TIMEOUT_MS = 15_000;
-
-/**
- * Guaranteed paid backstop — a single low-cost, low-variance paid model
- * dispatched on the *credited* (Pro) OpenRouter key after the primary cascade
- * fails (or every candidate is on cooldown), regardless of the request's plan.
- *
- * Why this exists separately from `PREMIUM_FALLBACK_MODELS`: that chain runs on
- * whatever key the plan resolves to. On the FREE plan that's the free
- * OpenRouter key, which may lack the credit to actually pay for the paid Gemini
- * entry — so the only "safety net" 402s and the request hard-fails (the
- * `AI_UNAVAILABLE` symptom on hired.video's tailor endpoint). The backstop
- * closes that hole: Builderforce funds this one cheap call (~$0.0001) as the
- * reliability floor so a saturated free pool never surfaces a hard failure.
- */
-export const GUARANTEED_BACKSTOP_MODEL = 'google/gemini-2.5-flash-lite';
-
-/**
- * Cheapest reliable paid coder — the head of the coding reliability floor and the
- * ONLY coding model treated as paid-overflow by id (see `PAID_OVERFLOW_MODELS`).
- * A `CODING_MODEL_POOL` member reachable on the credited OpenRouter key.
- */
-export const CHEAPEST_PAID_CODER = 'deepseek/deepseek-v4-flash'; // $0.10/$0.20
-
-/**
- * Coding-capable premium fallback chain — the coding analogue of
- * `PREMIUM_FALLBACK_MODELS`. A coding run must NEVER fall through to a general
- * non-coder (the gemini-flash family loops on search and ships no edits — see
- * execution #59), so when the curated coding pool is exhausted the cascade
- * escalates to *paid coders* on the credited key instead of the non-coder gemini
- * chain. Vendor-diverse (Cloudflare / DeepSeek / Xiaomi / Anthropic) so one
- * upstream outage doesn't sink the floor. Every id is a paid `CODING_MODEL_POOL`
- * member, so `LlmProxyService.codingPool.test` trips if a rename drifts it off
- * catalog.
- *
- * `leadPoolWithVendor(…, PAID_LEAD_VENDOR)` floats the Cloudflare coder to the
- * head: its first ~10K neurons/day are free, so an exhausted coding cascade spends
- * that allowance before any metered coder. The remaining entries stay cheapest-
- * reliable-first (DeepSeek → Xiaomi → OpenRouter-routed Claude), then the
- * DIRECT-ANTHROPIC last-resort floor: the OpenRouter-routed coders all share
- * OpenRouter's availability, so an OpenRouter-wide outage sinks them together —
- * `claude-sonnet-4-6` / `claude-opus-4-8` call Claude DIRECTLY on CLAUDE_API_KEY
- * (independent availability), Sonnet first (cheaper). Any vendor whose key is
- * unbound no-key-skips at dispatch, so the chain degrades cleanly to whatever is
- * reachable and surfaces an honest exhaustion only if nothing is.
- */
-export const CODING_PREMIUM_FALLBACK_MODELS: readonly string[] = leadPoolWithVendor([
-  CHEAPEST_PAID_CODER,           // $0.10/$0.20 — cheapest reliable paid coder (OpenRouter)
-  'xiaomi/mimo-v2.5',            // $0.14/$0.28 — OpenRouter Programming #1
-  // Cloudflare Workers AI coders — FREE up to the daily neuron allowance; `leadPoolWithVendor`
-  // floats all of these to the head so the free neurons are spent before any metered coder.
-  // Big-window first (a coding context can exceed a small window → 413 → cascade).
-  '@cf/zai-org/glm-4.7-flash',                 // 128K ctx
-  '@cf/moonshotai/kimi-k2.7-code',             // 256K ctx
-  '@cf/qwen/qwen3-30b-a3b-fp8',                // 32K ctx
-  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',  // 24K ctx
-  'anthropic/claude-sonnet-4.6', // strongest agentic coder (via OpenRouter)
-  'claude-sonnet-4-6',           // direct-Anthropic last-resort floor (CLAUDE_API_KEY)
-  'claude-opus-4-8',
-], PAID_LEAD_VENDOR);
-
-/**
- * Coding-capable backstop chain — the reliability floor for a *coding* run,
- * dispatched on the credited key after the primary coding cascade fails.
- *
- * `GUARANTEED_BACKSTOP_MODEL` (gemini-2.5-flash-lite) is a cheap general model
- * chosen for low variance, NOT for code. Flooring a coding run onto a non-coder
- * means the run flails and gives up without writing code (observed in execution
- * #59), so the coding floor is *coders only* — no general backstop tail. If every
- * paid coder is also down the run surfaces `cascade_exhausted` rather than
- * silently degrading onto a non-coder, because an honest failure beats a coding
- * agent that loops on search and ships nothing.
- */
-export const CODING_BACKSTOP_MODELS: readonly string[] = CODING_PREMIUM_FALLBACK_MODELS;
-
-/**
- * Premium fallback chain — appended to *every* non-strict candidate chain so a
- * fully-saturated free pool never surfaces an `LLM_UNAVAILABLE` / cascade-
- * exhausted 429 to the caller. Direct Google AI (`googleai/*`) is tried first
- * because it has the lowest variance and isn't subject to OpenRouter's shared
- * rate limits; the OpenRouter Gemini entry is the vendor-diverse backup so a
- * Google AI outage still resolves through a different upstream.
- *
- * Each entry is skipped at chain-build time when its vendor key is unbound or
- * the model is on cooldown.
- */
-export const PREMIUM_FALLBACK_MODELS: readonly string[] = [
-  'googleai/gemini-2.5-flash',
-  'googleai/gemini-2.5-flash-lite',
-  'google/gemini-2.5-flash-lite', // via OpenRouter — vendor-diverse backup
-];
-
-/**
- * Paid-overflow model set — the models Builderforce funds on its OWN keys when a
- * tenant's primary cascade is exhausted: the premium fallback chain, the general
- * reliability backstop, and the cheap coding floor (`CHEAPEST_PAID_CODER`). A
- * usage row resolved to one of these is "overflow spend" — metered against a
- * per-tenant daily $ cap so a Free tenant in a tight retry loop can't run up
- * arbitrary spend on our keys (the cap is enforced in the gateway route; see
- * `paid_overflow_daily_cap`).
- *
- * By-id detection is deliberately conservative here: the *stronger* coding-floor
- * coders (`xiaomi/mimo-v2.5`, `anthropic/claude-sonnet-4.6`) are Pro plan-pool
- * models, so flagging them by id would mis-meter a Pro tenant's legitimate plan
- * usage as overflow. Their genuine overflow case — resolving via the funded
- * coding *backstop* — is metered directly by `complete()` (which sets
- * `paidOverflow = true` on any backstop hit), not by this set. Every id that IS
- * in this set resolves only via the funded path (the gemini fallbacks live in no
- * plan pool; `CHEAPEST_PAID_CODER` is the historically-funded coding floor).
- */
-export const PAID_OVERFLOW_MODELS: ReadonlySet<string> = new Set<string>([
-  ...PREMIUM_FALLBACK_MODELS,
-  CHEAPEST_PAID_CODER,
+//   modelPool      — which models exist, in what order, for which plan (leaf).
+//   poolRouting    — in what order should the pool be tried for THIS request?
+//   responseFormat — does a model's reply satisfy the requested response_format?
+// ─────────────────────────────────────────────────────────────────────────────
+import {
+  CODING_BACKSTOP_MODELS,
+  CODING_DEFAULT_MODEL,
+  CODING_FREE_ATTEMPT_BUDGET,
+  CODING_MODEL_POOL,
+  CODING_PREMIUM_FALLBACK_MODELS,
+  COOLDOWN_PREFETCH_LIMIT,
+  FREE_ATTEMPT_BUDGET,
+  FREE_MODEL_POOL,
+  FREE_VENDOR_CALL_TIMEOUT_MS,
   GUARANTEED_BACKSTOP_MODEL,
-  // Direct-Anthropic floor — unlike `anthropic/claude-sonnet-4.6` (a Pro plan-pool
-  // model whose normal use must NOT be metered as overflow), these bare-id direct
-  // models live in NO plan pool: any resolution onto them is Builderforce funding a
-  // call on its own CLAUDE_API_KEY, so they are overflow spend by id on every path
-  // (primary appended-fallback OR credited backstop) and count against the cap.
-  'claude-sonnet-4-6',
-  'claude-opus-4-8',
-]);
-
-/** True when `model` resolved via the funded overflow path (premium fallback or
- *  a reliability-floor backstop) — i.e. Builderforce paid for it, not the tenant
- *  via their plan pool. Drives the `paid_overflow` usage flag + per-tenant cap. */
-export function isPaidOverflowModel(model: string | undefined | null): boolean {
-  return model != null && PAID_OVERFLOW_MODELS.has(model);
-}
-
-/**
- * Maximum number of FREE-tier attempts the cascade walks before falling through
- * to the premium fallback chain. Caps "we cycled 20 free models and still
- * 429'd" failure modes: every request now ends with at most 2 free attempts +
- * the premium fallback list, so callers reliably get a successful response
- * even when the free pool is saturated.
- *
- * Non-FREE models in the seed (Pro/Teams paid models, premium-priority routing)
- * are not affected by this cap — they're kept verbatim in the chain so paying
- * tenants still get the models their plan unlocks.
- */
-export const FREE_ATTEMPT_BUDGET = 2;
-
-/**
- * Pro/Teams free-tier breadth: paying tenants try MORE free models before the
- * cascade escalates to their paid premium pool. The 2-attempt cap above is
- * tuned for latency-sensitive Free-plan traffic (reach the guaranteed paid
- * backstop fast); a Pro tenant who is *already paying* benefits more from extra
- * free-tier coverage (a wider shot at a $0 model) than from a few hundred ms of
- * latency. Still bounded so the cascade can't walk the whole 40-model free pool.
- */
-export const PRO_FREE_ATTEMPT_BUDGET = 5;
-
-/**
- * Plan-aware general FREE-attempt budget (NON-coding). Free → the latency-tuned
- * 2; Pro/Teams → the wider {@link PRO_FREE_ATTEMPT_BUDGET}. Single source so the
- * proxy factory doesn't hardcode the constant — closes the "Pro plan's free-tier
- * section is also capped at 2 attempts, no Pro-specific carve-out" gap.
- *
- * Coding runs are unaffected: they pass `CODING_FREE_ATTEMPT_BUDGET` (the whole
- * free coding pool) explicitly and never consult this.
- */
-export function freeAttemptBudgetForPlan(effectivePlan: EffectivePlan): number {
-  return effectivePlan === 'free' ? FREE_ATTEMPT_BUDGET : PRO_FREE_ATTEMPT_BUDGET;
-}
-
-/**
- * FREE-attempt budget for a CODING run — deliberately the WHOLE free coding pool,
- * not the 2-attempt general cap.
- *
- * A coding run is a long-lived background job (container / durable loop, ~180s
- * outer budget), so unlike an interactive request it values COST over a few
- * seconds of latency. The general 2-attempt cap escalates to PAID coders — and
- * ultimately the funded direct-Anthropic floor on a METERED key — after only two
- * free coders, which is how a $10 Anthropic cap got drained while ~9 free coders
- * (minimax / glm / nemotron / qwen-coder / …) sat untried. Budgeting the entire
- * free coding pool means every free coder is attempted BEFORE any paid coder, so
- * the metered floor is genuinely last-resort (10+ models tried first), not a
- * second-attempt default.
- *
- * Derived from the pool so it tracks automatically as free coders are added.
- */
-export const CODING_FREE_ATTEMPT_BUDGET: number =
-  CODING_MODEL_POOL.filter((m) => FREE_MODEL_POOL.includes(m)).length;
-
-/** First N models of the active pool form the round-robin "preferred" group.
- *  Aligned with FREE_ATTEMPT_BUDGET so the round-robin window matches the cap. */
-export const PREFERRED_POOL_SIZE = 2;
-
-/**
- * Hard cap on how many seed models get a cooldown KV read up-front.
- *
- * The model pool can contain 40+ FREE entries across all vendors. Without this
- * cap, every `complete()` call issued one KV `get` per pool entry just to
- * prefetch cooldown state — ~50 subrequests *before* the first vendor fetch.
- * Cloudflare's per-invocation subrequest cap (50 free / 1000 paid) was being
- * exhausted by the bookkeeping path alone (production trace
- * `llm-2cc6ba1b-...`, 2026-05-26: cooldown reads + 6 vendor attempts =
- * cascade collapse with `Too many subrequests by single Worker invocation`).
- *
- * Why 12: `FREE_ATTEMPT_BUDGET` (=2) + `PREMIUM_FALLBACK_MODELS.length` (3) +
- * caller-pinned hint (1) is the minimum the chain composer can use; 12 leaves
- * headroom for ~6 cooled-and-skipped FREE entries before the composer's
- * walking-the-pool-looking-for-non-cooled loop runs dry — which is far more
- * skips than we've ever observed simultaneously, since cooldowns expire on
- * 5–30 minute windows. The shape-reorder + caller-hint prefix ensures the
- * 12 entries actually queried are the most likely to be tried.
- *
- * Trade-off: a model past index 12 that *is* cooled won't be filtered out of
- * the chain composer's view, so it could be attempted at dispatch time and
- * fail. The dispatcher records the failure and re-cools the model — the next
- * request sees the cooldown if the same model lands in the leading 12. Net
- * effect: a one-request lag on a stale cooldown, in exchange for a hard
- * upper bound on KV subrequests per gateway call.
- */
-export const COOLDOWN_PREFETCH_LIMIT = 12;
-
+  PREFERRED_POOL_SIZE,
+  PREMIUM_FALLBACK_MODELS,
+  PREMIUM_PRIORITY_POOL,
+  PREMIUM_VENDOR_CALL_TIMEOUT_MS,
+  PRO_MODEL_POOL,
+  byoAutoSeedModels,
+  canonicalModelId,
+  explicitModelPreemptsByo,
+  freeAttemptBudgetForPlan,
+  isKnownModel,
+  isPaidOverflowModel,
+  resolveCacheTtl,
+  resolveStrictPin,
+  resolveVendorTimeoutOverride,
+} from './modelPool';
+export * from './modelPool';
 // ---------------------------------------------------------------------------
 // Public types — kept stable for callers (llmRoutes, ideAiRoutes)
 // ---------------------------------------------------------------------------
@@ -537,6 +142,12 @@ export interface ChatCompletionRequest {
    *  `model` with NO substitution — an unavailable model 503s rather than
    *  silently swapping. Normalized onto `modelStrict` by `resolveStrictPin`. */
   strict?: boolean;
+  /** OPTIONAL vendor-neutral reasoning intent (the VS Code chat "Thinking" toggle).
+   *  Omitted entirely when the toggle is off. The level names are `AgentThinkLevel`
+   *  members, so `reasoningCapability` maps them to the CORRECT vendor param for the
+   *  model that actually serves — or drops them for a family that can't accept one.
+   *  Gateway-only: consumed in `dispatch()`, never forwarded to a vendor. */
+  reasoning?: { level?: string };
   messages: ChatMessage[];
   temperature?: number;
   max_tokens?: number;
@@ -577,6 +188,11 @@ export interface FailoverEvent {
    *  failure class (e.g. a Gemini schema 400 normalized to the 422 request-error
    *  class records `upstreamStatus: 400`). Absent when `code` IS the upstream status. */
   upstreamStatus?: number;
+  /** Human-readable failure detail (the vendor error message / thrown `Error.message`,
+   *  truncated). Critical for the `code: 0` case, where the status alone ("no response")
+   *  hides WHY the vendor `fetch()` threw — e.g. `network: <cause>` or a rejected body.
+   *  Surfaced in diagnostics so a connected-account failure names its own cause. */
+  detail?: string;
 }
 
 export interface ProxyResult {
@@ -599,6 +215,16 @@ export interface ProxyResult {
    *  model. The route stamps this onto the usage row so overflow spend can be
    *  capped per tenant. See {@link isPaidOverflowModel}. */
   paidOverflow?: boolean;
+  /** True when the tenant's OWN provider credential (a connected subscription or
+   *  a BYO vendor key) served this call — so the platform pays nothing. The route
+   *  stamps it onto the usage row as `byo`, which forces cost 0 and (for on-prem /
+   *  VSIX surfaces) exempts the row from the plan token allowance. Stamped by
+   *  finalize() via {@link isTenantFunded}. */
+  byoFunded?: boolean;
+  /** True when the final model came from a tenant-registered OpenRouter
+   * connection. These calls carry the flat platform routing surcharge whether
+   * they used Builderforce's key or the tenant's own OpenRouter key. */
+  platformSurcharge?: boolean;
   /** Number of times the gateway re-dispatched on non-conforming JSON output
    *  (only applies when `body.response_format.type` is `json_object`/`json_schema`). */
   schemaRetries?: number;
@@ -619,6 +245,7 @@ export interface ProxyResult {
   candidateChain?: string[];
   /** success | cascade_exhausted | all_cooldown | subrequest_exhausted |
    *  strict_unavailable | schema_nonconforming | request_error |
+   *  byo_unavailable (BYO required but no connected provider can serve) |
    *  schema_too_complex (every candidate rejected the json_schema as too complex). */
   outcome?: string;
   /** Rolled-up failure class across attempts — rate_limit | timeout | auth |
@@ -629,6 +256,57 @@ export interface ProxyResult {
    *  back to the caller (the per-attempt error text can contain raw upstream
    *  provider payloads). */
   attempts?: DispatchAttempt[];
+}
+
+/** Assistant message shape carried in a chat-completion choice. */
+export interface ProxyChoiceMessage {
+  role?: string;
+  content?: string | null;
+  tool_calls?: Array<{ id: string; type?: string; function: { name: string; arguments?: string } }>;
+}
+
+/** The unwrapped first choice of a {@link ProxyResult}. */
+export interface ProxyChoice {
+  /** The raw assistant message (undefined on a non-JSON / error body). */
+  message: ProxyChoiceMessage | undefined;
+  /** Trimmed assistant text — `''` when the turn was tool-only, genuinely empty, or the
+   *  body was a non-2xx/non-JSON envelope. */
+  content: string;
+  /** Tool calls the model requested (empty array when none). */
+  toolCalls: NonNullable<ProxyChoiceMessage['tool_calls']>;
+  /** OpenAI `finish_reason` (`stop` | `tool_calls` | `length` | …), `''` when absent. */
+  finishReason: string;
+  /** Full parsed OpenAI-shaped body, for callers that also need `usage`/`error`/etc. */
+  body: Record<string, unknown> | null;
+}
+
+/**
+ * THE single place a {@link ProxyResult}'s HTTP Response body is unwrapped into its first
+ * chat choice. `ProxyResult.response` is an HTTP `Response` (a JSON body), NOT the parsed
+ * object — every consumer MUST `await` its `.json()`. Reading `.choices` straight off the
+ * Response (as several call sites historically did) silently yields `undefined` and
+ * empties EVERY reply regardless of what the model returned. Centralising the unwrap here
+ * kills that whole class of bug and the extraction duplication that let it hide in one
+ * surface while working in others.
+ *
+ * The Response is CLONED, so callers may still read `result.response` (`.status` / `.ok`)
+ * and background metering may re-read the original body. A non-2xx or non-JSON body yields
+ * empty fields (never throws), so a caller can gate on `result.response.status` first and
+ * treat `content === ''` as "no usable output".
+ */
+export async function readProxyChoice(result: { response: Response }): Promise<ProxyChoice> {
+  const body = (await result.response.clone().json().catch(() => null)) as
+    | { choices?: Array<{ message?: ProxyChoiceMessage; finish_reason?: string }> }
+    | null;
+  const choice = body?.choices?.[0];
+  const message = choice?.message;
+  return {
+    message,
+    content: (typeof message?.content === 'string' ? message.content : '').trim(),
+    toolCalls: message?.tool_calls ?? [],
+    finishReason: choice?.finish_reason ?? '',
+    body: body as Record<string, unknown> | null,
+  };
 }
 
 export type ProductName = 'builderforceLLM' | 'builderforceLLMPro' | 'builderforceLLMTeams';
@@ -705,6 +383,49 @@ export interface LlmProxyOptions {
    *  tenant's own subscription — and is NOT metered as paid-overflow (it's $0 to
    *  us). Resolved per request from `resolveAnthropicOAuthToken`. */
   anthropicOAuthToken?: string | null;
+  openaiCodexAuth?: { accessToken: string; accountId: string } | null;
+  xaiOAuthToken?: string | null;
+  /** A tenant's BYO api-key credentials (OpenAI / Google / Anthropic) keyed by
+   *  provider. When set, vendorEnv overrides the matching operator env key with
+   *  the tenant's key for that vendor and marks the vendor tenant-funded (byo) —
+   *  so its usage is $0 to us and metered per the BYO rules. Resolved per request
+   *  from {@link resolveTenantVendorKeys}. */
+  tenantVendorKeys?: TenantVendorKeys | null;
+  /** The tenant's BYO PRECEDENCE as ordered gateway vendor ids (most-preferred first).
+   *  Threaded into the auto-select connected-flagship seed ({@link byoAutoSeedModels})
+   *  so the gateway completion seed leads with the owner's chosen account (e.g. Meta
+   *  first), matching the cloud-agent pin. Empty/undefined = catalog-tier order. */
+  byoVendorPriority?: readonly string[];
+  /** Shared precedence ranks for provider accounts. Unlike `byoVendorPriority`,
+   * this preserves gaps occupied by OpenRouter connections so both kinds can
+   * interleave in one ordered list. */
+  byoProviderPriorities?: readonly { vendor: string; priority: number | null }[];
+  /** Named OpenRouter registrations and their selected model sets. */
+  openRouterConnections?: readonly OpenRouterConnection[];
+  /** Bare OpenRouter model id -> tenant key for keyed registrations. */
+  openRouterModelKeys?: Readonly<Record<string, string>>;
+  /** A tenant has selected BYO execution, even if every stored credential is
+   *  temporarily unresolved. Prevents an expired/revoked key from silently
+   *  changing the funding source to BuilderForce's shared pool. */
+  byoRequired?: boolean;
+  /** What the tenant CONFIGURED (a stored credential row per provider) and, for each
+   *  provider that could not be resolved this call, WHY. Diagnostics only — routing
+   *  never reads it. It exists so a fail-closed BYO 503 can NAME the providers and the
+   *  models it walked instead of asserting a bare "no configured provider is usable",
+   *  which reads as a lie to an operator looking at four connected accounts in the UI.
+   *  Sourced from {@link TenantLlmCredentials} (`configuredProviders` +
+   *  `unresolvedReasons`), the same fields behind `x-builderforce-byo-unresolved`. */
+  byoDiagnostics?: ByoDiagnostics;
+}
+
+/** Configured-vs-resolved BYO state, carried purely so a fail-closed 503 can explain
+ *  itself. Mirrors the {@link TenantLlmCredentials} fields it is built from. */
+export interface ByoDiagnostics {
+  /** Every provider with a stored credential row — what the UI shows as "connected". */
+  configuredProviders?: readonly string[];
+  /** provider → why it produced no usable credential this call (`revoked`, `expired`,
+   *  `undecryptable`, …). Only populated for a configured-but-unresolved provider. */
+  unresolvedReasons?: Readonly<Record<string, string>>;
 }
 
 export class LlmProxyService {
@@ -719,6 +440,16 @@ export class LlmProxyService {
   private readonly codingOnly: boolean;
   private readonly freeBudget: number;
   private readonly anthropicOAuthToken: string | null;
+  private readonly openaiCodexAuth: { accessToken: string; accountId: string } | null;
+  private readonly xaiOAuthToken: string | null;
+  private readonly tenantVendorKeys: TenantVendorKeys;
+  private readonly byoVendorPriority: readonly string[];
+  private readonly byoProviderPriorities: readonly { vendor: string; priority: number | null }[];
+  private readonly openRouterConnections: readonly OpenRouterConnection[];
+  private readonly openRouterModelKeys: Readonly<Record<string, string>>;
+  private readonly openRouterConnectionModels: ReadonlySet<string>;
+  private readonly byoRequired: boolean;
+  private readonly byoDiagnostics: ByoDiagnostics;
 
   constructor(env: ProxyEnv, options?: LlmProxyOptions) {
     this.env = env;
@@ -732,6 +463,22 @@ export class LlmProxyService {
     this.codingOnly = options?.codingOnly ?? false;
     this.freeBudget = options?.freeBudget && options.freeBudget > 0 ? options.freeBudget : FREE_ATTEMPT_BUDGET;
     this.anthropicOAuthToken = options?.anthropicOAuthToken ?? null;
+    this.openaiCodexAuth = options?.openaiCodexAuth ?? null;
+    this.xaiOAuthToken = options?.xaiOAuthToken ?? null;
+    this.tenantVendorKeys = options?.tenantVendorKeys ?? {};
+    this.byoVendorPriority = options?.byoVendorPriority ?? [];
+    this.byoProviderPriorities = options?.byoProviderPriorities ?? [];
+    this.openRouterConnections = options?.openRouterConnections ?? [];
+    this.openRouterModelKeys = options?.openRouterModelKeys ?? {};
+    this.openRouterConnectionModels = new Set(connectionModelRefs(this.openRouterConnections));
+    this.byoRequired = options?.byoRequired ?? false;
+    this.byoDiagnostics = options?.byoDiagnostics ?? {};
+    // Mark every vendor a BYO key overrides as tenant-funded up front, so any
+    // resolution landing on that vendor this request is stamped byo (cost 0,
+    // on-prem/VSIX exempt). vendorEnv() applies the matching key override.
+    for (const provider of Object.keys(this.tenantVendorKeys) as Array<keyof TenantVendorKeys>) {
+      if (this.tenantVendorKeys[provider]) this.tenantFundedVendors.add(PROVIDER_VENDOR_MAP[provider].vendorId as VendorId);
+    }
   }
 
   /** True when this result was served by the tenant's connected Claude SUBSCRIPTION
@@ -739,7 +486,85 @@ export class LlmProxyService {
    *  must NOT be metered as paid-overflow. The vendor only ever uses OAuth when the
    *  token is present, so vendor=anthropic + token bound ⇒ subscription-funded. */
   private isSubscriptionFunded(result: ProxyResult): boolean {
-    return this.anthropicOAuthToken != null && result.resolvedVendor === 'anthropic';
+    return (this.anthropicOAuthToken != null && result.resolvedVendor === 'anthropic')
+      || (this.openaiCodexAuth != null && result.resolvedVendor === 'openai-codex')
+      || (this.xaiOAuthToken != null && result.resolvedVendor === 'xai-oauth');
+  }
+
+  /** Gateway vendor ids the tenant can serve from their OWN connected account this
+   *  request — a BYO api-key (any provider) OR a connected subscription (Anthropic /
+   *  ChatGPT-Codex / SuperGrok) on its OAuth vendor. Derived through the SHARED
+   *  {@link byoVendorIdsFromCredentials} so the ids the gateway SEEDS
+   *  ({@link byoAutoSeedModels}) can never disagree with the ids the BYO boundary
+   *  filter in {@link buildCandidateChain} keeps. */
+  private get connectedByoVendors(): Set<string> {
+    // Memoized: the credentials are fixed for this instance's lifetime, and this set is
+    // read per-candidate by the BYO chain filter and per-attempt by the cooldown scope
+    // check — rebuilding it in those loops was pure waste.
+    this.connectedByoVendorsMemo ??= byoVendorIdsFromCredentials({
+      anthropicOAuthToken: this.anthropicOAuthToken,
+      openaiCodexAuth: this.openaiCodexAuth,
+      xaiOAuthToken: this.xaiOAuthToken,
+      vendorKeys: this.tenantVendorKeys,
+    });
+    return this.connectedByoVendorsMemo;
+  }
+
+  private connectedByoVendorsMemo?: Set<string>;
+
+  /**
+   * Cooldown SCOPE — is this vendor served by the tenant's OWN credential this request?
+   *
+   * The cooldown store is keyed globally (`cooldown:<vendor>:<model>`, see
+   * cooldownStore.ts), which is exactly right for the operator's SHARED keys: one 429 on
+   * our OpenRouter key really does mean the next request should skip that model. It is
+   * wrong in BOTH directions once the call rides a tenant's own account:
+   *
+   *   - READ: a bench written by our shared key — or by another tenant's lapsed
+   *     subscription — says nothing about THIS owner's account. Gating on it hides a
+   *     healthy credential, and on the strict-pin path turns it into a hard 503 that the
+   *     caller reads as "your provider is unavailable" (which is how a green Integrations
+   *     card could sit next to a failing Test connection).
+   *   - WRITE: an owner's own 401 would bench that model for our shared key AND for every
+   *     other tenant, so one expired token starves the pool for everybody.
+   *
+   * So a vendor the tenant can serve themselves is exempt from the cooldown keyspace
+   * entirely. Its failure signal lives in two stores that ARE tenant-scoped:
+   * `vendorHealth` (governs BYO seed ORDER) and `providerAuthAlerts` (drives the
+   * "reconnect this account" prompt + the daily BYO credential probe's email). This is
+   * the same rule the non-strict path already applied via its BYO probe backstop —
+   * stated once, here, so strict dispatch, chain composition and cooldown writes agree.
+   */
+  private isOwnerServedVendor(vendor: string): boolean {
+    return this.connectedByoVendors.has(vendor);
+  }
+
+  /** Model-specific ownership is required for OpenRouter: one registration may
+   * use the tenant's key while another uses the managed key, even in one chain. */
+  private isOwnerServedModel(model: string): boolean {
+    return this.isOwnerServedVendor(vendorForModel(model))
+      || (vendorForModel(model) === 'openrouter' && !!this.openRouterModelKeys[bareModelId(model)]);
+  }
+
+  /** Vendors whose call was served with a tenant's OWN BYO credential this
+   *  request (populated by {@link vendorEnv} when it overlays a per-tenant key on
+   *  the operator env). Combined with the Anthropic-subscription case, this is the
+   *  full "the tenant funded it" signal for any provider. */
+  private readonly tenantFundedVendors = new Set<VendorId>();
+
+  /** True when the tenant's OWN provider credential served the call — a connected
+   *  Claude subscription OR a BYO vendor key (OpenAI/Google/Anthropic). The single
+   *  source of truth for ProxyResult.byoFunded, generalizing isSubscriptionFunded
+   *  across every provider. */
+  private isTenantFunded(result: ProxyResult): boolean {
+    return this.isSubscriptionFunded(result)
+      || this.tenantFundedVendors.has(result.resolvedVendor)
+      || this.isOwnerServedModel(result.resolvedModel);
+  }
+
+  /** BYO is strict when configured OR when at least one credential resolved. */
+  private get byoStrict(): boolean {
+    return this.byoRequired || this.connectedByoVendors.size > 0;
   }
 
   /** The premium fallback chain appended to every cascade — empty when the tenant
@@ -748,7 +573,10 @@ export class LlmProxyService {
    *  so it never resolves onto a general non-coder. Single source for both the
    *  cooldown-prefetch and the chain. */
   private get premiumFallback(): readonly string[] {
-    if (this.disablePaidOverflow) return [];
+    // A usable connected credential makes this a BYO-strict request. Never append
+    // BuilderForce-funded models behind the owner's account: an upstream failure
+    // must stay inside the owner's connected providers or surface honestly.
+    if (this.disablePaidOverflow || this.byoStrict) return [];
     return this.codingOnly ? CODING_PREMIUM_FALLBACK_MODELS : PREMIUM_FALLBACK_MODELS;
   }
 
@@ -776,10 +604,21 @@ export class LlmProxyService {
     requestHeaders?: Record<string, string>,
     traceId?: string,
     signal?: AbortSignal,
+    opts?: { estimatedTokens?: number },
   ): Promise<ProxyResult> {
     const startedAt = Date.now();
     const tid = traceId ?? newTraceId();
-    const callerModel = (body as { model?: unknown }).model;
+    // Rewrite a superseded pin to its live successor BEFORE anything reads it. This is
+    // the gateway-side seam of {@link canonicalModelId}: `body.model` is whatever the
+    // caller had stored (an agent base_model, a lane default, an SDK pin), and that can
+    // be months old. Rewriting here covers the strict-pin branch and the chained branch
+    // together, so a retired id can never reach `dispatch` — and can never be filtered
+    // out of the BYO seed as "not dispatchable", which is what turned a stale Opus pin
+    // into a bare `byo_unavailable` with four providers connected.
+    const rawCallerModel = (body as { model?: unknown }).model;
+    const callerModel = typeof rawCallerModel === 'string' && rawCallerModel.trim()
+      ? canonicalModelId(rawCallerModel)
+      : rawCallerModel;
     // `modelStrict` OR the public `strict` alias → single-model hard pin. Both
     // funnel through `resolveStrictPin` (which also enforces the "model present"
     // precondition) so the service can't disagree with the route's gate.
@@ -808,18 +647,113 @@ export class LlmProxyService {
     //     two routing rules compose. The capability order from the shape sort is
     //     preserved as the within-tier tiebreak.
     const useCase = (body as { useCase?: unknown }).useCase;
-    const routedPool: readonly string[] = isQualityCriticalUseCase(typeof useCase === 'string' ? useCase : undefined)
+    const useCaseStr = typeof useCase === 'string' ? useCase : undefined;
+    const qualityCritical = isQualityCriticalUseCase(useCaseStr);
+    let routedPool: readonly string[] = qualityCritical
       ? reorderPoolForQuality(reorderedPool, {
           strictSchema: (body as { response_format?: { type?: string } }).response_format?.type === 'json_schema',
         })
       : reorderedPool;
 
+    // 1b2) Agentic tool-loop (the request carries `tools`) is coding-critical: a
+    //      long tool-calling analysis turn served by a cheap generalist loops
+    //      without converging. `reorderPoolByShape` above floats every tools-capable
+    //      model equally, so a merely-tool-advertising generalist can still lead its
+    //      bucket; this pass promotes the real CODING_MODEL_POOL drivers ahead of
+    //      them. A pure permutation of the plan pool — free tenants only float their
+    //      own free coding models (no plan escalation). Skipped for quality-critical
+    //      traffic (output-quality writers, ranked by tier just above).
+    if (!qualityCritical && inferShape(body).hasTools) {
+      routedPool = reorderPoolForCoding(routedPool);
+    }
+
+    // 1c) Context-fit first pass: when the caller estimates how many tokens the
+    //     turn will send, drop pool models whose catalog window can't hold it, so
+    //     a small-window model isn't SEEDED into a context it would 413 on (the
+    //     97K-into-32K bug — the exact "Brain dies after several executions"
+    //     failover). Never empties the pool (see modelsFittingContext); oversized
+    //     requests still fall through to the normal cascade + 413 failover.
+    const fittedPool = modelsFittingContext(routedPool, opts?.estimatedTokens);
+
     // 2) Caller hint goes at the head; rest of the pool follows.
-    //    `callerModel` was extracted at the top of this function for the
-    //    strict-pin branch; reuse it here for the chained path.
-    const seed: readonly string[] = (typeof callerModel === 'string' && callerModel.length > 0)
-      ? [callerModel, ...routedPool.filter((m) => m !== callerModel)]
-      : routedPool;
+    //    `callerModel` was extracted at the top of this function for the strict-pin
+    //    branch; reuse it here for the chained path. With NO caller model, the
+    //    owner's connected accounts lead the pool (soft seed) so an auto-select turn
+    //    uses the tenant's OWN premium frontier model(s) before the free/paid tiers —
+    //    registration-driven (one flagship per connected provider, strongest tier
+    //    first), NOT a fixed vendor; Opus/Sonnet for Anthropic per turn shape. The
+    //    cascade then fails over across the owner's other connected accounts, and the
+    //    plan pool stays behind them all as final fallback. See byoAutoSeedModels.
+    // A non-strict caller `model` is a HINT, not an override of the tenant's connected
+    // account. Honour it at the head ONLY when it PREEMPTS the BYO seed — nothing
+    // connected, or the model is itself served by a connected BYO vendor (see
+    // {@link explicitModelPreemptsByo}). A NON-BYO caller model (the VS Code Brain's
+    // configured `defaultModel`, a stale coder default, any SDK caller's pin) must NOT
+    // shadow the connected flagship: otherwise a tenant with a connected Claude account
+    // silently runs a weak free coder — the "should have selected Opus" regression. This
+    // is the SAME invariant `byoAwareModel`/`explicitModelPreemptsByo` enforce on the
+    // tenantProxy + /v1/messages paths; applying it centrally HERE stops the gateway
+    // completion seed from drifting from them (a caller model bypassed the gate before).
+    // A shadowed hint still joins the pool just BEHIND the flagship, so it's the first
+    // failover after the connected account rather than being dropped.
+    const hasCallerModel = typeof callerModel === 'string' && callerModel.length > 0;
+    const connectedByo = this.connectedByoVendors;
+    // ONE rule, and it must see the REGISTERED refs too: an OpenRouter connection
+    // contributes no BYO vendor, so a vendor-only test would let a stale caller default
+    // lead over the connection the tenant ranked #1 (see explicitModelPreemptsByo).
+    const callerLeads = hasCallerModel
+      && explicitModelPreemptsByo(callerModel as string, connectedByo, this.openRouterConnectionModels);
+    // Demote any connected vendor on a 5xx streak out of the LEAD position (it stays
+    // in the seed — see `byoAutoSeedModels`). Returns an empty set and issues no reads
+    // when nothing is connected, so the non-BYO path is untouched.
+    const demotedVendors = await loadDemotedVendors(this.env, connectedByo);
+    const providerSeeds = byoAutoSeedModels(connectedByo, {
+      agentic: this.codingOnly,
+      vendorPriority: this.byoVendorPriority,
+      ...(demotedVendors.size ? { demotedVendors } : {}),
+    });
+    // Merge provider flagships and named OpenRouter model sets by their SHARED
+    // persisted rank. This is the core product behavior: "Cheap coders, then my
+    // Claude account, then Frontier" is one list, not two unrelated priorities.
+    const providerSeedByVendor = new Map(providerSeeds.map((model) => [vendorForModel(model), model]));
+    const rankedSeeds: Array<{ priority: number | null; tie: number; models: string[] }> = [
+      ...this.byoProviderPriorities.map((entry, tie) => ({
+        priority: entry.priority,
+        tie,
+        models: providerSeedByVendor.has(entry.vendor as VendorId) ? [providerSeedByVendor.get(entry.vendor as VendorId)!] : [],
+      })),
+      ...this.openRouterConnections.map((connection, tie) => ({
+        priority: connection.priority,
+        tie: this.byoProviderPriorities.length + tie,
+        models: connectionModelRefs([connection]),
+      })),
+    ];
+    rankedSeeds.sort((a, b) => {
+      const ar = a.priority ?? Number.POSITIVE_INFINITY;
+      const br = b.priority ?? Number.POSITIVE_INFINITY;
+      return ar === br ? a.tie - b.tie : ar - br;
+    });
+    const rankedModels = rankedSeeds.flatMap((entry) => entry.models);
+    const byoSeeds = [...new Set([
+      ...rankedModels,
+      ...providerSeeds.filter((model) => !rankedModels.includes(model)),
+    ])];
+    // An honoured caller model LEADS, but it never stands alone: the tenant's OTHER
+    // connected accounts follow it as failover. BYO is an execution boundary — the
+    // chain composer below drops every operator-funded model — so a lead-only head
+    // means a single cooled/faulting provider ends the request with `byo_unavailable`
+    // while three other connected accounts sit unused. (The measured stall: a cloud run
+    // pinned `claude-opus-4-8` with Anthropic, xAI, OpenAI AND Meta connected and never
+    // tried the other three.) Dedup keeps the lead's position when it IS a flagship.
+    const seedHead: readonly string[] = callerLeads
+      ? [callerModel as string, ...byoSeeds.filter((m) => m !== callerModel)]
+      : byoSeeds;
+    const basePool: readonly string[] = (hasCallerModel && !callerLeads && !fittedPool.includes(callerModel as string))
+      ? [callerModel as string, ...fittedPool]
+      : fittedPool;
+    const seed: readonly string[] = seedHead.length > 0
+      ? [...seedHead, ...basePool.filter((m) => !seedHead.includes(m))]
+      : basePool;
 
     // 3) Pre-fetch cooldown state for the leading seed slice + premium fallback
     //    (KV-backed when bound, in-memory fallback otherwise). The seed is
@@ -835,30 +769,75 @@ export class LlmProxyService {
       ...seedPrefix.map((m) => vendorForModel(m)),
       ...fallbackPairs.map((p) => p.vendor),
     ]));
+    // Never ASK about a vendor the tenant serves themselves: the global keyspace can't
+    // speak for the owner's account ({@link isOwnerServedVendor}). Filtering the pairs
+    // BEFORE the read (rather than the results after) both applies the exemption and drops
+    // those KV subrequests. Without it, a stale bench on connected provider A silently
+    // demotes it below connected provider B — violating the tenant's own BYO precedence —
+    // and, once it covers every connected model, composes an empty chain that only the
+    // probe backstop below rescues.
     const [cooledSet, cooledVendors] = await Promise.all([
       loadCooldowns(this.env, [
         ...seedPrefix.map((m) => ({ vendor: vendorForModel(m), model: m })),
         ...fallbackPairs,
-      ]),
-      loadCooledVendors(this.env, seedVendors),
+      ].filter((p) => !this.isOwnerServedModel(p.model))),
+      loadCooledVendors(this.env, seedVendors.filter((v) =>
+        !this.isOwnerServedVendor(v)
+        && !(v === 'openrouter' && this.openRouterConnectionModels.size > 0))),
     ]);
     // Pinned hint bypasses vendor-level cooldown so a caller-explicit paid model
     // (`anthropic/claude-3-haiku`) gets tried even when the same vendor's free
     // key has 429'd its way into vendor cooldown. Per-model cooldown still
     // applies — we won't retry a model that *itself* just failed.
-    const pinnedHint = typeof callerModel === 'string' && callerModel.length > 0
-      ? callerModel
-      : undefined;
-    const candidates = this.buildCandidateChain(seed, cooledSet, cooledVendors, pinnedHint);
+    // The seed's head (caller pin OR the strongest connected-BYO flagship) bypasses
+    // vendor-level cooldown so the owner's own account is still tried even when that
+    // vendor's operator key has 429'd its way into vendor cooldown. Per-model cooldown
+    // still applies.
+    const pinnedHint = seedHead.length > 0 ? seedHead[0] : undefined;
+    // Pass seedHead as the cascade HEAD so a deliberately-seeded connected-BYO flagship
+    // (or explicit pin) leads verbatim — otherwise a PREMIUM/ULTRA seed falls behind the
+    // free pool and the connected account is tried last (or never). See composeFreeCappedCascade.
+    const candidates = this.buildCandidateChain(seed, cooledSet, cooledVendors, pinnedHint, seedHead);
     if (candidates.length === 0) {
+      if (this.byoStrict) {
+        // Nothing composed — but "every connected model is COOLED" is not the same as
+        // "the tenant has no usable provider", and only the latter deserves a 503.
+        // Cooldown protects OUR shared keys from being hammered by fan-out; the owner's
+        // own account gets at most this one attempt per request, and failing closed here
+        // is what turned a transient bench into a permanently stalled ticket (autonomy's
+        // failure breaker trips after 3). So probe the connected flagships once, ignoring
+        // per-model cooldown, and surface the REAL upstream error if they still fail.
+        const probe = seedHead.filter((m) => connectedByo.has(vendorForModel(m)));
+        if (probe.length > 0) {
+          const probed = await this.dispatch(probe, body, requestHeaders, { signal });
+          probed.paidOverflow = false; // BYO-only chain — always the tenant's own account.
+          return this.finalize(probed, tid, startedAt, probe, probed.response.status < 400 ? 'success' : undefined);
+        }
+        // Genuinely nothing to try. Report WHAT was walked, not just that nothing was:
+        // the seed we composed, the vendors that actually resolved, what the tenant has
+        // configured (with the per-provider reason it was unusable), and anything the
+        // cooldown gate removed. Passing `seed` (not `[]`) as the candidate chain also
+        // makes the cloud loop's ` · chain: …` suffix report the real list.
+        return this.finalize(
+          byoUnavailableResult(seed[0] ?? 'byo-required', {
+            attempted: seed,
+            connectedVendors: [...connectedByo],
+            cooled: seed.filter((m) => cooledSet.has(`${vendorForModel(m)}/${m}`) || cooledVendors.has(vendorForModel(m))),
+            configuredProviders: this.byoDiagnostics.configuredProviders ?? [],
+            unresolvedReasons: this.byoDiagnostics.unresolvedReasons ?? {},
+          }),
+          tid, startedAt, seed, 'byo_unavailable',
+        );
+      }
       // Every model in the seed + premium fallback list is on cooldown. The
       // guaranteed paid backstop (credited key) is the last chance before we
       // surface a hard failure — unless the tenant has exhausted its paid-overflow
       // cap, in which case we don't fund another paid call.
       const backstop = this.disablePaidOverflow ? null : await this.dispatchBackstop(body, requestHeaders);
       if (backstop) {
-        // Subscription-funded Claude is free to us → never meter it as overflow.
-        backstop.paidOverflow = !this.isSubscriptionFunded(backstop);
+        // Tenant-funded (a connected subscription OR a BYO api-key) is free to us →
+        // never meter it as overflow.
+        backstop.paidOverflow = !this.isTenantFunded(backstop);
         return this.finalize(backstop, tid, startedAt, [...this.backstopModels], 'success');
       }
       return this.finalize(
@@ -875,8 +854,10 @@ export class LlmProxyService {
     if (primary.response.status < 400) {
       // Mark overflow when the primary cascade itself landed on an appended
       // premium-fallback model (vs a plan-pool model) so the route meters it —
-      // UNLESS a tenant subscription served it (free to us, see isSubscriptionFunded).
-      primary.paidOverflow = isPaidOverflowModel(primary.resolvedModel) && !this.isSubscriptionFunded(primary);
+      // UNLESS the tenant's OWN account served it (a connected subscription OR a BYO
+      // api-key — free to us; see isTenantFunded), e.g. an owner whose connected-BYO
+      // flagship (claude-*) seeded the head and served the turn on their own account.
+      primary.paidOverflow = isPaidOverflowModel(primary.resolvedModel) && !this.isTenantFunded(primary);
       return this.finalize(primary, tid, startedAt, candidates);
     }
 
@@ -911,7 +892,7 @@ export class LlmProxyService {
       retry.attempts  = [...(primary.attempts ?? []), ...(retry.attempts ?? [])];
       retry.schemaDowngraded = true;
       if (retry.response.status < 400) {
-        retry.paidOverflow = isPaidOverflowModel(retry.resolvedModel) && !this.isSubscriptionFunded(retry);
+        retry.paidOverflow = isPaidOverflowModel(retry.resolvedModel) && !this.isTenantFunded(retry);
         return this.finalize(retry, tid, startedAt, candidates, 'success');
       }
       // Downgraded cascade still failed for a NON-schema reason (saturation, etc.)
@@ -930,7 +911,7 @@ export class LlmProxyService {
       backstop.failovers = [...primary.failovers, ...backstop.failovers];
       backstop.retries   = primary.retries + backstop.retries;
       backstop.attempts  = [...(primary.attempts ?? []), ...(backstop.attempts ?? [])];
-      backstop.paidOverflow = !this.isSubscriptionFunded(backstop);
+      backstop.paidOverflow = !this.isTenantFunded(backstop);
       if (effectiveBody !== body) backstop.schemaDowngraded = true;
       return this.finalize(backstop, tid, startedAt, [...candidates, ...this.backstopModels], 'success');
     }
@@ -955,6 +936,12 @@ export class LlmProxyService {
     if (!result.classification) result.classification = classificationFromFailovers(result.failovers);
     if (outcomeOverride) result.outcome = outcomeOverride;
     else if (!result.outcome) result.outcome = result.response.status < 400 ? 'success' : 'cascade_exhausted';
+    // Stamp the tenant-funding signal once, on the single path every result
+    // leaves complete() through, so the route can mark the usage row `byo`.
+    if (result.byoFunded === undefined) result.byoFunded = this.isTenantFunded(result);
+    if (result.platformSurcharge === undefined) {
+      result.platformSurcharge = this.openRouterConnectionModels.has(result.resolvedModel);
+    }
     return result;
   }
 
@@ -972,16 +959,35 @@ export class LlmProxyService {
     requestHeaders?: Record<string, string>,
   ): Promise<ProxyResult> {
     const vendor = vendorForModel(model);
-    if (!vendorKeyBound(this.vendorEnv(), vendor)) {
+    if (this.byoStrict && !this.connectedByoVendors.has(vendor) && !this.openRouterConnectionModels.has(model)) {
+      // Name the vendor the pin needs AND the vendors that actually resolved — the bare
+      // reason code can't distinguish "you pinned a model on an account you never
+      // connected" from "the account IS connected but its credential didn't resolve".
+      const usable = [...this.connectedByoVendors];
+      return strictUnavailableResult(model, 'byo_provider_required', {
+        requiredVendor: vendor,
+        connectedVendors: usable,
+        configuredProviders: this.byoDiagnostics.configuredProviders ?? [],
+        unresolvedReasons: this.byoDiagnostics.unresolvedReasons ?? {},
+      });
+    }
+    if (!vendorKeyBound(this.vendorEnv(), vendor) && !this.isOwnerServedModel(model)) {
       return strictUnavailableResult(model, 'vendor_key_unconfigured');
     }
 
-    const [cooledSet, cooledVendors] = await Promise.all([
-      loadCooldowns(this.env, [{ vendor, model }]),
-      loadCooledVendors(this.env, [vendor]),
-    ]);
-    if (cooledVendors.has(vendor) || cooledSet.has(`${vendor}/${model}`)) {
-      return strictUnavailableResult(model, 'cooldown');
+    // A vendor the tenant serves from their OWN account is exempt from the global
+    // cooldown keyspace ({@link isOwnerServedVendor}) — the pinned model IS the owner's
+    // account, so it gets its one attempt and surfaces the REAL upstream error instead of
+    // a synthetic 503 inherited from someone else's key. Skipping the gate also drops two
+    // KV subrequests from every BYO strict-pin dispatch.
+    if (!this.isOwnerServedModel(model)) {
+      const [cooledSet, cooledVendors] = await Promise.all([
+        loadCooldowns(this.env, [{ vendor, model }]),
+        loadCooledVendors(this.env, [vendor]),
+      ]);
+      if (cooledVendors.has(vendor) || cooledSet.has(`${vendor}/${model}`)) {
+        return strictUnavailableResult(model, 'cooldown');
+      }
     }
 
     return this.dispatch([model], body, requestHeaders);
@@ -1042,9 +1048,11 @@ export class LlmProxyService {
     cooledSet: Set<string>,
     cooledVendors: Set<VendorId>,
     pinnedModel?: string,
+    head?: readonly string[],
   ): string[] {
-    return composeFreeCappedCascade({
+    const candidates = composeFreeCappedCascade({
       seed,
+      ...(head && head.length ? { head } : {}),
       premiumFallback: this.premiumFallback,
       freeBudget: this.freeBudget,
       tierOf: tierForModel,
@@ -1056,6 +1064,14 @@ export class LlmProxyService {
       }),
       cursor: chatRequestCursor,
     });
+    // BYO is an execution boundary, not merely a preference. Once at least one
+    // tenant credential resolves, remove every shared/operator-funded vendor from
+    // the chain. Multiple connected providers may still fail over among themselves.
+    return this.byoStrict
+      ? candidates.filter((model) =>
+          this.connectedByoVendors.has(vendorForModel(model))
+          || this.openRouterConnectionModels.has(model))
+      : candidates;
   }
 
   /** Synthesize the env passed to vendors — picks the Pro OpenRouter key when applicable. */
@@ -1064,13 +1080,20 @@ export class LlmProxyService {
       OPENROUTER_API_KEY: this.isPro
         ? (this.env.OPENROUTER_API_KEY_PRO ?? this.env.OPENROUTER_API_KEY ?? null)
         : (this.env.OPENROUTER_API_KEY ?? null),
+      OPENROUTER_MODEL_KEYS: this.openRouterModelKeys,
+      OPENAI_CODEX_AUTH: this.openaiCodexAuth ? JSON.stringify(this.openaiCodexAuth) : null,
+      XAI_OAUTH_TOKEN: this.xaiOAuthToken,
       CEREBRAS_API_KEY:         this.env.CEREBRAS_API_KEY         ?? null,
       NVIDIA_API_KEY:           this.env.NVIDIA_API_KEY           ?? null,
       OLLAMA_API_KEY:           this.env.OLLAMA_API_KEY           ?? null,
-      GOOGLE_API_KEY:           this.env.GOOGLE_API_KEY           ?? null,
+      // A tenant BYO Google key overrides the operator key for the `googleai`
+      // vendor (marked tenant-funded in the constructor → byo, $0 to us).
+      GOOGLE_API_KEY:           this.tenantVendorKeys.google      ?? this.env.GOOGLE_API_KEY ?? null,
       // Direct-Anthropic floor key. Flows through creditedVendorEnv() too (which
       // spreads this) so the coding backstop can reach Claude regardless of plan.
-      CLAUDE_API_KEY:           this.env.CLAUDE_API_KEY           ?? null,
+      // A tenant BYO Anthropic api-key overrides it (the subscription/OAuth path
+      // is separate, via CLAUDE_OAUTH_TOKEN below).
+      CLAUDE_API_KEY:           this.tenantVendorKeys.anthropic   ?? this.env.CLAUDE_API_KEY ?? null,
       // A connected tenant's Claude subscription token — when present the anthropic
       // vendor prefers it over CLAUDE_API_KEY (tenant-funded, $0 to us). Spread into
       // creditedVendorEnv() too, so a backstop landing on Claude also uses it.
@@ -1085,6 +1108,17 @@ export class LlmProxyService {
       // list is derived from `OPENAI_COMPATIBLE_VENDOR_KEYS` so it can't drift
       // from the registered vendors.
       ...passthroughVendorKeys(this.env),
+      // A tenant BYO OpenAI key overrides the operator OpenAI key (spread above)
+      // for the `openai` vendor — marked tenant-funded → byo, $0 to us.
+      ...(this.tenantVendorKeys.openai ? { OPENAI_API_KEY: this.tenantVendorKeys.openai } : {}),
+      ...(this.tenantVendorKeys.kimi ? { MOONSHOT_API_KEY: this.tenantVendorKeys.kimi } : {}),
+      ...(this.tenantVendorKeys.qwen ? { QWEN_API_KEY: this.tenantVendorKeys.qwen } : {}),
+      ...(this.tenantVendorKeys.minimax ? { MINIMAX_API_KEY: this.tenantVendorKeys.minimax } : {}),
+      ...(this.tenantVendorKeys.xai ? { XAI_API_KEY: this.tenantVendorKeys.xai } : {}),
+      // A tenant BYO Meta AI key powers the `meta` vendor (MUSE models). There is
+      // NO operator-level Meta key — this is the ONLY source. When absent the meta
+      // vendor no-key-skips at dispatch, same as any other unbound vendor.
+      ...(this.tenantVendorKeys.meta ? { META_API_KEY: this.tenantVendorKeys.meta } : {}),
     };
   }
 
@@ -1114,6 +1148,7 @@ export class LlmProxyService {
     body: ChatCompletionRequest,
     requestHeaders?: Record<string, string>,
   ): Promise<ProxyResult | null> {
+    if (this.byoStrict) return null;
     const creditedEnv = this.creditedVendorEnv();
     if (!creditedEnv.OPENROUTER_API_KEY) return null; // no paid key to fall back to
     const result = await this.dispatch([...this.backstopModels], body, requestHeaders, {
@@ -1138,6 +1173,20 @@ export class LlmProxyService {
     const sanitizedBody = sanitizeRequestToolCalls(body as unknown as Record<string, unknown>) as unknown as ChatCompletionRequest;
     const messages = sanitizedBody.messages as unknown as Array<Record<string, unknown>>;
     const extraBody = stripStandardFields(sanitizedBody);
+    // ── Client reasoning intent ─────────────────────────────────────────────
+    // The optional vendor-neutral `reasoning: { level }` (VS Code "Thinking" toggle) is
+    // validated into an `AgentExecParams` lever here and threaded to the vendor
+    // dispatcher AS INTENT — deliberately NOT resolved to a vendor param at this seam.
+    // A dispatch carries a candidate CHAIN that the dispatcher walks internally on
+    // failover, so a param computed once here would ride onto whichever model the
+    // cascade lands on; `dispatchInternal` instead derives it PER CANDIDATE through the
+    // single `reasoningParamsForModel` mapping, so an `auto`/mixed-family chain gets the
+    // right param on the Anthropic/OpenAI hops and nothing at all on a
+    // Cloudflare/deepseek/qwen coder.
+    // `isFirstTurn`: a request with no assistant turn yet is definitionally a planning
+    // turn (a tool-result continuation always carries one), which is what makes Anthropic
+    // extended thinking safe alongside tools — same rule the cloud loop uses.
+    const reasoningIntent = parseClientReasoningIntent((sanitizedBody as Record<string, unknown>).reasoning);
     // Timeout precedence: an explicit dispatch override (e.g. the paid backstop
     // forcing the premium budget) wins; otherwise a per-request caller override
     // (`_builderforce.vendorTimeoutMs`, clamped) lets even a free-plan one-off
@@ -1156,6 +1205,14 @@ export class LlmProxyService {
       ...(sanitizedBody.temperature != null ? { temperature: sanitizedBody.temperature } : {}),
       ...(sanitizedBody.top_p       != null ? { topP:        sanitizedBody.top_p       } : {}),
       ...(Object.keys(extraBody).length > 0 ? { extraBody } : {}),
+      ...(reasoningIntent
+        ? {
+            reasoningIntent: {
+              execParams: reasoningIntent,
+              isFirstTurn: !messages.some((m) => m.role === 'assistant'),
+            },
+          }
+        : {}),
       ...(cacheTtl ? { cacheTtl } : {}),
       title: this.productName,
       ...(effectiveTimeoutMs ? { timeoutMs: effectiveTimeoutMs } : {}),
@@ -1259,6 +1316,12 @@ export class LlmProxyService {
     totalFailovers: FailoverEvent[],
     schemaRetries: number,
   ): ProxyResult {
+    // The vendor that served this request is demonstrably healthy — clear any 5xx
+    // streak so it reclaims its lead position in the BYO seed immediately instead of
+    // waiting out the health TTL. Fire-and-forget: this method is synchronous, and
+    // the signal is advisory (a dropped clear costs at most one extra demoted
+    // ordering window, never a wrong routing decision).
+    void this.clearVendorHealth(result.vendorUsed);
     // Restore dotted tool names that the request-side sanitizer escaped, so
     // `tool_calls[*].function.name` round-trips to the caller's namespace.
     const restoredRaw = restoreResponseToolNames(result.raw);
@@ -1489,6 +1552,9 @@ export class LlmProxyService {
             headers: result.response.headers,
           })
         : result.response;
+      // Streaming counterpart of the health clear in `successJsonResult` — headers
+      // arrived, so this vendor is serving again.
+      await this.clearVendorHealth(result.vendorUsed);
       return {
         response,
         resolvedModel: result.modelUsed,
@@ -1526,9 +1592,36 @@ export class LlmProxyService {
    */
   private async applyCooldowns(attempts: ReadonlyArray<DispatchAttempt>): Promise<void> {
     if (attempts.length === 0) return;
-    await Promise.all(
-      attempts.map((a) => recordFailure(this.env, a.vendor, a.model, a.status, a.error)),
-    );
+    // An attempt that rode the tenant's OWN credential writes NO cooldown: the keyspace is
+    // global, so one owner's expired token would bench that model for our shared key and
+    // for every other tenant ({@link isOwnerServedVendor}). Their signal is the vendor-health
+    // fault below (seed order) plus the per-tenant `providerAuthAlerts` record the gateway
+    // route and the daily BYO probe both write.
+    const coolable = attempts.filter((a) => !this.isOwnerServedModel(a.model));
+    await Promise.all([
+      ...coolable.map((a) => recordFailure(this.env, a.vendor, a.model, a.status, a.error)),
+      // Independent of the cooldown above: extend the 5xx streak that governs BYO
+      // SEED ORDER. `recordVendorUpstreamFault` ignores non-5xx, so handing it every
+      // attempt is safe — a 429 or an auth failure must not demote a vendor, those
+      // are the cooldown store's business. See `vendorHealth` for why the two
+      // signals are deliberately separate.
+      ...attempts.map((a) => recordVendorUpstreamFault(this.env, a.vendor, a.status)),
+    ]);
+  }
+
+  /**
+   * Clear a served vendor's 5xx streak so a recovered account reclaims its lead
+   * position on the NEXT request rather than waiting out the health TTL. Cheap: a
+   * vendor with no streak recorded exits after one cached read and writes nothing,
+   * which is the state of essentially every successful call.
+   *
+   * Only the vendor that actually SERVED the request is cleared — vendors that
+   * failed on the way to it were just recorded as faults by `applyCooldowns`.
+   */
+  private async clearVendorHealth(vendor: VendorId): Promise<void> {
+    await recordVendorUpstreamSuccess(this.env, vendor).catch((error) => { /* advisory */ 
+      reportCaughtError(error, { source: "application/llm/LlmProxyService.ts", operation: "clearVendorHealth" });
+    });
   }
 }
 
@@ -1596,7 +1689,7 @@ function attemptsToFailovers(attempts: DispatchAttempt[]): FailoverEvent[] {
 /** One {@link DispatchAttempt} → {@link FailoverEvent}, carrying the structured
  *  `reason`/`upstreamStatus` when present so consumers branch on data, not prose.
  *  Single source for both `attemptsToFailovers` and `exhaustedResponse`'s mapper. */
-function attemptToFailover(a: DispatchAttempt): FailoverEvent {
+export function attemptToFailover(a: DispatchAttempt): FailoverEvent {
   return {
     model: a.model,
     vendor: a.vendor,
@@ -1605,6 +1698,7 @@ function attemptToFailover(a: DispatchAttempt): FailoverEvent {
     ...(a.kind ? { kind: a.kind } : {}),
     ...(a.reason ? { reason: a.reason } : {}),
     ...(a.upstreamStatus != null ? { upstreamStatus: a.upstreamStatus } : {}),
+    ...(a.error ? { detail: a.error.slice(0, 240) } : {}),
   };
 }
 
@@ -1630,7 +1724,10 @@ function classificationFromFailovers(failovers: ReadonlyArray<FailoverEvent>): s
 // Plan → proxy factory  (eliminates duplicated isPro/pool/productName wiring)
 // ---------------------------------------------------------------------------
 
-export type EffectivePlan = 'free' | 'pro' | 'teams';
+// Declared once in the domain; re-exported here so the ~40 modules that import
+// it from the gateway keep working.
+export type { EffectivePlan } from '../../domain/tenant/effectivePlan';
+import type { EffectivePlan } from '../../domain/tenant/effectivePlan';
 
 /**
  * Resolve the (productName, modelPool, vendorCallTimeoutMs) triple for a
@@ -1677,9 +1774,15 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null },
+  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoRequired?: boolean; byoDiagnostics?: ByoDiagnostics },
 ): LlmProxyService {
-  const { productName, modelPool, vendorCallTimeoutMs } = resolveRouting(effectivePlan, premiumOverride);
+  const routing = resolveRouting(effectivePlan, premiumOverride);
+  const { productName, modelPool } = routing;
+  // A caller may override the per-vendor timeout — used to lift the free plan's 15s
+  // fast-fail budget for a tenant's CONNECTED BYO account, whose (non-streaming) call
+  // is the primary path and worth waiting for (a frontier completion routinely exceeds
+  // 15s). Override wins over the plan-resolved value.
+  const vendorCallTimeoutMs = opts?.vendorCallTimeoutMs ?? routing.vendorCallTimeoutMs;
   // A CODING run restricts its failover cascade to the curated coding pool, so an
   // exhausted/failed primary escalates to the paid CODING backstop (deepseek-v4-flash)
   // — NOT to a random free non-coder (gemini-flash-lite) or a tool-unreliable vendor.
@@ -1701,6 +1804,23 @@ export function llmProxyForPlan(
       : { freeBudget: freeAttemptBudgetForPlan(effectivePlan) }),
     // A connected tenant subscription token powers any direct-Claude resolution.
     ...(opts?.anthropicOAuthToken ? { anthropicOAuthToken: opts.anthropicOAuthToken } : {}),
+    ...(opts?.openaiCodexAuth ? { openaiCodexAuth: opts.openaiCodexAuth } : {}),
+    ...(opts?.xaiOAuthToken ? { xaiOAuthToken: opts.xaiOAuthToken } : {}),
+    // BYO api-keys (OpenAI/Google/Anthropic) override the operator keys for their
+    // vendors and mark those calls tenant-funded (byo).
+    ...(opts?.tenantVendorKeys ? { tenantVendorKeys: opts.tenantVendorKeys } : {}),
+    // Tenant BYO precedence — leads the connected-flagship seed with the owner's
+    // chosen account (e.g. Meta first), matching the cloud-agent pin.
+    ...(opts?.byoVendorPriority?.length ? { byoVendorPriority: opts.byoVendorPriority } : {}),
+    ...(opts?.byoProviderPriorities?.length ? { byoProviderPriorities: opts.byoProviderPriorities } : {}),
+    ...(opts?.openRouterConnections?.length ? { openRouterConnections: opts.openRouterConnections } : {}),
+    ...(opts?.openRouterModelKeys && Object.keys(opts.openRouterModelKeys).length
+      ? { openRouterModelKeys: opts.openRouterModelKeys }
+      : {}),
+    ...(opts?.byoRequired ? { byoRequired: true } : {}),
+    // Diagnostics only — lets a fail-closed BYO 503 name the connected providers and
+    // the reason each was unusable instead of asserting a bare "none is usable".
+    ...(opts?.byoDiagnostics ? { byoDiagnostics: opts.byoDiagnostics } : {}),
   });
 }
 
@@ -1729,6 +1849,37 @@ export function codingModelsForPlan(effectivePlan: EffectivePlan, premiumOverrid
  *  falling back to the global free default if the plan pool somehow excludes all. */
 export function codingDefaultForPlan(effectivePlan: EffectivePlan, premiumOverride = false): string {
   return codingModelsForPlan(effectivePlan, premiumOverride)[0] ?? CODING_DEFAULT_MODEL;
+}
+
+/**
+ * Is `model` a PREMIUM OpenRouter selection — i.e. an explicit pin on a PAID
+ * OpenRouter model that is NOT already in the tenant's curated in-plan pool? This
+ * is the "leverage OpenRouter → any paid model" tier: it routes on OUR metered
+ * OpenRouter key, so selecting it is gated behind premium access (billing details + a
+ * validated card) and billed at OpenRouter cost + a flat 1¢/request.
+ *
+ * Excluded (return false):
+ *   • empty / no pin — nothing selected;
+ *   • non-OpenRouter vendors (`@cf/*`, `direct/*`, `googleai/*`, `evermind/*`,
+ *     `cerebras/*`, …) — those are plan-pool or BYO paths, not premium;
+ *   • `:free` OpenRouter ids — the free tier;
+ *   • ids already in the plan's auto-route pool (the curated PREMIUM coders like
+ *     `anthropic/claude-sonnet-5` a paid plan already reaches for free).
+ * Everything else that resolves to the OpenRouter vendor is the premium long tail.
+ *
+ * Pure so the gateway gate, the surcharge decision, and any picker filter share ONE
+ * definition of "premium selection".
+ */
+export function isPremiumModelSelection(
+  model: string | undefined | null,
+  effectivePlan: EffectivePlan,
+  premiumOverride = false,
+): boolean {
+  const id = typeof model === 'string' ? model.trim() : '';
+  if (!id) return false;
+  if (vendorForModel(id) !== 'openrouter') return false;
+  if (id.endsWith(':free')) return false;
+  return !modelPoolForPlan(effectivePlan, premiumOverride).includes(id);
 }
 
 /**
@@ -1824,6 +1975,31 @@ export interface PickCloudModelOptions {
    *  into a context it would 413 on — the 97K-into-32K bug. Composes with the SSM
    *  learned ranking: fit FIRST, then rank the fitting set. */
   estimatedTokens?: number;
+  /** Gateway vendor ids the tenant can serve from their OWN connected providers
+   *  (BYO). A free tenant may pin a model owned by one of these — they pay their
+   *  own provider — so the free-plan "can't choose a model" gate is lifted for it. */
+  byoVendors?: ReadonlySet<string>;
+  /** The tenant's BYO PRECEDENCE as ordered gateway vendor ids (most-preferred first).
+   *  When set, the connected-flagship soft seed leads with the owner's chosen account
+   *  (e.g. Meta first) instead of catalog-tier order. See {@link byoAutoSeedModels}. */
+  byoVendorPriority?: readonly string[];
+  /** Models selected in the tenant's OpenRouter registrations. Registered
+   * models are valid pins even when they are outside the curated catalog. */
+  registeredOpenRouterModels?: readonly string[];
+  /** The registered model that leads the shared provider/connection precedence. */
+  preferredRegisteredModel?: string;
+  /**
+   * The tenant may select a PREMIUM model (any paid OpenRouter model outside the plan
+   * pool, billed at OpenRouter cost + a flat 1¢/request) — i.e. a paid plan WITH a
+   * validated card, per `evaluatePremiumModelAccess`. Defaults to false.
+   *
+   * A cloud run dispatches through the internal proxy, NOT the gateway HTTP route, so
+   * the route's premium gate never sees it. Without this, an agent whose `base_model`
+   * is a premium id would run ungated on our metered key. Mirrors the free-plan rule
+   * below: an un-entitled premium pin is IGNORED (the run falls back to the plan's
+   * coding default) rather than erroring a background run.
+   */
+  premiumEntitled?: boolean;
 }
 
 /** Headroom over the prompt estimate to reserve for the model's OUTPUT tokens +
@@ -1838,7 +2014,7 @@ const CONTEXT_FIT_HEADROOM = 1.25;
  */
 export function estimateRequestTokens(messages: unknown, tools?: unknown): number {
   const chars = JSON.stringify(messages ?? '').length + (tools != null ? JSON.stringify(tools).length : 0);
-  return Math.ceil(chars / 4);
+  return estimateTokensFromChars(chars);
 }
 
 /**
@@ -1872,14 +2048,62 @@ export interface PickCloudModelResult {
 }
 
 export function pickCloudModel(
-  explicit: string | undefined,
+  explicitRaw: string | undefined,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
   opts?: PickCloudModelOptions,
 ): PickCloudModelResult {
-  const canChooseModel = premiumOverride || effectivePlan !== 'free';
-  // Explicit-pin behaviour (paid plans) — byte-for-byte unchanged.
-  if (canChooseModel && isKnownModel(explicit)) return { model: (explicit as string).trim(), strict: true };
+  // The pin arrives from DURABLE STATE (an agent's `base_model`, a lane default, a
+  // compile-run config) that may predate a vendor version bump, so rewrite it through
+  // the supersession map before ANY gate reads it. Doing it here rather than at each
+  // gate keeps `isKnownModel`, `vendorForModel`, the free-plan BYO check and the pin
+  // this function RETURNS (which is then written onto the execution row) all agreeing
+  // on one id — a stale id would otherwise fail `isKnownModel` and silently drop the
+  // run back to the plan default with no signal that the pin was the problem.
+  const explicit = canonicalModelId(explicitRaw) || undefined;
+  // An explicit pin is honored (strict) ONLY when it PREEMPTS the connected-BYO seed
+  // (shared rule — see explicitModelPreemptsByo): nothing connected, or the pin is on
+  // the tenant's OWN account. A non-BYO pin while an account is connected (e.g. a
+  // default agent base model of `@cf/qwen`) does NOT shadow it — the connected flagship
+  // leads instead. Within the honored branch the free-plan gate still applies: a free
+  // tenant may pin ONLY a model their own connected provider serves; paid / premium /
+  // override may pin anything.
+  const explicitIsRegistered = !!explicit && !!opts?.registeredOpenRouterModels?.includes(explicit.trim());
+  const explicitIsByo = !!explicit && (!!opts?.byoVendors?.has(vendorForModel(explicit.trim())) || explicitIsRegistered);
+  if (explicitModelPreemptsByo(explicit, opts?.byoVendors, opts?.registeredOpenRouterModels)) {
+    const canChooseModel = premiumOverride || effectivePlan !== 'free' || explicitIsByo;
+    // A PREMIUM pin (paid OpenRouter model off the plan pool) additionally needs the
+    // card-validated entitlement — a cloud run never passes the route's premium gate,
+    // so it is enforced here or nowhere. Un-entitled → ignore the pin and use the
+    // plan's coding default (same shape as the free-plan gate: a background run
+    // degrades to a model it may use rather than failing).
+    const isPremiumPin = !explicitIsByo && isPremiumModelSelection(explicit, effectivePlan, premiumOverride);
+    const premiumBlocked = isPremiumPin && opts?.premiumEntitled !== true;
+    // `isKnownModel` normally guards against strict-pinning a typo'd/retired id (which
+    // would 503 with no failover). But a PREMIUM id is off our curated catalog BY
+    // DEFINITION — it's the paid OpenRouter long tail — so that guard would reject
+    // every premium pin and silently drop the run back to the plan default. An
+    // ENTITLED premium pin is therefore honoured on its own: it came from the
+    // OpenRouter-catalog-driven picker, and dispatch resolves a bare `<org>/<slug>` to
+    // the OpenRouter vendor.
+    const pinnable = explicitIsRegistered || isKnownModel(explicit) || (isPremiumPin && !premiumBlocked);
+    if (canChooseModel && !premiumBlocked && pinnable) {
+      return { model: (explicit as string).trim(), strict: true };
+    }
+  }
+
+  // No honored explicit pin: when the tenant has connected their OWN provider(s), lead
+  // with the strongest connected frontier flagship as the soft seed so an auto-select
+  // cloud run uses the owner's account before the free/paid coding pool.
+  // Registration-driven (byoAutoSeedModels orders the connected providers' flagships by
+  // the tenant's BYO precedence, tier as tiebreak — a cloud run is always an agentic
+  // tool-loop, so Anthropic contributes Opus);
+  // the run locks onto whatever this seed resolves on turn 1. Shared with the gateway
+  // completion seed so both surfaces agree. Soft (not strict) so a transient provider
+  // error still fails over.
+  const byoSeed = opts?.preferredRegisteredModel
+    ?? byoAutoSeedModels(opts?.byoVendors, { agentic: true, vendorPriority: opts?.byoVendorPriority })[0];
+  if (byoSeed) return { model: byoSeed, strict: false };
 
   // Soft-seed branch — the ONLY place learned routing changes anything. Reorder the
   // plan-reachable coding pool by the learned stats (+ optional bias) and seed the
@@ -1932,18 +2156,42 @@ export function adminPoolProxy(
  */
 function strictUnavailableResult(
   model: string,
-  reason: 'cooldown' | 'vendor_key_unconfigured' | 'plan_tier' | 'vendor_outage',
+  reason: 'cooldown' | 'vendor_key_unconfigured' | 'plan_tier' | 'vendor_outage' | 'byo_provider_required',
+  byo?: {
+    requiredVendor: string;
+    connectedVendors: readonly string[];
+    configuredProviders: readonly string[];
+    unresolvedReasons: Readonly<Record<string, string>>;
+  },
 ): ProxyResult {
   const vendor = vendorForModel(model);
+  // For the BYO reason, spell out the gap. `byo_provider_required` alone leaves the
+  // operator guessing which of "never connected" / "connected but unusable" they hit.
+  const byoSuffix = byo
+    ? ` It needs the '${byo.requiredVendor}' provider on your own account.`
+      + ` ${byo.connectedVendors.length ? `Usable this request: ${byo.connectedVendors.join(', ')}.` : 'No provider resolved to a usable credential this request.'}`
+      + `${byo.configuredProviders.length
+        ? ` Connected: ${byo.configuredProviders.map((p) => (byo.unresolvedReasons[p] ? `${p} (unusable: ${byo.unresolvedReasons[p]})` : `${p} (ok)`)).join(', ')}.`
+        : ' No provider is connected on this workspace.'}`
+    : '';
   const body = JSON.stringify({
-    error: `Strict-pin: model '${model}' is unavailable (${reason}).`,
+    error: `Strict-pin: model '${model}' is unavailable (${reason}).${byoSuffix}`,
     code: 'model_unavailable',
     // Top-level `vendor` + `model` so SDK consumers' per-vendor rollups pick
     // up strict-pin 503s without parsing the model id prefix. `details`
     // retains `requestedModel` for backward compat.
     vendor,
     model,
-    details: { requestedModel: model, reason },
+    details: {
+      requestedModel: model,
+      reason,
+      ...(byo ? {
+        requiredVendor: byo.requiredVendor,
+        connectedVendors: [...byo.connectedVendors],
+        configuredProviders: [...byo.configuredProviders],
+        unresolvedReasons: { ...byo.unresolvedReasons },
+      } : {}),
+    },
   });
   return {
     response: new Response(body, {
@@ -1959,286 +2207,93 @@ function strictUnavailableResult(
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Response-format conformance — used by dispatchJson to detect non-conforming
-// model output (broken JSON, missing required fields) and retry across the
-// failover chain. Returns null when the response conforms (or no constraint
-// was requested), or a short reason string when retry is warranted.
-//
-// This is a deliberately *minimal* validator. Full JSON-Schema validation
-// is out of scope here — we don't want a runtime dependency. The two checks
-// catch the most common failure modes:
-//   1. `response_format: { type: 'json_object' }` — content doesn't parse.
-//   2. `response_format: { type: 'json_schema', json_schema: { strict: true,
-//      schema: { required: [...] } } }` — content parses but is missing a
-//      top-level required field.
-// ─────────────────────────────────────────────────────────────────────────────
-
-function extractAssistantContent(raw: unknown): string | null {
-  const choices = (raw as { choices?: Array<{ message?: { content?: unknown } }> } | null)?.choices;
-  const content = choices?.[0]?.message?.content;
-  return typeof content === 'string' ? content : null;
-}
-
-function checkResponseFormatConformance(body: ChatCompletionRequest, raw: unknown): string | null {
-  const rf = (body as { response_format?: { type?: string; json_schema?: { strict?: boolean; schema?: unknown } } }).response_format;
-  if (!rf || (rf.type !== 'json_object' && rf.type !== 'json_schema')) return null;
-
-  const content = extractAssistantContent(raw);
-  if (content === null) return null; // Tool-call assistant turns legitimately have no content.
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    return 'content is not valid JSON';
-  }
-
-  // Full draft-07-subset validation when strict json_schema is requested.
-  // Catches nested type / enum / required / additionalProperties violations
-  // that the consumer's downstream Zod (or equivalent) would otherwise
-  // bounce back as a 4xx — letting the gateway retry the chain instead.
-  if (rf.type === 'json_schema' && rf.json_schema?.strict === true && rf.json_schema.schema) {
-    const errs = validateJsonSchema(parsed, rf.json_schema.schema, { maxErrors: 5 });
-    if (errs.length > 0) {
-      const summary = errs.map((e) => `${e.path || '<root>'}: ${e.message}`).join('; ');
-      return `schema mismatch (${errs.length}${errs.length >= 5 ? '+' : ''} errors): ${summary}`;
-    }
-  }
-
-  return null;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Shape-driven routing — single source of truth for "which capability does
-// the request need?" answers. Each capability lists models known to handle
-// that capability well; reorderPoolByShape stable-sorts the configured pool
-// so capable models float to the front, then everything else follows.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Models that reliably honour `tools` / `tool_choice` round-trips. Derived from
- * the curated coding pool (every coding model is tool-capable) plus a few models
- * that handle tool-use well without being coding drivers. Deriving from
- * CODING_MODEL_POOL is what keeps this set from drifting off the live catalog.
- */
-const TOOL_ONLY_EXTRA_MODELS: readonly string[] = [
-  'x-ai/grok-3-mini',
-];
-const TOOL_CAPABLE_MODELS: ReadonlySet<string> = new Set([
-  ...CODING_MODEL_POOL,
-  ...TOOL_ONLY_EXTRA_MODELS,
-]);
-
-/** Models that reliably emit valid JSON / honour json_schema. The coding pool
- *  doubles as the structured-output set — all of these honour json_schema. */
-const STRUCTURED_OUTPUT_MODELS: ReadonlySet<string> = new Set(CODING_MODEL_POOL);
-
-/** Models with image-input (vision) capability. */
-const VISION_MODELS: ReadonlySet<string> = new Set([
-  'anthropic/claude-sonnet-4.6',
-  'openai/gpt-4.1',
-  'google/gemini-2.5-pro',
-  'nvidia/nemotron-nano-12b-v2-vl:free',
-  'microsoft/phi-4-multimodal-instruct',
-]);
-
-/**
- * OCR-specialized models. Deliberately disjoint from VISION_MODELS — these
- * are tuned for text extraction, not general visual reasoning, so they should
- * only float up when the request explicitly signals OCR (via a `useCase`
- * slug containing "ocr"). On a generic vision request they stay in the pool
- * at base rank.
- */
-const OCR_MODELS: ReadonlySet<string> = new Set([
-  'baidu/qianfan-ocr-fast:free',
-]);
-
-/**
- * Canonical capability set for a model — the single source of truth shared by
- * the shape-router (`reorderPoolByShape`) and the public `/v1/models` surface
- * (so SDK consumers like hired.video can discover which models read images /
- * PDFs without hard-coding ids). Merges the model's catalog-declared
- * `capabilities` with the legacy literal id sets above, which still carry the
- * capability facts for OpenRouter-routed models whose catalog entries predate
- * the `capabilities` field. Output order is stable: tools, structured_output,
- * vision, ocr.
- */
-export function capabilitiesForModel(model: string): AiCapability[] {
-  const set = new Set<AiCapability>(catalogEntry(model)?.capabilities ?? []);
-  if (TOOL_CAPABLE_MODELS.has(model)) set.add('tools');
-  if (STRUCTURED_OUTPUT_MODELS.has(model)) set.add('structured_output');
-  if (VISION_MODELS.has(model)) set.add('vision');
-  if (OCR_MODELS.has(model)) set.add('ocr');
-  return (['tools', 'structured_output', 'vision', 'ocr'] as const).filter((c) => set.has(c));
+/** Everything a fail-closed BYO 503 needs to explain itself. Built at the one call
+ *  site in {@link LlmProxyService.complete}; every field is diagnostics, never routing. */
+interface ByoUnavailableContext {
+  /** Every model id the gateway CONSIDERED for this request, in the order it would
+   *  have walked them (the composed seed). Empty means the seed itself came out empty
+   *  — which is itself the finding, and `connectedVendors` says whether that was
+   *  "nothing connected" or "connected, but no flagship survived". */
+  attempted: readonly string[];
+  /** Gateway vendor ids that RESOLVED to a usable credential this call. */
+  connectedVendors: readonly string[];
+  /** Model ids dropped from the chain because they were on cooldown. */
+  cooled: readonly string[];
+  /** Providers with a stored credential row — what the UI calls "connected". */
+  configuredProviders: readonly string[];
+  /** provider → why it produced no usable credential this call. */
+  unresolvedReasons: Readonly<Record<string, string>>;
 }
 
 /**
- * Models whose constrained-decoding engine has a LOW schema-complexity ceiling —
- * the Gemini family is the canonical case ("too many states for serving"). For a
- * STRICT `json_schema` request these are de-prioritized in the cascade so a
- * higher-ceiling model (OpenAI / Anthropic / Cerebras) leads and the request
- * doesn't hit `schema_too_complex` in the first place — preventing the failure
- * rather than recovering from it via the auto-downgrade. Matched by family name
- * so it catches both `googleai/gemini-*` (direct) and `google/gemini-*`
- * (OpenRouter-routed), which share the Gemini decoder regardless of vendor.
+ * Fail-closed envelope when BYO is required but no connected credential can serve the
+ * request. Deliberately a 503, not a shared-pool fallback.
  *
- * Deliberately narrow (Gemini only) — the authoritative per-vendor ceilings
- * belong in the model catalog (see the ROADMAP "advertise strict-schema
- * capability" item); this is the known-bad case wired into routing now.
+ * The message NAMES what was tried. The previous flat wording ("no configured provider
+ * is currently usable") was, from the operator's seat, false: the Provider-priority UI
+ * showed four connected accounts, so the sentence read as the gateway not seeing them,
+ * when the real state was "four rows stored, zero resolved to a usable credential" or
+ * "resolved fine, but every flagship was filtered out of the chain". Those are different
+ * bugs with different fixes, and the old envelope could not tell them apart — it carried
+ * no model list, and it finalized with an EMPTY candidate chain, so the cloud loop's
+ * ` · chain: …` suffix was blank too. Both are fixed here and at the call site.
  */
-export function isLowSchemaCeilingModel(model: string): boolean {
-  return /gemini/i.test(model);
-}
-
-interface ShapeFlags {
-  hasTools: boolean;
-  hasStructuredOutput: boolean;
-  hasVision: boolean;
-  hasOcr: boolean;
-  /** A STRICT `json_schema` request (constrained decoding) — distinct from loose
-   *  `json_object`. Drives the low-schema-ceiling de-prioritization below. */
-  hasStrictSchema: boolean;
-}
-
-function inferShape(body: ChatCompletionRequest): ShapeFlags {
-  const b = body as unknown as Record<string, unknown>;
-  const hasTools = Array.isArray(b.tools) && (b.tools as unknown[]).length > 0;
-
-  const rf = b.response_format as { type?: string } | undefined;
-  const hasStructuredOutput = rf?.type === 'json_object' || rf?.type === 'json_schema';
-  // Only `json_schema` engages constrained decoding (and its complexity ceiling);
-  // `json_object` is loose and never trips `schema_too_complex`.
-  const hasStrictSchema = rf?.type === 'json_schema';
-
-  const hasVision = Array.isArray(body.messages) && body.messages.some((m) => {
-    const content = (m as unknown as { content?: unknown }).content;
-    return Array.isArray(content) && content.some(
-      (part) => (part as { type?: string } | null)?.type === 'image_url',
-    );
-  });
-
-  // OCR is signalled via `useCase` slug — the SDK's free-form telemetry tag.
-  // Substring match on /ocr/i so tenant slugs like `invoice_ocr` or
-  // `receipt_ocr_extract` light up the route without needing an enum.
-  const useCase = typeof b.useCase === 'string' ? b.useCase : '';
-  const hasOcr = /ocr/i.test(useCase);
-
-  return { hasTools, hasStructuredOutput, hasVision, hasOcr, hasStrictSchema };
-}
-
-/**
- * Stable-sort the pool so models that match the request's required capabilities
- * come first. A model that matches every required capability ranks above one
- * that matches some, which ranks above one that matches none.
- *
- * Vision is treated as a *hard* requirement — non-vision models are filtered
- * out of the front rank and only kept as last-resort fallbacks (vendor will
- * usually error rather than silently drop the image, which is the right
- * failure mode for the cross-vendor fallback to recover from).
- */
-export function reorderPoolByShape(
-  body: ChatCompletionRequest,
-  pool: readonly string[],
-): readonly string[] {
-  const shape = inferShape(body);
-  if (!shape.hasTools && !shape.hasStructuredOutput && !shape.hasVision && !shape.hasOcr) {
-    return pool;
+function byoUnavailableResult(model: string, ctx: ByoUnavailableContext): ProxyResult {
+  const vendor = vendorForModel(model);
+  const { attempted, connectedVendors, cooled, configuredProviders, unresolvedReasons } = ctx;
+  // Lead with the discriminating fact — "configured but none resolved" vs "resolved but
+  // the chain composed empty" — because that is the sentence that tells the operator
+  // whether to go repair a credential or go look at model/vendor filtering.
+  const headline = connectedVendors.length === 0
+    ? (configuredProviders.length > 0
+      ? `BYO execution is required. ${configuredProviders.length} provider(s) are connected but NONE resolved to a usable credential this request — reconnect or repair the credential.`
+      : 'BYO execution is required, but no provider is connected on this workspace — connect a provider.')
+    : `BYO execution is required. ${connectedVendors.length} provider(s) resolved, but every candidate model was filtered out of the chain before dispatch — no request was sent upstream.`;
+  const detail: string[] = [];
+  if (configuredProviders.length) {
+    detail.push(`connected: ${configuredProviders
+      .map((p) => (unresolvedReasons[p] ? `${p} (unusable: ${unresolvedReasons[p]})` : `${p} (ok)`))
+      .join(', ')}`);
   }
-
-  // A model has a capability if it's in the legacy literal id-set (OpenRouter-
-  // centric) OR its catalog entry declares it — `capabilitiesForModel` merges
-  // both, so non-OpenRouter models (e.g. NVIDIA NIM vision models) are promoted
-  // too, not silently excluded [1429].
-  const score = (model: string): number => {
-    const mc = capabilitiesForModel(model);
-    let s = 0;
-    if (shape.hasOcr              && mc.includes('ocr'))               s += 8;
-    if (shape.hasVision           && mc.includes('vision'))            s += 4;
-    if (shape.hasTools            && mc.includes('tools'))             s += 2;
-    if (shape.hasStructuredOutput && mc.includes('structured_output')) s += 1;
-    return s;
+  if (connectedVendors.length) detail.push(`usable vendors: ${connectedVendors.join(', ')}`);
+  // The list the operator actually asked for: EVERY model considered, not just the one
+  // the envelope happens to be labelled with.
+  detail.push(attempted.length
+    ? `models tried: ${attempted.join(' → ')}`
+    : 'models tried: none — the candidate chain composed empty');
+  if (cooled.length) detail.push(`on cooldown: ${cooled.join(', ')}`);
+  return {
+    response: new Response(JSON.stringify({
+      error: `${headline} ${detail.join(' · ')}`,
+      code: 'byo_unavailable',
+      details: {
+        attemptedModels: [...attempted],
+        connectedVendors: [...connectedVendors],
+        configuredProviders: [...configuredProviders],
+        unresolvedReasons: { ...unresolvedReasons },
+        cooledModels: [...cooled],
+      },
+    }), { status: 503, headers: { 'content-type': 'application/json' } }),
+    resolvedModel: model,
+    resolvedVendor: vendor,
+    retries: 0,
+    failovers: [],
+    outcome: 'byo_unavailable',
+    // The chain the gateway WOULD have walked — stamped so `finalize` doesn't overwrite
+    // it and every consumer (cloud-run error text, superadmin trace, tool_audit detail)
+    // reports the same list instead of an empty one.
+    candidateChain: [...attempted],
+    attempts: [],
   };
-
-  // Schema-ceiling tiebreaker: for a STRICT json_schema, a low-ceiling model
-  // (Gemini) is de-prioritized WITHIN its capability bucket — it stays a valid
-  // candidate (and the auto-downgrade still covers it) but a higher-ceiling
-  // structured model leads, so a complex schema doesn't hit `too many states`.
-  const lowCeilingPenalty = (model: string): number =>
-    shape.hasStrictSchema && isLowSchemaCeilingModel(model) ? 1 : 0;
-
-  // Stable sort: capability score desc, then low-ceiling last within ties,
-  // then original pool order.
-  return [...pool]
-    .map((m, i) => ({ m, i, s: score(m), p: lowCeilingPenalty(m) }))
-    .sort((a, b) => (b.s - a.s) || (a.p - b.p) || (a.i - b.i))
-    .map((x) => x.m);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Quality-critical routing — "select the best models for this request" when the
-// generated text IS the product (resume tailoring, cover letters, …). Leads with
-// the highest-tier models the tenant's PLAN unlocks (premium writers for paid; a
-// no-op within a free pool, whose premium floor is the funded backstop). Plan-
-// respecting + catalog-driven, so it never hardcodes ids or funds premium for a
-// free tenant — that boundary stays the plan's job.
+// Collaborators split out of this file (2026-07-26). Re-exported here so the
+// ~50 modules that import from 'LlmProxyService' are unaffected — the split is
+// about where the code LIVES, not about churning every call site.
+//
+//   responseFormat — does a model's reply satisfy the requested response_format?
+//   poolRouting    — in what order should the pool be tried for this request?
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * `useCase` slugs that mark OUTPUT-QUALITY-CRITICAL traffic. Substring/regex match
- * on the free-form `useCase` tag (same mechanism as the OCR signal), so tenant
- * slugs like `resume_tailoring`, `cover_letter_gen`, or `proposal_draft` light up
- * without an enum. Single source so the detector can't drift across call sites.
- */
-export function isQualityCriticalUseCase(useCase: string | undefined | null): boolean {
-  if (!useCase) return false;
-  return /resume|cover[_\s-]?letter|tailor|proposal|cv\b|headline|profile[_\s-]?summary/i.test(useCase);
-}
-
-/** Tier → quality rank (higher = better model). Drives {@link reorderPoolForQuality}. */
-const QUALITY_TIER_RANK: Record<string, number> = { ULTRA: 3, PREMIUM: 2, STANDARD: 1, FREE: 0 };
-
-/**
- * Stable-reorder a pool so the HIGHEST-tier models lead (ULTRA → PREMIUM →
- * STANDARD → FREE), used for {@link isQualityCriticalUseCase} traffic. Within-tier
- * order is preserved from the input (so the capability ordering from
- * `reorderPoolByShape` survives as the tiebreak). When `strictSchema` is set, a
- * low-schema-ceiling model (Gemini) sorts LAST within its tier — so a quality
- * premium request still prefers a high-ceiling premium writer (Claude/GPT) over
- * gemini-pro. Plan-respecting by construction: a Free pool is all FREE tier, so
- * this is a no-op there. Catalog-driven via `tierForModel`. Pure + unit-testable.
- */
-export function reorderPoolForQuality(
-  pool: readonly string[],
-  opts?: { strictSchema?: boolean },
-): readonly string[] {
-  const penalty = (m: string): number =>
-    opts?.strictSchema && isLowSchemaCeilingModel(m) ? 1 : 0;
-  return [...pool]
-    .map((m, i) => ({ m, i, r: QUALITY_TIER_RANK[tierForModel(m)] ?? 0, p: penalty(m) }))
-    .sort((a, b) => (b.r - a.r) || (a.p - b.p) || (a.i - b.i))
-    .map((x) => x.m);
-}
-
-const STANDARD_BODY_FIELDS: ReadonlySet<string> = new Set([
-  'model', 'messages', 'temperature', 'max_tokens', 'top_p', 'stream',
-  // Gateway-side only — stripped before vendor dispatch:
-  'useCase',     // opaque telemetry slug; persisted to llm_usage_log.use_case, echoed back
-  'metadata',    // free-form trace-back kv; persisted to llm_usage_log.metadata, echoed back
-  'modelStrict', // strict-pin flag — gateway-only; controls failover behaviour
-  'strict',      // public SDK alias for modelStrict — gateway-only; stripped here
-  '_builderforce', // gateway-internal passthrough envelope (per-call vendorTimeoutMs override); consumed in dispatch(), never sent upstream
-  // OpenAI-compatible pass-throughs (`tools`, `tool_choice`, `response_format`)
-  // travel via the `extraBody` catch-all and reach the vendor verbatim.
-]);
-
-/** Pick out non-standard fields from the request body so they can be passed
- *  through as `extraBody` to the vendor. */
-function stripStandardFields(body: ChatCompletionRequest): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const key of Object.keys(body)) {
-    if (STANDARD_BODY_FIELDS.has(key)) continue;
-    out[key] = (body as Record<string, unknown>)[key];
-  }
-  return out;
-}
+export * from './responseFormat';
+export * from './poolRouting';

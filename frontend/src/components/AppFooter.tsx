@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useLegalDocs } from './legal/useLegalDocs';
 import LegalDocModal, { type LegalModalType } from './legal/LegalDocModal';
+import WhatsNewPanel from './WhatsNewPanel';
 import { FOOTER_COLUMNS, BRAND, STATS } from '@/lib/content';
 
 /**
@@ -23,7 +26,47 @@ import { FOOTER_COLUMNS, BRAND, STATS } from '@/lib/content';
  */
 export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | 'full' }) {
   const { appVersion, apiVersion, legal, termsVersion, privacyVersion } = useLegalDocs();
+  const t = useTranslations('footer');
+  const searchParams = useSearchParams();
   const [modalType, setModalType] = useState<LegalModalType | null>(null);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+
+  // Deep link from the weekly release-digest email CTA (`?whatsnew=1`) opens the
+  // panel straight away, so a reader lands on exactly what the mail announced.
+  useEffect(() => {
+    if (searchParams?.get('whatsnew') === '1') setWhatsNewOpen(true);
+  }, [searchParams]);
+
+  // Version + legal strip. Rendered under the copyright credit in the marketing
+  // (`full`) footer; rendered as its own bottom row in the slim (`legal`) footer.
+  const versionStrip = (
+    <div className="global-footer-inner">
+      <button
+        type="button"
+        onClick={() => setWhatsNewOpen(true)}
+        className="global-footer-link"
+        title={t('whatsNewHint')}
+      >
+        UI {appVersion} · API {apiVersion ?? '…'}
+      </button>
+      <div className="global-footer-links">
+        <button
+          type="button"
+          onClick={() => setModalType('terms')}
+          className="global-footer-link"
+        >
+          {t('termsOfUse')}{termsVersion ? ` (v${termsVersion})` : ''}
+        </button>
+        <button
+          type="button"
+          onClick={() => setModalType('privacy')}
+          className="global-footer-link"
+        >
+          {t('privacyPolicy')}{privacyVersion ? ` (v${privacyVersion})` : ''}
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -43,22 +86,23 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
               </Link>
               <p className="global-footer-summary">{STATS.quotable.humanInLoopAgentic}</p>
               <p className="global-footer-credit">
-                Built by{' '}
+                {t('builtBy')}{' '}
                 <a href={BRAND.founder.url} target="_blank" rel="noopener">
                   {BRAND.founder.name}
                 </a>{' '}
                 · {BRAND.name} © {BRAND.year}
               </p>
+              {versionStrip}
             </div>
 
-            <nav className="global-footer-cols" aria-label="Footer">
+            <nav className="global-footer-cols" aria-label={t('navLabel')}>
               {FOOTER_COLUMNS.map((col) => (
-                <div key={col.title} className="global-footer-col">
-                  <h3>{col.title}</h3>
+                <div key={col.titleKey} className="global-footer-col">
+                  <h3>{t(col.titleKey)}</h3>
                   <ul>
                     {col.links.map((l) => (
                       <li key={l.href}>
-                        <Link href={l.href}>{l.label}</Link>
+                        <Link href={l.href}>{t(l.labelKey)}</Link>
                       </li>
                     ))}
                   </ul>
@@ -68,30 +112,11 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
           </div>
         )}
 
-        <div className="global-footer-inner">
-          <span>
-            UI {appVersion} · API {apiVersion ?? '…'}
-          </span>
-          <div className="global-footer-links">
-            <button
-              type="button"
-              onClick={() => setModalType('terms')}
-              className="global-footer-link"
-            >
-              Terms of Use{termsVersion ? ` (v${termsVersion})` : ''}
-            </button>
-            <button
-              type="button"
-              onClick={() => setModalType('privacy')}
-              className="global-footer-link"
-            >
-              Privacy Policy{privacyVersion ? ` (v${privacyVersion})` : ''}
-            </button>
-          </div>
-        </div>
+        {variant === 'legal' && versionStrip}
       </footer>
 
       <LegalDocModal type={modalType} legal={legal} onClose={() => setModalType(null)} />
+      <WhatsNewPanel open={whatsNewOpen} onClose={() => setWhatsNewOpen(false)} />
     </>
   );
 }

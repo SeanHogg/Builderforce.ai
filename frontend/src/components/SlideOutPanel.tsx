@@ -1,7 +1,20 @@
 'use client';
 
+/**
+ * SlideOutPanel — the canonical overlay for the app.
+ *
+ * CONVENTION (app-wide): a centered modal dialog is reserved for TERMINAL /
+ * DESTRUCTIVE approvals only — irreversible confirmations like "Delete", "Remove",
+ * "Disconnect", "Cancel subscription". EVERYTHING ELSE (forms, editors, detail
+ * views, creation flows, settings, pickers) uses this slide-out side panel: it
+ * adapts to mobile far better than a modal, doesn't trap the viewport, and keeps
+ * the underlying context visible. When you reach for a modal, ask "is this a
+ * terminal destructive approval?" — if not, use SlideOutPanel.
+ */
+
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslations } from 'next-intl';
 
 export interface SlideOutPanelTab {
   id: string;
@@ -26,12 +39,18 @@ export interface SlideOutPanelProps {
   /** Which edge the drawer docks to. Default 'right'. Use 'left' when the Brain
    *  (which is right-docked) needs a companion work panel on the opposite side. */
   side?: 'left' | 'right';
+  /**
+   * Base stacking order (the overlay sits here, the drawer one above). Default 9998
+   * clears the app chrome. Raise it only to stack a panel ABOVE another overlay that
+   * already claims a higher layer — e.g. the board's ticket drawer sits at 10002/3,
+   * so a panel opened from inside it would otherwise render underneath.
+   */
+  zIndex?: number;
 }
 
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  zIndex: 9998,
 };
 
 export function SlideOutPanel({
@@ -45,7 +64,9 @@ export function SlideOutPanel({
   children,
   width = 'min(560px, 96vw)',
   side = 'right',
+  zIndex = 9998,
 }: SlideOutPanelProps) {
+  const tCommon = useTranslations('common');
   // Portal to <body> so the fixed drawer escapes ancestor stacking contexts
   // (e.g. the app `.shell` has `position: relative; z-index: 1`, which would
   // otherwise trap the drawer below the fixed footer regardless of its z-index).
@@ -62,14 +83,14 @@ export function SlideOutPanel({
         className="slide-panel-overlay"
         role="presentation"
         onClick={onClose}
-        style={overlayStyle}
+        style={{ ...overlayStyle, zIndex }}
         aria-hidden
       />
       <div
         className="slide-panel-drawer"
         role="dialog"
         aria-modal="true"
-        aria-label={typeof title === 'string' ? title : 'Panel'}
+        aria-label={typeof title === 'string' ? title : tCommon('panel')}
         style={{
           position: 'fixed',
           top: 0,
@@ -80,7 +101,7 @@ export function SlideOutPanel({
           ...(side === 'left'
             ? { borderRight: '1px solid var(--border-subtle)', boxShadow: '8px 0 24px rgba(0,0,0,0.2)' }
             : { borderLeft: '1px solid var(--border-subtle)', boxShadow: '-8px 0 24px rgba(0,0,0,0.2)' }),
-          zIndex: 9999,
+          zIndex: zIndex + 1,
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -101,7 +122,7 @@ export function SlideOutPanel({
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close panel"
+              aria-label={tCommon('closePanel')}
               style={{
                 width: 36,
                 height: 36,

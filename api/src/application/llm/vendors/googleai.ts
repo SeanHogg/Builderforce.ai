@@ -12,17 +12,8 @@
  * Free-pool rotation. Authenticates with `GOOGLE_API_KEY`.
  */
 
-import {
-  buildOpenAIChatBody,
-  executeChatCompletion,
-  executeChatCompletionStream,
-  type AiModelTier,
-  type VendorCallParams,
-  type VendorCallResult,
-  type VendorModelEntry,
-  type VendorModule,
-  type VendorStreamResult,
-} from './types';
+import { createOpenAICompatibleVendor } from './openaiCompatible';
+import type { VendorModelEntry, VendorModule } from './types';
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 
@@ -41,39 +32,16 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'gemini-2.5-pro',        tier: 'PREMIUM', label: 'Gemini 2.5 Pro (Google AI)',        brand: 'Google', capabilities: GEMINI_CAPS },
 ];
 
-const CATALOG_BY_ID = new Map(CATALOG.map((m) => [m.id, m]));
-
-function tierForGoogleAiModel(modelId: string): AiModelTier {
-  return CATALOG_BY_ID.get(modelId)?.tier ?? 'PREMIUM';
-}
-
-export const googleAiModule: VendorModule = {
+// Google AI is a plain OpenAI-compatible endpoint (Bearer key, standard chat body
+// + response), so it's built from the shared factory like nvidia/cerebras. Unlike
+// the commercial factory vendors it stays `autoRoute: true` (it's the premium
+// fallback at the tail of every cascade) and defaults non-catalog ids to PREMIUM
+// (all Gemini here is paid). tierFor/apiKeyFrom/call/callStream are the factory's.
+export const googleAiModule: VendorModule = createOpenAICompatibleVendor({
   id: 'googleai',
+  baseUrl: ENDPOINT,
+  apiKeyEnv: 'GOOGLE_API_KEY',
   catalog: CATALOG,
-  tierFor: tierForGoogleAiModel,
-  apiKeyFrom(env) { return env.GOOGLE_API_KEY ?? null; },
-  async call(params: VendorCallParams): Promise<VendorCallResult> {
-    return executeChatCompletion({
-      vendorId: 'googleai',
-      endpoint: ENDPOINT,
-      apiKey: params.apiKey,
-      model: params.model,
-      body: { ...buildOpenAIChatBody(params), stream: false },
-      ...(params.title ? { title: params.title } : {}),
-      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-      ...(params.signal ? { signal: params.signal } : {}),
-    });
-  },
-  async callStream(params: VendorCallParams): Promise<VendorStreamResult> {
-    return executeChatCompletionStream({
-      vendorId: 'googleai',
-      endpoint: ENDPOINT,
-      apiKey: params.apiKey,
-      model: params.model,
-      body: buildOpenAIChatBody(params),
-      ...(params.title ? { title: params.title } : {}),
-      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-      ...(params.signal ? { signal: params.signal } : {}),
-    });
-  },
-};
+  defaultTier: 'PREMIUM',
+  autoRoute: true,
+});

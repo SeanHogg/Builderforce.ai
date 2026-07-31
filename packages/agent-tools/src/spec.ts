@@ -188,6 +188,18 @@ function joinSkills(skills: AgentSpecIdentity["skills"]): string {
   return skills ?? "";
 }
 
+/** The single header for the persona/personality bullet block — shared by both persona renderers. */
+export const PERSONA_BLOCK_HEADER = "Personality (execute under these traits):";
+
+/**
+ * Render `header` followed by `- `-prefixed bullet lines — the one system-prompt
+ * sub-block shape shared by the persona, affect, and governance renderers, so they
+ * cannot drift. Caller pre-filters `items`.
+ */
+export function bulletBlock(header: string, items: readonly string[]): string {
+  return [header, ...items.map((x) => `- ${x}`)].join("\n");
+}
+
 /** Render one {@link PolicyGate} as a binding system-prompt line. */
 function policyGateDirective(g: PolicyGate): string {
   const scope = !g.tool || g.tool === "*" ? "any tool" : `the \`${g.tool}\` tool`;
@@ -210,7 +222,7 @@ function policyGateDirective(g: PolicyGate): string {
 export function renderPolicyDirectives(gates: readonly PolicyGate[] | undefined): string {
   const lines = (gates ?? []).map(policyGateDirective).filter(Boolean);
   if (lines.length === 0) return "";
-  return ["Governance (these gates are binding):", ...lines.map((g) => `- ${g}`)].join("\n");
+  return bulletBlock("Governance (these gates are binding):", lines);
 }
 
 /** The decision a policy evaluation yields at the engine's tool-call seam. */
@@ -257,9 +269,7 @@ export function lowerAgentSpec(spec: AgentSpec): LoweredAgent {
   // --- Persona directives ------------------------------------------------
   const directives = spec.persona?.directives?.filter(Boolean) ?? [];
   if (directives.length > 0) {
-    sections.push(
-      ["Personality (execute under these traits):", ...directives.map((d) => `- ${d}`)].join("\n"),
-    );
+    sections.push(bulletBlock(PERSONA_BLOCK_HEADER, directives));
   }
 
   // --- Recalled memory ---------------------------------------------------

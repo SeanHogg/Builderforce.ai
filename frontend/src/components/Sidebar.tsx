@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
-import { NAV_GROUPS, findActiveGroup, type NavGroup } from '@/lib/navGroups';
+import { findActiveGroup, navGroupsForAccountType, type NavGroup } from '@/lib/navGroups';
+import { useAvailableForHire, useIsFreelancer } from '@/lib/rbac';
 import SidebarLegalMenu from './legal/SidebarLegalMenu';
 import UsageMeter from './UsageMeter';
 
@@ -39,6 +40,9 @@ function GroupLink({ group, active, onNavigate, t }: {
       className={`nav-item ${active ? 'active' : ''} flex items-center`}
       style={{ textAlign: 'left' }}
       aria-current={active ? 'page' : undefined}
+      // Stable anchor for the demo product tour (DemoTour) — the group id maps to
+      // a TourAnchor. Inert outside a demo session.
+      data-tour={group.id}
     >
       <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{group.icon}</span>
       <span className="nav-item-label">{t(group.labelKey)}</span>
@@ -51,8 +55,12 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
   const t = useTranslations('nav');
   const { user } = useAuth();
 
-  const activeGroupId = findActiveGroup(pathname)?.id;
-  const groups = NAV_GROUPS.filter((g) => !g.superadminOnly || user?.isSuperadmin);
+  const isFreelancer = useIsFreelancer();
+  const availableForHire = useAvailableForHire();
+  const allGroups = navGroupsForAccountType(isFreelancer, availableForHire);
+  const activeGroupId = findActiveGroup(pathname)?.id
+    ?? allGroups.find((g) => g.match.some((m) => pathname === m || pathname.startsWith(`${m}/`)))?.id;
+  const groups = allGroups.filter((g) => !g.superadminOnly || user?.isSuperadmin);
 
   return (
     <>

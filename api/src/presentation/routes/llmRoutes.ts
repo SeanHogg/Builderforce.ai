@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * builderforceLLM routes — OpenAI-compatible LLM proxy.
  *
@@ -16,16 +17,22 @@ import {
   modelPoolForPlan,
   codingModelsForPlan,
   resolveStrictPin,
+  estimateRequestTokens,
+  isPremiumModelSelection,
+  CODING_BACKSTOP_MODELS,
   FREE_MODEL_POOL,
   PRO_MODEL_POOL,
   type ChatCompletionRequest,
   type LlmUsage,
 } from '../../application/llm/LlmProxyService';
-import { resolvePaidOverflowCapMillicents } from '../../application/llm/usageLedger';
+import { parseClientReasoningIntent } from '../../application/llm/reasoningCapability';
+import { normalizeByoProvider, resolvePaidOverflowCapMillicents, PREMIUM_REQUEST_SURCHARGE_MILLICENTS } from '../../application/llm/usageLedger';
+import { classifyReplyAccount } from '../../application/llm/replyProvenance';
+import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../../application/activity/activityLog';
 import { USAGE_KIND } from '../../application/llm/usageSource';
 import { logTrace, backfillTraceUsage } from '../../application/llm/traceLogger';
-import { recordUsageRow, type UsageAttribution, type RecordUsageRow } from '../../application/llm/usageLedger';
-import { pickUsage } from '../../application/llm/vendors';
+import { recordUsageRow, type UsageAttribution, type RecordUsageRow, type UsageSurface } from '../../application/llm/usageLedger';
+import { pickUsage, vendorForModel } from '../../application/llm/vendors';
 import {
   dispatchEmbeddingVendor,
   EmbeddingCascadeExhaustedError,
@@ -41,9 +48,10 @@ import {
   IMAGE_PRODUCT_NAMES,
   type ImageGenerationRequest,
 } from '../../application/llm/ImageProxyService';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import { resolveTenantModel, TENANT_MODEL_REF_PREFIX } from '../../application/llm/tenantModelService';
 import { resolveProjectEvermindModelPin, PROJECT_EVERMIND_MODEL_PREFIX } from '../../application/llm/projectEvermind';
+import { recordClientRunOutcome, type OutcomeSource, type TerminalStatus } from '../../application/runtime/scoreRunOutcome';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../../application/agent/agentPrompt';
 import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, agentHosts, tenantApiKeys, users, projects, tasks, runModelOutcomes } from '../../infrastructure/database/schema';
 import { getRoutingTable, parseScopeToken, scopeToken } from '../../application/llm/routingTable';
@@ -60,11 +68,45 @@ import {
   setTenantProviderKey,
   setTenantProviderOAuth,
   resolveAnthropicAuth,
-  resolveAnthropicOAuthToken,
+  resolveOpenAICodexResolution,
+  resolveTenantVendorKeys,
+  resolveTenantLlmCredentials,
   listTenantProviderKeys,
   deleteTenantProviderKey,
   isSupportedProvider,
+  byoVendorIdsFromCredentials,
+  providersFromCredentials,
+  formatByoUnresolvedHeader,
+  providersConnectedInOtherWorkspaces,
+  SUPPORTED_PROVIDERS,
+  type ProviderKeySummary,
+  type TenantVendorKeys,
+  type LlmProvider,
 } from '../../application/llm/tenantProviderKeyService';
+import {
+  deleteOpenRouterConnection,
+  connectionModelRefs,
+  listOpenRouterConnections,
+  openRouterConnectionUsage,
+  upsertOpenRouterConnection,
+  USAGE_WINDOW_DAYS,
+  type OpenRouterConnectionUsage,
+} from '../../application/llm/openRouterConnectionService';
+import {
+  listByoPrecedence,
+  parsePrecedenceRef,
+  setByoPrecedence,
+} from '../../application/llm/byoPrecedence';
+import { CAPACITY_LIMIT_MARKER } from '../../application/llm/vendors/types';
+import {
+  clearConnectionAuthAlert,
+  clearProviderAuthAlert,
+  loadConnectionAuthAlert,
+  loadProviderAuthAlert,
+} from '../../application/llm/providerAuthAlerts';
+import { raiseProviderAuthAlertsFromFailovers } from '../../application/llm/byoCredentialAlerting';
+import { probeByoProvider, probeOpenRouterConnection } from '../../application/llm/byoCredentialHealth';
+import { byoModelsFor } from '../../application/llm/byoModelRouting';
 import {
   generatePkce,
   generateState,
@@ -74,6 +116,12 @@ import {
   withClaudeCodeSystemPrompt,
   ANTHROPIC_OAUTH_BETA,
 } from '../../application/llm/anthropicOAuth';
+import {
+  buildOpenAICodexAuthorizeUrl,
+  parseOpenAICodexCallback,
+  exchangeOpenAICodexCode,
+} from '../../application/llm/openaiCodexOAuth';
+import { buildXaiAuthorizeUrl, parseXaiCallback, exchangeXaiCode } from '../../application/llm/xaiOAuth';
 import { parseAnthropicSseUsage } from '../../application/llm/anthropicSseUsage';
 import {
   anthropicToOpenAiRequest,
@@ -82,20 +130,26 @@ import {
   pipeOpenAiSseToAnthropic,
   type AnthropicMessagesRequest,
 } from '../../application/llm/anthropicMessagesBridge';
-import { resolveKeyCached, jwtMembershipHash } from '../../infrastructure/auth/keyResolutionCache';
-import type { FailoverEvent } from '../../application/llm/LlmProxyService';
+import { resolveKeyCached, jwtMembershipHash, type ResolvedKey } from '../../infrastructure/auth/keyResolutionCache';
+import type { FailoverEvent, ByoDiagnostics } from '../../application/llm/LlmProxyService';
 import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
+import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import { hashSecret } from '../../infrastructure/auth/HashService';
 import { TenantRole, TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
-import { getLimits, resolveImageCreditsDailyLimit, resolveTokenLimits } from '../../domain/tenant/PlanLimits';
+import { getLimits, resolveImageCreditsDailyLimit, GUEST_CHAT_LIMITS } from '../../domain/tenant/PlanLimits';
+import { evaluateFrontierAccess, evaluatePremiumModelAccess, premiumModelGateBody } from '../../domain/tenant/planFeatures';
+import { isCardValidated } from '../../application/tenant/cardValidationService';
+import { GuestChatService } from '../../application/guest/GuestChatService';
+import { verifyGuestToken, guestBrainEnabled, GUEST_TOKEN_PREFIX } from '../../application/guest/guestToken';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import {
   utcDayStart,
-  utcMonthStart,
   secondsUntilNextUtcMonth,
   sumTenantTextTokens,
-  sumTenantTextTokensDayAndMonth,
+  estimateTokensFromChars,
 } from '../../application/llm/tokenUsage';
+import { getTenantTokenAvailability, tokenGateUpgradeHint } from '../../application/llm/tenantTokenAvailability';
+import { getMemberSpendAvailability, maybeEmitSpendNotification, millicentsToUsd } from '../../application/consumption/memberSpend';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -125,11 +179,46 @@ function logFailovers(
 ): void {
   if (failovers.length === 0) return;
   ctx.waitUntil(
-    buildDatabase(env)
+    buildTransactionalDatabase(env)
       .insert(llmFailoverLog)
       .values(failovers.map(f => ({ model: f.model, errorCode: f.code })))
-      .catch(() => { /* never let logging fail the request */ }),
+      .catch((error) => { /* never let logging fail the request */ 
+        reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "logFailovers" });
+      }),
   );
+}
+
+/**
+ * Record any AUTH-class failover as a per-tenant "reconnect this account" alert AND
+ * email the workspace's admins the first time it breaks — fire-and-forget alongside
+ * {@link logFailovers}.
+ *
+ * This is the seam that makes a rejected BYO credential VISIBLE. The cascade
+ * already handles it correctly — cool the vendor, fail over, succeed elsewhere —
+ * which is exactly why nothing ever reached the operator: the request looks fine
+ * and `llm_failover_log` persists only `model` + `errorCode` (no tenant, no kind),
+ * so the signal died at the DB boundary. Writing it here, where tenant identity is
+ * in scope and the typed `FailoverEvent` still carries its `detail`, is the last
+ * point at which the alert can be attributed to the account that needs fixing.
+ *
+ * Notification lives in `raiseProviderAuthAlertsFromFailovers` rather than here so a
+ * mid-day breakage observed by a LIVE RUN reaches the owner immediately, on exactly the
+ * same transition rule the daily sweep uses — instead of waiting up to 24h for the next
+ * sweep to rediscover it. `authAlertsFromFailovers` no-ops for a cascade with no
+ * owner-actionable failure, so the common path costs one array scan and zero writes.
+ */
+function logProviderAuthAlerts(
+  env: HonoEnv['Bindings'],
+  ctx: ExecutionContext | undefined,
+  tenantId: number,
+  failovers: ReadonlyArray<FailoverEvent>,
+): void {
+  if (failovers.length === 0) return;
+  const promise = raiseProviderAuthAlertsFromFailovers(env, tenantId, failovers)
+    .catch((error) => { /* advisory — never let alerting fail the request */ 
+      reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "promise" });
+    });
+  if (ctx) ctx.waitUntil(promise); else void promise;
 }
 
 /** Write one row to llm_usage_log, fire-and-forget via ctx.waitUntil.
@@ -150,6 +239,37 @@ function logUsage(
   row: RecordUsageRow,
 ): void {
   ctx.waitUntil(recordUsageRow(buildDatabase(env), env as Env, row));
+}
+
+/**
+ * Which modality produced a gateway call, for the usage row's `surface` (drives
+ * the BYO metering exemption — own-machine on-prem/VSIX BYO is free, cloud is
+ * charged). A client may hint via `X-Builderforce-Surface`, but the header is
+ * NEVER trusted to grant an own-machine (on_prem/vsix) surface unless the auth
+ * path corroborates it: only an agentHost-key–authenticated call (`bfa_*`/`clk_*`,
+ * i.e. `access.agentHostId != null`) is on the user's own machine by definition.
+ * A web JWT or `bfk_*` tenant key may NOT self-declare on_prem/vsix — otherwise a
+ * BYO caller could set the header and dodge the plan cap (the exemption in
+ * tokenUsage.notFreeByoRow keys off surface∈{on_prem,vsix}). Such callers are
+ * clamped to 'web' (still billable). Funded (byo=false) calls are billable
+ * regardless of surface, so this only tightens the BYO exemption.
+ * (Cloud runs never come through this HTTP path — they record via
+ * recordCloudUsage with surface 'cloud'.) */
+const KNOWN_SURFACES: readonly UsageSurface[] = ['web', 'vsix', 'on_prem', 'cloud', 'sdk'];
+function resolveUsageSurface(c: Context<HonoEnv>, access: TenantAccess): UsageSurface {
+  const hinted = (c.req.header('x-builderforce-surface') ?? '').toLowerCase();
+  const isKnown = (KNOWN_SURFACES as readonly string[]).includes(hinted);
+  // An agentHost credential authenticated → the call genuinely originates on the
+  // user's own machine, so honor the client hint (on_prem/vsix/…) or default to
+  // on_prem.
+  if (access.agentHostId != null) {
+    return isKnown ? (hinted as UsageSurface) : 'on_prem';
+  }
+  // Web JWT / bfk_* machine key: the auth path does NOT corroborate an own-machine
+  // surface, so an own-machine hint is ignored (clamped to 'web'). Non-exempt
+  // hints (web/cloud/sdk) are still honored for accurate attribution.
+  if (isKnown && hinted !== 'on_prem' && hinted !== 'vsix') return hinted as UsageSurface;
+  return 'web';
 }
 
 /**
@@ -212,6 +332,15 @@ type TenantAccess = {
    *  premium model pool (top PREMIUM-tier models) and the extended per-vendor
    *  timeout regardless of plan/billingStatus. Comped / beta access. */
   premiumOverride: boolean;
+  /**
+   * The tenant has a card that passed the explicit validation flow (SetupIntent /
+   * $0 auth — migration 0342). Combined with a PAID plan this unlocks PREMIUM model
+   * selection: any paid OpenRouter model, billed at OpenRouter cost + a flat 1¢ per
+   * request. See `evaluatePremiumModelAccess`.
+   */
+  cardValidated: boolean;
+  /** Where the card-validation flow currently stands (drives the unlock CTA). */
+  cardValidationStatus: 'none' | 'pending' | 'validated' | 'failed';
   /** True when the JWT carries `sa: true`. Bypasses plan-cap and strict-pin
    *  gates so platform admins can use the gateway without hitting tenant caps.
    *  Always false for `clk_*` and `bfk_*` machine-credential paths. */
@@ -233,7 +362,7 @@ function toTenantPlan(ep: TenantAccess['effectivePlan']): TenantPlan {
 export async function resolveTenantPlan(
   env: Env,
   tenantId: number,
-): Promise<Pick<TenantAccess, 'plan' | 'billingStatus' | 'effectivePlan' | 'tokenDailyLimitOverride' | 'paidOverflowDailyCap' | 'imageCreditsDailyLimit' | 'premiumOverride'>> {
+): Promise<Pick<TenantAccess, 'plan' | 'billingStatus' | 'effectivePlan' | 'tokenDailyLimitOverride' | 'paidOverflowDailyCap' | 'imageCreditsDailyLimit' | 'premiumOverride' | 'cardValidated' | 'cardValidationStatus'>> {
   const db = buildDatabase(env);
   const [tenantRow] = await db
     .select({
@@ -245,6 +374,8 @@ export async function resolveTenantPlan(
       paidOverflowDailyCap: tenants.paidOverflowDailyCap,
       imageCreditsDailyLimit: tenants.imageCreditsDailyLimit,
       premiumOverride: tenants.premiumOverride,
+      cardValidatedAt: tenants.cardValidatedAt,
+      cardValidationStatus: tenants.cardValidationStatus,
     })
     .from(tenants)
     .where(eq(tenants.id, tenantId))
@@ -262,6 +393,8 @@ export async function resolveTenantPlan(
     trialEndsAt: tenantRow.trialEndsAt ?? null,
   }) as TenantAccess['effectivePlan'];
 
+  const cardValidationStatus = (tenantRow.cardValidationStatus ?? 'none') as TenantAccess['cardValidationStatus'];
+
   return {
     plan,
     billingStatus,
@@ -270,23 +403,18 @@ export async function resolveTenantPlan(
     paidOverflowDailyCap: tenantRow.paidOverflowDailyCap ?? null,
     imageCreditsDailyLimit: tenantRow.imageCreditsDailyLimit ?? null,
     premiumOverride: tenantRow.premiumOverride === true,
+    // A card counts as validated only when the flow COMPLETED (status + stamp) —
+    // the same rule `isCardValidated` applies, kept in lockstep via one predicate.
+    cardValidated: isCardValidated({ status: cardValidationStatus, validatedAt: tenantRow.cardValidatedAt ?? null }),
+    cardValidationStatus,
   };
 }
 
-/**
- * True when the tenant's plan includes the psychometric-persona Pro feature (a
- * behaviour-bearing personality trait vector). THE single entitlement check —
- * shared by the persona editor scoring routes AND the per-agent personality on the
- * Workforce agent routes, so "who can set a personality" is defined once. A
- * superadmin premium override always grants it.
- */
-export async function tenantHasPsychometricPersona(
-  env: HonoEnv['Bindings'],
-  tenantId: number,
-): Promise<boolean> {
-  const access = await resolveTenantPlan(env, tenantId);
-  return access.premiumOverride || getLimits(toTenantPlan(access.effectivePlan)).psychometricPersona;
-}
+// The psychometric-persona entitlement check moved to the shared feature gate
+// (`presentation/middleware/featureGate.ts` → `tenantHasFeature(..., 'psychometricPersona')`)
+// so every paid-plan gate — plan grant, premium override, AND superadmin bypass —
+// runs through one evaluator. `resolveTenantPlan` (below/above) stays here as the
+// gateway's plan resolver; the gate imports it.
 
 /** What a passing {@link enforceTokenCaps} returns for the response headers/body. */
 interface TokenCapUsage {
@@ -304,40 +432,56 @@ interface TokenCapUsage {
  * send (a cap exceeded), or the usage numbers for the response headers when the
  * request may proceed.
  *
- * Limits come from the single resolver {@link resolveTokenLimits} and usage from
- * the single accountant {@link sumTenantTextTokens} / {@link sumTenantTextTokensDayAndMonth},
- * so the cap enforced here is exactly the one the consumption meter displays.
- * Both totals are **cache-discounted** (cache_read ~0.1x, cache_creation ~1.25x).
+ * The plan cap decision + the superadmin(-owned-account) bypass are NOT implemented
+ * here — they come from the ONE shared entry {@link getTenantTokenAvailability} (the
+ * same the cron sweeps + Run-now use), so there is no parallel cap logic to drift.
+ * This function only layers the gateway-specific per-agentHost daily cap on top and
+ * shapes the 429 bodies. Usage totals are **cache-discounted** (cache_read ~0.1x,
+ * cache_creation ~1.25x) inside the shared accountant.
  */
 async function enforceTokenCaps(
   c: Context<HonoEnv>,
   access: TenantAccess,
 ): Promise<{ blocked: Response } | TokenCapUsage> {
-  const { dailyLimit, monthlyLimit } = resolveTokenLimits({
-    effectivePlan: toTenantPlan(access.effectivePlan),
-    tokenDailyLimitOverride: access.tokenDailyLimitOverride,
-    isSuperadmin: access.isSuperadmin,
-  });
-  // `-1` = unlimited (gate skipped). The host cap is independent of the plan cap.
-  const planDailyLimit = dailyLimit > 0 ? dailyLimit : 0;
-  const planMonthlyLimit = monthlyLimit > 0 ? monthlyLimit : 0;
-  const hasHostCap = access.agentHostId !== null && access.agentHostTokenDailyLimit !== null;
-  const needsDaily = planDailyLimit > 0 || hasHostCap;
+  const db = buildDatabase(c.env);
 
-  let usageToday = 0;
-  let usageMonth = 0;
-  if (planMonthlyLimit > 0) {
-    // One scan covers both windows (month outer, day a FILTER) — cheaper than two.
-    const db = buildDatabase(c.env);
-    const usage = await sumTenantTextTokensDayAndMonth(db, access.tenantId, utcDayStart(), utcMonthStart());
-    usageToday = usage.day;
-    usageMonth = usage.month;
-  } else if (needsDaily) {
-    const db = buildDatabase(c.env);
+  // Plan-level caps + the superadmin(-owned-account) bypass come from the ONE shared
+  // entry — the SAME `getTenantTokenAvailability` the cron manager sweep, autonomous
+  // executor, and Run-now gate use — so there is a single definition of "out of
+  // tokens" and the superadmin rule can never diverge between paths. We hand it the
+  // already-resolved principal superadmin flag (`access.isSuperadmin` — covers the
+  // `bfk_*` key-creator that has no user row, so no user query is issued) and the
+  // acting user id; the resolver additionally treats a tenant OWNED by a superadmin as
+  // unlimited (cached), and only scans usage for a genuinely capped tenant.
+  const availability = await getTenantTokenAvailability(
+    db,
+    access.tenantId,
+    {
+      actingUserId: access.userId,
+      actingIsSuperadmin: access.isSuperadmin,
+      // The gateway already resolved the plan snapshot on `access` — reuse it so the
+      // shared resolver skips a redundant tenant-row read on this hot path.
+      planSnapshot: { effectivePlan: access.effectivePlan, tokenDailyLimitOverride: access.tokenDailyLimitOverride },
+    },
+    c.env,
+  );
+
+  // Header/meter convention: `-1` (unlimited) surfaces as 0.
+  const planDailyLimit = availability.dailyLimit > 0 ? availability.dailyLimit : 0;
+  const planMonthlyLimit = availability.monthlyLimit > 0 ? availability.monthlyLimit : 0;
+  const planUnlimited = availability.dailyLimit <= 0 && availability.monthlyLimit <= 0;
+
+  // Per-agentHost daily cap — a gateway-only operational limit set per agentHost in the
+  // portal, INDEPENDENT of the tenant plan (so it still applies even to an unlimited /
+  // superadmin tenant, unchanged from before). It needs today's usage: the shared
+  // resolver already scanned it for a capped tenant; for an unlimited tenant it returns
+  // 0, so scan once here only when a host cap is actually set.
+  const hasHostCap = access.agentHostId !== null && access.agentHostTokenDailyLimit !== null;
+  let usageToday = availability.usageToday;
+  const usageMonth = availability.usageMonth;
+  if (hasHostCap && planUnlimited) {
     usageToday = await sumTenantTextTokens(db, access.tenantId, utcDayStart());
   }
-
-  // Per-agentHost daily cap (optional, set per-agentHost in portal)
   if (hasHostCap && usageToday >= (access.agentHostTokenDailyLimit as number)) {
     return {
       blocked: c.json({
@@ -349,13 +493,9 @@ async function enforceTokenCaps(
     };
   }
 
-  // Plan daily cap
-  if (planDailyLimit > 0 && usageToday >= planDailyLimit) {
-    const upgradeHint = access.effectivePlan === 'free'
-      ? ' Upgrade to Pro at builderforce.ai/pricing.'
-      : access.effectivePlan === 'pro'
-      ? ' Upgrade to Teams for a 5× higher daily budget.'
-      : '';
+  // Plan caps — the exhaustion verdict is the shared resolver's (daily precedence).
+  if (!availability.hasTokens && availability.reason === 'daily_exhausted') {
+    const upgradeHint = tokenGateUpgradeHint(access.effectivePlan, 'daily');
     return {
       blocked: c.json({
         error: `Plan daily token limit reached (${planDailyLimit.toLocaleString()} tokens).${upgradeHint}`,
@@ -372,12 +512,8 @@ async function enforceTokenCaps(
   // Plan monthly cap — the consumption-meter allowance. Graceful backpressure:
   // the tenant's already-processed data stays fully queryable; only NEW gateway
   // spend on our pool is paused until the month resets (or they upgrade).
-  if (planMonthlyLimit > 0 && usageMonth >= planMonthlyLimit) {
-    const upgradeHint = access.effectivePlan === 'free'
-      ? ' Upgrade to Pro at builderforce.ai/pricing for a higher monthly allowance.'
-      : access.effectivePlan === 'pro'
-      ? ' Upgrade to Teams for an unlimited monthly allowance.'
-      : '';
+  if (!availability.hasTokens && availability.reason === 'monthly_exhausted') {
+    const upgradeHint = tokenGateUpgradeHint(access.effectivePlan, 'monthly');
     const retryAfter = secondsUntilNextUtcMonth();
     return {
       blocked: c.json({
@@ -390,6 +526,47 @@ async function enforceTokenCaps(
         retryAfter,
       }, 429, { 'Retry-After': String(retryAfter) }),
     };
+  }
+
+  // Per-seat monthly SPEND cap (Teams, owner-configured). A tenant that doesn't
+  // BYO a key runs paid models on our OpenRouter account, metered at the OpenRouter
+  // rate into `llm_usage_log.cost_usd_millicents` (BYO rows are 0). Once a seat's
+  // month-to-date spend reaches its cap, pause NEW paid spend for that seat. Skipped
+  // for non-Teams plans, seats with no cap, superadmin operators, and machine
+  // credentials with no user (all handled inside getMemberSpendAvailability — the ONE
+  // definition of the rule, shared with the owner overview + notifications). Fail-open
+  // on any error so a scan blip never blocks a run.
+  if (access.userId) {
+    let spend: Awaited<ReturnType<typeof getMemberSpendAvailability>> | null = null;
+    try {
+      spend = await getMemberSpendAvailability(db, c.env, access.tenantId, access.userId, {
+        effectivePlan: access.effectivePlan,
+        actingUserId: access.userId,
+        actingIsSuperadmin: access.isSuperadmin,
+      });
+    } catch { spend = null; }
+    if (spend && spend.seatControlsEnabled && spend.capMillicents != null) {
+      // Ping the seat + owners as they cross 50/80/100% — off the hot path.
+      const notifyPromise = maybeEmitSpendNotification(db, c.env as Env, access.tenantId, access.userId, spend);
+      try { c.executionCtx.waitUntil(notifyPromise); } catch { void notifyPromise.catch((error) => {
+        reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "enforceTokenCaps" });
+      }); }
+      if (!spend.hasBudget) {
+        const capUsd = millicentsToUsd(spend.capMillicents).toFixed(2);
+        const retryAfter = secondsUntilNextUtcMonth();
+        return {
+          blocked: c.json({
+            error: `Monthly AI spend cap reached for this seat ($${capUsd}). New paid model usage is paused until the cap resets or your workspace owner raises it. Connect your own model key to keep going at your own rate.`,
+            code: 'member_spend_cap_exceeded',
+            plan: access.effectivePlan,
+            spendCapUsd: Number(capUsd),
+            spentUsd: Number(millicentsToUsd(spend.spentMillicents).toFixed(2)),
+            terminal: true,
+            retryAfter,
+          }, 429, { 'Retry-After': String(retryAfter) }),
+        };
+      }
+    }
   }
 
   return { usageToday, planDailyLimit, usageMonth, planMonthlyLimit };
@@ -412,7 +589,7 @@ async function isPaidOverflowExhausted(
   const cap = resolvePaidOverflowCapMillicents(access.paidOverflowDailyCap, access.effectivePlan);
   if (cap < 0) return false; // unlimited
   try {
-    const db = buildDatabase(c.env);
+    const db = buildTransactionalDatabase(c.env);
     const [row] = await db
       .select({ spent: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)` })
       .from(llmUsageLog)
@@ -444,7 +621,7 @@ async function enforceImageCreditCap(
   const limit = resolveImageCreditsDailyLimit(access.imageCreditsDailyLimit, toTenantPlan(access.effectivePlan));
   if (limit < 0) return null; // unlimited
   try {
-    const db = buildDatabase(c.env);
+    const db = buildTransactionalDatabase(c.env);
     const [row] = await db
       .select({ tokens: sql<number>`COALESCE(SUM(${llmUsageLog.totalTokens}), 0)` })
       .from(llmUsageLog)
@@ -474,6 +651,100 @@ async function enforceImageCreditCap(
   }
 }
 
+/**
+ * DB loader for an agentHost (`bfa_*` / legacy `clk_*`) key → its cached auth
+ * envelope. Extracted so the full auth path ({@link requireTenantAccess}) and the
+ * pre-auth rate-limit resolver ({@link resolveBearerTenantId}) share the EXACT
+ * loader, and therefore write a byte-identical value under the shared
+ * `auth:clk:<hash>` cache key — a divergent minimal loader would poison the cache
+ * with a payload missing fields the full path needs.
+ */
+async function loadAgentHostKeyByHash(env: HonoEnv['Bindings'], keyHash: string): Promise<ResolvedKey> {
+  const db = buildDatabase(env);
+  const [r] = await db
+    .select({
+      id:               agentHosts.id,
+      tenantId:         agentHosts.tenantId,
+      status:           agentHosts.status,
+      tokenDailyLimit:  agentHosts.tokenDailyLimit,
+    })
+    .from(agentHosts)
+    .where(eq(agentHosts.apiKeyHash, keyHash))
+    .limit(1);
+  if (!r || r.status !== 'active') return { ok: false, reason: 'Invalid or inactive agentHost API key' };
+  return {
+    ok: true,
+    payload: { id: r.id, tenantId: r.tenantId, tokenDailyLimit: r.tokenDailyLimit ?? null },
+  };
+}
+
+/**
+ * DB loader for a tenant API key (`bfk_*`) → its cached auth envelope. Shared by
+ * {@link requireTenantAccess} and {@link resolveBearerTenantId} for the same
+ * cache-shape reason as {@link loadAgentHostKeyByHash}.
+ */
+async function loadTenantApiKeyByHash(env: HonoEnv['Bindings'], keyHash: string): Promise<ResolvedKey> {
+  const db = buildDatabase(env);
+  const [r] = await db
+    .select({
+      id:              tenantApiKeys.id,
+      tenantId:        tenantApiKeys.tenantId,
+      revokedAt:       tenantApiKeys.revokedAt,
+      allowedOrigins:  tenantApiKeys.allowedOrigins,
+      scopes:          tenantApiKeys.scopes,
+      // A key minted by a superadmin (e.g. the IDE editor key) inherits the
+      // superadmin's unlimited budget — mirrors the JWT path's users.isSuperadmin.
+      creatorIsSuperadmin: users.isSuperadmin,
+    })
+    .from(tenantApiKeys)
+    .leftJoin(users, eq(users.id, tenantApiKeys.createdByUserId))
+    .where(eq(tenantApiKeys.keyHash, keyHash))
+    .limit(1);
+  if (!r || r.revokedAt) return { ok: false, reason: 'Invalid or revoked tenant API key' };
+  // Pre-parse allowedOrigins + scopes so a cache hit doesn't have to.
+  let allowlist: string[] | null = null;
+  if (r.allowedOrigins) {
+    try {
+      const parsed = JSON.parse(r.allowedOrigins);
+      if (Array.isArray(parsed)) allowlist = parsed.filter((s) => typeof s === 'string');
+    } catch (error) { /* malformed → server-only */ 
+      reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "loadTenantApiKeyByHash" });
+    }
+  }
+  return { ok: true, payload: { id: r.id, tenantId: r.tenantId, allowedOrigins: allowlist, scopes: deserializeScopes(r.scopes), isSuperadmin: r.creatorIsSuperadmin === true } };
+}
+
+/**
+ * Resolve JUST the tenant id from a request's Bearer credential, for pre-auth
+ * gating (the rate-limit middleware runs before the route's own
+ * {@link requireTenantAccess}). Reuses the SAME `resolveKeyCached` cache + the
+ * SAME loaders as the full auth path, so no parallel resolver and no divergent
+ * cache value. Machine keys (`bfa_*`/`clk_*`/`bfk_*`) and web/service JWTs all
+ * resolve to a tenant id; anonymous or unresolvable callers return null and fall
+ * through un-throttled (public ingest paths rely on this). Never throws.
+ */
+export async function resolveBearerTenantId(c: Context<HonoEnv>): Promise<number | null> {
+  const authHeader = c.req.header('Authorization') ?? '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : (c.req.query('token') ?? '');
+  if (!token) return null;
+  try {
+    if (token.startsWith('bfa_') || token.startsWith('clk_')) {
+      const keyHash = await hashSecret(token);
+      const resolved = await resolveKeyCached(c.env, 'clk', keyHash, () => loadAgentHostKeyByHash(c.env, keyHash));
+      return resolved.ok ? Number((resolved.payload as { tenantId: number }).tenantId) : null;
+    }
+    if (token.startsWith('bfk_')) {
+      const keyHash = await hashSecret(token);
+      const resolved = await resolveKeyCached(c.env, 'bfk', keyHash, () => loadTenantApiKeyByHash(c.env, keyHash));
+      return resolved.ok ? Number((resolved.payload as { tenantId: number }).tenantId) : null;
+    }
+    const payload = await verifyJwt(token, c.env.JWT_SECRET);
+    return typeof payload.tid === 'number' ? payload.tid : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAccess> {
   const authHeader = c.req.header('Authorization') ?? '';
   if (!authHeader.startsWith('Bearer ')) {
@@ -488,24 +759,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
   if (token.startsWith('bfa_') || token.startsWith('clk_')) {
     const keyHash = await hashSecret(token);
 
-    const resolved = await resolveKeyCached(c.env, 'clk', keyHash, async () => {
-      const db = buildDatabase(c.env);
-      const [r] = await db
-        .select({
-          id:               agentHosts.id,
-          tenantId:         agentHosts.tenantId,
-          status:           agentHosts.status,
-          tokenDailyLimit:  agentHosts.tokenDailyLimit,
-        })
-        .from(agentHosts)
-        .where(eq(agentHosts.apiKeyHash, keyHash))
-        .limit(1);
-      if (!r || r.status !== 'active') return { ok: false, reason: 'Invalid or inactive agentHost API key' };
-      return {
-        ok: true,
-        payload: { id: r.id, tenantId: r.tenantId, tokenDailyLimit: r.tokenDailyLimit ?? null },
-      };
-    });
+    const resolved = await resolveKeyCached(c.env, 'clk', keyHash, () => loadAgentHostKeyByHash(c.env, keyHash));
 
     if (!resolved.ok) throw new Error(resolved.reason);
     const agentHost = resolved.payload as { id: number; tenantId: number; tokenDailyLimit: number | null };
@@ -531,34 +785,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
     // KV-cached lookup: ~1ms hit, ~30-80ms miss. Cache entry covers everything
     // the auth path needs (id, tenantId, allowedOrigins, revoked flag) so a hit
     // requires zero DB calls. Falls through to DB when AUTH_CACHE_KV is unbound.
-    const resolved = await resolveKeyCached(c.env, 'bfk', keyHash, async () => {
-      const db = buildDatabase(c.env);
-      const [r] = await db
-        .select({
-          id:              tenantApiKeys.id,
-          tenantId:        tenantApiKeys.tenantId,
-          revokedAt:       tenantApiKeys.revokedAt,
-          allowedOrigins:  tenantApiKeys.allowedOrigins,
-          scopes:          tenantApiKeys.scopes,
-          // A key minted by a superadmin (e.g. the IDE editor key) inherits the
-          // superadmin's unlimited budget — mirrors the JWT path's users.isSuperadmin.
-          creatorIsSuperadmin: users.isSuperadmin,
-        })
-        .from(tenantApiKeys)
-        .leftJoin(users, eq(users.id, tenantApiKeys.createdByUserId))
-        .where(eq(tenantApiKeys.keyHash, keyHash))
-        .limit(1);
-      if (!r || r.revokedAt) return { ok: false, reason: 'Invalid or revoked tenant API key' };
-      // Pre-parse allowedOrigins + scopes so a cache hit doesn't have to.
-      let allowlist: string[] | null = null;
-      if (r.allowedOrigins) {
-        try {
-          const parsed = JSON.parse(r.allowedOrigins);
-          if (Array.isArray(parsed)) allowlist = parsed.filter((s) => typeof s === 'string');
-        } catch { /* malformed → server-only */ }
-      }
-      return { ok: true, payload: { id: r.id, tenantId: r.tenantId, allowedOrigins: allowlist, scopes: deserializeScopes(r.scopes), isSuperadmin: r.creatorIsSuperadmin === true } };
-    });
+    const resolved = await resolveKeyCached(c.env, 'bfk', keyHash, () => loadTenantApiKeyByHash(c.env, keyHash));
 
     if (!resolved.ok) throw new Error(resolved.reason);
     const { id: keyId, tenantId: keyTenantId, allowedOrigins: allowlist, scopes: keyScopes, isSuperadmin: keyIsSuperadmin } =
@@ -580,7 +807,9 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
         .update(tenantApiKeys)
         .set({ lastUsedAt: new Date() })
         .where(eq(tenantApiKeys.id, keyId))
-        .catch(() => { /* never let bookkeeping fail the request */ }),
+        .catch((error) => { /* never let bookkeeping fail the request */ 
+          reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "requireTenantAccess" });
+        }),
     );
 
     return {
@@ -604,10 +833,9 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
 
   // Service tokens carry no real user: agentHost instances (`agentHost:*`) and short-lived
   // embed-session tokens (`embed:*`) minted server-to-server from a bfk_* key.
-  // Neither has a tenant_members row, so both skip the membership check.
-  const isAgentHostToken = payload.sub.startsWith('agentHost:');
-  const isEmbedToken = payload.sub.startsWith('embed:');
-  const isServiceToken = isAgentHostToken || isEmbedToken;
+  // Neither has a tenant_members row, so both skip the membership check. Decoded through
+  // the ONE machine-subject parser rather than re-spelling the prefixes here.
+  const isServiceToken = parseMachineSubject(payload.sub) !== null;
   // Join `users.isSuperadmin` into the membership check so we don't depend on
   // the JWT carrying `sa: true`. Old JWTs minted before the `sa` claim was
   // added still grant superadmin bypass — no re-login required. New JWTs that
@@ -704,15 +932,162 @@ function wrapStreamForUsage(
                 ...(u.cache_creation_tokens != null ? { cacheCreationTokens: u.cache_creation_tokens } : {}),
               });
             }
-          } catch { /* ignore parse errors */ }
+          } catch (error) { /* ignore parse errors */ 
+            reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "transform" });
+          }
         }
       }
       controller.enqueue(chunk);
     },
   });
 
-  source.pipeTo(writable).catch(() => { /* stream may be cancelled by client */ });
+  source.pipeTo(writable).catch((error) => { /* stream may be cancelled by client */ 
+    reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "wrapStreamForUsage" });
+  });
   return readable;
+}
+
+/** A completion whose body carries `tools` IS an agentic tool-loop (the VS Code
+ *  Brain chat, on-prem hosts, any tool-calling SDK caller) — as opposed to a plain
+ *  chat completion. This is the discriminator for the coding capability floor. */
+function isAgenticToolTurn(body: { tools?: unknown }): boolean {
+  const tools = (body as { tools?: unknown[] }).tools;
+  return Array.isArray(tools) && tools.length > 0;
+}
+
+/**
+ * Build the gateway completion proxy, applying the agentic capability floor when
+ * the turn carries tools. `codingOnly` keeps the failover cascade inside the
+ * curated coder pool and `CODING_BACKSTOP_MODELS` floors an exhausted cascade onto
+ * a PAID coder — never the general `gemini-flash-lite` guaranteed backstop, which
+ * "loops on search and ships no edits" for tool loops. That is the same
+ * "free coders first → funded paid floor" ladder the cloud coding agent uses, so
+ * an auto-select agentic turn (e.g. the Brain chat) never degrades onto a lite
+ * non-coder that narrates edits it never makes. `disablePaidOverflow` still caps
+ * paid spend. A plain (non-tool) chat completion keeps the plan-aware general pool
+ * (cost over capability) unchanged. Shared by /v1/chat/completions and the
+ * /v1/messages our-models branch so both honour the identical ladder.
+ */
+function proxyForCompletion(
+  env: Env,
+  access: TenantAccess,
+  body: ChatCompletionRequest,
+  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; byoVendorPriority?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly import('../../application/llm/openRouterConnectionService').OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoRequired?: boolean; byoDiagnostics?: ByoDiagnostics },
+): ReturnType<typeof llmProxyForPlan> {
+  return llmProxyForPlan(env, access.effectivePlan, access.premiumOverride, {
+    disablePaidOverflow: opts.disablePaidOverflow,
+    ...(isAgenticToolTurn(body as { tools?: unknown }) ? { codingOnly: true, backstopModels: CODING_BACKSTOP_MODELS } : {}),
+    ...(opts.anthropicOAuthToken ? { anthropicOAuthToken: opts.anthropicOAuthToken } : {}),
+    ...(opts.openaiCodexAuth ? { openaiCodexAuth: opts.openaiCodexAuth } : {}),
+    ...(opts.xaiOAuthToken ? { xaiOAuthToken: opts.xaiOAuthToken } : {}),
+    ...(opts.tenantVendorKeys ? { tenantVendorKeys: opts.tenantVendorKeys } : {}),
+    ...(opts.byoVendorPriority?.length ? { byoVendorPriority: opts.byoVendorPriority } : {}),
+    ...(opts.byoProviderPriorities?.length ? { byoProviderPriorities: opts.byoProviderPriorities } : {}),
+    ...(opts.openRouterConnections?.length ? { openRouterConnections: opts.openRouterConnections } : {}),
+    ...(opts.openRouterModelKeys && Object.keys(opts.openRouterModelKeys).length ? { openRouterModelKeys: opts.openRouterModelKeys } : {}),
+    ...(opts.byoRequired ? { byoRequired: true } : {}),
+    // Diagnostics only — so a fail-closed BYO 503 names the connected providers and
+    // why each was unusable, matching `x-builderforce-byo-unresolved`.
+    ...(opts.byoDiagnostics ? { byoDiagnostics: opts.byoDiagnostics } : {}),
+  });
+}
+
+/**
+ * Guest (logged-out) chat handler for `POST /v1/chat/completions`.
+ *
+ * A LOGGED-OUT visitor can try the Brain before signing up. Their request
+ * carries a `bfguest_*` token (minted at `/api/guest/session`) instead of a
+ * tenant JWT, so the main handler routes here BEFORE `requireTenantAccess` — the
+ * tenant auth/metering path never sees anonymous traffic. Deliberately minimal
+ * and isolated from the tenant machinery:
+ *   • cheapest FREE pool, no tool loop, small max_tokens (cost containment);
+ *   • metered per visitorId AND per IP (GuestChatService) with a tiny cap;
+ *   • NO tenant usage rows written (a guest has no tenant), so guest spend never
+ *     touches `llm_usage_log` or any tenant meter.
+ * Cap exhaustion returns a 402 the UI turns into a "sign up free to keep going"
+ * wall — the whole point of the funnel.
+ */
+async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
+  if (!guestBrainEnabled(c.env)) {
+    return c.json({ error: 'Guest chat is disabled.', code: 'guest_brain_disabled' }, 503);
+  }
+  const authHeader = c.req.header('Authorization') ?? '';
+  const token = authHeader.slice(7); // strip "Bearer "
+  const visitorId = await verifyGuestToken(token, c.env.JWT_SECRET);
+  if (!visitorId) {
+    return c.json({ error: 'Invalid or expired guest session.', code: 'guest_token_invalid' }, 401);
+  }
+
+  const body = await c.req.json<ChatCompletionRequest>().catch(() => null);
+  if (!body || !Array.isArray(body.messages) || body.messages.length === 0) {
+    return c.json({ error: 'messages array is required' }, 400);
+  }
+
+  const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null;
+  const guest = new GuestChatService(buildDatabase(c.env));
+
+  const cap = await guest.checkCap(c.env as Env, visitorId, ip);
+  if (!cap.allowed) {
+    // 429 (not 402) — a guest has no plan to upgrade, so this must NOT trip the
+    // paid-plan upgrade modal. The UI shows a "sign up free to keep going" wall,
+    // keyed off code `guest_limit_reached`. `terminal` so the client stops.
+    return c.json({
+      error: cap.reason === 'ip'
+        ? 'This device has reached its free guest limit for today. Sign up free to keep going.'
+        : `You've used your ${cap.limit} free guest messages for today. Sign up free to keep going.`,
+      code: 'guest_limit_reached',
+      reason: cap.reason,
+      limit: cap.limit,
+      terminal: true,
+    }, 429);
+  }
+
+  // ── Cost containment: cheapest FREE pool, plain chat, clamped output ──────
+  const bodyAny = body as Record<string, unknown>;
+  delete bodyAny.tools;         // no agentic tool loop for guests (plain chat only)
+  delete bodyAny.tool_choice;
+  delete bodyAny.model;         // let the FREE pool pick its cheapest cascade
+  delete bodyAny.modelStrict;
+  if (typeof body.max_tokens !== 'number' || body.max_tokens > GUEST_CHAT_LIMITS.maxTokensPerRequest) {
+    body.max_tokens = GUEST_CHAT_LIMITS.maxTokensPerRequest;
+  }
+
+  // Consume one message up-front so an aborted/streamed request still counts
+  // (an abuser can't dodge the cap by killing the stream mid-flight).
+  const remaining = await guest.consumeMessage(c.env as Env, visitorId, ip);
+
+  const requiredKey = c.env.OPENROUTER_API_KEY;
+  if (!requiredKey) {
+    return c.json({ error: 'LLM proxy not configured (missing OPENROUTER_API_KEY)' }, 503);
+  }
+
+  const service = llmProxyForPlan(c.env, 'free');
+  const traceId = newTraceId();
+  const estimatedTokens = estimateRequestTokens(body.messages, undefined);
+  const result = await service.complete(body, undefined, traceId, undefined, { estimatedTokens });
+
+  const headers = new Headers();
+  const contentType = result.response.headers.get('content-type');
+  if (contentType) headers.set('content-type', contentType);
+  headers.set('x-builderforce-model', result.resolvedModel);
+  headers.set('x-builderforce-guest', 'true');
+  headers.set('x-builderforce-guest-remaining', String(remaining));
+  headers.set('x-builderforce-guest-limit', String(cap.limit));
+
+  if (body.stream && result.response.body) {
+    headers.set('cache-control', 'no-cache');
+    headers.set('connection', 'keep-alive');
+    logFailovers(c.env, c.executionCtx, result.failovers);
+    const instrumented = wrapStreamForUsage(result.response.body, (usage) => {
+      c.executionCtx.waitUntil(guest.addTokens(visitorId, usage.totalTokens ?? 0));
+    });
+    return new Response(instrumented, { status: result.response.status, headers });
+  }
+
+  const upstream = await result.response.json() as Record<string, unknown>;
+  logFailovers(c.env, c.executionCtx, result.failovers);
+  c.executionCtx.waitUntil(guest.addTokens(visitorId, result.usage?.totalTokens ?? 0));
+  return c.json({ ...upstream, _builderforce: { guest: true, remaining, limit: cap.limit } }, result.response.status as 200);
 }
 
 // ---------------------------------------------------------------------------
@@ -726,7 +1101,8 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   // BYO provider credentials — tenant-managed Anthropic auth. Two shapes:
   //   • API key (paste `sk-ant-…`), or
   //   • Claude Pro/Max SUBSCRIPTION via OAuth (connect your own Claude account).
-  // GET    /provider-keys                       → configured providers + auth type
+  // GET    /provider-keys                       → configured providers + auth type + priority
+  // PUT    /provider-keys/priority              → set BYO precedence { order: provider[] }
   // PUT    /provider-keys/:provider             → set/replace the API key { apiKey }
   // DELETE /provider-keys/:provider             → remove the credential
   // POST   /provider-keys/anthropic/oauth/start    → begin subscription connect (PKCE)
@@ -736,8 +1112,268 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     let access: TenantAccess;
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
     const details = await listTenantProviderKeys(c.env, access.tenantId);
-    // `providers` (id array) kept for backward compatibility; `details` carries auth type.
-    return c.json({ providers: details.map((d) => d.provider), details });
+    // Attach any "reconnect this account" alert to the LIST, not just the per-provider
+    // status drawer — an operator who never opens the drawer would otherwise never learn
+    // that a connected account has been silently rejected on every call. Bounded fan-out
+    // (one entry per CONNECTED provider, ≤8) and each lookup is read-through cached, so
+    // this stays a single cheap read in the steady state.
+    const alerts = await Promise.all(
+      details.map((d) => loadProviderAuthAlert(c.env, access.tenantId, d.provider).catch(() => null)),
+    );
+    // `providers` (id array) kept for backward compatibility; `details` carries auth type
+    // + tenant-set BYO precedence (ordered by `priority`, most-preferred first).
+    return c.json({
+      providers: details.map((d) => d.provider),
+      details: details.map((d, i) => (alerts[i] ? { ...d, authAlert: alerts[i] } : d)),
+    });
+  });
+
+  // Premium entitlement for the OpenRouter connection surface. Creating, editing and
+  // TESTING a registration all spend the same paid capability — a test is a real (tiny)
+  // upstream dispatch, and on a managed-key connection it is OUR key that pays for it — so
+  // the gate is defined once here instead of being re-derived per route.
+  const requireOpenRouterEntitlement = (c: Context<HonoEnv>, access: TenantAccess): Response | null => {
+    const premium = evaluatePremiumModelAccess({
+      effectivePlan: toTenantPlan(access.effectivePlan),
+      premiumOverride: access.premiumOverride,
+      isSuperadmin: access.isSuperadmin,
+      cardValidated: access.cardValidated,
+    });
+    return premium.entitled ? null : c.json(premiumModelGateBody(premium), 402);
+  };
+
+  // OpenRouter registrations — each named connection owns one ordered set of
+  // selected models and may optionally bind the tenant's OpenRouter key.
+  router.get('/openrouter-connections', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const connections = await listOpenRouterConnections(c.env, access.tenantId);
+    // Attach the rejected-account notice for the same reason the provider LIST does: a
+    // registration whose key was revoked or ran out of credit looks identical to a healthy
+    // one here, and an operator who never clicks Test would never find out. Bounded fan-out
+    // (≤20 connections) and each lookup is read-through cached.
+    //
+    // Usage rides the same read (ONE grouped scan for the whole tenant, 60s read-through) so
+    // "is it working" and "is it being used" are answered together — a registration that is
+    // healthy and has served nothing in 30 days is its own kind of problem, and until now
+    // this surface reported neither number.
+    const [alerts, usage] = await Promise.all([
+      Promise.all(connections.map((connection) =>
+        loadConnectionAuthAlert(c.env, access.tenantId, connection.id).catch(() => null))),
+      openRouterConnectionUsage(c.env, access.tenantId, connections)
+        .catch((): Record<number, OpenRouterConnectionUsage> => ({})),
+    ]);
+    return c.json({
+      connections: connections.map((connection, i) => ({
+        ...connection,
+        ...(alerts[i] ? { authAlert: alerts[i] } : {}),
+        ...(usage[connection.id] ? { usage: usage[connection.id] } : {}),
+      })),
+      usageWindowDays: USAGE_WINDOW_DAYS,
+    });
+  });
+
+  router.post('/openrouter-connections', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const gated = requireOpenRouterEntitlement(c, access);
+    if (gated) return gated;
+    const body = await c.req.json<{ label?: unknown; models?: unknown; apiKey?: unknown }>()
+      .catch(() => ({} as { label?: unknown; models?: unknown; apiKey?: unknown }));
+    const result = await upsertOpenRouterConnection(c.env, access.tenantId, {
+      label: typeof body.label === 'string' ? body.label : '',
+      models: Array.isArray(body.models) ? body.models.filter((m: unknown): m is string => typeof m === 'string') : [],
+      ...(typeof body.apiKey === 'string' ? { apiKey: body.apiKey } : {}),
+    }, access.userId);
+    if (!result.ok) {
+      const status = result.reason === 'duplicate_label' ? 409 : 400;
+      return c.json({ error: result.reason, code: result.reason }, status);
+    }
+    return c.json(result.connection, 201);
+  });
+
+  router.put('/openrouter-connections/:id', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const gated = requireOpenRouterEntitlement(c, access);
+    if (gated) return gated;
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid connection id' }, 400);
+    const body = await c.req.json<{ label?: unknown; models?: unknown; apiKey?: unknown; clearKey?: unknown }>()
+      .catch(() => ({} as { label?: unknown; models?: unknown; apiKey?: unknown; clearKey?: unknown }));
+    const result = await upsertOpenRouterConnection(c.env, access.tenantId, {
+      id,
+      label: typeof body.label === 'string' ? body.label : '',
+      models: Array.isArray(body.models) ? body.models.filter((m: unknown): m is string => typeof m === 'string') : [],
+      ...(typeof body.apiKey === 'string' ? { apiKey: body.apiKey } : {}),
+      ...(body.clearKey === true ? { clearKey: true } : {}),
+    }, access.userId);
+    if (!result.ok) {
+      const status = result.reason === 'not_found' ? 404 : result.reason === 'duplicate_label' ? 409 : 400;
+      return c.json({ error: result.reason, code: result.reason }, status);
+    }
+    // An edited registration — a replaced key, a corrected model list — invalidates the old
+    // rejection notice, exactly as replacing a provider key does. Otherwise the card keeps
+    // telling the operator to fix something they just fixed.
+    await clearConnectionAuthAlert(c.env, access.tenantId, id);
+    return c.json(result.connection);
+  });
+
+  // Test ONE registration by actually dispatching a tiny strict-pinned request down its own
+  // model list, on its own key when it has one. The provider cards have had this since the
+  // day a page of green "connected" chips sat next to a failing Test button; a registration
+  // is exactly as capable of being silently broken (a rotated OpenRouter key, a model id
+  // that OpenRouter retired), and until now nothing on this surface could tell an operator
+  // so. Same verdict shape, same probe module — see `probeOpenRouterConnection`.
+  router.post('/openrouter-connections/:id/test', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const gated = requireOpenRouterEntitlement(c, access);
+    if (gated) return gated;
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid connection id' }, 400);
+    const probe = await probeOpenRouterConnection(c.env, access.tenantId, id);
+    if (probe.status === 'not_found') return c.json({ error: 'not_found', code: 'not_found' }, 404);
+    if (probe.ok) {
+      return c.json({ ok: true, status: probe.status, model: probe.model, ownKey: probe.ownKey, testedAt: probe.checkedAt });
+    }
+    // An upstream 5xx means the OPPOSITE of a broken registration: the key was accepted and
+    // the model provider then errored. Reporting that as "test failed" sends an owner to
+    // re-enter a key that is fine — so it gets its own sentence naming the model, the status
+    // and the fact that their credential worked.
+    const account = probe.ownKey ? 'your OpenRouter key' : 'Builderforce managed billing';
+    return c.json({
+      ok: false,
+      status: probe.status,
+      model: probe.model,
+      ownKey: probe.ownKey,
+      error: probe.status === 'upstream_error'
+        ? `${account} worked — OpenRouter accepted it and routed the request. The model provider then returned HTTP ${probe.upstreamStatus} for ${probe.model}, twice. That is an upstream outage on that model, not a problem with this connection: retry shortly, or put a different model first in this registration.`
+        : probe.error
+          ? `OpenRouter connection test failed: ${probe.error}`
+          : `OpenRouter connection test could not run: ${probe.status.replaceAll('_', ' ')}.`,
+      code: 'openrouter_connection_test_failed',
+      testedAt: probe.checkedAt,
+      // Echo the alert the probe just persisted so the card repaints from THIS response
+      // instead of waiting for the list read's cache window to lapse.
+      ...(probe.alert ? { authAlert: probe.alert } : {}),
+      details: { connectionId: probe.connectionId, model: probe.model, upstreamStatus: probe.upstreamStatus },
+    });
+  });
+
+  router.delete('/openrouter-connections/:id', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid connection id' }, 400);
+    const deleted = await deleteOpenRouterConnection(c.env, access.tenantId, id);
+    // Nothing left to fix — retire the alert with the registration.
+    if (deleted) await clearConnectionAuthAlert(c.env, access.tenantId, id);
+    return deleted ? c.json({ ok: true }) : c.json({ error: 'not_found' }, 404);
+  });
+
+  router.get('/byo-precedence', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    return c.json({ entries: await listByoPrecedence(c.env, access.tenantId) });
+  });
+
+  // Credential health plus tenant-observed usage for the provider details drawer.
+  // This does not expose or transmit the stored secret.
+  router.get('/provider-keys/:provider/status', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const provider = c.req.param('provider');
+    if (!isSupportedProvider(provider)) return c.json({ error: 'unsupported provider' }, 400);
+    // `authAlert` is the DISPATCH-observed health signal, and it answers a question
+    // `configured`/`usable` structurally cannot: those describe whether the stored
+    // credential RESOLVES, and a ChatGPT account whose plan lapsed still resolves
+    // perfectly — it just 403s on every call. Without this the card reads
+    // "● connected" forever while the account silently serves nothing.
+    const [details, creds, authAlert] = await Promise.all([
+      listTenantProviderKeys(c.env, access.tenantId),
+      resolveTenantLlmCredentials(c.env, access.tenantId),
+      loadProviderAuthAlert(c.env, access.tenantId, provider),
+    ]);
+    const configured = details.some((d) => d.provider === provider);
+    const usable = providersFromCredentials(creds).includes(provider);
+    const db = buildTransactionalDatabase(c.env);
+    const usage = await db.execute(sql`
+      SELECT COUNT(*)::int AS requests,
+             COALESCE(SUM(total_tokens), 0)::bigint AS tokens,
+             MAX(created_at) AS last_used_at
+      FROM llm_usage_log
+      WHERE tenant_id = ${access.tenantId}
+        AND byo = true
+        AND byo_provider = ${provider}
+        AND created_at >= NOW() - interval '30 days'
+    `);
+    const row = (usage.rows?.[0] ?? {}) as Record<string, unknown>;
+    return c.json({
+      provider, configured, usable,
+      // A credential that decrypts but is refused upstream is not ready. Configuration
+      // and health are separate signals; health wins in the operator-facing verdict.
+      status: !configured ? 'not_connected'
+        : authAlert?.reason === 'capacity' ? 'capacity'
+        : authAlert ? 'needs_attention'
+        : usable ? 'ready'
+        : (creds.unresolvedReasons[provider] ?? 'unavailable'),
+      // Only meaningful while the credential is still configured — a removed one has
+      // nothing to reconnect, and the alert is cleared on removal anyway.
+      ...(configured && authAlert ? { authAlert } : {}),
+      usage: { periodDays: 30, requests: Number(row.requests ?? 0), tokens: Number(row.tokens ?? 0), lastUsedAt: row.last_used_at ?? null },
+    });
+  });
+
+  // Make one tiny, strict-pinned request through the same routing path as chat. The probe
+  // itself — model choice, dispatch, failure classification, and the alert write/clear that
+  // keeps the Integrations card honest — lives in `probeByoProvider`, because the DAILY
+  // sweep (runByoCredentialHealthCron) must reach the identical verdict this button does.
+  // When they disagreed, the page showed five green cards next to a failing test.
+  router.post('/provider-keys/:provider/test', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const provider = c.req.param('provider');
+    if (!isSupportedProvider(provider)) return c.json({ error: 'unsupported provider' }, 400);
+    const probe = await probeByoProvider(c.env, access.tenantId, provider);
+    if (probe.ok) {
+      return c.json({ ok: true, status: probe.status, model: probe.model, testedAt: probe.checkedAt });
+    }
+    return c.json({
+      ok: false,
+      status: probe.status,
+      error: probe.status === 'upstream_error'
+        ? `Your ${provider} credential worked — it was accepted and the request was routed. ${probe.model ?? 'The model'} then returned HTTP ${probe.upstreamStatus}, twice. That is an upstream outage on that model, not a problem with this account: retry shortly.`
+        : probe.error
+        ? probe.alert?.reason === 'capacity'
+          ? `${provider} connection test paused: this account's weekly usage allowance is depleted (HTTP ${probe.alert.status}). Check the provider's Usage page for the reset time; to continue now, buy credits or enable auto top-up, or upgrade the provider plan.`
+          : probe.alert?.reason === 'not_entitled'
+          ? `${provider} connection test failed: this account cannot use ${probe.model ?? 'the selected model'} (HTTP ${probe.alert.status}). Check the account's SuperGrok/API access, or use an xAI API key.`
+          : `${provider} connection test failed: ${probe.error}`
+        : `${provider} connection test could not run: ${probe.status.replaceAll('_', ' ')}.`,
+      code: 'provider_test_failed',
+      testedAt: probe.checkedAt,
+      // Echo the alert the probe just persisted so the card repaints from THIS response
+      // instead of waiting for the status read's 60s read-through window to lapse.
+      ...(probe.alert ? { authAlert: probe.alert } : {}),
+      details: { provider, model: probe.model, upstreamStatus: probe.upstreamStatus },
+    });
+  });
+
+  // Set the BYO precedence — the ordered provider list (most-preferred first) the
+  // auto-select cloud pin leads its connected flagships by (e.g. Meta first). Registered
+  // BEFORE `:provider` so the literal `priority` segment isn't captured as a provider id.
+  router.put('/provider-keys/priority', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const body = await c.req.json<{ order?: unknown }>().catch(() => ({} as { order?: unknown }));
+    if (!Array.isArray(body.order)) return c.json({ error: 'order must be an array' }, 400);
+    const parsed = body.order.map(parsePrecedenceRef);
+    if (parsed.some((entry) => entry === null)) {
+      return c.json({ error: 'order contains an invalid provider or OpenRouter connection ref' }, 400);
+    }
+    await setByoPrecedence(c.env, access.tenantId, parsed as NonNullable<(typeof parsed)[number]>[]);
+    return c.json({ ok: true, order: body.order });
   });
 
   router.put('/provider-keys/:provider', async (c) => {
@@ -749,6 +1385,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const apiKey = body.apiKey?.trim();
     if (!apiKey) return c.json({ error: 'apiKey is required' }, 400);
     await setTenantProviderKey(c.env, access.tenantId, provider, apiKey, access.userId);
+    // A replaced credential invalidates the old one's rejection notice — otherwise
+    // the card would keep telling the operator to reconnect an account they just did.
+    await clearProviderAuthAlert(c.env, access.tenantId, provider);
     return c.json({ ok: true, provider });
   });
 
@@ -802,9 +1441,96 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return c.json({ error: e instanceof Error ? e.message : 'OAuth exchange failed', code: 'oauth_exchange_failed' }, 502);
     }
     // Single-use verifier — drop it whether or not the store succeeds.
-    await kv.delete(pkceKvKey).catch(() => { /* best effort */ });
+    await kv.delete(pkceKvKey).catch((error) => { /* best effort */ 
+      reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
+    });
     await setTenantProviderOAuth(c.env, access.tenantId, 'anthropic', tokens, access.userId);
+    await clearProviderAuthAlert(c.env, access.tenantId, 'anthropic');
     return c.json({ ok: true, provider: 'anthropic', authType: 'oauth' });
+  });
+
+  const openAiOauthPkceKey = (tenantId: number, state: string): string => `openai_codex_oauth:${tenantId}:${state}`;
+
+  router.post('/provider-keys/openai/oauth/start', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
+    if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
+    const { verifier, challenge } = await generatePkce();
+    const state = generateState();
+    await kv.put(openAiOauthPkceKey(access.tenantId, state), verifier, { expirationTtl: OAUTH_PKCE_TTL_SECONDS });
+    return c.json({ authorizeUrl: buildOpenAICodexAuthorizeUrl({ state, challenge }), state });
+  });
+
+  router.post('/provider-keys/openai/oauth/complete', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
+    if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
+    const body = await c.req.json<{ code?: string; state?: string }>().catch(() => ({} as { code?: string; state?: string }));
+    const parsed = parseOpenAICodexCallback(body.code?.trim() ?? '');
+    const state = (parsed.state ?? body.state ?? '').trim();
+    if (!parsed.code || !state) return c.json({ error: 'Paste the full OpenAI redirect URL so code and state can be verified', code: 'oauth_missing_code_or_state' }, 400);
+    const key = openAiOauthPkceKey(access.tenantId, state);
+    const verifier = await kv.get(key);
+    if (!verifier) return c.json({ error: 'Connect session expired or invalid — start again.', code: 'oauth_state_expired' }, 400);
+    try {
+      const tokens = await exchangeOpenAICodexCode({ code: parsed.code, verifier });
+      await setTenantProviderOAuth(c.env, access.tenantId, 'openai', tokens, access.userId);
+      // A fresh consent may well have landed on an entitled account — retire the
+      // "reconnect your ChatGPT account" prompt the previous 403 raised.
+      await clearProviderAuthAlert(c.env, access.tenantId, 'openai');
+      await kv.delete(key).catch((error) => {
+        reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
+      });
+      return c.json({ ok: true, provider: 'openai', authType: 'oauth' });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : 'OAuth exchange failed', code: 'oauth_exchange_failed' }, 502);
+    }
+  });
+
+  const xaiOauthPkceKey = (tenantId: number, state: string): string => `xai_oauth:${tenantId}:${state}`;
+
+  router.post('/provider-keys/xai/oauth/start', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
+    if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
+    const { verifier, challenge } = await generatePkce();
+    const state = generateState();
+    await kv.put(xaiOauthPkceKey(access.tenantId, state), JSON.stringify({ verifier, challenge }), { expirationTtl: OAUTH_PKCE_TTL_SECONDS });
+    try {
+      return c.json({ authorizeUrl: await buildXaiAuthorizeUrl({ state, challenge }), state });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : 'xAI OAuth discovery failed', code: 'oauth_discovery_failed' }, 502);
+    }
+  });
+
+  router.post('/provider-keys/xai/oauth/complete', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
+    if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
+    const body = await c.req.json<{ code?: string; state?: string }>().catch(() => ({} as { code?: string; state?: string }));
+    const parsed = parseXaiCallback(body.code?.trim() ?? '');
+    const state = (parsed.state ?? body.state ?? '').trim();
+    if (!parsed.code || !state) return c.json({ error: 'Paste the full xAI redirect URL so code and state can be verified', code: 'oauth_missing_code_or_state' }, 400);
+    const key = xaiOauthPkceKey(access.tenantId, state);
+    const pendingRaw = await kv.get(key);
+    if (!pendingRaw) return c.json({ error: 'Connect session expired or invalid — start again.', code: 'oauth_state_expired' }, 400);
+    try {
+      const pending = JSON.parse(pendingRaw) as { verifier: string; challenge: string };
+      const tokens = await exchangeXaiCode({ code: parsed.code, verifier: pending.verifier, challenge: pending.challenge });
+      await setTenantProviderOAuth(c.env, access.tenantId, 'xai', tokens, access.userId);
+      await clearProviderAuthAlert(c.env, access.tenantId, 'xai');
+      await kv.delete(key).catch((error) => {
+        reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
+      });
+      return c.json({ ok: true, provider: 'xai', authType: 'oauth' });
+    } catch (e) {
+      const status = (e as { status?: number }).status;
+      return c.json({ error: e instanceof Error ? e.message : 'xAI OAuth exchange failed', code: status === 403 ? 'oauth_subscription_not_entitled' : 'oauth_exchange_failed' }, status === 403 ? 403 : 502);
+    }
   });
 
   router.delete('/provider-keys/:provider', async (c) => {
@@ -813,7 +1539,47 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const provider = c.req.param('provider');
     if (!isSupportedProvider(provider)) return c.json({ error: 'unsupported provider' }, 400);
     await deleteTenantProviderKey(c.env, access.tenantId, provider);
+    // Nothing left to reconnect — retire the alert with the credential.
+    await clearProviderAuthAlert(c.env, access.tenantId, provider);
     return c.json({ ok: true });
+  });
+
+  // OpenAI Responses-compatible surface backed by the tenant's own ChatGPT/Codex
+  // subscription. This is deliberately separate from /v1/chat/completions: Codex
+  // subscription tokens are valid for the Codex Responses backend, not the paid
+  // api.openai.com Chat Completions API used by an ordinary OpenAI API key.
+  router.post('/v1/responses', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const resolution = await resolveOpenAICodexResolution(c.env, access.tenantId);
+    if (!resolution.auth) {
+      return c.json({
+        error: {
+          message: resolution.reason
+            ? `OpenAI subscription credential is ${resolution.reason}; reconnect it in Settings → API keys.`
+            : 'Connect a ChatGPT/Codex subscription in Settings → API keys first.',
+          type: 'authentication_error',
+          code: `openai_subscription_${resolution.reason ?? 'not_connected'}`,
+        },
+      }, 401);
+    }
+    let body: Record<string, unknown>;
+    try { body = await c.req.json<Record<string, unknown>>(); }
+    catch { return c.json({ error: { message: 'Invalid JSON body', type: 'invalid_request_error' } }, 400); }
+    const upstream = await fetch('https://chatgpt.com/backend-api/codex/responses', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${resolution.auth.accessToken}`,
+        'ChatGPT-Account-Id': resolution.auth.accountId,
+        accept: c.req.header('accept') ?? 'application/json',
+      },
+      body: JSON.stringify({ ...body, store: false }),
+    });
+    const headers = new Headers(upstream.headers);
+    headers.delete('set-cookie');
+    headers.delete('content-encoding');
+    return new Response(upstream.body, { status: upstream.status, headers });
   });
 
   // -----------------------------------------------------------------------
@@ -889,6 +1655,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             },
             metadata: { engine: 'agent' }, idempotencyKey, useCase: 'agent',
             tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId },
+            // This branch IS the tenant's connected Anthropic credential serving the
+            // call, so name it — an unstamped byo row can't attribute to an integration.
+            byo: true, byoProvider: 'anthropic', surface: resolveUsageSurface(c, access),
           });
         }
         return new Response(JSON.stringify(json ?? { error: 'upstream_error' }), {
@@ -907,8 +1676,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             retries: 0, streamed: true, usage: parseAnthropicSseUsage(text),
             metadata: { engine: 'agent' }, idempotencyKey, useCase: 'agent',
             tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId },
+            byo: true, byoProvider: 'anthropic', surface: resolveUsageSurface(c, access),
           });
-        } catch { /* metering is best-effort */ }
+        } catch (error) { /* metering is best-effort */ 
+          reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
+        }
       })());
       return new Response(toClient, {
         status: upstream.status,
@@ -931,9 +1703,26 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const openaiBody = anthropicToOpenAiRequest(parsed);
     const traceId = newTraceId();
     const messageId = `msg_${traceId}`;
-    const service = llmProxyForPlan(c.env, access.effectivePlan, access.premiumOverride, { disablePaidOverflow });
+    // The tenant has no BYO Anthropic credential here (handled above), but may
+    // still bring OpenAI/Google — overlay those so a translated turn landing on
+    // their vendor rides the tenant's own account ($0 to us, metered byo).
+    const tenantVendorKeys = await resolveTenantVendorKeys(c.env, access.tenantId);
+    // Determinism for non-Anthropic on-prem BYO: if the requested model belongs to
+    // a vendor the tenant has connected, HARD-PIN it (modelStrict) so the run rides
+    // their own account instead of the gateway silently cascading onto our free
+    // pool. Mirrors the Anthropic passthrough's "runs on the tenant's account, period"
+    // guarantee for OpenAI/Google. A bare/mismatched model just stays a soft hint.
+    const byoVendors = byoVendorIdsFromCredentials({ vendorKeys: tenantVendorKeys });
+    if (typeof parsed.model === 'string' && byoVendors.has(vendorForModel(parsed.model))) {
+      (openaiBody as { modelStrict?: boolean }).modelStrict = true;
+    }
+    // Same routing path as /v1/chat/completions: a translated Anthropic request that
+    // carried `tools` is an agentic turn and floors onto the paid coder backstop
+    // rather than the lite general backstop. (BYO-Claude turns were served above.)
+    const service = proxyForCompletion(c.env, access, openaiBody as unknown as ChatCompletionRequest, { disablePaidOverflow, tenantVendorKeys });
     const result = await service.complete(openaiBody as unknown as ChatCompletionRequest, undefined, traceId);
     logFailovers(c.env, c.executionCtx, result.failovers);
+    logProviderAuthAlerts(c.env, c.executionCtx, access.tenantId, result.failovers);
 
     if (streamed && result.response.body) {
       const encoder = createAnthropicStreamEncoder({ messageId, model: result.resolvedModel });
@@ -945,6 +1734,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           useCase: 'agent', tenantApiKeyId: access.tenantApiKeyId,
           attribution: { agentHostId: access.agentHostId }, traceId,
           paidOverflow: result.paidOverflow,
+          byo: result.byoFunded ?? false,
+          byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
+          surface: resolveUsageSurface(c, access),
         });
       });
       return new Response(stream, {
@@ -962,6 +1754,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       useCase: 'agent', tenantApiKeyId: access.tenantApiKeyId,
       attribution: { agentHostId: access.agentHostId }, traceId,
       paidOverflow: result.paidOverflow,
+      byo: result.byoFunded ?? false,
+      byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
+      surface: resolveUsageSurface(c, access),
     });
     return new Response(JSON.stringify(openAiToAnthropicMessage(openaiJson, result.resolvedModel, messageId)), {
       status: result.response.status,
@@ -1078,6 +1873,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   // POST /v1/chat/completions
   // -----------------------------------------------------------------------
   router.post('/v1/chat/completions', async (c) => {
+    // Logged-out guest chat: a `bfguest_*` bearer routes to the isolated guest
+    // handler BEFORE the tenant auth path ever runs (see handleGuestChat).
+    if ((c.req.header('Authorization') ?? '').startsWith(`Bearer ${GUEST_TOKEN_PREFIX}`)) {
+      return handleGuestChat(c);
+    }
+
     let access: TenantAccess;
     try {
       access = await requireTenantAccess(c);
@@ -1089,6 +1890,26 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
       return c.json({ error: 'messages array is required' }, 400);
     }
+
+    // ── Client reasoning intent (VS Code chat "Thinking" toggle) ───────────
+    // OPTIONAL vendor-neutral `reasoning: { level: 'low'|'medium'|'high' }`, omitted
+    // entirely when the toggle is off (so today's requests stay byte-identical).
+    // Validate + CANONICALIZE here, at the trust boundary: only the matched level
+    // survives, so no arbitrary client-shaped `reasoning` object travels further, and a
+    // garbage value degrades to today's behaviour instead of erroring. The actual
+    // model-family mapping happens in the proxy's dispatch(), against the model the
+    // cascade RESOLVES rather than the id the client asked for.
+    //
+    // Cost: extended thinking bills as output tokens, so it is already bounded by the
+    // per-tenant daily + monthly gates in `enforceTokenCaps` below (and metered into
+    // llm_usage_log like any other output). No new gate is introduced here. NOTE the one
+    // interaction worth knowing: `vendors/anthropic.ts` raises max_tokens to fit an
+    // enabled thinking budget, so a thinking turn can exceed the plan's max_tokens clamp
+    // applied below — a plan-tier gate on `level: 'high'` is the natural hook if that
+    // ceiling ever needs to be hard.
+    const reasoningIntent = parseClientReasoningIntent((body as Record<string, unknown>).reasoning);
+    if (reasoningIntent) (body as Record<string, unknown>).reasoning = { level: reasoningIntent.thinkLevel };
+    else delete (body as Record<string, unknown>).reasoning;
 
     // ── Tenant "LLM" expansion (migration 0211) ────────────────────────────
     // A `tenant_model:<slug>` model ref expands into its configured base model +
@@ -1178,21 +1999,60 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // Free tenants can't strict-pin — a single misbehaving model would otherwise
     // drain their daily budget with retries. Paid plans, superadmin-issued
     // daily-limit overrides, and superadmin callers bypass.
+    // Resolve the tenant's Claude subscription token AND BYO api-keys up front (one
+    // round-trip) — needed both for the strict-pin gate below and for the proxy.
+    // The subscription powers direct-Claude; the BYO keys override the operator
+    // keys for their vendors so the tenant's own account serves the call ($0 to us,
+    // metered byo). The connected vendors also unlock free-plan model choice.
+    const tenantCreds = await resolveTenantLlmCredentials(c.env, access.tenantId);
+    const { anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, vendorKeys: tenantVendorKeys } = tenantCreds;
+    // DISPATCH vendor ids — a connected subscription rides `openai-codex` / `xai-oauth`.
+    const byoVendors = byoVendorIdsFromCredentials(tenantCreds);
+
     const queryStrict = c.req.query('strict') === 'true';
     const wantsStrict = resolveStrictPin(bodyAny, queryStrict);
     if (wantsStrict) {
+      // A free tenant may strict-pin a model their OWN connected provider serves —
+      // they pay their provider directly, so the "a bad model drains the budget"
+      // concern doesn't apply. Any other free-plan strict pin still needs a paid plan.
+      const pinnedVendor = typeof bodyAny.model === 'string' ? vendorForModel(bodyAny.model) : null;
+      const pinnedIsByo = pinnedVendor != null && byoVendors.has(pinnedVendor);
       const strictAllowed = access.isSuperadmin
                          || access.effectivePlan !== 'free'
-                         || access.tokenDailyLimitOverride !== null;
+                         || access.tokenDailyLimitOverride !== null
+                         || pinnedIsByo;
       if (!strictAllowed) {
+        // 402 Payment Required — uniform with the portal feature-gate standard
+        // (the caller is authenticated + authorized; they just need a higher plan).
         return c.json({
-          error: 'Strict model pinning requires a paid plan (Pro/Teams) or a superadmin-issued daily-limit override.',
+          error: 'Strict model pinning requires a paid plan (Pro/Teams), a connected provider (BYO), or a superadmin-issued daily-limit override.',
           code: 'strict_pin_not_allowed',
-        }, 403);
+          upgrade: true,
+        }, 402);
       }
       // Canonicalize: downstream (LlmProxyService.complete dispatch branch,
       // traceLogger) keys off `modelStrict`, so set it once here.
       body.modelStrict = true;
+    }
+
+    // ── Premium (any-paid-OpenRouter) model selection ────────────────────────
+    // Picking an OpenRouter model OUTSIDE the plan's curated pool is the premium
+    // tier: it routes on OUR metered OpenRouter key, so it needs billing details and
+    // a validated card (superadmin / premium override bypass). A model the tenant's
+    // OWN connected provider serves is NOT premium — that's BYO, funded by them, so
+    // it stays on the frontier-access rule and never reaches this gate.
+    const pinnedModel = typeof bodyAny.model === 'string' ? bodyAny.model.trim() : '';
+    const pinnedIsByoVendor = !!pinnedModel && byoVendors.has(vendorForModel(pinnedModel));
+    const premiumSelected = !pinnedIsByoVendor
+      && isPremiumModelSelection(pinnedModel, access.effectivePlan, access.premiumOverride);
+    if (premiumSelected) {
+      const premium = evaluatePremiumModelAccess({
+        effectivePlan: toTenantPlan(access.effectivePlan),
+        premiumOverride: access.premiumOverride,
+        isSuperadmin: access.isSuperadmin,
+        cardValidated: access.cardValidated,
+      });
+      if (!premium.entitled) return c.json(premiumModelGateBody(premium), 402);
     }
 
     // ── Token usage + limit checks (daily + monthly) ────────────────────────
@@ -1219,10 +2079,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
               'x-builderforce-idempotent-replay': 'true',
             });
           }
-        } catch { /* KV miss/error → fall through to the no-op guard */ }
+        } catch (error) { /* KV miss/error → fall through to the no-op guard */ 
+          reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
+        }
       }
       const tenMinAgo = new Date(Date.now() - 10 * 60_000);
-      const db = buildDatabase(c.env);
+      const db = buildTransactionalDatabase(c.env);
       const [prior] = await db
         .select({ id: llmUsageLog.id, createdAt: llmUsageLog.createdAt })
         .from(llmUsageLog)
@@ -1261,7 +2123,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     // Validate required key for the active plan up-front so callers get a clear 503.
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
-    if (!requiredKey) {
+    if (!requiredKey && !tenantCreds.openRouterConnections?.some((connection) => connection.hasKey)) {
       return c.json({
         error: isPro
           ? 'LLM proxy not configured (missing OPENROUTER_API_KEY_PRO or OPENROUTER_API_KEY)'
@@ -1279,20 +2141,85 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // $ cap — the primary pool still runs, only the paid fallback/backstop is
     // disabled. Hard ceiling on what a tight retry loop can spend on our keys.
     const disablePaidOverflow = await isPaidOverflowExhausted(c, access);
-    // If the tenant connected their own Claude subscription, any direct-Claude
-    // resolution in the cascade rides it (Bearer + oauth) instead of our metered
-    // key — and isn't metered as overflow. Null for everyone else (unchanged).
-    const anthropicOAuthToken = await resolveAnthropicOAuthToken(c.env, access.tenantId);
-    const service = llmProxyForPlan(c.env, access.effectivePlan, access.premiumOverride, { disablePaidOverflow, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}) });
-    const result = await service.complete(body, undefined, traceId);
+    // Single routing path for every modality (chat + messages, VS Code Brain +
+    // on-prem + SDK): an agentic tool-loop turn floors onto the paid coder backstop,
+    // a plain chat keeps the general pool. Reuses the credentials resolved above so
+    // any direct-Claude resolution rides the tenant subscription and BYO vendors
+    // serve from the tenant's own account.
+    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, tenantVendorKeys, byoVendorPriority: tenantCreds.vendorPriority, byoProviderPriorities: tenantCreds.providerPriorities, openRouterConnections: tenantCreds.openRouterConnections, openRouterModelKeys: tenantCreds.openRouterModelKeys, byoRequired: tenantCreds.configuredProviders.length > 0, byoDiagnostics: { configuredProviders: tenantCreds.configuredProviders, unresolvedReasons: tenantCreds.unresolvedReasons as Record<string, string> } });
+    // Context-fit seeding: estimate the turn's tokens so the proxy drops
+    // small-window models from the first-pass seed. This is the preventive half
+    // of the Brain "dies after several executions" fix — the reactive 413
+    // failover still backstops, but a long transcript no longer gets SEEDED onto
+    // a model it would immediately overflow (and the client now also bounds what
+    // it sends; see brainRunStore windowing + tool-result trimming).
+    const estimatedTokens = estimateRequestTokens(body.messages, (body as { tools?: unknown }).tools);
+    const result = await service.complete(body, undefined, traceId, undefined, { estimatedTokens });
+
+    // Did the PREMIUM model the tenant selected actually serve this turn? Only then
+    // does the flat 1¢ surcharge apply — if the cascade failed over to a plan-pool
+    // model, the tenant gets plan pricing and no surcharge (they didn't get premium).
+    const premiumServed = premiumSelected && result.resolvedModel === pinnedModel;
+    const platformSurcharge = premiumServed || result.platformSurcharge === true;
 
     // Clone upstream headers we care about
     const upstreamHeaders = new Headers();
     const contentType = result.response.headers.get('content-type');
     if (contentType) upstreamHeaders.set('content-type', contentType);
     upstreamHeaders.set('x-builderforce-model', result.resolvedModel);
+    // Tell the client this turn billed the premium surcharge, so the chat surface can
+    // show "premium · +1¢" provenance next to the model chip instead of guessing.
+    if (premiumServed) upstreamHeaders.set('x-builderforce-premium-surcharge', String(PREMIUM_REQUEST_SURCHARGE_MILLICENTS));
     upstreamHeaders.set('x-builderforce-trace-id', traceId);
     upstreamHeaders.set('x-builderforce-vendor', result.resolvedVendor);
+    // Which account served this turn (own / shared / shared_byo_unused) — the Brain
+    // provenance chip reads this so a SUCCESSFUL turn shows whether the tenant's own
+    // connected frontier account ran it, or the shared pool did despite one existing.
+    upstreamHeaders.set('x-builderforce-account', classifyReplyAccount(result.byoFunded ?? false, byoVendors.size > 0));
+    // A provider the tenant CONNECTED but that couldn't be resolved this call (revoked/
+    // expired subscription, an undecryptable key) leaves `byoVendors` empty — the turn
+    // degrades to the shared pool looking exactly like "nothing connected". Surface each
+    // unresolved provider WITH its reason (`anthropic:revoked`) so the client/triage can
+    // say precisely why + what to do, instead of a silent weak-coder run.
+    // ALSO cover the tenant-mismatch case: if NOTHING is connected in THIS tenant on an
+    // agentic (Brain) turn, check whether the same user connected a frontier provider in
+    // ANOTHER workspace (reason `other-workspace`) — cached per user (~1 query per 5 min,
+    // never on the common connected path) so it's not a per-request cost.
+    let otherWorkspace: LlmProvider[] = [];
+    if (byoVendors.size === 0 && tenantCreds.configuredProviders.length === 0 && isAgenticToolTurn(body as { tools?: unknown }) && access.userId) {
+      const uid = access.userId;
+      otherWorkspace = await getOrSetCached(
+        c.env as Env,
+        `byo-other-workspace:${uid}:${access.tenantId}`,
+        () => providersConnectedInOtherWorkspaces(c.env as Env, uid, access.tenantId, SUPPORTED_PROVIDERS),
+        { kvTtlSeconds: 300, l1TtlMs: 60_000 },
+      ).catch(() => [] as LlmProvider[]);
+    }
+    const byoUnresolvedHeader = formatByoUnresolvedHeader(tenantCreds, otherWorkspace);
+    if (byoUnresolvedHeader) upstreamHeaders.set('x-builderforce-byo-unresolved', byoUnresolvedHeader);
+
+    // Detect which BYO providers hit a usage/capacity cap this request — i.e. the
+    // tenant's key was resolved and used, but the upstream rejected it with a billing
+    // limit (Anthropic "reached your API usage limits", OpenAI "exceeded your quota",
+    // etc.). The CAPACITY_LIMIT_MARKER is embedded in the attempt error by throwClassified4xx,
+    // so we scan attempts for it, but only flag vendors the tenant is BYO-funding
+    // (no point alarming about a cap on the operator's shared keys).
+    const providerCapHeader = (() => {
+      const attempts = result.attempts ?? [];
+      if (byoVendors.size === 0) return null; // tenant has no BYO keys — nothing to manage
+      const cappedProviders = new Set<string>();
+      // Map vendor id → the provider name the UI (and settings page) uses
+      const vendorToProvider: Record<string, string> = {
+        anthropic: 'anthropic', openai: 'openai', googleai: 'google', meta: 'meta',
+      };
+      for (const attempt of attempts) {
+        if (attempt.error && attempt.error.includes(CAPACITY_LIMIT_MARKER) && byoVendors.has(attempt.vendor)) {
+          cappedProviders.add(vendorToProvider[attempt.vendor] ?? attempt.vendor);
+        }
+      }
+      return cappedProviders.size > 0 ? [...cappedProviders].join(',') : null;
+    })();
+    if (providerCapHeader) upstreamHeaders.set('x-builderforce-provider-cap', providerCapHeader);
     upstreamHeaders.set('x-builderforce-retries', String(result.retries));
     upstreamHeaders.set('x-builderforce-product', llmProduct);
     upstreamHeaders.set('x-builderforce-effective-plan', access.effectivePlan);
@@ -1310,6 +2237,43 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       upstreamHeaders.set('x-builderforce-monthly-tokens-remaining', String(Math.max(planMonthlyLimit - usageMonth, 0)));
     }
 
+    // Audit: when the caller identifies the Brain chat this completion is serving
+    // (`metadata.chatId`), record an activity row naming WHICH MODEL served the
+    // DEFAULT agent's turn — the gateway twin of the addressed-agent emit in
+    // `BrainService.agentReply`, sharing its ONE metadata builder so the audit
+    // timeline's model chip reads identical keys from either path. Turns without a
+    // chat id (SDK/on-prem/cloud traffic) are not chat activity and emit nothing.
+    // Best-effort by design — `llm_usage_log` stays the billing source of truth.
+    const recordBrainChatModelActivity = (): void => {
+      const meta = callerMetadata;
+      if (!meta || access.tenantId == null) return;
+      const rawChatId = meta.chatId ?? meta.brainChatId;
+      const chatId = typeof rawChatId === 'number' ? rawChatId : typeof rawChatId === 'string' && /^\d+$/.test(rawChatId) ? Number(rawChatId) : null;
+      if (chatId == null) return;
+      const agentRef = typeof meta.agentRef === 'string' && meta.agentRef ? meta.agentRef : 'brain-default';
+      const agentName = typeof meta.agentName === 'string' && meta.agentName ? meta.agentName : 'Brain';
+      const projectId = typeof meta.projectId === 'number' ? meta.projectId : null;
+      const byoFunded = result.byoFunded ?? false;
+      const promise = recordActivity(c.env, buildDatabase(c.env), {
+        tenantId: access.tenantId,
+        projectId,
+        actor: cloudAgentActor(agentRef, agentName),
+        verb: 'agent.replied',
+        targetType: 'chat',
+        targetId: chatId,
+        summary: `${agentName} replied in chat #${chatId}${result.resolvedModel ? ` using ${result.resolvedModel}` : ''}`,
+        metadata: buildModelActivityMetadata({
+          via: 'gateway',
+          model: result.resolvedModel,
+          vendor: result.resolvedVendor,
+          account: classifyReplyAccount(byoFunded, byoVendors.size > 0),
+          byoFunded,
+          extra: { chatId },
+        }),
+      });
+      c.executionCtx?.waitUntil?.(promise);
+    };
+
     // ── Streaming ────────────────────────────────────────────────────────────
     if (body.stream && result.response.body) {
       upstreamHeaders.set('cache-control', 'no-cache');
@@ -1317,6 +2281,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
       // Log any failovers that happened before this successful model
       logFailovers(c.env, c.executionCtx, result.failovers);
+      logProviderAuthAlerts(c.env, c.executionCtx, access.tenantId, result.failovers);
 
       // Full diagnostic trace (builder-side only). For streams the completion
       // body isn't captured here; identity, timing, attempts, and the chain are.
@@ -1341,9 +2306,14 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
             tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId }, traceId,
             paidOverflow: result.paidOverflow,
+            byo: result.byoFunded ?? false,
+            byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
+            surface: resolveUsageSurface(c, access),
+            premiumSurcharge: platformSurcharge,
           });
           // Back-fill the streamed trace row (logged above with 0 tokens) [1298].
           backfillTraceUsage(c.env, c.executionCtx, traceId, usage);
+          recordBrainChatModelActivity();
         },
       );
 
@@ -1358,6 +2328,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     // Log any failovers, then log usage
     logFailovers(c.env, c.executionCtx, result.failovers);
+    logProviderAuthAlerts(c.env, c.executionCtx, access.tenantId, result.failovers);
     logUsage(c.env, c.executionCtx, {
       tenantId: access.tenantId, userId: access.userId, llmProduct,
       model: result.resolvedModel, retries: result.retries, streamed: false,
@@ -1365,7 +2336,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
       tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId }, traceId,
       paidOverflow: result.paidOverflow,
+      byo: result.byoFunded ?? false,
+      byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
+      surface: resolveUsageSurface(c, access),
+      premiumSurcharge: platformSurcharge,
     });
+    recordBrainChatModelActivity();
 
     // Surface the trace id inside the error envelope too, so a consumer hitting
     // a failure can quote `error.details.correlationId` straight back for a
@@ -1406,6 +2382,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         product:       llmProduct,
         effectivePlan: access.effectivePlan,
         ...(access.premiumOverride ? { premium: true } : {}),
+        // A premium (any-paid-OpenRouter) turn: billed at OpenRouter cost + this flat
+        // per-request surcharge. Surfaced so the caller can attribute the extra cent.
+        ...(platformSurcharge ? { premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS } : {}),
         ...(result.schemaRetries != null ? { schemaRetries: result.schemaRetries } : {}),
         ...(result.schemaDowngraded ? { schemaDowngraded: true } : {}),
         ...(callerUseCase     ? { useCase:    callerUseCase  } : {}),
@@ -1440,7 +2419,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             idempotencyCacheKey(access.tenantId, idempotencyKey),
             JSON.stringify({ status: responseStatus, body: responseEnvelope }),
             { expirationTtl: 600 },
-          ).catch(() => { /* cache write is best-effort */ }),
+          ).catch((error) => { /* cache write is best-effort */ 
+            reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
+          }),
         );
       }
     }
@@ -1483,8 +2464,89 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // coding models, Pro tenants also see the premium ones).
     const codingModels = codingModelsForPlan(effectivePlan, premiumOverride);
 
+    // BYO: the tenant's connected providers drive an additional pinnable model set
+    // (their own account serves them, $0 to us). Connecting a provider ALSO unlocks
+    // model choice on the free plan — "LLM choices are based on the connected
+    // providers." Resolved only for an authenticated tenant.
+    // Keep the SUMMARIES (not just provider ids): a subscription-connected provider
+    // serves a different model route than an api-key one, and only the summary carries
+    // the auth type that decides which.
+    const [byoProviderRows, openRouterConnections] = access
+      ? await Promise.all([
+          listTenantProviderKeys(c.env, access.tenantId),
+          listOpenRouterConnections(c.env, access.tenantId),
+        ])
+      : [[] as ProviderKeySummary[], []];
+    const byoModels = [
+      ...byoModelsFor(byoProviderRows),
+      ...connectionModelRefs(openRouterConnections).map((id) => ({
+        id,
+        vendor: 'openrouter',
+        tier: 'REGISTERED',
+      })),
+    ];
+    // The wire shape stays a plain provider-id list (what every client reads).
+    const byoProviders: string[] = [
+      ...byoProviderRows.map((d) => d.provider),
+      ...(openRouterConnections.length ? ['openrouter'] : []),
+    ];
+    // THE single frontier-access rule (superadmin || premium override || connected BYO
+    // account || paid plan) — shared with every backend gate via evaluateFrontierAccess,
+    // so the client's model-choice / frontier-teacher unlock matches the server exactly.
+    // `access.isSuperadmin` is the DB-resolved flag (requireTenantAccess), so a superadmin
+    // unlocks frontier even without a premium override or a connected account.
+    const canUseFrontierModels = evaluateFrontierAccess({
+      effectivePlan: toTenantPlan(effectivePlan),
+      premiumOverride,
+      isSuperadmin: access?.isSuperadmin === true,
+      hasConnectedByoFrontier: byoProviders.length > 0,
+    }).entitled;
+    // `canChooseModel` is an alias kept for existing clients; it IS frontier access.
+    const canChooseModel = canUseFrontierModels;
+
+    // PREMIUM (any-paid-OpenRouter) selection — a STRICTER, separate rule from frontier
+    // access: billing details and a validated card (superadmin / override bypass). The premium
+    // model LIST is deliberately NOT inlined here: it is the whole paid OpenRouter
+    // catalog (hundreds of ids) and is already served, read-through + edge cached, by
+    // `GET /v1/catalog`. The picker loads it from there and filters, so this payload
+    // stays bounded and there is one catalog source.
+    const premiumAccess = evaluatePremiumModelAccess({
+      effectivePlan: toTenantPlan(effectivePlan),
+      premiumOverride,
+      isSuperadmin: access?.isSuperadmin === true,
+      cardValidated: access?.cardValidated === true,
+    });
+    // NOTE: the key is `premiumInfo`, NOT `premium` — `premium: true` is already the
+    // superadmin premium-OVERRIDE flag on this payload (clients read `res.premium ===
+    // true` to derive isPaid), so reusing it here would silently break that.
+    const premiumInfo = {
+      canUsePremiumModels: premiumAccess.entitled,
+      premiumInfo: {
+        entitled: premiumAccess.entitled,
+        reason: premiumAccess.reason,
+        ...(premiumAccess.unlock ? { unlock: premiumAccess.unlock } : {}),
+        cardValidationStatus: access?.cardValidationStatus ?? 'none',
+        /** Flat per-request surcharge on top of OpenRouter's own token price. */
+        surchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS,
+      },
+    };
+
+    // Frontier TEACHER options — the models eligible to distil into an Evermind. A
+    // connected BYO account means teaching with THEIR OWN frontier models (a BYO-Anthropic
+    // tenant teaches with Opus/Sonnet on their account, NOT a free `@cf/*`/qwen coder), so
+    // their BYO models lead. The platform's premium coders are added ONLY when the PLATFORM
+    // funds frontier (paid / override / superadmin) — a free BYO tenant must not teach on
+    // our premium pool for free. Empty when the tenant has no frontier access at all.
+    const platformFundsFrontier = premiumOverride || effectivePlan !== 'free' || access?.isSuperadmin === true;
+    const teacherModels = canUseFrontierModels
+      ? Array.from(new Set([
+          ...byoModels.map((m) => m.id),
+          ...(platformFundsFrontier ? codingModelsForPlan(effectivePlan === 'free' ? 'pro' : effectivePlan, true) : []),
+        ]))
+      : [];
+
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
-    if (!requiredKey) {
+    if (!requiredKey && !openRouterConnections.some((connection) => connection.hasKey)) {
       return c.json({
         configured: false,
         product: productName,
@@ -1492,6 +2554,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         ...(premiumOverride ? { premium: true } : {}),
         models: modelPoolForPlan(effectivePlan, premiumOverride),
         codingModels,
+        teacherModels,
+        canChooseModel,
+        canUseFrontierModels,
+        ...premiumInfo,
+        byo: { providers: byoProviders, models: byoModels },
       });
     }
 
@@ -1504,6 +2571,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       ...(premiumOverride ? { premium: true } : {}),
       data: await service.status(),
       codingModels,
+      teacherModels,
+      canChooseModel,
+      canUseFrontierModels,
+      ...premiumInfo,
+      byo: { providers: byoProviders, models: byoModels },
     });
   });
 
@@ -1607,6 +2679,57 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       { kvTtlSeconds: 120, l1TtlMs: 30_000 },
     );
     return c.json({ memories: seed });
+  });
+
+  // -----------------------------------------------------------------------
+  // POST /v1/run-outcome
+  // -----------------------------------------------------------------------
+  // Learned Model Routing (PRD 13) write-back for NON-cloud runs. IDE-native,
+  // on-prem, and external-SDK runs go through the gateway but never create a
+  // cloud `executions` row, so their (action_type, model)→success signal never
+  // reached the learner. This lets such a client report its terminal outcome so
+  // the same routing table that cloud runs teach also learns from them.
+  // Idempotent on `clientRunId`; best-effort (never blocks the caller).
+  router.post('/v1/run-outcome', async (c) => {
+    let access: TenantAccess;
+    try {
+      access = await requireTenantAccess(c);
+    } catch (err) {
+      return respondToAccessError(c, err);
+    }
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+
+    const clientRunId = typeof body.clientRunId === 'string' ? body.clientRunId.trim() : '';
+    const model = typeof body.model === 'string' ? body.model.trim() : '';
+    if (!clientRunId || !model) {
+      return c.json({ error: 'clientRunId and model are required' }, 400);
+    }
+    // `terminalStatus` wins; `success:boolean` is a friendly alias.
+    const terminalStatus: TerminalStatus =
+      body.terminalStatus === 'completed' || body.terminalStatus === 'failed' || body.terminalStatus === 'cancelled'
+        ? body.terminalStatus
+        : body.success === true ? 'completed' : body.success === false ? 'failed' : 'completed';
+    const source: OutcomeSource =
+      body.source === 'onprem' || body.source === 'ide' || body.source === 'external' ? body.source : 'external';
+    const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+
+    const db = buildDatabase(c.env);
+    await recordClientRunOutcome(c.env, db, access.tenantId, {
+      clientRunId,
+      source,
+      model,
+      terminalStatus,
+      ...(typeof body.actionType === 'string' ? { actionType: body.actionType } : {}),
+      ...(num(body.projectId) != null ? { projectId: num(body.projectId) } : {}),
+      ...(num(body.taskId) != null ? { taskId: num(body.taskId) } : {}),
+      ...(typeof body.merged === 'boolean' ? { merged: body.merged } : {}),
+      ...(typeof body.ciGreen === 'boolean' ? { ciGreen: body.ciGreen } : {}),
+      ...(typeof body.degraded === 'boolean' ? { degraded: body.degraded } : {}),
+      ...(num(body.steps) != null ? { steps: num(body.steps) } : {}),
+      ...(num(body.costMc) != null ? { costMc: num(body.costMc) } : {}),
+      ...(typeof body.approved === 'boolean' ? { approved: body.approved } : {}),
+    });
+    return c.json({ ok: true });
   });
 
   // -----------------------------------------------------------------------
@@ -1734,6 +2857,28 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       ORDER BY total_tokens DESC NULLS LAST
     `);
 
+    // Credential attribution is independent of model attribution: a single BYO
+    // integration or bfk_* API key may consume several models in this window.
+    const byCredential = await db.execute(sql`
+      SELECT
+        CASE WHEN u.byo_provider IS NOT NULL THEN 'integration' ELSE 'api_key' END AS "type",
+        COALESCE(u.byo_provider, u.tenant_api_key_id::text) AS "id",
+        COALESCE(u.byo_provider, k.name, 'Unnamed API key') AS "name",
+        COUNT(*)::int AS requests,
+        COUNT(DISTINCT u.model)::int AS "modelCount",
+        SUM(u.total_tokens)::bigint AS tokens
+      FROM llm_usage_log u
+      LEFT JOIN tenant_api_keys k ON k.id = u.tenant_api_key_id
+      WHERE u.tenant_id = ${access.tenantId}
+        AND u.created_at >= NOW() - (${days} || ' days')::interval
+        AND (u.byo_provider IS NOT NULL OR u.tenant_api_key_id IS NOT NULL)
+      GROUP BY
+        CASE WHEN u.byo_provider IS NOT NULL THEN 'integration' ELSE 'api_key' END,
+        COALESCE(u.byo_provider, u.tenant_api_key_id::text),
+        COALESCE(u.byo_provider, k.name, 'Unnamed API key')
+      ORDER BY tokens DESC NULLS LAST
+    `);
+
     const [totals] = (await db.execute(sql`
       SELECT
         COUNT(*)::int                  AS requests,
@@ -1789,6 +2934,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         completionTokens: Number(mine?.completion_tokens ?? 0),
       },
       byModel: byModel.rows,
+      byCredential: byCredential.rows,
       byDay: byDay.rows,
       byUser: byUser.rows,
       bySource: bySource.rows,
@@ -1829,6 +2975,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return c.json({ error: '`input` must be a string or array of strings' }, 400);
     }
 
+    // Plan/daily/monthly token cap — gate BEFORE the funded vendor call so a
+    // cap-exhausted (or per-agentHost-limited) tenant can't loop the operator's
+    // OpenRouter/Voyage key for free. Same shared gate the chat/messages handlers
+    // use; returns a 429 Response when blocked.
+    const capResult = await enforceTokenCaps(c, access);
+    if ('blocked' in capResult) return capResult.blocked;
+
     // Strip gateway-only fields before forwarding to the vendor.
     const { metadata, model, input, ...extraBody } = body;
     const envelope = (raw: Record<string, unknown>) => ({
@@ -1853,6 +3006,34 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         ? { ...(result.raw as Record<string, unknown>) }
         : { object: result.object, data: result.data, model: result.model, ...(result.usage ? { usage: result.usage } : {}) };
       out._vendor = result.vendorUsed;
+
+      // Meter the funded embeddings call so it counts on the token budget and
+      // lands in llm_usage_log (was silently free — a cap-exhausted tenant could
+      // loop it invisibly). Prefer the vendor-reported token usage; when the
+      // vendor omits it, fall back to the shared ~4-char/token estimate and mark
+      // the row `tokensEstimated` so it's distinguishable from a metered count.
+      const inputChars = Array.isArray(input)
+        ? input.reduce((n, s) => n + (typeof s === 'string' ? s.length : 0), 0)
+        : (typeof input === 'string' ? input.length : 0);
+      const vendorPrompt = result.usage?.prompt_tokens;
+      const vendorTotal = result.usage?.total_tokens;
+      const tokensEstimated = vendorPrompt == null && vendorTotal == null;
+      const promptTokens = vendorPrompt ?? estimateTokensFromChars(inputChars);
+      const totalTokens = vendorTotal ?? promptTokens;
+      logUsage(c.env, c.executionCtx, {
+        tenantId: access.tenantId, userId: access.userId,
+        llmProduct: productNameForPlan(access.effectivePlan, access.premiumOverride),
+        model: result.model, streamed: false,
+        // Embeddings have no completion tokens.
+        usage: { promptTokens, completionTokens: 0, totalTokens },
+        useCase: 'embedding',
+        metadata: { vendor: result.vendorUsed, ...(tokensEstimated ? { tokensEstimated: true } : {}) },
+        tenantApiKeyId: access.tenantApiKeyId,
+        attribution: { agentHostId: access.agentHostId },
+        // Funded (operator key) — byo defaults false, so the row is always billable.
+        surface: resolveUsageSurface(c, access),
+      });
+
       return c.json(envelope(out), 200);
     } catch (err) {
       // 400 bad payload — failover won't help, surface as-is.
@@ -1931,6 +3112,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
       tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId },
       paidOverflow: result.paidOverflow,
+      // No `byo`: image generation has no tenant-credential path (imageProxyForPlan
+      // never takes tenant vendor keys), so every image row is platform-funded.
+      surface: resolveUsageSurface(c, access),
     });
 
     if (cascadeExhausted) {
@@ -1991,10 +3175,20 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     });
   });
 
+  // Parse an optional `?projectId=` filter for the insights surfaces. Bad/blank
+  // values collapse to null (whole-tenant scope) rather than erroring — a wrong
+  // id simply matches no rows since the ledger is already tenant-scoped.
+  const parseProjectIdParam = (raw: string | undefined): number | null => {
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  };
+
   // -----------------------------------------------------------------------
   // GET /v1/builder-insights
   // Builder-level Insights snapshot — the cheap, cacheable "current state"
-  // the IDE/CLI poll-once or render on demand. Tenant (and caller) scoped.
+  // the IDE/CLI poll-once or render on demand. Tenant (and caller) scoped,
+  // optionally narrowed to one project via ?projectId=.
   // Mirrors the auth of /v1/usage.
   // -----------------------------------------------------------------------
   router.get('/v1/builder-insights', async (c) => {
@@ -2008,6 +3202,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const snapshot = await getCachedBuilderInsightsSnapshot(db, c.env, {
       tenantId: access.tenantId,
       userId: access.userId,
+      projectId: parseProjectIdParam(c.req.query('projectId')),
     });
     return c.json(snapshot);
   });
@@ -2029,7 +3224,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
 
     const db = buildDatabase(c.env);
-    const scope = { tenantId: access.tenantId, userId: access.userId };
+    const scope = {
+      tenantId: access.tenantId,
+      userId: access.userId,
+      projectId: parseProjectIdParam(c.req.query('projectId')),
+    };
     const signal = c.req.raw.signal;
     const MAX_TICKS = 10;
     const INTERVAL_MS = 30_000;
@@ -2040,8 +3239,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         const emit = (text: string) => {
           try {
             controller.enqueue(encoder.encode(text));
-          } catch {
+          } catch (error) {
             /* controller already closed */
+          
+            reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "emit" });
           }
         };
 
@@ -2071,8 +3272,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         }
         try {
           controller.close();
-        } catch {
+        } catch (error) {
           /* already closed */
+        
+          reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "start" });
         }
       },
     });

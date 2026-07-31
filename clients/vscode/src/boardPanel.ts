@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { BfTask, DEFAULT_HIDE_DONE, invalidateTasks, listTasks, updateTaskStatus } from "./bfApi";
+import { makeNonce, WebviewPanelBase, type WebviewInbound } from "./webviewShared";
 
 /**
  * Native Kanban board rendered directly in a webview panel — NOT the embedded web
@@ -27,7 +28,13 @@ const KNOWN = new Set(COLUMNS.map((c) => c.key));
 /** Tasks with an unknown/empty status bucket into Backlog so nothing is hidden. */
 const FALLBACK_STATUS = "backlog";
 
-export class BoardPanel {
+/** Inbound board messages (shared cases — token.refresh/signin — live in the base). */
+interface BoardInbound extends WebviewInbound {
+  taskId?: number;
+  status?: string;
+}
+
+export class BoardPanel extends WebviewPanelBase<BoardInbound> {
   private static readonly panels = new Map<number, BoardPanel>();
 
   static open(ctx: vscode.ExtensionContext, projectId: number, projectName: string): void {
@@ -40,45 +47,19 @@ export class BoardPanel {
     BoardPanel.panels.set(projectId, new BoardPanel(ctx, projectId, projectName));
   }
 
-  private readonly panel: vscode.WebviewPanel;
-  private readonly disposables: vscode.Disposable[] = [];
-
   private constructor(
-    private readonly ctx: vscode.ExtensionContext,
+    ctx: vscode.ExtensionContext,
     private readonly projectId: number,
     private readonly projectName: string,
   ) {
-    this.panel = vscode.window.createWebviewPanel(
-      "builderforce.board",
-      `BuilderForce Board — ${projectName}`,
-      vscode.ViewColumn.Active,
-      { enableScripts: true, retainContextWhenHidden: true },
-    );
-    this.panel.iconPath = vscode.Uri.joinPath(ctx.extensionUri, "media", "icon.png");
-    this.panel.webview.html = this.html(this.panel.webview);
-
-    this.panel.webview.onDidReceiveMessage(
-      (m: { type: string; taskId?: number; status?: string }) => void this.onMessage(m),
-      undefined,
-      this.disposables,
-    );
-    this.panel.onDidDispose(
-      () => {
-        BoardPanel.panels.delete(this.projectId);
-        for (const d of this.disposables) {
-          try {
-            d.dispose();
-          } catch {
-            /* noop */
-          }
-        }
-      },
-      undefined,
-      this.disposables,
-    );
+    super(ctx, {
+      viewType: "builderforce.board",
+      title: `BuilderForce Board — ${projectName}`,
+      htmlTitle: "BuilderForce Board",
+    });
   }
 
-  private async onMessage(m: { type: string; taskId?: number; status?: string }): Promise<void> {
+  protected async onMessage(m: BoardInbound): Promise<void> {
     switch (m.type) {
       case "ready":
       case "refresh":
@@ -138,11 +119,11 @@ export class BoardPanel {
 
   private lastTasks: BfTask[] = [];
 
-  private post(msg: unknown): void {
-    void this.panel.webview.postMessage(msg);
+  protected onDispose(): void {
+    BoardPanel.panels.delete(this.projectId);
   }
 
-  private html(webview: vscode.Webview): string {
+  protected renderHtml(webview: vscode.Webview): string {
     const nonce = makeNonce();
     const csp = [
       `default-src 'none'`,
@@ -324,11 +305,4 @@ function toCard(t: BfTask): { id: number; key?: string; title: string; status: s
     priority: t.priority,
     assignee: t.assignedUserId ?? undefined,
   };
-}
-
-function makeNonce(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let out = "";
-  for (let i = 0; i < 32; i++) out += chars[Math.floor(Math.random() * chars.length)];
-  return out;
 }

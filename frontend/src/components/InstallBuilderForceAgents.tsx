@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import QuickStart from './QuickStart';
 
 interface InstallBuilderForceAgentsProps {
@@ -12,11 +13,11 @@ interface InstallBuilderForceAgentsProps {
  * Renders the full quickstart UI with all installation modes (one-liner, npm, hackable, macOS).
  */
 export function InstallBuilderForceAgents({ tenantToken }: InstallBuilderForceAgentsProps) {
+  const t = useTranslations('installAgents');
   return (
     <div>
       <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20 }}>
-        Download and install the BuilderForce Agents agent on your machine. It will automatically
-        register with your workspace so you can delegate tasks immediately.
+        {t('intro')}
       </p>
 
       {tenantToken && (
@@ -31,18 +32,20 @@ export function InstallBuilderForceAgents({ tenantToken }: InstallBuilderForceAg
             color: 'var(--cyan-bright, #00e5cc)',
           }}
         >
-          Your workspace token is pre-configured — the agent will register automatically on first run.
+          {t('tokenPreconfigured')}
         </div>
       )}
 
       <QuickStart />
 
       <p style={{ marginTop: 16, fontSize: 12, color: 'var(--text-muted)' }}>
-        You can also do this later from the{' '}
-        <a href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
-          Workforce
-        </a>{' '}
-        page.
+        {t.rich('laterHint', {
+          link: (chunks) => (
+            <a href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
+              {chunks}
+            </a>
+          ),
+        })}
       </p>
     </div>
   );

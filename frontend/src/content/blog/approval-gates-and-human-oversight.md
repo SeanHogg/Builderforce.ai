@@ -12,6 +12,8 @@ Autonomous agents are powerful. That is also exactly what makes them dangerous w
 
 Builderforce.ai's **approval gate** system solves this at the infrastructure level. You define which action types need human sign-off; the platform blocks execution until a manager approves or rejects; the agent only proceeds once the decision is recorded. The whole loop is audited.
 
+![Flow diagram of an approval gate: an agent running a task hits a gate that blocks execution via POST /api/approvals, a manager approves, rejects, or lets it time out, and each outcome is recorded in an immutable audit trail](/blog/approval-gates.svg)
+
 ---
 
 ## How Approval Gates Work

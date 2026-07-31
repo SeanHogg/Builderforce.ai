@@ -99,7 +99,7 @@ export function Soc2Content() {
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 }}>
         <div style={{ fontSize: 16, fontWeight: 600 }}>SOC 2 Control Tracker</div>
         <div style={{ fontSize: 13, color: '#64748b' }}>
-          Readiness <strong style={{ color: '#0f172a' }}>{overall.pct}%</strong> ({overall.ready}/{overall.inScope} in scope)
+          Readiness <strong style={{ color: 'var(--text-primary, #0f172a)' }}>{overall.pct}%</strong> ({overall.ready}/{overall.inScope} in scope)
         </div>
       </div>
       {error && <div role="alert" style={{ color: '#dc2626', marginBottom: 8 }}>{error}</div>}

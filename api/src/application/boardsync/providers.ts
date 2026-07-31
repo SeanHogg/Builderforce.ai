@@ -111,6 +111,37 @@ export interface ProviderConfig {
   externalBoardId?: string | null;
 }
 
+export class PermanentBoardProviderError extends Error {
+  readonly permanent = true;
+
+  constructor(
+    message: string,
+    readonly code: 'invalid_scope' | 'not_found',
+  ) {
+    super(message);
+    this.name = 'PermanentBoardProviderError';
+  }
+}
+
+export function isPermanentBoardProviderError(error: unknown): error is PermanentBoardProviderError {
+  return error instanceof PermanentBoardProviderError;
+}
+
+function githubRepoScope(externalBoardId: string | null | undefined): string {
+  const scope = (externalBoardId ?? '').trim();
+  const parts = scope.split('/');
+  if (
+    parts.length !== 2
+    || parts.some((part) => !part || part === '.' || part === '..' || /\s|[?#]/.test(part))
+  ) {
+    throw new PermanentBoardProviderError(
+      'github provider requires externalBoardId "owner/repo"',
+      'invalid_scope',
+    );
+  }
+  return parts.map(encodeURIComponent).join('/');
+}
+
 /** Build the normalized ticket field bag + content hash from raw normalized parts. */
 function buildTicket(
   source: string,
@@ -172,8 +203,7 @@ export class GitHubBoardProvider implements BoardProvider {
   constructor(private readonly cfg: ProviderConfig, private readonly fetchFn: FetchLike) {}
 
   async fetchTicketsSince(cursor: string | null): Promise<FetchPage> {
-    const repo = (this.cfg.externalBoardId ?? '').trim();
-    if (!repo) throw new Error('github provider requires externalBoardId "owner/repo"');
+    const repo = githubRepoScope(this.cfg.externalBoardId);
     const token = String(this.cfg.credentials.accessToken ?? '');
 
     const params = new URLSearchParams({
@@ -192,6 +222,12 @@ export class GitHubBoardProvider implements BoardProvider {
         Accept: 'application/vnd.github+json',
       },
     });
+    if (res.status === 404) {
+      throw new PermanentBoardProviderError(
+        `GitHub repository "${decodeURIComponent(repo)}" was not found or is not accessible to this credential`,
+        'not_found',
+      );
+    }
     if (!res.ok) throw new Error(`GitHub issues fetch failed: ${res.status}`);
 
     const raw = (await res.json()) as GitHubIssueRaw[];
@@ -218,7 +254,7 @@ export class GitHubBoardProvider implements BoardProvider {
   }
 
   async pushUpdate(externalId: string, changeSet: ChangeSet): Promise<void> {
-    const repo = (this.cfg.externalBoardId ?? '').trim();
+    const repo = githubRepoScope(this.cfg.externalBoardId);
     const token = String(this.cfg.credentials.accessToken ?? '');
     const patch: Record<string, unknown> = {};
     if (changeSet.title !== undefined) patch.title = changeSet.title;
@@ -236,6 +272,12 @@ export class GitHubBoardProvider implements BoardProvider {
       },
       body: JSON.stringify(patch),
     });
+    if (res.status === 404) {
+      throw new PermanentBoardProviderError(
+        `GitHub repository "${decodeURIComponent(repo)}" or issue "${externalId}" was not found or is not accessible to this credential`,
+        'not_found',
+      );
+    }
     if (!res.ok) throw new Error(`GitHub issue update failed: ${res.status}`);
   }
 
@@ -249,10 +291,18 @@ export class GitHubBoardProvider implements BoardProvider {
     // "owner/repo" so a staged project maps straight onto a connection scope.
     const projects: DiscoveredProject[] = [];
     if (scope) {
-      const res = await this.fetchFn(`https://api.github.com/repos/${scope}`, { headers });
+      const repo = githubRepoScope(scope);
+      const res = await this.fetchFn(`https://api.github.com/repos/${repo}`, { headers });
       if (res.ok) {
         const r = (await res.json()) as { full_name: string; description?: string; html_url?: string; open_issues_count?: number };
         projects.push({ externalId: r.full_name, key: r.full_name, name: r.full_name, description: r.description ?? null, url: r.html_url ?? null, itemCount: r.open_issues_count ?? null });
+      } else if (res.status === 404) {
+        throw new PermanentBoardProviderError(
+          `GitHub repository "${scope}" was not found or is not accessible to this credential`,
+          'not_found',
+        );
+      } else {
+        throw new Error(`GitHub repo fetch failed: ${res.status}`);
       }
     } else {
       const res = await this.fetchFn('https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member', { headers });
@@ -825,6 +875,87 @@ export class FreshserviceBoardProvider implements BoardProvider {
       body: JSON.stringify(fields),
     });
     if (!res.ok) throw new Error(`Freshservice ticket update failed: ${res.status}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Freshdesk (REST) — itsm (help desk / support)
+// ---------------------------------------------------------------------------
+// Freshworks' help-desk product (distinct from Freshservice ITSM). Same /api/v2/
+// tickets REST shape + basic-auth-with-apiKey, so this mirrors FreshserviceBoardProvider;
+// the differences are the base URL (…/freshdesk.com) and Freshdesk's default status set.
+
+const FRESHDESK_STATUS: Record<number, string> = { 2: 'open', 3: 'pending', 4: 'resolved', 5: 'closed' };
+const FRESHDESK_PRIORITY: Record<number, string> = { 1: 'low', 2: 'normal', 3: 'high', 4: 'urgent' };
+
+interface FreshdeskTicketRaw {
+  id: number;
+  subject: string;
+  description_text?: string | null;
+  description?: string | null;
+  status?: number;
+  priority?: number;
+  /** Freshdesk ticket type ('Incident' | 'Problem' | 'Question' | 'Feature Request' | …). */
+  type?: string | null;
+  requester_id?: number | null;
+  updated_at: string;
+}
+
+export class FreshdeskBoardProvider implements BoardProvider {
+  readonly id = 'freshdesk';
+  constructor(private readonly cfg: ProviderConfig, private readonly fetchFn: FetchLike) {}
+
+  async fetchTicketsSince(cursor: string | null): Promise<FetchPage> {
+    const base = trimSlash(this.cfg.baseUrl);
+    if (!base) throw new Error('freshdesk provider requires baseUrl');
+    const apiKey = String(this.cfg.credentials.apiKey ?? '');
+
+    const params = new URLSearchParams({ order_by: 'updated_at', order_type: 'asc', per_page: '100' });
+    if (cursor) params.set('updated_since', cursor);
+
+    const res = await this.fetchFn(`${base}/api/v2/tickets?${params.toString()}`, {
+      headers: { Authorization: basicAuth(apiKey, 'X'), Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Freshdesk tickets fetch failed: ${res.status}`);
+
+    const raw = (await res.json()) as FreshdeskTicketRaw[];
+    const tickets: NormalizedTicket[] = [];
+    let next = cursor;
+    for (const t of raw ?? []) {
+      tickets.push(
+        buildTicket(this.id, {
+          externalId:      String(t.id),
+          externalUrl:     `${base}/a/tickets/${t.id}`,
+          externalVersion: t.updated_at,
+          title:           t.subject,
+          body:            t.description_text ?? t.description ?? null,
+          state:           FRESHDESK_STATUS[t.status ?? 2] ?? 'open',
+          extra:           {
+            priority: FRESHDESK_PRIORITY[t.priority ?? 2] ?? 'normal',
+            ticketType: t.type ?? null,
+            requester: t.requester_id != null ? String(t.requester_id) : null,
+          },
+        }),
+      );
+      next = maxVersion(next, t.updated_at);
+    }
+    return { tickets, nextCursor: next };
+  }
+
+  async pushUpdate(externalId: string, changeSet: ChangeSet): Promise<void> {
+    const base = trimSlash(this.cfg.baseUrl);
+    const apiKey = String(this.cfg.credentials.apiKey ?? '');
+    const fields: Record<string, unknown> = {};
+    if (changeSet.title !== undefined) fields.subject = changeSet.title;
+    if (changeSet.body !== undefined) fields.description = changeSet.body;
+    if (Object.keys(fields).length === 0) return;
+
+    const res = await this.fetchFn(`${base}/api/v2/tickets/${externalId}`, {
+      method: 'PUT',
+      headers: { Authorization: basicAuth(apiKey, 'X'), Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
+    });
+    if (!res.ok) throw new Error(`Freshdesk ticket update failed: ${res.status}`);
   }
 }
 
@@ -1545,6 +1676,7 @@ const PROVIDER_REGISTRY: Record<string, BoardProviderCtor> = {
   sentry:       SentryBoardProvider,
   pagerduty:    PagerDutyBoardProvider,
   freshservice: FreshserviceBoardProvider,
+  freshdesk:    FreshdeskBoardProvider,
   servicenow:   ServiceNowBoardProvider,
   monday:       MondayBoardProvider,
   asana:        AsanaBoardProvider,
@@ -1562,5 +1694,14 @@ export function createBoardProvider(
 ): BoardProvider {
   const Ctor = PROVIDER_REGISTRY[provider];
   if (!Ctor) throw new Error(`Unsupported board provider: ${provider}`);
-  return new Ctor(cfg, fetchFn);
+  // Bind before storing. Every provider invokes its injected fetch as a METHOD
+  // (`this.fetchFn(url, …)`), which sets `this` to the provider instance — and
+  // the Workers runtime rejects the global `fetch` called on anything but
+  // `globalThis` with "Illegal invocation: function called with incorrect `this`
+  // reference". Callers pass a bare `fetch`, so every board sync threw before
+  // issuing a request (145 sweep failures/day, one per due connection).
+  //
+  // Binding HERE covers all 37 call sites across every provider at once; doing
+  // it at the call site would leave the next caller to rediscover the trap.
+  return new Ctor(cfg, fetchFn.bind(globalThis));
 }

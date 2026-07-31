@@ -32,9 +32,21 @@ function parseDays(raw: string | undefined, def = 30): number {
   return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
 }
 
-/** Per-tenant version token bumped on every dismissal so the cached list ages out. */
-function recsVersionKey(tenantId: number): string {
+function parseProjectId(raw: string | undefined): number | undefined {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
+/** Per-tenant version token bumped on every dismissal so the cached list ages out.
+ *  Exported so the bundled /ai-overview read shares the exact same cache key (and
+ *  thus honours dismissals) rather than re-deriving the recommendations. */
+export function recsVersionKey(tenantId: number): string {
   return `insights-recs-version:tenant:${tenantId}`;
+}
+
+/** The recommendations read-through cache key for a tenant+window+dismissal token. */
+export function recommendationsCacheKey(tenantId: number, days: number, ver: string): string {
+  return `insights:recs:t:${tenantId}:d:${days}:v:${ver}`;
 }
 
 export function createRecommendationsRoutes(db: Db): Hono<HonoEnv> {
@@ -48,7 +60,7 @@ export function createRecommendationsRoutes(db: Db): Hono<HonoEnv> {
     const days = parseDays(c.req.query('days'));
     const env = c.env as Env;
     const ver = await getCacheVersion(env, recsVersionKey(tenantId));
-    const key = `insights:recs:t:${tenantId}:d:${days}:v:${ver}`;
+    const key = recommendationsCacheKey(tenantId, days, ver);
     return c.json(await getOrSetCached(env, key, () => computeRecommendations(db, tenantId, days), SHORT_TTL));
   });
 
@@ -69,9 +81,10 @@ export function createRecommendationsRoutes(db: Db): Hono<HonoEnv> {
   router.get('/space', requireRole(TenantRole.DEVELOPER), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
+    const projectId = parseProjectId(c.req.query('projectId'));
     const env = c.env as Env;
-    const key = `insights:space:t:${tenantId}:d:${days}`;
-    return c.json(await getOrSetCached(env, key, () => computeSpaceMetrics(db, tenantId, days), SHORT_TTL));
+    const key = `insights:space:t:${tenantId}:d:${days}:p:${projectId ?? 0}`;
+    return c.json(await getOrSetCached(env, key, () => computeSpaceMetrics(db, tenantId, days, projectId), SHORT_TTL));
   });
 
   return router;

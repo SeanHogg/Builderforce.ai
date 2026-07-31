@@ -46,6 +46,12 @@ export interface AnthropicOAuthTokens {
   expires: number;
 }
 
+/** Safety margin baked into {@link AnthropicOAuthTokens.expires}: the stored value is
+ *  the real expiry MINUS this, so a token is treated as expired 5 min early and never
+ *  dies mid-call. The REAL expiry is `expires + OAUTH_SAFETY_MARGIN_MS` — used to decide
+ *  whether a still-valid access token can be reused when a refresh transiently fails. */
+export const OAUTH_SAFETY_MARGIN_MS = 5 * 60 * 1000;
+
 // ---------------------------------------------------------------------------
 // PKCE
 // ---------------------------------------------------------------------------
@@ -101,7 +107,7 @@ function toTokens(data: { access_token: string; refresh_token: string; expires_i
     access: data.access_token,
     refresh: data.refresh_token,
     // 5-minute safety margin so a token never expires mid-call (matches agent-runtime).
-    expires: Date.now() + data.expires_in * 1000 - 5 * 60 * 1000,
+    expires: Date.now() + data.expires_in * 1000 - OAUTH_SAFETY_MARGIN_MS,
   };
 }
 
@@ -142,7 +148,12 @@ export async function refreshAnthropicToken(refreshToken: string): Promise<Anthr
     }),
   });
   if (!resp.ok) {
-    throw new Error(`Anthropic OAuth token refresh failed (${resp.status}): ${(await resp.text()).slice(0, 240)}`);
+    // Carry the HTTP status on the error so the resolver can tell a REVOKED refresh
+    // token (401/403 — the user must reconnect) from a transient failure (5xx/429 —
+    // retryable, don't force the tenant off their own account permanently).
+    const err = new Error(`Anthropic OAuth token refresh failed (${resp.status}): ${(await resp.text()).slice(0, 240)}`) as Error & { status?: number };
+    err.status = resp.status;
+    throw err;
   }
   return toTokens((await resp.json()) as { access_token: string; refresh_token: string; expires_in: number });
 }

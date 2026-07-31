@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Repo routes – /api/repos
  *
@@ -13,32 +14,37 @@
  * POST   /api/repos/pull-requests/:id/result           AgentHost callback: record PR number/url/status
  * POST   /api/repos/pull-requests/:id/merge            Approve & merge a recorded PR (in-product)
  * GET    /api/repos/projects/:projectId/pull-requests  List a project's pull requests
+ * GET    /api/repos/projects/:projectId/github-actions Agent-workflow presence per repo (surface readiness)
  *
  * Every query is tenant-scoped. The AGENT_HOST_RELAY dispatch mirrors runtimeRoutes.ts:
  *   env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(agentHostId))).fetch(...)
  */
 import { Hono } from 'hono';
 import { and, eq, desc, sql } from 'drizzle-orm';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { TenantRole } from '../../domain/shared/types';
 import {
   projectRepositories,
   pullRequests,
   projects,
 } from '../../infrastructure/database/schema';
 import type { HonoEnv, Env } from '../../env';
-import type { Db } from '../../infrastructure/database/connection';
+import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
+import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { RepoService, type AgentHostDispatcher } from '../../application/repos/RepoService';
 import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
 import { importRepoContents } from '../../application/repos/importRepoContents';
 import { enforceIngestionCap, recordIngestion } from '../../application/ingestion/ingestionLedger';
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
-import { mergePullRequest, normalizeMergeMethod } from '../../application/repos/mergePullRequest';
-import { markPullRequestMergedById } from '../../application/repos/recordPullRequestRow';
-import { getPullRequestDetail, invalidatePullRequestDetail } from '../../application/repos/getPullRequestDetail';
+import { mergeRecordedPullRequest } from '../../application/repos/mergeRecordedPr';
+import { getPullRequestDetail } from '../../application/repos/getPullRequestDetail';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
 import type { CreatePrMessage } from '../../application/repos/prDispatch';
+import { ensureAgentWorkflow, githubActionsAvailable } from '../../application/runtime/githubActionsDispatch';
+import { AGENT_WORKFLOW_PATH } from '../../application/runtime/githubActionsWorkflow';
+import { ingestOpenAlertsForRepo } from '../../application/security/githubAlerts';
 
 /** Read-through cache key for a project's repo list (the picker + SourceControl read
  *  this; it changes only on the CRUD routes below, which all invalidate it). */
@@ -356,7 +362,8 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     // data-ingestion allowance (consumption meter). Graceful backpressure: repos
     // already imported stay fully usable; only fresh pulls stop until the month
     // resets or they upgrade. 402 carries the plan-limit body the client renders.
-    const gate = await enforceIngestionCap(db, tenantId);
+    const ingestionDb = buildTransactionalDatabase(c.env as Env);
+    const gate = await enforceIngestionCap(db, tenantId, ingestionDb, c.env as Env);
     if (!gate.allowed) {
       return c.json({
         error: `Monthly data-ingestion allowance reached (${gate.limit.toLocaleString()} bytes). Already-imported repositories stay available; upgrade or wait for the monthly reset to import more.`,
@@ -379,7 +386,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
 
     // Meter the bytes actually pulled (post-cap), attributed to the repo's project.
     const bytesIngested = result.files.reduce((sum, f) => sum + f.content.length, 0);
-    c.executionCtx.waitUntil(recordIngestion(db, {
+    c.executionCtx.waitUntil(recordIngestion(ingestionDb, {
       tenantId,
       projectId: resolved.repo.projectId ?? null,
       source: 'repo_import',
@@ -517,53 +524,158 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
   // POST /api/repos/pull-requests/:id/merge — Approve & merge a recorded PR from
   // the product. Server-side with the tenant's decrypted token; records who
   // approved (audit) and busts the cached detail.
-  router.post('/pull-requests/:id/merge', async (c) => {
+  //
+  // DEVELOPER+ — this writes to the tenant's real repository and closes the PR, so it
+  // sits at the same tier as every other route that spends or ships. It previously
+  // carried NO role gate at all (only `authMiddleware`), which meant any authenticated
+  // tenant member — including a VIEWER — could merge any PR in the tenant, while merely
+  // *running* the AI Manager required MANAGER. The UI-only affordance was the sole
+  // barrier, and an API caller walked straight past it.
+  router.post('/pull-requests/:id/merge', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
     const id = c.req.param('id');
     const body = await c.req.json<{ method?: string }>().catch(() => ({} as { method?: string }));
 
-    const [row] = await db
-      .select()
-      .from(pullRequests)
-      .where(and(eq(pullRequests.id, id), eq(pullRequests.tenantId, tenantId)))
-      .limit(1);
-    if (!row) return c.json({ error: 'Pull request not found' }, 404);
-    if (row.status === 'merged') return c.json({ ok: true, alreadyMerged: true, pullRequest: row });
-    if (!row.repoId) return c.json({ error: 'PR has no linked repo to merge against' }, 409);
-    if (row.number == null) return c.json({ error: 'PR has no provider number yet (still being opened)' }, 409);
-
-    const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
-    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
-    const resolved = await resolveRepoCredential(db, secret, tenantId, row.repoId);
-    if (isResolveError(resolved)) return c.json({ error: resolved.error }, resolved.status);
-
-    const result = await mergePullRequest({
-      provider: resolved.repo.provider, host: resolved.repo.host,
-      owner: resolved.repo.owner, repo: resolved.repo.repo, token: resolved.token,
-      number: row.number, method: normalizeMergeMethod(body.method),
-      commitTitle: `Task #${row.taskId ?? ''}: merge ${row.branchName ?? ''}`.trim(),
+    // Shared with the AI Manager's autonomous PR coordination so the human "Approve
+    // & Merge" and the manager merge never drift (resolve credential → provider
+    // merge → mark merged → bust cache).
+    const result = await mergeRecordedPullRequest(db, c.env as Env, {
+      tenantId, prId: id, method: body.method, mergedBy: userId ?? null,
     });
-
     if (!result.ok) {
-      const httpStatus = result.code === 'unsupported' ? 501
-        : (result.code === 'conflict' || result.code === 'not_mergeable') ? 409
-        : 502;
-      return c.json({ error: result.reason, code: result.code }, httpStatus);
+      return c.json({ error: result.error, code: result.code }, result.httpStatus as 409);
     }
+    if (result.alreadyMerged) return c.json({ ok: true, alreadyMerged: true, pullRequest: result.pullRequest });
 
-    const updated = await markPullRequestMergedById(db, id, tenantId, {
-      mergeSha: result.sha ?? null,
-      mergedBy: userId ?? null,
+    // Unified audit stream: a merge, attributed to whoever approved it.
+    const pr = result.pullRequest as { id?: string; number?: number | null; taskId?: number | null; projectId?: number | null } | null;
+    c.executionCtx.waitUntil((async () => {
+      const actor = await resolveActorFromContext(c.env as Env, db, c);
+      await recordActivity(c.env as Env, db, {
+        tenantId,
+        projectId: pr?.projectId ?? null,
+        actor,
+        verb: 'pr.merged',
+        targetType: 'pull_request',
+        targetId: pr?.id ?? id,
+        targetLabel: pr?.number != null ? `PR #${pr.number}` : 'Pull request',
+        summary: `Merged ${pr?.number != null ? `PR #${pr.number}` : 'a pull request'}`,
+        metadata: { taskId: pr?.taskId ?? null, sha: result.sha ?? null },
+      });
+    })().catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/repoRoutes.ts", operation: "createRepoRoutes" });
+    }));
+    return c.json({ ok: true, merged: result.merged, sha: result.sha, pullRequest: result.pullRequest });
+  });
+
+  /**
+   * GET /api/repos/projects/:projectId/github-actions
+   *
+   * Is the GitHub Actions execution surface actually usable for this project?
+   *
+   * This exists because picking the surface used to be a guess: an agent could be
+   * set to `github_actions` for a project whose repo has no agent workflow, and
+   * the only feedback was a silent downgrade to the durable executor, explained in
+   * the run timeline AFTER the fact. Both the repo settings panel (per-repo
+   * "Enable / Enabled" state) and the agent surface picker (gate + warning) read
+   * this ONE endpoint, so the two can never disagree about what "enabled" means.
+   *
+   * `ready` mirrors dispatch's own question — dispatch resolves the task's default
+   * repo, so a project whose DEFAULT repo lacks the workflow is not ready even if
+   * some other linked repo has it.
+   *
+   * Cached: each repo's answer is the read-through-cached
+   * {@link githubActionsAvailable} (L1 Map + L2 KV, invalidated by
+   * `ensureAgentWorkflow` on write), so the picker can poll this freely without
+   * spending a GitHub subrequest per keystroke, and enabling the surface shows up
+   * immediately rather than after a TTL.
+   */
+  router.get('/projects/:projectId/github-actions', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid projectId' }, 400);
+
+    const rows = await db
+      .select({
+        id: projectRepositories.id,
+        provider: projectRepositories.provider,
+        owner: projectRepositories.owner,
+        repo: projectRepositories.repo,
+        isDefault: projectRepositories.isDefault,
+      })
+      .from(projectRepositories)
+      .where(and(eq(projectRepositories.projectId, projectId), eq(projectRepositories.tenantId, tenantId)));
+
+    const repositories = await Promise.all(rows.map(async (r) => ({
+      repoId: r.id,
+      // Only GitHub has Actions; a GitLab/Bitbucket repo is reported as
+      // unsupported rather than "not enabled", because there is nothing to enable.
+      supported: r.provider === 'github',
+      enabled: r.provider === 'github'
+        ? await githubActionsAvailable(c.env as Env, db, tenantId, r.id)
+        : false,
+      isDefault: r.isDefault,
+    })));
+
+    // No repo at all ⇒ not ready: dispatch has nothing to queue the workflow on.
+    const primary = repositories.find((r) => r.isDefault) ?? repositories[0];
+    return c.json({
+      ready: !!primary?.enabled,
+      workflowPath: AGENT_WORKFLOW_PATH,
+      repositories,
     });
+  });
 
-    // Bust the cached live detail keyed by the PRE-merge updatedAt token.
-    await invalidatePullRequestDetail(
-      c.env as Env, id,
-      row.updatedAt instanceof Date ? row.updatedAt.toISOString() : String(row.updatedAt),
-    ).catch(() => { /* cache miss is fine */ });
+  /**
+   * POST /api/repos/repositories/:id/github-actions/enable
+   *
+   * Commit the Builderforce agent workflow into this repo's default branch,
+   * which is what makes the `github_actions` execution surface selectable for
+   * agents working in this project. Without the workflow present, dispatch
+   * degrades to the durable executor and says so in the run timeline.
+   *
+   * The likely failure here is permissions, and it is worth stating plainly in
+   * the response: writing under `.github/workflows/` needs the `workflow` scope
+   * on a PAT (or `workflows: write` on the GitHub App installation), which is
+   * separate from ordinary contents write — a credential that pushes code fine
+   * will still be refused.
+   */
+  router.post('/repositories/:id/github-actions/enable', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
 
-    return c.json({ ok: true, merged: result.merged, sha: result.sha, pullRequest: updated ?? row });
+    const result = await ensureAgentWorkflow(c.env as Env, db, tenantId, id);
+    if (!result.ok) {
+      return c.json({ error: result.reason, code: result.code }, result.code === 'unsupported' ? 400 : 502);
+    }
+    return c.json({ ok: true, created: result.created, path: AGENT_WORKFLOW_PATH });
+  });
+
+  /**
+   * POST /api/repos/repositories/:id/security/backfill-alerts
+   *
+   * Pull every OPEN GitHub code-scanning and Dependabot alert for this repo and
+   * file them as security findings.
+   *
+   * The webhook path already ingests alerts as they are raised, so this exists
+   * for the two cases the webhook cannot cover: a repo connected AFTER alerts
+   * had already accumulated, and a repo where the webhook was never installed or
+   * silently stopped delivering — the same gap that makes pollPrCiStatus
+   * necessary for CI status.
+   *
+   * Idempotent: ingestion dedupes against open findings, so re-running it is
+   * safe and mints nothing the second time.
+   */
+  router.post('/repositories/:id/security/backfill-alerts', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+
+    const result = await ingestOpenAlertsForRepo(c.env as Env, db, tenantId, id);
+    if (!result.ok) {
+      return c.json({ error: result.reason, code: result.code }, result.code === 'forbidden' ? 403 : 502);
+    }
+    return c.json(result);
   });
 
   return router;

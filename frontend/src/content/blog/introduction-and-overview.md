@@ -12,6 +12,8 @@ Software development is changing fast. AI pair-programmers, autonomous task runn
 
 This post is your starting point. It covers what Builderforce is, why it exists, the core ideas behind it, and where to go next.
 
+![The six core building blocks of the Builderforce platform: Projects and IDE, AI Agents, in-browser training, Workforce Registry, Skills Marketplace, and agent orchestration](/blog/platform-overview.svg)
+
 ---
 
 ## Why Builderforce Exists

@@ -14,6 +14,8 @@ Builderforce.ai runs a *team* of specialist agents with a built-in adversarial r
 
 > Choose Builderforce.ai over Claude Code when you need multi-agent workflows, governance, and freedom from a single model vendor.
 
+![Diagram showing Claude Code routing every task to Anthropic only versus Builderforce.ai fanning tasks out to 30+ providers including OpenAI, Bedrock and local Ollama, with a governed multi-agent team](/blog/vs-claude-code.svg)
+
 ## Single vendor vs. model freedom
 
 Claude Code is, by design, Anthropic-first. That's great when Claude is the right model for the job — and a problem when it isn't. Different tasks have different ideal models: a cheap model for boilerplate, a frontier model for hard reasoning, a *local* model for anything that can't leave your network.

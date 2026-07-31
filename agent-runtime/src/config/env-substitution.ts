@@ -75,7 +75,22 @@ function parseEnvTokenAt(value: string, index: number): EnvToken | null {
   return null;
 }
 
-function substituteString(value: string, env: NodeJS.ProcessEnv, configPath: string): string {
+/**
+ * Resolve `${VAR}` references in a single string.
+ *
+ * - `${VAR}` → env value; missing (unset or empty) triggers `onMissing`
+ *   (`"throw"` raises {@link MissingEnvVarError}, `"null"` returns `null`).
+ * - `$${VAR}` → literal `${VAR}` (escape sequence).
+ * - Unrecognized `$` sequences are left untouched.
+ *
+ * In `"throw"` mode this never returns `null`.
+ */
+export function resolveEnvVarsInString(
+  value: string,
+  env: NodeJS.ProcessEnv,
+  onMissing: "throw" | "null",
+  configPath = "",
+): string | null {
   if (!value.includes("$")) {
     return value;
   }
@@ -98,7 +113,10 @@ function substituteString(value: string, env: NodeJS.ProcessEnv, configPath: str
     if (token?.kind === "substitution") {
       const envValue = env[token.name];
       if (envValue === undefined || envValue === "") {
-        throw new MissingEnvVarError(token.name, configPath);
+        if (onMissing === "throw") {
+          throw new MissingEnvVarError(token.name, configPath);
+        }
+        return null;
       }
       chunks.push(envValue);
       i = token.end;
@@ -110,6 +128,11 @@ function substituteString(value: string, env: NodeJS.ProcessEnv, configPath: str
   }
 
   return chunks.join("");
+}
+
+function substituteString(value: string, env: NodeJS.ProcessEnv, configPath: string): string {
+  // In "throw" mode the resolver never returns null.
+  return resolveEnvVarsInString(value, env, "throw", configPath) as string;
 }
 
 export function containsEnvVarReference(value: string): boolean {

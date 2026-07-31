@@ -38,7 +38,7 @@ export function PmoRollup({ scope }: { scope: { kind: PmoScopeKind; id: string }
         <DeckDownloadButton />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 14 }}>
-        <StatCard label={t('stat.projects')} value={String(data.projectCount)} sub={scope.kind === 'portfolio' ? t('stat.initiativesCount', { count: data.initiativeCount }) : t('stat.inInitiative')} />
+        <StatCard label={t('stat.projects')} value={String(data.projectCount)} sub={scope.kind === 'portfolio' || scope.kind === 'workspace' ? t('stat.initiativesCount', { count: data.initiativeCount }) : t('stat.inInitiative')} />
         <StatCard label={t('stat.completed')} value={String(data.delivery.completedCount)} sub={t('stat.openCount', { count: data.delivery.openCount })} />
         <StatCard label={t('stat.avgCycle')} value={hrs(data.delivery.avgCycleTimeHours)} sub={t('stat.startToDone')} />
         <StatCard label={t('stat.throughput')} value={t('stat.throughputValue', { count: data.delivery.throughputPerWeek })} sub={t('stat.last7days')} />
@@ -106,7 +106,38 @@ export function PmoRollup({ scope }: { scope: { kind: PmoScopeKind; id: string }
         </PmCard>
       )}
 
-      {scope.kind === 'portfolio' && data.byInitiative.length > 0 && (
+      {scope.kind === 'workspace' && data.byPortfolio.length > 0 && (
+        <PmCard title={t('section.byPortfolio')}>
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr style={theadRowStyle}>
+                  <th style={thStyle}>{t('col.portfolio')}</th>
+                  <th style={thStyle}>{t('col.initiatives')}</th>
+                  <th style={thStyle}>{t('col.projects')}</th>
+                  <th style={thStyle}>{t('col.completed')}</th>
+                  <th style={thStyle}>{t('col.agentSpend')}</th>
+                  <th style={thStyle}>{t('col.okrProgress')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.byPortfolio.map((p) => (
+                  <tr key={p.portfolioId ?? 'unassigned'} style={trStyle}>
+                    <td style={tdStyle}>{p.portfolioId ? p.name : t('unassignedPortfolio')}</td>
+                    <td style={tdMutedStyle}>{p.initiativeCount}</td>
+                    <td style={tdMutedStyle}>{p.projectCount}</td>
+                    <td style={tdMutedStyle}>{p.completedCount}</td>
+                    <td style={tdMutedStyle}>{usd(p.agentLlmCostUsd)}</td>
+                    <td style={{ ...tdMutedStyle, minWidth: 140 }}><ProgressBar value={p.avgProgress} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </PmCard>
+      )}
+
+      {(scope.kind === 'portfolio' || scope.kind === 'workspace') && data.byInitiative.length > 0 && (
         <PmCard title={t('section.byInitiative')}>
           <div style={tableWrapStyle}>
             <table style={tableStyle}>

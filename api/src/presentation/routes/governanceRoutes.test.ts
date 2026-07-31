@@ -98,6 +98,38 @@ describe('governanceRoutes /soc2', () => {
     const res = await createGovernanceRoutes(db).request('/soc2/controls/c1/evidence', body('POST', { url: 'x' }));
     expect(res.status).toBe(400);
   });
+
+  it('exports controls with their attached evidence grouped by control', async () => {
+    // Bespoke db: the two reads (controls, then evidence) must return distinct
+    // arrays, so a queue drives successive select().from().where() awaits.
+    const controls = [
+      { id: 'c1', controlRef: 'CC1.1', status: 'ready' },
+      { id: 'c2', controlRef: 'CC6.1', status: 'in_progress' },
+    ];
+    const evidence = [
+      { id: 'e1', controlId: 'c1', title: 'Policy PDF' },
+      { id: 'e2', controlId: 'c1', title: 'Screenshot' },
+    ];
+    const queue = [controls, evidence];
+    const db: any = {
+      select: () => ({ from: () => ({ where: () => Promise.resolve(queue.shift() ?? []) }) }),
+    };
+    const res = await createGovernanceRoutes(db).request('/soc2/export');
+    expect(res.status).toBe(200);
+    const json = await res.json() as {
+      framework: string;
+      controlCount: number;
+      evidenceCount: number;
+      controls: Array<{ id: string; evidence: unknown[] }>;
+    };
+    expect(json.framework).toBe('SOC 2');
+    expect(json.controlCount).toBe(2);
+    expect(json.evidenceCount).toBe(2);
+    const c1 = json.controls.find((x) => x.id === 'c1');
+    const c2 = json.controls.find((x) => x.id === 'c2');
+    expect(c1?.evidence).toHaveLength(2);
+    expect(c2?.evidence).toHaveLength(0); // no evidence ⇒ empty array, not missing
+  });
 });
 
 // The generic tracker factory, exercised via a mounted tracker (/vendors).

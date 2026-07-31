@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Generic segment-scoped tracker CRUD — the single factory behind every simple
  * tracker surface (governance compliance tools, product-management trackers, …).
@@ -12,7 +13,7 @@ import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { emitWebhookEvent, type WebhookEvent } from '../../application/seams/webhookService';
-import { getOrSetCached, invalidateCached, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, invalidateCached, bumpCacheVersion, trackerCacheKey, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
 
 /** The (tenantId, segmentId) scope every tracker query filters by. */
 export function scope(c: Context<HonoEnv>): { tenantId: number; segmentId: string } {
@@ -59,11 +60,6 @@ function parseProjectId(raw: string | undefined): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
-/** Cache key for a tracker list at a given scope; projectId omitted = portfolio (`all`). */
-function trackerCacheKey(ns: string, tenantId: number, segmentId: string, projectId?: number): string {
-  return `tracker:${ns}:t:${tenantId}:s:${segmentId}:p:${projectId ?? 'all'}`;
-}
-
 /** Invalidate the portfolio key plus the row's project key (if any). */
 async function invalidateTracker(
   env: Env,
@@ -78,8 +74,15 @@ async function invalidateTracker(
       await invalidateCached(env, trackerCacheKey(opts.cacheNs, tenantId, segmentId, projectId));
     }
   }
-  for (const vk of opts.bumpVersionKeys?.(tenantId) ?? []) {
+  const vks = opts.bumpVersionKeys?.(tenantId) ?? [];
+  for (const vk of vks) {
     await bumpCacheVersion(env, vk);
+  }
+  // Roadmap items and the PMO trackers (portfolio/initiative/objective/KR) are all
+  // link-picker ticket kinds — orphan the chat↔ticket typeahead when one changes.
+  // Gated so unrelated trackers (governance tools, …) don't over-invalidate it.
+  if (opts.cacheNs === 'roadmap' || vks.some((k) => k.startsWith('pmo-version'))) {
+    await bumpTicketSearchVersion(env, tenantId);
   }
 }
 
@@ -98,7 +101,9 @@ function maybeEmit(
   const { tenantId, segmentId } = scope(c);
   const eventId = typeof row.id === 'string' || typeof row.id === 'number' ? String(row.id) : crypto.randomUUID();
   waitUntil(
-    emitWebhookEvent(db, { tenantId, segmentId, eventType: e.event, eventId, data: row }).catch(() => { /* best-effort */ }),
+    emitWebhookEvent(db, { tenantId, segmentId, eventType: e.event, eventId, data: row }).catch((error) => { /* best-effort */ 
+      reportCaughtError(error, { source: "presentation/routes/segmentTrackerRoutes.ts", operation: "maybeEmit" });
+    }),
   );
 }
 

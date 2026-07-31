@@ -17,6 +17,16 @@
 export interface ComposeCascadeOptions {
   /** Caller-hint + pool, in the order the gateway intends to try. */
   seed: readonly string[];
+  /**
+   * Deliberately-seeded LEADING models that must be tried FIRST, verbatim, ahead of
+   * the free slice — the tenant's connected-BYO flagship(s) or an explicit caller pin.
+   * Without this, a PREMIUM/ULTRA connected-account seed falls into `paidSlice` and is
+   * placed BEHIND the entire free pool (the bug where a connected Claude subscription
+   * ran a whole `@cf/*` free cascade first and "produced no reply"). Head models are
+   * availability-filtered + deduped but NOT free-capped or round-robined. Any head
+   * entry also present in `seed` is de-duplicated (head wins the position).
+   */
+  head?: readonly string[];
   /** Premium fallback chain, always appended after the seed slice. */
   premiumFallback: readonly string[];
   /** Maximum number of FREE-tier seed entries to keep before falling through. */
@@ -91,12 +101,18 @@ export function buildCooldownPredicate(opts: {
 export function composeFreeCappedCascade(opts: ComposeCascadeOptions): string[] {
   const { seed, premiumFallback, freeBudget, isUnavailable, tierOf, cursor } = opts;
 
+  // Deliberately-seeded head (connected-BYO flagship / explicit pin) leads verbatim —
+  // availability-filtered but NOT free-capped or reordered. Excluded from the free-cap
+  // walk below so it can never be relegated behind the free pool.
+  const headKept = (opts.head ?? []).filter((m) => !isUnavailable(m));
+  const headSet = new Set(headKept);
+
   // Walk seed once: cap FREE-tier at `freeBudget`, keep paid verbatim.
   let freeKept = 0;
   const freeSlice: string[] = [];
   const paidSlice: string[] = [];
   for (const m of seed) {
-    if (isUnavailable(m)) continue;
+    if (headSet.has(m) || isUnavailable(m)) continue; // head already placed
     if (tierOf(m) === 'FREE') {
       if (freeKept >= freeBudget) continue;
       freeSlice.push(m);
@@ -118,7 +134,7 @@ export function composeFreeCappedCascade(opts: ComposeCascadeOptions): string[] 
 
   const premium = premiumFallback.filter((m) => !isUnavailable(m));
 
-  const composed = [...freeRotated, ...paidSlice, ...premium];
+  const composed = [...headKept, ...freeRotated, ...paidSlice, ...premium];
   const seen = new Set<string>();
   return composed.filter((m) => (seen.has(m) ? false : (seen.add(m), true)));
 }

@@ -41,6 +41,25 @@ export interface PlanLimits {
    * (application/quality/errorEventsLedger.ts).
    */
   errorEventsMonthly: number;
+  /**
+   * Monthly outbound-fetch allowance (COUNT of Brain `/fetch-url` requests that
+   * hit the wire), surfaced by the consumption meter as "Outbound fetches"; -1 =
+   * unlimited. Meters the arbitrary-URL GET proxy so free-vs-paid caps sustained
+   * outbound volume (the per-tenant rate limit caps burst). Filled against
+   * outbound_fetch_log (application/web/outboundFetchLedger.ts).
+   */
+  outboundFetchesMonthly: number;
+  /**
+   * Monthly cloud-agent RUN allowance (COUNT of distinct cloud executions),
+   * surfaced by the consumption meter as "Cloud runs"; -1 = unlimited. This is the
+   * platform-COMPUTE meter: a cloud run executes on our infra even when the tenant
+   * brings their own model (BYO tokens are $0 to us but the orchestration isn't),
+   * so free-vs-paid caps cloud usage independently of token volume. On-prem / VSIX
+   * runs execute on the user's machine and never consume this. Filled by counting
+   * distinct `execution_id` on cloud-surface usage rows
+   * (application/runtime/cloudRunLedger.ts).
+   */
+  cloudRunsMonthly: number;
   /** Image-generation credits per calendar day (1 credit = 1 returned image);
    *  -1 = unlimited. Independent of the text token budget. */
   imageCreditsDailyLimit: number;
@@ -68,6 +87,15 @@ export interface PlanLimits {
   teamApprovalInbox: boolean;
   /** Whether per-seat cost controls are available */
   seatCostControls: boolean;
+  /**
+   * Whether voice cloning (enrol a cloned voice + synthesize with it) is available.
+   * Any paid plan. Gated at the create/enrol path in studioVoiceCloneRoutes via the
+   * shared feature gate.
+   */
+  voiceCloning: boolean;
+  /** Whether the premium exec insight lenses (forecasting/anomalies + the
+   *  CTO/CFO/PMO analytical lenses) are available. Any paid plan. */
+  advancedInsights: boolean;
 }
 
 export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
@@ -79,6 +107,8 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     tokenMonthlyLimit: 50_000,
     ingestionMonthlyBytes: 50_000_000, // 50 MB/mo — a handful of repo imports
     errorEventsMonthly: 10_000, // 10K error events/mo
+    outboundFetchesMonthly: 500, // 500 Brain URL fetches/mo
+    cloudRunsMonthly: 25, // 25 cloud-agent runs/mo — enough to try it, then upgrade
     imageCreditsDailyLimit: 10,
     maxTokensPerRequest: 4_096,
     approvalWorkflows: false,
@@ -88,6 +118,8 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     psychometricPersona: false,
     teamApprovalInbox: false,
     seatCostControls: false,
+    voiceCloning: false,
+    advancedInsights: false,
   },
   [TenantPlan.PRO]: {
     maxAgentHosts: 3,
@@ -97,6 +129,8 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     tokenMonthlyLimit: 5_000_000,
     ingestionMonthlyBytes: 5_000_000_000, // 5 GB/mo
     errorEventsMonthly: 1_000_000, // 1M error events/mo
+    outboundFetchesMonthly: 50_000, // 50K Brain URL fetches/mo
+    cloudRunsMonthly: 2_000, // 2K cloud-agent runs/mo
     imageCreditsDailyLimit: 1_000,
     maxTokensPerRequest: 16_384,
     approvalWorkflows: true,
@@ -106,6 +140,8 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     psychometricPersona: true,
     teamApprovalInbox: false,
     seatCostControls: false,
+    voiceCloning: true,
+    advancedInsights: true,
   },
   [TenantPlan.TEAMS]: {
     maxAgentHosts: -1,
@@ -115,6 +151,8 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     tokenMonthlyLimit: -1,
     ingestionMonthlyBytes: -1, // unlimited
     errorEventsMonthly: -1, // unlimited
+    outboundFetchesMonthly: -1, // unlimited
+    cloudRunsMonthly: -1, // unlimited
     imageCreditsDailyLimit: 5_000,
     maxTokensPerRequest: 64_000,
     approvalWorkflows: true,
@@ -124,8 +162,30 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     psychometricPersona: true,
     teamApprovalInbox: true,
     seatCostControls: true,
+    voiceCloning: true,
+    advancedInsights: true,
   },
 };
+
+/**
+ * Anonymous guest (logged-out) chat allowance — the "try the Brain before you
+ * sign up" tier. Deliberately TINY: a logged-out visitor has no account we can
+ * ban and their visitorId/IP are spoofable, so this is a taste, not a free ride.
+ * Signing up unlocks the real FREE tier ({@link PLAN_LIMITS}.free — 10K
+ * tokens/day). Metered per visitorId AND per source IP (the spoof backstop) —
+ * see application/guest/GuestChatService. NOT part of the TenantPlan enum: a
+ * guest has no tenant row, so this never flows through resolveTokenLimits.
+ */
+export const GUEST_CHAT_LIMITS = {
+  /** Max assistant turns per visitorId per UTC day. */
+  messagesDailyLimit: 5,
+  /** Max assistant turns per source IP per UTC day — an abuser rotating
+   *  visitorIds still hits this. Higher than the per-visitor cap so a shared
+   *  office/NAT IP doesn't lock out honest visitors too soon. */
+  ipMessagesDailyLimit: 25,
+  /** Output-token ceiling per guest request (clamped down, never rejected). */
+  maxTokensPerRequest: 700,
+} as const;
 
 /** Returns the limits for the tenant's effective plan. */
 export function getLimits(plan: TenantPlan): PlanLimits {
@@ -216,6 +276,37 @@ export function resolveErrorEventsMonthly(input: {
 }): number {
   if (input.tokenDailyLimitOverride === -1 || input.isSuperadmin) return -1;
   return getLimits(input.effectivePlan).errorEventsMonthly;
+}
+
+/**
+ * Resolve a tenant's effective monthly outbound-fetch allowance (count); -1 =
+ * unlimited. Mirrors {@link resolveErrorEventsMonthly} so the meter display and
+ * the fetch-url cap gate agree. A superadmin-unlimited tenant is unlimited; a
+ * positive *token* override does not lift this (different axis).
+ */
+export function resolveOutboundFetchesMonthly(input: {
+  effectivePlan: TenantPlan;
+  tokenDailyLimitOverride: number | null;
+  isSuperadmin?: boolean;
+}): number {
+  if (input.tokenDailyLimitOverride === -1 || input.isSuperadmin) return -1;
+  return getLimits(input.effectivePlan).outboundFetchesMonthly;
+}
+
+/**
+ * Resolve a tenant's effective monthly cloud-agent-run allowance (count); -1 =
+ * unlimited. Mirrors {@link resolveOutboundFetchesMonthly} so the "Cloud runs"
+ * meter display and the cloud-dispatch gate agree. A superadmin-unlimited tenant
+ * is unlimited; a positive *token* override does not lift this (different axis —
+ * compute, not tokens).
+ */
+export function resolveCloudRunsMonthly(input: {
+  effectivePlan: TenantPlan;
+  tokenDailyLimitOverride: number | null;
+  isSuperadmin?: boolean;
+}): number {
+  if (input.tokenDailyLimitOverride === -1 || input.isSuperadmin) return -1;
+  return getLimits(input.effectivePlan).cloudRunsMonthly;
 }
 
 /**

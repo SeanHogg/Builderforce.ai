@@ -15,8 +15,11 @@ export const DEFAULT_MAIN_KEY = "main";
 export const DEFAULT_ACCOUNT_ID = "default";
 export type SessionKeyShape = "missing" | "agent" | "legacy_or_alias" | "malformed_agent";
 
+// Canonical agent/account id pattern body (no anchors) so callers can embed it
+// in larger patterns; the anchored, case-insensitive form is VALID_ID_RE.
+export const AGENT_ID_PATTERN = "[a-z0-9][a-z0-9_-]{0,63}";
 // Pre-compiled regex
-const VALID_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
+const VALID_ID_RE = new RegExp(`^${AGENT_ID_PATTERN}$`, "i");
 const INVALID_CHARS_RE = /[^a-z0-9_-]+/g;
 const LEADING_DASH_RE = /^-+/;
 const TRAILING_DASH_RE = /-+$/;
@@ -71,6 +74,10 @@ export function classifySessionKeyShape(sessionKey: string | undefined | null): 
     return "agent";
   }
   return raw.toLowerCase().startsWith("agent:") ? "malformed_agent" : "legacy_or_alias";
+}
+
+export function isValidAgentId(value: string): boolean {
+  return VALID_ID_RE.test(value);
 }
 
 export function normalizeAgentId(value: string | undefined | null): string {

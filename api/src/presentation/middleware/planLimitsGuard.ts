@@ -12,6 +12,7 @@
 
 import { and, count, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
 import {
   tenants,
   agentHosts,
@@ -21,6 +22,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { canAddAgentHost, canAddProject, canAddSeat, getLimits } from '../../domain/tenant/PlanLimits';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
+import { tenantHasSuperadminMember } from '../../application/llm/tenantTokenAvailability';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 
 interface LimitError {
@@ -71,10 +73,18 @@ async function getTenantPlan(db: Db, tenantId: number): Promise<TenantPlan> {
   });
 }
 
-export function buildPlanLimitsGuard(db: Db) {
+export function buildPlanLimitsGuard(db: Db, env?: Env) {
+  // A tenant with an active superadmin member is unlimited — the SAME operator
+  // bypass the token-cap and cloud-run-count gates use ({@link tenantHasSuperadminMember}),
+  // now extended to the plan resource caps (seats, projects, agent hosts) so an
+  // operator/white-label account is never blocked by a plan limit. Best-effort:
+  // any lookup failure falls through to the normal plan gate.
+  const bypass = (tenantId: number): Promise<boolean> =>
+    env ? tenantHasSuperadminMember(db, tenantId, env) : Promise.resolve(false);
   return {
     /** Returns an error payload if the tenant has reached their agentHost limit, otherwise null. */
     async checkAgentHostLimit(tenantId: number): Promise<LimitError | null> {
+      if (await bypass(tenantId)) return null;
       const plan = await getTenantPlan(db, tenantId);
       const [row] = await db
         .select({ total: count() })
@@ -92,6 +102,7 @@ export function buildPlanLimitsGuard(db: Db) {
 
     /** Returns an error payload if the tenant has reached their project limit, otherwise null. */
     async checkProjectLimit(tenantId: number): Promise<LimitError | null> {
+      if (await bypass(tenantId)) return null;
       const plan = await getTenantPlan(db, tenantId);
       const [row] = await db
         .select({ total: count() })
@@ -107,27 +118,12 @@ export function buildPlanLimitsGuard(db: Db) {
       };
     },
 
-    /**
-     * Returns an error payload if a Pro-only feature is used by a non-paid plan,
-     * otherwise null. The single gate for entitlement-gated features (e.g. Voice
-     * Cloning) — callers pass a human feature name for the 402 message instead of
-     * re-deriving "is this tenant paid" themselves.
-     */
-    async checkProFeature(tenantId: number, featureName: string): Promise<LimitError | null> {
-      const plan = await getTenantPlan(db, tenantId);
-      if (plan !== TenantPlan.FREE) return null;
-      return {
-        error: `${featureName} requires a paid plan. Upgrade to unlock it.`,
-        upgradeRequired: true,
-        currentPlan: plan,
-      };
-    },
-
     /** Returns an error payload if the tenant has reached their seat limit, otherwise null.
      *  A PENDING invitation is a promised seat, so it counts toward the tally —
      *  otherwise a manager could queue many invites under the cap and have them
      *  all auto-accept past the limit on signup (see {@link seatCapacityForTenant}). */
     async checkSeatLimit(tenantId: number): Promise<LimitError | null> {
+      if (await bypass(tenantId)) return null;
       const { plan, maxSeats, members, pendingInvites } = await seatCapacityForTenant(db, tenantId);
       const current = members + pendingInvites;
       if (canAddSeat(plan, current)) return null;

@@ -19,6 +19,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { industryBenchmarks, tenantBenchmarkProfiles } from '../../infrastructure/database/schema';
+import { clampScore } from '../../domain/shared/numbers';
 import { computeDora } from '../metrics/workforceMetrics';
 import { computeEngineeringInsights } from './engineeringInsights';
 
@@ -132,7 +133,7 @@ export function rankPercentile(
   // ascPercentile = "share of the cohort with a SMALLER raw value". When higher is
   // better that IS the standing; when lower is better, invert it.
   const percentile = higherIsBetter ? ascPercentile : 100 - ascPercentile;
-  return Math.round(Math.max(0, Math.min(100, percentile)));
+  return Math.round(clampScore(percentile));
 }
 
 /** Build one metric row from its live value + the seeded distribution row. */
@@ -192,6 +193,7 @@ export async function computeBenchmarking(
   db: Db,
   tenantId: number,
   days: number,
+  projectId?: number,
 ): Promise<BenchmarkingResult> {
   const { industry, sizeBand } = await getBenchmarkProfile(db, tenantId);
 
@@ -213,8 +215,8 @@ export async function computeBenchmarking(
 
   // Live tenant values from the existing collectors.
   const [dora, eng] = await Promise.all([
-    computeDora(db, tenantId, days),
-    computeEngineeringInsights(db, tenantId, days),
+    computeDora(db, tenantId, days, projectId),
+    computeEngineeringInsights(db, tenantId, days, projectId),
   ]);
 
   // AI adoption proxy: share of DORA lead-time deliveries that ran through an AI

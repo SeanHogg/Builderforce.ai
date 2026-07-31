@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { getModality } from '@/lib/modality';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { Select } from '@/components/Select';
+import { useModalityCopy } from '@/lib/useModalityCopy';
 import { listIdeContainers, updateIdeProject } from '@/lib/api';
 import { workflowDefinitions, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
 import type { IdeProject, IdeContainerOption } from '@/lib/types';
@@ -25,9 +27,11 @@ export function IdeProjectDetailsModal({
   onSaved: (updated: IdeProject) => void;
 }) {
   const t = useTranslations('ide');
-  const m = getModality(ideProject.modality);
+  const m = useModalityCopy()(ideProject.modality);
 
-  const isLlm = ideProject.modality === 'llm';
+  // Evermind projects (incl. legacy `llm`, which getModality aliases to evermind)
+  // can attach an optional automation workflow.
+  const isEvermind = m.id === 'evermind';
 
   const [name, setName] = useState(ideProject.name);
   const [containerProjectId, setContainerProjectId] = useState<number | null>(ideProject.containerProjectId);
@@ -86,14 +90,14 @@ export function IdeProjectDetailsModal({
     listIdeContainers()
       .then((rows) => { if (!cancelled) setContainers(rows); })
       .catch(() => { if (!cancelled) setContainers([]); });
-    // LLM projects assign a workflow — load the tenant's definitions to pick from.
-    if (isLlm) {
+    // Evermind projects assign a workflow — load the tenant's definitions to pick from.
+    if (isEvermind) {
       workflowDefinitions.list()
         .then((rows) => { if (!cancelled) setWorkflows(rows); })
         .catch(() => { if (!cancelled) setWorkflows([]); });
     }
     return () => { cancelled = true; };
-  }, [isLlm]);
+  }, [isEvermind]);
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,7 +108,7 @@ export function IdeProjectDetailsModal({
       const updated = await updateIdeProject(ideProject.id, {
         name: name.trim(),
         containerProjectId,
-        ...(isLlm ? { workflowDefinitionId } : {}),
+        ...(isEvermind ? { workflowDefinitionId } : {}),
       });
       onSaved(updated);
       onClose();
@@ -116,21 +120,22 @@ export function IdeProjectDetailsModal({
   };
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 60 }} onClick={onClose}>
-      <div
-        className="rounded-xl p-6 w-full max-w-md border border-gray-700"
-        style={{ background: 'var(--bg-elevated)' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="text-lg font-semibold mb-1" style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span aria-hidden>{m.icon}</span> {t('ideProjectSettings')}
-        </h3>
-        <p className="mb-4" style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+    <SlideOutPanel
+      open
+      onClose={onClose}
+      width="min(480px, 96vw)"
+      title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span aria-hidden>{m.icon}</span> {t('ideProjectSettings')}</span>}
+    >
+      <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>
           {m.label} · <span style={{ fontFamily: 'monospace' }}>{ideProject.storageProjectKey}</span>
+        </p>
+        <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: 0, lineHeight: 1.5 }}>
+          {t('detailedConfigHint')}
         </p>
 
         {error && (
-          <div style={{ borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 13, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)' }}>
+          <div style={{ borderRadius: 8, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)' }}>
             {error}
           </div>
         )}
@@ -149,7 +154,7 @@ export function IdeProjectDetailsModal({
 
           <div>
             <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('parentProject')}</label>
-            <select
+            <Select
               value={containerProjectId ?? ''}
               onChange={(e) => setContainerProjectId(e.target.value ? Number(e.target.value) : null)}
               style={inputStyle}
@@ -158,14 +163,14 @@ export function IdeProjectDetailsModal({
               {containers.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
-            </select>
+            </Select>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{t('parentProjectHint')}</p>
           </div>
 
-          {isLlm && (
+          {isEvermind && (
             <div>
               <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('workflowLabel')}</label>
-              <select
+              <Select
                 value={workflowDefinitionId ?? ''}
                 onChange={(e) => { setWorkflowDefinitionId(e.target.value || null); setNotice(null); }}
                 style={inputStyle}
@@ -174,7 +179,7 @@ export function IdeProjectDetailsModal({
                 {workflows.map((w) => (
                   <option key={w.id} value={w.id}>{w.name}{w.executionScope === 'project' ? ` · ${t('customTag')}` : ''}</option>
                 ))}
-              </select>
+              </Select>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{t('workflowHint')}</p>
               {selectedWorkflow && (
                 <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
@@ -212,7 +217,7 @@ export function IdeProjectDetailsModal({
           </div>
         </form>
       </div>
-    </div>
+    </SlideOutPanel>
   );
 }
 

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { getStoredTenant } from '@/lib/auth';
+import { useIsFreelancer } from '@/lib/rbac';
 import { findActiveGroup, activeRouteTabId, tabHref, type NavTab } from '@/lib/navGroups';
 import { useNavCounts } from '@/lib/navCounts';
 import { TabCountBadge } from '@/components/TabCountBadge';
@@ -33,6 +34,13 @@ export default function SectionTabs() {
   const pathname = usePathname() || '';
   const searchParams = useSearchParams();
   const counts = useNavCounts();
+  const isFreelancer = useIsFreelancer();
+
+  // findActiveGroup resolves against the BUILDER nav groups. A freelancer/gig
+  // account navigates via the sidebar and gets its own in-page PillTabs (e.g. on
+  // /settings), so the builder tab bar must stay quiet for them — otherwise it
+  // would surface tenant-only tabs (Integrations/Tenant) that bounce the account.
+  if (isFreelancer) return null;
 
   const group = findActiveGroup(pathname);
   if (!group || !group.tabs || group.tabs.length === 0) return null;

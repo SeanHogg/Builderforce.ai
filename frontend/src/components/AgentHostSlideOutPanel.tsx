@@ -16,6 +16,8 @@ import { AgentHostChannelsContent } from './AgentHostChannelsContent';
 import { AgentHostSkillsContent } from './AgentHostSkillsContent';
 import { AgentHostConfigContent } from './AgentHostConfigContent';
 import { AgentHostNodesContent } from './AgentHostNodesContent';
+import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 export type AgentHostPanelTab =
   | 'details'
@@ -48,22 +50,22 @@ export interface AgentHostSlideOutPanelProps {
   initialTab?: AgentHostPanelTab;
 }
 
-const TABS: { id: AgentHostPanelTab; label: string }[] = [
-  { id: 'details', label: 'Details' },
-  { id: 'chat', label: 'Chat' },
-  { id: 'sessions', label: 'Sessions' },
-  { id: 'usage', label: 'Usage' },
-  { id: 'workspace', label: 'Workspace' },
-  { id: 'projects', label: 'Projects' },
-  { id: 'config', label: 'Config' },
-  { id: 'cron', label: 'Cron' },
-  { id: 'channels', label: 'Channels' },
-  { id: 'skills', label: 'Skills' },
-  { id: 'capabilities', label: 'Capabilities' },
-  { id: 'prds', label: 'PRDs' },
-  { id: 'nodes', label: 'Nodes' },
-  { id: 'observability', label: 'Observability' },
-  { id: 'debug', label: 'Debug' },
+const TABS: { id: AgentHostPanelTab; labelKey: string }[] = [
+  { id: 'details', labelKey: 'tabDetails' },
+  { id: 'chat', labelKey: 'tabChat' },
+  { id: 'sessions', labelKey: 'tabSessions' },
+  { id: 'usage', labelKey: 'tabUsage' },
+  { id: 'workspace', labelKey: 'tabWorkspace' },
+  { id: 'projects', labelKey: 'tabProjects' },
+  { id: 'config', labelKey: 'tabConfig' },
+  { id: 'cron', labelKey: 'tabCron' },
+  { id: 'channels', labelKey: 'tabChannels' },
+  { id: 'skills', labelKey: 'tabSkills' },
+  { id: 'capabilities', labelKey: 'tabCapabilities' },
+  { id: 'prds', labelKey: 'tabPrds' },
+  { id: 'nodes', labelKey: 'tabNodes' },
+  { id: 'observability', labelKey: 'tabObservability' },
+  { id: 'debug', labelKey: 'tabDebug' },
 ];
 
 const panelOverlayStyle: React.CSSProperties = {
@@ -103,6 +105,9 @@ export function AgentHostSlideOutPanel({
   onDeleted,
   initialTab = 'details',
 }: AgentHostSlideOutPanelProps) {
+  const confirm = useConfirm();
+  const tc = useTranslations('common');
+  const t = useTranslations('agentHostPanel');
   const [activeTab, setActiveTab] = useState<AgentHostPanelTab>(initialTab);
   const [savingDefault, setSavingDefault] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -144,14 +149,14 @@ export function AgentHostSlideOutPanel({
     e.preventDefault();
     e.stopPropagation();
     if (deleting) return;
-    if (!confirm(`Deregister "${agentHost.name}"? Its API key will be revoked and it will no longer connect.`)) return;
+    if (!(await confirm(tc('deregisterAgentHostConfirm', { name: agentHost.name })))) return;
     setDeleting(true);
     try {
       await agentHosts.deregister(agentHost.id);
       onDeleted?.(agentHost.id);
       onClose();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to deregister');
+      alert(err instanceof Error ? err.message : t('deregisterFailed'));
     } finally {
       setDeleting(false);
     }
@@ -185,7 +190,7 @@ export function AgentHostSlideOutPanel({
         className="project-panel-drawer slide-panel-drawer"
         style={panelDrawerStyle}
         role="dialog"
-        aria-label="AgentHost details"
+        aria-label={t('dialogAriaLabel')}
       >
         {/* Header */}
         <div
@@ -214,7 +219,7 @@ export function AgentHostSlideOutPanel({
               color: 'var(--text-secondary)',
               cursor: 'pointer',
             }}
-            aria-label="Close panel"
+            aria-label={t('closePanel')}
           >
             <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -253,7 +258,7 @@ export function AgentHostSlideOutPanel({
                 color: 'var(--coral-bright, #f4726e)',
               }}
             >
-              Default
+              {t('default')}
             </span>
           )}
           {canSetDefault &&
@@ -273,7 +278,7 @@ export function AgentHostSlideOutPanel({
                   cursor: savingDefault ? 'wait' : 'pointer',
                 }}
               >
-                {savingDefault ? 'Updating…' : 'Clear default'}
+                {savingDefault ? t('updating') : t('clearDefault')}
               </button>
             ) : (
               <button
@@ -291,14 +296,14 @@ export function AgentHostSlideOutPanel({
                   cursor: savingDefault ? 'wait' : 'pointer',
                 }}
               >
-                {savingDefault ? 'Setting…' : 'Set as default'}
+                {savingDefault ? t('setting') : t('setAsDefault')}
               </button>
             ))}
           <button
             type="button"
             onClick={handleDeregister}
             disabled={deleting}
-            title="Deregister this remote agent"
+            title={t('deregisterTitle')}
             style={{
               padding: '6px 12px',
               fontSize: 12,
@@ -310,7 +315,7 @@ export function AgentHostSlideOutPanel({
               cursor: deleting ? 'wait' : 'pointer',
             }}
           >
-            {deleting ? 'Deregistering…' : 'Deregister'}
+            {deleting ? t('deregistering') : t('deregister')}
           </button>
         </div>
 
@@ -325,7 +330,7 @@ export function AgentHostSlideOutPanel({
             flexShrink: 0,
           }}
         >
-          {TABS.map(({ id, label }) => (
+          {TABS.map(({ id, labelKey }) => (
             <button
               key={id}
               type="button"
@@ -343,7 +348,7 @@ export function AgentHostSlideOutPanel({
                 marginBottom: -1,
               }}
             >
-              {label}
+              {t(labelKey)}
             </button>
           ))}
         </div>
@@ -353,15 +358,15 @@ export function AgentHostSlideOutPanel({
           {activeTab === 'details' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={cardStyle}>
-                <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>Overview</div>
+                <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>{t('overview')}</div>
                 <div style={{ display: 'grid', gap: 10 }}>
                   {[
-                    { label: 'Name', value: agentHost.name },
-                    { label: 'Slug', value: slug, mono: true },
-                    { label: 'Status', value: statusLabel },
-                    { label: 'Last seen', value: agentHost.lastSeenAt ? new Date(agentHost.lastSeenAt).toLocaleString() : '—' },
-                    { label: 'Connected at', value: agentHost.connectedAt ? new Date(agentHost.connectedAt).toLocaleString() : '—' },
-                    { label: 'Created', value: agentHost.createdAt ? new Date(agentHost.createdAt).toLocaleString() : '—' },
+                    { label: t('fieldName'), value: agentHost.name },
+                    { label: t('fieldSlug'), value: slug, mono: true },
+                    { label: t('fieldStatus'), value: statusLabel },
+                    { label: t('fieldLastSeen'), value: agentHost.lastSeenAt ? new Date(agentHost.lastSeenAt).toLocaleString() : '—' },
+                    { label: t('fieldConnectedAt'), value: agentHost.connectedAt ? new Date(agentHost.connectedAt).toLocaleString() : '—' },
+                    { label: t('fieldCreated'), value: agentHost.createdAt ? new Date(agentHost.createdAt).toLocaleString() : '—' },
                   ].filter(r => r.value).map(({ label, value, mono }) => (
                     <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                       <span style={{ color: 'var(--text-muted)' }}>{label}</span>
@@ -419,9 +424,9 @@ export function AgentHostSlideOutPanel({
 
           {activeTab === 'prds' && (
             <div style={cardStyle}>
-              <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>PRDs</div>
+              <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>{t('prdsHeading')}</div>
               <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
-                Product Requirements Documents are created and managed at the project level. Use Brain to draft PRDs and executable task plans, or open a project to view and edit its PRD.
+                {t('prdsDescription')}
               </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 <Link
@@ -437,7 +442,7 @@ export function AgentHostSlideOutPanel({
                     textDecoration: 'none',
                   }}
                 >
-                  Brainstorm / Brain
+                  {t('brainstormBrain')}
                 </Link>
                 <Link
                   href="/projects"
@@ -452,7 +457,7 @@ export function AgentHostSlideOutPanel({
                     textDecoration: 'none',
                   }}
                 >
-                  Projects
+                  {t('projectsLink')}
                 </Link>
               </div>
             </div>

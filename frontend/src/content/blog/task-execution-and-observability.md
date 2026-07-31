@@ -12,6 +12,8 @@ When an AI agent runs a task, a lot happens. It plans, it calls tools, it writes
 
 Builderforce gives you that visibility through a layered stack: **tasks**, **executions**, **workflow telemetry**, and the **real-time portal timeline**. This post walks through each layer.
 
+![Task execution and observability: an execution moves through pending, submitted, running and completed or failed states, its per-tool spans laid out on a timeline with the failing call highlighted, and aggregate dashboard tiles for totals, completions, failures, duration and tokens](/blog/task-observability.svg)
+
 ---
 
 ## The Data Model

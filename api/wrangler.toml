@@ -29,6 +29,19 @@ custom_domain = true
 pattern = "*.builderforce.ai/*"
 zone_name = "builderforce.ai"
 
+# Same-origin gateway path. Corporate networks frequently whitelist the primary
+# apex (builderforce.ai) but block the `api.` subdomain, so direct calls to
+# api.builderforce.ai fail on some users' machines. `builderforce.ai/gateway/*`
+# lands on THIS worker instead — a more-specific path route overrides the frontend
+# worker's apex `custom_domain` for this prefix only (everything else still serves
+# the Next.js app). The worker strips the `/gateway` prefix (see `stripGatewayPrefix`
+# in src/index.ts) so every route/middleware is byte-identical to api.builderforce.ai.
+# This is the ONE whitelisted host all clients (VS Code extension + integrations)
+# should target; nobody needs to reach the api.* subdomain directly.
+[[routes]]
+pattern = "builderforce.ai/gateway/*"
+zone_name = "builderforce.ai"
+
 [vars]
 # Overridden by Cloudflare dashboard secrets for production.
 CORS_ORIGINS = "*"
@@ -43,6 +56,7 @@ NOTIFICATION_EMAIL_FROM = "Builderforce <notifications@builderforce.ai>"
 #   Cloudflare (PAID_LEAD_VENDOR, free daily neurons) was dead on every call and
 #   coding overflow floored to the metered Anthropic key.
 # NEON_DATABASE_URL must be set via: wrangler secret put NEON_DATABASE_URL
+# NEON_TRANSACTIONAL_DATABASE_URL must be set via: wrangler secret put NEON_TRANSACTIONAL_DATABASE_URL
 # JWT_SECRET must be set via: wrangler secret put JWT_SECRET
 # OPENROUTER_API_KEY must be set via: wrangler secret put OPENROUTER_API_KEY
 # OPENROUTER_API_KEY_PRO must be set via: wrangler secret put OPENROUTER_API_KEY_PRO
@@ -172,9 +186,31 @@ new_sqlite_classes = ["ProjectEvermindCoordinatorDO"]
 # Cron triggers — see scheduled() in src/index.ts
 #   "0 9 * * *"   09:00 UTC daily: probe every LLM vendor; email superadmins on status change.
 #   "*/5 * * * *" every 5 min: fire due schedule + rss workflow triggers, then advance
-#                 pending cloud-runtime workflows. Schedules finer than 5 min coalesce to it.
+#                 pending cloud-runtime workflows; reap stale runs; AND run the always-on
+#                 autonomous executor (start every agent-owned pending ticket across all
+#                 tenants, token-gated). Schedules finer than 5 min coalesce to it.
+#   "0 8 * * 1" weekly (Mon 08:00 UTC): Security-agent SOC 2 audit sweep — one audit
+#                 per tenant that has a Security agent (heavier than the daily passes,
+#                 so weekly). No-op for tenants without a Security agent.
+#   "0 16 * * 5" weekly (Fri 16:00 UTC): release-notes marketing digest — email every
+#                 published-and-not-yet-emailed release note to consenting users
+#                 (product_updates lifecycle category), then flag the notes sent.
+#                 No-op on weeks with nothing new. See application/email/releaseDigest.ts.
+#
+# WHICH sweeps each expression runs is NOT decided here — every sweep is declared once
+# in src/cronSweeps.ts with a cadence, and scheduled() maps the expression above to a
+# cadence group (see CADENCE_BY_CRON in application/runtime/cronSweepRunner.ts). Adding
+# a cron expression that no cadence claims fires a tick that does nothing, so keep the
+# two in step; a test fails if a cadence has no sweeps.
+#
+# The frequent tick is KV work-gated so idle Neon compute can autosuspend: on an idle
+# platform it touches ZERO Postgres and returns. Optional `CRON_FLOOR_INTERVAL_MS`
+# (clamped [5 min, 6 h], default 30 min) tunes how long an idle platform may go without
+# an unconditional fan-out — a cost dial, see application/runtime/cronWorkSignal.ts.
+# To observe or force a tick without waiting: POST /api/admin/cron/:target (superadmin)
+# or the Admin → Overview → Scheduled sweeps panel.
 [triggers]
-crons = ["0 9 * * *", "*/5 * * * *"]
+crons = ["0 9 * * *", "0 8 * * 1", "0 16 * * 5", "*/5 * * * *"]
 
 # Inbound-email workflow trigger (the `inbound-email` trigger type) is delivered to
 # the email() handler in src/index.ts. It requires Cloudflare Email Routing to be

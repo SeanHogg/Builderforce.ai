@@ -25,6 +25,7 @@
 import {
   buildOpenAIChatBody,
   executeChatCompletion,
+  forwardCallOpts,
   VendorFatalError,
   type AiModelTier,
   type VendorCallParams,
@@ -103,9 +104,7 @@ export const cloudflareModule: VendorModule = {
       apiKey: token,
       model: params.model,
       body: buildOpenAIChatBody(params),
-      ...(params.title ? { title: params.title } : {}),
-      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-      ...(params.signal ? { signal: params.signal } : {}),
+      ...forwardCallOpts(params),
     });
   },
   // No `callStream` — streaming dispatch skips Cloudflare (records `skippedNoStream`);

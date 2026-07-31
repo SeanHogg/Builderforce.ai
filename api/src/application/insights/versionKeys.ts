@@ -13,3 +13,6 @@ export const qualityVersionKey = (tenantId: number): string => `insights-quality
 export const peopleVersionKey = (tenantId: number): string => `insights-people-version:tenant:${tenantId}`;
 export const aiProgramVersionKey = (tenantId: number): string => `insights-ai-program-version:tenant:${tenantId}`;
 export const rdFinancialsVersionKey = (tenantId: number): string => `insights-rd-financials-version:tenant:${tenantId}`;
+export const incidentVersionKey = (tenantId: number): string => `incidents-version:tenant:${tenantId}`;
+export const knowledgeVersionKey = (tenantId: number): string => `knowledge:${tenantId}`;
+export const monitoringVersionKey = (tenantId: number): string => `monitoring-version:tenant:${tenantId}`;

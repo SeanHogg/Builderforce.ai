@@ -1,15 +1,22 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono, type Context } from 'hono';
 import { and, count, eq, inArray, max, min, sql } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
+import { notSystemTask } from '../../application/task/taskScope';
 import { ensureProjectTemplate } from '../../application/project/projectTemplate';
+import { KanbanTemplateService } from '../../application/kanban/kanbanTemplateService';
+import { provisionDefaultProjectEvermind } from '../../application/llm/projectEvermind';
+import { DEFAULT_TEMPLATE_ID } from '../../application/kanban/templateCatalog';
 import type { HonoEnv } from '../../env';
 import type { Env } from '../../env';
-import { getCacheVersion, getOrSetCached, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import { getCacheVersion, getOrSetCached, bumpCacheVersion, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
+import { computeProject360, type Project360Aggregate } from '../../application/project/computeProject360';
+import { computeProjectDeliverySignals } from '../../application/insights/projectDeliverySignals';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentHostProjects, agentHosts, objectiveLinks, projectInsightEvents, projects, sourceControlIntegrations, specs, tasks, tenants, workflows } from '../../infrastructure/database/schema';
+import { agentHostProjects, agentHosts, objectiveLinks, objectives, projectInsightEvents, projects, sourceControlIntegrations, specs, tasks, tenants, workflows } from '../../infrastructure/database/schema';
 import { relayToRoom } from './realtimeRelay';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { projectRoomName } from '../../infrastructure/relay/broadcastRoom';
@@ -62,7 +69,13 @@ export function projectsListVersionKey(tenantId: number): string {
  * goal links) — mirrors the completed-by-assignee convention in reportRoutes.
  */
 export async function invalidateProjectsList(env: Env, tenantId: number): Promise<void> {
-  await bumpCacheVersion(env, projectsListVersionKey(tenantId));
+  // Task/objective/project writes that reshape the list also change what the
+  // chat↔ticket link picker can find, so orphan its typeahead cache in the same
+  // beat (the picker is a ticket surface, exactly like the projects list).
+  await Promise.all([
+    bumpCacheVersion(env, projectsListVersionKey(tenantId)),
+    bumpTicketSearchVersion(env, tenantId),
+  ]);
 }
 
 export function createProjectRoutes(projectService: ProjectService, db: Db): Hono<HonoEnv> {
@@ -76,7 +89,17 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   // is a dumb fan-out relay (no domain data flows through it), and the authed REST
   // routes stay the source of truth. The browser passes its JWT as `?token=` since
   // it can't set WS headers (authMiddleware already accepts the query param).
-  router.get('/:id/stream', (c) => relayToRoom(c, c.env?.SESSION_ROOM, projectRoomName(c.req.param('id'))));
+  // The room is tenant-scoped (`project:<tenantId>:<id>`), so before wiring the
+  // stream we resolve the project THROUGH the caller's tenant — getProject throws
+  // (404) when the id isn't in this tenant, which stops tenant B subscribing to
+  // tenant A's change-events. We key the room off the resolved integer id so it
+  // matches the publish side (broadcastProjectChanged always uses the integer id)
+  // even when the caller addressed the project by its public UUID.
+  router.get('/:id/stream', async (c) => {
+    const tenantId = c.get('tenantId');
+    const project = await projectService.getProject(c.req.param('id'), tenantId);
+    return relayToRoom(c, c.env?.SESSION_ROOM, projectRoomName(tenantId, project.id));
+  });
 
   const normalizeName = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
 
@@ -286,6 +309,10 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     return c.json({ projects });
   });
 
+  /** Window for the per-project delivery-health signals — matches the delivery
+   *  tab's default so the card and the tab agree for a single-project tenant. */
+  const DELIVERY_SIGNAL_WINDOW_DAYS = 30;
+
   /** Compute the full projects-list payload (base rows + all card aggregates). */
   async function buildProjectsList(tenantId: number) {
     const projectList = await projectService.listProjects(tenantId);
@@ -317,6 +344,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         and(
           inArray(tasks.projectId, projectIds),
           eq(tasks.archived, false),
+          notSystemTask,
         ),
       )
       .groupBy(tasks.projectId);
@@ -347,6 +375,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         and(
           inArray(tasks.projectId, projectIds),
           eq(tasks.archived, false),
+          notSystemTask,
         ),
       )
       .groupBy(tasks.projectId);
@@ -449,12 +478,29 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       if (row.objectiveId) goalSet(row.projectId).add(row.objectiveId);
     }
     for (const [projectId, initiativeId] of initiativeByProject) {
-      const objectives = objectivesByInitiative.get(initiativeId);
-      if (objectives) for (const objectiveId of objectives) goalSet(projectId).add(objectiveId);
+      const initiativeObjectives = objectivesByInitiative.get(initiativeId);
+      if (initiativeObjectives) for (const objectiveId of initiativeObjectives) goalSet(projectId).add(objectiveId);
+    }
+    // Third edge (0268): objectives scoped DIRECTLY to a project — the Brain's
+    // `objectives.create` with a projectId, or the OKR tab's project scope. Merged
+    // into the same distinct set so a project counts each linked objective once.
+    const projectScopedGoalRows = await db
+      .select({ projectId: objectives.projectId, objectiveId: objectives.id })
+      .from(objectives)
+      .where(and(eq(objectives.tenantId, tenantId), inArray(objectives.projectId, projectIds)));
+    for (const row of projectScopedGoalRows) {
+      if (row.projectId != null) goalSet(row.projectId).add(row.objectiveId);
     }
     const goalCountByProject = new Map<number, number>(
       [...goalObjectivesByProject].map(([projectId, set]) => [projectId, set.size]),
     );
+
+    // Per-project delivery signals (DORA + cycle time + flow) over the standard
+    // 30-day window — the compact inputs the frontend runs through the SAME
+    // computeDeliveryVerdict the /insights/delivery banner uses, so a project's
+    // health score is identical on its card and on the delivery tab. One bounded
+    // grouped pass (no N+1); the whole list payload is version-token cached.
+    const deliverySignalsByProject = await computeProjectDeliverySignals(db, tenantId, DELIVERY_SIGNAL_WINDOW_DAYS);
 
     return plainProjects.map((project) => {
       const b = taskBreakdownByProject.get(project.id);
@@ -467,6 +513,10 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         openTaskCount: b ? Math.max(0, b.total - b.done - b.cancelled) : 0,
         blockedTaskCount: b?.blocked ?? 0,
         overdueTaskCount: b?.overdue ?? 0,
+        // Delivery-health inputs — the frontend fuses these via the shared verdict
+        // so the card's health matches the /insights/delivery gauge (null = no
+        // deploys/throughput yet → the card shows a neutral "no data" health).
+        deliverySignals: deliverySignalsByProject.get(project.id) ?? null,
         workflowCount: workflowCountByProject.get(project.id) ?? 0,
         hasArchitecturePrd: hasArchByProject.has(project.id),
         // Goal/OKR linkage + planning-spine membership — the inspection Direction
@@ -500,6 +550,56 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   router.get('/:id', async (c) => {
     const project = await projectService.getProject(c.req.param('id'), c.get('tenantId'));
     return c.json(project.toPlain());
+  });
+
+  /**
+   * GET /api/projects/:id/360 — the whole-picture health rollup (Project 360): four
+   * pillars × eight dimensions, the missing-item "improve" checklist, and the LIVE
+   * workforce (who's working / idle and why). The single source of truth the VS Code
+   * native panel renders — the web app can render the SAME payload later.
+   *
+   * Reuses the already-cached projects-list aggregate for the expensive grouped task
+   * counts (no re-count), then composes the live signals (per-task assignment,
+   * non-terminal executions, availability). The composed result rides a DELIBERATELY
+   * SHORT read-through cache (5s L1 / 10s KV, keyed by the projects-list version so a
+   * task write busts it) — enough to absorb open/refresh storms without serving stale
+   * "who's working": an explicit refresh sends `?fresh=1` to bypass it entirely.
+   */
+  router.get('/:id/360', async (c) => {
+    const tenantId = c.get('tenantId');
+    const project = await projectService.getProject(c.req.param('id'), tenantId);
+    const version = await getCacheVersion(c.env as Env, projectsListVersionKey(tenantId));
+    const list = await getOrSetCached(
+      c.env as Env,
+      `${projectsListVersionKey(tenantId)}:v:${version}`,
+      () => buildProjectsList(tenantId),
+    );
+    const row = list.find((p) => p.id === project.id);
+    if (!row) return c.json({ error: 'project not found' }, 404);
+    const aggregate: Project360Aggregate = {
+      id: row.id,
+      name: row.name,
+      key: row.key ?? null,
+      status: row.status ?? null,
+      taskCount: row.taskCount,
+      completedTaskCount: row.completedTaskCount,
+      openTaskCount: row.openTaskCount,
+      blockedTaskCount: row.blockedTaskCount,
+      overdueTaskCount: row.overdueTaskCount,
+      linkedGoalCount: row.linkedGoalCount,
+      initiativeId: row.initiativeId ?? null,
+      hasArchitecturePrd: row.hasArchitecturePrd,
+      assignedAgentHost: row.assignedAgentHost ?? null,
+    };
+    const fresh = c.req.query('fresh') === '1';
+    if (fresh) return c.json(await computeProject360(db, tenantId, aggregate));
+    const model = await getOrSetCached(
+      c.env as Env,
+      `project-360:tenant:${tenantId}:project:${project.id}:v:${version}`,
+      () => computeProject360(db, tenantId, aggregate),
+      { l1TtlMs: 5_000, kvTtlSeconds: 10 },
+    );
+    return c.json(model);
   });
 
   // NOTE: the per-project chat CRUD (`GET/POST /:id/chats`, `GET/PATCH
@@ -547,7 +647,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       sourceControlRepoUrl?: string | null;
       githubRepoUrl?: string | null;
       governance?: string | null;
-      /** IDE project type: 'designer' | 'video' | 'llm'. Defaults to 'designer'. */
+      /** IDE project type: 'designer' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults to 'designer'. */
       modality?: string | null;
       /** Where the project was born — 'ide' tags it for the Designer badge. */
       origin?: string | null;
@@ -556,7 +656,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
 
-    const guard = buildPlanLimitsGuard(db);
+    const guard = buildPlanLimitsGuard(db, c.env as Env);
     const limitErr = await guard.checkProjectLimit(tenantId);
     if (limitErr) return c.json(limitErr, 402);
 
@@ -585,7 +685,26 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       tenantId,
     });
     await ensureProjectTemplate(c.env.UPLOADS, project);
-    await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
+    // Provision the project's board from a kanban template so its lanes carry role
+    // ownership + per-lane requirements from day one (the onboarding "recommended
+    // roster" reads from this). Defaults to the Standard SWE board; best-effort so a
+    // template failure never blocks project creation.
+    {
+      const plain = project.toPlain();
+      const templateId = (body as { kanbanTemplateId?: string }).kanbanTemplateId?.trim() || DEFAULT_TEMPLATE_ID;
+      await new KanbanTemplateService(db)
+        .applyToProject(c.env as Env, tenantId, plain.id, templateId, plain.name)
+        .catch((error) => {
+          reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
+        });
+    }
+    // Give the project a DEFAULT Evermind so it always has a self-learning model to
+    // run/learn/edit — even when the manager never seeds one from a Studio model.
+    // Best-effort (never blocks creation); inference stays OFF until opted in.
+    await provisionDefaultProjectEvermind(c.env as Env, db, tenantId, project.toPlain().id, name);
+    await invalidateProjectsList(c.env as Env, tenantId).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
+    });
     return c.json(project.toPlain(), 201);
   });
 
@@ -642,7 +761,9 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         },
         tenantId,
       );
-      await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
+      await invalidateProjectsList(c.env as Env, tenantId).catch((error) => {
+        reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
+      });
       return c.json({ action: 'updated', project: updated.toPlain() });
     }
 
@@ -660,7 +781,11 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     });
 
     await ensureProjectTemplate(c.env.UPLOADS, created);
-    await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
+    // Default Evermind for every newly-created project (see POST / above).
+    await provisionDefaultProjectEvermind(c.env as Env, db, tenantId, created.toPlain().id, name);
+    await invalidateProjectsList(c.env as Env, tenantId).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
+    });
     return c.json({ action: 'created', project: created.toPlain() }, 201);
   });
 
@@ -723,7 +848,17 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       sourceControlRepoUrl: assignment.value.sourceControlRepoUrl,
       githubRepoUrl: assignment.value.githubRepoUrl,
     }, tenantId);
-    await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
+    await invalidateProjectsList(c.env as Env, tenantId).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
+    });
+    // A Project Key change re-keys every task (`<oldKey>-NNN` → `<newKey>-NNN`) in
+    // updateProject; bust the cached Epic trees for this project so they don't
+    // serve stale keys. Task-list reads are uncached, so they reflect it already.
+    if (project.key !== existing.key) {
+      await bumpCacheVersion(c.env as Env, `task-tree-version:project:${existing.id}`).catch((error) => {
+        reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
+      });
+    }
     return c.json(project.toPlain());
   });
 
@@ -771,6 +906,8 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     // template so the IDE opens runnable — updates of an existing project keep
     // whatever files it already has.
     if (!existing) await ensureProjectTemplate(c.env.UPLOADS, project);
+    // Default Evermind for a freshly-scaffolded project (see POST / above).
+    if (!existing) await provisionDefaultProjectEvermind(c.env as Env, db, tenantId, project.id, name);
 
     let selectedAgentHostId: number | null = null;
 
@@ -815,7 +952,9 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       ? await projectService.updateProject(project.id, { status: ProjectStatus.ON_HOLD }, tenantId)
       : await projectService.updateProject(project.id, { status: ProjectStatus.ACTIVE }, tenantId);
 
-    await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
+    await invalidateProjectsList(c.env as Env, tenantId).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
+    });
     return c.json({
       project: finalProject.toPlain(),
       scaffold: {
@@ -831,7 +970,9 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     const tenantId = c.get('tenantId');
     const project = await projectService.getProject(c.req.param('id'), tenantId);
     await projectService.deleteProject(project.id, tenantId);
-    await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
+    await invalidateProjectsList(c.env as Env, tenantId).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/projectRoutes.ts", operation: "createProjectRoutes" });
+    });
     return c.body(null, 204);
   });
 

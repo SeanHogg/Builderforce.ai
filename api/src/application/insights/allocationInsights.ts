@@ -29,6 +29,7 @@ import {
   users,
 } from '../../infrastructure/database/schema';
 import { identityOf, type MemberIdentityFields } from '../metrics/workforceMetrics';
+import { notSystemTask } from '../task/taskScope';
 import {
   ALLOCATION_CATEGORIES,
   allocationCategoryLabel,
@@ -38,9 +39,9 @@ import {
   type AllocationCategory,
 } from '../llm/allocationCategories';
 import { loadTaskCostClassMap } from '../pmo/planningSpine';
+import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 
 const HOUR_MS = 3_600_000;
-const MILLICENTS_PER_USD = 100_000;
 /** Bound on tasks scanned per window (mirrors workforceMetrics.MAX_METRIC_ROWS). */
 const MAX_METRIC_ROWS = 5_000;
 /** Cap per-task effort hours so a single long-lived/stale task can't dominate the
@@ -364,6 +365,7 @@ export async function computeAllocationInsights(
     eq(projects.tenantId, tenantId),
     eq(tasks.archived, false),
     gte(tasks.updatedAt, since),
+    notSystemTask,
   ];
   if (scope.projectId != null) where.push(eq(tasks.projectId, scope.projectId));
 
@@ -525,6 +527,7 @@ export async function computeAllocationHistory(
     eq(projects.tenantId, tenantId),
     eq(tasks.archived, false),
     gte(tasks.updatedAt, since),
+    notSystemTask,
   ];
   if (scope.projectId != null) where.push(eq(tasks.projectId, scope.projectId));
 

@@ -1297,6 +1297,74 @@ export function createSecurityAuditWorkflow(target: string): WorkflowStep[] {
 }
 
 /**
+ * Quality Audit Workflow
+ *
+ * Bug Analyzer assesses test coverage / CI / build integrity, Test Generator
+ * fills the biggest gaps, and Code Reviewer signs off on the quality posture.
+ * The deterministic engine scores the report; this workflow does the deep pass.
+ */
+export function createQualityAuditWorkflow(target: string): WorkflowStep[] {
+  const assess = `Assess engineering quality for: ${target}. Evaluate automated test coverage, CI presence and gating, lint/type safety, build reproducibility (lockfiles), and error observability. List the highest-impact gaps.`;
+  const fill = `Add or strengthen automated tests and CI checks for the highest-impact gaps found in: ${target}. Prefer fast, deterministic tests around the riskiest untested paths.`;
+  return [
+    { role: "bug-analyzer", task: assess },
+    { role: "test-generator", task: fill, dependsOn: [assess] },
+    {
+      role: "code-reviewer",
+      task: `Review the quality improvements for: ${target}. Verify the new tests are meaningful (not tautological), CI is green, and produce a quality-posture sign-off with residual gaps.`,
+      dependsOn: [fill],
+    },
+  ];
+}
+
+/**
+ * Product Vision & Roadmap Audit Workflow
+ *
+ * Architecture Advisor evaluates product direction (vision, objectives, key
+ * results, roadmap sequencing) and Documentation Agent writes/updates the vision
+ * + roadmap artifacts to close the gaps.
+ */
+export function createPmVisionAuditWorkflow(target: string): WorkflowStep[] {
+  const assess = `Audit the product vision and roadmap for: ${target}. Check for a clear one-page vision (problem, users, differentiation), outcome objectives with measurable key results, and a sequenced/dated roadmap of initiatives. Identify what is missing or vague.`;
+  return [
+    { role: "architecture-advisor", task: assess },
+    {
+      role: "documentation-agent",
+      task: `Draft or update the product vision and roadmap documents for: ${target}, closing the gaps identified. Produce a concise vision doc and a sequenced roadmap outline.`,
+      dependsOn: [assess],
+    },
+  ];
+}
+
+/**
+ * Privacy & Data-Law Compliance Audit Workflow
+ *
+ * Architecture Advisor inventories personal data + data flows, Bug Analyzer
+ * checks the code for privacy-law gaps (consent gating, unsubscribe, data export
+ * / erasure, retention), Documentation Agent drafts the missing privacy policy /
+ * DPA language, and Code Reviewer signs off. Deepens the deterministic privacy
+ * scan with a content-level review.
+ */
+export function createPrivacyAuditWorkflow(target: string): WorkflowStep[] {
+  const inventory = `Inventory the personal data and data flows for: ${target}. Identify what PII is collected, where it is stored, who it is shared with (subprocessors), and the legal basis for each.`;
+  const gaps = `Audit ${target} for GDPR / CCPA·CPRA / CAN-SPAM gaps: is analytics/marketing gated behind opt-in consent; is there a working unsubscribe + List-Unsubscribe + physical address; are there self-service data export (Art. 20) and erasure (Art. 17) endpoints that truly delete; is there a documented retention/purge routine. List concrete gaps.`;
+  return [
+    { role: "architecture-advisor", task: inventory },
+    { role: "bug-analyzer", task: gaps, dependsOn: [inventory] },
+    {
+      role: "documentation-agent",
+      task: `Draft or update the privacy policy, cookie policy, and DPA/subprocessor language for: ${target}, closing the gaps found. Ensure data-subject rights and retention windows are stated plainly.`,
+      dependsOn: [gaps],
+    },
+    {
+      role: "code-reviewer",
+      task: `Review the privacy remediations for: ${target}. Verify consent actually gates trackers, export/erasure endpoints work end-to-end, and produce a compliance sign-off with residual risk.`,
+      dependsOn: [gaps],
+    },
+  ];
+}
+
+/**
  * Planning Workflow
  *
  * Architecture Advisor builds a PRD and architecture spec, then decomposes it

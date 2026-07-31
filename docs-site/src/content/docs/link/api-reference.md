@@ -435,17 +435,15 @@ Agent-authenticated endpoints for pushing telemetry from the agent runtime.
 
 ---
 
-## Payment Provider
+## Payments
 
-Builderforce supports swappable payment providers. The active provider is selected by `PAYMENT_PROVIDER` env var.
+Stripe is the only payment provider — there is no provider switch and no manual fallback.
 
-| Provider | Value | Status |
-|----------|-------|--------|
-| Manual (no processor) | `manual` | Default — activates immediately, no redirect |
-| Stripe | `stripe` | Full implementation — requires `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_YEARLY` |
-| Helcim | `helcim` | Stub ready — requires `HELCIM_API_TOKEN`, `HELCIM_WEBHOOK_SECRET` |
+Required Worker secrets: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY`, `STRIPE_PRICE_TEAMS_MONTHLY`, `STRIPE_PRICE_TEAMS_YEARLY`.
 
-### Checkout flow (hosted providers)
+Secrets are validated lazily: when they are absent the billing routes return **503 `payment_not_configured`** and every other route keeps working.
+
+### Checkout flow
 
 ```
 POST /api/tenants/:id/subscription/checkout

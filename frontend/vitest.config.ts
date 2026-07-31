@@ -38,6 +38,8 @@ export default defineConfig({
     //    breaking brain-embedded's context/hooks);
     //  - react-markdown/remark-gfm: brain-ui/dist imports these bare and brain-ui has
     //    no installed node_modules in the frontend-only job, so they must resolve here.
-    dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react-markdown', 'remark-gfm'],
+    //  - @seanhogg/builderforce-brain-embedded: brain-ui/dist imports it bare; it lives
+    //    in the frontend's node_modules (link: dep) but not in brain-ui's, so dedupe it.
+    dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react-markdown', 'remark-gfm', '@seanhogg/builderforce-brain-embedded'],
   },
 });

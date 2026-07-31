@@ -10,6 +10,8 @@ author: Sean Hogg
 
 A single generalist agent can answer questions, write code, and draft emails. But real-world workflows often need **specialist agents working in concert**: a planner, a coder, a reviewer, a deployer. The Builderforce Mesh is the layer that connects them.
 
+![Multi-agent orchestration: an orchestrator agent decomposes a goal and routes each sub-task to a specialist — planner, coder, reviewer, tester, deployer — passing structured JSON handoffs between nodes](/blog/multi-agent-orchestration.svg)
+
 ## The Mesh Mental Model
 
 Think of the Mesh as a message bus between agents. Each agent is a **node** that:

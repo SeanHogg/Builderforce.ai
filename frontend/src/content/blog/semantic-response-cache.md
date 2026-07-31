@@ -14,6 +14,8 @@ Builderforce.ai's answer is an **embedding-keyed semantic cache**: it reuses a p
 
 > The biggest cost lever in the stack is a semantic cache that reuses a prior answer when a new prompt means the same thing as one already answered — so the frontier model is never billed twice for the same work.
 
+![Flow showing two paraphrased prompts collapsing into one on-device SSM embedding vector, then cascading through an L1 on-device cache and an L2 shared gateway cache — each returning a hit reuse — before a full miss reaches the billed frontier model, whose answer is stored back into L1 and L2](/blog/semantic-cache.svg)
+
 ## Exact-match caching isn't enough
 
 A traditional response cache keys on the literal prompt string. It only helps when the *exact* same text comes through twice — which, in natural-language workloads, is rare. Reword a question, add a filename, change the order of two sentences, and you've blown the cache.

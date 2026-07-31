@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * AnalysisRunnerDO — drives a Digital-Transformation / Architect repo analysis
  * across Durable Object alarm() ticks. Each tick is a fresh Worker invocation
@@ -36,6 +37,7 @@ import {
 } from '../../application/repos/sources/RepoSource';
 import { ArchitectAnalysisService, ArtifactGenerationError } from '../../application/repoanalysis/ArchitectAnalysisService';
 import { ToolService, ARCHITECTURE_DIAGNOSTIC_ID } from '../../application/tools/ToolService';
+import { deriveArchitectureResult } from '../../application/tools/auditScanners';
 import { linkSpecToTask } from '../../application/prd/taskPrd';
 import {
   ARTIFACT_KINDS,
@@ -527,7 +529,12 @@ export class AnalysisRunnerDO implements DurableObject {
     // Record the run as a tracked project diagnostic so it contributes to the
     // project's rating (which rolls up to the tenant). Best-effort — a scoring
     // failure must not fail the analysis run.
-    if (ok) await this.recordArchitectureDiagnostic(cursor).catch(() => {});
+    if (ok) await this.recordArchitectureDiagnostic(cursor).catch((error) => reportCaughtError(error, { source: "infrastructure/relay/AnalysisRunnerDO.ts", operation: "tickDone", context: { logMessage: '[analysis-runner] diagnostic persistence failed', details: {
+      runId: cursor.runId,
+      executionId: cursor.executionId ?? null,
+      tenantId: cursor.tenantId,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    } } }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) }));
 
     await this.state.storage.delete(CURSOR_KEY);
     await this.state.storage.deleteAlarm();
@@ -553,35 +560,15 @@ export class AnalysisRunnerDO implements DurableObject {
     const data = safeJson<Record<string, { score?: number; notes?: string }>>(row.dataJson ?? '{}');
     if (!data) return;
 
-    const PRINCIPLES: Array<{ key: string; label: string }> = [
-      { key: 'dry', label: 'DRY' },
-      { key: 'solid', label: 'SOLID' },
-      { key: 'ddd', label: 'DDD' },
-      { key: 'patterns', label: 'Patterns' },
-    ];
-    const LEVEL_NAMES = ['Initial', 'Managed', 'Defined', 'Quantitatively Managed', 'Optimizing'];
-    const clampLevel = (n: number) => Math.max(1, Math.min(5, Math.round(n)));
-
-    const rows = PRINCIPLES
-      .map((p) => ({ ...p, raw: data[p.key]?.score }))
-      .filter((p): p is { key: string; label: string; raw: number } => typeof p.raw === 'number');
-    if (rows.length === 0) return;
-
-    const avg10 = rows.reduce((s, p) => s + Math.max(0, Math.min(10, p.raw)), 0) / rows.length;
-    const score = Math.round((avg10 / 2) * 10) / 10; // 0–10 → 1–5 scale
-    const label = LEVEL_NAMES[clampLevel(score) - 1]!;
-
-    const result = {
-      headline: `${label} — ${score.toFixed(1)} / 5`,
-      summary: 'Design-principle adherence (DRY, SOLID, DDD, patterns) from the latest architecture analysis.',
-      score,
-      scoreLabel: label,
-      metrics: rows.map((p) => {
-        const v = Math.max(0, Math.min(10, p.raw));
-        return { label: p.label, value: `${v}/10`, hint: data[p.key]?.notes?.slice(0, 160), tier: clampLevel(v / 2) };
-      }),
-      recommendations: [],
-    };
+    // Shared 1–5 derivation (the same scorer the deterministic architecture audit
+    // uses) — one source of truth for the principle→score math.
+    const result = deriveArchitectureResult([
+      { key: 'dry', label: 'DRY', score: data.dry?.score, notes: data.dry?.notes },
+      { key: 'solid', label: 'SOLID', score: data.solid?.score, notes: data.solid?.notes },
+      { key: 'ddd', label: 'DDD', score: data.ddd?.score, notes: data.ddd?.notes },
+      { key: 'patterns', label: 'Patterns', score: data.patterns?.score, notes: data.patterns?.notes },
+    ]);
+    if (!result) return;
 
     await new ToolService(this.db).recordExternalRun(this.env, {
       tenantId: cursor.tenantId,
@@ -600,14 +587,26 @@ export class AnalysisRunnerDO implements DurableObject {
         .update(executions)
         .set({ status: execStatus, completedAt: now, updatedAt: now })
         .where(eq(executions.id, cursor.executionId))
-        .catch(() => {});
+        .catch((error) => reportCaughtError(error, { source: "infrastructure/relay/AnalysisRunnerDO.ts", operation: "closeTaskAndExecution", context: { logMessage: '[analysis-runner] terminal execution transition failed', details: {
+          runId: cursor.runId,
+          executionId: cursor.executionId,
+          tenantId: cursor.tenantId,
+          status: execStatus,
+          error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        } } }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) }));
     }
     if (cursor.taskId != null) {
       await this.db
         .update(tasks)
         .set({ status: taskStatus, updatedAt: now })
         .where(eq(tasks.id, cursor.taskId))
-        .catch(() => {});
+        .catch((error) => reportCaughtError(error, { source: "infrastructure/relay/AnalysisRunnerDO.ts", operation: "closeTaskAndExecution", context: { logMessage: '[analysis-runner] terminal task transition failed', details: {
+          runId: cursor.runId,
+          taskId: cursor.taskId,
+          tenantId: cursor.tenantId,
+          status: taskStatus,
+          error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        } } }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) }));
     }
   }
 
@@ -731,7 +730,13 @@ export class AnalysisRunnerDO implements DurableObject {
         totalTokens: art.tokens,
         useCase: `repo_analysis_${art.kind}`,
       })
-      .catch(() => {});
+      .catch((error) => reportCaughtError(error, { source: "infrastructure/relay/AnalysisRunnerDO.ts", operation: "meterUsage", context: { logMessage: '[analysis-runner] usage metering failed', details: {
+        runId: cursor.runId,
+        executionId: cursor.executionId ?? null,
+        tenantId: cursor.tenantId,
+        model: art.model,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      } } }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) }));
   }
 
   private async failRun(cursor: Cursor, message: string): Promise<void> {

@@ -5,6 +5,7 @@ import { Select } from '@/components/Select';
 import { tasksApi, agentHosts as agentHostsApi, type Task, type AgentHost } from '@/lib/builderforceApi';
 import { RunAgentControl } from '@/components/task/RunAgentControl';
 import { AgentExecutionPanel } from '@/components/agent/AgentExecutionPanel';
+import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
 
 /**
  * IdeAgentPanel — run a cloud agent / AI prompt against this project from inside
@@ -56,6 +57,9 @@ export function IdeAgentPanel({ projectId }: { projectId: number }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ padding: 12, borderBottom: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0 }}>
+        {/* Project Evermind — run this project's agents on (and learn into) its own model. */}
+        <ProjectEvermindPanel projectId={projectId} />
+
         {/* New AI prompt → task */}
         <div style={{ display: 'flex', gap: 8 }}>
           <input

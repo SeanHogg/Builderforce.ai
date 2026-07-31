@@ -32,6 +32,7 @@ import {
 import type { Db } from '../../infrastructure/database/connection';
 import { tenants } from '../../infrastructure/database/schema';
 import { computeFinanceInsights, type FinanceInsights } from './financeInsights';
+import { clampScore } from '../../domain/shared/numbers';
 import { computeEngineeringInsights, type EngineeringInsights } from './engineeringInsights';
 import { computeAllocationInsights, type AllocationInsights } from './allocationInsights';
 import { computeDora } from '../metrics/workforceMetrics';
@@ -82,7 +83,7 @@ const SEVERITY_BASE: Record<RecSeverity, number> = { critical: 1000, warning: 50
 
 /** Severity → base rank + a 0..100 magnitude bump so worse offenders sort first. */
 function ranked(r: Omit<Recommendation, 'rank'>, magnitude = 0): Recommendation {
-  return { ...r, rank: SEVERITY_BASE[r.severity] + Math.max(0, Math.min(100, magnitude)) };
+  return { ...r, rank: SEVERITY_BASE[r.severity] + clampScore(magnitude) };
 }
 
 const pctStr = (n: number) => `${n.toFixed(0)}%`;

@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">SECURITY &amp; MULTI-TENANCY</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Every query is scoped; no tenant sees another</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- Isolation lanes -->
+  <rect x="100" y="228" width="420" height="252" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="100" y="228" width="6" height="252" rx="3" fill="url(#violetGrad)"/>
+  <text x="140" y="288" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="26" font-weight="900" fill="#EEF0FA">Tenant A</text>
+  <text x="140" y="332" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8"><tspan x="140" dy="0">projects · agents · tasks</tspan><tspan x="140" dy="30">skills · approvals · chat</tspan><tspan x="140" dy="30">agentHosts · conversations</tspan></text>
+  <text x="140" y="456" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#8891AE">— scoped to this tenant only</text>
+
+  <rect x="590" y="228" width="420" height="252" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="590" y="228" width="6" height="252" rx="3" fill="url(#coolGrad)"/>
+  <text x="630" y="288" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="26" font-weight="900" fill="#EEF0FA">Tenant B</text>
+  <text x="630" y="332" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8"><tspan x="630" dy="0">projects · agents · tasks</tspan><tspan x="630" dy="30">skills · approvals · chat</tspan><tspan x="630" dy="30">agentHosts · conversations</tspan></text>
+  <text x="630" y="456" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#8891AE">— scoped to this tenant only</text>
+
+  <rect x="1080" y="228" width="420" height="252" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="1080" y="228" width="6" height="252" rx="3" fill="url(#mintGrad)"/>
+  <text x="1120" y="288" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="26" font-weight="900" fill="#EEF0FA">Tenant C</text>
+  <text x="1120" y="332" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8"><tspan x="1120" dy="0">projects · agents · tasks</tspan><tspan x="1120" dy="30">skills · approvals · chat</tspan><tspan x="1120" dy="30">agentHosts · conversations</tspan></text>
+  <text x="1120" y="456" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#8891AE">— scoped to this tenant only</text>
+
+  <!-- Isolation walls -->
+  <line x1="555" y1="230" x2="555" y2="478" stroke="rgba(255,255,255,0.14)" stroke-width="2" stroke-dasharray="6 8"/>
+  <line x1="1045" y1="230" x2="1045" y2="478" stroke="rgba(255,255,255,0.14)" stroke-width="2" stroke-dasharray="6 8"/>
+  <text x="540" y="360" font-size="26">🔒</text>
+  <text x="1030" y="360" font-size="26">🔒</text>
+
+  <!-- Auth row -->
+  <rect x="100" y="518" width="440" height="196" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="100" y="518" width="6" height="196" rx="3" fill="url(#coolGrad)"/>
+  <text x="140" y="576" font-size="30">🎫</text>
+  <text x="190" y="574" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA">Web JWT — user sessions</text>
+  <text x="140" y="616" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="140" dy="0">userId · tenantId · role · exp</tspan><tspan x="140" dy="28">short-lived, individually revocable</tspan><tspan x="140" dy="28">optional TOTP multi-factor auth</tspan></text>
+
+  <rect x="580" y="518" width="440" height="196" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="580" y="518" width="6" height="196" rx="3" fill="url(#amberGrad)"/>
+  <text x="620" y="576" font-size="30">🔑</text>
+  <text x="670" y="574" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA">AgentHost API key</text>
+  <text x="620" y="616" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="620" dy="0">one-time plaintext, hashed at rest</tspan><tspan x="620" dy="28">Authorization: Bearer header only</tspan><tspan x="620" dy="28">keys never appear in URLs or logs</tspan></text>
+
+  <rect x="1060" y="518" width="440" height="196" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="1060" y="518" width="6" height="196" rx="3" fill="url(#coralGrad)"/>
+  <text x="1100" y="576" font-size="30">🛡️</text>
+  <text x="1150" y="574" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA">HMAC-SHA256 dispatch</text>
+  <text x="1100" y="616" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="1100" dy="0">inter-host tasks signed over body</tspan><tspan x="1100" dy="28">receiver recomputes and compares</tspan><tspan x="1100" dy="28">mismatch → 403 before processing</tspan></text>
+
+  <!-- Query-level isolation strip -->
+  <rect x="100" y="734" width="1400" height="58" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(139,108,255,0.30)" stroke-width="1.5"/>
+  <rect x="100" y="734" width="6" height="58" rx="3" fill="url(#violetGrad)"/>
+  <text x="140" y="771" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8">Query-level isolation — every tenant-scoped query carries eq(tenantId); there is no select-all path</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Isolation is the architectural assumption, enforced at the database layer</text>
+</svg>

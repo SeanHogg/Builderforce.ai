@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { NarrationResult } from '@/lib/voiceEngine';
 
 const wrap: React.CSSProperties = {
@@ -35,6 +36,7 @@ export function VoiceOutput({
   busy: boolean;
   unavailable: string | null;
 }) {
+  const t = useTranslations('voicePanel');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [activeWord, setActiveWord] = useState(-1);
 
@@ -56,7 +58,7 @@ export function VoiceOutput({
           color: '#fde68a', borderRadius: 12, padding: '20px 24px',
         }}>
           <div style={{ fontSize: '1.8rem', marginBottom: 8 }}>⚠</div>
-          <p style={{ fontWeight: 600, marginBottom: 4 }}>Synthesis unavailable</p>
+          <p style={{ fontWeight: 600, marginBottom: 4 }}>{t('synthUnavailable')}</p>
           <p style={{ fontSize: '0.9rem', opacity: 0.9 }}>{unavailable}</p>
         </div>
       </div>
@@ -67,7 +69,7 @@ export function VoiceOutput({
     return (
       <div style={wrap}>
         <div style={{ fontSize: '2.5rem', marginBottom: 14, animation: 'pulse 1.5s ease-in-out infinite' }}>🎙</div>
-        <p style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-display)' }}>Generating speech…</p>
+        <p style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-display)' }}>{t('generatingSpeech')}</p>
       </div>
     );
   }
@@ -77,10 +79,10 @@ export function VoiceOutput({
       <div style={wrap}>
         <div style={{ fontSize: '2.5rem', marginBottom: 14, opacity: 0.7 }}>🔊</div>
         <p style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
-          Press Run to generate speech
+          {t('pressRun')}
         </p>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: 6, textAlign: 'center', maxWidth: 360 }}>
-          Pick or create a voice on the right and write the lines (or ask the Brain), then hit ▶ Generate.
+          {t('emptyHint')}
         </p>
       </div>
     );
@@ -91,9 +93,9 @@ export function VoiceOutput({
       <div style={{ width: '100%', maxWidth: 680 }}>
         <audio ref={audioRef} src={audioUrl} controls autoPlay onTimeUpdate={onTimeUpdate} style={{ width: '100%' }} />
         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '8px 0 16px' }}>
-          {Math.round(result.durationMs / 100) / 10}s ·{' '}
-          {result.engineId === 'clone-client' ? 'on-device (free)' : 'server'}
-          {result.cloned ? '' : ' · fallback voice'}
+          {t('durationSeconds', { seconds: Math.round(result.durationMs / 100) / 10 })} ·{' '}
+          {result.engineId === 'clone-client' ? t('sourceOnDevice') : t('sourceServer')}
+          {result.cloned ? '' : ` · ${t('fallbackVoice')}`}
         </div>
         <p style={{ lineHeight: 2, fontSize: '1.05rem' }}>
           {result.wordTimestamps.length > 0
@@ -105,7 +107,7 @@ export function VoiceOutput({
                   transition: 'background 0.1s',
                 }}>{w.word} </span>
               ))
-            : <span style={{ color: 'var(--text-muted)' }}>(no word timing)</span>}
+            : <span style={{ color: 'var(--text-muted)' }}>{t('noWordTiming')}</span>}
         </p>
       </div>
     </div>

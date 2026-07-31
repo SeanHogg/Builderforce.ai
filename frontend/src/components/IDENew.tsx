@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useTranslations } from 'next-intl';
+import { repairScaffold } from '@/lib/scaffoldRepair';
 import { FileExplorer } from './FileExplorer';
 import { CodePane } from './CodePane';
 import { Terminal } from './Terminal';
@@ -8,12 +10,17 @@ import { AITrainingPanel } from './AITrainingPanel';
 import { AgentPublishPanel } from './AgentPublishPanel';
 import { SitePublishPanel } from './SitePublishPanel';
 import { AgentStateViewer } from './AgentStateViewer';
-import { LlmStudioPanel } from './LlmStudioPanel';
+import { EvermindStudioPanel } from './EvermindStudioPanel';
+import { FinetuneStudioPanel } from './FinetuneStudioPanel';
 import { PreviewFrame } from './PreviewFrame';
-import { ProjectsSlideOutPanel } from './ProjectsSlideOutPanel';
+import { IdeProjectsSlideOutPanel } from './ide/IdeProjectsSlideOutPanel';
 import { BrainPanel } from './brain/BrainPanel';
+import { TeamChatButton } from './brain/TeamChatButton';
 import { IdeSettingsPanel } from './IdeSettingsPanel';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { IdeAgentPanel } from './ide/IdeAgentPanel';
+import { DevicePreview } from './ide/DevicePreview';
+import { MobileDevicePanel } from './ide/MobileDevicePanel';
 import { useWebContainer } from '@/hooks/useWebContainer';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import { useVideoVersions } from '@/hooks/useVideoVersions';
@@ -24,11 +31,13 @@ import { isBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useRegisterBrainActions, useBrainContext, savePrd, saveTasks, type BrainAction } from '@/lib/brain';
 import { PrdReviewModal, TasksReviewModal } from './ArtifactReviewModals';
 import { getModality, RIGHT_TAB_LABELS, type ProjectModality, type RightTab } from '@/lib/modality';
+import { useModalityCopy } from '@/lib/useModalityCopy';
 import { getStoredTenantToken } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/apiClient';
 import { useVoiceStudio } from '@/lib/voiceStudio';
 import { VoiceOutput } from './ide/VoiceOutput';
 import { VoiceConfigPanel } from './ide/VoiceConfigPanel';
+import { ProjectEvermindPanel } from './ide/ProjectEvermindPanel';
 import { StudioPanel } from '@seanhogg/builderforce-studio-embedded';
 import '@seanhogg/builderforce-studio-embedded/styles.css';
 
@@ -40,62 +49,13 @@ interface IDEProps {
   onOpenProjectDetails?: () => void;
   /** When opening from "Open in IDE" with a chat, select this project chat on load. */
   initialChatId?: number | null;
+  /** One-shot prompt auto-sent into the Brain panel on load (Project 360 seed). */
+  initialPrompt?: string;
+  /** One-shot work item to auto-link the opened chat to (`?ticket=<kind>:<ref>`). */
+  initialTicket?: { kind: string; ref: string };
 }
 
 type CenterView = 'preview' | 'code';
-
-/**
- * Run-only fallback files for a missing/empty scaffold. Single source of truth
- * for both Run and the publish build (previously duplicated inline in each), and
- * matched to the server-side VANILLA_TEMPLATE so a seeded project runs identically.
- */
-const VANILLA_DEFAULTS: Record<string, string> = {
-  'package.json': JSON.stringify({
-    name: 'my-app',
-    version: '1.0.0',
-    type: 'module',
-    scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
-    dependencies: { react: '^18.2.0', 'react-dom': '^18.2.0' },
-    devDependencies: { '@vitejs/plugin-react': '^4.0.0', vite: '^4.3.9' },
-  }, null, 2),
-  'index.html': `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My App</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>`,
-  'src/main.jsx': `import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
-
-function App() {
-  return (
-    <div style={{ padding: '2rem', fontFamily: 'system-ui' }}>
-      <h1>Hello World! 🚀</h1>
-      <p>Edit src/main.jsx to get started.</p>
-    </div>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);`,
-  'src/index.css': `body {
-  margin: 0;
-  padding: 0;
-  font-family: system-ui, -apple-system, sans-serif;
-}`,
-  'vite.config.js': `import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
-export default defineConfig({
-  plugins: [react()],
-});`,
-};
 
 /** Cheap, stable string hash (djb2) — used to skip npm install when package.json
  *  is unchanged since the last install in this WebContainer session. */
@@ -112,19 +72,29 @@ interface CheckResult {
   detail?: string;
 }
 
-export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId }: IDEProps) {
+export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt, initialTicket }: IDEProps) {
+  const t = useTranslations('ide');
+  const tc = useTranslations('common');
+  const confirm = useConfirm();
   // The IDE is scoped to its project's type: modality is fixed at creation, not
   // switchable in-session, so it's derived (and clamped) rather than state.
-  const modality: ProjectModality = getModality(project.modality).id;
-  // Modalities that dock the Brain in the left panel (vs. the floating drawer):
-  // the coding Designer and the Voice studio both drive work from the chat.
-  const hasDockedBrain = modality === 'designer' || modality === 'voice';
+  const modalityDef = getModality(project.modality);
+  const modality: ProjectModality = modalityDef.id;
+  // Localized modality copy (label / runLabel) for the header + run button.
+  const modalityCopy = useModalityCopy()(modality);
+  // Layout comes from the modality registry, not from `modality === '…'` checks
+  // scattered through this file — see the CenterPanel/dockBrain notes there.
+  const hasDockedBrain = modalityDef.dockBrain;
   const [videoPrompt, setVideoPrompt] = useState('');
   const [files, setFiles] = useState<FileEntry[]>(initialFiles);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [activeFile, setActiveFile] = useState<string | undefined>();
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
   const [centerView, setCenterView] = useState<CenterView>('preview');
+  // For the combined Web + Mobile type: which preview to render in the code-preview
+  // centre — full-width web, or the phone bezel. (Pure `device` modalities are
+  // always the bezel and don't show this toggle.)
+  const [previewDevice, setPreviewDevice] = useState<'web' | 'mobile'>('web');
   const [rightTab, setRightTab] = useState<RightTab>(() => getModality(project.modality).rightTabs[0]);
   const [previewUrl, setPreviewUrl] = useState<string | undefined>();
   const [terminalWriter, setTerminalWriter] = useState<((data: string) => void) | undefined>();
@@ -135,6 +105,8 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   const [isSavingTitle, setIsSavingTitle] = useState(false);
   const [projectsPanelOpen, setProjectsPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Mobile: the "preview on your phone" slide-out (QR of the published build).
+  const [devicePanelOpen, setDevicePanelOpen] = useState(false);
   const [terminalExpanded, setTerminalExpanded] = useState(true);
   const [isChecking, setIsChecking] = useState(false);
   const [checkResults, setCheckResults] = useState<CheckResult[] | null>(null);
@@ -162,7 +134,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   }, [project.name]);
 
   // When modality changes, clamp the active right-panel tab to the allowed set.
-  const allowedRightTabs = getModality(modality).rightTabs;
+  const allowedRightTabs = modalityDef.rightTabs;
   useEffect(() => {
     if (!allowedRightTabs.includes(rightTab)) {
       setRightTab(allowedRightTabs[0]);
@@ -301,10 +273,17 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
 
   /**
    * Assemble the path→content map to mount into the WebContainer: the project's
-   * current contents (fetching any not yet loaded into state) plus run-only
-   * defaults for missing/empty required scaffold files. Returns null if a present
+   * current contents (fetching any not yet loaded into state) plus the starter
+   * scaffold for any missing/empty required file. Returns null if a present
    * package.json is invalid JSON. Shared by Run, Check and the publish build so
    * the gather/defaults/validate logic lives in exactly one place.
+   *
+   * A scaffold file that has to be substituted is also SAVED back to the project.
+   * These used to be run-only, which meant a workspace the server never seeded
+   * ran fine but opened blank in the editor — every file 0 bytes, nothing to edit,
+   * and the substitution repeated on every Run forever. Writing them makes the
+   * repair stick and is safe by the same rule the server seeds by: only a path
+   * with NO content is ever written, so real work is never overwritten.
    */
   const assembleMountContents = useCallback(async (
     onLog?: (s: string) => void,
@@ -336,12 +315,35 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
       }
     }
 
-    const mount: Record<string, string> = { ...allContents };
-    for (const [path, content] of Object.entries(VANILLA_DEFAULTS)) {
-      if (!mount[path] || mount[path].trim() === '') {
-        onLog?.(`  \x1b[33m⚠\x1b[0m ${path} is empty, using default for this run only\r\n`);
-        mount[path] = content;
+    // Repair the scaffold: fill empty files AND replace structurally cross-wired
+    // ones (another file's content written to this path — package.json's JSON in
+    // vite.config.js, source text in index.html, …). Shared pure helper so Run,
+    // Check and the publish build agree and the logic is unit-tested.
+    const { repaired: mount, restored } = repairScaffold(allContents, modality);
+    if (restored.length > 0) {
+      for (const { path, reason } of restored) {
+        onLog?.(
+          reason === 'corrupt'
+            ? `  \x1b[33m⚠\x1b[0m ${path} was corrupt — restored from the starter template\r\n`
+            : `  \x1b[33m⚠\x1b[0m ${path} was empty — restored from the starter template\r\n`,
+        );
       }
+      const restoredMap = Object.fromEntries(restored.map(({ path }) => [path, mount[path]!]));
+      setFileContents(prev => ({ ...prev, ...restoredMap }));
+      setFiles(prev => {
+        const have = new Set(prev.map(f => f.path));
+        const add = Object.keys(restoredMap)
+          .filter(p => !have.has(p))
+          .map(path => ({ path, content: restoredMap[path]!, type: 'file' as const }));
+        return add.length > 0 ? [...prev, ...add] : prev;
+      });
+      // Best-effort: a save failure (offline, 503) must never block the run —
+      // the mount already has the content either way.
+      await Promise.all(
+        Object.entries(restoredMap).map(([path, content]) =>
+          saveFile(project.id, path, content).catch((e) => console.error(`Failed to restore ${path}:`, e)),
+        ),
+      );
     }
     if (mount['package.json']) {
       try {
@@ -352,7 +354,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
       }
     }
     return mount;
-  }, [fileContents, files, project.id]);
+  }, [fileContents, files, project.id, modality]);
 
   /**
    * Run `npm install` only when package.json changed since the last install in
@@ -388,7 +390,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         return;
       }
       if (typeof window !== 'undefined' &&
-        !window.confirm(`Last checks failed (${summary}). Serve the preview anyway?`)) {
+        !(await confirm({ message: tc('servePreviewAnywayConfirm', { summary }), destructive: false }))) {
         return;
       }
     }
@@ -855,10 +857,20 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   // left panel, so we pop the floating drawer instead.
   const setBrainOpen = brainCtx.setOpen;
   useEffect(() => {
-    if (initialChatId == null) return;
-    setBrainContext({ initialChatId });
-    if (!hasDockedBrain) setBrainOpen(true);
-  }, [initialChatId, hasDockedBrain, setBrainContext, setBrainOpen]);
+    if (initialChatId == null && !initialPrompt && !initialTicket) return;
+    // Only the non-docked path needs the context publish + drawer pop; the docked
+    // Brain receives initialChatId/initialPrompt/initialTicket as direct props below.
+    if (hasDockedBrain) {
+      if (initialChatId != null) setBrainContext({ initialChatId });
+      return;
+    }
+    setBrainContext({
+      ...(initialChatId != null ? { initialChatId } : {}),
+      ...(initialPrompt ? { initialPrompt } : {}),
+      ...(initialTicket ? { initialTicket } : {}),
+    });
+    setBrainOpen(true);
+  }, [initialChatId, initialPrompt, initialTicket, hasDockedBrain, setBrainContext, setBrainOpen]);
 
   const statusLabel = wcState.status === 'booting'
     ? '⏳ Booting…'
@@ -880,7 +892,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         <button
           type="button"
           onClick={() => setProjectsPanelOpen(true)}
-          aria-label="Open projects"
+          aria-label={t('openProjectsAria')}
           style={{
             background: 'var(--bg-elevated)',
             color: 'var(--text-secondary)',
@@ -895,7 +907,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             justifyContent: 'center',
             gap: 3,
           }}
-          title="All projects"
+          title={t('yourIdeProjects')}
         >
           <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
           <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
@@ -929,7 +941,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
           }}
           onFocus={e => { e.currentTarget.style.borderColor = 'var(--coral-bright)'; }}
           disabled={isSavingTitle}
-          title="Edit project name (saves on blur or Enter)"
+          title={t('editNameHint')}
           style={{
             fontFamily: 'var(--font-display)',
             fontWeight: 700,
@@ -969,7 +981,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               alignItems: 'center',
               gap: 4,
             }}
-            title="Project details"
+            title={t('projectDetailsTitle')}
           >
             <span style={{ fontSize: '1rem' }}>▦</span>
             Details
@@ -980,8 +992,8 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         <button
           type="button"
           onClick={() => setSettingsOpen(true)}
-          aria-label="Project settings"
-          title="Settings & repository"
+          aria-label={t('projectSettingsAria')}
+          title={t('settingsRepoTitle')}
           style={{
             background: 'var(--bg-elevated)',
             color: 'var(--text-secondary)',
@@ -997,10 +1009,13 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
           ⚙️
         </button>
 
+        {/* Team Chat — the project's group conversation (humans + agents) */}
+        {Number.isFinite(projectIdNum) && <TeamChatButton projectId={projectIdNum} />}
+
         {/* Modality label — the IDE is scoped to this project's type (set at
             creation), so it's shown, not switchable. */}
         <span
-          title={`${getModality(modality).label} project`}
+          title={t('modalityProject', { label: modalityCopy.label })}
           style={{
             display: 'flex', alignItems: 'center', gap: 5, marginLeft: 8, flexShrink: 0,
             padding: '4px 10px', fontSize: '0.78rem', fontWeight: 600,
@@ -1008,8 +1023,8 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8,
           }}
         >
-          <span>{getModality(modality).icon}</span>
-          {getModality(modality).label}
+          <span>{modalityCopy.icon}</span>
+          {modalityCopy.label}
         </span>
 
         {/* Spacer */}
@@ -1025,7 +1040,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         {statusLabel && (
           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{statusLabel}</span>
         )}
-        {getModality(modality).showChecks && checkResults && (() => {
+        {modalityDef.showChecks && checkResults && (() => {
           const failed = checkResults.filter(r => r.status === 'fail').length;
           const passed = checkResults.filter(r => r.status === 'pass').length;
           return (
@@ -1040,9 +1055,9 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             </span>
           );
         })()}
-        {getModality(modality).showChecks && (
+        {modalityDef.showChecks && (
           <label
-            title="When on, Run is blocked while the last checks are failing"
+            title={t('blockOnFailHint')}
             style={{
               display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
               fontSize: '0.72rem', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none',
@@ -1057,11 +1072,11 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             Gate Run
           </label>
         )}
-        {getModality(modality).showChecks && (
+        {modalityDef.showChecks && (
           <button
             onClick={handleCheck}
             disabled={isChecking || isRunning}
-            title="Run type-check, lint and build in the browser to validate the code"
+            title={t('runChecksHint')}
             style={{
               background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
               border: '1px solid var(--border-subtle)', borderRadius: 8,
@@ -1074,10 +1089,10 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             {isChecking ? '⏳ Checking…' : '✓ Check'}
           </button>
         )}
-        {getModality(modality).showRunButton && (() => {
+        {modalityDef.showRunButton && (() => {
           // Voice generates speech (voice.synth); Designer runs the dev server.
           const isVoice = modality === 'voice';
-          const label = getModality(modality).runLabel;
+          const label = modalityCopy.runLabel;
           const active = isVoice ? voice.busy : isRunning;
           const disabled = active || (isVoice && !voice.selectedCloneId);
           return (
@@ -1100,10 +1115,10 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         })()}
       </div>
 
-      <ProjectsSlideOutPanel
+      <IdeProjectsSlideOutPanel
         open={projectsPanelOpen}
         onClose={() => setProjectsPanelOpen(false)}
-        currentProjectId={typeof project.id === 'number' ? project.id : Number(project.id)}
+        currentStorageProjectId={typeof project.id === 'number' ? project.id : Number(project.id)}
       />
 
       <IdeSettingsPanel
@@ -1112,6 +1127,17 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         projectId={projectIdNum}
         onImported={refreshFiles}
       />
+
+      {/* Mobile: scan-to-open-on-a-real-phone. Mounted only where the device
+          simulator is, since it hands off that modality's published build. */}
+      {(modalityDef.center === 'device' || modalityDef.enableMobilePreview) && Number.isFinite(projectIdNum) && (
+        <MobileDevicePanel
+          open={devicePanelOpen}
+          onClose={() => setDevicePanelOpen(false)}
+          projectId={projectIdNum}
+          onGoToPublish={() => setRightTab('publish')}
+        />
+      )}
 
       {/* Brain-tool artifact reviews — the agent's generate_prd/generate_tasks
           surface here for confirm-before-save, matching the button-action path. */}
@@ -1174,13 +1200,40 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                 modality={modality}
                 extraSystem={extraSystem}
                 initialChatId={initialChatId}
+                initialPrompt={initialPrompt}
+                initialTicket={initialTicket}
+                capabilitySurface="ide"
               />
             </div>
           </div>
         )}
         {/* Center panel — content depends on the active modality, chrome stays consistent */}
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-          {modality === 'video' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', position: 'relative' }}>
+          {/* Center Brain chat affordance — modalities that DON'T dock the agent
+              in the left panel (Video / Evermind / Fine-tune) otherwise only have
+              the corner launcher, so surface a prominent brain button in the middle
+              of the Builder that opens the AI chat scoped to this project. */}
+          {!hasDockedBrain && (
+            <button
+              type="button"
+              onClick={() => { setBrainContext({ projectId: projectIdNum, modality }); setBrainOpen(true); }}
+              title={t('askAi')}
+              aria-label={t('askAi')}
+              style={{
+                position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 20,
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 18px', borderRadius: 9999, cursor: 'pointer',
+                border: '1px solid var(--border-subtle)',
+                background: 'linear-gradient(135deg, var(--coral-bright, #f4726e), var(--coral-dark, #d94f4a))',
+                color: '#fff', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.85rem',
+                boxShadow: '0 8px 26px rgba(0,0,0,0.28)',
+              }}
+            >
+              <span aria-hidden style={{ fontSize: '1.2rem', lineHeight: 1 }}>🧠</span>
+              {t('askAi')}
+            </button>
+          )}
+          {modalityDef.center === 'video' ? (
             <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
               <StudioPanel
                 authToken={getStoredTenantToken() ?? ''}
@@ -1192,15 +1245,26 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                 onSaveVersion={videoVersions.onSaveVersion}
                 onLoadVersion={videoVersions.onLoadVersion}
               />
+              {/* The project's self-learning Evermind — parity with the other
+                  studios (self-gating, localized, theme-aware). */}
+              {/* `Number(project.id)` is NaN for a non-numeric id, and
+                  `NaN != null` is true — so guard on finiteness, matching the
+                  other project-id checks in this file, or a malformed id would
+                  mount the panel and request `/api/projects/NaN/...`. */}
+              {Number.isFinite(projectIdNum) && (
+                <div style={{ padding: '0 16px 16px' }}>
+                  <ProjectEvermindPanel projectId={projectIdNum} />
+                </div>
+              )}
             </div>
-          ) : modality === 'voice' ? (
+          ) : modalityDef.center === 'voice' ? (
             <VoiceOutput
               result={voice.result}
               audioUrl={voice.audioUrl}
               busy={voice.busy}
               unavailable={voice.unavailable}
             />
-          ) : modality === 'llm' ? (
+          ) : modalityDef.center === 'evermind' || modalityDef.center === 'finetune' ? (
             activeFile ? (
               <CodePane
                 openFiles={openFiles}
@@ -1214,12 +1278,16 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               />
             ) : (
               <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-                <LlmStudioPanel
-                  projectId={project.id}
-                  files={files}
-                  onGoToTab={setRightTab}
-                  onOpenFile={openFile}
-                />
+                {modalityDef.center === 'evermind' ? (
+                  <EvermindStudioPanel projectId={project.id} />
+                ) : (
+                  <FinetuneStudioPanel
+                    projectId={project.id}
+                    files={files}
+                    onGoToTab={setRightTab}
+                    onOpenFile={openFile}
+                  />
+                )}
               </div>
             )
           ) : (
@@ -1241,20 +1309,61 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                 }}
               >
                 {view === 'preview' ? (
-                  <>🌐 Preview {previewUrl && <span style={{ color: '#4ade80' }}>●</span>}</>
+                  <>
+                    <span aria-hidden>{modalityDef.center === 'device' ? '📱' : '🌐'}</span>
+                    {t('centerPreview')}
+                    {previewUrl && <span style={{ color: '#4ade80' }}>●</span>}
+                  </>
                 ) : (
-                  '💻 Code'
+                  <>
+                    <span aria-hidden>💻</span>
+                    {t('centerCode')}
+                  </>
                 )}
               </button>
             ))}
+            {/* Web ⇄ Mobile preview target — only the combined Web + Mobile type,
+                and only while previewing. Lets one project render as both a
+                full-width website and a phone-bezel handset app. */}
+            {modalityDef.enableMobilePreview && centerView === 'preview' && (
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+                {(['web', 'mobile'] as const).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setPreviewDevice(d)}
+                    aria-pressed={previewDevice === d}
+                    title={d === 'web' ? t('previewWeb') : t('previewMobile')}
+                    style={{
+                      padding: '4px 12px', fontSize: '0.75rem', fontWeight: 600, borderRadius: 6,
+                      cursor: 'pointer', border: '1px solid var(--border-subtle)',
+                      background: previewDevice === d ? 'var(--bg-elevated)' : 'transparent',
+                      color: previewDevice === d ? 'var(--text-primary)' : 'var(--text-muted)',
+                      display: 'flex', alignItems: 'center', gap: 5,
+                    }}
+                  >
+                    <span aria-hidden>{d === 'web' ? '🌐' : '📱'}</span>
+                    {d === 'web' ? t('previewWeb') : t('previewMobile')}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Main content area */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
             {/* Preview */}
             <div style={{ position: 'absolute', inset: 0, visibility: centerView === 'preview' ? 'visible' : 'hidden', pointerEvents: centerView === 'preview' ? 'auto' : 'none', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ flex: 1, overflow: 'hidden' }}>
-                <PreviewFrame url={previewUrl} />
+              <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+                {/* Mobile previews inside a device bezel at the handset's real
+                    viewport size; every other code modality fills the pane. The
+                    combined Web + Mobile type switches between the two via the
+                    Web/Mobile toggle above. */}
+                {modalityDef.center === 'device' || (modalityDef.enableMobilePreview && previewDevice === 'mobile') ? (
+                  <DevicePreview url={previewUrl} onOpenDevicePanel={() => setDevicePanelOpen(true)} />
+                ) : (
+                  <PreviewFrame url={previewUrl} />
+                )}
               </div>
             </div>
 
@@ -1351,7 +1460,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
           </div>
           <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'voice' ? 'visible' : 'hidden', pointerEvents: rightTab === 'voice' ? 'auto' : 'none' }}>
-              {modality === 'voice' && <VoiceConfigPanel voice={voice} />}
+              {modality === 'voice' && <VoiceConfigPanel voice={voice} projectId={projectIdNum} />}
             </div>
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'files' ? 'visible' : 'hidden', pointerEvents: rightTab === 'files' ? 'auto' : 'none' }}>
               <FileExplorer
@@ -1377,7 +1486,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               />
             </div>
             <div style={{ position: 'absolute', inset: 0, overflow: 'auto', visibility: rightTab === 'publish' ? 'visible' : 'hidden', pointerEvents: rightTab === 'publish' ? 'auto' : 'none' }}>
-              {modality === 'designer'
+              {modalityDef.publishPanel === 'site'
                 ? <SitePublishPanel projectId={project.id} projectName={project.name} onBuild={handlePublishBuild} />
                 : <AgentPublishPanel projectId={project.id} completedJobs={completedJobs} />}
             </div>

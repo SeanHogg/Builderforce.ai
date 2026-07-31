@@ -36,7 +36,7 @@ BuilderForce has a production agent runtime, a multi-vendor gateway, sandboxed c
 - `agent-runtime/src/builderforce/project-init.ts` → `initializeBuilderForceAgentsProject(projectRoot, ctx)` creates `.builderforce/` (context.yaml, architecture.md **template**, rules.yaml, memory/, sessions/, personas/). **The architecture summary is a template today — the auto-fill is the net-new scan step (§6.6).**
 - `agent-runtime/src/builderforce/project-knowledge.ts` → `appendKnowledgeMemory(root, entry)` (appends `.builderforce/memory/YYYY-MM-DD.md`).
 - `agent-runtime/src/infra/knowledge-loop.ts` → `KnowledgeLoopService.start()` (listens to agent events, records created/edited/tools/summary per run, feeds SSM).
-- `agent-runtime/src/infra/ssm-memory-service.ts` → `SsmMemoryService` (`remember/learn/recall/flush`, checkpoint `.builderforce/model.bin`). **Runs in Node** (SSMjs + `@webgpu/node` + `fake-indexeddb` per [[ssm-hippocampus-loop]]) — so the extension host IS the SSM client PRD 13 wants.
+- `agent-runtime/src/infra/ssm-memory-service.ts` → `SsmMemoryService` (`remember/learn/recall/flush`, checkpoint `.builderforce/model.bin`). **Runs in Node** (builderforce-memory + `@webgpu/node` + `fake-indexeddb` per [[ssm-hippocampus-loop]]) — so the extension host IS the SSM client PRD 13 wants.
 
 **Learned routing (consume — see PRD 13):**
 - PRD 13's action-type classifier (`classifyTaskAction`), `run_model_outcomes` fact table, `routing:<scope>` KV blob, `rankModelsForAction(reachable, stats, {bias})`, `GET /llm/v1/model-analytics`, and the **client-computed `routingBias`** seam. The VS Code host is the client that computes the bias and seeds the model.

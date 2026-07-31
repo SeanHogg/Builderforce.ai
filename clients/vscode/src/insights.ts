@@ -5,6 +5,7 @@ import {
   streamBuilderInsights,
   type BuilderInsightsSnapshot,
 } from "./gateway";
+import { getSelectedProject, onProjectChange } from "./projectState";
 
 /** One row in the Insights tree. */
 interface InsightRow {
@@ -40,6 +41,7 @@ export class InsightsController implements vscode.Disposable {
   private snapshot: BuilderInsightsSnapshot | undefined;
   private backoffMs = 2_000;
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly projectSub: vscode.Disposable;
 
   constructor(private readonly ctx: vscode.ExtensionContext) {
     this.statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -48,7 +50,24 @@ export class InsightsController implements vscode.Disposable {
     this.treeView = vscode.window.createTreeView("builderforce.insights", {
       treeDataProvider: this.treeProvider,
     });
+    this.applyProjectScope();
+    // Insights key off the active project: restart the stream against the new scope
+    // and label the view header so it's clear the spend is for one project vs. all.
+    this.projectSub = onProjectChange(() => {
+      this.applyProjectScope();
+      void this.start();
+    });
     void this.start();
+  }
+
+  /** The project the surfaces are scoped to (undefined = whole tenant/caller). */
+  private get projectId(): number | undefined {
+    return getSelectedProject()?.id;
+  }
+
+  /** Reflect the active project in the Insights header. */
+  private applyProjectScope(): void {
+    this.treeView.description = getSelectedProject()?.name;
   }
 
   /** Begin (or restart) the SSE subscription. Safe to call repeatedly. */
@@ -75,6 +94,7 @@ export class InsightsController implements vscode.Disposable {
         this.ctx.secrets,
         (s) => this.applySnapshot(s),
         controller.signal,
+        this.projectId,
       );
       // Stream ended cleanly (server closed after ~5 min) — reconnect promptly.
       this.backoffMs = 2_000;
@@ -109,7 +129,7 @@ export class InsightsController implements vscode.Disposable {
       return;
     }
     try {
-      const s = await getBuilderInsights(this.ctx.secrets);
+      const s = await getBuilderInsights(this.ctx.secrets, this.projectId);
       this.applySnapshot(s);
     } catch {
       /* keep last-known; the stream will recover */
@@ -161,6 +181,7 @@ export class InsightsController implements vscode.Disposable {
 
   dispose(): void {
     this.disposed = true;
+    this.projectSub.dispose();
     this.stopStream();
     this.statusBar.dispose();
     this.treeView.dispose();

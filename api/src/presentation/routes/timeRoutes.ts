@@ -9,8 +9,7 @@
 
 import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
-import { authMiddleware } from '../middleware/authMiddleware';
-import { TenantRole } from '../../domain/shared/types';
+import { authMiddleware, isManager } from '../middleware/authMiddleware';
 import { scope } from './segmentTrackerRoutes';
 import { tasks, timeEntries } from '../../infrastructure/database/schema';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
@@ -25,7 +24,6 @@ const clampDays = (raw: number, def: number, max: number) =>
   Math.min(max, Math.max(1, Number.isFinite(raw) ? raw : def));
 
 function timeVersionKey(tenantId: number): string { return `time-version:tenant:${tenantId}`; }
-function isManagerPlus(role: unknown): boolean { return role === TenantRole.OWNER || role === TenantRole.MANAGER; }
 
 /** Invalidate everything a time write touches: chart, spine cost, member metrics. */
 async function bumpAfterWrite(env: Env, tenantId: number): Promise<void> {
@@ -44,7 +42,6 @@ export function createTimeRoutes(db: Db): Hono<HonoEnv> {
   router.post('/entries', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
-    const role = c.get('role');
     const body = await c.req.json<{ taskId?: number; minutes?: number; entryDate?: string; note?: string; memberKind?: string; memberRef?: string }>();
 
     const taskId = Number(body.taskId);
@@ -57,7 +54,7 @@ export function createTimeRoutes(db: Db): Hono<HonoEnv> {
     const memberRef = body.memberRef ?? userId;
     if (!MEMBER_KINDS.has(memberKind)) return c.json({ error: 'invalid memberKind' }, 400);
     const loggingForOther = memberKind !== 'human' || memberRef !== userId;
-    if (loggingForOther && !isManagerPlus(role)) return c.json({ error: 'only a manager can log time for another member' }, 403);
+    if (loggingForOther && !isManager(c)) return c.json({ error: 'only a manager can log time for another member' }, 403);
 
     // Task must belong to this segment.
     const [task] = await db.select({ id: tasks.id }).from(tasks).where(and(eq(tasks.id, taskId), eq(tasks.segmentId, segmentId)));
@@ -87,12 +84,11 @@ export function createTimeRoutes(db: Db): Hono<HonoEnv> {
   router.get('/member/:kind/:ref', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
-    const role = c.get('role');
     const kind = c.req.param('kind');
     const ref = c.req.param('ref');
     if (!MEMBER_KINDS.has(kind)) return c.json({ error: 'invalid member kind' }, 400);
     // Self (human) is open; viewing anyone else is MANAGER+.
-    if ((kind !== 'human' || ref !== userId) && !isManagerPlus(role)) return c.json({ error: 'forbidden' }, 403);
+    if ((kind !== 'human' || ref !== userId) && !isManager(c)) return c.json({ error: 'forbidden' }, 403);
     const days = clampDays(Number(c.req.query('days')), 30, 180);
 
     const env = c.env as Env;
@@ -110,14 +106,13 @@ export function createTimeRoutes(db: Db): Hono<HonoEnv> {
   router.delete('/entries/:id', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
-    const role = c.get('role');
     const id = c.req.param('id');
     const [entry] = await db.select({ id: timeEntries.id, memberKind: timeEntries.memberKind, memberRef: timeEntries.memberRef })
       .from(timeEntries)
       .where(and(eq(timeEntries.id, id), eq(timeEntries.tenantId, tenantId), eq(timeEntries.segmentId, segmentId)));
     if (!entry) return c.json({ error: 'not found' }, 404);
     const isOwn = entry.memberKind === 'human' && entry.memberRef === userId;
-    if (!isOwn && !isManagerPlus(role)) return c.json({ error: 'forbidden' }, 403);
+    if (!isOwn && !isManager(c)) return c.json({ error: 'forbidden' }, 403);
 
     await db.delete(timeEntries).where(and(eq(timeEntries.id, id), eq(timeEntries.tenantId, tenantId), eq(timeEntries.segmentId, segmentId)));
     await bumpAfterWrite(c.env as Env, tenantId);

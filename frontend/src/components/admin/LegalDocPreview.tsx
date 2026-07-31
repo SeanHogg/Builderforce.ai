@@ -1,6 +1,7 @@
 'use client';
 
-import { ChatMessageContent } from '@/components/ChatMessageContent';
+import { useTranslations } from 'next-intl';
+import { DocumentMarkdown } from '@/components/DocumentMarkdown';
 import { unwrapMarkdownFence } from '@/lib/utils';
 
 export interface LegalDocPreviewProps {
@@ -18,8 +19,13 @@ export interface LegalDocPreviewProps {
  * and the public footer modal — renders through this single control to stay in
  * lockstep. The container/layout (scroll height, borders) is the caller's
  * concern; the rendered output is always identical.
+ *
+ * Renders at *document* scale via {@link DocumentMarkdown} (not the chat
+ * renderer), so a multi-page Terms/Privacy doc reads like a document.
  */
-export function LegalDocPreview({ content, emptyText = '_Nothing to preview yet._' }: LegalDocPreviewProps) {
-  const clean = content?.trim() ? unwrapMarkdownFence(content) : emptyText;
-  return <ChatMessageContent content={clean} />;
+export function LegalDocPreview({ content, emptyText }: LegalDocPreviewProps) {
+  const t = useTranslations('admin');
+  const fallback = emptyText ?? t('legal.preview.nothingToPreview');
+  const clean = content?.trim() ? unwrapMarkdownFence(content) : fallback;
+  return <DocumentMarkdown content={clean} />;
 }

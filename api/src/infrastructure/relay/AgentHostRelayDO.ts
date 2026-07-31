@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * AgentHostRelayDO — Cloudflare Durable Object that acts as a WebSocket relay
  * between a BuilderForce Agents instance (upstream) and one or more browser clients.
@@ -158,7 +159,9 @@ export class AgentHostRelayDO implements DurableObject {
   private attachUpstream(ws: WebSocket) {
     // Close any existing upstream connection
     if (this.upstreamSocket) {
-      try { this.upstreamSocket.close(1001, "replaced"); } catch { /* ignore */ }
+      try { this.upstreamSocket.close(1001, "replaced"); } catch (error) { /* ignore */ 
+        reportCaughtError(error, { source: "infrastructure/relay/AgentHostRelayDO.ts", operation: "attachUpstream" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+      }
     }
     this.upstreamSocket = ws;
     this.schedulePings();
@@ -180,7 +183,12 @@ export class AgentHostRelayDO implements DurableObject {
       }
     });
 
-    ws.addEventListener("error", () => { /* close follows */ });
+    ws.addEventListener("error", (error) => {
+      console.error('[agent-host-relay] upstream websocket error; awaiting close event', {
+        agentHostId: this.agentHostId,
+        error,
+      });
+    });
 
     // Tell the agentHost it is connected
     ws.send(JSON.stringify({ type: "relay_connected" }));
@@ -269,7 +277,9 @@ export class AgentHostRelayDO implements DurableObject {
         this.currentSessionKey = session;
         this.appendAndPersistMessage({ role: "user", content: msg.message });
       }
-    } catch { /* ignore non-JSON */ }
+    } catch (error) { /* ignore non-JSON */ 
+      reportCaughtError(error, { source: "infrastructure/relay/AgentHostRelayDO.ts", operation: "handleClientMessage" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+    }
   }
 
   /** Persist complete chat messages from upstream. Deltas are skipped. */
@@ -387,7 +397,9 @@ export class AgentHostRelayDO implements DurableObject {
       this.emitLog("info", `[chat] ${msg.role}: ${msg.text}`);
 
       this.appendAndPersistMessage({ role: msg.role, content: msg.text });
-    } catch { /* ignore non-JSON or non-message events */ }
+    } catch (error) { /* ignore non-JSON or non-message events */ 
+      reportCaughtError(error, { source: "infrastructure/relay/AgentHostRelayDO.ts", operation: "handleUpstreamMessage" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+    }
   }
 
   /** Add to in-memory history and persist asynchronously. */
@@ -442,7 +454,9 @@ export class AgentHostRelayDO implements DurableObject {
           }),
         },
       );
-    } catch { /* best-effort; do not crash the relay */ }
+    } catch (error) { /* best-effort; do not crash the relay */ 
+      reportCaughtError(error, { source: "infrastructure/relay/AgentHostRelayDO.ts", operation: "persistMessage" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -481,7 +495,9 @@ export class AgentHostRelayDO implements DurableObject {
           }),
         },
       );
-    } catch { /* best-effort */ }
+    } catch (error) { /* best-effort */ 
+      reportCaughtError(error, { source: "infrastructure/relay/AgentHostRelayDO.ts", operation: "persistRemoteResult" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -510,7 +526,9 @@ export class AgentHostRelayDO implements DurableObject {
           body: JSON.stringify(msg),
         },
       );
-    } catch { /* best-effort */ }
+    } catch (error) { /* best-effort */ 
+      reportCaughtError(error, { source: "infrastructure/relay/AgentHostRelayDO.ts", operation: "persistUsageSnapshot" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -541,7 +559,9 @@ export class AgentHostRelayDO implements DurableObject {
           body: JSON.stringify(msg),
         },
       );
-    } catch { /* best-effort */ }
+    } catch (error) { /* best-effort */ 
+      reportCaughtError(error, { source: "infrastructure/relay/AgentHostRelayDO.ts", operation: "persistToolAuditEvent" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -570,7 +590,9 @@ export class AgentHostRelayDO implements DurableObject {
           body: JSON.stringify(msg),
         },
       );
-    } catch { /* best-effort */ }
+    } catch (error) { /* best-effort */ 
+      reportCaughtError(error, { source: "infrastructure/relay/AgentHostRelayDO.ts", operation: "persistFileChange" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -597,7 +619,9 @@ export class AgentHostRelayDO implements DurableObject {
           body: JSON.stringify(msg),
         },
       );
-    } catch { /* best-effort */ }
+    } catch (error) { /* best-effort */ 
+      reportCaughtError(error, { source: "infrastructure/relay/AgentHostRelayDO.ts", operation: "persistApprovalRequest" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+    }
   }
 
   // ---------------------------------------------------------------------------

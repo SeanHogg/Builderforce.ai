@@ -1,6 +1,8 @@
 'use client';
 
 import { Select } from '@/components/Select';
+import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -53,7 +55,12 @@ const btnSubtle: React.CSSProperties = {
   color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
 };
 
-export function BoardConnectionsManager({ projectId, heading = 'External boards' }: { projectId: number; heading?: string | null }) {
+export function BoardConnectionsManager({ projectId, heading }: { projectId: number; heading?: string | null }) {
+  const confirm = useConfirm();
+  const tc = useTranslations('common');
+  const t = useTranslations('boardConnections');
+  // undefined default → localized fallback heading; null → headerless; string → as given.
+  const resolvedHeading = heading === undefined ? t('heading') : heading;
   const [connections, setConnections] = useState<BoardConnection[]>([]);
   const [creds, setCreds] = useState<IntegrationCredential[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,7 +84,7 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
       Promise.all([integrationsApi.list({ projectId }), integrationsApi.list({ scope: 'global' })]).then(([a, b]) => [...a, ...b]),
     ])
       .then(([conns, c]) => { setConnections(conns); setCreds(c); })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load board connections'))
+      .catch((e) => setError(e instanceof Error ? e.message : t('loadError')))
       .finally(() => setLoading(false));
   }, [projectId]);
 
@@ -88,7 +95,7 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
   const add = async () => {
     setError(null);
     if (providerMeta?.board?.externalId === 'required' && !externalBoardId.trim()) {
-      setError(`${providerMeta.label} boards need a value: ${providerMeta.board.hint}`);
+      setError(t('externalIdRequired', { provider: providerMeta.label, hint: providerMeta.board.hint }));
       return;
     }
     setSaving(true);
@@ -102,12 +109,12 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
       });
       // Kick off the first sync immediately so the board populates without waiting.
       boardConnectionsApi.sync(conn.id)
-        .then(() => setSyncMsg((m) => ({ ...m, [conn.id]: { text: 'Initial sync started', error: false } })))
-        .catch((e) => setSyncMsg((m) => ({ ...m, [conn.id]: { text: e instanceof Error ? e.message : 'Initial sync failed', error: true } })))
+        .then(() => setSyncMsg((m) => ({ ...m, [conn.id]: { text: t('initialSyncStarted'), error: false } })))
+        .catch((e) => setSyncMsg((m) => ({ ...m, [conn.id]: { text: e instanceof Error ? e.message : t('initialSyncFailed'), error: true } })))
         .finally(load);
       resetForm(); setAdding(false); load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create connection');
+      setError(e instanceof Error ? e.message : t('createError'));
     } finally {
       setSaving(false);
     }
@@ -117,15 +124,15 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
     setSyncing(id); setSyncMsg((m) => { const { [id]: _drop, ...rest } = m; return rest; });
     try {
       await boardConnectionsApi.sync(id);
-      setSyncMsg((m) => ({ ...m, [id]: { text: 'Synced', error: false } }));
+      setSyncMsg((m) => ({ ...m, [id]: { text: t('synced'), error: false } }));
     } catch (e) {
-      setSyncMsg((m) => ({ ...m, [id]: { text: e instanceof Error ? e.message : 'Sync failed', error: true } }));
+      setSyncMsg((m) => ({ ...m, [id]: { text: e instanceof Error ? e.message : t('syncFailed'), error: true } }));
     } finally {
       setSyncing(null); load();
     }
   };
 
-  const remove = async (id: string) => { if (confirm('Delete this board connection?')) { await boardConnectionsApi.remove(id); load(); } };
+  const remove = async (id: string) => { if (await confirm(tc('deleteBoardConnectionConfirm'))) { await boardConnectionsApi.remove(id); load(); } };
 
   const credName = (id: string | null) => creds.find((c) => c.id === id)?.name;
   // Keys that can back the selected board connection (provider must match).
@@ -133,34 +140,33 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
 
   return (
     <div style={cardStyle}>
-      {heading && <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>{heading}</div>}
+      {resolvedHeading && <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>{resolvedHeading}</div>}
       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-        Connect an external work, ITSM, or incident board (Jira, Linear, ServiceNow, Sentry and more)
-        to sync tickets into this project. The first sync imports existing items.
+        {t('description')}
       </div>
 
       {loading ? (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>Loading…</div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>{tc('loading')}</div>
       ) : (
         <div style={{ marginTop: 12 }}>
-          {connections.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No external boards connected.</div>}
+          {connections.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('empty')}</div>}
           {connections.map((conn) => (
             <div key={conn.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 0', borderTop: '1px solid var(--border-subtle)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--coral-bright)', minWidth: 56 }}>{conn.provider}</span>
                 <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>
-                  {conn.externalBoardId || '(board)'} · {credName(conn.credentialId) ?? 'no key'}
+                  {conn.externalBoardId || t('boardFallback')} · {credName(conn.credentialId) ?? t('noKey')}
                   <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>
-                    {conn.status}{conn.lastPolledAt ? ` · last ${new Date(conn.lastPolledAt).toLocaleString()}` : ''}
+                    {conn.status}{conn.lastPolledAt ? ` · ${t('lastPolled', { time: new Date(conn.lastPolledAt).toLocaleString() })}` : ''}
                   </span>
                   {syncMsg[conn.id] && !syncMsg[conn.id].error && (
                     <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>· {syncMsg[conn.id].text}</span>
                   )}
                 </span>
                 <button type="button" style={btnSubtle} disabled={syncing === conn.id} onClick={() => syncNow(conn.id)}>
-                  {syncing === conn.id ? 'Syncing…' : 'Sync now'}
+                  {syncing === conn.id ? t('syncing') : t('syncNow')}
                 </button>
-                <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(conn.id)}>Delete</button>
+                <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(conn.id)}>{tc('delete')}</button>
               </div>
               {syncMsg[conn.id]?.error && (
                 <div
@@ -172,7 +178,7 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
                     borderRadius: 6, padding: '6px 10px',
                   }}
                 >
-                  Sync failed: {syncMsg[conn.id].text}
+                  {t('syncFailedPrefix', { message: syncMsg[conn.id].text })}
                 </div>
               )}
             </div>
@@ -188,26 +194,26 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
             {BOARD_PROVIDERS.map(([id, m]) => <option key={id} value={id}>{m.label}</option>)}
           </Select>
           <Select value={credentialId} onChange={(e) => setCredentialId(e.target.value)} style={inputStyle}>
-            <option value="">— Select access key —</option>
-            {pmCreds.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.provider}{c.projectId == null ? ', workspace' : ''})</option>)}
+            <option value="">{t('selectAccessKey')}</option>
+            {pmCreds.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.provider}{c.projectId == null ? t('workspaceSuffix') : ''})</option>)}
           </Select>
           <input
             style={inputStyle}
-            placeholder={providerMeta?.board?.hint ?? 'External board id'}
+            placeholder={providerMeta?.board?.hint ?? t('externalBoardIdPlaceholder')}
             value={externalBoardId}
             onChange={(e) => setExternalBoardId(e.target.value)}
           />
           <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-            Poll interval (seconds)
+            {t('pollIntervalLabel')}
             <input style={{ ...inputStyle, marginTop: 4 }} type="number" min={60} value={pollIntervalSec} onChange={(e) => setPollIntervalSec(Number(e.target.value))} />
           </label>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" style={btnPrimary} disabled={saving} onClick={add}>{saving ? 'Connecting…' : 'Connect & sync'}</button>
-            <button type="button" style={btnSubtle} onClick={() => { setAdding(false); resetForm(); setError(null); }}>Cancel</button>
+            <button type="button" style={btnPrimary} disabled={saving} onClick={add}>{saving ? t('connecting') : t('connectAndSync')}</button>
+            <button type="button" style={btnSubtle} onClick={() => { setAdding(false); resetForm(); setError(null); }}>{tc('cancel')}</button>
           </div>
         </div>
       ) : (
-        <button type="button" style={{ ...btnPrimary, marginTop: 14 }} onClick={() => setAdding(true)}>Connect external board</button>
+        <button type="button" style={{ ...btnPrimary, marginTop: 14 }} onClick={() => setAdding(true)}>{t('connectExternalBoard')}</button>
       )}
     </div>
   );

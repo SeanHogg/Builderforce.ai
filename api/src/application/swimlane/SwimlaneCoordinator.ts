@@ -471,6 +471,25 @@ export class SwimlaneCoordinator {
       return;
     }
 
+    // Honor the lane's requirement gate: a 'hard' lane cannot launch its normal agents
+    // while a REQUIRED reviewer sign-off is still missing — park the ticket for review
+    // instead. A subsequent kanban.signoff (approved) clears it, and approveGate/retry
+    // resumes the stage. 'off'/'soft' gates do not block here (soft is the System-A
+    // reviewer round-trip; the coordinator just proceeds).
+    if (lane.requirementGate === 'hard'
+        && (await this.store.hasUnmetRequiredReviewers(run.taskId, lane.id, run.tenantId))) {
+      await this.applyLifecycle(run, {
+        next: 'needs_attention',
+        currentSwimlaneId: lane.id,
+        reason: 'failed',
+        workflowStatus: null,
+        historyStatus: 'blocked_requirements',
+        toSwimlaneId: lane.id,
+        error: 'Blocked: required reviewer sign-off missing (hard requirement gate).',
+      });
+      return;
+    }
+
     // Auto-PRD gate: this lane has agents, so ensure the task has a PRD before
     // they run. Idempotent — fires once, on the first agent stage with no PRD.
     if (this.prdEnsurer) {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { aiImpactApi, type AiImpactInsights } from '@/lib/aiImpactApi';
+import { aiImpactApi, PLATFORM_PROVIDER_ID, type AiImpactInsights, type ProviderConsumption } from '@/lib/aiImpactApi';
 import { insightsApi, llmApi, dashboardApi, type EngineeringInsights, type LlmUsageStats, type DashboardUsage } from '@/lib/builderforceApi';
 import { recommendationsApi, type RecommendationsResult, type RecSeverity } from '@/lib/recommendationsApi';
 import { usePmData } from '@/lib/pm/usePmData';
@@ -26,9 +26,86 @@ const SEVERITY_COLOR: Record<RecSeverity, string> = {
   info: '#2563eb',
 };
 
-export function AiImpactSummary({ days }: { days: number }) {
+/**
+ * The dashboard bundles all three summaries in one `/ai-overview` read and hands
+ * each its slice via `overrideData` (the bundle may degrade a leg to `null`).
+ * While the bundle is in flight it passes `bundleLoading` so the summary shows
+ * its loader instead of self-fetching — guaranteeing exactly one round-trip.
+ * When neither prop is set (standalone) the summary self-fetches its own lens
+ * endpoint — so the same component works both bundled and on its own.
+ */
+export interface SummaryProps<T> { days: number; overrideData?: T | null; bundleLoading?: boolean }
+
+/** True when the parent is sourcing this summary's data (loading or resolved). */
+function isBundled<T>(p: SummaryProps<T>): boolean {
+  return p.bundleLoading === true || p.overrideData !== undefined;
+}
+
+/**
+ * Consumption per funding credential — the tenant's connected BYO integrations
+ * and Builderforce's own platform key, ranked by tokens.
+ *
+ * Ranks and renders by TOKENS, never cost: BYO rows are recorded with cost 0 (the
+ * tenant's own key paid the vendor), so a cost-ranked view shows a BYO tenant
+ * nothing. Owns its own visibility — renders nothing when there is no usage.
+ */
+export function ProviderConsumptionBreakdown({ providers }: { providers: ProviderConsumption[] }) {
   const t = useTranslations('insights');
-  const { data, error } = usePmData<AiImpactInsights>(() => aiImpactApi.get(days), [days]);
+  if (providers.length === 0) return null;
+
+  return (
+    <div>
+      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 10 }}>
+        {t('aiImpact.byIntegration')}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {providers.map((p) => (
+          <div
+            key={p.provider}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              gap: 12, flexWrap: 'wrap',
+              padding: '8px 12px', borderRadius: 8,
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 auto' }}>
+              <span style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--text-primary)' }}>
+                {p.provider === PLATFORM_PROVIDER_ID ? t('aiImpact.platformKey') : p.provider}
+              </span>
+              <span
+                style={{
+                  fontSize: '0.68rem', fontWeight: 700, whiteSpace: 'nowrap',
+                  padding: '2px 8px', borderRadius: 999,
+                  color: p.byo ? 'var(--success-text, #15803d)' : 'var(--text-secondary)',
+                  background: p.byo ? 'var(--success-bg, rgba(34, 197, 94, 0.12))' : 'var(--border)',
+                }}
+              >
+                {p.byo ? t('aiImpact.fundedOwnKey') : t('aiImpact.fundedPlatform')}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              <span title={t('aiImpact.requests')}>{int(p.requests)}</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{compactTokens(p.tokens)}</span>
+              {/* BYO spend lands on the tenant's own vendor bill, so the platform
+                  figure would read a misleading $0 — show a dash instead. */}
+              <span style={{ minWidth: 52, textAlign: 'right' }}>{p.byo ? '—' : usd(p.costUsd)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function AiImpactSummary(props: SummaryProps<AiImpactInsights>) {
+  const { days, overrideData } = props;
+  const t = useTranslations('insights');
+  const bundled = isBundled(props);
+  const self = usePmData<AiImpactInsights>(() => aiImpactApi.get(days), [days], { skip: bundled });
+  const data = bundled ? (overrideData ?? null) : self.data;
+  const error = bundled ? null : self.error;
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -36,13 +113,11 @@ export function AiImpactSummary({ days }: { days: number }) {
   const p = data.productivity;
   const deltaSub = `${p.deltaPct >= 0 ? '+' : ''}${p.deltaPct.toFixed(0)}% ${t('aiImpact.wow')}`;
 
-  // Token spend by model — the raw consumption broken out, ranked. Only the
-  // models that actually burned tokens in the window.
-  const byModel = data.comparison
-    .filter((m) => m.tokens > 0)
-    .sort((a, b) => b.tokens - a.tokens)
-    .map((m) => ({ key: m.model, label: m.model, value: m.tokens }));
-  const totalTokens = byModel.reduce((s, m) => s + m.value, 0);
+  // Tokens by model, straight off the usage ledger — every surface and BOTH
+  // funding sources. Deliberately NOT `data.comparison`, which only covers
+  // scored cloud runs and so renders nothing for a tenant on their own keys.
+  const { models, totalTokens } = data.consumption;
+  const byModel = models.map((m) => ({ key: m.model, label: m.model, value: m.tokens }));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -68,6 +143,8 @@ export function AiImpactSummary({ days }: { days: number }) {
           />
         </div>
       )}
+
+      <ProviderConsumptionBreakdown providers={data.consumption.providers} />
     </div>
   );
 }
@@ -92,9 +169,13 @@ export function LlmUsageSummary(_props: { days: number }) {
   );
 }
 
-export function EngineeringSummary({ days }: { days: number }) {
+export function EngineeringSummary(props: SummaryProps<EngineeringInsights>) {
+  const { days, overrideData } = props;
   const t = useTranslations('insights');
-  const { data, error } = usePmData<EngineeringInsights>(() => insightsApi.engineering(days), [days]);
+  const bundled = isBundled(props);
+  const self = usePmData<EngineeringInsights>(() => insightsApi.engineering(days), [days], { skip: bundled });
+  const data = bundled ? (overrideData ?? null) : self.data;
+  const error = bundled ? null : self.error;
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -109,9 +190,13 @@ export function EngineeringSummary({ days }: { days: number }) {
   );
 }
 
-export function RecommendationsSummary({ days }: { days: number }) {
+export function RecommendationsSummary(props: SummaryProps<RecommendationsResult>) {
+  const { days, overrideData } = props;
   const t = useTranslations('insights');
-  const { data, error } = usePmData<RecommendationsResult>(() => recommendationsApi.recommendations(days), [days]);
+  const bundled = isBundled(props);
+  const self = usePmData<RecommendationsResult>(() => recommendationsApi.recommendations(days), [days], { skip: bundled });
+  const data = bundled ? (overrideData ?? null) : self.data;
+  const error = bundled ? null : self.error;
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;

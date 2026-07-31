@@ -17,6 +17,8 @@ import {
   tasks,
 } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
+import { onTaskLandedInLane } from '../swimlane/laneEntryTrigger';
 import type {
   BoardSyncStore,
   StoredConnection,
@@ -28,6 +30,7 @@ import type {
 } from './SyncEngine';
 import type { SyncState } from './reconciler';
 import type { ChangeSet } from './providers';
+import { parseJsonObject } from '../../domain/shared/json';
 
 /**
  * Coerce a stored `fields` jsonb value back into a plain object. The driver may
@@ -47,7 +50,15 @@ function normalizeFields(raw: unknown): Record<string, unknown> | null {
   return typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
 }
 
-export function createDrizzleStore(db: Db): BoardSyncStore {
+/**
+ * @param env When supplied, a ticket synced IN from the tracker fires the canonical
+ *   lane auto-run trigger via the shared funnel ({@link onTaskLandedInLane}) — the
+ *   same one a board drag uses. Without it (unit tests) the insert is silent, which
+ *   is exactly what the inbound path used to do in production: a Jira/Linear ticket
+ *   landing in a staffed auto-gated lane never fired the live trigger and was only
+ *   rescued up to 5 minutes later by the cron sweep.
+ */
+export function createDrizzleStore(db: Db, env?: Env): BoardSyncStore {
   return {
     async getConnection(connectionId: string): Promise<StoredConnection | null> {
       const [row] = await db
@@ -183,6 +194,20 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
         })
         .returning({ id: tasks.id });
       if (!row) throw new Error('upsertTask returned no row');
+      // Inbound board-sync is a LANE WRITER like any other: route the new ticket
+      // through the ONE funnel so a synced-in ticket that lands in a staffed,
+      // auto-gated lane starts its agent immediately instead of waiting for the
+      // cron backstop. Best-effort inside the funnel — a dispatch failure never
+      // fails the sync.
+      if (env) {
+        await onTaskLandedInLane(env, db, {
+          tenantId:    input.tenantId,
+          projectId:   input.projectId,
+          taskId:      row.id,
+          status:      input.status ?? 'backlog',
+          submittedBy: `system:board-sync:${input.provider}`,
+        });
+      }
       return row.id;
     },
 
@@ -281,11 +306,7 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
 }
 
 function safeParse(raw: string): Record<string, unknown> {
-  try {
-    return JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
+  return parseJsonObject(raw);
 }
 
 // ---------------------------------------------------------------------------

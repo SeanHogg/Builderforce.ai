@@ -18,6 +18,7 @@
  */
 
 import { isNavItemActive } from './nav';
+import { ADMIN_GROUP_META } from './adminGroups';
 
 /** Count-badge key for the Projects tab (published by the Projects page, read by
  *  <SectionTabs>). Lives here so the config + publisher share one constant. */
@@ -60,14 +61,19 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: 'brainstorm', labelKey: 'group.brainstorm', icon: '💡', href: '/brainstorm', match: ['/brainstorm'] },
   {
     id: 'projects', labelKey: 'group.projects', icon: '▦', href: '/projects',
-    match: ['/projects', '/tasks', '/pmo', '/ceremonies'],
+    match: ['/projects', '/tasks', '/pmo', '/ceremonies', '/kanban-templates'],
     tabKind: 'query', basePath: '/projects',
     tabs: [
       { id: '', labelKey: 'tab.projects', icon: '▦', countKey: PROJECTS_COUNT_KEY },
       { id: 'tasks', labelKey: 'tab.tasks', icon: '✓' },
+      { id: 'manager', labelKey: 'tab.manager', icon: '🧭' },
       { id: 'pm', labelKey: 'tab.planning', icon: '🗺' },
       { id: 'portfolio', labelKey: 'tab.portfolio', icon: '📊' },
       { id: 'ceremonies', labelKey: 'tab.ceremonies', icon: '🎯' },
+      { id: 'templates', labelKey: 'tab.templates', icon: '🗂' },
+      // Pre-sales: respond to an RFQ/RFP with a co-branded proposal grounded on the
+      // portfolio + a fresh diagnostics scan (capability roster + P&L + plan).
+      { id: 'rfp', labelKey: 'tab.rfp', icon: '📄' },
     ],
   },
   // IDE is one destination scoped to its project type. Each project IS typed by
@@ -76,13 +82,24 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: 'ide', labelKey: 'group.ide', icon: '💻', href: '/ide/dashboard', match: ['/ide'] },
   { id: 'workflows', labelKey: 'group.workflows', icon: '🔀', href: '/workflows', match: ['/workflows'] },
   {
+    // "Talent / Workforce": people + agents (Workforce) AND the roster of roles and
+    // external hires (Talent) share one destination. The Talent tab is the relocated
+    // /hires surface; the Roles tab is the workspace role roster with assignment.
+    // Live video/audio collaboration (Meetings) is a tab here too — schedule + join
+    // standups, planning, retros, ad-hoc and direct calls; connect Google/Microsoft
+    // calendars. `/meetings` redirects into ?tab=meetings.
     id: 'workforce', labelKey: 'group.workforce', icon: '👥', href: '/workforce',
-    match: ['/workforce'],
+    match: ['/workforce', '/hires', '/meetings'],
     tabKind: 'query', basePath: '/workforce',
     tabs: [
       { id: '', labelKey: 'tab.workforce', icon: '👥' },
+      { id: 'roles', labelKey: 'tab.roles', icon: '🎭' },
       { id: 'teams', labelKey: 'tab.teams', icon: '🧑‍🤝‍🧑' },
+      { id: 'meetings', labelKey: 'tab.meetings', icon: '📹' },
+      { id: 'calendar', labelKey: 'tab.calendar', icon: '📅' },
+      { id: 'talent', labelKey: 'tab.talent', icon: '🤝' },
       { id: 'performance', labelKey: 'tab.performance', icon: '📊' },
+      { id: 'plan', labelKey: 'tab.plan', icon: '🧮' },
       { id: 'chats', labelKey: 'tab.chats', icon: '💬' },
       { id: 'approvals', labelKey: 'tab.approvals', icon: '✅' },
       { id: 'logs', labelKey: 'tab.logs', icon: '📜' },
@@ -111,6 +128,12 @@ export const NAV_GROUPS: NavGroup[] = [
       // redirect here with ?panel=). activePaths keeps the tab highlighted on the
       // retired routes while they redirect in. [insights consolidation]
       { id: '/insights/delivery', labelKey: 'tab.delivery', icon: '📦', activePaths: ['/insights/bottlenecks', '/insights/dora', '/insights/space', '/insights/benchmarking', '/insights/funnel'] },
+      // Autonomy Health — "are manager/agent-created tickets actually completing
+      // their lifecycle autonomously?". Its own tab because it answers a question
+      // no delivery metric does (per-ORIGIN funnel + the autonomous-vs-human hop
+      // split); it is ALSO a Delivery-hub drill-down panel so the dashboard cards
+      // and the Brain can open the same lens in a slide-out.
+      { id: '/insights/autonomy', labelKey: 'tab.autonomy', icon: '🕹' },
       // Finance is a HUB: FinOps spend + Investment Allocation + DevFinOps (R&D /
       // SOC / audit) are drill-down slide-outs of this one tab (their old routes
       // redirect here with ?drill=). activePaths keeps the tab highlighted on the
@@ -122,6 +145,24 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: '/insights/devex', labelKey: 'tab.devex', icon: '🩺', activePaths: ['/surveys'] },
       { id: '/insights/compliance', labelKey: 'tab.compliance', icon: '🛡' },
       { id: '/alerts', labelKey: 'tab.alerts', icon: '🔔' },
+      // Periodic lens review snapshots (monthly/quarterly/annual cadence).
+      { id: '/insights/snapshots', labelKey: 'tab.snapshots', icon: '🗓' },
+    ],
+  },
+  {
+    // Agent Ops: the three things you do to a FLEET rather than to one agent —
+    // watch concurrent agents contend for files (Coordination), govern what they
+    // remember and for how long (Memory), and test an agent against a ticket with
+    // every effect suppressed before it touches real work (Rehearsal). Kept out of
+    // Workforce deliberately: that destination is the roster (who exists), this one
+    // is the operating posture (what they are doing to each other right now).
+    id: 'agentops', labelKey: 'group.agentOps', icon: '🧬', href: '/agent-ops',
+    match: ['/agent-ops'],
+    tabKind: 'query', basePath: '/agent-ops',
+    tabs: [
+      { id: '', labelKey: 'tab.coordination', icon: '🔗' },
+      { id: 'memory', labelKey: 'tab.memory', icon: '🧠' },
+      { id: 'rehearsal', labelKey: 'tab.rehearsal', icon: '🎬' },
     ],
   },
   {
@@ -131,6 +172,25 @@ export const NAV_GROUPS: NavGroup[] = [
     tabs: [
       { id: '', labelKey: 'tab.errors', icon: '🐞' },
       { id: 'collectors', labelKey: 'tab.collectors', icon: '🔌' },
+      { id: 'feedback', labelKey: 'tab.feedback', icon: '💬' },
+    ],
+  },
+  {
+    // Reliability: the detect→respond loop under ONE destination — active Monitoring
+    // (diagram boards + monitor pins; a breach opens an incident) folded together with
+    // Incident Management (war rooms + on-call + escalation + contacts). Sub-views are
+    // ?tab= pills on the /incidents page; the retired /monitoring route redirects into
+    // ?tab=monitors so old deep links still resolve (kept in `match` for highlighting).
+    id: 'reliability', labelKey: 'group.reliability', icon: '🚨', href: '/incidents',
+    match: ['/incidents', '/monitoring'],
+    tabKind: 'query', basePath: '/incidents',
+    tabs: [
+      { id: '', labelKey: 'tab.incidents', icon: '🚨' },
+      { id: 'monitors', labelKey: 'tab.monitors', icon: '📡' },
+      { id: 'oncall', labelKey: 'tab.oncall', icon: '📟' },
+      { id: 'escalation', labelKey: 'tab.escalation', icon: '⏫' },
+      { id: 'contacts', labelKey: 'tab.contacts', icon: '📇' },
+      { id: 'reporting', labelKey: 'tab.reporting', icon: '📊' },
     ],
   },
   // Knowledge is now ONE destination. SOPs / Processes / Documents / Training are
@@ -140,13 +200,15 @@ export const NAV_GROUPS: NavGroup[] = [
   // Knowledge, and "Content" is replaced by knowledge documents themselves.
   {
     id: 'knowledge', labelKey: 'group.knowledge', icon: '📖', href: '/knowledge',
-    match: ['/knowledge', '/content-manager', '/skills', '/personas', '/prompts'],
+    match: ['/knowledge', '/content-manager', '/skills', '/personas', '/prompts', '/facts'],
     tabKind: 'route',
     tabs: [
       { id: '/knowledge', labelKey: 'tab.knowledge', icon: '📖' },
       { id: '/skills', labelKey: 'tab.skills', icon: '⭐' },
       { id: '/personas', labelKey: 'tab.personas', icon: '👤' },
       { id: '/prompts', labelKey: 'tab.prompts', icon: '📚' },
+      // Structured, queryable fact store (subject·predicate·object triples).
+      { id: '/facts', labelKey: 'tab.facts', icon: '🧩' },
     ],
   },
   {
@@ -155,15 +217,90 @@ export const NAV_GROUPS: NavGroup[] = [
     tabKind: 'route',
     tabs: [
       { id: '/settings', labelKey: 'tab.settings', icon: '⚙', activePaths: [] },
+      // Lateral "lens persona" (CEO/CFO/CTO/CISO/PMO/EM) — reshapes insight lenses.
+      { id: '/settings/persona', labelKey: 'tab.persona', icon: '🎯' },
       { id: '/security', labelKey: 'tab.security', icon: '🔒' },
       { id: '/settings/integrations', labelKey: 'tab.integrations', icon: '🔌' },
       { id: '/pricing', labelKey: 'tab.billing', icon: '💳' },
       { id: '/tenants', labelKey: 'tab.tenant', icon: '🏢' },
-      { id: '/settings/api-keys', labelKey: 'tab.apiKeys', icon: '🔑', ownerOnly: true },
     ],
   },
-  { id: 'admin', labelKey: 'group.admin', icon: '⚙', href: '/admin', match: ['/admin'], superadminOnly: true },
+  {
+    // Platform Admin: superadmin-only. The 19 capabilities are consolidated into
+    // 10 top-level GROUPS (ADMIN_GROUP_META — the single source of truth, shared
+    // with the admin page). Each group is a TAB in the shared <SectionTabs> bar
+    // (query kind, ?tab=…); a group's sub-views are an inner <AdminGroupNav>
+    // (?sub=…) on the page. The default group (Overview) uses id '' so a bare
+    // /admin highlights it.
+    id: 'admin', labelKey: 'group.admin', icon: '⚙', href: '/admin', match: ['/admin'], superadminOnly: true,
+    tabKind: 'query', basePath: '/admin',
+    tabs: ADMIN_GROUP_META.map((g) => ({ id: g.id, labelKey: g.labelKey, icon: g.icon })),
+  },
 ];
+
+/**
+ * The RESTRICTED navigation for a freelancer / gig account (users.account_type =
+ * 'freelancer'). A for-hire worker never sees the IDE, Brain, projects, insights,
+ * etc. — only their for-hire profile, the gigs they can bid on / are engaged with,
+ * their timecard, and account settings. Kept as its own list (not a filter of the
+ * builder nav) because it is a deliberately different, minimal destination set.
+ */
+/**
+ * The for-hire WORKER destinations: profile / find work / timecard. Shared so both
+ * the restricted freelancer shell AND an opted-in builder's nav surface the exact
+ * same set — never re-inlined in two places.
+ */
+export const FOR_HIRE_NAV_GROUPS: NavGroup[] = [
+  { id: 'freelancer-dashboard', labelKey: 'group.myDashboard', icon: '🏠', href: '/freelancer/dashboard', match: ['/freelancer/dashboard'] },
+  { id: 'freelancer-profile', labelKey: 'group.myProfile', icon: '👤', href: '/freelancer/profile', match: ['/freelancer/profile'] },
+  { id: 'freelancer-gigs', labelKey: 'group.findWork', icon: '🔎', href: '/marketplace?category=gigs', match: ['/marketplace', '/freelancer/gigs'] },
+  { id: 'freelancer-workspace', labelKey: 'group.myWorkspace', icon: '🛠', href: '/freelancer/workspace', match: ['/freelancer/workspace'] },
+  { id: 'freelancer-timecard', labelKey: 'group.timecard', icon: '⏱', href: '/freelancer/timecard', match: ['/freelancer/timecard'] },
+];
+
+export const FREELANCER_NAV_GROUPS: NavGroup[] = [
+  ...FOR_HIRE_NAV_GROUPS,
+  {
+    // A gig account's personal settings live on /settings (Account / Personality /
+    // Sessions sub-tabs) — the same place a builder manages their own account. The
+    // Workspace sub-tab self-hides without a tenant, and the tenant-only sub-routes
+    // (integrations / api-keys) are never linked here.
+    id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/settings',
+    match: ['/settings'],
+    tabKind: 'route',
+    tabs: [
+      { id: '/settings', labelKey: 'tab.settings', icon: '⚙' },
+    ],
+  },
+];
+
+/** Route prefixes a freelancer account is allowed to reach in the app shell. Used
+ *  by both the nav (which groups to show) and the route guard (redirect away from
+ *  anything else). Public/marketing routes are handled separately by the shell. */
+export const FREELANCER_ALLOWED_PREFIXES = ['/freelancer'];
+
+/** Paths a freelancer may reach by EXACT match only — the settings root holds their
+ *  personal account controls, but the tenant-scoped `/settings/*` sub-routes
+ *  (integrations, api-keys) stay off-limits (they 401 for a tenantless account), so
+ *  we intentionally do not allow the `/settings` prefix. `/security` is kept
+ *  reachable for old deep links; it degrades to a "no workspace" state. */
+export const FREELANCER_ALLOWED_EXACT = ['/settings', '/security'];
+
+/** The nav destinations for the current account type — the ONE place the
+ *  freelancer-vs-builder nav split is decided, so the Sidebar + SectionTabs and
+ *  the route guard never drift. A dedicated freelancer gets the restricted shell; a
+ *  builder who opted in to being hired (`availableForHire`) keeps the full builder
+ *  nav PLUS the for-hire worker destinations. */
+export function navGroupsForAccountType(isFreelancer: boolean, availableForHire = false): NavGroup[] {
+  if (isFreelancer) return FREELANCER_NAV_GROUPS;
+  return availableForHire ? [...NAV_GROUPS, ...FOR_HIRE_NAV_GROUPS] : NAV_GROUPS;
+}
+
+/** Whether a freelancer account may view this in-app path (else redirect). */
+export function isFreelancerAllowedPath(pathname: string): boolean {
+  if (FREELANCER_ALLOWED_EXACT.includes(pathname)) return true;
+  return FREELANCER_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
 
 /** Longest-prefix match so /ide/dashboard resolves to IDE, /settings/api-keys to Settings, etc. */
 export function findActiveGroup(pathname: string): NavGroup | undefined {

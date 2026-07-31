@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Workforce member routes — /api/members
  *
@@ -22,6 +23,7 @@ import { deploymentEvents, integrationCredentials, memberMetricsPeriod, memberPr
 import { decryptCredentials } from '../../application/integrations/credentialCrypto';
 import { syncMemberCalendar, type CalendarCredential } from '../../application/integrations/googleCalendarSync';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { memberProfilesCacheKey as profilesCacheKey, readMemberProfiles } from '../../application/member/memberProfiles';
 import {
   computeDora,
   computeMemberMetrics,
@@ -34,6 +36,7 @@ import {
 } from '../../application/metrics/workforceMetrics';
 import { recommendAssignee } from '../../application/metrics/assigneeRecommender';
 import { getTenantEngagement, persistTenantEngagement } from '../../application/metrics/engagement';
+import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -41,7 +44,6 @@ const MEMBER_KINDS = new Set(['human', 'cloud_agent', 'host_agent']);
 const clampDays = (raw: number, def: number, max: number) =>
   Math.min(max, Math.max(1, Number.isFinite(raw) ? raw : def));
 
-function profilesCacheKey(tenantId: number): string { return `member-profiles:tenant:${tenantId}`; }
 
 /** The profile fields a caller may set (server owns id/tenant/segment/timestamps). */
 interface ProfileBody {
@@ -74,10 +76,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
   // profile PUT below.
   router.get('/profiles', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const profiles = await getOrSetCached(c.env as Env, profilesCacheKey(tenantId), async () =>
-      db.select().from(memberProfiles).where(eq(memberProfiles.tenantId, tenantId)),
-    );
-    return c.json({ profiles });
+    return c.json({ profiles: await readMemberProfiles(c.env as Env, db, tenantId) });
   });
 
   // ── GET /api/members/:kind/:ref/profile — one profile (null if unset) ──────
@@ -111,8 +110,6 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
       memberKind: kind as 'human' | 'cloud_agent' | 'host_agent',
       memberRef: ref,
       timezone: body.timezone ?? null,
-      workHours: body.workHours ?? null,
-      pto: body.pto ?? null,
       responseSlaHours: body.responseSlaHours ?? null,
       weeklyCapacityHours: body.weeklyCapacityHours ?? null,
       dailyCapacityPoints: body.dailyCapacityPoints ?? null,
@@ -129,6 +126,18 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
       costRateUsdCents: body.costRateUsdCents ?? null,
       syncSource: body.syncSource ?? 'manual',
       updatedAt: new Date(),
+      // `pto` and `workHours` are CALENDAR-OWNED and PRESENCE-ONLY: written only when the
+      // caller actually sent the key, never defaulted to null.
+      //
+      // Every other field above is a full-object replace, which is right for fields the
+      // editor renders — omitting one there means "clear it". These two are different:
+      // no UI edits them, the Google Calendar sync is their only real writer, and a
+      // client that PUTs a partial profile would silently erase someone's approved leave.
+      // Since 0366 that leave is what excuses them from a ceremony instead of marking
+      // them absent, so the erasure would end with an agent taking work off someone
+      // who was on holiday.
+      ...(body.pto !== undefined ? { pto: body.pto } : {}),
+      ...(body.workHours !== undefined ? { workHours: body.workHours } : {}),
     };
 
     const [row] = await db
@@ -140,10 +149,14 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
       })
       .returning();
 
-    await invalidateCached(c.env as Env, profilesCacheKey(tenantId)).catch(() => {});
+    await invalidateCached(c.env as Env, profilesCacheKey(tenantId)).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
+    });
     // A profile change (capacity / availability / skills) alters assignee
     // recommendations + scorecards, so bust the version-token caches too.
-    await bumpWorkforceMetricsVersion(c.env as Env, tenantId).catch(() => {});
+    await bumpWorkforceMetricsVersion(c.env as Env, tenantId).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
+    });
     return c.json({ profile: row });
   });
 
@@ -185,8 +198,12 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
 
     const result = await syncMemberCalendar(c.env as Env, db, { tenantId, memberRef: ref, calendarId, credential });
     if (result.ok) {
-      await invalidateCached(c.env as Env, profilesCacheKey(tenantId)).catch(() => {});
-      await bumpWorkforceMetricsVersion(c.env as Env, tenantId).catch(() => {});
+      await invalidateCached(c.env as Env, profilesCacheKey(tenantId)).catch((error) => {
+        reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
+      });
+      await bumpWorkforceMetricsVersion(c.env as Env, tenantId).catch((error) => {
+        reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
+      });
     }
     return c.json(result, result.ok ? 200 : 502);
   });
@@ -207,7 +224,9 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
     );
     // Snapshot into member_metrics_period (best-effort) so the table is the
     // queryable history behind sprint retros, not just an on-the-fly read.
-    c.executionCtx.waitUntil(snapshotMetrics(db, tenantId, days, scorecards).catch(() => {}));
+    c.executionCtx.waitUntil(snapshotMetrics(db, tenantId, days, scorecards).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
+    }));
     const byDiscipline = rollupByDiscipline(scorecards);
     const members = discipline ? scorecards.filter((m) => (m.discipline ?? null) === discipline) : scorecards;
     return c.json({ windowDays: days, members, byDiscipline });
@@ -250,7 +269,9 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
     const members = await getTenantEngagement(c.env as Env, db, tenantId, days);
     // Snapshot into member_metrics_period (best-effort) so the composite score has
     // trend history, mirroring the scorecard snapshot on the members read.
-    c.executionCtx.waitUntil(persistTenantEngagement(db, tenantId, days, members).catch(() => {}));
+    c.executionCtx.waitUntil(persistTenantEngagement(db, tenantId, days, members).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
+    }));
     return c.json({ windowDays: days, members });
   });
 
@@ -283,7 +304,26 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
         restoredAt: body.restoredAt ? new Date(body.restoredAt) : null,
       })
       .returning();
-    await bumpWorkforceMetricsVersion(c.env as Env, tenantId).catch(() => {});
+    await bumpWorkforceMetricsVersion(c.env as Env, tenantId).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
+    });
+    c.executionCtx.waitUntil((async () => {
+      const actor = await resolveActorFromContext(c.env as Env, db, c);
+      await recordActivity(c.env as Env, db, {
+        tenantId,
+        segmentId: (c as { get(k: 'segmentId'): string | undefined }).get('segmentId') ?? null,
+        projectId: body.projectId ?? null,
+        actor,
+        verb: (row?.isFailure) ? 'deploy.failed' : 'deploy.recorded',
+        targetType: 'deployment',
+        targetId: row?.id ?? body.externalRef ?? null,
+        targetLabel: body.environment ?? 'production',
+        summary: `Deploy to ${body.environment ?? 'production'}: ${row?.status ?? body.status ?? 'success'}`,
+        metadata: { environment: body.environment ?? 'production', status: row?.status, taskId: body.taskId ?? null, externalRef: body.externalRef ?? null },
+      });
+    })().catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
+    }));
     return c.json({ deployment: row }, 201);
   });
 

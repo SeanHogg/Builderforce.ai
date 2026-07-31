@@ -9,9 +9,11 @@
  */
 
 import { useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { MicRecorder, type PcmAudio } from '@/lib/captureAudio';
 import { hasWebGPU } from '@/lib/voiceEngine';
 import type { VoiceStudio } from '@/lib/voiceStudio';
+import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
 
 const section: React.CSSProperties = {
   padding: '14px 14px 16px',
@@ -35,27 +37,37 @@ const ghostBtn: React.CSSProperties = {
   color: 'var(--text-secondary)', borderRadius: 8, padding: '6px 11px', cursor: 'pointer',
 };
 
-export function VoiceConfigPanel({ voice }: { voice: VoiceStudio }) {
+export function VoiceConfigPanel({ voice, projectId }: { voice: VoiceStudio; projectId?: number }) {
+  const t = useTranslations('voicePanel');
   return (
     <div style={{ height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
       <div style={{ ...section, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <EngineBadge onDevice={voice.onDevice} />
       </div>
 
+      {/* The project's self-learning Evermind — every project has one (seeded on
+          creation); self-gating (RBAC), localized, theme-aware. Parity with the
+          designer + llm studios. */}
+      {projectId != null && (
+        <div style={section}>
+          <ProjectEvermindPanel projectId={projectId} />
+        </div>
+      )}
+
       {voice.error && (
         <div style={{ ...section, background: 'rgba(239,68,68,0.12)', color: '#fca5a5' }}>
           ⚠ {voice.error}{' '}
-          <button onClick={() => void voice.reload()} style={{ ...ghostBtn, marginLeft: 6 }}>Retry</button>
+          <button onClick={() => void voice.reload()} style={{ ...ghostBtn, marginLeft: 6 }}>{t('retry')}</button>
         </div>
       )}
 
       {/* Active voice + the lines to speak — the inputs the Generate button consumes. */}
       <div style={section}>
-        <div style={heading}>Voice</div>
+        <div style={heading}>{t('voiceHeading')}</div>
         {voice.loading ? (
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Loading…</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>{t('loading')}</p>
         ) : voice.clones.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>No voices yet — create one below.</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>{t('noVoices')}</p>
         ) : (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
             {voice.clones.map((c) => (
@@ -75,19 +87,19 @@ export function VoiceConfigPanel({ voice }: { voice: VoiceStudio }) {
           </div>
         )}
 
-        <label style={label}>Text to speak</label>
+        <label style={label}>{t('textToSpeak')}</label>
         <textarea
           style={{ ...input, minHeight: 90, resize: 'vertical' }}
           value={voice.text}
           onChange={(e) => voice.setText(e.target.value)}
-          placeholder="Write the lines to narrate, or ask the Brain…"
+          placeholder={t('textPlaceholder')}
         />
         {voice.selectedCloneId > 0 && (
           <button
             onClick={() => void voice.deleteClone(voice.selectedCloneId)}
             style={{ ...ghostBtn, marginTop: 10 }}
           >
-            Delete selected voice
+            {t('deleteSelected')}
           </button>
         )}
       </div>
@@ -95,17 +107,18 @@ export function VoiceConfigPanel({ voice }: { voice: VoiceStudio }) {
       <CreateCloneForm voice={voice} />
 
       <p style={{ padding: '12px 14px', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-        Cloning is Pro-gated and requires consent. On-device synthesis is free; the metered server is the fallback.
+        {t('proNote')}
       </p>
     </div>
   );
 }
 
 function EngineBadge({ onDevice }: { onDevice: boolean | null }) {
+  const t = useTranslations('voicePanel');
   if (onDevice === null) {
-    return <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>probing engine…</span>;
+    return <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{t('probingEngine')}</span>;
   }
-  const text = onDevice ? `On-device${hasWebGPU() ? ' · WebGPU' : ' · CPU'} (free)` : 'Server synthesis (metered)';
+  const text = onDevice ? t(hasWebGPU() ? 'engineWebGPU' : 'engineCPU') : t('engineServer');
   return (
     <span style={{
       fontSize: '0.68rem', fontWeight: 600, padding: '4px 10px', borderRadius: 16,
@@ -116,6 +129,7 @@ function EngineBadge({ onDevice }: { onDevice: boolean | null }) {
 }
 
 function CreateCloneForm({ voice }: { voice: VoiceStudio }) {
+  const t = useTranslations('voicePanel');
   const [name, setName] = useState('');
   const [consent, setConsent] = useState(false);
   const [reference, setReference] = useState<File | null>(null);
@@ -139,21 +153,21 @@ function CreateCloneForm({ voice }: { voice: VoiceStudio }) {
         setRecording(false);
       }
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Microphone capture failed.');
+      setErr(e instanceof Error ? e.message : t('errMic'));
       setRecording(false);
     }
   };
 
   const submit = async () => {
     setErr(null);
-    if (!name.trim()) return setErr('Name is required.');
-    if (!consent) return setErr('You must attest consent to create a voice clone.');
+    if (!name.trim()) return setErr(t('errName'));
+    if (!consent) return setErr(t('errConsent'));
     setBusy(true);
     try {
       await voice.createClone({ name, consentAttested: consent, reference, recordedPcm });
       setName(''); setConsent(false); setReference(null); setRecordedPcm(null);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Create failed.');
+      setErr(e instanceof Error ? e.message : t('errCreate'));
     } finally {
       setBusy(false);
     }
@@ -161,13 +175,13 @@ function CreateCloneForm({ voice }: { voice: VoiceStudio }) {
 
   return (
     <div style={section}>
-      <div style={heading}>Create a voice clone</div>
+      <div style={heading}>{t('createHeading')}</div>
       <div style={{ marginBottom: 10 }}>
-        <label style={label}>Voice name</label>
-        <input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. My Narrator" />
+        <label style={label}>{t('voiceName')}</label>
+        <input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('voiceNamePlaceholder')} />
       </div>
       <div style={{ marginBottom: 10 }}>
-        <label style={label}>Reference sample</label>
+        <label style={label}>{t('referenceSample')}</label>
         <input
           type="file"
           accept="audio/*"
@@ -183,22 +197,22 @@ function CreateCloneForm({ voice }: { voice: VoiceStudio }) {
               borderColor: recording ? '#ef4444' : 'var(--border-subtle)',
             }}
           >
-            {recording ? '⏹ Stop recording' : '🎤 Record from mic'}
+            {recording ? t('stopRecording') : t('recordFromMic')}
           </button>
         )}
         {recordedPcm && (
           <p style={{ fontSize: '0.72rem', color: '#6ee7b7', marginTop: 6 }}>
-            ✓ Recorded {(recordedPcm.samples.length / recordedPcm.sampleRate).toFixed(1)}s
+            {t('recorded', { seconds: (recordedPcm.samples.length / recordedPcm.sampleRate).toFixed(1) })}
           </p>
         )}
       </div>
       <label style={{ display: 'flex', gap: 7, alignItems: 'flex-start', marginBottom: 10, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
         <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} style={{ marginTop: 3 }} />
-        <span>This is my voice, or I have written permission to clone it. (Required — ToS §9a)</span>
+        <span>{t('consentText')}</span>
       </label>
       {err && <p style={{ color: '#fca5a5', fontSize: '0.8rem', marginBottom: 8 }}>{err}</p>}
       <button style={{ ...primaryBtn, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => void submit()}>
-        {busy ? 'Creating…' : 'Create voice'}
+        {busy ? t('creating') : t('createVoice')}
       </button>
     </div>
   );

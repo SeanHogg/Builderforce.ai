@@ -19,8 +19,11 @@ import { computeDora } from '../metrics/workforceMetrics';
 import { computeQualityInsights } from '../insights/qualityInsights';
 import { computePeopleInsights } from '../insights/peopleInsights';
 import { computeRdFinancials } from '../insights/rdFinancialsInsights';
-import { errorEvents, executions, llmUsageLog } from '../../infrastructure/database/schema';
+import { errorEvents, executions, llmUsageLog, deploymentEvents, alertEvents } from '../../infrastructure/database/schema';
 import { dailyCountSeries, dailySumSeries, seriesTotal, type MetricPoint } from './dailySeries';
+
+/** Millicents → USD (llm_usage_log.cost_usd_millicents is 1e-5 USD units). */
+const MILLICENTS_PER_USD = 100_000;
 
 export interface MetricDef {
   /** Human label for the widget header / query answer. */
@@ -70,6 +73,11 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
       const fin = await computeFinanceInsights(db, tenantId, '', currentPeriodMonth(now), now);
       return fin.totals.spendUsd;
     },
+    // Daily LLM spend (USD) over the window — the trend behind the MTD scalar.
+    async series(db, tenantId, days) {
+      const points = await dailySumSeries(db, llmUsageLog, llmUsageLog.tenantId, llmUsageLog.createdAt, llmUsageLog.costUsdMillicents, tenantId, days);
+      return points.map((p) => ({ day: p.day, value: p.value / MILLICENTS_PER_USD }));
+    },
   },
   'finance.forecast': {
     label: 'Forecast month-end spend',
@@ -103,6 +111,10 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     async compute(db, tenantId, days) {
       const dora = await computeDora(db, tenantId, days);
       return dora.deploymentFrequencyPerDay;
+    },
+    // Deployments per day over the window — the trend behind the DORA frequency.
+    series(db, tenantId, days) {
+      return dailyCountSeries(db, deploymentEvents, deploymentEvents.tenantId, deploymentEvents.deployedAt, tenantId, days);
     },
   },
   'dora.leadTime': {
@@ -190,6 +202,15 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
       return (await computeQualityInsights(db, tenantId, days)).prodIncidents.mttrHours;
     },
   },
+  'quality.incidents': {
+    label: 'Production incidents',
+    unit: '',
+    description: 'Production incidents (excluding alert-only) opened over the window — answers "do we have a breach?".',
+    goodWhenUp: false,
+    async compute(db, tenantId, days) {
+      return (await computeQualityInsights(db, tenantId, days)).prodIncidents.count;
+    },
+  },
 
   // ── People (computePeopleInsights) ─────────────────────────────────────────
   'people.attrition': {
@@ -249,6 +270,18 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     },
     series(db, tenantId, days) {
       return dailySumSeries(db, llmUsageLog, llmUsageLog.tenantId, llmUsageLog.createdAt, llmUsageLog.totalTokens, tenantId, days);
+    },
+  },
+  'alerts.fires': {
+    label: 'Alert firings',
+    unit: '',
+    description: 'Threshold-alert firings per day over the window.',
+    goodWhenUp: false,
+    async compute(db, tenantId, days) {
+      return seriesTotal(await dailyCountSeries(db, alertEvents, alertEvents.tenantId, alertEvents.createdAt, tenantId, days));
+    },
+    series(db, tenantId, days) {
+      return dailyCountSeries(db, alertEvents, alertEvents.tenantId, alertEvents.createdAt, tenantId, days);
     },
   },
 

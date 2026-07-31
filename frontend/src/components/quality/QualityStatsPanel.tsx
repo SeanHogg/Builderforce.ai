@@ -6,15 +6,15 @@ import { qualityApi, type QualityStats } from '@/lib/builderforceApi';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
-import { levelColor, statusColor } from './qualityColors';
+import { levelColor, statusColor, sourceColor } from './qualityColors';
 
 /**
  * Data-driven Quality overview — the "what have we collected, and what is it
  * telling us?" panel. Self-fetching off the cached /api/quality/stats aggregate
  * (project-scoped or tenant-wide), it renders the volume collected, the daily
- * frequency trend, and breakdowns by error level / type / collector. Reused on
- * BOTH the Quality dashboard (above the error table) and the collectors tab (the
- * "data collected" card), so there's one place that visualises the corpus.
+ * frequency trend, and breakdowns by error level / type / collector. It is the
+ * analytics half of the Errors tab; billed month-to-date consumption is rendered
+ * separately by the reusable Errors allowance meter.
  */
 export function QualityStatsPanel({ projectId, days = 30 }: { projectId?: number | null; days?: number }) {
   const t = useTranslations('quality');
@@ -46,6 +46,11 @@ export function QualityStatsPanel({ projectId, days = 30 }: { projectId?: number
     .filter((c) => c.events > 0)
     .sort((a, b) => b.events - a.events)
     .map((c) => ({ key: c.collectorId ?? 'unassigned', label: c.name ?? t('stats.unassigned'), value: c.events }));
+  const sourceSegments = (stats.bySource ?? [])
+    .filter((s) => s.events > 0)
+    .sort((a, b) => b.events - a.events)
+    .map((s) => ({ key: s.source, label: t(`source.${s.source}`), value: s.events, color: sourceColor(s.source) }));
+  const sourceTotal = sourceSegments.reduce((sum, s) => sum + s.value, 0);
 
   const trendLabels = stats.daily.map((d) => d.day.slice(5)); // MM-DD
   const trendValues = stats.daily.map((d) => d.count);
@@ -97,6 +102,18 @@ export function QualityStatsPanel({ projectId, days = 30 }: { projectId?: number
               centerValue={String(stats.totals.groups)}
               centerLabel={t('summary.groups')}
               ariaLabel={t('stats.byStatus')}
+            />
+          </div>
+        )}
+        {sourceSegments.length > 0 && (
+          <div style={card}>
+            <SectionTitle>{t('stats.bySource')}</SectionTitle>
+            <DonutChart
+              segments={sourceSegments}
+              size={150}
+              centerValue={sourceTotal.toLocaleString()}
+              centerLabel={t('stats.events')}
+              ariaLabel={t('stats.bySource')}
             />
           </div>
         )}

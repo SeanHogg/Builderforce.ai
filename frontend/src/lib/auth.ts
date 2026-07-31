@@ -9,6 +9,7 @@
  */
 
 import type { AuthUser, Tenant } from './types';
+import type { PsychometricProfile } from './psychometric';
 
 export const AUTH_API_URL =
   process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
@@ -188,49 +189,106 @@ export function checkUnauthorizedAndRedirect(
 // API calls to api.builderforce.ai
 // ---------------------------------------------------------------------------
 
-export interface LoginResponse {
+export interface AuthSession {
   token: string;
   user: AuthUser;
 }
 
-export interface RegisterResponse {
-  token: string;
-  user: AuthUser;
-}
+/**
+ * Result of a login / register attempt. Either the caller is fully authenticated
+ * (`needsVerification: false` + a session), or the account's email must be verified
+ * first (`needsVerification: true` — flip the UI to the code-entry step for `email`).
+ */
+export type AuthStepResult =
+  | { needsVerification: true; email: string }
+  | ({ needsVerification: false } & AuthSession);
 
 export interface TenantTokenResponse {
   token: string;
 }
 
-export async function login(email: string, password: string): Promise<LoginResponse> {
+export async function login(email: string, password: string): Promise<AuthStepResult> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/web/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { message?: string };
-    throw new Error(body.message ?? 'Login failed');
+  const body = await res.json().catch(() => ({})) as {
+    token?: string; user?: AuthUser; error?: string; message?: string;
+    verificationRequired?: boolean; email?: string;
+  };
+  // 403 + verificationRequired: the account exists but its email isn't verified.
+  if (body.verificationRequired) {
+    return { needsVerification: true, email: body.email ?? email };
   }
-  return res.json() as Promise<LoginResponse>;
+  if (!res.ok || !body.token || !body.user) {
+    throw new Error(body.error ?? body.message ?? 'Login failed');
+  }
+  return { needsVerification: false, token: body.token, user: body.user };
 }
 
 export async function register(
   email: string,
   password: string,
   name: string | undefined,
-  agreeToTerms: boolean
-): Promise<RegisterResponse> {
+  agreeToTerms: boolean,
+  accountType?: 'standard' | 'freelancer'
+): Promise<AuthStepResult> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/web/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, name, agreeToTerms }),
+    body: JSON.stringify({ email, password, name, agreeToTerms, accountType }),
   });
+  const body = await res.json().catch(() => ({})) as {
+    token?: string; user?: AuthUser; error?: string; message?: string;
+    verificationRequired?: boolean; email?: string;
+  };
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { message?: string };
-    throw new Error(body.message ?? 'Registration failed');
+    throw new Error(body.error ?? body.message ?? 'Registration failed');
   }
-  return res.json() as Promise<RegisterResponse>;
+  // Normal path: registration never returns a session — the email must be verified.
+  if (body.verificationRequired || !body.token || !body.user) {
+    return { needsVerification: true, email: body.email ?? email };
+  }
+  return { needsVerification: false, token: body.token, user: body.user };
+}
+
+/**
+ * Exchange the emailed OTP for a session. `trustDevice` extends the session to 30
+ * days so the user isn't asked to sign in again on this device for a month.
+ * On failure the thrown Error carries a `.reason` code ('invalid' | 'expired' |
+ * 'too_many' | 'none') so the UI can show a localized message.
+ */
+export async function verifyEmailCode(
+  email: string,
+  code: string,
+  trustDevice: boolean,
+): Promise<AuthSession> {
+  const res = await fetch(`${AUTH_API_URL}/api/auth/web/register/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code, trustDevice }),
+  });
+  const body = await res.json().catch(() => ({})) as {
+    token?: string; user?: AuthUser; error?: string; reason?: string;
+  };
+  if (!res.ok || !body.token || !body.user) {
+    const err = new Error(body.error ?? 'Verification failed') as Error & { reason?: string };
+    err.reason = body.reason;
+    throw err;
+  }
+  return { token: body.token, user: body.user };
+}
+
+/** Re-send a verification code. Returns a cooldown (seconds) when throttled. */
+export async function resendVerificationCode(email: string): Promise<{ cooldownSeconds?: number }> {
+  const res = await fetch(`${AUTH_API_URL}/api/auth/web/register/resend`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const body = await res.json().catch(() => ({})) as { cooldownSeconds?: number };
+  return { cooldownSeconds: body.cooldownSeconds };
 }
 
 /** API returns { tenants: [...] }; normalizes to Tenant[]. */
@@ -383,15 +441,104 @@ export async function resolveAndSelectTenant(webToken: string): Promise<Tenant |
   }
 }
 
-/** Fetch the current user profile, including onboarding status. */
-export async function getMe(webToken: string): Promise<{ onboardingCompletedAt: string | null }> {
+/** Resumable setup-wizard progress, recorded by STEP ID (API migration 0343). */
+export interface OnboardingProgress {
+  track: 'builder' | 'hired';
+  completed: string[];
+  activeStep: string | null;
+}
+
+/** Fetch the current user profile, including onboarding status, role-selection
+ *  status, account type + personality. */
+export async function getMe(webToken: string): Promise<{
+  onboardingCompletedAt: string | null;
+  onboardingProgress: OnboardingProgress | null;
+  psychometric: PsychometricProfile | null;
+  accountType: 'standard' | 'freelancer';
+  accountTypeSelected: boolean;
+  availableForHire: boolean;
+}> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/me`, {
     headers: { Authorization: `Bearer ${webToken}` },
   });
   checkUnauthorizedAndRedirect(res, !!webToken);
-  if (!res.ok) return { onboardingCompletedAt: null };
-  const data = await res.json() as { user?: { onboardingCompletedAt?: string | null } };
-  return { onboardingCompletedAt: data.user?.onboardingCompletedAt ?? null };
+  if (!res.ok) return { onboardingCompletedAt: null, onboardingProgress: null, psychometric: null, accountType: 'standard', accountTypeSelected: true, availableForHire: false };
+  const data = await res.json() as { user?: { onboardingCompletedAt?: string | null; onboardingProgress?: OnboardingProgress | null; psychometric?: PsychometricProfile | null; accountType?: 'standard' | 'freelancer'; accountTypeSelected?: boolean; availableForHire?: boolean } };
+  return {
+    onboardingCompletedAt: data.user?.onboardingCompletedAt ?? null,
+    onboardingProgress: data.user?.onboardingProgress ?? null,
+    psychometric: data.user?.psychometric ?? null,
+    accountType: data.user?.accountType ?? 'standard',
+    // Default to true on a missing field so an older API shape never traps a user
+    // behind the role gate.
+    accountTypeSelected: data.user?.accountTypeSelected ?? true,
+    availableForHire: data.user?.availableForHire ?? false,
+  };
+}
+
+/**
+ * Opt IN or OUT of being hired talent (independent of account type — a builder keeps
+ * the full builder shell). Opting in provisions a for-hire profile stub; opting out
+ * unpublishes it. Returns the new availability.
+ */
+export async function setAvailableForHire(
+  webToken: string,
+  available: boolean,
+): Promise<boolean> {
+  const res = await fetch(`${AUTH_API_URL}/api/freelancers/me/availability`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
+    body: JSON.stringify({ available }),
+  });
+  checkUnauthorizedAndRedirect(res, !!webToken);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error || `Request failed (${res.status})`);
+  }
+  const data = (await res.json()) as { availableForHire?: boolean };
+  return data.availableForHire ?? available;
+}
+
+/**
+ * Make the one-time account-type choice (Build vs Hired) for an OAuth/magic-link
+ * account that never picked on the /register form. Returns the updated user.
+ */
+export async function selectAccountType(
+  webToken: string,
+  accountType: 'standard' | 'freelancer',
+): Promise<AuthUser> {
+  const res = await fetch(`${AUTH_API_URL}/api/auth/me/account-type`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
+    body: JSON.stringify({ accountType }),
+  });
+  checkUnauthorizedAndRedirect(res, !!webToken);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error || `Request failed (${res.status})`);
+  }
+  const data = (await res.json()) as { user: AuthUser };
+  return data.user;
+}
+
+/** Update the signed-in user's OWN personality (psychometric profile). Pass null to
+ *  clear it. Personality is universal to every user, so this is not Pro-gated. */
+export async function updateMyPersonality(
+  webToken: string,
+  psychometric: PsychometricProfile | null,
+): Promise<PsychometricProfile | null> {
+  const res = await fetch(`${AUTH_API_URL}/api/auth/me`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
+    body: JSON.stringify({ psychometric }),
+  });
+  checkUnauthorizedAndRedirect(res, !!webToken);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error || `Request failed (${res.status})`);
+  }
+  const data = await res.json() as { user?: { psychometric?: PsychometricProfile | null } };
+  return data.user?.psychometric ?? null;
 }
 
 /** Mark onboarding as complete and optionally store user intent. */
@@ -402,6 +549,22 @@ export async function completeOnboarding(webToken: string, intent?: string[]): P
     body: JSON.stringify({ intent }),
   });
   checkUnauthorizedAndRedirect(res, !!webToken);
+}
+
+/**
+ * Persist which setup-wizard steps are done, so closing the wizard mid-way
+ * resumes where the user left off instead of restarting at step 1. Fire-and-
+ * forget: a failed write only costs the resume position, never the flow.
+ */
+export async function saveOnboardingProgress(
+  webToken: string,
+  progress: OnboardingProgress,
+): Promise<void> {
+  await fetch(`${AUTH_API_URL}/api/auth/me/onboarding/progress`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
+    body: JSON.stringify(progress),
+  }).catch(() => { /* resume position is best-effort */ });
 }
 
 /** Member row returned by GET /api/tenants/:id/security/users. */
@@ -417,6 +580,8 @@ export interface TenantMember {
   joinedAt: string | null;
   activeSessions: number;
   activeTokens: number;
+  /** This person's personality (parsed); null when they haven't taken the test. */
+  psychometric?: PsychometricProfile | null;
 }
 
 /** List all active members of a workspace. Requires manager role. */
