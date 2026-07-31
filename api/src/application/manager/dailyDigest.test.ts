@@ -127,7 +127,7 @@ describe('isQuietDay', () => {
       shipped: { today: 0, yesterday: 0 },
       opened: { today: 0, yesterday: 0 },
       laneMoves: { forward: 0, backward: 0, byHuman: 0, byAgent: 0, bySystem: 0 },
-      runs: { completed: 0, failed: 0 },
+      runs: { completed: 0, failed: 0, failureReasons: [], failuresUnaccounted: 0 },
       prs: { merged: { today: 0, yesterday: 0 }, opened: 0 },
       contributors: [],
       ...patch,
@@ -150,7 +150,7 @@ describe('isQuietDay', () => {
 
   it('is NOT quiet when work moved but nothing finished', () => {
     expect(isQuietDay(digest({ laneMoves: { forward: 3, backward: 0, byHuman: 3, byAgent: 0, bySystem: 0 } }))).toBe(false);
-    expect(isQuietDay(digest({ runs: { completed: 0, failed: 2 } }))).toBe(false);
+    expect(isQuietDay(digest({ runs: { completed: 0, failed: 2, failureReasons: [], failuresUnaccounted: 0 } }))).toBe(false);
   });
 });
 
@@ -192,9 +192,15 @@ describe('computeDailyDigest SQL', () => {
 
   it('sends every aggregate, with the day boundary as bound parameters', async () => {
     const { sent } = await renderQueries();
-    expect(sent).toHaveLength(10);
+    expect(sent).toHaveLength(11);
 
     const all = sent.map((s) => s.query).join('\n');
+    // The failure-reason rollup must be GROUPED in the database, never a row scan the
+    // API counts in memory: a busy day is hundreds of failures over a handful of
+    // distinct messages, and pulling every row to tally them is the N+1 this codebase
+    // forbids. `left(...)` bounds a column that can hold a whole stack trace.
+    expect(all).toMatch(/left\("?executions"?\."?error_message"?, 300\)/);
+    expect(all).toMatch(/group by left\(/i);
     // The counting form the digest is built on — a bare `count(*)` here would mean the
     // trend chips are measuring the whole table rather than the day.
     expect(all).toContain('filter (where');
