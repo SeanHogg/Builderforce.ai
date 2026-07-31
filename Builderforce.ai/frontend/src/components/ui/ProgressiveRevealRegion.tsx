@@ -79,6 +79,7 @@ export function ProgressiveRevealRegion({
   // Retry: clear failed stream so it can be re-registered (AC-8).
   const handleRetry = () => {
     orchestrator.retry(effectiveKey);
+    onRetry?.();
   };
 
   // ---- render decision tree ----
