@@ -1,253 +1,348 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import type {
   IntegrationStatus,
-  IntegrationHealth,
+  IntegrationType,
+  IntegrationTypeLabels,
+  type IntegrationHealth,
+  type IntegrationGap,
 } from '@/types/integration';
 
-interface AuditDashboardProps {
+/** ── Severity badge tones ─────────────────────────────────────────────── */
+const SEVERITY_TONE: Record<IntegrationGap['severity'], string> = {
+  CRITICAL: 'var(--red, #e00)',
+  HIGH: 'var(--coral-bright, #ff6b5e)',
+  MEDIUM: 'var(--amber, #eab308)',
+  LOW: 'var(--blue, #3b82f6)',
+};
+
+/** ── Status indicator tones ────────────────────────────────────────────── */
+const STATUS_COLOR: Record<IntegrationStatus, string> = {
+  CONNECTED: '#22c55e',
+  PARTIAL: '#f59e0b',
+  MISSING: '#dc2626',
+};
+
+const MAX_RETRIES = 2;
+
+export function AuditDashboard({
+  tenantId,
+  segmentId,
+}: {
+  tenantId: string;
   segmentId: string;
-}
-
-export function AuditDashboard({ segmentId }: AuditDashboardProps) {
-  const [healthData, setHealthData] = useState<IntegrationHealth[]>([]);
+}) {
+  const [data, setData] = useState<IntegrationHealth[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<string>('all');
+  const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [sortField, setSortField] = useState<'completenessScore' | 'lastSync' | 'status'>('completenessScore');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [typeFilter, setTypeFilter] = useState<IntegrationType | ''>('');
+  const [statusFilter, setStatusFilter] = useState<IntegrationStatus | ''>('');
 
-  useEffect(() => {
-    fetchHealth();
-  }, [segmentId]);
-
-  const fetchHealth = async () => {
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const res = await fetch(`/api/v1/audit/health?segmentId=${segmentId}`);
-      if (!res.ok) throw new Error(res.statusText);
-      const data = await res.json();
-      setHealthData(data);
-    } catch (error) {
-      console.error('Failed to fetch audit data:', error);
+      const params = new URLSearchParams({
+        tenantId,
+        segmentId,
+        includeGaps: 'true',
+        includeRecommendations: 'true',
+        sortBy: sortField,
+        sortOrder: sortDir,
+      });
+
+      if (typeFilter) params.set('integrationType', typeFilter);
+      if (statusFilter) params.set('status', statusFilter);
+
+      const res = await fetch(`/api/v1/audit/health?${params.toString()}`);
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const json = await res.json();
+
+      if (json.error) {
+        throw new Error(json.error);
+      }
+
+      setData(json.data ?? []);
+      setRetryCount(0);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(message);
+
+      if (retryCount < MAX_RETRIES) {
+        setRetryCount((c) => c + 1);
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [tenantId, segmentId, sortField, sortDir, typeFilter, statusFilter, retryCount]);
 
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-600';
-    if (score >= 50) return 'text-yellow-600';
-    return 'text-red-600';
-  };
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'CONNECTED':
-        return 'bg-green-100 text-green-800';
-      case 'PARTIAL':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'MISSING':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
+  // ── Derived stats ──────────────────────────────────────────────────────
+  const connected = useMemo(() => data.filter((d) => d.status === 'CONNECTED').length, [data]);
+  const partial = useMemo(() => data.filter((d) => d.status === 'PARTIAL').length, [data]);
+  const missing = useMemo(() => data.filter((d) => d.status === 'MISSING').length, [data]);
+  const averageScore = useMemo(
+    () => (data.length > 0 ? data.reduce((s, d) => s + d.completenessScore, 0) / data.length : 0),
+    [data],
+  );
 
-  const filteredData =
-    filter === 'all'
-      ? healthData
-      : healthData.filter((h) => h.integrationType === filter);
-
-  const typeLabels: Record<string, string> = {
-    source-control: 'Source Control',
-    'source_control': 'Source Control',
-    issue-tracker: 'Issue Tracker',
-    issue_tracker: 'Issue Tracker',
-    communication: 'Communication',
-    cicd: 'CI/CD',
-    monitoring: 'Monitoring',
-    calendar: 'Calendar/Project Management',
-  };
-
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="pt-6">
-          <div className="text-center py-8 text-gray-500">Loading audit data...</div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const globalScore =
-    healthData.length > 0
-      ? Math.round(
-          healthData.reduce((acc, item) => acc + item.completenessScore, 0) / healthData.length
-        )
-      : 0;
+  const typeOptions: IntegrationType[] = [
+    'source-control',
+    'issue-tracker',
+    'communication',
+    'cicd',
+    'monitoring',
+    'calendar',
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* Summary Overview */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Integration Health Summary</CardTitle>
-          <CardDescription>
-            Global health score across all integrations
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <div className={`text-3xl font-bold ${getScoreColor(globalScore)}`}>
-                {globalScore}%
-              </div>
-              <div className="text-sm text-gray-500">Data Completeness Score</div>
-            </div>
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div className="p-3 bg-green-50 rounded-lg">
-                <div className="text-2xl font-bold text-green-600">
-                  {healthData.filter((h) => h.status === 'CONNECTED').length}
-                </div>
-                <div className="text-xs text-gray-600">Connected</div>
-              </div>
-              <div className="p-3 bg-yellow-50 rounded-lg">
-                <div className="text-2xl font-bold text-yellow-600">
-                  {healthData.filter((h) => h.status === 'PARTIAL').length}
-                </div>
-                <div className="text-xs text-gray-600">Partial</div>
-              </div>
-              <div className="p-3 bg-red-50 rounded-lg">
-                <div className="text-2xl font-bold text-red-600">
-                  {healthData.filter((h) => h.status === 'MISSING').length}
-                </div>
-                <div className="text-xs text-gray-600">Missing</div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
+      {/* ── Summary strip ───────────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        <SummaryCard label="Connected" value={connected} color={STATUS_COLOR.CONNECTED} />
+        <SummaryCard label="Partial" value={partial} color={STATUS_COLOR.PARTIAL} />
+        <SummaryCard label="Missing" value={missing} color={STATUS_COLOR.MISSING} />
+        <SummaryCard label="Avg Score" value={`${averageScore.toFixed(0)}%`} color="#3b82f6" />
+      </div>
 
-      {/* Main Dashboard */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Integrations by Type</CardTitle>
-              <CardDescription>
-                Detailed view of integration status, gaps, and recommendations
-              </CardDescription>
-            </div>
-            <Tabs value={filter} onValueChange={setFilter} className="w-auto">
-              <TabsList>
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="source-control">Source Control</TabsTrigger>
-                <TabsTrigger value="issue-tracker">Issue Tracker</TabsTrigger>
-                <TabsTrigger value="communication">Communication</TabsTrigger>
-                <TabsTrigger value="cicd">CI/CD</TabsTrigger>
-                <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
-                <TabsTrigger value="calendar">Calendar</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {filteredData.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              No integration data found for this project.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {filteredData.map((integration) => (
-                <div
-                  key={integration.id}
-                  className="border rounded-lg p-4 hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-lg">
-                          {typeLabels[integration.integrationType as keyof typeof typeLabels] ||
-                            typeLabels[integration.type as keyof typeof typeLabels] ||
-                            integration.integrationType}
-                        </h3>
-                        <Badge className={getStatusColor(integration.status)}>
-                          {integration.status}
-                        </Badge>
-                        {integration.integrationType && (
-                          <span className="text-xs text-gray-500">
-                            {integration.integrationType}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Last sync: {integration.lastSync || 'Never'}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <div className={`text-2xl font-bold ${getScoreColor(integration.completenessScore)}`}>
-                        {integration.completenessScore}%
-                      </div>
-                      <div className="text-xs text-gray-500">Completeness</div>
-                    </div>
-                  </div>
+      {/* ── Controls ────────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value as IntegrationType | '')}
+          style={selectStyle}
+        >
+          <option value="">All Types</option>
+          {typeOptions.map((t) => (
+            <option key={t} value={t}>{IntegrationTypeLabels[t]}</option>
+          ))}
+        </select>
 
-                  {/* Completeness Score */}
-                  <div className="mb-4">
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>Data Completeness</span>
-                      <span className="font-medium">
-                        {integration.completenessScore}%
-                      </span>
-                    </div>
-                    <Progress value={integration.completenessScore} />
-                  </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as IntegrationStatus | '')}
+          style={selectStyle}
+        >
+          <option value="">All Statuses</option>
+          <option value="CONNECTED">Connected</option>
+          <option value="PARTIAL">Partial</option>
+          <option value="MISSING">Missing</option>
+        </select>
 
-                  {/* Gaps */}
-                  {integration.gaps.length > 0 && (
-                    <Card className="border-yellow-200 bg-yellow-50 mb-4">
-                      <CardContent className="pt-4">
-                        <h4 className="text-sm font-semibold text-yellow-800 mb-2">
-                          Identified Gaps:
-                        </h4>
-                        <ul className="text-sm text-yellow-700 space-y-1 list-disc list-inside">
-                          {integration.gaps.map((gap, idx) => (
-                            <li key={idx}>{gap}</li>
-                          ))}
-                        </ul>
-                      </CardContent>
-                    </Card>
-                  )}
+        <select
+          value={`${sortField}:${sortDir}`}
+          onChange={(e) => {
+            const [f, d] = e.target.value.split(':');
+            setSortField(f as typeof sortField);
+            setSortDir(d as typeof sortDir);
+          }}
+          style={selectStyle}
+        >
+          <option value="completenessScore:asc">Score ↑</option>
+          <option value="completenessScore:desc">Score ↓</option>
+          <option value="lastSync:asc">Last Sync ↑</option>
+          <option value="lastSync:desc">Last Sync ↓</option>
+          <option value="status:asc">Status A–Z</option>
+          <option value="status:desc">Status Z–A</option>
+        </select>
+      </div>
 
-                  {/* Recommendations */}
-                  {integration.recommendations.length > 0 && (
-                    <Card className="border-blue-200 bg-blue-50 mb-4">
-                      <CardContent className="pt-4">
-                        <h4 className="text-sm font-semibold text-blue-800 mb-2">
-                          Recommendations:
-                        </h4>
-                        <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
-                          {integration.recommendations.map((rec, idx) => (
-                            <li key={idx}>{rec}</li>
-                          ))}
-                        </ul>
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
-              ))}
-            </div>
+      {/* ── Table ───────────────────────────────────────────────────────── */}
+      {loading && !error && <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Loading integration health…</p>}
+
+      {error && !loading && (
+        <div style={{ color: 'var(--red, #e00)', fontSize: '0.85rem' }}>
+          {error}{' '}
+          {retryCount <= MAX_RETRIES && (
+            <button onClick={() => void fetchData()} style={retryBtnStyle}>Retry</button>
           )}
-        </CardContent>
-      </Card>
+          {retryCount > MAX_RETRIES && <span>(Retries exhausted)</span>}
+        </div>
+      )}
+
+      {!loading && !error && data.length === 0 && (
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+          No integrations found for this segment.
+        </p>
+      )}
+
+      {!loading && !error && data.length > 0 && (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={tableStyle}>
+            <thead>
+              <tr>
+                <th>Integration</th>
+                <th>Status</th>
+                <th>Score</th>
+                <th>Last Sync</th>
+                <th>Gaps</th>
+                <th>Recommendations</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((row) => (
+                <tr key={row.id}>
+                  <td>
+                    <strong>{row.name}</strong>
+                    <br />
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                      {IntegrationTypeLabels[row.type as IntegrationType] ?? row.type ?? 'Unknown'}
+                    </span>
+                  </td>
+                  <td>
+                    <StatusBadge status={row.status} />
+                  </td>
+                  <td>
+                    <ScoreBar score={row.completenessScore} />
+                  </td>
+                  <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                    {row.lastSync ? new Date(row.lastSync).toLocaleString() : '—'}
+                  </td>
+                  <td>
+                    {row.gaps.length > 0 ? (
+                      <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.78rem' }}>
+                        {row.gaps.map((gap, i) => (
+                          <li key={i} style={{ marginBottom: 4 }}>
+                            <span style={{
+                              display: 'inline-block',
+                              width: 8,
+                              height: 8,
+                              borderRadius: '50%',
+                              background: SEVERITY_TONE[gap.severity as keyof typeof SEVERITY_TONE] ?? 'var(--text-muted)',
+                              marginRight: 6,
+                            }} />
+                            {gap.description}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>None</span>
+                    )}
+                  </td>
+                  <td>
+                    {row.recommendations.length > 0 ? (
+                      <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.78rem' }}>
+                        {row.recommendations.map((r, i) => (
+                          <li key={i}>{r}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
+
+function StatusBadge({ status }: { status: IntegrationStatus }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        padding: '3px 10px',
+        borderRadius: 999,
+        fontSize: '0.72rem',
+        fontWeight: 700,
+        border: `1px solid ${STATUS_COLOR[status]}`,
+        color: STATUS_COLOR[status],
+        background: `${STATUS_COLOR[status]}15`,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_COLOR[status] }} />
+      {status}
+    </span>
+  );
+}
+
+function ScoreBar({ score }: { score: number }) {
+  const clamped = Math.min(100, Math.max(0, score));
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 120 }}>
+      <div style={{ flex: 1, height: 6, background: 'var(--bg-elevated)', borderRadius: 3, overflow: 'hidden' }}>
+        <div
+          style={{
+            width: `${clamped}%`,
+            height: '100%',
+            background:
+              clamped >= 80 ? '#22c55e' : clamped >= 50 ? '#f59e0b' : '#dc2626',
+            borderRadius: 3,
+            transition: 'width 0.3s ease',
+          }}
+        />
+      </div>
+      <span style={{ fontSize: '0.8rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+        {clamped.toFixed(0)}%
+      </span>
+    </div>
+  );
+}
+
+function SummaryCard({ label, value, color }: { label: string; value: number | string; color: string }) {
+  return (
+    <div
+      style={{
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 12,
+        padding: '12px 16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+      }}
+    >
+      <span style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+        {label}
+      </span>
+      <span style={{ fontSize: '1.5rem', fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+const selectStyle: React.CSSProperties = {
+  padding: '6px 12px',
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 8,
+  background: 'var(--bg-surface)',
+  color: 'var(--text-primary)',
+  fontSize: '0.8rem',
+};
+
+const tableStyle: React.CSSProperties = {
+  width: '100%',
+  borderCollapse: 'collapse',
+  fontSize: '0.85rem',
+  color: 'var(--text-primary)',
+};
+
+const retryBtnStyle: React.CSSProperties = {
+  background: 'transparent',
+  color: 'inherit',
+  border: '1px solid currentColor',
+  borderRadius: 6,
+  padding: '1px 9px',
+  fontSize: '0.74rem',
+  cursor: 'pointer',
+  marginLeft: 6,
+};
