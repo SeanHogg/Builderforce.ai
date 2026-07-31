@@ -1,43 +1,30 @@
 {
-  "name": "quality-risk-score",
-  "version": "0.1.0",
-  "description": "Quality risk scoring for product artifacts (features, releases, modules) with High/Medium/Low categories, justification, and manual override support",
-  "main": "./index.ts",
-  "types": "./index.ts",
-  "type": "module",
-  "author": "BuilderForce",
+  "name": "@builderforce/quality-risk-score",
+  "version": "1.0.0",
+  "description": "Quality Risk Score extension for BuilderForce — High/Medium/Low risk with justification",
   "license": "MIT",
-  "scripts": {
-    "build": "echo 'Not building - this is an inline runtime extension'",
-    "test": "echo 'Tests to be implemented'",
-    "type-check": "tsc --noEmit"
-  },
-  "entrypoints": [
-    "./index.ts"
-  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./index.ts",
-    "./provider": "./quality-risk-score-provider.ts",
-    "./config": "./config.ts",
-    "./score-engine": "./score-engine.ts",
-    "./quality-risk-score": "./quality-risk-score.ts",
-    "./metrics": "./METRIC_TEMPLATES.ts",
-    "./README": "./README.md"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
-  "keywords": [
-    "quality",
-    "risk",
-    "scoring",
-    "artifact-awareness",
-    "builderforce"
-  ],
-  "dependencies": {},
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "lint": "eslint src/"
+  },
+  "peerDependencies": {
+    "@builderforce/agent-runtime": ">=1.0.0"
+  },
   "devDependencies": {
-    "typescript": "^5.0.0"
-  },
-  "builderforce": {
-    "loadable": true,
-    "extensions": ["node"],
-    "sideEffects": false
+    "typescript": "^5.0.0",
+    "jest": "^29.0.0",
+    "@types/jest": "^29.0.0",
+    "eslint": "^8.0.0",
+    "@builderforce/agent-runtime": "1.0.0"
   }
 }
