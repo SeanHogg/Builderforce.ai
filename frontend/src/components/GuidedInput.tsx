@@ -52,6 +52,7 @@ function renderFieldInput(
   onChange: (key: string, value: unknown) => void,
   error: ValidationError | null,
   onKeyDown?: (e: KeyboardEvent) => void,
+  inputRef?: (el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null) => void,
 ): React.ReactNode {
   const id = `guided-field-${field.key}`;
   const stringVal = value != null ? String(value) : '';
@@ -74,6 +75,7 @@ function renderFieldInput(
         id={id}
         value={stringVal}
         onChange={(e) => onChange(field.key, e.target.value)}
+        ref={inputRef as (el: HTMLSelectElement | null) => void}
         style={sharedStyle}
         aria-invalid={!!error}
         aria-describedby={error ? `${id}-error` : undefined}
@@ -94,6 +96,7 @@ function renderFieldInput(
         id={id}
         value={stringVal}
         onChange={(e) => onChange(field.key, e.target.value)}
+        ref={inputRef as (el: HTMLTextAreaElement | null) => void}
         placeholder={field.placeholder}
         rows={4}
         style={{ ...sharedStyle, resize: 'vertical' }}
@@ -111,6 +114,7 @@ function renderFieldInput(
           type="checkbox"
           checked={!!value}
           onChange={(e) => onChange(field.key, e.target.checked)}
+          ref={inputRef as (el: HTMLInputElement | null) => void}
           style={{ width: 18, height: 18, accentColor: 'var(--coral, #ff6b6b)' }}
           aria-invalid={!!error}
           aria-describedby={error ? `${id}-error` : undefined}
@@ -126,6 +130,7 @@ function renderFieldInput(
       type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : field.type === 'url' ? 'url' : field.type === 'date' ? 'date' : 'text'}
       value={stringVal}
       onChange={(e) => onChange(field.key, e.target.value)}
+      ref={inputRef as (el: HTMLInputElement | null) => void}
       placeholder={field.placeholder}
       onKeyDown={onKeyDown}
       style={sharedStyle}
@@ -156,6 +161,8 @@ export function GuidedInput({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [reviewMode, setReviewMode] = useState(false);
   const startRef = useRef<number>(Date.now());
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+  const firstFieldRef = useRef<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null>(null);
 
   const groups = schema.groups;
   const totalSteps = groups.length;
@@ -165,6 +172,21 @@ export function GuidedInput({
     markFormStart();
     startRef.current = Date.now();
   }, []);
+
+  // Focus management: move focus to the first field on step change (FR-5)
+  useEffect(() => {
+    if (!reviewMode) {
+      // Small delay to let the DOM settle
+      const timer = setTimeout(() => {
+        if (firstFieldRef.current) {
+          firstFieldRef.current.focus();
+        } else if (stepHeadingRef.current) {
+          stepHeadingRef.current.focus();
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [activeStep, reviewMode]);
 
   const handleChange = useCallback((key: string, value: unknown) => {
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -263,35 +285,43 @@ export function GuidedInput({
     return (
       <div className={className} style={{ ...baseStyle, ...style }}>
         {/* Progress bar */}
-        <div style={progressBarStyle}>
-          {groups.map((g, i) => (
-            <div
-              key={g.key}
-              style={{
-                ...progressStepStyle,
-                background: 'var(--coral, #ff6b6b)',
-                color: '#fff',
-              }}
-            >
-              {i + 1}
-            </div>
-          ))}
-          <div
-            style={{
-              ...progressStepStyle,
-              background: 'var(--coral, #ff6b6b)',
-              color: '#fff',
-              fontWeight: 700,
-            }}
-          >
-            ✓
-          </div>
-        </div>
+        <nav aria-label="Form steps">
+          <ol style={{ ...progressBarStyle, listStyle: 'none', padding: 0, margin: '0 0 8px' }}>
+            {groups.map((g, i) => (
+              <li key={g.key} style={{ display: 'inline-flex' }}>
+                <span
+                  style={{
+                    ...progressStepStyle,
+                    background: 'var(--coral, #ff6b6b)',
+                    color: '#fff',
+                  }}
+                  aria-label={`Step ${i + 1}: ${g.title} — completed`}
+                >
+                  ✓
+                </span>
+              </li>
+            ))}
+            <li style={{ display: 'inline-flex' }}>
+              <span
+                style={{
+                  ...progressStepStyle,
+                  background: 'var(--coral, #ff6b6b)',
+                  color: '#fff',
+                  fontWeight: 700,
+                }}
+                aria-current="step"
+                aria-label="Review — current step"
+              >
+                {totalSteps + 1}
+              </span>
+            </li>
+          </ol>
+        </nav>
         <span style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16, display: 'block' }}>
           Step {totalSteps + 1} of {totalSteps + 1} — Review
         </span>
 
-        <h2 style={headingStyle}>Review Your Entry</h2>
+        <h2 ref={stepHeadingRef} tabIndex={-1} style={headingStyle}>Review Your Entry</h2>
 
         {groups.map((group) => (
           <div key={group.key} style={{ marginBottom: 20 }}>
@@ -376,34 +406,38 @@ export function GuidedInput({
         )}
       </div>
 
-      {/* Progress bar */}
-      <div style={progressBarStyle} role="progressbar" aria-valuenow={activeStep + 1} aria-valuemin={1} aria-valuemax={totalSteps}>
-        {groups.map((g, i) => (
-          <button
-            key={g.key}
-            type="button"
-            onClick={() => handleStepClick(i)}
-            disabled={i > activeStep}
-            aria-label={`Step ${i + 1}: ${g.title}${i <= activeStep ? '' : ' (locked)'}`}
-            style={{
-              ...progressStepStyle,
-              background: i <= activeStep ? 'var(--coral, #ff6b6b)' : 'var(--border-subtle)',
-              color: i <= activeStep ? '#fff' : 'var(--text-muted)',
-              cursor: i < activeStep ? 'pointer' : i === activeStep ? 'default' : 'not-allowed',
-              border: 'none',
-              fontWeight: i === activeStep ? 700 : 400,
-            }}
-          >
-            {i < activeStep ? '✓' : i + 1}
-          </button>
-        ))}
-      </div>
+      {/* Progress bar with correct semantics (FR-5) */}
+      <nav aria-label="Form steps">
+        <ol style={{ ...progressBarStyle, listStyle: 'none', padding: 0, margin: '0 0 8px' }}>
+          {groups.map((g, i) => (
+            <li key={g.key} style={{ display: 'inline-flex' }}>
+              <button
+                type="button"
+                onClick={() => handleStepClick(i)}
+                disabled={i > activeStep}
+                aria-label={`Step ${i + 1}: ${g.title}${i < activeStep ? ' — completed' : i === activeStep ? ' — current step' : ' — locked'}`}
+                aria-current={i === activeStep ? 'step' : undefined}
+                style={{
+                  ...progressStepStyle,
+                  background: i <= activeStep ? 'var(--coral, #ff6b6b)' : 'var(--border-subtle)',
+                  color: i <= activeStep ? '#fff' : 'var(--text-muted)',
+                  cursor: i < activeStep ? 'pointer' : i === activeStep ? 'default' : 'not-allowed',
+                  border: 'none',
+                  fontWeight: i === activeStep ? 700 : 400,
+                }}
+              >
+                {i < activeStep ? '✓' : i + 1}
+              </button>
+            </li>
+          ))}
+        </ol>
+      </nav>
       <span style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16, display: 'block' }}>
         Step {activeStep + 1} of {totalSteps} — {group.title}
       </span>
 
       {/* Step heading */}
-      <h2 style={headingStyle}>{group.title}</h2>
+      <h2 ref={stepHeadingRef} tabIndex={-1} style={headingStyle}>{group.title}</h2>
       {group.description && (
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.5 }}>
           {group.description}
@@ -412,8 +446,9 @@ export function GuidedInput({
 
       {/* Fields */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {group.fields.map((field) => {
+        {group.fields.map((field, idx) => {
           const err = errors.get(field.key) ?? null;
+          const isFirst = idx === 0;
           return (
             <div key={field.key}>
               {field.type !== 'checkbox' && (
@@ -435,7 +470,6 @@ export function GuidedInput({
                     <span
                       title={field.help}
                       tabIndex={0}
-                      role="tooltip"
                       aria-label={field.help}
                       style={{
                         display: 'inline-flex',
@@ -455,7 +489,14 @@ export function GuidedInput({
                   )}
                 </label>
               )}
-              {renderFieldInput(field, values[field.key], handleChange, err, handleKeyDown)}
+              {renderFieldInput(
+                field,
+                values[field.key],
+                handleChange,
+                err,
+                handleKeyDown,
+                isFirst ? (el) => { firstFieldRef.current = el; } : undefined,
+              )}
               {err && (
                 <span id={`guided-field-${field.key}-error`} role="alert" style={{ color: 'var(--coral, #ff6b6b)', fontSize: 12, marginTop: 4, display: 'block' }}>
                   {err.message}
@@ -508,6 +549,7 @@ const headingStyle: CSSProperties = {
   fontWeight: 700,
   color: 'var(--text-primary)',
   margin: '0 0 8px',
+  outline: 'none',
 };
 
 const progressBarStyle: CSSProperties = {
