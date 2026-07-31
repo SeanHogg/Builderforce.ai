@@ -606,15 +606,6 @@ export const GAP_REGISTRY: Record<Gaps, GapMetadata> = {
     acceptance:
       "Executions with stale heartbeat but not yet past deadline are flagged as at-risk, not failed.",
   },
-  [Gaps.O4_C]: {
-    key: "GAP-O4-C",
-    title:
-      "Reaper emitting false-positive dead-execution marks",
-    severity: "P1",
-    domain: "orchestrator",
-    acceptance:
-      "Healthy executions with recent heartbeats are never marked as orphaned; false-positive rate is zero.",
-  },
 };
 
 /**
