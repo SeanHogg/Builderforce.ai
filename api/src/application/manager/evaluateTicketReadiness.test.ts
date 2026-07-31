@@ -25,7 +25,10 @@ function input(over: Partial<ReadinessInput> = {}): ReadinessInput {
     taskType: 'task',
     actionType: 'backend_api',
     hasBranch: true,
-    hasPr: true,
+    // 'settled' = a pull request exists and has already landed, so the build checks below
+    // still apply and there is nothing left to merge. The OPEN case has its own tests.
+    prState: 'settled',
+    hasAssignee: true,
     buildStatus: 'success',
     hasLiveRun: false,
     signoff: signedOff,
@@ -67,13 +70,13 @@ describe('decideTicketReadiness', () => {
   it('RETURNS code work that reached review with no deliverable', () => {
     // The measured failure: `backend_api` tickets parked in review having produced
     // nothing. Review is not a resting place for unstarted work.
-    const r = decideTicketReadiness(input({ hasBranch: false, hasPr: false }));
+    const r = decideTicketReadiness(input({ hasBranch: false, prState: 'none' }));
     expect(r.action).toBe('return_to_implementation');
     expect(r.detail).toContain('no branch or PR');
   });
 
   it('does NOT return a non-code ticket for having no branch', () => {
-    const r = decideTicketReadiness(input({ actionType: 'other', hasBranch: false, hasPr: false }));
+    const r = decideTicketReadiness(input({ actionType: 'other', hasBranch: false, prState: 'none' }));
     expect(r.action).toBe('complete');
   });
 
@@ -129,7 +132,7 @@ describe('decideTicketReadiness', () => {
   });
 
   it('ignores build status on a ticket with no PR', () => {
-    const r = decideTicketReadiness(input({ actionType: 'other', hasBranch: false, hasPr: false, buildStatus: 'failure' }));
+    const r = decideTicketReadiness(input({ actionType: 'other', hasBranch: false, prState: 'none', buildStatus: 'failure' }));
     expect(r.action).toBe('complete');
   });
 
@@ -137,9 +140,81 @@ describe('decideTicketReadiness', () => {
     // All four failing at once must surface the MOST upstream problem, so the manager
     // fixes the cause rather than the symptom.
     const r = decideTicketReadiness(input({
-      hasBranch: false, hasPr: false, buildStatus: 'failure',
+      hasBranch: false, prState: 'none', buildStatus: 'failure',
       signoff: notSignedOff, requireGreenBuild: true,
     }));
     expect(r.action).toBe('return_to_implementation');
+  });
+});
+
+/**
+ * THE DEFECT THIS SUITE EXISTS FOR (api 2026.7.195, project 11, one pass, 78ms apart):
+ *   09:00:04.193  ticket -085 completed, journalled "(no branch to merge)", openedPr:false
+ *   09:00:04.271  the merge stage retired that same ticket's PR #103, conflict_exhausted
+ * The ticket had a branch AND an open pull request, so both halves of that sentence were
+ * false. It is the generator of the human-owed PR pile (49 → 52 → 72 → 75 in two days,
+ * 5 of its top 10 rows flagged "ticket already DONE — close this PR").
+ */
+describe('an OPEN pull request blocks completion', () => {
+  it('does NOT complete a ticket whose pull request is still open', () => {
+    const r = decideTicketReadiness(input({ prState: 'open' }));
+    expect(r.action).toBe('await_merge');
+    expect(r.completion).toBeNull();
+  });
+
+  it('says the work has not landed, never that there is nothing to merge', () => {
+    const r = decideTicketReadiness(input({ prState: 'open' }));
+    expect(r.detail).toContain('still open');
+    expect(r.detail).not.toContain('nothing to merge');
+  });
+
+  it('defers even when every other check passed and sign-off is not required', () => {
+    // The exact shape of ticket -085: green build, no sign-off requirement, a branch, and
+    // an open PR. Every question but "has it landed?" answers yes.
+    const r = decideTicketReadiness(input({ prState: 'open', requireSignoff: false, buildStatus: 'success' }));
+    expect(r.action).toBe('await_merge');
+  });
+
+  it('still asks for outstanding sign-offs while the PR is open', () => {
+    // Deferring the merge must not silence the review: the sign-off is what unblocks it.
+    const r = decideTicketReadiness(input({ prState: 'open', signoff: notSignedOff }));
+    expect(r.action).toBe('drive_signoff');
+  });
+
+  it('still returns an open PR whose build is red', () => {
+    const r = decideTicketReadiness(input({ prState: 'open', buildStatus: 'failure' }));
+    expect(r.action).toBe('return_build_failed');
+  });
+});
+
+describe('the completion shape names which closure applied', () => {
+  it('opens a PR when there is a branch, no PR and an agent to open it as', () => {
+    const r = decideTicketReadiness(input({ hasBranch: true, prState: 'none', hasAssignee: true }));
+    expect(r.action).toBe('complete');
+    expect(r.completion).toBe('open_pr');
+  });
+
+  it('reports branch_unopened when nobody is assigned to open the PR', () => {
+    // "No branch to merge" was printed here too, with a pushed branch sitting right there.
+    const r = decideTicketReadiness(input({ hasBranch: true, prState: 'none', hasAssignee: false }));
+    expect(r.completion).toBe('branch_unopened');
+  });
+
+  it('reports pr_settled when the pull request has already landed', () => {
+    expect(decideTicketReadiness(input({ hasBranch: true, prState: 'settled' })).completion).toBe('pr_settled');
+  });
+
+  it('reports no_deliverable only when there is genuinely nothing to merge', () => {
+    const r = decideTicketReadiness(input({ actionType: 'other', hasBranch: false, prState: 'none' }));
+    expect(r.completion).toBe('no_deliverable');
+  });
+
+  it('leaves the completion shape unset on every non-completing verdict', () => {
+    for (const over of [
+      { hasLiveRun: true } as const,
+      { prState: 'open' } as const,
+      { signoff: notSignedOff } as const,
+      { buildStatus: 'failure' } as const,
+    ]) expect(decideTicketReadiness(input(over)).completion).toBeNull();
   });
 });

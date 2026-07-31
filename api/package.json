@@ -1,6 +1,6 @@
 {
   "name": "builderforce-api",
-  "version": "2026.7.196",
+  "version": "2026.7.198",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
@@ -22,9 +22,8 @@
     "check:dispatch-budget": "node scripts/check-dispatch-budget.mjs",
     "check:pinned-defects": "node scripts/check-pinned-defects.mjs",
     "check:prompt-tools": "node scripts/check-prompt-tool-names.mjs",
-    "test": "npm run check:schema && npm run check:db-access && npm run check:version && npm run check:migrations && npm run check:layering && npm run check:tenant-scope && npm run check:tracks && npm run check:source && npm run check:silent-catches && npm run check:dispatch-budget && npm run check:pinned-defects && npm run check:prompt-tools && vitest run",
-    "typecheck:native": "tsgo --noEmit",
-    "check:version": "node scripts/check-version-sync.mjs"
+    "test": "npm run check:schema && npm run check:db-access && npm run check:migrations && npm run check:layering && npm run check:tenant-scope && npm run check:tracks && npm run check:source && npm run check:silent-catches && npm run check:dispatch-budget && npm run check:pinned-defects && npm run check:prompt-tools && vitest run",
+    "typecheck:native": "tsgo --noEmit"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",

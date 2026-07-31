@@ -2,8 +2,10 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import {
-  describeLaneStaffing, unfilledRolesForBoard, findBoardStaffingGaps, distinctTaskShapes, type LaneStaffingResult,
+  describeLaneStaffing, unfilledRolesForBoard, findBoardStaffingGaps, distinctTaskShapes,
+  laneStaffingFingerprint, type LaneStaffingResult, type UnauthorizedLane,
 } from './staffUnfilledLanes';
+import { stateFingerprint } from './managerActionJournal';
 import { EMPTY_ROLE_ROSTER, buildRoleRoster } from '../kanban/roleCapability';
 import type { LaneAuthorityInputs } from '../kanban/managedLaneRoles';
 
@@ -229,6 +231,82 @@ describe('describeLaneStaffing', () => {
     const text = describeLaneStaffing(result({ error: 'role roster unavailable' }));
     expect(text).toContain('role roster unavailable');
     expect(text).toMatch(/needs attention/);
+  });
+});
+
+/**
+ * THE MEASURED LOOP (project 11, 2026-07-31, api 2026.7.195): the identical `assign`
+ * verdict — "3 stages on this board authorise NO role … 317 tickets …" — journalled 3×
+ * in the last 30 decisions (07:55:06 → 09:00:02) for a condition nobody had touched. One
+ * `manager_actions` row per project per five minutes, on a board deliberately held on
+ * Neon's free tier, crowding real decisions out of both the feed and the 200-row window.
+ *
+ * The fingerprint is the CONTRACT. Too narrow and a genuine change is suppressed as
+ * "already said", which is strictly worse than the duplicate it prevents — so every input
+ * the sentence is computed from has to move it.
+ */
+describe('laneStaffingFingerprint', () => {
+  const result = (over: Partial<LaneStaffingResult> = {}): LaneStaffingResult =>
+    ({ unfilledRoleKeys: [], unauthorizedLanes: [], filled: [], unfillable: [], hires: 0, error: null, ...over });
+  const unauthorized = (over: Partial<UnauthorizedLane> = {}): UnauthorizedLane =>
+    ({ swimlaneId: 's1', laneKey: 'backlog', reason: 'lane_unstaffed', ticketCount: 299, unmappedAgents: [], ...over });
+  const board = () => result({
+    unauthorizedLanes: [unauthorized(), unauthorized({ swimlaneId: 's2', laneKey: 'blocked', ticketCount: 10 })],
+  });
+
+  it('is stable across passes for an unchanged board — the whole point', () => {
+    expect(laneStaffingFingerprint(board())).toBe(laneStaffingFingerprint(board()));
+  });
+
+  it('does not move when the lanes are merely reported in a different order', () => {
+    const reversed = result({ unauthorizedLanes: [...board().unauthorizedLanes].reverse() });
+    expect(laneStaffingFingerprint(reversed)).toBe(laneStaffingFingerprint(board()));
+  });
+
+  it('RE-ARMS when the cohort a lane is holding changes size', () => {
+    // A lane draining 299 → 4 is the board changing, and the reader has to be told.
+    const drained = result({
+      unauthorizedLanes: [unauthorized({ ticketCount: 4 }), unauthorized({ swimlaneId: 's2', laneKey: 'blocked', ticketCount: 10 })],
+    });
+    expect(laneStaffingFingerprint(drained)).not.toBe(laneStaffingFingerprint(board()));
+  });
+
+  it('RE-ARMS when a new stage falls unconfigured', () => {
+    const worse = result({
+      unauthorizedLanes: [...board().unauthorizedLanes, unauthorized({ swimlaneId: 's3', laneKey: 'todo', ticketCount: 8 })],
+    });
+    expect(laneStaffingFingerprint(worse)).not.toBe(laneStaffingFingerprint(board()));
+  });
+
+  it('RE-ARMS when a lane\'s reason changes, even at the same count', () => {
+    const retyped = result({
+      unauthorizedLanes: [
+        unauthorized({ reason: 'lane_agents_not_role_capable', unmappedAgents: ['Kevin BA/PM/PO'] }),
+        unauthorized({ swimlaneId: 's2', laneKey: 'blocked', ticketCount: 10 }),
+      ],
+    });
+    expect(laneStaffingFingerprint(retyped)).not.toBe(laneStaffingFingerprint(board()));
+  });
+
+  it('RE-ARMS when the sweep itself starts failing', () => {
+    expect(laneStaffingFingerprint(result({ error: 'role roster unavailable' })))
+      .not.toBe(laneStaffingFingerprint(result()));
+  });
+
+  it('RE-ARMS on the roles it could not fill', () => {
+    expect(laneStaffingFingerprint(result({ unfilledRoleKeys: ['architect'] })))
+      .not.toBe(laneStaffingFingerprint(result({ unfilledRoleKeys: ['architect', 'validator'] })));
+  });
+});
+
+describe('stateFingerprint', () => {
+  it('is deterministic and short enough to survive detail truncation', () => {
+    expect(stateFingerprint(['a', 1, null])).toBe(stateFingerprint(['a', 1, null]));
+    expect(stateFingerprint(['a', 1, null])).toHaveLength(8);
+  });
+
+  it('distinguishes different verdicts', () => {
+    expect(stateFingerprint(['a'])).not.toBe(stateFingerprint(['b']));
   });
 });
 
