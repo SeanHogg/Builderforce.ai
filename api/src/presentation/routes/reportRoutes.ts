@@ -337,13 +337,17 @@ async function generateInactiveContributorsReport(db: Db, tenantId: number, inac
 // ---------------------------------------------------------------------------
 
 /**
- * Lane keys that count a task as "completed". A board lane is free-form text
- * (tasks.status is a varchar), but `done` is the canonical terminal lane the
- * domain transitions to (Task.markDone → TaskStatus.DONE). Kept as a set so a
- * tenant that adds e.g. a `released` lane can be folded in later without
- * touching the grouping logic.
+ * Lane keys that count a task as "completed".
+ *
+ * This used to be a local array holding only `done`, duplicating the same rule in
+ * taskLifecycle, the assignee recommender and the FR1 unassigned-high-priority
+ * query. It now re-exports the ONE definition in domain/shared/doneClass, which
+ * also covers the terminal lanes imported boards (Jira/Linear/ADO) actually use
+ * — 'completed', 'closed', 'resolved', 'shipped'. Re-exported (rather than
+ * replaced by the import at every call site) so existing importers of
+ * `reportRoutes.DONE_CLASS_STATUSES` keep working.
  */
-export const DONE_CLASS_STATUSES: readonly string[] = [TaskStatus.DONE];
+export { DONE_CLASS_STATUSES } from '../../domain/shared/doneClass';
 
 /** Window (days) clamp — guards against unbounded scans / silly query params. */
 const COMPLETED_WINDOW_MIN_DAYS = 1;
