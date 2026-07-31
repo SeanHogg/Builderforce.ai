@@ -251,7 +251,7 @@ export class Task {
         'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'assignedAgentType'
         | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'startDate' | 'dueDate'
         | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank'
-        | 'decompositionSource' | 'persona' | 'archived'
+        | 'decompositionSource' | 'persona' | 'featureSign' | 'archived'
       >
     >,
   ): Task {
