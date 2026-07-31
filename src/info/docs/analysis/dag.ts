@@ -1,162 +1,269 @@
-// dag.ts — construct DAG, detect cycles, and compute critical-path metrics (PRD FR-1 to FR-3)
+// dag.ts — construct DAG, detect cycles, compute critical path (PRD FR-2)
 
-import type { DependencyGraph, Node, Edge, AnalysisError } from "./types";
+import type { DependencyGraph, Node, Edge, AnalysisError, TaskInput } from "./types";
 
-const CYCLE_ERROR: AnalysisError = {
-  error_code: "CIRCUIT",
-  message: "Circular dependency detected",
-  details: { cause: [] },
-};
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-/**
- * Detects circular dependencies and returns the if found.
- * From callers that give us dependency maps.
- */
+interface Adjacency {
+  successors: Map<string, string[]>;   // node → nodes that depend on it
+  predecessors: Map<string, string[]>; // node → nodes it depends on
+}
+
+function buildAdjacency(tasks: TaskInput[]): Adjacency {
+  const ids = new Set(tasks.map((t) => t.id));
+  const successors = new Map<string, string[]>();
+  const predecessors = new Map<string, string[]>();
+
+  for (const t of tasks) {
+    if (!successors.has(t.id)) successors.set(t.id, []);
+    if (!predecessors.has(t.id)) predecessors.set(t.id, []);
+
+    for (const dep of t.depends_on ?? []) {
+      if (!ids.has(dep)) continue; // skip unknown refs (caller validates)
+      // dep → t.id: dep must finish before t.id
+      predecessors.get(t.id)!.push(dep);
+      if (!successors.has(dep)) successors.set(dep, []);
+      successors.get(dep)!.push(t.id);
+    }
+  }
+
+  return { successors, predecessors };
+}
+
+// ---------------------------------------------------------------------------
+// Cycle detection (FR-2.2): DFS with white/gray/black coloring
+// Returns the cycle path `[first, ..., first]` or null
+// ---------------------------------------------------------------------------
+
 function detectCycle(
-  deps: Record<string, string[]>,
-  nodes: string[]
+  nodes: string[],
+  predecessors: Map<string, string[]>,
 ): string[] | null {
-  const visited = new Set<string>();
-  const stack = new Set<string>();
-  const path: string[] = [];
+  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const color = new Map<string, number>();
+  const parent = new Map<string, string>();
 
-  function nodeHasCycle(u: string): boolean {
-    if (stack.has(u)) {
-      const idx = path.indexOf(u);
-      return true;
+  for (const n of nodes) color.set(n, WHITE);
+
+  function dfs(u: string): string[] | null {
+    color.set(u, GRAY);
+    for (const v of predecessors.get(u) ?? []) {
+      const c = color.get(v) ?? WHITE;
+      if (c === GRAY) {
+        // Found a back edge u → v; reconstruct cycle v → ... → u → v
+        const cycle: string[] = [v, u];
+        let cur = u;
+        while (parent.has(cur) && parent.get(cur) !== v) {
+          cur = parent.get(cur)!;
+          cycle.push(cur);
+        }
+        cycle.push(v);
+        cycle.reverse();
+        return cycle;
+      }
+      if (c === WHITE) {
+        parent.set(v, u);
+        const res = dfs(v);
+        if (res) return res;
+      }
     }
-    if (visited.has(u)) return false;
-
-    visited.add(u);
-    stack.add(u);
-    path.push(u);
-
-    for (const v of (deps[u] ?? [])) {
-      if (nodeHasCycle(v)) return true;
-    }
-
-    path.pop();
-    stack.delete(u);
-    return false;
+    color.set(u, BLACK);
+    return null;
   }
 
   for (const n of nodes) {
-    if (!nodeHasCycle(n)) continue;
-    // find the cycle segment in path
-    const idx = path.indexOf(n);
-    return idx >= 0 ? path.slice(idx, path.length) : null;
+    if (color.get(n) === WHITE) {
+      const res = dfs(n);
+      if (res) return res;
+    }
   }
   return null;
 }
 
-/**
- * Build a dependency graph (DAG) from a task list.
- * Returns AnalysisError if a cycle is found; null otherwise.
- */
-export function buildDAG(
-  tasks: Array<{ id: string; depends_on?: string[] }>
-): { graph: DependencyGraph; cycle?: string[] } | AnalysisError {
-  // one canonical ID map so every task string maps to its record
-  const map = new Map<string, { depends_on?: string[] }>();
-  const nodeIds = new Set<string>();
+// ---------------------------------------------------------------------------
+// Topological sort (Kahn's algorithm)
+// Returns nodes in topological order, or null if a cycle is present
+// ---------------------------------------------------------------------------
 
-  for (const t of tasks) {
-    map.set(t.id, t);
-    nodeIds.add(t.id);
+function topologicalSort(
+  nodes: string[],
+  predecessors: Map<string, string[]>,
+  successors: Map<string, string[]>,
+): string[] | null {
+  const indegree = new Map<string, number>();
+  for (const n of nodes) indegree.set(n, (predecessors.get(n) ?? []).length);
+
+  const queue: string[] = [];
+  for (const n of nodes) {
+    if (indegree.get(n)! === 0) queue.push(n);
   }
 
-  // explicit deps: dedup + disallow nonexistent refs (warn nonblocking)
-  const edges: Edge[] = [];
-  for (const t of tasks) {
-    if (!t.depends_on) continue;
-    for (const depId of [...new Set(t.depends_on)]) {
-      if (!map.has(depId)) continue; // warn nonblocking
-      edges.push({ from: depId, to: t.id, duration: undefined });
+  const order: string[] = [];
+  while (queue.length > 0) {
+    const u = queue.shift()!;
+    order.push(u);
+    for (const v of successors.get(u) ?? []) {
+      const d = indegree.get(v)! - 1;
+      indegree.set(v, d);
+      if (d === 0) queue.push(v);
     }
   }
 
-  const nodes: Node[] = [];
-  const nodesMap = new Map<string, Node>();
-  for (const id of nodeIds) {
-    const t = map.get(id)!;
-    const indeg = (deps) => (deps?.filter((d) => map.has(d)).length ?? 0);
-    const outdeg = (deps) => (deps?.length ?? 0);
-    const node: Node = { id, name: t.name, in_degree: indeg(t.depends_on), out_degree: outdeg(t.depends_on) };
-    nodes.push(node);
-    nodesMap.set(id, node);
-  }
+  if (order.length !== nodes.length) return null; // cycle present
+  return order;
+}
 
-  const cycle = detectCycle(Object.fromEntries(edges.map((e) => [e.from, Array.from(new Set([...edges.filter((fe) => fe.from === e.from).map((f) => f.to)]))]), Array.from(nodeIds)));
-  if (cycle) return CYCLE_ERROR;
+// ---------------------------------------------------------------------------
+// Critical path via DP (FR-2.3)
+// Forward pass: earliest finish time for each node
+// Backward pass: trace the longest path
+// ---------------------------------------------------------------------------
 
-  // compute critical-path weights
-  const weights = new Map<string, number>();
-  for (const t of tasks) {
-    weights.set(t.id, t.estimated_duration ?? 0);
-  }
+function computeCriticalPath(
+  topoOrder: string[],
+  predecessors: Map<string, string[]>,
+  durationMap: Map<string, number>,
+): { path: string[]; length: number } {
+  // earliest finish time for each node
+  const eft = new Map<string, number>();
+  const bestPred = new Map<string, string | null>();
 
-  // topological order
-  const order: string[] = [];
-  const zeroIn: string[] = [];
-  for (const id of nodeIds) {
-    if ((map.get(id)?.depends_on ?? []).filter((d) => map.has(d)).length === 0) zeroIn.push(id);
-  }
-
-  while (zeroIn.length) {
-    const u = zeroIn.shift()!;
-    order.push(u);
-    // move outgoing via edges
-    for (const e of edges) {
-      if (e.from === u) {
-        // remove edge from indegrees of all downstreams
-        const vEdges = edges.filter((ed) => ed.to === e.to);
-        for (const v of vEdges) {
-          if (map.get(v.to)?.depends_on) {
-            const dn = v.to;
-            const remaining = (map.get(dn)?.depends_on ?? []).filter((d) => map.has(d));
-            if (remaining.length === 0) zeroIn.push(dn);
-            map.set(dn, { depends_on: remaining });
-          }
-        }
+  for (const u of topoOrder) {
+    const dur = durationMap.get(u) ?? 0;
+    let maxPredTime = 0;
+    let maxPredNode: string | null = null;
+    for (const p of predecessors.get(u) ?? []) {
+      const pt = eft.get(p) ?? 0;
+      if (pt > maxPredTime) {
+        maxPredTime = pt;
+        maxPredNode = p;
       }
     }
+    eft.set(u, maxPredTime + dur);
+    bestPred.set(u, maxPredNode);
   }
 
-  // remove any edges not present in topological-order traversal
-  const validEdges = edges.filter((e) => order.includes(e.from) && order.includes(e.to));
+  // Find the node with maximum eft (the end of the critical path)
+  let lastNode = topoOrder[0] ?? "";
+  let maxEft = 0;
+  for (const u of topoOrder) {
+    const t = eft.get(u) ?? 0;
+    if (t > maxEft) { maxEft = t; lastNode = u; }
+  }
 
-  // critical-path projection
-  const criticalPathNodes = new Set<string>();
-  if (order.length) {
-    let u = order[order.length - 1];
-    while (true) {
-      criticalPathNodes.add(u);
-      const predecessors = edges.filter((e) => e.to === u);
-      if (predecessors.length === 0 || predecessors.every((p) => !order.includes(p.from))) break;
-      const maxPred = predecessors.reduce((mx, ed) => weights.get(ed.from) ?? 0 > weights.get(mx.from) ?? 0 ? ed : mx);
-      u = maxPred.from;
+  // Trace backward
+  const path: string[] = [];
+  let cur: string | null = lastNode;
+  while (cur) {
+    path.push(cur);
+    cur = bestPred.get(cur) ?? null;
+  }
+  path.reverse();
+
+  return { path, length: maxEft };
+}
+
+// ---------------------------------------------------------------------------
+// Public: buildDAG
+// ---------------------------------------------------------------------------
+
+export function buildDAG(tasks: TaskInput[]): DependencyGraph | AnalysisError {
+  const ids = new Set(tasks.map((t) => t.id));
+
+  // --- Validate: unknown dependency references (non-blocking per FR-5.1) ---
+  // We just skip them (callers collect warnings separately)
+
+  // --- Validate: empty task list (FR-5.1) ---
+  if (tasks.length === 0) {
+    return {
+      error_code: "EMPTY_INPUT",
+      message: "Task list is empty",
+      details: { cause: [] },
+    };
+  }
+
+  // --- Build adjacency ---
+  const { successors, predecessors } = buildAdjacency(tasks);
+
+  // --- Cycle detection (FR-2.2) ---
+  const cycle = detectCycle(Array.from(ids), predecessors);
+  if (cycle) {
+    return {
+      error_code: "CIRCULAR_DEPENDENCY",
+      message: "Circular dependency detected",
+      details: { cause: cycle },
+    };
+  }
+
+  // --- Topological sort ---
+  const topoOrder = topologicalSort(Array.from(ids), predecessors, successors)!;
+  // safe because we already checked for cycles
+
+  // --- Build nodes ---
+  const taskMap = new Map(tasks.map((t) => [t.id, t]));
+  const nodes: Node[] = [];
+  for (const id of ids) {
+    const t = taskMap.get(id)!;
+    nodes.push({
+      id,
+      name: t.name,
+      in_degree: (predecessors.get(id) ?? []).length,
+      out_degree: (successors.get(id) ?? []).length,
+    });
+  }
+
+  // --- Build edges ---
+  const edges: Edge[] = [];
+  for (const t of tasks) {
+    for (const dep of t.depends_on ?? []) {
+      if (!ids.has(dep)) continue;
+      edges.push({
+        from: dep,
+        to: t.id,
+        duration: taskMap.get(dep)?.estimated_duration,
+      });
     }
   }
 
-  const criticalEdges = validEdges.filter((e) => {
-    const back = validEdges.filter((be) => be.to === e.from).sort((a, b) => (weights.get(b.from) ?? 0) - (weights.get(a.from) ?? 0));
-    return back[0]?.to === e.to;
-  });
+  // --- Critical path (FR-2.3) ---
+  const durationMap = new Map(tasks.map((t) => [t.id, t.estimated_duration ?? 0]));
+  const cp = computeCriticalPath(topoOrder, predecessors, durationMap);
+  const cpSet = new Set(cp.path);
+
+  // Critical-path edges: edges where both endpoints are on the critical path
+  // AND the edge is traversed in the critical path order
+  const cpEdgeSet = new Set<string>();
+  for (let i = 1; i < cp.path.length; i++) {
+    cpEdgeSet.add(`${cp.path[i - 1]}→${cp.path[i]}`);
+  }
+  const criticalPathEdges = edges.filter((e) =>
+    cpEdgeSet.has(`${e.from}→${e.to}`),
+  );
 
   return {
-    graph: {
-      nodes,
-      edges: validEdges,
-      critical_path_nodes: Array.from(criticalPathNodes),
-      critical_path_edges: criticalEdges,
-    },
+    nodes,
+    edges,
+    critical_path_nodes: cp.path,
+    critical_path_edges: criticalPathEdges,
   };
 }
 
-/**
- * Check if a dependency graph is a DAG (no cycles).
- */
+/** Check if a graph is a valid DAG (no cycles). */
 export function isDAG(graph: DependencyGraph): boolean {
-  const fix = buildDAG(graph.nodes.map((n) => ({ id: n.id, depends_on: [] })));
-  return fix !== CYCLE_ERROR;
+  // Build predecessor map from edges
+  const preds = new Map<string, string[]>();
+  for (const n of graph.nodes) preds.set(n.id, []);
+  for (const e of graph.edges) {
+    if (!preds.has(e.to)) preds.set(e.to, []);
+    preds.get(e.to)!.push(e.from);
+  }
+  return detectCycle(graph.nodes.map((n) => n.id), preds) === null;
 }
+
+// ---------------------------------------------------------------------------
+// Re-export internal functions for unit testing
+// ---------------------------------------------------------------------------
+
+export { detectCycle, topologicalSort, computeCriticalPath, buildAdjacency };
