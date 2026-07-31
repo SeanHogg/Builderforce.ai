@@ -275,6 +275,7 @@ async function searchPrsForTaskId(
             merged_at: pr.merged_at,
             user: pr.user,
             created_at: pr.created_at,
+            repo: `${owner}/${repo}`,
           });
         }
       }
@@ -316,6 +317,7 @@ async function searchPrsForTaskId(
             merged_at: pr.merged_at,
             user: pr.user,
             created_at: pr.created_at,
+            repo: `${owner}/${repo}`,
           });
         }
       }
