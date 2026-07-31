@@ -36,6 +36,7 @@ export function ProgressiveRevealRegion({
   children,
   fallback,
   errorFallback,
+  onRetry,
 }: {
   /** Unique key within this orchestrator scope. */
   streamKey: string;
@@ -49,6 +50,8 @@ export function ProgressiveRevealRegion({
   fallback?: React.ReactNode;
   /** Optional custom error renderer. Receives error + retry callback. */
   errorFallback?: (error: Error, retry: () => void) => React.ReactNode;
+  /** FR-7 / AC-8: called when user retries — consumer should re-fetch data. */
+  onRetry?: () => void;
 }) {
   const orchestrator = useProgressiveReveal();
   const registerId = useId();
