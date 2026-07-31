@@ -1,63 +1,83 @@
-import { Deadline, DeadlineProps, DeadlineStatus } from './Deadline.js';
-import { TenantId, ProjectId } from '../shared/types.js';
+import type { Deadline, DeadlineCreate, DeadlineProps, DeadlineUpdate, HealthStatus } from './Deadline';
 
-/** Public-facing Create DTO. */
-export interface DeadlineCreate {
-  tenantId: TenantId;
-  projectId?: ProjectId;
-  title: string;
-  type: 'business' | 'customer';
-  owner: string;
-  dueDate: string;
-  priority?: 'p1' | 'p2' | 'p3';
-  tags?: string[];
-  description?: string;
-}
-
-/** Full Update DTO include changes to health status. */
-export interface DeadlineUpdate {
-  title?: string;
-  type?: 'business' | 'customer';
-  owner?: string;
-  dueDate?: string;
-  priority?: 'p1' | 'p2' | 'p3';
-  tags?: string[];
-  description?: string;
-  dependentDeadlineIds?: number[];
-  healthOverride?: 'on_track' | 'at_risk' | 'off_track' | 'missed';
-  healthOverrideReason?: string;
-}
-
-/** Full Read DTO: status computed from health engine, flags for overrides/slips. */
-export interface DeadlineRead extends DeadlineCreate {
+/**
+ * Lightweight read model used for listing/filtering, typically returned by
+ * `findAll`. Not every field of `Deadline` is needed in list views.
+ */
+export interface DeadlineRead {
   id: number;
-  createdAt: string;
-  updatedAt: string;
-  status: DeadlineStatus;
-  healthOverride?: 'on_track' | 'at_risk' | 'off_track' | 'missed';
-  healthOverrideReason?: string;
+  title: string;
+  type: string;
+  ownerId: string;
+  projectId: number | null;
+  dueDate: Date;
+  forecastDate: Date | null;
+  tags: string[];
+  priority: string;
+  healthStatus: HealthStatus;
+  healthOverride: HealthStatus | null;
+  healthOverrideReason: string | null;
   dependents: number[];
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 /**
- * Repository contract for deadlines.
+ * Interface for persisting and querying `Deadline` aggregates.
+ *
+ * Implementations are provided by infrastructure layer (e.g. `DeadlineRepository`).
  */
 export interface IDeadlineRepository {
-  create(props: DeadlineProps): Promise<Deadline>;
-  findById(id: number): Promise<DeadlineRead | null>;
-  findByProjectId(projectId: number): Promise<DeadlineRead[]>;
-  findByTenantId(tenantId: number): Promise<DeadlineRead[]>;
-  update(id: number, props: Partial<DeadlineProps>): Promise<DeadlineRead | null>;
-  delete(id: number): Promise<boolean>;
-  list(activeOnly?: boolean): Promise<DeadlineRead[]>;
-}
+  /** Create a new deadline, returning its DB id. */
+  create(input: DeadlineCreate): Promise<number>;
 
-/**
- * Repository for deadlines with dependency support.
- */
-export interface IDependencyRepository {
-  findDependencies(deadlineId: number): Promise<number[]>;
-  findDependents(deadlineId: number): Promise<number[]>;
-  link(fromDeadlineId: number, toDeadlineId: number): Promise<void>;
-  unlink(deadlineId: number, dependentId: number): Promise<void>;
+  /** Read a single deadline by id. */
+  findById(id: number): Promise<Deadline | undefined>;
+
+  /** Update deadline fields, recording the actor for audit. */
+  updateProps(
+    id: number,
+    patch: Partial<DeadlineUpdate & { dueDate?: string }>,
+    actor: string,
+  ): Promise<Deadline>;
+
+  /** List deadlines matching optional filters. */
+  findAll(filters: {
+    type?: string;
+    status?: string;
+    ownerId?: string;
+    projectId?: number;
+    tag?: string;
+    priority?: string;
+    search?: string;
+    page: number;
+    limit: number;
+    sort: string;
+    order: 'asc' | 'desc';
+  }): Promise<{ data: Deadline[]; total: number }>;
+
+  /** Delete a deadline by id. */
+  delete(id: number): Promise<void>;
+
+  /** Get a deadline's dependencies graph edges. */
+  getDependencies(id: number): Promise<Array<{ id: number; title: string }>>;
+
+  /** Get all deadlines that depend on this id. */
+  getDependents(id: number): Promise<Array<{ id: number; title: string }>>;
+
+  /** Add an upstream dependency (blocker) to a deadline. */
+  addDependency(id: number, dependencyId: number): Promise<void>;
+
+  /** Remove an upstream dependency from a deadline. */
+  removeDependency(id: number, dependencyId: number): Promise<void>;
+
+  /** Count deadlines matching given filters. */
+  count(filters: {
+    type?: string;
+    status?: string;
+    ownerId?: string;
+    projectId?: number;
+    tag?: string;
+    priority?: string;
+  }): Promise<number>;
 }
