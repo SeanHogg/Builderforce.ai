@@ -629,6 +629,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/facts',             createFactsRoutes(db));            // FACTS library
   app.route('/api/prompt-analyzer',   createPromptAnalyzerRoutes(db));   // prompt telemetry → improved version
   app.route('/api/insights',          createForecastRoutes(db));         // forecasting + anomaly lens
+  app.route('/api/insights',          createTrendRoutes(db));            // PRD #208: trend analysis — accelerating/steady/slowing
   app.route('/api/managed-agent-hosts',   createManagedAgentHostRoutes(db));
   app.route('/api/managed-claws',          createManagedAgentHostRoutes(db)); // @deprecated back-compat alias
   app.route('/api/cost-forecast',   createCostForecastRoutes(db));
