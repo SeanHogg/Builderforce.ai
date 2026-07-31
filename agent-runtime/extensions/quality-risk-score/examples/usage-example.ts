@@ -1,187 +1,106 @@
 /**
- * Example: Using Quality Risk Score with BuilderForce tasks
- * 
- * This file demonstrates how to integrate the Quality Risk Score extension
- * into runtime task handling workflows where artifacts (features, releases, etc.)
- * might need risk assessment.
+ * Example usage of the Quality Risk Score extension.
+ *
+ * Demonstrates registering artifacts, updating metrics, calculating scores,
+ * applying manual overrides, and retrieving history.
  */
+import { QualityRiskScore } from '../src/quality-risk-score.js';
+import type { QualityMetric, Artifact } from '../src/config.js';
 
-import { 
-  createQualityRiskScoreProvider, 
-  METRIC_TEMPLATES,
-  type CalculatedScore 
-} from './quality-risk-score/index.js';
+// ── 1. Create an instance with default config ──────────────────────
+const qrs = new QualityRiskScore({
+  metrics: [],
+  overrideAllowed: true,
+  reevaluationInterval: 5,
+});
 
-/**
- * Simulates gathering metrics from various sources for a task/artifact
- */
-async function gatherMetricsForArtifact(task: {
-  id: string;
-  type: string;
-  name: string;
-  metadata?: Record<string, any>;
-}): Promise<Record<string, any>> {
-  const metrics: Record<string, any> = {};
-
-  // Example: If your runtime has access to buildersForceAgents scan results
-  // metrics.testCoverage = task.metadata?.scanResults?.testCoverage || 100;
-  // metrics.openBugs = task.metadata?.scanResults?.openBugs || 0;
-  // metrics.deploymentFailures = task.metadata?.scanResults?.deploymentFailures || 0;
-
-  // Placeholder: In real implementation, integrate with CI results, Jira/Webhooks, etc.
-  // metrics.testCoverage = Math.random() * 100; // Simulated
-  // metrics.openBugs = Math.floor(Math.random() * 10); // Simulated
-  // metrics.deploymentFailures = Math.floor(Math.random() * 3); // Simulated
-  
-  console.log('Gathering metrics for artifact:', task.name, metrics);
-  return metrics;
-}
-
-/**
- * Calculate and display quality risk score for a task
- */
-async function assessTaskRisk(task: {
-  id: string;
-  type: string;
-  name: string;
-  description?: string;
-  metadata?: Record<string, any>;
-}): Promise<void> {
-  // Create provider
-  const provider = createQualityRiskScoreProvider(
-    { id: 'runtime', name: 'BuilderForce Runtime' }
-  );
-
-  // Register the artifact (task as artifact)
-  const artifactId = provider.registerArtifact(task);
-
-  // Get real metrics from sources (placeholder implementation)
-  const metricValues = await gatherMetricsForArtifact(task);
-  
-  // Build metrics array
-  const metricsToScore = Object.entries(METRIC_TEMPLATES)
-    .filter(([key]) => key in metricValues || key === 'testCoverage')
-    .map(([key, template]) => ({
-      ...template,
-      value: metricValues[key] ?? template.value
-    }));
-
-  // Calculate score
-  const score: CalculatedScore = provider.calculateRiskScore(
-    artifactId,
-    metricsToScore
-  );
-
-  console.log(`\nQuality Risk Assessment for "${task.name}":`);
-  console.log('─'.repeat(40));
-  console.log(`Risk Level: ${score.level}`);
-  console.log(`Score: ${score.score}/100`);
-  console.log(`Justification: ${score.justification}`);
-  console.log('\nMetric Breakdown:');
-  
-  for (const [name, metric] of Object.entries(score.metrics)) {
-    console.log(`  ${name}: ${metric.value} (weight: ${metric.weight}, impact: +${metric.contribution}%)`);
-  }
-
-  // In production: send to display system, notification, or dashboard
-  return score;
-}
-
-/**
- * Example: Scenario - Assessing multiple tasks before release
- */
-async function assessReleaseCandidates(
-  tasks: Array<{ id: string; type: string; name: string }>
-): Promise<void> {
-  console.log('\nRelease Candidate Quality Risk Assessment\n');
-  
-  const assessments = tasks.map(task => 
-    assessTaskRisk(task).then(score => ({
-      task,
-      score
-    }))
-  );
-
-  const results = await Promise.all(assessments);
-  
-  console.log('\nSummary by Risk Level:');
-  console.log('─'.repeat(40));
-  
-  const byLevel = results.reduce((acc, r) => {
-    acc[r.score.level] = (acc[r.score.level] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  for (const [level, count] of Object.entries(byLevel)) {
-    console.log(`  ${level}: ${count} item(s)`);
-  }
-
-  // Highlight actions needed
-  if (byLevel.High > 0) {
-    console.log('\n⚠️  Attention Required: High-risk items may need immediate review.');
-  }
-  if (byLevel.Medium > 0) {
-    console.log('\n💡 Review suggested: Medium-risk items should be assessed before release.');
-  }
-}
-
-/**
- * Example: Using metrics to drive decisions
- */
-function determineActionPlan(score: CalculatedScore): string {
-  switch (score.level) {
-    case 'High':
-      return 'Immediate action required: Fix critical issues before proceeding';
-    case 'Medium':
-      return 'Review within 1-2 weeks; consider holding release if possible';
-    case 'Low':
-      return 'Continue as planned; monitor for changes';
-    default:
-      return 'No immediate action required';
-  }
-}
-
-/**
- * Example: Manual override workflow
- */
-async function handleManualOverride(
-  provider: ReturnType<typeof createQualityRiskScoreProvider>,
-  artifactId: string,
-  override: {
-    manualScore: 'High' | 'Medium' | 'Low';
-    reason: string;
-    overrideBy: string;
-  }
-): Promise<CalculatedScore> {
-  const updatedScore = provider.manualOverride(artifactId, override);
-  
-  if (!updatedScore) {
-    throw new Error('Artifact not found or override not allowed');
-  }
-
-  console.log(`Manual Override Applied by ${override.overrideBy}:`);
-  console.log(`  New Score: ${updatedScore.level}`);
-  console.log(`  Reason: ${override.reason}`);
-  console.log(`  Justification: ${updatedScore.justification}`);
-
-  return updatedScore;
-}
-
-// Example usage
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const demoTasks = [
-    { id: 'TASK-101', type: 'feature', name: 'Payment Gateway Integration' },
-    { id: 'TASK-102', type: 'feature', name: 'User Analytics Dashboard' },
-    { id: 'TASK-103', type: 'release', name: 'Summer 2024 Release' },
-    { id: 'TASK-104', type: 'module', name: 'Authentication Module' }
-  ];
-
-  assessReleaseCandidates(demoTasks.slice(0, 2));
-}
-
-export {
-  assessReleaseCandidates,
-  gatherMetricsForArtifact,
-  determineActionPlan,
-  handleManualOverride
+// ── 2. Register an artifact (e.g. a feature or release) ───────────
+const feature: Artifact = {
+  type: 'feature',
+  name: 'User Authentication v2',
+  description: 'OAuth2 + SSO refactor',
 };
+const artifactId = qrs.registerArtifact(feature);
+
+// ── 3. Feed in quality metrics ────────────────────────────────────
+const metrics: QualityMetric[] = [
+  {
+    name: 'openBugs',
+    value: 12,
+    weight: 1.0,
+    direction: 'higher_is_worse',
+    threshold: { low: 0, medium: 5, high: 15 },
+  },
+  {
+    name: 'criticalBugs',
+    value: 2,
+    weight: 1.5,
+    direction: 'higher_is_worse',
+    threshold: { low: 0, medium: 1, high: 3 },
+  },
+  {
+    name: 'testCoverage',
+    value: 55,
+    weight: 1.0,
+    direction: 'higher_is_better',
+    threshold: { low: 40, medium: 60, high: 80 },
+  },
+  {
+    name: 'codeComplexity',
+    value: 42,
+    weight: 0.8,
+    direction: 'higher_is_worse',
+    threshold: { low: 20, medium: 35, high: 50 },
+  },
+  {
+    name: 'deploymentFailures',
+    value: 1,
+    weight: 2.0,
+    direction: 'higher_is_worse',
+    threshold: { low: 0, medium: 1, high: 3 },
+  },
+];
+
+for (const metric of metrics) {
+  qrs.updateMetric(artifactId, metric);
+}
+
+// ── 4. Calculate the risk score ───────────────────────────────────
+const score = qrs.calculateRiskScore(artifactId, metrics);
+console.log('Risk Level:', score.level); // → 'High', 'Medium', or 'Low'
+console.log('Score:', score.score); // → 0-100
+console.log('Justification:', score.justification);
+console.log('Metrics:', score.metrics);
+
+// ── 5. Drill into contributing factors ────────────────────────────
+const detail = qrs.getArtifactMetrics(artifactId);
+if (detail) {
+  for (const [name, info] of Object.entries(detail)) {
+    console.log(`  ${name}: value=${info.value}, weight=${info.weight}, high threshold=${info.thresholdHigh}`);
+  }
+}
+
+// ── 6. Manual override ────────────────────────────────────────────
+const overrideResult = qrs.manualOverride(artifactId, {
+  manualScore: 'Medium',
+  reason: 'Known issues are cosmetic and will not affect production traffic.',
+  overrideBy: 'tech-lead@example.com',
+});
+if (overrideResult) {
+  console.log('Overridden level:', overrideResult.level);
+}
+
+// ── 7. Retrieve score history ─────────────────────────────────────
+const history = qrs.getScoreHistory(artifactId);
+console.log('History entries:', history?.length ?? 0);
+if (history) {
+  for (const entry of history) {
+    console.log(
+      `  ${entry.calculatedAt.toISOString()} — ${entry.level}${entry.manuallyOverride ? ' (MANUAL)' : ''}`,
+    );
+  }
+}
+
+// ── 8. Re-evaluation ──────────────────────────────────────────────
+const reevaluated = qrs.reevaluate(artifactId);
+console.log('Re-evaluated level:', reevaluated?.level);
