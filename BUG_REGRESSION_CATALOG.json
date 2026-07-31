@@ -27,7 +27,7 @@
     {
       "task_id": 66,
       "title": "Fix the agent execution",
-      "status": "in_review",
+      "status": "ready",
       "type": "bug",
       "severity": "critical",
       "severity_source": "heuristic",
