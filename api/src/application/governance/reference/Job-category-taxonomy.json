@@ -1,0 +1,14 @@
+{
+  "$schema": "./schemas/job-category-taxonomy.schema.json",
+  "$comment": "PRE-REMOVE: This file is a governance-only reference placeholder. Do not ship. See task #380 GAP P2-11.",
+  "version": "0.0.0-PREREMOVE",
+  "description": "Job category taxonomy for governance review. This file must be removed once integration surfaces are available.",
+  "lastGovernanceReview": null,
+  "categories": [],
+  "metadata": {
+    "purpose": "governance-only",
+    "shipped": false,
+    "removalTask": "task-380-followup",
+    "notes": "This taxonomy placeholder exists solely for governance alignment. It is NOT integrated into any application logic and should NOT appear in production builds."
+  }
+}
