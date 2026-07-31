@@ -25,7 +25,7 @@ const DEFAULT_LABELS: MarkdownLabels = { copy: 'Copy', copied: 'Copied', apply: 
 /** A leading `// path: x` / `# path: x` / `<!-- path: x -->` comment, if present. */
 function detectPath(code: string): string {
   const first = code.split('\n', 1)[0] ?? '';
-  const m = first.match(/(?:\/\/|#|<!--)\s*(?:path|file):\s*([^\s>]+)/i);
+  const m = first.match(/(?:\/\/|{#|<!--)\s*(?:path|file):\s*([^\s>]+)/i);
   return m ? m[1].trim() : '';
 }
 
@@ -114,16 +114,19 @@ function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, lab
             );
           },
           code(props) {
-            const { inline, className, children } = props as {
-              inline?: boolean;
+            const { className, children } = props as {
               className?: string;
               children?: React.ReactNode;
             };
-            const text = String(children ?? '').replace(/\n$/, '');
-            if (inline || (!className && !text.includes('\n'))) {
-              return <code className="bf-md__inline">{children}</code>;
+            // Fenced code blocks always have a className (e.g., "language-js"), while inline code doesn't.
+            // This is the standard markdown convention - check className to determine if it's a block.
+            const isBlock = className != null;
+            if (isBlock) {
+              const text = String(children ?? '').replace(/\n$/, '');
+              return <CodeBlock code={text} onApplyCode={onApplyCode} onCreateFile={onCreateFile} labels={lab} />;
             }
-            return <CodeBlock code={text} onApplyCode={onApplyCode} onCreateFile={onCreateFile} labels={lab} />;
+            // Handle inline code - fallback to empty code element if children is not provided
+            return <code className="bf-md__inline">{children ?? ''}</code>;
           },
           pre({ children }) {
             // CodeBlock already emits its own <pre>; passthrough avoids double-wrapping.
