@@ -24,7 +24,6 @@ import type {
   SkillGap,
   UnmappedSkill,
   GapSeverity,
-  SeniorityBand,
 } from "./types.js";
 
 // ── Quarter helpers ──────────────────────────────────────────────────
@@ -32,53 +31,47 @@ import type {
 function normalizeQuarter(q: string): Quarter {
   const s = (q ?? "").trim();
   if (!s) return "2026-Q1" as Quarter;
-  // canonical YYYY-Qn → already fine
-  const canon = s.match(/^((?:19|20)\d{2})-Q([1-4])$/i);
-  if (canon) return `${canon[1]}-Q${canon[2]}` as Quarter;
-  // 2026Q2 → 2026-Q2
-  const compact = s.match(/^((?:19|20)\d{2})Q([1-4])$/i);
-  if (compact) return `${compact[1]}-Q${compact[2]}` as Quarter;
-  // 2026-Q2 already caught; ISO date → quarter
-  const dt = Date.parse(s);
-  if (!Number.isNaN(dt)) {
-    const d = new Date(dt);
-    const quarter = Math.floor(d.getMonth() / 3) + 1;
-    return `${d.getFullYear()}-Q${quarter}` as Quarter;
-  }
+  // canonicalize e.g. 2026Q2, 2026 Q2, 2026-Q2, 2026q2 → 2026-Q2
+  const m = s.match(/^(\d{4})\s*-?\s*Q?\s*([1-4])$/i) ?? s.match(/^(\d{4})\s*[Qq]?\s*([1-4])$/);
+  if (m) return `${m[1]}-Q${m[2]}` as Quarter;
+  const m2 = s.match(/(20\d{2}).*?([1-4])/);
+  if (m2) return `${m2[1]}-Q${m2[2]}` as Quarter;
   return s as Quarter;
 }
 
 function parseQuarterToSortKey(q: Quarter): number {
-  const m = q.match(/^(\d{4})-Q([1-4])$/i);
-  if (m) return Number(m[1]) * 4 + Number(m[2]);
-  return 0;
+  const m = (q as string).match(/(\d{4})-Q([1-4])/);
+  if (!m) return 99999;
+  const year = Number.parseInt(m[1], 10);
+  const qNum = Number.parseInt(m[2], 10);
+  return year * 10 + qNum;
 }
 
-/** Expand an inclusive start..end quarter range into an ordered list. */
 function expandQuarterRange(startQ: Quarter, endQ: Quarter): Quarter[] {
-  const sKey = parseQuarterToSortKey(startQ);
-  const eKey = parseQuarterToSortKey(endQ);
-  if (sKey === 0 || eKey === 0 || sKey > eKey) {
-    // fallback: treat as single quarter if parse failed or inverted
-    return [startQ];
-  }
-  const out: Quarter[] = [];
-  let year = Number(startQ.slice(0, 4));
-  let q = Number(startQ.slice(6));
-  const endYear = Number(endQ.slice(0, 4));
-  const endQNum = Number(endQ.slice(6));
-  while (year < endYear || (year === endYear && q <= endQNum)) {
-    out.push(`${year}-Q${q}` as Quarter);
-    q++;
-    if (q > 4) {
-      q = 1;
-      year++;
+  const startKey = parseQuarterToSortKey(startQ);
+  const endKey = parseQuarterToSortKey(endQ);
+  if (startKey > endKey) return [startQ];
+  const startM = (startQ as string).match(/(\d{4})-Q([1-4])/);
+  const endM = (endQ as string).match(/(\d{4})-Q([1-4])/);
+  if (!startM || !endM) return [startQ];
+  const startYear = Number.parseInt(startM[1], 10);
+  const startQn = Number.parseInt(startM[2], 10);
+  const endYear = Number.parseInt(endM[1], 10);
+  const endQn = Number.parseInt(endM[2], 10);
+
+  const result: Quarter[] = [];
+  let y = startYear;
+  let qn = startQn;
+  while (y < endYear || (y === endYear && qn <= endQn)) {
+    result.push(`${y}-Q${qn}` as Quarter);
+    qn++;
+    if (qn > 4) {
+      qn = 1;
+      y++;
     }
   }
-  return out;
+  return result.length ? result : [startQ];
 }
-
-// ── Severity ─────────────────────────────────────────────────────────
 
 function classifySeverity(uncoveredPct: number): GapSeverity {
   if (uncoveredPct > 0.5) return "critical";
@@ -86,14 +79,14 @@ function classifySeverity(uncoveredPct: number): GapSeverity {
   return "low";
 }
 
-// ── Core engine ──────────────────────────────────────────────────────
+// ── Demand bucketing ─────────────────────────────────────────────────
 
 interface DemandBucketKey {
   skillId: string;
   quarter: Quarter;
   team?: string;
   location?: string;
-  seniority?: SeniorityBand;
+  seniority?: string;
 }
 
 function bucketKeyToString(k: DemandBucketKey): string {
@@ -103,10 +96,8 @@ function bucketKeyToString(k: DemandBucketKey): string {
 interface DemandAccum {
   key: DemandBucketKey;
   demandFTE: number;
-  /** Key is `${minProficiency}` — max requirement level touched */
   maxRequiredProf: number;
   projectIds: Set<string>;
-  /** Weighted demand by required proficiency — not needed for scalar gap but used for coverage tracking */
 }
 
 interface SupplyAccum {
@@ -116,8 +107,12 @@ interface SupplyAccum {
 
 export interface EngineOptions {
   config?: ResourceGapEngineConfig;
-  /** Flatten segmentation? When true, compute only by skill+quarter ignoring team/location/seniority in gap grouping. */
+  /** Flatten segmentation? When true, compute by skill+quarter including team/location/seniority in grouping. */
   segmented?: boolean;
+}
+
+function resolveProficiencyConfig(config: ResourceGapEngineConfig) {
+  return config.proficiency ?? { entries: [] as ProficiencyWeightEntry[] };
 }
 
 export function computeGaps(
@@ -130,7 +125,6 @@ export function computeGaps(
 
   // ── Build demand buckets ─────────────────────────────────────────
   const demandBuckets = new Map<string, DemandAccum>();
-  // track raw unmapped — caller should also pass ingest-level unmappedSkills
   let totalDemandFTE = 0;
 
   for (const d of demands) {
@@ -174,15 +168,13 @@ export function computeGaps(
             projectIds: new Set([d.projectId]),
           });
         }
+        // Distributed evenly across quarters; count fraction per quarter
         totalDemandFTE += fte / quarters.length;
       }
     }
   }
 
-  // ── Build supply index: skillId → availabilities ─────────────────
-  // We use availabilityPct to scale FTE per employee per skill.
-  // Employee's available FTE for a skill = availabilityPct/100.
-  // Weighted supply per bucket then multiplies by proficiency weight vs max required proficiency in that bucket.
+  // ── Build supply index ───────────────────────────────────────────
   const supplyBySkill = new Map<string, SupplyAccum>();
 
   for (const emp of employees) {
@@ -207,6 +199,7 @@ export function computeGaps(
   // ── Compute gaps per demand bucket ───────────────────────────────
   const gaps: SkillGap[] = [];
   let totalWeightedSupply = 0;
+  const profConfig = resolveProficiencyConfig(config);
 
   for (const bucket of demandBuckets.values()) {
     const skillSupply = supplyBySkill.get(bucket.key.skillId);
@@ -219,31 +212,22 @@ export function computeGaps(
 
     if (skillSupply) {
       for (const avail of skillSupply.availFTEs) {
-        const ratio = getEffectiveRatio(
-          { entries: config.proficiency.entries as ProficiencyWeightEntry[] },
-          avail.proficiency,
-          requiredLevel,
-        );
+        const ratio = getEffectiveRatio(profConfig, avail.proficiency, requiredLevel);
         weightedSupplyFTE += avail.fte * ratio;
       }
     }
 
     totalWeightedSupply += weightedSupplyFTE;
 
-    const gapFTE = bucket.key.quarter
-      ? Math.max(0, bucket.demandFTE - weightedSupplyFTE)
-      : 0;
+    const gapFTE = Math.max(0, bucket.demandFTE - weightedSupplyFTE);
     const demandFTE = bucket.demandFTE;
     const uncoveredPct = demandFTE > 0 ? gapFTE / demandFTE : 0;
     const severity = classifySeverity(uncoveredPct);
 
-    // Record only when gap exists (or we want full inventory — PRD says produce gaps for coverage view too)
-    // We record all buckets — dashboard shows severity-colored heatmap even when covered.
-    // To satisfy AC-3 (hiring recs for every Critical/Moderate) we must at least emit uncovered gaps; emitting covered ones too is safe.
     const gap: SkillGap = {
       skillId: bucket.key.skillId,
       quarter: bucket.key.quarter,
-      demandFTE: bucket.key.quarter ? bucket.demandFTE : demandFTE,
+      demandFTE,
       weightedSupplyFTE,
       rawSupplyFTE,
       gapFTE,
@@ -251,7 +235,7 @@ export function computeGaps(
       severity,
       team: bucket.key.team,
       location: bucket.key.location,
-      seniority: bucket.key.seniority,
+      seniority: bucket.key.seniority as SkillGap["seniority"],
       compoundingProjectIds:
         bucket.projectIds.size >= 3 ? Array.from(bucket.projectIds) : undefined,
       compoundingProjectCount: bucket.projectIds.size >= 3 ? bucket.projectIds.size : undefined,
@@ -259,7 +243,7 @@ export function computeGaps(
     gaps.push(gap);
   }
 
-  // Sort gaps by severity desc then gapFTE desc, then quarter asc
+  // Sort by severity desc, gapFTE desc, quarter asc
   const severityRank: Record<GapSeverity, number> = {
     critical: 0,
     moderate: 1,
@@ -273,12 +257,9 @@ export function computeGaps(
     return parseQuarterToSortKey(a.quarter) - parseQuarterToSortKey(b.quarter);
   });
 
-  // ── Project coverage (FR-6.2) ────────────────────────────────────
-  // For each project, fraction of demanded FTE covered by our overall weighted supply model.
-  // Simpler approximation: per-project = per-skill coverage weighted by FTE.
+  // Project coverage (FR-6.2)
   const projectCoverage = computeProjectCoverage(demands, supplyBySkill, config);
 
-  // Collect unmapped placeholder — detailed taxonomy flagging is handled in ingest layer
   const unmappedSkills: UnmappedSkill[] = [];
 
   return {
@@ -297,12 +278,12 @@ function computeProjectCoverage(
   config: ResourceGapEngineConfig,
 ): ProjectCoverage[] {
   const out: ProjectCoverage[] = [];
+  const profConfig = resolveProficiencyConfig(config);
 
   for (const d of demands) {
     let totalDemand = 0;
     let totalCovered = 0;
 
-    // Consider entire demand window as one bucket for coverage: sum quarters from this demand
     const startQ = normalizeQuarter(d.demandStartQuarter);
     const endQ = normalizeQuarter(d.demandEndQuarter);
     const quarters = expandQuarterRange(startQ, endQ);
@@ -311,7 +292,6 @@ function computeProjectCoverage(
     for (const req of d.requiredSkills) {
       const fte = Number(req.fteDemand);
       if (!Number.isFinite(fte) || fte <= 0) continue;
-      // Demand per quarter * quarterCount = full demand across window — report as full-span total for coverage
       const spanDemand = fte * quarterCount;
       totalDemand += spanDemand;
 
@@ -321,20 +301,10 @@ function computeProjectCoverage(
       const requiredLevel = (req.minProficiency || 3) as Proficiency;
       let weighted = 0;
       for (const av of skillSupply.availFTEs) {
-        const ratio = getEffectiveRatio(
-          { entries: config.proficiency.entries as ProficiencyWeightEntry[] },
-          av.proficiency,
-          requiredLevel,
-        );
+        const ratio = getEffectiveRatio(profConfig, av.proficiency, requiredLevel);
         weighted += av.fte * ratio;
       }
 
-      // Weighted supply is not per-project-exclusive in this model (shared pool)
-      // so coverage caps at demand for this project per skill per window.
-      // Supply sharing is approximated: each project gets proportional share of available.
-      // Simpler conservative approximation: covered = min(weighted, spanDemand)
-      // Shared-pool double counting is intentionally optimistic; server-side dashboard
-      // can apply proportional allocation. For AC coverage count this matches spec.
       totalCovered += Math.min(weighted * quarterCount, spanDemand);
     }
 
