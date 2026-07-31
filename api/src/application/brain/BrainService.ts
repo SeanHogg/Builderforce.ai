@@ -16,9 +16,9 @@ import {
   tenantMembers,
   tenantInvitations,
 } from '../../infrastructure/database/schema';
-import { ideProxy, explicitModelPreemptsByo, readProxyChoice, type LlmProxyService } from '../llm/LlmProxyService';
+import { ideProxy, explicitModelPreemptsByo, readProxyChoice, codingModelsForPlan, byoAutoSeedModels, type LlmProxyService } from '../llm/LlmProxyService';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
-import { classifyReplyAccount, buildReplyProvenance } from '../llm/replyProvenance';
+import { classifyReplyAccount, buildReplyProvenance, vendorAccountLabel } from '../llm/replyProvenance';
 import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../activity/activityLog';
 import { getProjectEvermindHead, recordEvermindServeOutcome } from '../llm/projectEvermind';
 import { isServableText } from '../llm/textCoherence';
@@ -28,7 +28,7 @@ import { vendorForModel } from '../llm/vendors';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from '../llm/builtinMcpService';
-import { shouldRecoverStalledTurn, isExhaustedStall, stallRecoveryNudge, stallExhaustedNotice, MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS } from '@builderforce/agent-stall';
+import { shouldRecoverStalledTurn, isExhaustedStall, stallRecoveryNudge, stallExhaustedNotice, modelFailoverNotice, chooseStallFailover, MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS, type ModelFallbackSurface } from '@builderforce/agent-stall';
 import {
   BRAIN_ORIGIN, TEAM_ORIGIN, MANAGER_ORIGIN, ACCESSIBLE_ORIGINS,
   resolveChatAccess, syncPendingMemberships as syncPendingMembershipsShared,
@@ -1062,7 +1062,7 @@ export class BrainService {
     // tenant's OWN account when they have one — NOT a weak operator-key model that
     // empty-turns. `codingOnly` restricts failover to the curated coding pool + paid
     // coding backstop (agentic tool turn), never a lite non-coder.
-    const { proxy: service, byoVendors, registeredModels } = await tenantProxyForPlan(env, tenantId, { codingOnly: true });
+    const { proxy: service, byoVendors, registeredModels, plan } = await tenantProxyForPlan(env, tenantId, { codingOnly: true });
     // The tenant's connected account beats a weak/default agent base model. Honor an
     // explicit base model ONLY when it preempts the BYO seed — the tenant has no
     // connected account, OR the base model is itself served by a connected BYO vendor.
@@ -1118,11 +1118,31 @@ export class BrainService {
     let announcementRecoveries = 0;
     // The model this reply is currently talking to, plus every model already tried.
     // A model that burns its whole stall budget without emitting a tool call is spent;
-    // dropping the pin hands the next attempt to the gateway cascade, which routes
-    // past it to a different model rather than returning a promise as the answer.
+    // the only remedy left is a DIFFERENT model, so the reply picks one itself.
     let activeModel = pinnedModel;
     const triedModels: string[] = [];
     let modelFailovers = 0;
+    /**
+     * The models this reply may fail over ONTO, in the shared preference order —
+     * the tenant's own connected flagships and the plan's curated coding pool.
+     *
+     * This loop previously had no such surface: its failover was "drop the model pin
+     * and let the cascade re-route", guarded by `if (… && activeModel)`. On the DEFAULT
+     * path that guard is false, because a tenant with a connected account is deliberately
+     * left UNPINNED so `complete()` seeds their own flagship — so there was no pin to
+     * drop and the branch was unreachable. Measured on project 11 / chat 86: 11 model
+     * turns, ONE model (`xai-oauth/grok-4.3`), zero tool calls, zero failovers, and a
+     * closing notice telling the user to go pick a different model by hand — which is
+     * precisely the work this branch exists to do for them.
+     *
+     * `data` (the general plan pool) is deliberately OMITTED: this is an agentic tool
+     * turn, and a tool loop that falls onto a non-coder flails and ships nothing — the
+     * same reason the proxy above is built `codingOnly`.
+     */
+    const fallbackSurface: ModelFallbackSurface = {
+      codingModels: codingModelsForPlan(plan.effectivePlan, plan.premiumOverride),
+      byo: { models: byoAutoSeedModels(byoVendors, { agentic: true }).map((id) => ({ id })) },
+    };
     let lastModel = pinnedModel ?? '';
     let lastFinish = '';
     // Auto-compact the running transcript BEFORE each paid turn so a tool-heavy reply
@@ -1191,17 +1211,37 @@ export class BrainService {
           continue;
         }
         // Every recovery spent and the reply is STILL only a description of calls it
-        // never made. Re-prompting THIS model is finished — so fail over rather than
-        // hand the requester a promise dressed as an answer. Dropping the pin routes
-        // the retry through the gateway cascade, which selects a different model; the
-        // model that just failed goes into `triedModels` so a repeat is recognisable.
+        // never made. Re-prompting THIS model is finished — so move to a DIFFERENT one
+        // rather than hand the requester a promise dressed as an answer.
         if (isExhaustedStall(stallInput)) {
-          for (const m of [activeModel, lastModel]) if (m && !triedModels.includes(m)) triedModels.push(m);
-          // Only worth retrying while an UNTRIED route remains: once the pin is already
-          // dropped, another unpinned attempt would just re-select the same model.
-          if (modelFailovers < MAX_MODEL_FAILOVERS && activeModel) {
+          // The SHARED decision — record both the asked-for and the resolved model, check
+          // the budget, pick a genuinely different route. Identical to the Brain run
+          // loop's, because it is the same function.
+          const next = chooseStallFailover({
+            activeModel,
+            resolvedModel: lastModel,
+            tried: triedModels,
+            failoversUsed: modelFailovers,
+            surface: fallbackSurface,
+          });
+          if (next) {
             modelFailovers += 1;
-            activeModel = undefined;
+            // Traced, because a chat that quietly changes model is its own support
+            // ticket — and because the diagnostics report cannot otherwise tell a
+            // failover that happened from one that never ran.
+            // A DISTINCT kind, not another `llm` row: it records a decision, not a model
+            // turn, and counting it as one would corrupt the "every turn was toolless"
+            // rollup the diagnostics report computes.
+            trace.push({
+              kind: 'failover',
+              label: next,
+              args: { from: lastModel || activeModel || null, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
+              result: { notice: modelFailoverNotice(lastModel || activeModel, next) },
+              turnSeq: iterations,
+            });
+            activeModel = next;
+            // The new model starts with a full stall budget — the old one's failures say
+            // nothing about this one, and carrying the count over would give it no chance.
             announcementRecoveries = 0;
             convo.push({ role: 'assistant', content });
             convo.push({ role: 'user', content: stallRecoveryNudge(false) });
@@ -1274,7 +1314,10 @@ export class BrainService {
     // the agent always speaks — a bounded extra call, not another tool round.
     if (!text) {
       const finalResult = await service.complete({
-        model: pinnedModel,
+        // `activeModel`, NOT the original pin: when the loop above failed over, the pin
+        // names a model that has already proven it cannot do this turn, and re-pinning it
+        // for the one call that must produce the user's answer throws the failover away.
+        model: activeModel,
         messages: [...convo, { role: 'user', content: `Now write your reply to the team AS ${agentName}: plain prose, first person, no tool calls. Summarise what you found or did.` }] as never,
         temperature: replyTemp,
         max_tokens: 1000,
@@ -1287,6 +1330,24 @@ export class BrainService {
       const finalChoice = await readProxyChoice(finalResult);
       lastFinish = finalChoice.finishReason || lastFinish;
       text = finalChoice.content;
+      // Traced like every other model turn. This is the call that decides whether the
+      // reply exists at all, and it was the ONLY one leaving no row — so an empty reply
+      // produced HERE was invisible to the diagnostics report that exists to explain it.
+      trace.push({
+        kind: 'llm',
+        label: readModel(finalResult) || activeModel || '(gateway default)',
+        args: { synthesis: true },
+        // No `advertisedTools`: this call is made WITHOUT tools by construction, and the
+        // rollup reads the newest row that reports the field — writing 0 here would make
+        // the report claim the manager was offered no tools at all.
+        result: {
+          finishReason: finalChoice.finishReason,
+          toolCalls: 0,
+          toolNames: [],
+          replyChars: finalChoice.content.length,
+        },
+        turnSeq: iterations + 1,
+      });
     }
 
     // ── Run this reply ON the project's Evermind (opt-in inference) ────────────
@@ -1339,6 +1400,19 @@ export class BrainService {
       }
     }
 
+    // Persist the tool trace for THIS reply — BEFORE the empty-reply branch below, not
+    // after it. Until this moved, the trace was written only on the success path, so a
+    // turn that produced NO reply — the exact failure the trace exists to explain — threw
+    // its own evidence away and left the diagnostics report reading rows from whatever
+    // older turn had last succeeded. That is how a support capture taken minutes after a
+    // 400 came back describing a two-day-old, already-fixed defect. One bounded append;
+    // best-effort by design — a trace failure must never cost an answer or a diagnosis.
+    if (trace.length > 0) {
+      await this.appendTrace(chatId, trace).catch((error) => {
+        reportCaughtError(error, { source: "application/brain/BrainService.ts", operation: "agentReply" });
+      });
+    }
+
     if (!text) {
       // Actionable diagnostics beat a bare "empty reply": name the account the run
       // used, the model it resolved to, and how much tool work happened — so the user
@@ -1349,10 +1423,8 @@ export class BrainService {
       // shared pool even with a connection. `classifyReplyAccount` is the one place that
       // decision lives, shared with the streaming gateway header.
       const account = classifyReplyAccount(lastByoFunded, hasConnectedAccount);
-      const vendorName = (v: string): string =>
-        v === 'anthropic' ? 'Claude' : v === 'openai' ? 'OpenAI' : v === 'googleai' ? 'Google' : 'provider';
       const via = account === 'own'
-        ? `your connected ${vendorName(lastVendor || (lastModel ? vendorForModel(lastModel) : ''))} account`
+        ? `your connected ${vendorAccountLabel(lastVendor || (lastModel ? vendorForModel(lastModel) : ''))} account`
         : account === 'shared_byo_unused'
           ? 'the shared model pool (your connected account was NOT used for this run)'
           : 'the shared model pool';
@@ -1365,10 +1437,10 @@ export class BrainService {
       // `stop`/`end_turn` ⇒ the model chose to say nothing. Distinguishes a config/prompt
       // problem from a transient blank.
       const finishNote = lastFinish && lastFinish !== 'stop' ? ` (finish_reason: ${lastFinish})` : '';
-      // If the connected account was TRIED and failed (cascading to the shared pool),
-      // say so with its status — an expired/revoked subscription 401s, a bad request
-      // 400s. This turns a mystifying "empty reply" into a fix ("reconnect your Claude
-      // account"). `byoFailure` is null when the connected account served fine (or none).
+      // If a connected account was TRIED and failed (so the cascade moved on), say so
+      // with its status — an expired/revoked subscription 401s, a bad request 400s. This
+      // turns a mystifying "empty reply" into a fix ("reconnect your Claude account").
+      // `byoFailure` is null when the connected account served fine (or none exists).
       const bf = byoFailure as { vendor: string; code: number; detail?: string } | null;
       // `code: 0` means the vendor `fetch()` threw before any HTTP response — the status
       // alone ("no response") hides the cause, so surface the thrown detail (e.g.
@@ -1381,8 +1453,17 @@ export class BrainService {
             ? ` — ${bf.detail}`
             : ''
         : '';
+      // Where the run went AFTER that failure, read off the SAME classification that
+      // produced `via` — not assumed. A tenant with several connected accounts cascades
+      // from the failed one onto ANOTHER OF THEIR OWN, and this sentence used to assert
+      // "fell back to the shared pool" unconditionally: the shipped ticket read
+      // "ran on your connected provider account … so the run fell back to the shared
+      // pool", two contradictory claims about the same turn in the same sentence.
+      const fellBackTo = account === 'own'
+        ? 'so the run moved to another of your connected accounts'
+        : 'so the run fell back to the shared pool';
       const byoNote = bf
-        ? ` Your connected ${bf.vendor === 'anthropic' ? 'Claude' : bf.vendor === 'openai' ? 'OpenAI' : bf.vendor === 'googleai' ? 'Google' : bf.vendor} account was tried first but errored (${bf.code || 'no response'})${bfCause}, so the run fell back to the shared pool.`
+        ? ` Your connected ${vendorAccountLabel(bf.vendor)} account was tried first but errored (${bf.code || 'no response'})${bfCause}, ${fellBackTo}.`
         : '';
       return {
         error: `${agentName} ran on ${via}${modelNote} but produced no reply${toolNote}${finishNote}.${byoNote} The model returned an empty turn — this usually clears on a retry. If it persists, set a stronger base model for this agent in Workforce, or confirm your connected account is active.` as const,
@@ -1407,16 +1488,7 @@ export class BrainService {
     });
     const [posted] = await this.appendRaw(chatId, [{ role: 'assistant', content: text, metadata }]);
 
-    // Persist the tool trace for THIS reply. Until this existed, an addressed-agent turn
-    // left no server-side record of what it called — so when the manager reported that
-    // its tools "have not returned results", there was nothing to inspect and no way to
-    // tell a model that never called anything from calls that all failed. One bounded
-    // append after the reply is posted: it must never delay or fail the answer.
-    if (trace.length > 0) {
-      await this.appendTrace(chatId, trace).catch((error) => {
-        reportCaughtError(error, { source: "application/brain/BrainService.ts", operation: "agentReply" });
-      });
-    }
+    // (The tool trace was persisted above, on BOTH the reply and no-reply paths.)
 
     // Audit: an agent ACTED in this chat, and on WHICH MODEL. Previously a chat turn
     // wrote no activity row at all, so the audit timeline could not answer "what model

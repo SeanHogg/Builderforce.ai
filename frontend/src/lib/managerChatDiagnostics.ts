@@ -24,6 +24,12 @@
  * PURE — no clock, no fetch, no DOM, no i18n (see {@link ./diagnosticsReport} for why the
  * body is deliberately locale-independent English while the button around it is not).
  */
+import {
+  claimsMissingToolData,
+  announcesUntakenAction,
+  toolNamesMentionedIn,
+  catalogToolNamesMentionedIn,
+} from '@seanhogg/builderforce-brain-embedded';
 import type { BrainChatTraceRow, BrainMessage, ManagerChatHandle } from './builderforceApi';
 import {
   capText,
@@ -95,6 +101,18 @@ export interface TraceRollup {
   byTool: Array<{ tool: string; count: number; errors: number }>;
   /** How many tools the model was actually offered, per the newest llm row that says. */
   advertisedTools: number | null;
+  /**
+   * Distinct models that actually ran, in first-seen order.
+   *
+   * Load-bearing for the stall findings: the reply loop is SUPPOSED to abandon a model
+   * that will not emit tool calls and try another. One model across every turn means the
+   * failover did not happen — a different (and worse) fact than "two models both refused",
+   * and the finding used to assert the second while the trace showed the first.
+   */
+  models: string[];
+  /** `failover` rows — the loop deciding to switch models. Zero with `models.length === 1`
+   *  is positive evidence the run never left its first model. */
+  failovers: number;
 }
 
 /** Row shapes the server writes into `result` for each trace kind. */
@@ -113,11 +131,13 @@ function readLlmResult(row: BrainChatTraceRow): LlmTraceResult | null {
 
 export function summarizeTrace(trace: readonly BrainChatTraceRow[]): TraceRollup {
   const byTool = new Map<string, { count: number; errors: number }>();
+  const models: string[] = [];
   const out: TraceRollup = {
     toolCalls: 0, toolErrors: 0, modelTurns: 0, turnsWithoutTools: 0,
-    byTool: [], advertisedTools: null,
+    byTool: [], advertisedTools: null, models, failovers: 0,
   };
   for (const row of trace) {
+    if (row.kind === 'failover') { out.failovers += 1; continue; }
     if (row.kind === 'tool') {
       out.toolCalls += 1;
       const key = row.label || '(unlabelled)';
@@ -129,6 +149,7 @@ export function summarizeTrace(trace: readonly BrainChatTraceRow[]): TraceRollup
     }
     if (row.kind !== 'llm') continue;
     out.modelTurns += 1;
+    if (row.label && !models.includes(row.label)) models.push(row.label);
     const parsed = readLlmResult(row);
     if (parsed?.toolCalls === 0) out.turnsWithoutTools += 1;
     if (typeof parsed?.advertisedTools === 'number') out.advertisedTools = parsed.advertisedTools;
@@ -140,24 +161,36 @@ export function summarizeTrace(trace: readonly BrainChatTraceRow[]): TraceRollup
 }
 
 /**
- * Phrases a manager uses when it is narrating tools instead of calling them.
+ * Is this reply narrating tools instead of calling them?
  *
- * Deliberately matched on the SHAPE of the excuse rather than on specific tool names: the
- * measured replies were "the required tools have not returned results yet" and "the tools
- * required are …", and any future variant of "I would need X" is the same defect. A false
- * positive here costs one extra finding in a report; a false negative costs the reader the
- * one line that explains the whole conversation.
+ * Delegates to `@builderforce/agent-stall` — the SAME predicates the reply loop recovers
+ * on. This file used to carry its own regex list, and a report whose detector disagrees
+ * with the loop's describes a different conversation than the one the loop saw: a reply
+ * the loop re-prompted three times could read as a clean answer here, and a reply the
+ * loop shipped as final could be flagged as a stall. One definition, two readers.
  */
-const NARRATION_PATTERNS: readonly RegExp[] = [
-  /tools?\s+(?:required|needed)\s+(?:are|is)\b/i,
-  /(?:have|has)\s+not\s+returned\s+results?/i,
-  /\bno\s+other\s+tools?\s+provide\b/i,
-  /\bI\s+(?:would|will)\s+need\s+to\s+(?:call|run|use)\b/i,
-  /\bawaiting\s+(?:the\s+)?tool\s+results?\b/i,
-];
-
 export function looksLikeToolNarration(text: string): boolean {
-  return NARRATION_PATTERNS.some((re) => re.test(text));
+  return claimsMissingToolData(text) || announcesUntakenAction(text);
+}
+
+/**
+ * WHICH NAMING the narration used — the discriminator between two bugs that produce
+ * identical transcripts (see `catalogToolNamesMentionedIn` for the full argument).
+ *
+ * `catalog` — the reply recites `manager.digest`: a name that appears nowhere in the
+ *   model's tool list, so something handed it a string it could never act on.
+ * `advertised` — the reply recites `builtin_manager_digest`: it was told the RIGHT name
+ *   and still would not emit a call. Nothing about the prompt or the catalog is wrong.
+ * `none` — it complained about tools without naming any; only the trace can say more.
+ *
+ * `advertised` wins a tie: a reply that names both was reading a correct tool list.
+ */
+export type NarratedToolNaming = 'advertised' | 'catalog' | 'none';
+
+export function narratedToolNaming(texts: readonly string[]): NarratedToolNaming {
+  const joined = texts.join('\n');
+  if (toolNamesMentionedIn(joined).length > 0) return 'advertised';
+  return catalogToolNamesMentionedIn(joined).length > 0 ? 'catalog' : 'none';
 }
 
 /**

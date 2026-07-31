@@ -225,6 +225,44 @@ const ALERT_COPY_KEY: Record<ProviderAuthAlert['reason'], string> = {
   unresolved: 'authAlert.unresolved',
 };
 
+/** Localized label for a probe/diagnostic status id; an id with no copy degrades to the
+ *  humanized raw value rather than rendering a bare key. */
+function stateLabel(t: TFn, status: string): string {
+  const label = t(`diagnostic.state.${status}`);
+  return label === `diagnostic.state.${status}` ? status.replaceAll('_', ' ') : label;
+}
+
+/**
+ * Probe verdict → the one line an operator reads.
+ *
+ * Shared by the provider card and the OpenRouter connection rows: both run the same probe
+ * primitive server-side, so a green/red verdict must read the same way on both surfaces —
+ * the moment one of them formats its own message they start explaining identical failures
+ * differently.
+ */
+function probeMessage(
+  t: TFn,
+  result: { ok: boolean; status: string; model?: string; error?: string },
+): string {
+  if (result.ok) {
+    return result.model ? t('diagnostic.verifiedWith', { model: result.model }) : t('diagnostic.verified');
+  }
+  return result.error ?? t('diagnostic.failedFallback', { status: stateLabel(t, result.status) });
+}
+
+/** The verdict line under a Test button — same colour rules and a11y role wherever a probe
+ *  reports back. */
+function ProbeResultLine({ result }: { result: { message: string; ok: boolean } }) {
+  return (
+    <div
+      role={result.ok ? 'status' : 'alert'}
+      style={{ fontSize: 11.5, color: result.ok ? 'rgba(34,197,94,0.9)' : 'var(--error, #ef4444)', marginTop: 7 }}
+    >
+      {result.message}
+    </div>
+  );
+}
+
 function AuthAlertNotice({ alert, t }: { alert: ProviderAuthAlert; t: TFn }) {
   const copyKey = alert.vendor === 'xai-oauth'
     ? alert.reason === 'not_entitled' ? 'authAlert.xaiNotEntitled'
@@ -327,19 +365,11 @@ function ProviderConnectionCard({
   const loadDiagnostic = () => providerKeysApi.status(config.id).then(setDiagnostic).catch((e: Error) => setError(e.message));
   useEffect(() => { void loadDiagnostic(); }, [config.id, authType]);
 
-  /** Localized label for a diagnostic status; unknown values degrade to the raw id. */
-  const stateLabel = (status: string) => {
-    const label = t(`diagnostic.state.${status}`);
-    return label === `diagnostic.state.${status}` ? status.replaceAll('_', ' ') : label;
-  };
-
   const testConnection = async () => {
     setTesting(true); setTestResult(null); setError(null);
     try {
       const result = await providerKeysApi.test(config.id);
-      const message = result.ok
-        ? (result.model ? t('diagnostic.verifiedWith', { model: result.model }) : t('diagnostic.verified'))
-        : result.error ?? t('diagnostic.failedFallback', { status: stateLabel(result.status) });
+      const message = probeMessage(t, result);
       setTestResult({ message, ok: result.ok });
       if (!result.ok) toast.error(message, { title: t('diagnostic.failedTitle', { label: config.label }) });
       // Repaint the whole page's health from THIS verdict — the probe just wrote (or
@@ -431,7 +461,7 @@ function ProviderConnectionCard({
               403s on every call, so an outstanding alert downgrades it the same way it
               downgrades the chip below. */}
           <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: diagnostic?.authAlert ? 'var(--warning-text, #b45309)' : diagnostic?.usable ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)' }}>
-            {t('diagnostic.currentStatus', { status: diagnostic?.status ? stateLabel(diagnostic.status) : t('diagnostic.checking') })}
+            {t('diagnostic.currentStatus', { status: diagnostic?.status ? stateLabel(t, diagnostic.status) : t('diagnostic.checking') })}
           </span>
           <button type="button" onClick={testConnection} disabled={testing || !configured} style={{ ...buttonPrimary, opacity: testing || !configured ? 0.5 : 1 }}>
             {testing ? t('diagnostic.testing') : t('diagnostic.test')}
@@ -444,14 +474,7 @@ function ProviderConnectionCard({
           })}
           {diagnostic?.usage.lastUsedAt ? t('diagnostic.lastUsed', { when: new Date(diagnostic.usage.lastUsedAt).toLocaleString() }) : ''}
         </div>
-        {testResult && (
-          <div
-            role={testResult.ok ? 'status' : 'alert'}
-            style={{ fontSize: 11.5, color: testResult.ok ? 'rgba(34,197,94,0.9)' : 'var(--error, #ef4444)', marginTop: 7 }}
-          >
-            {testResult.message}
-          </div>
-        )}
+        {testResult && <ProbeResultLine result={testResult} />}
         {/* Dispatch-observed rejection — the reason this "connected" account is not
             actually serving anything. Sits under the status strip because that is
             where an operator already looks to answer "is this working?". */}
@@ -549,7 +572,12 @@ function OpenRouterConnectionsPanel({
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Per-connection probe state, keyed by id: a tenant may hold up to 20 registrations and
+  // testing one must not blank out or block the verdict on another.
+  const [testingId, setTestingId] = useState<number | null>(null);
+  const [testResults, setTestResults] = useState<Record<number, { message: string; ok: boolean }>>({});
   const confirm = useConfirm();
+  const toast = useToast();
 
   useEffect(() => {
     void openRouterConnectionsApi.catalog()
@@ -604,6 +632,25 @@ function OpenRouterConnectionsPanel({
     }
   };
 
+  /** Probe ONE registration — the same round trip the provider cards make, so an operator
+   *  can tell "registered" from "actually serving" without dispatching a real agent run. */
+  const testConnection = async (connection: OpenRouterConnection) => {
+    setTestingId(connection.id);
+    setError(null);
+    try {
+      const result = await openRouterConnectionsApi.test(connection.id);
+      const message = probeMessage(t, result);
+      setTestResults((prev) => ({ ...prev, [connection.id]: { message, ok: result.ok } }));
+      if (!result.ok) toast.error(message, { title: t('diagnostic.failedTitle', { label: connection.label }) });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : t('diagnostic.failedGeneric');
+      setTestResults((prev) => ({ ...prev, [connection.id]: { message, ok: false } }));
+      toast.error(message, { title: t('diagnostic.failedTitle', { label: connection.label }) });
+    } finally {
+      setTestingId(null);
+    }
+  };
+
   const remove = async (connection: OpenRouterConnection) => {
     if (!(await confirm(t('openRouter.confirmRemove', { label: connection.label })))) return;
     setBusy(true);
@@ -648,9 +695,18 @@ function OpenRouterConnectionsPanel({
                 {connection.models.join(' → ')}
               </div>
             </div>
+            <button
+              type="button"
+              style={{ ...buttonPrimary, opacity: testingId === connection.id ? 0.5 : 1 }}
+              disabled={testingId === connection.id}
+              onClick={() => void testConnection(connection)}
+            >
+              {testingId === connection.id ? t('diagnostic.testing') : t('diagnostic.test')}
+            </button>
             <button type="button" style={buttonPrimary} onClick={() => begin(connection)}>{t('openRouter.edit')}</button>
             <button type="button" style={buttonDanger} onClick={() => void remove(connection)}>{t('remove')}</button>
           </div>
+          {testResults[connection.id] && <ProbeResultLine result={testResults[connection.id]!} />}
         </div>
       ))}
 

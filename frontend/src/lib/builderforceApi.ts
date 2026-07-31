@@ -3239,6 +3239,21 @@ export interface OpenRouterConnection {
   priority: number | null;
 }
 
+export interface OpenRouterConnectionTestResult {
+  ok: boolean;
+  /** `key_unresolved` = the saved key could not be applied to any of this connection's
+   *  models (it no longer decrypts, or a higher-priority connection already claims them). */
+  status: 'ready' | 'not_found' | 'no_test_model' | 'key_unresolved' | 'failed';
+  /** The bare OpenRouter id the probe pinned. */
+  model?: string;
+  /** True when the dispatch rode the tenant's OWN OpenRouter key rather than the managed one. */
+  ownKey: boolean;
+  testedAt?: string;
+  error?: string;
+  code?: string;
+  details?: { connectionId: number; model?: string; upstreamStatus?: number };
+}
+
 export type ByoPrecedenceEntry =
   | { ref: string; kind: 'provider'; provider: LlmProvider; priority: number | null }
   | { ref: string; kind: 'connection'; connection: OpenRouterConnection; priority: number | null };
@@ -3268,6 +3283,10 @@ export const openRouterConnectionsApi = {
     }),
   remove: (id: number): Promise<{ ok: true }> =>
     request<{ ok: true }>(`/llm/openrouter-connections/${id}`, { method: 'DELETE' }),
+  /** Dispatch a tiny strict-pinned request down this registration's own model list (on its
+   *  own key when it has one) and report whether it actually works. */
+  test: (id: number): Promise<OpenRouterConnectionTestResult> =>
+    request<OpenRouterConnectionTestResult>(`/llm/openrouter-connections/${id}/test`, { method: 'POST' }),
   precedence: (): Promise<{ entries: ByoPrecedenceEntry[] }> =>
     request<{ entries: ByoPrecedenceEntry[] }>('/llm/byo-precedence'),
 };

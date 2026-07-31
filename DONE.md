@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-07-31 — ✅ RESOLVED: the diagnostics report put the answer where it got cut (ui 2026.7.143)
+
+The capture that followed the census fix arrived **truncated at 50,000 characters**, and what it lost was the decision feed — the last prose section. That is the only place the board-staffing sweep records *why* a managed lane authorises nobody, and the critical finding at the top of the same report ended with "**look for an `assign` decision naming the roles it could not fill**". The report was instructing its reader to go and read a section that was no longer there.
+
+Two things were wrong, and both are structural rather than cosmetic:
+
+**The answer lived in the appendix.** `buildManagerDiagnosticsReport` is explicitly ordered "answer first, evidence second, appendix last — so a report that IS truncated loses the appendix rather than the diagnosis". The board-staffing verdict violated that: it is *the* answer for the largest cohort a managed board can carry, and it existed only as one row of a time-ordered feed. New pure `summarizeBoardStaffing(actions)` lifts it out (newest board-scope `assign` decision, ignoring per-ticket assigns that share the action type), and `describeStaffingVerdict` folds it into `managed_dispatch_refused` so the finding NAMES the lane, what it holds, and why — plus a new `-- Board staffing --` section above the PR pile, the register and the feed. Repair prose is not duplicated: the section quotes the sweep's own `summary`, authored once in the API's `describeLaneStaffing`.
+
+An **empty** sweep is now stated as a contradiction rather than a clean bill: a sweep reporting nothing while hundreds of tickets cannot dispatch is the two halves of the platform answering the same question differently, and that is the defect to chase. A **failed** sweep reports the cohort as *unexplained* rather than unstaffable. A **silent** sweep (no decision at all) says so.
+
+**The register spent ~18,000 characters restating six sentences.** Triage writes one `detail` per cause and stamps it onto every ticket carrying that cause, so a 60-row window rendered the same sentence up to 100 times — most of what pushed the report past its reader's limit, paid for by cutting the feed. Each distinct wording is now printed ONCE under its cause in the `by cause` rollup (capped at `MAX_CAUSE_WORDINGS`, the remainder counted, never silently dropped) and the rows carry the cause column that indexes it.
+
+Files: `frontend/src/lib/managerDiagnostics.ts`, `managerDiagnostics.test.ts` (85 tests, +11).
+
+---
+
 ## 2026-07-31 — ✅ RESOLVED: `managed_no_role` was a swallowed read, and the 91% failure rate is one cause not two (api 2026.7.191)
 
 ### The 306-ticket cohort was a failed query reported as a verdict

@@ -159,10 +159,25 @@ export type { PersistedStep } from './persistedSteps';
 // half of the diagnostics version stamp. Each surface supplies its own /health read.
 export { fetchApiVersionVia, resetApiVersionCache, API_VERSION_TTL_MS } from './apiVersion';
 
-// Which model to try NEXT when the current one won't emit tool calls. One ordering,
-// shared by every host that holds a `/llm/v1/models` surface.
-export { nextFallbackModel } from './modelFallback';
-export type { ModelFallbackSurface } from './modelFallback';
+// The untaken-tool-call contract, re-exported from `@builderforce/agent-stall` so a
+// React host reaches it through the package it already depends on.
+//
+// `nextFallbackModel` — which model to try NEXT when the current one won't emit tool
+// calls — used to be defined HERE, which put it out of reach of the server-side reply
+// loop; that loop then hand-rolled the decision and shipped a failover branch that
+// could never run. It now lives beside the recovery budget it serves.
+//
+// The DETECTORS come with it: a surface that DIAGNOSES a stalled reply (the manager
+// chat diagnostics report) must recognise a stall by exactly the predicate the loop
+// recovers on, or the report describes a different bug than the one the loop saw.
+export {
+  nextFallbackModel,
+  claimsMissingToolData,
+  announcesUntakenAction,
+  toolNamesMentionedIn,
+  catalogToolNamesMentionedIn,
+} from '@builderforce/agent-stall';
+export type { ModelFallbackSurface } from '@builderforce/agent-stall';
 
 // Chat ⇄ work linking — the directive that ties identified work / code changes to
 // the current chat, plus the predicates behind the "a code change is always tied to
