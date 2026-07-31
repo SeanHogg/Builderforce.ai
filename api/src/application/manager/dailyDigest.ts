@@ -54,6 +54,7 @@ import { ExecutionStatus, NON_TERMINAL_TASK_STATUSES } from '../../domain/shared
 import { liveExecution } from '../rehearsal/executionMode';
 import { notSystemTask, SYSTEM_TASK_SOURCE_MANAGER } from '../task/taskScope';
 import { resolveActorByRef, type ActorType } from '../activity/activityLog';
+import { rollUpRunFailures, type RunFailureTally } from '../runtime/runFailureReasons';
 
 /** How long a computed digest is served from cache. Short: the day is still moving. */
 const DIGEST_TTL_SECONDS = 60;
@@ -150,7 +151,14 @@ export interface DailyDigest {
        *  Its own bucket because folding it into `byAgent` claimed credit for agents that
        *  the contributor table simultaneously showed at zero. */
       bySystem: number };
-    runs: { completed: number; failed: number };
+    runs: {
+      completed: number; failed: number;
+      /** Why the failures failed, largest class first (see `runFailureReasons.ts`). */
+      failureReasons: RunFailureTally[];
+      /** Failures beyond the grouped query's 50-message cap — stated, not hidden, so
+       *  the table can never read as complete when it is not. */
+      failuresUnaccounted: number;
+    };
     prs: { merged: DigestDelta; opened: number };
     contributors: DigestContributor[];
   };
@@ -326,7 +334,7 @@ export async function computeDailyDigest(
   const yesterday = (col: PgColumn): SQL => between(col, w.prevStart, w.start);
 
   const [
-    ticketCounts, shippedRows, moveRows, execRows, prRow, decisionRows,
+    ticketCounts, shippedRows, moveRows, execRows, failureRows, prRow, decisionRows,
     passRow, ownerRows, stallRow, attentionRows,
   ] = await Promise.all([
     // 1. Ticket throughput, both windows, in ONE aggregate.
@@ -431,6 +439,39 @@ export async function computeDailyDigest(
         sql`coalesce(${executions.completedAt}, ${executions.updatedAt}) < ${sql.param(w.end, executions.completedAt)}`,
       ))
       .groupBy(executions.cloudAgentRef, executions.agentHostId)
+      .catch(() => []),
+
+    // 4b. WHY they failed. `agent runs failed: 162` against `completed: 16` is the
+    //     largest single fact about a board where nothing finishes, and on its own it
+    //     is not actionable — the same blind spot the pass budget had before it timed
+    //     its own stages, which was diagnosed by guessing twice and wrong twice.
+    //
+    //     GROUPED IN SQL, classified in TS. A busy day is hundreds of failures over a
+    //     handful of distinct messages, so grouping first turns an unbounded row scan
+    //     into ~10 rows; `left(...)` bounds the payload of a column that can hold a
+    //     stack trace. Classification stays in TS because it is regex policy shared
+    //     with the autonomy breaker, and it is unit-testable there.
+    db
+      .select({
+        message: sql<string | null>`left(${executions.errorMessage}, 300)`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(executions)
+      .innerJoin(tasks, eq(tasks.id, executions.taskId))
+      .where(scopedToTenant(
+        executions, tenantId,
+        eq(tasks.projectId, projectId),
+        liveExecution(),
+        eq(executions.status, ExecutionStatus.FAILED),
+        sql`coalesce(${executions.completedAt}, ${executions.updatedAt}) >= ${sql.param(w.start, executions.completedAt)}`,
+        sql`coalesce(${executions.completedAt}, ${executions.updatedAt}) < ${sql.param(w.end, executions.completedAt)}`,
+      ))
+      .groupBy(sql`left(${executions.errorMessage}, 300)`)
+      .orderBy(sql`count(*) desc`)
+      // Bounded, and the bound is reported: the rollup's total is compared against
+      // `runsFailed` so a truncated tail shows up as an explicit remainder rather than
+      // silently making the table add up to less than the headline.
+      .limit(50)
       .catch(() => []),
 
     // 5. Pull requests — the only signal that says code left the workspace.
@@ -604,6 +645,14 @@ export async function computeDailyDigest(
     else if (e.agentHostId != null) bump('host_agent', String(e.agentHostId), { runs: c });
   }
 
+  const runFailures = rollUpRunFailures(failureRows as Array<{ message: string | null; count: number }>);
+  // NO SILENT CAP. The grouped query takes the 50 largest distinct messages, so a day
+  // with a long tail of one-off errors would otherwise produce a table that quietly adds
+  // up to less than the headline `runsFailed` and reads as if it accounted for all of
+  // them. Say what is missing instead.
+  const classified = runFailures.reduce((n, r) => n + r.count, 0);
+  const runFailuresUnaccounted = Math.max(0, runsFailed - classified);
+
   // WHO FINISHED IT — the actor that made the terminal hop, through the SAME
   // `contributorKind` mapping the lane-move credit above uses, so "who did this" has one
   // answer across all three columns. Credited to the executor rather than the assignee;
@@ -678,7 +727,15 @@ export async function computeDailyDigest(
         shipped: { today: Number(counts.shippedToday ?? 0), yesterday: Number(counts.shippedPrev ?? 0) },
         opened: { today: Number(counts.openedToday ?? 0), yesterday: Number(counts.openedPrev ?? 0) },
         laneMoves: { forward, backward, byHuman, byAgent, bySystem },
-        runs: { completed: runsCompleted, failed: runsFailed },
+        runs: {
+          completed: runsCompleted, failed: runsFailed,
+          // WHY they failed, largest class first. `failed: 162` beside `completed: 16`
+          // is the biggest fact about a board that ships nothing, and it was previously
+          // unactionable — see `runFailureReasons.ts`.
+          failureReasons: runFailures,
+          /** Failures the 50-message cap did not reach. Reported, never hidden. */
+          failuresUnaccounted: runFailuresUnaccounted,
+        },
         prs: {
           merged: { today: Number(prs.mergedToday ?? 0), yesterday: Number(prs.mergedPrev ?? 0) },
           opened: Number(prs.openedToday ?? 0),

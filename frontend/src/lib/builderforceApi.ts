@@ -2341,7 +2341,25 @@ export interface ManagerDailyDigest {
        *  bucket because folding it into byAgent claimed credit for agents the
        *  contributor table simultaneously showed at zero. */
       bySystem: number };
-    runs: { completed: number; failed: number };
+    runs: {
+      completed: number; failed: number;
+      /**
+       * WHY the failures failed, largest class first. Optional because a client can be
+       * newer than the API it talks to — always `?? []`.
+       *
+       * `sample` is only populated where the raw text adds something (`unknown` and the
+       * crash classes); for a named reason it would just repeat three sentences of
+       * advice per row. `platform: true` means the class is the platform getting in the
+       * way rather than the work failing, which is the difference between "this board is
+       * healthy and being interrupted" and "this board is broken".
+       */
+      failureReasons?: Array<{
+        reason: string; label: string; count: number; sample: string | null; platform: boolean;
+      }>;
+      /** Failures past the API's 50-distinct-message cap. Surfaced so the breakdown can
+       *  never read as complete when it is not. */
+      failuresUnaccounted?: number;
+    };
     prs: { merged: DigestDelta; opened: number };
     contributors: DigestContributor[];
   };
