@@ -677,6 +677,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [connectionKind, sessionId, setEdges]);
 
   const onNodeClick: NodeMouseHandler<CreationFlowNode> = useCallback((_event, node) => { setSelectedId(node.id); if (!node.selected) setSelectedIds([node.id]); }, []);
+  // XYFlow subscribes to this callback through its Zustand store. An inline
+  // callback is a new subscription every render; immediately writing a fresh
+  // `[]` back to React from that subscription can create an update-depth loop
+  // on a newly hydrated local Session. Keep the subscriber stable and preserve
+  // state identity when the semantic selection did not change.
+  const onSelectionChange = useCallback(({ nodes: chosen }: { nodes: CreationFlowNode[] }) => {
+    const ids = chosen.map((node) => node.id);
+    setSelectedIds((current) => current.length === ids.length && current.every((id, index) => id === ids[index]) ? current : ids);
+    const nextId = ids.length === 1 ? ids[0]! : null;
+    setSelectedId((current) => current === nextId ? current : nextId);
+  }, []);
+  const clearSelection = useCallback(() => {
+    setSelectedId((current) => current == null ? current : null);
+    setSelectedIds((current) => current.length ? [] : current);
+  }, []);
   const onCanvasPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!flowRef.current) return;
     const point = flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY });
@@ -1318,8 +1333,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={onNodeClick}
-          onSelectionChange={({ nodes: chosen }) => { const ids = chosen.map((node) => node.id); setSelectedIds(ids); setSelectedId(ids.length === 1 ? ids[0] : null); }}
-          onPaneClick={() => { setSelectedId(null); setSelectedIds([]); }}
+          onSelectionChange={onSelectionChange}
+          onPaneClick={clearSelection}
           onMoveEnd={onViewportChange}
           onInit={(instance) => { flowRef.current = instance; if (pendingViewport.current) void instance.setViewport(pendingViewport.current); }}
           fitView

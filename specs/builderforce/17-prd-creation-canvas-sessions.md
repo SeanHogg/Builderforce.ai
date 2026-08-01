@@ -1,6 +1,6 @@
 # PRD 17 — Creation Sessions and the Infinite Canvas
 
-**Status:** Implementation in progress (2026-08-01); production rollout gates remain · **Owner:** Product + Platform · **Migrations:** `0388_creation_sessions.sql` through `0393_creation_session_timeline.sql`
+**Status:** Repository implementation complete / release candidate (2026-08-01); production rollout evidence remains · **Owner:** Product + Platform · **Migrations:** `0388_creation_sessions.sql` through `0393_creation_session_timeline.sql`
 
 ## 1. Executive summary
 
@@ -1349,7 +1349,7 @@ This PRD is implemented when:
 
 ## 48. Implementation audit and release evidence (2026-08-01)
 
-The repository contains the P0/P1 functional implementation and P2 Canvas foundations described below. It is **not yet valid to mark the complete PRD Definition of Done as passed**: Gates A–D require deployed dogfood/beta volume, measured success thresholds, production security/concurrency/performance evidence, incident/backup/rollback drills, and issue/owner sign-off. Production completion can only be attested after the evidence in `docs/design/creation-canvas/OPERATIONS.md` is recorded.
+All repository-addressable functional requirements CS-001 through CS-030 are implemented. The result is a **release candidate**, not an assertion that production adoption has already happened: Gates A–D require deployed dogfood/beta volume, measured success thresholds, production security/concurrency/performance evidence, incident/backup/rollback drills, and owner sign-off. Production GA can only be attested after the evidence in `docs/design/creation-canvas/OPERATIONS.md` is recorded.
 
 | Requirement | Implementation evidence |
 | --- | --- |
@@ -1367,20 +1367,20 @@ The repository contains the P0/P1 functional implementation and P2 Canvas founda
 ### Cross-cutting evidence
 
 - **Edge/runtime:** `/create/[sessionId]`, `/create/new`, and `/creation-canvas` declare the Edge runtime and pass production build registration.
-- **Security/data integrity:** tenant/member checks, canonical-resource access intersection, idempotency keys, If-Match revision handling, additive migrations, snapshots, and rollback guidance are implemented and covered by API/schema/tenant-scope suites.
+- **Security/data integrity:** tenant/member checks, canonical-resource access intersection, idempotency keys, If-Match revision handling, additive migrations, snapshots, duplicate graph-ID rejection, object/connection quotas, and rollback guidance are implemented and covered by API/schema/tenant-scope suites.
 - **Search/attention/limits:** active-by-default permission-revalidated search previews, safe derived search text, watch states, request-access notifications, durable templates, branch ancestry, collaborator/session/history/dataset/realtime/artifact quotas, preflight Session/dataset warnings, and explicit upgrade-safe error codes are implemented in migrations 0391–0393 and the Creation Session route service.
 - **Accessibility/performance:** keyboard selection/deletion/movement/copy/paste, accessible Object palette and controls, structured Canvas outline with semantic connection alternatives, reduced visual chrome in presentation mode, responsive 360px inspector/composer behavior, visible realtime state, visible-only rendering, and a large-Session warning are present.
 - **Analytics:** creation product signals use the shared activity queue and omit prompt/object content; server event/snapshot history supplies operational revision and command evidence.
 - **Localization:** the primary Canvas and Dashboard Session chrome and Object registry labels are present in English, Chinese, Spanish, French, and German catalogs; catalog parity tests enforce the shared key set. User-authored/AI-authored content remains unchanged by design.
 - **Operations:** deploy, smoke, observation, rollout, support, and rollback procedures live in `docs/design/creation-canvas/OPERATIONS.md`.
-- **Marketing:** the homepage, feature catalog, Product mega-menu/specifications, dedicated `/creation-canvas` page, and Creation Canvas launch article set reflect the unified Session model.
+- **Marketing:** the homepage, feature catalog, Product mega-menu/specifications, dedicated `/creation-canvas` page, and five Creation Canvas launch/use-case articles reflect the unified Session model.
 
 ### Repository verification completed
 
-- API TypeScript, migration sequence, schema drift, and tenant-scope ratchets pass.
-- Frontend TypeScript and production Next build pass; `/create`, `/create/new`, `/create/[sessionId]`, invitation, and `/creation-canvas` routes register with the Edge runtime.
-- Canvas registry, local transcript durability, semantic connection, API helper, and web/VSIX shared-contract tests pass.
-- The native VSIX extension and webview production bundles compile.
+- API TypeScript, migration sequence, schema drift, tenant-scope ratchets, and the full API suite pass: 400 test files and 4,347 tests (one environment-specific test skipped).
+- Frontend TypeScript, all 78 test files/768 tests, and the production Next build pass; `/create`, `/create/new`, `/create/[sessionId]`, invitation, and `/creation-canvas` routes register as dynamic Edge surfaces.
+- Canvas registry, local transcript durability, semantic connections, safe search text, graph integrity/limits, structured accessibility outline, API helpers, and the web/VSIX shared contract have automated coverage.
+- The native VSIX extension and webview production bundles compile; all 23 VSIX tests pass.
 - `qa-e2e/tests/creation-canvas.spec.ts` provides deployed-environment acceptance coverage for anonymous prompt → local Session and authenticated create/reopen. It typechecks; execution belongs to the rollout environment because it requires configured authenticated storage and a deployed API.
 
 ### Remaining release evidence (non-code)
@@ -1390,4 +1390,4 @@ The repository contains the P0/P1 functional implementation and P2 Canvas founda
 - Gate C: return-to-session, wrapper success, and unresolved-severity thresholds.
 - Gate D: production web/VSIX conformance, capacity, incident, backup/restore, and rollback drill records.
 
-Until those records exist, the correct status is **implementation release candidate; full PRD rollout incomplete**.
+Until those records exist, the correct status is **repository implementation complete; production rollout pending**.

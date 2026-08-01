@@ -8,7 +8,7 @@
 4. Deploy the API, then the frontend, then package/publish the VSIX. The older clients remain compatible with the additive schema.
 5. Smoke-test anonymous homepage prompt → local canvas → sign-in claim, server autosave, invitation/presence, history restore, project expansion, Agent delivery, and the native VSIX editor against one disposable session.
 6. Smoke-test the advanced collaboration gate: Marketplace pack placement, freehand drawing, custom-frame save/reuse, presentation mode, collaborator follow, named checkpoint, branch creation, reviewed merge, and recovery from a deliberately stale parent revision.
-7. Verify the public `/creation-canvas` specification page and the three launch articles are present in the generated sitemap and social metadata.
+7. Verify the public `/creation-canvas` specification page and all five launch/use-case articles are present in the generated sitemap and social metadata.
 
 ## Observe
 
@@ -20,10 +20,18 @@
 
 ## Rollout gates
 
-1. Internal tenants: seven-day soak with no P0/P1 tenant-isolation, data-loss, command-idempotency, accessibility, or presence defect.
-2. Opt-in tenants: legacy-wrapper success ≥ 99.5%, session API 5xx < 0.5%, command rejection/conflict within the established baseline, and no sustained preview queue or presence lag alert.
+1. Internal tenants: two-week daily-use soak with command/data-loss rate below 0.1%, wrapper-session success ≥ 99%, and no P0/P1 tenant-isolation, data-loss, command-idempotency, accessibility, or presence defect.
+2. Opt-in tenants: at least 50 tenant Sessions and five multiplayer Sessions; session API 5xx < 0.5%, command rejection/conflict within the established baseline, and no sustained preview queue or presence lag alert.
 3. Default navigation: enable `creation_sessions_nav` only after web and the current VSIX pass the shared session smoke suite.
 4. Legacy menu removal: keep compatibility URLs and rollback controls for at least one full supported client window.
+
+## Repository release-candidate evidence — 2026-08-01
+
+- API: TypeScript and all schema, migration, layering, tenant-scope, source, dispatch, and prompt-tool ratchets pass; 400 test files and 4,347 tests pass (one environment-specific test skipped).
+- Web: TypeScript, 78 test files/768 tests, and the optimized Next production build pass. `/create`, `/create/new`, `/create/[sessionId]`, `/create/invitations/[token]`, and `/creation-canvas` register as dynamic Edge surfaces.
+- VSIX: extension and native webview production bundles compile; 23 tests pass against the shared Creation Canvas object/command contract.
+- Acceptance project: `qa-e2e/tests/creation-canvas.spec.ts` typechecks and is ready for the deployed authenticated/local-first smoke environment.
+- Database repair: migrations 0388 and 0389 both define the presence `last_seen_at` column with forward-compatible guards, and schema drift verification passes.
 
 ## Support playbook
 
