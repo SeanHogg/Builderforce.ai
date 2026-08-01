@@ -77,7 +77,7 @@ export function DashboardWidget({ v }: { v: WidgetValue }) {
           />
         </TitledCard>
       ) : (
-        <InsightStat label={title} value={formatMetricValue(v.value, v.unit)} sub={t('noTrend')} delta={delta} />
+        <InsightStat label={title} value={formatMetricValue(v.value, v.unit)} sub={t('noTrend')} trendClassification={trend} delta={delta} />
       );
 
     case 'bar':
@@ -92,7 +92,7 @@ export function DashboardWidget({ v }: { v: WidgetValue }) {
           />
         </TitledCard>
       ) : (
-        <InsightStat label={title} value={formatMetricValue(v.value, v.unit)} sub={t('noTrend')} delta={delta} />
+        <InsightStat label={title} value={formatMetricValue(v.value, v.unit)} sub={t('noTrend')} trendClassification={trend} delta={delta} />
       );
 
     case 'gauge': {
