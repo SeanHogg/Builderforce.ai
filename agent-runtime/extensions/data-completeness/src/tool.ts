@@ -7,11 +7,14 @@ import {
   calculateRecordScore,
   calculateDatasetReport,
   validateWeights,
+  DEFAULT_THRESHOLDS,
+} from "./scoring-engine.js";
+import {
   DEFAULT_PLACEHOLDERS,
   DEFAULT_THRESHOLD_CRITICAL,
   DEFAULT_THRESHOLD_WARNING,
   DEFAULT_THRESHOLD_PASSING,
-} from "./scoring-engine.js";
+} from "./enums.js";
 import type {
   ScoreToolArguments,
   DatasetReport,
@@ -97,7 +100,8 @@ export function createDataCompletenessTool() {
       const scoreData = calculateRecordScore(
         record as Record<string, unknown>,
         fieldWeights,
-        placeholderSet
+        placeholderSet,
+        thresholds
       );
       recordScores.push(scoreData);
     }
