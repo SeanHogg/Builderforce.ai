@@ -34,7 +34,7 @@ describe('creation object registry', () => {
     const context = creationObjectAiContext({
       kind: 'projectComparison', title: 'Alpha vs Beta', status: 'Live evidence', fetchedAt: '2026-08-01T00:00:00.000Z',
       projects: [{ name: 'Alpha', health: 91, features: ['Canvas'] }],
-      sources: [{ label: 'Project metrics', resource: '/api/projects' }],
+      sources: [{ label: 'Project metrics', resource: '/api/projects', accessToken: 'nested-token-do-not-send' }],
       columns: ['customer', 'request'], rowCount: 12_000,
       rows: [{ customer: 'private customer', request: 'secret request' }],
       prompt: 'private prompt', secret: 'sk-do-not-send', accessToken: 'token-do-not-send',

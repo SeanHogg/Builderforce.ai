@@ -90,6 +90,7 @@ const CONTEXT_FIELDS = [
   'projects', 'sources', 'items', 'summary', 'participants', 'evermindVersion',
   'contributions', 'inferenceEnabled', 'teacherModel', 'viewport',
 ] as const;
+const SENSITIVE_CONTEXT_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;
 
 function safeContextValue(value: unknown, depth = 0): unknown {
   if (value == null || typeof value === 'boolean' || typeof value === 'number') return value;
@@ -98,6 +99,7 @@ function safeContextValue(value: unknown, depth = 0): unknown {
   if (Array.isArray(value)) return value.slice(0, 25).map((item) => safeContextValue(item, depth + 1)).filter((item) => item !== undefined);
   if (typeof value === 'object') {
     return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, 30).flatMap(([key, item]) => {
+      if (SENSITIVE_CONTEXT_KEY.test(key)) return [];
       const safe = safeContextValue(item, depth + 1);
       return safe === undefined ? [] : [[key, safe]];
     }));
