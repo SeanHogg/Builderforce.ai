@@ -1,15 +1,24 @@
 {
   "name": "@builderforce/conflict-detection",
-  "version": "2026.3.21",
-  "private": true,
-  "description": "BuilderForceAgents prioritization conflict detection rules and alerts",
+  "version": "1.0.0",
+  "description": "Conflict detection and alert system for priority register",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "type": "module",
-  "devDependencies": {
-    "@seanhogg/builderforce-agents": "workspace:*"
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
-  "builderforce": {
-    "extensions": [
-      "./index.ts"
-    ]
+  "dependencies": {
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/uuid": "^9.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
