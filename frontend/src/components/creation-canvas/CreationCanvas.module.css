@@ -61,6 +61,16 @@
 .flowWrap :global(.react-flow__edge-textbg) { fill: #f7faff; }
 .flowWrap :global(.react-flow__controls), .flowWrap :global(.react-flow__minimap) { border: 1px solid #d8e1ed; box-shadow: 0 7px 20px rgba(33, 58, 91, .1); border-radius: 9px; overflow: hidden; }
 .flowWrap :global(.react-flow__controls-button) { background: #fff; border-color: #e2e8f0; color: #3f5068; }
+.remoteCursors { position:absolute; inset:0; z-index:12; pointer-events:none; overflow:hidden; }
+.remoteCursors > span { position:absolute; display:grid; grid-template-columns:13px auto; align-items:start; transform:translate(-2px,-2px); filter:drop-shadow(0 2px 3px rgba(20,35,55,.18)); }
+.remoteCursors i { font-size:17px; line-height:1; font-style:normal; }.remoteCursors b { margin:12px 0 0 2px; padding:3px 6px; border-radius:5px; background:currentColor; color:#fff; font-size:8px; white-space:nowrap; }
+.historyPanel { position:absolute; z-index:14; top:14px; right:14px; bottom:86px; width:280px; border:1px solid #d7e0ed; border-radius:13px; background:rgba(255,255,255,.98); box-shadow:0 14px 42px rgba(31,55,88,.14); color:var(--canvas-ink); overflow:auto; }
+.historyPanel header { position:sticky; top:0; display:flex; justify-content:space-between; padding:14px; border-bottom:1px solid #e2e8f0; background:#fff; }.historyPanel header div { display:grid; gap:3px; }.historyPanel header strong { font-size:12px; }.historyPanel header small { color:#7f8da1; font-size:9px; }.historyPanel header button { border:0; background:transparent; color:#77869b; font-size:17px; cursor:pointer; }
+.historyPanel > p,.historyPanel > div > p { padding:14px; color:#6d7d94; font-size:10px; line-height:1.5; }.historyPanel > div { display:grid; padding:8px; gap:6px; }.historyPanel > div > button { display:grid; gap:3px; padding:9px; border:1px solid #dce4ef; border-radius:8px; background:#fbfdff; color:#2c3b50; text-align:left; cursor:pointer; }.historyPanel > div > button b { font-size:10px; }.historyPanel > div > button span { color:#8090a3; font-size:8px; }
+.changeSetPanel { position:absolute; z-index:15; top:14px; right:310px; width:330px; border:1px solid #cfc5f0; border-radius:13px; background:rgba(255,255,255,.99); box-shadow:0 16px 48px rgba(58,40,112,.18); color:var(--canvas-ink); overflow:hidden; }
+.changeSetPanel header { display:flex; justify-content:space-between; padding:13px; border-bottom:1px solid #e6e0f5; background:#faf8ff; }.changeSetPanel header div { display:grid; gap:3px; }.changeSetPanel header strong { font-size:12px; }.changeSetPanel header small { color:#796d99; font-size:9px; }.changeSetPanel header button { border:0; background:transparent; color:#77869b; font-size:17px; cursor:pointer; }
+.changeSetPanel > div { display:grid; max-height:310px; overflow:auto; padding:8px; gap:5px; }.changeSetPanel label { display:flex; align-items:flex-start; gap:8px; padding:8px; border:1px solid #e2ddef; border-radius:8px; background:#fff; cursor:pointer; }.changeSetPanel label input { margin-top:2px; accent-color:#7357e7; }.changeSetPanel label span { display:grid; gap:2px; }.changeSetPanel label b { font-size:9px; }.changeSetPanel label small { color:#83769f; font-size:8px; }
+.changeSetPanel footer { display:flex; justify-content:flex-end; gap:7px; padding:10px; border-top:1px solid #e6e0f5; background:#faf8ff; }
 
 .paletteToggle { position: absolute; top: 16px; left: 12px; z-index: 8; width: 30px; height: 30px; border: 1px solid #d7e0ed; border-radius: 8px; background: #fff; color: #43536b; cursor: pointer; box-shadow: 0 5px 15px rgba(31, 55, 88, .1); }
 .palette {
@@ -186,3 +196,11 @@
   .composer { width:calc(100% - 24px); min-width:0; bottom:10px; }
   .collaborators span:nth-child(2),.collaborators span:nth-child(3) { display:none; }
 }
+.resizeLine { border-color: var(--accent, #3978f6) !important; }
+.resizeHandle { width: 9px !important; height: 9px !important; border-radius: 3px !important; border: 2px solid white !important; background: var(--accent, #3978f6) !important; }
+.structuredGraph { position: absolute; z-index: 12; left: 62px; bottom: 16px; width: 250px; max-height: 45%; overflow: auto; padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: 9px; background: var(--bg-elevated, white); color: var(--text-secondary); font-size: 12px; }
+.structuredGraph summary { cursor: pointer; font-weight: 700; color: var(--text-primary); }
+.structuredGraph ol { margin: 8px 0 0; padding-left: 20px; }
+.structuredGraph button { padding: 2px 0; border: 0; background: none; color: var(--text-primary); font: inherit; font-weight: 650; cursor: pointer; }
+.structuredGraph span { display: block; font-size: 11px; }
+.structuredGraph ul { padding-left: 14px; }

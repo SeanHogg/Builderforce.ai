@@ -1044,11 +1044,29 @@ export const creationSessionMembers = pgTable('creation_session_members', {
   invitedBy:        varchar('invited_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   lastSeenRevision: bigint('last_seen_revision', { mode: 'number' }).notNull().default(0),
   lastSeenAt:       timestamp('last_seen_at').notNull().defaultNow(),
+  viewport:         jsonb('viewport').notNull().default(sql`'{"x":0,"y":0,"zoom":1}'::jsonb`),
+  cursor:           jsonb('cursor'),
+  selection:        jsonb('selection').notNull().default(sql`'[]'::jsonb`),
+  typing:           boolean('typing').notNull().default(false),
+  pinned:           boolean('pinned').notNull().default(false),
   joinedAt:         timestamp('joined_at').notNull().defaultNow(),
 }, (t) => ({
   pk: primaryKey({ columns: [t.sessionId, t.userId] }),
   byUser: index('idx_creation_members_user').on(t.userId, t.joinedAt),
   byPresence: index('idx_creation_members_presence').on(t.sessionId, t.lastSeenAt),
+}));
+
+export const creationSessionSnapshots = pgTable('creation_session_snapshots', {
+  sessionId: uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),
+  revision:  bigint('revision', { mode: 'number' }).notNull(),
+  graph:     jsonb('graph').notNull(),
+  viewport:  jsonb('viewport').notNull().default(sql`'{"x":0,"y":0,"zoom":1}'::jsonb`),
+  label:     varchar('label', { length: 120 }),
+  createdBy: varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.sessionId, t.revision] }),
+  byCreated: index('idx_creation_snapshots_session_created').on(t.sessionId, t.createdAt),
 }));
 
 export const creationSessionEvents = pgTable('creation_session_events', {

@@ -1,5 +1,7 @@
 # Creation Canvas
 
+Production deployment, observation, and rollback guidance lives in [OPERATIONS.md](./OPERATIONS.md).
+
 ## Recommendation
 
 Replace Brainstorm, the workflow builder, and the IDE launcher as separate creation destinations with one session-based surface:

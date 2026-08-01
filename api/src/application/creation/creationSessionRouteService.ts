@@ -16,7 +16,13 @@ import {
   creationSessionMembers,
   creationSessionObjects,
   creationSessionProjectLinks,
+  creationSessionSnapshots,
   creationSessions,
+  ceremonySessions,
+  ideAgents,
+  agents,
+  tasks,
+  workflows,
   workflowDefinitions,
   projects,
   tenantMembers,
@@ -52,6 +58,10 @@ type PatchSessionBody = { title?: string; description?: string | null; status?: 
 type SaveGraphBody = { objects?: GraphObjectInput[]; connections?: GraphConnectionInput[]; viewport?: unknown; expectedRevision?: number };
 type InviteBody = { userId?: string; email?: string; role?: string };
 type CommentBody = { body?: string; objectId?: string | null; parentCommentId?: string | null; mentions?: string[] };
+type CanvasCommand = { type?: string; [key: string]: unknown };
+type CommandsBody = { commands?: CanvasCommand[]; atomic?: boolean };
+type PinBody = { pinned?: boolean };
+type CheckpointBody = { label?: string };
 
 function cleanTitle(raw: unknown, fallback = 'Untitled session'): string {
   const title = typeof raw === 'string' ? raw.trim() : '';
@@ -105,6 +115,91 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     return access;
   }
 
+  /**
+   * A session permission never grants access to the resources placed inside it.
+   * Validate every authoritative reference against the active tenant before a
+   * graph replacement is committed. Canvas-native drafts have no resource ref.
+   */
+  async function validateResourceAccess(
+    objects: GraphObjectInput[],
+    tenantId: number,
+    segmentId: string | null,
+    userId: string,
+  ): Promise<string | null> {
+    if (!segmentId) return 'This session is missing its workspace segment';
+    const refs = objects.filter((object) => object.resourceType && object.resourceId);
+    const ids = (type: string) => [...new Set(refs.filter((object) => object.resourceType === type).map((object) => object.resourceId as string))];
+    const numericIds = (type: string) => ids(type).map(Number).filter((id) => Number.isInteger(id) && id > 0);
+
+    const projectIds = numericIds('project');
+    if (projectIds.length !== ids('project').length) return 'A Project reference is invalid';
+    if (projectIds.length) {
+      const found = await db.select({ id: projects.id }).from(projects).where(and(
+        eq(projects.tenantId, tenantId), eq(projects.segmentId, segmentId), inArray(projects.id, projectIds),
+      ));
+      if (found.length !== projectIds.length) return 'A Project is unavailable or belongs to another workspace';
+    }
+
+    const taskIds = numericIds('task');
+    if (taskIds.length !== ids('task').length) return 'A Task reference is invalid';
+    if (taskIds.length) {
+      const found = await db.select({ id: tasks.id }).from(tasks)
+        .innerJoin(projects, eq(projects.id, tasks.projectId))
+        .where(and(eq(projects.tenantId, tenantId), eq(tasks.segmentId, segmentId), inArray(tasks.id, taskIds)));
+      if (found.length !== taskIds.length) return 'A Task is unavailable or belongs to another workspace';
+    }
+
+    const workflowIds = ids('workflow');
+    if (workflowIds.length) {
+      if (workflowIds.some((id) => !UUID_RE.test(id))) return 'A Workflow reference is invalid';
+      const [definitions, executions] = await Promise.all([
+        db.select({ id: workflowDefinitions.id }).from(workflowDefinitions).where(and(
+          eq(workflowDefinitions.tenantId, tenantId), eq(workflowDefinitions.segmentId, segmentId), inArray(workflowDefinitions.id, workflowIds),
+        )),
+        db.select({ id: workflows.id }).from(workflows).where(and(
+          eq(workflows.tenantId, tenantId), eq(workflows.segmentId, segmentId), inArray(workflows.id, workflowIds),
+        )),
+      ]);
+      if (new Set([...definitions, ...executions].map((row) => row.id)).size !== workflowIds.length) return 'A Workflow is unavailable or belongs to another workspace';
+    }
+
+    for (const chatId of ids('chat')) {
+      const numeric = Number(chatId);
+      if (!Number.isInteger(numeric) || !(await resolveChatAccess(db, { chatId: numeric, userId, tenantId }))) {
+        return 'A Chat is unavailable or belongs to another workspace';
+      }
+    }
+
+    const agentIds = ids('agent');
+    if (agentIds.length) {
+      const numeric = agentIds.map(Number).filter((id) => Number.isInteger(id) && id > 0);
+      const text = agentIds.filter((id) => !numeric.includes(Number(id)));
+      const [legacy, workforce] = await Promise.all([
+        numeric.length ? db.select({ id: agents.id }).from(agents).where(and(eq(agents.tenantId, tenantId), eq(agents.segmentId, segmentId), inArray(agents.id, numeric))) : Promise.resolve([]),
+        text.length ? db.select({ id: ideAgents.id }).from(ideAgents).where(and(eq(ideAgents.tenantId, tenantId), inArray(ideAgents.id, text))) : Promise.resolve([]),
+      ]);
+      if (legacy.length + workforce.length !== agentIds.length) return 'An Agent is unavailable or belongs to another workspace';
+    }
+
+    const ceremonyIds = ids('ceremony');
+    if (ceremonyIds.length) {
+      if (ceremonyIds.some((id) => !UUID_RE.test(id))) return 'A ceremony reference is invalid';
+      const found = await db.select({ id: ceremonySessions.id }).from(ceremonySessions).where(and(
+        eq(ceremonySessions.tenantId, tenantId), eq(ceremonySessions.segmentId, segmentId), inArray(ceremonySessions.id, ceremonyIds),
+      ));
+      if (found.length !== ceremonyIds.length) return 'A ceremony is unavailable or belongs to another workspace';
+    }
+
+    const staffIds = ids('staff');
+    if (staffIds.length) {
+      const found = await db.select({ userId: tenantMembers.userId }).from(tenantMembers).where(and(
+        eq(tenantMembers.tenantId, tenantId), inArray(tenantMembers.userId, staffIds),
+      ));
+      if (found.length !== staffIds.length) return 'A staff member is unavailable or belongs to another workspace';
+    }
+    return null;
+  }
+
   router.get('/', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
@@ -121,6 +216,10 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         lastActivityAt: creationSessions.lastActivityAt,
         createdAt: creationSessions.createdAt,
         role: creationSessionMembers.role,
+        pinned: creationSessionMembers.pinned,
+        unread: sql<boolean>`${creationSessionMembers.lastSeenRevision} < ${creationSessions.canvasRevision}`,
+        collaboratorCount: sql<number>`(SELECT COUNT(*)::int FROM creation_session_members member_count WHERE member_count.session_id = ${creationSessions.id})`,
+        projectIds: sql<number[]>`COALESCE((SELECT array_agg(project_id ORDER BY project_id) FROM creation_session_project_links project_link WHERE project_link.session_id = ${creationSessions.id}), ARRAY[]::integer[])`,
       })
       .from(creationSessions)
       .innerJoin(creationSessionMembers, and(
@@ -196,6 +295,14 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         payload: { initialPrompt: !!initialPrompt, projectIds: validProjects.map((project) => project.id) },
         idempotencyKey: c.req.header('Idempotency-Key')?.slice(0, 128) || null,
       });
+      await db.insert(creationSessionSnapshots).values({
+        sessionId, revision: 1,
+        graph: {
+          objects: objectRows.map((object) => ({ id: object.id, kind: object.kind, resourceType: object.resourceType, resourceId: object.resourceId, canvasData: object.canvasData, content: object.content })),
+          connections: connectionRows.map((edge) => ({ id: edge.id, sourceObjectId: edge.sourceObjectId, targetObjectId: edge.targetObjectId, kind: edge.kind, label: edge.label, metadata: edge.metadata })),
+        },
+        viewport: { x: 0, y: 0, zoom: 1 }, createdBy: userId,
+      });
     } catch (error) {
       await db.delete(creationSessions).where(and(eq(creationSessions.id, sessionId), eq(creationSessions.tenantId, tenantId))).catch(() => undefined);
       throw error;
@@ -210,11 +317,12 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       db.select().from(creationSessionObjects).where(eq(creationSessionObjects.sessionId, access.session.id)),
       db.select().from(creationSessionConnections).where(eq(creationSessionConnections.sessionId, access.session.id)),
       db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(eq(creationSessionProjectLinks.sessionId, access.session.id)),
-      db.select({ userId: creationSessionMembers.userId, role: creationSessionMembers.role, displayName: users.displayName, lastSeenAt: creationSessionMembers.lastSeenAt })
+      db.select({ userId: creationSessionMembers.userId, role: creationSessionMembers.role, displayName: users.displayName, lastSeenAt: creationSessionMembers.lastSeenAt, viewport: creationSessionMembers.viewport, cursor: creationSessionMembers.cursor, selection: creationSessionMembers.selection, typing: creationSessionMembers.typing })
         .from(creationSessionMembers).leftJoin(users, eq(users.id, creationSessionMembers.userId))
         .where(eq(creationSessionMembers.sessionId, access.session.id)),
     ]);
-    return c.json({ session: access.session, role: access.role, objects, connections, projectIds: projectLinks.map((p) => p.projectId), members });
+    const currentMember = members.find((member) => member.userId === c.get('userId'));
+    return c.json({ session: access.session, role: access.role, currentUserId: c.get('userId'), objects, connections, projectIds: projectLinks.map((p) => p.projectId), members, personalViewport: currentMember?.viewport ?? access.session.viewport });
   });
 
   router.get('/:id/activity', async (c) => {
@@ -352,6 +460,52 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     return c.json(updated);
   });
 
+  router.post('/:id/pin', async (c) => {
+    const access = await requireSession(c);
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const body = await c.req.json<PinBody>().catch(() => ({} as PinBody));
+    if (typeof body.pinned !== 'boolean') return c.json({ error: 'pinned is required' }, 400);
+    await db.update(creationSessionMembers).set({ pinned: body.pinned }).where(and(
+      eq(creationSessionMembers.sessionId, access.session.id), eq(creationSessionMembers.userId, c.get('userId') as string),
+    ));
+    return c.json({ pinned: body.pinned });
+  });
+
+  router.post('/:id/duplicate', async (c) => {
+    const access = await requireSession(c);
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const { tenantId, segmentId } = scope(c);
+    const userId = c.get('userId') as string;
+    const [objects, connections] = await Promise.all([
+      db.select().from(creationSessionObjects).where(eq(creationSessionObjects.sessionId, access.session.id)),
+      db.select().from(creationSessionConnections).where(eq(creationSessionConnections.sessionId, access.session.id)),
+    ]);
+    const sessionId = crypto.randomUUID();
+    const idMap = new Map(objects.map((object) => [object.id, crypto.randomUUID()]));
+    const copiedObjects = objects.map((object) => ({
+      ...object, id: idMap.get(object.id)!, sessionId, createdBy: userId, updatedBy: userId, createdAt: undefined, updatedAt: undefined,
+    }));
+    const copiedConnections = connections.map((edge) => ({
+      ...edge, id: crypto.randomUUID(), sessionId, sourceObjectId: idMap.get(edge.sourceObjectId)!, targetObjectId: idMap.get(edge.targetObjectId)!, createdBy: userId, createdAt: undefined,
+    }));
+    const graph = {
+      objects: copiedObjects.map(({ id, kind, resourceType, resourceId, resourceRevision, canvasData, content }) => ({ id, kind, resourceType, resourceId, resourceRevision, canvasData, content })),
+      connections: copiedConnections.map(({ id, sourceObjectId, targetObjectId, kind, label, metadata }) => ({ id, sourceObjectId, targetObjectId, kind, label, metadata })),
+    };
+    const statements: unknown[] = [
+      db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title: cleanTitle(`Copy of ${access.session.title}`), description: access.session.description, preview: buildPreview(graph.objects), createdBy: userId, updatedBy: userId, canvasRevision: 1 }),
+      db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
+      db.insert(creationSessionEvents).values({ sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.duplicated', payload: { sourceSessionId: access.session.id } }),
+      db.insert(creationSessionSnapshots).values({ sessionId, revision: 1, graph, viewport: access.session.viewport, createdBy: userId }),
+    ];
+    if (copiedObjects.length) statements.push(db.insert(creationSessionObjects).values(copiedObjects.map(({ createdAt: _createdAt, updatedAt: _updatedAt, ...object }) => object)));
+    if (copiedConnections.length) statements.push(db.insert(creationSessionConnections).values(copiedConnections.map(({ createdAt: _createdAt, ...edge }) => edge)));
+    const projectLinks = await db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(eq(creationSessionProjectLinks.sessionId, access.session.id));
+    if (projectLinks.length) statements.push(db.insert(creationSessionProjectLinks).values(projectLinks.map(({ projectId }) => ({ sessionId, projectId, addedBy: userId }))));
+    await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
+    return c.json({ session: { id: sessionId, title: cleanTitle(`Copy of ${access.session.title}`), revision: 1 } }, 201);
+  });
+
   router.put('/:id/graph', async (c) => {
     const access = await requireSession(c, 'editor');
     if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
@@ -360,6 +514,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const connections = Array.isArray(body.connections) ? body.connections : [];
     const error = validGraph(objects, connections);
     if (error) return c.json({ error }, 400);
+    const resourceError = await validateResourceAccess(objects, access.session.tenantId, access.session.segmentId, c.get('userId') as string);
+    if (resourceError) return c.json({ error: resourceError, code: 'RESOURCE_ACCESS_DENIED' }, 403);
     if (body.expectedRevision != null && body.expectedRevision !== access.session.canvasRevision) {
       return c.json({ error: 'Session changed', code: 'REVISION_CONFLICT', revision: access.session.canvasRevision }, 409);
     }
@@ -394,18 +550,191 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         payload: { objectCount: objects.length, connectionCount: connections.length },
         idempotencyKey: c.req.header('Idempotency-Key')?.slice(0, 128) || null,
       }),
+      db.insert(creationSessionSnapshots).values({
+        sessionId: access.session.id, revision: nextRevision, graph: { objects, connections },
+        viewport: body.viewport ?? access.session.viewport, createdBy: userId,
+      }).onConflictDoNothing(),
     );
     await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
     return c.json({ revision: nextRevision, savedAt: new Date().toISOString() });
   });
 
-  router.post('/:id/invite', async (c) => {
+  router.post('/:id/commands', async (c) => {
     const access = await requireSession(c, 'editor');
+    if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
+    const idempotencyKey = c.req.header('Idempotency-Key')?.trim().slice(0, 128) || null;
+    if (!idempotencyKey) return c.json({ error: 'Idempotency-Key is required' }, 400);
+    const [prior] = await db.select({ payload: creationSessionEvents.payload }).from(creationSessionEvents).where(and(
+      eq(creationSessionEvents.sessionId, access.session.id), eq(creationSessionEvents.idempotencyKey, idempotencyKey),
+    )).limit(1);
+    if (prior) return c.json((prior.payload as { result?: unknown })?.result ?? { replayed: true });
+
+    const match = Number(c.req.header('If-Match'));
+    if (!Number.isInteger(match) || match !== access.session.canvasRevision) {
+      return c.json({ error: 'Session changed', code: 'REVISION_CONFLICT', revision: access.session.canvasRevision }, 409);
+    }
+    const body = await c.req.json<CommandsBody>().catch(() => ({} as CommandsBody));
+    const commands = Array.isArray(body.commands) ? body.commands.slice(0, 500) : [];
+    if (!commands.length) return c.json({ error: 'At least one command is required' }, 400);
+
+    const [storedObjects, storedConnections] = await Promise.all([
+      db.select().from(creationSessionObjects).where(eq(creationSessionObjects.sessionId, access.session.id)),
+      db.select().from(creationSessionConnections).where(eq(creationSessionConnections.sessionId, access.session.id)),
+    ]);
+    let objects: GraphObjectInput[] = storedObjects.map((object) => ({
+      id: object.id, kind: object.kind, resourceType: object.resourceType, resourceId: object.resourceId,
+      resourceRevision: object.resourceRevision, canvasData: object.canvasData, content: object.content,
+    }));
+    let connections: GraphConnectionInput[] = storedConnections.map((edge) => ({
+      id: edge.id, sourceObjectId: edge.sourceObjectId, targetObjectId: edge.targetObjectId,
+      kind: edge.kind, label: edge.label, metadata: edge.metadata,
+    }));
+    let personalViewport: unknown = null;
+    const accepted: Array<{ index: number; type: string; id?: string; clientId?: string }> = [];
+    const rejected: Array<{ index: number; error: string }> = [];
+    const clientIds = new Map<string, string>();
+    const reject = (index: number, error: string) => {
+      rejected.push({ index, error });
+      if (body.atomic !== false) throw new Error(error);
+    };
+    try {
+      commands.forEach((command, index) => {
+        const type = typeof command.type === 'string' ? command.type : '';
+        if (type === 'graph.replace') {
+          if (!Array.isArray(command.objects) || !Array.isArray(command.connections)) { reject(index, 'graph.replace requires objects and connections'); return; }
+          objects = command.objects as GraphObjectInput[];
+          connections = command.connections as GraphConnectionInput[];
+          personalViewport = command.viewport ?? null;
+          accepted.push({ index, type }); return;
+        }
+        if (type === 'object.add') {
+          const kind = typeof command.kind === 'string' ? command.kind.slice(0, 48) : '';
+          if (!kind) { reject(index, 'object.add requires kind'); return; }
+          const id = typeof command.id === 'string' && UUID_RE.test(command.id) ? command.id : crypto.randomUUID();
+          const clientId = typeof command.clientId === 'string' ? command.clientId.slice(0, 128) : undefined;
+          if (objects.some((object) => object.id === id)) { reject(index, 'Object id already exists'); return; }
+          const resourceRef = command.resourceRef && typeof command.resourceRef === 'object' ? command.resourceRef as { type?: unknown; id?: unknown } : null;
+          objects.push({
+            id, kind,
+            resourceType: typeof resourceRef?.type === 'string' ? resourceRef.type : null,
+            resourceId: typeof resourceRef?.id === 'string' || typeof resourceRef?.id === 'number' ? String(resourceRef.id) : null,
+            canvasData: command.geometry && typeof command.geometry === 'object' ? command.geometry : {},
+            content: command.content && typeof command.content === 'object' ? command.content : { kind, title: String(command.title || kind) },
+          });
+          if (clientId) clientIds.set(clientId, id);
+          accepted.push({ index, type, id, clientId }); return;
+        }
+        if (type === 'object.update' || type === 'object.move') {
+          const id = String(command.objectId || '');
+          const object = objects.find((candidate) => candidate.id === id);
+          if (!object) { reject(index, 'Object not found'); return; }
+          if (type === 'object.move' && command.geometry && typeof command.geometry === 'object') object.canvasData = { ...(object.canvasData as object), ...(command.geometry as object) };
+          if (type === 'object.update' && command.content && typeof command.content === 'object') object.content = { ...(object.content as object), ...(command.content as object) };
+          accepted.push({ index, type, id }); return;
+        }
+        if (type === 'object.delete') {
+          const id = String(command.objectId || '');
+          if (!objects.some((object) => object.id === id)) { reject(index, 'Object not found'); return; }
+          objects = objects.filter((object) => object.id !== id);
+          connections = connections.filter((edge) => edge.sourceObjectId !== id && edge.targetObjectId !== id);
+          accepted.push({ index, type, id }); return;
+        }
+        if (type === 'connection.add') {
+          const resolveId = (value: unknown) => clientIds.get(String(value)) ?? String(value || '');
+          const sourceObjectId = resolveId(command.sourceId);
+          const targetObjectId = resolveId(command.targetId);
+          if (!objects.some((object) => object.id === sourceObjectId) || !objects.some((object) => object.id === targetObjectId)) { reject(index, 'Connection endpoint not found'); return; }
+          const id = typeof command.id === 'string' && UUID_RE.test(command.id) ? command.id : crypto.randomUUID();
+          connections.push({ id, sourceObjectId, targetObjectId, kind: typeof command.kind === 'string' ? command.kind : 'reference', label: typeof command.label === 'string' ? command.label : null });
+          accepted.push({ index, type, id }); return;
+        }
+        if (type === 'connection.delete') {
+          const id = String(command.connectionId || '');
+          if (!connections.some((edge) => edge.id === id)) { reject(index, 'Connection not found'); return; }
+          connections = connections.filter((edge) => edge.id !== id);
+          accepted.push({ index, type, id }); return;
+        }
+        if (type === 'viewport.set') {
+          personalViewport = command.viewport;
+          accepted.push({ index, type }); return;
+        }
+        reject(index, `Unsupported command: ${type || 'missing type'}`);
+      });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : 'Command batch rejected', rejected }, 400);
+    }
+    const graphError = validGraph(objects, connections);
+    if (graphError) return c.json({ error: graphError, rejected }, 400);
+    const resourceError = await validateResourceAccess(objects, access.session.tenantId, access.session.segmentId, c.get('userId') as string);
+    if (resourceError) return c.json({ error: resourceError, code: 'RESOURCE_ACCESS_DENIED', rejected }, 403);
+    const nextRevision = access.session.canvasRevision + 1;
+    const userId = c.get('userId') as string;
+    const result = { accepted, rejected, serverIds: Object.fromEntries(clientIds), revision: nextRevision, savedAt: new Date().toISOString() };
+    const statements: unknown[] = [
+      db.delete(creationSessionConnections).where(eq(creationSessionConnections.sessionId, access.session.id)),
+      db.delete(creationSessionObjects).where(eq(creationSessionObjects.sessionId, access.session.id)),
+    ];
+    if (objects.length) statements.push(db.insert(creationSessionObjects).values(objects.map((object) => ({
+      id: object.id, sessionId: access.session.id, kind: object.kind.slice(0, 48), resourceType: object.resourceType?.slice(0, 64) || null,
+      resourceId: object.resourceId?.slice(0, 128) || null, resourceRevision: object.resourceRevision?.slice(0, 128) || null,
+      canvasData: object.canvasData ?? {}, content: object.content ?? null, createdBy: userId, updatedBy: userId,
+    }))));
+    if (connections.length) statements.push(db.insert(creationSessionConnections).values(connections.map((edge) => ({
+      id: edge.id, sessionId: access.session.id, sourceObjectId: edge.sourceObjectId, targetObjectId: edge.targetObjectId,
+      kind: (edge.kind || 'reference').slice(0, 24), label: edge.label?.slice(0, 255) || null, metadata: edge.metadata ?? null, createdBy: userId,
+    }))));
+    statements.push(
+      db.update(creationSessions).set({ canvasRevision: nextRevision, updatedBy: userId, updatedAt: new Date(), lastActivityAt: new Date(), preview: buildPreview(objects) }).where(and(eq(creationSessions.id, access.session.id), eq(creationSessions.tenantId, access.session.tenantId))),
+      db.insert(creationSessionEvents).values({ sessionId: access.session.id, revision: nextRevision, actorType: 'user', actorRef: userId, eventType: 'canvas.commands_applied', payload: { commands, result }, idempotencyKey }),
+      db.insert(creationSessionSnapshots).values({ sessionId: access.session.id, revision: nextRevision, graph: { objects, connections }, viewport: personalViewport ?? access.session.viewport, createdBy: userId }),
+    );
+    if (personalViewport) statements.push(db.update(creationSessionMembers).set({ viewport: personalViewport }).where(and(eq(creationSessionMembers.sessionId, access.session.id), eq(creationSessionMembers.userId, userId))));
+    await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
+    return c.json(result);
+  });
+
+  router.get('/:id/history', async (c) => {
+    const access = await requireSession(c);
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const snapshots = await db.select({ revision: creationSessionSnapshots.revision, label: creationSessionSnapshots.label, createdBy: creationSessionSnapshots.createdBy, createdAt: creationSessionSnapshots.createdAt })
+      .from(creationSessionSnapshots).where(eq(creationSessionSnapshots.sessionId, access.session.id))
+      .orderBy(desc(creationSessionSnapshots.revision)).limit(100);
+    return c.json({ snapshots });
+  });
+
+  router.post('/:id/checkpoints', async (c) => {
+    const access = await requireSession(c, 'editor');
+    if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
+    const body = await c.req.json<CheckpointBody>().catch(() => ({} as CheckpointBody));
+    const label = typeof body.label === 'string' ? body.label.trim().slice(0, 120) : '';
+    if (!label) return c.json({ error: 'Checkpoint name is required' }, 400);
+    const [objects, connections] = await Promise.all([
+      db.select().from(creationSessionObjects).where(eq(creationSessionObjects.sessionId, access.session.id)),
+      db.select().from(creationSessionConnections).where(eq(creationSessionConnections.sessionId, access.session.id)),
+    ]);
+    const graph = { objects, connections };
+    await db.insert(creationSessionSnapshots).values({ sessionId: access.session.id, revision: access.session.canvasRevision, graph, viewport: access.session.viewport, label, createdBy: c.get('userId') as string })
+      .onConflictDoUpdate({ target: [creationSessionSnapshots.sessionId, creationSessionSnapshots.revision], set: { label, graph, viewport: access.session.viewport } });
+    return c.json({ revision: access.session.canvasRevision, label }, 201);
+  });
+
+  router.get('/:id/history/:revision', async (c) => {
+    const access = await requireSession(c);
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const revision = Number(c.req.param('revision'));
+    if (!Number.isInteger(revision) || revision < 0) return c.json({ error: 'Invalid revision' }, 400);
+    const [snapshot] = await db.select().from(creationSessionSnapshots).where(and(eq(creationSessionSnapshots.sessionId, access.session.id), eq(creationSessionSnapshots.revision, revision))).limit(1);
+    if (!snapshot) return c.json({ error: 'Snapshot not found' }, 404);
+    return c.json(snapshot);
+  });
+
+  router.post('/:id/invite', async (c) => {
+    const access = await requireSession(c, 'owner');
     if (!access) return c.json({ error: 'Session not found or not shareable' }, 404);
     const body = await c.req.json<InviteBody>().catch(() => ({} as InviteBody));
     const role = cleanRole(body.role ?? 'editor');
     const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
-    if ((!body.userId && !email) || !role || role === 'owner') return c.json({ error: 'A userId or email and non-owner role are required' }, 400);
+    if ((!body.userId && !email) || !role) return c.json({ error: 'A userId or email and role are required' }, 400);
     const tenantId = c.get('tenantId') as number;
     const [target] = await db.select({ id: users.id }).from(users)
       .innerJoin(tenantMembers, and(
@@ -423,10 +752,13 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/presence', async (c) => {
     const access = await requireSession(c);
     if (!access) return c.json({ error: 'Session not found' }, 404);
-    const body: { revision?: number } = await c.req.json<{ revision?: number }>().catch(() => ({}));
+    const body: { revision?: number; viewport?: unknown; cursor?: unknown; selection?: unknown; typing?: boolean } = await c.req.json<{ revision?: number; viewport?: unknown; cursor?: unknown; selection?: unknown; typing?: boolean }>().catch(() => ({}));
     const now = new Date();
     const revision = Number.isFinite(body.revision) ? Math.max(0, Math.floor(body.revision!)) : access.session.canvasRevision;
-    await db.update(creationSessionMembers).set({ lastSeenAt: now, lastSeenRevision: revision }).where(and(
+    const viewport = body.viewport && typeof body.viewport === 'object' ? body.viewport : access.session.viewport;
+    const cursor = body.cursor && typeof body.cursor === 'object' ? body.cursor : null;
+    const selection = Array.isArray(body.selection) ? body.selection.filter((id): id is string => typeof id === 'string' && UUID_RE.test(id)).slice(0, 100) : [];
+    await db.update(creationSessionMembers).set({ lastSeenAt: now, lastSeenRevision: revision, viewport, cursor, selection, typing: body.typing === true }).where(and(
       eq(creationSessionMembers.sessionId, access.session.id),
       eq(creationSessionMembers.userId, c.get('userId') as string),
     ));
@@ -437,10 +769,14 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       displayName: users.displayName,
       lastSeenRevision: creationSessionMembers.lastSeenRevision,
       lastSeenAt: creationSessionMembers.lastSeenAt,
+      viewport: creationSessionMembers.viewport,
+      cursor: creationSessionMembers.cursor,
+      selection: creationSessionMembers.selection,
+      typing: creationSessionMembers.typing,
     }).from(creationSessionMembers)
       .leftJoin(users, eq(users.id, creationSessionMembers.userId))
       .where(and(eq(creationSessionMembers.sessionId, access.session.id), gte(creationSessionMembers.lastSeenAt, activeSince)));
-    return c.json({ revision: access.session.canvasRevision, members });
+    return c.json({ revision: access.session.canvasRevision, currentUserId: c.get('userId'), members });
   });
 
   router.post('/projects/:projectId/open', async (c) => {
@@ -450,13 +786,14 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!Number.isInteger(projectId) || projectId <= 0) return c.json({ error: 'Invalid project id' }, 400);
     const [project] = await db.select({ id: projects.id, name: projects.name }).from(projects).where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).limit(1);
     if (!project) return c.json({ error: 'Project not found' }, 404);
-    const [existing] = await db.select({ id: creationSessions.id })
+    const [existing] = await db.select({ id: creationSessions.id, objectId: creationSessionObjects.id })
       .from(creationSessionProjectLinks)
       .innerJoin(creationSessions, eq(creationSessions.id, creationSessionProjectLinks.sessionId))
       .innerJoin(creationSessionMembers, and(eq(creationSessionMembers.sessionId, creationSessions.id), eq(creationSessionMembers.userId, userId)))
+      .innerJoin(creationSessionObjects, and(eq(creationSessionObjects.sessionId, creationSessions.id), eq(creationSessionObjects.resourceType, 'project'), eq(creationSessionObjects.resourceId, String(projectId))))
       .where(and(eq(creationSessionProjectLinks.projectId, projectId), eq(creationSessions.status, 'active')))
       .orderBy(desc(creationSessions.lastActivityAt)).limit(1);
-    if (existing) return c.json({ sessionId: existing.id, created: false });
+    if (existing) return c.json({ sessionId: existing.id, objectId: existing.objectId, created: false });
     const sessionId = crypto.randomUUID();
     const objectId = crypto.randomUUID();
     await db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title: project.name, createdBy: userId, updatedBy: userId, canvasRevision: 1 });
@@ -465,6 +802,11 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       db.insert(creationSessionObjects).values({ id: objectId, sessionId, kind: 'project', resourceType: 'project', resourceId: String(projectId), canvasData: { x: 160, y: 120, w: 320, h: 220 }, content: { title: project.name }, createdBy: userId, updatedBy: userId }),
       db.insert(creationSessionProjectLinks).values({ sessionId, projectId, addedBy: userId }),
       db.insert(creationSessionEvents).values({ sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.created_from_project', payload: { projectId } }),
+      db.insert(creationSessionSnapshots).values({
+        sessionId, revision: 1,
+        graph: { objects: [{ id: objectId, kind: 'project', resourceType: 'project', resourceId: String(projectId), canvasData: { x: 160, y: 120, w: 320, h: 220 }, content: { kind: 'project', title: project.name } }], connections: [] },
+        viewport: { x: 0, y: 0, zoom: 1 }, createdBy: userId,
+      }),
     ]);
     return c.json({ sessionId, objectId, created: true }, 201);
   });
@@ -526,6 +868,11 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: `session.created_from_${resourceType}`,
         objectId, payload: { resourceType, resourceId, projectId },
       }),
+      db.insert(creationSessionSnapshots).values({
+        sessionId, revision: 1,
+        graph: { objects: [{ id: objectId, kind, resourceType, resourceId, canvasData: { x: 160, y: 120, w: kind === 'workflow' ? 460 : 320, h: 280 }, content: { kind, title, status: 'Live resource' } }], connections: [] },
+        viewport: { x: 0, y: 0, zoom: 1 }, createdBy: userId,
+      }),
     ];
     if (projectId) statements.push(db.insert(creationSessionProjectLinks).values({ sessionId, projectId, addedBy: userId }).onConflictDoNothing());
     await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
@@ -544,6 +891,9 @@ function buildPreview(objects: GraphObjectInput[]) {
       x: Number((object.canvasData as { x?: number } | undefined)?.x ?? 0),
       y: Number((object.canvasData as { y?: number } | undefined)?.y ?? 0),
       title: String((object.content as { title?: string } | undefined)?.title ?? object.kind).slice(0, 80),
+      status: String((object.content as { status?: string } | undefined)?.status ?? '').slice(0, 48) || undefined,
+      resourceType: object.resourceType || undefined,
+      resourceId: object.resourceId || undefined,
     })),
   };
 }

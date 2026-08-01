@@ -36,6 +36,6 @@ export default function CreationSessionClient({ sessionId }: { sessionId: string
 
   return <>
     {claimError && <div role="alert" style={{ position: 'fixed', zIndex: 100, top: 76, left: '50%', transform: 'translateX(-50%)', padding: '10px 14px', borderRadius: 10, background: '#fff1f0', color: '#a61d24', boxShadow: '0 6px 22px #19233a22' }}>{claimError}</div>}
-    <CreationCanvas sessionId={sessionId} persistence={local ? 'local' : 'server'} initialFocusId={searchParams.get('focus')} />
+    <CreationCanvas sessionId={sessionId} persistence={local ? 'local' : 'server'} initialFocusId={searchParams.get('focus')} initialShareOpen={searchParams.get('share') === '1'} initialPresent={searchParams.get('present') === '1'} />
   </>;
 }

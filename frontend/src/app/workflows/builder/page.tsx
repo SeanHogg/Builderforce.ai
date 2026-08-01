@@ -11,7 +11,7 @@ function BuilderPageInner() {
   const router = useRouter();
   const scope = useOptionalProjectScope();
   const id = params.get('id');
-  const adaptToCanvas = process.env.NEXT_PUBLIC_CREATION_SESSIONS_NAV === 'true' && !!id;
+  const adaptToCanvas = process.env.NEXT_PUBLIC_CREATION_SESSIONS_NAV !== 'false' && !!id;
   const [adapterFailed, setAdapterFailed] = useState(false);
   useEffect(() => {
     if (!adaptToCanvas || !id) return;

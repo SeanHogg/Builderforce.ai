@@ -11,6 +11,7 @@ export interface LocalCreationSnapshot {
   initialPrompt?: string;
   nodes: CreationFlowNode[];
   edges: Edge[];
+  viewport?: { x: number; y: number; zoom: number };
   updatedAt: string;
 }
 
@@ -31,7 +32,7 @@ export function createLocalCreationSession(prompt: string): string {
     id: nodeId,
     type: 'creation',
     position: { x: 120, y: 140 },
-    data: { kind: 'chat', title: 'Brain', subtitle: prompt.trim(), resourceId: `chat:${sessionId}` },
+    data: { kind: 'chat', title: 'Brain', subtitle: prompt.trim() },
   }];
   const edges: Edge[] = [];
   const lower = prompt.toLowerCase();
@@ -73,6 +74,7 @@ export function readLocalCreationSession(sessionId: string): LocalCreationSnapsh
       initialPrompt: typeof parsed.initialPrompt === 'string' ? parsed.initialPrompt : undefined,
       nodes: parsed.nodes,
       edges: parsed.edges,
+      viewport: parsed.viewport && typeof parsed.viewport.x === 'number' && typeof parsed.viewport.y === 'number' && typeof parsed.viewport.zoom === 'number' ? parsed.viewport : undefined,
       updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
     };
   } catch {
@@ -84,7 +86,7 @@ export function removeLocalCreationSession(sessionId: string): void {
   localStorage.removeItem(creationStorageKey(sessionId));
 }
 
-export function creationGraphFromSnapshot(snapshot: Pick<LocalCreationSnapshot, 'nodes' | 'edges'>): CreationGraphInput {
+export function creationGraphFromSnapshot(snapshot: Pick<LocalCreationSnapshot, 'nodes' | 'edges' | 'viewport'>): CreationGraphInput {
   return {
     objects: snapshot.nodes.map((node) => {
       const [resourceType, ...resourceParts] = (node.data.resourceId ?? '').split(':');
@@ -93,7 +95,12 @@ export function creationGraphFromSnapshot(snapshot: Pick<LocalCreationSnapshot, 
         kind: node.data.kind,
         resourceType: resourceParts.length ? resourceType : null,
         resourceId: resourceParts.length ? resourceParts.join(':') : null,
-        canvasData: { x: node.position.x, y: node.position.y },
+        canvasData: {
+          x: node.position.x,
+          y: node.position.y,
+          ...(typeof node.width === 'number' ? { w: node.width } : typeof node.style?.width === 'number' ? { w: node.style.width } : {}),
+          ...(typeof node.height === 'number' ? { h: node.height } : typeof node.style?.height === 'number' ? { h: node.style.height } : {}),
+        },
         content: { ...node.data },
       };
     }),
@@ -105,5 +112,6 @@ export function creationGraphFromSnapshot(snapshot: Pick<LocalCreationSnapshot, 
       label: typeof edge.label === 'string' ? edge.label : null,
       metadata: { animated: !!edge.animated },
     })),
+    ...(snapshot.viewport ? { viewport: snapshot.viewport } : {}),
   };
 }

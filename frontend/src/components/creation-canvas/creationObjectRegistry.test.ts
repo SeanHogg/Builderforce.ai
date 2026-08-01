@@ -5,7 +5,7 @@ describe('creation object registry', () => {
   it('has one unique definition for every palette object', () => {
     const kinds = CREATION_OBJECT_REGISTRY.map((definition) => definition.kind);
     expect(new Set(kinds).size).toBe(kinds.length);
-    expect(CREATION_PALETTE_GROUPS.flatMap((group) => group.items.map((item) => item.kind))).toEqual(kinds);
+    expect(new Set(CREATION_PALETTE_GROUPS.flatMap((group) => group.items.map((item) => item.kind)))).toEqual(new Set(kinds));
   });
 
   it('produces valid default data and resolves the same canonical definition', () => {

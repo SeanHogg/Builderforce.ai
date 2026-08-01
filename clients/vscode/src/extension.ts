@@ -25,6 +25,7 @@ import { InboxTreeProvider } from "./inboxTree";
 import { AttentionPoller, setLocalChatRuns, onLocalRunsChange, managerAttention } from "./attention";
 import { appUrl } from "./auth";
 import { MeetingsController, joinMeetingInBrowser, joinMeetingNative, openMeetingsWeb, type MeetingItem } from "./meetings";
+import { CreationCanvasPanel } from "./creationCanvasPanel";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
 function chatIdOf(item: bfApi.BfBrainChat | number | string | undefined): number | undefined {
@@ -146,9 +147,22 @@ export function activate(context: vscode.ExtensionContext): void {
       try {
         const session = await bfApi.createCreationSession(context.secrets, prompt);
         trackVsix("navigation", { ref: `creation-session:${session.id}` });
-        await vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/create/${session.id}`));
+        CreationCanvasPanel.open(context, session.id, session.title);
       } catch (error) {
         void vscode.window.showErrorMessage(vscode.l10n.t("Could not create a Canvas session: {0}", (error as Error).message));
+      }
+    }),
+    vscode.commands.registerCommand("builderforce.openCreationSession", async () => {
+      try {
+        const sessions = await bfApi.listCreationSessions(context.secrets);
+        const picked = await vscode.window.showQuickPick(sessions.map((session) => ({
+          label: session.title,
+          description: new Date(session.lastActivityAt).toLocaleString(),
+          session,
+        })), { title: vscode.l10n.t("Open Creation Session"), placeHolder: vscode.l10n.t("Choose a shared canvas") });
+        if (picked) CreationCanvasPanel.open(context, picked.session.id, picked.session.title);
+      } catch (error) {
+        void vscode.window.showErrorMessage(vscode.l10n.t("Could not open Creation Sessions: {0}", (error as Error).message));
       }
     }),
     attention.onDidChange(() => {

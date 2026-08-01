@@ -1,6 +1,6 @@
 'use client';
 
-import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
+import { Handle, NodeResizer, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
 import { creationObjectDefinition } from './creationObjectRegistry';
@@ -105,9 +105,11 @@ function StandupBody({ data }: { data: CreationNodeData }) {
 }
 
 export function CreationNode({ data, selected }: NodeProps<CreationFlowNode>) {
-  const isWide = data.kind === 'workflow' || data.kind === 'website' || data.kind === 'dashboard' || data.kind === 'evaluation' || data.kind === 'roadmap' || data.kind === 'featureSummary' || data.kind === 'evermind' || data.kind === 'projectComparison';
+  const isWide = data.kind === 'workflow' || data.kind === 'website' || data.kind === 'prototype' || data.kind === 'dashboard' || data.kind === 'chart' || data.kind === 'report' || data.kind === 'evaluation' || data.kind === 'roadmap' || data.kind === 'slides' || data.kind === 'featureSummary' || data.kind === 'mockupSet' || data.kind === 'evermind' || data.kind === 'projectComparison' || data.kind === 'frame';
+  const specialized = new Set(['workflow','website','prototype','dashboard','chart','report','evaluation','agent','staff','chat','dataset','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup']);
   return (
     <article className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
+      <NodeResizer isVisible={selected} minWidth={240} minHeight={130} lineClassName={styles.resizeLine} handleClassName={styles.resizeHandle} />
       <Handle type="target" position={Position.Left} className={styles.handle} />
       <header className={styles.nodeHeader}>
         <span className={styles.nodeIcon}>{creationObjectDefinition(data.kind).icon}</span>
@@ -117,8 +119,8 @@ export function CreationNode({ data, selected }: NodeProps<CreationFlowNode>) {
       </header>
       <div className={styles.nodeBody}>
         {data.kind === 'workflow' && <WorkflowBody status={data.status} />}
-        {data.kind === 'website' && <WebsiteBody data={data} />}
-        {data.kind === 'dashboard' && <DashboardBody data={data} />}
+        {(data.kind === 'website' || data.kind === 'prototype') && <WebsiteBody data={data} />}
+        {(data.kind === 'dashboard' || data.kind === 'chart' || data.kind === 'report') && <DashboardBody data={data} />}
         {data.kind === 'evaluation' && <EvaluationBody />}
         {data.kind === 'agent' && <><div className={styles.personRow}><span className={styles.presence} /><b>{data.status || 'Online'}</b><span>{data.model || 'gpt-4o'}</span></div><p>{data.subtitle}</p><div className={styles.pills}><span>Audience Analyzer</span><span>Copy Optimizer</span><span>Autonomy: Medium</span></div></>}
         {data.kind === 'staff' && <><div className={styles.personRow}><span className={styles.avatar} style={{ background: data.accent }}>{data.title.slice(0, 1)}</span><b>{data.role}</b><span className={styles.presence} /></div><small>Current focus</small><p>{data.focus}</p></>}
@@ -130,10 +132,12 @@ export function CreationNode({ data, selected }: NodeProps<CreationFlowNode>) {
         {data.kind === 'roadmap' && <div className={styles.roadmap}><div><b>Now</b><span>Validate narrative</span><span>Sales deck</span></div><div><b>Next</b><span>Executive review</span><span>Launch pilot</span></div><div><b>Later</b><span>Measure adoption</span><span>Scale channels</span></div></div>}
         {data.kind === 'task' && <><div className={styles.personRow}><span className={styles.liveDot} /><b>{data.status || 'Ready'}</b><span>{data.role || 'Campaign Strategist'}</span></div><p>{data.subtitle || 'Build the approved mockup and deliver it to the project.'}</p></>}
         {data.kind === 'mockup' && <><div className={styles.mockupGrid}><i /><i /><i /></div><p>{data.subtitle || 'High-fidelity interactive concept ready for review.'}</p><div className={styles.pills}><span>{data.status || 'Draft'}</span><span>Desktop + mobile</span></div></>}
+        {data.kind === 'mockupSet' && <><div className={styles.mockupGrid}><i /><i /><i /></div><p>{Array.isArray(data.items) && data.items.length ? `${data.items.length} linked concepts` : 'A reviewable collection of feature concepts. Ask Brain to expand every item.'}</p><div className={styles.pills}><span>Expandable</span><span>Citations retained</span></div></>}
         {data.kind === 'featureSummary' && <div className={styles.featureGrid}>{['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration'].map((feature, index) => <span key={feature}><b>{index + 1}</b>{feature}</span>)}</div>}
         {data.kind === 'evermind' && <EvermindBody data={data} />}
         {data.kind === 'projectComparison' && <ProjectComparisonBody data={data} />}
         {data.kind === 'standup' && <StandupBody data={data} />}
+        {!specialized.has(data.kind) && <><p>{data.subtitle || `${creationObjectDefinition(data.kind).label} is ready to connect, edit, and use as Brain context.`}</p><div className={styles.pills}><span>{data.status || 'Canvas object'}</span><span>Live session context</span></div></>}
       </div>
       <Handle type="source" position={Position.Right} className={styles.handle} />
     </article>

@@ -509,6 +509,58 @@ export async function createCreationSession(
   return result.session;
 }
 
+export interface BfCreationObject {
+  id: string;
+  kind: string;
+  resourceType?: string | null;
+  resourceId?: string | null;
+  canvasData?: Record<string, unknown> | null;
+  content?: Record<string, unknown> | null;
+}
+
+export interface BfCreationConnection {
+  id: string;
+  sourceObjectId: string;
+  targetObjectId: string;
+  kind?: string;
+  label?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface BfCreationSessionDetail {
+  session: { id: string; title: string; canvasRevision: number; viewport?: unknown };
+  role: "viewer" | "commenter" | "editor" | "runner" | "owner";
+  objects: BfCreationObject[];
+  connections: BfCreationConnection[];
+  members: Array<{ userId: string; displayName?: string | null; role: string }>;
+}
+
+export async function listCreationSessions(secrets: vscode.SecretStorage): Promise<Array<{ id: string; title: string; revision: number; lastActivityAt: string }>> {
+  const result = await authed<{ sessions: Array<{ id: string; title: string; revision: number; lastActivityAt: string }> }>(secrets, "/api/creation-sessions?limit=50");
+  return result?.sessions ?? [];
+}
+
+export async function getCreationSession(secrets: vscode.SecretStorage, sessionId: string): Promise<BfCreationSessionDetail> {
+  const result = await authed<BfCreationSessionDetail>(secrets, `/api/creation-sessions/${encodeURIComponent(sessionId)}`);
+  if (!result) throw new Error("Session not found");
+  return result;
+}
+
+export async function applyCreationCommands(
+  secrets: vscode.SecretStorage,
+  sessionId: string,
+  revision: number,
+  commands: unknown[],
+): Promise<{ revision: number }> {
+  const result = await authed<{ revision: number }>(secrets, `/api/creation-sessions/${encodeURIComponent(sessionId)}/commands`, {
+    method: "POST",
+    headers: { "Idempotency-Key": crypto.randomUUID(), "If-Match": String(revision) },
+    body: JSON.stringify({ commands, atomic: true }),
+  });
+  if (!result) throw new Error("Canvas change failed");
+  return result;
+}
+
 // Tasks cache: single-process, short TTL, busted by refresh / status change.
 const TASKS_TTL = 30_000;
 const taskCache = ttlCache<number, BfTask[]>(TASKS_TTL);

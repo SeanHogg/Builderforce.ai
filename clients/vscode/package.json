@@ -127,6 +127,12 @@
         "icon": "$(layout)"
       },
       {
+        "command": "builderforce.openCreationSession",
+        "title": "Open Creation Session…",
+        "category": "BuilderForce",
+        "icon": "$(multiple-windows)"
+      },
+      {
         "command": "builderforce.refreshMeetings",
         "title": "%command.refreshMeetings%",
         "icon": "$(sync)"

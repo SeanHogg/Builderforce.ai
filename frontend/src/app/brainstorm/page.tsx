@@ -22,9 +22,9 @@ export default function BrainstormPage() {
   const { hasTenant } = useAuth();
   const chatIdParam = searchParams.get('chat');
   const initialChatId = chatIdParam ? (Number(chatIdParam) || null) : null;
-  const creationNav = process.env.NEXT_PUBLIC_CREATION_SESSIONS_NAV === 'true';
+  const creationNav = process.env.NEXT_PUBLIC_CREATION_SESSIONS_NAV !== 'false';
   const legacyPrompt = searchParams.get('prompt')?.trim() || '';
-  const shouldAdapt = creationNav && (!!initialChatId || !!legacyPrompt);
+  const shouldAdapt = creationNav;
   const [adapterFailed, setAdapterFailed] = useState(false);
 
   useEffect(() => {
@@ -44,7 +44,9 @@ export default function BrainstormPage() {
           const localId = createLocalCreationSession(legacyPrompt);
           if (!stopped) router.replace(`/create/${localId}?from=brainstorm`);
         }
+        return;
       }
+      if (!stopped) router.replace('/create/new?from=brainstorm');
     };
     void open().catch(() => { if (!stopped) setAdapterFailed(true); });
     return () => { stopped = true; };

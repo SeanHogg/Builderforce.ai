@@ -1,6 +1,6 @@
 # PRD 17 — Creation Sessions and the Infinite Canvas
 
-**Status:** Phase 1 implemented (2026-08-01); advanced multiplayer/runtime milestones remain incremental · **Owner:** Product + Platform · **Migration:** `0388_creation_sessions.sql`
+**Status:** P0/P1 implementation candidate complete (2026-08-01); production rollout gates remain · **Owner:** Product + Platform · **Migrations:** `0388_creation_sessions.sql`, `0389_creation_session_collaboration.sql`, `0390_creation_session_commands.sql`
 
 ## 1. Executive summary
 
@@ -23,17 +23,18 @@ Homepage prompt
   → return to Dashboard → Create session cards
 ```
 
-### Phase 1 implementation note
+### Implementation note
 
 The initial vertical slice now includes anonymous prompt-to-canvas routing, legacy
 `/brainstorm?prompt=` bridging, intent-aware object seeding, local-to-server graph
 claiming, durable tenant-scoped session APIs, atomic revisioned graph saves, visual
-Dashboard session cards, project-to-canvas opening, invite-by-email, the consolidated
-Create navigation, and the VSIX “Create on Canvas” entry point. The canvas composer
+Dashboard session cards, project-to-canvas opening, role-based invitations, the consolidated
+Create navigation, and a native VSIX Creation Session editor. The canvas composer
 now uses the production Brain stream and tenant MCP registry, with an explicit
-confirmation boundary for mutating tools. Active-member presence and safe revision
-polling provide an initial collaboration loop; real-time cursors and CRDT/offline
-merge remain later milestones.
+change-set review boundary for mutating canvas tools. Active-member presence, live
+cursors/selections, personal viewport persistence, conflict reconciliation, comments,
+mentions, activity, durable commands, idempotency, and named revision checkpoints
+provide the shared collaboration loop.
 
 The object registry now also includes live website editing, CSV/TSV datasets and
 generated charts, canonical project expansion, task/agent delivery, and Evermind.
@@ -43,19 +44,23 @@ locally; a server session can attach it to a canonical Project and reuse the exi
 production Evermind console for seeding, teaching, training/flush, validation,
 inference settings, maintenance, and version telemetry.
 
-The next collaboration and migration increment adds durable object comments,
+The implemented collaboration and migration layer includes durable object comments,
 mentions metadata, resolvable threads, merged activity reads, role-aware canvas
-editing/running, active-presence polling, evidence-backed multi-Project comparisons,
-canonical impromptu stand-ups, and wrapper-session adapters for Brain chats and
-Workflow definitions. Legacy adapters remain guarded by
-`NEXT_PUBLIC_CREATION_SESSIONS_NAV` and visibly fall back to the old surface on a
-wrapper failure. Canvas object defaults, palette entries, icons, and AI tool enums
-now originate in one tested creation-object registry rather than separate catalogs.
+editing/running, evidence-backed multi-Project comparisons, canonical impromptu
+stand-ups, canonical Agent settings, streamed artifact delivery, and wrapper-session
+adapters for Brain chats, Workflow definitions, and Projects. Legacy adapters are on
+by default and retain visible fallbacks. Canvas defaults, palette entries, icons, and
+AI tool enums originate in one tested creation-object registry rather than separate catalogs.
 
 Migration `0389_creation_session_collaboration.sql` is the forward-only production
 upgrade for presence and comments. It intentionally repeats `IF NOT EXISTS` guards
 from the evolving `0388` definition because deployed environments may already have
 recorded `0388` before those collaboration fields were added.
+
+Migration `0390_creation_session_commands.sql` adds durable snapshots, named
+checkpoints, per-member cursors/selections/viewports, pinned sessions, and the
+revisioned command path. It must be applied before deploying clients that call
+`/commands`, `/history`, `/checkpoints`, or session pinning.
 
 `/dashboard` remains the default landing page. Its first and default tab becomes **Create**, showing visual session cards and a prompt that creates a new session immediately.
 

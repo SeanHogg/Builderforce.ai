@@ -39,7 +39,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { emulation } = useEmulation();
 
   // IDE/project pages force icon-only mode; otherwise the user's stored choice.
-  const routeCollapsed = isProjectIdPage(pathname) || isIdePage(pathname) || isCreationPage(pathname);
+  // Creation defaults to the user's preference: the compact rail keeps the canvas
+  // spacious, but expanding it reveals recent Creation Sessions and search.
+  const routeCollapsed = isProjectIdPage(pathname) || isIdePage(pathname);
   const { collapsed: navCollapsed, toggle: toggleNav } = useSidebarCollapse(routeCollapsed);
   const { open: navOpen, openNav, closeNav } = useMobileNav();
 
