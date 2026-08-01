@@ -616,7 +616,15 @@ export class RuntimeService {
         const effectContext = {
           tenantId, taskId: Number(execution.taskId), projectId, executionId: Number(saved.id),
         };
-        const managedResult = !holdsLane && this.onManagedRunStatus
+        // Holding the lane and coordinating the lifecycle are separate decisions.
+        // Role-attributed runs must not take the legacy RUNNING→in_progress /
+        // COMPLETED→next-lane path, but their terminal event MUST reach the managed
+        // callback: that callback first persists the role's evidence/verdict, then
+        // immediately evaluates whether the stage can advance. Suppressing it here
+        // left completed role work waiting for the periodic manager sweep (observed as
+        // a 108-minute developer→reviewer hand-off gap on task 1377).
+        const mayCoordinateManagedLifecycle = !isReviewRun && !isIncidentTriageRun;
+        const managedResult = mayCoordinateManagedLifecycle && this.onManagedRunStatus
           && (dto.status === ExecutionStatus.RUNNING || terminal)
           ? await this.runEffect('managed_run_status', effectContext, () => this.onManagedRunStatus!({
               ...effectContext,
