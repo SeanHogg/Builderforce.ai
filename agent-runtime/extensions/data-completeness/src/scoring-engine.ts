@@ -9,7 +9,6 @@ import type {
   ScoreThresholds,
   DatasetReport,
   FieldWeightConfig,
-  PlaceholderConfig,
 } from "./types.js";
 import {
   DEFAULT_PLACEHOLDERS,
@@ -18,6 +17,15 @@ import {
   DEFAULT_THRESHOLD_PASSING,
   getTier,
 } from "./enums.js";
+
+/**
+ * Default thresholds matching PRD requirements
+ */
+export const DEFAULT_THRESHOLDS: ScoreThresholds = {
+  critical: DEFAULT_THRESHOLD_CRITICAL,
+  warning: DEFAULT_THRESHOLD_WARNING,
+  passing: DEFAULT_THRESHOLD_PASSING,
+};
 
 /**
  * Checks if a value is considered present (not missing/empty/placeholder)
@@ -53,7 +61,8 @@ export function isValuePresent(
 export function calculateRecordScore(
   record: Record<string, unknown>,
   fieldWeights: FieldWeightConfig,
-  placeholders: Set<string>
+  placeholders: Set<string>,
+  thresholds: ScoreThresholds = DEFAULT_THRESHOLDS
 ): RecordScoreData {
   let totalWeight = 0;
   let presentWeightSum = 0;
@@ -97,7 +106,7 @@ export function calculateRecordScore(
 
   return {
     score,
-    tier: getTier(score, actualThresholds),
+    tier: getTier(score, thresholds),
     missingFields,
     topFieldGaps,
     rawData: record,
@@ -186,24 +195,9 @@ export function calculateDatasetReport(
     maxScore,
     stdDev: roundedStdDev,
     perFieldCompleteness,
-    recordScores,
+    recordScores: scores,
     summary,
   };
-}
-
-/**
- * Categorizes a score into its tier based on thresholds
- */
-export function getTier(
-  score: number,
-  thresholds: ScoreThresholds
-): TupleTier {
-  if (score < thresholds.critical) {
-    return "critical";
-  } else if (score < thresholds.warning) {
-    return "warning";
-  }
-  return "passing";
 }
 
 /**
