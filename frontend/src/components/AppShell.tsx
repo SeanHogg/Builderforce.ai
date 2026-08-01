@@ -21,11 +21,16 @@ function isIdePage(pathname: string | null): boolean {
   return pathname != null && pathname.startsWith('/ide/');
 }
 
+function isCreationPage(pathname: string | null): boolean {
+  return pathname != null && pathname.startsWith('/create');
+}
+
 /** Deep full-screen routes (the IDE editor + a single project) render edge-to-edge
  *  with no section tab bar. The IDE launcher + Voice Studio still show tabs. */
 function isFullScreenRoute(pathname: string | null): boolean {
   if (pathname == null) return false;
   if (isProjectIdPage(pathname)) return true;
+  if (isCreationPage(pathname)) return true;
   return /^\/ide\/(?!dashboard$|voice$)[^/]+/.test(pathname);
 }
 
@@ -34,7 +39,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { emulation } = useEmulation();
 
   // IDE/project pages force icon-only mode; otherwise the user's stored choice.
-  const routeCollapsed = isProjectIdPage(pathname) || isIdePage(pathname);
+  const routeCollapsed = isProjectIdPage(pathname) || isIdePage(pathname) || isCreationPage(pathname);
   const { collapsed: navCollapsed, toggle: toggleNav } = useSidebarCollapse(routeCollapsed);
   const { open: navOpen, openNav, closeNav } = useMobileNav();
 

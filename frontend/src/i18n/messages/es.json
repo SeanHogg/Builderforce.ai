@@ -398,6 +398,7 @@
     "group": {
       "dashboard": "Panel",
       "brainstorm": "Lluvia de ideas",
+      "create": "Crear",
       "projects": "Proyectos",
       "ide": "Builder",
       "workflows": "Flujos",

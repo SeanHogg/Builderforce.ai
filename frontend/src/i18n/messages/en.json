@@ -398,6 +398,7 @@
     "group": {
       "dashboard": "Dashboard",
       "brainstorm": "Brain Storm",
+      "create": "Create",
       "projects": "Projects",
       "ide": "Builder",
       "workflows": "Workflows",

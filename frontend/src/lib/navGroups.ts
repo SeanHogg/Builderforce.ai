@@ -58,6 +58,7 @@ export interface NavGroup {
 
 export const NAV_GROUPS: NavGroup[] = [
   { id: 'dashboard', labelKey: 'group.dashboard', icon: '🏠', href: '/dashboard', match: ['/dashboard'] },
+  { id: 'create', labelKey: 'group.create', icon: '✦', href: '/create', match: ['/create'] },
   { id: 'brainstorm', labelKey: 'group.brainstorm', icon: '💡', href: '/brainstorm', match: ['/brainstorm'] },
   {
     id: 'projects', labelKey: 'group.projects', icon: '▦', href: '/projects',
