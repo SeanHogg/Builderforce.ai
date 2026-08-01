@@ -1,41 +1,65 @@
-> **PRD** — drafted by CTO · task #487
+> **PRD** — drafted by Product Manager · task #1378
 > _Each agent that updates this PRD signs its change below._
 
-# Evermind Knowledge & Learning Pipeline PRD
+# Product Requirements Document (PRD) - Fix Code Block Detection in brain-ui Markdown Component
 
 ## Problem & Goal
-Teams building memory-enabled agents lack a repeatable pipeline to baseline existing knowledge, extract new insights, review for quality, store durably, and transfer to downstream systems. The goal is to deliver a reliable, auditable pipeline that turns raw interactions into structured, transferable knowledge while minimizing hallucination and drift.
+
+### Problem
+The current implementation of code block detection in the `Markdown` component of `brain-ui` relies on the `inline` prop and text newline checks, which has proven to be unreliable and error-prone. This has led to inconsistent rendering of code blocks and potential issues with the display of user-generated content.
+
+### Goal
+Replace the existing faulty inline detection logic with a more reliable method that accurately identifies code blocks. The new approach will use the presence of a `className` attribute to determine if a code block should be rendered, aligning with the approach used in `ChatMessageContent.tsx` in the frontend.
 
 ## Target Users / ICP Roles
-- Memory-engine maintainers and platform engineers
-- AI application developers integrating long-term memory
-- Knowledge operations roles responsible for review and governance
+- **Frontend Developers**: Developers who work with the `brain-ui` library and need to ensure consistent rendering of Markdown content.
+- **Technical Writers**: Users who rely on the `Markdown` component to document code and technical content accurately.
+- **QA Engineers**: Individuals responsible for testing the rendering of Markdown content to ensure quality and consistency.
 
 ## Scope
-Implement the five-stage pipeline (baseline → extract → review → store → transfer) as a core workflow inside `memory-engine`. Cover orchestration, data models, review interfaces, and transfer adapters for the initial release.
+
+### In-Scope
+- Update the `Markdown` component in `brain-ui` to use `className` for code block detection.
+- Remove the existing logic that relies on the `inline` prop and text newline checks.
+- Ensure that the new detection method aligns with the approach used in `ChatMessageContent.tsx`.
+- Update relevant tests to validate the new detection logic.
+
+### Out-of-Scope
+- Changes to the `ChatMessageContent.tsx` component.
+- Modifications to other components or libraries that use the `Markdown` component.
+- Implementation of additional features or enhancements unrelated to code block detection.
 
 ## Functional Requirements
-- **Baseline**: Snapshot current knowledge graph and vector store state with versioning.
-- **Extract**: Identify and pull candidate facts, entities, and relationships from new sessions or documents.
-- **Review**: Human-in-the-loop or automated quality gates for accuracy, relevance, and conflict detection.
-- **Store**: Persist reviewed items into the canonical knowledge store with provenance metadata.
-- **Transfer**: Export approved knowledge to external targets (vector DBs, graphs, downstream agents) via configurable adapters.
-- Provide CLI and SDK entry points for pipeline execution and status tracking.
-- Log every stage transition for auditability.
+
+1. **Code Block Detection**
+   - The `Markdown` component must use the presence of a `className` attribute to determine if a code block should be rendered.
+   - The component should no longer rely on the `inline` prop or text newline checks for code block detection.
+
+2. **Rendering Consistency**
+   - The rendering of code blocks must be consistent with the behavior of the `ChatMessageContent.tsx` component.
+   - All code blocks must be rendered correctly, with appropriate styling and formatting.
+
+3. **Backward Compatibility**
+   - The update should not introduce breaking changes to the existing API of the `Markdown` component.
+   - Any deprecated props or methods related to code block detection should be documented and phased out appropriately.
+
+4. **Testing**
+   - Unit tests must be updated to reflect the new detection logic.
+   - Integration tests should be implemented to ensure that code blocks are rendered correctly in various scenarios.
 
 ## Acceptance Criteria
-- Pipeline completes an end-to-end run on a 100-session corpus with <5% manual intervention.
-- Baseline and store operations produce immutable snapshots retrievable by version.
-- Review step surfaces conflicts and requires explicit approval before storage.
-- Transfer adapters successfully sync to at least two target systems with zero data loss.
-- All stages expose metrics (latency, items processed, rejection rate) via Prometheus.
+
+- The `Markdown` component successfully uses `className` for code block detection.
+- All existing tests pass with the new detection logic in place.
+- The rendering of code blocks is consistent with the `ChatMessageContent.tsx` component.
+- No regression issues are introduced in the `brain-ui` library as a result of the update.
+- Documentation is updated to reflect the changes in the detection logic.
 
 ## Out of Scope
-- Advanced LLM fine-tuning or model training
-- Real-time streaming ingestion
-- Multi-tenant isolation or billing features
-- Mobile or non-engine client SDKs
-- Historical data migration from legacy systems
+
+- Refactoring of other components or utilities within `brain-ui`.
+- Implementation of new features or enhancements unrelated to code block detection.
+- Changes to the frontend codebase outside of the `Markdown` component.
 
 ## Requirements
 
