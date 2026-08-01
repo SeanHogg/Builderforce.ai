@@ -100,6 +100,16 @@ describe('ProviderKeysSettings — rejected-account prompt', () => {
     expect(await screen.findByText(/providerKeys\.diagnostic\.currentStatus providerKeys\.diagnostic\.state\.capacity/)).toBeInTheDocument();
   });
 
+  it('gives a Kimi Code rejection Kimi remediation, never SuperGrok copy', async () => {
+    mockApi([{
+      provider: 'kimi', authType: 'api_key', priority: 0,
+      authAlert: alert({ provider: 'kimi', reason: 'not_entitled', vendor: 'kimi-code' }),
+    }]);
+    render(<ProviderKeysSettings />);
+    expect(await screen.findByText(/providerKeys\.authAlert\.kimiNotEntitled 403/)).toBeInTheDocument();
+    expect(screen.queryByText(/providerKeys\.authAlert\.xaiNotEntitled/)).not.toBeInTheDocument();
+  });
+
   it('does NOT report a broken account as connected — the chip follows health, not storage', async () => {
     // The whole reason this page could show five green cards next to a failing Test
     // connection: the chip coloured itself off "a credential is stored", which stays true
