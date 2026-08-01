@@ -1,15 +1,19 @@
 {
   "id": "conflict-detection",
-  "configSchema": {
+  "name": "Conflict Detection",
+  "description": "Detects priority conflicts and generates alerts for the priority register",
+  "version": "1.0.0",
+  "schema": {
     "type": "object",
-    "additionalProperties": false,
     "properties": {
-      "windowThresholdDays": {
-        "type": "integer",
-        "minimum": 1,
-        "maximum": 30,
-        "default": 7,
-        "description": "Fallback review-window size in days, used when requests carry no explicit review window or priority version."
+      "enabledRules": {
+        "type": "array",
+        "items": { "type": "string" },
+        "default": ["p0-team-review-window"]
+      },
+      "alertRetentionDays": {
+        "type": "number",
+        "default": 90
       }
     }
   }
