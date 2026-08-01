@@ -33,6 +33,39 @@ const FINAL_STATUSES: string[] = [
   'cancelled',
 ];
 
+/**
+ * Format days overdue as a human-readable string.
+ */
+function formatDaysOverdue(days: number | null): string {
+  if (days === null) return 'No due date';
+  if (days === 0) return 'today';
+  if (days === 1) return '1 day overdue';
+  if (days < 0) return `overdue by ${Math.abs(days)} days`;
+  return `${days} days overdue`;
+}
+
+/**
+ * Get epic info for a group of tasks.
+ */
+function getEpicInfo(tasks: Array<any>, epicKey: string) {
+  if (epicKey === '__NO_EPIC__') {
+    return {
+      id: null,
+      title: 'Tasks without Epic',
+      parentKey: null,
+      isUnassigned: true,
+    };
+  }
+
+  const firstTask = tasks[0];
+  return {
+    id: epicKey,
+    title: firstTask.epicId ? firstTask.taskTitle : 'Unknown Epic',
+    parentKey: epicKey,
+    isUnassigned: false,
+  };
+}
+
 export function createOverdueRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
@@ -92,7 +125,7 @@ export function createOverdueRoutes(db: Db): Hono<HonoEnv> {
 
         // Calculate days overdue
         const dueDate = overdueService.parseDueDate(row.taskDueDate);
-        let daysOverdue = null as number | null;
+        let daysOverdue: number | null = null;
 
         if (dueDate) {
           const now = new Date();
@@ -112,19 +145,20 @@ export function createOverdueRoutes(db: Db): Hono<HonoEnv> {
           daysOverdue,
           epicId: row.taskEpicParentId,
           projectId: row.taskProjectId,
+          taskTitle: row.taskTitle,
         });
       }
 
       // Build response structure
       const groupedData = Array.from(epicGroups.entries()).map(
         ([key, tasks]) => {
-          const epicInfo = this._getEpicInfo(tasks, key);
+          const epicInfo = getEpicInfo(tasks, key);
 
           return {
             epic: epicInfo,
             tasks: tasks.map((t) => ({
               task: t.task,
-              daysOverdue: this._formatDaysOverdue(t.daysOverdue!),
+              daysOverdue: formatDaysOverdue(t.daysOverdue),
             })),
           };
         }
@@ -150,49 +184,5 @@ export function createOverdueRoutes(db: Db): Hono<HonoEnv> {
     }
   });
 
-  /**
-   * Extract Epic-related info from the mismatched shape on tasks.
-   */
-  _getEpicInfo = (tasks: Array<any>, epicKey: string) => {
-    if (epicKey === '__NO_EPIC__') {
-      return {
-        id: null,
-        title: 'Tasks without Epic',
-        parentKey: null,
-        isUnassigned: true,
-      };
-    }
-
-    // For now, tasks that have a parentTaskId are considered to belong to that task
-    // even if we don't have details about the parent itself. In a future enhancement,
-    // we could join back to tasks.parentTaskId to get the Epic's title.
-    // For the current implementation, we'll display the task whose parent is the Epic.
-    const firstTask = tasks[0];
-    return {
-      id: epicKey,
-      title: firstTask.epicId
-        ? firstTask.taskTitle // Use the parent task's title as the Epic placeholder
-        : 'Unknown Epic',
-      parentKey: epicKey,
-      isUnassigned: false,
-    };
-  };
-
-  /**
-   * Format the overdue duration string.
-   */
-  _formatDaysOverdue = (days: number | null) => {
-    if (days === null) return 'No due date';
-    return this._daysOverdue(days);
-  };
-
-  /**
-   * Format days overdue.
-   */
-  _daysOverdue = (days: number) => {
-    if (days === 0) return 'today';
-    if (days === 1) return '1 day overdue';
-    if (days < 0) return `overdue by ${Math.abs(days)} days`;
-    return `${days} days overdue`;
-  };
+  return router;
 }
