@@ -66,8 +66,8 @@ CREATE INDEX IF NOT EXISTS idx_portfolio_items_media_type
 -- be managed separately, e.g. via a config table or a workshop).
 CREATE TABLE IF NOT EXISTS portfolio_item_tags (
   id              SERIAL PRIMARY KEY,
-  portfolio-item  INTEGER NOT NULL REFERENCES portfolio_items(id) ON DELETE CASCADE,
+  portfolio_item_id INTEGER NOT NULL REFERENCES portfolio_items(id) ON DELETE CASCADE,
   tag             VARCHAR(50) NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_portfolio_item_tag
-  ON portfolio_item_tags(portfolio_item, tag);
+  ON portfolio_item_tags(portfolio_item_id, tag);
