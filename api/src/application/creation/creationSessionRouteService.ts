@@ -5,7 +5,7 @@
  * (projects, workflows, agents, sites, tasks, …) remain referenced by type/id.
  */
 import { Hono, type Context } from 'hono';
-import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, or, sql } from 'drizzle-orm';
 import { authMiddleware } from '../../presentation/middleware/authMiddleware';
 import { scope } from '../../presentation/routes/segmentTrackerRoutes';
 import {
@@ -205,7 +205,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       db.select().from(creationSessionObjects).where(eq(creationSessionObjects.sessionId, access.session.id)),
       db.select().from(creationSessionConnections).where(eq(creationSessionConnections.sessionId, access.session.id)),
       db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(eq(creationSessionProjectLinks.sessionId, access.session.id)),
-      db.select({ userId: creationSessionMembers.userId, role: creationSessionMembers.role, displayName: users.displayName })
+      db.select({ userId: creationSessionMembers.userId, role: creationSessionMembers.role, displayName: users.displayName, lastSeenAt: creationSessionMembers.lastSeenAt })
         .from(creationSessionMembers).leftJoin(users, eq(users.id, creationSessionMembers.userId))
         .where(eq(creationSessionMembers.sessionId, access.session.id)),
     ]);
@@ -297,6 +297,29 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     await db.insert(creationSessionMembers).values({ sessionId: access.session.id, userId: target.id, role, invitedBy: c.get('userId') as string })
       .onConflictDoUpdate({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId], set: { role } });
     return c.json({ userId: target.id, role }, 201);
+  });
+
+  router.post('/:id/presence', async (c) => {
+    const access = await requireSession(c);
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const body: { revision?: number } = await c.req.json<{ revision?: number }>().catch(() => ({}));
+    const now = new Date();
+    const revision = Number.isFinite(body.revision) ? Math.max(0, Math.floor(body.revision!)) : access.session.canvasRevision;
+    await db.update(creationSessionMembers).set({ lastSeenAt: now, lastSeenRevision: revision }).where(and(
+      eq(creationSessionMembers.sessionId, access.session.id),
+      eq(creationSessionMembers.userId, c.get('userId') as string),
+    ));
+    const activeSince = new Date(now.getTime() - 60_000);
+    const members = await db.select({
+      userId: creationSessionMembers.userId,
+      role: creationSessionMembers.role,
+      displayName: users.displayName,
+      lastSeenRevision: creationSessionMembers.lastSeenRevision,
+      lastSeenAt: creationSessionMembers.lastSeenAt,
+    }).from(creationSessionMembers)
+      .leftJoin(users, eq(users.id, creationSessionMembers.userId))
+      .where(and(eq(creationSessionMembers.sessionId, access.session.id), gte(creationSessionMembers.lastSeenAt, activeSince)));
+    return c.json({ revision: access.session.canvasRevision, members });
   });
 
   router.post('/projects/:projectId/open', async (c) => {

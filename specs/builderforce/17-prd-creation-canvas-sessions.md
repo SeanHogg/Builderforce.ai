@@ -29,9 +29,19 @@ The initial vertical slice now includes anonymous prompt-to-canvas routing, lega
 `/brainstorm?prompt=` bridging, intent-aware object seeding, local-to-server graph
 claiming, durable tenant-scoped session APIs, atomic revisioned graph saves, visual
 Dashboard session cards, project-to-canvas opening, invite-by-email, the consolidated
-Create navigation, and the VSIX “Create on Canvas” entry point. Real-time cursors,
-CRDT/offline merge, and production agent/MCP execution remain later milestones in
-this PRD rather than being represented as complete by the Phase 1 UI.
+Create navigation, and the VSIX “Create on Canvas” entry point. The canvas composer
+now uses the production Brain stream and tenant MCP registry, with an explicit
+confirmation boundary for mutating tools. Active-member presence and safe revision
+polling provide an initial collaboration loop; real-time cursors and CRDT/offline
+merge remain later milestones.
+
+The object registry now also includes live website editing, CSV/TSV datasets and
+generated charts, canonical project expansion, task/agent delivery, and Evermind.
+An Evermind object can expand its dataset → tokenizer → tuning → evaluation →
+telemetry pipeline directly on the canvas. Anonymous users can design that pipeline
+locally; a server session can attach it to a canonical Project and reuse the existing
+production Evermind console for seeding, teaching, training/flush, validation,
+inference settings, maintenance, and version telemetry.
 
 `/dashboard` remains the default landing page. Its first and default tab becomes **Create**, showing visual session cards and a prompt that creates a new session immediately.
 

@@ -13,7 +13,8 @@ export type CreationObjectKind =
   | 'roadmap'
   | 'task'
   | 'mockup'
-  | 'featureSummary';
+  | 'featureSummary'
+  | 'evermind';
 
 export type CreationNodeData = {
   [key: string]: unknown;

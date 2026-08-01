@@ -7826,7 +7826,7 @@ export interface CreationSessionDetail {
   objects: CreationSessionObject[];
   connections: CreationSessionConnection[];
   projectIds: number[];
-  members: Array<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null }>;
+  members: Array<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; lastSeenAt?: string }>;
 }
 
 export interface CreationGraphInput {
@@ -7847,6 +7847,8 @@ export const creationSessionsApi = {
     request<{ revision: number; savedAt: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/graph`, { method: 'PUT', body: JSON.stringify(graph) }),
   invite: (id: string, invitee: { userId?: string; email?: string }, role: CreationSessionSummary['role'] = 'editor') =>
     request<{ userId: string; role: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/invite`, { method: 'POST', body: JSON.stringify({ ...invitee, role }) }),
+  presence: (id: string, revision: number) =>
+    request<{ revision: number; members: Array<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; lastSeenRevision: number; lastSeenAt: string }> }>(`/api/creation-sessions/${encodeURIComponent(id)}/presence`, { method: 'POST', body: JSON.stringify({ revision }) }),
   openProject: (projectId: number) =>
     request<{ sessionId: string; created: boolean }>(`/api/creation-sessions/projects/${projectId}/open`, { method: 'POST' }),
 };

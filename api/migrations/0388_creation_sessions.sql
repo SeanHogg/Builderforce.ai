@@ -71,12 +71,15 @@ CREATE TABLE IF NOT EXISTS creation_session_members (
     CHECK (role IN ('viewer', 'commenter', 'editor', 'runner', 'owner')),
   invited_by VARCHAR(36) REFERENCES users(id) ON DELETE SET NULL,
   last_seen_revision BIGINT NOT NULL DEFAULT 0,
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY(session_id, user_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_creation_members_user
   ON creation_session_members(user_id, joined_at DESC);
+CREATE INDEX IF NOT EXISTS idx_creation_members_presence
+  ON creation_session_members(session_id, last_seen_at DESC);
 
 CREATE TABLE IF NOT EXISTS creation_session_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

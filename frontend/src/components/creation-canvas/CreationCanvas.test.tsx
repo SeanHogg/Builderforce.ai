@@ -14,7 +14,7 @@ describe('CreationCanvas', () => {
     render(<CreationCanvas sessionId="campaign-test" />);
 
     expect(screen.getByText('Fall campaign workflow')).toBeInTheDocument();
-    expect(screen.getByText('Campaign landing page')).toBeInTheDocument();
+    expect(screen.getAllByText('Campaign landing page').length).toBeGreaterThan(0);
     expect(screen.getByText('Campaign forecast')).toBeInTheDocument();
     expect(screen.getByLabelText('Active collaborators')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Campaign Strategist')).toBeInTheDocument();
@@ -49,13 +49,52 @@ describe('CreationCanvas', () => {
   });
 
   it('creates feature mockups and dispatches their delivery from the session', () => {
-    render(<CreationCanvas sessionId="feature-test" />);
+    render(<CreationCanvas sessionId="feature-test" persistence="local" />);
     fireEvent.change(screen.getByLabelText('Ask Brain about this canvas'), { target: { value: 'Create a visual summary of the top 10 requested features and mockups' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send to Brain' }));
     act(() => vi.advanceTimersByTime(900));
 
     expect(screen.getByDisplayValue('Top 10 feature mockups')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Add to project and assign' }));
-    expect(screen.getByText('Mockup attached and delivery task assigned')).toBeInTheDocument();
+    expect(screen.getByText('Draft delivery task added; save to deliver it')).toBeInTheDocument();
+  });
+
+  it('edits a website prototype live from the inspector', () => {
+    render(<CreationCanvas sessionId="website-editor-test" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Website' }));
+    fireEvent.change(screen.getByLabelText('Headline'), { target: { value: 'Build the future together' } });
+    fireEvent.change(screen.getByLabelText('Call to action'), { target: { value: 'Start building' } });
+    expect(screen.getByText('Build the future together')).toBeInTheDocument();
+    expect(screen.getByText('Start building')).toBeInTheDocument();
+  });
+
+  it('imports tabular data and creates a connected visualization', async () => {
+    render(<CreationCanvas sessionId="dataset-visual-test" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Dataset' }));
+    const file = new File(['Region,Revenue\nNorth,120\nSouth,90'], 'revenue.csv', { type: 'text/csv' });
+    Object.defineProperty(file, 'text', { value: vi.fn().mockResolvedValue('Region,Revenue\nNorth,120\nSouth,90') });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Import CSV or TSV'), { target: { files: [file] } });
+      await Promise.resolve();
+    });
+    expect(screen.getByText('2 rows · 2 columns')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Create visualization' }));
+    expect(screen.getByDisplayValue('revenue.csv visualization')).toBeInTheDocument();
+    expect(screen.getAllByText('North').length).toBeGreaterThan(0);
+  });
+
+  it('designs Evermind creation and training as a canvas-native pipeline', () => {
+    render(<CreationCanvas sessionId="evermind-pipeline-test" persistence="local" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Evermind' }));
+
+    expect(screen.getByDisplayValue('Untitled Evermind')).toBeInTheDocument();
+    expect(screen.getByText(/blueprint works without an account/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add creation & training pipeline' }));
+
+    expect(screen.getByText('Evermind creation and training pipeline added')).toBeInTheDocument();
+    expect(screen.getByText('Tokenizer build')).toBeInTheDocument();
+    expect(screen.getByText('Evermind tuning run')).toBeInTheDocument();
+    expect(screen.getByText('Model quality gate')).toBeInTheDocument();
+    expect(screen.getByText('Training telemetry')).toBeInTheDocument();
   });
 });

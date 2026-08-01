@@ -115,11 +115,24 @@
 .mockupGrid { display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:5px; height:72px; }.mockupGrid i { display:block; border:1px solid #ccd9e9; border-radius:6px; background:linear-gradient(155deg,#edf4ff 0 45%,#3978f6 46% 55%,#fff 56%); }.mockupGrid i:nth-child(2){background:linear-gradient(155deg,#f7efff 0 45%,#7b5be7 46% 55%,#fff 56%)}.mockupGrid i:nth-child(3){background:linear-gradient(155deg,#eafaf5 0 45%,#22ad81 46% 55%,#fff 56%)}
 .featureGrid { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }.featureGrid span { display:flex; align-items:center; gap:5px; padding:7px 5px; border:1px solid #dfe6ef; border-radius:7px; background:#fbfdff; font-size:7px; }.featureGrid b { width:17px; height:17px; display:grid; place-items:center; flex:none; border-radius:5px; color:#fff; background:#3978f6; font-size:8px; }
 .node_project,.node_mockup,.node_task { width:290px; }.node_roadmap,.node_featureSummary { width:500px; }
+.node_evermind { width:500px; border-color:#dc9bca; background:linear-gradient(135deg,#fff 0%,#fff8fd 100%); }
+.node_evermind .nodeIcon { color:#b22c86; background:#fde9f6; }
+.evermindBody { display:grid; gap:10px; }
+.evermindMetrics { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
+.evermindMetrics span { display:grid; gap:3px; padding:8px; border:1px solid #edd8e7; border-radius:8px; background:#fff; }
+.evermindMetrics small { color:#8a7084; font-size:8px; text-transform:uppercase; letter-spacing:.06em; }
+.evermindMetrics b { font-size:15px; color:#702354; }
+.evermindStages { display:grid; grid-template-columns:repeat(5,1fr); gap:5px; }
+.evermindStages span { padding:6px 4px; border:1px solid #e3dfe7; border-radius:6px; color:#8791a1; background:#fafbfc; text-align:center; font-size:8px; }
+.evermindStages .evermindStageActive { border-color:#e7a8d2; color:#9b276e; background:#fff0f9; font-weight:700; }
 
 .inspector { position:absolute; z-index:9; top:14px; right:14px; bottom:86px; width:270px; display:flex; flex-direction:column; border:1px solid #d7e0ed; border-radius:13px; background:rgba(255,255,255,.98); box-shadow:0 14px 42px rgba(31,55,88,.14); color:var(--canvas-ink); }
 .inspector header { display:flex; justify-content:space-between; padding:14px; border-bottom:1px solid #e2e8f0; }.inspector header > div { display:grid; grid-template-columns:auto 1fr; column-gap:8px; }.inspector header span { grid-row:1/3; color:#7557e8; font-size:18px; }.inspector header strong { font-size:12px; }.inspector header small { color:#8190a4; font-size:9px; text-transform:capitalize; }.inspector header button { border:0; background:transparent; color:#77869b; font-size:17px; cursor:pointer; }
 .inspectorTabs { display:flex; padding:6px 10px 0; border-bottom:1px solid #e2e8f0; }.inspectorTabs button { flex:1; padding:7px; border:0; border-bottom:2px solid transparent; background:transparent; color:#78879b; font:600 10px inherit; }.inspectorTabs .activeTab { color:var(--canvas-blue); border-bottom-color:var(--canvas-blue); }
 .inspectorBody { flex:1; overflow:auto; padding:13px; }.inspector label { display:grid; gap:5px; margin-bottom:13px; color:#65758b; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }.inspector input,.inspector textarea,.inspector select { box-sizing:border-box; width:100%; padding:8px; border:1px solid #d9e2ed; border-radius:7px; background:#fbfdff; color:#243348; font:11px/1.45 inherit; text-transform:none; letter-spacing:0; }.inspector textarea { resize:vertical; }.inspectorPills button { border-style:dashed; cursor:pointer; }.inspectorHint { color:#6d7d94; font-size:11px; line-height:1.55; }.inspector footer { display:grid; gap:7px; padding:12px; border-top:1px solid #e2e8f0; color:#7b899c; font-size:9px; }.inspector footer code { overflow:hidden; text-overflow:ellipsis; color:#53647a; }.fullButton { width:100%; margin-top:7px; }
+
+.evermindConsoleHost { margin:14px -8px 0; padding-top:12px; border-top:1px solid #eadce6; font-size:11px; }
+.evermindConsoleHost :global(button),.evermindConsoleHost :global(input),.evermindConsoleHost :global(select),.evermindConsoleHost :global(textarea) { max-width:100%; }
 
 .composer { position:absolute; z-index:10; left:50%; bottom:20px; transform:translateX(-50%); width:min(630px,calc(100% - 620px)); min-width:430px; padding:10px 12px; border:1px solid #cfd9e6; border-radius:14px; background:rgba(255,255,255,.97); box-shadow:0 12px 35px rgba(27,53,86,.16); }
 .composer textarea { box-sizing:border-box; width:100%; border:0; outline:0; resize:none; padding:1px 3px 9px; background:transparent; color:#26364b; font:12px/1.45 inherit; }

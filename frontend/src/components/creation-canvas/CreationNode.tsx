@@ -10,6 +10,7 @@ const ICONS: Record<CreationNodeData['kind'], string> = {
   workflow: '⌘', website: '◎', dashboard: '▥', chat: '●', agent: '✦', staff: '●',
   evaluation: '✦', dataset: '▤', voice: '◖', note: '◇', project: '▦', roadmap: '↗',
   task: '✓', mockup: '▣', featureSummary: '★',
+  evermind: '🧠',
 };
 
 function WorkflowBody({ status }: { status?: string }) {
@@ -27,25 +28,32 @@ function WorkflowBody({ status }: { status?: string }) {
   );
 }
 
-function WebsiteBody() {
+function WebsiteBody({ data }: { data: CreationNodeData }) {
+  const headline = typeof data.websiteHeadline === 'string' ? data.websiteHeadline : 'Fall in love with every look';
+  const description = typeof data.websiteBody === 'string' ? data.websiteBody : 'New arrivals for the season ahead.';
+  const cta = typeof data.websiteCta === 'string' ? data.websiteCta : 'Shop the collection';
+  const accent = typeof data.websiteAccent === 'string' ? data.websiteAccent : '#3978f6';
   return (
     <div className={styles.websitePreview}>
-      <div className={styles.siteNav}><strong>AutumnGlow</strong><span>Products&nbsp;&nbsp; Collections&nbsp;&nbsp; About</span><button>Shop now</button></div>
+      <div className={styles.siteNav}><strong>{data.title}</strong><span>Product&nbsp;&nbsp; Solutions&nbsp;&nbsp; About</span><button style={{ background: accent }}>Get started</button></div>
       <div className={styles.siteHero}>
-        <div><h3>Fall in love<br />with every look</h3><p>New arrivals for the season ahead.</p><button>Shop the collection</button></div>
-        <div className={styles.heroArt}>AG</div>
+        <div><h3>{headline}</h3><p>{description}</p><button style={{ background: accent }}>{cta}</button></div>
+        <div className={styles.heroArt} style={{ color: accent }}>{data.title.slice(0, 2).toUpperCase()}</div>
       </div>
       <div className={styles.siteBenefits}><span>Free shipping</span><span>Easy returns</span><span>Secure checkout</span></div>
     </div>
   );
 }
 
-function DashboardBody() {
+function DashboardBody({ data }: { data: CreationNodeData }) {
+  const labels = Array.isArray(data.chartLabels) ? data.chartLabels.map(String).slice(0, 6) : [];
+  const values = Array.isArray(data.chartValues) ? data.chartValues.map(Number).slice(0, 6) : [];
+  const max = Math.max(1, ...values.filter(Number.isFinite));
   return (
     <>
       <div className={styles.kpis}><div><small>Reach</small><strong>212K</strong><em>↑ 18.4%</em></div><div><small>CTR</small><strong>3.6%</strong><em>↑ 0.6pp</em></div><div><small>Conversion</small><strong>2.1%</strong><em>↑ 0.3pp</em></div></div>
       <div className={styles.charts}>
-        <div><small>Funnel</small><div className={styles.funnel}><i /><i /><i /><i /></div></div>
+        <div><small>{labels.length ? 'Imported data' : 'Funnel'}</small>{labels.length ? <div style={{ display: 'grid', gap: 5, marginTop: 7 }}>{labels.map((label, index) => <div key={`${label}-${index}`} style={{ display: 'grid', gridTemplateColumns: '70px 1fr 38px', alignItems: 'center', gap: 5, fontSize: 9 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span><i style={{ display: 'block', height: 7, borderRadius: 5, background: '#08b59d', width: `${Math.max(4, (values[index] || 0) / max * 100)}%` }} /><b>{Number.isFinite(values[index]) ? values[index] : 0}</b></div>)}</div> : <div className={styles.funnel}><i /><i /><i /><i /></div>}</div>
         <div><small>Channel mix</small><div className={styles.donut} /></div>
       </div>
     </>
@@ -64,8 +72,20 @@ function EvaluationBody() {
   );
 }
 
+function EvermindBody({ data }: { data: CreationNodeData }) {
+  const version = typeof data.evermindVersion === 'number' ? data.evermindVersion : 0;
+  const contributions = typeof data.contributions === 'number' ? data.contributions : 0;
+  const loss = typeof data.trainingLoss === 'number' ? data.trainingLoss : null;
+  const stages = ['Dataset', 'Tokenize', 'Train', 'Evaluate', 'Publish'];
+  return <div className={styles.evermindBody}>
+    <div className={styles.evermindMetrics}><span><small>Version</small><b>{version ? `v${version}` : 'Draft'}</b></span><span><small>Learnings</small><b>{contributions}</b></span><span><small>Loss</small><b>{loss == null ? '—' : loss.toFixed(3)}</b></span></div>
+    <div className={styles.evermindStages}>{stages.map((stage, index) => <span key={stage} className={index <= (version ? 4 : 1) ? styles.evermindStageActive : ''}>{stage}</span>)}</div>
+    <p>{data.subtitle || 'A self-learning model blueprint. Attach project context to seed, teach, tune, evaluate, and deploy it.'}</p>
+  </div>;
+}
+
 export function CreationNode({ data, selected }: NodeProps<CreationFlowNode>) {
-  const isWide = data.kind === 'workflow' || data.kind === 'website' || data.kind === 'dashboard' || data.kind === 'evaluation' || data.kind === 'roadmap' || data.kind === 'featureSummary';
+  const isWide = data.kind === 'workflow' || data.kind === 'website' || data.kind === 'dashboard' || data.kind === 'evaluation' || data.kind === 'roadmap' || data.kind === 'featureSummary' || data.kind === 'evermind';
   return (
     <article className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
       <Handle type="target" position={Position.Left} className={styles.handle} />
@@ -77,13 +97,13 @@ export function CreationNode({ data, selected }: NodeProps<CreationFlowNode>) {
       </header>
       <div className={styles.nodeBody}>
         {data.kind === 'workflow' && <WorkflowBody status={data.status} />}
-        {data.kind === 'website' && <WebsiteBody />}
-        {data.kind === 'dashboard' && <DashboardBody />}
+        {data.kind === 'website' && <WebsiteBody data={data} />}
+        {data.kind === 'dashboard' && <DashboardBody data={data} />}
         {data.kind === 'evaluation' && <EvaluationBody />}
         {data.kind === 'agent' && <><div className={styles.personRow}><span className={styles.presence} /><b>{data.status || 'Online'}</b><span>{data.model || 'gpt-4o'}</span></div><p>{data.subtitle}</p><div className={styles.pills}><span>Audience Analyzer</span><span>Copy Optimizer</span><span>Autonomy: Medium</span></div></>}
         {data.kind === 'staff' && <><div className={styles.personRow}><span className={styles.avatar} style={{ background: data.accent }}>{data.title.slice(0, 1)}</span><b>{data.role}</b><span className={styles.presence} /></div><small>Current focus</small><p>{data.focus}</p></>}
-        {data.kind === 'chat' && <><div className={styles.message}><b>You</b><p>{data.subtitle || 'What would you like to create?'}</p></div><div className={styles.aiMessage}><b>Brain</b><p>I added your starting objects to the canvas. Keep creating freely; connect an account only when you want to collaborate or deliver the work.</p></div></>}
-        {data.kind === 'dataset' && <><p className={styles.fileMeta}>18,420 rows · 8 columns</p><div className={styles.miniTable}><b>User</b><b>Plan</b><b>Conversion</b><span>user_001</span><span>Pro</span><span>8.3%</span><span>user_002</span><span>Free</span><span>2.1%</span></div></>}
+        {data.kind === 'chat' && <><div className={styles.message}><b>You</b><p>{data.subtitle || 'What would you like to create?'}</p></div><div className={styles.aiMessage}><b>Brain</b><p>{typeof data.aiResponse === 'string' ? data.aiResponse : 'I added your starting objects to the canvas. Keep creating freely; connect an account only when you want to collaborate or deliver the work.'}</p></div></>}
+        {data.kind === 'dataset' && (() => { const columns = Array.isArray(data.columns) ? data.columns.map(String).slice(0, 3) : ['User', 'Plan', 'Conversion']; const rows = Array.isArray(data.rows) ? (data.rows as Array<Record<string, unknown>>).slice(0, 2) : [{ User: 'user_001', Plan: 'Pro', Conversion: '8.3%' }, { User: 'user_002', Plan: 'Free', Conversion: '2.1%' }]; return <><p className={styles.fileMeta}>{typeof data.rowCount === 'number' ? data.rowCount : 18420} rows · {columns.length} columns</p><div className={styles.miniTable}>{columns.map((column) => <b key={column}>{column}</b>)}{rows.flatMap((row, rowIndex) => columns.map((column) => <span key={`${rowIndex}-${column}`}>{String(row[column] ?? '')}</span>))}</div></>; })()}
         {data.kind === 'voice' && <><div className={styles.waveform}>▂▅▃▆▂▇▅▃▆▂▅▇▃▆▂▅</div><small>00:18 / 00:45</small></>}
         {data.kind === 'note' && <p>{data.subtitle || 'Double-click to add a thought.'}</p>}
         {data.kind === 'project' && <><div className={styles.projectHealth}><div><small>Maturity</small><b>3.8 / 5</b></div><div><small>Velocity</small><b>42 pts</b></div><div><small>Health</small><b className={styles.healthy}>On track</b></div></div><p>{data.subtitle || 'Optional project context. Expand to see related work.'}</p></>}
@@ -91,6 +111,7 @@ export function CreationNode({ data, selected }: NodeProps<CreationFlowNode>) {
         {data.kind === 'task' && <><div className={styles.personRow}><span className={styles.liveDot} /><b>{data.status || 'Ready'}</b><span>{data.role || 'Campaign Strategist'}</span></div><p>{data.subtitle || 'Build the approved mockup and deliver it to the project.'}</p></>}
         {data.kind === 'mockup' && <><div className={styles.mockupGrid}><i /><i /><i /></div><p>{data.subtitle || 'High-fidelity interactive concept ready for review.'}</p><div className={styles.pills}><span>{data.status || 'Draft'}</span><span>Desktop + mobile</span></div></>}
         {data.kind === 'featureSummary' && <div className={styles.featureGrid}>{['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration'].map((feature, index) => <span key={feature}><b>{index + 1}</b>{feature}</span>)}</div>}
+        {data.kind === 'evermind' && <EvermindBody data={data} />}
       </div>
       <Handle type="source" position={Position.Right} className={styles.handle} />
     </article>
