@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Resume a paused cloud run with a human's answer.
  *
@@ -20,7 +21,12 @@ import type { Env } from '../../env';
 export async function resumePausedExecution(
   env: Env,
   db: Db,
-  args: { executionId: number; tenantId: number; answer: string },
+  args: {
+    executionId: number; tenantId: number; answer: string;
+    /** The answered `question` approval's id — forwarded to the durable runner so its
+     *  resumed chat-milestone is keyed per Q&A cycle (see CloudRunnerDO `/resume`). */
+    approvalId?: string;
+  },
 ): Promise<void> {
   // 1. Queue the answer as a user turn for the loop to ingest (mid-run steer channel).
   await enqueueExecutionMessage(db, {
@@ -46,6 +52,15 @@ export async function resumePausedExecution(
   //    correctly still showing `paused` until then.
   if (env.CLOUD_RUNNER) {
     const stub = env.CLOUD_RUNNER.get(env.CLOUD_RUNNER.idFromName(`exec:${args.executionId}`));
-    await stub.fetch('https://cloud-runner/resume', { method: 'POST' }).catch(() => { /* best-effort */ });
+    await stub.fetch('https://cloud-runner/resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approvalId: args.approvalId ?? null }),
+    }).catch((error) => reportCaughtError(error, { source: "application/runtime/executionResume.ts", operation: "resumePausedExecution", context: { logMessage: '[execution-resume] durable runner wake-up failed', details: {
+      executionId: args.executionId,
+      tenantId: args.tenantId,
+      approvalId: args.approvalId ?? null,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    } } }));
   }
 }

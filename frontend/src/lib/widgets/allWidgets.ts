@@ -2,12 +2,14 @@ import type { WidgetDef } from './types';
 import { AI_IMPACT_WIDGETS } from '@/components/insights/widgets/aiImpactWidgets';
 import { LLM_USAGE_WIDGETS } from '@/components/insights/widgets/llmUsageWidgets';
 import { DELIVERY_WIDGETS } from '@/components/insights/widgets/deliveryWidgets';
+import { AUTONOMY_WIDGETS } from '@/components/insights/widgets/autonomyWidgets';
 import { FINANCE_WIDGETS } from '@/components/insights/widgets/financeWidgets';
 import { FORECAST_WIDGETS } from '@/components/insights/widgets/forecastWidgets';
 import { CORE_WIDGETS } from '@/components/widgets/registry-modules/coreWidgets';
 import { CATALOG_WIDGETS } from '@/components/widgets/registry-modules/catalogWidgets';
 import { OPERATIONAL_WIDGETS } from '@/components/widgets/registry-modules/operationalWidgets';
 import { OBSERVABILITY_WIDGETS } from '@/components/widgets/registry-modules/observabilityWidgets';
+import { INCIDENT_WIDGETS } from '@/components/widgets/registry-modules/incidentWidgets';
 import { WORKFORCE_WIDGETS } from '@/components/widgets/registry-modules/workforceWidgets';
 import { WORKFORCE_PLAN_WIDGETS } from '@/components/widgets/registry-modules/workforcePlanWidgets';
 import { EMP_METRICS_WIDGETS } from '@/components/widgets/registry-modules/empMetricsWidgets';
@@ -26,6 +28,7 @@ export const ALL_WIDGETS: WidgetDef[] = [
   ...AI_IMPACT_WIDGETS,
   ...LLM_USAGE_WIDGETS,
   ...DELIVERY_WIDGETS,
+  ...AUTONOMY_WIDGETS,
   ...FINANCE_WIDGETS,
   ...FORECAST_WIDGETS,
   // ── Non-insights surfaces (proves the registry is app-wide) ──
@@ -33,6 +36,7 @@ export const ALL_WIDGETS: WidgetDef[] = [
   ...CATALOG_WIDGETS,
   ...OPERATIONAL_WIDGETS,
   ...OBSERVABILITY_WIDGETS,
+  ...INCIDENT_WIDGETS,
   ...WORKFORCE_WIDGETS,
   ...WORKFORCE_PLAN_WIDGETS,
   ...EMP_METRICS_WIDGETS,

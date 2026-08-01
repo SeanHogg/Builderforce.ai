@@ -11,6 +11,7 @@ import { BoardConnectionsManager } from '../integrations/BoardConnectionsManager
 import { useBoardConfig } from './useBoardConfig';
 import {
   boardsApi,
+  kanbanApi,
   workflowDefinitions,
   type Board,
   type Swimlane,
@@ -18,6 +19,7 @@ import {
   type SwimlaneRequirement,
   type WorkflowDefinitionSummary,
 } from '@/lib/builderforceApi';
+import type { TemplateSummary } from '@/lib/kanban';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 import {
   listTeams,
@@ -142,7 +144,7 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName, initia
       ) : tab === 'teams' ? (
         <TeamsTab projectId={projectId} />
       ) : tab === 'settings' ? (
-        <SettingsTab board={board} onSaved={reload} />
+        <SettingsTab board={board} projectId={projectId} onSaved={reload} />
       ) : (
         <div style={sectionPad}>
           <BoardConnectionsManager projectId={projectId} heading={t('externalHeading')} />
@@ -600,8 +602,9 @@ function TeamsTab({ projectId }: { projectId: number }) {
   );
 }
 
-function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) {
+function SettingsTab({ board, projectId, onSaved }: { board: Board; projectId: number; onSaved: () => void }) {
   const t = useTranslations('boardConfig');
+  const confirm = useConfirm();
   const [maxConcurrent, setMaxConcurrent] = useState(board.maxConcurrentTickets);
   const [name, setName] = useState(board.name);
   const [turnMode, setTurnMode] = useState<'facilitator' | 'timeboxed'>(board.standupTurnMode ?? 'facilitator');
@@ -610,6 +613,47 @@ function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) 
   // Default true: a board with the flag unset still gates high/urgent work.
   const [requireApproval, setRequireApproval] = useState(board.requireExecutionApproval ?? true);
   const [saving, setSaving] = useState(false);
+  const [templates, setTemplates] = useState<TemplateSummary[]>([]);
+  const [activeTemplateId, setActiveTemplateId] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [templateBusy, setTemplateBusy] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    Promise.all([kanbanApi.listTemplates(), kanbanApi.roster(projectId)])
+      .then(([available, roster]) => {
+        if (!live) return;
+        setTemplates(available);
+        setActiveTemplateId(roster.templateId);
+        setSelectedTemplateId(roster.templateId);
+      })
+      .catch((e) => { if (live) setTemplateError(e instanceof Error ? e.message : t('templateLoadError')); });
+    return () => { live = false; };
+  }, [projectId, t]);
+
+  const applyTemplate = async () => {
+    if (!selectedTemplateId || selectedTemplateId === activeTemplateId) return;
+    const selected = templates.find((template) => template.id === selectedTemplateId);
+    const accepted = await confirm({
+      title: t('templateConfirmTitle'),
+      message: t('templateConfirmMessage', { name: selected?.name ?? selectedTemplateId }),
+      confirmLabel: t('templateApply'),
+      destructive: true,
+    });
+    if (!accepted) return;
+    setTemplateBusy(true);
+    setTemplateError(null);
+    try {
+      await kanbanApi.applyTemplate(projectId, selectedTemplateId);
+      setActiveTemplateId(selectedTemplateId);
+      onSaved();
+    } catch (e) {
+      setTemplateError(e instanceof Error ? e.message : t('templateApplyError'));
+    } finally {
+      setTemplateBusy(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -628,6 +672,32 @@ function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) 
 
   return (
     <div style={{ ...sectionPad, display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 420 }}>
+      <div style={{ paddingBottom: 14, borderBottom: '1px solid var(--border-subtle)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{t('templateHeading')}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>{t('templateHint')}</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+          <Select
+            value={selectedTemplateId}
+            onChange={(e) => setSelectedTemplateId(e.target.value)}
+            disabled={templateBusy || templates.length === 0}
+            aria-label={t('templateLabel')}
+            style={{ ...inputStyle, flex: 1, minWidth: 220 }}
+          >
+            {templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+          </Select>
+          <RoleGate capability="manager.manage" variant="block">
+            <button
+              type="button"
+              style={{ ...btnPrimary, opacity: !selectedTemplateId || selectedTemplateId === activeTemplateId || templateBusy ? 0.6 : 1 }}
+              disabled={!selectedTemplateId || selectedTemplateId === activeTemplateId || templateBusy}
+              onClick={() => void applyTemplate()}
+            >
+              {templateBusy ? t('templateApplying') : t('templateApply')}
+            </button>
+          </RoleGate>
+        </div>
+        {templateError && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--danger, #dc2626)' }}>{templateError}</div>}
+      </div>
       <label style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
         {t('boardNameLabel')}
         <input style={{ ...inputStyle, width: '100%', marginTop: 4 }} value={name} onChange={(e) => setName(e.target.value)} />

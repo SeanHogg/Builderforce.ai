@@ -37,7 +37,9 @@ import {
  *  fields — the only thing the OpenAI-compatible factory needs to read. Every
  *  member of `VendorEnv` is a `string | null` key, so this is just its keyset
  *  (kept as a named alias for intent at call sites). */
-export type VendorApiKeyEnv = keyof VendorEnv & string;
+export type VendorApiKeyEnv = {
+  [K in keyof VendorEnv]-?: Exclude<VendorEnv[K], null | undefined> extends string ? K : never
+}[keyof VendorEnv] & string;
 
 export interface OpenAICompatibleVendorOptions {
   /** Registry id (must be a member of {@link VendorId}). */

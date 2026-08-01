@@ -8,6 +8,7 @@ import MarketingShell from './MarketingShell';
 import OnboardingGate from './OnboardingGate';
 import RouteMarketing from './RouteMarketing';
 import { BrainActionsProvider, BrainContextProvider, BrainProvider, brainConfig, guestBrainConfig } from '@/lib/brain';
+import { ReportErrorProvider } from './ReportErrorProvider';
 import { GuestBrainstormPage } from './brain/GuestBrainstormPage';
 import { PinsProvider } from '@/lib/widgets/PinsProvider';
 import { AiInsightPanelProvider } from './insights/AiInsightPanelProvider';
@@ -22,6 +23,7 @@ import { DevexPanelBrainBridge } from './insights/DevexPanelBrainBridge';
 import { CanvasPanelProvider } from './canvas/CanvasPanelProvider';
 import { CanvasPanelBrainBridge } from './canvas/CanvasPanelBrainBridge';
 import { FloatingBrain } from './brain/FloatingBrain';
+import { FeedbackTab } from './feedback/FeedbackTab';
 import ActivityTracker from './ActivityTracker';
 import { McpExtensionsBridge } from './brain/McpExtensionsBridge';
 import { PlatformActionsBridge } from './brain/PlatformActionsBridge';
@@ -29,41 +31,12 @@ import { ProjectScopeProvider } from '@/lib/ProjectScopeContext';
 import { useAuth } from '@/lib/AuthContext';
 import { useIsFreelancer } from '@/lib/rbac';
 import { findActiveGroup, isFreelancerAllowedPath } from '@/lib/navGroups';
+import { classifyShell } from '@/lib/shellRouting';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { convertVisitor } from '@/lib/marketingApi';
 
-const FOOTER_ONLY_PATHS = ['/login', '/register'];
-
-// Full-screen routes that render their own UI with no shell chrome.
-const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/'];
-
-// Marketing + public-browse routes. These render in PublicShell (auth-aware
-// sidebar) for EVERYONE: logged-out visitors get the marketing nav + product
-// map, signed-in users get the app nav — but the page stays publicly viewable.
-// This is a DENY-LIST against the app shell: every route NOT listed here (nor
-// no-chrome / footer-only) defaults to the authenticated app shell, so a new
-// authed page gets correct chrome without being added to a list [1557]. Keep
-// this list current as marketing/public routes are added.
-const PUBLIC_SHELL_PREFIXES = ['/product', '/blog', '/agents', '/pricing', '/compare', '/marketplace', '/talent', '/prompts', '/models', '/integrations', '/diagnostics', '/tools', '/evermind', '/soc2'];
-
-export type ShellKind = 'none' | 'footer' | 'public' | 'app';
-
-/**
- * Classify the shell chrome for a path. Pure + exported for unit testing.
- * Order matters: no-chrome → footer-only → public-marketing → (default) app.
- * The app shell is the DEFAULT (deny-list model): anything not explicitly
- * no-chrome, footer-only, or public-marketing is treated as an authenticated
- * app route, so new pages get the right chrome by default [1557].
- */
-export function classifyShell(pathname: string): ShellKind {
-  if (NO_CHROME_PREFIXES.some((p) => pathname.startsWith(p))) return 'none';
-  if (FOOTER_ONLY_PATHS.includes(pathname)) return 'footer';
-  if (pathname === '/') return 'public';
-  if (PUBLIC_SHELL_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return 'public';
-  return 'app';
-}
-
-/** Footer-only chrome for the auth screens (login/register). */
+/** Footer-only chrome for the standalone auth screens (login/register/activate). */
 function FooterOnlyShell({ children }: { children: React.ReactNode }) {
   return (
     <div
@@ -195,6 +168,15 @@ function FreelancerRouteGuard() {
   return null;
 }
 
+/** Close anonymous Brain/tool attribution as soon as this browser authenticates. */
+function MarketingConversionTracker() {
+  const { isAuthenticated } = useAuth();
+  useEffect(() => {
+    if (isAuthenticated) convertVisitor();
+  }, [isAuthenticated]);
+  return null;
+}
+
 function AppBrainShell({ children }: { children: React.ReactNode }) {
   const content = useShellContent(children);
   const { hasTenant } = useAuth();
@@ -233,7 +215,9 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
           <CanvasPanelProvider>
           <BrainActionsProvider>
             <BrainContextProvider>
+              <ReportErrorProvider>
               {content}
+              <MarketingConversionTracker />
               <FreelancerRouteGuard />
               {/* Audited "click sense" capture — navigations + explicit signals
                   feed the billable-timecard pipeline. Signed-in users only. */}
@@ -241,6 +225,10 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
               {/* The Brain (launcher + capability/insight bridges) is a builder-app
                   surface — a freelancer/gig account never sees it. */}
               {showBrain && <FloatingBrain />}
+              {/* Product feedback collector — this app dogfooding the embeddable
+                  widget. Like the Brain it is a builder-app surface, and it
+                  decides its own visibility from auth + project scope. */}
+              {showBrain && <FeedbackTab />}
               {/* Make the Brain the epicenter for every action: register the platform
                   capability tools + the tenant's server-side MCP extension tools.
                   Both are auth-gated — they call the gateway with the tenant token. */}
@@ -259,6 +247,7 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
               {/* Canvas slide-out tool: `show_canvas` lets the Brain generate a
                   visual board (notes/timers) and the user save it to Knowledge. */}
               {showBrain && <CanvasPanelBrainBridge />}
+              </ReportErrorProvider>
             </BrainContextProvider>
           </BrainActionsProvider>
           </CanvasPanelProvider>

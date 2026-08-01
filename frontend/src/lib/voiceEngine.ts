@@ -12,7 +12,7 @@
  * passes a `voiceId` (+ optional speaker), never branches on provider itself.
  */
 
-import { getApiBaseUrl, getAuthHeaders } from './apiClient';
+import { getApiBaseUrl, apiRequestStream } from './apiClient';
 import { getStoredTenantToken } from './auth';
 import type { PcmAudio } from './captureAudio';
 
@@ -98,7 +98,7 @@ export async function narrationResultToObjectUrl(result: NarrationResult): Promi
     return URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
   }
   if (result.audioUrl) {
-    const res = await fetch(`${getApiBaseUrl()}${result.audioUrl}`, { headers: getAuthHeaders() });
+    const res = await apiRequestStream(result.audioUrl);
     if (!res.ok) throw new Error(`Audio fetch failed (${res.status})`);
     return URL.createObjectURL(await res.blob());
   }

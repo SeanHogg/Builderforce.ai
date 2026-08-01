@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { empInsightsApi, type CrossTeamBenchmarkResult, type CrossTeamMetricKey } from '@/lib/empInsightsApi';
 import { usePmData } from '@/lib/pm/usePmData';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { PmCard, PmEmpty, PmError } from '@/components/pm/pmShared';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
@@ -35,8 +36,9 @@ function fmtMetric(metric: CrossTeamMetricKey, value: number | null): string {
  */
 export function CrossTeamBenchmarkLens() {
   const t = useTranslations('insights.emp');
+  const { currentProjectId } = useProjectScope();
   const [days, setDays] = useState(30);
-  const { data, error } = usePmData<CrossTeamBenchmarkResult>(() => empInsightsApi.crossTeam(days), [days]);
+  const { data, error } = usePmData<CrossTeamBenchmarkResult>(() => empInsightsApi.crossTeam(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;

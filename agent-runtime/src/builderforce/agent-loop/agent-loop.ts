@@ -18,6 +18,13 @@ import type {
 import type { Message, Model, ToolResultMessage } from "../model/types.js";
 import { EventStream } from "./event-stream.js";
 import type { StreamFn } from "./stream.js";
+import {
+  shouldRecoverStalledTurn,
+  isExhaustedStall,
+  stallRecoveryNudge,
+  stallExhaustedNotice,
+  MAX_ANNOUNCEMENT_RECOVERIES,
+} from "@builderforce/agent-stall";
 
 export interface AgentLoopConfig {
   model: Model;
@@ -40,6 +47,15 @@ type ToolResultLike = AgentToolResult<unknown>;
 
 function isToolCall(c: { type: string }): c is import("../model/types.js").ToolCall {
   return c.type === "toolCall";
+}
+
+/** Visible text of an assistant turn — thinking blocks and tool calls excluded, since
+ *  only what the USER was left holding decides whether the turn stalled. */
+function assistantText(message: import("../model/types.js").AssistantMessage): string {
+  return message.content
+    .filter((c): c is import("../model/types.js").TextContent => c.type === "text")
+    .map((c) => c.text)
+    .join("\n");
 }
 
 /** Default identity conversion: fold non-LLM AgentMessages into plain LLM messages. */
@@ -248,6 +264,9 @@ async function runLoop(
 ): Promise<void> {
   let firstTurn = true;
   let pendingMessages: AgentMessage[] = (await config.getSteeringMessages?.()) || [];
+  // Budget for the announced-but-untaken tool call recovery below, shared with the
+  // Brain run loop via `@builderforce/agent-stall`.
+  let announcementRecoveries = 0;
 
   while (true) {
     let hasMoreToolCalls = true;
@@ -305,6 +324,42 @@ async function runLoop(
 
       if (steeringAfterTools && steeringAfterTools.length > 0) pendingMessages = steeringAfterTools;
       else pendingMessages = (await config.getSteeringMessages?.()) || [];
+
+      // The model ANNOUNCED an action and then ended the turn without taking it
+      // ("I'll search the codebase for the handler." → stopReason: stop, 0 tool
+      // calls). Treating that as "no tool calls, therefore done" ends the run with a
+      // promise as its result — for an autonomous run that is a silent no-op that
+      // still burns the run. Re-prompt instead, bounded per run so a model that keeps
+      // narrating can't spin. Nothing to do when steering already queued work.
+      const stallInput = {
+        text: assistantText(message),
+        toolCallCount: toolCalls.length,
+        availableToolCount: currentContext.tools?.length ?? 0,
+        recoveriesUsed: announcementRecoveries,
+      };
+      if (!hasMoreToolCalls && pendingMessages.length === 0 && shouldRecoverStalledTurn(stallInput)) {
+        announcementRecoveries += 1;
+        pendingMessages = [
+          {
+            role: "user",
+            content: stallRecoveryNudge(announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES),
+            timestamp: Date.now(),
+          },
+        ];
+      } else if (!hasMoreToolCalls && pendingMessages.length === 0 && isExhaustedStall(stallInput)) {
+        // Every recovery spent and the model is STILL only describing calls. Ending
+        // here silently leaves a promise as the run's result — for an autonomous run
+        // that reads as a completed step that did nothing. Append the reason to the
+        // transcript so the run output, the ticket ledger and any human reviewer see
+        // WHY it produced nothing, instead of inferring success from a clean exit.
+        const notice: AgentMessage = {
+          role: "user",
+          content: stallExhaustedNotice(config.model?.id),
+          timestamp: Date.now(),
+        };
+        currentContext.messages.push(notice);
+        newMessages.push(notice);
+      }
     }
 
     const followUpMessages = (await config.getFollowUpMessages?.()) || [];

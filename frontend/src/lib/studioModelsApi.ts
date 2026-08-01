@@ -6,6 +6,7 @@
  * text on the server (which reuses the model's own persisted tokenizer).
  */
 import { apiRequest, apiRequestStream } from './apiClient';
+import { downloadBlob, filenameFromResponse } from './download';
 
 /** A published, callable Evermind model the tenant owns. */
 export interface PublishedEvermindModel {
@@ -88,22 +89,10 @@ export async function exportPublishedModel(
     `/api/studio/models/${encodeURIComponent(slug)}/export?format=${format}&fp16=${fp16 ? 'true' : 'false'}`,
   );
   const blob = await res.blob();
-  const disposition = res.headers.get('Content-Disposition') ?? '';
-  const match = /filename="([^"]+)"/.exec(disposition);
   const safeSlug = slug.replace(/[^a-zA-Z0-9._-]/g, '_');
   const fallbackExt = EVERMIND_EXPORT_FORMATS.find((f) => f.id === format)?.ext ?? '';
-  const filename = match?.[1] ?? `${safeSlug}${fallbackExt}`;
+  const filename = filenameFromResponse(res, `${safeSlug}${fallbackExt}`);
 
-  const url = URL.createObjectURL(blob);
-  try {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  downloadBlob(blob, filename);
   return filename;
 }

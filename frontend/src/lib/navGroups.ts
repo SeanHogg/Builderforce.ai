@@ -71,6 +71,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'portfolio', labelKey: 'tab.portfolio', icon: '📊' },
       { id: 'ceremonies', labelKey: 'tab.ceremonies', icon: '🎯' },
       { id: 'templates', labelKey: 'tab.templates', icon: '🗂' },
+      // Pre-sales: respond to an RFQ/RFP with a co-branded proposal grounded on the
+      // portfolio + a fresh diagnostics scan (capability roster + P&L + plan).
+      { id: 'rfp', labelKey: 'tab.rfp', icon: '📄' },
     ],
   },
   // IDE is one destination scoped to its project type. Each project IS typed by
@@ -125,6 +128,12 @@ export const NAV_GROUPS: NavGroup[] = [
       // redirect here with ?panel=). activePaths keeps the tab highlighted on the
       // retired routes while they redirect in. [insights consolidation]
       { id: '/insights/delivery', labelKey: 'tab.delivery', icon: '📦', activePaths: ['/insights/bottlenecks', '/insights/dora', '/insights/space', '/insights/benchmarking', '/insights/funnel'] },
+      // Autonomy Health — "are manager/agent-created tickets actually completing
+      // their lifecycle autonomously?". Its own tab because it answers a question
+      // no delivery metric does (per-ORIGIN funnel + the autonomous-vs-human hop
+      // split); it is ALSO a Delivery-hub drill-down panel so the dashboard cards
+      // and the Brain can open the same lens in a slide-out.
+      { id: '/insights/autonomy', labelKey: 'tab.autonomy', icon: '🕹' },
       // Finance is a HUB: FinOps spend + Investment Allocation + DevFinOps (R&D /
       // SOC / audit) are drill-down slide-outs of this one tab (their old routes
       // redirect here with ?drill=). activePaths keeps the tab highlighted on the
@@ -141,36 +150,46 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    // Agent Ops: the three things you do to a FLEET rather than to one agent —
+    // watch concurrent agents contend for files (Coordination), govern what they
+    // remember and for how long (Memory), and test an agent against a ticket with
+    // every effect suppressed before it touches real work (Rehearsal). Kept out of
+    // Workforce deliberately: that destination is the roster (who exists), this one
+    // is the operating posture (what they are doing to each other right now).
+    id: 'agentops', labelKey: 'group.agentOps', icon: '🧬', href: '/agent-ops',
+    match: ['/agent-ops'],
+    tabKind: 'query', basePath: '/agent-ops',
+    tabs: [
+      { id: '', labelKey: 'tab.coordination', icon: '🔗' },
+      { id: 'memory', labelKey: 'tab.memory', icon: '🧠' },
+      { id: 'rehearsal', labelKey: 'tab.rehearsal', icon: '🎬' },
+    ],
+  },
+  {
     id: 'quality', labelKey: 'group.quality', icon: '🐞', href: '/quality',
     match: ['/quality'],
     tabKind: 'query', basePath: '/quality',
     tabs: [
       { id: '', labelKey: 'tab.errors', icon: '🐞' },
       { id: 'collectors', labelKey: 'tab.collectors', icon: '🔌' },
+      { id: 'feedback', labelKey: 'tab.feedback', icon: '💬' },
     ],
   },
   {
-    // Incident Management: live incident war rooms + on-call rotations + escalation
-    // policies + business-contact directory. Sub-views are ?tab= pills on the page.
-    id: 'incidents', labelKey: 'group.incidents', icon: '🚨', href: '/incidents',
-    match: ['/incidents'],
+    // Reliability: the detect→respond loop under ONE destination — active Monitoring
+    // (diagram boards + monitor pins; a breach opens an incident) folded together with
+    // Incident Management (war rooms + on-call + escalation + contacts). Sub-views are
+    // ?tab= pills on the /incidents page; the retired /monitoring route redirects into
+    // ?tab=monitors so old deep links still resolve (kept in `match` for highlighting).
+    id: 'reliability', labelKey: 'group.reliability', icon: '🚨', href: '/incidents',
+    match: ['/incidents', '/monitoring'],
     tabKind: 'query', basePath: '/incidents',
     tabs: [
       { id: '', labelKey: 'tab.incidents', icon: '🚨' },
+      { id: 'monitors', labelKey: 'tab.monitors', icon: '📡' },
       { id: 'oncall', labelKey: 'tab.oncall', icon: '📟' },
       { id: 'escalation', labelKey: 'tab.escalation', icon: '⏫' },
       { id: 'contacts', labelKey: 'tab.contacts', icon: '📇' },
-    ],
-  },
-  {
-    // Active Monitoring: upload an architecture diagram to a board, overlay
-    // monitor pins on it; a breach opens an incident. Reporting tab rolls up
-    // incident + monitor metrics. Sub-views are ?tab= pills on the page.
-    id: 'monitoring', labelKey: 'group.monitoring', icon: '📡', href: '/monitoring',
-    match: ['/monitoring'],
-    tabKind: 'query', basePath: '/monitoring',
-    tabs: [
-      { id: '', labelKey: 'tab.boards', icon: '🗺️' },
       { id: 'reporting', labelKey: 'tab.reporting', icon: '📊' },
     ],
   },
@@ -204,7 +223,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: '/settings/integrations', labelKey: 'tab.integrations', icon: '🔌' },
       { id: '/pricing', labelKey: 'tab.billing', icon: '💳' },
       { id: '/tenants', labelKey: 'tab.tenant', icon: '🏢' },
-      { id: '/settings/api-keys', labelKey: 'tab.apiKeys', icon: '🔑', ownerOnly: true },
     ],
   },
   {

@@ -8,10 +8,12 @@
     "lib": ["ES2022"],
     "types": ["@cloudflare/workers-types"],
     "skipLibCheck": true,
+    "resolveJsonModule": true,
     "noEmit": true,
     "paths": {
       "@builderforce/agent-tools": ["../packages/agent-tools/src/index.ts"],
-      "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"]
+      "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"],
+      "@builderforce/agent-stall": ["../packages/agent-stall/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts"],

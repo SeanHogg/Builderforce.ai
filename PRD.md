@@ -1,111 +1,125 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #320
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Dependency Resolution — Critical Path Unblocking
+# PRD: Guided (Interactive) and Bulk (Import) Input Modes
 
 ## Problem & Goal
 
-Engineering teams lose significant velocity when critical path dependencies stall delivery. Blockers are often identified too late, communicated informally, or left unresolved because ownership is unclear. The goal of this system is to **automatically identify dependency blockers on the critical path, surface them with context, and suggest concrete resolution actions** — reducing the mean time to unblock (MTTUB) and keeping delivery on schedule.
+Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+
+**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
 
 ---
 
 ## Target Users / ICP Roles
 
-| Role | Need |
-|---|---|
-| **Engineering Lead / Tech Lead** | Knows what is blocked; needs prioritized, actionable resolution steps without manual triage |
-| **Project / Program Manager** | Needs visibility into which dependencies threaten the delivery date and who owns resolution |
-| **Individual Contributor (IC)** | Needs clear, immediate next steps when their work is blocked |
-| **Engineering Manager** | Needs escalation signals and resource reallocation recommendations |
+| Role | Primary Mode | Context |
+|---|---|---|
+| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
+| Power User | Both | Switches between modes depending on task size |
+| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
+| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
+| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
 
 ---
 
 ## Scope
 
-This PRD covers the automated analysis of a project's task/dependency graph to:
+### In Scope
 
-1. Identify which tasks sit on the **critical path**.
-2. Detect which of those tasks have **unresolved dependencies** (blockers).
-3. Generate **ranked, actionable resolution suggestions** for each blocker.
+- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
+- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
+- Unified data schema enforced across both modes
+- Pre-import preview and dry-run capability in Bulk Mode
+- Post-submission confirmation and summary for both modes
+- Error handling and recovery paths in both modes
+- Mode-selection entry point accessible from the primary action surface
 
-The system operates on data already present in the project's task management tooling (e.g., GitHub Issues, Jira, Linear, or a structured task graph file).
+### Out of Scope
+
+- Real-time streaming ingestion or webhook-based input
+- API-only bulk endpoints (covered separately in API PRD)
+- Automated scheduling or recurring imports
+- Machine-learning-assisted field suggestions beyond basic format validation
+- Editing or deleting records post-submission (covered by record management PRD)
 
 ---
 
 ## Functional Requirements
 
-### FR-1: Critical Path Computation
-- The system MUST parse a directed acyclic graph (DAG) of tasks and their dependencies.
-- The system MUST compute the critical path using the **Critical Path Method (CPM)** — identifying the longest chain of dependent tasks that determines the minimum project duration.
-- The system MUST re-compute the critical path dynamically when task estimates or statuses change.
+### FR-1 — Mode Selection
 
-### FR-2: Blocker Detection
-- The system MUST flag any critical-path task whose upstream dependency meets one or more of the following conditions:
-  - Status is `blocked`, `on-hold`, `pending-external`, or equivalent.
-  - Owner is unassigned.
-  - Estimated completion date exceeds the dependent task's start date.
-  - No activity recorded within a configurable staleness window (default: 3 business days).
-- The system MUST distinguish between **hard blockers** (task cannot start) and **soft blockers** (task can start partially but will be impeded).
+- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
+- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
+- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
 
-### FR-3: Resolution Suggestion Engine
-- For each detected blocker, the system MUST generate one or more suggested resolution actions drawn from the following action categories:
+---
 
-  | Category | Example Action |
-  |---|---|
-  | **Re-assignment** | "Assign this dependency to [available team member with relevant skills]" |
-  | **Escalation** | "Escalate to [owner's manager] — stale for N days" |
-  | **Parallelization** | "Tasks X and Y can proceed in parallel; reorder to remove sequential constraint" |
-  | **Scope reduction** | "Deliver minimal interface/stub to unblock downstream; defer full implementation" |
-  | **External coordination** | "Schedule sync with [external team/vendor] to resolve API contract ambiguity" |
-  | **Risk acceptance** | "Accept risk; proceed with documented assumption [A]" |
+### FR-2 — Guided (Interactive) Mode
 
-- Suggestions MUST be ranked by estimated unblocking speed (fastest first) with a secondary sort by confidence score.
-- Each suggestion MUST include: action type, description, suggested owner, estimated time-to-unblock, and confidence level (`high` / `medium` / `low`).
+- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
+- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
+- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
+- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
+- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
+- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
+- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
 
-### FR-4: Dependency Impact Scoring
-- Each blocker MUST be assigned a **Dependency Impact Score (DIS)** calculated from:
-  - Number of downstream tasks affected.
-  - Total schedule slip risk (days) propagated through the DAG.
-  - Business priority weight of the affected milestone.
-- The DIS MUST be used to sort the blocker list, surfacing highest-impact blockers first.
+---
 
-### FR-5: Output & Reporting
-- The system MUST produce a structured report in both **human-readable markdown** and **machine-readable JSON**.
-- The report MUST include:
-  - Executive summary (total blockers, critical-path tasks at risk, projected schedule impact).
-  - Ranked blocker list with suggestions.
-  - Dependency graph visualization (mermaid diagram or equivalent) annotated with blocker status.
-- The system MUST support delivery via: CLI output, comment on linked issue/PR, and webhook payload.
+### FR-3 — Bulk (Import) Mode
 
-### FR-6: Staleness & Re-evaluation
-- The system MUST re-evaluate the dependency graph on a configurable schedule (default: every 24 hours or on any task status change event).
-- Previously resolved blockers MUST be removed from the active report and logged to a resolution history.
+- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
+- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
+- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
+- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
+- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
+- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
+- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
+- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
+- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
+- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
+
+---
+
+### FR-4 — Shared / Cross-Mode Requirements
+
+- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
+- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
+- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
+- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
+- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
 
 ---
 
 ## Acceptance Criteria
 
-| # | Criterion |
-|---|---|
-| AC-1 | Given a valid task DAG with ≥ 2 tasks, the system correctly identifies the critical path matching a manually verified CPM calculation. |
-| AC-2 | Given a critical-path task with a stale, unassigned upstream dependency, the system flags it as a hard blocker within one evaluation cycle. |
-| AC-3 | Every flagged blocker has at least one resolution suggestion with all required fields populated (action type, description, owner, time-to-unblock, confidence). |
-| AC-4 | Blocker suggestions are ranked fastest-to-unblock first; ties are broken by confidence score descending. |
-| AC-5 | The Dependency Impact Score correctly propagates delay through multi-hop dependency chains (verified against 3 test DAGs of increasing complexity). |
-| AC-6 | The markdown and JSON reports are generated in < 5 seconds for a DAG of up to 500 tasks. |
-| AC-7 | When a blocker is resolved (status changes to `done`/`complete`), it is removed from the active report within one evaluation cycle and appears in resolution history. |
-| AC-8 | The system handles cycles in the input graph gracefully, reports them as configuration errors, and does not crash. |
-| AC-9 | CLI, issue-comment, and webhook delivery modes each produce identical report content (format may differ). |
-| AC-10 | Staleness window and re-evaluation schedule are configurable without code changes (environment variable or config file). |
+| ID | Criterion | Verification Method |
+|---|---|---|
+| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
+| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
+| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
+| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
+| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
+| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
+| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
+| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
+| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
+| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
+| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
+| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
+| AC-13 | Switching modes before submission retains mappable field data | E2E test |
+| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
 
 ---
 
 ## Out of Scope
 
-- **Automatic execution of resolution actions** — the system suggests; humans act. No automated ticket reassignment, calendar invites, or code changes.
-- **Resource capacity planning** — the system does not model team-wide workload or sprint capacity; it operates on task-level dependency data only.
-- **Cost estimation** — financial impact of delays is not calculated.
-- **Third-party vendor SLA tracking** — external dependency timelines must be manually entered; the system does not query external APIs for SLA status.
-- **Historical trend analytics / burndown** — resolution history is stored but trend reporting is a future phase.
-- **Natural language task ingestion** — tasks must be in a structured format; free-text parsing is not supported in this version.
-- **Real-time collaborative editing** of the task graph within this tool.
+- API-only or SDK-driven bulk ingestion endpoints
+- Webhook or event-stream based real-time input
+- Scheduled or recurring automated imports
+- Post-submission record editing (handled by record management module)
+- AI/ML-assisted auto-mapping or data enrichment
+- Mobile viewports below 768 px width
+- Multi-file batch uploads in a single import session
+- Localization / i18n beyond English in the initial release

@@ -12,9 +12,26 @@ export type { BrainTimelineProps, BrainTimelineLabels } from './BrainTimeline';
 
 export { Markdown } from './Markdown';
 export type { MarkdownProps, MarkdownLabels } from './Markdown';
+export { splitThinkSegments } from './thinkBlocks';
+export type { ThinkSegment } from './thinkBlocks';
 
-export { QuestionCard, parseAskUser, stripAskUser, serializeAskUser, DEFAULT_ASK_USER_LABELS } from './askUser';
-export type { AskUserPayload, AskUserOption, AskUserLabels } from './askUser';
+export {
+  QuestionCard,
+  PendingQuestionBanner,
+  selectPendingAskUser,
+  askUserAnchorId,
+  parseAskUser,
+  stripAskUser,
+  serializeAskUser,
+  DEFAULT_ASK_USER_LABELS,
+} from './askUser';
+export type { AskUserPayload, AskUserOption, AskUserLabels, PendingAskUser } from './askUser';
+
+// The chat error banner: the message AND the remedy the server named (reconnect /
+// upgrade / add a card). Shared so the VS Code webview and the web app's BrainPanel
+// can't drift on what a given entitlement failure lets the user do about it.
+export { ChatErrorBanner, DEFAULT_CHAT_ERROR_LABELS } from './ChatErrorBanner';
+export type { ChatErrorBannerProps, ChatErrorBannerLabels } from './ChatErrorBanner';
 
 export { ConsolidateForkControl, DEFAULT_CONSOLIDATE_FORK_LABELS } from './ConsolidateForkControl';
 export type { ConsolidateForkControlProps, ConsolidateForkLabels } from './ConsolidateForkControl';
@@ -57,6 +74,8 @@ export type { TimelineNode, TimelineImage, BuildTimelineInput } from './timeline
 export { EvermindConsole } from './evermind/EvermindConsole';
 export type { EvermindConsoleProps } from './evermind/EvermindConsole';
 export { DEFAULT_EVERMIND_LABELS } from './evermind/types';
+export { evermindLearnedStatus } from './evermind/learnedStatus';
+export type { EvermindLearnedStatus, EvermindTeacherSkipReason, LearnedStatusInput } from './evermind/learnedStatus';
 export type {
   EvermindConsoleAdapter,
   EvermindConsoleLabels,
@@ -64,7 +83,18 @@ export type {
   EvermindMode,
   EvermindRecentEntry,
   EvermindSeedModel,
+  EvermindTarget,
   EvermindTeacherOptions,
+  EvermindValidateMatch,
+  EvermindValidateResult,
+  EvermindProbeSample,
+  EvermindProbeResult,
+  EvermindKnowledgeVerdict,
+  EvermindKnowledgeFinding,
+  EvermindKnowledgeAnalysis,
+  EvermindKnowledgeRepair,
+  EvermindCleanupResult,
+  EvermindReindexResult,
 } from './evermind/types';
 
 export { Project360View } from './project360/Project360View';

@@ -7,6 +7,12 @@
  * Semantics (deliberately small, tuned for file discovery):
  *   - a single star matches any run of characters except a slash
  *   - a double star matches any run of characters INCLUDING slashes (crosses dirs)
+ *   - `**` followed by a slash may also match ZERO directories, so "src/**\/*.ts"
+ *     finds "src/index.ts" as well as "src/a/b.ts" -- the semantics minimatch, bash
+ *     globstar, ripgrep --glob and VS Code all use, and the one list_files' own tool
+ *     description advertises. Compiling the slash literally would force at least one
+ *     intermediate directory and silently hide every file sitting directly in the
+ *     scoped dir, which the zero-match note then reports as "no such file".
  *   - a question mark matches a single character except a slash
  *   - matching is CASE-INSENSITIVE, so "Roadmap.md" finds "ROADMAP.md"
  *   - a pattern with NO slash matches the BASENAME anywhere in the tree, so the
@@ -25,8 +31,15 @@ export function globToRegExp(pattern: string): RegExp {
     const c = pattern[i]!;
     if (c === "*") {
       if (pattern[i + 1] === "*") {
-        re += ".*"; // double star -- cross directory boundaries
-        i++;
+        // `**/` is ONE token spanning "any number of directories, including none".
+        // Consume the trailing slash with it so the slash is optional too.
+        if (pattern[i + 2] === "/") {
+          re += "(?:.*/)?";
+          i += 2;
+        } else {
+          re += ".*"; // trailing/mid-segment double star -- cross directory boundaries
+          i++;
+        }
       } else {
         re += "[^/]*"; // single star -- within a path segment
       }
@@ -55,4 +68,28 @@ export function matchGlob(pathPosix: string, pattern: string): boolean {
 /** Filter a list of repo-relative paths to those matching the pattern. */
 export function filterByGlob(paths: readonly string[], pattern: string): string[] {
   return paths.filter((p) => matchGlob(p, pattern));
+}
+
+/**
+ * Normalize a `path` scope argument (the `search_code` / `list_files` subdirectory
+ * filter) to a clean repo-relative POSIX dir: back-slashes → forward, strip a leading
+ * `./` and any surrounding slashes. `"./src/board/"` and `"src\\board"` both become
+ * `"src/board"`; a blank/absent scope becomes `""` (no scope). ONE definition so every
+ * capability provider (cloud GitHub-API, on-prem ripgrep, editor walk) normalizes a
+ * scope identically instead of re-hand-rolling the same regex.
+ */
+export function normalizeScopeDir(raw: string | null | undefined): string {
+  return (raw ?? "").split("\\").join("/").trim().replace(/^\.\/+/, "").replace(/^\/+|\/+$/g, "");
+}
+
+/**
+ * Is a repo-relative POSIX path inside a normalized scope dir? True for the dir itself
+ * and anything beneath it (`src/board` ⊇ `src/board`, `src/board/x.ts`), false for a
+ * sibling that merely shares a prefix (`src/boardroom`). An empty scope matches every
+ * path (no scope). Shared prefix-match so provider scope-filtering can't drift.
+ */
+export function isUnderScopeDir(pathPosix: string, scopeDir: string): boolean {
+  if (!scopeDir) return true;
+  const p = pathPosix.split("\\").join("/");
+  return p === scopeDir || p.startsWith(`${scopeDir}/`);
 }

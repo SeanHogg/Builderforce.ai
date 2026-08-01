@@ -40,8 +40,17 @@ export interface CeremonyRollup {
   totals: {
     sessions: number;
     completed: number;
+    /** Still open right now. */
     active: number;
-    /** Completed / total, 0–1. */
+    /**
+     * Concluded WITHOUT being conducted (0365) — nobody attended and the project has not
+     * granted unattended ceremonies. Counted separately rather than folded into `active`
+     * (which is what "everything not completed" used to mean) because an abandoned
+     * ceremony is a finished fact about a team that skipped it, not a meeting in progress.
+     */
+    abandoned: number;
+    /** Completed / total, 0–1. Abandoned sessions count against it — deliberately: a
+     *  standup nobody came to is exactly the thing this rate should report. */
     completionRate: number;
     /** Distinct projects that ran a ceremony in the window. */
     projects: number;
@@ -97,6 +106,10 @@ export async function computeCeremonyRollup(db: Db, tenantId: number, days: numb
 
   // ── Session totals ──────────────────────────────────────────────────────────
   const completedSessions = sessions.filter((s) => s.status === 'completed');
+  // 'abandoned' (0365) is a THIRD terminal state. Before it existed "not completed" and
+  // "still running" were the same thing; counting an abandoned session as active would
+  // report a standup nobody attended, days ago, as a meeting currently in progress.
+  const abandonedSessions = sessions.filter((s) => s.status === 'abandoned');
   const kindCounts = new Map<string, number>();
   const projectSet = new Set<number>();
   let durationMsSum = 0;
@@ -147,7 +160,8 @@ export async function computeCeremonyRollup(db: Db, tenantId: number, days: numb
     totals: {
       sessions: sessions.length,
       completed: completedSessions.length,
-      active: sessions.length - completedSessions.length,
+      abandoned: abandonedSessions.length,
+      active: sessions.length - completedSessions.length - abandonedSessions.length,
       completionRate: sessions.length ? completedSessions.length / sessions.length : 0,
       projects: projectSet.size,
       avgDurationMinutes: durationSamples ? Math.round(durationMsSum / durationSamples / 60_000) : 0,

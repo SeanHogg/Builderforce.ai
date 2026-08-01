@@ -70,8 +70,34 @@ async function refreshWorkspaceHeader(context: vscode.ExtensionContext): Promise
   }
 }
 
+/**
+ * Mirror the signed-in state into the `builderforce.signedIn` context key so the
+ * sidebar can hide every feature view behind a single login panel when logged out
+ * (the views' `when` clauses read this key). Signed-in truth is "has an editor key
+ * in SecretStorage" — the same check every surface already makes ad hoc.
+ */
+async function syncSignedInContext(context: vscode.ExtensionContext): Promise<void> {
+  const signedIn = !!(await context.secrets.get(SECRET_KEY));
+  await vscode.commands.executeCommand("setContext", "builderforce.signedIn", signedIn);
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   initProjectState(context.workspaceState);
+  // Gate the sidebar on auth before anything else registers: until this resolves the
+  // key is falsy, so the login (Welcome) panel shows and the feature views stay hidden.
+  void syncSignedInContext(context);
+  // Empty provider so the Welcome view can render its viewsWelcome sign-in panel.
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider("builderforce.welcome", {
+      getChildren: () => [],
+      getTreeItem: () => new vscode.TreeItem(""),
+    } satisfies vscode.TreeDataProvider<never>),
+    // Keep the key fresh when auth changes out-of-band (e.g. the device-code flow
+    // completing, or a sign-out in another window).
+    vscode.authentication.onDidChangeSessions((e) => {
+      if (e.provider.id === BuilderForceAuthProvider.id) void syncSignedInContext(context);
+    }),
+  );
   const tree = new SessionsTreeProvider(context.secrets);
   const projects = new ProjectsTreeProvider(context);
   const inbox = new InboxTreeProvider(context.secrets);
@@ -110,10 +136,15 @@ export function activate(context: vscode.ExtensionContext): void {
     managerStatus,
     vscode.commands.registerCommand(OPEN_MANAGER_CMD, () =>
       vscode.env.openExternal(vscode.Uri.parse(`${appUrl()}/projects?tab=manager`))),
-    attention.onDidChange(() => { tree.refresh(); projects.refresh(); updateManagerStatus(); }),
+    attention.onDidChange(() => {
+      tree.refresh(); projects.refresh(); inbox.refresh(); updateManagerStatus();
+      // Per-session chat tabs show the same live status as the Sessions rows, off the
+      // same map — repaint them on the same signal (no second poller).
+      BrainWebview.refreshTabStatus();
+    }),
     // The in-webview Brain loop reports its own running / awaiting chats (the server
     // can't see them) — repaint the Sessions tree so they light up in lockstep.
-    onLocalRunsChange(() => tree.refresh()),
+    onLocalRunsChange(() => { tree.refresh(); BrainWebview.refreshTabStatus(); }),
     // Switching the active project re-scopes the attention query.
     onProjectChange(() => attention.refresh()),
   );
@@ -134,8 +165,9 @@ export function activate(context: vscode.ExtensionContext): void {
     },
     // Merge the webview's in-flight chat runs into the live-status map so a chat
     // that keeps executing after the user opens a new one still shows a spinner
-    // (or ❓ when paused on a confirm) in the Sessions tree.
-    onLocalRunsChanged: (runs) => setLocalChatRuns(runs),
+    // (or ❓ when paused on a confirm) in the Sessions tree. Keyed by the reporting
+    // panel — with per-session tabs several panels report at once.
+    onLocalRunsChanged: (sourceId, runs) => setLocalChatRuns(sourceId, runs),
   });
   projectView = vscode.window.createTreeView("builderforce.project", { treeDataProvider: projects });
   context.subscriptions.push(projectView);
@@ -308,8 +340,8 @@ export function activate(context: vscode.ExtensionContext): void {
       void vscode.window.showInformationMessage(`Logged a ${mins}-minute meeting as paid time.`);
     }),
     // Review the tenant's pending human-in-the-loop approvals and resolve them.
-    vscode.commands.registerCommand("builderforce.humanRequests", () =>
-      reviewHumanRequests(context, projects),
+    vscode.commands.registerCommand("builderforce.humanRequests", (approvalId?: string) =>
+      reviewHumanRequests(context, projects, approvalId),
     ),
     // The Board renders NATIVELY in a webview from bfApi data (not the embedded web
     // page) — reliable inside a VS Code webview where the /embed iframe is not.
@@ -811,6 +843,7 @@ async function runTask(
 async function reviewHumanRequests(
   context: vscode.ExtensionContext,
   projects: ProjectsTreeProvider,
+  requestedApprovalId?: string,
 ): Promise<void> {
   if (!(await ensureSignedIn(context))) return;
 
@@ -827,7 +860,10 @@ async function reviewHumanRequests(
   }
 
   const isAnswerable = (a: bfApi.BfApproval): boolean => a.kind === "question" || a.kind === "feedback";
-  const pick = await vscode.window.showQuickPick(
+  const requested = requestedApprovalId
+    ? pending.find((a) => String(a.id) === String(requestedApprovalId))
+    : undefined;
+  const pick = requested ? { approval: requested } : await vscode.window.showQuickPick(
     pending.map((a) => ({
       label: `$(${isAnswerable(a) ? "comment" : "shield"}) ${a.description?.slice(0, 70) || a.actionType || a.kind || "Approval"}`,
       description: a.kind ?? "",
@@ -908,6 +944,7 @@ async function signIn(context: vscode.ExtensionContext): Promise<void> {
     return;
   }
   vscode.window.showInformationMessage("BuilderForce: signed in.");
+  void syncSignedInContext(context); // reveal the feature views
   bfApi.clearJwt();
   clearPlatformToolsCache();
   BrainWebview.refresh();
@@ -916,10 +953,32 @@ async function signIn(context: vscode.ExtensionContext): Promise<void> {
   void vscode.commands.executeCommand("builderforce.refreshInbox");
   void heartbeat(context);
   void vscode.commands.executeCommand("builderforce.refreshProjects");
+  // Land the user on a ready board instead of "Select or create a project…":
+  // zero-setup onboarding provisions a Default project, so auto-select it.
+  void autoSelectDefaultProject(context);
   void maybeScan(context, false);
   void insights?.start();
   void diagnostics?.refresh();
   meetings?.refresh();
+}
+
+/** After sign-in, if no project is selected yet, select the workspace's sole/first
+ *  project so the user lands on a ready board instead of the "Select or create a
+ *  project…" placeholder. Zero-setup onboarding provisions a Default project on the
+ *  web, so a fresh builder has exactly one to land on. Best-effort and silent on any
+ *  failure — the manual "Select or create a project…" affordance always remains. */
+async function autoSelectDefaultProject(context: vscode.ExtensionContext): Promise<void> {
+  if (getSelectedProject()) return; // a returning user keeps their persisted selection
+  try {
+    const list = await bfApi.listProjects(context.secrets);
+    const first = list[0];
+    if (!first) return; // no projects yet — leave the create affordance
+    setSelectedProject({ id: first.id, name: first.name });
+    bfApi.invalidateTasks(first.id);
+    void vscode.commands.executeCommand("builderforce.refreshProjects");
+  } catch {
+    /* best-effort — leave the manual picker affordance in place */
+  }
 }
 
 async function signOut(
@@ -927,6 +986,7 @@ async function signOut(
   auth: BuilderForceAuthProvider,
 ): Promise<void> {
   await auth.removeSession();
+  void syncSignedInContext(context); // collapse back to the login-only Welcome panel
   bfApi.clearJwt();
   clearPlatformToolsCache();
   clearPersonalityBlockCache();
@@ -945,16 +1005,134 @@ async function signOut(
   meetings?.refresh();
 }
 
+/** Human-facing provider names for the BYO groups. Falls back to the raw key. */
+const BYO_PROVIDER_LABELS: Record<string, string> = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  "kimi-code": "Kimi Code",
+  moonshot: "Moonshot AI",
+  google: "Google",
+  meta: "Meta",
+  xai: "xAI",
+  mistral: "Mistral",
+  deepseek: "DeepSeek",
+};
+
+function byoProviderLabel(vendor: string): string {
+  return BYO_PROVIDER_LABELS[vendor] ?? vendor.replace(/^./, (ch) => ch.toUpperCase());
+}
+
 async function pickModel(context: vscode.ExtensionContext): Promise<void> {
   try {
-    const models = await getModels(context.secrets, true);
+    const { models, canUsePremiumModels, premiumModels, canChooseModel, byo, premiumInfo } =
+      await getModels(context.secrets, true);
     const auto = "(auto — let the gateway choose)";
-    const pick = await vscode.window.showQuickPick([auto, ...models], {
+
+    // When premium is locked, the gateway tells us WHY and which step opens it.
+    // Same unlock vocabulary the chat error banner uses, so the picker and a failed
+    // turn name the same remedy.
+    const premiumUnlock = canUsePremiumModels
+      ? null
+      : premiumInfo?.unlock === "validate_card"
+        ? {
+            label: "$(credit-card) Add a card to unlock premium models",
+            detail: "Your plan allows premium; it needs a validated card on file",
+          }
+        : premiumInfo?.unlock === "upgrade"
+          ? {
+              label: "$(rocket) Upgrade to unlock premium models",
+              detail: "Any paid OpenRouter model, at cost + 1¢/request",
+            }
+          : null;
+
+    // Model choice is a gated entitlement (frontier access: paid plan, superadmin,
+    // premium override, or a connected BYO account). Without it the gateway rejects a
+    // pinned model, so offering one would be a dead control — clear the pin instead.
+    if (!canChooseModel) {
+      setSelectedModel(undefined);
+      const action = await vscode.window.showInformationMessage(
+        "Model choice needs a paid plan or a connected provider account. Connect your own Anthropic/OpenAI key to pick models and have turns billed to your account.",
+        "Open settings",
+      );
+      if (action) void vscode.commands.executeCommand("builderforce.openSettings");
+      return;
+    }
+
+    // Separator-grouped QuickPick, ordered by what it COSTS the user:
+    //   1. BYO — their own connected account. Billed to their key, $0 to us, so it
+    //      leads. Grouped per provider ("BYO — Anthropic") because a tenant can
+    //      connect several and needs to know whose key a pick will spend.
+    //   2. Plan models — included in the plan.
+    //   3. Premium — any paid OpenRouter model, metered at cost + 1¢/request.
+    // Groups the tenant isn't entitled to never render, so the picker can only ever
+    // offer models the gateway will accept.
+    const items: vscode.QuickPickItem[] = [{ label: auto, description: "Default · gateway picks per turn" }];
+
+    // Group the BYO models by their serving provider, preserving catalog order.
+    const byVendor = new Map<string, typeof byo.models>();
+    for (const m of byo.models) {
+      const list = byVendor.get(m.vendor) ?? [];
+      list.push(m);
+      byVendor.set(m.vendor, list);
+    }
+    for (const [vendor, vendorModels] of byVendor) {
+      items.push(
+        {
+          label: `BYO — ${byoProviderLabel(vendor)} (billed to your own key)`,
+          kind: vscode.QuickPickItemKind.Separator,
+        },
+        ...vendorModels.map((m) => ({
+          label: m.id,
+          description: `your ${byoProviderLabel(vendor)} account · ${m.tier}`,
+          detail:
+            m.contextWindow != null
+              ? `${m.contextWindow.toLocaleString()} token context · no platform charge`
+              : "no platform charge",
+        })),
+      );
+    }
+
+    items.push(
+      { label: "Plan models — included in your plan", kind: vscode.QuickPickItemKind.Separator },
+      ...models.map((m) => ({ label: m, description: "included in your plan" })),
+    );
+
+    if (canUsePremiumModels && premiumModels.length > 0) {
+      items.push(
+        { label: "Premium — any OpenRouter model (cost + 1¢/request)", kind: vscode.QuickPickItemKind.Separator },
+        ...premiumModels.map((m) => ({ label: m, description: "premium · metered at cost + 1¢/request" })),
+      );
+    } else if (premiumUnlock) {
+      // Premium is off — SAY SO, and name the step that turns it on. Silently
+      // omitting the group made the picker look like it was missing models the web
+      // app plainly offers. Picking this row opens the page that unlocks it rather
+      // than pinning anything.
+      items.push(
+        { label: "Premium — any OpenRouter model", kind: vscode.QuickPickItemKind.Separator },
+        { label: premiumUnlock.label, description: premiumUnlock.detail },
+      );
+    }
+
+    const pick = await vscode.window.showQuickPick(items, {
       title: "Select BuilderForce model",
-      placeHolder: "Pick a model for new turns",
+      placeHolder: byo.providers.length > 0
+        ? "Your connected accounts are listed first — those turns are billed to your own key"
+        : "Pick a model for new turns",
+      matchOnDescription: true,
+      matchOnDetail: true,
     });
     if (pick === undefined) return;
-    setSelectedModel(pick === auto ? undefined : pick);
+    // The unlock row is a call to action, not a model — send them to the page that
+    // grants the entitlement and leave the current pin untouched.
+    if (premiumUnlock && pick.label === premiumUnlock.label) {
+      void vscode.env.openExternal(
+        vscode.Uri.parse(
+          `${getWebBaseUrl()}${premiumInfo?.unlock === "upgrade" ? "/pricing?upgrade=pro" : "/pricing"}`,
+        ),
+      );
+      return;
+    }
+    setSelectedModel(pick.label === auto ? undefined : pick.label);
   } catch (e) {
     const message = (e as { message?: string }).message ?? String(e);
     if (message.includes("not_signed_in")) {

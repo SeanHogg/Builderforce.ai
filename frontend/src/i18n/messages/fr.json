@@ -1,4 +1,101 @@
 {
+  "marketingDeck": {
+    "seo": {
+      "title": "La démo ultime — Builderforce",
+      "description": "Suivez cinq étapes pour voir une idée devenir une application fonctionnelle, déployée et testée, pilotée par une équipe d'humains et d'agents IA.",
+      "ogTitle": "La démo ultime : créez, déployez et passez à l'échelle en quelques minutes"
+    },
+    "ui": {
+      "start": "Lancer la démo",
+      "next": "Suivant",
+      "prev": "Retour",
+      "restart": "Recommencer",
+      "progress": "{current} / {total}",
+      "progressLabel": "Progression de la démo",
+      "seeLabel": "Ce que vous verrez",
+      "ctaPrimary": "Commencer à créer",
+      "ctaSecondary": "Réserver une démo"
+    },
+    "slides": [
+      {
+        "kind": "intro",
+        "eyebrow": "La démo ultime",
+        "title": "Créez, déployez et passez à l'échelle, d'un seul coup.",
+        "tagline": "Cinq étapes mènent une seule idée jusqu'à un produit fonctionnel piloté par une équipe d'humains et d'agents IA. Suivez le guide."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "01",
+        "eyebrow": "Connexion",
+        "title": "Aucune configuration. Vous êtes déjà prêt.",
+        "tagline": "Pas de formulaire, pas de réglages : juste un compte.",
+        "steps": [
+          "Créez un compte ou connectez-vous",
+          "Arrivez directement dans votre espace de travail par défaut",
+          "Un projet par défaut vous attend déjà"
+        ],
+        "see": "Vous êtes dans un espace de travail opérationnel en quelques secondes, sur le web ou dans VS Code."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "02",
+        "eyebrow": "Décrivez-le",
+        "title": "Dites ce que vous voulez. Regardez-le se construire.",
+        "tagline": "Saisissez votre idée dans « Que construisons-nous ? ».",
+        "steps": [
+          "Saisissez une description en langage naturel de votre app",
+          "Arrivez dans le Builder avec votre prompt déjà transmis",
+          "L'IA génère pour vous une application complète et fonctionnelle"
+        ],
+        "see": "Un aperçu en direct s'illumine avec une app fonctionnelle, à partir d'une seule phrase."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "03",
+        "eyebrow": "Déployez et testez",
+        "title": "En ligne en un clic. Testé automatiquement.",
+        "tagline": "Publiez, puis laissez l'agent la mettre à l'épreuve.",
+        "steps": [
+          "Cliquez sur Publier : votre app est en ligne à une URL en quelques secondes",
+          "Le Testeur agentique cible automatiquement l'app déployée",
+          "Les résultats reviennent sous forme de tickets prêts à corriger"
+        ],
+        "see": "Déployée et contrôlée qualité sans jamais quitter le Builder."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "04",
+        "eyebrow": "Agrandissez l'équipe",
+        "title": "Invitez des personnes. Recrutez des agents. Une seule équipe.",
+        "tagline": "Humains et agents IA travaillent sur le même tableau.",
+        "steps": [
+          "Invitez un collègue dans votre espace de travail",
+          "Ajoutez un agent IA à vos effectifs",
+          "Attribuez le travail à une personne ou à un agent, avec le même sélecteur"
+        ],
+        "see": "Une équipe mixte humains + agents, qui collabore sur un tableau partagé."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "05",
+        "eyebrow": "Dirigez les effectifs",
+        "title": "Une équipe réduite. Des effectifs augmentés.",
+        "tagline": "Quelques développeurs dirigent une flotte d'agents.",
+        "steps": [
+          "Affectez les bons agents à chaque couloir",
+          "Glissez un ticket dans un couloir pour lancer un agent automatiquement",
+          "Pilotez les exécutions en direct et répondez à leurs questions au fil de l'eau"
+        ],
+        "see": "Une poignée de développeurs orchestre des effectifs d'agents qui font le gros du travail."
+      },
+      {
+        "kind": "outro",
+        "eyebrow": "C'est ça, l'effet WOW",
+        "title": "De l'idée au produit à l'équipe, en quelques minutes.",
+        "tagline": "Vous venez de voir un prompt devenir une app déployée et testée, pilotée par une équipe d'humains et d'agents IA. À vous de jouer."
+      }
+    ]
+  },
   "contentManager": {
     "migrate": {
       "moving": "Transfert de votre contenu vers Connaissances…",
@@ -121,6 +218,15 @@
     "assignTeam": "Assigner une équipe…",
     "assign": "Assigner",
     "boardNameLabel": "Nom du tableau",
+    "templateHeading": "Modèle du tableau",
+    "templateLabel": "Modèle du tableau",
+    "templateHint": "L’application d’un modèle remplace les couloirs, les exigences de rôles, les contrôles et le paramètre de cycle coordonné de ce tableau.",
+    "templateApply": "Appliquer le modèle",
+    "templateApplying": "Application…",
+    "templateConfirmTitle": "Appliquer le modèle du tableau ?",
+    "templateConfirmMessage": "Appliquer « {name} » à ce tableau ? La configuration actuelle des couloirs sera remplacée. Les tickets et leur historique seront conservés.",
+    "templateLoadError": "Impossible de charger les modèles du tableau",
+    "templateApplyError": "Impossible d’appliquer le modèle du tableau",
     "maxConcurrent": "Tickets simultanés max",
     "hideDoneItems": "Masquer les éléments terminés",
     "standupTimer": "Minuteur de tour du standup",
@@ -158,6 +264,9 @@
       "migratable": "Migration",
       "keyCount": "{count} clé(s)",
       "tapToConnect": "Appuyez pour connecter",
+      "dataConsumed": "Données consommées",
+      "thisMonth": "Ce mois-ci",
+      "confirmDisconnect": "Déconnecter {label} ? Cela supprime {count} identifiant(s) enregistré(s) et arrête toute synchronisation en cours. Le travail déjà importé est conservé.",
       "category": {
         "pm": "Gestion de projet et du travail",
         "scm": "Gestion de code source",
@@ -258,6 +367,22 @@
       "back": "Retour",
       "next": "Suivant",
       "working": "Traitement…"
+    },
+    "page": {
+      "title": "Intégrations / Clés API",
+      "subtitle": "Connectez des fournisseurs de modèles et des outils métier, gérez les clés développeur et contrôlez la priorité des fournisseurs depuis un seul endroit.",
+      "searchPlaceholder": "Rechercher des intégrations et des clés API…",
+      "categoryLabel": "Catégorie",
+      "priorityChip": "Priorité · {leader}",
+      "priorityNone": "Aucun",
+      "embedHeading": "Intégration embarquée",
+      "category": {
+        "all": "Tout",
+        "models": "Fournisseurs de modèles",
+        "apps": "Intégrations d'applications",
+        "developer": "Clés API développeur",
+        "embed": "Intégrer"
+      }
     }
   },
   "nav": {
@@ -274,7 +399,7 @@
       "dashboard": "Tableau de bord",
       "brainstorm": "Brainstorming",
       "projects": "Projets",
-      "ide": "IDE",
+      "ide": "Builder",
       "workflows": "Flux de travail",
       "workforce": "Talents / Effectif",
       "insights": "Analyses",
@@ -290,7 +415,9 @@
       "myWorkspace": "Mon espace",
       "marketplace": "Marché",
       "incidents": "Incidents",
-      "monitoring": "Surveillance"
+      "monitoring": "Surveillance",
+      "reliability": "Fiabilité",
+      "agentOps": "Ops des agents"
     },
     "tab": {
       "projects": "Projets",
@@ -340,7 +467,7 @@
       "logs": "Journaux",
       "qa": "QA agentique",
       "home": "Accueil",
-      "integrations": "Intégrations",
+      "integrations": "Intégrations / Clés API",
       "manager": "Manager",
       "roles": "Rôles",
       "talent": "Talents",
@@ -365,8 +492,16 @@
       "escalation": "Escalade",
       "contacts": "Contacts",
       "boards": "Tableaux",
-      "reporting": "Rapports"
-    }
+      "monitors": "Moniteurs",
+      "reporting": "Rapports",
+      "rfp": "Appels d'offres",
+      "feedback": "Retours",
+      "autonomy": "Autonomie",
+      "coordination": "Coordination",
+      "memory": "Mémoire",
+      "rehearsal": "Répétition"
+    },
+    "primaryAria": "Principale"
   },
   "alerts": {
     "title": "Alertes",
@@ -440,12 +575,16 @@
     }
   },
   "ceremonies": {
-    "selectProject": "Sélectionnez un projet pour démarrer une cérémonie."
+    "selectProject": "Sélectionnez un projet pour démarrer une cérémonie.",
+    "viewLive": "Table ronde en direct",
+    "viewSchedules": "Planifications",
+    "viewSwitchLabel": "Vue de cérémonie",
+    "viewHistory": "Historique"
   },
   "projectCard": {
     "details": "Détails",
     "taskBoard": "Tableau des tâches",
-    "openIde": "Ouvrir dans l’IDE",
+    "openIde": "Ouvrir dans l’Builder",
     "deleteProject": "Supprimer le projet",
     "agentLabel": "Agent :",
     "tasks": "{count, plural, one {# tâche} other {# tâches}}",
@@ -465,7 +604,26 @@
     "healthNoDataAria": "Santé du projet — aucune donnée de livraison pour l'instant",
     "doneAria": "{pct}% terminé — {completed} sur {total} tâches terminées",
     "donePct": "{pct} % terminé",
-    "health360": "Projet 360"
+    "health360": "Projet 360",
+    "originBuilder": "Builder",
+    "originImported": "Importé",
+    "originBuilderTitle": "Démarré dans le Builder",
+    "originImportedTitle": "Importé depuis un dépôt",
+    "openChat": "Ouvrir le chat du projet",
+    "configTitle": "Terminer la configuration",
+    "configDone": "Configuré",
+    "configTodo": "À faire",
+    "configAria": "Configuration terminée à {pct}%",
+    "config_vision": "Vision",
+    "config_goals": "Objectifs",
+    "config_deadline": "Échéance",
+    "config_owner": "Responsable",
+    "config_tasks": "Tâches",
+    "config_architecture": "Architecture",
+    "configPct": "{pct}% configuré",
+    "configMissingList": "Reste à configurer : {items}",
+    "brainstormGoals": "Réfléchir aux objectifs",
+    "brainstormGoalsPrompt": "Aide-moi à réfléchir à des objectifs clairs pour le projet « {name} ». Pose-moi des questions sur sa portée et ses critères de réussite, puis propose 3 à 5 objectifs concrets que je pourrai transformer en objectifs."
   },
   "projectInspection": {
     "title": "Inspection",
@@ -651,8 +809,8 @@
     "modalityProject": "Projet {label}",
     "modality": {
       "designer": {
-        "label": "Concepteur",
-        "tagline": "Générez et créez des applications avec Aperçu, Code et un serveur de dev en direct.",
+        "label": "Site web",
+        "tagline": "Générez et créez un site web ou une application web avec Aperçu, Code et un serveur de développement en direct.",
         "runLabel": "Lancer"
       },
       "video": {
@@ -674,6 +832,16 @@
         "label": "Voix",
         "tagline": "Clonez et concevez une voix personnalisée, puis synthétisez de la parole à partir d’elle.",
         "runLabel": "Générer"
+      },
+      "mobile": {
+        "label": "Mobile",
+        "tagline": "Créez une application pour téléphone et prévisualisez-la dans un simulateur, puis scannez pour l'ouvrir sur votre propre appareil.",
+        "runLabel": "Exécuter"
+      },
+      "webmobile": {
+        "label": "Web + Mobile",
+        "tagline": "Créez une application web et une application mobile ensemble à partir d’une seule base de code — prévisualisez les deux côte à côte.",
+        "runLabel": "Lancer"
       }
     },
     "all": "Tous",
@@ -683,10 +851,10 @@
     "noProjectsFilter": "Aucun projet ne correspond à ce filtre. Créez-en un nouveau ci-dessus.",
     "noProjectsYet": "Aucun projet pour l’instant. Choisissez un type ci-dessus pour créer le premier.",
     "deleteFailed": "Échec de la suppression du projet",
-    "title": "IDE",
-    "subtitle": "Créez un nouveau projet IDE ou ouvrez-en un existant.",
-    "newIdeProject": "Nouveau projet IDE",
-    "yourIdeProjects": "Vos projets IDE",
+    "title": "Builder",
+    "subtitle": "Créez un nouveau projet Builder ou ouvrez-en un existant.",
+    "newIdeProject": "Nouveau projet Builder",
+    "yourIdeProjects": "Vos projets Builder",
     "comingSoon": "bientôt disponible",
     "soon": "bientôt",
     "newModalityProject": "Nouveau projet {label}",
@@ -703,16 +871,16 @@
     "projectNamePlaceholder": "Mon super projet",
     "parentOptional": "Regrouper sous un projet (facultatif)",
     "parentProject": "Projet parent",
-    "parentProjectHint": "Regroupez ce projet IDE sous un projet, ou laissez-le non groupé.",
-    "ideProjectSettings": "Paramètres du projet IDE",
+    "parentProjectHint": "Regroupez ce projet Builder sous un projet, ou laissez-le non groupé.",
+    "ideProjectSettings": "Paramètres du projet Builder",
     "openProjectsAria": "Ouvrir les projets",
     "editNameHint": "Modifier le nom du projet (enregistré à la perte du focus ou avec Entrée)",
-    "projectDetailsTitle": "Détails du projet IDE",
+    "projectDetailsTitle": "Détails du projet Builder",
     "projectSettingsAria": "Paramètres du projet",
     "settingsRepoTitle": "Paramètres et dépôt",
     "blockOnFailHint": "Lorsque activé, l'exécution est bloquée tant que les dernières vérifications échouent",
     "runChecksHint": "Exécuter la vérification de types, le linting et la compilation dans le navigateur pour valider le code",
-    "detailedConfigHint": "La mémoire, le modèle, l'inférence, la personnalité et la voix de ce projet se configurent dans les panneaux de l'IDE. C'est ici que vous le renommez et définissez son Projet parent.",
+    "detailedConfigHint": "La mémoire, le modèle, l'inférence, la personnalité et la voix de ce projet se configurent dans les panneaux de l'Builder. C'est ici que vous le renommez et définissez son Projet parent.",
     "createOpen": "Créer et ouvrir",
     "creating": "Création…",
     "cancel": "Annuler",
@@ -748,7 +916,68 @@
     "recipeBlankDesc": "Un modèle minimal que vous entraînez de zéro dans le Studio.",
     "recipeSeedModelLabel": "Modèle publié pour l'initialisation",
     "recipeSeedSelect": "Sélectionnez un modèle…",
-    "recipeSeedNoModels": "aucun modèle publié pour l'instant"
+    "recipeSeedNoModels": "aucun modèle publié pour l'instant",
+    "centerPreview": "Aperçu",
+    "centerCode": "Code",
+    "device": {
+      "simulateOnWeb": "Simuler sur le web",
+      "deviceLabel": "Appareil",
+      "rotate": "Pivoter",
+      "reload": "Recharger l'aperçu",
+      "openInTab": "Ouvrir dans un nouvel onglet",
+      "tryOnDevice": "Tester sur l'appareil",
+      "previewTitle": "Aperçu de l'application mobile",
+      "emptyTitle": "Rien en cours d'exécution",
+      "emptyHint": "Cliquez sur Exécuter pour démarrer le serveur de développement et voir votre application ici.",
+      "panelTitle": "Aperçu sur votre téléphone",
+      "panelIntro": "Le simulateur s'exécute dans cet onglet du navigateur, votre téléphone ne peut donc pas y accéder. Scannez plutôt la version publiée.",
+      "checking": "Recherche d'une version publiée…",
+      "qrAlt": "QR code de l'URL de l'application publiée",
+      "copyLink": "Copier le lien",
+      "copied": "Copié",
+      "openLink": "Ouvrir",
+      "step1": "Ouvrez l'application appareil photo sur votre téléphone.",
+      "step2": "Pointez-la vers le QR code ci-dessus.",
+      "step3": "Touchez la notification pour ouvrir votre application.",
+      "lastPublished": "Dernière publication le {when}",
+      "republishHint": "Republiez après vos modifications : le QR code reste valable, il pointe toujours vers la dernière version.",
+      "notPublishedTitle": "Rien n'a encore été publié",
+      "notPublishedBody": "Publiez cette application pour obtenir un lien que votre téléphone peut ouvrir. Cela prend environ une minute.",
+      "goToPublish": "Aller à Publier"
+    },
+    "publish": {
+      "title": "Publier sur le web",
+      "description": "Compilez cette application et hébergez-la sur un sous-domaine. Hébergement statique : votre application s'exécute dans le navigateur.",
+      "subdomain": "Sous-domaine",
+      "building": "Compilation…",
+      "uploading": "Envoi…",
+      "publish": "Publier",
+      "republish": "Republier",
+      "published": "Publié ✓",
+      "liveSite": "Site en ligne",
+      "preview": "aperçu",
+      "fileCount": "{count, plural, one {# fichier} other {# fichiers}}",
+      "invalidSubdomain": "Saisissez un sous-domaine valide (lettres, chiffres et tirets).",
+      "failed": "Échec de la publication"
+    },
+    "deploy": {
+      "title": "Déployer depuis GitHub",
+      "description": "Laissez GitHub Actions compiler ce projet à chaque push et le déployer ici — sans garder l'Builder ouvert.",
+      "checking": "Vérification du dépôt connecté…",
+      "needsRepo": "Connectez d'abord un dépôt GitHub à ce projet, depuis Paramètres → Dépôt.",
+      "needsGitHub": "Ce projet est connecté à un dépôt qui n'est pas GitHub. Les déploiements GitHub Actions nécessitent un dépôt GitHub.",
+      "repoLabel": "Dépôt :",
+      "enable": "Activer les déploiements GitHub",
+      "reapply": "Mettre à jour le workflow",
+      "enabling": "Écriture du workflow…",
+      "enableFailed": "Impossible d'activer les déploiements GitHub.",
+      "enabledOn": "{path} a été ajouté sur {branch}. Le prochain push sur cette branche compilera et déploiera.",
+      "viewRuns": "Voir les exécutions du workflow sur GitHub",
+      "viewWorkflow": "Afficher le fichier du workflow"
+    },
+    "askAi": "Demander à l’IA",
+    "previewWeb": "Web",
+    "previewMobile": "Mobile"
   },
   "tools": {
     "outOf5": "sur 5,0",
@@ -855,7 +1084,24 @@
     "clearanceNeededBody": "Ceci est un élément de sécurité restreint. Vous n'avez pas l'autorisation d'en voir les détails. Demandez l'accès à un propriétaire ou responsable de l'espace.",
     "typeProduct": "Produit",
     "typeDesign": "Design",
-    "typeIncident": "Incident"
+    "typeIncident": "Incident",
+    "requiresRoleHint": "{role, select, viewer {Nécessite le rôle Observateur} developer {Nécessite le rôle Développeur} manager {Nécessite le rôle Gestionnaire} owner {Nécessite le rôle Propriétaire} other {Nécessite le rôle {role}}}",
+    "requiresDeveloperRole": "Nécessite le rôle Développeur",
+    "closePanel": "Fermer le panneau",
+    "panel": "Panneau",
+    "copy": "Copier",
+    "copied": "Copié",
+    "copyFailed": "Échec de la copie",
+    "copyDiagnostics": "Copier le diagnostic",
+    "connectToggle": {
+      "connect": "Connecter",
+      "disconnect": "Déconnecter",
+      "working": "En cours…",
+      "connectAria": "Connecter {name}",
+      "disconnectAria": "Déconnecter {name}",
+      "errorTitle": "Impossible de déconnecter {name}",
+      "errorGeneric": "Échec de la déconnexion. Réessayez."
+    }
   },
   "prdCreate": {
     "title": "Nouveau PRD",
@@ -974,6 +1220,12 @@
     "merging": "Fusion…"
   },
   "memberProfile": {
+    "tabs": {
+      "overview": "Aperçu",
+      "timeLogs": "Temps enregistrés",
+      "tasks": "Tâches"
+    },
+    "noTasks": "Aucune tâche n’est assignée à cet utilisateur.",
     "subtitle": "{kind} · capacité et disponibilité",
     "syncing": "Synchronisation…",
     "syncFromGoogleCalendar": "Synchroniser depuis Google Agenda",
@@ -1034,7 +1286,7 @@
       "cloud_runs": "Exécutions cloud",
       "ingestion": "Données",
       "error_events": "Erreurs",
-      "outbound_fetches": "Disponibilité"
+      "outbound_fetches": "Requêtes sortantes"
     },
     "unlimited": "Illimité",
     "freePerMo": "{amount} gratuit / mois",
@@ -1101,7 +1353,73 @@
     },
     "accountTab": "Compte",
     "sessionsTab": "Sessions",
-    "subnavLabel": "Sections des paramètres"
+    "subnavLabel": "Sections des paramètres",
+    "emailTab": "E-mail",
+    "emailPrefs": {
+      "title": "Préférences d’e-mail",
+      "whatWeSend": "Ce que nous envoyons",
+      "error": "Impossible de mettre à jour vos préférences d’e-mail. Veuillez réessayer.",
+      "language": "Langue des e-mails",
+      "languageAuto": "Détection automatique",
+      "languageHelp": "La langue dans laquelle nous vous écrivons. Indépendante de la langue de l’application ci-dessus.",
+      "languageTitle": "Langue",
+      "languageDetail": "Nous vous écrivons dans cette langue. En détection automatique, nous utilisons la langue de votre inscription, à défaut l’anglais.",
+      "optionalTitle": "E-mails facultatifs",
+      "optionalHelp": "Désactivez ce que vous préférez ne pas recevoir.",
+      "optionalDetail": "Ce sont les e-mails que nous choisissons d’envoyer. Vous pouvez les désactiver un par un, et chacun contient un lien de désabonnement.",
+      "productUpdates": "Nouveautés produit",
+      "productUpdatesHelp": "Nouvelles fonctionnalités et changements notables.",
+      "onboardingTips": "Conseils et guides",
+      "onboardingTipsHelp": "Quelques conseils de temps en temps pour tirer plus de Builderforce.",
+      "digests": "Résumés et récapitulatifs",
+      "digestsHelp": "Récapitulatifs réguliers de l’activité de vos projets.",
+      "alwaysOnTitle": "Toujours envoyés",
+      "alwaysOnBody": "Ces e-mails font partie de votre compte. Ils ne sont jamais supprimés, même si vous vous désabonnez de tout le reste.",
+      "alwaysOn": {
+        "signIn": "Liens de connexion et liens magiques",
+        "verification": "Codes de vérification d’e-mail",
+        "invites": "Invitations aux espaces de travail et aux conversations",
+        "security": "Avis de sécurité et d’accès au compte"
+      },
+      "transactionalNote": "Les e-mails de compte et de sécurité sont toujours envoyés — ils font partie du fonctionnement de votre compte et ne figurent donc pas ci-dessus.",
+      "unsubscribedTitle": "Vous êtes désabonné",
+      "unsubscribedBody": "Vous ne recevez aucun e-mail facultatif. Les messages de compte et de sécurité continuent d’être envoyés.",
+      "resubscribeCta": "Se réabonner",
+      "resubscribeTitle": "Se réabonner aux e-mails facultatifs",
+      "resubscribeConfirm": "Vous recevrez de nouveau les e-mails facultatifs, selon les catégories que vous avez activées. Continuer ?"
+    },
+    "spendLimits": "Limites de dépenses",
+    "spendTitle": "Limites de dépenses IA de l’équipe",
+    "spendDescription": "Définissez un plafond mensuel de dépenses IA pour chaque siège. Les sièges sans clé de modèle propre s’exécutent sur Builderforce au tarif OpenRouter : une fois le plafond atteint, leur usage payant est suspendu, et vous comme l’intéressé êtes prévenus à l’approche.",
+    "spendTeamsOnlyTitle": "Fonctionnalité du forfait Teams",
+    "spendTeamsOnly": "Les limites de dépenses par siège sont disponibles dans le forfait Teams. Passez à ce forfait pour fixer un budget IA mensuel par membre.",
+    "spendDefaultTitle": "Budget par siège par défaut",
+    "spendDefaultDescription": "Appliqué à chaque siège sans limite propre. Laissez vide pour aucun budget par défaut.",
+    "spendDefaultLabel": "Budget mensuel par défaut en dollars",
+    "spendNoDefaultPlaceholder": "Aucune limite",
+    "spendPerSeatMonth": "par siège / mois",
+    "spendDefaultHint": "Les montants sont en dollars. L’usage couvert par la clé de modèle propre (BYO) d’un membre n’est jamais comptabilisé.",
+    "spendSeatsTitle": "Sièges",
+    "spendResetsOn": "Les dépenses sont réinitialisées le {date}.",
+    "spendNoSeats": "Aucun membre actif pour l’instant.",
+    "spendOfCap": "{spent} sur {cap}",
+    "spendUnlimitedUsage": "{spent} · sans limite",
+    "spendModeLabel": "Mode de budget",
+    "spendModeInherit": "Utiliser le défaut",
+    "spendModeUnlimited": "Sans limite",
+    "spendModeCustom": "Personnalisé",
+    "spendAmountPlaceholder": "Montant",
+    "spendAmountLabel": "Budget mensuel en dollars",
+    "spendSave": "Enregistrer",
+    "spendSaving": "Enregistrement…",
+    "spendSaved": "Enregistré",
+    "spendSaveFailed": "Échec de l’enregistrement",
+    "managerDefaults": "Manager IA",
+    "managerDefaultsTitle": "Valeurs par défaut du Manager IA",
+    "managerDefaultsSubtitle": "Le comportement du Manager IA dans tous les projets de cet espace de travail. Un projet peut les affiner depuis son propre onglet Manager, mais ne peut jamais s’accorder une autorisation que vous refusez ici.",
+    "managerDefaultsError": "Impossible de charger les valeurs par défaut du Manager IA.",
+    "managerDefaultsProjectHint": "Pour ne modifier qu’un seul projet :",
+    "managerDefaultsProjectLink": "ouvrir ses réglages Manager"
   },
   "pmo": {
     "title": "Portefeuille (PMO)",
@@ -1310,7 +1628,9 @@
         "crossTeam": "Inter-équipes",
         "crossTeamDesc": "Classer chaque équipe par rapport aux autres",
         "delayTaxonomy": "Causes de retard",
-        "delayTaxonomyDesc": "Pourquoi le travail est en retard"
+        "delayTaxonomyDesc": "Pourquoi le travail est en retard",
+        "autonomy": "Santé de l'autonomie",
+        "autonomyDesc": "Le travail s'est-il terminé tout seul ? Entonnoir du cycle de vie selon l'auteur du ticket, répartition des déplacements autonomes et humains, et points de blocage de l'autonomie."
       },
       "summary": {
         "cycleTime": "Temps de cycle moyen",
@@ -1723,7 +2043,12 @@
       "activeUsers": "Utilisateurs actifs",
       "cost": "Coût",
       "tokensSub": "tous modèles confondus",
-      "tokensByModel": "Jetons par modèle"
+      "tokensByModel": "Jetons par modèle",
+      "byIntegration": "Consommation par intégration",
+      "platformKey": "Builderforce (clé de la plateforme)",
+      "fundedOwnKey": "Votre clé",
+      "fundedPlatform": "Plateforme",
+      "requests": "Requêtes"
     },
     "devexhub": {
       "title": "DevEx",
@@ -2054,6 +2379,78 @@
       "title": "Cette vue nécessite un forfait supérieur",
       "body": "Les analyses avancées ne sont pas incluses dans votre forfait {plan}. Passez à un forfait supérieur pour débloquer les prévisions, la détection d'anomalies et les vues de direction.",
       "cta": "Voir les forfaits"
+    },
+    "autonomy": {
+      "title": "Santé de l'autonomie",
+      "subtitle": "Les tickets ouverts par votre manager IA et par vos équipes parcourent-ils vraiment tout leur cycle de vie seuls ? Comparez l'entonnoir selon l'auteur du ticket, voyez qui fait réellement avancer le tableau et repérez les verrous où l'autonomie s'arrête.",
+      "scopeAll": "Tous les projets de cet espace de travail.",
+      "scopeProject": "Périmètre : {project}.",
+      "coverage": {
+        "full": "Couverture complète — les {n} tickets ouverts sur les {days} derniers jours ont tous été audités.",
+        "truncated": "Échantillon seulement — l'audit a été plafonné à {n} tickets des {days} derniers jours ; ces chiffres portent donc sur les tickets les plus récents, pas sur tous."
+      },
+      "origin": {
+        "label": "Créé par",
+        "agent": "Agent",
+        "manager_card": "Carte du manager",
+        "human": "Humain",
+        "system": "Automatisation",
+        "unknown": "Non attribué"
+      },
+      "stage": {
+        "created": "Créés",
+        "dispatched": "Au moins une exécution",
+        "progressed": "Avancés seuls",
+        "terminal": "Arrivés à Terminé",
+        "fullyAutonomous": "Entièrement autonomes"
+      },
+      "allOrigins": "Toutes les origines",
+      "conversion": "De bout en bout",
+      "ticketsCreated": "{n} créés",
+      "endToEnd": "sont arrivés à Terminé sans aucun déplacement humain de colonne ({n} tickets).",
+      "funnelAria": "Entonnoir d'autonomie des tickets créés par {origin} — {n} tickets, exprimés en part des tickets créés.",
+      "originMixAria": "Tickets créés sur cette période, répartis selon leur auteur.",
+      "hopsAutonomous": "Déplacements autonomes",
+      "hopsHuman": "Déplacements humains",
+      "hopsOfTotal": "{share} d'autonomes sur {n} déplacements",
+      "hopSplitAria": "Déplacements de colonne pour {origin} : {a} autonomes, {h} humains.",
+      "stallAria": "Verrous retenant {n} tickets bloqués, classés par nombre de tickets.",
+      "noTickets": "Aucun ticket n'a été ouvert sur cette période.",
+      "noHops": "Aucun déplacement de colonne n'a été enregistré sur cette période.",
+      "noStalls": "Rien n'est bloqué — aucun ticket n'est inachevé sans exécution en cours.",
+      "stat": {
+        "fully": "Terminés en autonomie",
+        "fullySub": "{n} tickets sur {total} sont arrivés à Terminé sans intervention humaine",
+        "dispatchedSub": "{n} tickets sur {total} ont eu au moins une exécution",
+        "hopShare": "Déplacements réalisés par l'autonomie",
+        "hopShareSub": "{a} déplacements autonomes contre {h} humains",
+        "stalled": "Bloqués à un verrou",
+        "stalledSub": "{share} des tickets — inachevés, rien en cours",
+        "neverStartedSub": "{share} des tickets — jamais exécutés, jamais déplacés"
+      },
+      "gateShort": {
+        "unrecorded": "Jamais évalués"
+      },
+      "gate": {
+        "will_run": "Une exécution a été lancée pour ces tickets.",
+        "no_board": "Le projet n'a pas de tableau : l'autonomie n'a aucune colonne à résoudre.",
+        "no_lane": "Aucune colonne du tableau ne correspond au statut du ticket : l'autonomie n'a rien à déclencher.",
+        "terminal_lane": "Le ticket est dans une colonne terminale (Terminé), qui ne s'exécute jamais automatiquement.",
+        "human_gate": "La colonne exige une validation humaine — quelqu’un doit l’approuver ou cliquer sur Exécuter maintenant.",
+        "no_agent": "La colonne n'a aucun agent affecté et la personne propriétaire ne peut pas exécuter cette étape. Affectez un agent à la colonne, ou lancez explicitement avec Exécuter maintenant.",
+        "managed_no_role": "Ce tableau est géré par cycle de vie : toute exécution doit être attribuée à un rôle autorisé par l’étape, et ici aucun rôle autorisé ne se résout en un agent. Affecter une personne responsable n’y changera rien : la personne assignée est le Coordinateur, jamais l’exécutant. Affectez un agent à la colonne, épinglez le rôle, ou laissez le Coordinateur résoudre le participant de l’étape.",
+        "capability_mismatch": "Aucun agent candidat ne possède les compétences exigées par cette colonne.",
+        "already_running": "Une exécution est déjà en cours sur le ticket : aucune nouvelle n'a été lancée.",
+        "run_cap_exhausted": "Les dernières exécutions consécutives ont toutes échoué ou se sont terminées sans rien produire : l'autonomie a cessé de relancer. Exécuter maintenant passe outre.",
+        "cooldown_active": "La dernière exécution a échoué ou n'a rien produit, le ticket est donc dans sa fenêtre d'attente avant la prochaine tentative autonome.",
+        "not_executable": "Tâche système ou de coordination — jamais confiée à un agent, par conception.",
+        "pending_approval": "Demande externe en attente d'acceptation humaine au triage avant qu'un agent puisse y toucher.",
+        "unrecorded": "Aucune décision d'exécution automatique n'a été enregistrée — l'autonomie n'a jamais évalué ces tickets.",
+        "lane_requirement_gate": "La colonne exige une validation de rôle encore en attente : la porte d'exigences a donc lancé ce relecteur et suspendu l'agent habituel de la colonne jusqu'à ce que la revue aboutisse.",
+        "same_lane_reentry": "L'exécution qui vient de se terminer desservait déjà cette colonne : la protection anti-boucle a empêché un relancement immédiat. Rien ne s'exécute.",
+        "tenant_token_limit": "L'espace de travail a épuisé son quota de jetons : l'autonomie est en pause pour tous ses tickets jusqu'à la réinitialisation du quota ou une montée en gamme.",
+        "cloud_run_limit": "L'espace de travail a épuisé son quota mensuel d'exécutions cloud. Réessayer n'y changera rien : passez à un forfait supérieur ou attendez la réinitialisation. Les exécutions on-premise et VS Code restent illimitées."
+      }
     }
   },
   "cloudAgentForm": {
@@ -2078,9 +2475,10 @@
     "surface": "Surface d'exécution",
     "surfaceLabel": {
       "durable": "Durable (cloud, sans serveur à la demande)",
-      "container": "Conteneur Cloudflare longue durée (pour les exécutions très longues)"
+      "container": "Conteneur Cloudflare longue durée (pour les exécutions très longues)",
+      "github_actions": "GitHub Actions (s'exécute sur les runners de votre dépôt)"
     },
-    "surfaceHelp": "Les deux exécutent la tâche complète dans le cloud (tout Cloudflare). Durable s'exécute à la demande sur un Durable Object (par étape) — l'option par défaut. Le conteneur Cloudflare longue durée maintient un processus actif pour des tâches très longues et continues (revient à Durable tant que l'infrastructure de conteneurs n'est pas activée).",
+    "surfaceHelp": "Toutes exécutent la tâche complète à distance. Durable s'exécute à la demande sur un Durable Object (par étape) — l'option par défaut. Le conteneur Cloudflare longue durée maintient un processus actif pour des tâches très longues et continues (revient à Durable tant que l'infrastructure de conteneurs n'est pas activée). GitHub Actions exécute l'agent sur les runners du dépôt lié, avec un système de fichiers et une chaîne d'outils réels et une limite de 60 minutes — cela nécessite que le workflow de l'agent Builderforce (.github/workflows/builderforce-agent.yml) soit présent dans le dépôt, sinon l'exécution revient à Durable.",
     "baseModel": "Modèle de base (facultatif)",
     "baseModelDefault": "Par défaut builderforce.ai (meilleur modèle de codage)",
     "baseModelHelp": "Le modèle d'appel d'outils et de codage sur lequel cet agent s'exécute — choisissez l'un de vos LLM ou un modèle du pool. Une exécution fixe un modèle pour toute la tâche ; laissez par défaut pour utiliser le meilleur modèle de codage de votre forfait.",
@@ -2103,7 +2501,7 @@
     "statusPublished": "PUBLIÉ",
     "statusDraft": "BROUILLON",
     "loadingCapabilities": "Chargement des capacités…",
-    "capabilitiesHint": "Les compétences et personas attribués ici accompagnent cet agent partout où il s'exécute — IDE, Workflow, sur site ou cloud — indépendamment de tout projet.",
+    "capabilitiesHint": "Les compétences et personas attribués ici accompagnent cet agent partout où il s'exécute — Builder, Workflow, sur site ou cloud — indépendamment de tout projet.",
     "pricingIntro": "Définissez un prix pour publier <strong>{name}</strong> sur la place de marché. Utilisez 0 pour le proposer gratuitement.",
     "pricingModel": "Modèle de tarification",
     "pricingFlatFee": "Forfait fixe",
@@ -2279,8 +2677,8 @@
     "brainHint": "Utilisez Brain pour générer des PRD et des actions de tâches exécutables pour ce projet.",
     "integrationKeys": "Clés d'intégration du projet",
     "workspaceTitle": "Espace de travail",
-    "workspaceDesc": "Espace de travail et système de fichiers de ce projet. Ouvrez l'IDE pour modifier les fichiers.",
-    "openInIde": "Ouvrir dans l'IDE",
+    "workspaceDesc": "Espace de travail et système de fichiers de ce projet. Ouvrez l'Builder pour modifier les fichiers.",
+    "openInIde": "Ouvrir dans l'Builder",
     "dueDateLabel": "Date d’échéance",
     "dueDateHint": "Définissez une échéance de projet. Laissez vide pour utiliser la dernière date d’échéance des tâches.",
     "deadline": "Échéance",
@@ -2309,7 +2707,9 @@
       "task": "Tâche",
       "roadmap": "Feuille de route"
     },
-    "exportCsv": "Exporter CSV"
+    "exportCsv": "Exporter CSV",
+    "milestoneTip": "Jalon — une seule date est définie",
+    "derivedTip": "Dates déduites des éléments qu'il contient"
   },
   "reconcile": {
     "loading": "Chargement des éléments de travail…",
@@ -2382,7 +2782,23 @@
     },
     "performance": {
       "activityTitle": "Activité de contribution",
-      "activitySub": "Activité de toute l'équipe : humains via git/PR, agents via télémétrie."
+      "activitySub": "Activité de toute l'équipe : humains via git/PR, agents via télémétrie.",
+      "title": "Performance",
+      "scorecards": "Fiches des membres",
+      "scorecardsSub": "· {days} derniers jours · cliquez sur une ligne pour modifier capacité/disponibilité",
+      "loading": "Chargement…",
+      "noActivity": "Aucune activité sur cette période.",
+      "colMember": "Membre",
+      "colAssigned": "Assignées",
+      "colCompleted": "Terminées",
+      "colRedo": "Reprises",
+      "colReopen": "Réouvertures",
+      "colCycle": "Cycle",
+      "colPickup": "Prise en charge",
+      "colIdleDone": "Inactif→terminé",
+      "colHygiene": "Hygiène",
+      "colEngage": "Engagement",
+      "colEffective": "Efficacité"
     },
     "consolidate": {
       "title": "Regrouper les personnes",
@@ -2411,7 +2827,9 @@
       "security": "Sécurité",
       "product_manager": "Produit",
       "designer": "Designer",
-      "incident_manager": "Gestionnaire d'incidents"
+      "incident_manager": "Gestionnaire d'incidents",
+      "cto": "CTO",
+      "product_owner": "Product Owner"
     },
     "teams": {
       "heading": "Équipes",
@@ -2511,7 +2929,24 @@
     "errUnhireFailed": "Échec de la résiliation",
     "errRemoveMember": "Échec de la suppression du membre",
     "errChangeRole": "Échec du changement de rôle",
-    "errRevokeInvite": "Échec de la révocation de l'invitation"
+    "errRevokeInvite": "Échec de la révocation de l'invitation",
+    "copiedExclaim": "Copié !",
+    "manifest": {
+      "assignedConfig": "Configuration attribuée",
+      "copyManifest": "Copier le manifeste",
+      "emptyNote": "Aucune compétence ni persona attribuée",
+      "noneAssigned": "Aucune attribution",
+      "personas": "Personas",
+      "skills": "Compétences",
+      "content": "Contenu"
+    },
+    "quickstart": {
+      "title": "Connecter un nouvel agent",
+      "intro": "Préconfiguré pour <b>{name}</b>. Exécutez ceci sur n’importe quelle machine — l’agent s’installe et s’enregistre directement dans ce groupe de travail.",
+      "osUnix": "macOS / Linux",
+      "osWindows": "Windows",
+      "noToken": "Aucun jeton d’espace de travail dans cette session — l’agent vous demandera de choisir un groupe de travail au premier lancement."
+    }
   },
   "knowledge": {
     "headingSops": "Procédures opératoires standard",
@@ -2769,6 +3204,7 @@
       "reopen": "Rouvrir"
     },
     "loadMore": "Charger plus",
+    "aggregateConsumption": "Erreurs · Tous les collecteurs",
     "setup": {
       "title": "Collecteurs d’erreurs",
       "subtitle": "Connectez l’origine de vos erreurs : un collecteur par projet.",
@@ -2781,6 +3217,7 @@
       "creating": "Création…",
       "tenantName": "Collecteur du locataire",
       "tenantScope": "Tous les projets (niveau locataire)",
+      "collectorConsumption": "Erreurs · {name}",
       "snippetNote": "Votre clé d’ingestion n’est affichée qu’une fois, à la création. Ajoutez ce snippet à chaque app du projet.",
       "sdkSnippet": "SDK navigateur",
       "otlpEndpoint": "Point de terminaison OTLP",
@@ -2792,6 +3229,10 @@
       "paused": "en pause",
       "pause": "Suspendre",
       "resume": "Reprendre",
+      "test": "Tester",
+      "testing": "Test en cours…",
+      "testSucceeded": "Erreur de test reçue. Ce collecteur est correctement configuré.",
+      "testFailed": "Le test du collecteur a échoué",
       "delete": "Supprimer",
       "confirmDelete": "Supprimer ce collecteur ? Les erreurs ingérées sont conservées.",
       "lastEvent": "dernier événement",
@@ -2945,9 +3386,11 @@
       "daysAgo": "il y a {n} j"
     },
     "heading": "Que devons-nous construire ?",
-    "subheading": "Commencez par le <brainstorm>Brainstorming</brainstorm> pour concevoir, puis exécutez en tant que projet et développez dans l’IDE — ou attribuez le travail via les agents <tasks>Tâches</tasks> et <workforce>Talents</workforce>.",
+    "subheading": "Commencez par le <brainstorm>Brainstorming</brainstorm> pour concevoir, puis exécutez en tant que projet et développez dans l’Builder — ou attribuez le travail via les agents <tasks>Tâches</tasks> et <workforce>Talents</workforce>.",
     "promptPlaceholder": "Créez un suivi de budget avec des composants Material UI…",
     "brainStorm": "Brainstorming",
+    "build": "Créer",
+    "building": "Démarrage…",
     "agentsConnected": "{count, plural, one {# agent connecté} other {# agents connectés}}",
     "noAgents": "Aucun agent connecté —",
     "setUpInWorkforce": "configurer dans Talents",
@@ -2967,7 +3410,7 @@
     "tabs": {
       "projects": "Projets",
       "workforce": "Talents / Équipe",
-      "ide": "IDE",
+      "ide": "Builder",
       "ideas": "Idées / Brainstorming",
       "quality": "Qualité",
       "knowledge": "Connaissances"
@@ -3007,7 +3450,7 @@
       "agentsHeading": "Agents ({count})",
       "noPeople": "Aucune personne en ligne.",
       "noAgents": "Aucun agent en ligne.",
-      "inIde": "Dans l’IDE",
+      "inIde": "Dans l’Builder",
       "activeSession": "Session active",
       "manage": "Gérer l’équipe",
       "agent": {
@@ -3068,7 +3511,8 @@
       "hours": "Heures",
       "labor": "Main-d’œuvre",
       "aiSpend": "Dépense IA",
-      "qualified": "Qualifié"
+      "qualified": "Qualifié",
+      "optionalPh": "(facultatif)"
     },
     "soc": {
       "coverage": "Couverture des contrôles",
@@ -3148,13 +3592,14 @@
       "wfPerformance": "Personnel · Performance",
       "marketplace": "Place de marché",
       "tools": "Outils",
-      "ide": "IDE",
+      "ide": "Builder",
       "alerts": "Alertes",
       "logs": "Journaux",
       "quality": "Qualité",
       "integrations": "Intégrations",
       "content": "Contenu",
       "ceremonies": "Cérémonies",
+      "incidents": "Incidents",
       "wfPlan": "Plan des effectifs",
       "empAllocation": "Répartition",
       "empCollaboration": "Collaboration",
@@ -3162,7 +3607,8 @@
       "empCost": "Coût de main-d’œuvre",
       "empPerformers": "Performance",
       "empInitiatives": "Répartition par initiative",
-      "forecast": "Prévisions"
+      "forecast": "Prévisions",
+      "autonomy": "Autonomie"
     },
     "title": {
       "aiProductivity": "Score de productivité IA",
@@ -3174,6 +3620,7 @@
       "aiModelShare": "Part des modèles dans les exécutions",
       "aiMergeRate": "Taux de fusion par modèle",
       "aiComparison": "Évaluation multi-outils",
+      "aiByIntegration": "Consommation par intégration",
       "aiShareTrend": "Tendance d'adoption et de part",
       "delivCycleTime": "Temps de cycle",
       "delivVelocity": "Vélocité",
@@ -3236,7 +3683,7 @@
       "catalogMarketplaceTopEval": "Agent le mieux évalué",
       "catalogToolsByCategory": "Outils par catégorie",
       "ideByModality": "Projets par modalité",
-      "ideRecency": "Projets IDE",
+      "ideRecency": "Projets Builder",
       "obsAlertFires": "Déclenchements d'alerte / jour",
       "obsAlertRuleHealth": "Santé des règles d'alerte",
       "obsLogVolume": "Volume d'événements",
@@ -3249,6 +3696,10 @@
       "obsContentByKind": "Documents par type",
       "obsCeremonyCadence": "Cadence des cérémonies",
       "obsCeremonyBalance": "Répartition de la parole",
+      "incStatus": "Incidents ouverts",
+      "incSeverity": "Incidents par gravité",
+      "incSystems": "Incidents par système",
+      "incMttr": "Temps moyen de résolution",
       "wfpCostSplit": "Coût recruter vs. agent",
       "wfpCapacity": "Capacité vs WIP",
       "wfpGap": "Marge allouable",
@@ -3262,7 +3713,18 @@
       "forecastCycleProjection": "Temps de cycle projeté",
       "forecastCfrProjection": "Échec de changements projeté",
       "forecastAnomalies": "Anomalies ouvertes",
-      "forecastCostTrend": "Prévision de dépense"
+      "forecastCostTrend": "Prévision de dépense",
+      "autoFully": "Terminés en autonomie",
+      "autoDispatched": "Au moins une exécution",
+      "autoHopShare": "Déplacements réalisés par l'autonomie",
+      "autoStalled": "Bloqués à un verrou",
+      "autoNeverStarted": "Jamais démarrés",
+      "autoOriginFunnel": "Entonnoir du cycle de vie par origine",
+      "autoHopSplit": "Déplacements autonomes contre humains",
+      "autoStallGates": "Où l'autonomie se bloque",
+      "autoOriginMix": "Qui ouvre le travail",
+      "autoFunnelTable": "Entonnoir d'autonomie (tableau)",
+      "autoCoverage": "Couverture de l'audit"
     },
     "loading": "Chargement…",
     "overview": {
@@ -3293,7 +3755,11 @@
       "bySource": "Coût par source",
       "spendSub": "estimé, 7 derniers jours",
       "byProject": "Dépenses par projet",
-      "noProjects": "Aucune dépense par projet"
+      "noProjects": "Aucune dépense par projet",
+      "byoFundedOnly": "Aucune dépense de plateforme — tout l'usage a été exécuté sur vos clés connectées",
+      "sourceCloud": "Cloud",
+      "sourceOnPrem": "Sur site",
+      "sourceWeb": "Web / SDK"
     },
     "catalog": {
       "noInstalls": "Aucune installation",
@@ -3345,8 +3811,8 @@
     },
     "ide": {
       "builds": "projets",
-      "buildsSub": "projets IDE",
-      "noProjects": "Aucun projet IDE pour le moment"
+      "buildsSub": "projets Builder",
+      "noProjects": "Aucun projet Builder pour le moment"
     },
     "obs": {
       "noFirings": "Aucun déclenchement",
@@ -3381,6 +3847,19 @@
       "humanTalk": "Humain",
       "agentTalk": "Agent IA",
       "completed": "terminées"
+    },
+    "inc": {
+      "noIncidents": "Aucun incident",
+      "ofTotal": "sur {total} dans la fenêtre",
+      "openNudge": "{count} à traiter",
+      "allClear": "Tout va bien",
+      "incidents": "incidents",
+      "unclassified": "Non classé",
+      "mttrSub": "temps moyen de résolution",
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
     },
     "reorder": {
       "drag": "Glisser pour réorganiser",
@@ -3595,6 +4074,22 @@
     "detailTitle": "Mémoire apprise",
     "detailTask": "Tâche",
     "detailLearned": "Appris",
+    "detailTeacher": "Enseignant",
+    "detailTeacherSelf": "Auto-apprentissage",
+    "detailTeacherUnknown": "Modèle de pointe",
+    "detailNoAnswer": "Rien n'a été appris de cette tâche : l'enseignant n'a produit aucune réponse.",
+    "faultBadge": "Non distillé",
+    "faultTitle": "L'enseignant n'a produit aucune réponse",
+    "faultBody": "L'enseignant n'a pas répondu à cette tâche ({reason}), donc rien n'en a été appris.",
+    "faultBodyWithModel": "{model} n'a pas répondu à cette tâche ({reason}), donc rien n'en a été appris.",
+    "faultHint": "Vérifiez le modèle enseignant épinglé et votre crédit de pointe, puis réenseignez la tâche.",
+    "faultNotPinned": "aucun enseignant épinglé",
+    "faultBudget": "budget de jetons de pointe épuisé",
+    "faultTooShort": "tâche trop courte pour être enseignée",
+    "faultGateway": "la passerelle de modèles a renvoyé une erreur",
+    "faultEmpty": "l'enseignant a renvoyé une réponse vide",
+    "faultException": "l'appel à l'enseignant a échoué",
+    "faultUnknown": "motif non enregistré",
     "detailKind": "Type",
     "detailVersion": "Version",
     "detailWeight": "Poids",
@@ -3736,7 +4231,31 @@
     "membersTab": "Membres",
     "agentsTab": "Agents",
     "auditTab": "SOC 2",
-    "subnavLabel": "Sections de sécurité"
+    "subnavLabel": "Sections de sécurité",
+    "policiesTab": "Politiques",
+    "webTab": "Analyse du site",
+    "webTitle": "Analyse de sécurité du site web",
+    "webSubtitle": "Pointez vers votre site en ligne et obtenez des résultats de sécurité immédiatement. Chaque problème est enregistré comme un ticket que votre équipe peut corriger.",
+    "webUrlLabel": "URL du site web",
+    "webUrlPlaceholder": "https://votre-site.com",
+    "webSave": "Enregistrer",
+    "webRunNow": "Lancer l'analyse",
+    "webRunning": "Analyse en cours…",
+    "webScore": "Score de sécurité",
+    "webScoreDelta": "{delta} par rapport à la dernière analyse",
+    "webBaselineFirst": "Première analyse — c'est votre référence.",
+    "webNewFindings": "{count} nouveaux",
+    "webResolved": "{count} résolus",
+    "webFindingsFiled": "{count} enregistrés comme tickets",
+    "webNoIssues": "Aucun problème détecté — votre site a réussi toutes les vérifications.",
+    "webHistory": "Historique des analyses",
+    "webNoHistory": "Aucune analyse pour le moment. Lancez votre première analyse ci-dessus.",
+    "webRecommendation": "Recommandation",
+    "sev_critical": "Critique",
+    "sev_high": "Élevé",
+    "sev_medium": "Moyen",
+    "sev_low": "Faible",
+    "sev_info": "Info"
   },
   "catalogInsights": {
     "total": {
@@ -3773,8 +4292,9 @@
     "viewWorkflows": "Voir les workflows",
     "workflows": "Workflows",
     "workflowsWithCount": "Workflows ({count})",
-    "openIde": "Ouvrir dans l'IDE",
-    "delete": "Supprimer"
+    "openIde": "Ouvrir dans l'Builder",
+    "delete": "Supprimer",
+    "openChat": "Ouvrir le chat du projet"
   },
   "diagnosticsStrip": {
     "title": "Diagnostics",
@@ -5101,7 +5621,8 @@
         "question": "Puis-je acheter ou vendre un modèle de tableau Kanban ?",
         "answer": "Oui. Empaquetez un processus de livraison — couloirs, rôles requis, contrôles de relecture et répertoire recommandé — sous forme de modèle Kanban et publiez-le sur le marché pour le vendre ou le partager. N’importe quelle équipe peut installer un modèle éprouvé dans un projet en un clic et hériter d’un flux gouverné et régi par les rôles au lieu d’en construire un de zéro."
       }
-    ]
+    ],
+    "newsletterPlaceholder": "vous@email.com"
   },
   "pricing": {
     "seo": {
@@ -5146,26 +5667,23 @@
     "labelSeats": "Postes",
     "labelBillingEmail": "E-mail de facturation",
     "placeholderBillingEmail": "facturation@exemple.com",
-    "labelCardBrand": "Type de carte",
-    "labelCardLast4": "4 derniers chiffres de la carte",
     "redirectNote": "Vous serez redirigé vers notre prestataire de paiement pour saisir vos informations de carte en toute sécurité.",
     "total": "Total : {price} $/{unit}",
     "totalForSeats": "{seats, plural, one {pour # poste} other {pour # postes}}",
     "unitYear": "an",
     "unitMonth": "mois",
     "errorBillingEmailRequired": "L'e-mail de facturation est requis.",
-    "errorCardLast4": "Les 4 derniers chiffres de la carte doivent comporter exactement 4 chiffres.",
     "errorUpgradeFailed": "Échec du changement de forfait",
     "cancel": "Annuler",
-    "activating": "Activation…",
     "redirecting": "Redirection…",
-    "activatePlan": "Activer {plan}",
     "continueToPayment": "Continuer vers le paiement",
     "planComparison": "Comparaison des forfaits",
     "colFeature": "Fonctionnalité",
     "priceFree": "0 $",
     "priceProMonthly": "{price} $/mois",
     "priceTeamsMonthly": "{price} $/poste/mois",
+    "teamsVolumeNote": "Min. {min} postes",
+    "teamsSeatMinimum": "Minimum de {min} postes — Teams applique une tarification de volume pour toute l'organisation.",
     "teamsCostNoteYear": "{perSeat} $/poste/an — facturé {total} $/an",
     "teamsCostNoteMonth": "{perSeat} $/poste/mois — facturé {total} $/mois",
     "managedAddon": "Module complémentaire : <b>AgentHost géré</b> — {price} $/mois par AgentHost hébergé. Nous exécutons votre instance BuilderForce Agents pour vous — sans Docker, sans DevOps.",
@@ -5525,7 +6043,9 @@
       "learnSkipReasonFrozen": "l'Evermind de ce projet est gelé (lecture seule)",
       "reconcileTitle": "{count} souvenirs appris réconciliés dans Evermind v{version}",
       "reconcileHint": "La réponse a reformulé ces apprentissages rappelés, elle les met donc à jour (cognition en écriture directe).",
-      "stop": "Arrêter"
+      "stop": "Arrêter",
+      "learnTargetContributed": "Contribué à {name} (projet #{projectId} v{version})",
+      "learnTargetSkipped": "Ignoré {name} (projet #{projectId}) — {reason}"
     },
     "tickets": {
       "none": "Aucun ticket lié pour l’instant.",
@@ -5572,6 +6092,15 @@
       "lockHint": "Les chats partagés sont visibles par toute l’équipe ; verrouillez pour le réserver à ses membres.",
       "mergeHint": "Fusionnez d’autres chats dans celui-ci. Leurs messages, tickets et agents sont déplacés ici ; les sources sont archivées.",
       "mergeNoOthers": "Aucun autre chat à fusionner.",
+      "questions": "Questions",
+      "noQuestions": "Aucune question en attente.",
+      "answerPlaceholder": "Saisissez votre réponse…",
+      "submitAnswer": "Répondre",
+      "answering": "Envoi…",
+      "showTickets": "Afficher les tickets liés",
+      "hideTickets": "Masquer les tickets liés",
+      "ticketCount": "{n, plural, one {# ticket} other {# tickets}}",
+      "overallAria": "Progression globale : {pct}% terminé",
       "mergeAction": "Fusionner {n} ici",
       "mergedN": "{n} chat(s) fusionné(s).",
       "kind": {
@@ -5587,7 +6116,7 @@
     },
     "approveAll": "Tout approuver",
     "newChat": "+ Nouveau",
-    "messagePlaceholder": "Envoyer un message à Brain…",
+    "messagePlaceholder": "Que souhaitez-vous accomplir ?",
     "searchChats": "Rechercher des discussions…",
     "confirmActionAria": "Confirmer l'action",
     "wantsTo": "Brain veut <b>{action}</b>. Approuvez pour exécuter.",
@@ -5620,8 +6149,81 @@
     "addToProject": "Ajouter au projet…",
     "createNewProject": "+ Créer un nouveau projet",
     "brainTitle": "Brain",
-    "emptyHint": "Démarrez une nouvelle discussion ou choisissez-en une pour commencer.",
+    "emptyHint": "Dites-moi ce que vous voulez accomplir, et je vous aiderai à y parvenir.",
     "startNewChat": "Démarrer une nouvelle discussion",
+    "capabilities": {
+      "makingLabel": "Création",
+      "pickerAria": "Que voulez-vous créer ?",
+      "none": "Peu importe",
+      "tilesHintBrainstorm": "…ou partez de ce que vous voulez créer",
+      "tilesHintIde": "…ou partez de ce que vous voulez construire",
+      "document": {
+        "label": "Document",
+        "hint": "Rédigez un document structuré avec titres, sections et tableaux.",
+        "starter": "Rédige un document résumant l'état actuel de ce projet."
+      },
+      "slides": {
+        "label": "Diapositives",
+        "hint": "Composez une présentation, une diapositive par section.",
+        "starter": "Crée une présentation résumant l'état actuel de ce projet."
+      },
+      "dataviz": {
+        "label": "Visualisation de données",
+        "hint": "Transformez les données en graphiques intégrés, chiffres à l'appui.",
+        "starter": "Représente en graphique la répartition des tâches de ce projet par statut."
+      },
+      "spreadsheet": {
+        "label": "Tableur",
+        "hint": "Modélisez les chiffres dans un tableau avec formules et totaux.",
+        "starter": "Crée un tableur des tâches ouvertes de ce projet, avec responsable, statut et ancienneté."
+      },
+      "website": {
+        "label": "Site web",
+        "hint": "Construisez une application ou un site sous forme de vrais fichiers.",
+        "starter": "Construis une page d'accueil pour ce projet."
+      },
+      "design": {
+        "label": "Design",
+        "hint": "Concevez l'interface : mise en page, espacements, typographie et thème.",
+        "starter": "Conçois l'écran principal de ce projet, en thèmes clair et sombre."
+      },
+      "mobile": {
+        "label": "Mobile",
+        "hint": "Construisez une application pensée mobile d'abord, navigation native.",
+        "starter": "Construis un écran d'accueil mobile pour ce projet."
+      },
+      "animation": {
+        "label": "Animation",
+        "hint": "Ajoutez du mouvement utile, avec durées et courbes explicites.",
+        "starter": "Ajoute une animation d'entrée à l'écran principal de ce projet."
+      },
+      "game3d": {
+        "label": "Jeu 3D",
+        "hint": "Construisez un jeu 3D : scène, caméra, contrôles et boucle de jeu.",
+        "starter": "Construis une scène 3D simple dans laquelle je peux déplacer une caméra."
+      },
+      "export": {
+        "docx": "Télécharger Word",
+        "pptx": "Télécharger PowerPoint",
+        "csv": "Télécharger CSV",
+        "working": "Préparation…",
+        "failed": "Échec de l'export",
+        "untitled": "Sans titre"
+      },
+      "missing": {
+        "body": "Cette réponse ne contenait pas {capability} — le modèle n'a renvoyé qu'un titre.",
+        "retry": "Redemander",
+        "retryPrompt": "Cette réponse ne contenait aucun {capability}. Produis maintenant {capability} complet, dans cette réponse."
+      }
+    },
+    "messageActions": {
+      "copy": "Copier",
+      "copied": "Copié !",
+      "goodResponse": "Bonne réponse",
+      "badResponse": "Mauvaise réponse",
+      "thumbsUp": "J'aime",
+      "thumbsDown": "Je n'aime pas"
+    },
     "newProjectPlaceholder": "Nom du nouveau projet",
     "createAndAssign": "Créer et attribuer",
     "actingAs": "En tant que",
@@ -5647,10 +6249,32 @@
     "assignChatToProjectAria": "Attribuer la discussion au projet",
     "addProject": "+ Projet",
     "workflowsArrow": "Flux de travail →",
-    "openInIde": "Ouvrir dans l'IDE →",
+    "openInIde": "Ouvrir dans l'Builder →",
     "brainModality": "Brain — {modality}",
     "brainAs": "Brain en tant que {name}",
-    "chatHistory": "Historique des discussions"
+    "chatHistory": "Historique des discussions",
+    "upgrade": "Mettre à niveau",
+    "upgradeToPlan": "Passer à {plan}",
+    "addCard": "Ajouter une carte",
+    "cardValidationFailed": "Échec de la validation de la carte.",
+    "allowance": {
+      "exhausted": "Votre quota de jetons IA pour cette période est épuisé ({used} sur {limit}). Les échanges échoueront ou s'arrêteront en cours jusqu'à la réinitialisation le {resets}.",
+      "nearLimit": "Quota de jetons IA utilisé à {percent}% — il reste {remaining} jusqu'au {resets}. Les réponses longues peuvent être tronquées.",
+      "upgrade": "Passer à l'offre supérieure",
+      "connectAccount": "Connectez votre propre compte",
+      "dismiss": "Ignorer"
+    },
+    "queuedCount": "{count, plural, one {# message en file} other {# messages en file}}",
+    "onboardMe": "Aidez-moi à démarrer",
+    "onboardMePrompt": "Je suis nouveau ici — aidez-moi à démarrer. Demandez-moi ce que je veux créer, expliquez comment fonctionnent l'usage et les coûts, recommandez si le plan Free ou Pro convient à mon échéance, et aidez-moi à connecter mon compte IA existant si j'en ai un.",
+    "providerCapBanner": "Votre clé API {providers} a atteint sa limite d’utilisation — cette exécution est repassée sur le pool de modèles partagé.",
+    "manageApiKeys": "Gérer vos clés API →"
+  },
+  "chatMessage": {
+    "copy": "Copier",
+    "apply": "Appliquer →",
+    "createFile": "Créer le fichier",
+    "downloadAs": "Télécharger {ext}"
   },
   "modelExport": {
     "subtitle": "Exportez un modèle publié vers un artefact portable — un dépôt Hugging Face, ONNX, safetensors ou GGUF — et téléchargez-le. Le modèle est produit sur le serveur ; aucun jeton n’est nécessaire.",
@@ -5697,11 +6321,20 @@
         "already_running": "Déjà en cours",
         "human_gate": "En attente d'approbation",
         "capability_mismatch": "Compétences requises manquantes",
+        "run_cap_exhausted": "Trop d'exécutions sans résultat — en pause pour révision",
+        "cloud_run_limit": "Quota mensuel d’exécutions cloud atteint — passez à un forfait supérieur",
+        "cooldown_active": "Pause après une exécution sans résultat — nouvelle tentative sous peu",
         "no_agent": "Aucun agent assigné",
+        "managed_no_role": "Aucun rôle ne peut exécuter cette étape",
+        "lane_unconfigured": "L’étape n’autorise aucun rôle",
         "no_board": "Aucun tableau configuré",
         "no_lane": "Voie non configurée",
         "terminal_lane": "Terminé — aucune exécution",
-        "not_executable": "Tâche système — non exécutée par un agent"
+        "not_executable": "Tâche système — non exécutée par un agent",
+        "pending_approval": "Demande externe — en attente d’approbation",
+        "lane_requirement_gate": "En attente de validation du rôle",
+        "same_lane_reentry": "Vient de terminer cette étape",
+        "tenant_token_limit": "Espace à court de jetons — passez à un forfait supérieur ou attendez la réinitialisation"
       }
     },
     "businessValue": {
@@ -5714,8 +6347,10 @@
     },
     "audit": {
       "flagged": "Signalé",
-      "flaggedTitle": "Ce ticket a sauté un rôle ou diagnostic requis — révision nécessaire"
-    }
+      "flaggedTitle": "Ce ticket a sauté un rôle ou diagnostic requis — révision nécessaire",
+      "participantsTitle": "Participation des rôles requis : terminés sur requis"
+    },
+    "prdBadgeTitle": "{count, plural, one {# PRD lié} other {# PRD liés}}"
   },
   "projectsContent": {
     "errLoad": "Échec du chargement des projets. Vérifiez votre connexion et réessayez.",
@@ -5915,6 +6550,19 @@
     "description": "Donnez à ce projet son propre modèle qui apprend seul. Une fois activé, les agents du projet s'exécutent dessus et s'améliorent à chaque tâche terminée — partagé entre le cloud, l'on-premise et l'éditeur.",
     "statusSeeded": "Actif · v{version}",
     "statusUnseeded": "Non configuré",
+    "quarantinedBadge": "En quarantaine",
+    "quarantinedHint": "Cet Evermind s'est désactivé automatiquement après avoir produit une sortie incohérente ({reason}). Réentraînez-le au-delà du seuil de cohérence pour réactiver l'inférence.",
+    "targetsTitle": "Everminds de ce projet",
+    "targetsHint": "Tous les Evermind auxquels ce projet contribue son apprentissage.",
+    "targetsEmpty": "Aucun Evermind résolu pour ce projet pour l'instant.",
+    "targetSelfBadge": "Ce projet",
+    "targetBuildBadge": "Build IDE",
+    "targetSeeded": "v{version}",
+    "targetUnseeded": "non initialisé",
+    "targetInferenceOn": "inférence",
+    "targetConnected": "connecté",
+    "targetFrozen": "gelé",
+    "targetProjectId": "projet n° {id}",
     "noModels": "Publiez d'abord un modèle entraîné dans le LLM Studio, puis activez-le ici.",
     "pickModelLabel": "Choisissez un modèle publié pour alimenter ce projet",
     "enableCta": "Activer",
@@ -5979,7 +6627,66 @@
     "validateMethod": "{method, select, embedding {Rappel sémantique} other {Rappel lexical (repli)}}",
     "evalDelta": "{pct}% vs préc.",
     "evalFlat": "aucun changement",
-    "evalTooltip": "Contrôle de régression sur v{version} : perte réservée {base} → {next} sur {size, plural, one {# tâche antérieure} other {# tâches antérieures}}."
+    "evalTooltip": "Contrôle de régression sur v{version} : perte réservée {base} → {next} sur {size, plural, one {# tâche antérieure} other {# tâches antérieures}}.",
+    "inheritedHint": "Cette build partage l’Evermind de son projet parent : tout ce qu’il a appris est donc disponible ici. L’entraînement et les réglages se gèrent sur le projet parent.",
+    "testTitle": "Banc d’essai",
+    "testHint": "Envoyez une instruction au modèle et voyez exactement ce qu’il écrit, évalué comme une vraie réponse. C’est ainsi que vous vérifiez qu’il vaut la peine de l’activer, avant que quiconque discute avec lui.",
+    "testPlaceholder": "Posez une question au modèle, p. ex. « Résume où en est ce projet ».",
+    "testRunCta": "Exécuter",
+    "testReadinessCta": "Vérifier l’aptitude",
+    "testRunning": "Génération…",
+    "testResultReadiness": "Vérification — {passed} réponses utilisables sur {total}",
+    "testResultPrompt": "Ce que le modèle a produit",
+    "testServable": "Utilisable",
+    "testRefused": "Refusée",
+    "testRefusedBecause": "Ceci ne serait pas montré à un utilisateur : {detail}.",
+    "testEmptyOutput": "(le modèle n’a rien produit)",
+    "testVerdictReady": "Ce modèle est assez cohérent pour répondre.",
+    "testVerdictNotReady": "Ce modèle n’est pas encore assez cohérent pour répondre. Continuez à l’entraîner, définissez un modèle enseignant, ou remplacez-le ci-dessous.",
+    "maintenanceTitle": "Maintenance",
+    "maintenanceHint": "Réparez et nettoyez le modèle lorsqu’il déraille. Rien de tout cela n’efface le travail de votre projet.",
+    "reseedLabel": "Remplacer le modèle",
+    "reseedHint": "Repartez d’une base saine, en conservant le projet. À utiliser quand le modèle s’est entraîné jusqu’à l’absurde. Les réponses restent désactivées tant qu’il n’a pas repassé la vérification.",
+    "reseedCta": "Remplacer…",
+    "reseedConfirm": "Remplacer le cerveau de ce modèle par une base neuve ? Ce qu’il a appris jusqu’ici ne façonnera plus ses réponses. Action irréversible.",
+    "reseedStarterOption": "Base de départ neuve (non entraînée)",
+    "reseedDone": "Modèle remplacé — désormais en v{version}. Lancez une vérification avant de réactiver les réponses.",
+    "reindexLabel": "Reconstruire l’index de rappel",
+    "reindexHint": "Réindexe chaque souvenir avec le modèle actuel. Les souvenirs sont indexés au moment où ils sont appris, donc le rappel dérive à mesure que le modèle change — reconstruisez s’il rappelle les mauvaises choses.",
+    "reindexCta": "Reconstruire",
+    "reindexDone": "{count} souvenirs réindexés.",
+    "cleanupLabel": "Nettoyer",
+    "cleanupHint": "Supprime ce qui est en file d’attente mais pas encore appris, et vide les réponses en cache pour que les questions répétées reçoivent une nouvelle réponse. Les connaissances acquises ne sont pas touchées.",
+    "cleanupCta": "Nettoyer",
+    "cleanupConfirm": "Supprimer tout ce qui est en file d’attente mais pas encore appris, et vider les réponses en cache ?",
+    "cleanupDone": "{discarded} élément(s) en file supprimé(s) et {cached} réponse(s) en cache vidée(s).",
+    "analyzeTitle": "Vérifier ce qu’il a appris",
+    "analyzeHint": "Relisez tout ce que le modèle a appris et faites-le vérifier par un modèle de pointe (erreurs, informations périmées, non-sens), puis corrigez en lui enseignant les rectifications.",
+    "analyzeCta": "Vérifier les connaissances",
+    "analyzing": "Vérification…",
+    "analyzeClean": "{analyzed} souvenirs vérifiés — rien d’anormal.",
+    "analyzeSummary": "{issues} souvenirs sur {analyzed} nécessitent votre attention (vérifié par {model}).",
+    "analyzeSummaryLocal": "{issues} souvenirs sur {analyzed} nécessitent votre attention.",
+    "analyzeVerdict": "{verdict, select, incoherent {Incohérent} incorrect {Erroné} outdated {Périmé} unusable {Pas une réponse} redundant {Doublon} other {Correct}}",
+    "analyzeCorrectionLabel": "Sera remplacé par",
+    "analyzeSelectAll": "Tout sélectionner",
+    "analyzeSelectNone": "Effacer la sélection",
+    "analyzeApplyCta": "Corriger {count} sélectionnés",
+    "analyzeApplying": "Correction…",
+    "analyzeApplied": "Corrigé : {corrected} corrigés, {forgotten} oubliés. Le modèle est désormais en v{version}.",
+    "analyzeSkipped": "{count} n’ont pas pu être appliqués.",
+    "tabsLabel": "Commandes Evermind",
+    "tabTeach": "Enseigner",
+    "tabTest": "Tester",
+    "tabCheck": "Vérifier",
+    "tabMaintain": "Entretenir",
+    "diagnosticsTitle": "Diagnostic",
+    "diagnosticsHint": "Copiez tout ce que contient ce panneau — l’état du modèle, ce qu’il a réellement produit, ce qu’il a appris et les problèmes détectés — sous forme de texte à coller au support ou à un assistant IA.",
+    "diagnosticsCta": "Copier le diagnostic",
+    "diagnosticsCopied": "Copié dans le presse-papiers.",
+    "diagnosticsShow": "Afficher le rapport",
+    "diagnosticsHide": "Masquer le rapport",
+    "diagnosticsManualHint": "La copie automatique a été bloquée ici — le rapport est sélectionné ci-dessous, appuyez sur Ctrl/Cmd+C pour le copier."
   },
   "topbar": {
     "cart": "Panier",
@@ -6056,6 +6763,11 @@
       "noExpiry": "Sans expiration",
       "markDone": "Terminé"
     },
+    "notConfigured": {
+      "title": "Aucun manager n’est configuré pour ce projet",
+      "body": "Rien de cette page ne s’exécute pour l’instant. Les passes planifiées ne couvrent que les projets ayant leurs propres réglages de manager, et « Lancer le manager » est ignoré tant qu’il n’en existe pas. Le tableau des politiques ci-dessous peut toujours indiquer « activé » : c’est la valeur par défaut intégrée vers laquelle bascule un projet sans réglages propres, pas un manager en cours d’exécution.",
+      "cta": "Configurer le manager"
+    },
     "autonomyPaused": {
       "title": "Gestion autonome en pause",
       "daily": "Cet espace de travail a atteint sa limite quotidienne de jetons ; le gestionnaire automatique et les agents sont donc en pause jusqu’à sa réinitialisation. D’ici là, le backlog ne sera pas re-priorisé, le travail sans responsable ne sera pas attribué ni lancé, et l’Evermind n’apprendra pas des nouvelles exécutions. Vous pouvez toujours lancer le gestionnaire manuellement ci-dessous. Passez à un forfait supérieur pour une allocation quotidienne plus élevée.",
@@ -6085,14 +6797,26 @@
       "unscored": "À évaluer",
       "unranked": "Non classés",
       "unowned": "Sans responsable",
-      "openPullRequests": "PR ouvertes"
+      "openPullRequests": "PR ouvertes",
+      "flagged": "Lacunes de couverture",
+      "undated": "Sans dates"
     },
     "chart": {
       "title": "Backlog par priorité",
       "caption": "Répartition du travail ouvert selon les niveaux de priorité.",
       "empty": "Aucun ticket ouvert à afficher pour l’instant."
     },
+    "subnav": {
+      "label": "Sections du manager",
+      "overview": "Vue d’ensemble",
+      "backlog": "Backlog",
+      "activity": "Activité",
+      "policy": "Politique",
+      "stuck": "Bloqués",
+      "ask": "Demander"
+    },
     "insightNudge": "{unscored} tickets ont encore besoin d’une valeur métier et {unranked} ne sont pas classés — lancez le manager pour les mettre à jour.",
+    "coverageNudge": "{flagged} tickets n’ont pas de rôle ou de relecteur obligatoire — le manager les affectera automatiquement lors de son prochain passage.",
     "policy": {
       "title": "Comment ce backlog est géré",
       "subtitle": "Décidez qui gère le backlog et ce qui est fait automatiquement. Vous pouvez changer cela à tout moment.",
@@ -6134,7 +6858,70 @@
         "queue": {
           "label": "Laisser à un humain",
           "help": "Ne jamais fusionner automatiquement — réserve chaque pull request à une relecture et une fusion humaines."
-        }
+        },
+        "needsAuthority": "Le moment ne compte que si le manager est autorisé à fusionner ; pour l’instant, les fusions attendent une personne."
+      },
+      "allowAutoMerge": {
+        "label": "Autoriser le manager à fusionner les pull requests",
+        "help": "Il s’agit de l’autorisation de fusionner, distincte du moment choisi ci-dessous. Désactivée, le manager prépare et vérifie tout, puis laisse la fusion à une personne."
+      },
+      "requireSignoff": {
+        "label": "Exiger une validation avant de terminer",
+        "help": "Désactivé tant que vous ne l’activez pas. Une fois activé, un ticket n’est terminé — et sa pull request fusionnée — qu’après validation de chaque relecteur requis, et le manager relance les rôles qui la doivent encore. Un ticket que personne n’était chargé de relire ne remplit jamais la condition."
+      },
+      "tri": {
+        "on": "Activé",
+        "off": "Désactivé",
+        "inherit": "Utiliser la valeur par défaut",
+        "builtinIs": "Valeur par défaut intégrée : {value}",
+        "workspaceIs": "Valeur par défaut de l’espace de travail : {value}"
+      },
+      "effective": {
+        "title": "Ce qui s’applique actuellement",
+        "help": "Ce que le manager fera réellement une fois tous les niveaux de ces réglages combinés. Pour les autorisations, la réponse la plus restrictive l’emporte.",
+        "managingOn": "Backlog géré",
+        "managingOff": "Gestion en pause",
+        "mergeGranted": "Peut fusionner les pull requests",
+        "mergeWithheld": "Les fusions attendent une personne",
+        "signoffRequired": "Validation requise pour terminer",
+        "signoffOptional": "Aucune validation requise",
+        "ceremoniesUnattended": "Peut mener des cérémonies sans personne",
+        "ceremoniesNeedPeople": "Les cérémonies exigent une personne",
+        "reassignGranted": "Peut réattribuer après {hours} h d’inactivité",
+        "reassignWithheld": "Les absents gardent leur travail"
+      },
+      "workspaceDefaultsHint": "Tout ce qui reste sur « Utiliser la valeur par défaut » suit les valeurs par défaut de votre espace de travail dans Paramètres → Manager IA.",
+      "ceremonies": {
+        "sectionTitle": "Cérémonies",
+        "sectionHelp": "Ce que le manager peut faire lorsqu’il mène une mêlée ou une planification sans les personnes concernées."
+      },
+      "allowUnattendedCeremonies": {
+        "label": "Mener des cérémonies sans personne",
+        "help": "Autorise le manager à mener une mêlée planifiée que personne n’a rejointe. Désactivé : la session est tout de même enregistrée, montrant que personne n’est venu, mais rien n’est décidé au nom de l’équipe."
+      },
+      "allowAgentReassignment": {
+        "label": "Confier le travail bloqué aux agents",
+        "help": "Autorise une cérémonie à confier à un agent le ticket d’une personne absente. L’absence ne suffit jamais à elle seule : le ticket doit aussi être resté intact pendant la durée ci-dessous."
+      },
+      "allowAutoStaffLanes": {
+        "label": "Configurer une étape qui ne nomme personne",
+        "help": "Certaines étapes n’autorisent aucun rôle : aucun rôle requis déclaré, aucun agent affecté — donc sur un tableau piloté par le cycle de vie, rien de ce qui s’y trouve ne pourra jamais être lancé. Le manager signale toujours ces étapes ; cette option décide s’il peut en plus en corriger une en y affectant un exécutant. L’accorder démarre tous les tickets qui y attendent déjà : une étape laissée vide volontairement (une colonne d’entrée que vous dépilez à la main) devrait donc le rester."
+      },
+      "agentReassignIdleHours": {
+        "label": "Seulement après une inactivité de",
+        "help": "Durée pendant laquelle un ticket doit rester intact avant que le droit de son propriétaire absent ne s’éteigne. Assez longue pour qu’une absence normale ne l’atteigne jamais.",
+        "unit": "heures",
+        "inherited": "Valeur héritée utilisée : {value} heures"
+      },
+      "agentReassignMaxPerSession": {
+        "label": "Au maximum, par cérémonie",
+        "help": "Limite stricte du nombre de tickets qu’une seule cérémonie peut transférer, afin qu’une mêlée ne réattribue jamais discrètement tout un sprint.",
+        "unit": "tickets",
+        "inherited": "Valeur héritée utilisée : {value}"
+      },
+      "autoSchedule": {
+        "label": "Placer le travail sur un calendrier",
+        "help": "Attribue une date de début et une échéance aux tickets sans dates, par ordre de priorité et en respectant les dépendances. Ne modifie jamais une date que vous avez définie."
       }
     },
     "backlog": {
@@ -6155,8 +6942,17 @@
       "assign": "Attribué",
       "score_value": "Évalué",
       "dispatch": "Envoyé",
+      "sync_pr": "PR actualisée",
       "merge_pr": "PR fusionnée",
-      "flag": "Signalé"
+      "flag": "Signalé",
+      "coordinate": "Rôle affecté",
+      "schedule": "Planifié",
+      "merge_blocked": "Fusion refusée",
+      "merge_failed": "Fusion rejetée",
+      "pr_conflict": "PR en conflit",
+      "triage": "Trié",
+      "escalate": "Escaladé",
+      "systemic": "Constat plateforme"
     },
     "runTasks": {
       "title": "Tâches du manager",
@@ -6177,6 +6973,157 @@
       "title": "Activité récente",
       "working": "Le manager travaille — diffusion des décisions en direct…",
       "empty": "Le manager n’a encore effectué aucune action."
+    },
+    "stalls": {
+      "title": "Tickets bloqués",
+      "caption": "Le travail que le manager ne peut pas terminer, pourquoi, et ce qu'il a déjà tenté. Après {maxAttempts} tentatives qui ne font pas avancer un ticket, le manager cesse de réessayer et vous le confie.",
+      "loading": "Vérification de ce qui est bloqué…",
+      "empty": "Rien n’est bloqué : chaque ticket avance ou est terminé.",
+      "error": "Impossible de charger la liste des tickets bloqués.",
+      "retry": "Réessayer",
+      "byCause": "Ce qui freine le travail",
+      "needsYou": "Requiert votre attention",
+      "lastTried": "Dernière tentative {when}",
+      "attemptsOf": "{attempts} tentative(s) sur {max}",
+      "idleDays": "{days, plural, one {# jour} other {# jours}}",
+      "idleToday": "Moins d’un jour",
+      "stat": {
+        "working": "Le manager s’en occupe",
+        "escalated": "Confié à une personne"
+      },
+      "col": {
+        "ticket": "Ticket",
+        "cause": "Pourquoi il est bloqué",
+        "doing": "Ce que fait le manager",
+        "attempts": "Tentatives",
+        "stuckFor": "Bloqué depuis"
+      },
+      "cause": {
+        "live": "En cours",
+        "cooling_down": "En pause après un échec",
+        "moving": "En mouvement",
+        "never_started": "Jamais démarré",
+        "unassigned": "Personne d’assigné",
+        "managed_no_role": "Aucun rôle ne peut exécuter cette étape",
+        "capability_gap": "Aucun agent compétent",
+        "human_gate": "En attente d’une approbation humaine",
+        "failure_breaker": "Arrêté après des échecs répétés",
+        "missing_deliverable": "Aucun livrable produit",
+        "build_failed": "Build non validé",
+        "awaiting_signoff": "En attente de validation",
+        "pr_conflict": "La pull request est en conflit",
+        "pr_unreconciled": "État de la pull request désynchronisé",
+        "merge_withheld": "Fusion retenue par la politique",
+        "blocked": "Bloqué",
+        "unknown": "Non classé"
+      },
+      "copyDiagnosticsAria": "Copier le diagnostic complet du Manager IA : niveaux de politique, état de l’autonomie, compteurs du backlog, chaque passe de gestion, chaque décision et chaque ticket bloqué"
+    },
+    "census": {
+      "title": "Recensement des blocages",
+      "caption": "Tous les tickets de ce projet, classés selon ce qui les bloque — pas seulement ceux que le manager a diagnostiqués en profondeur.",
+      "loading": "Comptage des blocages…",
+      "empty": "Rien n’est bloqué : tous les tickets avancent ou sont terminés.",
+      "error": "Impossible de charger le recensement des blocages.",
+      "retry": "Réessayer",
+      "coverageNote": "{stalled} tickets sont bloqués ; {diagnosed} ont été diagnostiqués en profondeur à ce jour. Les autres sont comptés ici mais pas encore examinés individuellement.",
+      "computedAt": "Compté {when}.",
+      "stat": {
+        "managed": "Tickets actifs",
+        "stalled": "Bloqués",
+        "moving": "En mouvement",
+        "deepDiagnosed": "Diagnostiqués en profondeur"
+      },
+      "cohorts": {
+        "title": "Ce qui bloque le travail, sur l’ensemble des tickets",
+        "aria": "Tickets bloqués regroupés par cause"
+      },
+      "findings": {
+        "title": "Constats plateforme",
+        "caption": "Quand de nombreux tickets se bloquent pour la même raison, il s’agit d’un seul défaut et non de multiples problèmes de tickets. Le manager le diagnostique et ouvre un ticket pour le corriger.",
+        "headline": "{count} tickets bloqués sur « {cause} »",
+        "remediation": "Correctif :",
+        "sourceAi": "diagnostiqué par le modèle",
+        "sourceHeuristic": "diagnostiqué à partir des mesures",
+        "openTicket": "Ouvrir {key}",
+        "raised": "Signalé {when}"
+      }
+    },
+    "today": {
+      "title": "Aujourd’hui",
+      "loading": "Lecture du travail du jour…",
+      "error": "Impossible de charger le résumé du jour.",
+      "retry": "Réessayer",
+      "updated": "mis à jour {when}",
+      "lastPass": "Dernière passe de gestion {when}.",
+      "viewActivity": "Voir toutes les décisions",
+      "headline": {
+        "team": "L’équipe a terminé {shipped, plural, =0 {aucun ticket} one {1 ticket} other {# tickets}} et fusionné {merged, plural, =0 {aucune pull request} one {1 pull request} other {# pull requests}}, sur {runs, plural, =0 {aucune exécution d’agent terminée} one {1 exécution d’agent terminée} other {# exécutions d’agent terminées}}.",
+        "manager": "Vous avez lancé {passes, plural, =0 {aucune passe de gestion} one {1 passe de gestion} other {# passes de gestion}} et pris {decisions, plural, =0 {aucune décision} one {1 décision} other {# décisions}}.",
+        "quiet": "Rien n’a encore bougé aujourd’hui.",
+        "quietYesterday": "Hier : {shipped, plural, =0 {aucun ticket} one {1 ticket} other {# tickets}} terminés, {merged, plural, =0 {aucune pull request} one {1 pull request} other {# pull requests}} fusionnées, {decisions, plural, =0 {aucune décision du gestionnaire} one {1 décision du gestionnaire} other {# décisions du gestionnaire}}."
+      },
+      "stat": {
+        "shipped": "Terminés aujourd’hui",
+        "shippedSub": "{opened} créés aujourd’hui",
+        "merged": "PR fusionnées",
+        "mergedSub": "{opened} ouvertes aujourd’hui",
+        "runs": "Exécutions terminées",
+        "runsSub": "{failed} en échec",
+        "moves": "Avancées d’étape",
+        "movesSub": "{human} par des personnes · {agent} par des agents",
+        "movesSubWithSystem": "{human} par des personnes · {agent} par des agents · {system} non attribués",
+        "decisions": "Décisions du gestionnaire",
+        "decisionsSub": "{passes, plural, =0 {aucune passe} one {1 passe} other {# passes}} aujourd’hui"
+      },
+      "shipped": {
+        "title": "Terminés aujourd’hui",
+        "empty": "Aucun ticket n’a encore atteint une étape terminale aujourd’hui.",
+        "unowned": "Non assigné",
+        "more": "+{n} de plus"
+      },
+      "decisions": {
+        "title": "Ce que le gestionnaire a décidé",
+        "empty": "Le gestionnaire n’a encore pris aucune décision aujourd’hui.",
+        "aria": "Décisions du gestionnaire aujourd’hui, par type"
+      },
+      "contributors": {
+        "title": "Qui a fait avancer le travail aujourd’hui",
+        "caption": "Personnes et agents dans une seule liste. Les trois compteurs restent séparés : un ticket terminé, une exécution achevée et une avancée d’étape ne sont pas la même unité de travail.",
+        "metrics": "{shipped} terminés · {runs} exécutions · {moves} avancées"
+      },
+      "attention": {
+        "title": "{open, plural, one {1 élément attend une personne} other {# éléments attendent une personne}} · {today} remontés aujourd’hui",
+        "since": "remonté {when}",
+        "open": "Ouvrir le registre des blocages"
+      }
+    },
+    "health": {
+      "title": "Santé du backlog",
+      "caption": "L’état permanent du tableau — ce qui n’a toujours ni valeur, ni rang, ni dates, ni responsable."
+    },
+    "ask": {
+      "title": "Interroger le gestionnaire",
+      "caption": "Posez la question directement au gestionnaire. Il consulte son propre relevé — ce qui a été terminé, ce qu’il a décidé, ce qui est bloqué et ce qu’il était réellement autorisé à faire — avant de répondre.",
+      "loading": "Ouverture de la conversation…",
+      "error": "Le gestionnaire n’a pas pu répondre pour le moment.",
+      "empty": "Aucune question pour l’instant. Commencez par l’une de celles ci-dessous.",
+      "placeholder": "Posez une question sur la journée, un ticket, ou sur ce qui n’avance pas…",
+      "send": "Demander",
+      "sending": "Envoi…",
+      "you": "Vous",
+      "fallbackName": "le gestionnaire",
+      "thinking": "{name} consulte le relevé…",
+      "answeredBy": "Réponse de {name}",
+      "answeredByDesignated": "Réponse de {name}, le gestionnaire désigné de ce projet",
+      "noAgent": "Aucun agent gestionnaire n’est encore configuré dans cet espace de travail : personne ne peut répondre ici. Désignez un gestionnaire dans Politique et la conversation s’ouvrira.",
+      "compactPrompt": "Pas la journée espérée ? Demandez-le à {name}.",
+      "starter": {
+        "today": "Qu’avez-vous accompli aujourd’hui, vous et l’équipe ?",
+        "blocked": "Pourquoi si peu de choses ont-elles avancé — qu’est-ce qui bloque le travail ?",
+        "plan": "Que ferez-vous ensuite pour débloquer la situation ?"
+      },
+      "copyDiagnosticsAria": "Copier la conversation et le relevé d’outils du gestionnaire"
     }
   },
   "project360": {
@@ -6884,6 +7831,8 @@
     "taskCount": "{count, plural, one {# tâche} other {# tâches}}",
     "byStage": "Par étape",
     "byAssignee": "Par responsable",
+    "expandAssigneeRow": "Développer les tâches assignées à {name}",
+    "collapseAssigneeRow": "Réduire les tâches assignées à {name}",
     "startStandup": "Démarrer le stand-up",
     "startPlanning": "Démarrer la planification",
     "viewPrdAria": "Voir le PRD",
@@ -6901,6 +7850,7 @@
     "deleteTask": "Supprimer la tâche",
     "tabAgent": "Agent / Capacités",
     "tabPrd": "PRD",
+    "tabAccountability": "Validations et responsabilité",
     "changeStatusTitle": "Cliquez pour changer le statut",
     "changePriorityTitle": "Cliquez pour changer la priorité",
     "viewCodeChangesTitle": "Voir les modifications de code sur GitHub",
@@ -6914,7 +7864,116 @@
     "errMove": "Échec du déplacement",
     "tabChanges": "Modifications",
     "release": "Version",
-    "delayReason": "Cause du retard"
+    "delayReason": "Cause du retard",
+    "lifecycleAction": "Cycle de vie",
+    "lifecycleActionTitle": "Cycle de vie et preuve d’autonomie — ce ticket a-t-il avancé seul, ou une personne l’a-t-elle poussé à chaque étape ?"
+  },
+  "ticketLifecycle": {
+    "title": "Cycle de vie / preuve d’autonomie",
+    "loading": "Assemblage de la chaîne de traçabilité…",
+    "errorTitle": "Impossible de charger le cycle de vie de ce ticket",
+    "retry": "Réessayer",
+    "openedAt": "Créé le",
+    "currentLane": "Voie actuelle",
+    "origin": {
+      "label": "Créé par",
+      "human": "Une personne",
+      "agent": "Un agent (Manager IA)",
+      "system": "Automatisation",
+      "manager_card": "Fiche de préparation du Manager IA",
+      "unknown": "Non enregistré"
+    },
+    "verdict": {
+      "fullyAutonomous": "Exécuté de bout en bout en autonomie — 0 déplacement de voie humain",
+      "fullyAutonomousDetail": "L’autonomie a effectué {hops, plural, one {# déplacement de voie} other {# déplacements de voie}} et atteint une voie finale. Aucune personne n’a déplacé ce ticket.",
+      "partialStalled": "Partiellement autonome — à l’arrêt",
+      "partialStalledDetail": "L’autonomie a effectué {hops, plural, one {# déplacement de voie} other {# déplacements de voie}}, mais le ticket n’a pas atteint Terminé et rien ne tourne.",
+      "partialRunning": "Partiellement autonome — toujours en cours",
+      "partialRunningDetail": "L’autonomie a effectué {hops, plural, one {# déplacement de voie} other {# déplacements de voie}} et une exécution est en cours.",
+      "humanDriven": "Piloté par des humains — l’autonomie n’a jamais déplacé ce ticket",
+      "humanDrivenDetail": "Tous les déplacements de voie ont été faits par une personne ({hops} au total). Pas un seul saut autonome n’est enregistré.",
+      "assisted": "Terminé avec de l’aide humaine",
+      "assistedDetail": "Il a atteint une voie finale, mais une personne a fait {humanHops} des {totalHops} déplacements de voie.",
+      "noMovement": "Jamais déplacé",
+      "noMovementDetail": "Ce ticket n’a pas changé de voie une seule fois — ni une personne ni l’autonomie ne l’a déplacé.",
+      "liveRun": "Exécution en cours",
+      "managerCardTitle": "Fiche de coordination",
+      "managerCard": "Le Manager IA crée ces fiches pour préparer le backlog, et l’autonomie refuse délibérément de les lancer. Ici, « aucune exécution » est le comportement attendu, pas une panne."
+    },
+    "stall": {
+      "title": "Pourquoi il reste bloqué",
+      "unrecorded": "Aucun verrou enregistré — rien n’a encore tenté d’exécuter ce ticket.",
+      "laneGate": "Barrière du couloir",
+      "gate": {
+        "auto": "Automatique",
+        "human": "Approbation humaine requise"
+      },
+      "staffed": "Agents affectés au couloir",
+      "noneStaffed": "Aucun",
+      "candidate": "« Exécuter maintenant » lancerait",
+      "noCandidate": "Rien ne peut l’exécuter",
+      "streak": "Exécutions échouées consécutives",
+      "streakValue": "{count} (l’autonomie s’arrête à {limit})",
+      "cooldown": "Temps d’attente restant",
+      "capabilityMismatch": "Capacité manquante"
+    },
+    "stats": {
+      "title": "Sauts et exécutions",
+      "autonomousHops": "Sauts autonomes",
+      "autonomousHopsHint": "Déplacements de voie écrits par un agent ou par l’automatisation.",
+      "humanHops": "Sauts humains",
+      "humanHopsHint": "Déplacements de voie effectués par une personne.",
+      "runsDispatched": "Exécutions lancées",
+      "runsCompleted": "Exécutions réussies",
+      "runsFailed": "Exécutions en échec",
+      "backwardHops": "Sauts de reprise",
+      "backwardHopsHint": "Déplacements de voie en arrière — travail renvoyé pour une nouvelle passe."
+    },
+    "timeline": {
+      "title": "Chaîne de traçabilité",
+      "help": "Chaque ligne indique la table dont elle provient : c’est une preuve, pas un récit.",
+      "empty": "Aucun événement de cycle de vie enregistré pour ce ticket.",
+      "laneMove": "{from} → {to}",
+      "laneEntered": "Entré en {to}",
+      "backward": "Reprise",
+      "run": "Exécution n° {id}",
+      "dispatchedBy": "Lancée par {who}"
+    },
+    "kind": {
+      "created": "Créé",
+      "lane_moved": "Changement de voie",
+      "run_dispatched": "Exécution lancée",
+      "run_completed": "Exécution réussie",
+      "run_failed": "Exécution en échec",
+      "autorun_dispatched": "Exécution auto lancée",
+      "autorun_skipped": "Exécution auto refusée",
+      "autorun_error": "Erreur d’exécution auto",
+      "autorun_awaiting_approval": "Exécution auto en attente d’approbation",
+      "role_event": "Événement de rôle"
+    },
+    "source": {
+      "activity_log": "Journal d’activité / d’audit",
+      "task_status_transitions": "Journal des changements de voie",
+      "executions": "Enregistrements d’exécution",
+      "tool_audit_events": "Audit des décisions d’exécution auto",
+      "aria": "Source : {label}"
+    },
+    "copyDiagnosticsAria": "Copier le diagnostic complet du cycle de vie de ce ticket, avec chaque évènement, identifiant d'exécution et motif de blocage",
+    "failures": {
+      "title": "Analyse des échecs",
+      "help": "Exécutions échouées regroupées par cause. Une même cause qui se répète à intervalle régulier est une boucle de reprise, pas une série d’échecs indépendants.",
+      "runs": "{count, plural, one {# exécution a échoué ainsi} other {# exécutions ont échoué ainsi}}",
+      "cadence": "toutes les ~{interval}",
+      "cadenceOnce": "s’est produit une fois",
+      "window": "Première {first} · dernière {last}",
+      "dispatchedBy": "lancée par {who}",
+      "runIds": "Exécutions : {ids}"
+    },
+    "dispatchers": {
+      "title": "Qui a lancé les exécutions",
+      "help": "Le sous-système qui a démarré chaque exécution. Tout ce qui n’est pas le déclencheur de couloir a atteint le répartiteur sans passer par son disjoncteur d’échecs consécutifs.",
+      "counts": "{runs} exécutions · {completed} réussies · {failed} en échec"
+    }
   },
   "taskChanges": {
     "allChanges": "Toutes les modifications",
@@ -6944,6 +8003,7 @@
     "sub": {
       "health": "État",
       "directory": "Annuaire",
+      "sessions": "Sessions",
       "security": "Sécurité",
       "emulation": "Émulation",
       "tenants": "Espaces",
@@ -6960,7 +8020,12 @@
       "errors": "Erreurs",
       "audit": "Journal d’audit",
       "apiKeys": "Clés API",
-      "token": "Jeton superadmin"
+      "token": "Jeton superadmin",
+      "feedback": "Retours",
+      "releaseNotes": "Nouveautés",
+      "demoFunnel": "Entonnoir démo",
+      "salesLeads": "Leads commerciaux",
+      "cron": "Tâches planifiées"
     },
     "common": {
       "loading": "Chargement…",
@@ -7040,12 +8105,41 @@
       "errorVolume": "Volume d'erreurs"
     },
     "errors": {
-      "lastN": "{n} dernières erreurs",
       "noErrorsRecorded": "Aucune erreur enregistrée.",
       "time": "Heure",
-      "method": "Méthode",
       "path": "Chemin",
-      "message": "Message"
+      "message": "Message",
+      "tenant": "Espace de travail",
+      "kind": "Type",
+      "source": "Source",
+      "operation": "Opération",
+      "count": "Événements",
+      "tenants": "Espaces de travail",
+      "lastSeen": "Vu pour la dernière fois",
+      "sample": "Dernier message",
+      "statTotal": "Exceptions",
+      "statUnhandled": "Ont renvoyé un 500",
+      "statHandled": "Gérées",
+      "statFaults": "Défauts distincts",
+      "topFaults": "Défauts les plus fréquents",
+      "window": "Période",
+      "window_all": "Depuis le début",
+      "window_h1": "Dernière heure",
+      "window_h24": "Dernières 24 heures",
+      "window_d7": "Les 7 derniers jours",
+      "window_d30": "Les 30 derniers jours",
+      "handledFilter": "État de gestion",
+      "handled_all": "Toutes",
+      "handled_unhandled": "Non gérées",
+      "handled_handled": "Gérées",
+      "sourceFilter": "Module source",
+      "allSources": "Toutes les sources",
+      "searchPlaceholder": "Rechercher une source, un chemin ou un message…",
+      "clearFault": "Effacer le filtre de défaut",
+      "scopedTo": "Affichage de {source} · {operation}",
+      "context": "Contexte",
+      "stack": "Trace d’appels",
+      "pagination": "{from}–{to} sur {total}"
     },
     "token": {
       "shareWarning": "Ce jeton web accorde un accès API superadmin pour votre session actuelle. Ne le partagez qu'avec des outils de confiance.",
@@ -7132,6 +8226,22 @@
         "colDuration": "Durée",
         "durationActive": "Active"
       }
+    },
+    "sessions": {
+      "title": "Sessions d’adoption",
+      "subtitle": "Visiteurs anonymes de Brain et des outils gratuits, avec conversion en compte et en offre payante.",
+      "count": "{count, plural, one {# session} other {# sessions}}",
+      "empty": "Aucune session invité trouvée.",
+      "visitor": "Visiteur",
+      "engagement": "Engagement",
+      "firstSeen": "Première visite",
+      "lastSeen": "Dernière visite",
+      "conversion": "Conversion",
+      "brainMessages": "{count} messages Brain",
+      "tokensAndTools": "{tokens} jetons · {tools} exécutions d’outils",
+      "guest": "invité",
+      "registered": "inscrit",
+      "paid": "payant"
     },
     "usage": {
       "aiAnalyze": "Analyse IA",
@@ -7399,7 +8509,14 @@
     },
     "permissions": {
       "title": "Rôles et autorisations",
-      "colPermission": "Autorisation"
+      "colPermission": "Autorisation",
+      "enforced": "Appliquée",
+      "advisory": "Indicative",
+      "granted": "Accordée",
+      "denied": "Refusée",
+      "enforcedHint": "Cette autorisation est vérifiée à chaque requête. Les dérogations prennent effet immédiatement.",
+      "advisoryHint": "Cette autorisation n'est pas encore vérifiée au moment de la requête : la route est protégée uniquement par le niveau de rôle, donc modifier cette ligne ne change que l'affichage de ce tableau.",
+      "enforcementNote": "Les lignes marquées Appliquée sont vérifiées à chaque requête ; une dérogation prend donc effet immédiatement. Les lignes marquées Indicative sont protégées uniquement par le niveau de rôle : les modifier ne change que ce tableau, pas ce qu'un membre peut réellement faire."
     },
     "modules": {
       "title": "Modules de la plateforme",
@@ -7558,6 +8675,157 @@
       "requestBody": "Corps de la requête",
       "responseBody": "Corps de la réponse",
       "callerMetadata": "Métadonnées de l'appelant"
+    },
+    "releaseNotes": {
+      "digestTitle": "E-mail hebdomadaire des nouveautés",
+      "unsentCount": "{count, plural, =0 {Aucune note à envoyer} one {# note publiée pas encore envoyée} other {# notes publiées pas encore envoyées}}",
+      "digestSent": "{notes} nouveautés envoyées à {sent} personnes ({suppressed} désabonnées).",
+      "sendDigest": "Envoyer maintenant",
+      "sendDigestConfirm": "Envoyer par e-mail dès maintenant toutes les nouveautés publiées et non encore envoyées aux utilisateurs consentants ?",
+      "editNote": "Modifier la nouveauté",
+      "newNote": "Nouvelle nouveauté",
+      "phVersion": "Version (p. ex. 2026.7.93)",
+      "phTitle": "Titre — le bénéfice, en langage clair",
+      "phBody": "Ce que cela apporte à l’utilisateur. Les lignes vides séparent les paragraphes.",
+      "savePublish": "Enregistrer et publier",
+      "saveDraft": "Enregistrer le brouillon",
+      "allNotes": "Toutes les nouveautés ({count})",
+      "thTitle": "Titre",
+      "thVersion": "Version",
+      "thCategory": "Catégorie",
+      "thStatus": "Statut",
+      "thEmailed": "Envoyé",
+      "published": "Publié",
+      "draft": "Brouillon",
+      "publish": "Publier",
+      "unpublish": "Dépublier",
+      "deleteConfirm": "Supprimer la nouveauté « {title} » ? Cette action est irréversible.",
+      "sendNote": "Envoyer maintenant",
+      "resendNote": "Renvoyer",
+      "sendNoteHint": "Envoyer cette nouveauté par e-mail à tous les utilisateurs consentants maintenant — elle sera exclue du récapitulatif hebdomadaire.",
+      "resendNoteHint": "Cette nouveauté a déjà été envoyée. Renvoyez-la à tous les utilisateurs consentants.",
+      "sendNoteConfirm": "Envoyer la nouveauté « {title} » par e-mail à tous les utilisateurs consentants maintenant ? Elle sera ensuite exclue du récapitulatif hebdomadaire.",
+      "resendNoteConfirm": "Cette nouveauté a déjà été envoyée. Renvoyer « {title} » à tous les utilisateurs consentants maintenant ?"
+    },
+    "demoFunnel": {
+      "title": "Entonnoir de conversion des démos",
+      "subtitle": "Engagement anonyme des comptes démo par persona (30 derniers jours).",
+      "persona": "Persona",
+      "total": "Total",
+      "convRate": "{rate}% inscription",
+      "recentTitle": "Événements récents",
+      "empty": "Aucune activité de démo pour le moment.",
+      "when": "Quand",
+      "event": "Événement",
+      "path": "Chemin",
+      "personas": {
+        "ai-team": "Équipe logicielle IA",
+        "insights": "ROI et analyses d'ingénierie",
+        "pmo": "Centre de commande PMO",
+        "talent": "Talents et marketplace",
+        "governance": "Sécurité, architecture et gouvernance"
+      },
+      "stages": {
+        "demo_start": "Démarré",
+        "page_view": "Pages vues",
+        "convert_prompt_shown": "Invite affichée",
+        "convert_clicked": "Inscription cliquée",
+        "book_demo_opened": "Réservation ouverte",
+        "lead_submitted": "Lead envoyé",
+        "exit_prompt_shown": "Sortie affichée",
+        "demo_exit": "Quitté"
+      }
+    },
+    "salesLeads": {
+      "title": "Leads commerciaux",
+      "subtitle": "Leads de réservation de démo et d’intention de sortie du site marketing.",
+      "count": "{count} leads",
+      "filterAll": "Tous les statuts",
+      "contact": "Contact",
+      "interest": "Intérêt",
+      "source": "Source",
+      "received": "Reçu",
+      "statusHeader": "Statut",
+      "empty": "Aucun lead pour le moment.",
+      "mailSubject": "Votre démo Builderforce",
+      "status": {
+        "new": "Nouveau",
+        "contacted": "Contacté",
+        "qualified": "Qualifié",
+        "closed": "Fermé"
+      },
+      "personas": {
+        "ai-team": "Équipe logicielle IA",
+        "insights": "ROI et analyses d'ingénierie",
+        "pmo": "Centre de commande PMO",
+        "talent": "Talents et marketplace",
+        "governance": "Sécurité, architecture et gouvernance"
+      }
+    },
+    "cron": {
+      "title": "Tâches planifiées",
+      "subtitle": "Cloudflare transmet les déclencheurs cron au Worker, jamais à une URL. Forcez une exécution ici au lieu d’attendre la barrière de travail.",
+      "forceNote": "Exécuter une tâche ici contourne la barrière KV et ne réinitialise pas le minuteur du seuil : une exécution forcée ne retarde donc jamais le prochain déclenchement réel. Utilisez « Signaler du travail en attente » pour tester la barrière elle-même.",
+      "gate": {
+        "heading": "Barrière de travail (KV)",
+        "checkedAt": "Vérifié {at}",
+        "wouldRun": "Le prochain déclenchement lancerait le balayage de la base de données",
+        "wouldSkip": "Le prochain déclenchement serait ignoré — Postgres reste en veille",
+        "reason": {
+          "signal": "une écriture a signalé du travail en attente",
+          "floor": "l’intervalle seuil est écoulé",
+          "idle": "rien n’a été signalé et le seuil n’est pas échu",
+          "kv-unavailable": "KV est injoignable, la barrière laisse donc passer"
+        },
+        "floorInterval": "Intervalle seuil",
+        "overridden": "remplacé",
+        "lastFloor": "Dernier balayage seuil",
+        "nextFloor": "Prochain balayage seuil",
+        "never": "Jamais",
+        "asap": "Prochain déclenchement",
+        "explainIdle": "Une barrière inactive ne signifie pas qu’il n’y a rien en attente. Le signal ne part que lorsqu’un ticket franchit réellement ses barrières : un tableau de tickets bloqués ne signale donc rien et attend le balayage seuil.",
+        "kvUnbound": "AUTH_CACHE_KV n’est pas lié : la barrière laisse passer et chaque déclenchement lance le balayage.",
+        "signalled": "Travail en attente signalé — le prochain déclenchement planifié lancera le balayage."
+      },
+      "actions": {
+        "runFrequent": "▶ Lancer le tick de 5 minutes",
+        "signal": "⚑ Signaler du travail en attente",
+        "run": "Lancer",
+        "runGroup": "▶ Lancer le groupe",
+        "running": "En cours…"
+      },
+      "cadence": {
+        "frequent": "Tick fréquent",
+        "daily": "Quotidien",
+        "weekly-mon": "Hebdomadaire (lundi)",
+        "weekly-fri": "Hebdomadaire (vendredi)",
+        "everyFiveMinutes": "toutes les 5 minutes (sous barrière de travail)"
+      },
+      "table": {
+        "sweep": "Tâche",
+        "description": "Rôle",
+        "lastRun": "Dernière exécution forcée"
+      },
+      "badge": {
+        "dispatches": "démarre des exécutions d’agents",
+        "unavailable": "désactivée dans cet environnement"
+      },
+      "outcome": {
+        "ok": "OK en {ms} ms",
+        "noop": "rien à faire",
+        "failed": "Échec",
+        "timedOut": "Toujours en cours après {ms} ms — consultez les journaux pour le résultat",
+        "skipped": "Ignorée (désactivée)"
+      },
+      "result": {
+        "heading": "{target} forcé :",
+        "summary": "{ok} tâches sur {total} terminées en {ms} ms · {dispatched} exécutions d’agents démarrées"
+      },
+      "confirm": {
+        "title": "Forcer une tâche planifiée ?",
+        "dispatch": "Lancer « {target} » démarre de véritables exécutions d’agents dans tous les espaces de travail ({count} des tâches sélectionnées déclenchent du travail). Cela consomme des jetons et n’est pas un essai à blanc.",
+        "confirmLabel": "Lancer maintenant"
+      }
     }
   },
   "providerKeys": {
@@ -7565,10 +8833,43 @@
     "subtitle": "Connectez votre propre compte Anthropic, OpenAI ou Google. Les fournisseurs connectés alimentent vos agents avec votre propre compte et déterminent les choix de modèles dans chaque sélecteur — l'utilisation sur votre machine (sur site et VS Code) est gratuite ; l'utilisation des agents cloud reste facturée. Les identifiants sont stockés chiffrés et ne sont plus jamais affichés.",
     "loading": "Chargement…",
     "errorPrefix": "Erreur : {message}",
+    "openRouter": {
+      "title": "Connexions OpenRouter",
+      "subtitle": "Créez plusieurs inscriptions nommées avec un ou plusieurs modèles et classez-les avec vos comptes IA.",
+      "cardBlurb": "Sélectionnez un ou plusieurs modèles OpenRouter par inscription et classez-les avec vos comptes connectés.",
+      "add": "Ajouter une connexion",
+      "connectedCount": "● {count} connexion(s)",
+      "brokenCount": "{count} connexion(s) OpenRouter",
+      "modelCount": "{count} modèle(s) sélectionné(s)",
+      "costOwnKey": "Frais de routage Builderforce : {cost}. OpenRouter facture les jetons sur votre propre compte.",
+      "costManaged": "Facturé par Builderforce : {cost} (routage + jetons).",
+      "ownKey": "Votre clé OpenRouter",
+      "managedKey": "Facturation Builderforce",
+      "edit": "Modifier",
+      "empty": "Aucune connexion OpenRouter.",
+      "createTitle": "Inscrire des modèles OpenRouter",
+      "editTitle": "Modifier la connexion OpenRouter",
+      "name": "Nom de la connexion",
+      "apiKey": "Clé API OpenRouter (facultative)",
+      "clearKey": "Supprimer la clé et utiliser la facturation Builderforce",
+      "billing": "Chaque requête passe par Builderforce et ajoute 0,01 $ de frais de plateforme. Avec votre clé, OpenRouter facture les jetons ; sans clé, Builderforce facture aussi le coût des jetons OpenRouter.",
+      "orderTitle": "Ordre des modèles",
+      "orderHint": "Les agents utilisent le modèle du haut et basculent vers les suivants en cas d'échec. « Tester la connexion » teste le premier.",
+      "removeModel": "Retirer {model} de cette connexion",
+      "search": "Rechercher des modèles OpenRouter…",
+      "selected": "{count} modèle(s) sélectionné(s)",
+      "validation": "Saisissez un nom et sélectionnez au moins un modèle.",
+      "saveError": "Échec de l’enregistrement de la connexion OpenRouter",
+      "removeError": "Échec de la suppression de la connexion OpenRouter",
+      "confirmRemove": "Supprimer la connexion OpenRouter « {label} » ?",
+      "confirmDisconnectAll": "Déconnecter OpenRouter ? Cela supprime les {count} enregistrement(s). Les agents qui les utilisent basculeront vers les modèles gérés par Builderforce."
+    },
     "status": {
       "connected": "● {subscription} connecté",
       "keyConfigured": "● Clé d'API {label} configurée",
-      "notConnected": "○ Non connecté"
+      "notConnected": "○ Non connecté",
+      "usageDepleted": "▲ {label} — quota épuisé",
+      "needsAttention": "▲ {label} — nécessite une action"
     },
     "disconnect": "Déconnecter",
     "remove": "Supprimer",
@@ -7592,24 +8893,116 @@
     "errStartConnect": "Échec du démarrage de la connexion",
     "errConnectSubscription": "Échec de la connexion de l'abonnement",
     "errRemove": "Échec de la suppression de l'identifiant",
+    "precedence": {
+      "title": "Priorité des fournisseurs",
+      "subtitle": "Lorsque plusieurs de vos comptes sont connectés, les agents cloud commencent par le fournisseur placé en tête et basculent vers le suivant en cas d'échec. Placez Meta en premier pour y acheminer les agents cloud.",
+      "leads": "Prioritaire",
+      "drag": "Glisser pour réorganiser",
+      "rowLabel": "{provider}, position {position}. Faites glisser pour réorganiser.",
+      "moveUp": "Monter {provider}",
+      "moveDown": "Descendre {provider}",
+      "errSave": "Échec de l'enregistrement de la priorité"
+    },
     "provider": {
       "anthropic": {
         "blurb": "Connectez votre abonnement Claude Pro/Max (sans facturation par token) ou collez une clé d'API Anthropic.",
-        "subscription": "abonnement Claude"
+        "subscription": "abonnement Claude",
+        "pastePrompt": "Après approbation dans l’onglet Claude, collez la valeur complète <code>code#state</code>.",
+        "pastePlaceholder": "Collez le code Claude…"
       },
       "openai": {
-        "blurb": "Collez une clé d'API OpenAI pour exécuter des modèles GPT sur votre propre compte OpenAI."
+        "blurb": "Connectez votre abonnement ChatGPT/Codex ou collez une clé API OpenAI.",
+        "subscription": "abonnement ChatGPT/Codex",
+        "pastePrompt": "Après connexion, copiez l’URL complète <code>http://localhost:1455/auth/callback?code=…&state=…</code> depuis la barre d’adresse et collez-la ici.",
+        "pastePlaceholder": "Collez l’URL de redirection OpenAI…"
       },
       "google": {
         "blurb": "Collez une clé d'API Google AI (Gemini) pour exécuter des modèles Gemini sur votre propre compte Google."
+      },
+      "meta": {
+        "blurb": "Collez une clé d'API Meta AI pour exécuter des modèles MUSE (muse-spark-1.1) sur votre propre compte Meta AI."
+      },
+      "kimi": {
+        "blurb": "Collez une clé d’abonnement Kimi Code pour utiliser vos modèles de code kimi.com."
+      },
+      "moonshot": {
+        "blurb": "Collez une clé API Moonshot Open Platform pour utiliser les modèles Moonshot."
+      },
+      "qwen": {
+        "blurb": "Collez une clé API Alibaba DashScope pour utiliser les modèles Qwen."
+      },
+      "minimax": {
+        "blurb": "Collez une clé API MiniMax pour utiliser les modèles MiniMax."
+      },
+      "xai": {
+        "blurb": "Connectez un abonnement SuperGrok éligible ou une clé API xAI.",
+        "subscription": "abonnement SuperGrok",
+        "pastePrompt": "Après approbation, copiez le code affiché sur la page xAI et collez-le ici.",
+        "pastePlaceholder": "Collez le code de connexion xAI…"
       }
+    },
+    "diagnostic": {
+      "currentStatus": "État actuel : {status}",
+      "checking": "vérification…",
+      "test": "Tester la connexion",
+      "testing": "Test en cours…",
+      "verified": "Connexion vérifiée.",
+      "verifiedWith": "Connexion vérifiée avec {model}.",
+      "usage": "{days} derniers jours : {requests} requêtes · {tokens} jetons",
+      "lastUsed": " · Dernière utilisation {when}",
+      "failedFallback": "Échec du test de connexion : {status}.",
+      "failedGeneric": "Échec du test de connexion",
+      "failedTitle": "Échec de la connexion à {label}",
+      "upstreamTitle": "{label} — erreur du fournisseur du modèle",
+      "testCost": "Le test envoie une petite requête réelle, facturée au compte testé.",
+      "state": {
+        "ready": "prête",
+        "capacity": "quota épuisé",
+        "needs_attention": "nécessite une attention",
+        "not_connected": "non connectée",
+        "revoked": "révoquée",
+        "expired": "expirée",
+        "undecryptable": "identifiant illisible",
+        "unsupported-auth": "enregistré comme abonnement, mais ce fournisseur nécessite une clé API",
+        "unavailable": "indisponible",
+        "failed": "en échec",
+        "upstream_error": "erreur du fournisseur du modèle",
+        "not_found": "connexion introuvable",
+        "no_test_model": "aucun modèle sélectionné à tester",
+        "key_unresolved": "la clé enregistrée n'a pas pu être utilisée"
+      },
+      "tokensUsed": "Jetons IA utilisés",
+      "periodLabel": "Derniers {period}"
+    },
+    "authAlert": {
+      "title": "Non utilisé",
+      "notEntitled": "Ce compte s’est bien connecté, mais le fournisseur a refusé la requête ({status}) car l’offre ne la couvre pas. Reconnectez un compte dont l’offre l’inclut, ou passez à une offre supérieure.",
+      "xaiNotEntitled": "xAI a accepté la connexion, mais a refusé l’accès à l’API Grok ({status}). Vérifiez que ce compte dispose d’une offre SuperGrok éligible et d’un quota hebdomadaire restant, ou connectez une clé API xAI.",
+      "xaiCapacity": "Votre quota hebdomadaire d’API SuperGrok est épuisé ({status}). Grok reprendra après sa réinitialisation ; pour continuer maintenant, achetez des crédits d’utilisation supplémentaires, activez la recharge automatique ou passez à SuperGrok Heavy. Ne reconnectez pas le compte.",
+      "kimiNotEntitled": "Kimi a accepté cette clé API, mais a refusé l’accès à Kimi Code ({status}). Consultez la console Kimi Code pour vérifier les alertes du compte.",
+      "kimiCapacity": "Le quota de votre abonnement Kimi Code est épuisé ({status}). Consultez la console Kimi Code pour connaître la prochaine réinitialisation. La clé reste valide.",
+      "rejected": "Le fournisseur a rejeté cet identifiant ({status}). Il a probablement expiré, été révoqué ou renouvelé ailleurs — reconnectez le compte.",
+      "capacity": "L’identifiant fonctionne, mais le compte n’a plus de budget ({status}) — plafond de dépense atteint ou solde de crédits vide. Rechargez ou relevez la limite ; inutile de reconnecter.",
+      "unresolved": "L’identifiant enregistré n’a pas pu être utilisé du tout : il a été révoqué, a expiré, ou a été enregistré dans un autre espace de travail. Reconnectez-le ici."
     }
   },
   "modelSelect": {
     "yourLlms": "Vos LLM",
     "connectedProviders": "Fournisseurs connectés",
     "models": "Modèles",
-    "current": "{model} (actuel)"
+    "current": "{model} (actuel)",
+    "premiumModels": "Premium — tout modèle OpenRouter (coût + 1 ¢/requête)",
+    "premiumOption": "{name} · {price}/M en entrée",
+    "premiumUnlockTitle": "Débloquer les modèles premium",
+    "premiumUnlockCardBody": "Ajoutez vos informations de facturation et validez une carte pour sélectionner n’importe quel modèle payant d’OpenRouter. Vous êtes facturé au prix d’OpenRouter plus 1 ¢ par requête. Aucun débit ni changement d’offre n’est effectué.",
+    "premiumUnlockUpgradeBody": "Les modèles premium (tout modèle payant d’OpenRouter, facturé au coût OpenRouter plus 1 ¢ par requête) nécessitent une offre payante avec une carte validée.",
+    "premiumValidateCard": "Facturation et carte",
+    "premiumValidating": "Ouverture…",
+    "premiumPending": "En attente de confirmation",
+    "premiumPendingHint": "Terminez la validation auprès de votre prestataire de paiement, puis rechargez.",
+    "premiumFailedHint": "Cette carte n’a pas pu être validée. Essayez-en une autre.",
+    "premiumUpgrade": "Passer à Pro",
+    "premiumUnlockFailed": "Impossible de lancer la validation de la carte."
   },
   "runAgentControl": {
     "agentTitle": "Agent",
@@ -7682,7 +9075,16 @@
       "system": "Système",
       "unknown": "Inconnu"
     },
+    "model": {
+      "tooltip": "Servi par le modèle {model}",
+      "accountOwn": "Votre compte",
+      "accountShared": "Pool partagé",
+      "accountSharedUnused": "Pool partagé (votre compte n'a pas été utilisé)"
+    },
     "verb": {
+      "agent": {
+        "replied": "a répondu dans une conversation"
+      },
       "task": {
         "created": "a créé un ticket",
         "updated": "a mis à jour un ticket",
@@ -7835,7 +9237,8 @@
     "running": "En cours",
     "awaiting": "Réponse requise",
     "needsYou": "{count} en attente de votre réponse",
-    "runningCount": "{count} en cours"
+    "runningCount": "{count} en cours",
+    "unread": "{count, plural, =1 {1 message non lu} other {# messages non lus}}"
   },
   "onboarding": {
     "welcome": "Bienvenue sur Builderforce",
@@ -7870,6 +9273,18 @@
       },
       "invite": {
         "label": "Inviter l'équipe"
+      },
+      "talentProfile": {
+        "label": "Votre profil"
+      },
+      "resume": {
+        "label": "CV"
+      },
+      "publish": {
+        "label": "Publier"
+      },
+      "findWork": {
+        "label": "Trouver une mission"
       }
     },
     "ticketing": {
@@ -7905,7 +9320,15 @@
       "runningAll": "Audits en cours…",
       "run": "Lancer les audits sélectionnés",
       "viewReports": "Voir les rapports",
-      "notifyHint": "Nous vous préviendrons dès que chaque rapport sera prêt. Vous pouvez quitter cette page — les audits continuent."
+      "notifyHint": "Nous vous préviendrons dès que chaque rapport sera prêt. Vous pouvez quitter cette page — les audits continuent.",
+      "webHeading": "Analysez votre site en ligne",
+      "webIntro": "Vous avez déjà un site ? Saisissez son URL pour une analyse de sécurité instantanée — les résultats deviennent des tickets à corriger.",
+      "webPlaceholder": "https://votre-site.com",
+      "webButton": "Analyser le site",
+      "webScanning": "Analyse en cours…",
+      "webResult": "Score {score}/100 — {count} enregistrés comme tickets",
+      "webView": "Voir les résultats",
+      "webError": "Échec de l'analyse. Vérifiez l'URL et réessayez."
     },
     "closeOnboarding": "Fermer l’intégration",
     "workspaceReady": "Espace de travail prêt",
@@ -7938,6 +9361,25 @@
       "monetize": "Gagner de l’argent avec des agents IA",
       "automate": "Automatiser mon flux de développement",
       "learn": "Apprendre et explorer"
+    },
+    "welcomeHired": "Bienvenue sur Builderforce",
+    "subtitleHired": "Rendez-vous recrutable en quelques étapes.",
+    "talentProfile": {
+      "intro": "Les employeurs recherchent sur ces champs : plus vous en remplissez, plus vous apparaissez."
+    },
+    "resumeStep": {
+      "intro": "Importez un CV et nous remplirons votre titre, votre résumé et vos compétences.",
+      "skipHint": "Facultatif — vous pourrez l'ajouter plus tard depuis votre profil."
+    },
+    "publishStep": {
+      "intro": "La publication vous répertorie sur la place de marché des talents. Vous pouvez vous retirer à tout moment."
+    },
+    "findWorkStep": {
+      "intro": "Vous êtes prêt. Voici où se passe le travail.",
+      "gigs": "Parcourir les missions",
+      "gigsHint": "Des missions ouvertes adaptées à vos compétences et à votre tarif.",
+      "timecard": "Saisir vos heures",
+      "timecardHint": "Envoyez vos relevés d’heures et suivez vos paiements."
     }
   },
   "soc2": {
@@ -8135,7 +9577,10 @@
     "errorCreateSprint": "Échec de la création du sprint",
     "errorStart": "Impossible de démarrer la session",
     "errorAdvance": "Impossible de passer au tour suivant",
-    "errorComplete": "Impossible de terminer la session"
+    "errorComplete": "Impossible de terminer la session",
+    "startSession": "Démarrer la mêlée",
+    "startSessionHint": "Démarrer la mêlée",
+    "startSessionFacilitatorOnly": "Seul l’animateur peut la démarrer"
   },
   "meetings": {
     "title": "Réunions",
@@ -8298,7 +9743,8 @@
     "commonQuestions": "Questions fréquentes",
     "pillLora": "🧠 Entraînement LoRA",
     "pillRegistry": "🤖 Registre d’agents",
-    "pillEval": "🔬 Évaluation IA"
+    "pillEval": "🔬 Évaluation IA",
+    "emailPlaceholder": "vous@exemple.com"
   },
   "gigs": {
     "publish": {
@@ -8584,6 +10030,10 @@
   },
   "agentExecution": {
     "runThisTask": "Exécuter cette tâche",
+    "coordinateThisTicket": "Coordonner ce ticket",
+    "coordinateNow": "Assigner et lancer le rôle suivant",
+    "coordinating": "Coordination…",
+    "coordinateHint": "Le responsable coordonne ce cycle. BuilderForce vérifie le manifeste et lance le prochain rôle requis, jamais le responsable comme exécuteur par défaut.",
     "awaitingApproval": "En attente d'approbation avant de pouvoir s'exécuter : {reason}",
     "executions": "Exécutions",
     "ticketSpendTooltip": "Dépense du ticket sur toutes les exécutions : {tokens} jetons sur {requests} appel(s) LLM. Cumulé sur ce projet, puis sur le compte.",
@@ -8620,7 +10070,15 @@
     "noFileChangesYet": "Aucune modification de fichier pour l'instant.",
     "noFileChangesRecorded": "Cette exécution n'a enregistré aucune modification de fichier.",
     "noToolCalls": "Aucun appel d'outil enregistré.",
-    "failedToRerun": "Échec de la réexécution"
+    "failedToRerun": "Échec de la réexécution",
+    "revert": "Annuler l’exécution",
+    "reverting": "Annulation…",
+    "revertHint": "Ferme la pull request ouverte par cette exécution et supprime la branche qu’elle a écrite. Refusé si autre chose y a touché.",
+    "revertConfirmTitle": "Annuler cette exécution ?",
+    "revertConfirmMessage": "Cela ferme la pull request ouverte par l’exécution n° {id} et supprime la branche qu’elle a écrite. Cette action est irréversible. Elle sera refusée si la pull request a déjà été fusionnée ou si autre chose a modifié la branche.",
+    "revertConfirmAction": "Annuler l’exécution",
+    "revertDone": "Annulée — branche {branch} supprimée ({commits} commit(s)).",
+    "failedToRevert": "Échec de l’annulation de cette exécution"
   },
   "aiTraining": {
     "title": "Entraînement de modèles IA",
@@ -8974,8 +10432,8 @@
     "noKey": "aucune clé",
     "test": "Tester",
     "testing": "Test en cours…",
-    "importTitle": "Importez les fichiers de ce dépôt dans l'espace de travail de l'IDE pour les modifier et les exécuter dans le navigateur",
-    "importToIde": "Importer dans l'IDE",
+    "importTitle": "Importez les fichiers de ce dépôt dans l'espace de travail de l'Builder pour les modifier et les exécuter dans le navigateur",
+    "importToIde": "Importer dans l'Builder",
     "importing": "Importation…",
     "copyConfigTitle": "Copiez la configuration de ce dépôt (sans secrets) pour diagnostiquer un test échoué",
     "copied": "Copié !",
@@ -8992,7 +10450,20 @@
     "workspaceSuffix": ", espace de travail",
     "setAsDefault": "Définir comme dépôt par défaut du projet",
     "saveChanges": "Enregistrer les modifications",
-    "addRepository": "Ajouter un dépôt"
+    "addRepository": "Ajouter un dépôt",
+    "enableAgentRuns": "Activer les exécutions d’agents",
+    "agentRunsEnabled": "Exécutions activées",
+    "enablingAgentRuns": "Activation…",
+    "enableAgentRunsTitle": "Valider le workflow d’agent Builderforce dans ce dépôt afin que les agents s’exécutent sur vos propres runners GitHub Actions",
+    "reenableAgentRunsTitle": "Déjà activé — relancez pour écraser le fichier de workflow avec la dernière version",
+    "confirmReenableActions": "Cette action réécrit .github/workflows/builderforce-agent.yml sur la branche par défaut et supprime les modifications que vous y avez apportées. Continuer ?",
+    "actionsEnabled": "Workflow d’agent validé dans {path}",
+    "actionsEnableFailed": "Impossible de valider le workflow d’agent",
+    "backfillAlerts": "Importer les alertes",
+    "backfillingAlerts": "Importation…",
+    "backfillAlertsTitle": "Importer toutes les alertes ouvertes d’analyse de code et Dependabot de ce dépôt comme constats de sécurité. Réexécution sans risque.",
+    "alertsBackfilled": "{count} {count, plural, one {constat} other {constats}} de sécurité importés ({deduped} déjà suivis)",
+    "alertsBackfillFailed": "Impossible d’importer les alertes de sécurité"
   },
   "workflowsContent": {
     "noRunsYet": "Aucune exécution",
@@ -9080,6 +10551,16 @@
       "escalation": "Escalade",
       "contacts": "Contacts"
     },
+    "workflows": {
+      "title": "Runbooks et workflows",
+      "blurb": "Exécutez un workflow personnalisé pour cet incident ou consultez les workflows déclenchés par ses événements.",
+      "pick": "Workflow",
+      "pickPlaceholder": "Choisir un workflow…",
+      "run": "Exécuter le workflow",
+      "create": "Créer un workflow",
+      "runs": "Exécutions pour cet incident",
+      "noRuns": "Aucune exécution de workflow pour le moment."
+    },
     "severity": {
       "sev1": "SEV1",
       "sev2": "SEV2",
@@ -9139,6 +10620,8 @@
       "publishedNote": "Une analyse des causes racines a été publiée pour cet incident.",
       "prompt": "Cet incident est résolu. Publiez une analyse des causes racines dans la base de connaissances.",
       "formTitle": "Publier l'analyse des causes racines",
+      "fishTitle": "Pourquoi cela s'est-il produit ?",
+      "fishAria": "Diagramme en arêtes de poisson des causes racines pour {title}",
       "summary": "Résumé",
       "summaryPlaceholder": "Aperçu de l'incident en un paragraphe…",
       "rootCause": "Cause racine",
@@ -9175,7 +10658,7 @@
     "memberDisplayName": "Nom affiché",
     "memberRef": "Référence du membre",
     "memberRefPlaceholder": "u:123 / contact:abc / c:acme",
-    "memberRefHelp": "Référencez un utilisateur de la plateforme (u:<id>), un contact professionnel (contact:<id>) ou une entreprise (c:<slug>).",
+    "memberRefHelp": "Référencez un utilisateur de la plateforme (u:'<id>'), un contact professionnel (contact:'<id>') ou une entreprise (c:'<slug>').",
     "addMember": "Ajouter un membre",
     "removeMember": "Retirer le membre",
     "rotationName": "Nom",
@@ -9218,7 +10701,18 @@
     "deleteContactConfirm": "Supprimer le contact « {name} » ?",
     "oncallSubtitle": "Les rotations d’astreinte déterminent qui est alerté en premier lorsqu’un incident se déclenche.",
     "escalationSubtitle": "Les politiques d’escalade parcourent les cibles et les canaux jusqu’à ce que quelqu’un réponde.",
-    "contactsSubtitle": "Contacts professionnels que vous pouvez alerter ou vers qui escalader pendant un incident."
+    "contactsSubtitle": "Contacts professionnels que vous pouvez alerter ou vers qui escalader pendant un incident.",
+    "implicated": {
+      "title": "Tickets de livraison impliqués",
+      "help": "Le(s) ticket(s) de livraison dont le changement a causé cet incident — chacun avec sa responsabilité pour que le RCA voie où le processus a été ignoré ou dispensé.",
+      "loading": "Chargement…",
+      "empty": "Aucun ticket impliqué lié pour le moment.",
+      "signed": "{done}/{total} validés",
+      "gaps": "{count} lacune(s)",
+      "remove": "Retirer",
+      "add": "Lier un ticket",
+      "addPlaceholder": "Ticket n°"
+    }
   },
   "monitoring": {
     "boardsTitle": "Surveillance active",
@@ -9252,6 +10746,13 @@
     "fieldIntervalSeconds": "Intervalle (secondes)",
     "fieldUrl": "URL",
     "fieldExpectedStatus": "Statut attendu",
+    "fieldMethod": "Méthode",
+    "fieldHeaders": "En-têtes de la requête",
+    "headersPlaceholder": "Authorization: Bearer …",
+    "headersHint": "Un « En-tête : valeur » par ligne — envoyé avec la vérification d'état.",
+    "fieldBodyMatch": "Le corps doit contenir",
+    "bodyMatchPlaceholder": "\"status\":\"ok\"",
+    "bodyMatchHint": "Facultatif : panne si le corps de la réponse ne contient pas ce texte.",
     "fieldMetric": "Métrique",
     "fieldComparator": "Comparateur",
     "fieldThreshold": "Seuil",
@@ -9346,5 +10847,974 @@
     "statusError": "Erreur",
     "errFailed": "Échec de l’invitation",
     "laterHint": "Vous pouvez aussi inviter des coéquipiers plus tard depuis <link>Équipe</link>."
+  },
+  "accountability": {
+    "loading": "Chargement de la responsabilité…",
+    "signedHeader": "{done} rôle(s) requis sur {total} ont validé",
+    "unassigned": "Non attribué",
+    "addedBadge": "ajouté",
+    "gaps": {
+      "title": "{count} lacune(s) de responsabilité",
+      "outstandingTitle": "{count} rôle(s) restant à valider",
+      "kind": {
+        "unsigned": "Non validé",
+        "unstaffed": "Manque de ressource",
+        "no_contribution": "Aucune contribution",
+        "waived": "Dispensé",
+        "changes_requested": "Modifications demandées"
+      },
+      "detail": {
+        "unsigned": "Le rôle requis n'a pas encore validé.",
+        "pending": "Pas encore commencé.",
+        "assigned": "Attribué ; le travail n'a pas encore commencé.",
+        "in_progress": "Travail en cours ; validation pas encore enregistrée.",
+        "unstaffed": "Aucune ressource compétente n'est disponible pour ce rôle requis.",
+        "changes_requested": "Des modifications ont été demandées et ne sont pas encore résolues.",
+        "no_contribution": "Approuvé sans contribution liée — risque d'approbation de complaisance.",
+        "waived": "Dispensé : {reason}",
+        "waived_no_reason": "Dispensé sans motif enregistré."
+      }
+    },
+    "table": {
+      "title": "Validations et responsabilité",
+      "role": "Rôle",
+      "who": "Qui",
+      "state": "État",
+      "verdict": "Verdict",
+      "when": "Quand",
+      "comments": "Commentaires",
+      "contribution": "Contribution",
+      "empty": "Aucun rôle requis pour ce ticket pour le moment.",
+      "action": "Action"
+    },
+    "verdict": {
+      "approved": "Approuvé",
+      "changes_requested": "Modifications demandées",
+      "waived": "Dispensé",
+      "delegated": "Délégué"
+    },
+    "state": {
+      "pending": "En attente",
+      "assigned": "Attribué",
+      "in_progress": "En cours",
+      "completed": "Terminé",
+      "changes_requested": "Modifications demandées",
+      "waived": "Dispensé",
+      "skipped": "Ignoré",
+      "unstaffed": "Sans ressource"
+    },
+    "responsibility": {
+      "owner": "Responsable",
+      "reviewer": "Relecteur",
+      "contributor": "Contributeur"
+    },
+    "assess": {
+      "title": "Évaluation des ressources",
+      "help": "Ajoutez un rôle dont ce ticket a besoin au-delà du modèle (p. ex. designer, ingénieur sécurité). Si aucune ressource compétente n’est disponible, il est signalé comme lacune de ressource.",
+      "rolePlaceholder": "Sélectionnez un rôle…",
+      "notePlaceholder": "Pourquoi ce rôle est-il nécessaire ? (facultatif)",
+      "add": "Ajouter un rôle requis",
+      "materialize": "Créer des éléments de travail",
+      "materializeHelp": "Crée une sous-tâche par ressource pour que la progression remonte à ce ticket."
+    },
+    "contribution": {
+      "pr": "PR",
+      "run": "Exécution n° {id}",
+      "prd": "PRD r{revision}",
+      "test": "Test {id}",
+      "files": "{count, plural, one {# fichier} other {# fichiers}}"
+    },
+    "signoff": {
+      "action": "Valider",
+      "cancel": "Annuler",
+      "confirm": "Valider en tant que {role}",
+      "recording": "Enregistrement…",
+      "summaryPlaceholder": "Qu’avez-vous vérifié ? (facultatif)",
+      "reasonRequired": "Motif de la dérogation (obligatoire)",
+      "help": "Seul un membre compétent pour ce rôle peut le valider ; l’espace de travail enregistre qui a validé, quand et sur quelles preuves."
+    }
+  },
+  "rfpPage": {
+    "title": "Réponse à un appel d'offres",
+    "subtitle": "Répondez à un RFQ/RFP par une proposition co-brandée fondée sur votre portefeuille : inventaire des capacités, compte de résultat, plan de livraison et risques.",
+    "newRequest": "Nouvelle réponse",
+    "needDeveloper": "Nécessite le rôle Développeur",
+    "loading": "Chargement…",
+    "empty": "Aucune demande d'appel d'offres pour l'instant. Créez-en une pour rédiger une proposition co-brandée.",
+    "validation": "Un titre est requis.",
+    "creating": "Création…",
+    "create": "Créer et rédiger",
+    "cancel": "Annuler",
+    "noOrg": "Organisation sans nom",
+    "sourceNew": "Nouveau projet",
+    "sourceExisting": "Basée sur un projet",
+    "quoted": "Devis {price}",
+    "notGenerated": "Pas encore générée",
+    "scanFresh": "Scan récent",
+    "status": {
+      "draft": "Brouillon",
+      "analyzing": "Analyse",
+      "ready": "Prête",
+      "submitted": "Soumise"
+    },
+    "field": {
+      "title": "Titre",
+      "titlePlaceholder": "ex. Refonte du portail client",
+      "requesterOrg": "Organisation demandeuse",
+      "requesterOrgPlaceholder": "Qui a émis l'appel d'offres",
+      "requesterBrand": "Couleurs de marque du demandeur",
+      "requesterBrandHint": "La palette de l'entreprise demandeuse, fusionnée avec la vôtre dans la proposition.",
+      "primary": "Principale",
+      "secondary": "Secondaire",
+      "accent": "Accent",
+      "logoUrl": "URL du logo",
+      "requirements": "Exigences",
+      "requirementsPlaceholder": "Collez les exigences du RFP/RFQ…",
+      "sourceMode": "Fondement",
+      "project": "Projet",
+      "selectProject": "Sélectionnez un projet…",
+      "economics": "Économie",
+      "margin": "Marge",
+      "marketing": "Marketing",
+      "contingency": "Contingence"
+    },
+    "backToList": "Retour aux demandes",
+    "generating": "Génération…",
+    "regenerate": "Régénérer",
+    "generate": "Générer la réponse",
+    "generatingHint": "Exécution du scan avec contrôle de fraîcheur, mise en correspondance de votre portefeuille et rédaction de la proposition…",
+    "noResponseYet": "Aucune proposition générée pour l'instant. Cliquez sur Générer pour en rédiger une.",
+    "scanRefreshed": "Scan actualisé",
+    "scanCurrent": "Scan à jour",
+    "groundedOn": "Fondée sur {project}",
+    "greenfield": "Nouveau projet — proposé à partir des exigences",
+    "scanAge": "dernier scan il y a {days}j",
+    "sec": {
+      "summary": "Synthèse",
+      "capabilities": "Capacités et approche",
+      "economics": "Investissement et volet commercial",
+      "plan": "Plan de livraison",
+      "risks": "Risques clés",
+      "dependencies": "Dépendances",
+      "portfolio": "Projets similaires",
+      "document": "Proposition brandée"
+    },
+    "capabilitiesGreenfield": "Nouveau projet — les capacités sont proposées à partir des exigences.",
+    "col": {
+      "component": "Composant",
+      "responsibility": "Responsabilité"
+    },
+    "stack": "Stack",
+    "quotedPrice": "Prix proposé",
+    "marginNote": "{pct} % de marge · {weeks} semaines d'effort.",
+    "deliveryWindow": "Livraison : {start} → {end} ({weeks} semaines).",
+    "severity": {
+      "low": "Faible",
+      "medium": "Moyen",
+      "high": "Élevé"
+    },
+    "depType": {
+      "internal": "Interne",
+      "external": "Externe",
+      "third_party": "Tierce partie"
+    },
+    "downloadDoc": "Télécharger"
+  },
+  "planBadge": {
+    "tier": {
+      "free": "Free",
+      "pro": "Pro",
+      "teams": "Teams"
+    },
+    "freeHint": "Vous êtes sur le forfait Free — les conversations utilisent les modèles BuilderForce inclus. Cliquez pour voir les forfaits et passer à la version supérieure.",
+    "paidHint": "Votre espace de travail utilise le forfait {plan}. Cliquez pour gérer votre forfait.",
+    "tokensLeft": "{count} jetons restants",
+    "noTokens": "plus de jetons",
+    "upgrade": "Mettre à niveau"
+  },
+  "billing": {
+    "cardOnFileTitle": "Carte enregistrée",
+    "cardOnFileHint": "L'accès aux modèles premium est vérifié avec cette carte. La remplacer lance une nouvelle vérification à 0 $.",
+    "cardPendingHint": "Nous attendons la confirmation de votre banque. Les modèles premium seront débloqués dès validation.",
+    "cardNoDetails": "Détails de la carte indisponibles",
+    "cardStatusValidated": "Vérifiée",
+    "cardStatusPending": "Vérification…",
+    "cardStatusFailed": "Échec de la vérification",
+    "replaceCard": "Remplacer la carte",
+    "retryCard": "Réessayer",
+    "cardWorking": "En cours…",
+    "replaceCardTitle": "Remplacer votre carte ?",
+    "replaceCardWarning": "Votre carte actuelle reste active jusqu'à la vérification de la nouvelle : les modèles premium ne sont jamais interrompus. L'ancienne carte est supprimée automatiquement dès que la nouvelle est confirmée.",
+    "retryCardMessage": "Nous allons lancer une nouvelle vérification à 0 $. Votre carte n'est pas débitée.",
+    "replaceCardConfirm": "Continuer",
+    "cardValidationFailed": "Impossible de lancer la vérification de la carte. Veuillez réessayer.",
+    "removeCard": "Supprimer la carte",
+    "removeCardTitle": "Supprimer votre carte ?",
+    "removeCardWarning": "Les modèles premium seront désactivés et nous cesserons de conserver votre carte. Votre forfait et les modèles inclus continuent de fonctionner. Vous pouvez ajouter une carte à tout moment.",
+    "removeCardConfirm": "Supprimer la carte",
+    "removeCardFailed": "Impossible de supprimer la carte. Veuillez réessayer."
+  },
+  "policyPacks": {
+    "title": "Packs de politiques",
+    "subtitle": "Les garde-fous de gouvernance imposés à vos agents. Un garde-fou s’applique dès la prochaine exécution de son périmètre — le runtime le fait respecter à chaque appel d’outil.",
+    "newPack": "Nouveau pack",
+    "error": "Erreur : {message}",
+    "genericError": "Une erreur est survenue.",
+    "loading": "Chargement des packs de politiques…",
+    "empty": "Aucun pack de politiques pour l’instant. Créez-en un pour encadrer ce que vos agents peuvent faire.",
+    "effectiveTitle": "En vigueur actuellement",
+    "effectiveEmpty": "Aucun garde-fou ne s’applique à une exécution à l’échelle de l’espace de travail. Les agents ne sont pas encadrés.",
+    "effectiveCount": "{count, plural, one {# garde-fou s’applique} other {# garde-fous s’appliquent}} à une exécution à l’échelle de l’espace de travail.",
+    "enabled": "Activé",
+    "disabled": "Désactivé",
+    "noGates": "Aucun garde-fou dans ce pack.",
+    "remove": "Retirer",
+    "scopeTenant": "S’applique à tous les projets et agents",
+    "scopeProject": "Projet : {project}",
+    "scopeAgent": "Agent : {agent}",
+    "scopeProjectAgent": "{project} · {agent}",
+    "anyTool": "N’importe quel outil",
+    "fieldName": "Nom",
+    "fieldNamePlaceholder": "ex. Sécurité en production",
+    "fieldDescription": "Description",
+    "fieldProject": "Projet",
+    "allProjects": "Tous les projets",
+    "fieldAgent": "Agent",
+    "allAgents": "Tous les agents",
+    "fieldEnabled": "Le pack est activé",
+    "saving": "Enregistrement…",
+    "createPack": "Créer le pack",
+    "savePack": "Enregistrer",
+    "deletePack": "Supprimer le pack",
+    "deletePackTitle": "Supprimer le pack de politiques",
+    "deletePackConfirm": "Supprimer « {name} » et tous ses garde-fous ? Les agents n’y seront plus soumis.",
+    "gatesTitle": "Garde-fous",
+    "gatesHelp": "Chaque garde-fou correspond à un appel d’outil et décide de la suite : une instruction, une pause pour approbation, ou un refus.",
+    "addGateTitle": "Ajouter un garde-fou",
+    "fieldGateKey": "Identifiant",
+    "fieldGateKeyPlaceholder": "ex. no-shell-in-prod",
+    "fieldTool": "Outil",
+    "toolHelp": "Utilisez * pour encadrer tous les outils — c’est ainsi qu’on définit une posture de refus par défaut.",
+    "fieldEffect": "Effet",
+    "fieldDirective": "Instruction",
+    "fieldDirectivePlaceholder": "Ce que l’agent doit faire, en langage clair.",
+    "fieldReason": "Motif",
+    "fieldReasonPlaceholder": "Pourquoi c’est encadré — affiché à l’agent et à l’approbateur.",
+    "addGate": "Ajouter",
+    "deleteGateTitle": "Supprimer le garde-fou",
+    "deleteGateConfirm": "Supprimer le garde-fou « {key} » ?",
+    "effect": {
+      "inject-directive": "Instruire",
+      "require-approval": "Approuver",
+      "block": "Bloquer"
+    },
+    "effectHelp": {
+      "inject-directive": "Ajoute une instruction contraignante au prompt de l’agent. L’outil s’exécute quand même.",
+      "require-approval": "L’agent s’interrompt et demande l’accord d’un humain avant d’utiliser l’outil.",
+      "block": "L’agent refuse purement et simplement l’outil et explique pourquoi."
+    }
+  },
+  "ceremonySchedules": {
+    "title": "Cérémonies récurrentes",
+    "subtitle": "Lancez les mêlées et les plannings à intervalle régulier. Chaque cérémonie planifiée s’ouvre d’elle-même, table ronde déjà installée.",
+    "newSchedule": "Nouvelle planification",
+    "editSchedule": "Modifier la planification",
+    "empty": "Aucune cérémonie récurrente pour l’instant. Ajoutez une planification et votre mêlée démarrera toute seule.",
+    "enabled": "Active",
+    "paused": "En pause",
+    "pause": "Mettre en pause",
+    "resume": "Reprendre",
+    "colKind": "Cérémonie",
+    "colCadence": "Cadence",
+    "colNextRun": "Prochaine exécution",
+    "colLastRun": "Dernière exécution",
+    "colStatus": "Statut",
+    "colActions": "Actions",
+    "colRoster": "Table ronde",
+    "kind_standup": "Mêlée quotidienne",
+    "kind_planning": "Planification",
+    "scope_members": "Membres du projet",
+    "scope_roster": "Liste fixe",
+    "preset_weekdays9": "En semaine à 09h00",
+    "preset_weekdays10": "En semaine à 10h00",
+    "preset_daily9": "Tous les jours à 09h00",
+    "preset_mondays10": "Le lundi à 10h00",
+    "preset_fridays16": "Le vendredi à 16h00",
+    "presetCustom": "Planification personnalisée…",
+    "fieldKind": "Cérémonie",
+    "fieldCadence": "Fréquence",
+    "fieldCron": "Expression cron",
+    "cronHelp": "Cinq champs : minute, heure, jour du mois, mois, jour de la semaine. Le préréglage ci-dessus le remplit ; modifiez-le pour un cas plus précis.",
+    "fieldTimezone": "Fuseau horaire",
+    "fieldRoster": "Qui participe",
+    "rosterHelp": "« Membres du projet » installe toutes les personnes actives sur ce projet, celle qui a le moins parlé en premier. Une liste fixe installe toujours les mêmes personnes.",
+    "fieldMaxParticipants": "Nombre maximal de places",
+    "fieldTurnSeconds": "Secondes par tour de parole",
+    "turnSecondsPlaceholder": "Utiliser la valeur du tableau",
+    "fieldEnabled": "Planification active",
+    "enabledHelp": "Une planification en pause conserve ses réglages mais n’ouvre jamais de cérémonie.",
+    "fieldAutoDispatch": "Lancer le travail des agents à la fin de la cérémonie",
+    "autoDispatchHelp": "À la clôture de la session, les tickets de ce projet confiés à des agents leur sont automatiquement transmis.",
+    "confirmDelete": "Supprimer cette cérémonie récurrente ? Les sessions déjà tenues sont conservées.",
+    "errorLoad": "Impossible de charger les planifications.",
+    "errorSave": "Impossible d’enregistrer la planification.",
+    "errorDelete": "Impossible de supprimer la planification."
+  },
+  "permissionDebugger": {
+    "title": "Débogueur de permissions",
+    "copyAll": "Tout copier",
+    "copyAllHint": "Tout copier au format JSON",
+    "exportCsv": "Exporter en CSV",
+    "exportCsvHint": "Exporter au format CSV",
+    "close": "Fermer",
+    "role": "Rôle :",
+    "activeCount": "Actives : {granted} / {total} permissions",
+    "deniedCount": "{count} refusées",
+    "softGatedCount": "{count} en restriction souple",
+    "empty": "Aucune permission dans cette vue.",
+    "tab": {
+      "page": "Page",
+      "user": "Utilisateur",
+      "role": "Rôle",
+      "missing": "Manquantes"
+    },
+    "col": {
+      "permission": "Permission",
+      "status": "Statut",
+      "source": "Source",
+      "count": "Nombre",
+      "apiEndpoint": "Point de terminaison API"
+    },
+    "status": {
+      "granted": "ACCORDÉE",
+      "denied": "REFUSÉE",
+      "soft-gate": "RESTRICTION SOUPLE"
+    }
+  },
+  "githubActionsSurface": {
+    "notReadyTitle": "GitHub Actions n’est pas encore configuré pour ce projet",
+    "notReadyBody": "Le workflow d’agent Builderforce est absent du dépôt par défaut de ce projet : les exécutions basculeront donc vers l’exécuteur cloud durable. Ouvrez les paramètres Gestion de code source et choisissez « Activer les exécutions d’agents » sur le dépôt.",
+    "noGithubRepoBody": "Aucun dépôt GitHub n’est lié à ce projet, il n’y a donc nulle part où exécuter GitHub Actions. Les exécutions basculeront vers l’exécuteur cloud durable. Liez un dépôt GitHub dans les paramètres Gestion de code source."
+  },
+  "feedback": {
+    "page": {
+      "title": "Retours",
+      "subtitle": "Recueillez les demandes de fonctionnalités, les bugs et les idées, et examinez-les avant tout travail."
+    },
+    "tab": {
+      "label": "Retours",
+      "tooltip": "Envoyez-nous vos retours"
+    },
+    "kind": {
+      "feature": "Demande de fonctionnalité",
+      "bug": "Rapport de bug",
+      "idea": "Idée",
+      "other": "Autre chose"
+    },
+    "status": {
+      "new": "Nouveau",
+      "approved": "Approuvé",
+      "declined": "Refusé"
+    },
+    "form": {
+      "title": "Envoyez-nous vos retours",
+      "intro": "Dites-nous ce qui améliorerait l’outil. Demandes de fonctionnalités, bugs, idées à peine ébauchées : tout est bienvenu.",
+      "destination": "Va dans le backlog de {project} pour examen.",
+      "kind": "Type",
+      "summary": "Résumé",
+      "summaryPlaceholder": "Une ligne — que voulez-vous ?",
+      "details": "Détails",
+      "detailsPlaceholder": "Qu’essayez-vous de faire et qu’est-ce qui vous en empêche ?",
+      "gateNote": "Votre demande est enregistrée pour qu’une personne l’examine — rien n’est construit automatiquement.",
+      "submit": "Envoyer",
+      "submitting": "Envoi…",
+      "close": "Fermer",
+      "another": "En envoyer un autre",
+      "successTitle": "Merci",
+      "successBody": "Votre demande a été enregistrée pour examen par l’équipe.",
+      "errorRequired": "Veuillez décrire votre retour avant l’envoi.",
+      "errorGeneric": "Une erreur s’est produite lors de l’envoi. Veuillez réessayer."
+    },
+    "setup": {
+      "intro": "Un collecteur par projet — un seul extrait intégrable qui rassemble demandes de fonctionnalités, bugs et idées de n’importe quelle application dans le backlog de ce projet.",
+      "pickProject": "Sélectionnez un projet pour configurer son collecteur de retours.",
+      "enable": "Activer la collecte de retours",
+      "enableAction": "Activer",
+      "namePlaceholder": "Nom du collecteur",
+      "creating": "Création…",
+      "created": "Collecteur créé",
+      "dismiss": "Ignorer",
+      "keyOnce": "Copiez votre clé d’ingestion maintenant — elle n’est affichée qu’une fois et n’est jamais stockée.",
+      "ingestKey": "Clé d’ingestion",
+      "curlSnippet": "Tester avec curl",
+      "snippet": "Extrait à intégrer",
+      "endpoint": "Point de terminaison d’envoi",
+      "snippetNote": "Collez ceci dans n’importe quelle application pour ajouter un onglet de retour.",
+      "copy": "Copier",
+      "enabled": "Activé",
+      "paused": "En pause",
+      "pause": "Mettre en pause",
+      "resume": "Reprendre",
+      "delete": "Supprimer",
+      "confirmDelete": "Supprimer ce collecteur de retours ? L’extrait cessera d’accepter les envois.",
+      "lastSubmission": "Dernier envoi",
+      "options": "Options",
+      "autoCreateTask": "Ouvrir un ticket de backlog par envoi",
+      "autoCreateTaskHint": "Désactivé, les envois sont tout de même enregistrés et consultables, mais aucune carte n’est ajoutée au tableau.",
+      "dailyLimit": "Limite d’envois quotidienne",
+      "dailyLimitHint": "Envois acceptés depuis cet extrait par période glissante de 24 heures (plafond anti-abus).",
+      "allowedOrigins": "Origines autorisées",
+      "allowedOriginsHint": "Liste de sites séparés par des virgules autorisés à envoyer, ou * pour toutes.",
+      "loading": "Chargement…",
+      "loadFailed": "Échec du chargement du collecteur de retours.",
+      "createFailed": "Échec de la création du collecteur.",
+      "saveFailed": "Échec de l’enregistrement des modifications."
+    },
+    "triage": {
+      "intro": "Examinez chaque demande et approuvez-la pour autoriser le travail, ou refusez-la. Rien ne s’exécute avant votre approbation.",
+      "filter": "Afficher",
+      "statusAll": "Tous",
+      "loading": "Chargement…",
+      "loadFailed": "Échec du chargement des envois.",
+      "reviewFailed": "Échec de l’enregistrement de votre décision.",
+      "empty": "Aucun retour ici pour l’instant.",
+      "approve": "Approuver",
+      "decline": "Refuser",
+      "working": "Traitement…",
+      "confirmDecline": "Refuser cette demande ? Son ticket sera archivé hors du tableau.",
+      "gatedNote": "Demande externe — en attente de votre approbation. Aucun agent ne la prendra tant que vous ne l’aurez pas approuvée.",
+      "showMore": "Voir plus",
+      "showLess": "Voir moins"
+    },
+    "admin": {
+      "title": "Retours produit",
+      "subtitle": "Demandes de fonctionnalités, bugs et idées recueillis par les collecteurs de retours de chaque espace de travail."
+    }
+  },
+  "onboardingPill": {
+    "title": "Progression de la configuration du compte",
+    "ariaLabel": "Configuration du compte terminée à {pct}%",
+    "label": "Config. {pct}%",
+    "panelTitle": "Terminer la configuration du compte",
+    "progressLabel": "Progression de la configuration",
+    "percentDone": "{pct}% terminé",
+    "intro": "Complétez ces étapes pour tirer le meilleur parti de votre espace de travail. Votre progression est enregistrée au fur et à mesure.",
+    "statusDone": "Terminé",
+    "statusTodo": "À faire",
+    "continueSetup": "Continuer la configuration",
+    "reviewSetup": "Revoir la configuration"
+  },
+  "globalError": {
+    "collapse": "Réduire",
+    "expandDetails": "Afficher les détails",
+    "report": "Signaler à un projet",
+    "copyTicket": "Copier le ticket de support",
+    "dismiss": "Ignorer"
+  },
+  "reportError": {
+    "title": "Signaler une erreur",
+    "intro": "Enregistrez une erreur dans un projet. Elle apparaît dans le flux Qualité de ce projet, aux côtés des erreurs collectées automatiquement.",
+    "projectLabel": "Projet",
+    "projectPlaceholder": "Choisissez un projet…",
+    "titleLabel": "Titre",
+    "titlePlaceholder": "Résumé court (facultatif)",
+    "messageLabel": "Que s'est-il passé ?",
+    "messagePlaceholder": "Décrivez l'erreur, ce que vous faisiez et tout ce qui aide à la reproduire.",
+    "levelLabel": "Gravité",
+    "level_fatal": "Fatale",
+    "level_error": "Erreur",
+    "level_warning": "Avertissement",
+    "level_info": "Info",
+    "noProjects": "Vous n'avez pas encore de projet — créez-en un d'abord pour y signaler une erreur.",
+    "reported": "Erreur signalée au projet.",
+    "failed": "Impossible de signaler l'erreur.",
+    "cancel": "Annuler",
+    "submit": "Signaler l'erreur",
+    "submitting": "Envoi…"
+  },
+  "activate": {
+    "title": "Connectez votre éditeur",
+    "loading": "Chargement…",
+    "working": "Traitement…",
+    "redirecting": "Redirection vers la connexion…",
+    "confirmIntro": "Votre éditeur demande un accès. Vérifiez que ce code correspond à celui affiché dans VS Code :",
+    "approve": "Approuver",
+    "deny": "Refuser",
+    "approved": "✓ Approuvé. Retournez dans VS Code : la connexion se terminera automatiquement.",
+    "denied": "Demande refusée. Vous pouvez fermer cet onglet.",
+    "keyIntro": "Voici votre clé d’éditeur. Copiez-la et collez-la dans VS Code :",
+    "copyKey": "Copier la clé",
+    "copied": "✓ Copiée",
+    "keyFine": "Gardez cette clé secrète. Vous pouvez la révoquer à tout moment dans Paramètres → Clés API.",
+    "tryAgain": "Réessayer",
+    "errorNoTenant": "Votre compte n’a pas encore d’espace de travail. Créez-en un, puis réessayez.",
+    "errorAlreadyResolved": "Ce code a déjà été utilisé ou a expiré. Relancez la connexion depuis votre éditeur.",
+    "errorApprove": "Impossible d’approuver l’appareil ({status}).",
+    "errorDeny": "Impossible de refuser l’appareil ({status}).",
+    "errorCreateKey": "Impossible de créer une clé ({status}).",
+    "errorNetwork": "Erreur réseau. Veuillez réessayer.",
+    "errorNoKey": "Aucune clé renvoyée. Veuillez réessayer."
+  },
+  "marketingNav": {
+    "beta": "BÊTA",
+    "primaryNav": "Principale",
+    "home": "Accueil",
+    "product": "Produit",
+    "resources": "Ressources",
+    "talentWorkforce": "Talents / Main-d’œuvre",
+    "agents": "Agents",
+    "models": "Modèles",
+    "pricing": "Tarifs",
+    "blog": "Blog",
+    "diagnosticsTools": "Diagnostics et outils",
+    "soc2Audits": "SOC 2 et audits système",
+    "promptLibrary": "Bibliothèque de prompts",
+    "compare": "Comparer",
+    "integrations": "Intégrations",
+    "mediaKit": "Kit média",
+    "signIn": "Se connecter",
+    "getStarted": "Commencer →",
+    "toggleMenu": "Basculer le menu"
+  },
+  "media": {
+    "seo": {
+      "title": "Kit média — Présentation commerciale et supports marketing",
+      "description": "Téléchargez la présentation commerciale de Builderforce.ai en PDF prêt à imprimer ou PowerPoint, ainsi que chaque diapositive en PNG.",
+      "ogTitle": "Kit média Builderforce.ai"
+    },
+    "eyebrow": "Kit média",
+    "title": "La présentation Builderforce.ai — prête à partager.",
+    "intro": "Téléchargez la présentation du produit et de la plateforme au format qui vous convient : PDF prêt à imprimer, PowerPoint modifiable, ou chaque diapositive en PNG à insérer dans vos propres documents et publications.",
+    "deckAlt": "Diapositive de couverture de la présentation Builderforce.ai",
+    "download": "Télécharger",
+    "assets": {
+      "pdf": {
+        "name": "Présentation commerciale (PDF)",
+        "desc": "La vue d’ensemble complète du produit et de la plateforme en 26 diapositives — prête à imprimer et à envoyer."
+      },
+      "pptx": {
+        "name": "Présentation commerciale (PowerPoint)",
+        "desc": "La même présentation au format PPTX, à présenter ou à intégrer dans vos propres supports."
+      },
+      "slides": {
+        "name": "Toutes les diapositives (PNG)",
+        "desc": "Chaque diapositive en PNG 2560×1440 — partagez des diapositives individuelles comme supports marketing."
+      }
+    },
+    "usageNote": "Vous pouvez partager ces supports tels quels lorsque vous écrivez sur Builderforce.ai ou le présentez. Le nom et le logo Builderforce.ai restent des marques déposées ; merci de ne pas modifier les diapositives ni de suggérer une approbation officielle."
+  },
+  "authCallback": {
+    "title": "Échec de la connexion",
+    "backToLogin": "Retour à la connexion",
+    "signingIn": "Connexion en cours…",
+    "errorMissingParams": "Échec de l’authentification : paramètres manquants.",
+    "errorInvalidState": "Échec de l’authentification : état invalide ou expiré. Veuillez réessayer.",
+    "errorAuthFailed": "L’authentification auprès du fournisseur a échoué. Veuillez réessayer.",
+    "errorNoEmail": "Votre compte fournisseur n’a pas d’adresse e-mail vérifiée.",
+    "errorAccountNotFound": "Compte introuvable ou désactivé.",
+    "errorAccountSuspended": "Votre compte a été suspendu. Veuillez contacter l’assistance.",
+    "errorProviderUnavailable": "Ce fournisseur de connexion n’est pas disponible actuellement.",
+    "errorAlreadyLinkedOther": "Ce compte fournisseur est déjà connecté à un autre compte Builderforce.",
+    "errorUnexpected": "Une erreur inattendue s’est produite. Veuillez réessayer.",
+    "errorNoCode": "Aucun code de connexion reçu. Veuillez réessayer.",
+    "errorProfile": "Impossible de charger le profil de votre compte. Veuillez vous reconnecter."
+  },
+  "footer": {
+    "builtBy": "Conçu par",
+    "navLabel": "Pied de page",
+    "termsOfUse": "Conditions d’utilisation",
+    "privacyPolicy": "Politique de confidentialité",
+    "whatsNewHint": "Découvrir les nouveautés",
+    "colProduct": "Produit",
+    "colPlatform": "Plateforme",
+    "colGetStarted": "Commencer",
+    "linkProduct": "Produit",
+    "linkCompare": "Comparer",
+    "linkPricing": "Tarifs",
+    "linkMediaKit": "Kit média",
+    "linkEvermind": "Evermind LLM",
+    "linkWorkforceRegistry": "Registre de main-d’œuvre",
+    "linkAgents": "BuilderForce Agents",
+    "linkDiagnostics": "Diagnostics et outils",
+    "linkSoc2": "SOC 2 et audits système",
+    "linkBlog": "Blog",
+    "linkLiveDemo": "Démo en direct",
+    "linkSignIn": "Se connecter",
+    "linkGetStarted": "Commencer"
+  },
+  "whatsNew": {
+    "title": "Nouveautés",
+    "loading": "Chargement…",
+    "error": "Impossible de charger les nouveautés. Réessayez plus tard.",
+    "empty": "Aucune nouveauté pour l’instant — revenez bientôt.",
+    "categories": {
+      "new": "Nouveau",
+      "improvement": "Amélioré",
+      "fix": "Corrigé"
+    }
+  },
+  "demo": {
+    "personas": {
+      "ai-team": "Équipe logicielle IA",
+      "insights": "ROI et analyses d'ingénierie",
+      "pmo": "Centre de commande PMO",
+      "talent": "Talents et marketplace",
+      "governance": "Sécurité, architecture et gouvernance"
+    },
+    "bannerAria": "Commandes de la session démo",
+    "badge": "Démo en direct",
+    "bannerText": "Vous explorez une démo en direct — {name}",
+    "bookOrJoin": "Rejoindre ou réserver une démo",
+    "createAccount": "Créer un compte",
+    "exit": "Quitter la démo",
+    "convertTitle": "Faites-en votre espace de travail",
+    "convertLead": "Vous venez d'explorer la démo {persona} avec des données d'exemple. Créez un compte gratuit pour le faire avec vos propres projets, ou parlez à notre équipe.",
+    "benefit1": "Apportez vos dépôts, tickets et équipe",
+    "benefit2": "Des agents IA qui ouvrent de vraies pull requests",
+    "benefit3": "Gratuit pour commencer, sans carte",
+    "createAccountFree": "Créer un compte gratuit",
+    "talkToSales": "Parler aux ventes",
+    "bookLead": "Vous préférez une visite guidée ? Réservez une démo.",
+    "exitTitle": "Avant de partir",
+    "exitLead": "Envie de continuer avec vos propres données, ou que nous vous fassions une visite guidée ?",
+    "exitBookLead": "Réservez une démo avec notre équipe",
+    "showcase": {
+      "heading": "Essayez une démo en direct, sans inscription",
+      "lead": "Choisissez le scénario qui vous correspond et entrez directement dans un espace de travail prérempli. C'est le vrai produit, avec des données d'exemple.",
+      "launch": "Lancer la démo",
+      "launching": "Lancement…",
+      "error": "Impossible de démarrer la démo. Réessayez.",
+      "note": "Les démos sont partagées, réinitialisées régulièrement et ne nécessitent aucun compte. Vos modifications sont temporaires.",
+      "personas": {
+        "ai-team": {
+          "title": "Équipe logicielle IA",
+          "audience": "Pour les équipes d'ingénierie",
+          "desc": "Un tableau de sprint en direct où agents IA et humains se partagent le travail : voyez un agent prendre un ticket, le planifier et ouvrir une pull request."
+        },
+        "insights": {
+          "title": "ROI et analyses d'ingénierie",
+          "audience": "Pour les VP et CTO",
+          "desc": "Santé de livraison, impact de l'IA et coût par ticket : les chiffres qui montrent ce que rapporte vraiment la livraison assistée par IA."
+        },
+        "pmo": {
+          "title": "Centre de commande PMO",
+          "audience": "Pour les responsables de programme et de livraison",
+          "desc": "Une hiérarchie datée, de l'objectif d'entreprise jusqu'au ticket exécuté par l'agent : portefeuille, OKR, Gantt et cérémonies."
+        },
+        "talent": {
+          "title": "Talents et marketplace",
+          "audience": "Pour les agences et freelances",
+          "desc": "Un effectif mixte de vos équipes, de freelances recrutés et d'agents IA sur un même tableau : recrutez l'un ou l'autre via le même flux."
+        },
+        "governance": {
+          "title": "Sécurité, architecture et gouvernance",
+          "audience": "Pour la sécurité et la conformité",
+          "desc": "Un audit SOC 2 hebdomadaire qui crée des tickets de remédiation, une piste d'audit inaltérable et des contrôles de politique à chaque déploiement."
+        }
+      }
+    },
+    "tour": {
+      "ariaLabel": "Visite guidée du produit",
+      "welcomeTitle": "Bienvenue dans votre démo",
+      "finishTitle": "Tout est prêt",
+      "finishBody": "Voilà pour la visite rapide. Prêt à le faire avec vos propres projets et votre équipe ?",
+      "stepOf": "{current} sur {total}",
+      "takeTour": "Faire la visite",
+      "next": "Suivant",
+      "back": "Retour",
+      "skip": "Passer la visite",
+      "finish": "Terminer",
+      "close": "Fermer",
+      "getStarted": "Commencer gratuitement",
+      "welcome": {
+        "ai-team": "Voyons comment les agents IA travaillent comme de vrais coéquipiers sur un tableau partagé.",
+        "insights": "Voyons ce que coûte et rapporte vraiment la livraison assistée par IA.",
+        "pmo": "Voyons le parcours de l'objectif d'entreprise jusqu'au ticket exécuté par l'agent.",
+        "talent": "Voyons comment gérer vos équipes, freelances et agents IA sur un seul tableau.",
+        "governance": "Voyons l'audit SOC 2 continu, la remédiation et la piste d'audit."
+      },
+      "nav": {
+        "dashboard": {
+          "title": "Construisez n’importe quoi",
+          "body": "Décrivez ce que vous voulez en langage naturel et un agent IA commence à le construire, sans configuration."
+        },
+        "projects": {
+          "title": "Le tableau partagé",
+          "body": "Humains et agents IA sur un même tableau. Glissez un ticket vers Prêt et un agent le planifie, écrit le code et ouvre une pull request."
+        },
+        "workforce": {
+          "title": "Votre main-d’œuvre",
+          "body": "Les agents IA et les personnes sont des coéquipiers à part entière : affectez le travail, recrutez et gérez-les ensemble."
+        },
+        "insights": {
+          "title": "Analyses et ROI",
+          "body": "Santé de livraison, impact de l'IA et coût par ticket : voyez exactement ce que rapporte la livraison assistée par IA."
+        },
+        "quality": {
+          "title": "Qualité et fiabilité",
+          "body": "Erreurs, métriques DORA et QA automatisé pour ne rien livrer de cassé."
+        },
+        "knowledge": {
+          "title": "Connaissances et gouvernance",
+          "body": "SOP, processus et politiques avec versionnage et accusé de lecture comme preuve d'audit."
+        }
+      }
+    }
+  },
+  "bookDemo": {
+    "badge": "Contactez-nous",
+    "pageTitle": "Réserver une démo",
+    "pageLead": "Découvrez Builderforce sur votre propre cas d’usage avec notre équipe, ou lancez dès maintenant une démo en libre-service.",
+    "formHeading": "Planifier avec les ventes",
+    "formSub": "Parlez-nous un peu de vous et nous vous contacterons pour organiser une visite guidée.",
+    "selfServeHeading": "Ou essayez-le vous-même",
+    "selfServeSub": "Sans inscription ni attente : explorez un espace de démo prérempli.",
+    "selfServe1": "Vrai produit, vraies données d’exemple",
+    "selfServe2": "Cinq scénarios pour cinq types d’acheteur",
+    "selfServe3": "Convertissez en votre compte à tout moment",
+    "selfServeCta": "Voir les démos en direct",
+    "nameLabel": "Nom",
+    "namePlaceholder": "Votre nom",
+    "emailLabel": "E-mail professionnel",
+    "emailPlaceholder": "vous@entreprise.com",
+    "companyLabel": "Entreprise",
+    "companyPlaceholder": "Nom de l’entreprise",
+    "interestLabel": "Je suis intéressé par",
+    "interestAny": "Je ne sais pas encore",
+    "messageLabel": "Quelque chose à nous signaler ?",
+    "messagePlaceholder": "Vos objectifs, la taille de l’équipe, le calendrier…",
+    "submit": "Demander une démo",
+    "submitting": "Envoi…",
+    "error": "Une erreur est survenue. Réessayez.",
+    "successTitle": "Merci, nous vous recontacterons",
+    "successBody": "Notre équipe vous contactera sous peu pour planifier votre visite guidée.",
+    "personas": {
+      "ai-team": "Équipe logicielle IA",
+      "insights": "ROI et analyses d'ingénierie",
+      "pmo": "Centre de commande PMO",
+      "talent": "Talents et marketplace",
+      "governance": "Sécurité, architecture et gouvernance"
+    }
+  },
+  "ceremonyHistory": {
+    "loading": "Chargement…",
+    "errorLoad": "Impossible de charger l’historique des cérémonies.",
+    "filterAll": "Toutes",
+    "filterStandup": "Mêlées",
+    "filterPlanning": "Planification",
+    "count": "{count} enregistrées",
+    "emptyTitle": "Aucune cérémonie n’a encore eu lieu",
+    "emptyHelp": "Dès qu’une mêlée ou une session de planification se termine, elle apparaît ici avec les présents et ce qui a changé.",
+    "loadMore": "Charger les précédentes",
+    "durationMinutes": "{minutes} min",
+    "attended": "{present} sur {expected} présents",
+    "missed": "{count} absents",
+    "reassigned": "{count} réattribuées",
+    "dispatched": "{count} exécutions d’agent lancées",
+    "detailTitle": "{kind} · {when}",
+    "whoWasHere": "Qui était présent",
+    "whatHappened": "Ce qui s’est passé",
+    "noParticipants": "Personne n’était installé à cette cérémonie.",
+    "noJournal": "Rien n’a été enregistré pour cette cérémonie.",
+    "seatHuman": "Personne",
+    "seatAgent": "Agent",
+    "seatAdHoc": "venu spontanément",
+    "spoke": "a parlé {seconds} s",
+    "kind": {
+      "standup": "Mêlée",
+      "planning": "Planification"
+    },
+    "closeReason": {
+      "facilitator": "Clôturée par une personne",
+      "unattended": "Menée par le manager",
+      "no_humans": "Personne n’est venu",
+      "expired": "Expirée"
+    },
+    "concludedBy": {
+      "manager": "Menée par le manager",
+      "system": "Clôturée automatiquement"
+    },
+    "attendance": {
+      "unknown": "Inconnu",
+      "present": "Présent",
+      "absent": "Absent",
+      "excused": "Facultatif"
+    },
+    "errorCorrect": "Impossible de mettre à jour la présence.",
+    "correctAria": "Présence de {name}",
+    "sourcePto": "En congé approuvé",
+    "sourceManual": "Corrigé par un manager"
+  },
+  "observability": {
+    "agents": "Agents",
+    "agentsHint": "Cliquez sur un agent pour afficher ses diagnostics. Sélectionnez-en plusieurs pour comparer.",
+    "selectAll": "Tout sélectionner",
+    "clear": "Effacer",
+    "loadingAgents": "Chargement des agents…",
+    "agentFallback": "Agent",
+    "agentNumbered": "Agent {id}",
+    "cloudAgentFallback": "Agent cloud",
+    "scopedFromPanel": "{name} (limité depuis le panneau)",
+    "noAgents": "Aucun agent pour le moment. Enregistrez un agent auto-hébergé dans <link>Effectif</link> ou créez un agent cloud — les deux apparaîtront ici dès leur première exécution.",
+    "online": "EN LIGNE",
+    "offline": "HORS LIGNE",
+    "viewLabel": "Vue :",
+    "logView": "Vue journaux",
+    "timelineView": "Vue chronologie",
+    "conn": {
+      "connecting": "connexion",
+      "connected": "connecté",
+      "offline": "hors ligne",
+      "disconnected": "déconnecté"
+    },
+    "refreshing": "Actualisation…",
+    "refreshCloud": "Actualiser le cloud",
+    "autoScroll": "Défilement automatique",
+    "copyTriage": "Copier les infos de triage",
+    "copyReport": "Copier le rapport (+diffs)",
+    "copyTriageTitle": "Copier dans le presse-papiers un rapport de triage complet (agents, télémétrie, erreurs, journaux)",
+    "copyReportTitle": "Copier dans le presse-papiers un rapport complet — supports/PRD, les modifications de code (diffs), la télémétrie, les erreurs et les journaux",
+    "cloudNote": "Les agents cloud s’exécutent côté serveur via la passerelle (pas de flux relais en direct) ; leurs lignes de journal sont dérivées de la télémétrie d’exécution. Utilisez « Actualiser le cloud » pour obtenir les données les plus récentes.",
+    "registerThenSelect": "Enregistrez ou créez d’abord un agent, puis sélectionnez-le ci-dessus.",
+    "selectForLogs": "Sélectionnez un ou plusieurs agents ci-dessus pour afficher les diagnostics.",
+    "waitingForLogs": "En attente de sortie de journal…",
+    "timeline": "Chronologie",
+    "categoryFilterPlaceholder": "Filtre de catégorie (ex. llm, thinking)",
+    "refresh": "Actualiser",
+    "viewGantt": "Gantt",
+    "viewList": "Liste",
+    "loadingTimeline": "Chargement de la chronologie…",
+    "noTimelineEvents": "Aucun événement dans la chronologie",
+    "noTimelineHint": "Les événements d’audit d’appels d’outils et les tâches de workflow apparaîtront ici dès que les agents s’exécuteront.",
+    "registerFirst": "Enregistrez ou créez d’abord un agent.",
+    "goToWorkforce": "Aller à Effectif →",
+    "selectForTimeline": "Sélectionnez un ou plusieurs agents ci-dessus pour afficher la chronologie d’exécution.",
+    "errLoadAgents": "Échec du chargement des agents",
+    "errLoadDiagnostics": "Échec du chargement des diagnostics"
+  },
+  "embedInstall": {
+    "heading": "Installer dans votre application hôte",
+    "intro": "Un développeur de l’application hôte installe le paquet et affiche un composant par page, en transmettant votre JWT SSO/locataire signé. Le jeton est remis à l’iframe via <code>postMessage</code> — jamais dans une URL.",
+    "stepInstall": "1 · Installer",
+    "stepMount": "2 · Monter une surface",
+    "mountableViews": "Vues montables ({count})",
+    "noCapabilities": "Aucune capacité activée — activez Produit / Agile / Sécurité ci-dessus pour exposer des vues.",
+    "copyInstall": "Copier l’installation",
+    "copySnippet": "Copier l’extrait",
+    "copiedFlash": "✓ Copié"
+  },
+  "ticketContext": {
+    "thisTicket": "Ce ticket",
+    "thisEpic": "Cette épopée",
+    "parentEpic": "Épopée parente",
+    "signoffs": "Validations",
+    "basisLane": "Étape {index} sur {total}",
+    "basisSignoff": "{done} sur {total} validées",
+    "basisChildren": "{done} sur {total} sous-éléments terminés",
+    "basisWeight": "poids de {weight} %",
+    "partOfEpic": "Fait partie de l’épopée",
+    "epicChildren": "{done} sur {total} éléments terminés",
+    "waitingOn": "En attente de",
+    "gapsOnly": "{count, plural, one {# écart de responsabilité} other {# écarts de responsabilité}}",
+    "dispatchReviewers": "Envoyer les relecteurs",
+    "dispatching": "Envoi…",
+    "reviewSignoffs": "Voir les validations",
+    "objective": "Objectif",
+    "noObjective": "Aucun objectif lié. Liez-le depuis le tableau Planification pour rendre sa valeur mesurable.",
+    "objectiveAttained": "atteint",
+    "objectiveShare": "Ce ticket représente <b>{share} %</b> de la livraison liée à cet objectif ({done} sur {total} terminés).",
+    "objectiveInherited": "Hérité du périmètre de ce ticket — aucun lien de livraison direct.",
+    "via": {
+      "task": "Lié directement",
+      "epic": "Via l’épopée",
+      "project": "Objectif du projet",
+      "initiative": "Objectif de l’initiative"
+    }
+  },
+  "agentOps": {
+    "loading": "Chargement…",
+    "close": "Fermer",
+    "genericError": "Une erreur est survenue.",
+    "coordination": {
+      "title": "Coordination",
+      "subtitle": "Plusieurs agents peuvent traiter le même ticket en même temps et partager une seule branche. Voici qui détient quels fichiers en ce moment, et les notes qu’ils se laissent.",
+      "ticketLabel": "Numéro de ticket",
+      "ticketPlaceholder": "ex. 412",
+      "inspect": "Inspecter le ticket",
+      "empty": "Saisissez un numéro de ticket pour voir quels fichiers ses agents détiennent et ce qu’ils se sont dit.",
+      "leasesTitle": "Fichiers détenus actuellement",
+      "noLeases": "Aucun agent ne détient de fichier sur ce ticket.",
+      "notesTitle": "Espace de travail partagé",
+      "noNotes": "Aucun agent n’a laissé de note sur ce ticket.",
+      "resource": "Fichier",
+      "holder": "Détenu par",
+      "mode": "Verrou",
+      "reason": "Motif",
+      "exclusive": "Exclusif",
+      "shared": "Partagé",
+      "release": "Libérer de force",
+      "releaseTitle": "Libérer ce fichier de force ?",
+      "releaseConfirm": "{holder} détient encore {resource}. Le libérer permet à un autre agent d’écrire immédiatement dans le fichier — ne le faites que si vous savez que le détenteur s’est arrêté."
+    },
+    "memory": {
+      "title": "Mémoire",
+      "subtitle": "Tout ce que vos agents tiennent pour vrai, avec la portée de chaque croyance, son origine et le moment où elle cesse d’être vraie. Affiché selon la portée du projet courant — exactement ce qu’un agent exécuté ici pourrait rappeler.",
+      "tableTitle": "Faits mémorisés",
+      "empty": "Vos agents n’ont encore enregistré aucun fait dans cette portée.",
+      "key": "Clé",
+      "fact": "Fait",
+      "scope": "Portée",
+      "origin": "Provenance",
+      "expiry": "Expire",
+      "durable": "Jamais",
+      "lapsed": "Expiré",
+      "fromRun": "exécution n° {id}",
+      "scopeTenant": "Tout l’espace de travail",
+      "scopeProject": "Ce projet",
+      "scopeTicket": "Ticket n° {id}",
+      "forget": "Oublier",
+      "forgetTitle": "Oublier ce fait ?",
+      "forgetConfirm": "Les agents cesseront de rappeler « {key} ». S’il existe une version plus large de la même clé, celle-ci redeviendra visible.",
+      "purge": "Purger les expirés",
+      "purgeTitle": "Purger les faits expirés ?",
+      "purgeConfirm": "Supprime les faits dont l’expiration est passée. Les agents avaient déjà cessé de les rappeler, donc rien ne change pour une exécution.",
+      "statTotal": "Faits dans la portée",
+      "statTotalHint": "Ce qu’un agent exécuté ici peut rappeler.",
+      "statScoped": "Portée restreinte",
+      "statScopedHint": "Faits qui restent dans ce projet ou sur un seul ticket.",
+      "statExpiring": "Avec expiration",
+      "statExpiringHint": "Faits limités dans le temps, qui expireront d’eux-mêmes.",
+      "statLapsed": "Déjà expirés",
+      "statLapsedHint": "Plus rappelés ; en attente de nettoyage."
+    },
+    "rehearsal": {
+      "title": "Répétition",
+      "subtitle": "Exécutez réellement un agent sur un ticket, tous les effets supprimés — aucun commit, aucune pull request, aucune écriture en mémoire, personne d’alerté — puis lisez ce qu’il aurait fait.",
+      "startTitle": "Lancer une répétition",
+      "kind": "Type",
+      "kindDryRun": "À blanc",
+      "kindReplay": "Rejeu",
+      "kindTrial": "Essai",
+      "ticket": "Ticket",
+      "ticketPlaceholder": "ex. 412",
+      "agent": "Agent",
+      "agentPlaceholder": "Laissez vide pour utiliser l’agent affecté au ticket",
+      "startHint": "Une répétition consomme des jetons de modèle : elle est donc limitée à une exécution courte. Un essai répète le même agent sur les tickets récemment mis à jour de ce projet.",
+      "start": "Lancer la répétition",
+      "running": "En cours…",
+      "historyTitle": "Répétitions passées",
+      "empty": "Aucune répétition pour l’instant. Lancez-en une avant de modifier un prompt, un pack de règles ou un modèle épinglé.",
+      "wouldWrite": "Aurait écrit",
+      "stepCount": "{count} effets",
+      "outcome": "Résultat",
+      "finished": "Terminé",
+      "unfinished": "Étapes épuisées",
+      "failed": "Échec",
+      "viewReport": "Rapport",
+      "reportTitle": "Ce que l’agent aurait fait",
+      "frozenAt": "Dépôt lu à",
+      "suppressedTitle": "Effets supprimés",
+      "noSteps": "L’agent n’a produit aucun effet : il n’a ni écrit de code ni rien enregistré."
+    }
   }
 }

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
+import { downloadText } from '@/lib/download';
 import { errText, useAdminData, AdminError, AdminLoading } from '@/components/admin/adminShared';
 
 export default function PermissionsPanel() {
@@ -14,6 +15,14 @@ export default function PermissionsPanel() {
   const [permSaving, setPermSaving] = useState(false);
 
   if (loading && !permMatrix) return <AdminLoading />;
+
+  /**
+   * Permissions the API reports as backed by a real request-time gate. The rest
+   * are gated by the ROLE ladder alone, so an override on them changes this table
+   * and nothing else — the badge says so rather than letting the screen imply
+   * control the platform does not have.
+   */
+  const enforced = new Set(permMatrix?.enforced ?? []);
 
   return (
     <div>
@@ -29,11 +38,7 @@ export default function PermissionsPanel() {
                 onClick={async () => {
                   try {
                     const csv = await adminApi.permissionsMatrixExport();
-                    const blob = new Blob([csv], { type: 'text/csv' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url; a.download = 'permissions-matrix.csv'; a.click();
-                    URL.revokeObjectURL(url);
+                    downloadText(csv, 'permissions-matrix.csv', 'text/csv');
                   } catch (e) { setError(errText(e)); }
                 }}
               >
@@ -42,6 +47,17 @@ export default function PermissionsPanel() {
               <button type="button" className="admin-tab" onClick={() => reload()}>↻ {t('common.refresh')}</button>
             </div>
           </div>
+          <p
+            style={{
+              margin: '0 0 12px',
+              fontSize: 13,
+              lineHeight: 1.5,
+              color: 'var(--text-secondary, #6b7280)',
+              maxWidth: '72ch',
+            }}
+          >
+            {t('permissions.enforcementNote')}
+          </p>
           <div style={{ overflowX: 'auto' }}>
             <table className="data-table" style={{ minWidth: 600 }}>
               <thead>
@@ -93,9 +109,32 @@ export default function PermissionsPanel() {
                 </tr>
               </thead>
               <tbody>
-                {permMatrix.permissions.map((perm) => (
+                {permMatrix.permissions.map((perm) => {
+                  const isEnforced = enforced.has(perm);
+                  return (
                   <tr key={perm}>
-                    <td style={{ fontFamily: 'var(--font-mono,monospace)', fontSize: 12 }}>{perm}</td>
+                    <td style={{ fontSize: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontFamily: 'var(--font-mono,monospace)' }}>{perm}</span>
+                        <span
+                          title={isEnforced ? t('permissions.enforcedHint') : t('permissions.advisoryHint')}
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em',
+                            padding: '2px 6px',
+                            borderRadius: 4,
+                            whiteSpace: 'nowrap',
+                            color: isEnforced ? 'var(--success-text, #166534)' : 'var(--text-secondary, #6b7280)',
+                            background: isEnforced ? 'var(--success-bg, rgba(34,197,94,0.15))' : 'var(--surface-2, rgba(127,127,127,0.12))',
+                            border: `1px solid ${isEnforced ? 'var(--success-border, rgba(34,197,94,0.35))' : 'var(--border, rgba(127,127,127,0.3))'}`,
+                          }}
+                        >
+                          {isEnforced ? t('permissions.enforced') : t('permissions.advisory')}
+                        </span>
+                      </div>
+                    </td>
                     {permMatrix.roles.map((r) => {
                       const granted = permEditRole === r
                         ? permEditOverrides[perm] ?? false
@@ -109,7 +148,10 @@ export default function PermissionsPanel() {
                               onChange={(e) => setPermEditOverrides((prev) => ({ ...prev, [perm]: e.target.checked }))}
                             />
                           ) : (
-                            <span style={{ color: granted ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
+                            <span
+                              aria-label={granted ? t('permissions.granted') : t('permissions.denied')}
+                              style={{ color: granted ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)', fontWeight: 600 }}
+                            >
                               {granted ? '✓' : '✗'}
                             </span>
                           )}
@@ -117,7 +159,8 @@ export default function PermissionsPanel() {
                       );
                     })}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../observability/caughtErrorReporter';
 /**
  * Multi-vendor LLM gateway — type system, error classes, and shared transport.
  *
@@ -12,11 +13,14 @@
  */
 
 import { applyPromptCaching } from '../promptCaching';
+import type { ReasoningParamOpts } from '../reasoningCapability';
 import { parseSseDataLine } from '../sseFrames';
+
+import type { AgentExecParams } from '@builderforce/agent-tools';
 
 export type VendorId =
   // ── Bespoke wire-format vendors (hand-rolled modules)
-  | 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic'
+  | 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic' | 'openai-codex' | 'xai-oauth'
   // ── Our OWN model: serves a published `.evermind` artifact from R2 via the
   //    builderforce-memory runtime (on-CPU, in-Worker). Reached only via an
   //    explicit `evermind/<ref>` pin (autoRoute:false). See vendors/evermind.ts.
@@ -26,11 +30,14 @@ export type VendorId =
   //    ride the shared transport. Reachable via an explicit `<vendor>/<id>` pin
   //    (autoRoute:false — they don't pollute the auto-selected FREE/PRO pools) and
   //    participate in the same dispatch/cooldown/fallback machinery as the rest.
-  | 'openai' | 'groq' | 'deepseek' | 'mistral' | 'together' | 'fireworks'
-  | 'deepinfra' | 'xai' | 'perplexity' | 'moonshot' | 'hyperbolic' | 'novita'
+  | 'openai' | 'groq' | 'deepseek' | 'mistral' | 'together' | 'fireworks' | 'qwen'
+  | 'deepinfra' | 'xai' | 'perplexity' | 'moonshot' | 'kimi-code' | 'hyperbolic' | 'novita'
   | 'sambanova' | 'lepton' | 'anyscale' | 'octoai' | 'featherless' | 'inferencenet'
   | 'targon' | 'avian' | 'nebius' | 'baseten' | 'lambda' | 'klusterai'
-  | 'parasail' | 'nscale' | 'chutes' | 'ai21' | 'siliconflow' | 'minimax';
+  | 'parasail' | 'nscale' | 'chutes' | 'ai21' | 'siliconflow' | 'minimax'
+  // ── BYO-only vendor: no operator pool key; only reachable when a tenant
+  //    connects their own Meta AI account from the provider-keys settings page.
+  | 'meta';
 
 /**
  * Tier classification per model — drives pricing, plan gating, and the
@@ -48,7 +55,14 @@ export type AiModelTier = 'FREE' | 'STANDARD' | 'PREMIUM' | 'ULTRA';
  * and synthesizing this env per call — vendors don't know about plans.
  */
 export interface VendorEnv {
+  OPENAI_CODEX_AUTH?: string | null;
+  XAI_OAUTH_TOKEN?: string | null;
   OPENROUTER_API_KEY?: string | null;
+  /** Optional per-model tenant OpenRouter keys. Keys are indexed by the BARE
+   * OpenRouter model id (`anthropic/claude-...`). The registry resolves this
+   * before the shared key so several named connections can safely use different
+   * OpenRouter accounts in one cascade. */
+  OPENROUTER_MODEL_KEYS?: Readonly<Record<string, string>> | null;
   CEREBRAS_API_KEY?: string | null;
   OLLAMA_API_KEY?: string | null;
   NVIDIA_API_KEY?: string | null;
@@ -58,7 +72,7 @@ export interface VendorEnv {
   /** Anthropic (Claude) API key — direct call to api.anthropic.com/v1/messages.
    *  The last-resort reliability floor for cloud CODING runs: when every
    *  OpenRouter-routed paid coder is unreachable, the coding cascade falls back to
-   *  Claude directly on this key (claude-sonnet-4-6 → claude-opus-4-8). */
+   *  Claude directly on this key (claude-sonnet-5 → claude-opus-4-8). */
   CLAUDE_API_KEY?: string | null;
   /** A connected tenant's Claude Pro/Max SUBSCRIPTION access token (OAuth). When
    *  set, the `anthropic` vendor authenticates with `Authorization: Bearer` + the
@@ -103,6 +117,9 @@ export interface VendorEnv {
   PERPLEXITY_API_KEY?: string | null;
   /** Moonshot AI (Kimi) — api.moonshot.cn/v1. */
   MOONSHOT_API_KEY?: string | null;
+  /** Kimi Code subscription — api.kimi.com/coding/v1 (not interchangeable with Moonshot keys). */
+  KIMI_CODE_API_KEY?: string | null;
+  QWEN_API_KEY?: string | null;
   /** Hyperbolic — api.hyperbolic.xyz/v1. */
   HYPERBOLIC_API_KEY?: string | null;
   /** Novita AI — api.novita.ai/v3/openai. */
@@ -143,6 +160,11 @@ export interface VendorEnv {
   SILICONFLOW_API_KEY?: string | null;
   /** MiniMax — api.minimax.io/v1. */
   MINIMAX_API_KEY?: string | null;
+  /** Meta AI (MUSE) — api.meta.ai/v1. BYO-only: populated exclusively from a
+   *  tenant's connected Meta AI provider key (settings → Bring your own models).
+   *  No operator-level key exists; when unset the `meta` vendor is skipped by the
+   *  cascade exactly like any other unbound vendor. */
+  META_API_KEY?: string | null;
 }
 
 export interface VendorCallParams {
@@ -156,6 +178,20 @@ export interface VendorCallParams {
   topP?: number;
   /** Vendor-specific passthrough. Last write wins over the standard fields above. */
   extraBody?: Record<string, unknown>;
+  /**
+   * Vendor-NEUTRAL reasoning intent (the `AgentExecParams` lever a persona or the
+   * client's `reasoning: { level }` produced) — NOT a pre-computed vendor param.
+   *
+   * A dispatch carries a model CHAIN, and `dispatchInternal` walks it on failover, so a
+   * param derived once from the chain head would ride onto whatever model the cascade
+   * lands on (a Cloudflare/deepseek/qwen coder would 400 on Anthropic `thinking`).
+   * Carrying the INTENT instead lets the chain walk derive the CORRECT param per
+   * candidate via the single `reasoningParamsForModel` mapping, merging it into that one
+   * attempt's `extraBody` — and emitting nothing at all for a family that doesn't
+   * support reasoning. `dispatchInternal` CONSUMES this field: it is stripped before the
+   * vendor call, so no `VendorModule` ever receives it.
+   */
+  reasoningIntent?: { execParams: AgentExecParams } & ReasoningParamOpts;
   /** Prompt-cache breakpoint retention for caching-capable (Anthropic-family)
    *  models: `'5m'` (default ephemeral) or `'1h'` (long retention, ~2x write
    *  cost). Carried from a caller's `_builderforce.cacheTtl` hint; only the
@@ -244,6 +280,19 @@ export interface VendorModule {
    * removing it from the catalog, so explicit `ollama/<id>` pins still resolve.
    */
   autoRoute?: boolean;
+  /**
+   * Whether this vendor can execute FUNCTION/TOOL CALLING at all. Default `true`.
+   *
+   * Set `false` for a backend that has no tool-call machinery whatsoever (our own
+   * `evermind` SSM: it generates raw text and cannot emit structured `tool_calls`).
+   * A tool-less vendor that is handed `tools` does not fail — it just answers in
+   * prose — so an agent loop pinned to it NARRATES the calls it can never make and
+   * silently does no work. That is not a model quirk to diagnose after the fact; it
+   * is a routing error, so this flag is the ONE declaration every caller consults
+   * via {@link import('./registry').modelSupportsTools} before pinning a model onto
+   * a tool-driven run, and the vendor itself hard-rejects a tool-bearing request.
+   */
+  supportsTools?: boolean;
   /**
    * Per-vendor JSON-Schema dialect compatibility. When set, the gateway strips
    * `stripKeywords` from a consumer-supplied `response_format.json_schema.schema`
@@ -475,17 +524,31 @@ export const CASCADE_STATUSES: ReadonlySet<number> = new Set<number>([
 export const AUTH_STATUSES: ReadonlySet<number> = new Set<number>([401, 403]);
 
 /**
- * True when a non-OK 4xx body is a CAPACITY / billing condition — a usage cap,
- * spend limit, low credit balance, or exhausted quota — rather than a malformed
- * request. Several upstreams return these as HTTP **400** (not 429): Anthropic
- * emits `invalid_request_error` "You have reached your specified API usage
- * limits" / "Your credit balance is too low to access the Anthropic API", and
- * OpenAI-shaped vendors use `insufficient_quota` / "exceeded your current
- * quota". These are NOT payload bugs — the *request* is fine and a DIFFERENT
- * vendor can serve it — so the cascade must fail over (and cool this vendor)
- * instead of hard-failing the run with a misleading 400. (Fix: a cloud coding
- * run flooring onto the direct-Anthropic backstop died with a fatal 400 when
- * that account hit its monthly usage cap, never failing over — execution #73.)
+ * True when a non-OK 4xx body is a CAPACITY / BILLING / ACCOUNT condition — a
+ * usage cap, spend limit, low credit balance, exhausted quota, unverified payment
+ * method or a suspended/inactive account — rather than a malformed request.
+ *
+ * Several upstreams return these as HTTP **400** (not 429 or 402): Anthropic emits
+ * `invalid_request_error` "You have reached your specified API usage limits" /
+ * "Your credit balance is too low to access the Anthropic API", OpenAI-shaped
+ * vendors use `insufficient_quota` / "exceeded your current quota", and Meta
+ * answers "Billing verification failed. Please check your payment method."
+ *
+ * None are payload bugs — the *request* is fine and a DIFFERENT vendor can serve
+ * it — so the cascade must fail over (and cool this vendor) instead of hard-failing
+ * the run with a misleading 400. (Fix 1: a cloud coding run flooring onto the
+ * direct-Anthropic backstop died with a fatal 400 when that account hit its monthly
+ * usage cap, never failing over — execution #73. Fix 2: a tenant's Meta BYO account
+ * failed billing verification and, because that 400 classified as request_error —
+ * "the caller's bug" — every run routed to it died terminally with the account
+ * FIRST in that tenant's BYO precedence, instead of standing the vendor down and
+ * moving on — task 683, execution #4259.)
+ *
+ * The account-unusable half is deliberately grouped with capacity rather than with
+ * `auth`: a dead payment method does not recover inside the 5-minute transient
+ * window any more than a monthly cap does, and the capacity class already carries
+ * the right response — a 60-minute backoff that trips the VENDOR cooldown on the
+ * first strike, because one unusable account is unusable for every model on it.
  */
 /**
  * Stable marker embedded in the retryable error a capacity/billing limit raises
@@ -499,9 +562,37 @@ export const CAPACITY_LIMIT_MARKER = 'capacity/usage limit';
 
 export function isCapacityLimitBody(text: string | undefined | null): boolean {
   if (!text) return false;
-  return /usage\s+limit|credit\s+balance|insufficient[_\s-]?quota|exceeded\s+your\s+(current\s+)?quota|spend(ing)?\s+limit|billing\s+(hard\s+)?limit|reached\s+your[^.]*\blimit/i.test(
+  return (
+    /usage\s+limit|weekly\b[^.]{0,40}\blimit|hit\s+(?:your|the)\b[^.]{0,40}\blimit|credit\s+balance|extra\s+usage\s+credits|insufficient[_\s-]?quota|exceeded\s+your\s+(current\s+)?quota|(?:usage\s+)?allowance\b[^.]{0,30}\b(depleted|exhausted|used)|spend(ing)?\s+limit|billing\s+(hard\s+)?limit|reached\s+your[^.]*\blimit/i.test(text)
+    || isAccountUnusableBody(text)
+  );
+}
+
+/**
+ * True when a 4xx body says the ACCOUNT itself cannot serve requests — billing
+ * unverified, no payment method, subscription inactive, account suspended or
+ * deactivated. Split out from the usage-cap patterns above because the two read
+ * differently even though they earn the identical response (fail over + long
+ * vendor cooldown), and because a reader tracing "why did my BYO key stop being
+ * used" needs to find this list by name.
+ *
+ * Deliberately requires an explicit billing/account signal: a bare "invalid
+ * request" or a validation error naming a parameter must stay a request_error, or
+ * a genuine payload bug would be silently retried across every vendor in the chain.
+ */
+export function isAccountUnusableBody(text: string | undefined | null): boolean {
+  if (!text) return false;
+  return /billing\s+(verification|is\s+not|not)\b|verify\s+your\s+billing|payment\s+(method|details|information)|payment\s+required|add\s+a\s+payment|no\s+active\s+subscription|subscription\s+(has\s+)?(expired|inactive|cancell?ed)|account\b[^.]{0,24}?\b(suspended|deactivated|disabled|not\s+active|inactive)|not\s+been\s+activated|access\s+(is\s+)?(suspended|revoked)/i.test(
     text,
   );
+}
+
+/** Some OpenRouter upstreams report context-window overflow as HTTP 400 instead
+ * of 413. The payload is valid for the gateway; a larger-window model can serve
+ * it, so normalize this narrow message class to the existing 413 cascade path. */
+export function isContextOverflowBody(text: string | undefined | null): boolean {
+  if (!text) return false;
+  return /context\s*(window|length)|maximum\s+context|too\s+many\s+tokens|prompt\s+is\s+too\s+long|input.*token.*(?:exceed|limit)|estimated\s+tokens.*exceed/i.test(text);
 }
 
 /**
@@ -554,6 +645,9 @@ export function throwClassified4xx(
   status: number,
   errText: string,
 ): never {
+  if (isContextOverflowBody(errText)) {
+    throw new VendorRetryableError(vendorId, model, 413, `context window exceeded (upstream ${status}): ${errText.slice(0, 200)}`);
+  }
   // Schema-too-complex is checked FIRST: it rides on a 400 (so the fatal branch
   // below would wrongly hard-fail the run) but a DIFFERENT vendor can serve the
   // same schema, so it must cascade — and carry the `schema` class so an
@@ -790,6 +884,19 @@ export async function executeVendorPost<T>(args: {
     throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
   }
 
+  // Some authenticated subscription APIs (notably Kimi Code) report an exhausted
+  // billing-cycle allowance as HTTP 403. Capacity text wins over the generic auth
+  // bucket: the key is valid and replacing it cannot help. Normalize it to the same
+  // retryable/cooldown signal used by providers that return 400/429 for this condition.
+  if (isCapacityLimitBody(errText)) {
+    throw new VendorRetryableError(
+      vendorId,
+      model,
+      429,
+      `${CAPACITY_LIMIT_MARKER} (upstream ${resp.status}): ${errText.slice(0, 200)}`,
+    );
+  }
+
   if (AUTH_STATUSES.has(resp.status)) {
     console.error(
       `[${logPrefix}] ${vendorId}/${model} auth ${resp.status} — check ${vendorId.toUpperCase()}_API_KEY. Failing over to next ${authFailoverNoun}.`,
@@ -886,6 +993,14 @@ export async function executeChatCompletionStream(args: {
     if (CASCADE_STATUSES.has(resp.status)) {
       throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
     }
+    if (isCapacityLimitBody(errText)) {
+      throw new VendorRetryableError(
+        vendorId,
+        model,
+        429,
+        `${CAPACITY_LIMIT_MARKER} (upstream ${resp.status}): ${errText.slice(0, 200)}`,
+      );
+    }
     if (AUTH_STATUSES.has(resp.status)) {
       console.error(
         `[vendors] ${vendorId}/${model} stream auth ${resp.status} — check ${vendorId.toUpperCase()}_API_KEY.`,
@@ -905,11 +1020,15 @@ export async function executeChatCompletionStream(args: {
   const [peek, pass] = resp.body.tee();
   const reader = peek.getReader();
   const { value: firstChunk } = await reader.read();
-  reader.cancel().catch(() => { /* ignore */ });
+  reader.cancel().catch((error) => { /* ignore */ 
+    reportCaughtError(error, { source: "application/llm/vendors/types.ts", operation: "executeChatCompletionStream" });
+  });
   const firstText = firstChunk ? new TextDecoder().decode(firstChunk) : '';
 
   if (isChunkError(firstText)) {
-    await pass.cancel().catch(() => { /* ignore */ });
+    await pass.cancel().catch((error) => { /* ignore */ 
+      reportCaughtError(error, { source: "application/llm/vendors/types.ts", operation: "executeChatCompletionStream" });
+    });
     // Schema-too-complex can also surface as a first-chunk embedded error on the
     // streaming surface — classify it the same way so the cascade tags it
     // `schema` (terminal-eligible) rather than a generic embedded failure.

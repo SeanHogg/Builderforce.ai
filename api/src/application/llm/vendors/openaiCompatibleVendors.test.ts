@@ -8,7 +8,7 @@ import {
   autoRoutableModelsByTier,
   dispatchVendor,
 } from './registry';
-import type { VendorEnv } from './types';
+import { CAPACITY_LIMIT_MARKER, VendorRetryableError, type VendorEnv } from './types';
 import {
   openAICompatibleModules,
   OPENAI_COMPATIBLE_VENDOR_KEYS,
@@ -90,6 +90,50 @@ describe('explicit direct/<vendor>/<id> prefix routing reaches the new vendors',
 });
 
 describe('a factory vendor builds a correct OpenAI-compatible request', () => {
+  it('routes Kimi Code subscription keys to api.kimi.com, not the Moonshot Open Platform', async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    (globalThis as { fetch: typeof fetch }).fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      calls.push({ url: typeof input === 'string' ? input : input.toString(), init: init ?? {} });
+      return new Response(
+        JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' } }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const result = await dispatchVendor({
+      env: { KIMI_CODE_API_KEY: 'sk-kimi-code' } as VendorEnv,
+      modelChain: ['direct/kimi-code/kimi-for-coding'],
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+
+    expect(result.vendorUsed).toBe('kimi-code');
+    expect(calls.map((call) => call.url)).toEqual(['https://api.kimi.com/coding/v1/chat/completions']);
+    expect((calls[0]!.init.headers as Record<string, string>)['User-Agent']).toBe('Builderforce.ai');
+  });
+
+  it('classifies Kimi Code HTTP 403 usage exhaustion as capacity, not rejected access', async () => {
+    (globalThis as { fetch: typeof fetch }).fetch = vi.fn(async () => new Response(
+      JSON.stringify({ error: { message: "You've reached your usage limit for this billing cycle." } }),
+      { status: 403, headers: { 'content-type': 'application/json' } },
+    )) as unknown as typeof fetch;
+
+    let thrown: unknown;
+    try {
+      await getModule('kimi-code').call({
+        apiKey: 'sk-kimi-code',
+        model: 'kimi-for-coding',
+        messages: [{ role: 'user', content: 'hi' }],
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(VendorRetryableError);
+    expect((thrown as VendorRetryableError).status).toBe(429);
+    expect((thrown as VendorRetryableError).message).toContain(CAPACITY_LIMIT_MARKER);
+    expect((thrown as VendorRetryableError).message).toContain('upstream 403');
+  });
+
   it('POSTs to the vendor base URL with a Bearer auth header and the pinned model in the body', async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     (globalThis as { fetch: typeof fetch }).fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {

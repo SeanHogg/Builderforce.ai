@@ -8,10 +8,14 @@ import {
 import { recommendationsApi, type SpaceMetrics } from '@/lib/recommendationsApi';
 import { benchmarkingApi, type BenchmarkingResult, type BenchmarkRating } from '@/lib/benchmarkingApi';
 import { innovationApi, type FunnelMetrics } from '@/lib/builderforceApi';
+import {
+  autonomyApi, autonomousHopShare, shareOfCreated, type AutonomySummary as AutonomySummaryData,
+} from '@/lib/autonomyApi';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { KpiGrid } from './LensShell';
 import { hrs, pct, days as dDays, int } from './format';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 
 /**
  * Compact "at-a-glance" KPI summaries for the combined Delivery dashboard.
@@ -39,10 +43,11 @@ function ordinal(n: number | null): string {
   return `${v}${suffix}`;
 }
 
-/** Delivery — tenant-wide end-to-end cycle time (the Life Cycle Explorer rollup). */
+/** Delivery — scoped end-to-end cycle time (the Life Cycle Explorer rollup). */
 export function DeliverySummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const { data, error } = usePmData<LifecycleInsights>(() => insightsApi.lifecycle(days), [days]);
+  const { currentProjectId } = useProjectScope();
+  const { data, error } = usePmData<LifecycleInsights>(() => insightsApi.lifecycle(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -58,7 +63,8 @@ export function DeliverySummary({ days }: { days: number }) {
 /** Bottlenecks — slowest stage, rework rate and currently-stuck WIP. */
 export function BottleneckSummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const { data, error } = usePmData<BottleneckInsights>(() => insightsApi.bottlenecks(days), [days]);
+  const { currentProjectId } = useProjectScope();
+  const { data, error } = usePmData<BottleneckInsights>(() => insightsApi.bottlenecks(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -75,7 +81,8 @@ export function BottleneckSummary({ days }: { days: number }) {
 /** DORA — the four DevOps keys. */
 export function DoraSummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const { data, error } = usePmData<DoraInsights>(() => insightsApi.dora(days), [days]);
+  const { currentProjectId } = useProjectScope();
+  const { data, error } = usePmData<DoraInsights>(() => insightsApi.dora(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -93,7 +100,8 @@ export function DoraSummary({ days }: { days: number }) {
 /** SPACE — the five productivity dimensions (0..100 each). */
 export function SpaceSummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const { data, error } = usePmData<SpaceMetrics>(() => recommendationsApi.space(days), [days]);
+  const { currentProjectId } = useProjectScope();
+  const { data, error } = usePmData<SpaceMetrics>(() => recommendationsApi.space(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -118,7 +126,8 @@ export function SpaceSummary({ days }: { days: number }) {
 /** Industry benchmarking — average percentile + how many metrics rate elite/high. */
 export function BenchmarkingSummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const { data, error } = usePmData<BenchmarkingResult>(() => benchmarkingApi.get(days), [days]);
+  const { currentProjectId } = useProjectScope();
+  const { data, error } = usePmData<BenchmarkingResult>(() => benchmarkingApi.get(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -135,10 +144,52 @@ export function BenchmarkingSummary({ days }: { days: number }) {
   );
 }
 
+/**
+ * Autonomy Health — did the work actually finish itself? The three figures that
+ * answer it: end-to-end autonomous completion, the share of lane moves autonomy
+ * made, and how many tickets are sitting at a gate. Reads the SAME cached
+ * collector the full lens reads, so the card and the report always agree.
+ */
+export function AutonomySummary({ days }: { days: number }) {
+  const t = useTranslations('insights');
+  const { currentProjectId } = useProjectScope();
+  const { data, error } = usePmData<AutonomySummaryData>(
+    () => autonomyApi.get(days, currentProjectId),
+    [days, currentProjectId],
+  );
+
+  if (error) return <PmError message={error} />;
+  if (!data) return <PmEmpty message={t('loading')} />;
+
+  const s = data.totals;
+  const hopShare = autonomousHopShare(s);
+
+  return (
+    <KpiGrid>
+      <StatCard
+        label={t('autonomy.stat.fully')}
+        value={s.tickets > 0 ? pct(shareOfCreated(s, s.fullyAutonomous)) : '—'}
+        sub={t('autonomy.stat.fullySub', { n: int(s.fullyAutonomous), total: int(s.tickets) })}
+      />
+      <StatCard
+        label={t('autonomy.stat.hopShare')}
+        value={hopShare == null ? '—' : pct(hopShare)}
+        sub={t('autonomy.stat.hopShareSub', { a: int(s.autonomousHops), h: int(s.humanHops) })}
+      />
+      <StatCard
+        label={t('autonomy.stat.stalled')}
+        value={int(s.stalled)}
+        sub={t('autonomy.stat.stalledSub', { share: pct(shareOfCreated(s, s.stalled)) })}
+      />
+    </KpiGrid>
+  );
+}
+
 /** Innovation funnel — pipeline size, idea→ship conversion and time-to-value. */
 export function FunnelSummary(_: { days: number }) {
   const t = useTranslations('insights');
-  const { data, error } = usePmData<FunnelMetrics>(() => innovationApi.funnel(), []);
+  const { currentProjectId } = useProjectScope();
+  const { data, error } = usePmData<FunnelMetrics>(() => innovationApi.funnel(undefined, currentProjectId), [currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;

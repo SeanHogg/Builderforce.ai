@@ -1,4 +1,101 @@
 {
+  "marketingDeck": {
+    "seo": {
+      "title": "Die ultimative Demo — Builderforce",
+      "description": "Folge fünf Schritten und sieh, wie aus einer Idee eine laufende, bereitgestellte und getestete App wird, betrieben von einem Team aus Menschen und KI-Agenten.",
+      "ogTitle": "Die ultimative Demo: in Minuten bauen, bereitstellen und skalieren"
+    },
+    "ui": {
+      "start": "Demo starten",
+      "next": "Weiter",
+      "prev": "Zurück",
+      "restart": "Neu starten",
+      "progress": "{current} / {total}",
+      "progressLabel": "Demo-Fortschritt",
+      "seeLabel": "Das wirst du sehen",
+      "ctaPrimary": "Jetzt loslegen",
+      "ctaSecondary": "Demo buchen"
+    },
+    "slides": [
+      {
+        "kind": "intro",
+        "eyebrow": "Die ultimative Demo",
+        "title": "Bauen, bereitstellen und skalieren – in einem Rutsch.",
+        "tagline": "Fünf Schritte führen eine einzige Idee bis zu einem laufenden Produkt, betrieben von einem Team aus Menschen und KI-Agenten. Mach mit."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "01",
+        "eyebrow": "Anmelden",
+        "title": "Kein Setup. Du bist schon drin.",
+        "tagline": "Keine Formulare, keine Konfiguration – nur ein Konto.",
+        "steps": [
+          "Konto erstellen oder anmelden",
+          "Direkt im Standard-Workspace landen",
+          "Ein Standardprojekt wartet bereits auf dich"
+        ],
+        "see": "In Sekunden in einem einsatzbereiten Workspace – im Web oder in VS Code."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "02",
+        "eyebrow": "Beschreibe es",
+        "title": "Sag, was du willst. Sieh zu, wie es entsteht.",
+        "tagline": "Gib deine Idee in „Was sollen wir bauen?“ ein.",
+        "steps": [
+          "Beschreibe deine App in normaler Sprache",
+          "Lande im Builder – dein Prompt kommt mit",
+          "Die KI erstellt dir eine vollständige, lauffähige App"
+        ],
+        "see": "Eine Live-Vorschau erwacht mit einer funktionierenden App – aus einem einzigen Satz."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "03",
+        "eyebrow": "Bereitstellen & testen",
+        "title": "Mit einem Klick live. Automatisch getestet.",
+        "tagline": "Veröffentliche und lass den Agenten sie auf Herz und Nieren prüfen.",
+        "steps": [
+          "Auf Veröffentlichen klicken – deine App ist in Sekunden unter einer URL live",
+          "Der agentische Tester zielt automatisch auf die bereitgestellte App",
+          "Die Ergebnisse kommen als sofort behebbare Tickets zurück"
+        ],
+        "see": "Bereitgestellt und qualitätsgeprüft, ohne den Builder je zu verlassen."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "04",
+        "eyebrow": "Team vergrößern",
+        "title": "Menschen einladen. Agenten anheuern. Ein Team.",
+        "tagline": "Menschen und KI-Agenten arbeiten am selben Board.",
+        "steps": [
+          "Lade einen Kollegen in deinen Workspace ein",
+          "Füge einen KI-Agenten zu deiner Belegschaft hinzu",
+          "Weise Arbeit einer Person oder einem Agenten zu – gleiche Auswahl"
+        ],
+        "see": "Ein gemischtes Team aus Menschen und Agenten, das an einem gemeinsamen Board zusammenarbeitet."
+      },
+      {
+        "kind": "scenario",
+        "chapter": "05",
+        "eyebrow": "Die Belegschaft führen",
+        "title": "Ein schlankes Team. Eine erweiterte Belegschaft.",
+        "tagline": "Wenige Entwickler dirigieren eine Flotte von Agenten.",
+        "steps": [
+          "Besetze Swimlanes mit den passenden Agenten",
+          "Zieh ein Ticket in eine Lane, um einen Agenten automatisch zu starten",
+          "Steuere laufende Runs und beantworte ihre Fragen während der Arbeit"
+        ],
+        "see": "Eine Handvoll Entwickler orchestriert eine Belegschaft von Agenten, die die Hauptarbeit erledigen."
+      },
+      {
+        "kind": "outro",
+        "eyebrow": "Das ist der WOW-Effekt",
+        "title": "Von der Idee zum Produkt zum Team – in Minuten.",
+        "tagline": "Du hast gerade gesehen, wie ein Prompt zu einer bereitgestellten, getesteten App wird, betrieben von einem Team aus Menschen und KI-Agenten. Jetzt bist du dran."
+      }
+    ]
+  },
   "contentManager": {
     "migrate": {
       "moving": "Deine Inhalte werden nach Wissen verschoben…",
@@ -121,6 +218,15 @@
     "assignTeam": "Ein Team zuweisen…",
     "assign": "Zuweisen",
     "boardNameLabel": "Board-Name",
+    "templateHeading": "Board-Vorlage",
+    "templateLabel": "Board-Vorlage",
+    "templateHint": "Beim Anwenden einer Vorlage werden Swimlanes, Rollenanforderungen, Gates und die koordinierte Lebenszyklus-Einstellung dieses Boards ersetzt.",
+    "templateApply": "Vorlage anwenden",
+    "templateApplying": "Wird angewendet…",
+    "templateConfirmTitle": "Board-Vorlage anwenden?",
+    "templateConfirmMessage": "„{name}“ auf dieses Board anwenden? Die vorhandene Swimlane-Konfiguration wird ersetzt. Tickets und Verlauf bleiben erhalten.",
+    "templateLoadError": "Board-Vorlagen konnten nicht geladen werden",
+    "templateApplyError": "Board-Vorlage konnte nicht angewendet werden",
     "maxConcurrent": "Max. gleichzeitige Tickets",
     "hideDoneItems": "Erledigte Elemente ausblenden",
     "standupTimer": "Standup-Runden-Timer",
@@ -158,6 +264,9 @@
       "migratable": "Migration",
       "keyCount": "{count} Schlüssel",
       "tapToConnect": "Zum Verbinden tippen",
+      "dataConsumed": "Verbrauchte Daten",
+      "thisMonth": "Diesen Monat",
+      "confirmDisconnect": "{label} trennen? Dadurch werden {count} gespeicherte Zugangsdaten gelöscht und laufende Synchronisierungen gestoppt. Bereits importierte Arbeit bleibt erhalten.",
       "category": {
         "pm": "Projekt- & Arbeitsmanagement",
         "scm": "Versionsverwaltung",
@@ -258,6 +367,22 @@
       "back": "Zurück",
       "next": "Weiter",
       "working": "Wird bearbeitet…"
+    },
+    "page": {
+      "title": "Integrationen / API-Schlüssel",
+      "subtitle": "Verbinden Sie Modellanbieter und Geschäftstools, verwalten Sie Entwicklerschlüssel und steuern Sie die Anbieterpriorität an einem Ort.",
+      "searchPlaceholder": "Integrationen und API-Schlüssel suchen…",
+      "categoryLabel": "Kategorie",
+      "priorityChip": "Priorität · {leader}",
+      "priorityNone": "Keine",
+      "embedHeading": "Eingebettete Integration",
+      "category": {
+        "all": "Alle",
+        "models": "Modellanbieter",
+        "apps": "App-Integrationen",
+        "developer": "Entwickler-API-Schlüssel",
+        "embed": "Einbetten"
+      }
     }
   },
   "nav": {
@@ -274,7 +399,7 @@
       "dashboard": "Dashboard",
       "brainstorm": "Brainstorming",
       "projects": "Projekte",
-      "ide": "IDE",
+      "ide": "Builder",
       "workflows": "Workflows",
       "workforce": "Talente / Belegschaft",
       "insights": "Insights",
@@ -290,7 +415,9 @@
       "myWorkspace": "Mein Bereich",
       "marketplace": "Marktplatz",
       "incidents": "Vorfälle",
-      "monitoring": "Überwachung"
+      "monitoring": "Überwachung",
+      "reliability": "Zuverlässigkeit",
+      "agentOps": "Agenten-Betrieb"
     },
     "tab": {
       "projects": "Projekte",
@@ -340,7 +467,7 @@
       "logs": "Protokolle",
       "qa": "Agentische QA",
       "home": "Start",
-      "integrations": "Integrationen",
+      "integrations": "Integrationen / API-Schlüssel",
       "manager": "Manager",
       "roles": "Rollen",
       "talent": "Talente",
@@ -365,8 +492,16 @@
       "escalation": "Eskalation",
       "contacts": "Kontakte",
       "boards": "Boards",
-      "reporting": "Berichte"
-    }
+      "monitors": "Monitore",
+      "reporting": "Berichte",
+      "rfp": "RFP",
+      "feedback": "Feedback",
+      "autonomy": "Autonomie",
+      "coordination": "Koordination",
+      "memory": "Gedächtnis",
+      "rehearsal": "Probelauf"
+    },
+    "primaryAria": "Primär"
   },
   "alerts": {
     "title": "Warnungen",
@@ -440,12 +575,16 @@
     }
   },
   "ceremonies": {
-    "selectProject": "Wählen Sie ein Projekt, um eine Zeremonie zu starten."
+    "selectProject": "Wählen Sie ein Projekt, um eine Zeremonie zu starten.",
+    "viewLive": "Live-Runde",
+    "viewSchedules": "Zeitpläne",
+    "viewSwitchLabel": "Zeremonie-Ansicht",
+    "viewHistory": "Verlauf"
   },
   "projectCard": {
     "details": "Details",
     "taskBoard": "Aufgabenboard",
-    "openIde": "In der IDE öffnen",
+    "openIde": "In der Builder öffnen",
     "deleteProject": "Projekt löschen",
     "agentLabel": "Agent:",
     "tasks": "{count, plural, one {# Aufgabe} other {# Aufgaben}}",
@@ -465,7 +604,26 @@
     "healthNoDataAria": "Projektzustand — noch keine Lieferdaten",
     "doneAria": "{pct}% erledigt — {completed} von {total} Aufgaben abgeschlossen",
     "donePct": "{pct} % erledigt",
-    "health360": "Projekt 360"
+    "health360": "Projekt 360",
+    "originBuilder": "Builder",
+    "originImported": "Importiert",
+    "originBuilderTitle": "Im Builder erstellt",
+    "originImportedTitle": "Aus einem Repository importiert",
+    "openChat": "Projekt-Chat öffnen",
+    "configTitle": "Einrichtung abschließen",
+    "configDone": "Konfiguriert",
+    "configTodo": "Offen",
+    "configAria": "Konfiguration zu {pct}% abgeschlossen",
+    "config_vision": "Vision",
+    "config_goals": "Ziele",
+    "config_deadline": "Frist",
+    "config_owner": "Verantwortlich",
+    "config_tasks": "Aufgaben",
+    "config_architecture": "Architektur",
+    "configPct": "{pct}% eingerichtet",
+    "configMissingList": "Noch einzurichten: {items}",
+    "brainstormGoals": "Ziele entwickeln",
+    "brainstormGoalsPrompt": "Hilf mir, klare Ziele für das Projekt „{name}“ zu entwickeln. Frage mich nach Umfang und Erfolgskriterien und schlage dann 3–5 konkrete Ziele vor, die ich in Objectives umwandeln kann."
   },
   "projectInspection": {
     "title": "Inspektion",
@@ -651,8 +809,8 @@
     "modalityProject": "{label}-Projekt",
     "modality": {
       "designer": {
-        "label": "Designer",
-        "tagline": "Generiere und baue Apps mit Vorschau, Code und einem Live-Dev-Server.",
+        "label": "Website",
+        "tagline": "Erstelle eine Website oder Web-App mit Vorschau, Code und einem Live-Dev-Server.",
         "runLabel": "Ausführen"
       },
       "video": {
@@ -674,6 +832,16 @@
         "label": "Stimme",
         "tagline": "Klone und gestalte eine eigene Stimme und synthetisiere daraus Sprache.",
         "runLabel": "Generieren"
+      },
+      "mobile": {
+        "label": "Mobil",
+        "tagline": "Entwickle eine Handy-App, sieh sie dir im Gerätesimulator an und scanne den Code, um sie auf deinem eigenen Gerät zu öffnen.",
+        "runLabel": "Ausführen"
+      },
+      "webmobile": {
+        "label": "Web + Mobile",
+        "tagline": "Erstelle eine Webanwendung und eine mobile App gemeinsam aus einer Codebasis – zeige beide nebeneinander in der Vorschau.",
+        "runLabel": "Ausführen"
       }
     },
     "all": "Alle",
@@ -683,10 +851,10 @@
     "noProjectsFilter": "Keine Projekte entsprechen diesem Filter. Erstellen Sie oben ein neues.",
     "noProjectsYet": "Noch keine Projekte. Wählen Sie oben einen Typ, um Ihr erstes zu erstellen.",
     "deleteFailed": "Projekt konnte nicht gelöscht werden",
-    "title": "IDE",
-    "subtitle": "Erstellen Sie ein neues IDE-Projekt oder öffnen Sie ein vorhandenes.",
-    "newIdeProject": "Neues IDE-Projekt",
-    "yourIdeProjects": "Ihre IDE-Projekte",
+    "title": "Builder",
+    "subtitle": "Erstellen Sie ein neues Builder-Projekt oder öffnen Sie ein vorhandenes.",
+    "newIdeProject": "Neues Builder-Projekt",
+    "yourIdeProjects": "Ihre Builder-Projekte",
     "comingSoon": "demnächst",
     "soon": "bald",
     "newModalityProject": "Neues {label}-Projekt",
@@ -703,16 +871,16 @@
     "projectNamePlaceholder": "Mein tolles Projekt",
     "parentOptional": "Unter einem Projekt gruppieren (optional)",
     "parentProject": "Übergeordnetes Projekt",
-    "parentProjectHint": "Gruppieren Sie dieses IDE-Projekt unter einem Projekt oder lassen Sie es ungruppiert.",
-    "ideProjectSettings": "IDE-Projekteinstellungen",
+    "parentProjectHint": "Gruppieren Sie dieses Builder-Projekt unter einem Projekt oder lassen Sie es ungruppiert.",
+    "ideProjectSettings": "Builder-Projekteinstellungen",
     "openProjectsAria": "Projekte öffnen",
     "editNameHint": "Projektnamen bearbeiten (wird beim Verlassen des Felds oder mit Enter gespeichert)",
-    "projectDetailsTitle": "IDE-Projektdetails",
+    "projectDetailsTitle": "Builder-Projektdetails",
     "projectSettingsAria": "Projekteinstellungen",
     "settingsRepoTitle": "Einstellungen & Repository",
     "blockOnFailHint": "Wenn aktiviert, wird die Ausführung blockiert, solange die letzten Prüfungen fehlschlagen",
     "runChecksHint": "Typprüfung, Linting und Build im Browser ausführen, um den Code zu validieren",
-    "detailedConfigHint": "Speicher, Modell, Inferenz, Persönlichkeit und Stimme dieses Projekts werden in den IDE-Panels konfiguriert. Hier benennst du es um und legst sein übergeordnetes Projekt fest.",
+    "detailedConfigHint": "Speicher, Modell, Inferenz, Persönlichkeit und Stimme dieses Projekts werden in den Builder-Panels konfiguriert. Hier benennst du es um und legst sein übergeordnetes Projekt fest.",
     "createOpen": "Erstellen & öffnen",
     "creating": "Wird erstellt…",
     "cancel": "Abbrechen",
@@ -748,7 +916,68 @@
     "recipeBlankDesc": "Ein minimales Modell, das du im Studio von Grund auf trainierst.",
     "recipeSeedModelLabel": "Veröffentlichtes Modell zum Initialisieren",
     "recipeSeedSelect": "Modell auswählen…",
-    "recipeSeedNoModels": "noch keine veröffentlichten Modelle"
+    "recipeSeedNoModels": "noch keine veröffentlichten Modelle",
+    "centerPreview": "Vorschau",
+    "centerCode": "Code",
+    "device": {
+      "simulateOnWeb": "Im Web simulieren",
+      "deviceLabel": "Gerät",
+      "rotate": "Drehen",
+      "reload": "Vorschau neu laden",
+      "openInTab": "In neuem Tab öffnen",
+      "tryOnDevice": "Auf dem Gerät testen",
+      "previewTitle": "Vorschau der mobilen App",
+      "emptyTitle": "Noch nichts gestartet",
+      "emptyHint": "Klicke auf „Ausführen“, um den Entwicklungsserver zu starten und deine App hier zu sehen.",
+      "panelTitle": "Vorschau auf deinem Handy",
+      "panelIntro": "Der Simulator läuft in diesem Browser-Tab, dein Handy kann ihn also nicht erreichen. Scanne stattdessen die veröffentlichte Version.",
+      "checking": "Suche nach einer veröffentlichten Version…",
+      "qrAlt": "QR-Code für die URL der veröffentlichten App",
+      "copyLink": "Link kopieren",
+      "copied": "Kopiert",
+      "openLink": "Öffnen",
+      "step1": "Öffne die Kamera-App auf deinem Handy.",
+      "step2": "Richte sie auf den QR-Code oben.",
+      "step3": "Tippe auf die Benachrichtigung, um deine App zu öffnen.",
+      "lastPublished": "Zuletzt veröffentlicht am {when}",
+      "republishHint": "Veröffentliche nach Änderungen erneut – der QR-Code bleibt gültig und verweist immer auf die neueste Version.",
+      "notPublishedTitle": "Noch nichts veröffentlicht",
+      "notPublishedBody": "Veröffentliche diese App, um einen Link zu erhalten, den dein Handy öffnen kann. Das dauert etwa eine Minute.",
+      "goToPublish": "Zu „Veröffentlichen“"
+    },
+    "publish": {
+      "title": "Im Web veröffentlichen",
+      "description": "Erstelle diese App und hoste sie unter einer Subdomain. Statisches Hosting – deine App läuft im Browser.",
+      "subdomain": "Subdomain",
+      "building": "Wird erstellt…",
+      "uploading": "Wird hochgeladen…",
+      "publish": "Veröffentlichen",
+      "republish": "Erneut veröffentlichen",
+      "published": "Veröffentlicht ✓",
+      "liveSite": "Live-Website",
+      "preview": "Vorschau",
+      "fileCount": "{count, plural, one {# Datei} other {# Dateien}}",
+      "invalidSubdomain": "Gib eine gültige Subdomain ein (Buchstaben, Zahlen und Bindestriche).",
+      "failed": "Veröffentlichung fehlgeschlagen"
+    },
+    "deploy": {
+      "title": "Von GitHub bereitstellen",
+      "description": "Lass GitHub Actions dieses Projekt bei jedem Push bauen und hier bereitstellen – ganz ohne geöffnete Builder.",
+      "checking": "Verbundenes Repository wird geprüft…",
+      "needsRepo": "Verbinde dieses Projekt zuerst unter Einstellungen → Repository mit einem GitHub-Repository.",
+      "needsGitHub": "Dieses Projekt ist mit einem Nicht-GitHub-Repository verbunden. GitHub-Actions-Deployments brauchen ein GitHub-Repository.",
+      "repoLabel": "Repository:",
+      "enable": "GitHub-Deployments aktivieren",
+      "reapply": "Workflow aktualisieren",
+      "enabling": "Workflow wird geschrieben…",
+      "enableFailed": "GitHub-Deployments konnten nicht aktiviert werden.",
+      "enabledOn": "{path} wurde auf {branch} hinzugefügt. Der nächste Push auf diesen Branch baut und deployt.",
+      "viewRuns": "Workflow-Läufe auf GitHub ansehen",
+      "viewWorkflow": "Workflow-Datei anzeigen"
+    },
+    "askAi": "KI fragen",
+    "previewWeb": "Web",
+    "previewMobile": "Mobil"
   },
   "tools": {
     "outOf5": "von 5,0",
@@ -855,7 +1084,24 @@
     "clearanceNeededBody": "Dies ist ein eingeschränktes Sicherheitselement. Sie haben keine Freigabe, die Details zu sehen. Bitten Sie einen Workspace-Eigentümer oder Manager um Zugriff.",
     "typeProduct": "Produkt",
     "typeDesign": "Design",
-    "typeIncident": "Vorfall"
+    "typeIncident": "Vorfall",
+    "requiresRoleHint": "{role, select, viewer {Erfordert die Rolle „Betrachter“} developer {Erfordert die Rolle „Entwickler“} manager {Erfordert die Rolle „Manager“} owner {Erfordert die Rolle „Eigentümer“} other {Erfordert die Rolle „{role}“}}",
+    "requiresDeveloperRole": "Erfordert die Rolle „Entwickler“",
+    "closePanel": "Panel schließen",
+    "panel": "Panel",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "copyFailed": "Kopieren fehlgeschlagen",
+    "copyDiagnostics": "Diagnose kopieren",
+    "connectToggle": {
+      "connect": "Verbinden",
+      "disconnect": "Trennen",
+      "working": "Wird ausgeführt…",
+      "connectAria": "{name} verbinden",
+      "disconnectAria": "{name} trennen",
+      "errorTitle": "{name} konnte nicht getrennt werden",
+      "errorGeneric": "Trennen fehlgeschlagen. Bitte erneut versuchen."
+    }
   },
   "prdCreate": {
     "title": "Neues PRD",
@@ -974,6 +1220,12 @@
     "merging": "Wird zusammengeführt…"
   },
   "memberProfile": {
+    "tabs": {
+      "overview": "Übersicht",
+      "timeLogs": "Zeiterfassung",
+      "tasks": "Aufgaben"
+    },
+    "noTasks": "Diesem Benutzer sind keine Aufgaben zugewiesen.",
     "subtitle": "{kind} · Fähigkeiten & Verfügbarkeit",
     "syncing": "Wird synchronisiert…",
     "syncFromGoogleCalendar": "Aus Google Kalender synchronisieren",
@@ -1034,7 +1286,7 @@
       "cloud_runs": "Cloud-Ausführungen",
       "ingestion": "Daten",
       "error_events": "Fehler",
-      "outbound_fetches": "Verfügbarkeit"
+      "outbound_fetches": "Ausgehende Abrufe"
     },
     "unlimited": "Unbegrenzt",
     "freePerMo": "{amount} kostenlos / Mon.",
@@ -1101,7 +1353,73 @@
     },
     "accountTab": "Konto",
     "sessionsTab": "Sitzungen",
-    "subnavLabel": "Einstellungsbereiche"
+    "subnavLabel": "Einstellungsbereiche",
+    "emailTab": "E-Mail",
+    "emailPrefs": {
+      "title": "E-Mail-Einstellungen",
+      "whatWeSend": "Was wir senden",
+      "error": "Ihre E-Mail-Einstellungen konnten nicht aktualisiert werden. Bitte versuchen Sie es erneut.",
+      "language": "E-Mail-Sprache",
+      "languageAuto": "Automatisch erkennen",
+      "languageHelp": "Die Sprache, in der wir Ihnen schreiben. Unabhängig von der App-Sprache oben.",
+      "languageTitle": "Sprache",
+      "languageDetail": "Wir schreiben Ihnen in dieser Sprache. Bei automatischer Erkennung verwenden wir die Sprache Ihrer Registrierung, ersatzweise Englisch.",
+      "optionalTitle": "Optionale E-Mails",
+      "optionalHelp": "Schalten Sie ab, was Sie nicht erhalten möchten.",
+      "optionalDetail": "Das sind die E-Mails, die wir von uns aus senden. Sie können jede einzeln abschalten, und jede enthält einen Abmeldelink.",
+      "productUpdates": "Produkt-Neuigkeiten",
+      "productUpdatesHelp": "Neue Funktionen und wichtige Änderungen.",
+      "onboardingTips": "Tipps und Anleitungen",
+      "onboardingTipsHelp": "Gelegentliche Hinweise, wie Sie mehr aus Builderforce herausholen.",
+      "digests": "Zusammenfassungen und Übersichten",
+      "digestsHelp": "Regelmäßige Übersichten der Aktivitäten in Ihren Projekten.",
+      "alwaysOnTitle": "Werden immer gesendet",
+      "alwaysOnBody": "Diese E-Mails gehören zu Ihrem Konto. Sie werden nie unterdrückt, auch wenn Sie sich von allem anderen abmelden.",
+      "alwaysOn": {
+        "signIn": "Anmeldelinks und Magic Links",
+        "verification": "E-Mail-Bestätigungscodes",
+        "invites": "Einladungen zu Arbeitsbereichen und Chats",
+        "security": "Sicherheits- und Kontozugriffshinweise"
+      },
+      "transactionalNote": "Konto- und Sicherheits-E-Mails werden immer gesendet — sie gehören zur Funktionsweise Ihres Kontos und sind deshalb oben nicht aufgeführt.",
+      "unsubscribedTitle": "Sie sind abgemeldet",
+      "unsubscribedBody": "Sie erhalten keine optionalen E-Mails. Konto- und Sicherheitsnachrichten werden weiterhin gesendet.",
+      "resubscribeCta": "Erneut anmelden",
+      "resubscribeTitle": "Optionale E-Mails wieder abonnieren",
+      "resubscribeConfirm": "Sie erhalten wieder optionale E-Mails, entsprechend den von Ihnen aktivierten Kategorien. Fortfahren?"
+    },
+    "spendLimits": "Ausgabenlimits",
+    "spendTitle": "KI-Ausgabenlimits des Teams",
+    "spendDescription": "Lege für jeden Platz ein monatliches KI-Ausgabenlimit fest. Plätze ohne eigenen Modell-Schlüssel laufen bei Builderforce zum OpenRouter-Tarif – bei Erreichen des Limits wird die kostenpflichtige Nutzung pausiert, und du sowie das Mitglied werdet bei Annäherung benachrichtigt.",
+    "spendTeamsOnlyTitle": "Teams-Tarif-Funktion",
+    "spendTeamsOnly": "Ausgabenlimits pro Platz sind im Teams-Tarif verfügbar. Führe ein Upgrade durch, um ein monatliches KI-Budget je Mitglied festzulegen.",
+    "spendDefaultTitle": "Standard-Budget pro Platz",
+    "spendDefaultDescription": "Gilt für jeden Platz ohne eigenes Limit. Leer lassen für kein Standard-Budget.",
+    "spendDefaultLabel": "Monatliches Standard-Budget in US-Dollar",
+    "spendNoDefaultPlaceholder": "Kein Limit",
+    "spendPerSeatMonth": "pro Platz / Monat",
+    "spendDefaultHint": "Beträge in US-Dollar. Nutzung über den eigenen Modell-Schlüssel (BYO) eines Mitglieds wird nie gezählt.",
+    "spendSeatsTitle": "Plätze",
+    "spendResetsOn": "Ausgaben werden am {date} zurückgesetzt.",
+    "spendNoSeats": "Noch keine aktiven Mitglieder.",
+    "spendOfCap": "{spent} von {cap}",
+    "spendUnlimitedUsage": "{spent} · kein Limit",
+    "spendModeLabel": "Budget-Modus",
+    "spendModeInherit": "Standard verwenden",
+    "spendModeUnlimited": "Kein Limit",
+    "spendModeCustom": "Benutzerdefiniert",
+    "spendAmountPlaceholder": "Betrag",
+    "spendAmountLabel": "Monatliches Budget in US-Dollar",
+    "spendSave": "Speichern",
+    "spendSaving": "Speichern…",
+    "spendSaved": "Gespeichert",
+    "spendSaveFailed": "Speichern fehlgeschlagen",
+    "managerDefaults": "KI-Manager",
+    "managerDefaultsTitle": "KI-Manager-Standards des Arbeitsbereichs",
+    "managerDefaultsSubtitle": "Wie sich der KI-Manager in allen Projekten dieses Arbeitsbereichs verhält. Ein Projekt kann das auf seinem eigenen Manager-Tab verfeinern – sich aber nie selbst eine Berechtigung erteilen, die Sie hier zurückhalten.",
+    "managerDefaultsError": "Die KI-Manager-Standards des Arbeitsbereichs konnten nicht geladen werden.",
+    "managerDefaultsProjectHint": "Nur ein einzelnes Projekt ändern:",
+    "managerDefaultsProjectLink": "dessen Manager-Einstellungen öffnen"
   },
   "pmo": {
     "title": "Portfolio (PMO)",
@@ -1310,7 +1628,9 @@
         "crossTeam": "Team-übergreifend",
         "crossTeamDesc": "Jedes Team gegen die anderen einordnen",
         "delayTaxonomy": "Verzögerungsgründe",
-        "delayTaxonomyDesc": "Warum die Arbeit im Verzug ist"
+        "delayTaxonomyDesc": "Warum die Arbeit im Verzug ist",
+        "autonomy": "Autonomie-Gesundheit",
+        "autonomyDesc": "Hat sich die Arbeit selbst erledigt? Lebenszyklus-Funnel danach, wer das Ticket angelegt hat, Verhältnis autonomer zu menschlichen Wechseln und wo die Autonomie stehen bleibt."
       },
       "summary": {
         "cycleTime": "Ø Durchlaufzeit",
@@ -1723,7 +2043,12 @@
       "activeUsers": "Aktive Nutzer",
       "cost": "Kosten",
       "tokensSub": "über alle Modelle",
-      "tokensByModel": "Tokens nach Modell"
+      "tokensByModel": "Tokens nach Modell",
+      "byIntegration": "Verbrauch nach Integration",
+      "platformKey": "Builderforce (Plattform-Schlüssel)",
+      "fundedOwnKey": "Ihr Schlüssel",
+      "fundedPlatform": "Plattform",
+      "requests": "Anfragen"
     },
     "devexhub": {
       "title": "DevEx",
@@ -2054,6 +2379,78 @@
       "title": "Diese Ansicht erfordert einen höheren Tarif",
       "body": "Erweiterte Insights sind in Ihrem {plan}-Tarif nicht enthalten. Upgraden Sie, um Prognosen, Anomalieerkennung und die Führungsansichten freizuschalten.",
       "cta": "Tarife ansehen"
+    },
+    "autonomy": {
+      "title": "Autonomie-Gesundheit",
+      "subtitle": "Durchlaufen die Tickets, die dein KI-Manager und dein Team anlegen, ihren Lebenszyklus wirklich selbstständig? Vergleiche den Funnel danach, wer die Arbeit angelegt hat, sieh, wer das Board tatsächlich bewegt, und finde die Tore, an denen die Autonomie endet.",
+      "scopeAll": "Alle Projekte in diesem Workspace.",
+      "scopeProject": "Eingegrenzt auf {project}.",
+      "coverage": {
+        "full": "Vollständige Abdeckung – alle {n} in den letzten {days} Tagen angelegten Tickets wurden geprüft.",
+        "truncated": "Nur eine Stichprobe – die Prüfung war auf {n} Tickets der letzten {days} Tage begrenzt; diese Zahlen umfassen also die neuesten Tickets, nicht alle."
+      },
+      "origin": {
+        "label": "Angelegt von",
+        "agent": "Agent",
+        "manager_card": "Manager-Karte",
+        "human": "Mensch",
+        "system": "Automatisierung",
+        "unknown": "Ohne Zuordnung"
+      },
+      "stage": {
+        "created": "Angelegt",
+        "dispatched": "Mindestens ein Lauf",
+        "progressed": "Autonom vorangebracht",
+        "terminal": "Bis Fertig gelangt",
+        "fullyAutonomous": "Vollständig autonom"
+      },
+      "allOrigins": "Alle Quellen",
+      "conversion": "Ende zu Ende",
+      "ticketsCreated": "{n} angelegt",
+      "endToEnd": "erreichten Fertig ohne einen einzigen menschlichen Spaltenwechsel ({n} Tickets).",
+      "funnelAria": "Autonomie-Funnel für Tickets von {origin} – {n} Tickets, als Anteil der angelegten Tickets.",
+      "originMixAria": "In diesem Zeitraum angelegte Tickets, aufgeteilt danach, wer sie angelegt hat.",
+      "hopsAutonomous": "Autonome Wechsel",
+      "hopsHuman": "Menschliche Wechsel",
+      "hopsOfTotal": "{share} autonom von {n} Wechseln",
+      "hopSplitAria": "Spaltenwechsel für {origin}: {a} autonom, {h} menschlich.",
+      "stallAria": "Tore, die {n} feststeckende Tickets halten, nach Ticketzahl sortiert.",
+      "noTickets": "In diesem Zeitraum wurde kein Ticket angelegt.",
+      "noHops": "In diesem Zeitraum wurde kein Spaltenwechsel erfasst.",
+      "noStalls": "Nichts steckt fest – kein Ticket ist unfertig, ohne dass etwas läuft.",
+      "stat": {
+        "fully": "Autonom abgeschlossen",
+        "fullySub": "{n} von {total} Tickets erreichten Fertig ohne menschliches Zutun",
+        "dispatchedSub": "{n} von {total} Tickets hatten mindestens einen Lauf",
+        "hopShare": "Von der Autonomie bewegt",
+        "hopShareSub": "{a} autonome gegenüber {h} menschlichen Spaltenwechseln",
+        "stalled": "An einem Tor festgesteckt",
+        "stalledSub": "{share} der Tickets – unfertig, nichts läuft",
+        "neverStartedSub": "{share} der Tickets – nie gelaufen, nie bewegt"
+      },
+      "gateShort": {
+        "unrecorded": "Nie bewertet"
+      },
+      "gate": {
+        "will_run": "Für diese Tickets wurde ein Lauf gestartet.",
+        "no_board": "Das Projekt hat kein Board, also kann die Autonomie keine Spalte auflösen.",
+        "no_lane": "Keine Spalte des Boards passt zum Status des Tickets, also hat die Autonomie keinen Auslöser.",
+        "terminal_lane": "Das Ticket liegt in einer Endspalte (Fertig), die niemals automatisch läuft.",
+        "human_gate": "Die Spalte ist menschlich freizugeben – jemand muss zustimmen oder „Jetzt ausführen“ drücken.",
+        "no_agent": "Die Spalte hat keinen zugewiesenen Agenten und die verantwortliche Person kann diese Phase nicht ausführen. Besetze die Spalte, oder starte ausdrücklich mit „Jetzt ausführen“.",
+        "managed_no_role": "Dieses Board ist lifecycle-verwaltet, daher muss jeder Lauf einer Rolle zugeordnet sein, die die Phase autorisiert — und hier lässt sich keine autorisierte Rolle zu einem Agenten auflösen. Eine verantwortliche Person zuzuweisen hilft nicht: Die zugewiesene Person ist die Koordination, nie die ausführende Instanz. Besetze die Spalte, fixiere die Rolle, oder lass die Koordination die Phasenbeteiligung auflösen.",
+        "capability_mismatch": "Allen möglichen Agenten fehlen die von dieser Spalte verlangten Fähigkeiten.",
+        "already_running": "Auf dem Ticket läuft bereits eine Ausführung, daher wurde keine neue gestartet.",
+        "run_cap_exhausted": "Die letzten Läufe scheiterten hintereinander oder endeten ohne jedes Ergebnis, daher startet die Autonomie keine weiteren. Ein menschliches „Jetzt ausführen“ setzt das außer Kraft.",
+        "cooldown_active": "Der letzte Lauf scheiterte oder brachte kein Ergebnis, daher ist das Ticket in der Wartezeit vor dem nächsten autonomen Versuch.",
+        "not_executable": "Eine System- oder Koordinationsaufgabe – wird bewusst nie an einen Agenten übergeben.",
+        "pending_approval": "Eine externe Anfrage, die im Triage erst menschlich angenommen werden muss, bevor ein Agent sie anfassen darf.",
+        "unrecorded": "Es wurde nie eine Auto-Run-Entscheidung erfasst – die Autonomie hat diese Tickets nie bewertet.",
+        "lane_requirement_gate": "Die Spalte verlangt eine noch ausstehende Rollen-Freigabe, daher hat das Anforderungs-Gate diesen Prüfer gestartet und den regulären Agenten der Spalte bis zum Abschluss der Prüfung ausgesetzt.",
+        "same_lane_reentry": "Der gerade beendete Lauf hat diese Spalte bereits bedient, daher hat die Schleifensicherung ein sofortiges erneutes Starten verhindert. Es läuft nichts.",
+        "tenant_token_limit": "Der Workspace hat sein Token-Kontingent aufgebraucht, daher ist die Autonomie für ALLE seine Tickets pausiert, bis das Kontingent zurückgesetzt oder der Tarif erhöht wird.",
+        "cloud_run_limit": "Der Workspace hat sein monatliches Cloud-Lauf-Kontingent aufgebraucht. Ein erneuter Versuch ändert daran nichts — Tarif erhöhen oder auf die Zurücksetzung warten. On-Prem- und VS-Code-Läufe bleiben unbegrenzt."
+      }
     }
   },
   "cloudAgentForm": {
@@ -2078,9 +2475,10 @@
     "surface": "Laufzeitumgebung",
     "surfaceLabel": {
       "durable": "Durable (Cloud, serverlos auf Abruf)",
-      "container": "Langlebiger Cloudflare-Container (für sehr lange Läufe)"
+      "container": "Langlebiger Cloudflare-Container (für sehr lange Läufe)",
+      "github_actions": "GitHub Actions (läuft auf den Runnern deines Repos)"
     },
-    "surfaceHelp": "Beide führen die gesamte Aufgabe in der Cloud aus (komplett Cloudflare). Durable läuft auf Abruf auf einem Durable Object (pro Schritt) – die Standardoption. Der langlebige Cloudflare-Container hält einen Prozess für sehr lange, kontinuierliche Aufgaben am Laufen (fällt auf Durable zurück, bis die Container-Infrastruktur aktiviert ist).",
+    "surfaceHelp": "Alle führen die gesamte Aufgabe entfernt aus. Durable läuft auf Abruf auf einem Durable Object (pro Schritt) – die Standardoption. Der langlebige Cloudflare-Container hält einen Prozess für sehr lange, kontinuierliche Aufgaben am Laufen (fällt auf Durable zurück, bis die Container-Infrastruktur aktiviert ist). GitHub Actions führt den Agenten auf den eigenen Runnern deines verknüpften Repos aus – mit echtem Dateisystem und echter Toolchain und einem Limit von 60 Minuten. Dafür muss der Builderforce-Agent-Workflow (.github/workflows/builderforce-agent.yml) im Repo vorhanden sein, sonst fällt der Lauf auf Durable zurück.",
     "baseModel": "Basismodell (optional)",
     "baseModelDefault": "builderforce.ai-Standard (bestes Coding-Modell)",
     "baseModelHelp": "Das Tool-Calling- und Coding-Modell, auf dem dieser Agent läuft – wähle eines deiner LLMs oder ein Modell aus dem Pool. Ein Lauf legt ein Modell für die gesamte Aufgabe fest; lass den Standard, um das beste Coding-Modell deines Tarifs zu verwenden.",
@@ -2103,7 +2501,7 @@
     "statusPublished": "VERÖFFENTLICHT",
     "statusDraft": "ENTWURF",
     "loadingCapabilities": "Fähigkeiten werden geladen…",
-    "capabilitiesHint": "Hier zugewiesene Fähigkeiten und Personas begleiten diesen Agenten überall, wo er läuft – IDE, Workflow, On-Premise oder Cloud – unabhängig von jedem Projekt.",
+    "capabilitiesHint": "Hier zugewiesene Fähigkeiten und Personas begleiten diesen Agenten überall, wo er läuft – Builder, Workflow, On-Premise oder Cloud – unabhängig von jedem Projekt.",
     "pricingIntro": "Lege einen Preis fest, um <strong>{name}</strong> auf dem Marktplatz zu veröffentlichen. Verwende 0, um ihn kostenlos anzubieten.",
     "pricingModel": "Preismodell",
     "pricingFlatFee": "Pauschalgebühr",
@@ -2279,8 +2677,8 @@
     "brainHint": "Nutzen Sie Brain, um PRDs und ausführbare Aufgabenaktionen für dieses Projekt zu erstellen.",
     "integrationKeys": "Projekt-Integrationsschlüssel",
     "workspaceTitle": "Arbeitsbereich",
-    "workspaceDesc": "Arbeitsbereich und Dateisystem für dieses Projekt. Öffnen Sie die IDE, um Dateien zu bearbeiten.",
-    "openInIde": "In IDE öffnen",
+    "workspaceDesc": "Arbeitsbereich und Dateisystem für dieses Projekt. Öffnen Sie die Builder, um Dateien zu bearbeiten.",
+    "openInIde": "In Builder öffnen",
     "dueDateLabel": "Fälligkeitsdatum",
     "dueDateHint": "Lege eine Projektfrist fest. Leer lassen, um das späteste Aufgaben-Fälligkeitsdatum zu verwenden.",
     "deadline": "Frist",
@@ -2309,7 +2707,9 @@
       "task": "Aufgabe",
       "roadmap": "Roadmap"
     },
-    "exportCsv": "CSV exportieren"
+    "exportCsv": "CSV exportieren",
+    "milestoneTip": "Meilenstein — nur ein Datum ist gesetzt",
+    "derivedTip": "Termine aus den enthaltenen Elementen abgeleitet"
   },
   "reconcile": {
     "loading": "Arbeitselemente werden geladen…",
@@ -2382,7 +2782,23 @@
     },
     "performance": {
       "activityTitle": "Beitragsaktivität",
-      "activitySub": "Aktivität des gesamten Teams – Menschen über git/PR, Agenten über Telemetrie."
+      "activitySub": "Aktivität des gesamten Teams – Menschen über git/PR, Agenten über Telemetrie.",
+      "title": "Leistung",
+      "scorecards": "Mitglieder-Scorecards",
+      "scorecardsSub": "· letzte {days} Tage · Zeile anklicken, um Fähigkeiten/Verfügbarkeit zu bearbeiten",
+      "loading": "Wird geladen…",
+      "noActivity": "Keine Aktivität in diesem Zeitraum.",
+      "colMember": "Mitglied",
+      "colAssigned": "Zugewiesen",
+      "colCompleted": "Erledigt",
+      "colRedo": "Nacharbeit",
+      "colReopen": "Wiedereröffnet",
+      "colCycle": "Zykluszeit",
+      "colPickup": "Aufnahme",
+      "colIdleDone": "Leerlauf→fertig",
+      "colHygiene": "Board-Hygiene",
+      "colEngage": "Engagement",
+      "colEffective": "Effektivität"
     },
     "consolidate": {
       "title": "Personen zusammenführen",
@@ -2411,7 +2827,9 @@
       "security": "Sicherheit",
       "product_manager": "Produkt",
       "designer": "Designer",
-      "incident_manager": "Incident-Manager"
+      "incident_manager": "Incident-Manager",
+      "cto": "CTO",
+      "product_owner": "Product Owner"
     },
     "teams": {
       "heading": "Teams",
@@ -2511,7 +2929,24 @@
     "errUnhireFailed": "Entlassen fehlgeschlagen",
     "errRemoveMember": "Mitglied konnte nicht entfernt werden",
     "errChangeRole": "Rolle konnte nicht geändert werden",
-    "errRevokeInvite": "Einladung konnte nicht widerrufen werden"
+    "errRevokeInvite": "Einladung konnte nicht widerrufen werden",
+    "copiedExclaim": "Kopiert!",
+    "manifest": {
+      "assignedConfig": "Zugewiesene Konfiguration",
+      "copyManifest": "Manifest kopieren",
+      "emptyNote": "Keine Skills oder Personas zugewiesen",
+      "noneAssigned": "Nichts zugewiesen",
+      "personas": "Personas",
+      "skills": "Skills",
+      "content": "Inhalte"
+    },
+    "quickstart": {
+      "title": "Neuen Agenten verbinden",
+      "intro": "Vorkonfiguriert für <b>{name}</b>. Führe dies auf einem beliebigen Rechner aus — der Agent installiert sich und registriert sich direkt in dieser Arbeitsgruppe.",
+      "osUnix": "macOS / Linux",
+      "osWindows": "Windows",
+      "noToken": "Kein Arbeitsbereich-Token in dieser Sitzung — der Agent fragt dich beim ersten Start nach einer Arbeitsgruppe."
+    }
   },
   "knowledge": {
     "headingSops": "Standardarbeitsanweisungen",
@@ -2769,6 +3204,7 @@
       "reopen": "Wieder öffnen"
     },
     "loadMore": "Mehr laden",
+    "aggregateConsumption": "Fehler · Alle Kollektoren",
     "setup": {
       "title": "Fehler-Kollektoren",
       "subtitle": "Verbinden Sie, woher Ihre Fehler kommen – ein Kollektor pro Projekt.",
@@ -2781,6 +3217,7 @@
       "creating": "Wird erstellt…",
       "tenantName": "Mandanten-Kollektor",
       "tenantScope": "Alle Projekte (mandantenweit)",
+      "collectorConsumption": "Fehler · {name}",
       "snippetNote": "Ihr Ingest-Schlüssel wird nur einmal bei der Erstellung angezeigt. Fügen Sie dieses Snippet in jede App des Projekts ein.",
       "sdkSnippet": "Browser-SDK",
       "otlpEndpoint": "OTLP-Endpunkt",
@@ -2792,6 +3229,10 @@
       "paused": "pausiert",
       "pause": "Pausieren",
       "resume": "Fortsetzen",
+      "test": "Testen",
+      "testing": "Wird getestet…",
+      "testSucceeded": "Testfehler empfangen. Dieser Kollektor ist korrekt konfiguriert.",
+      "testFailed": "Kollektortest fehlgeschlagen",
       "delete": "Löschen",
       "confirmDelete": "Diesen Kollektor löschen? Erfasste Fehler bleiben erhalten.",
       "lastEvent": "letztes Ereignis",
@@ -2945,9 +3386,11 @@
       "daysAgo": "vor {n} T"
     },
     "heading": "Was sollen wir bauen?",
-    "subheading": "Beginne im <brainstorm>Brainstorming</brainstorm>, um Ideen zu entwickeln, führe es dann als Projekt aus und baue es in der IDE – oder weise Arbeit über <tasks>Aufgaben</tasks> und <workforce>Talent</workforce>-Agenten zu.",
+    "subheading": "Beginne im <brainstorm>Brainstorming</brainstorm>, um Ideen zu entwickeln, führe es dann als Projekt aus und baue es in der Builder – oder weise Arbeit über <tasks>Aufgaben</tasks> und <workforce>Talent</workforce>-Agenten zu.",
     "promptPlaceholder": "Baue einen Budget-Tracker mit Material-UI-Komponenten…",
     "brainStorm": "Brainstorming",
+    "build": "Erstellen",
+    "building": "Wird gestartet…",
     "agentsConnected": "{count, plural, one {# Agent verbunden} other {# Agenten verbunden}}",
     "noAgents": "Keine Agenten verbunden —",
     "setUpInWorkforce": "in Talent einrichten",
@@ -2967,7 +3410,7 @@
     "tabs": {
       "projects": "Projekte",
       "workforce": "Talent / Team",
-      "ide": "IDE",
+      "ide": "Builder",
       "ideas": "Ideen / Brainstorming",
       "quality": "Qualität",
       "knowledge": "Wissen"
@@ -3007,7 +3450,7 @@
       "agentsHeading": "Agenten ({count})",
       "noPeople": "Keine Personen online.",
       "noAgents": "Keine Agenten online.",
-      "inIde": "In der IDE",
+      "inIde": "In der Builder",
       "activeSession": "Aktive Sitzung",
       "manage": "Team verwalten",
       "agent": {
@@ -3068,7 +3511,8 @@
       "hours": "Stunden",
       "labor": "Arbeit",
       "aiSpend": "KI-Ausgaben",
-      "qualified": "Qualifiziert"
+      "qualified": "Qualifiziert",
+      "optionalPh": "(optional)"
     },
     "soc": {
       "coverage": "Kontrollabdeckung",
@@ -3148,13 +3592,14 @@
       "wfPerformance": "Belegschaft · Leistung",
       "marketplace": "Marktplatz",
       "tools": "Werkzeuge",
-      "ide": "IDE",
+      "ide": "Builder",
       "alerts": "Warnungen",
       "logs": "Protokolle",
       "quality": "Qualität",
       "integrations": "Integrationen",
       "content": "Inhalte",
       "ceremonies": "Zeremonien",
+      "incidents": "Vorfälle",
       "wfPlan": "Personalplan",
       "empAllocation": "Zuteilung",
       "empCollaboration": "Zusammenarbeit",
@@ -3162,7 +3607,8 @@
       "empCost": "Arbeitskosten",
       "empPerformers": "Leistung",
       "empInitiatives": "Initiativen-Mix",
-      "forecast": "Prognose"
+      "forecast": "Prognose",
+      "autonomy": "Autonomie"
     },
     "title": {
       "aiProductivity": "KI-Produktivitätswert",
@@ -3174,6 +3620,7 @@
       "aiModelShare": "Modellanteil an Läufen",
       "aiMergeRate": "Merge-Rate nach Modell",
       "aiComparison": "Multi-Tool-Bewertung",
+      "aiByIntegration": "Verbrauch nach Integration",
       "aiShareTrend": "Akzeptanz- & Anteilstrend",
       "delivCycleTime": "Durchlaufzeit",
       "delivVelocity": "Velocity",
@@ -3236,7 +3683,7 @@
       "catalogMarketplaceTopEval": "Bestbewerteter Agent",
       "catalogToolsByCategory": "Werkzeuge nach Kategorie",
       "ideByModality": "Projekte nach Modalität",
-      "ideRecency": "IDE-Projekte",
+      "ideRecency": "Builder-Projekte",
       "obsAlertFires": "Warnungsauslösungen / Tag",
       "obsAlertRuleHealth": "Zustand der Warnregeln",
       "obsLogVolume": "Ereignisvolumen",
@@ -3249,6 +3696,10 @@
       "obsContentByKind": "Dokumente nach Typ",
       "obsCeremonyCadence": "Zeremonien-Takt",
       "obsCeremonyBalance": "Redeanteil-Verteilung",
+      "incStatus": "Offene Vorfälle",
+      "incSeverity": "Vorfälle nach Schweregrad",
+      "incSystems": "Vorfälle nach System",
+      "incMttr": "Mittlere Lösungszeit",
       "wfpCostSplit": "Kosten Einstellen vs. Agent",
       "wfpCapacity": "Kapazität vs. WIP",
       "wfpGap": "Zuteilbare Lücke",
@@ -3262,7 +3713,18 @@
       "forecastCycleProjection": "Prognostizierte Durchlaufzeit",
       "forecastCfrProjection": "Prognostizierte Änderungsfehler",
       "forecastAnomalies": "Offene Anomalien",
-      "forecastCostTrend": "Ausgabenprognose"
+      "forecastCostTrend": "Ausgabenprognose",
+      "autoFully": "Autonom abgeschlossen",
+      "autoDispatched": "Mindestens ein Lauf",
+      "autoHopShare": "Von der Autonomie bewegt",
+      "autoStalled": "An einem Tor festgesteckt",
+      "autoNeverStarted": "Nie gestartet",
+      "autoOriginFunnel": "Lebenszyklus-Funnel nach Quelle",
+      "autoHopSplit": "Autonome gegenüber menschlichen Wechseln",
+      "autoStallGates": "Wo die Autonomie stehen bleibt",
+      "autoOriginMix": "Wer die Arbeit anlegt",
+      "autoFunnelTable": "Autonomie-Funnel (Tabelle)",
+      "autoCoverage": "Prüfungsabdeckung"
     },
     "loading": "Laden…",
     "overview": {
@@ -3293,7 +3755,11 @@
       "bySource": "Kosten nach Quelle",
       "spendSub": "geschätzt, letzte 7 Tage",
       "byProject": "Ausgaben nach Projekt",
-      "noProjects": "Keine Projektausgaben"
+      "noProjects": "Keine Projektausgaben",
+      "byoFundedOnly": "Keine Plattformausgaben – die gesamte Nutzung lief über Ihre verbundenen Schlüssel",
+      "sourceCloud": "Cloud",
+      "sourceOnPrem": "On-Premise",
+      "sourceWeb": "Web / SDK"
     },
     "catalog": {
       "noInstalls": "Noch keine Installationen",
@@ -3345,8 +3811,8 @@
     },
     "ide": {
       "builds": "Projekte",
-      "buildsSub": "IDE-Projekte",
-      "noProjects": "Noch keine IDE-Projekte"
+      "buildsSub": "Builder-Projekte",
+      "noProjects": "Noch keine Builder-Projekte"
     },
     "obs": {
       "noFirings": "Noch keine Auslösungen",
@@ -3381,6 +3847,19 @@
       "humanTalk": "Mensch",
       "agentTalk": "KI-Agent",
       "completed": "abgeschlossen"
+    },
+    "inc": {
+      "noIncidents": "Keine Vorfälle",
+      "ofTotal": "von {total} im Zeitraum",
+      "openNudge": "{count} benötigen Aufmerksamkeit",
+      "allClear": "Alles in Ordnung",
+      "incidents": "Vorfälle",
+      "unclassified": "Nicht klassifiziert",
+      "mttrSub": "mittlere Lösungszeit",
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
     },
     "reorder": {
       "drag": "Zum Umsortieren ziehen",
@@ -3595,6 +4074,22 @@
     "detailTitle": "Gelernte Erinnerung",
     "detailTask": "Aufgabe",
     "detailLearned": "Gelernt",
+    "detailTeacher": "Lehrer",
+    "detailTeacherSelf": "Selbst gelernt",
+    "detailTeacherUnknown": "Frontier-Modell",
+    "detailNoAnswer": "Aus dieser Aufgabe wurde nichts gelernt – der Lehrer lieferte keine Antwort.",
+    "faultBadge": "Nicht destilliert",
+    "faultTitle": "Lehrer lieferte keine Antwort",
+    "faultBody": "Der Lehrer hat diese Aufgabe nicht beantwortet ({reason}), daher wurde nichts daraus gelernt.",
+    "faultBodyWithModel": "{model} hat diese Aufgabe nicht beantwortet ({reason}), daher wurde nichts daraus gelernt.",
+    "faultHint": "Prüfe das angeheftete Lehrermodell und dein Frontier-Guthaben und lehre die Aufgabe erneut.",
+    "faultNotPinned": "kein Lehrer angeheftet",
+    "faultBudget": "Frontier-Token-Budget aufgebraucht",
+    "faultTooShort": "Aufgabe zu kurz zum Lehren",
+    "faultGateway": "das Modell-Gateway meldete einen Fehler",
+    "faultEmpty": "der Lehrer lieferte eine leere Antwort",
+    "faultException": "der Lehreraufruf schlug fehl",
+    "faultUnknown": "Grund nicht erfasst",
     "detailKind": "Typ",
     "detailVersion": "Version",
     "detailWeight": "Gewicht",
@@ -3736,7 +4231,31 @@
     "membersTab": "Mitglieder",
     "agentsTab": "Agenten",
     "auditTab": "SOC 2",
-    "subnavLabel": "Sicherheitsbereiche"
+    "subnavLabel": "Sicherheitsbereiche",
+    "policiesTab": "Richtlinien",
+    "webTab": "Website-Scan",
+    "webTitle": "Website-Sicherheitsscan",
+    "webSubtitle": "Richten Sie den Scan auf Ihre Live-Website und erhalten Sie sofort Sicherheitsbefunde. Jedes Problem wird als Ticket erfasst, das Ihr Team beheben kann.",
+    "webUrlLabel": "Website-URL",
+    "webUrlPlaceholder": "https://ihre-website.de",
+    "webSave": "Speichern",
+    "webRunNow": "Scan starten",
+    "webRunning": "Scan läuft…",
+    "webScore": "Sicherheitsbewertung",
+    "webScoreDelta": "{delta} gegenüber letztem Scan",
+    "webBaselineFirst": "Erster Scan – dies ist Ihre Ausgangsbasis.",
+    "webNewFindings": "{count} neu",
+    "webResolved": "{count} behoben",
+    "webFindingsFiled": "{count} als Tickets erfasst",
+    "webNoIssues": "Keine Probleme gefunden – Ihre Website hat alle Prüfungen bestanden.",
+    "webHistory": "Scan-Verlauf",
+    "webNoHistory": "Noch keine Scans. Starten Sie oben Ihren ersten Scan.",
+    "webRecommendation": "Empfehlung",
+    "sev_critical": "Kritisch",
+    "sev_high": "Hoch",
+    "sev_medium": "Mittel",
+    "sev_low": "Niedrig",
+    "sev_info": "Info"
   },
   "catalogInsights": {
     "total": {
@@ -3773,8 +4292,9 @@
     "viewWorkflows": "Workflows anzeigen",
     "workflows": "Workflows",
     "workflowsWithCount": "Workflows ({count})",
-    "openIde": "Im IDE öffnen",
-    "delete": "Löschen"
+    "openIde": "Im Builder öffnen",
+    "delete": "Löschen",
+    "openChat": "Projekt-Chat öffnen"
   },
   "diagnosticsStrip": {
     "title": "Diagnosen",
@@ -5101,7 +5621,8 @@
         "question": "Kann ich eine Kanban-Board-Vorlage kaufen oder verkaufen?",
         "answer": "Ja. Verpacken Sie einen Lieferprozess — Lanes, erforderliche Rollen, Prüf-Gates und ein empfohlenes Aufgebot — als Kanban-Vorlage und veröffentlichen Sie sie auf dem Marktplatz zum Verkauf oder Teilen. Jedes Team kann eine bewährte Vorlage mit einem Klick in ein Projekt installieren und einen gesteuerten, rollengeschützten Workflow erben, statt einen von Grund auf zu bauen."
       }
-    ]
+    ],
+    "newsletterPlaceholder": "du@email.com"
   },
   "pricing": {
     "seo": {
@@ -5146,26 +5667,23 @@
     "labelSeats": "Plätze",
     "labelBillingEmail": "Abrechnungs-E-Mail",
     "placeholderBillingEmail": "billing@example.com",
-    "labelCardBrand": "Kartentyp",
-    "labelCardLast4": "Letzte 4 Kartenziffern",
     "redirectNote": "Sie werden zu unserem Zahlungsanbieter weitergeleitet, um Ihre Kartendaten sicher einzugeben.",
     "total": "Gesamt: ${price}/{unit}",
     "totalForSeats": "{seats, plural, one {für # Platz} other {für # Plätze}}",
     "unitYear": "J.",
     "unitMonth": "Mon.",
     "errorBillingEmailRequired": "Abrechnungs-E-Mail ist erforderlich.",
-    "errorCardLast4": "Letzte 4 Kartenziffern müssen genau 4 Ziffern sein.",
     "errorUpgradeFailed": "Aufrüstung fehlgeschlagen",
     "cancel": "Abbrechen",
-    "activating": "Wird aktiviert…",
     "redirecting": "Wird weitergeleitet…",
-    "activatePlan": "{plan} aktivieren",
     "continueToPayment": "Weiter zur Zahlung",
     "planComparison": "Tarifvergleich",
     "colFeature": "Funktion",
     "priceFree": "$0",
     "priceProMonthly": "${price}/Mon.",
     "priceTeamsMonthly": "${price}/Platz/Mon.",
+    "teamsVolumeNote": "Min. {min} Plätze",
+    "teamsSeatMinimum": "Mindestens {min} Plätze – Teams nutzt Mengenpreise für die gesamte Organisation.",
     "teamsCostNoteYear": "${perSeat}/Platz/J. — abgerechnet als ${total}/J.",
     "teamsCostNoteMonth": "${perSeat}/Platz/Mon. — abgerechnet als ${total}/Mon.",
     "managedAddon": "Add-on: <b>Verwalteter AgentHost</b> — ${price}/Mon. pro gehostetem AgentHost. Wir betreiben Ihre BuilderForce Agents-Instanz für Sie — kein Docker, kein DevOps.",
@@ -5525,7 +6043,9 @@
       "learnSkipReasonFrozen": "das Evermind dieses Projekts ist eingefroren (schreibgeschützt)",
       "reconcileTitle": "{count} gelernte Erinnerungen in Evermind v{version} abgeglichen",
       "reconcileHint": "Die Antwort hat diese abgerufenen Erkenntnisse neu formuliert und aktualisiert sie damit (Write-Through-Kognition).",
-      "stop": "Stoppen"
+      "stop": "Stoppen",
+      "learnTargetContributed": "Zu {name} beigetragen (Projekt #{projectId} v{version})",
+      "learnTargetSkipped": "{name} übersprungen (Projekt #{projectId}) — {reason}"
     },
     "tickets": {
       "none": "Noch keine Tickets verknüpft.",
@@ -5572,6 +6092,15 @@
       "lockHint": "Geteilte Chats sind für das ganze Team sichtbar; sperren, um ihn nur den Mitgliedern vorzubehalten.",
       "mergeHint": "Andere Chats in diesen zusammenführen. Ihre Nachrichten, Tickets und Agenten wandern hierher; die Quellen werden archiviert.",
       "mergeNoOthers": "Keine anderen Chats zum Zusammenführen.",
+      "questions": "Fragen",
+      "noQuestions": "Keine offenen Fragen.",
+      "answerPlaceholder": "Antwort eingeben…",
+      "submitAnswer": "Antworten",
+      "answering": "Wird gesendet…",
+      "showTickets": "Verknüpfte Tickets anzeigen",
+      "hideTickets": "Verknüpfte Tickets ausblenden",
+      "ticketCount": "{n, plural, one {# Ticket} other {# Tickets}}",
+      "overallAria": "Gesamtfortschritt: {pct}% erledigt",
       "mergeAction": "{n} hier zusammenführen",
       "mergedN": "{n} Chat(s) zusammengeführt.",
       "kind": {
@@ -5587,7 +6116,7 @@
     },
     "approveAll": "Alle genehmigen",
     "newChat": "+ Neu",
-    "messagePlaceholder": "Nachricht an Brain…",
+    "messagePlaceholder": "Was möchtest du erreichen?",
     "searchChats": "Chats durchsuchen…",
     "confirmActionAria": "Aktion bestätigen",
     "wantsTo": "Brain möchte <b>{action}</b>. Zum Ausführen genehmigen.",
@@ -5620,8 +6149,81 @@
     "addToProject": "Zum Projekt hinzufügen…",
     "createNewProject": "+ Neues Projekt erstellen",
     "brainTitle": "Brain",
-    "emptyHint": "Starte einen neuen Chat oder wähle einen aus, um zu beginnen.",
+    "emptyHint": "Sag mir, was du erreichen möchtest, und ich helfe dir dabei.",
     "startNewChat": "Neuen Chat starten",
+    "capabilities": {
+      "makingLabel": "Erstellen",
+      "pickerAria": "Was möchtest du erstellen?",
+      "none": "Beliebig",
+      "tilesHintBrainstorm": "…oder beginne mit dem, was du erstellen willst",
+      "tilesHintIde": "…oder beginne mit dem, was du bauen willst",
+      "document": {
+        "label": "Dokument",
+        "hint": "Schreibe ein strukturiertes Dokument mit Überschriften, Abschnitten und Tabellen.",
+        "starter": "Schreibe ein Dokument, das den aktuellen Stand dieses Projekts zusammenfasst."
+      },
+      "slides": {
+        "label": "Folien",
+        "hint": "Erstelle eine Präsentation – eine Folie pro Abschnitt.",
+        "starter": "Erstelle eine Präsentation, die den aktuellen Stand dieses Projekts zusammenfasst."
+      },
+      "dataviz": {
+        "label": "Datenvisualisierung",
+        "hint": "Mache Daten als eingebettete Diagramme sichtbar, mit den Zahlen darunter.",
+        "starter": "Stelle grafisch dar, wie sich die Aufgaben dieses Projekts auf die Status verteilen."
+      },
+      "spreadsheet": {
+        "label": "Tabelle",
+        "hint": "Modelliere Zahlen als Tabelle mit Formeln und Summen.",
+        "starter": "Erstelle eine Tabelle der offenen Aufgaben dieses Projekts mit Verantwortlichen, Status und Alter."
+      },
+      "website": {
+        "label": "Website",
+        "hint": "Baue eine Web-App oder Website als echte, direkt anlegbare Dateien.",
+        "starter": "Baue eine Landingpage für dieses Projekt."
+      },
+      "design": {
+        "label": "Design",
+        "hint": "Gestalte die Oberfläche – Layout, Abstände, Typografie und Theme-Tokens.",
+        "starter": "Gestalte den Hauptbildschirm dieses Projekts – mit hellem und dunklem Theme."
+      },
+      "mobile": {
+        "label": "Mobil",
+        "hint": "Baue eine Mobile-First-App mit nativ wirkender Navigation.",
+        "starter": "Baue einen mobilen Startbildschirm für dieses Projekt."
+      },
+      "animation": {
+        "label": "Animation",
+        "hint": "Füge gezielte Bewegung mit klarer Dauer und Easing hinzu.",
+        "starter": "Füge dem Hauptbildschirm dieses Projekts eine Einblendanimation hinzu."
+      },
+      "game3d": {
+        "label": "3D-Spiel",
+        "hint": "Baue ein 3D-Spiel – Szene, Kamera, Eingabe und Game-Loop.",
+        "starter": "Baue eine einfache 3D-Szene, in der ich eine Kamera bewegen kann."
+      },
+      "export": {
+        "docx": "Word herunterladen",
+        "pptx": "PowerPoint herunterladen",
+        "csv": "CSV herunterladen",
+        "working": "Wird vorbereitet…",
+        "failed": "Export fehlgeschlagen",
+        "untitled": "Ohne Titel"
+      },
+      "missing": {
+        "body": "Diese Antwort enthielt {capability} nicht — das Modell lieferte nur eine Überschrift.",
+        "retry": "Erneut anfragen",
+        "retryPrompt": "Diese Antwort enthielt kein {capability}. Erzeuge jetzt das vollständige {capability} in dieser Antwort."
+      }
+    },
+    "messageActions": {
+      "copy": "Kopieren",
+      "copied": "Kopiert!",
+      "goodResponse": "Gute Antwort",
+      "badResponse": "Schlechte Antwort",
+      "thumbsUp": "Daumen hoch",
+      "thumbsDown": "Daumen runter"
+    },
     "newProjectPlaceholder": "Name des neuen Projekts",
     "createAndAssign": "Erstellen und zuweisen",
     "actingAs": "Handelt als",
@@ -5647,10 +6249,32 @@
     "assignChatToProjectAria": "Chat einem Projekt zuweisen",
     "addProject": "+ Projekt",
     "workflowsArrow": "Workflows →",
-    "openInIde": "In der IDE öffnen →",
+    "openInIde": "In der Builder öffnen →",
     "brainModality": "Brain — {modality}",
     "brainAs": "Brain als {name}",
-    "chatHistory": "Chat-Verlauf"
+    "chatHistory": "Chat-Verlauf",
+    "upgrade": "Upgrade",
+    "upgradeToPlan": "Auf {plan} upgraden",
+    "addCard": "Karte hinzufügen",
+    "cardValidationFailed": "Kartenprüfung fehlgeschlagen.",
+    "allowance": {
+      "exhausted": "Dein KI-Token-Kontingent für diesen Zeitraum ist aufgebraucht ({used} von {limit}). Anfragen schlagen fehl oder brechen mitten in der Antwort ab, bis es am {resets} zurückgesetzt wird.",
+      "nearLimit": "KI-Token-Kontingent zu {percent}% genutzt — {remaining} übrig bis {resets}. Lange Antworten können abgeschnitten werden.",
+      "upgrade": "Upgraden",
+      "connectAccount": "Eigenes Konto verbinden",
+      "dismiss": "Ausblenden"
+    },
+    "queuedCount": "{count, plural, one {# Nachricht in Warteschlange} other {# Nachrichten in Warteschlange}}",
+    "onboardMe": "Hilf mir beim Einstieg",
+    "onboardMePrompt": "Ich bin neu hier – hilf mir beim Einstieg. Frag mich, was ich bauen möchte, erkläre, wie Nutzung und Kosten funktionieren, empfiehl, ob der Free- oder Pro-Plan zu meinem Zeitrahmen passt, und hilf mir, mein vorhandenes KI-Konto zu verbinden, falls ich eines habe.",
+    "providerCapBanner": "Dein {providers}-API-Schlüssel hat sein Nutzungslimit erreicht — dieser Lauf ist auf den gemeinsamen Modell-Pool zurückgefallen.",
+    "manageApiKeys": "API-Schlüssel verwalten →"
+  },
+  "chatMessage": {
+    "copy": "Kopieren",
+    "apply": "Anwenden →",
+    "createFile": "Datei erstellen",
+    "downloadAs": "{ext} herunterladen"
   },
   "modelExport": {
     "subtitle": "Exportieren Sie ein veröffentlichtes Modell in ein portables Artefakt – ein Hugging-Face-Repo, ONNX, safetensors oder GGUF – und laden Sie es herunter. Das Modell wird serverseitig erzeugt; es ist kein Token erforderlich.",
@@ -5697,11 +6321,20 @@
         "already_running": "Läuft bereits",
         "human_gate": "Warte auf Freigabe",
         "capability_mismatch": "Agent fehlen erforderliche Fähigkeiten",
+        "run_cap_exhausted": "Zu viele Läufe ohne Ergebnis — zur Prüfung pausiert",
+        "cloud_run_limit": "Monatliches Cloud-Lauf-Kontingent aufgebraucht — Upgrade für weitere Läufe",
+        "cooldown_active": "Abkühlphase nach einem Lauf ohne Ergebnis — erneuter Versuch in Kürze",
         "no_agent": "Kein Agent zugewiesen",
+        "managed_no_role": "Keine Rolle kann diese Phase ausführen",
+        "lane_unconfigured": "Stufe autorisiert keine Rolle",
         "no_board": "Kein Board konfiguriert",
         "no_lane": "Spur nicht konfiguriert",
         "terminal_lane": "Fertig — kein Lauf nötig",
-        "not_executable": "Systemaufgabe – wird nicht von einem Agenten ausgeführt"
+        "not_executable": "Systemaufgabe – wird nicht von einem Agenten ausgeführt",
+        "pending_approval": "Externe Anfrage – wartet auf Genehmigung",
+        "lane_requirement_gate": "Wartet auf Rollen-Freigabe",
+        "same_lane_reentry": "Hat diese Phase gerade beendet",
+        "tenant_token_limit": "Workspace ohne Token — Upgrade oder auf Zurücksetzung warten"
       }
     },
     "businessValue": {
@@ -5714,8 +6347,10 @@
     },
     "audit": {
       "flagged": "Markiert",
-      "flaggedTitle": "Dieses Ticket hat eine erforderliche Rolle oder Diagnose übersprungen – Prüfung nötig"
-    }
+      "flaggedTitle": "Dieses Ticket hat eine erforderliche Rolle oder Diagnose übersprungen – Prüfung nötig",
+      "participantsTitle": "Beteiligung erforderlicher Rollen: abgeschlossen von erforderlich"
+    },
+    "prdBadgeTitle": "{count, plural, one {# verknüpftes PRD} other {# verknüpfte PRDs}}"
   },
   "projectsContent": {
     "errLoad": "Projekte konnten nicht geladen werden. Prüfe deine Verbindung und versuche es erneut.",
@@ -5915,6 +6550,19 @@
     "description": "Geben Sie diesem Projekt sein eigenes selbstlernendes Modell. Nach der Aktivierung laufen die Agenten des Projekts darauf und werden mit jeder erledigten Aufgabe besser — geteilt über Cloud, On-Premise und Editor.",
     "statusSeeded": "Aktiv · v{version}",
     "statusUnseeded": "Nicht eingerichtet",
+    "quarantinedBadge": "Unter Quarantäne",
+    "quarantinedHint": "Dieses Evermind hat sich nach inkohärenter Ausgabe automatisch deaktiviert ({reason}). Trainiere es über die Kohärenzschwelle hinaus neu, um die Inferenz wieder zu aktivieren.",
+    "targetsTitle": "Everminds unter diesem Projekt",
+    "targetsHint": "Alle Everminds, zu denen dieses Projekt Lernen beiträgt.",
+    "targetsEmpty": "Für dieses Projekt wurden noch keine Everminds aufgelöst.",
+    "targetSelfBadge": "Dieses Projekt",
+    "targetBuildBadge": "IDE-Build",
+    "targetSeeded": "v{version}",
+    "targetUnseeded": "nicht initialisiert",
+    "targetInferenceOn": "Inferenz",
+    "targetConnected": "verbunden",
+    "targetFrozen": "eingefroren",
+    "targetProjectId": "Projekt #{id}",
     "noModels": "Veröffentlichen Sie zuerst ein trainiertes Modell im LLM Studio und aktivieren Sie es dann hier.",
     "pickModelLabel": "Wählen Sie ein veröffentlichtes Modell für dieses Projekt",
     "enableCta": "Aktivieren",
@@ -5979,7 +6627,66 @@
     "validateMethod": "{method, select, embedding {Semantischer Abruf} other {Lexikalischer Abruf (Fallback)}}",
     "evalDelta": "{pct}% vs. vorher",
     "evalFlat": "keine Änderung",
-    "evalTooltip": "Regressionsprüfung für v{version}: Holdout-Verlust {base} → {next} über {size, plural, one {# frühere Aufgabe} other {# frühere Aufgaben}}."
+    "evalTooltip": "Regressionsprüfung für v{version}: Holdout-Verlust {base} → {next} über {size, plural, one {# frühere Aufgabe} other {# frühere Aufgaben}}.",
+    "inheritedHint": "Dieser Build teilt sich das Evermind seines übergeordneten Projekts, daher ist hier alles verfügbar, was es gelernt hat. Training und Einstellungen werden im übergeordneten Projekt verwaltet.",
+    "testTitle": "Testbereich",
+    "testHint": "Schicken Sie eine Eingabe an das Modell und sehen Sie genau, was es schreibt — bewertet wie eine echte Antwort. So prüfen Sie, ob sich das Einschalten lohnt, bevor jemand damit chattet.",
+    "testPlaceholder": "Stellen Sie dem Modell eine Frage, z. B. „Fasse zusammen, wo dieses Projekt steht.“",
+    "testRunCta": "Ausführen",
+    "testReadinessCta": "Bereitschaft prüfen",
+    "testRunning": "Erzeuge…",
+    "testResultReadiness": "Bereitschaftsprüfung — {passed} von {total} Antworten brauchbar",
+    "testResultPrompt": "Was das Modell erzeugt hat",
+    "testServable": "Brauchbar",
+    "testRefused": "Abgelehnt",
+    "testRefusedBecause": "Das würde einem Benutzer nicht gezeigt: {detail}.",
+    "testEmptyOutput": "(das Modell hat nichts erzeugt)",
+    "testVerdictReady": "Dieses Modell ist kohärent genug, um zu antworten.",
+    "testVerdictNotReady": "Dieses Modell ist noch nicht kohärent genug zum Antworten. Trainieren Sie es weiter, wählen Sie ein Lehrermodell, oder ersetzen Sie es unten.",
+    "maintenanceTitle": "Wartung",
+    "maintenanceHint": "Reparieren und aufräumen, wenn das Modell entgleist ist. Nichts davon löscht die Arbeit Ihres Projekts.",
+    "reseedLabel": "Modell ersetzen",
+    "reseedHint": "Von einer bekannt guten Basis neu beginnen — das Projekt bleibt erhalten. Nutzen Sie das, wenn sich das Modell in Unsinn hineintrainiert hat. Antworten bleiben aus, bis es die Bereitschaftsprüfung erneut besteht.",
+    "reseedCta": "Ersetzen…",
+    "reseedConfirm": "Das Gehirn dieses Modells durch eine neue Basis ersetzen? Bisher Gelerntes prägt seine Antworten dann nicht mehr. Nicht rückgängig zu machen.",
+    "reseedStarterOption": "Neue Startbasis (untrainiert)",
+    "reseedDone": "Modell ersetzt — jetzt v{version}. Führen Sie eine Bereitschaftsprüfung durch, bevor Sie Antworten wieder einschalten.",
+    "reindexLabel": "Abrufindex neu aufbauen",
+    "reindexHint": "Jede Erinnerung neu gegen das aktuelle Modell indizieren. Erinnerungen werden beim Lernen indiziert, daher driftet der Abruf mit dem Modell — neu aufbauen, wenn Falsches abgerufen wird.",
+    "reindexCta": "Neu aufbauen",
+    "reindexDone": "{count} Erinnerungen neu indiziert.",
+    "cleanupLabel": "Aufräumen",
+    "cleanupHint": "Verwirft alles, was in der Warteschlange steht, aber noch nicht gelernt wurde, und leert zwischengespeicherte Antworten, damit wiederholte Fragen neu beantwortet werden. Gelerntes Wissen bleibt unberührt.",
+    "cleanupCta": "Aufräumen",
+    "cleanupConfirm": "Alles Wartende, noch nicht Gelernte verwerfen und zwischengespeicherte Antworten leeren?",
+    "cleanupDone": "{discarded} wartende Einträge verworfen und {cached} zwischengespeicherte Antworten geleert.",
+    "analyzeTitle": "Gelerntes überprüfen",
+    "analyzeHint": "Alles Gelernte zurücklesen und von einem Frontier-Modell auf Fehler, veraltete Fakten und Unsinn prüfen lassen — dann Falsches korrigieren, indem die Korrekturen gelehrt werden.",
+    "analyzeCta": "Wissen prüfen",
+    "analyzing": "Prüfe…",
+    "analyzeClean": "{analyzed} Erinnerungen geprüft — nichts zu beanstanden.",
+    "analyzeSummary": "{issues} von {analyzed} Erinnerungen brauchen Aufmerksamkeit (geprüft von {model}).",
+    "analyzeSummaryLocal": "{issues} von {analyzed} Erinnerungen brauchen Aufmerksamkeit.",
+    "analyzeVerdict": "{verdict, select, incoherent {Unsinn} incorrect {Falsch} outdated {Veraltet} unusable {Keine Antwort} redundant {Duplikat} other {In Ordnung}}",
+    "analyzeCorrectionLabel": "Wird ersetzt durch",
+    "analyzeSelectAll": "Alle auswählen",
+    "analyzeSelectNone": "Auswahl aufheben",
+    "analyzeApplyCta": "{count} ausgewählte beheben",
+    "analyzeApplying": "Behebe…",
+    "analyzeApplied": "Behoben: {corrected} korrigiert, {forgotten} vergessen. Modell ist jetzt v{version}.",
+    "analyzeSkipped": "{count} konnten nicht angewendet werden.",
+    "tabsLabel": "Evermind-Steuerung",
+    "tabTeach": "Beibringen",
+    "tabTest": "Testen",
+    "tabCheck": "Prüfen",
+    "tabMaintain": "Warten",
+    "diagnosticsTitle": "Diagnose",
+    "diagnosticsHint": "Kopiere alles aus diesem Bereich – den Zustand des Modells, was es tatsächlich erzeugt hat, was es gelernt hat und alle gefundenen Probleme – als Text, den du an den Support oder einen KI-Assistenten weitergeben kannst.",
+    "diagnosticsCta": "Diagnose kopieren",
+    "diagnosticsCopied": "In die Zwischenablage kopiert.",
+    "diagnosticsShow": "Bericht anzeigen",
+    "diagnosticsHide": "Bericht ausblenden",
+    "diagnosticsManualHint": "Das automatische Kopieren wurde hier blockiert – der Bericht ist unten markiert, drücke Strg/Cmd+C zum Kopieren."
   },
   "topbar": {
     "cart": "Warenkorb",
@@ -6056,6 +6763,11 @@
       "noExpiry": "Kein Ablauf",
       "markDone": "Erledigt"
     },
+    "notConfigured": {
+      "title": "Für dieses Projekt ist kein Manager eingerichtet",
+      "body": "Auf dieser Seite läuft noch nichts. Geplante Durchläufe erfassen nur Projekte mit eigenen Manager-Einstellungen, und „Manager jetzt ausführen“ wird übersprungen, solange keine vorhanden sind. Die Richtlinientabelle unten kann weiterhin „aktiviert“ anzeigen – das ist der eingebaute Standardwert, auf den ein Projekt ohne eigene Einstellungen zurückfällt, kein laufender Manager.",
+      "cta": "Manager einrichten"
+    },
     "autonomyPaused": {
       "title": "Autonome Verwaltung pausiert",
       "daily": "Dieser Arbeitsbereich hat sein tägliches Token-Limit erreicht, daher sind der automatische Manager und die Agenten pausiert, bis es zurückgesetzt wird. Bis dahin wird das Backlog nicht neu priorisiert, nicht zugewiesene Arbeit nicht verteilt oder gestartet, und der Evermind lernt nicht aus neuen Ausführungen. Du kannst den Manager unten weiterhin manuell ausführen. Führe ein Upgrade deines Tarifs für ein höheres tägliches Kontingent durch.",
@@ -6085,14 +6797,26 @@
       "unscored": "Ohne Wert",
       "unranked": "Nicht eingeordnet",
       "unowned": "Ohne Verantwortlichen",
-      "openPullRequests": "Offene PRs"
+      "openPullRequests": "Offene PRs",
+      "flagged": "Abdeckungslücken",
+      "undated": "Ohne Termine"
     },
     "chart": {
       "title": "Backlog nach Priorität",
       "caption": "Wie sich die offene Arbeit auf die Prioritätsstufen verteilt.",
       "empty": "Noch keine offenen Tickets für das Diagramm."
     },
+    "subnav": {
+      "label": "Manager-Bereiche",
+      "overview": "Überblick",
+      "backlog": "Backlog",
+      "activity": "Aktivität",
+      "policy": "Richtlinie",
+      "stuck": "Blockiert",
+      "ask": "Fragen"
+    },
     "insightNudge": "{unscored} Tickets brauchen noch einen Geschäftswert und {unranked} sind nicht eingeordnet – führen Sie den Manager aus, um sie aufzuholen.",
+    "coverageNudge": "{flagged} Tickets fehlt eine erforderliche Rolle oder ein Prüfer – der Manager besetzt sie beim nächsten Durchlauf automatisch.",
     "policy": {
       "title": "Wie dieses Backlog verwaltet wird",
       "subtitle": "Legen Sie fest, wer das Backlog führt und wie viel automatisch geschieht. Sie können das jederzeit ändern.",
@@ -6134,7 +6858,70 @@
         "queue": {
           "label": "Einem Menschen überlassen",
           "help": "Niemals automatisch zusammenführen – hält jeden Pull Request für eine menschliche Prüfung und Zusammenführung zurück."
-        }
+        },
+        "needsAuthority": "Der Zeitpunkt spielt erst eine Rolle, wenn der Manager mergen darf – derzeit warten Merges auf einen Menschen."
+      },
+      "allowAutoMerge": {
+        "label": "Dem Manager das Mergen von Pull Requests erlauben",
+        "help": "Das ist die Berechtigung zum Mergen – unabhängig vom Zeitpunkt weiter unten. Ist sie aus, bereitet der Manager weiterhin alles vor und prüft es, überlässt den Merge aber einem Menschen."
+      },
+      "requireSignoff": {
+        "label": "Freigabe vor dem Abschluss verlangen",
+        "help": "Aus, bis Sie es einschalten. Wenn aktiviert, wird ein Ticket erst abgeschlossen – und sein Pull Request erst gemergt –, wenn alle erforderlichen Prüfenden freigegeben haben, und der Manager erinnert weiterhin die Rollen, die noch ausstehen. Ein Ticket, das niemand prüfen sollte, erfüllt die Bedingung nie."
+      },
+      "tri": {
+        "on": "Ein",
+        "off": "Aus",
+        "inherit": "Standard verwenden",
+        "builtinIs": "Integrierter Standard: {value}",
+        "workspaceIs": "Arbeitsbereich-Standard: {value}"
+      },
+      "effective": {
+        "title": "Aktuell wirksam",
+        "help": "Was der Manager tatsächlich tut, wenn alle Ebenen dieser Einstellungen zusammengeführt sind. Bei Berechtigungen gilt die strengste Antwort.",
+        "managingOn": "Backlog wird verwaltet",
+        "managingOff": "Verwaltung pausiert",
+        "mergeGranted": "Darf Pull Requests mergen",
+        "mergeWithheld": "Merges warten auf einen Menschen",
+        "signoffRequired": "Freigabe zum Abschließen erforderlich",
+        "signoffOptional": "Keine Freigabe erforderlich",
+        "ceremoniesUnattended": "Darf Zeremonien ohne Personen führen",
+        "ceremoniesNeedPeople": "Zeremonien brauchen eine Person",
+        "reassignGranted": "Darf ab {hours} h Untätigkeit neu zuweisen",
+        "reassignWithheld": "Abwesende behalten ihre Arbeit"
+      },
+      "workspaceDefaultsHint": "Alles, was auf „Standard verwenden“ bleibt, folgt den Arbeitsbereich-Standards unter Einstellungen → KI-Manager.",
+      "ceremonies": {
+        "sectionTitle": "Zeremonien",
+        "sectionHelp": "Was der Manager darf, wenn er ein Standup oder eine Planung durchführt und die betroffenen Personen nicht da sind."
+      },
+      "allowUnattendedCeremonies": {
+        "label": "Zeremonien ohne Personen durchführen",
+        "help": "Erlaubt dem Manager, ein geplantes Standup durchzuführen, dem niemand beigetreten ist. Aus: Die Sitzung wird trotzdem erfasst und zeigt, dass niemand da war – aber es wird nichts im Namen des Teams entschieden."
+      },
+      "allowAgentReassignment": {
+        "label": "Liegengebliebene Arbeit an Agenten geben",
+        "help": "Erlaubt einer Zeremonie, ein Ticket von einer abwesenden Person an einen Agenten zu übergeben. Fehlen allein genügt nie – das Ticket muss außerdem den unten genannten Zeitraum unberührt geblieben sein."
+      },
+      "allowAutoStaffLanes": {
+        "label": "Eine Stufe konfigurieren, die niemanden benennt",
+        "help": "Manche Stufen autorisieren überhaupt keine Rolle – keine Pflichtrolle deklariert, kein Agent zugewiesen –, sodass auf einem Lifecycle-verwalteten Board nichts, was dort liegt, jemals gestartet werden kann. Der Manager meldet diese Stufen immer; diese Option entscheidet, ob er eine davon zusätzlich beheben darf, indem er ihr einen Ausführenden zuweist. Die Erteilung startet alle Tickets, die dort bereits warten – eine bewusst leer gelassene Stufe (eine Eingangsspalte, aus der Sie von Hand ziehen) sollte es also bleiben."
+      },
+      "agentReassignIdleHours": {
+        "label": "Erst nach Untätigkeit von",
+        "help": "Wie lange ein Ticket unberührt bleiben muss, bevor der Anspruch der abwesenden Person erlischt. Lang genug, dass eine normale Abwesenheit ihn nie erreicht.",
+        "unit": "Stunden",
+        "inherited": "Geerbter Wert wird verwendet: {value} Stunden"
+      },
+      "agentReassignMaxPerSession": {
+        "label": "Höchstens, pro Zeremonie",
+        "help": "Harte Grenze, wie viele Tickets eine einzelne Zeremonie übergeben darf – damit ein Standup nie unbemerkt einen ganzen Sprint umverteilt.",
+        "unit": "Tickets",
+        "inherited": "Geerbter Wert wird verwendet: {value}"
+      },
+      "autoSchedule": {
+        "label": "Die Arbeit terminieren",
+        "help": "Gibt Tickets ohne Termine ein Start- und Fälligkeitsdatum in der Reihenfolge des Rankings und berücksichtigt Abhängigkeiten. Ändert nie ein Datum, das du selbst gesetzt hast."
       }
     },
     "backlog": {
@@ -6155,8 +6942,17 @@
       "assign": "Zugewiesen",
       "score_value": "Bewertet",
       "dispatch": "Versandt",
+      "sync_pr": "PR aktualisiert",
       "merge_pr": "PR zusammengeführt",
-      "flag": "Markiert"
+      "flag": "Markiert",
+      "coordinate": "Rolle besetzt",
+      "schedule": "Terminiert",
+      "merge_blocked": "Merge verweigert",
+      "merge_failed": "Merge abgelehnt",
+      "pr_conflict": "PR-Konflikt",
+      "triage": "Triagiert",
+      "escalate": "Eskaliert",
+      "systemic": "Plattform-Befund"
     },
     "runTasks": {
       "title": "Manager-Aufgaben",
@@ -6177,6 +6973,157 @@
       "title": "Letzte Aktivität",
       "working": "Der Manager arbeitet – Entscheidungen werden live übertragen…",
       "empty": "Der Manager hat noch keine Aktionen durchgeführt."
+    },
+    "stalls": {
+      "title": "Blockierte Tickets",
+      "caption": "Arbeit, die der Manager nicht abschließen kann, warum, und was er bereits versucht hat. Nach {maxAttempts} Versuchen, die ein Ticket nicht bewegen, hört der Manager auf und übergibt es an Sie.",
+      "loading": "Prüfe, was blockiert ist…",
+      "empty": "Nichts ist blockiert – jedes Ticket bewegt sich oder ist fertig.",
+      "error": "Die Liste blockierter Tickets konnte nicht geladen werden.",
+      "retry": "Erneut versuchen",
+      "byCause": "Was die Arbeit aufhält",
+      "needsYou": "Braucht Sie",
+      "lastTried": "Zuletzt versucht {when}",
+      "attemptsOf": "{attempts} von {max} Versuchen",
+      "idleDays": "{days, plural, one {# Tag} other {# Tage}}",
+      "idleToday": "Weniger als ein Tag",
+      "stat": {
+        "working": "Manager kümmert sich darum",
+        "escalated": "An eine Person übergeben"
+      },
+      "col": {
+        "ticket": "Ticket",
+        "cause": "Warum es blockiert ist",
+        "doing": "Was der Manager tut",
+        "attempts": "Versuche",
+        "stuckFor": "Blockiert seit"
+      },
+      "cause": {
+        "live": "Läuft",
+        "cooling_down": "Wartet nach Fehlschlag",
+        "moving": "In Bewegung",
+        "never_started": "Nie gestartet",
+        "unassigned": "Niemand zugewiesen",
+        "managed_no_role": "Keine Rolle kann diese Phase ausführen",
+        "capability_gap": "Kein fähiger Agent",
+        "human_gate": "Wartet auf menschliche Freigabe",
+        "failure_breaker": "Nach wiederholten Fehlern gestoppt",
+        "missing_deliverable": "Kein Ergebnis geliefert",
+        "build_failed": "Build nicht grün",
+        "awaiting_signoff": "Wartet auf Freigabe",
+        "pr_conflict": "Pull Request hat Konflikte",
+        "pr_unreconciled": "Pull-Request-Status abgewichen",
+        "merge_withheld": "Merge durch Richtlinie zurückgehalten",
+        "blocked": "Blockiert",
+        "unknown": "Nicht klassifiziert"
+      },
+      "copyDiagnosticsAria": "Vollständige KI-Manager-Diagnose kopieren – Richtlinienebenen, Autonomie-Status, Backlog-Zahlen, jeder Management-Durchlauf, jede Entscheidung und jedes blockierte Ticket"
+    },
+    "census": {
+      "title": "Blockade-Übersicht",
+      "caption": "Alle Tickets dieses Projekts, klassifiziert danach, was sie aufhält — nicht nur die, die der Manager im Detail untersucht hat.",
+      "loading": "Blockaden werden gezählt…",
+      "empty": "Nichts hängt fest – alle Tickets bewegen sich oder sind fertig.",
+      "error": "Die Blockade-Übersicht konnte nicht geladen werden.",
+      "retry": "Erneut versuchen",
+      "coverageNote": "{stalled} Tickets hängen fest; {diagnosed} wurden bisher im Detail untersucht. Der Rest wird hier gezählt, aber noch nicht einzeln geprüft.",
+      "computedAt": "Gezählt {when}.",
+      "stat": {
+        "managed": "Aktive Tickets",
+        "stalled": "Hängen fest",
+        "moving": "In Bewegung",
+        "deepDiagnosed": "Im Detail untersucht"
+      },
+      "cohorts": {
+        "title": "Was die Arbeit aufhält – über alle Tickets hinweg",
+        "aria": "Feststeckende Tickets nach Ursache gruppiert"
+      },
+      "findings": {
+        "title": "Plattform-Befunde",
+        "caption": "Wenn viele Tickets aus demselben Grund feststecken, ist das ein einzelner Defekt und nicht eine Vielzahl von Ticket-Problemen. Der Manager diagnostiziert ihn und legt ein Ticket zur Behebung an.",
+        "headline": "{count} Tickets hängen an „{cause}“ fest",
+        "remediation": "Behebung:",
+        "sourceAi": "vom Modell diagnostiziert",
+        "sourceHeuristic": "aus Messwerten diagnostiziert",
+        "openTicket": "{key} öffnen",
+        "raised": "Erfasst {when}"
+      }
+    },
+    "today": {
+      "title": "Heute",
+      "loading": "Die heutige Arbeit wird gelesen…",
+      "error": "Die heutige Zusammenfassung konnte nicht geladen werden.",
+      "retry": "Erneut versuchen",
+      "updated": "aktualisiert {when}",
+      "lastPass": "Letzter Verwaltungsdurchlauf {when}.",
+      "viewActivity": "Alle Entscheidungen ansehen",
+      "headline": {
+        "team": "Das Team hat {shipped, plural, =0 {nichts} one {1 Ticket} other {# Tickets}} abgeschlossen und {merged, plural, =0 {keine Pull Requests} one {1 Pull Request} other {# Pull Requests}} zusammengeführt, bei {runs, plural, =0 {keinen abgeschlossenen Agentenläufen} one {1 abgeschlossenen Agentenlauf} other {# abgeschlossenen Agentenläufen}}.",
+        "manager": "Du hast {passes, plural, =0 {keine Verwaltungsdurchläufe} one {1 Verwaltungsdurchlauf} other {# Verwaltungsdurchläufe}} ausgeführt und {decisions, plural, =0 {keine Entscheidungen} one {1 Entscheidung} other {# Entscheidungen}} getroffen.",
+        "quiet": "Heute hat sich noch nichts bewegt.",
+        "quietYesterday": "Gestern: {shipped, plural, =0 {keine Tickets} one {1 Ticket} other {# Tickets}} abgeschlossen, {merged, plural, =0 {keine Pull Requests} one {1 Pull Request} other {# Pull Requests}} zusammengeführt, {decisions, plural, =0 {keine Manager-Entscheidungen} one {1 Manager-Entscheidung} other {# Manager-Entscheidungen}}."
+      },
+      "stat": {
+        "shipped": "Heute abgeschlossen",
+        "shippedSub": "{opened} heute erstellt",
+        "merged": "Zusammengeführte PRs",
+        "mergedSub": "{opened} heute geöffnet",
+        "runs": "Abgeschlossene Läufe",
+        "runsSub": "{failed} fehlgeschlagen",
+        "moves": "Vorwärtsschritte",
+        "movesSub": "{human} von Menschen · {agent} von Agenten",
+        "movesSubWithSystem": "{human} von Menschen · {agent} von Agenten · {system} ohne Zuordnung",
+        "decisions": "Manager-Entscheidungen",
+        "decisionsSub": "heute {passes, plural, =0 {keine Durchläufe} one {1 Durchlauf} other {# Durchläufe}}"
+      },
+      "shipped": {
+        "title": "Heute abgeschlossen",
+        "empty": "Heute hat noch kein Ticket eine Abschlussspalte erreicht.",
+        "unowned": "Nicht zugewiesen",
+        "more": "+{n} weitere"
+      },
+      "decisions": {
+        "title": "Was der Manager entschieden hat",
+        "empty": "Der Manager hat heute noch keine Entscheidung getroffen.",
+        "aria": "Manager-Entscheidungen heute, nach Typ"
+      },
+      "contributors": {
+        "title": "Wer heute Arbeit bewegt hat",
+        "caption": "Menschen und Agenten in einer Liste. Die drei Zahlen bleiben getrennt, weil ein abgeschlossenes Ticket, ein fertiger Lauf und ein Spaltenwechsel nicht dieselbe Arbeitseinheit sind.",
+        "metrics": "{shipped} abgeschlossen · {runs} Läufe · {moves} Schritte"
+      },
+      "attention": {
+        "title": "{open, plural, one {1 Vorgang wartet auf einen Menschen} other {# Vorgänge warten auf einen Menschen}} · {today} heute eskaliert",
+        "since": "eskaliert {when}",
+        "open": "Blockade-Register öffnen"
+      }
+    },
+    "health": {
+      "title": "Backlog-Zustand",
+      "caption": "Der Dauerzustand des Boards — was noch keinen Wert, keinen Rang, keine Termine oder keinen Verantwortlichen hat."
+    },
+    "ask": {
+      "title": "Den Manager fragen",
+      "caption": "Fragen Sie den Manager direkt. Er liest zuerst seine eigenen Aufzeichnungen — was fertig wurde, was er entschieden hat, was feststeckt und was ihm überhaupt erlaubt war — und antwortet dann.",
+      "loading": "Unterhaltung wird geöffnet…",
+      "error": "Der Manager konnte gerade nicht antworten.",
+      "empty": "Noch nichts gefragt. Beginnen Sie mit einer der Fragen unten.",
+      "placeholder": "Fragen Sie nach dem heutigen Tag, einem Ticket oder danach, warum etwas nicht vorangeht…",
+      "send": "Fragen",
+      "sending": "Wird gefragt…",
+      "you": "Sie",
+      "fallbackName": "der Manager",
+      "thinking": "{name} prüft die Aufzeichnungen…",
+      "answeredBy": "Beantwortet von {name}",
+      "answeredByDesignated": "Beantwortet von {name}, dem benannten Manager dieses Projekts",
+      "noAgent": "In diesem Workspace ist noch kein Manager-Agent eingerichtet, daher kann hier niemand antworten. Benennen Sie unter „Richtlinie“ einen Manager, dann öffnet sich die Unterhaltung.",
+      "compactPrompt": "Nicht der Tag, den Sie sich erhofft haben? Fragen Sie {name} danach.",
+      "starter": {
+        "today": "Was haben Sie und das Team heute geschafft?",
+        "blocked": "Warum wurde so wenig fertig — was blockiert die Arbeit?",
+        "plan": "Was tun Sie als Nächstes, um das aufzulösen?"
+      },
+      "copyDiagnosticsAria": "Unterhaltung und Werkzeugprotokoll des Managers kopieren"
     }
   },
   "project360": {
@@ -6884,6 +7831,8 @@
     "taskCount": "{count, plural, one {# Aufgabe} other {# Aufgaben}}",
     "byStage": "Nach Phase",
     "byAssignee": "Nach Zuständigem",
+    "expandAssigneeRow": "Aufgaben von {name} aufklappen",
+    "collapseAssigneeRow": "Aufgaben von {name} einklappen",
     "startStandup": "Standup starten",
     "startPlanning": "Planung starten",
     "viewPrdAria": "PRD ansehen",
@@ -6901,6 +7850,7 @@
     "deleteTask": "Aufgabe löschen",
     "tabAgent": "Agent / Fähigkeiten",
     "tabPrd": "PRD",
+    "tabAccountability": "Freigaben & Verantwortlichkeit",
     "changeStatusTitle": "Zum Ändern des Status klicken",
     "changePriorityTitle": "Zum Ändern der Priorität klicken",
     "viewCodeChangesTitle": "Die Code-Änderungen auf GitHub ansehen",
@@ -6914,7 +7864,116 @@
     "errMove": "Verschieben fehlgeschlagen",
     "tabChanges": "Änderungen",
     "release": "Release",
-    "delayReason": "Verzögerungsgrund"
+    "delayReason": "Verzögerungsgrund",
+    "lifecycleAction": "Lebenszyklus",
+    "lifecycleActionTitle": "Lebenszyklus & Autonomie-Nachweis — hat sich dieses Ticket selbst bewegt, oder hat es bei jedem Schritt ein Mensch geschoben?"
+  },
+  "ticketLifecycle": {
+    "title": "Lebenszyklus / Autonomie-Nachweis",
+    "loading": "Beweiskette wird zusammengestellt…",
+    "errorTitle": "Der Lebenszyklus dieses Tickets konnte nicht geladen werden",
+    "retry": "Erneut versuchen",
+    "openedAt": "Erstellt",
+    "currentLane": "Aktuelle Spur",
+    "origin": {
+      "label": "Erstellt von",
+      "human": "Einer Person",
+      "agent": "Einem Agenten (KI-Manager)",
+      "system": "Automatisierung",
+      "manager_card": "Grooming-Karte des KI-Managers",
+      "unknown": "Nicht erfasst"
+    },
+    "verdict": {
+      "fullyAutonomous": "Lief durchgängig autonom — 0 menschliche Spurwechsel",
+      "fullyAutonomousDetail": "Die Autonomie hat {hops, plural, one {# Spurwechsel} other {# Spurwechsel}} vorgenommen und eine Endspur erreicht. Keine Person hat dieses Ticket bewegt.",
+      "partialStalled": "Teilweise autonom — festgefahren",
+      "partialStalledDetail": "Die Autonomie hat {hops, plural, one {# Spurwechsel} other {# Spurwechsel}} vorgenommen, aber das Ticket ist nicht bei Erledigt und es läuft nichts.",
+      "partialRunning": "Teilweise autonom — arbeitet noch",
+      "partialRunningDetail": "Die Autonomie hat {hops, plural, one {# Spurwechsel} other {# Spurwechsel}} vorgenommen, und aktuell läuft ein Lauf.",
+      "humanDriven": "Von Menschen getrieben — die Autonomie hat dieses Ticket nie bewegt",
+      "humanDrivenDetail": "Jeden Spurwechsel hat eine Person gemacht (insgesamt {hops}). Kein einziger autonomer Schritt ist erfasst.",
+      "assisted": "Mit menschlicher Hilfe abgeschlossen",
+      "assistedDetail": "Es hat eine Endspur erreicht, aber eine Person hat {humanHops} der {totalHops} Spurwechsel gemacht.",
+      "noMovement": "Nie bewegt",
+      "noMovementDetail": "Dieses Ticket hat nicht ein einziges Mal die Spur gewechselt — weder eine Person noch die Autonomie hat es bewegt.",
+      "liveRun": "Lauf aktiv",
+      "managerCardTitle": "Koordinationskarte",
+      "managerCard": "Der KI-Manager erstellt diese Karten, um das Backlog zu pflegen; die Autonomie verweigert deren Ausführung bewusst. „Keine Läufe“ ist hier das gewollte Verhalten, kein Fehler."
+    },
+    "stall": {
+      "title": "Warum es liegen bleibt",
+      "unrecorded": "Keine Sperre erfasst — bisher hat nichts versucht, dieses Ticket auszuführen.",
+      "laneGate": "Spuren-Gate",
+      "gate": {
+        "auto": "Automatisch",
+        "human": "Freigabe durch Person erforderlich"
+      },
+      "staffed": "Der Spur zugewiesene Agenten",
+      "noneStaffed": "Keine",
+      "candidate": "„Jetzt ausführen“ würde starten",
+      "noCandidate": "Nichts kann es ausführen",
+      "streak": "Aufeinanderfolgende fehlgeschlagene Läufe",
+      "streakValue": "{count} (Autonomie stoppt bei {limit})",
+      "cooldown": "Verbleibende Abkühlzeit",
+      "capabilityMismatch": "Fehlende Fähigkeit"
+    },
+    "stats": {
+      "title": "Schritte & Läufe",
+      "autonomousHops": "Autonome Schritte",
+      "autonomousHopsHint": "Spurwechsel, die ein Agent oder die Automatisierung geschrieben hat.",
+      "humanHops": "Menschliche Schritte",
+      "humanHopsHint": "Spurwechsel, die eine Person gemacht hat.",
+      "runsDispatched": "Läufe gestartet",
+      "runsCompleted": "Läufe erfolgreich",
+      "runsFailed": "Läufe fehlgeschlagen",
+      "backwardHops": "Nacharbeit-Schritte",
+      "backwardHopsHint": "Spurwechsel zurück — Arbeit für eine weitere Runde zurückgeschickt."
+    },
+    "timeline": {
+      "title": "Beweiskette",
+      "help": "Jede Zeile nennt die Tabelle, aus der sie gelesen wurde — das ist Beweis, keine Erzählung.",
+      "empty": "Für dieses Ticket sind noch keine Lebenszyklus-Ereignisse erfasst.",
+      "laneMove": "{from} → {to}",
+      "laneEntered": "Eingetreten in {to}",
+      "backward": "Nacharbeit",
+      "run": "Lauf #{id}",
+      "dispatchedBy": "Gestartet von {who}"
+    },
+    "kind": {
+      "created": "Erstellt",
+      "lane_moved": "Spur gewechselt",
+      "run_dispatched": "Lauf gestartet",
+      "run_completed": "Lauf abgeschlossen",
+      "run_failed": "Lauf fehlgeschlagen",
+      "autorun_dispatched": "Auto-Lauf gestartet",
+      "autorun_skipped": "Auto-Lauf abgelehnt",
+      "autorun_error": "Auto-Lauf-Fehler",
+      "autorun_awaiting_approval": "Auto-Lauf wartet auf Freigabe",
+      "role_event": "Rollen-Ereignis"
+    },
+    "source": {
+      "activity_log": "Aktivitäts-/Audit-Log",
+      "task_status_transitions": "Spurwechsel-Log",
+      "executions": "Lauf-Datensätze",
+      "tool_audit_events": "Audit der Auto-Lauf-Entscheidungen",
+      "aria": "Quelle: {label}"
+    },
+    "copyDiagnosticsAria": "Die vollständige Lebenszyklus-Diagnose dieses Tickets kopieren, mit allen Ereignissen, Ausführungs-IDs und Gate-Gründen",
+    "failures": {
+      "title": "Fehleranalyse",
+      "help": "Fehlgeschlagene Läufe nach Ursache gruppiert. Eine Ursache, die sich in regelmäßigen Abständen wiederholt, ist eine Wiederholungsschleife und keine Reihe unabhängiger Fehler.",
+      "runs": "{count, plural, one {# Lauf ist so fehlgeschlagen} other {# Läufe sind so fehlgeschlagen}}",
+      "cadence": "ca. alle {interval}",
+      "cadenceOnce": "einmal aufgetreten",
+      "window": "Erster {first} · letzter {last}",
+      "dispatchedBy": "gestartet von {who}",
+      "runIds": "Läufe: {ids}"
+    },
+    "dispatchers": {
+      "title": "Wer die Läufe gestartet hat",
+      "help": "Das Subsystem, das jeden Lauf gestartet hat. Alles außer dem Spur-Trigger hat den Dispatcher erreicht, ohne dessen Schutzschalter für aufeinanderfolgende Fehler zu passieren.",
+      "counts": "{runs} Läufe · {completed} abgeschlossen · {failed} fehlgeschlagen"
+    }
   },
   "taskChanges": {
     "allChanges": "Alle Änderungen",
@@ -6944,6 +8003,7 @@
     "sub": {
       "health": "Zustand",
       "directory": "Verzeichnis",
+      "sessions": "Sitzungen",
       "security": "Sicherheit",
       "emulation": "Emulation",
       "tenants": "Arbeitsbereiche",
@@ -6960,7 +8020,12 @@
       "errors": "Fehler",
       "audit": "Prüfprotokoll",
       "apiKeys": "API-Schlüssel",
-      "token": "Superadmin-Token"
+      "token": "Superadmin-Token",
+      "feedback": "Feedback",
+      "releaseNotes": "Neuerungen",
+      "demoFunnel": "Demo-Funnel",
+      "salesLeads": "Sales-Leads",
+      "cron": "Geplante Läufe"
     },
     "common": {
       "loading": "Wird geladen…",
@@ -7040,12 +8105,41 @@
       "errorVolume": "Fehlervolumen"
     },
     "errors": {
-      "lastN": "Letzte {n} Fehler",
-      "noErrorsRecorded": "Keine Fehler erfasst.",
+      "noErrorsRecorded": "Keine Fehler aufgezeichnet.",
       "time": "Zeit",
-      "method": "Methode",
       "path": "Pfad",
-      "message": "Meldung"
+      "message": "Meldung",
+      "tenant": "Arbeitsbereich",
+      "kind": "Art",
+      "source": "Quelle",
+      "operation": "Operation",
+      "count": "Ereignisse",
+      "tenants": "Arbeitsbereiche",
+      "lastSeen": "Zuletzt gesehen",
+      "sample": "Letzte Meldung",
+      "statTotal": "Ausnahmen",
+      "statUnhandled": "Ergaben einen 500er",
+      "statHandled": "Behandelt",
+      "statFaults": "Verschiedene Fehler",
+      "topFaults": "Häufigste Fehler",
+      "window": "Zeitraum",
+      "window_all": "Gesamter Zeitraum",
+      "window_h1": "Letzte Stunde",
+      "window_h24": "Letzte 24 Stunden",
+      "window_d7": "Letzte 7 Tage",
+      "window_d30": "Letzte 30 Tage",
+      "handledFilter": "Behandlungsstatus",
+      "handled_all": "Alle",
+      "handled_unhandled": "Unbehandelt",
+      "handled_handled": "Behandelt",
+      "sourceFilter": "Quellmodul",
+      "allSources": "Alle Quellen",
+      "searchPlaceholder": "Quelle, Pfad oder Meldung suchen…",
+      "clearFault": "Fehlerfilter zurücksetzen",
+      "scopedTo": "Zeigt {source} · {operation}",
+      "context": "Kontext",
+      "stack": "Stacktrace",
+      "pagination": "{from}–{to} von {total}"
     },
     "token": {
       "shareWarning": "Dieses Web-Token gewährt Superadmin-API-Zugriff für Ihre aktuelle Sitzung. Geben Sie es nur an vertrauenswürdige Tools weiter.",
@@ -7132,6 +8226,22 @@
         "colDuration": "Dauer",
         "durationActive": "Aktiv"
       }
+    },
+    "sessions": {
+      "title": "Adoptionssitzungen",
+      "subtitle": "Anonyme Brain- und Gratis-Tool-Besucher inklusive Konto- und Bezahlkonvertierung.",
+      "count": "{count, plural, one {# Sitzung} other {# Sitzungen}}",
+      "empty": "Keine Gastsitzungen gefunden.",
+      "visitor": "Besucher",
+      "engagement": "Interaktion",
+      "firstSeen": "Erstmals gesehen",
+      "lastSeen": "Zuletzt gesehen",
+      "conversion": "Konvertierung",
+      "brainMessages": "{count} Brain-Nachrichten",
+      "tokensAndTools": "{tokens} Tokens · {tools} Tool-Aufrufe",
+      "guest": "Gast",
+      "registered": "registriert",
+      "paid": "bezahlt"
     },
     "usage": {
       "aiAnalyze": "KI-Analyse",
@@ -7399,7 +8509,14 @@
     },
     "permissions": {
       "title": "Rollen & Berechtigungen",
-      "colPermission": "Berechtigung"
+      "colPermission": "Berechtigung",
+      "enforced": "Durchgesetzt",
+      "advisory": "Hinweisend",
+      "granted": "Gewährt",
+      "denied": "Verweigert",
+      "enforcedHint": "Diese Berechtigung wird bei jeder Anfrage geprüft. Ausnahmen wirken sofort.",
+      "advisoryHint": "Diese Berechtigung wird noch nicht zur Laufzeit geprüft — die Route ist nur durch die Rollenstufe geschützt, daher ändert das Bearbeiten dieser Zeile lediglich die Anzeige dieser Tabelle.",
+      "enforcementNote": "Zeilen mit „Durchgesetzt“ werden bei jeder Anfrage geprüft, eine Ausnahme wirkt daher sofort. Zeilen mit „Hinweisend“ sind nur durch die Rollenstufe geschützt: Sie zu bearbeiten ändert nur diese Tabelle, nicht das, was ein Mitglied tatsächlich tun kann."
     },
     "modules": {
       "title": "Plattform-Module",
@@ -7558,6 +8675,157 @@
       "requestBody": "Anfragetext",
       "responseBody": "Antworttext",
       "callerMetadata": "Aufrufer-Metadaten"
+    },
+    "releaseNotes": {
+      "digestTitle": "Wöchentliche Produkt-Update-E-Mail",
+      "unsentCount": "{count, plural, =0 {Keine ungesendeten Notizen} one {# veröffentlichte Notiz noch nicht gesendet} other {# veröffentlichte Notizen noch nicht gesendet}}",
+      "digestSent": "{notes} Neuerungen an {sent} Personen gesendet ({suppressed} abgemeldet).",
+      "sendDigest": "Jetzt senden",
+      "sendDigestConfirm": "Jetzt alle veröffentlichten, noch nicht gesendeten Neuerungen per E-Mail an alle einwilligenden Nutzer senden?",
+      "editNote": "Neuerung bearbeiten",
+      "newNote": "Neue Neuerung",
+      "phVersion": "Version (z. B. 2026.7.93)",
+      "phTitle": "Titel – der Nutzen, in klarer Sprache",
+      "phBody": "Was es dem Nutzer bringt. Leerzeilen trennen Absätze.",
+      "savePublish": "Speichern & veröffentlichen",
+      "saveDraft": "Entwurf speichern",
+      "allNotes": "Alle Neuerungen ({count})",
+      "thTitle": "Titel",
+      "thVersion": "Version",
+      "thCategory": "Kategorie",
+      "thStatus": "Status",
+      "thEmailed": "Gesendet",
+      "published": "Veröffentlicht",
+      "draft": "Entwurf",
+      "publish": "Veröffentlichen",
+      "unpublish": "Zurückziehen",
+      "deleteConfirm": "Die Neuerung „{title}“ löschen? Dies kann nicht rückgängig gemacht werden.",
+      "sendNote": "Jetzt senden",
+      "resendNote": "Erneut senden",
+      "sendNoteHint": "Diese Neuerung jetzt per E-Mail an alle einwilligenden Nutzer senden – sie wird aus der wöchentlichen Zusammenfassung ausgeschlossen.",
+      "resendNoteHint": "Diese Neuerung wurde bereits gesendet. Erneut an alle einwilligenden Nutzer senden.",
+      "sendNoteConfirm": "Die Neuerung „{title}“ jetzt per E-Mail an alle einwilligenden Nutzer senden? Sie wird danach aus der wöchentlichen Zusammenfassung ausgeschlossen.",
+      "resendNoteConfirm": "Diese Neuerung wurde bereits gesendet. „{title}“ jetzt erneut an alle einwilligenden Nutzer senden?"
+    },
+    "demoFunnel": {
+      "title": "Demo-Conversion-Funnel",
+      "subtitle": "Anonyme Demo-Konto-Interaktion nach Persona (letzte 30 Tage).",
+      "persona": "Persona",
+      "total": "Gesamt",
+      "convRate": "{rate}% Registrierung",
+      "recentTitle": "Letzte Ereignisse",
+      "empty": "Noch keine Demo-Aktivität.",
+      "when": "Wann",
+      "event": "Ereignis",
+      "path": "Pfad",
+      "personas": {
+        "ai-team": "KI-Softwareteam",
+        "insights": "Engineering-ROI & Insights",
+        "pmo": "PMO-Kommandozentrale",
+        "talent": "Talente & Marktplatz",
+        "governance": "Sicherheit, Architektur & Governance"
+      },
+      "stages": {
+        "demo_start": "Gestartet",
+        "page_view": "Seitenaufrufe",
+        "convert_prompt_shown": "Hinweis gezeigt",
+        "convert_clicked": "Registrierung geklickt",
+        "book_demo_opened": "Buchung geöffnet",
+        "lead_submitted": "Lead gesendet",
+        "exit_prompt_shown": "Exit gezeigt",
+        "demo_exit": "Verlassen"
+      }
+    },
+    "salesLeads": {
+      "title": "Sales-Leads",
+      "subtitle": "Demo-Buchungs- und Exit-Intent-Leads von der Marketing-Website.",
+      "count": "{count} Leads",
+      "filterAll": "Alle Status",
+      "contact": "Kontakt",
+      "interest": "Interesse",
+      "source": "Quelle",
+      "received": "Erhalten",
+      "statusHeader": "Status",
+      "empty": "Noch keine Leads.",
+      "mailSubject": "Deine Builderforce-Demo",
+      "status": {
+        "new": "Neu",
+        "contacted": "Kontaktiert",
+        "qualified": "Qualifiziert",
+        "closed": "Geschlossen"
+      },
+      "personas": {
+        "ai-team": "KI-Softwareteam",
+        "insights": "Engineering-ROI & Insights",
+        "pmo": "PMO-Kommandozentrale",
+        "talent": "Talente & Marktplatz",
+        "governance": "Sicherheit, Architektur & Governance"
+      }
+    },
+    "cron": {
+      "title": "Geplante Läufe",
+      "subtitle": "Cloudflare liefert Cron-Trigger an den Worker, nie an eine URL. Erzwinge hier einen Lauf, statt auf das Arbeits-Gate zu warten.",
+      "forceNote": "Ein Lauf von hier umgeht das KV-Arbeits-Gate und verschiebt den Mindestintervall-Timer nicht – ein erzwungener Lauf verzögert also nie den nächsten echten Tick. Um das Gate selbst zu testen, nutze „Ausstehende Arbeit signalisieren“.",
+      "gate": {
+        "heading": "KV-Arbeits-Gate",
+        "checkedAt": "Geprüft {at}",
+        "wouldRun": "Der nächste Tick würde den Datenbank-Durchlauf ausführen",
+        "wouldSkip": "Der nächste Tick würde übersprungen – Postgres bleibt schlafend",
+        "reason": {
+          "signal": "ein Schreibvorgang hat ausstehende Arbeit signalisiert",
+          "floor": "das Mindestintervall ist abgelaufen",
+          "idle": "nichts signalisiert und das Mindestintervall ist nicht fällig",
+          "kv-unavailable": "KV ist nicht erreichbar, das Gate lässt daher durch"
+        },
+        "floorInterval": "Mindestintervall",
+        "overridden": "überschrieben",
+        "lastFloor": "Letzter Mindest-Durchlauf",
+        "nextFloor": "Nächster Mindest-Durchlauf",
+        "never": "Nie",
+        "asap": "Nächster Tick",
+        "explainIdle": "Ein untätiges Gate bedeutet nicht, dass nichts aussteht. Das Signal wird nur gesetzt, wenn ein Ticket seine Gates tatsächlich passiert – ein Board voller blockierter Tickets signalisiert also nichts und wartet auf den Mindest-Durchlauf.",
+        "kvUnbound": "AUTH_CACHE_KV ist nicht gebunden – das Gate lässt durch und jeder Tick führt den Durchlauf aus.",
+        "signalled": "Ausstehende Arbeit signalisiert – der nächste geplante Tick führt den Durchlauf aus."
+      },
+      "actions": {
+        "runFrequent": "▶ 5-Minuten-Tick ausführen",
+        "signal": "⚑ Ausstehende Arbeit signalisieren",
+        "run": "Ausführen",
+        "runGroup": "▶ Gruppe ausführen",
+        "running": "Läuft…"
+      },
+      "cadence": {
+        "frequent": "Häufiger Tick",
+        "daily": "Täglich",
+        "weekly-mon": "Wöchentlich (Montag)",
+        "weekly-fri": "Wöchentlich (Freitag)",
+        "everyFiveMinutes": "alle 5 Minuten (mit Arbeits-Gate)"
+      },
+      "table": {
+        "sweep": "Lauf",
+        "description": "Aufgabe",
+        "lastRun": "Letzter erzwungener Lauf"
+      },
+      "badge": {
+        "dispatches": "startet Agenten-Läufe",
+        "unavailable": "in dieser Umgebung deaktiviert"
+      },
+      "outcome": {
+        "ok": "OK in {ms} ms",
+        "noop": "nichts zu tun",
+        "failed": "Fehlgeschlagen",
+        "timedOut": "Läuft nach {ms} ms noch – Ergebnis in den Logs prüfen",
+        "skipped": "Übersprungen (deaktiviert)"
+      },
+      "result": {
+        "heading": "{target} erzwungen:",
+        "summary": "{ok} von {total} Läufen in {ms} ms abgeschlossen · {dispatched} Agenten-Läufe gestartet"
+      },
+      "confirm": {
+        "title": "Geplanten Lauf erzwingen?",
+        "dispatch": "„{target}“ auszuführen startet echte Agenten-Läufe in allen Workspaces ({count} der ausgewählten Läufe verteilen Arbeit). Das verbraucht Tokens und ist kein Probelauf.",
+        "confirmLabel": "Jetzt ausführen"
+      }
     }
   },
   "providerKeys": {
@@ -7565,10 +8833,43 @@
     "subtitle": "Verbinden Sie Ihr eigenes Anthropic-, OpenAI- oder Google-Konto. Verbundene Anbieter betreiben Ihre Agenten mit Ihrem eigenen Konto und bestimmen die Modellauswahl in jedem Auswahlmenü – die Nutzung auf Ihrem Rechner (On-Premises und VS Code) ist kostenlos; die Nutzung von Cloud-Agenten wird weiterhin berechnet. Zugangsdaten werden verschlüsselt gespeichert und nie wieder angezeigt.",
     "loading": "Wird geladen…",
     "errorPrefix": "Fehler: {message}",
+    "openRouter": {
+      "title": "OpenRouter-Verbindungen",
+      "subtitle": "Erstellen Sie mehrere benannte Registrierungen mit einem oder mehreren Modellen und priorisieren Sie sie zusammen mit Ihren KI-Konten.",
+      "cardBlurb": "Wählen Sie pro Registrierung ein oder mehrere OpenRouter-Modelle und priorisieren Sie sie mit Ihren Anbieter-Konten.",
+      "add": "Verbindung hinzufügen",
+      "connectedCount": "● {count} Verbindung(en)",
+      "brokenCount": "{count} OpenRouter-Verbindung(en)",
+      "modelCount": "{count} ausgewählte(s) Modell(e)",
+      "costOwnKey": "Builderforce-Routing-Gebühren: {cost}. Die Token berechnet OpenRouter Ihrem eigenen Konto.",
+      "costManaged": "Von Builderforce berechnet: {cost} (Routing + Token).",
+      "ownKey": "Ihr OpenRouter-Schlüssel",
+      "managedKey": "Builderforce-Abrechnung",
+      "edit": "Bearbeiten",
+      "empty": "Noch keine OpenRouter-Verbindungen.",
+      "createTitle": "OpenRouter-Modelle registrieren",
+      "editTitle": "OpenRouter-Verbindung bearbeiten",
+      "name": "Verbindungsname",
+      "apiKey": "OpenRouter-API-Schlüssel (optional)",
+      "clearKey": "Gespeicherten Schlüssel entfernen und Builderforce-Abrechnung verwenden",
+      "billing": "Jede Anfrage läuft über Builderforce und enthält eine Plattformgebühr von 0,01 $. Mit eigenem Schlüssel berechnet OpenRouter die Token; ohne Schlüssel berechnet Builderforce zusätzlich die OpenRouter-Tokenkosten.",
+      "orderTitle": "Modellreihenfolge",
+      "orderHint": "Agenten nutzen das oberste Modell und weichen bei Fehlern nach unten aus. „Verbindung testen“ prüft das oberste.",
+      "removeModel": "{model} aus dieser Verbindung entfernen",
+      "search": "OpenRouter-Modelle suchen…",
+      "selected": "{count} Modell(e) ausgewählt",
+      "validation": "Geben Sie einen Namen ein und wählen Sie mindestens ein Modell.",
+      "saveError": "OpenRouter-Verbindung konnte nicht gespeichert werden",
+      "removeError": "OpenRouter-Verbindung konnte nicht entfernt werden",
+      "confirmRemove": "OpenRouter-Verbindung „{label}“ entfernen?",
+      "confirmDisconnectAll": "OpenRouter trennen? Dadurch werden alle {count} Registrierungen entfernt. Agenten, die sie nutzen, greifen auf die verwalteten Modelle von Builderforce zurück."
+    },
     "status": {
       "connected": "● {subscription} verbunden",
       "keyConfigured": "● {label}-API-Schlüssel konfiguriert",
-      "notConnected": "○ Nicht verbunden"
+      "notConnected": "○ Nicht verbunden",
+      "usageDepleted": "▲ {label} – Nutzung aufgebraucht",
+      "needsAttention": "▲ {label} – Handlungsbedarf"
     },
     "disconnect": "Trennen",
     "remove": "Entfernen",
@@ -7592,24 +8893,116 @@
     "errStartConnect": "Verbindung konnte nicht gestartet werden",
     "errConnectSubscription": "Abo konnte nicht verbunden werden",
     "errRemove": "Zugangsdaten konnten nicht entfernt werden",
+    "precedence": {
+      "title": "Anbieter-Priorität",
+      "subtitle": "Wenn mehrere Ihrer Konten verbunden sind, beginnen Cloud-Agenten mit dem obersten Anbieter und wechseln bei Ausfall die Liste hinab. Setzen Sie Meta an die erste Stelle, um Cloud-Agenten darüber zu leiten.",
+      "leads": "Bevorzugt",
+      "drag": "Zum Umsortieren ziehen",
+      "rowLabel": "{provider}, Position {position}. Zum Umsortieren ziehen.",
+      "moveUp": "{provider} nach oben",
+      "moveDown": "{provider} nach unten",
+      "errSave": "Priorität konnte nicht gespeichert werden"
+    },
     "provider": {
       "anthropic": {
         "blurb": "Verbinden Sie Ihr Claude-Pro/Max-Abo (keine Abrechnung pro Token) oder fügen Sie einen Anthropic-API-Schlüssel ein.",
-        "subscription": "Claude-Abo"
+        "subscription": "Claude-Abo",
+        "pastePrompt": "Nach der Freigabe im Claude-Tab den vollständigen Wert <code>code#state</code> hier einfügen.",
+        "pastePlaceholder": "Claude-Code einfügen…"
       },
       "openai": {
-        "blurb": "Fügen Sie einen OpenAI-API-Schlüssel ein, um GPT-Modelle mit Ihrem eigenen OpenAI-Konto auszuführen."
+        "blurb": "Verbinden Sie Ihr ChatGPT/Codex-Abo oder fügen Sie einen OpenAI-API-Schlüssel ein.",
+        "subscription": "ChatGPT/Codex-Abo",
+        "pastePrompt": "Kopieren Sie nach der Anmeldung die vollständige URL <code>http://localhost:1455/auth/callback?code=…&state=…</code> aus der Adressleiste und fügen Sie sie hier ein.",
+        "pastePlaceholder": "OpenAI-Weiterleitungs-URL einfügen…"
       },
       "google": {
         "blurb": "Fügen Sie einen Google-AI-(Gemini-)API-Schlüssel ein, um Gemini-Modelle mit Ihrem eigenen Google-Konto auszuführen."
+      },
+      "meta": {
+        "blurb": "Fügen Sie einen Meta-AI-API-Schlüssel ein, um MUSE-Modelle (muse-spark-1.1) mit Ihrem eigenen Meta-AI-Konto auszuführen."
+      },
+      "kimi": {
+        "blurb": "Fügen Sie einen Kimi-Code-Aboschlüssel ein, um Ihre kostenpflichtigen kimi.com-Codingmodelle zu verwenden."
+      },
+      "moonshot": {
+        "blurb": "Fügen Sie einen API-Schlüssel der Moonshot Open Platform ein."
+      },
+      "qwen": {
+        "blurb": "Fügen Sie einen Alibaba-DashScope-API-Schlüssel für Qwen-Modelle ein."
+      },
+      "minimax": {
+        "blurb": "Fügen Sie einen MiniMax-API-Schlüssel für MiniMax-Modelle ein."
+      },
+      "xai": {
+        "blurb": "Verbinden Sie ein berechtigtes SuperGrok-Abo oder einen xAI-API-Schlüssel.",
+        "subscription": "SuperGrok-Abo",
+        "pastePrompt": "Kopieren Sie nach der Freigabe den auf der xAI-Seite angezeigten Code und fügen Sie ihn hier ein.",
+        "pastePlaceholder": "xAI-Anmeldecode einfügen…"
       }
+    },
+    "diagnostic": {
+      "currentStatus": "Aktueller Status: {status}",
+      "checking": "wird geprüft…",
+      "test": "Verbindung testen",
+      "testing": "Wird getestet…",
+      "verified": "Verbindung bestätigt.",
+      "verifiedWith": "Verbindung mit {model} bestätigt.",
+      "usage": "Letzte {days} Tage: {requests} Anfragen · {tokens} Token",
+      "lastUsed": " · Zuletzt verwendet {when}",
+      "failedFallback": "Verbindungstest fehlgeschlagen: {status}.",
+      "failedGeneric": "Verbindungstest fehlgeschlagen",
+      "failedTitle": "{label}-Verbindung fehlgeschlagen",
+      "upstreamTitle": "{label} — Fehler des Modellanbieters",
+      "testCost": "Der Test sendet eine kleine echte Anfrage, die dem getesteten Konto berechnet wird.",
+      "state": {
+        "ready": "bereit",
+        "capacity": "Nutzung aufgebraucht",
+        "needs_attention": "Aufmerksamkeit erforderlich",
+        "not_connected": "nicht verbunden",
+        "revoked": "widerrufen",
+        "expired": "abgelaufen",
+        "undecryptable": "Anmeldedaten unlesbar",
+        "unsupported-auth": "als Abonnement gespeichert, dieser Anbieter benötigt jedoch einen API-Schlüssel",
+        "unavailable": "nicht verfügbar",
+        "failed": "fehlgeschlagen",
+        "upstream_error": "Fehler des Modellanbieters",
+        "not_found": "Verbindung nicht gefunden",
+        "no_test_model": "kein Modell zum Testen ausgewählt",
+        "key_unresolved": "gespeicherter Schlüssel konnte nicht verwendet werden"
+      },
+      "tokensUsed": "Verbrauchte KI-Token",
+      "periodLabel": "Letzte {period}"
+    },
+    "authAlert": {
+      "title": "Wird nicht verwendet",
+      "notEntitled": "Dieses Konto hat sich erfolgreich angemeldet, aber der Anbieter hat die Anfrage abgelehnt ({status}), weil der Tarif sie nicht abdeckt. Verbinden Sie ein Konto, dessen Tarif sie enthält, oder führen Sie ein Upgrade durch.",
+      "xaiNotEntitled": "xAI hat die Anmeldung akzeptiert, aber den Grok-API-Zugriff verweigert ({status}). Prüfen Sie, ob dieses Konto einen berechtigten SuperGrok-Tarif und verbleibende wöchentliche Nutzung hat, oder verbinden Sie einen xAI-API-Schlüssel.",
+      "xaiCapacity": "Ihr wöchentliches SuperGrok-API-Kontingent ist aufgebraucht ({status}). Grok ist nach der Zurücksetzung wieder verfügbar; um sofort fortzufahren, kaufen Sie zusätzliche Nutzungsguthaben, aktivieren Sie Auto-Aufladung oder wechseln Sie zu SuperGrok Heavy. Verbinden Sie das Konto nicht erneut.",
+      "kimiNotEntitled": "Kimi hat diesen API-Schlüssel akzeptiert, aber den Kimi-Code-Zugriff verweigert ({status}). Prüfen Sie die Kimi-Code-Konsole auf einen Kontohinweis.",
+      "kimiCapacity": "Ihr Kimi-Code-Abonnementkontingent ist aufgebraucht ({status}). Prüfen Sie die Kimi-Code-Konsole auf den nächsten Rücksetzzeitpunkt. Der Schlüssel ist weiterhin gültig.",
+      "rejected": "Der Anbieter hat diese Zugangsdaten abgelehnt ({status}). Sie sind vermutlich abgelaufen, widerrufen oder anderswo rotiert worden — verbinden Sie das Konto erneut.",
+      "capacity": "Die Zugangsdaten funktionieren, aber das Konto hat kein Budget mehr ({status}) – Ausgabenlimit erreicht oder Guthaben aufgebraucht. Laden Sie auf oder erhöhen Sie das Limit; ein Neuverbinden ist nicht nötig.",
+      "unresolved": "Die gespeicherten Zugangsdaten waren überhaupt nicht nutzbar – widerrufen, abgelaufen oder in einem anderen Workspace gespeichert. Bitte hier neu verbinden."
     }
   },
   "modelSelect": {
     "yourLlms": "Ihre LLMs",
     "connectedProviders": "Verbundene Anbieter",
     "models": "Modelle",
-    "current": "{model} (aktuell)"
+    "current": "{model} (aktuell)",
+    "premiumModels": "Premium – jedes OpenRouter-Modell (Kosten + 1 ¢/Anfrage)",
+    "premiumOption": "{name} · {price}/M Eingabe",
+    "premiumUnlockTitle": "Premium-Modelle freischalten",
+    "premiumUnlockCardBody": "Fügen Sie Rechnungsdaten hinzu und validieren Sie eine Karte, um jedes kostenpflichtige OpenRouter-Modell auszuwählen. Abgerechnet wird der OpenRouter-Preis zuzüglich 1 ¢ pro Anfrage. Dabei erfolgt keine Abbuchung und kein Tarifupgrade.",
+    "premiumUnlockUpgradeBody": "Premium-Modelle (jedes kostenpflichtige OpenRouter-Modell, abgerechnet zu OpenRouter-Kosten zuzüglich 1 ¢ pro Anfrage) erfordern einen kostenpflichtigen Tarif mit einer validierten Karte.",
+    "premiumValidateCard": "Rechnungsdaten & Karte",
+    "premiumValidating": "Wird geöffnet…",
+    "premiumPending": "Warte auf Bestätigung",
+    "premiumPendingHint": "Schließen Sie die Validierung bei Ihrem Zahlungsanbieter ab und laden Sie dann neu.",
+    "premiumFailedHint": "Diese Karte konnte nicht validiert werden. Versuchen Sie eine andere.",
+    "premiumUpgrade": "Auf Pro upgraden",
+    "premiumUnlockFailed": "Kartenvalidierung konnte nicht gestartet werden."
   },
   "runAgentControl": {
     "agentTitle": "Agent",
@@ -7682,7 +9075,16 @@
       "system": "System",
       "unknown": "Unbekannt"
     },
+    "model": {
+      "tooltip": "Bereitgestellt vom Modell {model}",
+      "accountOwn": "Ihr Konto",
+      "accountShared": "Gemeinsamer Pool",
+      "accountSharedUnused": "Gemeinsamer Pool (Ihr Konto wurde nicht genutzt)"
+    },
     "verb": {
+      "agent": {
+        "replied": "hat in einem Chat geantwortet"
+      },
       "task": {
         "created": "hat ein Ticket erstellt",
         "updated": "hat ein Ticket aktualisiert",
@@ -7835,7 +9237,8 @@
     "running": "Läuft",
     "awaiting": "Antwort nötig",
     "needsYou": "{count} warten auf Ihre Antwort",
-    "runningCount": "{count} laufen"
+    "runningCount": "{count} laufen",
+    "unread": "{count, plural, =1 {1 ungelesene Nachricht} other {# ungelesene Nachrichten}}"
   },
   "onboarding": {
     "welcome": "Willkommen bei Builderforce",
@@ -7870,6 +9273,18 @@
       },
       "invite": {
         "label": "Team einladen"
+      },
+      "talentProfile": {
+        "label": "Dein Profil"
+      },
+      "resume": {
+        "label": "Lebenslauf"
+      },
+      "publish": {
+        "label": "Veröffentlichen"
+      },
+      "findWork": {
+        "label": "Aufträge finden"
       }
     },
     "ticketing": {
@@ -7905,7 +9320,15 @@
       "runningAll": "Audits laufen…",
       "run": "Ausgewählte Audits ausführen",
       "viewReports": "Berichte ansehen",
-      "notifyHint": "Wir benachrichtigen dich, sobald jeder Bericht fertig ist. Du kannst diese Seite verlassen — die Audits laufen weiter."
+      "notifyHint": "Wir benachrichtigen dich, sobald jeder Bericht fertig ist. Du kannst diese Seite verlassen — die Audits laufen weiter.",
+      "webHeading": "Scannen Sie Ihre Live-Website",
+      "webIntro": "Haben Sie bereits eine Website? Geben Sie die URL für einen sofortigen Sicherheitsscan ein — Befunde werden zu behebbaren Tickets.",
+      "webPlaceholder": "https://ihre-website.de",
+      "webButton": "Website scannen",
+      "webScanning": "Scan läuft…",
+      "webResult": "Bewertung {score}/100 — {count} als Tickets erfasst",
+      "webView": "Ergebnisse ansehen",
+      "webError": "Scan fehlgeschlagen. Prüfen Sie die URL und versuchen Sie es erneut."
     },
     "closeOnboarding": "Onboarding schließen",
     "workspaceReady": "Arbeitsbereich bereit",
@@ -7938,6 +9361,25 @@
       "monetize": "Mit KI-Agenten Geld verdienen",
       "automate": "Meinen Entwicklungs-Workflow automatisieren",
       "learn": "Lernen und erkunden"
+    },
+    "welcomeHired": "Willkommen bei Builderforce",
+    "subtitleHired": "Mach dich in wenigen Schritten buchbar.",
+    "talentProfile": {
+      "intro": "Auftraggeber suchen über diese Felder – je mehr du ausfüllst, desto häufiger wirst du gefunden."
+    },
+    "resumeStep": {
+      "intro": "Lade einen Lebenslauf hoch, dann füllen wir Überschrift, Zusammenfassung und Fähigkeiten für dich aus.",
+      "skipHint": "Optional – du kannst das später in deinem Profil ergänzen."
+    },
+    "publishStep": {
+      "intro": "Mit der Veröffentlichung erscheinst du im Talent-Marktplatz. Du kannst das jederzeit rückgängig machen."
+    },
+    "findWorkStep": {
+      "intro": "Alles eingerichtet. Hier findet die Arbeit statt.",
+      "gigs": "Aufträge durchsuchen",
+      "gigsHint": "Offene Aufträge, die zu deinen Fähigkeiten und deinem Satz passen.",
+      "timecard": "Stunden erfassen",
+      "timecardHint": "Reiche Stundenzettel ein und behalte deine Zahlungen im Blick."
     }
   },
   "soc2": {
@@ -8135,7 +9577,10 @@
     "errorCreateSprint": "Sprint konnte nicht erstellt werden",
     "errorStart": "Sitzung konnte nicht gestartet werden",
     "errorAdvance": "Zug konnte nicht weitergegeben werden",
-    "errorComplete": "Sitzung konnte nicht abgeschlossen werden"
+    "errorComplete": "Sitzung konnte nicht abgeschlossen werden",
+    "startSession": "Standup starten",
+    "startSessionHint": "Das Standup starten",
+    "startSessionFacilitatorOnly": "Nur der Moderator kann starten"
   },
   "meetings": {
     "title": "Besprechungen",
@@ -8298,7 +9743,8 @@
     "commonQuestions": "Häufige Fragen",
     "pillLora": "🧠 LoRA-Training",
     "pillRegistry": "🤖 Agenten-Registry",
-    "pillEval": "🔬 KI-Bewertung"
+    "pillEval": "🔬 KI-Bewertung",
+    "emailPlaceholder": "du@beispiel.com"
   },
   "gigs": {
     "publish": {
@@ -8584,6 +10030,10 @@
   },
   "agentExecution": {
     "runThisTask": "Diese Aufgabe ausführen",
+    "coordinateThisTicket": "Dieses Ticket koordinieren",
+    "coordinateNow": "Nächste Rolle zuweisen und starten",
+    "coordinating": "Wird koordiniert…",
+    "coordinateHint": "Der Zuständige koordiniert diesen Lebenszyklus. BuilderForce prüft das Manifest und startet die nächste erforderliche Rolle – niemals den Zuständigen als Standardausführer.",
     "awaitingApproval": "Warten auf Genehmigung, bevor dies ausgeführt werden kann: {reason}",
     "executions": "Ausführungen",
     "ticketSpendTooltip": "Ticket-Ausgaben über alle Ausführungen: {tokens} Tokens bei {requests} LLM-Aufruf(en). Wird auf dieses Projekt und dann auf das Konto hochgerechnet.",
@@ -8620,7 +10070,15 @@
     "noFileChangesYet": "Noch keine Dateiänderungen.",
     "noFileChangesRecorded": "Diese Ausführung hat keine Dateiänderungen aufgezeichnet.",
     "noToolCalls": "Keine Werkzeugaufrufe aufgezeichnet.",
-    "failedToRerun": "Erneute Ausführung fehlgeschlagen"
+    "failedToRerun": "Erneute Ausführung fehlgeschlagen",
+    "revert": "Lauf zurücknehmen",
+    "reverting": "Wird zurückgenommen…",
+    "revertHint": "Schließt den von diesem Lauf geöffneten Pull Request und löscht den Branch, den er geschrieben hat. Wird abgelehnt, wenn etwas anderes daran geändert hat.",
+    "revertConfirmTitle": "Diesen Lauf zurücknehmen?",
+    "revertConfirmMessage": "Dies schließt den von Lauf #{id} geöffneten Pull Request und löscht den Branch, den er geschrieben hat. Das lässt sich nicht rückgängig machen. Es wird abgelehnt, wenn der Pull Request bereits gemergt wurde oder etwas anderes den Branch geändert hat.",
+    "revertConfirmAction": "Lauf zurücknehmen",
+    "revertDone": "Zurückgenommen — Branch {branch} gelöscht ({commits} Commit(s)).",
+    "failedToRevert": "Lauf konnte nicht zurückgenommen werden"
   },
   "aiTraining": {
     "title": "KI-Modelltraining",
@@ -8974,8 +10432,8 @@
     "noKey": "kein Schlüssel",
     "test": "Testen",
     "testing": "Wird getestet…",
-    "importTitle": "Importieren Sie die Dateien dieses Repos in den IDE-Arbeitsbereich, um sie im Browser zu bearbeiten und auszuführen",
-    "importToIde": "In IDE importieren",
+    "importTitle": "Importieren Sie die Dateien dieses Repos in den Builder-Arbeitsbereich, um sie im Browser zu bearbeiten und auszuführen",
+    "importToIde": "In Builder importieren",
     "importing": "Importieren…",
     "copyConfigTitle": "Kopieren Sie die Konfiguration dieses Repos (ohne Geheimnisse), um einen fehlgeschlagenen Test zu diagnostizieren",
     "copied": "Kopiert!",
@@ -8992,7 +10450,20 @@
     "workspaceSuffix": ", Arbeitsbereich",
     "setAsDefault": "Als Standard-Repository des Projekts festlegen",
     "saveChanges": "Änderungen speichern",
-    "addRepository": "Repository hinzufügen"
+    "addRepository": "Repository hinzufügen",
+    "enableAgentRuns": "Agentenläufe aktivieren",
+    "agentRunsEnabled": "Agentenläufe aktiv",
+    "enablingAgentRuns": "Wird aktiviert…",
+    "enableAgentRunsTitle": "Den Builderforce-Agenten-Workflow in dieses Repo committen, damit Agenten auf Ihren eigenen GitHub-Actions-Runnern laufen",
+    "reenableAgentRunsTitle": "Bereits aktiv – erneut ausführen, um die Workflow-Datei mit der neuesten Version zu überschreiben",
+    "confirmReenableActions": "Dadurch wird .github/workflows/builderforce-agent.yml im Standard-Branch überschrieben und Ihre dortigen Änderungen gehen verloren. Fortfahren?",
+    "actionsEnabled": "Agenten-Workflow nach {path} committet",
+    "actionsEnableFailed": "Agenten-Workflow konnte nicht committet werden",
+    "backfillAlerts": "Warnungen nachladen",
+    "backfillingAlerts": "Wird nachgeladen…",
+    "backfillAlertsTitle": "Alle offenen Code-Scanning- und Dependabot-Warnungen dieses Repos als Sicherheitsbefunde importieren. Erneutes Ausführen ist unbedenklich.",
+    "alertsBackfilled": "{count} {count, plural, one {Sicherheitsbefund} other {Sicherheitsbefunde}} importiert ({deduped} bereits erfasst)",
+    "alertsBackfillFailed": "Sicherheitswarnungen konnten nicht importiert werden"
   },
   "workflowsContent": {
     "noRunsYet": "Noch keine Ausführungen",
@@ -9080,6 +10551,16 @@
       "escalation": "Eskalation",
       "contacts": "Kontakte"
     },
+    "workflows": {
+      "title": "Runbooks & Workflows",
+      "blurb": "Führen Sie einen benutzerdefinierten Workflow für diesen Vorfall aus oder sehen Sie die von seinen Ereignissen ausgelösten Workflows.",
+      "pick": "Workflow",
+      "pickPlaceholder": "Workflow auswählen…",
+      "run": "Workflow ausführen",
+      "create": "Workflow erstellen",
+      "runs": "Ausführungen für diesen Vorfall",
+      "noRuns": "Noch keine Workflow-Ausführungen."
+    },
     "severity": {
       "sev1": "SEV1",
       "sev2": "SEV2",
@@ -9139,6 +10620,8 @@
       "publishedNote": "Für diesen Vorfall wurde eine Ursachenanalyse veröffentlicht.",
       "prompt": "Dieser Vorfall ist behoben. Veröffentlichen Sie eine Ursachenanalyse in der Wissensdatenbank.",
       "formTitle": "Ursachenanalyse veröffentlichen",
+      "fishTitle": "Warum ist das passiert?",
+      "fishAria": "Ishikawa-Ursachendiagramm für {title}",
       "summary": "Zusammenfassung",
       "summaryPlaceholder": "Überblick über den Vorfall in einem Absatz…",
       "rootCause": "Grundursache",
@@ -9175,7 +10658,7 @@
     "memberDisplayName": "Anzeigename",
     "memberRef": "Mitgliedsreferenz",
     "memberRefPlaceholder": "u:123 / contact:abc / c:acme",
-    "memberRefHelp": "Referenzieren Sie einen Plattformbenutzer (u:<id>), einen Geschäftskontakt (contact:<id>) oder ein Unternehmen (c:<slug>).",
+    "memberRefHelp": "Referenzieren Sie einen Plattformbenutzer (u:'<id>'), einen Geschäftskontakt (contact:'<id>') oder ein Unternehmen (c:'<slug>').",
     "addMember": "Mitglied hinzufügen",
     "removeMember": "Mitglied entfernen",
     "rotationName": "Name",
@@ -9218,7 +10701,18 @@
     "deleteContactConfirm": "Kontakt „{name}“ löschen?",
     "oncallSubtitle": "Bereitschaftsrotationen legen fest, wer bei einem Vorfall zuerst alarmiert wird.",
     "escalationSubtitle": "Eskalationsrichtlinien durchlaufen Ziele und Kanäle, bis jemand reagiert.",
-    "contactsSubtitle": "Geschäftskontakte, die Sie während eines Vorfalls alarmieren oder eskalieren können."
+    "contactsSubtitle": "Geschäftskontakte, die Sie während eines Vorfalls alarmieren oder eskalieren können.",
+    "implicated": {
+      "title": "Betroffene Liefertickets",
+      "help": "Das/die Lieferticket(s), deren Änderung diesen Vorfall verursacht hat — je mit Verantwortlichkeit, damit die RCA sieht, wo der Prozess übersprungen oder erlassen wurde.",
+      "loading": "Wird geladen…",
+      "empty": "Noch keine betroffenen Tickets verknüpft.",
+      "signed": "{done}/{total} freigegeben",
+      "gaps": "{count} Lücke(n)",
+      "remove": "Entfernen",
+      "add": "Ticket verknüpfen",
+      "addPlaceholder": "Ticket-Nr."
+    }
   },
   "monitoring": {
     "boardsTitle": "Aktive Überwachung",
@@ -9252,6 +10746,13 @@
     "fieldIntervalSeconds": "Intervall (Sekunden)",
     "fieldUrl": "URL",
     "fieldExpectedStatus": "Erwarteter Status",
+    "fieldMethod": "Methode",
+    "fieldHeaders": "Anfrage-Header",
+    "headersPlaceholder": "Authorization: Bearer …",
+    "headersHint": "Ein „Header: Wert“ pro Zeile – wird mit der Zustandsprüfung gesendet.",
+    "fieldBodyMatch": "Body muss enthalten",
+    "bodyMatchPlaceholder": "\"status\":\"ok\"",
+    "bodyMatchHint": "Optional: Störung, wenn der Antwort-Body diesen Text nicht enthält.",
     "fieldMetric": "Kennzahl",
     "fieldComparator": "Vergleichsoperator",
     "fieldThreshold": "Schwellenwert",
@@ -9346,5 +10847,974 @@
     "statusError": "Fehler",
     "errFailed": "Einladung fehlgeschlagen",
     "laterHint": "Du kannst Teammitglieder auch später über <link>Team</link> einladen."
+  },
+  "accountability": {
+    "loading": "Verantwortlichkeit wird geladen…",
+    "signedHeader": "{done} von {total} erforderlichen Rollen haben freigegeben",
+    "unassigned": "Nicht zugewiesen",
+    "addedBadge": "hinzugefügt",
+    "gaps": {
+      "title": "{count} Verantwortlichkeitslücke(n)",
+      "outstandingTitle": "{count} Rolle(n) mit ausstehender Freigabe",
+      "kind": {
+        "unsigned": "Nicht freigegeben",
+        "unstaffed": "Ressourcenlücke",
+        "no_contribution": "Kein Beitrag",
+        "waived": "Erlassen",
+        "changes_requested": "Änderungen angefordert"
+      },
+      "detail": {
+        "unsigned": "Die erforderliche Rolle hat noch nicht freigegeben.",
+        "pending": "Noch nicht begonnen.",
+        "assigned": "Zugewiesen; die Arbeit hat noch nicht begonnen.",
+        "in_progress": "Arbeit läuft; Freigabe noch nicht erfasst.",
+        "unstaffed": "Für diese erforderliche Rolle ist keine geeignete Ressource verfügbar.",
+        "changes_requested": "Änderungen wurden angefordert und sind noch nicht erledigt.",
+        "no_contribution": "Ohne verknüpften Beitrag freigegeben — Gefahr einer bloßen Alibi-Freigabe.",
+        "waived": "Erlassen: {reason}",
+        "waived_no_reason": "Ohne erfassten Grund erlassen."
+      }
+    },
+    "table": {
+      "title": "Freigaben & Verantwortlichkeit",
+      "role": "Rolle",
+      "who": "Wer",
+      "state": "Status",
+      "verdict": "Urteil",
+      "when": "Wann",
+      "comments": "Kommentare",
+      "contribution": "Beitrag",
+      "empty": "Noch keine erforderlichen Rollen für dieses Ticket.",
+      "action": "Aktion"
+    },
+    "verdict": {
+      "approved": "Genehmigt",
+      "changes_requested": "Änderungen angefordert",
+      "waived": "Erlassen",
+      "delegated": "Delegiert"
+    },
+    "state": {
+      "pending": "Ausstehend",
+      "assigned": "Zugewiesen",
+      "in_progress": "In Bearbeitung",
+      "completed": "Abgeschlossen",
+      "changes_requested": "Änderungen angefordert",
+      "waived": "Erlassen",
+      "skipped": "Übersprungen",
+      "unstaffed": "Unbesetzt"
+    },
+    "responsibility": {
+      "owner": "Verantwortlich",
+      "reviewer": "Prüfer",
+      "contributor": "Mitwirkender"
+    },
+    "assess": {
+      "title": "Ressourcenbewertung",
+      "help": "Fügen Sie eine Rolle hinzu, die dieses Ticket über die Vorlage hinaus benötigt (z. B. Designer, Sicherheitsingenieur). Ist keine geeignete Ressource verfügbar, wird dies als Ressourcenlücke markiert.",
+      "rolePlaceholder": "Rolle auswählen…",
+      "notePlaceholder": "Warum wird diese Rolle benötigt? (optional)",
+      "add": "Erforderliche Rolle hinzufügen",
+      "materialize": "Arbeitspakete erstellen",
+      "materializeHelp": "Erstellt pro Ressource eine Unteraufgabe, sodass der Fortschritt zu diesem Ticket zusammenläuft."
+    },
+    "contribution": {
+      "pr": "PR",
+      "run": "Lauf #{id}",
+      "prd": "PRD r{revision}",
+      "test": "Test {id}",
+      "files": "{count, plural, one {# Datei} other {# Dateien}}"
+    },
+    "signoff": {
+      "action": "Freigeben",
+      "cancel": "Abbrechen",
+      "confirm": "Als {role} freigeben",
+      "recording": "Wird erfasst…",
+      "summaryPlaceholder": "Was hast du geprüft? (optional)",
+      "reasonRequired": "Grund für den Verzicht (erforderlich)",
+      "help": "Nur ein für diese Rolle befähigtes Mitglied kann sie freigeben; der Workspace protokolliert wer, wann und mit welchem Nachweis freigegeben hat."
+    }
+  },
+  "rfpPage": {
+    "title": "RFP-Antwort",
+    "subtitle": "Beantworten Sie ein RFQ/RFP mit einem co-gebrandeten Angebot auf Basis Ihres Portfolios – Fähigkeitenkatalog, GuV, Lieferplan und Risiken.",
+    "newRequest": "Neue Antwort",
+    "needDeveloper": "Erfordert Entwicklerrolle",
+    "loading": "Laden…",
+    "empty": "Noch keine RFP-Anfragen. Erstellen Sie eine, um ein co-gebrandetes Angebot zu entwerfen.",
+    "validation": "Ein Titel ist erforderlich.",
+    "creating": "Wird erstellt…",
+    "create": "Erstellen & entwerfen",
+    "cancel": "Abbrechen",
+    "noOrg": "Unbenannte Organisation",
+    "sourceNew": "Neuentwicklung",
+    "sourceExisting": "Basierend auf einem Projekt",
+    "quoted": "Angebot {price}",
+    "notGenerated": "Noch nicht generiert",
+    "scanFresh": "Aktueller Scan",
+    "status": {
+      "draft": "Entwurf",
+      "analyzing": "Analyse",
+      "ready": "Bereit",
+      "submitted": "Eingereicht"
+    },
+    "field": {
+      "title": "Titel",
+      "titlePlaceholder": "z. B. Kundenportal-Neuaufbau",
+      "requesterOrg": "Anfragende Organisation",
+      "requesterOrgPlaceholder": "Wer das RFP ausgestellt hat",
+      "requesterBrand": "Markenfarben des Anfragenden",
+      "requesterBrandHint": "Die Palette des anfragenden Unternehmens – im Angebot mit Ihrer eigenen kombiniert.",
+      "primary": "Primär",
+      "secondary": "Sekundär",
+      "accent": "Akzent",
+      "logoUrl": "Logo-URL",
+      "requirements": "Anforderungen",
+      "requirementsPlaceholder": "Fügen Sie die RFP/RFQ-Anforderungen ein…",
+      "sourceMode": "Grundlage",
+      "project": "Projekt",
+      "selectProject": "Projekt auswählen…",
+      "economics": "Wirtschaftlichkeit",
+      "margin": "Marge",
+      "marketing": "Marketing",
+      "contingency": "Puffer"
+    },
+    "backToList": "Zurück zu Anfragen",
+    "generating": "Wird generiert…",
+    "regenerate": "Neu generieren",
+    "generate": "Antwort generieren",
+    "generatingHint": "Aktualitätsgeprüfter Scan läuft, Portfolio wird abgeglichen und das Angebot entworfen…",
+    "noResponseYet": "Noch kein Angebot generiert. Klicken Sie auf Generieren, um eines zu entwerfen.",
+    "scanRefreshed": "Scan aktualisiert",
+    "scanCurrent": "Scan aktuell",
+    "groundedOn": "Basierend auf {project}",
+    "greenfield": "Neuentwicklung – aus den Anforderungen abgeleitet",
+    "scanAge": "letzter Scan vor {days} T",
+    "sec": {
+      "summary": "Zusammenfassung",
+      "capabilities": "Fähigkeiten & Ansatz",
+      "economics": "Investition & Kommerzielles",
+      "plan": "Lieferplan",
+      "risks": "Wesentliche Risiken",
+      "dependencies": "Abhängigkeiten",
+      "portfolio": "Ähnliche Projekte",
+      "document": "Gebrandetes Angebot"
+    },
+    "capabilitiesGreenfield": "Neuentwicklung – Fähigkeiten werden aus den Anforderungen abgeleitet.",
+    "col": {
+      "component": "Komponente",
+      "responsibility": "Verantwortung"
+    },
+    "stack": "Stack",
+    "quotedPrice": "Angebotspreis",
+    "marginNote": "{pct}% Gewinnmarge · {weeks} Wochen Aufwand.",
+    "deliveryWindow": "Lieferung: {start} → {end} ({weeks} Wochen).",
+    "severity": {
+      "low": "Niedrig",
+      "medium": "Mittel",
+      "high": "Hoch"
+    },
+    "depType": {
+      "internal": "Intern",
+      "external": "Extern",
+      "third_party": "Drittanbieter"
+    },
+    "downloadDoc": "Herunterladen"
+  },
+  "planBadge": {
+    "tier": {
+      "free": "Free",
+      "pro": "Pro",
+      "teams": "Teams"
+    },
+    "freeHint": "Sie nutzen den Free-Tarif — Chats laufen mit den enthaltenen BuilderForce-Modellen. Klicken Sie, um Tarife anzuzeigen und zu upgraden.",
+    "paidHint": "Ihr Workspace nutzt den Tarif {plan}. Klicken Sie, um Ihren Tarif zu verwalten.",
+    "tokensLeft": "Noch {count} Token",
+    "noTokens": "keine Token mehr",
+    "upgrade": "Upgrade"
+  },
+  "billing": {
+    "cardOnFileTitle": "Hinterlegte Karte",
+    "cardOnFileHint": "Der Zugang zu Premium-Modellen wird über diese Karte geprüft. Ein Austausch startet eine neue 0-$-Prüfung.",
+    "cardPendingHint": "Wir warten auf die Bestätigung Ihrer Bank. Premium-Modelle werden freigeschaltet, sobald sie vorliegt.",
+    "cardNoDetails": "Kartendaten nicht verfügbar",
+    "cardStatusValidated": "Verifiziert",
+    "cardStatusPending": "Wird geprüft…",
+    "cardStatusFailed": "Prüfung fehlgeschlagen",
+    "replaceCard": "Karte ersetzen",
+    "retryCard": "Erneut versuchen",
+    "cardWorking": "Wird ausgeführt…",
+    "replaceCardTitle": "Karte ersetzen?",
+    "replaceCardWarning": "Ihre aktuelle Karte bleibt aktiv, bis die neue verifiziert ist — Premium-Modelle werden nie unterbrochen. Die alte Karte wird automatisch entfernt, sobald die neue bestätigt ist.",
+    "retryCardMessage": "Wir starten eine neue 0-$-Prüfung. Ihre Karte wird nicht belastet.",
+    "replaceCardConfirm": "Weiter",
+    "cardValidationFailed": "Die Kartenprüfung konnte nicht gestartet werden. Bitte versuchen Sie es erneut.",
+    "removeCard": "Karte entfernen",
+    "removeCardTitle": "Karte entfernen?",
+    "removeCardWarning": "Premium-Modelle werden deaktiviert und wir speichern Ihre Karte nicht mehr. Ihr Tarif und die enthaltenen Modelle laufen weiter. Sie können jederzeit wieder eine Karte hinzufügen.",
+    "removeCardConfirm": "Karte entfernen",
+    "removeCardFailed": "Die Karte konnte nicht entfernt werden. Bitte versuchen Sie es erneut."
+  },
+  "policyPacks": {
+    "title": "Richtlinienpakete",
+    "subtitle": "Governance-Schranken, an die sich Ihre Agenten halten müssen. Eine Schranke greift beim nächsten Lauf in ihrem Geltungsbereich — die Laufzeit setzt sie bei jedem Werkzeugaufruf durch.",
+    "newPack": "Neues Paket",
+    "error": "Fehler: {message}",
+    "genericError": "Etwas ist schiefgelaufen.",
+    "loading": "Richtlinienpakete werden geladen…",
+    "empty": "Noch keine Richtlinienpakete. Legen Sie eines an, um zu steuern, was Ihre Agenten tun dürfen.",
+    "effectiveTitle": "Aktuell in Kraft",
+    "effectiveEmpty": "Für einen arbeitsbereichsweiten Lauf greift keine Schranke. Die Agenten sind ungeregelt.",
+    "effectiveCount": "{count, plural, one {# Schranke greift} other {# Schranken greifen}} bei einem arbeitsbereichsweiten Lauf.",
+    "enabled": "Aktiv",
+    "disabled": "Inaktiv",
+    "noGates": "Keine Schranken in diesem Paket.",
+    "remove": "Entfernen",
+    "scopeTenant": "Gilt für alle Projekte und Agenten",
+    "scopeProject": "Projekt: {project}",
+    "scopeAgent": "Agent: {agent}",
+    "scopeProjectAgent": "{project} · {agent}",
+    "anyTool": "Beliebiges Werkzeug",
+    "fieldName": "Name",
+    "fieldNamePlaceholder": "z. B. Produktionssicherheit",
+    "fieldDescription": "Beschreibung",
+    "fieldProject": "Projekt",
+    "allProjects": "Alle Projekte",
+    "fieldAgent": "Agent",
+    "allAgents": "Alle Agenten",
+    "fieldEnabled": "Paket ist aktiv",
+    "saving": "Wird gespeichert…",
+    "createPack": "Paket anlegen",
+    "savePack": "Änderungen speichern",
+    "deletePack": "Paket löschen",
+    "deletePackTitle": "Richtlinienpaket löschen",
+    "deletePackConfirm": "„{name}“ samt aller Schranken löschen? Die Agenten unterliegen ihnen dann nicht mehr.",
+    "gatesTitle": "Schranken",
+    "gatesHelp": "Jede Schranke greift bei einem Werkzeugaufruf und entscheidet, was passiert: eine Anweisung, eine Pause zur Freigabe oder eine Verweigerung.",
+    "addGateTitle": "Schranke hinzufügen",
+    "fieldGateKey": "Schranken-ID",
+    "fieldGateKeyPlaceholder": "z. B. no-shell-in-prod",
+    "fieldTool": "Werkzeug",
+    "toolHelp": "Mit * gelten die Regeln für alle Werkzeuge — so formulieren Sie eine Grundhaltung „standardmäßig verboten“.",
+    "fieldEffect": "Wirkung",
+    "fieldDirective": "Anweisung",
+    "fieldDirectivePlaceholder": "Was der Agent tun muss — in klarer Sprache.",
+    "fieldReason": "Begründung",
+    "fieldReasonPlaceholder": "Warum dies geregelt ist — wird dem Agenten und der freigebenden Person angezeigt.",
+    "addGate": "Schranke hinzufügen",
+    "deleteGateTitle": "Schranke löschen",
+    "deleteGateConfirm": "Die Schranke „{key}“ löschen?",
+    "effect": {
+      "inject-directive": "Anweisen",
+      "require-approval": "Freigeben",
+      "block": "Sperren"
+    },
+    "effectHelp": {
+      "inject-directive": "Fügt dem Prompt des Agenten eine verbindliche Anweisung hinzu. Das Werkzeug läuft weiterhin.",
+      "require-approval": "Der Agent hält an und holt vor dem Werkzeugeinsatz eine menschliche Freigabe ein.",
+      "block": "Der Agent verweigert das Werkzeug vollständig und erklärt den Grund."
+    }
+  },
+  "ceremonySchedules": {
+    "title": "Wiederkehrende Zeremonien",
+    "subtitle": "Dailys und Plannings in festem Rhythmus durchführen. Jede geplante Zeremonie startet von selbst – die Runde ist bereits besetzt.",
+    "newSchedule": "Neuer Zeitplan",
+    "editSchedule": "Zeitplan bearbeiten",
+    "empty": "Noch keine wiederkehrenden Zeremonien. Lege einen Zeitplan an, und dein Daily startet von allein.",
+    "enabled": "Aktiv",
+    "paused": "Pausiert",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "colKind": "Zeremonie",
+    "colCadence": "Rhythmus",
+    "colNextRun": "Nächster Lauf",
+    "colLastRun": "Letzter Lauf",
+    "colStatus": "Status",
+    "colActions": "Aktionen",
+    "colRoster": "Runde",
+    "kind_standup": "Daily",
+    "kind_planning": "Planning",
+    "scope_members": "Projektmitglieder",
+    "scope_roster": "Feste Liste",
+    "preset_weekdays9": "Werktags um 09:00 Uhr",
+    "preset_weekdays10": "Werktags um 10:00 Uhr",
+    "preset_daily9": "Täglich um 09:00 Uhr",
+    "preset_mondays10": "Montags um 10:00 Uhr",
+    "preset_fridays16": "Freitags um 16:00 Uhr",
+    "presetCustom": "Eigener Zeitplan…",
+    "fieldKind": "Zeremonie",
+    "fieldCadence": "Häufigkeit",
+    "fieldCron": "Cron-Ausdruck",
+    "cronHelp": "Fünf Felder: Minute, Stunde, Tag des Monats, Monat, Wochentag. Die Vorlage oben füllt das aus; für Spezielleres einfach anpassen.",
+    "fieldTimezone": "Zeitzone",
+    "fieldRoster": "Wer teilnimmt",
+    "rosterHelp": "„Projektmitglieder“ setzt alle auf diesem Projekt aktiven Personen an den Tisch – wer am wenigsten gesprochen hat, zuerst. Eine feste Liste setzt immer dieselben Personen.",
+    "fieldMaxParticipants": "Maximale Plätze",
+    "fieldTurnSeconds": "Sekunden pro Redebeitrag",
+    "turnSecondsPlaceholder": "Standard des Boards verwenden",
+    "fieldEnabled": "Zeitplan ist aktiv",
+    "enabledHelp": "Ein pausierter Zeitplan behält seine Einstellungen, öffnet aber nie eine Zeremonie.",
+    "fieldAutoDispatch": "Agenten-Arbeit nach Ende der Zeremonie starten",
+    "autoDispatchHelp": "Nach Abschluss der Sitzung werden Tickets dieses Projekts, die Agenten gehören, automatisch an ihre Agenten übergeben.",
+    "confirmDelete": "Diese wiederkehrende Zeremonie löschen? Bereits durchgeführte Sitzungen bleiben erhalten.",
+    "errorLoad": "Die Zeitpläne konnten nicht geladen werden.",
+    "errorSave": "Der Zeitplan konnte nicht gespeichert werden.",
+    "errorDelete": "Der Zeitplan konnte nicht gelöscht werden."
+  },
+  "permissionDebugger": {
+    "title": "Berechtigungs-Debugger",
+    "copyAll": "Alle kopieren",
+    "copyAllHint": "Alle als JSON kopieren",
+    "exportCsv": "CSV exportieren",
+    "exportCsvHint": "Als CSV exportieren",
+    "close": "Schließen",
+    "role": "Rolle:",
+    "activeCount": "Aktiv: {granted} / {total} Berechtigungen",
+    "deniedCount": "{count} verweigert",
+    "softGatedCount": "{count} eingeschränkt",
+    "empty": "Keine Berechtigungen in dieser Ansicht.",
+    "tab": {
+      "page": "Seite",
+      "user": "Benutzer",
+      "role": "Rolle",
+      "missing": "Fehlend"
+    },
+    "col": {
+      "permission": "Berechtigung",
+      "status": "Status",
+      "source": "Quelle",
+      "count": "Anzahl",
+      "apiEndpoint": "API-Endpunkt"
+    },
+    "status": {
+      "granted": "GEWÄHRT",
+      "denied": "VERWEIGERT",
+      "soft-gate": "EINGESCHRÄNKT"
+    }
+  },
+  "githubActionsSurface": {
+    "notReadyTitle": "GitHub Actions ist für dieses Projekt noch nicht eingerichtet",
+    "notReadyBody": "Im Standard-Repository dieses Projekts fehlt der Builderforce-Agenten-Workflow, daher weichen Läufe auf den dauerhaften Cloud-Executor aus. Öffnen Sie die Einstellungen unter Quellcodeverwaltung und wählen Sie beim Repository „Agentenläufe aktivieren“.",
+    "noGithubRepoBody": "Diesem Projekt ist kein GitHub-Repository zugeordnet, es gibt also keinen Ort für GitHub Actions. Läufe weichen auf den dauerhaften Cloud-Executor aus. Verknüpfen Sie unter Quellcodeverwaltung ein GitHub-Repository."
+  },
+  "feedback": {
+    "page": {
+      "title": "Feedback",
+      "subtitle": "Sammle Funktionswünsche, Fehler und Ideen – und prüfe sie, bevor Arbeit beginnt."
+    },
+    "tab": {
+      "label": "Feedback",
+      "tooltip": "Sende uns Feedback"
+    },
+    "kind": {
+      "feature": "Funktionswunsch",
+      "bug": "Fehlerbericht",
+      "idea": "Idee",
+      "other": "Etwas anderes"
+    },
+    "status": {
+      "new": "Neu",
+      "approved": "Genehmigt",
+      "declined": "Abgelehnt"
+    },
+    "form": {
+      "title": "Sende uns Feedback",
+      "intro": "Sag uns, was das Produkt besser machen würde. Funktionswünsche, Fehler, halbfertige Ideen – alles ist willkommen.",
+      "destination": "Geht zur Prüfung ins Backlog von {project}.",
+      "kind": "Typ",
+      "summary": "Zusammenfassung",
+      "summaryPlaceholder": "Eine Zeile – was möchtest du?",
+      "details": "Details",
+      "detailsPlaceholder": "Was versuchst du zu tun, und was steht dir im Weg?",
+      "gateNote": "Deine Anfrage wird zur Prüfung durch eine Person erfasst – es wird nichts automatisch gebaut.",
+      "submit": "Feedback senden",
+      "submitting": "Senden…",
+      "close": "Schließen",
+      "another": "Weiteres senden",
+      "successTitle": "Danke",
+      "successBody": "Deine Anfrage wurde zur Prüfung durch das Team erfasst.",
+      "errorRequired": "Bitte beschreibe dein Feedback vor dem Senden.",
+      "errorGeneric": "Beim Senden deines Feedbacks ist etwas schiefgelaufen. Bitte versuche es erneut."
+    },
+    "setup": {
+      "intro": "Ein Collector pro Projekt – ein einziges einbettbares Snippet, das Funktionswünsche, Fehler und Ideen aus jeder Anwendung im Backlog dieses Projekts sammelt.",
+      "pickProject": "Wähle ein Projekt, um seinen Feedback-Collector zu konfigurieren.",
+      "enable": "Feedback-Sammlung aktivieren",
+      "enableAction": "Aktivieren",
+      "namePlaceholder": "Collector-Name",
+      "creating": "Wird erstellt…",
+      "created": "Collector erstellt",
+      "dismiss": "Verwerfen",
+      "keyOnce": "Kopiere deinen Ingest-Schlüssel jetzt – er wird nur einmal angezeigt und nie gespeichert.",
+      "ingestKey": "Ingest-Schlüssel",
+      "curlSnippet": "Mit curl testen",
+      "snippet": "Einbettungs-Snippet",
+      "endpoint": "Übermittlungs-Endpunkt",
+      "snippetNote": "Füge dies in eine beliebige Anwendung ein, um einen Feedback-Tab hinzuzufügen.",
+      "copy": "Kopieren",
+      "enabled": "Aktiviert",
+      "paused": "Pausiert",
+      "pause": "Pausieren",
+      "resume": "Fortsetzen",
+      "delete": "Löschen",
+      "confirmDelete": "Diesen Feedback-Collector löschen? Das Snippet nimmt dann keine Einsendungen mehr an.",
+      "lastSubmission": "Letzte Einsendung",
+      "options": "Optionen",
+      "autoCreateTask": "Pro Einsendung ein Backlog-Ticket öffnen",
+      "autoCreateTaskHint": "Ausgeschaltet werden Einsendungen weiterhin erfasst und können geprüft werden, aber es wird keine Karte auf dem Board angelegt.",
+      "dailyLimit": "Tägliches Einsendelimit",
+      "dailyLimitHint": "Einsendungen, die dieses Snippet je gleitendem 24-Stunden-Fenster annimmt (Missbrauchsgrenze).",
+      "allowedOrigins": "Erlaubte Ursprünge",
+      "allowedOriginsHint": "Kommagetrennte Liste von Seiten, die senden dürfen, oder * für alle.",
+      "loading": "Wird geladen…",
+      "loadFailed": "Feedback-Collector konnte nicht geladen werden.",
+      "createFailed": "Collector konnte nicht erstellt werden.",
+      "saveFailed": "Änderungen konnten nicht gespeichert werden."
+    },
+    "triage": {
+      "intro": "Prüfe jede Anfrage und genehmige sie, um Arbeit zuzulassen, oder lehne sie ab. Nichts läuft, bis du genehmigst.",
+      "filter": "Anzeigen",
+      "statusAll": "Alle",
+      "loading": "Wird geladen…",
+      "loadFailed": "Einsendungen konnten nicht geladen werden.",
+      "reviewFailed": "Deine Entscheidung konnte nicht gespeichert werden.",
+      "empty": "Hier gibt es noch kein Feedback.",
+      "approve": "Genehmigen",
+      "decline": "Ablehnen",
+      "working": "Wird bearbeitet…",
+      "confirmDecline": "Diese Anfrage ablehnen? Ihr Ticket wird vom Board archiviert.",
+      "gatedNote": "Externe Anfrage – wartet auf deine Genehmigung. Kein Agent nimmt sie an, bis du sie genehmigst.",
+      "showMore": "Mehr anzeigen",
+      "showLess": "Weniger anzeigen"
+    },
+    "admin": {
+      "title": "Produkt-Feedback",
+      "subtitle": "Funktionswünsche, Fehler und Ideen aus den Feedback-Collectorn jedes Arbeitsbereichs."
+    }
+  },
+  "onboardingPill": {
+    "title": "Fortschritt der Kontoeinrichtung",
+    "ariaLabel": "Kontoeinrichtung zu {pct}% abgeschlossen",
+    "label": "Einrichtung {pct}%",
+    "panelTitle": "Kontoeinrichtung abschließen",
+    "progressLabel": "Einrichtungsfortschritt",
+    "percentDone": "{pct}% erledigt",
+    "intro": "Schließe diese Schritte ab, um das Beste aus deinem Workspace herauszuholen. Dein Fortschritt wird automatisch gespeichert.",
+    "statusDone": "Erledigt",
+    "statusTodo": "Offen",
+    "continueSetup": "Einrichtung fortsetzen",
+    "reviewSetup": "Einrichtung ansehen"
+  },
+  "globalError": {
+    "collapse": "Einklappen",
+    "expandDetails": "Details anzeigen",
+    "report": "An ein Projekt melden",
+    "copyTicket": "Support-Ticket kopieren",
+    "dismiss": "Schließen"
+  },
+  "reportError": {
+    "title": "Fehler melden",
+    "intro": "Melde einen Fehler an ein Projekt. Er erscheint im Qualitäts-Feed dieses Projekts neben automatisch erfassten Fehlern.",
+    "projectLabel": "Projekt",
+    "projectPlaceholder": "Projekt auswählen…",
+    "titleLabel": "Titel",
+    "titlePlaceholder": "Kurze Zusammenfassung (optional)",
+    "messageLabel": "Was ist passiert?",
+    "messagePlaceholder": "Beschreibe den Fehler, was du getan hast, und alles, was beim Reproduzieren hilft.",
+    "levelLabel": "Schweregrad",
+    "level_fatal": "Fatal",
+    "level_error": "Fehler",
+    "level_warning": "Warnung",
+    "level_info": "Info",
+    "noProjects": "Du hast noch keine Projekte – erstelle zuerst eines, um ihm einen Fehler zu melden.",
+    "reported": "Fehler an das Projekt gemeldet.",
+    "failed": "Fehler konnte nicht gemeldet werden.",
+    "cancel": "Abbrechen",
+    "submit": "Fehler melden",
+    "submitting": "Wird gemeldet…"
+  },
+  "activate": {
+    "title": "Editor verbinden",
+    "loading": "Wird geladen…",
+    "working": "Wird bearbeitet…",
+    "redirecting": "Weiterleitung zur Anmeldung…",
+    "confirmIntro": "Dein Editor fordert Zugriff an. Prüfe, ob dieser Code mit dem in VS Code angezeigten übereinstimmt:",
+    "approve": "Genehmigen",
+    "deny": "Ablehnen",
+    "approved": "✓ Genehmigt. Kehre zu VS Code zurück – die Anmeldung wird automatisch abgeschlossen.",
+    "denied": "Anfrage abgelehnt. Du kannst diesen Tab schließen.",
+    "keyIntro": "Hier ist dein Editor-Schlüssel. Kopiere ihn und füge ihn in VS Code ein:",
+    "copyKey": "Schlüssel kopieren",
+    "copied": "✓ Kopiert",
+    "keyFine": "Halte diesen Schlüssel geheim. Du kannst ihn jederzeit unter Einstellungen → API-Schlüssel widerrufen.",
+    "tryAgain": "Erneut versuchen",
+    "errorNoTenant": "Dein Konto hat noch keinen Workspace. Erstelle einen und versuche es erneut.",
+    "errorAlreadyResolved": "Dieser Code wurde bereits verwendet oder ist abgelaufen. Starte die Anmeldung im Editor neu.",
+    "errorApprove": "Gerät konnte nicht genehmigt werden ({status}).",
+    "errorDeny": "Gerät konnte nicht abgelehnt werden ({status}).",
+    "errorCreateKey": "Schlüssel konnte nicht erstellt werden ({status}).",
+    "errorNetwork": "Netzwerkfehler. Bitte versuche es erneut.",
+    "errorNoKey": "Kein Schlüssel zurückgegeben. Bitte versuche es erneut."
+  },
+  "marketingNav": {
+    "beta": "BETA",
+    "primaryNav": "Hauptnavigation",
+    "home": "Start",
+    "product": "Produkt",
+    "resources": "Ressourcen",
+    "talentWorkforce": "Talente / Workforce",
+    "agents": "Agenten",
+    "models": "Modelle",
+    "pricing": "Preise",
+    "blog": "Blog",
+    "diagnosticsTools": "Diagnosen & Tools",
+    "soc2Audits": "SOC 2 & System-Audits",
+    "promptLibrary": "Prompt-Bibliothek",
+    "compare": "Vergleich",
+    "integrations": "Integrationen",
+    "mediaKit": "Medien-Kit",
+    "signIn": "Anmelden",
+    "getStarted": "Loslegen →",
+    "toggleMenu": "Menü umschalten"
+  },
+  "media": {
+    "seo": {
+      "title": "Medien-Kit — Vertriebspräsentation & Marketingmaterial",
+      "description": "Laden Sie die Builderforce.ai-Vertriebspräsentation als druckfertiges PDF oder PowerPoint herunter — plus jede Folie als PNG-Marketingmaterial.",
+      "ogTitle": "Builderforce.ai Medien-Kit"
+    },
+    "eyebrow": "Medien-Kit",
+    "title": "Das Builderforce.ai-Deck — bereit zum Teilen.",
+    "intro": "Laden Sie die Produkt- und Plattformpräsentation im passenden Format herunter — als druckfertiges PDF, editierbares PowerPoint oder jede Folie als PNG für Ihre eigenen Dokumente und Beiträge.",
+    "deckAlt": "Titelfolie der Builderforce.ai-Produktpräsentation",
+    "download": "Herunterladen",
+    "assets": {
+      "pdf": {
+        "name": "Vertriebspräsentation (PDF)",
+        "desc": "Der vollständige Produkt- und Plattformüberblick auf 26 Folien — druck- und versandfertig."
+      },
+      "pptx": {
+        "name": "Vertriebspräsentation (PowerPoint)",
+        "desc": "Dasselbe Deck als PPTX — zum Präsentieren oder Einbetten in eigene Unterlagen."
+      },
+      "slides": {
+        "name": "Alle Folien (PNG)",
+        "desc": "Jede Folie als 2560×1440-PNG — einzelne Folien als Marketingmaterial teilen."
+      }
+    },
+    "usageNote": "Sie dürfen diese Materialien unverändert teilen, wenn Sie über Builderforce.ai schreiben oder es präsentieren. Name und Logo von Builderforce.ai bleiben Marken; bitte verändern Sie die Folien nicht und erwecken Sie keinen Eindruck einer offiziellen Unterstützung."
+  },
+  "authCallback": {
+    "title": "Anmeldung fehlgeschlagen",
+    "backToLogin": "Zurück zur Anmeldung",
+    "signingIn": "Sie werden angemeldet…",
+    "errorMissingParams": "Authentifizierung fehlgeschlagen: fehlende Parameter.",
+    "errorInvalidState": "Authentifizierung fehlgeschlagen: ungültiger oder abgelaufener Status. Bitte versuchen Sie es erneut.",
+    "errorAuthFailed": "Die Authentifizierung beim Anbieter ist fehlgeschlagen. Bitte versuchen Sie es erneut.",
+    "errorNoEmail": "Ihr Anbieterkonto hat keine verifizierte E-Mail-Adresse.",
+    "errorAccountNotFound": "Konto nicht gefunden oder deaktiviert.",
+    "errorAccountSuspended": "Ihr Konto wurde gesperrt. Bitte wenden Sie sich an den Support.",
+    "errorProviderUnavailable": "Dieser Anmeldeanbieter ist derzeit nicht verfügbar.",
+    "errorAlreadyLinkedOther": "Dieses Anbieterkonto ist bereits mit einem anderen Builderforce-Konto verknüpft.",
+    "errorUnexpected": "Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
+    "errorNoCode": "Kein Anmeldecode empfangen. Bitte versuchen Sie es erneut.",
+    "errorProfile": "Das Profil Ihres Kontos konnte nicht geladen werden. Bitte melden Sie sich erneut an."
+  },
+  "footer": {
+    "builtBy": "Entwickelt von",
+    "navLabel": "Fußzeile",
+    "termsOfUse": "Nutzungsbedingungen",
+    "privacyPolicy": "Datenschutzerklärung",
+    "whatsNewHint": "Neuerungen ansehen",
+    "colProduct": "Produkt",
+    "colPlatform": "Plattform",
+    "colGetStarted": "Loslegen",
+    "linkProduct": "Produkt",
+    "linkCompare": "Vergleichen",
+    "linkPricing": "Preise",
+    "linkMediaKit": "Medienkit",
+    "linkEvermind": "Evermind LLM",
+    "linkWorkforceRegistry": "Workforce-Verzeichnis",
+    "linkAgents": "BuilderForce Agents",
+    "linkDiagnostics": "Diagnose & Tools",
+    "linkSoc2": "SOC 2 & Systemaudits",
+    "linkBlog": "Blog",
+    "linkLiveDemo": "Live-Demo",
+    "linkSignIn": "Anmelden",
+    "linkGetStarted": "Loslegen"
+  },
+  "whatsNew": {
+    "title": "Neuerungen",
+    "loading": "Wird geladen…",
+    "error": "Neuerungen konnten nicht geladen werden. Bitte später erneut versuchen.",
+    "empty": "Noch keine Neuerungen – schauen Sie bald wieder vorbei.",
+    "categories": {
+      "new": "Neu",
+      "improvement": "Verbessert",
+      "fix": "Behoben"
+    }
+  },
+  "demo": {
+    "personas": {
+      "ai-team": "KI-Softwareteam",
+      "insights": "Engineering-ROI & Insights",
+      "pmo": "PMO-Kommandozentrale",
+      "talent": "Talente & Marktplatz",
+      "governance": "Sicherheit, Architektur & Governance"
+    },
+    "bannerAria": "Steuerung der Demo-Sitzung",
+    "badge": "Live-Demo",
+    "bannerText": "Du erkundest eine Live-Demo — {name}",
+    "bookOrJoin": "Beitreten oder Demo buchen",
+    "createAccount": "Konto erstellen",
+    "exit": "Demo verlassen",
+    "convertTitle": "Mach es zu deinem Workspace",
+    "convertLead": "Du hast gerade die {persona}-Demo mit Beispieldaten erkundet. Erstelle ein kostenloses Konto, um das mit deinen eigenen Projekten zu tun – oder sprich mit unserem Team.",
+    "benefit1": "Bring deine Repos, Tickets und dein Team mit",
+    "benefit2": "KI-Agenten, die echte Pull Requests öffnen",
+    "benefit3": "Kostenlos starten – keine Kreditkarte",
+    "createAccountFree": "Kostenloses Konto erstellen",
+    "talkToSales": "Mit dem Vertrieb sprechen",
+    "bookLead": "Lieber eine geführte Tour? Buche eine Demo.",
+    "exitTitle": "Bevor du gehst",
+    "exitLead": "Möchtest du mit eigenen Daten weiter erkunden oder dir alles zeigen lassen?",
+    "exitBookLead": "Buche eine Demo mit unserem Team",
+    "showcase": {
+      "heading": "Probiere eine Live-Demo – ohne Anmeldung",
+      "lead": "Wähle die Story, die zu dir passt, und steige direkt in einen vorbefüllten Workspace ein. Es ist das echte Produkt mit Beispieldaten.",
+      "launch": "Demo starten",
+      "launching": "Wird gestartet…",
+      "error": "Demo konnte nicht gestartet werden. Bitte erneut versuchen.",
+      "note": "Demos sind geteilt, werden regelmäßig zurückgesetzt und benötigen kein Konto. Deine Änderungen sind temporär.",
+      "personas": {
+        "ai-team": {
+          "title": "KI-Softwareteam",
+          "audience": "Für Engineering-Teams",
+          "desc": "Ein Live-Sprint-Board, auf dem KI-Agenten und Menschen die Arbeit teilen – sieh zu, wie ein Agent ein Ticket übernimmt, plant und einen Pull Request öffnet."
+        },
+        "insights": {
+          "title": "Engineering-ROI & Insights",
+          "audience": "Für VPs & CTOs",
+          "desc": "Lieferqualität, KI-Wirkung und Kosten pro Ticket – die Zahlen, die zeigen, was KI-gestützte Lieferung wirklich einbringt."
+        },
+        "pmo": {
+          "title": "PMO-Kommandozentrale",
+          "audience": "Für Programm- und Lieferverantwortliche",
+          "desc": "Eine datierte Hierarchie vom Unternehmensziel bis zum agentenausgeführten Ticket: Portfolio, OKRs, Gantt und Zeremonien."
+        },
+        "talent": {
+          "title": "Talente & Marktplatz",
+          "audience": "Für Agenturen & Freelancer",
+          "desc": "Eine gemischte Besetzung aus deinem Team, angeheuerten Freelancern und KI-Agenten auf einem Board – beide über denselben Ablauf anheuern."
+        },
+        "governance": {
+          "title": "Sicherheit, Architektur & Governance",
+          "audience": "Für Sicherheit & Compliance",
+          "desc": "Ein wöchentliches SOC-2-Audit, das Behebungstickets erstellt, ein unveränderliches Audit-Protokoll und Policy-Gates bei jedem Deploy."
+        }
+      }
+    },
+    "tour": {
+      "ariaLabel": "Produkt-Tour",
+      "welcomeTitle": "Willkommen zu deiner Demo",
+      "finishTitle": "Alles bereit",
+      "finishBody": "Das war die Kurztour. Bereit, das mit deinen eigenen Projekten und deinem Team zu tun?",
+      "stepOf": "{current} von {total}",
+      "takeTour": "Tour starten",
+      "next": "Weiter",
+      "back": "Zurück",
+      "skip": "Tour überspringen",
+      "finish": "Fertig",
+      "close": "Schließen",
+      "getStarted": "Kostenlos starten",
+      "welcome": {
+        "ai-team": "Sehen wir uns an, wie KI-Agenten als echte Teammitglieder auf einem gemeinsamen Board arbeiten.",
+        "insights": "Sehen wir uns an, was KI-gestützte Lieferung wirklich kostet und einbringt.",
+        "pmo": "Sehen wir uns den Weg vom Unternehmensziel bis zum agentenausgeführten Ticket an.",
+        "talent": "Sehen wir uns an, wie du dein Team, Freelancer und KI-Agenten auf einem Board führst.",
+        "governance": "Sehen wir uns kontinuierliche SOC-2-Audits, Behebung und das Audit-Protokoll an."
+      },
+      "nav": {
+        "dashboard": {
+          "title": "Baue alles",
+          "body": "Beschreibe in natürlicher Sprache, was du willst, und ein KI-Agent beginnt zu bauen – ohne Einrichtung."
+        },
+        "projects": {
+          "title": "Das gemeinsame Board",
+          "body": "Menschen und KI-Agenten auf einem Board. Zieh ein Ticket auf Bereit, und ein Agent plant es, schreibt den Code und öffnet einen Pull Request."
+        },
+        "workforce": {
+          "title": "Deine Belegschaft",
+          "body": "KI-Agenten und Menschen sind vollwertige Teammitglieder – Arbeit zuweisen, anheuern und gemeinsam managen."
+        },
+        "insights": {
+          "title": "Insights & ROI",
+          "body": "Lieferqualität, KI-Wirkung und Kosten pro Ticket – sieh genau, was KI-gestützte Lieferung einbringt."
+        },
+        "quality": {
+          "title": "Qualität & Zuverlässigkeit",
+          "body": "Fehler, DORA-Metriken und automatisiertes QA, damit nichts Kaputtes live geht."
+        },
+        "knowledge": {
+          "title": "Wissen & Governance",
+          "body": "SOPs, Prozesse und Richtlinien mit Versionierung und Lesebestätigung als Audit-Nachweis."
+        }
+      }
+    }
+  },
+  "bookDemo": {
+    "badge": "Sprich mit uns",
+    "pageTitle": "Demo buchen",
+    "pageLead": "Erlebe Builderforce mit unserem Team an deinem eigenen Anwendungsfall – oder starte jetzt eine Self-Service-Live-Demo.",
+    "formHeading": "Termin mit dem Vertrieb",
+    "formSub": "Erzähl uns kurz etwas über dich, und wir melden uns, um eine Tour zu vereinbaren.",
+    "selfServeHeading": "Oder probiere es jetzt selbst",
+    "selfServeSub": "Keine Anmeldung, kein Warten – erkunde einen vorbefüllten Demo-Workspace.",
+    "selfServe1": "Echtes Produkt, echte Beispieldaten",
+    "selfServe2": "Fünf Storys für fünf Käufertypen",
+    "selfServe3": "Jederzeit in dein eigenes Konto umwandeln",
+    "selfServeCta": "Live-Demos ansehen",
+    "nameLabel": "Name",
+    "namePlaceholder": "Dein Name",
+    "emailLabel": "Arbeits-E-Mail",
+    "emailPlaceholder": "du@unternehmen.com",
+    "companyLabel": "Unternehmen",
+    "companyPlaceholder": "Firmenname",
+    "interestLabel": "Ich interessiere mich für",
+    "interestAny": "Noch unsicher",
+    "messageLabel": "Sollten wir etwas wissen?",
+    "messagePlaceholder": "Deine Ziele, Teamgröße, Zeitrahmen…",
+    "submit": "Demo anfragen",
+    "submitting": "Wird gesendet…",
+    "error": "Etwas ist schiefgelaufen. Bitte erneut versuchen.",
+    "successTitle": "Danke – wir melden uns",
+    "successBody": "Unser Team meldet sich in Kürze, um deine Tour zu planen.",
+    "personas": {
+      "ai-team": "KI-Softwareteam",
+      "insights": "Engineering-ROI & Insights",
+      "pmo": "PMO-Kommandozentrale",
+      "talent": "Talente & Marktplatz",
+      "governance": "Sicherheit, Architektur & Governance"
+    }
+  },
+  "ceremonyHistory": {
+    "loading": "Wird geladen…",
+    "errorLoad": "Der Zeremonienverlauf konnte nicht geladen werden.",
+    "filterAll": "Alle",
+    "filterStandup": "Standups",
+    "filterPlanning": "Planung",
+    "count": "{count} erfasst",
+    "emptyTitle": "Es hat noch keine Zeremonie stattgefunden",
+    "emptyHelp": "Sobald ein Standup oder eine Planungssitzung endet, erscheint sie hier – mit Anwesenheit und allen Änderungen.",
+    "loadMore": "Ältere laden",
+    "durationMinutes": "{minutes} Min.",
+    "attended": "{present} von {expected} anwesend",
+    "missed": "{count} haben gefehlt",
+    "reassigned": "{count} neu zugewiesen",
+    "dispatched": "{count} Agentenläufe gestartet",
+    "detailTitle": "{kind} · {when}",
+    "whoWasHere": "Wer da war",
+    "whatHappened": "Was passiert ist",
+    "noParticipants": "An dieser Zeremonie war niemand beteiligt.",
+    "noJournal": "Für diese Zeremonie wurde nichts erfasst.",
+    "seatHuman": "Person",
+    "seatAgent": "Agent",
+    "seatAdHoc": "spontan dazugekommen",
+    "spoke": "sprach {seconds} s",
+    "kind": {
+      "standup": "Standup",
+      "planning": "Planung"
+    },
+    "closeReason": {
+      "facilitator": "Von einer Person beendet",
+      "unattended": "Vom Manager durchgeführt",
+      "no_humans": "Niemand war da",
+      "expired": "Zeitüberschreitung"
+    },
+    "concludedBy": {
+      "manager": "Vom Manager durchgeführt",
+      "system": "Automatisch beendet"
+    },
+    "attendance": {
+      "unknown": "Unbekannt",
+      "present": "Anwesend",
+      "absent": "Gefehlt",
+      "excused": "Optional"
+    },
+    "errorCorrect": "Anwesenheit konnte nicht aktualisiert werden.",
+    "correctAria": "Anwesenheit von {name}",
+    "sourcePto": "Im genehmigten Urlaub",
+    "sourceManual": "Von einem Manager korrigiert"
+  },
+  "observability": {
+    "agents": "Agenten",
+    "agentsHint": "Klicke auf einen Agenten, um seine Diagnose zu sehen. Wähle mehrere aus, um sie zu vergleichen.",
+    "selectAll": "Alle auswählen",
+    "clear": "Leeren",
+    "loadingAgents": "Agenten werden geladen…",
+    "agentFallback": "Agent",
+    "agentNumbered": "Agent {id}",
+    "cloudAgentFallback": "Cloud-Agent",
+    "scopedFromPanel": "{name} (aus dem Panel eingegrenzt)",
+    "noAgents": "Noch keine Agenten. Registriere einen selbst gehosteten Agenten in <link>Belegschaft</link> oder erstelle einen Cloud-Agenten — beide erscheinen hier, sobald sie laufen.",
+    "online": "ONLINE",
+    "offline": "OFFLINE",
+    "viewLabel": "Ansicht:",
+    "logView": "Log-Ansicht",
+    "timelineView": "Zeitleisten-Ansicht",
+    "conn": {
+      "connecting": "verbinde",
+      "connected": "verbunden",
+      "offline": "offline",
+      "disconnected": "getrennt"
+    },
+    "refreshing": "Wird aktualisiert…",
+    "refreshCloud": "Cloud aktualisieren",
+    "autoScroll": "Auto-Scroll",
+    "copyTriage": "Triage-Infos kopieren",
+    "copyReport": "Bericht kopieren (+Diffs)",
+    "copyTriageTitle": "Einen vollständigen Triage-Bericht (Agenten, Telemetrie, Fehler, Logs) in die Zwischenablage kopieren",
+    "copyReportTitle": "Einen vollständigen Bericht — Material/PRD, die Codeänderungen (Diffs), Telemetrie, Fehler und Logs — in die Zwischenablage kopieren",
+    "cloudNote": "Cloud-Agenten laufen serverseitig über das Gateway (kein Live-Relay-Stream); ihre Logzeilen werden aus der Ausführungstelemetrie abgeleitet. Nutze „Cloud aktualisieren“ für den neuesten Stand.",
+    "registerThenSelect": "Registriere oder erstelle zuerst einen Agenten und wähle ihn dann oben aus.",
+    "selectForLogs": "Wähle oben einen oder mehrere Agenten aus, um die Diagnose zu sehen.",
+    "waitingForLogs": "Warte auf Log-Ausgabe…",
+    "timeline": "Zeitleiste",
+    "categoryFilterPlaceholder": "Kategoriefilter (z. B. llm, thinking)",
+    "refresh": "Aktualisieren",
+    "viewGantt": "Gantt",
+    "viewList": "Liste",
+    "loadingTimeline": "Zeitleiste wird geladen…",
+    "noTimelineEvents": "Keine Zeitleisten-Ereignisse",
+    "noTimelineHint": "Audit-Ereignisse von Tool-Aufrufen und Workflow-Aufgaben erscheinen hier, sobald die Agenten laufen.",
+    "registerFirst": "Registriere oder erstelle zuerst einen Agenten.",
+    "goToWorkforce": "Zur Belegschaft →",
+    "selectForTimeline": "Wähle oben einen oder mehrere Agenten aus, um die Ausführungs-Zeitleiste zu sehen.",
+    "errLoadAgents": "Agenten konnten nicht geladen werden",
+    "errLoadDiagnostics": "Diagnose konnte nicht geladen werden"
+  },
+  "embedInstall": {
+    "heading": "In deiner Host-App installieren",
+    "intro": "Ein Entwickler der Host-App installiert das Paket und rendert eine Komponente pro Seite, wobei dein signiertes SSO-/Mandanten-JWT übergeben wird. Das Token wird dem iframe über <code>postMessage</code> übergeben — niemals in einer URL.",
+    "stepInstall": "1 · Installieren",
+    "stepMount": "2 · Eine Oberfläche einbinden",
+    "mountableViews": "Einbindbare Ansichten ({count})",
+    "noCapabilities": "Keine Funktionsbereiche aktiviert — schalte oben Produkt / Agile / Sicherheit ein, um Ansichten freizugeben.",
+    "copyInstall": "Installation kopieren",
+    "copySnippet": "Snippet kopieren",
+    "copiedFlash": "✓ Kopiert"
+  },
+  "ticketContext": {
+    "thisTicket": "Dieses Ticket",
+    "thisEpic": "Dieses Epic",
+    "parentEpic": "Übergeordnetes Epic",
+    "signoffs": "Freigaben",
+    "basisLane": "Phase {index} von {total}",
+    "basisSignoff": "{done} von {total} freigegeben",
+    "basisChildren": "{done} von {total} Unterelementen erledigt",
+    "basisWeight": "{weight} % Gewichtung",
+    "partOfEpic": "Teil des Epics",
+    "epicChildren": "{done} von {total} Elementen erledigt",
+    "waitingOn": "Wartet auf",
+    "gapsOnly": "{count, plural, one {# Verantwortungslücke} other {# Verantwortungslücken}}",
+    "dispatchReviewers": "Prüfer beauftragen",
+    "dispatching": "Wird beauftragt…",
+    "reviewSignoffs": "Freigaben ansehen",
+    "objective": "Ziel",
+    "noObjective": "Mit keinem Ziel verknüpft. Verknüpfe es im Planungsboard, damit sein Wert messbar wird.",
+    "objectiveAttained": "erreicht",
+    "objectiveShare": "Dieses Ticket macht <b>{share} %</b> der mit diesem Ziel verknüpften Lieferung aus ({done} von {total} erledigt).",
+    "objectiveInherited": "Vom Geltungsbereich dieses Tickets geerbt – keine direkte Lieferverknüpfung.",
+    "via": {
+      "task": "Direkt verknüpft",
+      "epic": "Über das Epic",
+      "project": "Projektziel",
+      "initiative": "Initiativenziel"
+    }
+  },
+  "agentOps": {
+    "loading": "Wird geladen…",
+    "close": "Schließen",
+    "genericError": "Etwas ist schiefgelaufen.",
+    "coordination": {
+      "title": "Koordination",
+      "subtitle": "Mehrere Agenten können gleichzeitig an einem Ticket arbeiten und teilen sich einen Branch. Hier steht, wer gerade welche Dateien hält und welche Notizen sie einander hinterlassen.",
+      "ticketLabel": "Ticketnummer",
+      "ticketPlaceholder": "z. B. 412",
+      "inspect": "Ticket prüfen",
+      "empty": "Geben Sie eine Ticketnummer ein, um zu sehen, welche Dateien dessen Agenten halten und was sie einander mitgeteilt haben.",
+      "leasesTitle": "Aktuell gehaltene Dateien",
+      "noLeases": "Kein Agent hält eine Datei dieses Tickets.",
+      "notesTitle": "Gemeinsamer Arbeitsbereich",
+      "noNotes": "Kein Agent hat eine Notiz zu diesem Ticket hinterlassen.",
+      "resource": "Datei",
+      "holder": "Gehalten von",
+      "mode": "Sperre",
+      "reason": "Grund",
+      "exclusive": "Exklusiv",
+      "shared": "Geteilt",
+      "release": "Zwangsweise freigeben",
+      "releaseTitle": "Diese Datei zwangsweise freigeben?",
+      "releaseConfirm": "{holder} hält {resource} noch. Nach der Freigabe kann ein anderer Agent die Datei sofort schreiben – tun Sie das nur, wenn Sie wissen, dass der Halter gestoppt ist."
+    },
+    "memory": {
+      "title": "Gedächtnis",
+      "subtitle": "Alles, was Ihre Agenten für wahr halten – mit der Reichweite jeder Überzeugung, ihrer Herkunft und dem Zeitpunkt, an dem sie nicht mehr gilt. Angezeigt für den aktuellen Projektbereich: genau das, woran sich ein hier laufender Agent erinnern würde.",
+      "tableTitle": "Gespeicherte Fakten",
+      "empty": "Ihre Agenten haben in diesem Bereich noch keine Fakten gespeichert.",
+      "key": "Schlüssel",
+      "fact": "Fakt",
+      "scope": "Bereich",
+      "origin": "Herkunft",
+      "expiry": "Läuft ab",
+      "durable": "Nie",
+      "lapsed": "Abgelaufen",
+      "fromRun": "Lauf #{id}",
+      "scopeTenant": "Gesamter Arbeitsbereich",
+      "scopeProject": "Dieses Projekt",
+      "scopeTicket": "Ticket #{id}",
+      "forget": "Vergessen",
+      "forgetTitle": "Diesen Fakt vergessen?",
+      "forgetConfirm": "Agenten erinnern sich nicht mehr an „{key}“. Existiert eine weiter gefasste Version desselben Schlüssels, wird diese wieder sichtbar.",
+      "purge": "Abgelaufene löschen",
+      "purgeTitle": "Abgelaufene Fakten löschen?",
+      "purgeConfirm": "Löscht Fakten, deren Ablauf bereits vorbei ist. Agenten haben sie seit dem Ablauf ohnehin nicht mehr erinnert – für einen Lauf ändert sich nichts.",
+      "statTotal": "Fakten im Bereich",
+      "statTotalHint": "Woran sich ein hier laufender Agent erinnern kann.",
+      "statScoped": "Eng begrenzt",
+      "statScopedHint": "Fakten, die dieses Projekt oder ein Ticket nicht verlassen.",
+      "statExpiring": "Mit Ablauf",
+      "statExpiringHint": "Befristete Fakten, die von selbst ablaufen.",
+      "statLapsed": "Bereits abgelaufen",
+      "statLapsedHint": "Werden nicht mehr erinnert; warten auf die Bereinigung."
+    },
+    "rehearsal": {
+      "title": "Probelauf",
+      "subtitle": "Lassen Sie einen Agenten wirklich an einem Ticket arbeiten, aber mit unterdrückten Auswirkungen – kein Commit, kein Pull Request, kein Gedächtnis-Eintrag, niemand wird gerufen – und lesen Sie dann, was er getan hätte.",
+      "startTitle": "Probelauf starten",
+      "kind": "Art",
+      "kindDryRun": "Trockenlauf",
+      "kindReplay": "Wiederholung",
+      "kindTrial": "Erprobung",
+      "ticket": "Ticket",
+      "ticketPlaceholder": "z. B. 412",
+      "agent": "Agent",
+      "agentPlaceholder": "Leer lassen, um den dem Ticket zugewiesenen Agenten zu verwenden",
+      "startHint": "Ein Probelauf verbraucht Modell-Tokens und ist deshalb auf einen kurzen Lauf begrenzt. Eine Erprobung lässt denselben Agenten die zuletzt aktualisierten Tickets dieses Projekts durchlaufen.",
+      "start": "Probelauf starten",
+      "running": "Läuft…",
+      "historyTitle": "Frühere Probeläufe",
+      "empty": "Noch keine Probeläufe. Führen Sie einen aus, bevor Sie einen Prompt, ein Policy-Pack oder ein festgelegtes Modell ändern.",
+      "wouldWrite": "Hätte geschrieben",
+      "stepCount": "{count} Auswirkungen",
+      "outcome": "Ergebnis",
+      "finished": "Abgeschlossen",
+      "unfinished": "Schritte aufgebraucht",
+      "failed": "Fehlgeschlagen",
+      "viewReport": "Bericht",
+      "reportTitle": "Was der Agent getan hätte",
+      "frozenAt": "Repository gelesen bei",
+      "suppressedTitle": "Unterdrückte Auswirkungen",
+      "noSteps": "Der Agent hat überhaupt keine Auswirkungen erzeugt – weder Code geschrieben noch etwas gespeichert."
+    }
   }
 }

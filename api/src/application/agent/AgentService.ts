@@ -38,8 +38,10 @@ export class AgentService {
     return this.agents.findAllByTenant(asTenantId(tenantId));
   }
 
-  async getAgent(id: number): Promise<Agent> {
-    const agent = await this.agents.findById(asAgentId(id));
+  async getAgent(id: number, tenantId: number): Promise<Agent> {
+    // Tenant-scoped: an agent id from another workspace resolves to null → 404,
+    // never leaking (or acting on) a cross-tenant agent.
+    const agent = await this.agents.findByIdAndTenant(asAgentId(id), asTenantId(tenantId));
     if (!agent) throw new NotFoundError('Agent', id);
     return agent;
   }
@@ -69,8 +71,8 @@ export class AgentService {
     return agent;
   }
 
-  async deactivateAgent(id: number): Promise<Agent> {
-    const agent = await this.getAgent(id);
+  async deactivateAgent(id: number, tenantId: number): Promise<Agent> {
+    const agent = await this.getAgent(id, tenantId);
     return this.agents.update(agent.deactivate());
   }
 
@@ -81,8 +83,8 @@ export class AgentService {
     return this.skills.findAll();
   }
 
-  async registerSkill(dto: RegisterSkillDto): Promise<Skill> {
-    await this.getAgent(dto.agentId); // guard – agent must exist
+  async registerSkill(dto: RegisterSkillDto, tenantId: number): Promise<Skill> {
+    await this.getAgent(dto.agentId, tenantId); // guard – agent must exist AND belong to caller's tenant
     return this.skills.save(Skill.create({
       agentId:      asAgentId(dto.agentId),
       name:         dto.name,

@@ -12,10 +12,45 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 // Plus formatByoUnresolvedHeader's `provider:reason` encoding (incl. other-workspace).
 // ---------------------------------------------------------------------------
 
-// neon() → a tagged-template fn returning whatever rows the current test staged.
+// buildDatabase() → an in-memory fake of the drizzle-orm/neon-http builder chain
+// the service uses, returning whatever rows the current test staged:
+//   db.select(cols).from(t).where(w)[.limit(n) | .orderBy(...)] -> Promise<rows>
+//   db.selectDistinct(cols).from(t).innerJoin(...).where(w)     -> Promise<rows>
+//   db.insert(t).values(v).onConflictDoUpdate({target,set})     -> Promise<void>
+//   db.update(t).set(s).where(w) / db.delete(t).where(w)        -> Promise<void>
+// Rows are staged in DRIZZLE shape (camelCase columns) — the service maps them
+// back to the snake_case row shape its internal callers read.
 const rowsBox: { current: unknown[] } = { current: [] };
-vi.mock('@neondatabase/serverless', () => ({
-  neon: () => async () => rowsBox.current,
+const upserts: Array<{ values: Record<string, unknown>; set: Record<string, unknown> }> = [];
+
+/** A thenable that also answers the terminal builder steps (.limit/.orderBy). */
+function rowsResult() {
+  return Object.assign(Promise.resolve(rowsBox.current), {
+    limit: () => Promise.resolve(rowsBox.current),
+    orderBy: () => Promise.resolve(rowsBox.current),
+  });
+}
+
+function fakeDb() {
+  const reader = () => ({ from: () => ({ where: rowsResult, innerJoin: () => ({ where: rowsResult }) }) });
+  return {
+    select: reader,
+    selectDistinct: reader,
+    insert: () => ({
+      values: (values: Record<string, unknown>) => ({
+        onConflictDoUpdate: ({ set }: { set: Record<string, unknown> }) => {
+          upserts.push({ values, set });
+          return Promise.resolve();
+        },
+      }),
+    }),
+    update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
+    delete: () => ({ where: () => Promise.resolve() }),
+  };
+}
+
+vi.mock('../../infrastructure/database/connection', () => ({
+  buildDatabase: () => fakeDb(),
 }));
 
 // Decrypt is swapped per test (valid blob / api key / throws for undecryptable).
@@ -37,20 +72,43 @@ vi.mock('./anthropicOAuth', async (orig) => {
 import {
   resolveAnthropicResolution,
   formatByoUnresolvedHeader,
+  PROVIDER_VENDOR_MAP,
+  byoVendorPriorityOrder,
   type TenantLlmCredentials,
 } from './tenantProviderKeyService';
 import { OAUTH_SAFETY_MARGIN_MS } from './anthropicOAuth';
 
 const env = { NEON_DATABASE_URL: 'x', JWT_SECRET: 's' } as never;
 
+describe('BYO provider routing map', () => {
+  it('maps Kimi Code, Moonshot, Qwen, and MiniMax to their direct gateway vendors', () => {
+    expect(PROVIDER_VENDOR_MAP.kimi).toMatchObject({ vendorId: 'kimi-code', envKey: 'KIMI_CODE_API_KEY' });
+    expect(PROVIDER_VENDOR_MAP.moonshot).toMatchObject({ vendorId: 'moonshot', envKey: 'MOONSHOT_API_KEY' });
+    expect(PROVIDER_VENDOR_MAP.qwen).toMatchObject({ vendorId: 'qwen', envKey: 'QWEN_API_KEY' });
+    expect(PROVIDER_VENDOR_MAP.minimax).toMatchObject({ vendorId: 'minimax', envKey: 'MINIMAX_API_KEY' });
+    expect(PROVIDER_VENDOR_MAP.xai).toMatchObject({ vendorId: 'xai', envKey: 'XAI_API_KEY', oauth: true });
+  });
+
+  it('maps OpenAI OAuth priority to the Codex subscription vendor', () => {
+    expect(byoVendorPriorityOrder([{ provider: 'openai', authType: 'oauth', priority: 0 }])).toEqual(['openai-codex']);
+    expect(byoVendorPriorityOrder([{ provider: 'openai', authType: 'api_key', priority: 0 }])).toEqual(['openai']);
+  });
+
+  it('maps xAI OAuth priority to the SuperGrok Responses vendor', () => {
+    expect(byoVendorPriorityOrder([{ provider: 'xai', authType: 'oauth', priority: 0 }])).toEqual(['xai-oauth']);
+    expect(byoVendorPriorityOrder([{ provider: 'xai', authType: 'api_key', priority: 0 }])).toEqual(['xai']);
+  });
+});
+
 /** Stage an oauth row whose decrypted token blob has the given absolute `expires`. */
 function stageOAuth(expires: number, access = 'A1') {
-  rowsBox.current = [{ key_enc: 'enc', auth_type: 'oauth' }];
+  rowsBox.current = [{ keyEnc: 'enc', authType: 'oauth' }];
   decryptBox.current = () => JSON.stringify({ access, refresh: 'R1', expires });
 }
 
 afterEach(() => {
   rowsBox.current = [];
+  upserts.length = 0;
   decryptBox.current = (s) => s;
   refreshBox.current = async () => ({ access: 'A2', refresh: 'R2', expires: Date.now() + 3_600_000 });
 });
@@ -69,7 +127,7 @@ describe('resolveAnthropicResolution — reason reporting', () => {
   });
 
   it('an api key resolves with no reason', async () => {
-    rowsBox.current = [{ key_enc: 'enc', auth_type: 'api_key' }];
+    rowsBox.current = [{ keyEnc: 'enc', authType: 'api_key' }];
     decryptBox.current = () => 'sk-ant-123';
     const r = await resolveAnthropicResolution(env, 1);
     expect(r.reason).toBeUndefined();
@@ -77,7 +135,7 @@ describe('resolveAnthropicResolution — reason reporting', () => {
   });
 
   it('an undecryptable blob → reason "undecryptable"', async () => {
-    rowsBox.current = [{ key_enc: 'enc', auth_type: 'oauth' }];
+    rowsBox.current = [{ keyEnc: 'enc', authType: 'oauth' }];
     decryptBox.current = () => { throw new Error('bad key'); };
     expect(await resolveAnthropicResolution(env, 1)).toEqual({ auth: null, reason: 'undecryptable' });
   });
@@ -88,6 +146,20 @@ describe('resolveAnthropicResolution — reason reporting', () => {
     const r = await resolveAnthropicResolution(env, 1);
     expect(r.reason).toBeUndefined();
     expect(r.auth).toEqual({ mode: 'oauth', accessToken: 'FRESH' });
+  });
+
+  it('persists the rotated tokens as an oauth upsert (auth_type discriminator preserved)', async () => {
+    stageOAuth(Date.now() - 10 * 60_000);
+    refreshBox.current = async () => ({ access: 'FRESH', refresh: 'R2', expires: Date.now() + 3_600_000 });
+    await resolveAnthropicResolution(env, 1);
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0]!.values).toMatchObject({ tenantId: 1, provider: 'anthropic', authType: 'oauth' });
+    expect(upserts[0]!.set).toMatchObject({ authType: 'oauth' });
+    // The stored blob goes through encryptSecretForStorage (`enc:` prefix in this
+    // fake) — the plaintext token JSON is never written straight to the column.
+    const keyEnc = upserts[0]!.values.keyEnc as string;
+    expect(keyEnc.startsWith('enc:')).toBe(true);
+    expect(JSON.parse(keyEnc.slice(4))).toMatchObject({ access: 'FRESH', refresh: 'R2' });
   });
 
   it('expired token + refresh 401 → reason "revoked" (reconnect required)', async () => {
@@ -119,6 +191,7 @@ describe('formatByoUnresolvedHeader — provider:reason encoding', () => {
     vendorKeys: {},
     configuredProviders: ['anthropic'],
     unresolvedReasons: { anthropic: 'revoked' },
+    vendorPriority: [],
   };
 
   it('encodes a same-tenant unresolved provider with its reason', () => {
@@ -130,7 +203,7 @@ describe('formatByoUnresolvedHeader — provider:reason encoding', () => {
   });
 
   it('is empty when everything resolved and nothing is connected elsewhere', () => {
-    const ok: TenantLlmCredentials = { anthropicOAuthToken: 'tok', vendorKeys: {}, configuredProviders: ['anthropic'], unresolvedReasons: {} };
+    const ok: TenantLlmCredentials = { anthropicOAuthToken: 'tok', vendorKeys: {}, configuredProviders: ['anthropic'], unresolvedReasons: {}, vendorPriority: [] };
     expect(formatByoUnresolvedHeader(ok)).toBe('');
   });
 });

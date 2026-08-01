@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * POST /api/webhooks/payment
  *
@@ -7,9 +8,13 @@
  */
 
 import { Hono } from 'hono';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { TenantService } from '../../application/tenant/TenantService';
 import type { PaymentProvider } from '../../infrastructure/payment/PaymentProvider';
+import {
+  markCardValidatedByCustomer,
+  markCardValidationFailedByCustomer,
+} from '../../application/tenant/cardValidationService';
 
 export function createWebhookRoutes(
   tenantService: TenantService,
@@ -35,7 +40,7 @@ export function createWebhookRoutes(
     try {
       event = await paymentProvider.parseWebhook(rawBody, signatureHeader);
     } catch (err) {
-      console.error('[webhook] signature verification failed:', err);
+      reportCaughtError(err, { source: "presentation/routes/webhookRoutes.ts", operation: "createWebhookRoutes", context: { logMessage: '[webhook] signature verification failed:', details: err } });
       return c.json({ error: 'Invalid signature' }, 401);
     }
 
@@ -44,13 +49,62 @@ export function createWebhookRoutes(
       return c.json({ received: true, processed: false });
     }
 
+    // Card-validation events are NOT subscription state — they only stamp the
+    // `card_validated_at` / `card_validation_status` columns that unlock PREMIUM
+    // (any-paid-OpenRouter) model selection. Handled here rather than in
+    // TenantService so the Tenant aggregate stays about plans/members, matching how
+    // `resolveTenantPlan` and the usage ledger already own their own columns.
+    if (event.type === 'card.validated' || event.type === 'card.validation_failed') {
+      try {
+        let known: boolean;
+        if (event.type === 'card.validated') {
+          const outcome = await markCardValidatedByCustomer(c.env as Env, event.externalCustomerId, {
+            brand: event.paymentBrand ?? null,
+            last4: event.paymentLast4 ?? null,
+            paymentMethodId: event.paymentMethodId ?? null,
+          }, {
+            tenantId: event.tenantId,
+            billingEmail: event.billingEmail ?? null,
+          });
+          known = outcome.known;
+
+          // A REPLACE completes here: the new card is confirmed and already on the
+          // row, so the displaced one can be detached with no gap in premium access
+          // (the reverse order would revoke access first and restore it only when
+          // this webhook arrived). Best-effort — a failed detach leaves an orphaned
+          // card at the processor, which is far better than failing the webhook and
+          // having the whole validation retried against an already-updated row.
+          if (outcome.replacedPaymentMethodId) {
+            try {
+              await paymentProvider.detachCards({ paymentMethodId: outcome.replacedPaymentMethodId });
+            } catch (detachErr) {
+              reportCaughtError(detachErr, { source: "presentation/routes/webhookRoutes.ts", operation: "createWebhookRoutes", level: 'warning', context: { logMessage: '[webhook] replaced card detach failed (orphaned at provider):', details: detachErr } });
+            }
+          }
+        } else {
+          known = await markCardValidationFailedByCustomer(c.env as Env, event.externalCustomerId, event.tenantId);
+        }
+        if (!known) {
+          console.warn(`[webhook] card event for unknown externalCustomerId: ${event.externalCustomerId}`);
+        }
+        return c.json({ received: true, processed: known });
+      } catch (err) {
+        reportCaughtError(err, { source: "presentation/routes/webhookRoutes.ts", operation: "createWebhookRoutes", context: { logMessage: '[webhook] card validation update failed:', details: err } });
+        return c.json({ error: 'Processing failed' }, 500);
+      }
+    }
+
     try {
       await tenantService.handleWebhookEvent(event);
     } catch (err) {
-      console.error('[webhook] handleWebhookEvent failed:', err);
+      reportCaughtError(err, { source: "presentation/routes/webhookRoutes.ts", operation: "createWebhookRoutes", context: { logMessage: '[webhook] handleWebhookEvent failed:', details: err } });
       // Return 500 so the provider retries
       return c.json({ error: 'Processing failed' }, 500);
     }
+
+    // Cancelling a subscription does NOT remove the card-validation profile.
+    // Free tenants can keep it for metered OpenRouter usage and may remove it
+    // explicitly from /pricing once the subscription is no longer active.
 
     return c.json({ received: true, processed: true });
   });

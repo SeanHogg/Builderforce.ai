@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * ingestRepoCiEvent — feed a target repo's CI/deploy result back to the cloud
  * execution that produced the change, and validate the POST-MERGE build.
@@ -15,13 +16,14 @@
  * fix-run dispatch is performed by the caller (it owns the request/execution
  * context); this module only DECIDES and returns the intent.
  */
-import { and, count, desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { executions, tasks, projects, toolAuditEvents } from '../../infrastructure/database/schema';
+import { peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { resolveDefaultRepoForTask } from '../repos/resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutofixOnBuildFailure, MAX_AUTOFIX_ATTEMPTS } from '../repos/mergeBranchToBase';
 import { ticketBranchName } from '../repos/commitFileAsPendingChange';
-import { markPullRequestMergedByTask, findMergedPullRequestBySha, findOpenPullRequestByTask, setPullRequestBuildStatus } from '../repos/recordPullRequestRow';
+import { markPullRequestMergedByTask, findMergedPullRequestBySha, findOpenPullRequestByTask, findOpenPullRequestByProject, setPullRequestBuildStatus } from '../repos/recordPullRequestRow';
 import { completeTaskOnMerge } from '../task/taskLifecycle';
 import { fetchBuildError } from './fetchBuildError';
 import type { Db } from '../../infrastructure/database/connection';
@@ -38,14 +40,35 @@ export interface RepoCiEvent {
   /** Raw provider state/conclusion for the audit detail. */
   rawState: string | null;
   targetUrl: string | null;
-  /** Provider run id (GitHub Actions `workflow_run.id`) — for the failed-step fetch. */
+  /** Provider run id (GitHub Actions `workflow_run.id`, GitLab `pipeline.id`) — for the failed-step fetch. */
   runId: number | null;
+  /**
+   * Pre-merge auto-fix eligibility override. A ticket-branch failure only burns an
+   * auto-fix attempt when the event is an AUTHORITATIVE whole-build conclusion — on
+   * GitHub that is exactly "has a workflow_run id", which is why this defaults to
+   * `runId != null`. Providers whose terminal build event carries no numeric run id
+   * (Bitbucket commit statuses) set this explicitly so they are genuinely eligible
+   * rather than silently skipped.
+   */
+  authoritative?: boolean;
+  /**
+   * Identifies the POSTER of the status, not the build (Bitbucket commit-status
+   * `key` — one per CI system wired to the repo). A repo with several keys posts
+   * several authoritative terminal states for the SAME commit, so the auto-fix
+   * budget de-duplicates on `(sha, key)` and spends one attempt per BUILD.
+   */
+  statusKey?: string | null;
 }
 
 const TASK_BRANCH_RE = /^builderforce\/task-(\d+)\b/;
+/** The IDE bridge's branch (`repoBridge.designerBranch`) — a PROJECT, not a task. */
+const DESIGNER_BRANCH_RE = /^builderforce\/designer-(\d+)\b/;
 
 /** Telemetry toolName recorded per dispatched auto-fix run (the loop-guard counts these). */
 export const AUTOFIX_DISPATCH_EVENT = 'autofix.dispatch';
+
+/** `reason` returned when a second status poster reports an already-claimed build. */
+export const AUTOFIX_DEDUPED_REASON = 'auto-fix already dispatched for this build';
 
 export interface AutoFixIntent {
   taskId: number;
@@ -54,12 +77,19 @@ export interface AutoFixIntent {
   attempt: number;
   /** JSON payload carrying the remediation context for the fix run's prompt. */
   payload: string;
+  /** Commit the failing build ran on — recorded on the dispatch event so a later
+   *  status post for the SAME build is recognised and doesn't burn a second attempt. */
+  sha: string | null;
+  /** Status poster that claimed this build's attempt (Bitbucket key), for telemetry. */
+  statusKey?: string | null;
 }
 
 export interface IngestResult {
   processed: boolean;
   reason?: string;
   taskId?: number;
+  /** Owning tenant of the correlated task (set whenever `taskId` is). */
+  tenantId?: number;
   executionId?: number;
   merged?: boolean;
   buildStatus?: 'success' | 'failure' | 'pending';
@@ -78,10 +108,16 @@ async function latestExecutionId(db: Db, taskId: number, tenantId: number): Prom
   return exec?.id;
 }
 
-/** How many auto-fix runs have already been dispatched for this task (loop-guard). */
-async function autofixAttemptsSoFar(db: Db, taskId: number, tenantId: number): Promise<number> {
-  const [row] = await db
-    .select({ n: count() })
+/**
+ * The auto-fix runs already dispatched for this task (loop-guard): how many, and
+ * which commits they were dispatched FOR. The sha set is what makes the budget count
+ * BUILDS — a repo with several commit-status keys posts several authoritative
+ * terminal states for one commit, and without this each poster would spend its own
+ * attempt. A real second attempt always follows a fix commit, i.e. a new sha.
+ */
+async function priorAutofixDispatches(db: Db, taskId: number, tenantId: number): Promise<{ attempts: number; shas: Set<string> }> {
+  const rows = await db
+    .select({ args: toolAuditEvents.args })
     .from(toolAuditEvents)
     .innerJoin(executions, eq(executions.id, toolAuditEvents.executionId))
     .where(and(
@@ -89,7 +125,21 @@ async function autofixAttemptsSoFar(db: Db, taskId: number, tenantId: number): P
       eq(executions.tenantId, tenantId),
       eq(toolAuditEvents.toolName, AUTOFIX_DISPATCH_EVENT),
     ));
-  return row?.n ?? 0;
+  const shas = new Set<string>();
+  for (const r of rows) {
+    try {
+      const sha = (JSON.parse(r.args ?? '{}') as { sha?: unknown }).sha;
+      if (typeof sha === 'string' && sha) shas.add(sha);
+    } catch (error) { /* pre-sha rows (and malformed args) just don't contribute a sha */ 
+      reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "priorAutofixDispatches" });
+    }
+  }
+  return { attempts: rows.length, shas };
+}
+
+/** Cache key for the in-flight claim on a build's single auto-fix attempt. */
+function autofixClaimKey(tenantId: number, taskId: number, sha: string): string {
+  return `autofix-build:${tenantId}:${taskId}:${sha}`;
 }
 
 /**
@@ -129,7 +179,9 @@ async function applyBuildOutcome(
   let buildError: string | null = null;
   if (outcome === 'failure') {
     buildError = `The ${phaseLabel} failed.${evt.targetUrl ? ` See: ${evt.targetUrl}` : ''}`;
-    if (pr.repoId && evt.runId) {
+    // A run id OR a run URL is enough: GitHub/GitLab address the run by id, Bitbucket
+    // recovers its build number from the status URL.
+    if (pr.repoId && (evt.runId != null || evt.targetUrl)) {
       const resolved = await resolveRepoCredential(db, secret, tenantId, pr.repoId);
       if (!isResolveError(resolved)) {
         const be = await fetchBuildError(env, {
@@ -143,7 +195,9 @@ async function applyBuildOutcome(
   }
 
   // Persist on the PR row so the in-product Pull Request tab renders status + reason.
-  await setPullRequestBuildStatus(db, pr.id, outcome, buildError).catch(() => {});
+  await setPullRequestBuildStatus(db, pr.id, outcome, buildError).catch((error) => {
+    reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "applyBuildOutcome" });
+  });
 
   await db.insert(toolAuditEvents).values({
     tenantId, agentHostId: null, cloudAgentRef: agentRef,
@@ -152,20 +206,39 @@ async function applyBuildOutcome(
     args: JSON.stringify({ phase, branch: evt.branch, sha: evt.sha, runId: evt.runId, url: evt.targetUrl }),
     result: `${phaseLabel} ${outcome}${evt.targetUrl ? ` · ${evt.targetUrl}` : ''}`.slice(0, 300),
     ts: new Date(),
-  }).catch(() => {});
+  }).catch((error) => {
+    reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "applyBuildOutcome" });
+  });
 
   if (outcome === 'success') {
-    return { processed: true, taskId, executionId: execId, buildStatus: 'success' };
+    return { processed: true, taskId, tenantId, executionId: execId, buildStatus: 'success' };
   }
 
   // FAILURE → auto-fix (if eligible, enabled, and under the per-task attempt cap).
   if (!ctx.allowAutoFix) {
-    return { processed: true, taskId, executionId: execId, buildStatus: 'failure', reason: 'event not auto-fix eligible' };
+    return { processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure', reason: 'event not auto-fix eligible' };
   }
   if (!cloudAutofixOnBuildFailure(env)) {
-    return { processed: true, taskId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix disabled' };
+    return { processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix disabled' };
   }
-  const priorAttempts = await autofixAttemptsSoFar(db, taskId, tenantId);
+  // De-duplicate per BUILD, identified by (sha, status key): the first key to report
+  // a commit red claims that build's attempt, and every other key reporting the SAME
+  // commit is the same failing build, not a new one. Two layers because the durable
+  // record is written asynchronously (the caller dispatches in `waitUntil`, so a
+  // second webhook can arrive first): a short-lived claim in the shared read-through
+  // cache covers the in-flight window, the dispatch events' shas cover the rest.
+  const { attempts: priorAttempts, shas: dispatchedShas } = await priorAutofixDispatches(db, taskId, tenantId);
+  if (evt.sha) {
+    const claimed = dispatchedShas.has(evt.sha)
+      || (await peekCached<{ statusKey: string | null }>(env, autofixClaimKey(tenantId, taskId, evt.sha))) != null;
+    if (claimed) {
+      return {
+        processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure',
+        reason: AUTOFIX_DEDUPED_REASON,
+      };
+    }
+  }
+
   if (priorAttempts >= MAX_AUTOFIX_ATTEMPTS) {
     await db.insert(toolAuditEvents).values({
       tenantId, agentHostId: null, cloudAgentRef: agentRef,
@@ -173,17 +246,28 @@ async function applyBuildOutcome(
       toolName: 'build.needs_human', category: 'ci',
       args: JSON.stringify({ phase, sha: evt.sha, attempts: priorAttempts }),
       result: `auto-fix exhausted after ${priorAttempts} attempt(s) — needs human`, ts: new Date(),
-    }).catch(() => {});
-    return { processed: true, taskId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix attempts exhausted' };
+    }).catch((error) => {
+      reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "applyBuildOutcome" });
+    });
+    return { processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix attempts exhausted' };
   }
 
   const attempt = priorAttempts + 1;
   const payload = JSON.stringify({
     remediation: { kind: 'build_failure', phase, attempt, maxAttempts: MAX_AUTOFIX_ATTEMPTS, buildError, runUrl: evt.targetUrl },
   });
+  // Claim this build BEFORE returning the intent, so a sibling status key that
+  // arrives while the dispatch is still in flight sees the claim above.
+  if (evt.sha) {
+    await setCached(env, autofixClaimKey(tenantId, taskId, evt.sha), { statusKey: evt.statusKey ?? null }, {
+      kvTtlSeconds: 3600, l1TtlMs: 3600_000,
+    }).catch((error) => { /* claim is an optimization — the dispatch events are the record */ 
+      reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "applyBuildOutcome" });
+    });
+  }
   return {
-    processed: true, taskId, executionId: execId, buildStatus: 'failure',
-    autoFix: { taskId, tenantId, attempt, payload },
+    processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure',
+    autoFix: { taskId, tenantId, attempt, payload, sha: evt.sha, statusKey: evt.statusKey ?? null },
   };
 }
 
@@ -195,13 +279,82 @@ export async function ingestRepoCiEvent(
   evt: RepoCiEvent,
 ): Promise<IngestResult> {
   try {
-    const m = evt.branch ? TASK_BRANCH_RE.exec(evt.branch) : null;
-    return m
-      ? await ingestPreMergeEvent(db, env, secret, evt, Number(m[1]))
-      : await ingestPostMergeEvent(db, env, secret, evt);
+    const task = evt.branch ? TASK_BRANCH_RE.exec(evt.branch) : null;
+    if (task) return await ingestPreMergeEvent(db, env, secret, evt, Number(task[1]));
+    // Designer/Mobile PRs come from the IDE bridge, not a ticket. They previously
+    // fell through to the post-merge path, which correlates by merged-PR SHA and
+    // so matched nothing — meaning an IDE-opened PR showed no build status at all.
+    const designer = evt.branch ? DESIGNER_BRANCH_RE.exec(evt.branch) : null;
+    if (designer) return await ingestDesignerEvent(db, env, secret, evt, Number(designer[1]));
+    return await ingestPostMergeEvent(db, env, secret, evt);
   } catch (e) {
     return { processed: false, reason: e instanceof Error ? e.message : 'ingest failed' };
   }
+}
+
+/**
+ * Path 1b — an event on an IDE bridge branch (`builderforce/designer-<projectId>`).
+ *
+ * Same goal as the ticket path — the PR row carries the build verdict and the
+ * reason, so the IDE can show whether the pushed workspace actually builds — but
+ * deliberately WITHOUT the auto-fix dispatch: there is no ticket and no assigned
+ * agent to hand a failing build to. A human opened this PR from the IDE, so the
+ * feedback belongs on screen, not in an agent run.
+ */
+async function ingestDesignerEvent(
+  db: Db,
+  env: Env,
+  secret: string,
+  evt: RepoCiEvent,
+  projectId: number,
+): Promise<IngestResult> {
+  const [project] = await db
+    .select({ id: projects.id, tenantId: projects.tenantId })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  if (!project) return { processed: false, reason: `no project #${projectId}` };
+
+  if (evt.outcome !== 'success' && evt.outcome !== 'failure') {
+    return { processed: false, reason: 'not a terminal build outcome' };
+  }
+
+  const pr = await findOpenPullRequestByProject(db, project.tenantId, projectId);
+  if (!pr) return { processed: false, reason: `no open PR for project #${projectId}` };
+
+  const outcome = evt.outcome;
+  let buildError: string | null = null;
+  if (outcome === 'failure') {
+    buildError = `The PR-branch build failed.${evt.targetUrl ? ` See: ${evt.targetUrl}` : ''}`;
+    if (pr.repoId && (evt.runId != null || evt.targetUrl)) {
+      const resolved = await resolveRepoCredential(db, secret, project.tenantId, pr.repoId);
+      if (!isResolveError(resolved)) {
+        const be = await fetchBuildError(env, {
+          provider: resolved.repo.provider, host: resolved.repo.host,
+          owner: resolved.repo.owner, repo: resolved.repo.repo, token: resolved.token,
+          runId: evt.runId, runUrl: evt.targetUrl,
+        });
+        buildError = be.summary;
+      }
+    }
+  }
+
+  await setPullRequestBuildStatus(db, pr.id, outcome, buildError).catch((error) => {
+    reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestDesignerEvent" });
+  });
+
+  await db.insert(toolAuditEvents).values({
+    tenantId: project.tenantId, agentHostId: null, cloudAgentRef: null,
+    executionId: null, sessionKey: `project:${projectId}`,
+    toolName: 'build.result', category: 'ci',
+    args: JSON.stringify({ branch: evt.branch, sha: evt.sha, projectId }),
+    result: (outcome === 'success' ? 'PR-branch build passed' : (buildError ?? 'PR-branch build failed')).slice(0, 300),
+    ts: new Date(),
+  }).catch((error) => { /* telemetry best-effort */ 
+    reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestDesignerEvent" });
+  });
+
+  return { processed: true, tenantId: project.tenantId, buildStatus: outcome };
 }
 
 /** Path 1 — an event on the ticket branch (pre-merge): record + optional green merge. */
@@ -224,7 +377,9 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
     category: 'ci',
     args: JSON.stringify({ branch: evt.branch, sha: evt.sha, state: evt.rawState, url: evt.targetUrl }),
     result: result.slice(0, 300), ts: new Date(),
-  }).catch(() => { /* telemetry best-effort */ });
+  }).catch((error) => { /* telemetry best-effort */ 
+    reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestPreMergeEvent" });
+  });
 
   // Stamp the build outcome + REASON on the agent's open PR row (so the ticket shows
   // WHY CI is red before merge) and, on an authoritative failure, dispatch an auto-fix
@@ -237,7 +392,7 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
       buildResult = await applyBuildOutcome(db, env, secret, {
         phase: 'pre_merge', taskId, tenantId: task.tenantId, execId,
         agentRef: task.assignedAgentRef ?? null, pr: { id: pr.id, repoId: pr.repoId },
-        evt, allowAutoFix: evt.runId != null,
+        evt, allowAutoFix: evt.authoritative ?? evt.runId != null,
       });
     }
   }
@@ -260,17 +415,23 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
         merged = mr.ok;
         // Stamp the merge SHA so the resulting deploy-branch build correlates back.
         if (mr.ok) {
-          await markPullRequestMergedByTask(db, task.tenantId, taskId, { mergeSha: mr.sha ?? null }).catch(() => {});
+          await markPullRequestMergedByTask(db, task.tenantId, taskId, { mergeSha: mr.sha ?? null }).catch((error) => {
+            reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestPreMergeEvent" });
+          });
           // Merge on green → ticket complete (same completion path as the human/manager merge).
-          await completeTaskOnMerge(env, db, { tenantId: task.tenantId, taskId }).catch(() => {});
+          await completeTaskOnMerge(env, db, { tenantId: task.tenantId, taskId }).catch((error) => {
+            reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestPreMergeEvent" });
+          });
         }
       }
     }
   }
 
   // Carry the build status + any auto-fix intent (failure) up to the webhook, which
-  // owns the run dispatch — same contract the post-merge path returns.
-  return { processed: true, taskId, executionId: execId, merged, buildStatus: buildResult?.buildStatus, autoFix: buildResult?.autoFix };
+  // owns the run dispatch — same contract the post-merge path returns. The `reason`
+  // rides along too: it is what `handleCiEventOutcome` turns into the observable
+  // `build.autofix_skipped` event, so dropping it here blinded the pre-merge path.
+  return { processed: true, taskId, tenantId: task.tenantId, executionId: execId, merged, buildStatus: buildResult?.buildStatus, autoFix: buildResult?.autoFix, reason: buildResult?.reason };
 }
 
 /** Path 2 — an event on the deploy branch (post-merge): validate + maybe auto-fix. */
@@ -296,7 +457,9 @@ async function ingestPostMergeEvent(db: Db, env: Env, secret: string, evt: RepoC
   // earlier merge path already completed it). A deploy FAILURE leaves it open and
   // drives auto-fix below.
   if (evt.outcome === 'success') {
-    await completeTaskOnMerge(env, db, { tenantId, taskId }).catch(() => {});
+    await completeTaskOnMerge(env, db, { tenantId, taskId }).catch((error) => {
+      reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestPostMergeEvent" });
+    });
   }
 
   // Post-merge always allows auto-fix (a deploy failure is authoritative even without

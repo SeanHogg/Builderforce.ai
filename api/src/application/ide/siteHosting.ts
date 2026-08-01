@@ -12,8 +12,10 @@
  * the hot path (every asset request resolves it), so it's served through the
  * canonical read-through cache and invalidated on publish via `version_token`.
  */
-import { neon } from '@neondatabase/serverless';
+import { eq } from 'drizzle-orm';
 import type { Env } from '../../env';
+import { buildDatabase } from '../../infrastructure/database/connection';
+import { projectSites } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 
 /** R2 key prefix all hosted sites live under. */
@@ -101,20 +103,24 @@ export async function lookupSite(env: Env, subdomain: string): Promise<SiteRecor
     env,
     siteCacheKey(subdomain),
     async () => {
-      const rows = await neon(env.NEON_DATABASE_URL)`
-        SELECT project_id, r2_prefix, status, version_token, index_document
-        FROM project_sites WHERE subdomain = ${subdomain} LIMIT 1`;
-      const row = rows[0] as {
-        project_id: number; r2_prefix: string; status: string;
-        version_token: string; index_document: string;
-      } | undefined;
+      const [row] = await buildDatabase(env)
+        .select({
+          projectId: projectSites.projectId,
+          r2Prefix: projectSites.r2Prefix,
+          status: projectSites.status,
+          versionToken: projectSites.versionToken,
+          indexDocument: projectSites.indexDocument,
+        })
+        .from(projectSites)
+        .where(eq(projectSites.subdomain, subdomain))
+        .limit(1);
       if (!row || row.status === 'disabled') return null;
       return {
-        projectId: row.project_id,
-        r2Prefix: row.r2_prefix,
+        projectId: row.projectId,
+        r2Prefix: row.r2Prefix,
         status: row.status,
-        versionToken: row.version_token,
-        indexDocument: row.index_document,
+        versionToken: row.versionToken,
+        indexDocument: row.indexDocument,
       };
     },
     { kvTtlSeconds: 600 },

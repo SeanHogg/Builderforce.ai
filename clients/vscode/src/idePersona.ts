@@ -98,6 +98,32 @@ export function activeProjectDirective(project?: ActiveProject | null): string |
 }
 
 /**
+ * Repo facts for the open workspace folder — "where the code is". Pure data (no
+ * `vscode` types) so it crosses the webview bridge and is formatted by
+ * {@link editorContextDirective} on both surfaces. The host-side DETECTOR lives in
+ * `src/gitContext.ts`, which imports this shape rather than re-declaring it.
+ */
+export interface GitContext {
+  /** False when the folder is not inside a git working tree. */
+  isRepo: boolean;
+  /** Absolute fsPath of the repository root (may differ from the workspace folder). */
+  root?: string;
+  /** Current branch name; undefined on a detached HEAD. */
+  branch?: string;
+  /** The `origin` remote URL, verbatim. */
+  remoteUrl?: string;
+  /** Parsed from {@link remoteUrl} — e.g. `SeanHogg` / `Builderforce.ai` / `github.com`. */
+  owner?: string;
+  repo?: string;
+  host?: string;
+  /** Commits ahead of / behind the upstream branch, when known. */
+  ahead?: number;
+  behind?: number;
+  /** Number of changed (working-tree + index) files, when known. */
+  dirtyCount?: number;
+}
+
+/**
  * The live editor context the host reads from VS Code (active file, cursor,
  * selection, open tabs, workspace name). Pure data — no `vscode` types — so it can
  * cross the webview bridge and be formatted by {@link editorContextDirective} on
@@ -117,6 +143,10 @@ export interface EditorContext {
   selection?: { path: string; startLine: number; endLine: number; text: string; languageId?: string };
   /** Other files open in editor tabs, workspace-relative (includes the active file). */
   openFiles?: string[];
+  /** ABSOLUTE fsPath of the first open workspace folder — the root the local file tools resolve against. */
+  workspaceRoot?: string;
+  /** Repository facts for {@link workspaceRoot}; see `src/gitContext.ts`. */
+  git?: GitContext;
 }
 
 /**
@@ -133,6 +163,31 @@ export function editorContextDirective(ctx?: EditorContext): string | undefined 
   if (!ctx) return undefined;
   const parts: string[] = [];
   if (ctx.workspaceName) parts.push(`Open workspace folder: ${ctx.workspaceName}.`);
+  if (ctx.workspaceRoot) {
+    parts.push(
+      `THE CODE IS HERE — workspace root (absolute): \`${ctx.workspaceRoot}\`. Your \`read_file\`, ` +
+        "`list_files`, `search_code` and `edit_file` tools operate on THIS root and take " +
+        "workspace-relative paths. Use them to find and read the code yourself; never ask the user " +
+        "where the code is, for a path, or to paste a file.",
+    );
+  }
+  if (ctx.git) {
+    if (!ctx.git.isRepo) {
+      parts.push("This workspace is NOT a git repository — there is no branch, remote or commit history to reason about.");
+    } else {
+      const g = ctx.git;
+      const bits = [
+        g.owner && g.repo ? `repo \`${g.owner}/${g.repo}\`` : undefined,
+        g.host ? `hosted on ${g.host}` : undefined,
+        g.remoteUrl ? `remote ${g.remoteUrl}` : undefined,
+        g.branch ? `branch \`${g.branch}\`` : "detached HEAD",
+        g.root && g.root !== ctx.workspaceRoot ? `git root \`${g.root}\`` : undefined,
+        typeof g.dirtyCount === "number" ? `${g.dirtyCount} uncommitted file(s)` : undefined,
+        g.ahead || g.behind ? `${g.ahead ?? 0} ahead / ${g.behind ?? 0} behind upstream` : undefined,
+      ].filter(Boolean);
+      parts.push(`Git: ${bits.join(", ")}.`);
+    }
+  }
   if (ctx.activeFile) {
     const pos = ctx.cursor ? ` (cursor at line ${ctx.cursor.line})` : "";
     parts.push(`Active file (open and focused in the editor right now): \`${ctx.activeFile}\`${pos}.`);

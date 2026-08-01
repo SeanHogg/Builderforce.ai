@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * meetingIntelligence — the AI half of live meetings (migration 0330).
  *
@@ -79,7 +80,9 @@ export async function postMeetingChatLine(
       seq: (last?.seq ?? 0) + 1,
     });
     await db.update(brainChats).set({ updatedAt: new Date() }).where(eq(brainChats.id, chatId));
-  } catch { /* the meeting chat is a nice-to-have; never fail the turn on it */ }
+  } catch (error) { /* the meeting chat is a nice-to-have; never fail the turn on it */ 
+    reportCaughtError(error, { source: "application/meetings/meetingIntelligence.ts", operation: "postMeetingChatLine" });
+  }
 }
 
 /** Persist a transcript line + fan it out to live clients as a caption. */

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Retention purge — daily deletion of rows from append-only diagnostic/telemetry
  * tables that would otherwise grow unbounded. Run from the daily cron tick
@@ -9,9 +10,10 @@
  * — one place, one policy (DRY).
  */
 import { lt } from 'drizzle-orm';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { llmTraces, llmFailoverLog, llmHealthProbes, qaJourneyEvents, errorEvents } from '../../infrastructure/database/schema';
+import { llmTraces, llmFailoverLog, llmHealthProbes, qaJourneyEvents, errorEvents, managerActions, toolAuditEvents, demoEvents, apiErrorLog } from '../../infrastructure/database/schema';
+import { purgeExpiredMemories } from '../memory/memoryService';
 
 /** Days of history kept per table before older rows are purged. */
 const RETENTION_DAYS = {
@@ -23,6 +25,26 @@ const RETENTION_DAYS = {
   // only the raw stream is swept. 90d is safely > the consumption meter's
   // month-to-date window, so error-event billing is never affected by the purge.
   errorEvents: 90,
+  // The manager-decision FEED (cron + "Run manager now" telemetry) — the platform's
+  // highest-write table (~46k rows in <30d, all from the every-5-min manager sweep).
+  // It had NO retention and its on-disk size ballooned to ~593 MB, mostly page bloat
+  // (reclaim needs a one-time VACUUM FULL — retention alone won't shrink recent rows).
+  // 30d caps the live-row count for a drill-in feed that nobody reads month-old rows
+  // from; the KV cron gate further cuts its write rate on idle ticks.
+  managerActions: 30,
+  // Agent tool-audit timeline (~117 MB, also previously unbounded). Same 90d window
+  // as the other agent/telemetry event streams.
+  toolAuditEvents: 90,
+  // Anonymous demo-funnel telemetry (migration 0360). Append-only, one row per demo
+  // visitor interaction — swept on the same 90d window as the other event streams;
+  // the admin funnel panel only looks back 30d.
+  demoEvents: 90,
+  // The platform's OWN caught/unhandled exception stream (persistCaughtError).
+  // Append-only and previously unswept despite its own migration promising a
+  // 30-day policy — and its write rate rose sharply when every handled catch in
+  // the API started reporting here, so it is now one of the fastest-growing
+  // tables. 30d matches the superadmin Logs page, which never looks further back.
+  apiErrorLog: 30,
 } as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -35,18 +57,28 @@ const cutoff = (now: number, days: number) => new Date(now - days * DAY_MS);
  */
 export async function runRetentionPurge(env: Env, now: number = Date.now()): Promise<void> {
   const db = buildDatabase(env);
+  const transactionalDb = buildTransactionalDatabase(env);
   const targets: Array<{ name: string; run: () => Promise<unknown> }> = [
-    { name: 'llm_traces',        run: () => db.delete(llmTraces).where(lt(llmTraces.createdAt, cutoff(now, RETENTION_DAYS.llmTraces))) },
-    { name: 'llm_failover_log',  run: () => db.delete(llmFailoverLog).where(lt(llmFailoverLog.createdAt, cutoff(now, RETENTION_DAYS.llmFailoverLog))) },
-    { name: 'llm_health_probes', run: () => db.delete(llmHealthProbes).where(lt(llmHealthProbes.createdAt, cutoff(now, RETENTION_DAYS.llmHealthProbes))) },
+    { name: 'llm_traces',        run: () => transactionalDb.delete(llmTraces).where(lt(llmTraces.createdAt, cutoff(now, RETENTION_DAYS.llmTraces))) },
+    { name: 'llm_failover_log',  run: () => transactionalDb.delete(llmFailoverLog).where(lt(llmFailoverLog.createdAt, cutoff(now, RETENTION_DAYS.llmFailoverLog))) },
+    { name: 'llm_health_probes', run: () => transactionalDb.delete(llmHealthProbes).where(lt(llmHealthProbes.createdAt, cutoff(now, RETENTION_DAYS.llmHealthProbes))) },
+    // Operational DB: persistCaughtError writes here, so the purge must too.
+    { name: 'api_error_log',     run: () => transactionalDb.delete(apiErrorLog).where(lt(apiErrorLog.createdAt, cutoff(now, RETENTION_DAYS.apiErrorLog))) },
     { name: 'qa_journey_events', run: () => db.delete(qaJourneyEvents).where(lt(qaJourneyEvents.ts, cutoff(now, RETENTION_DAYS.qaJourneyEvents))) },
     { name: 'error_events',      run: () => db.delete(errorEvents).where(lt(errorEvents.createdAt, cutoff(now, RETENTION_DAYS.errorEvents))) },
+    { name: 'manager_actions',   run: () => db.delete(managerActions).where(lt(managerActions.createdAt, cutoff(now, RETENTION_DAYS.managerActions))) },
+    { name: 'tool_audit_events', run: () => db.delete(toolAuditEvents).where(lt(toolAuditEvents.createdAt, cutoff(now, RETENTION_DAYS.toolAuditEvents))) },
+    { name: 'demo_events',       run: () => db.delete(demoEvents).where(lt(demoEvents.createdAt, cutoff(now, RETENTION_DAYS.demoEvents))) },
+    // Lapsed agent memories (0371). NOT an age-based purge like the rest of this
+    // file — a fact expires when its own author said it would, so the policy lives
+    // on the row, and this only reclaims what recall already stopped returning.
+    { name: 'expired_memories',  run: () => purgeExpiredMemories(env, db) },
   ];
   for (const t of targets) {
     try {
       await t.run();
     } catch (err) {
-      console.error(`[cron:retention] purge ${t.name} failed`, err);
+      reportCaughtError(err, { source: "application/maintenance/retentionPurge.ts", operation: "runRetentionPurge", context: { logMessage: `[cron:retention] purge ${t.name} failed`, details: err } });
     }
   }
 }

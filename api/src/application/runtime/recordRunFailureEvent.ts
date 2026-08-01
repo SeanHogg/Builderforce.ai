@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Execution } from '../../domain/execution/Execution';
 import { toolAuditEvents } from '../../infrastructure/database/schema';
@@ -43,7 +44,11 @@ export async function recordRunFailureEvent(db: Db, e: Execution): Promise<void>
       result:        e.errorMessage ?? 'Run failed',
       ts:            new Date(),
     });
-  } catch {
-    /* telemetry is best-effort — never break a status transition on it */
+  } catch (error) {
+    reportCaughtError(error, { source: "application/runtime/recordRunFailureEvent.ts", operation: "recordRunFailureEvent", context: { logMessage: '[run-failure-event] telemetry append failed', details: {
+      tenantId: Number(e.tenantId),
+      executionId: Number(e.id),
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    } } });
   }
 }

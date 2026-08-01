@@ -28,41 +28,92 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: api/pnpm-lock.yaml
 
+      # pnpm --frozen-lockfile, NOT `npm install` — deploy must build the exact
+      # tree CI gated. Every type-check/test job in ci.yml installs from
+      # api/pnpm-lock.yaml, so resolving here with npm (which re-resolves against
+      # a package-lock.json no gate reads) meant the worker shipped to production
+      # could carry dependency versions nothing had ever type-checked or tested.
       - name: Install API dependencies
         working-directory: api
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
-      # Drift guard — same file-based checks CI runs, but here they GATE the deploy.
-      # CI and this Deploy both trigger on push:main and run concurrently, so a
-      # drift-failing CI does NOT stop a deploy. Without this, a schema.ts column/
-      # table with no migration would ship a worker the DB can't serve (the
-      # "column \"action_type\" does not exist" 500). Failing here aborts the deploy
-      # loudly instead of shipping the broken worker.
-      - name: Guard — block deploy on schema/migration drift
+      # Release gate — CI runs on pull requests, but direct pushes to main reach this
+      # workflow without a CI run. The 2026.7.181 manager release demonstrated why the
+      # deploy must defend itself: package.json was bumped while src/version.ts was not,
+      # and the worker shipped diagnostics claiming the previous build. Run the full API
+      # suite plus type-check here before migrations or any external mutation.
+      - name: Guard — type-check and test the exact API release
         working-directory: api
         run: |
-          npm run check:schema
-          npm run check:migrations
+          npm run type-check
+          npm test
 
       - name: Run API migrations
         working-directory: api
         env:
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          NEON_TRANSACTIONAL_DATABASE_URL: ${{ secrets.NEON_TRANSACTIONAL_DATABASE_URL }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: npm run db:migrate
 
+      # Retried, because the failure this guards against is on Cloudflare's side and
+      # says nothing about the build. Observed 2026-07-28 (run 30325003865): the worker
+      # uploaded, the agent container built and pushed, the QA-runner image built and
+      # EVERY layer pushed — and the final manifest PUT to registry.cloudflare.com
+      # returned `500 Internal Server Error`, so wrangler exited 1 and the release went
+      # red. The next push succeeded unchanged.
+      #
+      # `wrangler deploy` is idempotent: a re-run re-uploads the same worker version and
+      # skips every layer already in the registry, so a retry costs seconds and cannot
+      # half-apply anything. Three attempts, so a genuine failure still fails — it just
+      # has to fail three times rather than lose a release to one bad response.
       - name: Deploy API worker
         working-directory: api
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-        run: npm run deploy:worker
+        run: |
+          for attempt in 1 2 3; do
+            if npm run deploy:worker; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "::warning::wrangler deploy failed (attempt $attempt/3) — retrying in 30s. A transient registry/API 5xx is the expected cause; see the comment in release.yml."
+              sleep 30
+            fi
+          done
+          echo "::error::wrangler deploy failed 3 times — this is not a transient registry error."
+          exit 1
+
+      # Refresh the sales-demo persona tenants so any visitor-made changes are
+      # wiped on every deploy. Skips quietly when the secret isn't configured
+      # (set the same value as `wrangler secret put DEMO_RESEED_SECRET`);
+      # non-fatal so a reseed hiccup never fails the deploy — the nightly cron
+      # backstop reseeds anyway.
+      - name: Refresh demo accounts
+        env:
+          DEMO_RESEED_SECRET: ${{ secrets.DEMO_RESEED_SECRET }}
+        run: |
+          if [ -z "$DEMO_RESEED_SECRET" ]; then
+            echo "DEMO_RESEED_SECRET not set — skipping demo reseed."
+            exit 0
+          fi
+          curl -fsS -X POST "https://api.builderforce.ai/api/demo/reseed" \
+            -H "x-demo-reseed-secret: $DEMO_RESEED_SECRET" \
+            --max-time 300 \
+            || echo "::warning::Demo account reseed failed (nightly cron will retry)."
 
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -84,32 +135,38 @@ jobs:
       - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'pnpm'
           cache-dependency-path: frontend/pnpm-lock.yaml
 
       # Frontend's `link:` deps don't auto-build the linked packages' dist/.
-      # Each linked package's `prepare` script runs `npm run build` on install,
-      # so a plain `npm install` here is sufficient to produce dist/.
+      # Each linked package's `prepare` script runs its build on install, so
+      # installing here is sufficient to produce dist/.
+      #
+      # All four use pnpm --frozen-lockfile so the artifacts bundled into the
+      # deployed frontend are built from the SAME dependency tree ci.yml's
+      # type-check/test matrix gated (it installs each of these from its own
+      # pnpm-lock.yaml). `npm install` re-resolved instead, so a linked package
+      # could ship built against versions no gate had exercised.
       - name: Install + build SDK
         working-directory: sdk
-        run: npm install --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
 
       - name: Install + build Studio engine
         working-directory: studio
-        run: npm install --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
 
       # Must follow the engine build — studio-embedded file:-depends on it.
       - name: Install + build Studio embedded
         working-directory: studio-embedded
-        run: npm install --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
 
       # brain-embedded's committed dist/ can drift or be deleted; its `prepare`
       # script (tsup) rebuilds dist/ on install so the frontend `link:` dep
       # (@seanhogg/builderforce-brain-embedded) always resolves.
       - name: Install + build Brain embedded
         working-directory: brain-embedded
-        run: npm install --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
 
       # Must follow brain-embedded — brain-ui link:-depends on it for its DTS.
       # Uses pnpm (not npm): brain-ui has a `link:` dep npm can't parse, and its
@@ -229,11 +286,16 @@ jobs:
       - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
+      # docs-site is the one deployed package with no pnpm-lock.yaml and no CI
+      # gate, so npm stays its resolver — but `npm ci` (lockfile-exact) rather
+      # than `npm install` (re-resolves and rewrites the lock), matching the
+      # frozen-lockfile idiom used everywhere else here. Falls back the same way
+      # the pnpm steps do so a lock/package.json drift can't block a docs deploy.
       - name: Install dependencies
         working-directory: docs-site
-        run: npm install
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
 
       - name: Build Astro Starlight (base=/docs)
         working-directory: docs-site

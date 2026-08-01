@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, type BrainMessage, type BrainTraceEvent, type MessageProvenance } from '@seanhogg/builderforce-brain-embedded';
 import { Markdown } from './Markdown';
 import { Avatar } from './ParticipantBadge';
-import { parseAskUser, stripAskUser, QuestionCard, DEFAULT_ASK_USER_LABELS } from './askUser';
+import { parseAskUser, stripAskUser, QuestionCard, askUserAnchorId, DEFAULT_ASK_USER_LABELS } from './askUser';
 import { buildSettledTimeline, formatDuration, formatPayload, streamingNode, type TimelineNode } from './timelineModel';
 
 export interface BrainTimelineLabels {
@@ -52,6 +52,12 @@ export interface BrainTimelineLabels {
   learnSkippedHint: string;
   /** Human phrase per skip reason, substituted into {@link learnSkippedTitle}. */
   learnSkipReason: { 'not-attached': string; 'not-seeded': string; frozen: string };
+  /** Per-Evermind CONTRIBUTED line for a multi-target fan-out. Must contain `{name}`,
+   *  `{projectId}`, `{version}`. */
+  learnTargetContributed: string;
+  /** Per-Evermind SKIPPED line for a multi-target fan-out. Must contain `{name}`,
+   *  `{projectId}`, `{reason}` (filled from {@link learnSkipReason}). */
+  learnTargetSkipped: string;
   /** Evermind reconcile step — the turn updated learned memories. Must contain
    *  `{count}` and `{version}`. */
   reconcileTitle: string;
@@ -91,6 +97,8 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
     'not-seeded': 'this project has no Evermind model yet',
     frozen: 'this project’s Evermind is frozen (read-only)',
   },
+  learnTargetContributed: 'Contributed to {name} (project #{projectId} v{version})',
+  learnTargetSkipped: 'Skipped {name} (project #{projectId}) — {reason}',
   reconcileTitle: 'Reconciled {count} learned memories in Evermind v{version}',
   reconcileHint: 'The answer restated these recalled learnings, so it updates them (write-through cognition).',
 };
@@ -102,16 +110,29 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
  * use my paid Claude?" is answered inline instead of only surfacing on an empty
  * reply. The `shared_byo_unused` state is styled as a warning because it's the one
  * the user most wants to catch (a connected account that silently wasn't used).
+ *
+ * The account is optional: when the gateway didn't report one the chip still names
+ * the MODEL and simply omits the badge — attribution without a claim we can't back.
  */
 function ProvenanceChip({ prov, labels }: { prov: MessageProvenance; labels: BrainTimelineLabels }) {
   const unused = prov.account === 'shared_byo_unused';
-  const badge = prov.account === 'own' ? labels.accountOwn : unused ? labels.accountByoUnused : labels.accountShared;
-  const variant = prov.account === 'own' ? 'bf-tl__prov--own' : unused ? 'bf-tl__prov--unused' : 'bf-tl__prov--shared';
+  const badge = prov.account === 'own'
+    ? labels.accountOwn
+    : unused
+      ? labels.accountByoUnused
+      : prov.account === 'shared'
+        ? labels.accountShared
+        : null;
+  const variant = prov.account === 'own'
+    ? 'bf-tl__prov--own'
+    : unused
+      ? 'bf-tl__prov--unused'
+      : 'bf-tl__prov--shared';
   const modelTitle = prov.vendor ? `${prov.model} · ${prov.vendor}` : prov.model;
   return (
     <div className={`bf-tl__prov ${variant}`}>
       <span className="bf-tl__prov-model" title={modelTitle}>{prov.model}</span>
-      <span className="bf-tl__prov-badge">{badge}</span>
+      {badge && <span className="bf-tl__prov-badge">{badge}</span>}
       {prov.evermind ? (
         <span className="bf-tl__prov-evermind" title={labels.ranOnEvermind}>{`🧠 Evermind v${prov.evermind.version}`}</span>
       ) : null}
@@ -448,6 +469,7 @@ function BrainTimelineInner({
                       payload={card}
                       labels={{ askSubmit: labels.askSubmit, askAnswered: labels.askAnswered }}
                       onAnswer={onAnswerQuestion}
+                      anchorId={askUserAnchorId(node.message.id)}
                     />
                   )}
                   {renderAssistantActions && <div className="bf-tl__actions">{renderAssistantActions(node.message)}</div>}
@@ -525,6 +547,37 @@ function BrainTimelineInner({
             );
           }
           if (node.kind === 'learn') {
+            // Multi-target: a project can fan out to MANY Everminds (its own head + its IDE
+            // builds). Name EACH by id + version so a fan-out is triageable — the same detail
+            // the native chat chip shows. Falls back to the single-line phrasing below when
+            // the server sent no per-target breakdown (older turns / summary only).
+            if (node.targets && node.targets.length > 0) {
+              const lines = node.targets
+                .map((tg) => {
+                  if (tg.learned) {
+                    return labels.learnTargetContributed
+                      .replace('{name}', tg.name).replace('{projectId}', String(tg.projectId)).replace('{version}', String(tg.version));
+                  }
+                  const reasonLabel = tg.reason && tg.reason !== 'too-short'
+                    ? labels.learnSkipReason[tg.reason as 'not-attached' | 'not-seeded' | 'frozen']
+                    : null;
+                  return reasonLabel
+                    ? labels.learnTargetSkipped.replace('{name}', tg.name).replace('{projectId}', String(tg.projectId)).replace('{reason}', reasonLabel)
+                    : null;
+                })
+                .filter((s): s is string => !!s);
+              if (lines.length === 0) return null;
+              return (
+                <li key={node.key} className="bf-tl__item bf-tl__item--memory">
+                  <span className="bf-tl__gutter">
+                    <span className="bf-tl__dot bf-tl__dot--muted">{dotIcon('learn')}</span>
+                  </span>
+                  <div className="bf-tl__body">
+                    <span className="bf-tl__memory-line">{lines.join('; ')}</span>
+                  </div>
+                </li>
+              );
+            }
             // Skipped: the turn did NOT feed the Evermind for a project-level reason —
             // render an explained muted line so the absence is never a silent mystery.
             const title = node.skipped

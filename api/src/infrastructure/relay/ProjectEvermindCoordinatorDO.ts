@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * ProjectEvermindCoordinatorDO — the SINGLE WRITER for a project's Evermind.
  *
@@ -16,6 +17,13 @@
  *                  to R2 → record the version bump in `project_evermind`.
  *   GET /head    — current { version, ref, mode } for replicas to compare against.
  *
+ * Maintenance doors (all single-writer, so none can race a merge):
+ *   POST /reindex          — recompute every memory's recall embedding against the
+ *                            CURRENT head (they are computed at merge time and drift
+ *                            out of the query's embedding space as the model learns).
+ *   POST /discard-pending  — drop queued-but-unmerged contributions (a bad batch).
+ *   POST /forget           — remove specific learned memories from the recall ring.
+ *
  * Guards (Phase 5): `offline-frozen` mode rejects learns; a debounce window
  * batches bursts into a single republish; the pending queue is capped; a diff
  * taken against a STALE base is dropped (the agent recomputes against the new
@@ -27,10 +35,15 @@ import {
   getProjectEvermindHead,
   putProjectEvermindVersion,
   recordProjectEvermindMerge,
+  quarantineProjectEvermind,
   projectEvermindRef,
 } from '../../application/llm/projectEvermind';
+import { assessLMCoherence } from '../../application/llm/evermindRuntime';
 import { mergeCheckpointDiffs } from '../../application/llm/evermindMerge';
 import { buildEvermindTrainingText, resolveEvermindTeacherModel } from '../../application/llm/evermindTeacher';
+import type { EffectiveTeacher, TeacherSkipReason } from '../../application/llm/evermindTeacher';
+import { ingestErrorEvents } from '../../application/quality/ingestEngine';
+import type { NormalizedErrorEvent } from '../../application/quality/errorSpec';
 import { embedTokens, cosineVec, packVec, unpackVec, EMBED_MAX_TOKENS } from '../../application/llm/evermindEmbed';
 import { meanEvalLoss, type EvalExample } from '../../application/llm/evermindEval';
 import type { Env } from '../../env';
@@ -143,10 +156,33 @@ interface RecentEntry {
   at: number;
   /** FedAvg sample weight (tokens learned / caller-supplied). */
   weight: number;
+  /** True when this contribution's weights were actually fitted and pushed into the
+   *  FedAvg batch — i.e. it MOVED the neocortex, not merely got recorded. Stamped at
+   *  the point the checkpoint diff is pushed, so region attribution in the Knowledge
+   *  Map rests on data rather than on the ordering of statements in {@link drain}.
+   *  Absent on rows written before this field existed; every such row was fitted (the
+   *  merge loop had no path that recorded an unfitted contribution), so consumers must
+   *  read `fitted !== false`, not `fitted === true`. */
+  fitted?: boolean;
   /** Readable snippet of the task prompt the run addressed (text-path only). */
   prompt?: string;
-  /** Readable snippet of the run/exemplar text that was learned (text-path only). */
+  /** Readable snippet of the run/exemplar text that was learned (text-path only).
+   *  ABSENT when a pinned teacher failed on a teach-a-task: the only text available
+   *  there is the question itself, and recording that would present the question as
+   *  its own answer. `skipReason` carries what to show instead. */
   text?: string;
+  /** True when a frontier teacher shaped what was learned (text-path only). A teach-a-task
+   *  is only meaningful when this is true — it's the frontier answer that got distilled. */
+  distilled?: boolean;
+  /** The frontier model that distilled this entry (present when `distilled`). */
+  teacherModel?: string;
+  /** Why distillation did NOT happen (present when a text entry wasn't distilled).
+   *  Surfaced in the console so a silently-broken teacher is visible, not guessed at. */
+  skipReason?: TeacherSkipReason;
+  /** Operator-facing detail behind `skipReason` (HTTP status, exception message). */
+  skipDetail?: string;
+  /** The teacher model that was pinned but failed (present on a distillation fault). */
+  attemptedTeacherModel?: string;
   /** base64-packed SSM embedding of this memory (text-path only), computed at merge
    *  time from the merged model so recall only has to embed the QUERY. Never returned
    *  to callers — it lives here purely to power {@link ProjectEvermindCoordinatorDO.handleRecall}. */
@@ -231,6 +267,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     if (request.method === 'POST' && url.pathname.endsWith('/flush')) return this.handleFlush();
     if (request.method === 'GET' && url.pathname.endsWith('/recent')) return this.handleRecent();
     if (request.method === 'POST' && url.pathname.endsWith('/recall')) return this.handleRecall(request);
+    if (request.method === 'POST' && url.pathname.endsWith('/reindex')) return this.handleReindex();
+    if (request.method === 'POST' && url.pathname.endsWith('/discard-pending')) return this.handleDiscardPending();
+    if (request.method === 'POST' && url.pathname.endsWith('/forget')) return this.handleForget(request);
     if (request.method === 'GET' && url.pathname.endsWith('/head')) return this.handleHead();
     return new Response('not found', { status: 404 });
   }
@@ -324,6 +363,77 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const model = { lm: pkg.loadLM(), tok };
     embedModelCache = { key: head.ref, model };
     return model;
+  }
+
+  /**
+   * REINDEX the recall embeddings.
+   *
+   * Each memory's embedding is computed once, at the merge that learned it, using the
+   * model AS IT WAS THEN. Recall embeds the QUERY with the CURRENT head — so after a few
+   * merges the stored vectors and the query vector live in progressively different
+   * spaces, and recall quality decays silently. Nothing in the product re-derived them,
+   * which is exactly the "no way to reindex" gap.
+   *
+   * This recomputes every text memory's embedding against the current head, in one pass,
+   * on the single writer (so it can't race a merge). Idempotent and safe to re-run: it
+   * writes the same ring back with fresh vectors.
+   */
+  private async handleReindex(): Promise<Response> {
+    const meta = await this.state.storage.get<CoordMeta>(META_KEY);
+    if (!meta) return this.json({ ok: false, error: 'this Evermind has no coordinator state yet' }, 409);
+    const recent = (await this.state.storage.get<RecentEntry[]>(RECENT_KEY)) ?? [];
+    if (recent.length === 0) return this.json({ ok: true, reindexed: 0, skipped: 0, version: 0 });
+
+    const model = await this.loadEmbeddingModel(meta);
+    if (!model) return this.json({ ok: false, error: 'model not available for reindexing (unseeded or artifact storage unbound)' }, 503);
+    const head = await getProjectEvermindHead(this.env, this.db, meta.tenantId, meta.projectId);
+
+    let reindexed = 0;
+    let skipped = 0;
+    const next = recent.map((e) => {
+      const source = `${e.prompt ?? ''} ${e.text ?? ''}`.trim();
+      if (e.kind !== 'text' || !source) { skipped++; return e; }
+      const vec = embedTokens(model.lm, model.tok.encode(source).slice(0, EMBED_MAX_TOKENS));
+      if (vec.length === 0) { skipped++; return e; }
+      reindexed++;
+      return { ...e, emb: packVec(vec) };
+    });
+    await this.state.storage.put(RECENT_KEY, next);
+    return this.json({ ok: true, reindexed, skipped, version: head.version });
+  }
+
+  /**
+   * Drop everything QUEUED but not yet merged. The operator escape hatch for a bad
+   * batch (a broken importer, a teach against the wrong project, a run that contributed
+   * noise): without it the only way past a poisoned queue was to merge it into the
+   * weights. Already-merged knowledge is untouched — use `/forget` for that.
+   */
+  private async handleDiscardPending(): Promise<Response> {
+    const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
+    if (pending.length > 0) await this.state.storage.put(PENDING_KEY, []);
+    return this.json({ ok: true, discarded: pending.length });
+  }
+
+  /**
+   * FORGET specific learned memories by id: remove them from the inspection/recall ring
+   * so they can never be recalled or used to ground a reply again.
+   *
+   * Honest about what this does and does not do — the ring is the RECALL surface, not
+   * the weights. Removing an entry stops it being retrieved and stops it grounding
+   * answers; the residual influence it had on the neocortex is superseded the normal
+   * way, by teaching the corrected knowledge (write-through: update == replace). That
+   * is exactly how the knowledge analyzer repairs a bad memory — forget + re-teach.
+   */
+  private async handleForget(request: Request): Promise<Response> {
+    const body = (await request.json().catch(() => null)) as { ids?: unknown } | null;
+    const ids = Array.isArray(body?.ids) ? body.ids.filter((n): n is number => typeof n === 'number') : [];
+    if (ids.length === 0) return this.json({ ok: false, error: 'ids[] is required' }, 400);
+    const recent = (await this.state.storage.get<RecentEntry[]>(RECENT_KEY)) ?? [];
+    const drop = new Set(ids);
+    const next = recent.filter((e) => !drop.has(e.id));
+    const forgotten = recent.length - next.length;
+    if (forgotten > 0) await this.state.storage.put(RECENT_KEY, next);
+    return this.json({ ok: true, forgotten, remaining: next.length });
   }
 
   /**
@@ -500,12 +610,17 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const processedIds: number[] = [];
     // Per-entry provenance for the inspection ring, stamped with the merged version
     // once the merge lands (parallel to `diffs`/`weights`).
-    const mergedMeta: Array<{ id: number; kind: 'text' | 'delta'; weight: number; prompt?: string; text?: string; emb?: string }> = [];
+    const mergedMeta: Array<Omit<RecentEntry, 'version' | 'at'>> = [];
     // Real training telemetry accumulated across the adaptations this merge runs, so
     // the Knowledge Map can show what teaching actually did to the neocortex weights.
     let lossSum = 0;
     let lossN = 0;
     let seqTotal = 0;
+    // Teacher-distillation faults accumulated this alarm. Beyond the greppable
+    // console.warn, each is ingested into the Quality/error-observability pillar
+    // (error_groups) so a tenant whose pinned teacher is 4xx-ing every merge raises
+    // a real alert on /quality instead of failing silently. [[quality-error-observability-pillar]]
+    const faultEvents: NormalizedErrorEvent[] = [];
     try {
       const store = this.env.UPLOADS;
       if (!store) return { merged: 0, newVersion: null }; // no R2 → can't merge; leave everything pending for a later alarm
@@ -531,9 +646,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       // Resolve the effective (budget-gated) teacher ONCE per alarm — the token scan
       // is a per-tenant aggregate constant across this batch, so it must not run per
       // entry. null unless a teacher is pinned AND there's trainable text to distil.
-      const effectiveTeacher = (isLM && usable.some((e) => !e.diffB64 && !!e.text))
+      const effectiveTeacher: EffectiveTeacher = (isLM && usable.some((e) => !e.diffB64 && !!e.text))
         ? await resolveEvermindTeacherModel(this.env, this.db, tenantId, head.teacherModel)
-        : null;
+        : { model: null, reason: 'not_pinned' };
       const diffs: ArrayBuffer[] = [];
       const weights: number[] = [];
       let textFits = 0;
@@ -576,15 +691,56 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           // (its ideal answer), so that is what "Learned" must show — recording the raw
           // input instead makes a teach-a-task echo the question back as its own answer
           // (e.text === the task the user typed). Undistilled entries fall back to the
-          // raw run text, which is the meaningful signal there.
-          const learnedText = (training.distilled && training.exemplar ? training.exemplar : e.text).slice(0, RECENT_TEXT_CHARS);
+          // raw run text, which is the meaningful signal there — EXCEPT on a teach-a-task,
+          // where the raw text IS the question: producing no answer is a fault to report,
+          // not an echo to display, so we record the reason and omit the text entirely.
+          const isEcho = !training.distilled && !!e.prompt && e.text.trim() === e.prompt.trim();
+          const learnedText = training.distilled && training.exemplar ? training.exemplar : e.text;
           mergedMeta.push({
             id: e.id,
             kind: 'text',
             weight: e.weight,
+            // The diff for this entry went into the batch immediately above, so it
+            // provably moved neocortex weights. Recorded explicitly — the Knowledge
+            // Map credits the Neocortex off this flag, not off `kind`.
+            fitted: true,
             ...(e.prompt ? { prompt: e.prompt.slice(0, RECENT_PROMPT_CHARS) } : {}),
-            text: learnedText,
+            ...(isEcho ? {} : { text: learnedText.slice(0, RECENT_TEXT_CHARS) }),
+            distilled: training.distilled,
+            ...(training.teacherModel ? { teacherModel: training.teacherModel } : {}),
+            ...(training.skipReason ? { skipReason: training.skipReason } : {}),
+            ...(training.skipDetail ? { skipDetail: training.skipDetail } : {}),
+            ...(training.attemptedTeacherModel ? { attemptedTeacherModel: training.attemptedTeacherModel } : {}),
           });
+          // A PINNED teacher that produced nothing is an operational fault (bad model
+          // pin, no credit, vendor down) that otherwise fails silently — the exact way
+          // "teacher mode isn't working" stayed invisible. Log it so it's greppable.
+          if (training.attemptedTeacherModel) {
+            console.warn(
+              `[evermind] teacher distillation failed tenant=${tenantId} project=${projectId} ` +
+              `model=${training.attemptedTeacherModel} reason=${training.skipReason} detail=${training.skipDetail ?? 'none'}`,
+            );
+            // Group ALL faults for the same (project, teacher, reason) into ONE
+            // error_groups row whose count climbs — a stable fingerprint keyed on those,
+            // never the per-entry id, so a repeatedly-failing teacher is one climbing
+            // alert rather than a flood of singletons.
+            faultEvents.push({
+              fingerprint: `evermind-teacher-fault:${projectId}:${training.attemptedTeacherModel}:${training.skipReason ?? 'unknown'}`,
+              type: 'EvermindTeacherDistillationFault',
+              message:
+                `Teacher distillation failed for pinned model ${training.attemptedTeacherModel}: ` +
+                `${training.skipReason ?? 'unknown'}${training.skipDetail ? ` — ${training.skipDetail}` : ''}`,
+              level: 'error',
+              timestamp: new Date().toISOString(),
+              source: 'evermind-teacher',
+              tags: {
+                service: 'evermind',
+                teacherModel: training.attemptedTeacherModel,
+                ...(training.skipReason ? { skipReason: String(training.skipReason) } : {}),
+              },
+              context: { tenantId, projectId, entryId: e.id },
+            });
+          }
         } else {
           processedIds.push(e.id); // unusable (e.g. text but base isn't an evermind-lm)
         }
@@ -611,6 +767,36 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       // Verify the new version is the one we wrote (a concurrent merge is impossible
       // — single DO — but a forward-only DB guard means we trust the row).
       void projectEvermindRef(tenantId, projectId, nextVersion);
+
+      // ── Post-merge fitness re-benchmark ────────────────────────────────────
+      // Promotion to `inferenceEnabled` is benchmark-gated, but EVERY merge changes the
+      // weights — so a head that passed the probe at version N can degrade into
+      // gibberish by version N+k with nothing re-checking it, and the serve path picks
+      // up the new ref immediately. That is how a head ended up answering users in
+      // invented words. Re-grade the JUST-MERGED model here (the coordinator alarm, off
+      // the request path, with the model already in memory — no R2 reload) using the
+      // same probe + the same `looksLikeCoherentText` bar the enable gate uses, and
+      // quarantine it through the same shared writer if it is no longer fit to serve.
+      // Only for a head that is actually serving; best-effort, never fails the merge.
+      if (isLM && head.inferenceEnabled) {
+        try {
+          const fitness = assessLMCoherence(lm, tok);
+          if (!fitness.ready) {
+            await quarantineProjectEvermind(
+              this.env, this.db, tenantId, projectId,
+              `Auto-quarantined at v${nextVersion}: the merged model failed the coherence probe `
+              + `(${Math.round(fitness.passRate * 100)}% of samples readable). Learning continues; `
+              + 're-enable inference once it passes, or pin a frontier teacher to distil into it.',
+            );
+            console.warn(
+              `[evermind] quarantined tenant=${tenantId} project=${projectId} v=${nextVersion} `
+              + `passRate=${fitness.passRate.toFixed(2)} — merged model is not fit to serve`,
+            );
+          }
+        } catch (error) { /* best-effort: a probe failure must never wedge the merge */ 
+          reportCaughtError(error, { source: "infrastructure/relay/ProjectEvermindCoordinatorDO.ts", operation: "drain" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+        }
+      }
       // Embed each text memory with the JUST-MERGED model so semantic recall (Validate)
       // only has to embed the query later — the vector is computed once, here, off the
       // recall path. isLM is guaranteed when any text entry exists (tok is loaded then).
@@ -621,7 +807,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           if (!src) continue;
           try {
             m.emb = packVec(embedTokens(lm, tok.encode(src).slice(0, EMBED_MAX_TOKENS)));
-          } catch { /* best-effort: a failed embed just falls back to lexical recall */ }
+          } catch (error) { /* best-effort: a failed embed just falls back to lexical recall */ 
+            reportCaughtError(error, { source: "infrastructure/relay/ProjectEvermindCoordinatorDO.ts", operation: "drain" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+          }
         }
       }
       // Cache the freshly-merged model for recall on this isolate (its ref is the new
@@ -666,10 +854,23 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           if (fresh.length > 0) {
             await this.state.storage.put(EVAL_KEY, [...fresh, ...evalSet].slice(0, EVAL_MAX));
           }
-        } catch { /* best-effort: never fail the merge over an eval point */ }
+        } catch (error) { /* best-effort: never fail the merge over an eval point */ 
+          reportCaughtError(error, { source: "infrastructure/relay/ProjectEvermindCoordinatorDO.ts", operation: "drain" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+        }
       }
       return { merged: mergedMeta.length, newVersion: nextVersion };
     } finally {
+      // Surface any teacher-distillation faults from this alarm to the Quality pillar,
+      // on EVERY exit path (including "nothing merged" and a throw). Collector-less
+      // in-app source (`id: null`) — error_groups.collector_id is nullable — routed
+      // straight to this project. Best-effort: a broken teacher must never wedge drain.
+      if (faultEvents.length > 0) {
+        try {
+          await ingestErrorEvents(this.db, this.env, { id: null, tenantId, projectId, defaultProjectId: projectId }, faultEvents);
+        } catch (error) { /* best-effort: the console.warn above is the fallback record */ 
+          reportCaughtError(error, { source: "infrastructure/relay/ProjectEvermindCoordinatorDO.ts", operation: "drain" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
+        }
+      }
       // Clear only what we consumed; anything that arrived mid-merge OR was deferred
       // past the per-alarm fit cap stays queued, and we re-arm to fold it in next.
       await this.dropProcessed(processedIds);

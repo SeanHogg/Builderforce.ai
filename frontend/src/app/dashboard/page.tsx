@@ -4,11 +4,12 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import type { Project, Tenant } from '@/lib/types';
-import { fetchProjects } from '@/lib/api';
+import type { Project } from '@/lib/types';
+import { fetchProjects, createIdeProject } from '@/lib/api';
+import { persistLastProjectId } from '@/lib/auth';
 import { useAuth } from '@/lib/AuthContext';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
-import { getMe } from '@/lib/auth';
+import { useOnboardingPrompt } from '@/lib/onboarding';
 import { ChatInput } from '@/components/ChatInput';
 import PageContainer from '@/components/PageContainer';
 import { ProjectsContent } from '@/components/ProjectsContent';
@@ -28,10 +29,16 @@ import { WorkforcePresenceStripView } from '@/components/workforce/WorkforcePres
 import { useWorkforcePresence } from '@/lib/useWorkforcePresence';
 import { agentHosts, tasksApi, approvalsApi, type AgentHost } from '@/lib/builderforceApi';
 
-const ONBOARDING_DISMISSED_KEY = 'bf_onboarding_dismissed';
-
 const DASHBOARD_TABS = ['projects', 'workforce', 'ide', 'ideas', 'quality', 'knowledge'] as const;
 type DashboardTab = (typeof DASHBOARD_TABS)[number];
+
+/** Derive a short, human project name from the build prompt's first line. */
+function deriveProjectName(promptText: string): string {
+  const firstLine = (promptText.split('\n')[0] ?? '').trim();
+  const cleaned = firstLine.replace(/^(please\s+)?(build|create|make|design|generate)\s+(me\s+)?(a|an|the)?\s*/i, '').trim();
+  const name = (cleaned || firstLine).slice(0, 48).trim();
+  return name || 'New app';
+}
 
 /**
  * Dashboard (home) — BuilderForceAgentsLink-style: "What should we build?" chat input,
@@ -41,7 +48,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const t = useTranslations('dashboard');
-  const { isAuthenticated, hasTenant, webToken, tenantToken, tenant, selectTenant } = useAuth();
+  const { isAuthenticated, hasTenant, webToken, tenantToken, tenant } = useAuth();
   const { currentProjectId } = useProjectScope();
   const tenantId = tenant?.id != null ? Number(tenant.id) : undefined;
 
@@ -49,6 +56,7 @@ export default function DashboardPage() {
   const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
   const [loading, setLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
+  const [building, setBuilding] = useState(false);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [approvalDates, setApprovalDates] = useState<string[]>([]);
   const [taskStats, setTaskStats] = useState<{ total: number; inProgress: number; done: number } | null>(null);
@@ -67,63 +75,23 @@ export default function DashboardPage() {
     [router],
   );
 
-  // Onboarding stepper state
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [onboardingChecked, setOnboardingChecked] = useState(false);
+  // Onboarding wizard — the show/dismiss decision is shared with the hired
+  // dashboard (useOnboardingPrompt); the stepper picks its own account-type track.
+  const {
+    show: showOnboarding,
+    progress: onboardingProgress,
+    complete: handleOnboardingComplete,
+    dismiss: handleOnboardingDismiss,
+  } = useOnboardingPrompt();
 
-  // Auth guard — allow staying on dashboard if not yet onboarded (no tenant yet)
+  // Auth guard. A brand-new builder's Default workspace is auto-provisioned by the
+  // onboarding gate before this page renders, so reaching here without a tenant means
+  // the picker is the right destination (multi-workspace, or provisioning fell back).
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace('/login?next=/dashboard');
     }
-    // No redirect to /tenants here — the onboarding stepper handles workspace creation
   }, [isAuthenticated, router]);
-
-  // Check onboarding status once we have a web token.
-  // Only owners go through onboarding — invited members skip it entirely.
-  useEffect(() => {
-    if (!isAuthenticated || !webToken || onboardingChecked) return;
-
-    // If the user has a workspace selected and they're not an owner in it, skip onboarding.
-    if (hasTenant && tenant?.role && tenant.role !== 'owner') {
-      setOnboardingChecked(true);
-      return;
-    }
-
-    const dismissed = typeof window !== 'undefined' && localStorage.getItem(ONBOARDING_DISMISSED_KEY) === '1';
-    if (dismissed) {
-      setOnboardingChecked(true);
-      return;
-    }
-    getMe(webToken)
-      .then(({ onboardingCompletedAt }) => {
-        if (!onboardingCompletedAt) {
-          setShowOnboarding(true);
-        }
-      })
-      .catch(() => {
-        // If the check fails, don't block the user — just skip onboarding
-      })
-      .finally(() => setOnboardingChecked(true));
-  }, [isAuthenticated, webToken, onboardingChecked, hasTenant, tenant]);
-
-  const handleOnboardingWorkspaceCreated = useCallback(
-    async (newTenant: Tenant) => {
-      await selectTenant(newTenant);
-    },
-    [selectTenant]
-  );
-
-  const handleOnboardingComplete = useCallback(() => {
-    setShowOnboarding(false);
-  }, []);
-
-  const handleOnboardingDismiss = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(ONBOARDING_DISMISSED_KEY, '1');
-    }
-    setShowOnboarding(false);
-  }, []);
 
   useEffect(() => {
     if (!isAuthenticated || !hasTenant) return;
@@ -161,15 +129,27 @@ export default function DashboardPage() {
     return () => { alive = false; };
   }, [isAuthenticated, hasTenant, currentProjectId]);
 
-  // The dashboard prompt opens Brain Storm and auto-executes there: Brain creates
-  // a chat on demand and streams a reply, then the user can promote it to a
-  // project / IDE. (Direct dispatch to an agent host stays on /tasks + /workforce.)
-  const handlePromptSubmit = () => {
+  // The dashboard prompt STARTS A BUILD: spin up a fresh Website (designer) IDE
+  // project and open it with the prompt seeded, so the Brain scaffolds a running
+  // app right away (live Preview + one-click Publish) — the single-prompt→app
+  // moment. Falls back to Brain Storm if the project can't be created, so the
+  // prompt is never lost. (Direct dispatch to an agent host stays on /tasks.)
+  const handlePromptSubmit = useCallback(async () => {
     const p = prompt.trim();
-    if (!p) return;
-    setPrompt('');
-    router.push(`/brainstorm?prompt=${encodeURIComponent(p)}`);
-  };
+    if (!p || building) return;
+    setBuilding(true);
+    try {
+      const created = await createIdeProject({ name: deriveProjectName(p), modality: 'designer' });
+      persistLastProjectId(String(created.storageProjectId));
+      setPrompt('');
+      router.push(`/ide/${created.storageProjectPublicId}?prompt=${encodeURIComponent(p)}`);
+    } catch {
+      // Couldn't create a project — don't lose the intent; continue in Brain Storm.
+      router.push(`/brainstorm?prompt=${encodeURIComponent(p)}`);
+    } finally {
+      setBuilding(false);
+    }
+  }, [prompt, building, router]);
 
   const connectedAgentHosts = agentHostList.filter((c) => c.online);
   // Live "who's online / what's working" across humans AND agents — powers the
@@ -192,22 +172,8 @@ export default function DashboardPage() {
 
   if (!isAuthenticated) return null;
 
-  // If we don't have a tenant AND we're still checking or showing onboarding, render the stepper overlay only
-  if (!hasTenant && (showOnboarding || !onboardingChecked)) {
-    return showOnboarding ? (
-      <OnboardingStepper
-        webToken={webToken!}
-        tenantToken={tenantToken}
-        tenant={tenant}
-        existingProjectsCount={projects.length}
-        onWorkspaceCreated={handleOnboardingWorkspaceCreated}
-        onComplete={handleOnboardingComplete}
-        onDismiss={handleOnboardingDismiss}
-      />
-    ) : null;
-  }
-
-  // If no tenant and onboarding was dismissed/complete, send to tenant picker
+  // No tenant → the picker (a brand-new builder's Default workspace is provisioned
+  // upstream by the onboarding gate, so this is the multi-workspace / fallback path).
   if (!hasTenant) {
     router.replace('/tenants?next=/dashboard');
     return null;
@@ -220,8 +186,7 @@ export default function DashboardPage() {
           webToken={webToken}
           tenantToken={tenantToken}
           tenant={tenant}
-          existingProjectsCount={projects.length}
-          onWorkspaceCreated={handleOnboardingWorkspaceCreated}
+          initialProgress={onboardingProgress}
           onComplete={handleOnboardingComplete}
           onDismiss={handleOnboardingDismiss}
         />
@@ -239,13 +204,14 @@ export default function DashboardPage() {
               workforce: (chunks) => <Link href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>{chunks}</Link>,
             })}
           </p>
-          <div style={{ maxWidth: 760, margin: '0 auto' }}>
+          <div style={{ maxWidth: 760, margin: '0 auto' }} data-tour="demo-build">
             <ChatInput
               value={prompt}
               onChange={setPrompt}
               onSubmit={handlePromptSubmit}
+              disabled={building}
               placeholder={t('promptPlaceholder')}
-              submitLabel={t('brainStorm')}
+              submitLabel={building ? t('building') : t('build')}
               rows={1}
               submitOnEnter={false}
               showBrainIcon={true}

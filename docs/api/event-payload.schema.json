@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Chat Ticket Progress Event",
+  "description": "Progress event payload for a Brain chat linked to a planning work item (task/epic/objective/initiative/portfolio/roadmap/spec). Sent whenever a relevant state change occurs.",
+  "type": "object",
+  "required": ["kind", "ref", "progressPct"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["task", "epic", "goal", "objective", "initiative", "portfolio", "roadmap", "spec"],
+      "description": "The type of work item (identifies the ticket tier)."
+    },
+    "ref": {
+      "type": "string",
+      "description": "The identifier for this work item (task id as text, or UUID for strategy tiers)"
+    },
+    "label": {
+      "type": "string",
+      "description": "Display title/name of the work item."
+    },
+    "status": {
+      "type": "string",
+      "description": "Current raw status string of the work item."
+    },
+    "progressPct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Completion percentage 0–100. Metric type: 0 = not started, 1–99 = in progress, 100 = complete OR terminal-status signal. The Book rule: progressPct=100 MUST be emitted only once, after ALL processing steps are confirmed complete and NO further progress updates follow."
+    },
+    "done": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of completed sub-items (leaf tasks counted as 1 each, or KRs for objectives). Only relevant for container tiers."
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of sub-items to complete (leaf tasks for epic, key results for objective). Only relevant for container tiers."
+    },
+    "exists": {
+      "type": "boolean",
+      "description": "True if the referenced ticket exists in the tenant; false if it was deleted or cross-tenant."
+    }
+  },
+  "examples": [
+    {
+      "kind": "task",
+      "ref": "42",
+      "label": "Refactor auth module",
+      "status": "done",
+      "progressPct": 100,
+      "done": 1,
+      "total": 1,
+      "exists": true
+    },
+    {
+      "kind": "epic",
+      "ref": "11",
+      "label": "Payment integration",
+      "status": "in_review",
+      "progressPct": 75,
+      "done": 3,
+      "total": 4,
+      "exists": true
+    },
+    {
+      "kind": "objective",
+      "ref": "17",
+      "label": "Increase customer retention",
+      "status": "active",
+      "progressPct": 43,
+      "done": 2,
+      "total": 5,
+      "exists": true
+    }
+  ]
+}

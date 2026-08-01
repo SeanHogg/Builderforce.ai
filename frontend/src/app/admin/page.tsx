@@ -10,13 +10,18 @@ import { resolveAdminRoute } from '@/lib/adminGroups';
 import { TenantApiKeysAdminTab } from '@/components/admin/TenantApiKeysAdminTab';
 import { LlmTracesPanel } from './LlmTracesPanel';
 import HealthPanel from '@/components/admin/panels/HealthPanel';
+import CronPanel from '@/components/admin/panels/CronPanel';
 import BillingPanel from '@/components/admin/panels/BillingPanel';
 import UsagePanel from '@/components/admin/panels/UsagePanel';
 import UsersPanel from '@/components/admin/panels/UsersPanel';
+import GuestSessionsPanel from '@/components/admin/panels/GuestSessionsPanel';
 import TenantsPanel from '@/components/admin/panels/TenantsPanel';
 import SecurityPanel from '@/components/admin/panels/SecurityPanel';
 import LegalPanel from '@/components/admin/panels/LegalPanel';
 import NewsletterPanel from '@/components/admin/panels/NewsletterPanel';
+import ReleaseNotesPanel from '@/components/admin/panels/ReleaseNotesPanel';
+import DemoFunnelPanel from '@/components/admin/panels/DemoFunnelPanel';
+import SalesLeadsPanel from '@/components/admin/panels/SalesLeadsPanel';
 import PrivacyPanel from '@/components/admin/panels/PrivacyPanel';
 import PersonasPanel from '@/components/admin/panels/PersonasPanel';
 import GovernancePanel from '@/components/admin/panels/GovernancePanel';
@@ -26,6 +31,7 @@ import ImpersonationSessionsPanel from '@/components/admin/panels/ImpersonationS
 import AuditLogPanel from '@/components/admin/panels/AuditLogPanel';
 import ErrorsPanel from '@/components/admin/panels/ErrorsPanel';
 import TokenPanel from '@/components/admin/panels/TokenPanel';
+import FeedbackPanel from '@/components/admin/panels/FeedbackPanel';
 
 /**
  * Platform Admin shell — a THIN router.
@@ -41,7 +47,9 @@ import TokenPanel from '@/components/admin/panels/TokenPanel';
 // ADMIN_GROUP_META), so one flat registry covers every sub-view.
 const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   health: HealthPanel,
+  cron: CronPanel,
   directory: UsersPanel,
+  sessions: GuestSessionsPanel,
   security: SecurityPanel,
   emulation: ImpersonationSessionsPanel,
   tenants: TenantsPanel,
@@ -55,10 +63,14 @@ const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   privacy: PrivacyPanel,
   billing: BillingPanel,
   newsletter: NewsletterPanel,
+  releaseNotes: ReleaseNotesPanel,
+  demoFunnel: DemoFunnelPanel,
+  salesLeads: SalesLeadsPanel,
   errors: ErrorsPanel,
   audit: AuditLogPanel,
   apiKeys: () => <TenantApiKeysAdminTab active />,
   token: TokenPanel,
+  feedback: FeedbackPanel,
 };
 
 export default function AdminPage() {

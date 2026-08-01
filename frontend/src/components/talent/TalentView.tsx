@@ -23,6 +23,7 @@ import {
   type Deliverable, type PostingType, type EngagementType,
 } from '@/lib/freelancerApi';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { Select } from '@/components/Select';
 
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 18 };
 const input: React.CSSProperties = { background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', width: '100%' };
@@ -278,19 +279,19 @@ export function TalentView() {
                 <input style={input} placeholder={t('job.titlePlaceholder')} value={job.title} onChange={(e) => setJob((j) => ({ ...j, title: e.target.value }))} />
                 <textarea style={{ ...input, minHeight: 70, resize: 'vertical' }} placeholder={t('job.descPlaceholder')} value={job.description} onChange={(e) => setJob((j) => ({ ...j, description: e.target.value }))} />
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
-                  <select style={input} value={job.postingType} onChange={(e) => setJob((j) => { const postingType = e.target.value as PostingType; return { ...j, postingType, engagementType: postingType === 'fte' ? 'fte' : (j.engagementType === 'fte' ? 'fixed_bid' : j.engagementType) }; })}>
+                  <Select style={input} value={job.postingType} onChange={(e) => setJob((j) => { const postingType = e.target.value as PostingType; return { ...j, postingType, engagementType: postingType === 'fte' ? 'fte' : (j.engagementType === 'fte' ? 'fixed_bid' : j.engagementType) }; })}>
                     {POSTING_TYPES.map((v) => <option key={v} value={v}>{tg(`postingType.${v}`)}</option>)}
-                  </select>
-                  <select style={input} value={job.engagementType} disabled={job.postingType === 'fte'} onChange={(e) => setJob((j) => ({ ...j, engagementType: e.target.value as EngagementType }))}>
+                  </Select>
+                  <Select style={input} value={job.engagementType} disabled={job.postingType === 'fte'} onChange={(e) => setJob((j) => ({ ...j, engagementType: e.target.value as EngagementType }))}>
                     {ENGAGEMENT_TYPES.map((v) => <option key={v} value={v}>{tg(`engagementType.${v}`)}</option>)}
-                  </select>
+                  </Select>
                 </div>
                 <textarea style={{ ...input, minHeight: 60, resize: 'vertical' }} placeholder={tg('publish.requirementsPlaceholder')} value={job.requirements} onChange={(e) => setJob((j) => ({ ...j, requirements: e.target.value }))} />
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
-                  <select style={input} value={job.discipline} onChange={(e) => setJob((j) => ({ ...j, discipline: e.target.value }))}>
+                  <Select style={input} value={job.discipline} onChange={(e) => setJob((j) => ({ ...j, discipline: e.target.value }))}>
                     <option value="">{t('job.discipline')}</option>
                     {DISCIPLINES.map((d) => <option key={d} value={d}>{td(`discipline.${d}`)}</option>)}
-                  </select>
+                  </Select>
                   <input style={input} placeholder={t('job.rateMin')} type="number" min={0} value={job.rateMin} onChange={(e) => setJob((j) => ({ ...j, rateMin: e.target.value }))} />
                   <input style={input} placeholder={t('job.rateMax')} type="number" min={0} value={job.rateMax} onChange={(e) => setJob((j) => ({ ...j, rateMax: e.target.value }))} />
                 </div>

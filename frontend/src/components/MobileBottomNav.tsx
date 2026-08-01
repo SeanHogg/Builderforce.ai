@@ -81,7 +81,7 @@ export default function MobileBottomNav() {
   const items = itemsFor(isAuthenticated, !!user?.isSuperadmin, isFreelancer);
 
   return (
-    <nav className="mobile-bottom-nav" aria-label="Primary">
+    <nav className="mobile-bottom-nav" aria-label={t('primaryAria')}>
       {items.map((item) => {
         const active = isNavItemActive(pathname, item);
         return (
@@ -90,6 +90,9 @@ export default function MobileBottomNav() {
             href={item.href}
             className={`mbn-item${active ? ' active' : ''}${item.accent ? ' mbn-accent' : ''}`}
             aria-current={active ? 'page' : undefined}
+            // Stable anchor for the demo product tour — first path segment matches
+            // the sidebar nav ids / TourAnchor (e.g. /workforce → "workforce").
+            data-tour={item.href.replace(/^\//, '').split('/')[0]}
           >
             <span className="mbn-icon" aria-hidden="true">{item.icon}</span>
             <span className="mbn-label">{t(item.labelKey)}</span>

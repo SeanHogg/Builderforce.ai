@@ -1,25 +1,44 @@
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Superadmin routes — /api/admin/*
  *
  * All routes require a WebJWT with sa: true (enforced by superAdminMiddleware).
  *
  * GET  /api/admin/users                — all platform users + tenant counts
+ * GET  /api/admin/guest-sessions       — anonymous Brain/tool adoption sessions
  * GET  /api/admin/tenants              — all tenants + member/agentHost counts
  * GET  /api/admin/health               — system health (DB ping, model pool, counts)
  * GET  /api/admin/errors               — recent API error log (last 200 entries)
+ * GET  /api/admin/feedback             — cross-tenant product feedback roll-up
  * POST /api/admin/impersonate          — issue a tenant JWT for any user+tenant pair
+ * GET  /api/admin/cron                 — scheduled sweeps + live KV work-gate state
+ * POST /api/admin/cron/signal          — set the pending-work flag for the next tick
+ * POST /api/admin/cron/:target         — force-run a sweep / cadence group / all
  */
 import { Hono } from 'hono';
 import { and, desc, eq, gt, ilike, inArray, isNull, sql } from 'drizzle-orm';
-import type { Env, HonoEnv } from '../../env';
+import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
+import { credentialSecret } from '../../application/integrations/credentialCrypto';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
-import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import { buildDatabase, buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import { writeAdminAudit, type AdminAuditOpts } from '../../infrastructure/audit/adminAudit';
 import { parseJsonArray } from '../../domain/shared/json';
+import { reviewFeedbackSubmission } from '../../application/feedback/feedbackEngine';
+import {
+  listFeedbackSubmissions, countFeedbackByStatus, parseFeedbackStatus,
+} from '../../application/feedback/feedbackQueries';
 import { slugify } from '../../domain/shared/strings';
 import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { computePlatformRollup } from '../../application/admin/platformRollup';
+import {
+  clampErrorLogLimit,
+  getErrorLogEntry,
+  listErrorLogSources,
+  queryErrorLog,
+  summarizeErrorLog,
+  type ErrorLogFilters,
+} from '../../application/observability/errorLogQuery';
 import {
   authTokens,
   authUserSessions,
@@ -31,7 +50,6 @@ import {
   tenants,
   tenantMembers,
   agentHosts,
-  apiErrorLog,
   llmUsageLog,
   userMfaRecoveryCodes,
   projects,
@@ -53,7 +71,12 @@ import {
   DEFAULT_ROLE_PERMISSIONS,
   resolveRolePermissions,
   resolveEffectivePermissions,
+  ENFORCED_PERMISSIONS,
 } from '../../domain/permissions/permissionRegistry';
+import {
+  invalidateMemberPermissions,
+  invalidateRolePermissions,
+} from '../../application/rbac/effectivePermissions';
 import {
   adminPoolProxy,
   FREE_MODEL_POOL,
@@ -95,6 +118,18 @@ import {
 } from '../../infrastructure/auth/MfaService';
 import { magicLinkTokens } from '../../infrastructure/database/schema';
 import { sendAdminPasswordResetEmail } from '../../infrastructure/email/EmailService';
+import { sendTransactionalEmail } from '../../application/email/sendEmail';
+import { runRetentionPurge } from '../../application/maintenance/retentionPurge';
+import { CRON_SWEEPS } from '../../cronSweeps';
+import {
+  CADENCE_BY_CRON,
+  CRON_CADENCES,
+  resolveCronTarget,
+  runCronSweeps,
+} from '../../application/runtime/cronSweepRunner';
+import { evaluateCronGate, signalPendingWork } from '../../application/runtime/cronWorkSignal';
+import { createTickDispatchBudget } from '../../application/runtime/tickDispatchBudget';
+import { API_VERSION } from '../../version';
 
 /**
  * Coerce a `platform_modules.permissions` value into `string[]`.
@@ -192,7 +227,7 @@ async function assertTenantMember(db: Db, tenantId: number, userId: string): Pro
 
 async function assertMfa(
   db: Db,
-  envSecret: string,
+  env: Env,
   user: typeof users.$inferSelect,
   code?: string,
   recoveryCode?: string,
@@ -200,7 +235,9 @@ async function assertMfa(
   if (!user.mfaEnabled || !user.mfaSecretEnc) return false;
 
   if (code) {
-    const secret = await decryptSecretFromStorage(user.mfaSecretEnc, envSecret);
+    // M2: read under the dedicated credential secret, with JWT_SECRET as the legacy
+    // fallback so MFA rows sealed before the migration still decrypt (versioned dual-read).
+    const secret = await decryptSecretFromStorage(user.mfaSecretEnc, credentialSecret(env), { legacySecret: env.JWT_SECRET });
     const validTotp = await verifyTotpCode(secret, code);
     if (validTotp) return true;
   }
@@ -243,6 +280,45 @@ async function replaceRecoveryCodes(db: Db, userId: string, codes: string[]) {
   await db.insert(userMfaRecoveryCodes).values(hashed);
 }
 
+type DatabaseTarget = 'primary' | 'transactional';
+
+async function inspectDatabase(db: Db, name: DatabaseTarget) {
+  const started = Date.now();
+  try {
+    const [database] = (await db.execute(sql`
+      SELECT current_database() AS "databaseName", pg_database_size(current_database())::bigint AS "totalBytes"
+    `)).rows as Array<{ databaseName: string; totalBytes: number | string }>;
+    const tables = (await db.execute(sql`
+      SELECT relname AS name,
+        pg_total_relation_size(relid)::bigint AS "totalBytes",
+        COALESCE(n_live_tup, 0)::bigint AS "estimatedRows",
+        COALESCE(n_tup_ins, 0)::bigint AS "insertsSinceStatsReset",
+        COALESCE(n_tup_upd, 0)::bigint AS "updatesSinceStatsReset",
+        COALESCE(n_tup_del, 0)::bigint AS "deletesSinceStatsReset",
+        last_autovacuum AS "lastAutovacuum",
+        last_analyze AS "lastAnalyze"
+      FROM pg_stat_user_tables
+      ORDER BY pg_total_relation_size(relid) DESC
+      LIMIT 100
+    `)).rows;
+    return {
+      name, ok: true, latencyMs: Date.now() - started,
+      databaseName: database?.databaseName ?? null,
+      totalBytes: Number(database?.totalBytes ?? 0),
+      tables,
+    };
+  } catch (error) {
+    return {
+      name, ok: false, latencyMs: Date.now() - started, databaseName: null,
+      totalBytes: 0, tables: [], error: error instanceof Error ? error.message : 'Database inspection failed',
+    };
+  }
+}
+
+function isSafeRelationName(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-z_][a-z0-9_]{0,62}$/.test(value);
+}
+
 export function createAdminRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
@@ -280,7 +356,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     }
     const body = await c.req.json<{ version: string; title?: string; content: string }>();
     try {
-      const document = await publishLegalDoc(db, docType, body, actorUserId);
+      const document = await publishLegalDoc(db, docType, body, actorUserId, c.env);
       return c.json({ document }, 201);
     } catch (e) {
       if (e instanceof LegalDocError) return c.json({ error: e.message }, e.status as 400);
@@ -301,7 +377,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const actorUserId = c.get('userId') as string;
     const body = await c.req.json<{ version?: string; title?: string; content: string }>();
     try {
-      const document = await amendActiveLegalDoc(db, docType, body, actorUserId);
+      const document = await amendActiveLegalDoc(db, docType, body, actorUserId, c.env);
       return c.json({ document });
     } catch (e) {
       if (e instanceof LegalDocError) return c.json({ error: e.message }, e.status as 400);
@@ -885,7 +961,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (user.mfaEnabled) return c.json({ error: 'MFA is already enabled' }, 409);
 
     const secret = generateTotpSecret();
-    const encrypted = await encryptSecretForStorage(secret, c.env.JWT_SECRET);
+    const encrypted = await encryptSecretForStorage(secret, credentialSecret(c.env), { upgrade: true });
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     await db
@@ -942,11 +1018,11 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'MFA setup session expired. Start setup again.' }, 400);
     }
 
-    const secret = await decryptSecretFromStorage(user.mfaTempSecretEnc, c.env.JWT_SECRET);
+    const secret = await decryptSecretFromStorage(user.mfaTempSecretEnc, credentialSecret(c.env), { legacySecret: c.env.JWT_SECRET });
     const valid = await verifyTotpCode(secret, body.code);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
-    const encryptedSecret = await encryptSecretForStorage(secret, c.env.JWT_SECRET);
+    const encryptedSecret = await encryptSecretForStorage(secret, credentialSecret(c.env), { upgrade: true });
     const recoveryCodes = generateRecoveryCodes(10);
 
     await replaceRecoveryCodes(db, user.id, recoveryCodes);
@@ -989,7 +1065,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (!user) return c.json({ error: 'User not found' }, 404);
     if (!user.mfaEnabled) return c.json({ enabled: false });
 
-    const valid = await assertMfa(db, c.env.JWT_SECRET, user, body.code, body.recoveryCode);
+    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
     await db.delete(userMfaRecoveryCodes).where(eq(userMfaRecoveryCodes.userId, user.id));
@@ -1030,7 +1106,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (!user) return c.json({ error: 'User not found' }, 404);
     if (!user.mfaEnabled) return c.json({ error: 'MFA is not enabled' }, 400);
 
-    const valid = await assertMfa(db, c.env.JWT_SECRET, user, body.code, body.recoveryCode);
+    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
     const recoveryCodes = generateRecoveryCodes(10);
@@ -1144,6 +1220,110 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   // -------------------------------------------------------------------------
+  // GET /api/admin/guest-sessions
+  // Anonymous Brain sessions are marketing leads, not auth_user_sessions. Keep
+  // them visible beside the user directory so admins can follow the full
+  // guest -> account -> paid adoption funnel.
+  // -------------------------------------------------------------------------
+  router.get('/guest-sessions', async (c) => {
+    const db = buildDatabase(c.env);
+
+    const rows = await db.execute(sql`
+      SELECT
+        ms.id,
+        ms.visitor_id        AS "visitorId",
+        ms.guest_chat_count  AS "guestChatCount",
+        ms.guest_chat_tokens AS "guestChatTokens",
+        ms.guest_chat_day    AS "guestChatDay",
+        ms.tool_runs         AS "toolRuns",
+        ms.last_tool_id      AS "lastToolId",
+        ms.landing_path      AS "landingPath",
+        ms.referrer,
+        ms.converted,
+        ms.converted_user_id AS "convertedUserId",
+        ms.converted_at      AS "convertedAt",
+        ms.first_seen_at     AS "firstSeenAt",
+        ms.last_seen_at      AS "lastSeenAt",
+        u.email              AS "convertedEmail",
+        COALESCE(BOOL_OR(t.plan = 'pro' AND t.billing_status = 'active' AND t.is_demo = false), false) AS "isPaid"
+      FROM marketing_sessions ms
+      LEFT JOIN users u ON u.id = ms.converted_user_id
+      LEFT JOIN tenant_members tm ON tm.user_id = u.id AND tm.is_active = true
+      LEFT JOIN tenants t ON t.id = tm.tenant_id
+      GROUP BY ms.id, u.email
+      ORDER BY ms.last_seen_at DESC
+      LIMIT 500
+    `);
+
+    return c.json({ sessions: rows.rows });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/demo/funnel
+  // Demo-account conversion funnel (migration 0360): per-persona event rollup
+  // over the trailing 30 days + the most recent raw events. Cached 60s — the
+  // stream is append-only and the panel re-polls.
+  // -------------------------------------------------------------------------
+  router.get('/demo/funnel', async (c) => {
+    const funnel = await getOrSetCached(c.env, 'admin:demo:funnel', async () => {
+      const db = buildDatabase(c.env);
+      const byKind = await db.execute(sql`
+        SELECT
+          persona,
+          kind,
+          COUNT(*)::int                    AS "count",
+          COUNT(DISTINCT visitor_id)::int  AS "visitors"
+        FROM demo_events
+        WHERE occurred_at > now() - interval '30 days'
+        GROUP BY persona, kind
+        ORDER BY persona, kind
+      `);
+      const recent = await db.execute(sql`
+        SELECT persona, kind, path, visitor_id AS "visitorId", occurred_at AS "occurredAt"
+        FROM demo_events
+        ORDER BY occurred_at DESC
+        LIMIT 100
+      `);
+      return { byKind: byKind.rows, recent: recent.rows };
+    }, { kvTtlSeconds: 60 });
+    return c.json(funnel);
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/sales-leads  ·  PATCH /api/admin/sales-leads/:id
+  // Book-a-demo pipeline: list newest-first, update status as sales works them.
+  // -------------------------------------------------------------------------
+  router.get('/sales-leads', async (c) => {
+    const db = buildDatabase(c.env);
+    const status = (c.req.query('status') ?? '').trim();
+    const rows = await db.execute(sql`
+      SELECT id, name, email, company, interest, message, source, locale,
+             visitor_id AS "visitorId", status, created_at AS "createdAt"
+      FROM sales_leads
+      ${status ? sql`WHERE status = ${status}` : sql``}
+      ORDER BY created_at DESC
+      LIMIT 500
+    `);
+    return c.json({ leads: rows.rows });
+  });
+
+  router.patch('/sales-leads/:id', async (c) => {
+    const id = c.req.param('id');
+    const body = await c.req.json<{ status?: string }>().catch(() => ({} as { status?: string }));
+    const allowed = ['new', 'contacted', 'qualified', 'closed'];
+    if (!body.status || !allowed.includes(body.status)) {
+      return c.json({ error: `status must be one of ${allowed.join(', ')}` }, 400);
+    }
+    const db = buildDatabase(c.env);
+    const rows = await db.execute(sql`
+      UPDATE sales_leads SET status = ${body.status} WHERE id = ${id}
+      RETURNING id, status
+    `);
+    if (rows.rows.length === 0) return c.json({ error: 'Lead not found' }, 404);
+    return c.json({ lead: rows.rows[0] });
+  });
+
+  // -------------------------------------------------------------------------
   // GET /api/admin/tenants
   // -------------------------------------------------------------------------
   router.get('/tenants', async (c) => {
@@ -1165,7 +1345,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         t.paid_overflow_daily_cap AS "paidOverflowDailyCap",
         t.image_credits_daily_limit AS "imageCreditsDailyLimit",
         t.premium_override AS "premiumOverride",
-        CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' THEN true ELSE false END AS "isPaid",
+        CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' AND t.is_demo = false THEN true ELSE false END AS "isPaid",
         CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' THEN 'pro' ELSE 'free' END AS "effectivePlan",
         t.created_at AS "createdAt",
         COUNT(DISTINCT tm.user_id)::int  AS "memberCount",
@@ -1218,7 +1398,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       tenantId,
       metadata: { from: before?.prev ?? null, to: updated.tokenDailyLimitOverride },
       ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
-    }).catch(() => {});
+    }).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/adminRoutes.ts", operation: "createAdminRoutes" });
+    });
 
     return c.json({ id: updated.id, tokenDailyLimitOverride: updated.tokenDailyLimitOverride });
   });
@@ -1262,7 +1444,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       tenantId,
       metadata: { from: before?.prev ?? null, to: updated.paidOverflowDailyCap },
       ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
-    }).catch(() => {});
+    }).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/adminRoutes.ts", operation: "createAdminRoutes" });
+    });
 
     return c.json({ id: updated.id, paidOverflowDailyCap: updated.paidOverflowDailyCap });
   });
@@ -1304,7 +1488,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       tenantId,
       metadata: { from: before?.prev ?? null, to: updated.imageCreditsDailyLimit },
       ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
-    }).catch(() => {});
+    }).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/adminRoutes.ts", operation: "createAdminRoutes" });
+    });
 
     return c.json({ id: updated.id, imageCreditsDailyLimit: updated.imageCreditsDailyLimit });
   });
@@ -1339,7 +1525,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       tenantId,
       metadata: { from: before?.prev ?? null, to: updated.premiumOverride },
       ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
-    }).catch(() => {});
+    }).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/adminRoutes.ts", operation: "createAdminRoutes" });
+    });
 
     return c.json({ id: updated.id, premiumOverride: updated.premiumOverride });
   });
@@ -1398,7 +1586,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       await db.execute(sql`SELECT 1`);
       dbLatencyMs = Date.now() - t0;
       dbOk = true;
-    } catch { /* dbOk stays false */ }
+    } catch (error) { /* dbOk stays false */ 
+      reportCaughtError(error, { source: "presentation/routes/adminRoutes.ts", operation: "createAdminRoutes" });
+    }
 
     // Platform counts
     const [counts] = (await db.execute(sql`
@@ -1407,12 +1597,25 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         (SELECT COUNT(*)::int FROM tenants)                 AS "tenantCount",
         (SELECT COUNT(*)::int FROM agent_hosts)     AS "agentHostCount",
         (SELECT COUNT(*)::int FROM executions)              AS "executionCount",
-        (SELECT COUNT(*)::int FROM api_error_log)           AS "errorCount",
         (SELECT COUNT(*)::int FROM tenants WHERE plan = 'pro' AND billing_status = 'active') AS "paidTenantCount"
     `)).rows as Array<{
       userCount: number; tenantCount: number; agentHostCount: number;
-      executionCount: number; errorCount: number; paidTenantCount: number;
+      executionCount: number; paidTenantCount: number;
     }>;
+
+    // api_error_log lives in the operational database, not the primary one.
+    let errorCount = 0;
+    try {
+      const [row] = (await buildTransactionalDatabase(c.env)
+        .execute(sql`SELECT COUNT(*)::int AS "errorCount" FROM api_error_log`))
+        .rows as Array<{ errorCount: number }>;
+      errorCount = row?.errorCount ?? 0;
+    } catch (error) {
+      reportCaughtError(error, {
+        source: 'presentation/routes/adminRoutes.ts',
+        operation: 'health.errorCount',
+      });
+    }
 
     // LLM model pool — include both Free + Pro pools. Per-model availability
     // (cooldown / vendor-key / vendor-cooldown) is resolved inside the proxy
@@ -1431,7 +1634,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     return c.json({
       status:       dbOk ? 'ok' : 'degraded',
       db:           { ok: dbOk, latencyMs: dbLatencyMs },
-      platform:     counts,
+      platform:     { ...counts, errorCount },
       llm:          {
         pool:   modelPool.length,
         models: modelPool,
@@ -1444,18 +1647,266 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   // -------------------------------------------------------------------------
+  // GET /api/admin/system-health — operational infrastructure + both Neon DBs.
+  // Table mutation counters are PostgreSQL counters since the last stats reset;
+  // they make sustained growth visible without retaining a second metrics table.
+  // -------------------------------------------------------------------------
+  router.get('/system-health', async (c) => {
+    const primary = buildDatabase(c.env);
+    const transactional = buildTransactionalDatabase(c.env);
+    const [primaryDb, transactionalDb, runtime] = await Promise.all([
+      inspectDatabase(primary, 'primary'),
+      inspectDatabase(transactional, 'transactional'),
+      primary.execute(sql`
+        SELECT
+          (SELECT COUNT(*)::int FROM agent_hosts) AS "agentHosts",
+          (SELECT COUNT(*)::int FROM agent_hosts WHERE connected_at IS NOT NULL AND last_seen_at > now() - interval '5 minutes') AS "onlineAgentHosts",
+          (SELECT COUNT(*)::int FROM executions WHERE status IN ('pending', 'running')) AS "activeExecutions",
+          (SELECT COUNT(*)::int FROM executions WHERE status = 'failed' AND updated_at > now() - interval '24 hours') AS "failedExecutions24h"
+      `).catch(() => ({ rows: [] })),
+    ]);
+    const row = (runtime.rows[0] ?? {}) as Record<string, number>;
+    return c.json({
+      timestamp: new Date().toISOString(),
+      worker: {
+        version: API_VERSION,
+        environment: c.env.ENVIRONMENT ?? 'unknown',
+        bindings: {
+          analysisRunner: Boolean(c.env.ANALYSIS_RUNNER),
+          agentContainer: Boolean(c.env.AGENT_CONTAINER),
+          qaRunnerContainer: Boolean(c.env.QA_RUNNER_CONTAINER),
+          cloudRunner: Boolean(c.env.CLOUD_RUNNER),
+          cloudflareAi: Boolean(c.env.CLOUDFLARE_AI_API_TOKEN && c.env.CLOUDFLARE_ACCOUNT_ID),
+        },
+      },
+      runtime: {
+        agentHosts: Number(row.agentHosts ?? 0),
+        onlineAgentHosts: Number(row.onlineAgentHosts ?? 0),
+        activeExecutions: Number(row.activeExecutions ?? 0),
+        failedExecutions24h: Number(row.failedExecutions24h ?? 0),
+      },
+      databases: [primaryDb, transactionalDb],
+    });
+  });
+
+  // POST /api/admin/system-health/maintenance
+  // { action: 'purge_expired' } runs only the existing retention policy.
+  // { action: 'vacuum_analyze', target, table? } is intentionally limited to
+  // normal VACUUM ANALYZE (never VACUUM FULL / arbitrary SQL).
+  router.post('/system-health/maintenance', async (c) => {
+    const body = await c.req.json().catch(() => ({})) as {
+      action?: string; target?: DatabaseTarget; table?: string;
+    };
+    const actorId = c.get('userId') as string | undefined;
+    if (body.action === 'purge_expired') {
+      await runRetentionPurge(c.env as Env);
+      await writeAdminAudit(buildDatabase(c.env), 'SYSTEM_HEALTH_PURGE_EXPIRED', actorId ?? null, {
+        metadata: { target: 'both', retentionPolicy: true }, ipAddress: c.req.header('cf-connecting-ip') ?? null,
+      });
+      return c.json({ ok: true, action: body.action });
+    }
+    if (body.action !== 'vacuum_analyze' || (body.target !== 'primary' && body.target !== 'transactional')) {
+      return c.json({ error: 'Use purge_expired or vacuum_analyze with target primary|transactional.' }, 400);
+    }
+    if (body.table != null && !isSafeRelationName(body.table)) {
+      return c.json({ error: 'Invalid table name.' }, 400);
+    }
+    const db = body.target === 'primary' ? buildDatabase(c.env) : buildTransactionalDatabase(c.env);
+    const statement = body.table ? `VACUUM (ANALYZE) "${body.table}"` : 'VACUUM (ANALYZE)';
+    try {
+      await db.execute(sql.raw(statement));
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : 'VACUUM failed' }, 500);
+    }
+    await writeAdminAudit(buildDatabase(c.env), 'SYSTEM_HEALTH_VACUUM_ANALYZE', actorId ?? null, {
+      metadata: { target: body.target, table: body.table ?? null }, ipAddress: c.req.header('cf-connecting-ip') ?? null,
+    });
+    return c.json({ ok: true, action: body.action, target: body.target, table: body.table ?? null });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/cron — what the platform has scheduled, plus the LIVE state of
+  // the KV work-gate that decides whether the every-5-minute tick runs at all.
+  //
+  // Deliberately NOT cached (contra the default for read endpoints): it reads KV
+  // only — no Neon round-trip, so there is no cost to serve — and its entire
+  // purpose is to show the CURRENT gate decision. A cache would hide exactly the
+  // state it exists to reveal.
+  // -------------------------------------------------------------------------
+  router.get('/cron', async (c) => {
+    const env = c.env as Env;
+    const nowMs = Date.now();
+    // Read-only: evaluateCronGate never writes, so inspecting the gate cannot
+    // consume a pending-work signal or move the floor timestamp.
+    const gate = await evaluateCronGate(env, nowMs);
+    return c.json({
+      now: new Date(nowMs).toISOString(),
+      gate: {
+        /** What the next frequent tick would do if it fired right now. */
+        wouldRun: gate.run,
+        reason: gate.reason,
+        floorDue: gate.floorDue,
+        floorIntervalMs: gate.floorIntervalMs,
+        floorIntervalOverridden: Boolean(env.CRON_FLOOR_INTERVAL_MS),
+        lastFloorSweepAt: gate.lastFloorMs ? new Date(gate.lastFloorMs).toISOString() : null,
+        nextFloorDueAt: gate.lastFloorMs
+          ? new Date(gate.lastFloorMs + gate.floorIntervalMs).toISOString()
+          : null,
+        /** Unbound KV = the gate fails open and every tick runs the fan-out. */
+        kvBound: Boolean(env.AUTH_CACHE_KV),
+      },
+      cadences: CRON_CADENCES.map((cadence) => ({
+        cadence,
+        cron: Object.entries(CADENCE_BY_CRON).find(([, v]) => v === cadence)?.[0] ?? null,
+        sweeps: CRON_SWEEPS.filter((s) => s.cadence === cadence).length,
+      })),
+      sweeps: CRON_SWEEPS.map((s) => ({
+        key: s.key,
+        cadence: s.cadence,
+        description: s.description,
+        dispatches: Boolean(s.dispatches),
+        available: s.available ? s.available(env) : true,
+      })),
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/admin/cron/signal — set the KV pending-work flag so the NEXT real
+  // cron tick runs the Postgres fan-out instead of skipping. This exercises the
+  // gate itself (the force-run below deliberately bypasses it), which is the only
+  // way to confirm end-to-end that a signalled tick actually wakes and dispatches.
+  //
+  // MUST stay registered before `/cron/:target` so the static path wins the match.
+  // -------------------------------------------------------------------------
+  router.post('/cron/signal', async (c) => {
+    const env = c.env as Env;
+    if (!env.AUTH_CACHE_KV) {
+      return c.json({ error: 'AUTH_CACHE_KV is not bound — the work-gate fails open and every tick already runs.' }, 409);
+    }
+    await signalPendingWork(env);
+    const gate = await evaluateCronGate(env, Date.now());
+    await writeAdminAudit(buildDatabase(c.env), 'CRON_SIGNAL_WORK', (c.get('userId') as string | undefined) ?? null, {
+      ipAddress: c.req.header('cf-connecting-ip') ?? null,
+    });
+    return c.json({ ok: true, gate: { wouldRun: gate.run, reason: gate.reason } });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/admin/cron/:target — force-run scheduled work NOW. `:target` is a
+  // sweep key, a cadence group (frequent | daily | weekly-mon | weekly-fri), or
+  // `all`. Body: { timeoutMs? }.
+  //
+  // WHY: Cloudflare delivers crons to scheduled(), never to a URL, so before this
+  // route a change to any cron-path sweep could only be observed by waiting out
+  // the work-gate — and the wait is worse than the 5-minute trigger suggests,
+  // because signalPendingWork only fires when a ticket actually passes its gates,
+  // so a board of stalled tickets signals nothing and falls through to the
+  // 30-minute floor. The manual "Run manager now" button is not a substitute: it
+  // takes the shouldDispatch = true branch, a different path from the cron one.
+  //
+  // The sweeps invoked are the SAME registry entries scheduled() dispatches, with
+  // one shared per-tenant dispatch budget, exactly as a real tick has. It does NOT
+  // touch the gate's KV state: stamping the floor here would push the next real
+  // floor sweep out by a full interval, i.e. the diagnostic would delay the work
+  // it was run to observe. Audited.
+  // -------------------------------------------------------------------------
+  router.post('/cron/:target', async (c) => {
+    const env = c.env as Env;
+    const target = c.req.param('target');
+    const resolved = resolveCronTarget(CRON_SWEEPS, target);
+    if (!resolved) {
+      return c.json({
+        error: `Unknown cron target '${target}'. Use a sweep key, a cadence (${CRON_CADENCES.join(' | ')}), or 'all'.`,
+        sweeps: CRON_SWEEPS.map((s) => s.key),
+      }, 404);
+    }
+    if (resolved.sweeps.length === 0) {
+      return c.json({ error: `No sweeps are registered for '${target}'.` }, 404);
+    }
+    const body = await c.req.json<{ timeoutMs?: number }>().catch(() => ({} as { timeoutMs?: number }));
+    const budget = createTickDispatchBudget();
+    const started = Date.now();
+    const results = await runCronSweeps(resolved.sweeps, { env, budget }, {
+      timeoutMs: body.timeoutMs,
+      // A sweep past its deadline keeps running after we answer; without this the
+      // isolate would cancel it when the request ends and the force-run would
+      // silently truncate real work.
+      keepAlive: (p) => c.executionCtx.waitUntil(p),
+    });
+    await writeAdminAudit(buildDatabase(c.env), 'CRON_FORCE_RUN', (c.get('userId') as string | undefined) ?? null, {
+      metadata: {
+        target,
+        kind: resolved.kind,
+        sweeps: resolved.sweeps.map((s) => s.key),
+        failed: results.filter((r) => !r.ok).map((r) => r.key),
+        timedOut: results.filter((r) => r.timedOut).map((r) => r.key),
+      },
+      ipAddress: c.req.header('cf-connecting-ip') ?? null,
+    });
+    return c.json({
+      target,
+      kind: resolved.kind,
+      ranAt: new Date(started).toISOString(),
+      totalMs: Date.now() - started,
+      /** Billable runs this forced pass actually started, across all tenants. */
+      dispatchesReserved: budget.total(),
+      results,
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // GET /api/admin/errors
+  //   ?q&source&operation&path&handled&tenantId&sinceHours&limit&offset
+  //
+  // Answer-first: the rollup says which faults are loudest, the rows are the
+  // evidence. Reads the OPERATIONAL database — that is where persistCaughtError
+  // writes. Shares its read model with the built-in MCP `errors.*` tools.
   // -------------------------------------------------------------------------
   router.get('/errors', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = buildTransactionalDatabase(c.env);
+    const q = c.req.query();
 
-    const rows = await db
-      .select()
-      .from(apiErrorLog)
-      .orderBy(desc(apiErrorLog.createdAt))
-      .limit(200);
+    const handledParam = q.handled;
+    const filters: ErrorLogFilters = {
+      q: q.q || undefined,
+      source: q.source || undefined,
+      operation: q.operation || undefined,
+      path: q.path || undefined,
+      handled: handledParam === 'true' ? true : handledParam === 'false' ? false : undefined,
+      tenantId: q.tenantId ? Number(q.tenantId) : undefined,
+      sinceHours: q.sinceHours ? Number(q.sinceHours) : undefined,
+      limit: clampErrorLogLimit(q.limit),
+      offset: q.offset ? Number(q.offset) : 0,
+    };
 
-    return c.json({ errors: rows });
+    // Cache on the exact filter set: the log is append-only, so a short TTL is
+    // safe and the unfiltered first page (the common case) stops hitting Neon
+    // on every superadmin refresh.
+    const key = `admin:errors:${JSON.stringify(filters)}`;
+    const payload = await getOrSetCached(
+      c.env as Env,
+      key,
+      async () => {
+        const [page, summary, sources] = await Promise.all([
+          queryErrorLog(db, filters),
+          summarizeErrorLog(db, { ...filters, offset: 0 }),
+          listErrorLogSources(db, filters.sinceHours),
+        ]);
+        return { ...page, summary, sources };
+      },
+      { kvTtlSeconds: 30, l1TtlMs: 10_000 },
+    );
+
+    return c.json(payload);
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/errors/:id — one entry with full stack + context.
+  // -------------------------------------------------------------------------
+  router.get('/errors/:id', async (c) => {
+    const entry = await getErrorLogEntry(buildTransactionalDatabase(c.env), Number(c.req.param('id')));
+    if (!entry) return c.json({ error: 'Error log entry not found' }, 404);
+    return c.json({ error: entry });
   });
 
   // -------------------------------------------------------------------------
@@ -1715,7 +2166,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       );
     }
     const result = await probeVendor(c.env, vendorParam as VendorId);
-    await persistProbe(buildDatabase(c.env), result, 'manual');
+    await persistProbe(buildTransactionalDatabase(c.env), result, 'manual');
     return c.json(result);
   });
 
@@ -1723,7 +2174,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // GET /api/admin/llm-health — latest probe per vendor, for the admin UI
   // -------------------------------------------------------------------------
   router.get('/llm-health', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = buildTransactionalDatabase(c.env);
     const rows = (await db.execute(sql`
       SELECT DISTINCT ON (vendor)
         vendor, status, probed_count AS "probedCount", ok_count AS "okCount",
@@ -2408,6 +2859,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       roles,
       permissions: ALL_PERMISSIONS,
       matrix,
+      // Which rows are backed by a real request-time gate. Without this the
+      // screen implied every override took effect; most are still advisory
+      // because the route is gated by the role ladder alone.
+      enforced: [...ENFORCED_PERMISSIONS],
       overrides: overrides.map((o) => ({ tenantId: null, role: o.role, permission: o.permission, granted: o.granted })),
     });
   });
@@ -2439,6 +2894,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       metadata: { role, overrides: body.overrides },
       ipAddress: c.req.header('CF-Connecting-IP') ?? null,
     });
+
+    // The gate resolves this set from cache on every request — a matrix edit
+    // that skipped this would keep applying the OLD permissions until the TTL.
+    await invalidateRolePermissions(c.env, role);
 
     const updated = await db.select().from(rolePermissionOverrides).where(eq(rolePermissionOverrides.role, role));
     return c.json({ role, permissions: resolveRolePermissions(role, updated) });
@@ -2559,6 +3018,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await db.insert(tenantMemberModules).values({
       tenantId, userId, moduleId: body.moduleId, grantedBy: actorId,
     }).onConflictDoNothing();
+    await invalidateMemberPermissions(c.env, tenantId, userId);
     await writeAudit(db, 'MODULE_ASSIGNED', actorId, { targetUserId: userId, tenantId, metadata: { moduleId: body.moduleId } });
     return c.json({ ok: true });
   });
@@ -2573,6 +3033,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await db.delete(tenantMemberModules).where(
       and(eq(tenantMemberModules.tenantId, tenantId), eq(tenantMemberModules.userId, userId), eq(tenantMemberModules.moduleId, moduleId))
     );
+    await invalidateMemberPermissions(c.env, tenantId, userId);
     await writeAudit(db, 'MODULE_REMOVED', actorId, { targetUserId: userId, tenantId, metadata: { moduleId } });
     return c.json({ ok: true });
   });
@@ -2612,7 +3073,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const token = Array.from(crypto.getRandomValues(new Uint8Array(32)))
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('');
-    const frontendBase = (c.env.APP_URL ?? 'https://builderforce.ai').split(',')[0]!.trim();
+    const frontendBase = resolveAppBaseUrl(c.env);
 
     await db
       .update(magicLinkTokens)
@@ -2627,7 +3088,15 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     });
 
     const magicUrl = `${frontendBase}/auth/magic-link?token=${encodeURIComponent(token)}`;
-    void sendAdminPasswordResetEmail(c.env, user.email, magicUrl);
+    // The admin triggering this may not share the target's language, so the
+    // resolver's stored-locale lookup (keyed on the TARGET's address) is what
+    // matters here; the admin's request headers are only a last resort.
+    void sendTransactionalEmail(
+      c.env,
+      db,
+      user.email,
+      ({ locale }) => sendAdminPasswordResetEmail(c.env, user.email, magicUrl, locale),
+    );
 
     await writeAudit(db, 'USER_PASSWORD_RESET_FORCED', actorId, {
       targetUserId: targetId,
@@ -2687,6 +3156,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
           set: { granted: o.granted, expiresAt: o.expiresAt ? new Date(o.expiresAt) : null },
         });
     }
+    await invalidateMemberPermissions(c.env, body.tenantId, targetId);
     await writeAudit(db, 'USER_PERMISSION_OVERRIDE', actorId, {
       targetUserId: targetId,
       tenantId: body.tenantId,
@@ -2710,7 +3180,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await db.update(tenantMembers).set({ role: body.role as 'viewer' | 'developer' | 'manager' | 'owner' }).where(eq(tenantMembers.id, row.id));
     // Bust the gateway's JWT→membership cache so the new role takes effect at once
     // (otherwise a demote keeps elevated gateway access until the 60s TTL lapses).
-    await invalidateJwtMembershipCache(c.env as Env, tenantId, userId).catch(() => {});
+    await invalidateJwtMembershipCache(c.env as Env, tenantId, userId).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/adminRoutes.ts", operation: "createAdminRoutes" });
+    });
     await writeAudit(db, 'USER_PERSONA_CHANGED', actorId, {
       targetUserId: userId,
       tenantId,
@@ -2755,11 +3227,16 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const effective = resolveEffectivePermissions({ rolePermissions: rolePerms, modulePermissions: modulePerms, userGrants, userRevocations: userRevokes });
 
     return c.json({
+      userId: targetId,
+      tenantId,
       role: membership.role,
+      permissions: effective,
       rolePermissions: rolePerms,
       modulePermissions: modulePerms,
       userGrants,
       userRevocations: userRevokes,
+      // Keep the original field during the rolling-deploy window for any older
+      // clients that consumed the route before its response contract was fixed.
       effectivePermissions: effective,
     });
   });
@@ -2915,6 +3392,55 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     });
     if (!updated) return c.json({ error: 'Key not found, revoked, or no fields to update' }, 404);
     return c.json({ key: updated });
+  });
+
+  /**
+   * Cross-tenant product feedback roll-up — the dogfooding inbox. Every external
+   * request gathered by any tenant's feedback collector, newest first. Shares the
+   * exact loader the per-tenant triage queue uses (`listFeedbackSubmissions`);
+   * passing `tenantId: null` is what widens it to every workspace.
+   */
+  router.get('/feedback', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantParam = c.req.query('tenantId');
+    const tenantId = tenantParam ? Number(tenantParam) : null;
+    if (tenantId != null && !Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
+
+    const filter = {
+      tenantId,
+      status: parseFeedbackStatus(c.req.query('status')),
+      limit: c.req.query('limit') ? Number(c.req.query('limit')) : undefined,
+      before: c.req.query('before') ?? null,
+    };
+    const [submissions, counts] = await Promise.all([
+      listFeedbackSubmissions(db, c.env, filter),
+      countFeedbackByStatus(db, c.env, { tenantId, projectId: null }),
+    ]);
+    return c.json({ submissions, counts });
+  });
+
+  /**
+   * Superadmin review of any tenant's request. The decision itself runs through
+   * the SAME engine as tenant-side triage, so approving here un-gates the ticket
+   * identically — there is no second, privileged approval path to keep in sync.
+   */
+  router.post('/feedback/:id/review', async (c) => {
+    const db = buildDatabase(c.env);
+    const body = await c.req.json<{ decision?: string; tenantId?: number }>().catch(() => null);
+    const decision = body?.decision;
+    if (decision !== 'approved' && decision !== 'declined') {
+      return c.json({ error: "decision must be 'approved' or 'declined'" }, 400);
+    }
+    if (typeof body?.tenantId !== 'number') return c.json({ error: 'tenantId is required' }, 400);
+
+    const result = await reviewFeedbackSubmission(db, c.env, {
+      tenantId: body.tenantId,
+      submissionId: c.req.param('id'),
+      decision,
+      reviewerUserId: (c.get('userId') as string | undefined) ?? null,
+    });
+    if (!result.ok) return c.json({ error: 'Submission not found' }, 404);
+    return c.json({ ok: true, taskId: result.taskId });
   });
 
   router.delete('/tenants/:tenantId/api-keys/:keyId', async (c) => {

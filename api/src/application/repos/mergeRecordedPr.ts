@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * mergeRecordedPullRequest — the server-side "merge + close a recorded PR" core,
  * shared by the in-product "Approve & Merge" route AND the AI Manager's autonomous
@@ -14,10 +15,77 @@ import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
 import { mergePullRequest, normalizeMergeMethod, type MergeMethod } from './mergePullRequest';
 import { markPullRequestMergedById } from './recordPullRequestRow';
 import { invalidatePullRequestDetail } from './getPullRequestDetail';
-import { completeTaskOnMerge } from '../task/taskLifecycle';
+import { completeTaskOnMerge, type TransitionActorInput } from '../task/taskLifecycle';
+import { resolveManagerAssignee } from '../manager/managerPolicy';
+import { updatePullRequestBranch } from './updatePullRequestBranch';
+
+export type UpdateRecordedPrBranchResult =
+  | { ok: true; updated: boolean }
+  | { ok: false; httpStatus: number; error: string; code: 'conflict' | 'provider_error' };
+
+/** Tenant-scoped preparation used by the manager before checking CI/merging. */
+export async function updateRecordedPullRequestBranch(
+  db: Db,
+  env: Env,
+  args: { tenantId: number; prId: string },
+): Promise<UpdateRecordedPrBranchResult> {
+  const [row] = await db.select().from(pullRequests)
+    .where(and(eq(pullRequests.id, args.prId), eq(pullRequests.tenantId, args.tenantId))).limit(1);
+  if (!row) return { ok: false, httpStatus: 404, error: 'Pull request not found', code: 'provider_error' };
+  if (!row.repoId || row.number == null) {
+    return { ok: false, httpStatus: 409, error: 'Pull request is not ready to update', code: 'provider_error' };
+  }
+  const e = env as unknown as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
+  const resolved = await resolveRepoCredential(
+    db, e.INTEGRATION_ENCRYPTION_SECRET ?? e.JWT_SECRET ?? '', args.tenantId, row.repoId,
+  );
+  if (isResolveError(resolved)) {
+    return { ok: false, httpStatus: resolved.status, error: resolved.error, code: 'provider_error' };
+  }
+  const result = await updatePullRequestBranch({
+    provider: resolved.repo.provider, host: resolved.repo.host,
+    owner: resolved.repo.owner, repo: resolved.repo.repo,
+    token: resolved.token, number: row.number,
+  });
+  // No provider endpoint means there is no preparation step; retain the existing
+  // merge behaviour instead of disabling supported Bitbucket merges.
+  if (!result.ok && result.code === 'unsupported') return { ok: true, updated: false };
+  if (!result.ok) {
+    return {
+      ok: false, httpStatus: result.code === 'conflict' ? 409 : 502,
+      error: result.reason, code: result.code === 'conflict' ? 'conflict' : 'provider_error',
+    };
+  }
+  return result;
+}
+
+/**
+ * Decode `pull_requests.merged_by` into the lifecycle actor that completed the ticket.
+ *
+ * The AI manager stamps `manager:<managerRef>`, and that ref is the SAME `u:`/`c:`/`h:`
+ * designation the manager policy carries — so an auto-merge names the exact agent (or
+ * human manager) that took the decision. It used to be discarded as "not a user id",
+ * which is how every manager-driven completion landed in the log as anonymous automation.
+ * A `provider:*` marker (a reconcile that noticed an out-of-band merge) genuinely has no
+ * actor and stays that way.
+ */
+export function resolveMergeActor(mergedBy: string | null | undefined): TransitionActorInput {
+  const ref = mergedBy?.trim();
+  if (!ref) return {};
+  if (ref.startsWith('manager:')) {
+    const assignee = resolveManagerAssignee(ref.slice('manager:'.length));
+    return {
+      actorUserId: assignee.assignedUserId,
+      actorAgentRef: assignee.assignedAgentRef,
+      actorAgentHostId: assignee.assignedAgentHostId,
+    };
+  }
+  if (ref.startsWith('provider:')) return {};
+  return { actorUserId: ref };
+}
 
 export type MergeRecordedPrResult =
-  | { ok: true; merged: boolean; alreadyMerged?: boolean; sha: string | null; pullRequest: unknown }
+  | { ok: true; merged: boolean; alreadyMerged?: boolean; branchUpdated?: boolean; sha: string | null; pullRequest: unknown }
   | { ok: false; httpStatus: number; error: string; code?: string };
 
 /**
@@ -28,7 +96,7 @@ export type MergeRecordedPrResult =
 export async function mergeRecordedPullRequest(
   db: Db,
   env: Env,
-  args: { tenantId: number; prId: string; method?: MergeMethod | string; mergedBy?: string | null },
+  args: { tenantId: number; prId: string; method?: MergeMethod | string; mergedBy?: string | null; updateBranch?: boolean },
 ): Promise<MergeRecordedPrResult> {
   const [row] = await db
     .select()
@@ -44,6 +112,23 @@ export async function mergeRecordedPullRequest(
   const secret = e.INTEGRATION_ENCRYPTION_SECRET ?? e.JWT_SECRET ?? '';
   const resolved = await resolveRepoCredential(db, secret, args.tenantId, row.repoId);
   if (isResolveError(resolved)) return { ok: false, httpStatus: resolved.status, error: resolved.error };
+
+  let branchUpdated = false;
+  if (args.updateBranch) {
+    const update = await updatePullRequestBranch({
+      provider: resolved.repo.provider,
+      host: resolved.repo.host,
+      owner: resolved.repo.owner,
+      repo: resolved.repo.repo,
+      token: resolved.token,
+      number: row.number,
+    });
+    // Providers without a safe update endpoint retain the old merge behaviour.
+    if (!update.ok && update.code !== 'unsupported') {
+      return { ok: false, httpStatus: update.code === 'conflict' ? 409 : 502, error: update.reason, code: update.code };
+    }
+    branchUpdated = update.ok && update.updated;
+  }
 
   const result = await mergePullRequest({
     provider: resolved.repo.provider,
@@ -72,7 +157,9 @@ export async function mergeRecordedPullRequest(
     env,
     args.prId,
     row.updatedAt instanceof Date ? row.updatedAt.toISOString() : String(row.updatedAt),
-  ).catch(() => { /* cache miss is fine */ });
+  ).catch((error) => { /* cache miss is fine */ 
+    reportCaughtError(error, { source: "application/repos/mergeRecordedPr.ts", operation: "mergeRecordedPullRequest" });
+  });
 
   // Merge → ticket complete: the ONE place every merge path funnels through, so the
   // human "Approve & Merge", the AI Manager sweep and the green-CI auto-merge all
@@ -82,9 +169,11 @@ export async function mergeRecordedPullRequest(
     await completeTaskOnMerge(env, db, {
       tenantId: args.tenantId,
       taskId: row.taskId,
-      actorUserId: args.mergedBy && !args.mergedBy.startsWith('manager:') ? args.mergedBy : null,
-    }).catch(() => { /* completion is best-effort; the merge itself succeeded */ });
+      ...resolveMergeActor(args.mergedBy),
+    }).catch((error) => { /* completion is best-effort; the merge itself succeeded */
+      reportCaughtError(error, { source: "application/repos/mergeRecordedPr.ts", operation: "mergeRecordedPullRequest" });
+    });
   }
 
-  return { ok: true, merged: result.merged, sha: result.sha, pullRequest: updated ?? row };
+  return { ok: true, merged: result.merged, branchUpdated, sha: result.sha, pullRequest: updated ?? row };
 }

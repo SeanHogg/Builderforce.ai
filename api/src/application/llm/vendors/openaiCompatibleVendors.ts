@@ -80,7 +80,7 @@ const SPECS: ReadonlyArray<VendorSpec> = [
   {
     id: 'xai', brand: 'xAI', apiKeyEnv: 'XAI_API_KEY',
     baseUrl: 'https://api.x.ai/v1/chat/completions',
-    models: ['grok-3', 'grok-3-mini', 'grok-2-1212'],
+    models: ['grok-4.5', 'grok-4.3', 'grok-3', 'grok-3-mini'],
   },
   {
     id: 'perplexity', brand: 'Perplexity', apiKeyEnv: 'PERPLEXITY_API_KEY',
@@ -91,6 +91,21 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     id: 'moonshot', brand: 'Moonshot', apiKeyEnv: 'MOONSHOT_API_KEY',
     baseUrl: 'https://api.moonshot.cn/v1/chat/completions',
     models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k', 'kimi-k2-0711-preview'],
+  },
+  {
+    id: 'kimi-code', brand: 'Kimi Code', apiKeyEnv: 'KIMI_CODE_API_KEY',
+    baseUrl: 'https://api.kimi.com/coding/v1/chat/completions',
+    // Kimi asks third-party coding clients to preserve their real identity. Do
+    // not spoof kimi-code-cli/Claude/Codex; identify this gateway truthfully.
+    headers: { 'User-Agent': 'Builderforce.ai' },
+    // Keep the all-members model first: credential health probes use the first
+    // catalog entry, while K3/high-speed access depends on the subscription tier.
+    models: ['kimi-for-coding', 'k3-256k', 'k3', 'kimi-for-coding-highspeed'],
+  },
+  {
+    id: 'qwen', brand: 'Qwen', apiKeyEnv: 'QWEN_API_KEY',
+    baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
+    models: ['qwen3-coder-plus', 'qwen3-max', 'qwen-plus', 'qwen-turbo'],
   },
   {
     id: 'hyperbolic', brand: 'Hyperbolic', apiKeyEnv: 'HYPERBOLIC_API_KEY',
@@ -191,6 +206,15 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     id: 'minimax', brand: 'MiniMax', apiKeyEnv: 'MINIMAX_API_KEY',
     baseUrl: 'https://api.minimax.io/v1/chat/completions',
     models: ['MiniMax-M1', 'MiniMax-Text-01'],
+  },
+  {
+    // Meta MUSE — OpenAI-compatible endpoint at api.meta.ai/v1.
+    // Tenant BYO key stored as LlmProvider 'meta'; maps to this vendor so that
+    // the gateway dispatches MUSE models on the tenant's own Meta AI account.
+    // Reachable via explicit `direct/meta/<model-id>` pin or the BYO auto-seed.
+    id: 'meta', brand: 'Meta AI', apiKeyEnv: 'META_API_KEY',
+    baseUrl: 'https://api.meta.ai/v1/chat/completions',
+    models: ['muse-spark-1.1'],
   },
 ];
 

@@ -1,3 +1,4 @@
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Unified activity / audit log — the ONE canonical write + read path for "who did
  * what, to what, when" across the whole workforce (team members, external talent /
@@ -23,6 +24,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { activityLog, agentHosts, freelancerEngagements, ideAgents, tenantMembers, users } from '../../infrastructure/database/schema';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
 
 export type ActorType = 'human' | 'hire' | 'cloud_agent' | 'host_agent' | 'system';
 
@@ -62,6 +64,64 @@ export function cloudAgentActor(agentRef: string, name: string): ActorIdentity {
   return { type: 'cloud_agent', ref: agentRef, name };
 }
 
+// ── Model provenance on an activity row ─────────────────────────────────────
+
+/**
+ * The subset of an activity row's free-form `metadata` that answers "WHICH MODEL
+ * served this agent turn". Written by every LLM-backed emit site (the Brain
+ * addressed-agent loop, the gateway default-agent turn) and read verbatim by the
+ * audit timeline's model chip — so the key names here are the wire contract with
+ * `AuditTrailPanel`.
+ *
+ * NOTE: activity rows are best-effort (see {@link recordActivity}) — this is an
+ * OBSERVABILITY signal, never a billing one. `llm_usage_log` stays the single
+ * source of truth for metering.
+ */
+export interface ModelActivityMetadata extends Record<string, unknown> {
+  /** Emit site, e.g. 'brain-chat' | 'gateway' | 'mcp'. */
+  via?: string;
+  /** The model the proxy actually routed to (ProxyResult.resolvedModel). */
+  model?: string;
+  /** Resolved vendor id, e.g. 'anthropic' | 'openai' | 'googleai'. */
+  vendor?: string;
+  /** Which account served it — mirrors ReplyProvenance.account ('own' | 'shared' | 'shared_byo_unused'). */
+  account?: string;
+  /** True when the tenant's OWN connected credential paid for the turn. */
+  byoFunded?: boolean;
+  /** Set when the project's own Evermind generated the reply. */
+  evermind?: { version: number };
+}
+
+/**
+ * Build the model-provenance `metadata` payload for an activity row. ONE builder
+ * shared by every LLM emit site so the audit chip reads identical keys wherever
+ * the turn was served from. Nullish/empty fields are omitted rather than written
+ * as nulls, keeping the stored jsonb small and the chip's presence checks simple.
+ */
+export function buildModelActivityMetadata(args: {
+  via: string;
+  model?: string | null;
+  vendor?: string | null;
+  account?: string | null;
+  byoFunded?: boolean | null;
+  evermind?: { version: number } | null;
+  /** Extra emit-site-specific keys (e.g. `{ tool }`, `{ chatId }`). */
+  extra?: Record<string, unknown>;
+}): ModelActivityMetadata {
+  const model = args.model?.trim() || undefined;
+  const vendor = args.vendor?.trim() || undefined;
+  const account = args.account?.trim() || undefined;
+  return {
+    via: args.via,
+    ...(model ? { model } : {}),
+    ...(vendor ? { vendor } : {}),
+    ...(account ? { account } : {}),
+    ...(args.byoFunded == null ? {} : { byoFunded: args.byoFunded }),
+    ...(args.evermind ? { evermind: args.evermind } : {}),
+    ...(args.extra ?? {}),
+  };
+}
+
 export function activityLogVersionKey(tenantId: number | null): string {
   return `activity-log:tenant:${tenantId ?? 'global'}`;
 }
@@ -73,7 +133,8 @@ export function activityLogVersionKey(tenantId: number | null): string {
  */
 export async function recordActivity(env: Env | undefined, db: Db, input: ActivityInput): Promise<void> {
   try {
-    await db.insert(activityLog).values({
+    const activityDb = env?.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
+    await activityDb.insert(activityLog).values({
       tenantId: input.tenantId ?? null,
       segmentId: input.segmentId ?? null,
       projectId: input.projectId ?? null,
@@ -90,8 +151,19 @@ export async function recordActivity(env: Env | undefined, db: Db, input: Activi
       occurredAt: input.occurredAt ?? new Date(),
     });
     await bumpCacheVersion(env as Env, activityLogVersionKey(input.tenantId));
-  } catch {
-    // Best-effort — audit failures must not break the mutation.
+  } catch (error) {
+    // Best-effort — audit failures must not break the mutation, but they must be
+    // diagnosable. Never include the free-form metadata because it may contain
+    // tenant-sensitive content.
+    reportCaughtError(error, { source: "application/activity/activityLog.ts", operation: "recordActivity", context: { logMessage: '[activity-log] append failed', details: {
+      tenantId: input.tenantId,
+      projectId: input.projectId ?? null,
+      verb: input.verb,
+      targetType: input.targetType ?? null,
+      targetId: input.targetId ?? null,
+      actorType: input.actor.type,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    } } });
   }
 }
 
@@ -265,5 +337,6 @@ export async function getActivityLog(env: Env, db: Db, tenantId: number, filter:
   const limit = Math.min(100, Math.max(1, filter.limit ?? 50));
   const version = await getCacheVersion(env, activityLogVersionKey(tenantId));
   const key = `activity-log:list:tenant:${tenantId}:v:${version}:${JSON.stringify({ ...filter, limit })}`;
-  return getOrSetCached(env, key, () => queryActivityLog(db, tenantId, filter, limit), { kvTtlSeconds: 120 });
+  const activityDb = env.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
+  return getOrSetCached(env, key, () => queryActivityLog(activityDb, tenantId, filter, limit), { kvTtlSeconds: 120 });
 }

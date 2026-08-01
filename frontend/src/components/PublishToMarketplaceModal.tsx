@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { Select } from '@/components/Select';
 import { publishTicket, type PostingType, type EngagementType, type TicketPosting } from '@/lib/freelancerApi';
 
 const input: React.CSSProperties = {
@@ -76,15 +77,15 @@ export function PublishToMarketplaceModal({
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
           <div>
             <label style={labelStyle} htmlFor="mkt-posting">{t('publish.postingType')}</label>
-            <select id="mkt-posting" style={input} value={postingType} onChange={(e) => pickPosting(e.target.value as PostingType)}>
+            <Select id="mkt-posting" style={input} value={postingType} onChange={(e) => pickPosting(e.target.value as PostingType)}>
               {POSTING_TYPES.map((v) => <option key={v} value={v}>{t(`postingType.${v}`)}</option>)}
-            </select>
+            </Select>
           </div>
           <div>
             <label style={labelStyle} htmlFor="mkt-engagement">{t('publish.engagementType')}</label>
-            <select id="mkt-engagement" style={input} value={engagementType} onChange={(e) => setEngagementType(e.target.value as EngagementType)} disabled={postingType === 'fte'}>
+            <Select id="mkt-engagement" style={input} value={engagementType} onChange={(e) => setEngagementType(e.target.value as EngagementType)} disabled={postingType === 'fte'}>
               {ENGAGEMENT_TYPES.map((v) => <option key={v} value={v}>{t(`engagementType.${v}`)}</option>)}
-            </select>
+            </Select>
           </div>
         </div>
 
@@ -105,10 +106,10 @@ export function PublishToMarketplaceModal({
           </div>
           <div>
             <label style={labelStyle} htmlFor="mkt-vis">{t('publish.visibility')}</label>
-            <select id="mkt-vis" style={input} value={visibility} onChange={(e) => setVisibility(e.target.value as 'public' | 'private')}>
+            <Select id="mkt-vis" style={input} value={visibility} onChange={(e) => setVisibility(e.target.value as 'public' | 'private')}>
               <option value="public">{t('visibility.public')}</option>
               <option value="private">{t('visibility.private')}</option>
-            </select>
+            </Select>
           </div>
         </div>
         <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>{t('publish.rateHint')}</p>

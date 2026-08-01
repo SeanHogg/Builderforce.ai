@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { reposApi, type ProjectRepository } from '@/lib/builderforceApi';
+import { Select } from '@/components/Select';
 
 /**
  * Onboarding step: attach one-or-many source repositories (GitHub / GitLab /
@@ -91,9 +92,11 @@ export function WizardReposStep({ projectId }: { projectId: number }) {
       )}
 
       <form onSubmit={add} style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 0.8fr) 1fr 1fr auto', gap: 8, alignItems: 'end' }}>
-        <select value={provider} onChange={(e) => setProvider(e.target.value)} style={inputStyle} aria-label={t('provider')}>
+        {/* Themed Select, not a native <select>: the native popup ignores our dark
+            theme tokens and paints white-on-blue. See components/Select.tsx. */}
+        <Select value={provider} onChange={(e) => setProvider(e.target.value)} style={{ ...inputStyle, width: '100%' }} aria-label={t('provider')}>
           {PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-        </select>
+        </Select>
         <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder={t('ownerPlaceholder')} style={inputStyle} aria-label={t('owner')} />
         <input value={repo} onChange={(e) => setRepo(e.target.value)} placeholder={t('repoPlaceholder')} style={inputStyle} aria-label={t('repo')} />
         <button type="submit" disabled={busy || !owner.trim() || !repo.trim()} style={{

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TaskService } from './TaskService';
-import { EpicDecomposer, heuristicEpicDecomposer } from './EpicDecomposer';
+import { EpicDecomposer, heuristicEpicDecomposer, checklistItemTitle } from './EpicDecomposer';
 import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { IProjectRepository } from '../../domain/project/IProjectRepository';
 import { Task } from '../../domain/task/Task';
@@ -102,8 +102,31 @@ function makeProject(): Project {
 function makeService(decomposer?: EpicDecomposer) {
   const repo = new InMemoryTaskRepo();
   const projects = new InMemoryProjectRepo(makeProject());
-  const service = new TaskService(repo, projects, decomposer);
-  return { repo, service };
+  /** Records the precedence edges fan-out asks for, so sequencing is assertable. */
+  const edges: Array<{ predecessorTaskId: number; successorTaskId: number }> = [];
+  const service = new TaskService(repo, projects, decomposer, undefined,
+    async (_projectId, predecessorTaskId, successorTaskId) => {
+      edges.push({ predecessorTaskId, successorTaskId });
+    });
+  return { repo, service, edges };
+}
+
+/** A bare unsaved task, for exercising a decomposer's `assess` directly. */
+function makeTask(title: string, description: string | null): Task {
+  return Task.create({
+    projectId: PROJECT_ID,
+    title,
+    description,
+    status: undefined as never,
+    priority: undefined as never,
+    assignedAgentType: null,
+    assignedAgentHostId: null,
+    startDate: null,
+    dueDate: null,
+    persona: null,
+    projectKey: 'ACME',
+    lastKeySeq: 0,
+  });
 }
 
 describe('heuristicEpicDecomposer', () => {
@@ -145,6 +168,56 @@ describe('heuristicEpicDecomposer', () => {
     const plan = await heuristicEpicDecomposer.assess(task);
     expect(plan.isEpic).toBe(false);
     expect(plan.children).toHaveLength(0);
+  });
+});
+
+describe('checklistItemTitle — what is NOT a work item', () => {
+  it('rejects a markdown sub-header masquerading as a bullet', () => {
+    // The exact shape that filled the board with markdown fragments.
+    expect(checklistItemTitle('- **API Endpoints**:')).toBeNull();
+    expect(checklistItemTitle('  - **Data Model**:')).toBeNull();
+    expect(checklistItemTitle('### Data model')).toBeNull();
+  });
+
+  it('keeps the CLAUSE after a leading label and drops the label', () => {
+    expect(checklistItemTitle('- **Data Model**: Create a Capability entity'))
+      .toBe('Create a Capability entity');
+    expect(checklistItemTitle('- **Health Score**: Compute a simple health score'))
+      .toBe('Compute a simple health score');
+  });
+
+  it('rejects a one-word category', () => {
+    expect(checklistItemTitle('- Backend')).toBeNull();
+    expect(checklistItemTitle('- **Testing**')).toBeNull();
+  });
+
+  it('still accepts ordinary checklist work', () => {
+    expect(checklistItemTitle('- [ ] Design the schema')).toBe('Design the schema');
+    expect(checklistItemTitle('* Add the invite route')).toBe('Add the invite route');
+    expect(checklistItemTitle('1. Wire the webhook handler')).toBe('Wire the webhook handler');
+  });
+
+  it('ignores prose that is not a bullet at all', () => {
+    expect(checklistItemTitle('Just fix the typo on the login page.')).toBeNull();
+    expect(checklistItemTitle('')).toBeNull();
+  });
+});
+
+describe('heuristicEpicDecomposer — document guard', () => {
+  it('refuses to shred a long document into tickets', async () => {
+    const doc = Array.from({ length: 30 }, (_, i) => `- Implement the thing number ${i}`).join('\n');
+    const task = makeTask('Big spec', doc);
+    const plan = await heuristicEpicDecomposer.assess(task);
+    // 30 parsed bullets means this is a spec, not a checklist.
+    expect(plan.isEpic).toBe(false);
+    expect(plan.children).toHaveLength(0);
+  });
+
+  it('reports itself as the heuristic source', async () => {
+    const plan = await heuristicEpicDecomposer.assess(
+      makeTask('Build onboarding', '- [ ] Design the schema\n- [ ] Add the API routes'),
+    );
+    expect(plan.source).toBe('heuristic');
   });
 });
 
@@ -257,6 +330,7 @@ describe('TaskService on-assign decomposition', () => {
       async assess() {
         return {
           isEpic: true,
+          source: 'llm' as const,
           children: [
             { title: 'Backend', assignedAgentRef: 'agent-be' },
             { title: 'Frontend', assignedUserId: 'user-fe' },
@@ -276,6 +350,116 @@ describe('TaskService on-assign decomposition', () => {
   });
 });
 
+describe('TaskService.decomposeEpic — scheduling + sequencing (0364)', () => {
+  const plan: EpicDecomposer = {
+    async assess() {
+      return {
+        isEpic: true,
+        source: 'llm' as const,
+        children: [
+          { title: 'Design the schema', estimateDays: 3 },
+          { title: 'Build the API', estimateDays: 2, dependsOnIndex: 0 },
+          { title: 'Write the docs', estimateDays: 1 },
+        ],
+      };
+    },
+  };
+
+  it('gives every fanned-out child a real start AND due date', async () => {
+    const { repo, service } = makeService(plan);
+    const epic = await service.createTask(
+      { projectId: PROJECT_ID as number, title: 'Onboarding', assignedAgentRef: 'planner' },
+      TENANT as number,
+    );
+    const children = await repo.findChildren(epic.id);
+    expect(children).toHaveLength(3);
+    for (const child of children) {
+      expect(child.startDate).toBeInstanceOf(Date);
+      expect(child.dueDate).toBeInstanceOf(Date);
+      expect(child.dueDate!.getTime()).toBeGreaterThanOrEqual(child.startDate!.getTime());
+    }
+  });
+
+  it('starts a dependent child AFTER its predecessor finishes, and parallel work together', async () => {
+    const { repo, service } = makeService(plan);
+    const epic = await service.createTask(
+      { projectId: PROJECT_ID as number, title: 'Onboarding', assignedAgentRef: 'planner' },
+      TENANT as number,
+    );
+    const children = await repo.findChildren(epic.id);
+    const byTitle = new Map(children.map((c) => [c.title, c]));
+    const design = byTitle.get('Design the schema')!;
+    const api = byTitle.get('Build the API')!;
+    const docs = byTitle.get('Write the docs')!;
+
+    expect(api.startDate!.getTime()).toBeGreaterThan(design.dueDate!.getTime());
+    // 'Write the docs' declared no dependency, so it runs alongside the first item.
+    expect(docs.startDate!.getTime()).toBe(design.startDate!.getTime());
+  });
+
+  it('records the declared sequence as a real precedence edge', async () => {
+    const { repo, service, edges } = makeService(plan);
+    const epic = await service.createTask(
+      { projectId: PROJECT_ID as number, title: 'Onboarding', assignedAgentRef: 'planner' },
+      TENANT as number,
+    );
+    const children = await repo.findChildren(epic.id);
+    const design = children.find((c) => c.title === 'Design the schema')!;
+    const api = children.find((c) => c.title === 'Build the API')!;
+    expect(edges).toEqual([
+      { predecessorTaskId: design.id as number, successorTaskId: api.id as number },
+    ]);
+  });
+
+  it('back-fills the undated Epic with the span of its children', async () => {
+    const { repo, service } = makeService(plan);
+    const epic = await service.createTask(
+      { projectId: PROJECT_ID as number, title: 'Onboarding', assignedAgentRef: 'planner' },
+      TENANT as number,
+    );
+    const stored = (await repo.findById(epic.id))!;
+    const children = await repo.findChildren(epic.id);
+    const earliest = Math.min(...children.map((c) => c.startDate!.getTime()));
+    const latest = Math.max(...children.map((c) => c.dueDate!.getTime()));
+    expect(stored.startDate!.getTime()).toBe(earliest);
+    expect(stored.dueDate!.getTime()).toBe(latest);
+  });
+
+  it('stamps WHICH decomposer produced the plan', async () => {
+    const { repo, service } = makeService(plan);
+    const epic = await service.createTask(
+      { projectId: PROJECT_ID as number, title: 'Onboarding', assignedAgentRef: 'planner' },
+      TENANT as number,
+    );
+    expect((await repo.findById(epic.id))!.decompositionSource).toBe('llm');
+  });
+
+  it('refuses to duplicate children on a second decompose, and reconciles with replace', async () => {
+    const { repo, service } = makeService(plan);
+    const epic = await service.createTask(
+      { projectId: PROJECT_ID as number, title: 'Onboarding', assignedAgentRef: 'planner' },
+      TENANT as number,
+    );
+    const first = await repo.findChildren(epic.id);
+    expect(first).toHaveLength(3);
+
+    await expect(
+      service.decomposeEpic(epic.id as number, [{ title: 'Design the schema' }]),
+    ).rejects.toThrow(/already decomposed/i);
+    expect(await repo.findChildren(epic.id)).toHaveLength(3);
+
+    // With replace, a title that already exists is re-scheduled, not re-created.
+    await service.decomposeEpic(
+      epic.id as number,
+      [{ title: 'Design the schema' }, { title: 'Add the audit trail' }],
+      { replace: true },
+    );
+    const after = await repo.findChildren(epic.id);
+    expect(after).toHaveLength(4);
+    expect(after.filter((c) => c.title === 'Design the schema')).toHaveLength(1);
+  });
+});
+
 describe('TaskService.getEpicTree', () => {
   it('returns the Epic and its direct children', async () => {
     const { service } = makeService();
@@ -283,13 +467,15 @@ describe('TaskService.getEpicTree', () => {
       {
         projectId: PROJECT_ID as number,
         title: 'Build onboarding',
-        description: '- [ ] A\n- [ ] B',
+        // Multi-word items on purpose: a single-word bullet is a category, not an
+        // assignable unit of work, and the parser now rejects it.
+        description: '- [ ] Add the invite route\n- [ ] Add the welcome email',
         assignedAgentRef: 'ide-agent-9',
       },
       TENANT as number,
     );
     const tree = await service.getEpicTree(epic.id as number);
     expect(tree.epic.id).toBe(epic.id);
-    expect(tree.children.map(c => c.title)).toEqual(['A', 'B']);
+    expect(tree.children.map(c => c.title)).toEqual(['Add the invite route', 'Add the welcome email']);
   });
 });

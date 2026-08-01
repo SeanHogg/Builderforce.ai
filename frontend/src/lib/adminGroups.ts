@@ -33,9 +33,11 @@ export interface AdminGroupMeta {
 export const ADMIN_GROUP_META: AdminGroupMeta[] = [
   { id: '', labelKey: 'tab.adminOverview', icon: '🩺', subs: [
     { id: '', subKey: 'health', icon: '🩺' },
+    { id: 'cron', subKey: 'cron', icon: '⏱' },
   ] },
   { id: 'users', labelKey: 'tab.adminUsers', icon: '👤', subs: [
     { id: '', subKey: 'directory', icon: '👤' },
+    { id: 'sessions', subKey: 'sessions', icon: '🧠' },
     { id: 'security', subKey: 'security', icon: '🔒' },
     { id: 'emulation', subKey: 'emulation', icon: '🕵️' },
   ] },
@@ -61,10 +63,14 @@ export const ADMIN_GROUP_META: AdminGroupMeta[] = [
   { id: 'growth', labelKey: 'tab.adminGrowth', icon: '💳', subs: [
     { id: '', subKey: 'billing', icon: '💳' },
     { id: 'newsletter', subKey: 'newsletter', icon: '✉️' },
+    { id: 'releaseNotes', subKey: 'releaseNotes', icon: '📣' },
+    { id: 'demoFunnel', subKey: 'demoFunnel', icon: '🎬' },
+    { id: 'salesLeads', subKey: 'salesLeads', icon: '📇' },
   ] },
   { id: 'logs', labelKey: 'tab.adminLogs', icon: '📋', subs: [
     { id: '', subKey: 'errors', icon: '🐞' },
     { id: 'audit', subKey: 'audit', icon: '📋' },
+    { id: 'feedback', subKey: 'feedback', icon: '💬' },
   ] },
   { id: 'developer', labelKey: 'tab.adminDeveloper', icon: '🔑', subs: [
     { id: '', subKey: 'apiKeys', icon: '🔑' },
