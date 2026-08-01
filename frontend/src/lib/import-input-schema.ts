@@ -181,13 +181,17 @@ export type DryRunResult = {
  * Determine if a record is fully valid (all required fields present and non-empty if required).
  */
 export function isRecordValid(record: Partial<BaseRecord>, overrideRequireds?: Record<string, boolean>): boolean {
+  // Record kinds may add fields at runtime, so validation necessarily reads by
+  // schema key. Keep BaseRecord strict for callers and widen only this lookup
+  // boundary instead of adding an `any` index signature to the public type.
+  const values = record as Readonly<Record<string, unknown>>;
   for (const kind in RECORD_KINDS) {
     const fields = RECORD_KINDS[kind].availableFields;
     for (const key in fields) {
       const field = fields[key];
       const required = overrideRequireds?.[key] ?? field.required;
-      if (required || record[key]) {
-        const value = record[key];
+      if (required || values[key]) {
+        const value = values[key];
         if (!value || String(value).trim() === '') {
           return false;
         }
