@@ -33,7 +33,7 @@ import { isAwaitingApprovalExecution } from '@/lib/builderforceApi';
 import { fetchProjects } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
 import { updateAgent } from '@/lib/api';
-import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData } from './creationObjectRegistry';
+import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition } from './creationObjectRegistry';
 import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
@@ -1050,7 +1050,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     parameters: { type: 'object', properties: {}, additionalProperties: false },
     run: () => ({
       scope: resolvedScopeMode,
-      objects: scopedNodes.map((node) => ({ id: node.id, kind: node.data.kind, title: node.data.title, status: node.data.status, content: node.data.subtitle })),
+      objects: scopedNodes.map((node) => ({ id: node.id, ...creationObjectDefinition(node.data.kind).contextAdapter(node.data) })),
       connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
     }),
   }, {
@@ -1116,7 +1116,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const request = requestText;
       const snapshot = JSON.stringify({
         sessionId, scope: resolvedScopeMode, selectedObjectIds: effectiveSelectedIds,
-        objects: scopedNodes.map((node) => ({ id: node.id, kind: node.data.kind, title: node.data.title, status: node.data.status, content: node.data.subtitle, position: node.position })),
+        objects: scopedNodes.map((node) => ({ id: node.id, ...creationObjectDefinition(node.data.kind).contextAdapter(node.data), position: node.position })),
         connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
       });
       setPrompt('');

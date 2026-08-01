@@ -17,7 +17,9 @@ describe('CreationCanvas with the real XYFlow store', { timeout: 15_000 }, () =>
     render(<CreationCanvas sessionId={sessionId} persistence="local" />);
 
     await waitFor(() => expect(screen.getAllByText('Build a new website').length).toBeGreaterThan(0));
-    await new Promise((resolve) => window.setTimeout(resolve, 250));
+    // The initial prompt auto-submits after hydration. Stay mounted through that
+    // update as well; the production failure appeared after the first store sync.
+    await new Promise((resolve) => window.setTimeout(resolve, 1_200));
     expect(errors.map((args) => args.join(' ')).join('\n')).not.toMatch(/maximum update depth|error #185/i);
   });
 });

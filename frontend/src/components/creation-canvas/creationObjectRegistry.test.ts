@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, availableCreationObjects, createDefaultCreationData, creationObjectDefinition } from './creationObjectRegistry';
+import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, availableCreationObjects, createDefaultCreationData, creationObjectAiContext, creationObjectDefinition } from './creationObjectRegistry';
 import { CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
 
 describe('creation object registry', () => {
@@ -28,5 +28,24 @@ describe('creation object registry', () => {
     expect(base).toContain('workflow');
     expect(base).not.toContain('evermind');
     expect(availableCreationObjects(new Set(['evermind'])).map((definition) => definition.kind)).toContain('evermind');
+  });
+
+  it('retains structured evidence while excluding rows, prompts, and secrets from Brain context', () => {
+    const context = creationObjectAiContext({
+      kind: 'projectComparison', title: 'Alpha vs Beta', status: 'Live evidence', fetchedAt: '2026-08-01T00:00:00.000Z',
+      projects: [{ name: 'Alpha', health: 91, features: ['Canvas'] }],
+      sources: [{ label: 'Project metrics', resource: '/api/projects' }],
+      columns: ['customer', 'request'], rowCount: 12_000,
+      rows: [{ customer: 'private customer', request: 'secret request' }],
+      prompt: 'private prompt', secret: 'sk-do-not-send', accessToken: 'token-do-not-send',
+    });
+
+    expect(context).toMatchObject({ title: 'Alpha vs Beta', rowCount: 12_000, columns: ['customer', 'request'] });
+    expect(context.projects).toEqual([{ name: 'Alpha', health: 91, features: ['Canvas'] }]);
+    expect(context.sources).toEqual([{ label: 'Project metrics', resource: '/api/projects' }]);
+    expect(context).not.toHaveProperty('rows');
+    expect(context).not.toHaveProperty('prompt');
+    expect(context).not.toHaveProperty('secret');
+    expect(context).not.toHaveProperty('accessToken');
   });
 });

@@ -78,7 +78,39 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   project: ['expand', 'compare'], task: ['assign', 'deliver'], agent: ['inspect', 'configure', 'assign'],
   evermind: ['teach', 'train', 'evaluate', 'publish'], voice: ['record', 'play'], mcp: ['authenticate', 'execute'],
 };
-const CONTEXT_FIELDS = ['kind', 'title', 'subtitle', 'status', 'resourceId', 'model', 'role', 'focus'] as const;
+/**
+ * Explicit, content-safe fields Brain may receive from a Canvas Object.
+ * Imported rows, prompts, credentials, tokens, and arbitrary inspector state are
+ * intentionally absent. Structured evidence is retained so comparisons,
+ * evaluations, roadmaps, and charts can be grounded rather than title-only.
+ */
+const CONTEXT_FIELDS = [
+  'kind', 'title', 'subtitle', 'status', 'resourceId', 'model', 'role', 'focus',
+  'fetchedAt', 'projectLens', 'columns', 'rowCount', 'chartLabels', 'chartValues',
+  'projects', 'sources', 'items', 'summary', 'participants', 'evermindVersion',
+  'contributions', 'inferenceEnabled', 'teacherModel', 'viewport',
+] as const;
+
+function safeContextValue(value: unknown, depth = 0): unknown {
+  if (value == null || typeof value === 'boolean' || typeof value === 'number') return value;
+  if (typeof value === 'string') return value.slice(0, 2_000);
+  if (depth >= 3) return undefined;
+  if (Array.isArray(value)) return value.slice(0, 25).map((item) => safeContextValue(item, depth + 1)).filter((item) => item !== undefined);
+  if (typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, 30).flatMap(([key, item]) => {
+      const safe = safeContextValue(item, depth + 1);
+      return safe === undefined ? [] : [[key, safe]];
+    }));
+  }
+  return undefined;
+}
+
+export function creationObjectAiContext(data: CreationNodeData): Record<string, unknown> {
+  return Object.fromEntries(CONTEXT_FIELDS.flatMap((field) => {
+    const value = safeContextValue(data[field]);
+    return value === undefined ? [] : [[field, value]];
+  }));
+}
 
 export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = BASE_CREATION_OBJECT_REGISTRY.map((definition) => ({
   ...definition,
@@ -87,7 +119,7 @@ export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = BAS
   inspector: 'creation' as const,
   actions: ACTIONS[definition.kind] ?? ['inspect'],
   allowedConnections: CREATION_CONNECTION_KINDS,
-  contextAdapter: (data: CreationNodeData) => Object.fromEntries(CONTEXT_FIELDS.flatMap((field) => data[field] == null ? [] : [[field, data[field]]])),
+  contextAdapter: creationObjectAiContext,
   previewAdapter: (data: CreationNodeData) => ({ kind: data.kind, title: data.title, ...(data.status ? { status: data.status } : {}) }),
 }));
 
