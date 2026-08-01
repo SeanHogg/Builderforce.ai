@@ -879,15 +879,15 @@ Use XYFlow as the one spatial engine. Do not nest `CanvasBoard` or a second Reac
 - Use a native VSIX webview backed by a shared package, not iframe embedding.
 - Represent ten feature mockups as an expandable Mockup Set by default to avoid canvas overload; users can expand all.
 
-### Open questions to resolve before Phase 1 exit
+### Phase 1 decisions (resolved)
 
-- Should personal sessions default to tenant-visible or private-to-creator?
-- Which user fields are permitted for automatic tenant naming in each authentication path?
-- Is the starter Project always provisioned or only after the tutorial’s delivery step?
-- Session retention/storage limits by plan.
-- Whether archived sessions appear in global search by default.
-- Whether Project open should prefer the user’s last session or a shared canonical project session.
-- Which object types require hard editing locks versus CRDT collaboration.
+- Personal Sessions default to creator-private; tenant visibility requires an explicit invitation/share action.
+- Automatic workspace naming uses company/organization name when supplied, then a sanitized display name, then the email local part. Invited users always join the inviter’s workspace and never trigger a second workspace.
+- Starter Project creation is lazy and best-effort at the tutorial’s delivery step. A failed Project provision never blocks a usable Session.
+- Session/artifact/history retention and storage use the plan quota service; the UI warns before the API rejects a quota-consuming action.
+- Archived Sessions are excluded from global search by default and included through an explicit status filter.
+- Opening a Project prefers the user’s most-recent accessible Session containing that Project; otherwise it creates or opens the shared canonical wrapper Session.
+- Geometry, cursors, selection, comments, drawings, notes, and frame layout use optimistic collaborative commands. Canonical resource content uses the authoritative API and its lock/version/approval behavior; destructive multi-resource changes require preview and review.
 
 ## 31. Design references
 
@@ -1339,3 +1339,30 @@ This PRD is implemented when:
 - Web and VSIX open the same sessions and pass the shared conformance suite.
 - Migration, rollback, support, analytics, localization, accessibility, performance, and operational runbooks are complete.
 - No known P0/P1 security, data-loss, tenant-isolation, idempotency, or accessibility defects remain.
+
+## 48. Implementation closure and release evidence (2026-08-01)
+
+The product implementation described by this PRD is complete in the repository. Production rollout remains an operational gate: it can only be attested after the deployed internal/opt-in soak and telemetry thresholds in `docs/design/creation-canvas/OPERATIONS.md` have passed.
+
+| Requirement | Implementation evidence |
+| --- | --- |
+| CS-001–CS-005 | Tenant-optional session creation, local guest snapshots, claim-on-auth, revisioned graph persistence, geometry/connection commands, and scoped composer in `api/src/application/creation/creationSessionRouteService.ts`, `frontend/src/lib/creationSessions.ts`, and `frontend/src/components/creation-canvas/CreationCanvas.tsx`. |
+| CS-006–CS-008 | Shared typed registry, live renderers/inspectors, canonical resource saves, idempotent command batches, snapshots, restore, and conflict reconciliation in `frontend/src/components/creation-canvas/creationObjectRegistry.ts`, `CreationNode.tsx`, and migrations 0388–0390. |
+| CS-009–CS-014 | Homepage prompt → local Session, Dashboard Create cards, `/create/new`, compatibility adapters, intersection authorization, and project-independent onboarding in the homepage, dashboard, route adapters, API route service, and Creation Canvas tutorial. |
+| CS-015–CS-016 | Invitations/roles, presence/cursors/selections, comments/mentions/activity plus the complete creation object catalog in the API route service and canvas registry. |
+| CS-017–CS-023 | Project lens expansion, cited multi-project comparison, persistent evaluations, selectable AI change sets, artifact/task/Agent delivery, top-feature Mockup Sets, Roadmaps, and Slides in `CreationCanvas.tsx` and canonical project/task/runtime clients. |
+| CS-024–CS-026 | Viewer/Commenter/Editor/Runner/Owner roles, consolidated primary navigation with legacy URL adapters, Edge route registration, and native VSIX full-editor Creation Sessions in `clients/vscode/src/creationCanvasPanel.ts`. |
+| CS-027 | Presentation mode, opt-in collaborator viewport follow, named checkpoints, revision restore, and personal viewport persistence in `CreationCanvas.tsx` and the history/presence APIs. |
+| CS-028 | Six capability-safe Marketplace session/object packs (Campaign, Product discovery, Data story, Stand-up, Evermind model lab, Executive review) in `creationTemplates.ts`, surfaced from the in-canvas template library. |
+| CS-029 | Real pointer-based freehand paths, editable stroke controls, spatial frames, frame colors/purpose, and private reusable frame presets in `CreationCanvas.tsx`, `CreationNode.tsx`, and canvas CSS. |
+| CS-030 | Durable independent Session branches and an explicit per-object branch/parent resolution panel before revision-checked merge into the parent. |
+
+### Cross-cutting evidence
+
+- **Edge/runtime:** `/create/[sessionId]`, `/create/new`, and `/creation-canvas` declare the Edge runtime and pass production build registration.
+- **Security/data integrity:** tenant/member checks, canonical-resource access intersection, idempotency keys, If-Match revision handling, additive migrations, snapshots, and rollback guidance are implemented and covered by API/schema/tenant-scope suites.
+- **Accessibility:** keyboard selection/deletion, accessible object palette and controls, explicit labels, structured canvas outline, reduced visual chrome in presentation mode, and responsive mobile inspector/composer behavior are present.
+- **Analytics:** creation product signals use the shared activity queue and omit prompt/object content; server event/snapshot history supplies operational revision and command evidence.
+- **Localization:** the marketing entry flow is updated in all five catalogs; fixed terminology and locale formatting requirements remain enforced by the catalog parity tests and existing internationalization layer.
+- **Operations:** deploy, smoke, observation, rollout, support, and rollback procedures live in `docs/design/creation-canvas/OPERATIONS.md`.
+- **Marketing:** the homepage, feature catalog, Product mega-menu/specifications, dedicated `/creation-canvas` page, and Creation Canvas launch article set reflect the unified Session model.

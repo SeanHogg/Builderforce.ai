@@ -5386,16 +5386,16 @@
     }
   },
   "home": {
-    "heroBadge": "Human-in-the-Loop · Vollständig agentische Cloud",
-    "heroTitle": "Sehen Sie die Zukunft, <em>klar</em>",
-    "heroSub": "Die Innovationsplattform für die agentische Ära – eine Belegschaft aus Menschen und KI-Agenten auf einem einzigen Board.",
-    "heroPromptPlaceholder": "Beschreiben Sie, was Ihre KI-Belegschaft tun soll…",
-    "heroPromptAria": "Beschreiben Sie, was Ihre KI-Belegschaft tun soll",
-    "heroGetStarted": "Loslegen",
+    "heroBadge": "Eine Leinwand · Menschen + KI-Agenten",
+    "heroTitle": "Vorstellen. <em>Gemeinsam bauen.</em>",
+    "heroSub": "Beginnen Sie mit einem Prompt und erstellen Sie Workflows, Websites, Datengeschichten, Modelle, Sprach-Erlebnisse und echte Ergebnisse in einer visuellen Sitzung.",
+    "heroPromptPlaceholder": "Was möchten Sie erstellen?",
+    "heroPromptAria": "Beschreiben Sie, was Sie erstellen möchten",
+    "heroGetStarted": "Jetzt erstellen",
     "heroExamples": [
-      "Mein Repository auf Sicherheitsprobleme prüfen",
-      "Jira verbinden und diesen Sprint zusammenfassen",
-      "Einen Kundensupport-Agenten bauen & trainieren"
+      "Eine Kampagne und ihre Landingpage entwerfen",
+      "Kundenfeedback visualisieren und Top-Funktionen gestalten",
+      "Einen Kundensupport-Agenten bauen, bewerten und ausliefern"
     ],
     "evermindHeadingSuffix": "Ein Modell, das beim Arbeiten lernt – und nie veraltet",
     "pillarsHeading": "Human in the Loop. Vollständig agentisch.",

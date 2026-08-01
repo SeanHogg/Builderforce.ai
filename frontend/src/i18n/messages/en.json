@@ -5386,16 +5386,16 @@
     }
   },
   "home": {
-    "heroBadge": "Human-in-the-loop · Fully agentic cloud",
-    "heroTitle": "See the future, <em>clearly</em>",
-    "heroSub": "The innovation platform for the agentic era — one workforce of humans and AI agents, on a single board.",
-    "heroPromptPlaceholder": "Describe what you want your AI workforce to do…",
-    "heroPromptAria": "Describe what you want your AI workforce to do",
-    "heroGetStarted": "Get started",
+    "heroBadge": "One canvas · Humans + AI agents",
+    "heroTitle": "Imagine it. <em>Build it together.</em>",
+    "heroSub": "Start with a prompt, then create workflows, websites, data stories, models, voice experiences, and real delivery in one visual session.",
+    "heroPromptPlaceholder": "What do you want to create?",
+    "heroPromptAria": "Describe what you want to create",
+    "heroGetStarted": "Start creating",
     "heroExamples": [
-      "Audit my repo for security issues",
-      "Connect Jira and summarize this sprint",
-      "Build & train a customer-support agent"
+      "Design a campaign and its landing page",
+      "Visualize customer feedback and mock up the top features",
+      "Build, evaluate, and deliver a customer-support agent"
     ],
     "evermindHeadingSuffix": "A model that learns as it works — and never goes stale",
     "pillarsHeading": "Human in the loop. Fully agentic.",
@@ -5732,32 +5732,32 @@
     "sections": [
       {
         "id": "build",
-        "title": "Build & Train",
-        "blurb": "Go from an idea to a trained, evaluated AI agent — all in the browser.",
+        "title": "Create",
+        "blurb": "Move from a prompt to working artifacts and delivery without changing surfaces or organizing a project first.",
         "surfaces": [
           {
-            "title": "Evermind",
-            "desc": "The brain of the platform — a self-updating model governed by Write-Through Cognition. New knowledge replaces what came before with no reconciliation step, and it runs on WebGPU in the browser, on-device, or inside every agent."
+            "title": "Creation Canvas",
+            "desc": "One infinite multiplayer canvas for conversation, workflows, websites, data, prototypes, models, voice, people, agents, and optional project context."
           },
           {
-            "title": "Dashboard",
-            "desc": "Your command center: workspace health, recent runs, and what your AI workforce is doing right now."
+            "title": "Session Library",
+            "desc": "Visual session cards are the first Dashboard view. Search, pin, duplicate, archive, branch, merge, or return to any creative context."
           },
           {
-            "title": "Brain Storm",
-            "desc": "Describe what you need in plain language; the Brain turns it into projects, datasets, and agents."
+            "title": "Workflows & Evaluation",
+            "desc": "Design and run workflows in place, connect them to websites or data, and ask Brain for a cited cross-object evaluation before applying changes."
           },
           {
-            "title": "IDE Workspace",
-            "desc": "Monaco editor, terminal, AI chat, and file explorer in one collaborative project workspace."
+            "title": "Websites, Data & Prototypes",
+            "desc": "Import datasets, build live charts and dashboards, create WYSIWYG interactive prototypes, and bind evidence to the experience on one canvas."
           },
           {
-            "title": "Training",
-            "desc": "In-browser WebGPU LoRA fine-tuning up to 2B parameters with a live evaluation engine — zero GPU bills. Train a custom agent, then call it from inside your own agent."
+            "title": "Evermind, LLM & Voice",
+            "desc": "Create, teach, tune, evaluate, package, and operate models and voice experiences as connected canvas objects."
           },
           {
-            "title": "VS Code Extension",
-            "desc": "Run the whole platform from your editor — chat with agents, assign and run tasks, review and validate their work, and approve actions without leaving VS Code."
+            "title": "Creation Canvas for VS Code",
+            "desc": "Open the same tenant session in a native full editor tab, with repository, selection, diagnostics, terminal output, and preview context."
           }
         ]
       },

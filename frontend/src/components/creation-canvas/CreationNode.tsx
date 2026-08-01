@@ -104,11 +104,22 @@ function StandupBody({ data }: { data: CreationNodeData }) {
   </div>;
 }
 
+function DrawingBody({ data }: { data: CreationNodeData }) {
+  const points = Array.isArray(data.points)
+    ? data.points.filter((point): point is { x: number; y: number } => !!point && typeof point === 'object' && typeof (point as { x?: unknown }).x === 'number' && typeof (point as { y?: unknown }).y === 'number')
+    : [];
+  const path = points.map((point, index) => `${index ? 'L' : 'M'} ${point.x} ${point.y}`).join(' ');
+  return <svg className={styles.drawingSurface} viewBox={`0 0 ${Number(data.drawingWidth) || 240} ${Number(data.drawingHeight) || 120}`} role="img" aria-label={data.title} preserveAspectRatio="none">
+    {path ? <path d={path} fill="none" stroke={String(data.stroke || '#5b5ce2')} strokeWidth={Number(data.strokeWidth) || 3} strokeLinecap="round" strokeLinejoin="round" /> : <text x="12" y="28">Select Draw, then sketch on the canvas</text>}
+  </svg>;
+}
+
 export function CreationNode({ data, selected }: NodeProps<CreationFlowNode>) {
   const isWide = data.kind === 'workflow' || data.kind === 'website' || data.kind === 'prototype' || data.kind === 'dashboard' || data.kind === 'chart' || data.kind === 'report' || data.kind === 'evaluation' || data.kind === 'roadmap' || data.kind === 'slides' || data.kind === 'featureSummary' || data.kind === 'mockupSet' || data.kind === 'evermind' || data.kind === 'projectComparison' || data.kind === 'frame';
-  const specialized = new Set(['workflow','website','prototype','dashboard','chart','report','evaluation','agent','staff','chat','dataset','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup']);
+  const specialized = new Set(['workflow','website','prototype','dashboard','chart','report','evaluation','agent','staff','chat','dataset','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame']);
+  const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || '#f8f6ff'), borderColor: String(data.frameBorder || '#9d8bea') } : undefined;
   return (
-    <article className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
+    <article style={frameStyle} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
       <NodeResizer isVisible={selected} minWidth={240} minHeight={130} lineClassName={styles.resizeLine} handleClassName={styles.resizeHandle} />
       <Handle type="target" position={Position.Left} className={styles.handle} />
       <header className={styles.nodeHeader}>
@@ -137,6 +148,8 @@ export function CreationNode({ data, selected }: NodeProps<CreationFlowNode>) {
         {data.kind === 'evermind' && <EvermindBody data={data} />}
         {data.kind === 'projectComparison' && <ProjectComparisonBody data={data} />}
         {data.kind === 'standup' && <StandupBody data={data} />}
+        {data.kind === 'drawing' && <DrawingBody data={data} />}
+        {data.kind === 'frame' && <div className={styles.frameBody}><strong>{String(data.framePurpose || 'Arrange related objects here')}</strong><p>{data.subtitle || 'A reusable spatial section for presentation, facilitation, or review.'}</p></div>}
         {!specialized.has(data.kind) && <><p>{data.subtitle || `${creationObjectDefinition(data.kind).label} is ready to connect, edit, and use as Brain context.`}</p><div className={styles.pills}><span>{data.status || 'Canvas object'}</span><span>Live session context</span></div></>}
       </div>
       <Handle type="source" position={Position.Right} className={styles.handle} />

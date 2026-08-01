@@ -127,6 +127,12 @@ export interface Feature {
 
 export const FEATURES: Feature[] = [
   {
+    icon: '✦',
+    title: 'Creation Canvas — Build Everything in One Session',
+    shortDesc: 'Chat, workflows, websites, data, models, people, and delivery on one multiplayer canvas.',
+    longDesc: 'Start with a prompt—without choosing a project or creating an account—and build in a durable spatial session. Drag in workflows, live websites, datasets, dashboards, Evermind models, voice, humans, and agents; ask Brain to reason across them; review proposed changes; then deliver approved mockups into projects, tasks, and agent execution. Sessions support local-to-account claiming, live cursors and comments, presentation/follow mode, version checkpoints, reusable Marketplace packs, freehand drawing, and reviewed branch merges on web and in VS Code.',
+  },
+  {
     icon: '🧠',
     title: 'Evermind — The Self-Updating Model',
     shortDesc: 'A model that learns as it works and never goes stale.',
@@ -1369,15 +1375,15 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
   {
     id: 'build',
     icon: '🛠',
-    title: 'Build & Train',
-    blurb: 'Go from an idea to a trained, evaluated AI agent — all in the browser.',
+    title: 'Create',
+    blurb: 'Move from a prompt to working artifacts and delivery without changing surfaces or organizing a project first.',
     surfaces: [
-      { icon: '🧠', title: 'Evermind', desc: 'The brain of the platform — a self-updating model governed by Write-Through Cognition. New knowledge replaces what came before with no reconciliation step, and it runs on WebGPU in the browser, on-device, or inside every agent.', href: '/evermind' },
-      { icon: '🏠', title: 'Dashboard', desc: 'Your command center: workspace health, recent runs, and what your AI workforce is doing right now.', href: '/dashboard' },
-      { icon: '💡', title: 'Brain Storm', desc: 'Describe what you need in plain language; the Brain turns it into projects, datasets, and agents.', href: '/brainstorm' },
-      { icon: '💻', title: 'IDE Workspace', desc: 'Monaco editor, terminal, AI chat, and file explorer in one collaborative project workspace.', href: '/ide' },
-      { icon: '🎓', title: 'Training', desc: 'In-browser WebGPU LoRA fine-tuning up to 2B parameters with a live evaluation engine — zero GPU bills. Train a custom agent, then call it from inside your own agent.', href: '/training' },
-      { icon: '🧩', title: 'VS Code Extension', desc: 'Run the whole platform from your editor — chat with agents, assign and run tasks, review and validate their work, and approve actions without leaving VS Code.', href: 'https://marketplace.visualstudio.com/items?itemName=BuilderForce.builderforce-ai' },
+      { icon: '✦', title: 'Creation Canvas', desc: 'One infinite multiplayer canvas for conversation, workflows, websites, data, prototypes, models, voice, people, agents, and optional project context.', href: '/creation-canvas' },
+      { icon: '🏠', title: 'Session Library', desc: 'Visual session cards are the first Dashboard view. Search, pin, duplicate, archive, branch, merge, or return to any creative context.', href: '/dashboard' },
+      { icon: '🔀', title: 'Workflows & Evaluation', desc: 'Design and run workflows in place, connect them to websites or data, and ask Brain for a cited cross-object evaluation before applying changes.', href: '/create' },
+      { icon: '▣', title: 'Websites, Data & Prototypes', desc: 'Import datasets, build live charts and dashboards, create WYSIWYG interactive prototypes, and bind evidence to the experience on one canvas.', href: '/create' },
+      { icon: '🧠', title: 'Evermind, LLM & Voice', desc: 'Create, teach, tune, evaluate, package, and operate models and voice experiences as connected canvas objects.', href: '/create' },
+      { icon: '🧩', title: 'Creation Canvas for VS Code', desc: 'Open the same tenant session in a native full editor tab, with repository, selection, diagnostics, terminal output, and preview context.', href: 'https://marketplace.visualstudio.com/items?itemName=BuilderForce.builderforce-ai' },
     ],
   },
   {
@@ -1386,12 +1392,12 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
     title: 'Orchestrate',
     blurb: 'Coordinate work across agents, workflows, and a mesh of remote AgentHosts.',
     surfaces: [
-      { icon: '🔀', title: 'Workflow Builder', desc: 'Compose agents and tools into repeatable, approval-gated workflows.', href: '/workflows/builder' },
+      { icon: '🔀', title: 'Workflow Execution', desc: 'Compose and run repeatable, approval-gated workflows as live objects inside Creation Sessions.', href: '/create' },
       { icon: '▦', title: 'Projects / Tasks', desc: 'Organize work into project workspaces — each with a full IDE, agents, and a task board — then plan, assign, and watch tasks flow across your agent workforce in board, table, calendar, or Gantt views.', href: '/projects' },
       { icon: '🗺️', title: 'Planning Spine & Portfolio', desc: 'One dated hierarchy — portfolio → initiative → epic → task with OKRs at any level — where every leaf\'s cost rolls up to each ancestor and is split CAPEX vs OPEX on a single Gantt. Plan, deliver, and account for work in one place.', href: '/projects?tab=portfolio' },
       { icon: '🔗', title: 'Board Connectors', desc: 'Two-way sync with Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty, and GitHub — orchestrate across the trackers you already run, with no migration.', href: '/projects?tab=connections' },
       { icon: '🕸️', title: 'Workforce Mesh', desc: 'Discover and dispatch work across local and remote AgentHosts — capacity sharing across machines and tenants.', href: '/workforce' },
-      { icon: '💬', title: 'Chats', desc: 'Talk to your agents directly, or watch them collaborate in shared conversations.', href: '/workforce?tab=chats' },
+      { icon: '💬', title: 'Session Conversations', desc: 'Use the persistent bottom composer or place movable Chat objects beside the work they discuss.', href: '/create' },
       { icon: '🧑‍🏭', title: 'Workforce Kanban & Templates', desc: 'Staff a project from a role roster of humans and AI agents on a sign-off-gated board, then buy, sell, or install ready-made board templates — lanes, required roles, review gates, and a recommended roster — from the marketplace.', href: '/projects?tab=templates' },
     ],
   },
@@ -1712,6 +1718,9 @@ export const INTEGRATION_SLUG_MAP: Record<string, IntegrationSeo> = Object.fromE
  */
 export const RELATED_ARTICLES: Record<string, string[]> = {
   product: [
+    'creation-canvas-beyond-chat',
+    'customer-feedback-to-ten-mockups',
+    'multiplayer-creation-canvas-web-vscode',
     'transitioning-to-an-agentic-workforce',
     'real-time-collaboration-humans-and-agents',
     'define-a-need-the-agentic-system-solves-it',

@@ -124,4 +124,26 @@ describe('CreationCanvas', () => {
     expect(screen.getAllByText('Sarah').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Campaign Strategist').length).toBeGreaterThan(0);
   });
+
+  it('adds a reusable Marketplace object pack to the session', () => {
+    render(<CreationCanvas sessionId="template-test" persistence="local" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Templates' }));
+    fireEvent.click(screen.getByRole('button', { name: /Product discovery/i }));
+
+    expect(screen.getByText('Product discovery added from Marketplace')).toBeInTheDocument();
+    expect(screen.getByText('Customer feedback')).toBeInTheDocument();
+    expect(screen.getByText('Opportunity evaluation')).toBeInTheDocument();
+  });
+
+  it('customizes and saves a reusable spatial frame', () => {
+    render(<CreationCanvas sessionId="frame-preset-test" persistence="local" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Frame' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Decision review' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save as reusable frame' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Templates' }));
+
+    expect(screen.getByText('Reusable frame saved to your template library')).toBeInTheDocument();
+    expect(screen.getByText('Your reusable frames')).toBeInTheDocument();
+    expect(screen.getByText('Private custom frame')).toBeInTheDocument();
+  });
 });

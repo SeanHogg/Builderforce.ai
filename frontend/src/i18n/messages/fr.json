@@ -5386,16 +5386,16 @@
     }
   },
   "home": {
-    "heroBadge": "Intervention humaine · Cloud pleinement agentique",
-    "heroTitle": "Voyez l'avenir, <em>clairement</em>",
-    "heroSub": "La plateforme d'innovation pour l'ère agentique — une seule main-d'œuvre d'humains et d'agents IA, sur un unique tableau.",
-    "heroPromptPlaceholder": "Décrivez ce que vous voulez que votre main-d'œuvre IA accomplisse…",
-    "heroPromptAria": "Décrivez ce que vous voulez que votre main-d'œuvre IA accomplisse",
-    "heroGetStarted": "Commencer",
+    "heroBadge": "Un canevas · Humains + agents IA",
+    "heroTitle": "Imaginez. <em>Créez ensemble.</em>",
+    "heroSub": "Commencez par une demande, puis créez workflows, sites, récits de données, modèles, expériences vocales et livrables dans une seule session visuelle.",
+    "heroPromptPlaceholder": "Que voulez-vous créer ?",
+    "heroPromptAria": "Décrivez ce que vous voulez créer",
+    "heroGetStarted": "Commencer à créer",
     "heroExamples": [
-      "Audite mon dépôt à la recherche de failles de sécurité",
-      "Connecte Jira et résume ce sprint",
-      "Conçois et entraîne un agent de support client"
+      "Concevoir une campagne et sa page d’arrivée",
+      "Visualiser les retours clients et maquetter les fonctions clés",
+      "Créer, évaluer et livrer un agent de support client"
     ],
     "evermindHeadingSuffix": "Un modèle qui apprend en travaillant — et ne se périme jamais",
     "pillarsHeading": "Intervention humaine. Pleinement agentique.",

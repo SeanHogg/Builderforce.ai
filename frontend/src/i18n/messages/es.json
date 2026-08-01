@@ -5386,16 +5386,16 @@
     }
   },
   "home": {
-    "heroBadge": "Intervención humana · Nube totalmente agéntica",
-    "heroTitle": "Mira el futuro, <em>con claridad</em>",
-    "heroSub": "La plataforma de innovación para la era agéntica: una fuerza de trabajo de personas y agentes de IA, en un solo tablero.",
-    "heroPromptPlaceholder": "Describe lo que quieres que haga tu fuerza de trabajo de IA…",
-    "heroPromptAria": "Describe lo que quieres que haga tu fuerza de trabajo de IA",
-    "heroGetStarted": "Comenzar",
+    "heroBadge": "Un lienzo · Personas + agentes de IA",
+    "heroTitle": "Imagínalo. <em>Créenlo juntos.</em>",
+    "heroSub": "Empieza con una instrucción y crea flujos, sitios, historias de datos, modelos, experiencias de voz y entregas reales en una sesión visual.",
+    "heroPromptPlaceholder": "¿Qué quieres crear?",
+    "heroPromptAria": "Describe lo que quieres crear",
+    "heroGetStarted": "Empezar a crear",
     "heroExamples": [
-      "Audita mi repositorio en busca de problemas de seguridad",
-      "Conecta Jira y resume este sprint",
-      "Crea y entrena un agente de atención al cliente"
+      "Diseña una campaña y su página de destino",
+      "Visualiza comentarios y diseña las funciones principales",
+      "Crea, evalúa y entrega un agente de atención al cliente"
     ],
     "evermindHeadingSuffix": "Un modelo que aprende mientras trabaja y nunca queda obsoleto",
     "pillarsHeading": "Con intervención humana. Totalmente agéntico.",

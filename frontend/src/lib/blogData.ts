@@ -58,6 +58,9 @@ import roleAccountability from '@/content/blog/role-gated-accountability-proof-o
 import rfpResponse from '@/content/blog/automated-rfp-response-from-your-codebase.md';
 import memoryFirst from '@/content/blog/memory-first-inference-skip-the-llm.md';
 import localFirstWebgpu from '@/content/blog/local-first-ai-webgpu-in-the-browser.md';
+import creationCanvasBeyondChat from '@/content/blog/creation-canvas-beyond-chat.md';
+import feedbackToMockups from '@/content/blog/customer-feedback-to-ten-mockups.md';
+import multiplayerCanvas from '@/content/blog/multiplayer-creation-canvas-web-vscode.md';
 
 export interface BlogPost {
   slug: string;
@@ -120,6 +123,9 @@ function buildPost(slug: string, raw: string): BlogPost {
 
 /** All published blog posts, sorted newest-first. */
 export const BLOG_POSTS: BlogPost[] = [
+  buildPost('creation-canvas-beyond-chat', creationCanvasBeyondChat),
+  buildPost('customer-feedback-to-ten-mockups', feedbackToMockups),
+  buildPost('multiplayer-creation-canvas-web-vscode', multiplayerCanvas),
   buildPost('getting-started-with-ai-agents', gettingStarted),
   buildPost('webgpu-lora-explained', webgpuLora),
   buildPost('multi-agent-orchestration', multiAgent),

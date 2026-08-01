@@ -5386,16 +5386,16 @@
     }
   },
   "home": {
-    "heroBadge": "人在回路 · 完全自主的云",
-    "heroTitle": "<em>清晰</em>洞见未来",
-    "heroSub": "面向智能体时代的创新平台——一支由人类与 AI 智能体组成的队伍，同处一块看板。",
-    "heroPromptPlaceholder": "描述你希望你的 AI 队伍做什么……",
-    "heroPromptAria": "描述你希望你的 AI 队伍做什么",
-    "heroGetStarted": "开始使用",
+    "heroBadge": "一个画布 · 人类 + AI 智能体",
+    "heroTitle": "尽情想象，<em>共同创造。</em>",
+    "heroSub": "从一句提示开始，在同一个可视化会话中创建工作流、网站、数据故事、模型、语音体验并交付真实成果。",
+    "heroPromptPlaceholder": "你想创造什么？",
+    "heroPromptAria": "描述你想创造的内容",
+    "heroGetStarted": "开始创作",
     "heroExamples": [
-      "审计我的代码仓库中的安全问题",
-      "连接 Jira 并总结这个冲刺",
-      "构建并训练一个客户支持智能体"
+      "设计营销活动及其落地页",
+      "可视化客户反馈并制作热门功能原型",
+      "构建、评估并交付客户支持智能体"
     ],
     "evermindHeadingSuffix": "一个在工作中持续学习、永不过时的模型",
     "pillarsHeading": "人在回路。完全自主。",

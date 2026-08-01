@@ -34,12 +34,19 @@ import { fetchProjects } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
 import { updateAgent } from '@/lib/api';
 import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData } from './creationObjectRegistry';
+import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
+import { trackActivity } from '@/lib/activity/tracker';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 type ProposedCanvasChange =
   | { id: string; type: 'object.add'; label: string; node: CreationFlowNode }
   | { id: string; type: 'object.update'; label: string; objectId: string; patch: Partial<CreationNodeData> }
   | { id: string; type: 'connection.add'; label: string; edge: Edge };
+type MergeItem = { key: string; source: CreationFlowNode; target: CreationFlowNode | null; choice: 'branch' | 'parent' };
+type MergeReview = { parentId: string; parentRevision: number; parentNodes: CreationFlowNode[]; parentEdges: Edge[]; items: MergeItem[] };
+type FramePreset = { id: string; name: string; data: CreationNodeData };
+
+const BRANCH_MARKER = /\[\[creation-branch:([0-9a-f-]{36}):(\d+)\]\]/i;
 
 function newNode(kind: CreationObjectKind, position: { x: number; y: number }): CreationFlowNode {
   return { id: crypto.randomUUID(), type: 'creation', position, data: createDefaultCreationData(kind) };
@@ -116,7 +123,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [title, setTitle] = useState('Untitled session');
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [shareOpen, setShareOpen] = useState(initialShareOpen);
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [paletteSearch, setPaletteSearch] = useState('');
   const [presentMode, setPresentMode] = useState(initialPresent);
+  const [drawingMode, setDrawingMode] = useState(false);
+  const [followingUserId, setFollowingUserId] = useState<string | null>(null);
+  const [branchParentId, setBranchParentId] = useState<string | null>(null);
+  const [mergeReview, setMergeReview] = useState<MergeReview | null>(null);
+  const [framePresets, setFramePresets] = useState<FramePreset[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<CreationSessionSummary['role']>('editor');
   const [prompt, setPrompt] = useState('Will this campaign workflow be effective with this landing page?');
@@ -148,9 +162,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const redoStack = useRef<string[]>([]);
   const historyBaseline = useRef<string | null>(null);
   const historyApplying = useRef(false);
+  const drawingPoints = useRef<Array<{ x: number; y: number }>>([]);
 
   useEffect(() => {
     if (localStorage.getItem('builderforce:create-tour-complete') !== '1') setTourStep(1);
+    try { setFramePresets(JSON.parse(localStorage.getItem('builderforce:create-frame-presets') || '[]') as FramePreset[]); } catch { setFramePresets([]); }
   }, []);
 
   useEffect(() => {
@@ -164,11 +180,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           if (saved.viewport) { viewportRef.current = saved.viewport; pendingViewport.current = saved.viewport; void flowRef.current?.setViewport(saved.viewport); }
         }
         hydrated.current = true;
+        trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: 'web', persistence: 'local' } });
         return;
       }
       void creationSessionsApi.get(sessionId).then((detail) => {
         const { nodes: loadedNodes, edges: loadedEdges } = flowFromSession(detail);
         setTitle(detail.session.title);
+        setBranchParentId(detail.session.description?.match(BRANCH_MARKER)?.[1] ?? null);
         setNodes(loadedNodes);
         setEdges(loadedEdges);
         setMembers(detail.members);
@@ -186,6 +204,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         lastSavedGraph.current = JSON.stringify({ nodes: loadedNodes, edges: loadedEdges });
         currentGraph.current = lastSavedGraph.current;
         hydrated.current = true;
+        trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: 'web', objectKinds: [...new Set(loadedNodes.map((node) => node.data.kind))] } });
         setNotice('Session saved');
       }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not load session'));
     } catch { hydrated.current = true; }
@@ -252,6 +271,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const presence = await creationSessionsApi.presence(sessionId, { revision: revision.current, viewport: viewportRef.current, cursor: cursorRef.current, selection: selectedId ? [selectedId] : [], typing: thinking });
         if (stopped) return;
         setMembers(presence.members);
+        const followed = presence.members.find((member) => member.userId === followingUserId && member.viewport && typeof member.viewport.x === 'number' && typeof member.viewport.y === 'number' && typeof member.viewport.zoom === 'number');
+        if (followed?.viewport) void flowRef.current?.setViewport({ x: Number(followed.viewport.x), y: Number(followed.viewport.y), zoom: Number(followed.viewport.zoom) }, { duration: 350 });
         if (presence.currentUserId) setCurrentUserId(presence.currentUserId);
         if (presence.revision <= revision.current || saveInFlight.current || currentGraph.current !== lastSavedGraph.current) return;
         const detail = await creationSessionsApi.get(sessionId);
@@ -271,7 +292,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     void reconcile();
     const timer = window.setInterval(() => void reconcile(), 8_000);
     return () => { stopped = true; window.clearInterval(timer); };
-  }, [persistence, selectedId, sessionId, setEdges, setNodes, thinking]);
+  }, [followingUserId, persistence, selectedId, sessionId, setEdges, setNodes, thinking]);
 
   const selectedNode = nodes.find((node) => node.id === selectedId) ?? null;
   const scopeLabel = selectedNode ? `${selectedNode.data.kind === 'frame' ? 'Current frame' : 'Selected'}: ${selectedNode.data.title}` : 'Entire canvas';
@@ -373,13 +394,32 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID(), type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } }, current));
-  }, [setEdges]);
+    trackActivity('creation_connection_added', { sessionId, metadata: { clientSurface: 'web' } });
+  }, [sessionId, setEdges]);
 
   const onNodeClick: NodeMouseHandler<CreationFlowNode> = useCallback((_event, node) => setSelectedId(node.id), []);
   const onCanvasPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!flowRef.current || persistence !== 'server') return;
-    cursorRef.current = flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY });
-  }, [persistence]);
+    if (!flowRef.current) return;
+    const point = flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    if (persistence === 'server') cursorRef.current = point;
+    if (drawingMode && drawingPoints.current.length) drawingPoints.current.push(point);
+  }, [drawingMode, persistence]);
+  const onCanvasPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!drawingMode || !canEdit || !flowRef.current || !(event.target as HTMLElement).classList.contains('react-flow__pane')) return;
+    drawingPoints.current = [flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY })];
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }, [canEdit, drawingMode]);
+  const onCanvasPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!drawingMode || drawingPoints.current.length < 2) return;
+    const points = drawingPoints.current.splice(0);
+    const xs = points.map((point) => point.x); const ys = points.map((point) => point.y);
+    const minX = Math.min(...xs); const minY = Math.min(...ys); const width = Math.max(40, Math.max(...xs) - minX); const height = Math.max(40, Math.max(...ys) - minY);
+    const node = newNode('drawing', { x: minX - 8, y: minY - 8 });
+    node.style = { width: width + 16, height: height + 58 };
+    node.data = { ...node.data, title: 'Canvas sketch', points: points.map((point) => ({ x: point.x - minX + 8, y: point.y - minY + 8 })), drawingWidth: width + 16, drawingHeight: height + 16, stroke: '#5b5ce2', strokeWidth: 3 };
+    setNodes((current) => [...current, node]); setSelectedId(node.id); setDrawingMode(false); setNotice('Sketch added');
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  }, [drawingMode, setNodes]);
   const onViewportChange = useCallback((_event: MouseEvent | TouchEvent | null, viewport: { x: number; y: number; zoom: number }) => {
     viewportRef.current = viewport;
     if (persistence !== 'local' || !hydrated.current) return;
@@ -395,7 +435,74 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNodes((current) => [...current, node]);
     setSelectedId(node.id);
     setNotice(`${node.data.title} added`);
+    trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: 'web', objectKinds: [kind] } });
+  }, [canEdit, sessionId, setNodes]);
+
+  const applyTemplate = useCallback((template: CreationTemplate) => {
+    if (!canEdit) return;
+    const center = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 260 };
+    const created = template.objects.map((item) => { const node = newNode(item.kind, { x: center.x + item.x - 520, y: center.y + item.y - 180 }); if (item.title) node.data = { ...node.data, title: item.title }; return node; });
+    const createdEdges = (template.connections ?? []).map((edge) => ({ id: crypto.randomUUID(), source: created[edge.source].id, target: created[edge.target].id, type: 'smoothstep', label: edge.label }));
+    setNodes((current) => [...current, ...created]); setEdges((current) => [...current, ...createdEdges]); setTemplateOpen(false); setNotice(`${template.name} added from Marketplace`);
+    trackActivity('creation_object_pack_added', { sessionId, metadata: { clientSurface: 'web', templateId: template.id, objectKinds: template.objects.map((item) => item.kind) } });
+    window.setTimeout(() => void flowRef.current?.fitView({ nodes: created.map(({ id }) => ({ id })), padding: .2, duration: 400 }), 0);
+  }, [canEdit, sessionId, setEdges, setNodes]);
+
+  const addFramePreset = useCallback((preset: FramePreset) => {
+    if (!canEdit) return;
+    const position = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 260 };
+    const node = newNode('frame', position); node.data = { ...preset.data, title: preset.name };
+    setNodes((current) => [...current, node]); setSelectedId(node.id); setTemplateOpen(false); setNotice(`${preset.name} frame added`);
   }, [canEdit, setNodes]);
+
+  const saveFramePreset = useCallback(() => {
+    if (selectedNode?.data.kind !== 'frame') return;
+    const preset: FramePreset = { id: crypto.randomUUID(), name: selectedNode.data.title, data: { ...selectedNode.data } };
+    setFramePresets((current) => { const next = [...current.filter((item) => item.name !== preset.name), preset].slice(-20); localStorage.setItem('builderforce:create-frame-presets', JSON.stringify(next)); return next; });
+    setNotice('Reusable frame saved to your template library');
+  }, [selectedNode]);
+
+  const createBranch = useCallback(() => {
+    if (persistence !== 'server') { setNotice('Save this session before creating a branch'); return; }
+    setNotice('Creating an independent branch…');
+    void creationSessionsApi.duplicate(sessionId).then(async ({ session }) => {
+      await creationSessionsApi.update(session.id, { title: `${title} — branch`, description: `[[creation-branch:${sessionId}:${revision.current}]] Independent session branch` });
+      window.location.href = `/create/${session.id}`;
+    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not create branch'));
+  }, [persistence, sessionId, title]);
+
+  const prepareMerge = useCallback(() => {
+    if (!branchParentId || persistence !== 'server') return;
+    setNotice('Comparing branch with its parent…');
+    void creationSessionsApi.get(branchParentId).then((detail) => {
+      const parent = flowFromSession(detail);
+      const unused = new Set(parent.nodes.map((node) => node.id));
+      const items = nodes.map((source, index): MergeItem => {
+        const target = parent.nodes.find((candidate) => unused.has(candidate.id) && candidate.data.kind === source.data.kind && ((source.data.resourceId && candidate.data.resourceId === source.data.resourceId) || candidate.data.title === source.data.title)) ?? null;
+        if (target) unused.delete(target.id);
+        return { key: `${source.data.kind}:${source.data.resourceId || source.data.title}:${index}`, source, target, choice: 'branch' };
+      });
+      setMergeReview({ parentId: branchParentId, parentRevision: detail.session.canvasRevision, parentNodes: parent.nodes, parentEdges: parent.edges, items });
+      setNotice(`${items.length} object decisions ready for review`);
+    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not compare branch'));
+  }, [branchParentId, nodes, persistence]);
+
+  const applyMerge = useCallback(() => {
+    if (!mergeReview) return;
+    const consumedTargets = new Set(mergeReview.items.map((item) => item.target?.id).filter((id): id is string => !!id));
+    const idMap = new Map<string, string>();
+    const merged = mergeReview.items.map((item) => {
+      const id = item.target?.id ?? crypto.randomUUID(); idMap.set(item.source.id, id);
+      return item.choice === 'parent' && item.target ? item.target : { ...item.source, id };
+    });
+    mergeReview.parentNodes.filter((node) => !consumedTargets.has(node.id)).forEach((node) => merged.push(node));
+    const branchEdges = edges.filter((edge) => idMap.has(edge.source) && idMap.has(edge.target)).map((edge) => ({ ...edge, id: crypto.randomUUID(), source: idMap.get(edge.source)!, target: idMap.get(edge.target)! }));
+    const parentOnly = new Set(merged.filter((node) => !consumedTargets.has(node.id)).map((node) => node.id));
+    const retainedEdges = mergeReview.parentEdges.filter((edge) => parentOnly.has(edge.source) || parentOnly.has(edge.target));
+    const graph = creationGraphFromSnapshot({ nodes: merged, edges: [...retainedEdges, ...branchEdges] });
+    setNotice('Applying reviewed merge…');
+    void creationSessionsApi.saveGraph(mergeReview.parentId, { ...graph, expectedRevision: mergeReview.parentRevision }).then(() => { window.location.href = `/create/${mergeReview.parentId}`; }).catch((error) => setNotice(error instanceof Error ? error.message : 'Merge could not be applied'));
+  }, [edges, mergeReview]);
 
   const expandProject = useCallback(() => {
     const project = selectedNode?.data.kind === 'project' ? selectedNode : nodes.find((node) => node.data.kind === 'project');
@@ -675,6 +782,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const evaluateCanvas = useCallback((event: FormEvent) => {
     event.preventDefault();
     if (!prompt.trim() || thinking) return;
+    trackActivity('creation_prompt_submitted', { sessionId, metadata: { clientSurface: 'web', scope: selectedId ? 'selection' : 'canvas', objectKinds: [...new Set(nodes.map((node) => node.data.kind))] } });
     setThinking(true);
     setNotice('Brain is evaluating connected objects…');
     if (process.env.NODE_ENV !== 'test') {
@@ -753,7 +861,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setProposedChanges([]);
     setAcceptedProposalIds(new Set());
     setNotice(`${selected.length} reviewed Brain changes applied`);
-  }, [acceptedProposalIds, proposedChanges, setEdges, setNodes]);
+    trackActivity('creation_change_set_applied', { sessionId, metadata: { clientSurface: 'web', commandCount: selected.length } });
+  }, [acceptedProposalIds, proposedChanges, sessionId, setEdges, setNodes]);
 
   const rejectProposedChanges = useCallback(() => {
     setProposedChanges([]);
@@ -823,21 +932,26 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         <div className={styles.titleBlock}><span className={styles.spark}>✦</span><input aria-label="Session title" value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice('Session saved')).catch(() => setNotice('Title save failed')); }} /><span className={styles.saved}>{notice}</span></div>
         <div className={styles.sessionActions}>
           <div className={styles.collaborators} aria-label="Active collaborators">
-            {(persistence === 'local' ? [{ userId: 'local', displayName: 'You', role: 'owner' }] : members).slice(0, 4).map((member, index) => <span key={member.userId} title={`${member.displayName || 'Collaborator'} · ${member.role}`} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span>)}
+            {(persistence === 'local' ? [{ userId: 'local', displayName: 'You', role: 'owner' as const }] : members).slice(0, 4).map((member, index) => <button key={member.userId} type="button" aria-pressed={followingUserId === member.userId} title={`${member.displayName || 'Collaborator'} · ${member.role}${member.userId !== currentUserId ? ' · click to follow viewport' : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
             <button aria-label="Invite collaborator" onClick={() => setShareOpen(true)}>+</button>
           </div>
           <button className={styles.secondaryButton} onClick={undo} aria-label="Undo canvas change">↶</button>
           <button className={styles.secondaryButton} onClick={redo} aria-label="Redo canvas change">↷</button>
           <button className={styles.secondaryButton} onClick={openHistory}>History</button>
+          <button className={`${styles.secondaryButton} ${drawingMode ? styles.canvasToolActive : ''}`} aria-pressed={drawingMode} onClick={() => setDrawingMode((value) => !value)}>Draw</button>
+          <button className={styles.secondaryButton} onClick={() => setTemplateOpen((value) => !value)}>Templates</button>
+          <button className={styles.secondaryButton} onClick={createBranch}>Branch</button>
+          {branchParentId && <button className={styles.secondaryButton} onClick={prepareMerge}>Merge</button>}
           <button className={styles.secondaryButton} onClick={() => setPresentMode((value) => !value)}>{presentMode ? 'Exit presentation' : 'Present'}</button>
           <button className={styles.secondaryButton} onClick={() => setShareOpen((value) => !value)}>Share ▾</button>
           {persistence === 'local' && <button className={styles.primaryButton} onClick={() => { window.location.href = `/login?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>Save & collaborate</button>}
           <button className={styles.primaryButton} disabled={!canRun} onClick={runWorkflow}>▶ Run</button>
           {shareOpen && <div className={styles.shareMenu}><strong>{persistence === 'local' ? 'Save to invite people' : 'Invite collaborators'}</strong><p>{persistence === 'local' ? 'Your work is safe on this device. Create a free account when you want live collaboration or delivery.' : 'Anyone invited can build with you and ask Brain questions.'}</p>{persistence === 'local' ? <button onClick={() => { window.location.href = `/login?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>Save this session</button> : <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="name@company.com" /><select aria-label="Invitation role" value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">Viewer</option><option value="commenter">Commenter</option><option value="editor">Editor</option><option value="runner">Runner</option><option value="owner">Owner</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(() => { setShareOpen(false); setInviteEmail(''); setNotice('Collaborator invited'); }).catch((error) => setNotice(error instanceof Error ? error.message : 'Invite failed')); }}>Invite</button></div>}<small>Access: {persistence === 'local' ? 'Private on this device' : inviteRole}</small></div>}
+          {templateOpen && <div className={styles.templateMenu}><header><div><strong>Marketplace templates</strong><small>Reusable, capability-safe object packs</small></div><button onClick={() => setTemplateOpen(false)} aria-label="Close templates">×</button></header>{CREATION_TEMPLATES.map((template) => <button key={template.id} onClick={() => applyTemplate(template)}><b>{template.name}</b><small>{template.category} · {template.objects.length} objects</small><span>{template.description}</span></button>)}{!!framePresets.length && <><h4>Your reusable frames</h4>{framePresets.map((preset) => <button key={preset.id} onClick={() => addFramePreset(preset)}><b>{preset.name}</b><small>Private custom frame</small></button>)}</>}</div>}
         </div>
       </div>
 
-      <div ref={flowWrapRef} className={styles.flowWrap} onPointerMove={onCanvasPointerMove} onPointerLeave={() => { cursorRef.current = null; }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
+      <div ref={flowWrapRef} className={styles.flowWrap} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
         {tourStep > 0 && <div style={{ position: 'absolute', zIndex: 30, top: 18, left: '50%', transform: 'translateX(-50%)', width: 'min(430px, calc(100% - 32px))', padding: 16, borderRadius: 14, background: 'var(--bg-elevated, white)', boxShadow: '0 14px 44px rgba(25,40,70,.22)', border: '1px solid var(--border-subtle)' }}>
           <strong>{['', 'Ask Brain from the composer', 'Everything is an object', 'Select to focus Brain', 'Connect ideas explicitly', 'Build with collaborators', 'Deliver when you are ready'][tourStep]}</strong>
           <p style={{ margin: '7px 0 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{['', 'The familiar prompt stays at the bottom and can create or evaluate anything in this session.', 'Drag workflows, sites, data, agents, people, and project context from the palette.', 'Select one object for a focused question, or click the background to evaluate the complete session.', 'Connect two objects to define a real data, control, reference, presentation, or delivery relationship.', 'Share the session, comment on objects, and see live cursors without moving anyone else’s viewport.', 'Projects are optional. Add one only when you want to turn an artifact into a Task and assign an Agent.'][tourStep]}</p>
@@ -859,8 +973,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           minZoom={0.35}
           maxZoom={1.6}
           defaultEdgeOptions={{ type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed }, style: { stroke: '#7b8aa0', strokeWidth: 1.5 } }}
-          nodesDraggable={canEdit}
-          nodesConnectable={canEdit}
+          nodesDraggable={canEdit && !drawingMode}
+          nodesConnectable={canEdit && !drawingMode}
           elementsSelectable
           deleteKeyCode={canEdit ? ['Backspace', 'Delete'] : null}
           selectionOnDrag
@@ -878,15 +992,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {!presentMode && <button className={styles.paletteToggle} onClick={() => setPaletteOpen((value) => !value)} aria-label="Toggle object palette">{paletteOpen ? '‹' : '+'}</button>}
         {!presentMode && paletteOpen && <aside className={styles.palette}>
           <div className={styles.paletteHeader}><strong>Add to canvas</strong><button onClick={() => setPaletteOpen(false)} aria-label="Close palette">×</button></div>
-          <input className={styles.search} placeholder="Search everything…" />
-          {CREATION_PALETTE_GROUPS.map((group) => <section key={group.group}><h4>{group.group}</h4><div className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} aria-label={item.label} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span>{item.icon}</span>{item.label}</button>)}</div></section>)}
+          <input className={styles.search} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder="Search everything…" />
+          {CREATION_PALETTE_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => `${item.label} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => <section key={group.group}><h4>{group.group}</h4><div className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} aria-label={item.label} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span>{item.icon}</span>{item.label}</button>)}</div></section>)}
         </aside>}
 
-        {!presentMode && selectedNode && <Inspector node={selectedNode} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit} members={members} onChange={updateSelected} onClose={() => setSelectedId(null)} onRun={runWorkflow} onSaveAgent={saveAgent} onExpandProject={expandProject} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
+        {!presentMode && selectedNode && <Inspector node={selectedNode} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit} members={members} onChange={updateSelected} onClose={() => setSelectedId(null)} onRun={runWorkflow} onSaveAgent={saveAgent} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
 
         {historyOpen && <aside className={styles.historyPanel}><header><div><strong>Version history</strong><small>Restore creates a new revision</small></div><button onClick={() => setHistoryOpen(false)} aria-label="Close history">×</button></header>{persistence === 'local' ? <p>This session is currently stored on this device. Server version history begins after you save it.</p> : <><button className={styles.primaryButton} onClick={createCheckpoint} disabled={!canEdit}>+ Name current checkpoint</button><div>{history.length ? history.map((snapshot) => <button key={snapshot.revision} onClick={() => restoreRevision(snapshot.revision)} disabled={!canEdit}><b>{snapshot.label || `Revision ${snapshot.revision}`}</b><span>Revision {snapshot.revision} · {new Date(snapshot.createdAt).toLocaleString()}</span></button>) : <p>No saved revisions yet.</p>}</div></>}</aside>}
 
         {!!proposedChanges.length && <aside className={styles.changeSetPanel}><header><div><strong>Review Brain changes</strong><small>Select exactly what should change</small></div><button onClick={rejectProposedChanges} aria-label="Close change set">×</button></header><div>{proposedChanges.map((change) => <label key={change.id}><input type="checkbox" checked={acceptedProposalIds.has(change.id)} onChange={() => setAcceptedProposalIds((current) => { const next = new Set(current); if (next.has(change.id)) next.delete(change.id); else next.add(change.id); return next; })} /><span><b>{change.label}</b><small>{change.type.replace('.', ' ')}</small></span></label>)}</div><footer><button className={styles.secondaryButton} onClick={rejectProposedChanges}>Reject all</button><button className={styles.primaryButton} disabled={!acceptedProposalIds.size} onClick={applyProposedChanges}>Apply {acceptedProposalIds.size} selected</button></footer></aside>}
+        {mergeReview && <aside className={styles.mergePanel}><header><div><strong>Merge branch into parent</strong><p>Resolve each object explicitly. Parent-only objects are preserved.</p></div><button onClick={() => setMergeReview(null)} aria-label="Close merge review">×</button></header>{mergeReview.items.map((item) => <label key={item.key}><b>{item.source.data.title}</b><small>{item.target ? `Both sessions contain this ${item.source.data.kind}.` : `New ${item.source.data.kind} from this branch.`}</small>{item.target && <span><select aria-label={`Merge choice for ${item.source.data.title}`} value={item.choice} onChange={(event) => setMergeReview((current) => current ? { ...current, items: current.items.map((candidate) => candidate.key === item.key ? { ...candidate, choice: event.target.value as 'branch' | 'parent' } : candidate) } : current)}><option value="branch">Use branch version</option><option value="parent">Keep parent version</option></select></span>}</label>)}<button className={styles.primaryButton} onClick={applyMerge}>Apply reviewed merge</button></aside>}
 
         {!presentMode && <form className={styles.composer} onSubmit={evaluateCanvas}>
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} aria-label="Ask Brain about this canvas" placeholder="Ask, create, or change anything…" rows={1} />
@@ -906,7 +1021,7 @@ function RemoteCursors({ members, currentUserId, instance, container }: { member
   })}</div>;
 }
 
-function Inspector({ node, sessionId, persistence, role, editable, members, onChange, onClose, onRun, onSaveAgent, onExpandProject, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onStartStandup }: { node: CreationFlowNode; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onClose: () => void; onRun: () => void; onSaveAgent: () => void; onExpandProject: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onStartStandup: () => void }) {
+function Inspector({ node, sessionId, persistence, role, editable, members, onChange, onClose, onRun, onSaveAgent, onSaveFramePreset, onExpandProject, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onStartStandup }: { node: CreationFlowNode; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onClose: () => void; onRun: () => void; onSaveAgent: () => void; onSaveFramePreset: () => void; onExpandProject: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onStartStandup: () => void }) {
   const kind = node.data.kind;
   const [tab, setTab] = useState<'details' | 'activity'>('details');
   return <aside className={styles.inspector}>
@@ -933,7 +1048,9 @@ function Inspector({ node, sessionId, persistence, role, editable, members, onCh
       {kind === 'mockupSet' && <><p className={styles.inspectorHint}>Expand the set into individually reviewable mockups, or deliver the approved set as one project task.</p><button className={styles.fullButton} onClick={onExpandMockupSet}>Expand all mockups</button><button className={styles.fullButton} onClick={onDeliverMockup}>Add to project and assign</button><SourceList sources={node.data.sources} /></>}
       {kind === 'evermind' && <EvermindInspector node={node} persistence={persistence} onAttach={onAttachEvermindProject} onExpand={onExpandEvermindPipeline} />}
       {kind === 'standup' && <><p className={styles.inspectorHint}>Gather every Staff Member and Agent currently on the canvas. With a saved Project, this starts the canonical stand-up ceremony and keeps its resource link in the session.</p><button className={styles.fullButton} onClick={onStartStandup}>Gather and start stand-up</button></>}
-      {!['agent', 'staff', 'website', 'workflow', 'dashboard', 'project', 'mockup', 'evermind', 'standup'].includes(kind) && <p className={styles.inspectorHint}>This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.</p>}
+      {kind === 'frame' && <><label>Purpose<input value={typeof node.data.framePurpose === 'string' ? node.data.framePurpose : 'Arrange related objects here'} onChange={(event) => onChange({ framePurpose: event.target.value })} /></label><label>Fill color<input type="color" value={typeof node.data.frameColor === 'string' ? node.data.frameColor : '#f8f6ff'} onChange={(event) => onChange({ frameColor: event.target.value })} /></label><label>Border color<input type="color" value={typeof node.data.frameBorder === 'string' ? node.data.frameBorder : '#9d8bea'} onChange={(event) => onChange({ frameBorder: event.target.value })} /></label><button className={styles.fullButton} onClick={onSaveFramePreset}>Save as reusable frame</button></>}
+      {kind === 'drawing' && <><label>Stroke color<input type="color" value={typeof node.data.stroke === 'string' ? node.data.stroke : '#5b5ce2'} onChange={(event) => onChange({ stroke: event.target.value })} /></label><label>Stroke width<input type="range" min="1" max="12" value={typeof node.data.strokeWidth === 'number' ? node.data.strokeWidth : 3} onChange={(event) => onChange({ strokeWidth: Number(event.target.value) })} /></label><p className={styles.inspectorHint}>Resize, annotate, connect, or use this sketch as visual context for Brain.</p></>}
+      {!['agent', 'staff', 'website', 'workflow', 'dashboard', 'project', 'mockup', 'evermind', 'standup', 'frame', 'drawing'].includes(kind) && <p className={styles.inspectorHint}>This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.</p>}
       </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} persistence={persistence} role={role} members={members} />}
     </div>
     <footer><span>Resource · {role}</span><code>{node.data.resourceId || `session:${node.id}`}</code><button className={styles.fullButton} disabled={!editable} onClick={() => onChange({ status: 'Saved' })}>Save changes</button></footer>
