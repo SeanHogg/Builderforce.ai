@@ -37,4 +37,25 @@ describe('CreationCanvas', () => {
     expect(screen.getByDisplayValue('Canvas evaluation')).toBeInTheDocument();
     expect(screen.getByText('Evaluation added to canvas')).toBeInTheDocument();
   });
+
+  it('expands optional project context into related live objects', () => {
+    render(<CreationCanvas sessionId="project-test" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Project' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add all related items' }));
+
+    expect(screen.getByText('Project relationships added to canvas')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('BuilderForce launch')).toBeInTheDocument();
+  });
+
+  it('creates feature mockups and dispatches their delivery from the session', () => {
+    render(<CreationCanvas sessionId="feature-test" />);
+    fireEvent.change(screen.getByLabelText('Ask Brain about this canvas'), { target: { value: 'Create a visual summary of the top 10 requested features and mockups' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Brain' }));
+    act(() => vi.advanceTimersByTime(900));
+
+    expect(screen.getByDisplayValue('Top 10 feature mockups')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add to project and assign' }));
+    expect(screen.getByText('Mockup attached and delivery task assigned')).toBeInTheDocument();
+  });
 });

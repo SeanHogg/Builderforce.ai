@@ -27,14 +27,16 @@ const DND_MIME = 'application/x-builderforce-creation-object';
 
 const PALETTE: Array<{ group: string; items: Array<{ kind: CreationObjectKind; label: string; icon: string }> }> = [
   { group: 'Build', items: [{ kind: 'workflow', label: 'Workflow', icon: '⌘' }, { kind: 'website', label: 'Website', icon: '◎' }, { kind: 'chat', label: 'Chat', icon: '●' }, { kind: 'dataset', label: 'Dataset', icon: '▤' }] },
-  { group: 'Insights', items: [{ kind: 'dashboard', label: 'Dashboard', icon: '▥' }, { kind: 'evaluation', label: 'Evaluation', icon: '✦' }, { kind: 'note', label: 'Note', icon: '◇' }, { kind: 'voice', label: 'Voice', icon: '◖' }] },
+  { group: 'Insights', items: [{ kind: 'dashboard', label: 'Dashboard', icon: '▥' }, { kind: 'evaluation', label: 'Evaluation', icon: '✦' }, { kind: 'roadmap', label: 'Roadmap', icon: '↗' }, { kind: 'note', label: 'Note', icon: '◇' }] },
+  { group: 'Work', items: [{ kind: 'project', label: 'Project', icon: '▦' }, { kind: 'task', label: 'Task', icon: '✓' }, { kind: 'mockup', label: 'Mockup', icon: '▣' }, { kind: 'featureSummary', label: 'Feature summary', icon: '★' }] },
   { group: 'People', items: [{ kind: 'staff', label: 'Staff member', icon: '●' }] },
-  { group: 'Agents', items: [{ kind: 'agent', label: 'Agent', icon: '✦' }] },
+  { group: 'Agents', items: [{ kind: 'agent', label: 'Agent', icon: '✦' }, { kind: 'voice', label: 'Voice', icon: '◖' }] },
 ];
 
 function newNode(kind: CreationObjectKind, position: { x: number; y: number }): CreationFlowNode {
   const defaults: Record<CreationObjectKind, CreationNodeData> = {
     workflow: { kind, title: 'Untitled workflow', status: 'Ready', resourceId: `workflow:${crypto.randomUUID()}` },
+    project: { kind, title: 'BuilderForce launch', status: 'On track', subtitle: 'Product and go-to-market delivery.', resourceId: `project:${crypto.randomUUID()}` },
     website: { kind, title: 'Website concept', status: 'Live', resourceId: `website:${crypto.randomUUID()}` },
     dashboard: { kind, title: 'Performance dashboard', resourceId: `dashboard:${crypto.randomUUID()}` },
     chat: { kind, title: 'Brain', resourceId: `chat:${crypto.randomUUID()}` },
@@ -44,6 +46,10 @@ function newNode(kind: CreationObjectKind, position: { x: number; y: number }): 
     dataset: { kind, title: 'Imported dataset.csv', resourceId: `dataset:${crypto.randomUUID()}` },
     voice: { kind, title: 'Voice note', resourceId: `voice:${crypto.randomUUID()}` },
     note: { kind, title: 'Note', subtitle: 'Add context for your collaborators.' },
+    roadmap: { kind, title: 'Executive sales roadmap', status: 'Draft' },
+    task: { kind, title: 'Build approved mockup', status: 'Ready', role: 'Campaign Strategist' },
+    mockup: { kind, title: 'Interactive feature mockup', status: 'Draft' },
+    featureSummary: { kind, title: 'Top 10 requested features', status: 'Synthesized' },
   };
   return { id: crypto.randomUUID(), type: 'creation', position, data: defaults[kind] };
 }
@@ -122,6 +128,38 @@ function CanvasInner({ sessionId }: { sessionId: string }) {
     setNotice(`${node.data.title} added`);
   }, [setNodes]);
 
+  const expandProject = useCallback(() => {
+    const project = selectedNode?.data.kind === 'project' ? selectedNode : nodes.find((node) => node.data.kind === 'project');
+    if (!project) {
+      setNotice('Add or select a project first');
+      return;
+    }
+    const related: CreationFlowNode[] = [
+      { id: `${project.id}:health`, type: 'creation', position: { x: project.position.x + 330, y: project.position.y - 150 }, data: { kind: 'dashboard', title: `${project.data.title} health`, resourceId: `dashboard:${project.id}` } },
+      { id: `${project.id}:roadmap`, type: 'creation', position: { x: project.position.x + 330, y: project.position.y + 100 }, data: { kind: 'roadmap', title: `${project.data.title} roadmap`, status: 'Live', resourceId: `roadmap:${project.id}` } },
+      { id: `${project.id}:workflow`, type: 'creation', position: { x: project.position.x + 850, y: project.position.y - 120 }, data: { kind: 'workflow', title: 'Delivery workflow', status: 'Ready', resourceId: `workflow:${project.id}` } },
+      { id: `${project.id}:task`, type: 'creation', position: { x: project.position.x + 850, y: project.position.y + 150 }, data: { kind: 'task', title: 'Next delivery task', status: 'Ready', role: 'Campaign Strategist', resourceId: `task:${project.id}` } },
+    ];
+    setNodes((current) => [...current, ...related.filter((candidate) => !current.some((node) => node.id === candidate.id))]);
+    setEdges((current) => [...current, ...related.filter((candidate) => !current.some((edge) => edge.source === project.id && edge.target === candidate.id)).map((candidate) => ({ id: `${project.id}->${candidate.id}`, source: project.id, target: candidate.id, type: 'smoothstep' }))]);
+    setNotice('Project relationships added to canvas');
+  }, [nodes, selectedNode, setEdges, setNodes]);
+
+  const deliverMockup = useCallback(() => {
+    if (!selectedNode || selectedNode.data.kind !== 'mockup') return;
+    const project = nodes.find((node) => node.data.kind === 'project');
+    const agent = nodes.find((node) => node.data.kind === 'agent');
+    const taskId = `${selectedNode.id}:delivery-task`;
+    const task: CreationFlowNode = {
+      id: taskId, type: 'creation', position: { x: selectedNode.position.x + 330, y: selectedNode.position.y + 40 },
+      data: { kind: 'task', title: `Build ${selectedNode.data.title}`, status: 'Assigned', role: agent?.data.title || 'Available agent', subtitle: project ? `Deliver to ${project.data.title}.` : 'Attach a project when ready.', resourceId: `task:${crypto.randomUUID()}` },
+    };
+    setNodes((current) => current.some((node) => node.id === taskId) ? current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status: 'Assigned' } } : node) : [...current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status: 'Assigned' } } : node), task]);
+    setEdges((current) => current.some((edge) => edge.target === taskId) ? current : [...current, { id: `${selectedNode.id}->${taskId}`, source: selectedNode.id, target: taskId, type: 'smoothstep', animated: true }]);
+    setSelectedId(taskId);
+    setNotice('Mockup attached and delivery task assigned');
+  }, [nodes, selectedNode, setEdges, setNodes]);
+
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
     const kind = event.dataTransfer.getData(DND_MIME) as CreationObjectKind;
@@ -137,6 +175,21 @@ function CanvasInner({ sessionId }: { sessionId: string }) {
     setThinking(true);
     setNotice('Brain is evaluating connected objects…');
     window.setTimeout(() => {
+      const request = prompt.toLowerCase();
+      if (request.includes('roadmap')) {
+        const project = nodes.find((node) => node.data.kind === 'project');
+        const roadmap: CreationFlowNode = { id: `roadmap:${crypto.randomUUID()}`, type: 'creation', position: { x: 560, y: 315 }, data: { kind: 'roadmap', title: request.includes('executive') ? 'Executive team roadmap' : 'Sales presentation roadmap', status: 'AI generated', resourceId: project ? `roadmap:${project.id}` : undefined } };
+        setNodes((current) => [...current, roadmap]);
+        if (project) setEdges((current) => [...current, { id: `${project.id}->${roadmap.id}`, source: project.id, target: roadmap.id, type: 'smoothstep', animated: true }]);
+        setSelectedId(roadmap.id); setThinking(false); setPrompt(''); setNotice('Roadmap added to canvas'); return;
+      }
+      if (request.includes('top 10') || request.includes('requested features')) {
+        const summary: CreationFlowNode = { id: `features:${crypto.randomUUID()}`, type: 'creation', position: { x: 500, y: 260 }, data: { kind: 'featureSummary', title: 'Top 10 requested features', status: 'Synthesized' } };
+        const mockups: CreationFlowNode = { id: `mockups:${crypto.randomUUID()}`, type: 'creation', position: { x: 1040, y: 300 }, data: { kind: 'mockup', title: 'Top 10 feature mockups', status: 'Ready for review', subtitle: 'Ten linked high-fidelity concepts generated from user feedback.' } };
+        setNodes((current) => [...current, summary, mockups]);
+        setEdges((current) => [...current, { id: `${summary.id}->${mockups.id}`, source: summary.id, target: mockups.id, type: 'smoothstep', animated: true }]);
+        setSelectedId(mockups.id); setThinking(false); setPrompt(''); setNotice('Feature summary and mockups added'); return;
+      }
       setNodes((current) => {
         if (current.some((node) => node.id === 'evaluation-campaign')) return current;
         return [...current, { id: 'evaluation-campaign', type: 'creation', position: { x: 560, y: 315 }, data: { kind: 'evaluation', title: 'Canvas evaluation', status: 'AI evaluation' } }];
@@ -151,7 +204,7 @@ function CanvasInner({ sessionId }: { sessionId: string }) {
       setPrompt('');
       setNotice('Evaluation added to canvas');
     }, 850);
-  }, [prompt, setEdges, setNodes, thinking]);
+  }, [nodes, prompt, setEdges, setNodes, thinking]);
 
   const runWorkflow = useCallback(() => {
     const targetId = selectedNode?.data.kind === 'workflow' ? selectedNode.id : 'workflow-campaign';
@@ -213,7 +266,7 @@ function CanvasInner({ sessionId }: { sessionId: string }) {
           {PALETTE.map((group) => <section key={group.group}><h4>{group.group}</h4><div className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} aria-label={item.label} draggable onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span>{item.icon}</span>{item.label}</button>)}</div></section>)}
         </aside>}
 
-        {selectedNode && <Inspector node={selectedNode} onChange={updateSelected} onClose={() => setSelectedId(null)} onRun={runWorkflow} />}
+        {selectedNode && <Inspector node={selectedNode} onChange={updateSelected} onClose={() => setSelectedId(null)} onRun={runWorkflow} onExpandProject={expandProject} onDeliverMockup={deliverMockup} />}
 
         <form className={styles.composer} onSubmit={evaluateCanvas}>
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} aria-label="Ask Brain about this canvas" placeholder="Ask, create, or change anything…" rows={1} />
@@ -224,7 +277,7 @@ function CanvasInner({ sessionId }: { sessionId: string }) {
   );
 }
 
-function Inspector({ node, onChange, onClose, onRun }: { node: CreationFlowNode; onChange: (patch: Partial<CreationNodeData>) => void; onClose: () => void; onRun: () => void }) {
+function Inspector({ node, onChange, onClose, onRun, onExpandProject, onDeliverMockup }: { node: CreationFlowNode; onChange: (patch: Partial<CreationNodeData>) => void; onClose: () => void; onRun: () => void; onExpandProject: () => void; onDeliverMockup: () => void }) {
   const kind = node.data.kind;
   return <aside className={styles.inspector}>
     <header><div><span>{kind === 'agent' ? '✦' : kind === 'website' ? '◎' : kind === 'workflow' ? '⌘' : '◇'}</span><strong>{node.data.title}</strong><small>Live {kind}</small></div><button onClick={onClose} aria-label="Close inspector">×</button></header>
@@ -241,7 +294,9 @@ function Inspector({ node, onChange, onClose, onRun }: { node: CreationFlowNode;
       {kind === 'website' && <><label>Viewport<select><option>Desktop · 1440</option><option>Tablet · 768</option><option>Mobile · 390</option></select></label><label>Theme<select><option>Autumn campaign</option><option>Builderforce light</option></select></label><button className={styles.fullButton}>Open WYSIWYG editor</button></>}
       {kind === 'workflow' && <><label>Execution target<select><option>BuilderForce.AI</option><option>Campaign Strategist</option></select></label><label>Approval mode<select><option>Required before publish</option><option>Fully autonomous</option></select></label><button className={styles.fullButton} onClick={onRun}>▶ Run workflow</button></>}
       {kind === 'dashboard' && <><label>Date range<select><option>Last 30 days</option><option>Last 7 days</option><option>Quarter to date</option></select></label><button className={styles.fullButton}>Refresh live data</button></>}
-      {!['agent', 'staff', 'website', 'workflow', 'dashboard'].includes(kind) && <p className={styles.inspectorHint}>This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.</p>}
+      {kind === 'project' && <><label>Project view<select><option>Everything</option><option>Delivery</option><option>Metrics</option><option>Customer feedback</option></select></label><p className={styles.inspectorHint}>Project context is optional. Add its related items to compare work visually or ground Brain in the complete project.</p><button className={styles.fullButton} onClick={onExpandProject}>Add all related items</button></>}
+      {kind === 'mockup' && <><label>Delivery project<select><option>BuilderForce launch</option><option>No project</option></select></label><label>Assign agent<select><option>Campaign Strategist</option><option>Web Analyst</option></select></label><button className={styles.fullButton} onClick={onDeliverMockup}>Add to project and assign</button></>}
+      {!['agent', 'staff', 'website', 'workflow', 'dashboard', 'project', 'mockup'].includes(kind) && <p className={styles.inspectorHint}>This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.</p>}
     </div>
     <footer><span>Resource</span><code>{node.data.resourceId || `session:${node.id}`}</code><button className={styles.fullButton} onClick={() => onChange({ status: 'Saved' })}>Save changes</button></footer>
   </aside>;

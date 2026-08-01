@@ -8,7 +8,8 @@ export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
 
 const ICONS: Record<CreationNodeData['kind'], string> = {
   workflow: '⌘', website: '◎', dashboard: '▥', chat: '●', agent: '✦', staff: '●',
-  evaluation: '✦', dataset: '▤', voice: '◖', note: '◇',
+  evaluation: '✦', dataset: '▤', voice: '◖', note: '◇', project: '▦', roadmap: '↗',
+  task: '✓', mockup: '▣', featureSummary: '★',
 };
 
 function WorkflowBody({ status }: { status?: string }) {
@@ -64,7 +65,7 @@ function EvaluationBody() {
 }
 
 export function CreationNode({ data, selected }: NodeProps<CreationFlowNode>) {
-  const isWide = data.kind === 'workflow' || data.kind === 'website' || data.kind === 'dashboard' || data.kind === 'evaluation';
+  const isWide = data.kind === 'workflow' || data.kind === 'website' || data.kind === 'dashboard' || data.kind === 'evaluation' || data.kind === 'roadmap' || data.kind === 'featureSummary';
   return (
     <article className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
       <Handle type="target" position={Position.Left} className={styles.handle} />
@@ -85,6 +86,11 @@ export function CreationNode({ data, selected }: NodeProps<CreationFlowNode>) {
         {data.kind === 'dataset' && <><p className={styles.fileMeta}>18,420 rows · 8 columns</p><div className={styles.miniTable}><b>User</b><b>Plan</b><b>Conversion</b><span>user_001</span><span>Pro</span><span>8.3%</span><span>user_002</span><span>Free</span><span>2.1%</span></div></>}
         {data.kind === 'voice' && <><div className={styles.waveform}>▂▅▃▆▂▇▅▃▆▂▅▇▃▆▂▅</div><small>00:18 / 00:45</small></>}
         {data.kind === 'note' && <p>{data.subtitle || 'Double-click to add a thought.'}</p>}
+        {data.kind === 'project' && <><div className={styles.projectHealth}><div><small>Maturity</small><b>3.8 / 5</b></div><div><small>Velocity</small><b>42 pts</b></div><div><small>Health</small><b className={styles.healthy}>On track</b></div></div><p>{data.subtitle || 'Optional project context. Expand to see related work.'}</p></>}
+        {data.kind === 'roadmap' && <div className={styles.roadmap}><div><b>Now</b><span>Validate narrative</span><span>Sales deck</span></div><div><b>Next</b><span>Executive review</span><span>Launch pilot</span></div><div><b>Later</b><span>Measure adoption</span><span>Scale channels</span></div></div>}
+        {data.kind === 'task' && <><div className={styles.personRow}><span className={styles.liveDot} /><b>{data.status || 'Ready'}</b><span>{data.role || 'Campaign Strategist'}</span></div><p>{data.subtitle || 'Build the approved mockup and deliver it to the project.'}</p></>}
+        {data.kind === 'mockup' && <><div className={styles.mockupGrid}><i /><i /><i /></div><p>{data.subtitle || 'High-fidelity interactive concept ready for review.'}</p><div className={styles.pills}><span>{data.status || 'Draft'}</span><span>Desktop + mobile</span></div></>}
+        {data.kind === 'featureSummary' && <div className={styles.featureGrid}>{['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration'].map((feature, index) => <span key={feature}><b>{index + 1}</b>{feature}</span>)}</div>}
       </div>
       <Handle type="source" position={Position.Right} className={styles.handle} />
     </article>

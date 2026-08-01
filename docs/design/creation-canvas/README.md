@@ -11,7 +11,7 @@ Replace Brainstorm, the workflow builder, and the IDE launcher as separate creat
 /create/:sessionId?focus=:id    Open and select one canvas object
 ```
 
-`/create/:sessionId` is the canonical route. A session is the durable container; workflows, chats, prototypes, datasets, models, and voice clips are objects on its canvas.
+`/create/:sessionId` is the canonical route. A session is the durable container; workflows, chats, prototypes, datasets, models, voice clips, and optional projects are objects on its canvas.
 
 The existing routes should remain as compatibility entry points during migration:
 
@@ -38,6 +38,19 @@ The canvas is the product. Chat is a familiar control and a reusable canvas obje
 - **Resource reference**: links an object to its canonical application entity. Editing a Workflow, Website, Agent, report, or dashboard on the canvas edits the same resource seen elsewhere in Builderforce.ai.
 
 Spatial proximity must not imply execution. Only a connection or explicit agent action changes data flow or workflow behavior.
+
+## Session first, project optional
+
+The user returns to a **session**, which is the evolution of chat: a persistent place where conversation, visual context, generated work, and collaborators remain together. Creating a session must not require choosing or creating a project.
+
+A Project is an optional live object that supplies organizational context and a delivery destination. A session can contain zero, one, or several projects:
+
+- With no Project object, users can brainstorm and build freely.
+- With one Project object, Brain can use its tasks, agents, files, workflows, maturity, performance, and roadmap as grounded context.
+- With multiple Project objects, Brain can compare features, health, delivery performance, maturity, or dependencies.
+- **Add all related items** expands a Project into a visual subgraph. Filters control whether the expansion includes everything, delivery work, metrics, customer feedback, or another lens.
+
+Team and organization metrics remain attached to canonical projects. Sessions reference and visualize those metrics but do not force project-management structure onto individual creation.
 
 ## Primary interaction
 
@@ -67,6 +80,7 @@ The composer remains stable at the bottom, but has a scope chip:
 | --- | --- | --- |
 | Chat | Familiar conversation stream | Prompt, copy, branch, turn response into object |
 | Workflow | Executable graph or collapsed workflow group | Connect, validate, run, inspect output |
+| Project | Optional organizational context and delivery destination | Expand relationships, compare, inspect health, attach outputs |
 | Website | Live site, page, or WYSIWYG creation surface | Edit, preview, evaluate, publish |
 | Dataset | Imported CSV/XLSX/JSON/database result | Profile, clean, filter, visualize |
 | Chart | Live view bound to a dataset | Change encoding, filter, export, use in prototype |
@@ -78,6 +92,9 @@ The composer remains stable at the bottom, but has a scope chip:
 | Agent | Live workforce member and configuration | Assign, inspect activity, edit model/tools/instructions/autonomy |
 | Staff Member | Human collaborator or stakeholder | Invite, mention, assign, join stand-up, share context |
 | Document/Slide/Sheet | Existing generated deliverables | Edit, copy, download, use as input |
+| Roadmap | Canvas-native or project-backed narrative/timeline | Tailor for sales, executive, delivery, or product audiences |
+| Mockup | Interactive visual artifact or a set of feature concepts | Review, attach to task, assign agent, deliver to project |
+| Task | Project delivery unit | Assign agent, run, approve, inspect output |
 
 The Add palette should expose the application's object registry, not a second hard-coded catalog. Anything that has a detail view in Builderforce.ai should be able to declare a canvas renderer, compact renderer, inspector, actions, permissions, and agent-readable context adapter.
 
@@ -92,6 +109,19 @@ The agent must reason about the actual selected resources and their typed relati
 5. `Apply recommendations` previews a multi-resource change set. The user can accept changes individually before the workflow or website is mutated.
 
 Evaluation objects remain on the canvas so collaborators can comment, revisit the evidence, and compare a later evaluation after changes.
+
+## Creation-to-delivery loop
+
+The canvas should close the loop between ideation and execution:
+
+1. A user asks Brain to create a sales or executive roadmap based on a Project object.
+2. Brain adds a Roadmap object grounded in the project's actual features, metrics, and delivery state.
+3. A user asks for a mockup, or for a visual summary of the ten most-requested features and a mockup for each.
+4. Brain adds a Feature Summary connected to a Mockup Set. Each feature retains citations to its feedback evidence.
+5. From a Mockup object, **Add to project and assign** creates or links a Task, attaches the artifact, chooses an Agent, and starts the existing approval-gated delivery flow.
+6. Build progress and output stream back into the same session objects, so the user never has to leave the creative context to check execution.
+
+All multi-resource mutations must be previewable and auditable. The canvas command may orchestrate several existing APIs, but it does not bypass their permissions or approval policies.
 
 ## Multiplayer collaboration
 
@@ -137,7 +167,7 @@ Use XYFlow as the single spatial engine. Nesting the current `CanvasBoard` insid
 
 ```ts
 type CreationObjectKind =
-  | 'chat' | 'workflow' | 'website' | 'dataset' | 'chart' | 'dashboard' | 'report' | 'prototype'
+  | 'chat' | 'workflow' | 'project' | 'website' | 'dataset' | 'chart' | 'dashboard' | 'report' | 'prototype'
   | 'code' | 'browser' | 'llm' | 'voice'
   | 'agent' | 'staff' | 'evaluation'
   | 'document' | 'slides' | 'spreadsheet' | 'note' | 'drawing' | 'frame';
@@ -167,6 +197,20 @@ type CanvasResourceRef = {
 ```
 
 Large payloads (datasets, generated files, code trees, audio, and prototype bundles) should be stored as artifact references, not embedded in the canvas JSON.
+
+## VS Code extension
+
+The canvas should be available in the VSIX as the same tenant session, not as a separate local whiteboard.
+
+- Add **Open Creation Session…** to the command palette and BuilderForce activity view.
+- List recent tenant sessions and allow a new blank session without selecting a project.
+- Open the selected session in a full editor tab; a narrow sidebar is insufficient for spatial work.
+- Reuse the same session graph, commands, resource adapters, permissions, and realtime collaboration transport as the web route.
+- Add editor-aware objects such as current file, selection, diagnostics, terminal output, repository, and local preview.
+- Double-clicking Code, Task, or file-backed objects should open the corresponding native VS Code editor or BuilderForce panel.
+- Presence should identify a collaborator as using Web or VS Code while keeping one shared cursor/comment/activity model.
+
+The current VSIX deliberately uses bundled native React webviews because iframe-based `/embed/*` surfaces proved unreliable in VS Code. Therefore the production implementation should extract the canvas engine and object registry into a shared UI package consumed by both `frontend` and `clients/vscode/webview`; it should not iframe `/create` into the extension.
 
 ## Delivery sequence
 

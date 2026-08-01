@@ -1,5 +1,6 @@
 export type CreationObjectKind =
   | 'workflow'
+  | 'project'
   | 'website'
   | 'dashboard'
   | 'chat'
@@ -8,7 +9,11 @@ export type CreationObjectKind =
   | 'evaluation'
   | 'dataset'
   | 'voice'
-  | 'note';
+  | 'note'
+  | 'roadmap'
+  | 'task'
+  | 'mockup'
+  | 'featureSummary';
 
 export type CreationNodeData = {
   [key: string]: unknown;
