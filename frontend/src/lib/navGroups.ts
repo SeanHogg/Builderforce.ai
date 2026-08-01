@@ -58,8 +58,9 @@ export interface NavGroup {
 
 export const NAV_GROUPS: NavGroup[] = [
   { id: 'dashboard', labelKey: 'group.dashboard', icon: '🏠', href: '/dashboard', match: ['/dashboard'] },
-  { id: 'create', labelKey: 'group.create', icon: '✦', href: '/create', match: ['/create'] },
-  { id: 'brainstorm', labelKey: 'group.brainstorm', icon: '💡', href: '/brainstorm', match: ['/brainstorm'] },
+  // Brainstorm, Workflow Builder, and IDE are creation modes within one canvas.
+  // Legacy routes stay matched so old deep links retain a clear active home.
+  { id: 'create', labelKey: 'group.create', icon: '✦', href: '/create', match: ['/create', '/brainstorm', '/workflows', '/ide'] },
   {
     id: 'projects', labelKey: 'group.projects', icon: '▦', href: '/projects',
     match: ['/projects', '/tasks', '/pmo', '/ceremonies', '/kanban-templates'],
@@ -77,11 +78,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'rfp', labelKey: 'tab.rfp', icon: '📄' },
     ],
   },
-  // IDE is one destination scoped to its project type. Each project IS typed by
-  // modality (designer/video/llm/voice) at creation, so there are no modality
-  // sub-tabs here — Voice opens as a Voice IDE project, not a separate menu item.
-  { id: 'ide', labelKey: 'group.ide', icon: '💻', href: '/ide/dashboard', match: ['/ide'] },
-  { id: 'workflows', labelKey: 'group.workflows', icon: '🔀', href: '/workflows', match: ['/workflows'] },
   {
     // "Talent / Workforce": people + agents (Workforce) AND the roster of roles and
     // external hires (Talent) share one destination. The Talent tab is the relocated

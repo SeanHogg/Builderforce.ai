@@ -122,6 +122,11 @@
         "icon": "$(comment-discussion)"
       },
       {
+        "command": "builderforce.openCreateCanvas",
+        "title": "%command.openCreateCanvas%",
+        "icon": "$(layout)"
+      },
+      {
         "command": "builderforce.refreshMeetings",
         "title": "%command.refreshMeetings%",
         "icon": "$(sync)"

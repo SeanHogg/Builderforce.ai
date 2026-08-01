@@ -5,8 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
-import { fetchProjects, createIdeProject } from '@/lib/api';
-import { persistLastProjectId } from '@/lib/auth';
+import { fetchProjects } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { useOnboardingPrompt } from '@/lib/onboarding';
@@ -21,24 +20,15 @@ import { InsightStat } from '@/components/dashboard/InsightStat';
 import { PulseSubmitCard } from '@/components/insights/PulseWidget';
 import { buildInsightDelta } from '@/components/dashboard/metricFormat';
 import { cumulativeDailySeries, dailyCounts } from '@/components/dashboard/seriesFromTimestamps';
-import { IdeProjectsContent } from '@/components/ide/IdeProjectsContent';
-import { DashboardIdeasTab } from '@/components/dashboard/DashboardIdeasTab';
+import { DashboardCreationSessions } from '@/components/dashboard/DashboardCreationSessions';
 import { DashboardQualityTab } from '@/components/dashboard/DashboardQualityTab';
 import { DashboardKnowledgeTab } from '@/components/dashboard/DashboardKnowledgeTab';
 import { WorkforcePresenceStripView } from '@/components/workforce/WorkforcePresenceStrip';
 import { useWorkforcePresence } from '@/lib/useWorkforcePresence';
-import { agentHosts, tasksApi, approvalsApi, type AgentHost } from '@/lib/builderforceApi';
+import { agentHosts, tasksApi, approvalsApi, creationSessionsApi, type AgentHost } from '@/lib/builderforceApi';
 
-const DASHBOARD_TABS = ['projects', 'workforce', 'ide', 'ideas', 'quality', 'knowledge'] as const;
+const DASHBOARD_TABS = ['create', 'projects', 'workforce', 'quality', 'knowledge'] as const;
 type DashboardTab = (typeof DASHBOARD_TABS)[number];
-
-/** Derive a short, human project name from the build prompt's first line. */
-function deriveProjectName(promptText: string): string {
-  const firstLine = (promptText.split('\n')[0] ?? '').trim();
-  const cleaned = firstLine.replace(/^(please\s+)?(build|create|make|design|generate)\s+(me\s+)?(a|an|the)?\s*/i, '').trim();
-  const name = (cleaned || firstLine).slice(0, 48).trim();
-  return name || 'New app';
-}
 
 /**
  * Dashboard (home) — BuilderForceAgentsLink-style: "What should we build?" chat input,
@@ -62,15 +52,14 @@ export default function DashboardPage() {
   const [taskStats, setTaskStats] = useState<{ total: number; inProgress: number; done: number } | null>(null);
   const [taskDates, setTaskDates] = useState<string[]>([]);
 
-  // Active tab is driven by ?tab= so it deep-links and survives reload (matches
-  // the /projects convention). Unknown/absent → the default Projects tab.
+  // Create is the default home. Projects remain an optional organizational lens.
   const tabParam = searchParams.get('tab');
   const activeTab: DashboardTab = (DASHBOARD_TABS as readonly string[]).includes(tabParam ?? '')
     ? (tabParam as DashboardTab)
-    : 'projects';
+    : 'create';
   const selectTab = useCallback(
     (key: DashboardTab) => {
-      router.replace(key === 'projects' ? '/dashboard' : `/dashboard?tab=${key}`, { scroll: false });
+      router.replace(key === 'create' ? '/dashboard' : `/dashboard?tab=${key}`, { scroll: false });
     },
     [router],
   );
@@ -129,23 +118,19 @@ export default function DashboardPage() {
     return () => { alive = false; };
   }, [isAuthenticated, hasTenant, currentProjectId]);
 
-  // The dashboard prompt STARTS A BUILD: spin up a fresh Website (designer) IDE
-  // project and open it with the prompt seeded, so the Brain scaffolds a running
-  // app right away (live Preview + one-click Publish) — the single-prompt→app
-  // moment. Falls back to Brain Storm if the project can't be created, so the
-  // prompt is never lost. (Direct dispatch to an agent host stays on /tasks.)
+  // A prompt creates a session, not a project. Project context can be added later.
   const handlePromptSubmit = useCallback(async () => {
     const p = prompt.trim();
     if (!p || building) return;
     setBuilding(true);
     try {
-      const created = await createIdeProject({ name: deriveProjectName(p), modality: 'designer' });
-      persistLastProjectId(String(created.storageProjectId));
+      const created = await creationSessionsApi.create({ title: p.slice(0, 80), initialPrompt: p });
       setPrompt('');
-      router.push(`/ide/${created.storageProjectPublicId}?prompt=${encodeURIComponent(p)}`);
+      router.push(`/create/${created.session.id}`);
     } catch {
-      // Couldn't create a project — don't lose the intent; continue in Brain Storm.
-      router.push(`/brainstorm?prompt=${encodeURIComponent(p)}`);
+      // Preserve intent locally if server persistence is briefly unavailable.
+      const { createLocalCreationSession } = await import('@/lib/creationSessions');
+      router.push(`/create/${createLocalCreationSession(p)}`);
     } finally {
       setBuilding(false);
     }
@@ -317,10 +302,9 @@ export default function DashboardPage() {
           }}
         >
           {([
+            { key: 'create', label: 'Create', count: undefined },
             { key: 'projects', label: t('tabs.projects'), count: scopedProjects.length as number | undefined },
             { key: 'workforce', label: t('tabs.workforce'), count: undefined },
-            { key: 'ide', label: t('tabs.ide'), count: undefined },
-            { key: 'ideas', label: t('tabs.ideas'), count: undefined },
             { key: 'quality', label: t('tabs.quality'), count: undefined },
             { key: 'knowledge', label: t('tabs.knowledge'), count: undefined },
           ] as const).map(({ key, label, count }) => {
@@ -350,6 +334,8 @@ export default function DashboardPage() {
           })}
         </div>
 
+        {activeTab === 'create' && <DashboardCreationSessions />}
+
         {/* Projects tab (preview) — reuses ProjectsContent so the cards, table,
             button group, and data shape match the /projects page exactly. */}
         {activeTab === 'projects' && (
@@ -365,20 +351,6 @@ export default function DashboardPage() {
             <WorkforcePresenceStripView presence={presence} />
             <WorkforceAgents tenantId={tenantId} />
           </>
-        )}
-
-        {/* IDE tab — reuses IdeProjectCard via the shared IdeProjectsContent. */}
-        {activeTab === 'ide' && (
-          <section style={{ marginBottom: 40 }}>
-            <IdeProjectsContent limit={6} viewAllHref="/ide/dashboard" />
-          </section>
-        )}
-
-        {/* Ideas / Brainstorm tab — the tenant's Brain chats, deep-linked. */}
-        {activeTab === 'ideas' && (
-          <section style={{ marginBottom: 40 }}>
-            <DashboardIdeasTab limit={9} />
-          </section>
         )}
 
         {/* Quality tab — registered collectors + slide-out create. */}

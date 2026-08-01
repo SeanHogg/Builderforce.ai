@@ -144,7 +144,7 @@ export async function acceptActiveTerms(
  * should consume `phase` here so all gates evolve together.
  */
 export function useOnboardingState(): OnboardingState {
-  const { webToken, tenantToken, selectTenant, selectAccountType } = useAuth();
+  const { user, webToken, tenantToken, selectTenant, selectAccountType } = useAuth();
 
   const [terms, setTerms] = useState<ActiveTermsDoc | null>(null);
   const [needsTerms, setNeedsTerms] = useState<boolean | null>(null);
@@ -208,7 +208,9 @@ export function useOnboardingState(): OnboardingState {
       try {
         const tenants = await getMyTenants(webToken);
         if (tenants.length > 0) return; // existing users keep the normal picker flow
-        const tenant = await createTenant(webToken, 'Default');
+        const identity = (user?.name?.trim() || user?.email?.split('@')[0] || 'My').slice(0, 60);
+        const workspaceName = /workspace$/i.test(identity) ? identity : `${identity}'s Workspace`;
+        const tenant = await createTenant(webToken, workspaceName);
         await selectTenant(tenant); // mints the tenant JWT (persisted synchronously)
         // Give the new workspace a Default project so the app is immediately usable
         // (createProject also seeds its board + Evermind). Guarded so a returning
@@ -238,7 +240,7 @@ export function useOnboardingState(): OnboardingState {
         setProvisioning(false);
       }
     })();
-  }, [webToken, tenantToken, needsTerms, needsRole, accountType, provisioning, selectTenant]);
+  }, [webToken, tenantToken, needsTerms, needsRole, accountType, provisioning, selectTenant, user?.email, user?.name]);
 
   const selectRole = useCallback(async (accountType: 'standard' | 'freelancer') => {
     await selectAccountType(accountType);

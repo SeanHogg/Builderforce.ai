@@ -136,6 +136,21 @@ export function activate(context: vscode.ExtensionContext): void {
     managerStatus,
     vscode.commands.registerCommand(OPEN_MANAGER_CMD, () =>
       vscode.env.openExternal(vscode.Uri.parse(`${appUrl()}/projects?tab=manager`))),
+    vscode.commands.registerCommand("builderforce.openCreateCanvas", async () => {
+      const prompt = await vscode.window.showInputBox({
+        title: vscode.l10n.t("Create on Canvas"),
+        prompt: vscode.l10n.t("What do you want to build, compare, visualize, or automate?"),
+        ignoreFocusOut: true,
+      });
+      if (prompt === undefined) return;
+      try {
+        const session = await bfApi.createCreationSession(context.secrets, prompt);
+        trackVsix("navigation", { ref: `creation-session:${session.id}` });
+        await vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/create/${session.id}`));
+      } catch (error) {
+        void vscode.window.showErrorMessage(vscode.l10n.t("Could not create a Canvas session: {0}", (error as Error).message));
+      }
+    }),
     attention.onDidChange(() => {
       tree.refresh(); projects.refresh(); inbox.refresh(); updateManagerStatus();
       // Per-session chat tabs show the same live status as the Sessions rows, off the

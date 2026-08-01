@@ -7785,3 +7785,68 @@ export const innovationApi = {
     remove: (id: string) => ideaTracker.remove(id),
   },
 };
+
+// ---------------------------------------------------------------------------
+// Create — durable collaborative canvas sessions.
+// ---------------------------------------------------------------------------
+
+export interface CreationSessionSummary {
+  id: string;
+  title: string;
+  description: string | null;
+  status: 'active' | 'archived';
+  preview: { objectCount?: number; kinds?: string[]; objects?: Array<{ id: string; kind: string; x: number; y: number; title: string }> } | null;
+  revision: number;
+  lastActivityAt: string;
+  createdAt: string;
+  role: 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner';
+}
+
+export interface CreationSessionObject {
+  id: string;
+  kind: string;
+  resourceType: string | null;
+  resourceId: string | null;
+  canvasData: { x?: number; y?: number; [key: string]: unknown };
+  content: Record<string, unknown> | null;
+}
+
+export interface CreationSessionConnection {
+  id: string;
+  sourceObjectId: string;
+  targetObjectId: string;
+  kind: string;
+  label: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface CreationSessionDetail {
+  session: CreationSessionSummary & { viewport?: Record<string, unknown> | null; canvasRevision: number };
+  role: CreationSessionSummary['role'];
+  objects: CreationSessionObject[];
+  connections: CreationSessionConnection[];
+  projectIds: number[];
+  members: Array<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null }>;
+}
+
+export interface CreationGraphInput {
+  objects: Array<{ id: string; kind: string; resourceType?: string | null; resourceId?: string | null; canvasData: Record<string, unknown>; content: Record<string, unknown> }>;
+  connections: Array<{ id: string; sourceObjectId: string; targetObjectId: string; kind?: string; label?: string | null; metadata?: Record<string, unknown> }>;
+  expectedRevision?: number;
+  viewport?: Record<string, unknown>;
+}
+
+export const creationSessionsApi = {
+  list: (): Promise<{ sessions: CreationSessionSummary[] }> => request('/api/creation-sessions'),
+  create: (body: { title?: string; description?: string; initialPrompt?: string; projectIds?: number[] }) =>
+    request<{ session: { id: string; title: string; revision: number } }>('/api/creation-sessions', { method: 'POST', body: JSON.stringify(body) }),
+  get: (id: string): Promise<CreationSessionDetail> => request(`/api/creation-sessions/${encodeURIComponent(id)}`),
+  update: (id: string, body: { title?: string; description?: string | null; status?: 'active' | 'archived'; preview?: unknown }) =>
+    request<CreationSessionSummary>(`/api/creation-sessions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  saveGraph: (id: string, graph: CreationGraphInput) =>
+    request<{ revision: number; savedAt: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/graph`, { method: 'PUT', body: JSON.stringify(graph) }),
+  invite: (id: string, invitee: { userId?: string; email?: string }, role: CreationSessionSummary['role'] = 'editor') =>
+    request<{ userId: string; role: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/invite`, { method: 'POST', body: JSON.stringify({ ...invitee, role }) }),
+  openProject: (projectId: number) =>
+    request<{ sessionId: string; created: boolean }>(`/api/creation-sessions/projects/${projectId}/open`, { method: 'POST' }),
+};

@@ -11,6 +11,7 @@
   "welcome.sessions": "Inicia una conversación con el BuilderForce Brain.\n[Nuevo chat](command:builderforce.newSession)\n\nEl Brain se abre en el editor: el mismo chat unificado que la app web, para que revises los cambios en paralelo.",
   "welcome.insights": "Selecciona un proyecto para ver análisis en vivo (consumo de tokens, presupuesto, modelo principal, coste por PR fusionada).\n[Seleccionar proyecto](command:builderforce.selectProject)",
   "command.openChat": "BuilderForce: Abrir chat",
+  "command.openCreateCanvas": "BuilderForce: Crear en Canvas",
   "command.refreshInsights": "BuilderForce: Actualizar análisis",
   "command.refreshEvermind": "BuilderForce: Actualizar Evermind",
   "command.signIn": "BuilderForce: Iniciar sesión",

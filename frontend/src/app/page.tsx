@@ -7,8 +7,7 @@ import { useTranslations } from 'next-intl';
 import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
 import { FEATURES, EVERMIND } from '@/lib/content';
-import { savePendingPrompt } from '@/lib/brain';
-import { pendingPromptsApi } from '@/lib/builderforceApi';
+import { createLocalCreationSession } from '@/lib/creationSessions';
 import { BLOG_POSTS } from '@/lib/blogData';
 import { ArticleCardGrid } from '@/components/blog/ArticleCard';
 import QuickStart from '@/components/QuickStart';
@@ -37,13 +36,10 @@ export default function LandingPage() {
     e.preventDefault();
     const text = prompt.trim();
     if (!text) return;
-    // Answer the prompt immediately as a GUEST — no login wall. /brainstorm renders
-    // the guest chat for logged-out visitors and auto-sends ?prompt=. We still stash
-    // it (durable, cross-device) so if they later sign up mid-thought the authed
-    // Brain can replay it. See GuestBrainstormPage + lib/brain/pendingPrompt.
-    savePendingPrompt(text);
-    pendingPromptsApi.save(text, '/');
-    router.push(`/brainstorm?prompt=${encodeURIComponent(text)}`);
+    // Creation starts without an account. The complete browser draft is claimed
+    // by CreationSessionClient once the visitor signs in and has a workspace.
+    const sessionId = createLocalCreationSession(text);
+    router.push(`/create/${sessionId}`);
   }
 
   async function handleNewsletterSubmit(e: React.FormEvent) {

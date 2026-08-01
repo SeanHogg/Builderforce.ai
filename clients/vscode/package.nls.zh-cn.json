@@ -11,6 +11,7 @@
   "welcome.sessions": "开始与 BuilderForce Brain 对话。\n[新建对话](command:builderforce.newSession)\n\nBrain 在编辑器中打开 —— 与网页应用相同的统一对话，方便你并排查看更改。",
   "welcome.insights": "选择一个项目，即可查看实时的开发者洞察（令牌消耗、预算、热门模型、每个合并 PR 的成本）。\n[选择项目](command:builderforce.selectProject)",
   "command.openChat": "BuilderForce：打开对话",
+  "command.openCreateCanvas": "BuilderForce：在画布上创建",
   "command.refreshInsights": "BuilderForce：刷新洞察",
   "command.refreshEvermind": "BuilderForce：刷新 Evermind",
   "command.signIn": "BuilderForce：登录",

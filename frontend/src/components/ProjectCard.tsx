@@ -13,6 +13,7 @@ import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { RunDiagnosticsButton } from './RunDiagnosticsButton';
 import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
+import { creationSessionsApi } from '@/lib/builderforceApi';
 
 export interface ProjectCardProps {
   project: Project;
@@ -137,6 +138,23 @@ export function ProjectCard({
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              void creationSessionsApi.openProject(Number(project.id)).then(({ sessionId }) => {
+                window.location.href = `/create/${sessionId}`;
+              });
+            }}
+            aria-label="Open project on canvas"
+            title="Open on Create canvas"
+            style={iconButtonStyle}
+          >
+            <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+              <circle cx="6" cy="7" r="2" /><circle cx="18" cy="6" r="2" /><circle cx="15" cy="18" r="2" />
+              <path d="M8 7l8-1M7 9l7 7M18 8l-2 8" />
+            </svg>
+          </button>
           {showDetailsButton && (
             <button
               type="button"

@@ -976,3 +976,103 @@ export const rehearsalSteps = pgTable('rehearsal_steps', {
   detail:       text('detail'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
 });
+
+
+// ---------------------------------------------------------------------------
+// Creation Sessions (migration 0388)
+// ---------------------------------------------------------------------------
+
+/** A durable, tenant-owned infinite canvas. A Project is optional context, not
+ *  the owner of the session; project associations live in the link table below. */
+export const creationSessions = pgTable('creation_sessions', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  title:          varchar('title', { length: 255 }).notNull().default('Untitled session'),
+  description:    text('description'),
+  status:         varchar('status', { length: 16 }).notNull().default('active'),
+  createdBy:      varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  updatedBy:      varchar('updated_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  canvasRevision: bigint('canvas_revision', { mode: 'number' }).notNull().default(0),
+  viewport:       jsonb('viewport').notNull().default(sql`'{"x":0,"y":0,"zoom":1}'::jsonb`),
+  preview:        jsonb('preview'),
+  lastActivityAt: timestamp('last_activity_at').notNull().defaultNow(),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+  archivedAt:     timestamp('archived_at'),
+}, (t) => ({
+  byTenantActivity: index('idx_creation_sessions_tenant_activity').on(t.tenantId, t.status, t.lastActivityAt),
+  byCreator: index('idx_creation_sessions_creator').on(t.createdBy, t.lastActivityAt),
+  bySegment: index('idx_creation_sessions_segment').on(t.tenantId, t.segmentId, t.lastActivityAt),
+}));
+
+export const creationSessionObjects = pgTable('creation_session_objects', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  sessionId:        uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),
+  kind:             varchar('kind', { length: 48 }).notNull(),
+  resourceType:     varchar('resource_type', { length: 64 }),
+  resourceId:       varchar('resource_id', { length: 128 }),
+  resourceRevision: varchar('resource_revision', { length: 128 }),
+  canvasData:       jsonb('canvas_data').notNull().default(sql`'{}'::jsonb`),
+  content:          jsonb('content'),
+  createdBy:        varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  updatedBy:        varchar('updated_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  bySession: index('idx_creation_objects_session').on(t.sessionId, t.createdAt),
+  byResource: uniqueIndex('uq_creation_objects_resource').on(t.sessionId, t.resourceType, t.resourceId)
+    .where(sql`${t.resourceId} IS NOT NULL`),
+}));
+
+export const creationSessionConnections = pgTable('creation_session_connections', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  sessionId:      uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),
+  sourceObjectId: uuid('source_object_id').notNull().references(() => creationSessionObjects.id, { onDelete: 'cascade' }),
+  targetObjectId: uuid('target_object_id').notNull().references(() => creationSessionObjects.id, { onDelete: 'cascade' }),
+  kind:           varchar('kind', { length: 24 }).notNull().default('reference'),
+  label:          varchar('label', { length: 255 }),
+  metadata:       jsonb('metadata'),
+  createdBy:      varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({ bySession: index('idx_creation_connections_session').on(t.sessionId, t.createdAt) }));
+
+export const creationSessionMembers = pgTable('creation_session_members', {
+  sessionId:        uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),
+  userId:           varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role:             varchar('role', { length: 16 }).notNull().default('viewer'),
+  invitedBy:        varchar('invited_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  lastSeenRevision: bigint('last_seen_revision', { mode: 'number' }).notNull().default(0),
+  joinedAt:         timestamp('joined_at').notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.sessionId, t.userId] }),
+  byUser: index('idx_creation_members_user').on(t.userId, t.joinedAt),
+}));
+
+export const creationSessionEvents = pgTable('creation_session_events', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  sessionId:      uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),
+  revision:       bigint('revision', { mode: 'number' }).notNull(),
+  actorType:      varchar('actor_type', { length: 16 }).notNull().default('user'),
+  actorRef:       varchar('actor_ref', { length: 128 }),
+  eventType:      varchar('event_type', { length: 64 }).notNull(),
+  objectId:       uuid('object_id').references(() => creationSessionObjects.id, { onDelete: 'set null' }),
+  payload:        jsonb('payload').notNull().default(sql`'{}'::jsonb`),
+  idempotencyKey: varchar('idempotency_key', { length: 128 }),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byRevision: uniqueIndex('uq_creation_events_revision').on(t.sessionId, t.revision),
+  byIdempotency: uniqueIndex('uq_creation_events_idempotency').on(t.sessionId, t.idempotencyKey)
+    .where(sql`${t.idempotencyKey} IS NOT NULL`),
+  bySession: index('idx_creation_events_session_revision').on(t.sessionId, t.revision),
+}));
+
+export const creationSessionProjectLinks = pgTable('creation_session_project_links', {
+  sessionId: uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),
+  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  addedBy:   varchar('added_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.sessionId, t.projectId] }),
+  byProject: index('idx_creation_project_links_project').on(t.projectId, t.createdAt),
+}));

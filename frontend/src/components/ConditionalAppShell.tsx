@@ -9,7 +9,6 @@ import OnboardingGate from './OnboardingGate';
 import RouteMarketing from './RouteMarketing';
 import { BrainActionsProvider, BrainContextProvider, BrainProvider, brainConfig, guestBrainConfig } from '@/lib/brain';
 import { ReportErrorProvider } from './ReportErrorProvider';
-import { GuestBrainstormPage } from './brain/GuestBrainstormPage';
 import { PinsProvider } from '@/lib/widgets/PinsProvider';
 import { AiInsightPanelProvider } from './insights/AiInsightPanelProvider';
 import { AiInsightPanelBrainBridge } from './insights/AiInsightPanelBrainBridge';
@@ -33,8 +32,22 @@ import { useIsFreelancer } from '@/lib/rbac';
 import { findActiveGroup, isFreelancerAllowedPath } from '@/lib/navGroups';
 import { classifyShell } from '@/lib/shellRouting';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { convertVisitor } from '@/lib/marketingApi';
+import { createLocalCreationSession } from '@/lib/creationSessions';
+
+/** Preserve old campaign links while moving prompt-led creation onto Canvas. */
+function LegacyPromptCanvasRedirect() {
+  const router = useRouter();
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    const prompt = new URLSearchParams(window.location.search).get('prompt')?.trim() ?? '';
+    router.replace(`/create/${createLocalCreationSession(prompt)}`);
+  }, [router]);
+  return <div style={{ minHeight: '60vh', display: 'grid', placeItems: 'center' }}>Opening your creation canvas…</div>;
+}
 
 /** Footer-only chrome for the standalone auth screens (login/register/activate). */
 function FooterOnlyShell({ children }: { children: React.ReactNode }) {
@@ -91,11 +104,12 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
     // teaser; it runs inside the guest-configured BrainProvider (see AppBrainShell).
     // Every other app route still shows the per-route teaser + login CTA.
     if (pathname.startsWith('/brainstorm')) {
-      return (
-        <MarketingShell>
-          <GuestBrainstormPage />
-        </MarketingShell>
-      );
+      return <MarketingShell><LegacyPromptCanvasRedirect /></MarketingShell>;
+    }
+    // Anonymous Create sessions are real, editable local-first canvases. They
+    // remain under marketing chrome until sign-in, when the draft is claimed.
+    if (pathname.startsWith('/create/local-')) {
+      return <MarketingShell>{children}</MarketingShell>;
     }
     return (
       <MarketingShell>

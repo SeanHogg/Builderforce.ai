@@ -116,6 +116,7 @@ import { createChatRoutes }         from './presentation/routes/chatRoutes';
 import { createSpecRoutes }         from './presentation/routes/specRoutes';
 import { createWorkflowRoutes }     from './presentation/routes/workflowRoutes';
 import { createWorkflowDefinitionRoutes } from './presentation/routes/workflowDefinitionRoutes';
+import { createCreationSessionRoutes } from './presentation/routes/creationSessionRoutes';
 import { createWorkflowTriggerRoutes } from './presentation/routes/workflowTriggerRoutes';
 import { createApprovalRoutes }     from './presentation/routes/approvalRoutes';
 import { createApprovalRuleRoutes } from './presentation/routes/approvalRuleRoutes';
@@ -601,6 +602,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/specs',    createSpecRoutes(db));
   app.route('/api/workflows', createWorkflowRoutes(db));
   app.route('/api/workflow-definitions', createWorkflowDefinitionRoutes(db));
+  app.route('/api/creation-sessions', createCreationSessionRoutes(db));
   app.route('/api/approvals',       createApprovalRoutes(db, runtimeService));
   app.route('/api/approval-rules',  createApprovalRuleRoutes(db));
   app.route('/api/telemetry',       createTelemetryRoutes(db));

@@ -496,6 +496,19 @@ export async function createProject(
   return project;
 }
 
+/** Create a durable unified Canvas session from the editor. */
+export async function createCreationSession(
+  secrets: vscode.SecretStorage,
+  prompt: string,
+): Promise<{ id: string; title: string; revision: number }> {
+  const result = await authed<{ session: { id: string; title: string; revision: number } }>(secrets, "/api/creation-sessions", {
+    method: "POST",
+    body: JSON.stringify({ title: prompt.trim().slice(0, 80) || "Untitled session", initialPrompt: prompt.trim() }),
+  });
+  if (!result?.session) throw new Error("not signed in");
+  return result.session;
+}
+
 // Tasks cache: single-process, short TTL, busted by refresh / status change.
 const TASKS_TTL = 30_000;
 const taskCache = ttlCache<number, BfTask[]>(TASKS_TTL);

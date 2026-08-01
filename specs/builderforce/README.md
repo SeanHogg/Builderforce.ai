@@ -133,6 +133,25 @@
     codebase scan/knowledge → learned routing). Out of scope: Visual Studio (C#/VSIX) and JetBrains —
     same backend, separate clients.
 
+15. **[15 — PRD: RFP / RFQ Response](./15-prd-rfp-response.md)**
+    Adds grounded, co-branded pre-sales proposal generation: portfolio matching, diagnostics freshness,
+    CTO/Product Owner personas, cost and margin modeling, delivery plans, risks, dependencies, and
+    self-contained proposal export. It composes existing project, diagnostics, agent, and finance
+    primitives rather than introducing a disconnected proposal workflow.
+
+16. **[16 — PRD: Insights Answer Engine](./16-prd-insights-answer-engine.md)**
+    Turns vague leadership questions into safe, composed visual answers using the existing metric and
+    widget registries. Adds deterministic answer templates, an out-of-box Executive dashboard, delivery
+    risk and RCA visual primitives, and one shared answer path for Insights and the Brain.
+
+17. **[17 — PRD: Creation Sessions and the Infinite Canvas](./17-prd-creation-canvas-sessions.md)**
+    Recasts chat as a durable, tenant-owned Creation Session and unifies Brain Storm, Workflows,
+    IDE/Builder, websites, data, models, voice, projects, workforce, and application widgets on one
+    multiplayer canvas. Projects become optional live context and delivery destinations; `/dashboard`
+    defaults to visual Create-session cards; onboarding starts in a guided session; generated roadmaps,
+    feature mockups, tasks, and agent delivery stay in the same creative context; the web and VSIX share
+    one canvas engine and command contract.
+
 > **Decision log.** PM + Agile = Phase 1 (BuilderForce owns data, autonomous dev agents, thin
 > embed shells, Tenant→Segment isolation with BurnRateOS as IdP). Security/Governance = Phase 2
 > (doc 07), same model. DSR/suppression re-home per-Segment; BurnRateOS keeps its own

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 import JsonLd from '@/components/JsonLd';
@@ -15,9 +15,11 @@ import { REGISTER_MARKETING } from '@/lib/content';
 import MarketingVisual from '@/components/account/MarketingVisual';
 import AccountTypeChooser from '@/components/account/AccountTypeChooser';
 import EmailVerificationStep from '@/components/account/EmailVerificationStep';
+import { safeRedirectPath } from '@/lib/safeRedirect';
 
 export default function RegisterPageClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const tr = useTranslations('register');
   const { register, isAuthenticated } = useAuth();
 
@@ -38,11 +40,12 @@ export default function RegisterPageClient() {
 
   // Freelancers land on their for-hire profile (the restricted gig shell); standard
   // accounts go to the builder dashboard.
-  const destination = accountType === 'freelancer' ? '/freelancer/profile' : '/dashboard';
+  const requestedDestination = safeRedirectPath(searchParams.get('next'));
+  const destination = accountType === 'freelancer' ? '/freelancer/profile' : requestedDestination;
 
   useEffect(() => {
-    if (isAuthenticated) router.replace('/dashboard');
-  }, [isAuthenticated, router]);
+    if (isAuthenticated) router.replace(destination);
+  }, [destination, isAuthenticated, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

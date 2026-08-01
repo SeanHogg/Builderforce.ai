@@ -154,7 +154,7 @@ export default function LoginPageClient() {
           </Link>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <ThemeToggleButton />
-            <Link href="/register" style={{
+            <Link href={`/register${searchParams.get('next') ? `?next=${encodeURIComponent(safeRedirectPath(searchParams.get('next')))}` : ''}`} style={{
               padding: '7px 16px', borderRadius: 10,
               background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
               color: '#fff', textDecoration: 'none',
@@ -307,7 +307,7 @@ export default function LoginPageClient() {
 
           <p style={{ textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: 20 }}>
             {t('noAccount')}{' '}
-            <Link href="/register" style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 600 }}>
+            <Link href={`/register${searchParams.get('next') ? `?next=${encodeURIComponent(safeRedirectPath(searchParams.get('next')))}` : ''}`} style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 600 }}>
               {t('signUpLink')}
             </Link>
           </p>
