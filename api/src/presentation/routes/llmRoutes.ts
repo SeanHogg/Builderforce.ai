@@ -1350,10 +1350,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             ? `Kimi connection test paused: Kimi reports that this subscription's usage allowance is exhausted. Check the Kimi Code Console for the reset time. The key is valid and does not need to be replaced. (${probe.error})`
             : `${provider} connection test paused: this account's usage allowance is depleted (HTTP ${probe.alert.status}). Check the provider's Usage page for the reset time; to continue now, buy credits or enable auto top-up, or upgrade the provider plan.`
           : probe.alert?.reason === 'not_entitled'
-          ? provider === 'xai'
+          ? provider === 'kimi' && /<!doctype\s+html|<html\b/i.test(probe.error)
+            ? `Kimi's edge blocked the hosted Builderforce gateway before the API could validate this key. Kimi Code subscription keys are limited to personal interactive clients and cannot be used through this hosted reverse proxy. Use Kimi Code locally, or connect a Moonshot Open Platform API key for hosted Builderforce agents.`
+            : provider === 'xai'
             ? `xAI connection test failed: this account cannot use ${probe.model ?? 'the selected model'} (HTTP ${probe.alert.status}). Check the account's SuperGrok/API access, or use an xAI API key.`
             : provider === 'kimi'
-              ? `Kimi accepted the API key but refused ${probe.model ?? 'the selected model'} (HTTP ${probe.alert.status}). Kimi's response: ${probe.error}`
+              ? `Kimi refused ${probe.model ?? 'the selected model'} (HTTP ${probe.alert.status}). Kimi's response: ${probe.error}`
               : `${provider} connection test failed: this account cannot use ${probe.model ?? 'the selected model'} (HTTP ${probe.alert.status}). Provider response: ${probe.error}`
           : `${provider} connection test failed: ${probe.error}`
         : `${provider} connection test could not run: ${probe.status.replaceAll('_', ' ')}.`,

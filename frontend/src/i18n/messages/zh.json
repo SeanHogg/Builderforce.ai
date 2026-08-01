@@ -8923,7 +8923,7 @@
         "blurb": "粘贴 Meta AI API 密钥，在您自己的 Meta AI 账户上运行 MUSE 模型（muse-spark-1.1）。"
       },
       "kimi": {
-        "blurb": "粘贴 Kimi Code 订阅密钥，以使用您在 kimi.com 购买的编程模型。"
+        "blurb": "Kimi Code 订阅密钥仅用于个人交互式客户端，托管网关可能会被拦截。云端 Agent 请使用 Moonshot 开放平台 API 密钥。"
       },
       "moonshot": {
         "blurb": "粘贴 Moonshot 开放平台 API 密钥以使用 Moonshot 模型。"
@@ -8979,7 +8979,7 @@
       "notEntitled": "该账户已成功登录，但服务商拒绝了请求（{status}），因为当前套餐不包含此功能。请改用套餐包含该功能的账户重新连接，或升级套餐。",
       "xaiNotEntitled": "xAI 已接受登录，但拒绝了 Grok API 访问（{status}）。请确认该账户具有符合条件的 SuperGrok 套餐且每周用量尚有余额，或连接 xAI API 密钥。",
       "xaiCapacity": "您的每周 SuperGrok API 用量已耗尽（{status}）。重置后 Grok 将恢复；如需立即继续，请购买额外用量点数、启用自动充值或升级到 SuperGrok Heavy。无需重新连接账户。",
-      "kimiNotEntitled": "Kimi 已接受此 API 密钥，但拒绝了 Kimi Code 访问（{status}）。请在 Kimi Code 控制台查看账户访问通知。更换密钥无法解除账户限制。",
+      "kimiNotEntitled": "Kimi 拒绝了托管请求（{status}）。如果连接测试显示 HTML，说明 Kimi 边缘在验证密钥前拦截了云网关。请在本地使用 Kimi Code，或为托管 Agent 使用 Moonshot 开放平台。",
       "kimiCapacity": "您的 Kimi Code 订阅额度已用尽（{status}）。请在 Kimi Code 控制台查看下次重置时间。密钥仍然有效，无需更换。",
       "rejected": "服务商拒绝了此凭据（{status}）。它可能已过期、被吊销，或已在别处轮换——请重新连接该账户。",
       "capacity": "凭据本身有效，但账户额度已用尽（{status}）——可能是消费上限或余额为零。请充值或提高上限，无需重新连接。",

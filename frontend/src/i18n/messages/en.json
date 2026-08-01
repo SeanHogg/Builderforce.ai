@@ -8923,7 +8923,7 @@
         "blurb": "Paste a Meta AI API key to run MUSE models (muse-spark-1.1) on your own Meta AI account."
       },
       "kimi": {
-        "blurb": "Paste a Kimi Code subscription key to use your paid kimi.com coding models."
+        "blurb": "Kimi Code subscription keys are for personal interactive clients and may be blocked by hosted gateways. For cloud agents, connect a Moonshot Open Platform API key instead."
       },
       "moonshot": {
         "blurb": "Paste a Moonshot Open Platform API key to run Moonshot models on your own account."
@@ -8979,7 +8979,7 @@
       "notEntitled": "This account signed in successfully, but the provider refused the request ({status}) because the plan does not cover it. Reconnect an account whose plan includes it, or upgrade the plan.",
       "xaiNotEntitled": "xAI accepted the sign-in but refused Grok API access ({status}). Check that this account has an eligible SuperGrok plan and remaining weekly usage, or connect an xAI API key.",
       "xaiCapacity": "Your weekly SuperGrok API allowance is depleted ({status}). Grok will resume when it resets; to continue now, buy Extra Usage Credits, enable Auto Top-Up, or upgrade to SuperGrok Heavy. Do not reconnect the account.",
-      "kimiNotEntitled": "Kimi accepted this API key but refused Kimi Code access ({status}). Check the Kimi Code Console for an account-access notice. Replacing the key will not resolve an account restriction.",
+      "kimiNotEntitled": "Kimi refused the hosted request ({status}). If the connection test shows HTML, Kimi’s edge blocked this cloud gateway before validating the key. Use Kimi Code locally, or use Moonshot Open Platform for hosted agents.",
       "kimiCapacity": "Your Kimi Code subscription allowance is exhausted ({status}). Check the Kimi Code Console for the next reset time. The key is valid and does not need to be replaced.",
       "rejected": "The provider rejected this credential ({status}). It has probably expired, been revoked, or been rotated elsewhere — reconnect the account.",
       "capacity": "The credential works, but the account is out of budget ({status}) — a spend cap or empty credit balance. Top up or raise the limit; there is no need to reconnect.",

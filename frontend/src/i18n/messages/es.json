@@ -8923,7 +8923,7 @@
         "blurb": "Pega una clave de API de Meta AI para ejecutar modelos MUSE (muse-spark-1.1) en tu propia cuenta de Meta AI."
       },
       "kimi": {
-        "blurb": "Pega una clave de suscripción de Kimi Code para usar tus modelos de programación de kimi.com."
+        "blurb": "Las claves de suscripción de Kimi Code son para clientes interactivos personales y pueden ser bloqueadas por pasarelas alojadas. Para agentes en la nube, usa Moonshot Open Platform."
       },
       "moonshot": {
         "blurb": "Pega una clave API de Moonshot Open Platform para usar modelos de Moonshot."
@@ -8979,7 +8979,7 @@
       "notEntitled": "Esta cuenta inició sesión correctamente, pero el proveedor rechazó la solicitud ({status}) porque el plan no la cubre. Vuelve a conectar una cuenta cuyo plan la incluya, o mejora el plan.",
       "xaiNotEntitled": "xAI aceptó el inicio de sesión, pero rechazó el acceso a la API de Grok ({status}). Comprueba que la cuenta tenga un plan SuperGrok compatible y uso semanal disponible, o conecta una clave de API de xAI.",
       "xaiCapacity": "Tu asignación semanal de la API de SuperGrok se agotó ({status}). Grok volverá a funcionar cuando se restablezca; para continuar ahora, compra créditos de uso extra, activa la recarga automática o mejora a SuperGrok Heavy. No vuelvas a conectar la cuenta.",
-      "kimiNotEntitled": "Kimi aceptó esta clave API, pero rechazó el acceso a Kimi Code ({status}). Revisa la consola de Kimi Code para ver los avisos de la cuenta.",
+      "kimiNotEntitled": "Kimi rechazó la solicitud alojada ({status}). Si la prueba muestra HTML, el perímetro de Kimi bloqueó la pasarela antes de validar la clave. Usa Kimi Code localmente o Moonshot Open Platform para agentes alojados.",
       "kimiCapacity": "La asignación de tu suscripción a Kimi Code está agotada ({status}). Revisa en la consola de Kimi Code cuándo se restablece. La clave sigue siendo válida.",
       "rejected": "El proveedor rechazó esta credencial ({status}). Es probable que haya caducado, se haya revocado o se haya rotado en otro lugar: vuelve a conectar la cuenta.",
       "capacity": "La credencial funciona, pero la cuenta se ha quedado sin saldo ({status}): un límite de gasto o un saldo de créditos vacío. Recarga o sube el límite; no hace falta reconectar.",
