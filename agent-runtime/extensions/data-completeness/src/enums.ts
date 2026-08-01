@@ -22,3 +22,20 @@ export const DEFAULT_PLACEHOLDERS = [
 
 export const MAX_BATCH_SIZE_RECOMMENDED = 100000;
 export const BENCHMARK_TARGET_RPS = 16667; // 1M records in 60 seconds = 16667 RPS
+
+import type { TupleTier, ScoreThresholds } from "./types.js";
+
+/**
+ * Categorizes a score into its tier based on thresholds
+ */
+export function getTier(
+  score: number,
+  thresholds: ScoreThresholds
+): TupleTier {
+  if (score < thresholds.critical) {
+    return "critical";
+  } else if (score < thresholds.warning) {
+    return "warning";
+  }
+  return "passing";
+}
