@@ -76,6 +76,7 @@ function makeService(opts: {
   let captured: Captured = null;
   let taskSyncCalls = 0;
   let laneEntryCalls = 0;
+  let managedRunStatusCalls = 0;
   const onLaneEntry = async (info: { status: string; originLaneKey?: string }) => {
     laneEntryCalls += 1;
     if (laneEntryCalls <= (opts.laneEntryFailures ?? 0)) throw new Error('lane dispatcher unavailable');
@@ -92,7 +93,10 @@ function makeService(opts: {
     ? async () => opts.nextStatus ?? null
     : undefined;
   const onManagedRunStatus = opts.managedToStatus !== undefined
-    ? async () => ({ managed: true, toStatus: opts.managedToStatus! })
+    ? async () => {
+        managedRunStatusCalls += 1;
+        return { managed: true, toStatus: opts.managedToStatus! };
+      }
     : undefined;
   const svc = new RuntimeService(executions, tasks, agents, audit, undefined, onTaskStatusSync, undefined, onLaneEntry, resolveNextStatus, undefined, undefined, onManagedRunStatus);
   return {
@@ -101,6 +105,7 @@ function makeService(opts: {
     getStored: () => stored,
     getTaskSyncCalls: () => taskSyncCalls,
     getLaneEntryCalls: () => laneEntryCalls,
+    getManagedRunStatusCalls: () => managedRunStatusCalls,
     getStoredExecution: () => storedExecution,
   };
 }
@@ -213,21 +218,23 @@ describe('RuntimeService lane chaining', () => {
   });
 
   it('uses the Coordinator result without invoking legacy lane chaining', async () => {
-    const { svc, getCaptured } = makeService({
+    const { svc, getCaptured, getManagedRunStatusCalls } = makeService({
       taskStatus: 'ready', payload: JSON.stringify({ laneKey: 'ready', actAsRole: 'architect' }), managedToStatus: 'in_progress',
     });
     await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'design approved' });
     // The composition-root Coordinator performs the DB move + next-role dispatch;
     // RuntimeService must not perform a second move/trigger.
     expect(getCaptured()).toBeNull();
+    expect(getManagedRunStatusCalls()).toBe(1);
   });
 
   it('does not move a managed ticket to in_progress merely because its role run started', async () => {
-    const { svc, getStored } = makeService({
+    const { svc, getStored, getManagedRunStatusCalls } = makeService({
       taskStatus: 'ready', payload: JSON.stringify({ laneKey: 'ready', actAsRole: 'business-analyst' }), managedToStatus: 'ready',
     });
     await svc.update(EXEC_ID, { status: ExecutionStatus.RUNNING });
     expect(getStored().status).toBe('ready');
+    expect(getManagedRunStatusCalls()).toBe(1);
   });
 
   it('retries a transient side-effect failure and still runs later lifecycle effects', async () => {
