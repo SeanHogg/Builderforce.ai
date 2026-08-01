@@ -32,40 +32,12 @@ import { getProjectEvermindHead } from '@/lib/projectEvermindApi';
 import { isAwaitingApprovalExecution } from '@/lib/builderforceApi';
 import { fetchProjects } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
+import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData } from './creationObjectRegistry';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 
-const PALETTE: Array<{ group: string; items: Array<{ kind: CreationObjectKind; label: string; icon: string }> }> = [
-  { group: 'Build', items: [{ kind: 'workflow', label: 'Workflow', icon: '⌘' }, { kind: 'website', label: 'Website', icon: '◎' }, { kind: 'chat', label: 'Chat', icon: '●' }, { kind: 'dataset', label: 'Dataset', icon: '▤' }] },
-  { group: 'Insights', items: [{ kind: 'dashboard', label: 'Dashboard', icon: '▥' }, { kind: 'evaluation', label: 'Evaluation', icon: '✦' }, { kind: 'projectComparison', label: 'Comparison', icon: '≈' }, { kind: 'roadmap', label: 'Roadmap', icon: '↗' }, { kind: 'note', label: 'Note', icon: '◇' }] },
-  { group: 'Work', items: [{ kind: 'project', label: 'Project', icon: '▦' }, { kind: 'task', label: 'Task', icon: '✓' }, { kind: 'mockup', label: 'Mockup', icon: '▣' }, { kind: 'featureSummary', label: 'Feature summary', icon: '★' }] },
-  { group: 'People', items: [{ kind: 'staff', label: 'Staff member', icon: '●' }, { kind: 'standup', label: 'Stand-up', icon: '◎' }] },
-  { group: 'Agents', items: [{ kind: 'agent', label: 'Agent', icon: '✦' }, { kind: 'voice', label: 'Voice', icon: '◖' }] },
-  { group: 'Models', items: [{ kind: 'evermind', label: 'Evermind', icon: '🧠' }] },
-];
-
 function newNode(kind: CreationObjectKind, position: { x: number; y: number }): CreationFlowNode {
-  const defaults: Record<CreationObjectKind, CreationNodeData> = {
-    workflow: { kind, title: 'Untitled workflow', status: 'Ready', resourceId: `workflow:${crypto.randomUUID()}` },
-    project: { kind, title: 'BuilderForce launch', status: 'On track', subtitle: 'Product and go-to-market delivery.', resourceId: `project:${crypto.randomUUID()}` },
-    website: { kind, title: 'Website concept', status: 'Live', resourceId: `website:${crypto.randomUUID()}` },
-    dashboard: { kind, title: 'Performance dashboard', resourceId: `dashboard:${crypto.randomUUID()}` },
-    chat: { kind, title: 'Brain', resourceId: `chat:${crypto.randomUUID()}` },
-    agent: { kind, title: 'New agent', status: 'Online', model: 'gpt-4o', subtitle: 'Helps the team analyze and improve work.', resourceId: `agent:${crypto.randomUUID()}` },
-    staff: { kind, title: 'Teammate', role: 'Contributor', focus: 'Add a current focus from the inspector.', accent: '#3978f6', resourceId: `staff:${crypto.randomUUID()}` },
-    evaluation: { kind, title: 'Canvas evaluation', status: 'AI evaluation' },
-    dataset: { kind, title: 'Imported dataset.csv', resourceId: `dataset:${crypto.randomUUID()}` },
-    voice: { kind, title: 'Voice note', resourceId: `voice:${crypto.randomUUID()}` },
-    note: { kind, title: 'Note', subtitle: 'Add context for your collaborators.' },
-    roadmap: { kind, title: 'Executive sales roadmap', status: 'Draft' },
-    task: { kind, title: 'Build approved mockup', status: 'Ready', role: 'Campaign Strategist' },
-    mockup: { kind, title: 'Interactive feature mockup', status: 'Draft' },
-    featureSummary: { kind, title: 'Top 10 requested features', status: 'Synthesized' },
-    evermind: { kind, title: 'Untitled Evermind', status: 'Blueprint', subtitle: 'Create, teach, tune, evaluate, and publish a self-learning model on this canvas.', resourceId: `evermind:${crypto.randomUUID()}`, evermindVersion: 0, contributions: 0 },
-    projectComparison: { kind, title: 'Project comparison', status: 'Add two projects', projects: [], sources: [] },
-    standup: { kind, title: 'Impromptu stand-up', status: 'Gathering', participants: [], summary: 'Add staff members and agents from this canvas. Brain will facilitate current work, blockers, and follow-ups.' },
-  };
-  return { id: crypto.randomUUID(), type: 'creation', position, data: defaults[kind] };
+  return { id: crypto.randomUUID(), type: 'creation', position, data: createDefaultCreationData(kind) };
 }
 
 const SEED = {
@@ -499,14 +471,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId }: { sessionId: st
     parameters: {
       type: 'object', required: ['kind', 'title'], additionalProperties: false,
       properties: {
-        kind: { type: 'string', enum: PALETTE.flatMap((group) => group.items.map((item) => item.kind)) },
+        kind: { type: 'string', enum: CREATION_OBJECT_REGISTRY.map((definition) => definition.kind) },
         title: { type: 'string' }, subtitle: { type: 'string' }, status: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' },
       },
     },
     mutates: true,
     run: (raw: unknown) => {
       const args = raw as { kind?: CreationObjectKind; title?: string; subtitle?: string; status?: string; x?: number; y?: number };
-      const allowed = new Set(PALETTE.flatMap((group) => group.items.map((item) => item.kind)));
+      const allowed = new Set(CREATION_OBJECT_REGISTRY.map((definition) => definition.kind));
       if (!args.kind || !allowed.has(args.kind)) return { error: 'Unsupported canvas object kind' };
       const node = newNode(args.kind, { x: Number(args.x ?? 520), y: Number(args.y ?? 280) });
       node.data = { ...node.data, title: String(args.title || node.data.title).slice(0, 160), subtitle: args.subtitle?.slice(0, 2_000), status: args.status?.slice(0, 80) };
@@ -669,7 +641,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId }: { sessionId: st
         {paletteOpen && <aside className={styles.palette}>
           <div className={styles.paletteHeader}><strong>Add to canvas</strong><button onClick={() => setPaletteOpen(false)} aria-label="Close palette">×</button></div>
           <input className={styles.search} placeholder="Search everything…" />
-          {PALETTE.map((group) => <section key={group.group}><h4>{group.group}</h4><div className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} aria-label={item.label} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span>{item.icon}</span>{item.label}</button>)}</div></section>)}
+          {CREATION_PALETTE_GROUPS.map((group) => <section key={group.group}><h4>{group.group}</h4><div className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} aria-label={item.label} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span>{item.icon}</span>{item.label}</button>)}</div></section>)}
         </aside>}
 
         {selectedNode && <Inspector node={selectedNode} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit} members={members} onChange={updateSelected} onClose={() => setSelectedId(null)} onRun={runWorkflow} onExpandProject={expandProject} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}

@@ -3,17 +3,9 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
+import { creationObjectDefinition } from './creationObjectRegistry';
 
 export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
-
-const ICONS: Record<CreationNodeData['kind'], string> = {
-  workflow: '⌘', website: '◎', dashboard: '▥', chat: '●', agent: '✦', staff: '●',
-  evaluation: '✦', dataset: '▤', voice: '◖', note: '◇', project: '▦', roadmap: '↗',
-  task: '✓', mockup: '▣', featureSummary: '★',
-  evermind: '🧠',
-  projectComparison: '≈',
-  standup: '◎',
-};
 
 function WorkflowBody({ status }: { status?: string }) {
   const steps = ['Audience', 'Create campaign', 'Approve', 'Publish'];
@@ -118,7 +110,7 @@ export function CreationNode({ data, selected }: NodeProps<CreationFlowNode>) {
     <article className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
       <Handle type="target" position={Position.Left} className={styles.handle} />
       <header className={styles.nodeHeader}>
-        <span className={styles.nodeIcon}>{ICONS[data.kind]}</span>
+        <span className={styles.nodeIcon}>{creationObjectDefinition(data.kind).icon}</span>
         <strong>{data.title}</strong>
         {data.status && <span className={styles.status}>{data.status}</span>}
         <button className={styles.moreButton} aria-label={`More options for ${data.title}`}>•••</button>

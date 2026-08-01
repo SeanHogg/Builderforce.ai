@@ -43,6 +43,20 @@ locally; a server session can attach it to a canonical Project and reuse the exi
 production Evermind console for seeding, teaching, training/flush, validation,
 inference settings, maintenance, and version telemetry.
 
+The next collaboration and migration increment adds durable object comments,
+mentions metadata, resolvable threads, merged activity reads, role-aware canvas
+editing/running, active-presence polling, evidence-backed multi-Project comparisons,
+canonical impromptu stand-ups, and wrapper-session adapters for Brain chats and
+Workflow definitions. Legacy adapters remain guarded by
+`NEXT_PUBLIC_CREATION_SESSIONS_NAV` and visibly fall back to the old surface on a
+wrapper failure. Canvas object defaults, palette entries, icons, and AI tool enums
+now originate in one tested creation-object registry rather than separate catalogs.
+
+Migration `0389_creation_session_collaboration.sql` is the forward-only production
+upgrade for presence and comments. It intentionally repeats `IF NOT EXISTS` guards
+from the evolving `0388` definition because deployed environments may already have
+recorded `0388` before those collaboration fields were added.
+
 `/dashboard` remains the default landing page. Its first and default tab becomes **Create**, showing visual session cards and a prompt that creates a new session immediately.
 
 ## 2. Problem
