@@ -122,6 +122,7 @@ export function DashboardWidget({ v }: { v: WidgetValue }) {
           value={formatMetricValue(v.value, v.unit)}
           sub={t('window', { days: v.days })}
           series={values.length > 1 ? values : null}
+          trendClassification={trend}
           delta={delta}
           color={color}
         />
