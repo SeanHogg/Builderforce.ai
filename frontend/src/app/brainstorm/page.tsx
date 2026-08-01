@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { BrainPanel } from '@/components/brain/BrainPanel';
 import { takePendingPrompt } from '@/lib/brain';
 import { useAuth } from '@/lib/AuthContext';
+import { creationSessionsApi } from '@/lib/builderforceApi';
+import { createLocalCreationSession } from '@/lib/creationSessions';
 
 /**
  * Brain Storm — the full-page Brain. It renders the exact same <BrainPanel>
@@ -20,19 +22,47 @@ export default function BrainstormPage() {
   const { hasTenant } = useAuth();
   const chatIdParam = searchParams.get('chat');
   const initialChatId = chatIdParam ? (Number(chatIdParam) || null) : null;
+  const creationNav = process.env.NEXT_PUBLIC_CREATION_SESSIONS_NAV === 'true';
+  const legacyPrompt = searchParams.get('prompt')?.trim() || '';
+  const shouldAdapt = creationNav && (!!initialChatId || !!legacyPrompt);
+  const [adapterFailed, setAdapterFailed] = useState(false);
+
+  useEffect(() => {
+    if (!shouldAdapt) return;
+    let stopped = false;
+    const open = async () => {
+      if (initialChatId && hasTenant) {
+        const result = await creationSessionsApi.openResource('chat', initialChatId);
+        if (!stopped) router.replace(`/create/${result.sessionId}?focus=${result.objectId}&from=brainstorm`);
+        return;
+      }
+      if (legacyPrompt) {
+        if (hasTenant) {
+          const result = await creationSessionsApi.create({ title: legacyPrompt.slice(0, 80), initialPrompt: legacyPrompt });
+          if (!stopped) router.replace(`/create/${result.session.id}?from=brainstorm`);
+        } else {
+          const localId = createLocalCreationSession(legacyPrompt);
+          if (!stopped) router.replace(`/create/${localId}?from=brainstorm`);
+        }
+      }
+    };
+    void open().catch(() => { if (!stopped) setAdapterFailed(true); });
+    return () => { stopped = true; };
+  }, [hasTenant, initialChatId, legacyPrompt, router, shouldAdapt]);
 
   // Capture ?prompt= exactly once on mount, then strip it from the URL so a
   // refresh doesn't replay the prompt into a fresh chat. BrainPanel auto-sends
   // it (ref-guarded) and creates+selects a chat on demand.
   const [initialPrompt, setInitialPrompt] = useState(() => searchParams.get('prompt') ?? undefined);
   useEffect(() => {
+    if (shouldAdapt) return;
     if (!searchParams.get('prompt')) return;
     const params = new URLSearchParams(searchParams.toString());
     params.delete('prompt');
     const qs = params.toString();
     router.replace(qs ? `/brainstorm?${qs}` : '/brainstorm');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams, router, shouldAdapt]);
 
   // Fallback: a landing-page prompt captured pre-auth (localStorage, not the URL)
   // is replayed here when the user lands directly on /brainstorm after signing in.
@@ -50,11 +80,16 @@ export default function BrainstormPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasTenant]);
 
+  if (shouldAdapt && !adapterFailed) return <div style={{ padding: 24, fontSize: 13, color: 'var(--text-muted)' }}>Opening your creation canvas…</div>;
+
   return (
+    <>
     <BrainPanel
       variant="page"
       initialChatId={initialChatId}
       initialPrompt={initialPrompt}
     />
+    {adapterFailed && <div role="status" style={{ position: 'fixed', right: 18, bottom: 18, zIndex: 20, padding: 12, borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>Canvas migration was unavailable. Brain remains open so your deep link still works.</div>}
+    </>
   );
 }

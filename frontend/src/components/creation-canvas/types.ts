@@ -14,7 +14,9 @@ export type CreationObjectKind =
   | 'task'
   | 'mockup'
   | 'featureSummary'
-  | 'evermind';
+  | 'evermind'
+  | 'projectComparison'
+  | 'standup';
 
 export type CreationNodeData = {
   [key: string]: unknown;

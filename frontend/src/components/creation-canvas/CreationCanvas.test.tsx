@@ -97,4 +97,31 @@ describe('CreationCanvas', () => {
     expect(screen.getByText('Model quality gate')).toBeInTheDocument();
     expect(screen.getByText('Training telemetry')).toBeInTheDocument();
   });
+
+  it('keeps anonymous object comments unblocked as a save-later collaboration step', () => {
+    render(<CreationCanvas sessionId="local-comment-test" persistence="local" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Activity' }));
+
+    expect(screen.getByText('Collaboration starts when you save')).toBeInTheDocument();
+    expect(screen.getByText(/Sign in to add comments, mentions, shared activity/i)).toBeInTheDocument();
+  });
+
+  it('requires two canonical projects before creating a live comparison', () => {
+    render(<CreationCanvas sessionId="comparison-gate-test" persistence="local" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Project' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Compare projects on canvas' }));
+
+    expect(screen.getByText('Add at least two saved projects to compare')).toBeInTheDocument();
+  });
+
+  it('gathers staff and agents into an impromptu stand-up frame', () => {
+    render(<CreationCanvas sessionId="standup-test" persistence="local" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Stand-up' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gather and start stand-up' }));
+
+    expect(screen.getByText('Draft stand-up gathered; save to start it live')).toBeInTheDocument();
+    expect(screen.getAllByText('Sarah').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Campaign Strategist').length).toBeGreaterThan(0);
+  });
 });

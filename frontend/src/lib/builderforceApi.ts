@@ -7836,6 +7836,34 @@ export interface CreationGraphInput {
   viewport?: Record<string, unknown>;
 }
 
+export interface CreationSessionComment {
+  id: string;
+  objectId: string | null;
+  parentCommentId: string | null;
+  body: string;
+  mentions: string[];
+  createdBy: string | null;
+  authorName: string | null;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreationSessionActivity {
+  id: string;
+  kind: 'event' | 'comment';
+  type: string;
+  objectId: string | null;
+  actorRef: string | null;
+  actorName: string | null;
+  createdAt: string;
+  body?: string;
+  payload?: Record<string, unknown>;
+  revision?: number;
+  resolvedAt?: string | null;
+}
+
 export const creationSessionsApi = {
   list: (): Promise<{ sessions: CreationSessionSummary[] }> => request('/api/creation-sessions'),
   create: (body: { title?: string; description?: string; initialPrompt?: string; projectIds?: number[] }) =>
@@ -7849,6 +7877,18 @@ export const creationSessionsApi = {
     request<{ userId: string; role: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/invite`, { method: 'POST', body: JSON.stringify({ ...invitee, role }) }),
   presence: (id: string, revision: number) =>
     request<{ revision: number; members: Array<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; lastSeenRevision: number; lastSeenAt: string }> }>(`/api/creation-sessions/${encodeURIComponent(id)}/presence`, { method: 'POST', body: JSON.stringify({ revision }) }),
+  activity: (id: string, limit = 50) =>
+    request<{ activity: CreationSessionActivity[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/activity?limit=${Math.min(200, Math.max(1, limit))}`),
+  comments: {
+    list: (id: string, objectId?: string) =>
+      request<{ comments: CreationSessionComment[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/comments${objectId ? `?objectId=${encodeURIComponent(objectId)}` : ''}`),
+    create: (id: string, body: { body: string; objectId?: string | null; parentCommentId?: string | null; mentions?: string[] }) =>
+      request<CreationSessionComment>(`/api/creation-sessions/${encodeURIComponent(id)}/comments`, { method: 'POST', body: JSON.stringify(body) }),
+    resolve: (id: string, commentId: string, resolved: boolean) =>
+      request<CreationSessionComment>(`/api/creation-sessions/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`, { method: 'PATCH', body: JSON.stringify({ resolved }) }),
+  },
   openProject: (projectId: number) =>
     request<{ sessionId: string; created: boolean }>(`/api/creation-sessions/projects/${projectId}/open`, { method: 'POST' }),
+  openResource: (resourceType: 'chat' | 'workflow', resourceId: string | number) =>
+    request<{ sessionId: string; objectId: string; created: boolean }>(`/api/creation-sessions/resources/${resourceType}/${encodeURIComponent(String(resourceId))}/open`, { method: 'POST' }),
 };

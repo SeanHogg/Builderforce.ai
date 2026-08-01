@@ -10,17 +10,21 @@ import { authMiddleware } from '../../presentation/middleware/authMiddleware';
 import { scope } from '../../presentation/routes/segmentTrackerRoutes';
 import {
   creationSessionConnections,
+  creationSessionComments,
+  brainChats,
   creationSessionEvents,
   creationSessionMembers,
   creationSessionObjects,
   creationSessionProjectLinks,
   creationSessions,
+  workflowDefinitions,
   projects,
   tenantMembers,
   users,
 } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { HonoEnv } from '../../env';
+import { resolveChatAccess } from '../brain/chatAccess';
 
 type SessionRole = 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner';
 const ROLE_RANK: Record<SessionRole, number> = { viewer: 0, commenter: 1, editor: 2, runner: 3, owner: 4 };
@@ -47,6 +51,7 @@ type CreateSessionBody = { title?: string; description?: string; initialPrompt?:
 type PatchSessionBody = { title?: string; description?: string | null; status?: string; preview?: unknown };
 type SaveGraphBody = { objects?: GraphObjectInput[]; connections?: GraphConnectionInput[]; viewport?: unknown; expectedRevision?: number };
 type InviteBody = { userId?: string; email?: string; role?: string };
+type CommentBody = { body?: string; objectId?: string | null; parentCommentId?: string | null; mentions?: string[] };
 
 function cleanTitle(raw: unknown, fallback = 'Untitled session'): string {
   const title = typeof raw === 'string' ? raw.trim() : '';
@@ -212,6 +217,122 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ session: access.session, role: access.role, objects, connections, projectIds: projectLinks.map((p) => p.projectId), members });
   });
 
+  router.get('/:id/activity', async (c) => {
+    const access = await requireSession(c);
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const limit = Math.min(200, Math.max(1, Number(c.req.query('limit') ?? 50)));
+    const [events, comments] = await Promise.all([
+      db.select({
+        id: creationSessionEvents.id,
+        type: creationSessionEvents.eventType,
+        objectId: creationSessionEvents.objectId,
+        payload: creationSessionEvents.payload,
+        revision: creationSessionEvents.revision,
+        actorRef: creationSessionEvents.actorRef,
+        actorName: users.displayName,
+        createdAt: creationSessionEvents.createdAt,
+      }).from(creationSessionEvents)
+        .leftJoin(users, eq(users.id, creationSessionEvents.actorRef))
+        .where(eq(creationSessionEvents.sessionId, access.session.id))
+        .orderBy(desc(creationSessionEvents.createdAt)).limit(limit),
+      db.select({
+        id: creationSessionComments.id,
+        objectId: creationSessionComments.objectId,
+        body: creationSessionComments.body,
+        actorRef: creationSessionComments.createdBy,
+        actorName: users.displayName,
+        resolvedAt: creationSessionComments.resolvedAt,
+        createdAt: creationSessionComments.createdAt,
+      }).from(creationSessionComments)
+        .leftJoin(users, eq(users.id, creationSessionComments.createdBy))
+        .where(eq(creationSessionComments.sessionId, access.session.id))
+        .orderBy(desc(creationSessionComments.createdAt)).limit(limit),
+    ]);
+    const activity = [
+      ...events.map((event) => ({ ...event, kind: 'event' as const })),
+      ...comments.map((comment) => ({ ...comment, kind: 'comment' as const, type: comment.resolvedAt ? 'comment.resolved' : 'comment.created' })),
+    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, limit);
+    return c.json({ activity });
+  });
+
+  router.get('/:id/comments', async (c) => {
+    const access = await requireSession(c);
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const objectId = c.req.query('objectId');
+    if (objectId && !UUID_RE.test(objectId)) return c.json({ error: 'Invalid object id' }, 400);
+    const where = objectId
+      ? and(eq(creationSessionComments.sessionId, access.session.id), eq(creationSessionComments.objectId, objectId))
+      : eq(creationSessionComments.sessionId, access.session.id);
+    const comments = await db.select({
+      id: creationSessionComments.id,
+      objectId: creationSessionComments.objectId,
+      parentCommentId: creationSessionComments.parentCommentId,
+      body: creationSessionComments.body,
+      mentions: creationSessionComments.mentions,
+      createdBy: creationSessionComments.createdBy,
+      authorName: users.displayName,
+      resolvedAt: creationSessionComments.resolvedAt,
+      resolvedBy: creationSessionComments.resolvedBy,
+      createdAt: creationSessionComments.createdAt,
+      updatedAt: creationSessionComments.updatedAt,
+    }).from(creationSessionComments)
+      .leftJoin(users, eq(users.id, creationSessionComments.createdBy))
+      .where(where).orderBy(desc(creationSessionComments.createdAt)).limit(200);
+    return c.json({ comments });
+  });
+
+  router.post('/:id/comments', async (c) => {
+    const access = await requireSession(c, 'commenter');
+    if (!access) return c.json({ error: 'Session not found or comments are not allowed' }, 404);
+    const body = await c.req.json<CommentBody>().catch(() => ({} as CommentBody));
+    const content = typeof body.body === 'string' ? body.body.trim() : '';
+    if (!content || content.length > 5_000) return c.json({ error: 'Comment must be between 1 and 5,000 characters' }, 400);
+    const objectId = body.objectId || null;
+    if (objectId) {
+      if (!UUID_RE.test(objectId)) return c.json({ error: 'Invalid object id' }, 400);
+      const [object] = await db.select({ id: creationSessionObjects.id }).from(creationSessionObjects)
+        .where(and(eq(creationSessionObjects.id, objectId), eq(creationSessionObjects.sessionId, access.session.id))).limit(1);
+      if (!object) return c.json({ error: 'Object not found in this session' }, 404);
+    }
+    const parentCommentId = body.parentCommentId || null;
+    if (parentCommentId) {
+      if (!UUID_RE.test(parentCommentId)) return c.json({ error: 'Invalid parent comment id' }, 400);
+      const [parent] = await db.select({ id: creationSessionComments.id }).from(creationSessionComments)
+        .where(and(eq(creationSessionComments.id, parentCommentId), eq(creationSessionComments.sessionId, access.session.id))).limit(1);
+      if (!parent) return c.json({ error: 'Parent comment not found' }, 404);
+    }
+    const requestedMentions = [...new Set((body.mentions ?? []).filter((id) => typeof id === 'string' && id.length <= 36))].slice(0, 20);
+    const memberMentions = requestedMentions.length
+      ? await db.select({ userId: creationSessionMembers.userId }).from(creationSessionMembers)
+        .where(and(eq(creationSessionMembers.sessionId, access.session.id), inArray(creationSessionMembers.userId, requestedMentions)))
+      : [];
+    const userId = c.get('userId') as string;
+    const [created] = await db.insert(creationSessionComments).values({
+      sessionId: access.session.id, objectId, parentCommentId, body: content,
+      mentions: memberMentions.map((member) => member.userId), createdBy: userId,
+    }).returning();
+    await db.update(creationSessions).set({ lastActivityAt: new Date(), updatedAt: new Date(), updatedBy: userId })
+      .where(and(eq(creationSessions.id, access.session.id), eq(creationSessions.tenantId, access.session.tenantId)));
+    return c.json(created, 201);
+  });
+
+  router.patch('/:id/comments/:commentId', async (c) => {
+    const access = await requireSession(c, 'commenter');
+    if (!access) return c.json({ error: 'Session not found or comments are not allowed' }, 404);
+    const commentId = c.req.param('commentId');
+    if (!UUID_RE.test(commentId)) return c.json({ error: 'Invalid comment id' }, 400);
+    const body: { resolved?: boolean } = await c.req.json<{ resolved?: boolean }>().catch(() => ({}));
+    if (typeof body.resolved !== 'boolean') return c.json({ error: 'resolved is required' }, 400);
+    const userId = c.get('userId') as string;
+    const [updated] = await db.update(creationSessionComments).set({
+      resolvedAt: body.resolved ? new Date() : null,
+      resolvedBy: body.resolved ? userId : null,
+      updatedAt: new Date(),
+    }).where(and(eq(creationSessionComments.id, commentId), eq(creationSessionComments.sessionId, access.session.id))).returning();
+    if (!updated) return c.json({ error: 'Comment not found' }, 404);
+    return c.json(updated);
+  });
+
   router.patch('/:id', async (c) => {
     const access = await requireSession(c, 'editor');
     if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
@@ -345,6 +466,69 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       db.insert(creationSessionProjectLinks).values({ sessionId, projectId, addedBy: userId }),
       db.insert(creationSessionEvents).values({ sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.created_from_project', payload: { projectId } }),
     ]);
+    return c.json({ sessionId, objectId, created: true }, 201);
+  });
+
+  router.post('/resources/:resourceType/:resourceId/open', async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const userId = c.get('userId') as string;
+    const resourceType = c.req.param('resourceType');
+    const resourceId = c.req.param('resourceId');
+    let title: string;
+    let kind: 'chat' | 'workflow';
+    let projectId: number | null = null;
+    if (resourceType === 'chat') {
+      const chatId = Number(resourceId);
+      if (!Number.isInteger(chatId) || chatId <= 0) return c.json({ error: 'Invalid chat id' }, 400);
+      const chat = await resolveChatAccess(db, {
+        chatId, tenantId, userId,
+        selectExtra: { title: brainChats.title, projectId: brainChats.projectId, segmentId: brainChats.segmentId },
+      });
+      if (!chat || (chat.segmentId != null && chat.segmentId !== segmentId)) return c.json({ error: 'Chat not found' }, 404);
+      title = String(chat.title || 'Brain session');
+      projectId = chat.projectId == null ? null : Number(chat.projectId);
+      kind = 'chat';
+    } else if (resourceType === 'workflow') {
+      if (!UUID_RE.test(resourceId)) return c.json({ error: 'Invalid workflow id' }, 400);
+      const [definition] = await db.select({ id: workflowDefinitions.id, name: workflowDefinitions.name, projectId: workflowDefinitions.projectId })
+        .from(workflowDefinitions).where(and(
+          eq(workflowDefinitions.id, resourceId), eq(workflowDefinitions.tenantId, tenantId), eq(workflowDefinitions.segmentId, segmentId),
+        )).limit(1);
+      if (!definition) return c.json({ error: 'Workflow not found' }, 404);
+      title = definition.name;
+      projectId = definition.projectId;
+      kind = 'workflow';
+    } else {
+      return c.json({ error: 'Unsupported resource type' }, 400);
+    }
+
+    const [existing] = await db.select({ sessionId: creationSessions.id, objectId: creationSessionObjects.id })
+      .from(creationSessionObjects)
+      .innerJoin(creationSessions, eq(creationSessions.id, creationSessionObjects.sessionId))
+      .innerJoin(creationSessionMembers, and(eq(creationSessionMembers.sessionId, creationSessions.id), eq(creationSessionMembers.userId, userId)))
+      .where(and(
+        eq(creationSessions.tenantId, tenantId), eq(creationSessions.status, 'active'),
+        eq(creationSessionObjects.resourceType, resourceType), eq(creationSessionObjects.resourceId, resourceId),
+      )).orderBy(desc(creationSessions.lastActivityAt)).limit(1);
+    if (existing) return c.json({ ...existing, created: false });
+
+    const sessionId = crypto.randomUUID();
+    const objectId = crypto.randomUUID();
+    const statements: unknown[] = [
+      db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title, createdBy: userId, updatedBy: userId, canvasRevision: 1 }),
+      db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
+      db.insert(creationSessionObjects).values({
+        id: objectId, sessionId, kind, resourceType, resourceId,
+        canvasData: { x: 160, y: 120, w: kind === 'workflow' ? 460 : 320, h: 280 },
+        content: { kind, title, status: 'Live resource' }, createdBy: userId, updatedBy: userId,
+      }),
+      db.insert(creationSessionEvents).values({
+        sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: `session.created_from_${resourceType}`,
+        objectId, payload: { resourceType, resourceId, projectId },
+      }),
+    ];
+    if (projectId) statements.push(db.insert(creationSessionProjectLinks).values({ sessionId, projectId, addedBy: userId }).onConflictDoNothing());
+    await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
     return c.json({ sessionId, objectId, created: true }, 201);
   });
 

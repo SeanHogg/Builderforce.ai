@@ -101,6 +101,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_creation_events_idempotency
 CREATE INDEX IF NOT EXISTS idx_creation_events_session_revision
   ON creation_session_events(session_id, revision);
 
+CREATE TABLE IF NOT EXISTS creation_session_comments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id UUID NOT NULL REFERENCES creation_sessions(id) ON DELETE CASCADE,
+  object_id UUID REFERENCES creation_session_objects(id) ON DELETE SET NULL,
+  parent_comment_id UUID REFERENCES creation_session_comments(id) ON DELETE CASCADE,
+  body TEXT NOT NULL CHECK (char_length(body) BETWEEN 1 AND 5000),
+  mentions JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_by VARCHAR(36) REFERENCES users(id) ON DELETE SET NULL,
+  resolved_by VARCHAR(36) REFERENCES users(id) ON DELETE SET NULL,
+  resolved_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_creation_comments_session
+  ON creation_session_comments(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_creation_comments_object
+  ON creation_session_comments(object_id, created_at DESC)
+  WHERE object_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS creation_session_project_links (
   session_id UUID NOT NULL REFERENCES creation_sessions(id) ON DELETE CASCADE,
   project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

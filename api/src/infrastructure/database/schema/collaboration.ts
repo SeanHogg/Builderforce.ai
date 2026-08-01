@@ -1069,6 +1069,23 @@ export const creationSessionEvents = pgTable('creation_session_events', {
   bySession: index('idx_creation_events_session_revision').on(t.sessionId, t.revision),
 }));
 
+export const creationSessionComments = pgTable('creation_session_comments', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  sessionId:       uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),
+  objectId:        uuid('object_id').references(() => creationSessionObjects.id, { onDelete: 'set null' }),
+  parentCommentId: uuid('parent_comment_id'),
+  body:            text('body').notNull(),
+  mentions:        jsonb('mentions').notNull().default(sql`'[]'::jsonb`),
+  createdBy:       varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  resolvedBy:      varchar('resolved_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  resolvedAt:      timestamp('resolved_at'),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  bySession: index('idx_creation_comments_session').on(t.sessionId, t.createdAt),
+  byObject: index('idx_creation_comments_object').on(t.objectId, t.createdAt).where(sql`${t.objectId} IS NOT NULL`),
+}));
+
 export const creationSessionProjectLinks = pgTable('creation_session_project_links', {
   sessionId: uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),
   projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),

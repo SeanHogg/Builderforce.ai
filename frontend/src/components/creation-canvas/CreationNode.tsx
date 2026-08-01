@@ -11,6 +11,8 @@ const ICONS: Record<CreationNodeData['kind'], string> = {
   evaluation: '✦', dataset: '▤', voice: '◖', note: '◇', project: '▦', roadmap: '↗',
   task: '✓', mockup: '▣', featureSummary: '★',
   evermind: '🧠',
+  projectComparison: '≈',
+  standup: '◎',
 };
 
 function WorkflowBody({ status }: { status?: string }) {
@@ -84,8 +86,34 @@ function EvermindBody({ data }: { data: CreationNodeData }) {
   </div>;
 }
 
+function ProjectComparisonBody({ data }: { data: CreationNodeData }) {
+  const projects = Array.isArray(data.projects) ? data.projects as Array<Record<string, unknown>> : [];
+  return <div className={styles.comparisonBody}>
+    <div className={styles.comparisonTable}>
+      <b>Project</b><b>Progress</b><b>Health</b><b>Velocity</b><b>Open / blocked</b>
+      {projects.flatMap((project, index) => [
+        <strong key={`${index}-name`}>{String(project.name || `Project ${index + 1}`)}</strong>,
+        <span key={`${index}-progress`}>{Number(project.progress || 0)}%</span>,
+        <span key={`${index}-health`}>{project.health == null ? 'No data' : `${Number(project.health)}/100`}</span>,
+        <span key={`${index}-velocity`}>{project.velocity == null ? '—' : `${Number(project.velocity)} pts`}</span>,
+        <span key={`${index}-work`}>{Number(project.open || 0)} / {Number(project.blocked || 0)}</span>,
+      ])}
+    </div>
+    {projects.map((project, index) => <p key={`${index}-features`}><b>{String(project.name)}:</b> {Array.isArray(project.features) && project.features.length ? project.features.map(String).join(' · ') : 'No feature/task evidence available'}</p>)}
+    <small>Freshness: {typeof data.fetchedAt === 'string' ? new Date(data.fetchedAt).toLocaleString() : 'Draft'} · Sources attached</small>
+  </div>;
+}
+
+function StandupBody({ data }: { data: CreationNodeData }) {
+  const participants = Array.isArray(data.participants) ? data.participants as Array<Record<string, unknown>> : [];
+  return <div className={styles.standupBody}>
+    <div className={styles.standupRoster}>{participants.length ? participants.map((person, index) => <span key={`${person.ref}-${index}`}><i>{String(person.name || '?').slice(0, 1)}</i><b>{String(person.name || 'Participant')}</b><small>{String(person.kind || 'human')}</small></span>) : <p>Drag staff and agents onto the canvas, then gather the stand-up.</p>}</div>
+    {typeof data.summary === 'string' && <div className={styles.standupSummary}><b>Brain facilitator</b><p>{data.summary}</p></div>}
+  </div>;
+}
+
 export function CreationNode({ data, selected }: NodeProps<CreationFlowNode>) {
-  const isWide = data.kind === 'workflow' || data.kind === 'website' || data.kind === 'dashboard' || data.kind === 'evaluation' || data.kind === 'roadmap' || data.kind === 'featureSummary' || data.kind === 'evermind';
+  const isWide = data.kind === 'workflow' || data.kind === 'website' || data.kind === 'dashboard' || data.kind === 'evaluation' || data.kind === 'roadmap' || data.kind === 'featureSummary' || data.kind === 'evermind' || data.kind === 'projectComparison';
   return (
     <article className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
       <Handle type="target" position={Position.Left} className={styles.handle} />
@@ -112,6 +140,8 @@ export function CreationNode({ data, selected }: NodeProps<CreationFlowNode>) {
         {data.kind === 'mockup' && <><div className={styles.mockupGrid}><i /><i /><i /></div><p>{data.subtitle || 'High-fidelity interactive concept ready for review.'}</p><div className={styles.pills}><span>{data.status || 'Draft'}</span><span>Desktop + mobile</span></div></>}
         {data.kind === 'featureSummary' && <div className={styles.featureGrid}>{['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration'].map((feature, index) => <span key={feature}><b>{index + 1}</b>{feature}</span>)}</div>}
         {data.kind === 'evermind' && <EvermindBody data={data} />}
+        {data.kind === 'projectComparison' && <ProjectComparisonBody data={data} />}
+        {data.kind === 'standup' && <StandupBody data={data} />}
       </div>
       <Handle type="source" position={Position.Right} className={styles.handle} />
     </article>
