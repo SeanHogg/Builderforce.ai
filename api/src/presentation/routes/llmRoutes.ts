@@ -1346,9 +1346,15 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         ? `Your ${provider} credential worked — it was accepted and the request was routed. ${probe.model ?? 'The model'} then returned HTTP ${probe.upstreamStatus}, twice. That is an upstream outage on that model, not a problem with this account: retry shortly.`
         : probe.error
         ? probe.alert?.reason === 'capacity'
-          ? `${provider} connection test paused: this account's weekly usage allowance is depleted (HTTP ${probe.alert.status}). Check the provider's Usage page for the reset time; to continue now, buy credits or enable auto top-up, or upgrade the provider plan.`
+          ? provider === 'kimi'
+            ? `Kimi connection test paused: Kimi reports that this subscription's usage allowance is exhausted. Check the Kimi Code Console for the reset time. The key is valid and does not need to be replaced. (${probe.error})`
+            : `${provider} connection test paused: this account's usage allowance is depleted (HTTP ${probe.alert.status}). Check the provider's Usage page for the reset time; to continue now, buy credits or enable auto top-up, or upgrade the provider plan.`
           : probe.alert?.reason === 'not_entitled'
-          ? `${provider} connection test failed: this account cannot use ${probe.model ?? 'the selected model'} (HTTP ${probe.alert.status}). Check the account's SuperGrok/API access, or use an xAI API key.`
+          ? provider === 'xai'
+            ? `xAI connection test failed: this account cannot use ${probe.model ?? 'the selected model'} (HTTP ${probe.alert.status}). Check the account's SuperGrok/API access, or use an xAI API key.`
+            : provider === 'kimi'
+              ? `Kimi accepted the API key but refused ${probe.model ?? 'the selected model'} (HTTP ${probe.alert.status}). Kimi's response: ${probe.error}`
+              : `${provider} connection test failed: this account cannot use ${probe.model ?? 'the selected model'} (HTTP ${probe.alert.status}). Provider response: ${probe.error}`
           : `${provider} connection test failed: ${probe.error}`
         : `${provider} connection test could not run: ${probe.status.replaceAll('_', ' ')}.`,
       code: 'provider_test_failed',

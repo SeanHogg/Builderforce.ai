@@ -8979,6 +8979,8 @@
       "notEntitled": "Esta cuenta inició sesión correctamente, pero el proveedor rechazó la solicitud ({status}) porque el plan no la cubre. Vuelve a conectar una cuenta cuyo plan la incluya, o mejora el plan.",
       "xaiNotEntitled": "xAI aceptó el inicio de sesión, pero rechazó el acceso a la API de Grok ({status}). Comprueba que la cuenta tenga un plan SuperGrok compatible y uso semanal disponible, o conecta una clave de API de xAI.",
       "xaiCapacity": "Tu asignación semanal de la API de SuperGrok se agotó ({status}). Grok volverá a funcionar cuando se restablezca; para continuar ahora, compra créditos de uso extra, activa la recarga automática o mejora a SuperGrok Heavy. No vuelvas a conectar la cuenta.",
+      "kimiNotEntitled": "Kimi aceptó esta clave API, pero rechazó el acceso a Kimi Code ({status}). Revisa la consola de Kimi Code para ver los avisos de la cuenta.",
+      "kimiCapacity": "La asignación de tu suscripción a Kimi Code está agotada ({status}). Revisa en la consola de Kimi Code cuándo se restablece. La clave sigue siendo válida.",
       "rejected": "El proveedor rechazó esta credencial ({status}). Es probable que haya caducado, se haya revocado o se haya rotado en otro lugar: vuelve a conectar la cuenta.",
       "capacity": "La credencial funciona, pero la cuenta se ha quedado sin saldo ({status}): un límite de gasto o un saldo de créditos vacío. Recarga o sube el límite; no hace falta reconectar.",
       "unresolved": "La credencial guardada no se pudo usar en absoluto: ha sido revocada, ha caducado o se guardó en otro espacio de trabajo. Vuelve a conectarla aquí."

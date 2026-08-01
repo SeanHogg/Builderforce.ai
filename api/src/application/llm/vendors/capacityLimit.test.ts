@@ -24,6 +24,8 @@ describe('isCapacityLimitBody', () => {
       'You hit your weekly limit. Extra Usage Credits are being used.',
       'Weekly SuperGrok Limit: 100% used',
       'Your weekly API usage allowance is depleted.',
+      // Kimi Code subscription billing-cycle allowance (HTTP 403 upstream).
+      "You've reached your usage limit for this billing cycle.",
     ];
     for (const body of capacityBodies) {
       expect(isCapacityLimitBody(body)).toBe(true);

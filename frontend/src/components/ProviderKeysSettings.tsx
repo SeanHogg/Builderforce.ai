@@ -399,7 +399,11 @@ function ProbeCostNote({ t }: { t: TFn }) {
 type RenderableAuthAlert = Pick<ProviderAuthAlert, 'reason' | 'status' | 'vendor'>;
 
 function AuthAlertNotice({ alert, t }: { alert: RenderableAuthAlert; t: TFn }) {
-  const copyKey = alert.vendor === 'xai-oauth'
+  const copyKey = alert.vendor === 'kimi-code'
+    ? alert.reason === 'not_entitled' ? 'authAlert.kimiNotEntitled'
+      : alert.reason === 'capacity' ? 'authAlert.kimiCapacity'
+      : ALERT_COPY_KEY[alert.reason]
+    : alert.vendor === 'xai-oauth'
     ? alert.reason === 'not_entitled' ? 'authAlert.xaiNotEntitled'
       : alert.reason === 'capacity' ? 'authAlert.xaiCapacity'
       : ALERT_COPY_KEY[alert.reason]

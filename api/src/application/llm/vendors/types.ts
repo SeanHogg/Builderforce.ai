@@ -884,6 +884,19 @@ export async function executeVendorPost<T>(args: {
     throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
   }
 
+  // Some authenticated subscription APIs (notably Kimi Code) report an exhausted
+  // billing-cycle allowance as HTTP 403. Capacity text wins over the generic auth
+  // bucket: the key is valid and replacing it cannot help. Normalize it to the same
+  // retryable/cooldown signal used by providers that return 400/429 for this condition.
+  if (isCapacityLimitBody(errText)) {
+    throw new VendorRetryableError(
+      vendorId,
+      model,
+      429,
+      `${CAPACITY_LIMIT_MARKER} (upstream ${resp.status}): ${errText.slice(0, 200)}`,
+    );
+  }
+
   if (AUTH_STATUSES.has(resp.status)) {
     console.error(
       `[${logPrefix}] ${vendorId}/${model} auth ${resp.status} — check ${vendorId.toUpperCase()}_API_KEY. Failing over to next ${authFailoverNoun}.`,
@@ -979,6 +992,14 @@ export async function executeChatCompletionStream(args: {
     const errText = (await resp.text()).slice(0, 400);
     if (CASCADE_STATUSES.has(resp.status)) {
       throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
+    }
+    if (isCapacityLimitBody(errText)) {
+      throw new VendorRetryableError(
+        vendorId,
+        model,
+        429,
+        `${CAPACITY_LIMIT_MARKER} (upstream ${resp.status}): ${errText.slice(0, 200)}`,
+      );
     }
     if (AUTH_STATUSES.has(resp.status)) {
       console.error(
