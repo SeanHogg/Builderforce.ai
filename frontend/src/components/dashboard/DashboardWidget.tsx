@@ -49,12 +49,14 @@ export function DashboardWidget({ v }: { v: WidgetValue }) {
   const values = points.map((p) => p.value);
   const color = colorAt(0);
 
+  // Handle error state - show unavailable with no trend.
   if (v.error) {
-    return <InsightStat label={title} value="—" sub={t('unavailable')} nuance={trendAnchorPoints(values)} />;
+    return <InsightStat label={title} value="—" sub={t('unavailable')} />;
   }
 
   // Trend classification (SVG arrow) — built from the daily series, optionally overrides delta.
   const trend = buildTrendClassification(values, v.goodWhenUp === false ? 'lower-is-better' : v.goodWhenUp === true ? 'higher-is-better' : null);
+  // Fall back to legacy delta chip only when trend classification is not available.
   const delta: InsightDelta | null = trend
     ? null // Prioritize TrendArrow over text chip when classification exists
     : seriesDelta(values)
