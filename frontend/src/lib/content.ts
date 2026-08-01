@@ -130,7 +130,7 @@ export const FEATURES: Feature[] = [
     icon: '✦',
     title: 'Creation Canvas — Build Everything in One Session',
     shortDesc: 'Chat, workflows, websites, data, models, people, and delivery on one multiplayer canvas.',
-    longDesc: 'Start with a prompt—without choosing a project or creating an account—and build in a durable spatial session. Drag in workflows, live websites, datasets, dashboards, Evermind models, voice, humans, and agents; ask Brain to reason across them; review proposed changes; then deliver approved mockups into projects, tasks, and agent execution. Sessions support local-to-account claiming, live cursors and comments, presentation/follow mode, version checkpoints, reusable Marketplace packs, freehand drawing, and reviewed branch merges on web and in VS Code.',
+    longDesc: 'Start with a prompt—without choosing a project or creating an account—and build in a durable spatial session. Drag in workflows, live websites, datasets, dashboards, Evermind models, voice, humans, and agents; ask Brain to reason across them; review proposed changes; then deliver approved mockups into projects, tasks, and agent execution. Sessions support local-to-account claiming, live cursors and comments, presentation/follow mode, version checkpoints, reusable Marketplace packs, freehand drawing, and reviewed branch merges on the web. VS Code opens the same graph in a native full-editor surface and can add files, selections, diagnostics, repositories, terminal output, services, and previews.',
   },
   {
     icon: '🧠',
@@ -1383,7 +1383,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
       { icon: '🔀', title: 'Workflows & Evaluation', desc: 'Design and run workflows in place, connect them to websites or data, and ask Brain for a cited cross-object evaluation before applying changes.', href: '/create' },
       { icon: '▣', title: 'Websites, Data & Prototypes', desc: 'Import datasets, build live charts and dashboards, create WYSIWYG interactive prototypes, and bind evidence to the experience on one canvas.', href: '/create' },
       { icon: '🧠', title: 'Evermind, LLM & Voice', desc: 'Create, teach, tune, evaluate, package, and operate models and voice experiences as connected canvas objects.', href: '/create' },
-      { icon: '🧩', title: 'Creation Canvas for VS Code', desc: 'Open the same tenant session in a native full editor tab, with repository, selection, diagnostics, terminal output, and preview context.', href: 'https://marketplace.visualstudio.com/items?itemName=BuilderForce.builderforce-ai' },
+      { icon: '🧩', title: 'Creation Canvas for VS Code', desc: 'Open the same tenant Session in a native full editor tab and add files, selections, diagnostics, repository context, terminal output, local services, and browser previews.', href: 'https://marketplace.visualstudio.com/items?itemName=BuilderForce.builderforce-ai' },
     ],
   },
   {
@@ -1717,10 +1717,19 @@ export const INTEGRATION_SLUG_MAP: Record<string, IntegrationSeo> = Object.fromE
  * in sync with src/content/blog/*.md (a missing slug is silently skipped).
  */
 export const RELATED_ARTICLES: Record<string, string[]> = {
+  'creation-canvas': [
+    'creation-canvas-beyond-chat',
+    'compare-projects-and-build-an-executive-roadmap',
+    'customer-feedback-to-ten-mockups',
+    'build-and-train-evermind-on-the-creation-canvas',
+    'multiplayer-creation-canvas-web-vscode',
+  ],
   product: [
     'creation-canvas-beyond-chat',
     'customer-feedback-to-ten-mockups',
     'multiplayer-creation-canvas-web-vscode',
+    'compare-projects-and-build-an-executive-roadmap',
+    'build-and-train-evermind-on-the-creation-canvas',
     'transitioning-to-an-agentic-workforce',
     'real-time-collaboration-humans-and-agents',
     'define-a-need-the-agentic-system-solves-it',
@@ -1736,6 +1745,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   ],
   // Evermind technology page / feature teaser.
   evermind: [
+    'build-and-train-evermind-on-the-creation-canvas',
     'evermind-self-updating-model',
     'inside-evermind-architecture',
     'memory-first-inference-skip-the-llm',

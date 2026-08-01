@@ -7794,7 +7794,7 @@ export interface CreationSessionSummary {
   id: string;
   title: string;
   description: string | null;
-  status: 'active' | 'archived';
+  status: 'active' | 'archived' | 'deleted';
   preview: { objectCount?: number; kinds?: string[]; objects?: Array<{ id: string; kind: string; x: number; y: number; title: string; status?: string; resourceType?: string; resourceId?: string }> } | null;
   revision: number;
   lastActivityAt: string;
@@ -7813,6 +7813,8 @@ export interface CreationSessionObject {
   resourceId: string | null;
   canvasData: { x?: number; y?: number; [key: string]: unknown };
   content: Record<string, unknown> | null;
+  lockedBy?: string | null;
+  lockExpiresAt?: string | null;
 }
 
 export interface CreationSessionConnection {
@@ -7825,13 +7827,13 @@ export interface CreationSessionConnection {
 }
 
 export interface CreationSessionDetail {
-  session: CreationSessionSummary & { viewport?: Record<string, unknown> | null; canvasRevision: number };
+  session: CreationSessionSummary & { viewport?: Record<string, unknown> | null; canvasRevision: number; branchParentSessionId?: string | null; branchBaseRevision?: number | null };
   role: CreationSessionSummary['role'];
   currentUserId?: string;
   objects: CreationSessionObject[];
   connections: CreationSessionConnection[];
   projectIds: number[];
-  members: Array<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number } | null; selection?: string[]; typing?: boolean }>;
+  members: Array<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null }>;
   personalViewport?: { x?: number; y?: number; zoom?: number } | null;
 }
 
@@ -7870,6 +7872,16 @@ export interface CreationSessionActivity {
   resolvedAt?: string | null;
 }
 
+export interface CreationTimelineMessage {
+  id: number;
+  clientMessageId: string;
+  messageRole: 'user' | 'assistant' | 'system';
+  body: string;
+  metadata: { scope?: string; objectIds?: string[]; model?: string; error?: boolean };
+  createdBy: string | null;
+  createdAt: string;
+}
+
 export interface CreationCommandResult {
   accepted: Array<{ index: number; type: string; id?: string; clientId?: string }>;
   rejected: Array<{ index: number; error: string }>;
@@ -7880,16 +7892,47 @@ export interface CreationCommandResult {
 
 export interface CreationSnapshotSummary { revision: number; label?: string | null; createdBy: string | null; createdAt: string }
 export interface CreationSnapshot extends CreationSnapshotSummary { graph: { objects: CreationGraphInput['objects']; connections: CreationGraphInput['connections'] }; viewport: Record<string, unknown> }
+export interface CreationTemplate { id: string; name: string; description: string | null; category: string; visibility: 'private' | 'tenant'; graph: CreationGraphInput; createdBy: string | null; updatedAt: string }
 
 export const creationSessionsApi = {
-  list: (): Promise<{ sessions: CreationSessionSummary[] }> => request('/api/creation-sessions'),
+  list: (status: 'active' | 'archived' = 'active'): Promise<{ sessions: CreationSessionSummary[] }> => request(`/api/creation-sessions?status=${status}`),
+  search: (input: { q: string; status?: 'active' | 'archived'; kind?: string; projectId?: number; collaborator?: string; limit?: number }) => {
+    const params = new URLSearchParams({ q: input.q });
+    if (input.status) params.set('status', input.status);
+    if (input.kind) params.set('kind', input.kind);
+    if (input.projectId) params.set('projectId', String(input.projectId));
+    if (input.collaborator) params.set('collaborator', input.collaborator);
+    if (input.limit) params.set('limit', String(input.limit));
+    return request<{ sessions: Array<CreationSessionSummary & { matchingObjectId?: string | null }> }>(`/api/creation-sessions/search?${params}`);
+  },
+  quotas: () => request<{ usage: { sessions: number; templates: number }; limits: { sessions: number; collaboratorsPerSession: number; templates: number; historyPerSession: number; datasetRows: number; realtimeEditors: number; artifactBytesPerSession: number } }>('/api/creation-sessions/quotas'),
   create: (body: { title?: string; description?: string; initialPrompt?: string; projectIds?: number[] }) =>
-    request<{ session: { id: string; title: string; revision: number } }>('/api/creation-sessions', { method: 'POST', body: JSON.stringify(body) }),
+    request<{ session: { id: string; title: string; revision: number } }>('/api/creation-sessions', { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify(body) }),
+  claim: (body: CreationGraphInput & { clientSessionId: string; title: string; initialPrompt?: string; timeline?: Array<{ clientMessageId: string; role: 'user' | 'assistant' | 'system'; body: string; createdAt: string }> }) =>
+    request<{ session: { id: string; title?: string; revision?: number; claimed: true; replayed?: boolean } }>('/api/creation-sessions/claim', { method: 'POST', body: JSON.stringify(body) }),
   get: (id: string): Promise<CreationSessionDetail> => request(`/api/creation-sessions/${encodeURIComponent(id)}`),
   update: (id: string, body: { title?: string; description?: string | null; status?: 'active' | 'archived'; preview?: unknown }) =>
     request<CreationSessionSummary>(`/api/creation-sessions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  remove: (id: string) => request<{ session: { id: string; status: 'deleted' }; recoverable: true }>(`/api/creation-sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  preview: (id: string) => request<{ sessionId: string; title: string; revision: number; preview: CreationSessionSummary['preview']; lastActivityAt: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/preview`),
+  export: (id: string) => request<{ format: string; exportedAt: string; session: Record<string, unknown>; objects: CreationSessionObject[]; connections: CreationSessionConnection[]; timeline: CreationTimelineMessage[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/export`),
+  events: (id: string, after = 0) => request<{ events: Array<Record<string, unknown>>; revision: number; hasMore: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/events?after=${Math.max(0, Math.floor(after))}`),
+  timeline: {
+    list: (id: string, after = 0, limit = 200) => request<{ messages: CreationTimelineMessage[]; lastId: number; hasMore: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/timeline?after=${Math.max(0, Math.floor(after))}&limit=${Math.min(500, Math.max(1, Math.floor(limit)))}`),
+    append: (id: string, message: { clientMessageId: string; role: 'user' | 'assistant' | 'system'; body: string; metadata?: { scope?: string; objectIds?: string[]; model?: string; error?: boolean } }) => request<CreationTimelineMessage>(`/api/creation-sessions/${encodeURIComponent(id)}/timeline`, { method: 'POST', body: JSON.stringify(message) }),
+  },
+  liveUrl: (id: string): string | null => {
+    const token = getStoredTenantToken();
+    if (!token) return null;
+    const base = AUTH_API_URL.replace(/^http/, 'ws');
+    return `${base}/api/creation-sessions/${encodeURIComponent(id)}/ws?token=${encodeURIComponent(token)}`;
+  },
   pin: (id: string, pinned: boolean) => request<{ pinned: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/pin`, { method: 'POST', body: JSON.stringify({ pinned }) }),
   duplicate: (id: string) => request<{ session: { id: string; title: string; revision: number } }>(`/api/creation-sessions/${encodeURIComponent(id)}/duplicate`, { method: 'POST', body: '{}' }),
+  branch: (id: string, title?: string) => request<{ session: { id: string; title: string; revision: number; parentSessionId: string; baseRevision: number } }>(`/api/creation-sessions/${encodeURIComponent(id)}/branches`, { method: 'POST', body: JSON.stringify({ title }) }),
+  watch: (id: string, state: 'all' | 'mentions' | 'muted') => request<{ state: 'all' | 'mentions' | 'muted' }>(`/api/creation-sessions/${encodeURIComponent(id)}/watch`, { method: 'PATCH', body: JSON.stringify({ state }) }),
+  lock: (id: string, objectId: string, action: 'acquire' | 'renew' | 'release' = 'acquire', leaseSeconds = 60) => request<{ objectId: string; lockedBy: string | null; lockExpiresAt: string | null }>(`/api/creation-sessions/${encodeURIComponent(id)}/objects/${encodeURIComponent(objectId)}/lock`, { method: 'POST', body: JSON.stringify({ action, leaseSeconds }) }),
+  requestObjectAccess: (id: string, objectId: string) => request<{ requested: true }>(`/api/creation-sessions/${encodeURIComponent(id)}/objects/${encodeURIComponent(objectId)}/request-access`, { method: 'POST', body: '{}' }),
   saveGraph: (id: string, graph: CreationGraphInput) =>
     request<{ revision: number; savedAt: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/graph`, { method: 'PUT', body: JSON.stringify(graph) }),
   applyCommands: (id: string, revision: number, idempotencyKey: string, commands: Array<Record<string, unknown>>, atomic = true) =>
@@ -7900,9 +7943,18 @@ export const creationSessionsApi = {
     checkpoint: (id: string, label: string) => request<{ revision: number; label: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/checkpoints`, { method: 'POST', body: JSON.stringify({ label }) }),
   },
   invite: (id: string, invitee: { userId?: string; email?: string }, role: CreationSessionSummary['role'] = 'editor') =>
-    request<{ userId: string; role: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/invite`, { method: 'POST', body: JSON.stringify({ ...invitee, role }) }),
-  presence: (id: string, body: { revision: number; viewport?: Record<string, unknown>; cursor?: { x: number; y: number } | null; selection?: string[]; typing?: boolean }) =>
-    request<{ revision: number; currentUserId?: string; members: Array<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; lastSeenRevision: number; lastSeenAt: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number } | null; selection?: string[]; typing?: boolean }> }>(`/api/creation-sessions/${encodeURIComponent(id)}/presence`, { method: 'POST', body: JSON.stringify(body) }),
+    request<{ userId: string; role: string } | { invitationId: string; email: string; role: string; expiresAt: string; acceptPath: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/invite`, { method: 'POST', body: JSON.stringify({ ...invitee, role }) }),
+  invitations: {
+    accept: (token: string) => request<{ sessionId: string; role: CreationSessionSummary['role'] }>(`/api/creation-sessions/invitations/${encodeURIComponent(token)}/accept`, { method: 'POST', body: '{}' }),
+    list: (id: string) => request<{ invitations: Array<{ id: string; email: string; role: CreationSessionSummary['role']; expiresAt: string; acceptedAt: string | null; revokedAt: string | null; createdAt: string }> }>(`/api/creation-sessions/${encodeURIComponent(id)}/invitations`),
+    revoke: (id: string, invitationId: string) => request<void>(`/api/creation-sessions/${encodeURIComponent(id)}/invitations/${encodeURIComponent(invitationId)}`, { method: 'DELETE' }),
+  },
+  members: {
+    update: (id: string, userId: string, role: CreationSessionSummary['role']) => request<{ userId: string; role: CreationSessionSummary['role'] }>(`/api/creation-sessions/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+    remove: (id: string, userId: string) => request<void>(`/api/creation-sessions/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
+  },
+  presence: (id: string, body: { revision: number; viewport?: Record<string, unknown>; cursor?: { x: number; y: number } | null; selection?: string[]; typing?: boolean; followingUserId?: string | null }) =>
+    request<{ revision: number; currentUserId?: string; members: Array<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; lastSeenRevision: number; lastSeenAt: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number } | null; selection?: string[]; typing?: boolean; followingUserId?: string | null }> }>(`/api/creation-sessions/${encodeURIComponent(id)}/presence`, { method: 'POST', body: JSON.stringify(body) }),
   activity: (id: string, limit = 50) =>
     request<{ activity: CreationSessionActivity[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/activity?limit=${Math.min(200, Math.max(1, limit))}`),
   comments: {
@@ -7913,8 +7965,16 @@ export const creationSessionsApi = {
     resolve: (id: string, commentId: string, resolved: boolean) =>
       request<CreationSessionComment>(`/api/creation-sessions/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`, { method: 'PATCH', body: JSON.stringify({ resolved }) }),
   },
+  templates: {
+    list: () => request<{ builtInIds: string[]; templates: CreationTemplate[] }>('/api/creation-sessions/templates'),
+    create: (body: { name: string; description?: string; category?: string; visibility?: 'private' | 'tenant'; graph: CreationGraphInput }) => request<{ template: { id: string; name: string } }>('/api/creation-sessions/templates', { method: 'POST', body: JSON.stringify(body) }),
+    remove: (templateId: string) => request<void>(`/api/creation-sessions/templates/${encodeURIComponent(templateId)}`, { method: 'DELETE' }),
+    apply: (id: string, templateId: string, revision: number) => request<{ revision: number; objectIds: string[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/templates/${encodeURIComponent(templateId)}/apply`, { method: 'POST', headers: { 'If-Match': String(revision) }, body: '{}' }),
+  },
   openProject: (projectId: number) =>
     request<{ sessionId: string; objectId: string; created: boolean }>(`/api/creation-sessions/projects/${projectId}/open`, { method: 'POST' }),
+  expandProject: (id: string, projectId: number, lens: 'everything' | 'delivery' | 'metrics' | 'customer-feedback' = 'everything') =>
+    request<{ project: { id: number; name: string; description: string | null; status: string }; lens: string; resources: Array<{ kind: string; resourceType: string; resourceId: string; title: string; subtitle: string | null; status: string }>; generated: Array<{ key: string; kind: string; title: string; status: string }>; fetchedAt: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/projects/${projectId}/expand`, { method: 'POST', body: JSON.stringify({ lens }) }),
   openResource: (resourceType: 'chat' | 'workflow', resourceId: string | number) =>
     request<{ sessionId: string; objectId: string; created: boolean }>(`/api/creation-sessions/resources/${resourceType}/${encodeURIComponent(String(resourceId))}/open`, { method: 'POST' }),
 };

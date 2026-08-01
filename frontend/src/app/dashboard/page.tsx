@@ -47,6 +47,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
   const [building, setBuilding] = useState(false);
+  const [creationQuota, setCreationQuota] = useState<{ usage: number; limit: number } | null>(null);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [approvalDates, setApprovalDates] = useState<string[]>([]);
   const [taskStats, setTaskStats] = useState<{ total: number; inProgress: number; done: number } | null>(null);
@@ -99,6 +100,11 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, [isAuthenticated, hasTenant]);
 
+  useEffect(() => {
+    if (!isAuthenticated || !hasTenant) return;
+    void creationSessionsApi.quotas().then((result) => setCreationQuota({ usage: result.usage.sessions, limit: result.limits.sessions })).catch(() => undefined);
+  }, [hasTenant, isAuthenticated]);
+
   // Task stats follow the global project scope: when a project is selected the
   // dashboard reflects just that project's tasks (re-fetched on scope change).
   useEffect(() => {
@@ -121,7 +127,7 @@ export default function DashboardPage() {
   // A prompt creates a session, not a project. Project context can be added later.
   const handlePromptSubmit = useCallback(async () => {
     const p = prompt.trim();
-    if (!p || building) return;
+    if (!p || building || (creationQuota?.limit !== -1 && creationQuota != null && creationQuota.usage >= creationQuota.limit)) return;
     setBuilding(true);
     try {
       const created = await creationSessionsApi.create({ title: p.slice(0, 80), initialPrompt: p });
@@ -134,7 +140,7 @@ export default function DashboardPage() {
     } finally {
       setBuilding(false);
     }
-  }, [prompt, building, router]);
+  }, [prompt, building, creationQuota, router]);
 
   const connectedAgentHosts = agentHostList.filter((c) => c.online);
   // Live "who's online / what's working" across humans AND agents — powers the
@@ -194,7 +200,7 @@ export default function DashboardPage() {
               value={prompt}
               onChange={setPrompt}
               onSubmit={handlePromptSubmit}
-              disabled={building}
+              disabled={building || (creationQuota?.limit !== -1 && creationQuota != null && creationQuota.usage >= creationQuota.limit)}
               placeholder={t('promptPlaceholder')}
               submitLabel={building ? t('building') : t('build')}
               rows={1}
@@ -216,6 +222,7 @@ export default function DashboardPage() {
                 )
               }
             />
+            {creationQuota?.limit !== -1 && creationQuota != null && creationQuota.usage >= creationQuota.limit && <p role="alert" style={{ margin: '8px 0 0', color: 'var(--warning, #b45309)', fontSize: 12 }}>Your saved Session limit is reached. Archive a Session or upgrade before creating another.</p>}
           </div>
           {pendingApprovalsCount > 0 && (
             <div style={{ marginTop: 8, fontSize: 12, color: 'var(--warning-text)' }}>

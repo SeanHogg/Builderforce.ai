@@ -16,22 +16,22 @@ Builderforce Creation Sessions give those artifacts a shared spatial home withou
 
 On the web, Creation Canvas is the default visual workspace for chat, workflows, websites, data, models, people, agents, and optional projects. In the BuilderForce VS Code extension, the same session opens in a full editor tab—not an iframe and not a narrow sidebar.
 
-Both surfaces use the same session graph, object identities, permissions, revisioned commands, comments, and activity. A web user and an editor user are collaborators in one session, not users of synchronized copies.
+Both surfaces use the same session graph, object identities, permissions, revisioned command contract, presence, and comments. The complete activity timeline and specialized inspectors remain available in the browser. A web user and an editor user are collaborators in one session, not users of synchronized copies.
 
-VS Code adds editor-aware objects that make development context portable:
+The native VS Code surface can add development context without leaving the editor:
 
-- current file or selection;
-- repository and branch;
-- diagnostics;
-- terminal output;
-- local runtime preview;
-- Task and pull-request context.
+- current files or selections;
+- repository and branch context;
+- diagnostics and Problems;
+- pasted terminal output with a secret warning;
+- local services and browser previews;
+- any shared Canvas object kind from the native palette.
 
-A product manager can connect customer evidence and a mockup on the web while a developer connects the failing diagnostic and relevant source selection from VS Code.
+A product manager can connect customer evidence and a mockup on the web while a developer connects the failing diagnostic, relevant source selection, and local preview from VS Code.
 
 ## Collaboration without viewport fights
 
-Every member has a personal viewport. Moving or zooming your canvas does not move anyone else’s. Presence shows cursors, selections, typing state, and the client surface being used.
+Every member has a personal viewport. Moving or zooming your canvas does not move anyone else’s. In the browser, presence shows cursors, selections, typing state, and the client surface being used. The VS Code panel reports its current selection through the same durable presence contract.
 
 When someone is presenting, collaborators can deliberately follow that person’s viewport. Leaving follow mode returns control to the individual. This makes walkthroughs useful without turning ordinary collaboration into remote-control screen sharing.
 
@@ -45,7 +45,7 @@ Imagine a team reviewing a new onboarding flow:
 2. Design places a WYSIWYG Prototype and its mobile variant beside the evidence.
 3. Brain evaluates the prototype against requested features and creates a reviewable change set.
 4. The team approves a Mockup and delivers it into a project Task assigned to an implementation Agent.
-5. A developer opens the same Session in VS Code and adds the relevant repository, component file, and local preview.
+5. A developer opens the same Session in VS Code and adds the relevant repository, component selection, diagnostics, and local preview.
 6. The Agent executes through the project’s approval policy. Build status and output appear back in the Session.
 
 No one has to reconstruct why the task exists. The evidence, decision, artifact, implementation context, and execution history remain connected.

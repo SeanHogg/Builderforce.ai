@@ -1,6 +1,6 @@
 # PRD 17 — Creation Sessions and the Infinite Canvas
 
-**Status:** P0/P1 implementation candidate complete (2026-08-01); production rollout gates remain · **Owner:** Product + Platform · **Migrations:** `0388_creation_sessions.sql`, `0389_creation_session_collaboration.sql`, `0390_creation_session_commands.sql`
+**Status:** Implementation in progress (2026-08-01); production rollout gates remain · **Owner:** Product + Platform · **Migrations:** `0388_creation_sessions.sql` through `0393_creation_session_timeline.sql`
 
 ## 1. Executive summary
 
@@ -61,6 +61,12 @@ Migration `0390_creation_session_commands.sql` adds durable snapshots, named
 checkpoints, per-member cursors/selections/viewports, pinned sessions, and the
 revisioned command path. It must be applied before deploying clients that call
 `/commands`, `/history`, `/checkpoints`, or session pinning.
+
+Migration `0393_creation_session_timeline.sql` moves the conversation transcript
+into a session-owned append-only timeline. A visual Chat Object is now only a
+projection of that transcript, so removing it cannot remove user or Brain messages.
+The same migration normalizes legacy connection labels into the six semantic
+connection kinds before strict server-side contract validation is enabled.
 
 `/dashboard` remains the default landing page. Its first and default tab becomes **Create**, showing visual session cards and a prompt that creates a new session immediately.
 
@@ -618,9 +624,9 @@ Base: `/api/creation-sessions`
 | GET | `/:id/events?after=` | viewer | Catch up after revision |
 | POST | `/:id/invite` | owner/editor policy | Invite collaborator |
 | PATCH | `/:id/members/:userId` | owner | Change role/remove member |
-| POST | `/:id/ai` | editor | Stream scoped Brain request and canvas commands |
+| POST | `/api/ai/chat` + Canvas tool contract | editor | Stream scoped Brain request; Canvas tools emit reviewable typed commands |
 | POST | `/:id/projects/:projectId/expand` | viewer | Return related object graph for a lens |
-| POST | `/:id/artifacts/:objectId/deliver` | runner | Attach/create task and assign execution |
+| POST | `/api/tasks` then `/api/runtime/executions` | runner | Canonically attach/create a Task, assign an Agent, and start execution |
 | GET | `/:id/preview` | viewer | Lightweight visual card descriptor/image |
 
 All reads/writes enforce tenant, segment, session membership, underlying resource capability, and role. Resource adapters batch reads to prevent an expanded Project from creating N+1 API traffic.
@@ -1065,7 +1071,7 @@ Response contains accepted commands, server IDs, resulting revision, and rejecte
 ### Ask Brain
 
 ```http
-POST /api/creation-sessions/:id/ai
+POST /api/ai/chat
 Accept: text/event-stream
 ```
 
@@ -1078,30 +1084,31 @@ Accept: text/event-stream
 }
 ```
 
-SSE event types: `request.accepted`, `context.progress`, `message.delta`, `command.proposed`, `approval.required`, `command.applied`, `artifact.ready`, `request.complete`, `request.error`.
+The Canvas supplies the permission-filtered session snapshot and the shared Canvas tool schemas to the existing Brain streaming gateway. Text deltas render immediately; `canvas_*` tool calls become a selectable proposal set. Tenant-mutating MCP tools retain their normal confirmation/approval behavior. This deliberately reuses the canonical Brain transport instead of creating a second Session-specific model gateway.
 
 ### Expand project
 
 ```json
 POST /api/creation-sessions/:id/projects/42/expand
-{ "lens": "features-and-feedback", "depth": 2, "reuseExisting": true }
+{ "lens": "customer-feedback" }
 ```
 
-The response is a proposed object/connection command batch so the client can preview a large expansion before applying it.
+The batched response contains permission-checked canonical resource descriptors plus stable generated-view keys. The client previews/places those objects and skips resource refs or generated keys already present, making repeated expansion idempotent.
 
 ### Deliver artifact
 
 ```json
-POST /api/creation-sessions/:id/artifacts/:objectId/deliver
+POST /api/tasks
 {
   "projectId": 42,
-  "task": { "mode": "create", "title": "Build approved onboarding mockup", "priority": "high" },
-  "agentRef": "agent:campaign-strategist",
-  "approvalPolicy": "project-default"
+  "title": "Build approved onboarding mockup",
+  "priority": "high",
+  "assignedAgentRef": "campaign-strategist",
+  "description": "Source creation session: <session-id>\nSource canvas object: <object-id>"
 }
 ```
 
-Returns canonical artifact/task refs, assignment/run state, and the canvas command batch linking them.
+When an Agent is assigned, the client submits the returned Task ID to `POST /api/runtime/executions` with the Creation Session ID. Those canonical endpoints preserve project approval, billing, assignment, runtime, and audit behavior; the resulting Task/execution refs are linked back to the artifact and execution state is streamed/polled into the Session.
 
 ## 37. Search and discovery
 
@@ -1340,18 +1347,18 @@ This PRD is implemented when:
 - Migration, rollback, support, analytics, localization, accessibility, performance, and operational runbooks are complete.
 - No known P0/P1 security, data-loss, tenant-isolation, idempotency, or accessibility defects remain.
 
-## 48. Implementation closure and release evidence (2026-08-01)
+## 48. Implementation audit and release evidence (2026-08-01)
 
-The product implementation described by this PRD is complete in the repository. Production rollout remains an operational gate: it can only be attested after the deployed internal/opt-in soak and telemetry thresholds in `docs/design/creation-canvas/OPERATIONS.md` have passed.
+The repository contains the P0/P1 functional implementation and P2 Canvas foundations described below. It is **not yet valid to mark the complete PRD Definition of Done as passed**: Gates A–D require deployed dogfood/beta volume, measured success thresholds, production security/concurrency/performance evidence, incident/backup/rollback drills, and issue/owner sign-off. Production completion can only be attested after the evidence in `docs/design/creation-canvas/OPERATIONS.md` is recorded.
 
 | Requirement | Implementation evidence |
 | --- | --- |
-| CS-001–CS-005 | Tenant-optional session creation, local guest snapshots, claim-on-auth, revisioned graph persistence, geometry/connection commands, and scoped composer in `api/src/application/creation/creationSessionRouteService.ts`, `frontend/src/lib/creationSessions.ts`, and `frontend/src/components/creation-canvas/CreationCanvas.tsx`. |
-| CS-006–CS-008 | Shared typed registry, live renderers/inspectors, canonical resource saves, idempotent command batches, snapshots, restore, and conflict reconciliation in `frontend/src/components/creation-canvas/creationObjectRegistry.ts`, `CreationNode.tsx`, and migrations 0388–0390. |
+| CS-001–CS-005 | Tenant-optional session creation, local guest snapshots, atomic claim-on-auth, a Session-owned timeline independent of Chat placements, revisioned graph persistence, geometry/connection commands, semantic connection validation, and Canvas/selection/connected/frame composer scope in `api/src/application/creation/creationSessionRouteService.ts`, migration 0393, `frontend/src/lib/creationSessions.ts`, and `frontend/src/components/creation-canvas/CreationCanvas.tsx`. |
+| CS-006–CS-008 | Shared typed registry, live renderers/inspectors, canonical resource saves, idempotent command batches, snapshots, restore, object locks, and conflict reconciliation in `packages/creation-canvas-contract`, `frontend/src/components/creation-canvas/creationObjectRegistry.ts`, `CreationNode.tsx`, and migrations 0388–0391. |
 | CS-009–CS-014 | Homepage prompt → local Session, Dashboard Create cards, `/create/new`, compatibility adapters, intersection authorization, and project-independent onboarding in the homepage, dashboard, route adapters, API route service, and Creation Canvas tutorial. |
-| CS-015–CS-016 | Invitations/roles, presence/cursors/selections, comments/mentions/activity plus the complete creation object catalog in the API route service and canvas registry. |
-| CS-017–CS-023 | Project lens expansion, cited multi-project comparison, persistent evaluations, selectable AI change sets, artifact/task/Agent delivery, top-feature Mockup Sets, Roadmaps, and Slides in `CreationCanvas.tsx` and canonical project/task/runtime clients. |
-| CS-024–CS-026 | Viewer/Commenter/Editor/Runner/Owner roles, consolidated primary navigation with legacy URL adapters, Edge route registration, and native VSIX full-editor Creation Sessions in `clients/vscode/src/creationCanvasPanel.ts`. |
+| CS-015–CS-016 | Expiring/auditable invitations and five roles, durable presence/cursors/selections, authenticated tenant-qualified WebSocket revision broadcasts with reconnect catch-up, comments/mentions/activity, plus the complete creation object catalog in the API route service and canvas registry. |
+| CS-017–CS-023 | Batched permission-checked Project lens expansion, cited multi-project comparison, persistent evaluations, selectable AI change sets over the canonical Brain SSE gateway, artifact/task/Agent delivery through canonical Task/runtime APIs, top-feature Mockup Sets, Roadmaps, and Slides in `creationSessionRouteService.ts`, `CreationCanvas.tsx`, and the canonical clients. |
+| CS-024–CS-026 | Viewer/Commenter/Editor/Runner/Owner roles, consolidated primary navigation with legacy URL adapters, Edge route registration, and native VSIX full-editor Creation Sessions using the same Object-kind/command contract in `clients/vscode/src/creationCanvasPanel.ts` and `packages/creation-canvas-contract`. Specialized inspectors, comments, and advanced presence remain browser capabilities. |
 | CS-027 | Presentation mode, opt-in collaborator viewport follow, named checkpoints, revision restore, and personal viewport persistence in `CreationCanvas.tsx` and the history/presence APIs. |
 | CS-028 | Six capability-safe Marketplace session/object packs (Campaign, Product discovery, Data story, Stand-up, Evermind model lab, Executive review) in `creationTemplates.ts`, surfaced from the in-canvas template library. |
 | CS-029 | Real pointer-based freehand paths, editable stroke controls, spatial frames, frame colors/purpose, and private reusable frame presets in `CreationCanvas.tsx`, `CreationNode.tsx`, and canvas CSS. |
@@ -1361,8 +1368,26 @@ The product implementation described by this PRD is complete in the repository. 
 
 - **Edge/runtime:** `/create/[sessionId]`, `/create/new`, and `/creation-canvas` declare the Edge runtime and pass production build registration.
 - **Security/data integrity:** tenant/member checks, canonical-resource access intersection, idempotency keys, If-Match revision handling, additive migrations, snapshots, and rollback guidance are implemented and covered by API/schema/tenant-scope suites.
-- **Accessibility:** keyboard selection/deletion, accessible object palette and controls, explicit labels, structured canvas outline, reduced visual chrome in presentation mode, and responsive mobile inspector/composer behavior are present.
+- **Search/attention/limits:** active-by-default permission-revalidated search previews, safe derived search text, watch states, request-access notifications, durable templates, branch ancestry, collaborator/session/history/dataset/realtime/artifact quotas, preflight Session/dataset warnings, and explicit upgrade-safe error codes are implemented in migrations 0391–0393 and the Creation Session route service.
+- **Accessibility/performance:** keyboard selection/deletion/movement/copy/paste, accessible Object palette and controls, structured Canvas outline with semantic connection alternatives, reduced visual chrome in presentation mode, responsive 360px inspector/composer behavior, visible realtime state, visible-only rendering, and a large-Session warning are present.
 - **Analytics:** creation product signals use the shared activity queue and omit prompt/object content; server event/snapshot history supplies operational revision and command evidence.
-- **Localization:** the marketing entry flow is updated in all five catalogs; fixed terminology and locale formatting requirements remain enforced by the catalog parity tests and existing internationalization layer.
+- **Localization:** the primary Canvas and Dashboard Session chrome and Object registry labels are present in English, Chinese, Spanish, French, and German catalogs; catalog parity tests enforce the shared key set. User-authored/AI-authored content remains unchanged by design.
 - **Operations:** deploy, smoke, observation, rollout, support, and rollback procedures live in `docs/design/creation-canvas/OPERATIONS.md`.
 - **Marketing:** the homepage, feature catalog, Product mega-menu/specifications, dedicated `/creation-canvas` page, and Creation Canvas launch article set reflect the unified Session model.
+
+### Repository verification completed
+
+- API TypeScript, migration sequence, schema drift, and tenant-scope ratchets pass.
+- Frontend TypeScript and production Next build pass; `/create`, `/create/new`, `/create/[sessionId]`, invitation, and `/creation-canvas` routes register with the Edge runtime.
+- Canvas registry, local transcript durability, semantic connection, API helper, and web/VSIX shared-contract tests pass.
+- The native VSIX extension and webview production bundles compile.
+- `qa-e2e/tests/creation-canvas.spec.ts` provides deployed-environment acceptance coverage for anonymous prompt → local Session and authenticated create/reopen. It typechecks; execution belongs to the rollout environment because it requires configured authenticated storage and a deployed API.
+
+### Remaining release evidence (non-code)
+
+- Gate A: two weeks of internal daily usage and measured command/data-loss and wrapper-session rates.
+- Gate B: 50 tenant Sessions, five multiplayer Sessions, and beta support sign-off.
+- Gate C: return-to-session, wrapper success, and unresolved-severity thresholds.
+- Gate D: production web/VSIX conformance, capacity, incident, backup/restore, and rollback drill records.
+
+Until those records exist, the correct status is **implementation release candidate; full PRD rollout incomplete**.

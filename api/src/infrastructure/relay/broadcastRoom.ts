@@ -47,6 +47,10 @@ export const projectRoomName = (tenantId: number | string, projectId: number | s
 export const brainChatRoomName = (tenantId: number | string, chatId: number | string): string =>
   `brain-chat:${tenantId}:${chatId}`;
 
+/** Tenant-qualified room for one Creation Session. */
+export const creationSessionRoomName = (tenantId: number | string, sessionId: string): string =>
+  `creation:${tenantId}:${sessionId}`;
+
 /** Notify every open surface that a durable chat message was appended. */
 export async function broadcastBrainChatChanged(
   ns: DurableObjectNamespace | undefined,

@@ -11817,5 +11817,16 @@
       "suppressedTitle": "Effets supprimés",
       "noSteps": "L’agent n’a produit aucun effet : il n’a ni écrit de code ni rien enregistré."
     }
+  },
+  "creationCanvas": {
+    "sessionTitle": "Titre de la Session", "saved": "Session enregistrée", "activeCollaborators": "Collaborateurs actifs",
+    "newSession": "Nouvelle Session", "templates": "Modèles", "history": "Historique", "draw": "Dessiner", "branch": "Créer une branche", "merge": "Fusionner", "present": "Présenter", "exitPresentation": "Quitter la présentation", "share": "Partager", "run": "Exécuter", "saveCollaborate": "Enregistrer et collaborer",
+    "addToCanvas": "Ajouter au Canevas", "searchEverything": "Tout rechercher…", "askBrain": "Interroger Brain sur ce Canevas", "sendBrain": "Envoyer à Brain", "entireCanvas": "Canevas entier", "loading": "Chargement du Canevas…", "requestAccess": "Demander l’accès", "accessRequired": "Accès requis",
+    "canvasTemplates": "Modèles de Canevas", "savedAccount": "Enregistré dans votre compte", "reusableFrames": "Vos cadres réutilisables", "marketplacePacks": "Packs d’Objets réutilisables et sécurisés",
+    "details": "Détails", "activity": "Activité", "name": "Nom", "saveChanges": "Enregistrer", "next": "Suivant", "startCreating": "Commencer à créer",
+    "duplicate": "Dupliquer", "align": "Aligner", "frame": "Encadrer", "lock": "Verrouiller", "unlock": "Déverrouiller", "hide": "Masquer", "showHidden": "Afficher les éléments masqués", "hideHidden": "Masquer les éléments cachés", "focus": "Centrer", "edge": "Connexion", "conversation": "Conversation", "tutorial": "Tutoriel",
+    "live": "En direct", "offlineRetry": "Hors ligne · les modifications seront réessayées", "reconnecting": "Reconnexion…", "connecting": "Connexion…", "largeSession": "Grande Session · {count} Objets",
+    "dashboardTitle": "Sessions Create", "dashboardSubtitle": "Revenez à un Canevas et reprenez exactement où vous étiez.", "searchSessions": "Rechercher Sessions, Objets, Projets ou personnes…", "active": "Actives", "archived": "Archivées", "continueCreating": "Continuer à créer", "sharedWithMe": "Partagées avec moi", "recentlyCompleted": "Récemment terminées",
+    "object": {"workflow":"Flux de travail","project":"Projet","website":"Site web","dashboard":"Tableau de bord","chat":"Chat","agent":"Agent","staff":"Membre d’équipe","evaluation":"Évaluation","dataset":"Jeu de données","table":"Tableau","spreadsheet":"Feuille de calcul","chart":"Graphique","report":"Rapport","kpi":"KPI","prototype":"WYSIWYG","code":"Code","browser":"Aperçu navigateur","llm":"LLM","voice":"Voix","document":"Document","slides":"Diapositives","knowledge":"Connaissances","file":"Fichier","url":"URL","note":"Note","drawing":"Dessin","frame":"Cadre","comment":"Commentaire","timer":"Minuteur","roadmap":"Feuille de route","prd":"PRD","release":"Version","task":"Tâche","mockup":"Maquette","mockupSet":"Ensemble de maquettes","featureSummary":"Résumé des fonctionnalités","team":"Équipe","role":"Rôle","mcp":"Outil connecté","evermind":"Evermind","projectComparison":"Comparaison de projets","standup":"Point d’équipe","repository":"Dépôt","selection":"Sélection de l’éditeur","diagnostics":"Diagnostics","terminal":"Sortie du terminal","service":"Service local"}
   }
 }

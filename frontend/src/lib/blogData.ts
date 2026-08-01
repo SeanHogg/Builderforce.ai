@@ -61,6 +61,8 @@ import localFirstWebgpu from '@/content/blog/local-first-ai-webgpu-in-the-browse
 import creationCanvasBeyondChat from '@/content/blog/creation-canvas-beyond-chat.md';
 import feedbackToMockups from '@/content/blog/customer-feedback-to-ten-mockups.md';
 import multiplayerCanvas from '@/content/blog/multiplayer-creation-canvas-web-vscode.md';
+import projectComparisonRoadmap from '@/content/blog/compare-projects-and-build-an-executive-roadmap.md';
+import evermindCanvas from '@/content/blog/build-and-train-evermind-on-the-creation-canvas.md';
 
 export interface BlogPost {
   slug: string;
@@ -126,6 +128,8 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('creation-canvas-beyond-chat', creationCanvasBeyondChat),
   buildPost('customer-feedback-to-ten-mockups', feedbackToMockups),
   buildPost('multiplayer-creation-canvas-web-vscode', multiplayerCanvas),
+  buildPost('compare-projects-and-build-an-executive-roadmap', projectComparisonRoadmap),
+  buildPost('build-and-train-evermind-on-the-creation-canvas', evermindCanvas),
   buildPost('getting-started-with-ai-agents', gettingStarted),
   buildPost('webgpu-lora-explained', webgpuLora),
   buildPost('multi-agent-orchestration', multiAgent),

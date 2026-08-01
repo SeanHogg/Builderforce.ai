@@ -4,7 +4,7 @@
 
 1. Back up the production database and record the current API/frontend/VSIX versions.
 2. From `api`, run `npm run check:migrations`, `npm run check:schema`, `npm run check:tenant-scope`, and `npm run typecheck:native`.
-3. Run `npm run db:migrate` before deploying the API. This applies `0388`, `0389`, and `0390` in order and fixes older environments that lack collaboration columns.
+3. Run `npm run db:migrate` before deploying the API. This applies `0388` through `0393` in order, fixes older environments that lack collaboration columns, adds completion/search/limit state, creates hashed expiring invitations, and installs the Session-owned conversation timeline.
 4. Deploy the API, then the frontend, then package/publish the VSIX. The older clients remain compatible with the additive schema.
 5. Smoke-test anonymous homepage prompt → local canvas → sign-in claim, server autosave, invitation/presence, history restore, project expansion, Agent delivery, and the native VSIX editor against one disposable session.
 6. Smoke-test the advanced collaboration gate: Marketplace pack placement, freehand drawing, custom-frame save/reuse, presentation mode, collaborator follow, named checkpoint, branch creation, reviewed merge, and recovery from a deliberately stale parent revision.
@@ -12,7 +12,7 @@
 
 ## Observe
 
-- Alert on creation-session 5xx, command conflicts/rejections, permission denials, snapshot growth, presence failures, wrapper failures, and delivery duplication.
+- Alert on creation-session 5xx, command conflicts/rejections, permission denials, snapshot growth, presence/WebSocket failures, wrapper failures, and delivery duplication.
 - Verify `/create/:sessionId` is served by the Edge runtime and that `last_seen_at`, snapshot, viewport, cursor, selection, typing, and pinned columns exist.
 - Track legacy wrapper success before removing fallback code.
 - Track the PRD product-event family (`creation_session_*`, `creation_prompt_submitted`, `creation_object_*`, `creation_connection_added`, `creation_project*`, `creation_ai_evaluation_completed`, `creation_change_set_applied`, `creation_artifact_delivered`, `creation_agent_assigned`, `creation_tutorial_step_completed`, and `creation_legacy_route_adapted`) without recording prompt or object content.
@@ -28,7 +28,8 @@
 ## Support playbook
 
 - **Guest draft does not claim:** preserve the local-storage snapshot, confirm a tenant token exists, retry claim with the same idempotency key, and never clear the guest key until the saved session opens successfully.
-- **Session reports missing `last_seen_at`:** confirm migrations 0388–0390 were applied in order and run schema checks before restarting presence traffic.
+- **Session reports missing `last_seen_at`:** confirm migrations 0388–0393 were applied in order—especially the forward-compatible `0389` repair—and run schema checks before restarting presence traffic.
+- **Conversation is missing after Chat removal:** confirm `0393_creation_session_timeline.sql` is applied, verify `/api/creation-sessions/:id/timeline`, and do not reconstruct the authoritative transcript from Chat Object content.
 - **Realtime disconnect:** keep local geometry edits queued, display reconnecting state, and reconcile against the latest server revision before resuming autosave.
 - **Referenced object is redacted:** verify both session membership and the canonical resource permission. Never broaden resource access merely because the session was shared.
 - **Merge conflict:** reopen the parent, rerun comparison, and require a fresh object-by-object review. Do not force a stale graph replacement.

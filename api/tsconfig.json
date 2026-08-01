@@ -13,7 +13,8 @@
     "paths": {
       "@builderforce/agent-tools": ["../packages/agent-tools/src/index.ts"],
       "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"],
-      "@builderforce/agent-stall": ["../packages/agent-stall/src/index.ts"]
+      "@builderforce/agent-stall": ["../packages/agent-stall/src/index.ts"],
+      "@builderforce/creation-canvas-contract": ["../packages/creation-canvas-contract/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts"],

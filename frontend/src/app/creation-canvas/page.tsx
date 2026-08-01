@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { pageMetadata } from '@/lib/seo';
+import RelatedArticles from '@/components/blog/RelatedArticles';
 
 export const runtime = 'edge';
 
@@ -16,6 +17,7 @@ const capabilities = [
   ['Brain sees relationships', 'Scope a prompt to the whole canvas, a selection, or a frame. Typed connections tell Brain what supplies data, controls execution, provides evidence, or receives delivery.'],
   ['Build together', 'Invite viewers, commenters, editors, runners, and owners. Use live cursors, object comments, mentions, shared activity, presentation mode, and viewport follow.'],
   ['Review before mutation', 'AI multi-object changes appear as a selectable proposal. Branch a session for exploration and resolve each object explicitly before merging it back.'],
+  ['Find work without exposing it', 'Permission-scoped search covers Session titles, safe Object labels, Projects, collaborators, kinds, status, and activity—never imported rows, prompts, credentials, or secrets.'],
   ['Close the delivery loop', 'Turn an approved mockup into a project task, assign a human or AI agent, apply approval policy, and follow execution from the same session.'],
 ];
 
@@ -24,7 +26,8 @@ const specs = [
   ['Spatial engine', 'Infinite pan/zoom canvas, minimap, marquee, drag/drop, resizing, typed connections, freehand drawing, and reusable frames'],
   ['Creation packs', 'Campaign, product discovery, data story, stand-up, Evermind model lab, and executive review Marketplace templates'],
   ['Collaboration', 'Role-based invitations, presence, cursors, selections, comments, mentions, activity, presentation, follow, checkpoints, branches, and reviewed merges'],
-  ['AI contract', 'Canvas/selection/frame scope, canonical resource context, cited evaluations, previewable command sets, and idempotent revisioned saves'],
+  ['AI contract', 'Canvas/selection/frame scope, canonical resource context, inspectable evidence, previewable command sets, and idempotent revisioned saves'],
+  ['Safety and plans', 'Underlying-resource permission intersection, redacted tombstones, access requests, edit leases, watch controls, and plan-aware Session, collaborator, history, data, template, and realtime limits'],
   ['Surfaces', 'Cloudflare Edge web route and a native VS Code full-editor Creation Session surface backed by the same APIs'],
   ['Projects', 'Optional context and delivery destinations; add one or many, expand related items, compare evidence, and create roadmaps'],
   ['Model creation', 'Evermind creation, teaching, tuning, evaluation, versioning, packaging, and publishing on the canvas'],
@@ -43,6 +46,7 @@ export default function CreationCanvasMarketingPage() {
     <section className="ccm-board" aria-label="Example Creation Canvas"><div className="ccm-card"><b>⌘ Campaign workflow</b><span>Audience → Create → Approve → Publish</span></div><div className="ccm-card"><b>◎ Interactive landing page</b><span>Live WYSIWYG website prototype</span></div><div className="ccm-card"><b>▥ Campaign forecast</b><span>Dataset-bound funnel and channel metrics</span></div><div className="ccm-card"><b>● Brain conversation</b><span>Will this workflow be effective with this page?</span></div><div className="ccm-card"><b>✦ Campaign strategist</b><span>Live agent · configured and assignable</span></div></section>
     <h2>Creativity without context switching</h2><section className="ccm-grid">{capabilities.map(([title, body]) => <article className="ccm-feature" key={title}><h3>{title}</h3><p>{body}</p></article>)}</section>
     <h2>Product specifications</h2><section className="ccm-specs">{specs.map(([label, value]) => <div className="ccm-spec" key={label}><b>{label}</b><span>{value}</span></div>)}</section>
+    <RelatedArticles surface="creation-canvas" heading="Creation Canvas guides and use cases" />
     <section className="ccm-hero" style={{ marginTop: 80, marginBottom: 0 }}><h2>Start with what you want—not where it belongs.</h2><p>Your first prompt creates a session. Add project structure only when it helps organize, compare, govern, or deliver the work.</p><div className="ccm-actions"><Link href="/create/new">Open a blank canvas →</Link></div></section>
   </main>;
 }

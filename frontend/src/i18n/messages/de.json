@@ -11817,5 +11817,16 @@
       "suppressedTitle": "Unterdrückte Auswirkungen",
       "noSteps": "Der Agent hat überhaupt keine Auswirkungen erzeugt – weder Code geschrieben noch etwas gespeichert."
     }
+  },
+  "creationCanvas": {
+    "sessionTitle": "Sessiontitel", "saved": "Session gespeichert", "activeCollaborators": "Aktive Mitwirkende",
+    "newSession": "Neue Session", "templates": "Vorlagen", "history": "Verlauf", "draw": "Zeichnen", "branch": "Branch erstellen", "merge": "Zusammenführen", "present": "Präsentieren", "exitPresentation": "Präsentation beenden", "share": "Teilen", "run": "Ausführen", "saveCollaborate": "Speichern und zusammenarbeiten",
+    "addToCanvas": "Zum Canvas hinzufügen", "searchEverything": "Alles durchsuchen…", "askBrain": "Brain zu diesem Canvas fragen", "sendBrain": "An Brain senden", "entireCanvas": "Gesamter Canvas", "loading": "Canvas wird geladen…", "requestAccess": "Zugriff anfordern", "accessRequired": "Zugriff erforderlich",
+    "canvasTemplates": "Canvas-Vorlagen", "savedAccount": "In deinem Konto gespeichert", "reusableFrames": "Deine wiederverwendbaren Rahmen", "marketplacePacks": "Wiederverwendbare, sichere Objektpakete",
+    "details": "Details", "activity": "Aktivität", "name": "Name", "saveChanges": "Änderungen speichern", "next": "Weiter", "startCreating": "Mit dem Erstellen beginnen",
+    "duplicate": "Duplizieren", "align": "Ausrichten", "frame": "Rahmen", "lock": "Sperren", "unlock": "Entsperren", "hide": "Ausblenden", "showHidden": "Ausgeblendete zeigen", "hideHidden": "Ausgeblendete verbergen", "focus": "Fokussieren", "edge": "Verbindung", "conversation": "Unterhaltung", "tutorial": "Tutorial",
+    "live": "Live", "offlineRetry": "Offline · Änderungen werden erneut versucht", "reconnecting": "Verbindung wird wiederhergestellt…", "connecting": "Verbindung wird hergestellt…", "largeSession": "Große Session · {count} Objekte",
+    "dashboardTitle": "Create Sessions", "dashboardSubtitle": "Kehre zu einem Canvas zurück und mache genau dort weiter.", "searchSessions": "Sessions, Objekte, Projekte oder Personen suchen…", "active": "Aktiv", "archived": "Archiviert", "continueCreating": "Weiter erstellen", "sharedWithMe": "Mit mir geteilt", "recentlyCompleted": "Kürzlich abgeschlossen",
+    "object": {"workflow":"Workflow","project":"Projekt","website":"Website","dashboard":"Dashboard","chat":"Chat","agent":"Agent","staff":"Teammitglied","evaluation":"Bewertung","dataset":"Datensatz","table":"Tabelle","spreadsheet":"Tabellenblatt","chart":"Diagramm","report":"Bericht","kpi":"KPI","prototype":"WYSIWYG","code":"Code","browser":"Browser-Vorschau","llm":"LLM","voice":"Sprache","document":"Dokument","slides":"Folien","knowledge":"Wissen","file":"Datei","url":"URL","note":"Notiz","drawing":"Zeichnung","frame":"Rahmen","comment":"Kommentar","timer":"Timer","roadmap":"Roadmap","prd":"PRD","release":"Release","task":"Aufgabe","mockup":"Mockup","mockupSet":"Mockup-Satz","featureSummary":"Funktionsübersicht","team":"Team","role":"Rolle","mcp":"Verbundenes Werkzeug","evermind":"Evermind","projectComparison":"Projektvergleich","standup":"Stand-up","repository":"Repository","selection":"Editor-Auswahl","diagnostics":"Diagnosen","terminal":"Terminalausgabe","service":"Lokaler Dienst"}
   }
 }

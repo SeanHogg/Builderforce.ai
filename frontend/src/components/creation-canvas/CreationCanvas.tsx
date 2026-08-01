@@ -22,7 +22,7 @@ import '@xyflow/react/dist/style.css';
 import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData, CreationObjectKind } from './types';
 import styles from './CreationCanvas.module.css';
-import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, projectAgents, runtimeApi, tasksApi, workflows, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionSummary, type CreationSnapshotSummary } from '@/lib/builderforceApi';
+import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, tasksApi, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import { creationGraphFromSnapshot, creationStorageKey, readLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
 import { runCreationCanvasAi } from '@/lib/creationCanvasAi';
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
@@ -36,6 +36,8 @@ import { updateAgent } from '@/lib/api';
 import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData } from './creationObjectRegistry';
 import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
 import { trackActivity } from '@/lib/activity/tracker';
+import { useTranslations } from 'next-intl';
+import { CREATION_CONNECTION_KINDS, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 type ProposedCanvasChange =
@@ -45,8 +47,8 @@ type ProposedCanvasChange =
 type MergeItem = { key: string; source: CreationFlowNode; target: CreationFlowNode | null; choice: 'branch' | 'parent' };
 type MergeReview = { parentId: string; parentRevision: number; parentNodes: CreationFlowNode[]; parentEdges: Edge[]; items: MergeItem[] };
 type FramePreset = { id: string; name: string; data: CreationNodeData };
-
-const BRANCH_MARKER = /\[\[creation-branch:([0-9a-f-]{36}):(\d+)\]\]/i;
+type CanvasTimelineMessage = Pick<CreationTimelineMessage, 'clientMessageId' | 'messageRole' | 'body' | 'createdAt'> & { id?: number };
+type BrowserSpeechRecognition = { lang: string; interimResults: boolean; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void };
 
 function newNode(kind: CreationObjectKind, position: { x: number; y: number }): CreationFlowNode {
   return { id: crypto.randomUUID(), type: 'creation', position, data: createDefaultCreationData(kind) };
@@ -71,8 +73,8 @@ const INITIAL_NODES: CreationFlowNode[] = [
 ];
 
 const INITIAL_EDGES: Edge[] = [
-  { id: SEED.workflowWebsite, source: SEED.workflow, target: SEED.website, label: 'publishes', type: 'smoothstep' },
-  { id: SEED.websiteDashboard, source: SEED.website, target: SEED.dashboard, label: 'measures', type: 'smoothstep' },
+  { id: SEED.workflowWebsite, source: SEED.workflow, target: SEED.website, label: 'publishes', type: 'smoothstep', data: { connectionKind: 'control' } },
+  { id: SEED.websiteDashboard, source: SEED.website, target: SEED.dashboard, label: 'measures', type: 'smoothstep', data: { connectionKind: 'data' } },
 ];
 
 const nodeTypes: NodeTypes = { creation: CreationNode };
@@ -82,6 +84,8 @@ function flowFromSession(detail: CreationSessionDetail): { nodes: CreationFlowNo
     nodes: detail.objects.map((object) => ({
       id: object.id, type: 'creation',
       position: { x: Number(object.canvasData?.x ?? 0), y: Number(object.canvasData?.y ?? 0) },
+      draggable: object.content?.placementLocked !== true,
+      hidden: object.content?.placementHidden === true,
       ...((Number(object.canvasData?.w) > 0 || Number(object.canvasData?.h) > 0) ? { style: { width: Number(object.canvasData?.w) || undefined, height: Number(object.canvasData?.h) || undefined } } : {}),
       data: {
         kind: object.kind as CreationObjectKind,
@@ -92,7 +96,8 @@ function flowFromSession(detail: CreationSessionDetail): { nodes: CreationFlowNo
     })),
     edges: detail.connections.map((edge) => ({
       id: edge.id, source: edge.sourceObjectId, target: edge.targetObjectId,
-      type: edge.kind || 'smoothstep', label: edge.label ?? undefined, animated: !!edge.metadata?.animated,
+      type: typeof edge.metadata?.rendererType === 'string' ? edge.metadata.rendererType : 'smoothstep', label: edge.label ?? undefined, animated: !!edge.metadata?.animated,
+      data: { connectionKind: edge.kind || 'reference' },
     })),
   };
 }
@@ -107,19 +112,23 @@ function mergeCollaboratorGraph(local: { nodes: CreationFlowNode[]; edges: Edge[
 
 function flowFromSnapshotGraph(graph: { objects: Array<{ id: string; kind: string; resourceType?: string | null; resourceId?: string | null; canvasData: Record<string, unknown>; content: Record<string, unknown> }>; connections: Array<{ id: string; sourceObjectId: string; targetObjectId: string; kind?: string; label?: string | null; metadata?: Record<string, unknown> }> }) {
   const nodes: CreationFlowNode[] = graph.objects.map((object) => ({
-    id: object.id, type: 'creation', position: { x: Number(object.canvasData?.x ?? 0), y: Number(object.canvasData?.y ?? 0) },
+    id: object.id, type: 'creation', position: { x: Number(object.canvasData?.x ?? 0), y: Number(object.canvasData?.y ?? 0) }, draggable: object.content?.placementLocked !== true, hidden: object.content?.placementHidden === true,
     ...((Number(object.canvasData?.w) > 0 || Number(object.canvasData?.h) > 0) ? { style: { width: Number(object.canvasData?.w) || undefined, height: Number(object.canvasData?.h) || undefined } } : {}),
     data: { kind: object.kind as CreationObjectKind, title: object.kind, ...(object.resourceType && object.resourceId ? { resourceId: `${object.resourceType}:${object.resourceId}` } : {}), ...(object.content ?? {}) } as CreationNodeData,
   }));
-  const edges: Edge[] = graph.connections.map((edge) => ({ id: edge.id, source: edge.sourceObjectId, target: edge.targetObjectId, type: edge.kind || 'smoothstep', label: edge.label ?? undefined, animated: !!edge.metadata?.animated }));
+  const edges: Edge[] = graph.connections.map((edge) => ({ id: edge.id, source: edge.sourceObjectId, target: edge.targetObjectId, type: typeof edge.metadata?.rendererType === 'string' ? edge.metadata.rendererType : 'smoothstep', label: edge.label ?? undefined, animated: !!edge.metadata?.animated, data: { connectionKind: edge.kind || 'reference' } }));
   return { nodes, edges };
 }
 
 function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialPresent = false }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialPresent?: boolean }) {
+  const t = useTranslations('creationCanvas');
   const storageKey = creationStorageKey(sessionId);
-  const [nodes, setNodes, onNodesChange] = useNodesState<CreationFlowNode>(INITIAL_NODES);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(INITIAL_EDGES);
-  const [selectedId, setSelectedId] = useState<string | null>(persistence === 'local' ? null : SEED.agent);
+  const [nodes, setNodes, onNodesChange] = useNodesState<CreationFlowNode>(persistence === 'local' ? INITIAL_NODES : []);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(persistence === 'local' ? INITIAL_EDGES : []);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [scopeMode, setScopeMode] = useState<'auto' | 'canvas' | 'selection' | 'connected' | 'frame'>('auto');
+  const [connectionKind, setConnectionKind] = useState<CreationConnectionKind>('reference');
   const [title, setTitle] = useState('Untitled session');
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [shareOpen, setShareOpen] = useState(initialShareOpen);
@@ -127,23 +136,32 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [paletteSearch, setPaletteSearch] = useState('');
   const [presentMode, setPresentMode] = useState(initialPresent);
   const [drawingMode, setDrawingMode] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
   const [followingUserId, setFollowingUserId] = useState<string | null>(null);
   const [branchParentId, setBranchParentId] = useState<string | null>(null);
   const [mergeReview, setMergeReview] = useState<MergeReview | null>(null);
   const [framePresets, setFramePresets] = useState<FramePreset[]>([]);
+  const [serverTemplates, setServerTemplates] = useState<ServerCreationTemplate[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<CreationSessionSummary['role']>('editor');
   const [prompt, setPrompt] = useState('Will this campaign workflow be effective with this landing page?');
   const [thinking, setThinking] = useState(false);
   const [tourStep, setTourStep] = useState(0);
   const [notice, setNotice] = useState('Session saved');
+  const [loadingSession, setLoadingSession] = useState(persistence === 'server');
+  const [realtimeState, setRealtimeState] = useState<'local' | 'connecting' | 'online' | 'reconnecting' | 'offline'>(persistence === 'local' ? 'local' : 'connecting');
   const [members, setMembers] = useState<CreationSessionDetail['members']>([]);
+  const [allMembers, setAllMembers] = useState<CreationSessionDetail['members']>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<CreationSnapshotSummary[]>([]);
+  const [timeline, setTimeline] = useState<CanvasTimelineMessage[]>([]);
+  const [conversationOpen, setConversationOpen] = useState(false);
   const [proposedChanges, setProposedChanges] = useState<ProposedCanvasChange[]>([]);
   const [acceptedProposalIds, setAcceptedProposalIds] = useState<Set<string>>(new Set());
   const [sessionRole, setSessionRole] = useState<CreationSessionSummary['role']>('owner');
+  const [lockBlocked, setLockBlocked] = useState(false);
+  const [datasetRowLimit, setDatasetRowLimit] = useState(500);
   const canEdit = persistence === 'local' || sessionRole === 'editor' || sessionRole === 'runner' || sessionRole === 'owner';
   const canRun = persistence === 'local' || sessionRole === 'runner' || sessionRole === 'owner';
   const flowRef = useRef<ReactFlowInstance<CreationFlowNode, Edge> | null>(null);
@@ -163,11 +181,30 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const historyBaseline = useRef<string | null>(null);
   const historyApplying = useRef(false);
   const drawingPoints = useRef<Array<{ x: number; y: number }>>([]);
+  const canvasClipboard = useRef<{ nodes: CreationFlowNode[]; edges: Edge[] } | null>(null);
+  const composerFormRef = useRef<HTMLFormElement | null>(null);
+  const initialPromptSubmitted = useRef(false);
+
+  const tourStorageKey = `builderforce:create-tour-complete:${currentUserId || (persistence === 'local' ? 'guest' : 'pending')}`;
 
   useEffect(() => {
-    if (localStorage.getItem('builderforce:create-tour-complete') !== '1') setTourStep(1);
+    if (persistence === 'server' && !currentUserId) return;
+    if (localStorage.getItem(tourStorageKey) !== '1') setTourStep(1);
     try { setFramePresets(JSON.parse(localStorage.getItem('builderforce:create-frame-presets') || '[]') as FramePreset[]); } catch { setFramePresets([]); }
-  }, []);
+  }, [currentUserId, persistence, tourStorageKey]);
+
+  useEffect(() => {
+    if (persistence !== 'server') return;
+    void creationSessionsApi.quotas().then((quota) => {
+      if (quota.limits.datasetRows === -1) setDatasetRowLimit(1_000_000);
+      else setDatasetRowLimit(Math.max(1, quota.limits.datasetRows));
+    }).catch(() => undefined);
+  }, [persistence]);
+
+  useEffect(() => {
+    if (!templateOpen || persistence !== 'server') return;
+    void creationSessionsApi.templates.list().then((result) => setServerTemplates(result.templates)).catch(() => setServerTemplates([]));
+  }, [persistence, templateOpen]);
 
   useEffect(() => {
     try {
@@ -177,21 +214,27 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           setTitle(saved.title);
           setNodes(saved.nodes);
           setEdges(saved.edges);
+          setTimeline((saved.timeline ?? []).map((message) => ({ clientMessageId: message.clientMessageId, messageRole: message.role, body: message.body, createdAt: message.createdAt })));
           if (saved.viewport) { viewportRef.current = saved.viewport; pendingViewport.current = saved.viewport; void flowRef.current?.setViewport(saved.viewport); }
         }
         hydrated.current = true;
         trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: 'web', persistence: 'local' } });
         return;
       }
-      void creationSessionsApi.get(sessionId).then((detail) => {
+      void Promise.all([creationSessionsApi.get(sessionId), creationSessionsApi.timeline.list(sessionId)]).then(([detail, transcript]) => {
         const { nodes: loadedNodes, edges: loadedEdges } = flowFromSession(detail);
         setTitle(detail.session.title);
-        setBranchParentId(detail.session.description?.match(BRANCH_MARKER)?.[1] ?? null);
+        setBranchParentId(detail.session.branchParentSessionId ?? null);
         setNodes(loadedNodes);
         setEdges(loadedEdges);
         setMembers(detail.members);
+        setAllMembers(detail.members);
         setCurrentUserId(detail.currentUserId || null);
+        const personalSelection = detail.members.find((member) => member.userId === detail.currentUserId)?.selection?.filter((id) => loadedNodes.some((node) => node.id === id)) ?? [];
+        setSelectedIds(personalSelection);
+        setSelectedId(personalSelection.length === 1 ? personalSelection[0] : null);
         setSessionRole(detail.role);
+        setTimeline(transcript.messages);
         const restoredViewport = detail.personalViewport && typeof detail.personalViewport.x === 'number' && typeof detail.personalViewport.y === 'number' && typeof detail.personalViewport.zoom === 'number'
           ? { x: detail.personalViewport.x, y: detail.personalViewport.y, zoom: detail.personalViewport.zoom }
           : null;
@@ -206,7 +249,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         hydrated.current = true;
         trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: 'web', objectKinds: [...new Set(loadedNodes.map((node) => node.data.kind))] } });
         setNotice('Session saved');
-      }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not load session'));
+      }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not load session')).finally(() => setLoadingSession(false));
     } catch { hydrated.current = true; }
   }, [persistence, sessionId, setEdges, setNodes]);
 
@@ -225,7 +268,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (serialized === lastSavedGraph.current) return;
       if (persistence === 'local') {
         const prior = readLocalCreationSession(sessionId);
-        const snapshot: LocalCreationSnapshot = { version: 1, title, initialPrompt: prior?.initialPrompt, nodes, edges, viewport: viewportRef.current, updatedAt: new Date().toISOString() };
+        const snapshot: LocalCreationSnapshot = { version: 1, title, initialPrompt: prior?.initialPrompt, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, createdAt: message.createdAt })), nodes, edges, viewport: viewportRef.current, updatedAt: new Date().toISOString() };
         localStorage.setItem(storageKey, JSON.stringify(snapshot));
         lastSavedGraph.current = serialized;
         setNotice('Saved on this device');
@@ -264,11 +307,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [canEdit, edges, nodes, persistence, sessionId, storageKey, title]);
 
   useEffect(() => {
+    if (persistence !== 'local' || !hydrated.current) return;
+    const handle = window.setTimeout(() => {
+      const prior = readLocalCreationSession(sessionId); if (!prior) return;
+      const snapshot: LocalCreationSnapshot = { ...prior, title, nodes, edges, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, createdAt: message.createdAt })), viewport: viewportRef.current, updatedAt: new Date().toISOString() };
+      localStorage.setItem(storageKey, JSON.stringify(snapshot));
+    }, 150);
+    return () => window.clearTimeout(handle);
+  }, [edges, nodes, persistence, sessionId, storageKey, timeline, title]);
+
+  useEffect(() => {
     if (persistence !== 'server') return;
     let stopped = false;
     const reconcile = async () => {
       try {
-        const presence = await creationSessionsApi.presence(sessionId, { revision: revision.current, viewport: viewportRef.current, cursor: cursorRef.current, selection: selectedId ? [selectedId] : [], typing: thinking });
+        const presence = await creationSessionsApi.presence(sessionId, { revision: revision.current, viewport: viewportRef.current, cursor: cursorRef.current, selection: selectedIds, typing: thinking, followingUserId });
         if (stopped) return;
         setMembers(presence.members);
         const followed = presence.members.find((member) => member.userId === followingUserId && member.viewport && typeof member.viewport.x === 'number' && typeof member.viewport.y === 'number' && typeof member.viewport.zoom === 'number');
@@ -283,6 +336,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         setNodes(remote.nodes);
         setEdges(remote.edges);
         setTitle(detail.session.title);
+        setAllMembers(detail.members);
         revision.current = remoteRevision;
         lastSavedGraph.current = JSON.stringify(remote);
         currentGraph.current = lastSavedGraph.current;
@@ -292,23 +346,162 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     void reconcile();
     const timer = window.setInterval(() => void reconcile(), 8_000);
     return () => { stopped = true; window.clearInterval(timer); };
-  }, [followingUserId, persistence, selectedId, sessionId, setEdges, setNodes, thinking]);
+  }, [followingUserId, persistence, selectedIds, sessionId, setEdges, setNodes, thinking]);
+
+  useEffect(() => {
+    if (persistence !== 'server') return;
+    const liveUrl = creationSessionsApi.liveUrl(sessionId);
+    if (!liveUrl) { setRealtimeState('offline'); return; }
+    let stopped = false;
+    let socket: WebSocket | null = null;
+    let retryTimer: number | null = null;
+    let retryMs = 1_000;
+    const syncRevision = async (hint?: number) => {
+      if (stopped || saveInFlight.current || currentGraph.current !== lastSavedGraph.current) return;
+      try {
+        const caughtUp = await creationSessionsApi.events(sessionId, revision.current);
+        const remoteRevision = Math.max(Number(hint || 0), Number(caughtUp.revision || 0));
+        if (remoteRevision <= revision.current) return;
+        const detail = await creationSessionsApi.get(sessionId);
+        if (stopped) return;
+        const remote = flowFromSession(detail);
+        setNodes(remote.nodes);
+        setEdges(remote.edges);
+        setTitle(detail.session.title);
+        setAllMembers(detail.members);
+        revision.current = detail.session.canvasRevision ?? detail.session.revision ?? remoteRevision;
+        lastSavedGraph.current = JSON.stringify(remote);
+        currentGraph.current = lastSavedGraph.current;
+        setNotice('Updated live by a collaborator');
+      } catch { /* The presence reconciliation remains a durable fallback. */ }
+    };
+    const connect = () => {
+      if (stopped) return;
+      setRealtimeState(retryMs > 1_000 ? 'reconnecting' : 'connecting');
+      try { socket = new WebSocket(liveUrl); } catch { socket = null; }
+      if (!socket) {
+        setRealtimeState('reconnecting');
+        retryTimer = window.setTimeout(connect, retryMs);
+        retryMs = Math.min(15_000, retryMs * 2);
+        return;
+      }
+      socket.onopen = () => { setRealtimeState('online'); retryMs = 1_000; void syncRevision(); };
+      socket.onmessage = (event) => {
+        try {
+          const frame = JSON.parse(String(event.data)) as { type?: string; revision?: number; lastId?: number };
+          if (frame.type === 'canvas.changed') void syncRevision(frame.revision);
+          if (frame.type === 'timeline.changed') void creationSessionsApi.timeline.list(sessionId).then((result) => setTimeline(result.messages)).catch(() => undefined);
+        } catch { /* Ignore malformed relay frames. */ }
+      };
+      socket.onclose = () => {
+        socket = null;
+        if (!stopped) {
+          setRealtimeState(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'reconnecting');
+          retryTimer = window.setTimeout(connect, retryMs);
+          retryMs = Math.min(15_000, retryMs * 2);
+        }
+      };
+    };
+    connect();
+    return () => {
+      stopped = true;
+      if (retryTimer != null) window.clearTimeout(retryTimer);
+      socket?.close();
+    };
+  }, [persistence, sessionId, setEdges, setNodes]);
 
   const selectedNode = nodes.find((node) => node.id === selectedId) ?? null;
-  const scopeLabel = selectedNode ? `${selectedNode.data.kind === 'frame' ? 'Current frame' : 'Selected'}: ${selectedNode.data.title}` : 'Entire canvas';
+  const effectiveSelectedIds = useMemo(() => selectedIds.length ? selectedIds : selectedId ? [selectedId] : [], [selectedId, selectedIds]);
+  const resolvedScopeMode = scopeMode === 'auto'
+    ? selectedNode?.data.kind === 'frame' ? 'frame' : effectiveSelectedIds.length ? 'selection' : 'canvas'
+    : scopeMode;
+  const scopedNodeIds = useMemo(() => {
+    if (resolvedScopeMode === 'canvas') return new Set(nodes.map((node) => node.id));
+    const selected = new Set(effectiveSelectedIds);
+    if (resolvedScopeMode === 'connected') {
+      edges.forEach((edge) => {
+        if (selected.has(edge.source)) selected.add(edge.target);
+        if (selected.has(edge.target)) selected.add(edge.source);
+      });
+    }
+    if (resolvedScopeMode === 'frame' && selectedNode?.data.kind === 'frame') {
+      const width = Number(selectedNode.width || selectedNode.style?.width || 640);
+      const height = Number(selectedNode.height || selectedNode.style?.height || 420);
+      nodes.forEach((node) => {
+        if (node.id !== selectedNode.id && node.position.x >= selectedNode.position.x && node.position.y >= selectedNode.position.y && node.position.x <= selectedNode.position.x + width && node.position.y <= selectedNode.position.y + height) selected.add(node.id);
+      });
+    }
+    return selected;
+  }, [edges, effectiveSelectedIds, nodes, resolvedScopeMode, selectedNode]);
+  const scopeLabel = resolvedScopeMode === 'canvas' ? t('entireCanvas')
+    : resolvedScopeMode === 'connected' ? `Connected objects (${scopedNodeIds.size})`
+      : resolvedScopeMode === 'frame' ? `Current frame: ${selectedNode?.data.title || 'Frame'}`
+        : effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects`
+          : selectedNode ? `Selected: ${selectedNode.data.title}` : t('entireCanvas');
+  const scopedNodes = useMemo(() => nodes.filter((node) => scopedNodeIds.has(node.id)), [nodes, scopedNodeIds]);
+  const scopedEdges = useMemo(() => edges.filter((edge) => scopedNodeIds.has(edge.source) && scopedNodeIds.has(edge.target)), [edges, scopedNodeIds]);
 
   const updateSelected = useCallback((patch: Partial<CreationNodeData>) => {
-    if (!selectedId || !canEdit) return;
+    if (!selectedId || !canEdit || lockBlocked) return;
     setNodes((current) => current.map((node) => node.id === selectedId ? { ...node, data: { ...node.data, ...patch } } : node));
     setNotice('Saving changes…');
-  }, [canEdit, selectedId, setNodes]);
+  }, [canEdit, lockBlocked, selectedId, setNodes]);
+
+  const appendTimeline = useCallback((role: 'user' | 'assistant' | 'system', body: string, metadata?: { scope?: string; objectIds?: string[]; model?: string; error?: boolean }, clientMessageId = crypto.randomUUID()) => {
+    const message: CanvasTimelineMessage = { clientMessageId, messageRole: role, body, createdAt: new Date().toISOString() };
+    setTimeline((current) => current.some((item) => item.clientMessageId === clientMessageId) ? current : [...current, message]);
+    if (persistence === 'server') void creationSessionsApi.timeline.append(sessionId, { clientMessageId, role, body, metadata }).then((saved) => {
+      setTimeline((current) => current.map((item) => item.clientMessageId === clientMessageId ? saved : item));
+    }).catch((error) => setNotice(error instanceof Error ? `Conversation save failed: ${error.message}` : 'Conversation save failed'));
+    return clientMessageId;
+  }, [persistence, sessionId]);
+
+  const startVoiceInput = useCallback(() => {
+    const browserWindow = window as unknown as { SpeechRecognition?: new () => BrowserSpeechRecognition; webkitSpeechRecognition?: new () => BrowserSpeechRecognition };
+    const Recognition = browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition;
+    if (!Recognition) { setNotice('Voice input is not supported by this browser'); return; }
+    const recognition = new Recognition();
+    recognition.lang = navigator.language || 'en-US'; recognition.interimResults = false;
+    setNotice('Listening…');
+    recognition.onresult = (event) => { const transcript = event.results[0]?.[0]?.transcript?.trim(); if (transcript) setPrompt((current) => current ? `${current} ${transcript}` : transcript); };
+    recognition.onerror = () => setNotice('Voice input could not be captured');
+    recognition.onend = () => setNotice('Voice input ready');
+    recognition.start();
+  }, []);
+
+  useEffect(() => {
+    const messages = timeline.map((message) => ({ role: message.messageRole, content: message.body, createdAt: message.createdAt }));
+    setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, messages, aiResponse: [...timeline].reverse().find((message) => message.messageRole === 'assistant')?.body || node.data.aiResponse } } : node));
+  }, [setNodes, timeline]);
+
+  useEffect(() => {
+    if (persistence !== 'server' || !selectedId || !canEdit) { setLockBlocked(false); return; }
+    let stopped = false;
+    const acquire = async (action: 'acquire' | 'renew') => {
+      try {
+        await creationSessionsApi.lock(sessionId, selectedId, action);
+        if (!stopped) setLockBlocked(false);
+      } catch (error) {
+        if (!stopped) { setLockBlocked(true); setNotice(error instanceof Error ? error.message : 'This object is being edited by another collaborator'); }
+      }
+    };
+    void acquire('acquire');
+    const timer = window.setInterval(() => void acquire('renew'), 45_000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      void creationSessionsApi.lock(sessionId, selectedId, 'release').catch(() => undefined);
+    };
+  }, [canEdit, persistence, selectedId, sessionId]);
 
   const importDataset = useCallback(async (file: File) => {
     if (!selectedId) return;
     try {
       const text = await file.text();
       const delimiter = file.name.toLowerCase().endsWith('.tsv') ? '\t' : ',';
-      const lines = text.split(/\r?\n/).filter((line) => line.trim()).slice(0, 501);
+      const allLines = text.split(/\r?\n/).filter((line) => line.trim());
+      if (allLines.length - 1 > datasetRowLimit) throw new Error(`This plan supports up to ${datasetRowLimit.toLocaleString()} dataset rows per Canvas import.`);
+      const lines = allLines.slice(0, datasetRowLimit + 1);
       const split = (line: string) => line.split(delimiter).map((value) => value.trim().replace(/^"|"$/g, ''));
       const columns = split(lines[0] ?? '').filter(Boolean).slice(0, 24);
       if (!columns.length) throw new Error('No columns found');
@@ -318,7 +511,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Dataset import failed');
     }
-  }, [selectedId, setNodes]);
+  }, [datasetRowLimit, selectedId, setNodes]);
 
   useEffect(() => {
     if (!hydrated.current || historyApplying.current) return;
@@ -351,20 +544,106 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     undoStack.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(next); setNotice('Canvas change redone');
   }, [edges, nodes, restoreGraphState]);
 
+  const selectionIds = useCallback(() => selectedIds.length ? selectedIds : selectedId ? [selectedId] : [], [selectedId, selectedIds]);
+  const duplicateSelection = useCallback(() => {
+    if (!canEdit) return;
+    const ids = new Set(selectionIds());
+    if (!ids.size) { setNotice('Select one or more objects to duplicate'); return; }
+    const idMap = new Map<string, string>();
+    const copies = nodes.filter((node) => ids.has(node.id)).map((node) => {
+      const id = crypto.randomUUID(); idMap.set(node.id, id);
+      return { ...node, id, position: { x: node.position.x + 36, y: node.position.y + 36 }, selected: true, data: { ...node.data, title: `${node.data.title} copy`, resourceId: undefined } };
+    });
+    const copiedEdges = edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)).map((edge) => ({ ...edge, id: crypto.randomUUID(), source: idMap.get(edge.source)!, target: idMap.get(edge.target)! }));
+    setNodes((current) => [...current.map((node) => ({ ...node, selected: false })), ...copies]);
+    setEdges((current) => [...current, ...copiedEdges]);
+    const nextIds = copies.map((node) => node.id); setSelectedIds(nextIds); setSelectedId(nextIds.length === 1 ? nextIds[0] : null);
+    setNotice(`${copies.length} object${copies.length === 1 ? '' : 's'} duplicated`);
+  }, [canEdit, edges, nodes, selectionIds, setEdges, setNodes]);
+
+  const copySelection = useCallback(() => {
+    const ids = new Set(selectionIds());
+    if (!ids.size) { setNotice('Select one or more objects to copy'); return; }
+    canvasClipboard.current = {
+      nodes: nodes.filter((node) => ids.has(node.id)).map((node) => ({ ...node, data: { ...node.data } })),
+      edges: edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)).map((edge) => ({ ...edge })),
+    };
+    setNotice(`${ids.size} object${ids.size === 1 ? '' : 's'} copied`);
+  }, [edges, nodes, selectionIds]);
+
+  const pasteSelection = useCallback(() => {
+    if (!canEdit || !canvasClipboard.current) return;
+    const idMap = new Map<string, string>();
+    const pasted = canvasClipboard.current.nodes.map((node) => {
+      const id = crypto.randomUUID(); idMap.set(node.id, id);
+      return { ...node, id, position: { x: node.position.x + 48, y: node.position.y + 48 }, selected: true, data: { ...node.data, resourceId: undefined } };
+    });
+    const pastedEdges = canvasClipboard.current.edges.map((edge) => ({ ...edge, id: crypto.randomUUID(), source: idMap.get(edge.source)!, target: idMap.get(edge.target)! }));
+    setNodes((current) => [...current.map((node) => ({ ...node, selected: false })), ...pasted]); setEdges((current) => [...current, ...pastedEdges]);
+    const ids = pasted.map((node) => node.id); setSelectedIds(ids); setSelectedId(ids.length === 1 ? ids[0] : null); setNotice(`${ids.length} object${ids.length === 1 ? '' : 's'} pasted`);
+  }, [canEdit, setEdges, setNodes]);
+
+  const alignSelection = useCallback(() => {
+    const ids = new Set(selectionIds());
+    if (!canEdit || ids.size < 2) { setNotice('Select at least two objects to align'); return; }
+    const left = Math.min(...nodes.filter((node) => ids.has(node.id)).map((node) => node.position.x));
+    setNodes((current) => current.map((node) => ids.has(node.id) && node.data.placementLocked !== true ? { ...node, position: { ...node.position, x: left } } : node));
+    setNotice(`${ids.size} objects aligned left`);
+  }, [canEdit, nodes, selectionIds, setNodes]);
+
+  const frameSelection = useCallback(() => {
+    const ids = new Set(selectionIds());
+    const chosen = nodes.filter((node) => ids.has(node.id));
+    if (!canEdit || chosen.length < 2) { setNotice('Select at least two objects to create a frame'); return; }
+    const left = Math.min(...chosen.map((node) => node.position.x)) - 40;
+    const top = Math.min(...chosen.map((node) => node.position.y)) - 70;
+    const right = Math.max(...chosen.map((node) => node.position.x + Number(node.width || node.style?.width || 300))) + 40;
+    const bottom = Math.max(...chosen.map((node) => node.position.y + Number(node.height || node.style?.height || 180))) + 40;
+    const frame = newNode('frame', { x: left, y: top }); frame.style = { width: right - left, height: bottom - top }; frame.zIndex = -1;
+    frame.data = { ...frame.data, title: 'Grouped objects', framePurpose: 'Organize this related work' };
+    setNodes((current) => [frame, ...current.map((node) => ({ ...node, selected: false }))]); setSelectedIds([frame.id]); setSelectedId(frame.id); setScopeMode('frame'); setNotice(`${chosen.length} objects framed`);
+  }, [canEdit, nodes, selectionIds, setNodes]);
+
+  const togglePlacementLock = useCallback(() => {
+    const ids = new Set(selectionIds()); if (!canEdit || !ids.size) return;
+    const shouldLock = nodes.some((node) => ids.has(node.id) && node.data.placementLocked !== true);
+    setNodes((current) => current.map((node) => ids.has(node.id) ? { ...node, draggable: !shouldLock, data: { ...node.data, placementLocked: shouldLock } } : node));
+    setNotice(shouldLock ? 'Object placement locked' : 'Object placement unlocked');
+  }, [canEdit, nodes, selectionIds, setNodes]);
+
+  const toggleHidden = useCallback(() => {
+    const ids = new Set(selectionIds()); if (!canEdit || !ids.size) return;
+    const shouldHide = nodes.some((node) => ids.has(node.id) && node.data.placementHidden !== true);
+    setNodes((current) => current.map((node) => ids.has(node.id) ? { ...node, hidden: shouldHide, data: { ...node.data, placementHidden: shouldHide } } : node));
+    if (shouldHide) { setSelectedId(null); setSelectedIds([]); }
+    setNotice(shouldHide ? 'Objects hidden from the canvas' : 'Objects shown on the canvas');
+  }, [canEdit, nodes, selectionIds, setNodes]);
+
+  const focusSelection = useCallback(() => {
+    const ids = selectionIds(); if (!ids.length) return;
+    void flowRef.current?.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.28, duration: 350 });
+  }, [selectionIds]);
+
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); return; }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') { event.preventDefault(); redo(); return; }
-      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId && canEdit) {
-        event.preventDefault(); setNodes((current) => current.filter((node) => node.id !== selectedId)); setEdges((current) => current.filter((edge) => edge.source !== selectedId && edge.target !== selectedId)); setSelectedId(null);
+      const ids = new Set(selectionIds());
+      if ((event.key === 'Delete' || event.key === 'Backspace') && ids.size && canEdit) {
+        event.preventDefault(); setNodes((current) => current.filter((node) => !ids.has(node.id))); setEdges((current) => current.filter((edge) => !ids.has(edge.source) && !ids.has(edge.target))); setSelectedId(null); setSelectedIds([]);
       }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd' && selectedNode && canEdit) {
-        event.preventDefault(); const copy = { ...selectedNode, id: crypto.randomUUID(), position: { x: selectedNode.position.x + 32, y: selectedNode.position.y + 32 }, selected: false, data: { ...selectedNode.data, title: `${selectedNode.data.title} copy`, resourceId: undefined } }; setNodes((current) => [...current, copy]); setSelectedId(copy.id);
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') { event.preventDefault(); duplicateSelection(); return; }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') { event.preventDefault(); copySelection(); return; }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') { event.preventDefault(); pasteSelection(); return; }
+      if (event.key === 'Escape') { setSelectedId(null); setSelectedIds([]); setNodes((current) => current.map((node) => ({ ...node, selected: false }))); return; }
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) && ids.size && canEdit) {
+        event.preventDefault(); const step = event.shiftKey ? 10 : 1; const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0; const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
+        setNodes((current) => current.map((node) => ids.has(node.id) && node.data.placementLocked !== true ? { ...node, position: { x: node.position.x + dx, y: node.position.y + dy } } : node));
       }
     };
     window.addEventListener('keydown', keyboard); return () => window.removeEventListener('keydown', keyboard);
-  }, [canEdit, redo, selectedId, selectedNode, setEdges, setNodes, undo]);
+  }, [canEdit, copySelection, duplicateSelection, pasteSelection, redo, selectionIds, setEdges, setNodes, undo]);
 
   const visualizeDataset = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'dataset') return;
@@ -393,11 +672,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [selectedNode, setEdges, setNodes]);
 
   const onConnect = useCallback((connection: Connection) => {
-    setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID(), type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed } }, current));
-    trackActivity('creation_connection_added', { sessionId, metadata: { clientSurface: 'web' } });
-  }, [sessionId, setEdges]);
+    setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID(), type: 'smoothstep', data: { connectionKind }, label: connectionKind, markerEnd: { type: MarkerType.ArrowClosed } }, current));
+    trackActivity('creation_connection_added', { sessionId, metadata: { clientSurface: 'web', connectionKind } });
+  }, [connectionKind, sessionId, setEdges]);
 
-  const onNodeClick: NodeMouseHandler<CreationFlowNode> = useCallback((_event, node) => setSelectedId(node.id), []);
+  const onNodeClick: NodeMouseHandler<CreationFlowNode> = useCallback((_event, node) => { setSelectedId(node.id); if (!node.selected) setSelectedIds([node.id]); }, []);
   const onCanvasPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!flowRef.current) return;
     const point = flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY });
@@ -424,19 +703,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     viewportRef.current = viewport;
     if (persistence !== 'local' || !hydrated.current) return;
     const prior = readLocalCreationSession(sessionId);
-    const snapshot: LocalCreationSnapshot = { version: 1, title, initialPrompt: prior?.initialPrompt, nodes, edges, viewport, updatedAt: new Date().toISOString() };
+    const snapshot: LocalCreationSnapshot = { version: 1, title, initialPrompt: prior?.initialPrompt, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, createdAt: message.createdAt })), nodes, edges, viewport, updatedAt: new Date().toISOString() };
     localStorage.setItem(storageKey, JSON.stringify(snapshot));
-  }, [edges, nodes, persistence, sessionId, storageKey, title]);
+  }, [edges, nodes, persistence, sessionId, storageKey, timeline, title]);
 
   const addAtCenter = useCallback((kind: CreationObjectKind) => {
     if (!canEdit) { setNotice('Your session role does not allow editing'); return; }
     const position = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 300 };
     const node = newNode(kind, position);
+    if (kind === 'chat') node.data = { ...node.data, messages: timeline.map((message) => ({ role: message.messageRole, content: message.body, createdAt: message.createdAt })) };
     setNodes((current) => [...current, node]);
-    setSelectedId(node.id);
+    setSelectedId(node.id); setSelectedIds([node.id]);
     setNotice(`${node.data.title} added`);
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: 'web', objectKinds: [kind] } });
-  }, [canEdit, sessionId, setNodes]);
+  }, [canEdit, sessionId, setNodes, timeline]);
 
   const applyTemplate = useCallback((template: CreationTemplate) => {
     if (!canEdit) return;
@@ -458,15 +738,34 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const saveFramePreset = useCallback(() => {
     if (selectedNode?.data.kind !== 'frame') return;
     const preset: FramePreset = { id: crypto.randomUUID(), name: selectedNode.data.title, data: { ...selectedNode.data } };
+    if (persistence === 'server') {
+      const graph = creationGraphFromSnapshot({ nodes: [{ ...selectedNode, id: crypto.randomUUID(), position: { x: 80, y: 80 } }], edges: [] });
+      void creationSessionsApi.templates.create({ name: preset.name, description: 'Reusable Canvas frame', category: 'Frame', visibility: 'private', graph }).then(() => {
+        setNotice('Reusable frame saved to your account template library');
+        return creationSessionsApi.templates.list();
+      }).then((result) => setServerTemplates(result.templates)).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not save template'));
+      return;
+    }
     setFramePresets((current) => { const next = [...current.filter((item) => item.name !== preset.name), preset].slice(-20); localStorage.setItem('builderforce:create-frame-presets', JSON.stringify(next)); return next; });
     setNotice('Reusable frame saved to your template library');
-  }, [selectedNode]);
+  }, [persistence, selectedNode]);
+
+  const applyServerTemplate = useCallback((template: ServerCreationTemplate) => {
+    if (persistence !== 'server' || !canEdit) return;
+    setNotice(`Adding ${template.name}…`);
+    void creationSessionsApi.templates.apply(sessionId, template.id, revision.current).then(async (result) => {
+      revision.current = result.revision;
+      const detail = await creationSessionsApi.get(sessionId);
+      const flow = flowFromSession(detail);
+      setNodes(flow.nodes); setEdges(flow.edges); setTemplateOpen(false); setNotice(`${template.name} added`);
+      window.setTimeout(() => void flowRef.current?.fitView({ nodes: result.objectIds.map((id) => ({ id })), padding: .2, duration: 400 }), 0);
+    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not apply template'));
+  }, [canEdit, persistence, sessionId, setEdges, setNodes]);
 
   const createBranch = useCallback(() => {
     if (persistence !== 'server') { setNotice('Save this session before creating a branch'); return; }
     setNotice('Creating an independent branch…');
-    void creationSessionsApi.duplicate(sessionId).then(async ({ session }) => {
-      await creationSessionsApi.update(session.id, { title: `${title} — branch`, description: `[[creation-branch:${sessionId}:${revision.current}]] Independent session branch` });
+    void creationSessionsApi.branch(sessionId, `${title} — branch`).then(async ({ session }) => {
       window.location.href = `/create/${session.id}`;
     }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not create branch'));
   }, [persistence, sessionId, title]);
@@ -513,25 +812,28 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const projectId = project.data.resourceId?.startsWith('project:') ? Number(project.data.resourceId.slice('project:'.length)) : NaN;
     if (persistence === 'server' && Number.isInteger(projectId) && projectId > 0) {
       setNotice('Loading project relationships…');
-      void Promise.all([
-        tasksApi.list(projectId).catch(() => []),
-        workflows.list({ projectId }).catch(() => []),
-        projectAgents.list(projectId).catch(() => []),
-      ]).then(([tasks, projectWorkflows, agents]) => {
-        const lens = typeof project.data.projectLens === 'string' ? project.data.projectLens : 'everything';
+      const lens = ['delivery', 'metrics', 'customer-feedback'].includes(String(project.data.projectLens))
+        ? project.data.projectLens as 'delivery' | 'metrics' | 'customer-feedback'
+        : 'everything';
+      void creationSessionsApi.expandProject(sessionId, projectId, lens).then((expanded) => {
         const related: CreationFlowNode[] = [
-          ...(['everything', 'delivery'].includes(lens) ? tasks.slice(0, 12).map((task, index): CreationFlowNode => ({ id: crypto.randomUUID(), type: 'creation', position: { x: project.position.x + 390 + (index % 3) * 300, y: project.position.y - 180 + Math.floor(index / 3) * 190 }, data: { kind: 'task', title: task.title, status: task.status, subtitle: task.description ?? undefined, resourceId: `task:${task.id}` } })) : []),
-          ...(['everything', 'delivery'].includes(lens) ? projectWorkflows.slice(0, 6).map((workflow, index): CreationFlowNode => ({ id: crypto.randomUUID(), type: 'creation', position: { x: project.position.x + 390 + index * 320, y: project.position.y + 650 }, data: { kind: 'workflow', title: workflow.description || `${workflow.workflowType} workflow`, status: workflow.status, resourceId: `workflow:${workflow.id}` } })) : []),
-          ...(['everything', 'delivery'].includes(lens) ? agents.slice(0, 6).map((agent, index): CreationFlowNode => ({ id: crypto.randomUUID(), type: 'creation', position: { x: project.position.x - 50 + index * 290, y: project.position.y + 900 }, data: { kind: 'agent', title: agent.name, status: 'Available', role: agent.role, resourceId: `agent:${agent.agentRef}` } })) : []),
-          ...(['everything', 'metrics'].includes(lens) ? [{ id: crypto.randomUUID(), type: 'creation' as const, position: { x: project.position.x + 390, y: project.position.y - 430 }, data: { kind: 'dashboard' as const, title: `${project.data.title} delivery metrics`, status: 'Live', sourceProjectId: projectId } }] : []),
-          ...(['everything', 'customer-feedback'].includes(lens) ? [{ id: crypto.randomUUID(), type: 'creation' as const, position: { x: project.position.x + 760, y: project.position.y - 430 }, data: { kind: 'featureSummary' as const, title: `${project.data.title} requested features`, status: 'Evidence view', sourceProjectId: projectId } }] : []),
+          ...expanded.resources.slice(0, 24).map((item, index): CreationFlowNode => ({
+            id: crypto.randomUUID(), type: 'creation',
+            position: { x: project.position.x + 390 + (index % 3) * 300, y: project.position.y - 180 + Math.floor(index / 3) * 190 },
+            data: { kind: item.kind as CreationObjectKind, title: item.title, status: item.status, subtitle: item.subtitle ?? undefined, resourceId: `${item.resourceType}:${item.resourceId}` },
+          })),
+          ...expanded.generated.map((item, index): CreationFlowNode => ({
+            id: crypto.randomUUID(), type: 'creation', position: { x: project.position.x + 390 + index * 370, y: project.position.y - 430 },
+            data: { kind: item.kind as CreationObjectKind, title: item.title, status: item.status, sourceProjectId: projectId, expansionKey: item.key },
+          })),
         ];
         const knownResources = new Set(nodes.map((node) => node.data.resourceId).filter(Boolean));
-        const knownNative = new Set(nodes.map((node) => `${node.data.kind}:${node.data.title}`));
-        const additions = related.filter((node) => node.data.resourceId ? !knownResources.has(node.data.resourceId) : !knownNative.has(`${node.data.kind}:${node.data.title}`));
+        const knownNative = new Set(nodes.map((node) => String(node.data.expansionKey || `${node.data.kind}:${node.data.title}`)));
+        const additions = related.filter((node) => node.data.resourceId ? !knownResources.has(node.data.resourceId) : !knownNative.has(String(node.data.expansionKey || `${node.data.kind}:${node.data.title}`)));
         setNodes((current) => [...current, ...additions]);
         setEdges((current) => [...current, ...additions.map((node) => ({ id: crypto.randomUUID(), source: project.id, target: node.id, type: 'smoothstep', label: node.data.kind }))]);
         setNotice(additions.length ? `${additions.length} related project items added` : 'This project lens is already expanded');
+        trackActivity('creation_project_expanded', { sessionId, metadata: { clientSurface: 'web', projectId } });
       }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not expand project'));
       return;
     }
@@ -545,7 +847,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNodes((current) => [...current, ...additions]);
     setEdges((current) => [...current, ...additions.map((candidate) => ({ id: crypto.randomUUID(), source: project.id, target: candidate.id, type: 'smoothstep' }))]);
     setNotice('Project relationships added to canvas');
-  }, [nodes, persistence, selectedNode, setEdges, setNodes]);
+    trackActivity('creation_project_expanded', { sessionId, metadata: { clientSurface: 'web', projectId: Number.isInteger(projectId) ? projectId : undefined } });
+  }, [nodes, persistence, selectedNode, sessionId, setEdges, setNodes]);
 
   const compareProjects = useCallback(() => {
     const projectNodes = nodes.filter((node) => node.data.kind === 'project' && /^project:\d+$/.test(node.data.resourceId || '')).slice(0, 6);
@@ -583,6 +886,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setEdges((current) => [...current, ...projectNodes.map((project) => ({ id: crypto.randomUUID(), source: project.id, target: comparison.id, label: 'compared in', type: 'smoothstep', animated: true }))]);
       setSelectedId(comparison.id);
       setNotice('Evidence-backed project comparison added');
+      trackActivity('creation_projects_compared', { sessionId, metadata: { clientSurface: 'web', projectCount: projectNodes.length } });
     }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not compare projects'));
   }, [nodes, persistence, setEdges, setNodes]);
 
@@ -633,6 +937,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           }
         } else {
           setNotice('Mockup delivered to the project as a task');
+          trackActivity('creation_artifact_delivered', { sessionId, metadata: { clientSurface: 'web', objectKinds: [selectedNode.data.kind], projectId } });
+          if (agentRef) trackActivity('creation_agent_assigned', { sessionId, metadata: { clientSurface: 'web', projectId } });
         }
       }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not create delivery task'));
       return;
@@ -720,7 +1026,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!kind || !flowRef.current) return;
     const node = newNode(kind, flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY }));
     setNodes((current) => [...current, node]);
-    setSelectedId(node.id);
+    setSelectedId(node.id); setSelectedIds([node.id]);
   }, [canEdit, setNodes]);
 
   const canvasActions = useMemo<BrainAction[]>(() => [{
@@ -728,8 +1034,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     description: 'Read every object and relationship currently visible on the creation canvas.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
     run: () => ({
-      objects: nodes.map((node) => ({ id: node.id, kind: node.data.kind, title: node.data.title, status: node.data.status, content: node.data.subtitle })),
-      connections: edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, label: edge.label })),
+      scope: resolvedScopeMode,
+      objects: scopedNodes.map((node) => ({ id: node.id, kind: node.data.kind, title: node.data.title, status: node.data.status, content: node.data.subtitle })),
+      connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
     }),
   }, {
     name: 'canvas_add_object',
@@ -767,39 +1074,42 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, {
     name: 'canvas_connect_objects',
     description: 'Draw a labeled relationship between two existing canvas objects.',
-    parameters: { type: 'object', required: ['sourceId', 'targetId'], additionalProperties: false, properties: { sourceId: { type: 'string' }, targetId: { type: 'string' }, label: { type: 'string' } } },
+    parameters: { type: 'object', required: ['sourceId', 'targetId'], additionalProperties: false, properties: { sourceId: { type: 'string' }, targetId: { type: 'string' }, kind: { type: 'string', enum: [...CREATION_CONNECTION_KINDS] }, label: { type: 'string' } } },
     mutates: true,
     run: (raw: unknown) => {
-      const args = raw as { sourceId?: string; targetId?: string; label?: string };
+      const args = raw as { sourceId?: string; targetId?: string; kind?: CreationConnectionKind; label?: string };
       const exists = (id: string) => nodes.some((node) => node.id === id) || proposalBuffer.current.some((change) => change.type === 'object.add' && change.node.id === id);
       if (!args.sourceId || !args.targetId || !exists(args.sourceId) || !exists(args.targetId)) return { error: 'Source or target object not found' };
-      const edge = { id: crypto.randomUUID(), source: args.sourceId, target: args.targetId, label: args.label?.slice(0, 120), type: 'smoothstep', animated: true } satisfies Edge;
+      const edge = { id: crypto.randomUUID(), source: args.sourceId, target: args.targetId, label: args.label?.slice(0, 120), type: 'smoothstep', animated: true, data: { connectionKind: args.kind || 'reference' } } satisfies Edge;
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Connect objects${args.label ? `: ${args.label}` : ''}`, edge });
       return { ok: true, proposed: true, connectionId: edge.id };
     },
-  }], [edges, nodes]);
+  }], [nodes, resolvedScopeMode, scopedEdges, scopedNodes]);
 
   const evaluateCanvas = useCallback((event: FormEvent) => {
     event.preventDefault();
     if (!prompt.trim() || thinking) return;
-    trackActivity('creation_prompt_submitted', { sessionId, metadata: { clientSurface: 'web', scope: selectedId ? 'selection' : 'canvas', objectKinds: [...new Set(nodes.map((node) => node.data.kind))] } });
+    trackActivity('creation_prompt_submitted', { sessionId, metadata: { clientSurface: 'web', scope: resolvedScopeMode, objectKinds: [...new Set(scopedNodes.map((node) => node.data.kind))] } });
     setThinking(true);
     setNotice('Brain is evaluating connected objects…');
+    const requestText = prompt.trim();
+    const initialMessage = initialPromptSubmitted.current ? timeline.find((message) => (message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:')) && message.body === requestText) : undefined;
+    const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, initialMessage?.clientMessageId);
     if (process.env.NODE_ENV !== 'test') {
       proposalBuffer.current = [];
       setProposedChanges([]);
-      const request = prompt.trim();
+      const request = requestText;
       const snapshot = JSON.stringify({
-        sessionId, selectedObjectId: selectedId,
-        objects: nodes.map((node) => ({ id: node.id, kind: node.data.kind, title: node.data.title, status: node.data.status, content: node.data.subtitle, position: node.position })),
-        connections: edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, label: edge.label })),
+        sessionId, scope: resolvedScopeMode, selectedObjectIds: effectiveSelectedIds,
+        objects: scopedNodes.map((node) => ({ id: node.id, kind: node.data.kind, title: node.data.title, status: node.data.status, content: node.data.subtitle, position: node.position })),
+        connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
       });
       setPrompt('');
       void runCreationCanvasAi({ prompt: request, canvasSnapshot: snapshot, persistence, canvasActions }).then((answer) => {
         if (answer.trim()) {
+          appendTimeline('assistant', answer.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, `${requestMessageId}:assistant`);
           const chat = nodes.find((node) => node.data.kind === 'chat');
-          if (chat) setNodes((current) => current.map((node) => node.id === chat.id ? { ...node, data: { ...node.data, aiResponse: answer.trim() } } : node));
-          else {
+          if (!chat) {
             const responseNode = newNode('chat', { x: 120, y: 120 });
             responseNode.data = { ...responseNode.data, title: 'Brain', subtitle: request, aiResponse: answer.trim() };
             setNodes((current) => [...current, responseNode]);
@@ -812,7 +1122,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         }
         setThinking(false);
         setNotice(changes.length ? `${changes.length} Brain changes await review` : 'Brain finished evaluating the canvas');
+        trackActivity('creation_ai_evaluation_completed', { sessionId, metadata: { clientSurface: 'web', proposedChangeCount: changes.length, objectKinds: [...new Set(nodes.map((node) => node.data.kind))] } });
       }).catch((error) => {
+        appendTimeline('system', error instanceof Error ? error.message : 'Brain could not complete this request', { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:error`);
         setThinking(false);
         setNotice(error instanceof Error ? error.message : 'Brain could not complete this request');
       });
@@ -845,7 +1157,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setPrompt('');
       setNotice('Evaluation added to canvas');
     }, 850);
-  }, [canvasActions, edges, nodes, persistence, prompt, selectedId, sessionId, setEdges, setNodes, thinking]);
+  }, [appendTimeline, canvasActions, effectiveSelectedIds, edges, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, setEdges, setNodes, thinking, timeline]);
+
+  useEffect(() => {
+    if (!hydrated.current || initialPromptSubmitted.current || thinking) return;
+    const initial = timeline.find((message) => message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:'));
+    if (!initial || timeline.some((message) => message.messageRole === 'assistant')) return;
+    initialPromptSubmitted.current = true;
+    setPrompt(initial.body);
+    window.setTimeout(() => composerFormRef.current?.requestSubmit(), 0);
+  }, [thinking, timeline]);
 
   const applyProposedChanges = useCallback(() => {
     const selected = proposedChanges.filter((change) => acceptedProposalIds.has(change.id));
@@ -925,11 +1246,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const colors: Partial<Record<CreationObjectKind, string>> = { workflow: '#7357ed', website: '#3978f6', dashboard: '#08b59d', agent: '#8a5cf5', staff: '#f09a3e', evaluation: '#6941d7', evermind: '#df4fa5', projectComparison: '#0d8f82' };
     return colors[node.data.kind] ?? '#9aa8bd';
   }, []);
+  const renderedNodes = useMemo(() => nodes.map((node) => node.data.placementHidden === true ? { ...node, hidden: !showHidden, style: showHidden ? { ...node.style, opacity: .42 } : node.style } : node), [nodes, showHidden]);
 
   return (
     <div className={`${styles.canvasShell} app-full-height`}>
       <div className={styles.sessionBar}>
-        <div className={styles.titleBlock}><span className={styles.spark}>✦</span><input aria-label="Session title" value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice('Session saved')).catch(() => setNotice('Title save failed')); }} /><span className={styles.saved}>{notice}</span></div>
+        <div className={styles.titleBlock}><span className={styles.spark}>✦</span><input aria-label={t('sessionTitle')} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice('Title save failed')); }} /><span className={styles.saved}>{notice}</span>{persistence === 'server' && <span role="status" aria-live="polite" className={styles.realtimeStatus} data-state={realtimeState}>{realtimeState === 'online' ? t('live') : realtimeState === 'offline' ? t('offlineRetry') : realtimeState === 'reconnecting' ? t('reconnecting') : t('connecting')}</span>}</div>
         <div className={styles.sessionActions}>
           <div className={styles.collaborators} aria-label="Active collaborators">
             {(persistence === 'local' ? [{ userId: 'local', displayName: 'You', role: 'owner' as const }] : members).slice(0, 4).map((member, index) => <button key={member.userId} type="button" aria-pressed={followingUserId === member.userId} title={`${member.displayName || 'Collaborator'} · ${member.role}${member.userId !== currentUserId ? ' · click to follow viewport' : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
@@ -937,35 +1259,67 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           </div>
           <button className={styles.secondaryButton} onClick={undo} aria-label="Undo canvas change">↶</button>
           <button className={styles.secondaryButton} onClick={redo} aria-label="Redo canvas change">↷</button>
-          <button className={styles.secondaryButton} onClick={openHistory}>History</button>
-          <button className={`${styles.secondaryButton} ${drawingMode ? styles.canvasToolActive : ''}`} aria-pressed={drawingMode} onClick={() => setDrawingMode((value) => !value)}>Draw</button>
-          <button className={styles.secondaryButton} onClick={() => setTemplateOpen((value) => !value)}>Templates</button>
-          <button className={styles.secondaryButton} onClick={createBranch}>Branch</button>
-          {branchParentId && <button className={styles.secondaryButton} onClick={prepareMerge}>Merge</button>}
-          <button className={styles.secondaryButton} onClick={() => setPresentMode((value) => !value)}>{presentMode ? 'Exit presentation' : 'Present'}</button>
-          <button className={styles.secondaryButton} onClick={() => setShareOpen((value) => !value)}>Share ▾</button>
-          {persistence === 'local' && <button className={styles.primaryButton} onClick={() => { window.location.href = `/login?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>Save & collaborate</button>}
-          <button className={styles.primaryButton} disabled={!canRun} onClick={runWorkflow}>▶ Run</button>
-          {shareOpen && <div className={styles.shareMenu}><strong>{persistence === 'local' ? 'Save to invite people' : 'Invite collaborators'}</strong><p>{persistence === 'local' ? 'Your work is safe on this device. Create a free account when you want live collaboration or delivery.' : 'Anyone invited can build with you and ask Brain questions.'}</p>{persistence === 'local' ? <button onClick={() => { window.location.href = `/login?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>Save this session</button> : <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="name@company.com" /><select aria-label="Invitation role" value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">Viewer</option><option value="commenter">Commenter</option><option value="editor">Editor</option><option value="runner">Runner</option><option value="owner">Owner</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(() => { setShareOpen(false); setInviteEmail(''); setNotice('Collaborator invited'); }).catch((error) => setNotice(error instanceof Error ? error.message : 'Invite failed')); }}>Invite</button></div>}<small>Access: {persistence === 'local' ? 'Private on this device' : inviteRole}</small></div>}
-          {templateOpen && <div className={styles.templateMenu}><header><div><strong>Marketplace templates</strong><small>Reusable, capability-safe object packs</small></div><button onClick={() => setTemplateOpen(false)} aria-label="Close templates">×</button></header>{CREATION_TEMPLATES.map((template) => <button key={template.id} onClick={() => applyTemplate(template)}><b>{template.name}</b><small>{template.category} · {template.objects.length} objects</small><span>{template.description}</span></button>)}{!!framePresets.length && <><h4>Your reusable frames</h4>{framePresets.map((preset) => <button key={preset.id} onClick={() => addFramePreset(preset)}><b>{preset.name}</b><small>Private custom frame</small></button>)}</>}</div>}
+          <button className={styles.secondaryButton} onClick={duplicateSelection} disabled={!canEdit || !effectiveSelectedIds.length}>{t('duplicate')}</button>
+          <button className={styles.secondaryButton} onClick={alignSelection} disabled={!canEdit || effectiveSelectedIds.length < 2}>{t('align')}</button>
+          <button className={styles.secondaryButton} onClick={frameSelection} disabled={!canEdit || effectiveSelectedIds.length < 2}>{t('frame')}</button>
+          <button className={styles.secondaryButton} onClick={togglePlacementLock} disabled={!canEdit || !effectiveSelectedIds.length}>{effectiveSelectedIds.some((id) => nodes.find((node) => node.id === id)?.data.placementLocked !== true) ? t('lock') : t('unlock')}</button>
+          <button className={styles.secondaryButton} onClick={toggleHidden} disabled={!canEdit || !effectiveSelectedIds.length}>{t('hide')}</button>
+          <button className={styles.secondaryButton} onClick={() => setShowHidden((value) => !value)}>{showHidden ? t('hideHidden') : t('showHidden')}</button>
+          <button className={styles.secondaryButton} onClick={focusSelection} disabled={!effectiveSelectedIds.length}>{t('focus')}</button>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11 }}>{t('edge')}
+            <select aria-label="Connection kind" value={connectionKind} onChange={(event) => setConnectionKind(event.target.value as CreationConnectionKind)}>{CREATION_CONNECTION_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select>
+          </label>
+          <button className={styles.secondaryButton} onClick={openHistory}>{t('history')}</button>
+          <button className={styles.secondaryButton} onClick={() => setConversationOpen((value) => !value)}>{t('conversation')}</button>
+          <button className={`${styles.secondaryButton} ${drawingMode ? styles.canvasToolActive : ''}`} aria-pressed={drawingMode} onClick={() => setDrawingMode((value) => !value)}>{t('draw')}</button>
+          <button className={styles.secondaryButton} onClick={() => setTemplateOpen((value) => !value)}>{t('templates')}</button>
+          <button className={styles.secondaryButton} onClick={createBranch}>{t('branch')}</button>
+          {branchParentId && <button className={styles.secondaryButton} onClick={prepareMerge}>{t('merge')}</button>}
+          <button className={styles.secondaryButton} onClick={() => setPresentMode((value) => !value)}>{presentMode ? t('exitPresentation') : t('present')}</button>
+          <button className={styles.secondaryButton} onClick={() => setTourStep(1)}>{t('tutorial')}</button>
+          <button className={styles.secondaryButton} onClick={() => setShareOpen((value) => !value)}>{t('share')} ▾</button>
+          {persistence === 'local' && <button className={styles.primaryButton} onClick={() => { window.location.href = `/login?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>{t('saveCollaborate')}</button>}
+          <button className={styles.primaryButton} disabled={!canRun} onClick={runWorkflow}>▶ {t('run')}</button>
+          {shareOpen && <div className={styles.shareMenu}>
+            <strong>{persistence === 'local' ? 'Save to invite people' : 'Invite collaborators'}</strong>
+            <p>{persistence === 'local' ? 'Your work is safe on this device. Create a free account when you want live collaboration or delivery.' : 'Anyone invited can build with you and ask Brain questions.'}</p>
+            {persistence === 'local' ? <button onClick={() => { window.location.href = `/login?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>Save this session</button> : <>
+              <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="name@company.com" /><select aria-label="Invitation role" value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">Viewer</option><option value="commenter">Commenter</option><option value="editor">Editor</option><option value="runner">Runner</option><option value="owner">Owner</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await navigator.clipboard.writeText(`${window.location.origin}${result.acceptPath}`).catch(() => undefined); setNotice('Expiring invitation link copied'); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice('Collaborator invited'); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : 'Invite failed')); }}>Invite</button></div>
+              {sessionRole === 'owner' && <div aria-label="Session members">{allMembers.map((member) => <div key={member.userId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                <span>{member.displayName || 'Collaborator'}{member.userId === currentUserId ? ' (you)' : ''}</span>
+                <select aria-label={`Role for ${member.displayName || member.userId}`} value={member.role} onChange={(event) => { const role = event.target.value as CreationSessionSummary['role']; void creationSessionsApi.members.update(sessionId, member.userId, role).then(() => setAllMembers((current) => current.map((item) => item.userId === member.userId ? { ...item, role } : item))).catch((error) => setNotice(error instanceof Error ? error.message : 'Role update failed')); }}><option value="viewer">Viewer</option><option value="commenter">Commenter</option><option value="editor">Editor</option><option value="runner">Runner</option><option value="owner">Owner</option></select>
+                <button type="button" disabled={member.userId === currentUserId} aria-label={`Remove ${member.displayName || 'member'}`} onClick={() => { void creationSessionsApi.members.remove(sessionId, member.userId).then(() => setAllMembers((current) => current.filter((item) => item.userId !== member.userId))).catch((error) => setNotice(error instanceof Error ? error.message : 'Member removal failed')); }}>×</button>
+              </div>)}</div>}
+            </>}
+            <small>Access: {persistence === 'local' ? 'Private on this device' : inviteRole}</small>
+          </div>}
+          {templateOpen && <div className={styles.templateMenu}>
+            <header><div><strong>{t('canvasTemplates')}</strong><small>{t('marketplacePacks')}</small></div><button onClick={() => setTemplateOpen(false)} aria-label="Close templates">×</button></header>
+            {CREATION_TEMPLATES.map((template) => <button key={template.id} onClick={() => applyTemplate(template)}><b>{template.name}</b><small>{template.category} · {template.objects.length} objects</small><span>{template.description}</span></button>)}
+            {!!serverTemplates.length && <><h4>{t('savedAccount')}</h4>{serverTemplates.map((template) => <button key={template.id} onClick={() => applyServerTemplate(template)}><b>{template.name}</b><small>{template.visibility === 'tenant' ? 'Shared with tenant' : 'Private'} · {template.category}</small><span>{template.description}</span></button>)}</>}
+            {!!framePresets.length && <><h4>{t('reusableFrames')}</h4>{framePresets.map((preset) => <button key={preset.id} onClick={() => addFramePreset(preset)}><b>{preset.name}</b><small><span>Private custom frame</span> · this device</small></button>)}</>}
+          </div>}
         </div>
       </div>
 
       <div ref={flowWrapRef} className={styles.flowWrap} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
+        {loadingSession && <div className={styles.canvasSkeleton} role="status" aria-live="polite"><span /><span /><span /><b>Loading session…</b></div>}
+        {nodes.length > 100 && <div className={styles.performanceNotice} role="status"><strong>{t('largeSession', { count: nodes.length })}</strong><span>Only visible Objects are rendered. Use frames or hide heavy Objects to keep navigation fast.</span><button type="button" onClick={() => setPaletteOpen(true)}>{t('frame')}</button></div>}
         {tourStep > 0 && <div style={{ position: 'absolute', zIndex: 30, top: 18, left: '50%', transform: 'translateX(-50%)', width: 'min(430px, calc(100% - 32px))', padding: 16, borderRadius: 14, background: 'var(--bg-elevated, white)', boxShadow: '0 14px 44px rgba(25,40,70,.22)', border: '1px solid var(--border-subtle)' }}>
           <strong>{['', 'Ask Brain from the composer', 'Everything is an object', 'Select to focus Brain', 'Connect ideas explicitly', 'Build with collaborators', 'Deliver when you are ready'][tourStep]}</strong>
           <p style={{ margin: '7px 0 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{['', 'The familiar prompt stays at the bottom and can create or evaluate anything in this session.', 'Drag workflows, sites, data, agents, people, and project context from the palette.', 'Select one object for a focused question, or click the background to evaluate the complete session.', 'Connect two objects to define a real data, control, reference, presentation, or delivery relationship.', 'Share the session, comment on objects, and see live cursors without moving anyone else’s viewport.', 'Projects are optional. Add one only when you want to turn an artifact into a Task and assign an Agent.'][tourStep]}</p>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><small>{tourStep} of 6</small><button className={styles.primaryButton} onClick={() => { if (tourStep < 6) setTourStep((step) => step + 1); else { localStorage.setItem('builderforce:create-tour-complete', '1'); setTourStep(0); } }}>{tourStep < 6 ? 'Next' : 'Start creating'}</button></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><small>{tourStep} of 6</small><span style={{ display: 'flex', gap: 7 }}><button className={styles.secondaryButton} onClick={() => { localStorage.setItem(tourStorageKey, '1'); setTourStep(0); }}>Dismiss</button><button className={styles.primaryButton} onClick={() => { trackActivity('creation_tutorial_step_completed', { sessionId, metadata: { clientSurface: 'web', step: tourStep } }); if (tourStep < 6) setTourStep((step) => step + 1); else { localStorage.setItem(tourStorageKey, '1'); setTourStep(0); } }}>{tourStep < 6 ? 'Next' : 'Start creating'}</button></span></div>
         </div>}
         <ReactFlow<CreationFlowNode, Edge>
-          nodes={nodes}
+          nodes={renderedNodes}
           edges={edges}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={onNodeClick}
-          onPaneClick={() => setSelectedId(null)}
+          onSelectionChange={({ nodes: chosen }) => { const ids = chosen.map((node) => node.id); setSelectedIds(ids); setSelectedId(ids.length === 1 ? ids[0] : null); }}
+          onPaneClick={() => { setSelectedId(null); setSelectedIds([]); }}
           onMoveEnd={onViewportChange}
           onInit={(instance) => { flowRef.current = instance; if (pendingViewport.current) void instance.setViewport(pendingViewport.current); }}
           fitView
@@ -980,6 +1334,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           selectionOnDrag
           multiSelectionKeyCode={['Meta', 'Control']}
           proOptions={{ hideAttribution: true }}
+          onlyRenderVisibleElements
         >
           <Background variant={BackgroundVariant.Dots} gap={24} size={1.2} color="var(--creation-dot, #c9d8ea)" />
           <Controls position="bottom-left" showInteractive={false} />
@@ -987,25 +1342,26 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         </ReactFlow>
 
         <RemoteCursors members={members} currentUserId={currentUserId} instance={flowRef.current} container={flowWrapRef.current} />
-        <details className={styles.structuredGraph}><summary>Accessible canvas outline</summary><ol>{nodes.map((node) => <li key={node.id}><button aria-label={`Focus ${node.data.title}`} onClick={() => setSelectedId(node.id)}>{node.data.title} ({node.data.kind})</button><span>{node.data.status || 'Canvas object'}</span><ul>{edges.filter((edge) => edge.source === node.id).map((edge) => <li key={edge.id}>connects to {nodes.find((target) => target.id === edge.target)?.data.title || 'object'}{edge.label ? `: ${String(edge.label)}` : ''}</li>)}</ul></li>)}</ol></details>
+        <details className={styles.structuredGraph}><summary>Accessible canvas outline</summary><ol>{nodes.map((node) => <li key={node.id}><button aria-label={`Focus ${node.data.title}`} onClick={() => { setSelectedId(node.id); setSelectedIds([node.id]); }}>{node.data.title} ({node.data.kind})</button><span>{node.data.status || 'Canvas object'}{node.data.placementLocked === true ? ' · placement locked' : ''}</span><ul>{edges.filter((edge) => edge.source === node.id).map((edge) => <li key={edge.id}>{String(edge.data?.connectionKind || 'reference')} connection to {nodes.find((target) => target.id === edge.target)?.data.title || 'object'}{edge.label ? `: ${String(edge.label)}` : ''}</li>)}</ul></li>)}</ol></details>
 
         {!presentMode && <button className={styles.paletteToggle} onClick={() => setPaletteOpen((value) => !value)} aria-label="Toggle object palette">{paletteOpen ? '‹' : '+'}</button>}
         {!presentMode && paletteOpen && <aside className={styles.palette}>
-          <div className={styles.paletteHeader}><strong>Add to canvas</strong><button onClick={() => setPaletteOpen(false)} aria-label="Close palette">×</button></div>
-          <input className={styles.search} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder="Search everything…" />
-          {CREATION_PALETTE_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => `${item.label} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => <section key={group.group}><h4>{group.group}</h4><div className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} aria-label={item.label} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span>{item.icon}</span>{item.label}</button>)}</div></section>)}
+          <div className={styles.paletteHeader}><strong>{t('addToCanvas')}</strong><button onClick={() => setPaletteOpen(false)} aria-label="Close palette">×</button></div>
+          <input className={styles.search} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchEverything')} />
+          {CREATION_PALETTE_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => <section key={group.group}><h4>{group.group}</h4><div className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} aria-label={t(`object.${item.kind}`)} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span>{item.icon}</span>{t(`object.${item.kind}`)}</button>)}</div></section>)}
         </aside>}
 
-        {!presentMode && selectedNode && <Inspector node={selectedNode} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit} members={members} onChange={updateSelected} onClose={() => setSelectedId(null)} onRun={runWorkflow} onSaveAgent={saveAgent} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
+        {!presentMode && selectedNode && <Inspector node={selectedNode} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onClose={() => setSelectedId(null)} onRun={runWorkflow} onSaveAgent={saveAgent} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
 
         {historyOpen && <aside className={styles.historyPanel}><header><div><strong>Version history</strong><small>Restore creates a new revision</small></div><button onClick={() => setHistoryOpen(false)} aria-label="Close history">×</button></header>{persistence === 'local' ? <p>This session is currently stored on this device. Server version history begins after you save it.</p> : <><button className={styles.primaryButton} onClick={createCheckpoint} disabled={!canEdit}>+ Name current checkpoint</button><div>{history.length ? history.map((snapshot) => <button key={snapshot.revision} onClick={() => restoreRevision(snapshot.revision)} disabled={!canEdit}><b>{snapshot.label || `Revision ${snapshot.revision}`}</b><span>Revision {snapshot.revision} · {new Date(snapshot.createdAt).toLocaleString()}</span></button>) : <p>No saved revisions yet.</p>}</div></>}</aside>}
+        {conversationOpen && <aside className={styles.historyPanel} aria-label="Session conversation"><header><div><strong>Session conversation</strong><small>Persists even when Chat Objects are removed</small></div><button onClick={() => setConversationOpen(false)} aria-label="Close conversation">×</button></header><div>{timeline.length ? timeline.map((message) => <article key={message.clientMessageId} style={{ padding: '9px 10px', borderBottom: '1px solid var(--border-subtle)' }}><strong style={{ textTransform: 'capitalize' }}>{message.messageRole === 'assistant' ? 'Brain' : message.messageRole}</strong><p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}>{message.body}</p><small>{new Date(message.createdAt).toLocaleString()}</small></article>) : <p>No conversation yet. Ask Brain from the composer to begin.</p>}</div></aside>}
 
         {!!proposedChanges.length && <aside className={styles.changeSetPanel}><header><div><strong>Review Brain changes</strong><small>Select exactly what should change</small></div><button onClick={rejectProposedChanges} aria-label="Close change set">×</button></header><div>{proposedChanges.map((change) => <label key={change.id}><input type="checkbox" checked={acceptedProposalIds.has(change.id)} onChange={() => setAcceptedProposalIds((current) => { const next = new Set(current); if (next.has(change.id)) next.delete(change.id); else next.add(change.id); return next; })} /><span><b>{change.label}</b><small>{change.type.replace('.', ' ')}</small></span></label>)}</div><footer><button className={styles.secondaryButton} onClick={rejectProposedChanges}>Reject all</button><button className={styles.primaryButton} disabled={!acceptedProposalIds.size} onClick={applyProposedChanges}>Apply {acceptedProposalIds.size} selected</button></footer></aside>}
         {mergeReview && <aside className={styles.mergePanel}><header><div><strong>Merge branch into parent</strong><p>Resolve each object explicitly. Parent-only objects are preserved.</p></div><button onClick={() => setMergeReview(null)} aria-label="Close merge review">×</button></header>{mergeReview.items.map((item) => <label key={item.key}><b>{item.source.data.title}</b><small>{item.target ? `Both sessions contain this ${item.source.data.kind}.` : `New ${item.source.data.kind} from this branch.`}</small>{item.target && <span><select aria-label={`Merge choice for ${item.source.data.title}`} value={item.choice} onChange={(event) => setMergeReview((current) => current ? { ...current, items: current.items.map((candidate) => candidate.key === item.key ? { ...candidate, choice: event.target.value as 'branch' | 'parent' } : candidate) } : current)}><option value="branch">Use branch version</option><option value="parent">Keep parent version</option></select></span>}</label>)}<button className={styles.primaryButton} onClick={applyMerge}>Apply reviewed merge</button></aside>}
 
-        {!presentMode && <form className={styles.composer} onSubmit={evaluateCanvas}>
-          <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} aria-label="Ask Brain about this canvas" placeholder="Ask, create, or change anything…" rows={1} />
-          <div className={styles.composerBottom}><button type="button" className={styles.iconButton} onClick={() => setPaletteOpen(true)} aria-label="Add an object">＋</button><span className={styles.scopeChip}>⌁ {scopeLabel}⌄</span><span className={styles.composerSpacer} /><button type="button" className={styles.iconButton} aria-label="Use voice">⌕</button><button className={styles.sendButton} aria-label="Send to Brain" disabled={thinking || !prompt.trim()}>{thinking ? '•••' : '➤'}</button></div>
+        {!presentMode && <form ref={composerFormRef} className={styles.composer} onSubmit={evaluateCanvas}>
+          <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} aria-label={t('askBrain')} placeholder={t('askBrain')} rows={1} />
+          <div className={styles.composerBottom}><button type="button" className={styles.iconButton} onClick={() => setPaletteOpen(true)} aria-label={t('addToCanvas')}>＋</button><label className={styles.scopeChip}>⌁ <span className="sr-only">Brain scope</span><select aria-label="Brain scope" value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">Entire canvas</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects` : 'Selected object'}</option><option value="connected" disabled={!effectiveSelectedIds.length}>Connected objects</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>Current frame</option></select></label><span className={styles.composerSpacer} /><button type="button" className={styles.iconButton} aria-label="Use voice" onClick={startVoiceInput}>◖</button><button className={styles.sendButton} aria-label={t('sendBrain')} disabled={thinking || !prompt.trim()}>{thinking ? '•••' : '➤'}</button></div>
         </form>}
       </div>
     </div>
@@ -1024,11 +1380,13 @@ function RemoteCursors({ members, currentUserId, instance, container }: { member
 function Inspector({ node, sessionId, persistence, role, editable, members, onChange, onClose, onRun, onSaveAgent, onSaveFramePreset, onExpandProject, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onStartStandup }: { node: CreationFlowNode; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onClose: () => void; onRun: () => void; onSaveAgent: () => void; onSaveFramePreset: () => void; onExpandProject: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onStartStandup: () => void }) {
   const kind = node.data.kind;
   const [tab, setTab] = useState<'details' | 'activity'>('details');
+  const [accessStatus, setAccessStatus] = useState('');
   return <aside className={styles.inspector}>
     <header><div><span>{kind === 'agent' ? '✦' : kind === 'website' ? '◎' : kind === 'workflow' ? '⌘' : '◇'}</span><strong>{node.data.title}</strong><small>Live {kind}</small></div><button onClick={onClose} aria-label="Close inspector">×</button></header>
     <div className={styles.inspectorTabs}><button className={tab === 'details' ? styles.activeTab : ''} onClick={() => setTab('details')}>Details</button><button className={tab === 'activity' ? styles.activeTab : ''} onClick={() => setTab('activity')}>Activity</button></div>
     <div className={styles.inspectorBody}>
       {tab === 'details' ? <fieldset className={styles.inspectorFields} disabled={!editable}>
+      {node.data.redacted === true && <><p className={styles.inspectorHint}>You can see this object’s position, but its source is no longer available to you.</p><button type="button" className={styles.fullButton} disabled={persistence !== 'server' || !!accessStatus} onClick={() => { setAccessStatus('Requesting…'); void creationSessionsApi.requestObjectAccess(sessionId, node.id).then(() => setAccessStatus('Access requested')).catch((error) => setAccessStatus(error instanceof Error ? error.message : 'Request failed')); }}>{accessStatus || 'Request access'}</button></>}
       <label>Name<input value={node.data.title} onChange={(event) => onChange({ title: event.target.value })} /></label>
       {kind === 'agent' && <>
         <label>Model<select value={node.data.model || 'gpt-4o'} onChange={(event) => onChange({ model: event.target.value })}><option>gpt-4o</option><option>claude-3.5-sonnet</option><option>Evermind</option></select></label>
@@ -1038,10 +1396,11 @@ function Inspector({ node, sessionId, persistence, role, editable, members, onCh
         <button type="button" className={styles.fullButton} onClick={onSaveAgent}>Save agent settings everywhere</button>
       </>}
       {kind === 'staff' && <><label>Role<input value={node.data.role || ''} onChange={(event) => onChange({ role: event.target.value })} /></label><label>Current focus<textarea value={node.data.focus || ''} onChange={(event) => onChange({ focus: event.target.value })} rows={4} /></label></>}
-      {kind === 'website' && <><label>Headline<input value={typeof node.data.websiteHeadline === 'string' ? node.data.websiteHeadline : 'Fall in love with every look'} onChange={(event) => onChange({ websiteHeadline: event.target.value })} /></label><label>Supporting copy<textarea rows={3} value={typeof node.data.websiteBody === 'string' ? node.data.websiteBody : 'New arrivals for the season ahead.'} onChange={(event) => onChange({ websiteBody: event.target.value })} /></label><label>Call to action<input value={typeof node.data.websiteCta === 'string' ? node.data.websiteCta : 'Shop the collection'} onChange={(event) => onChange({ websiteCta: event.target.value })} /></label><label>Accent color<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : '#3978f6'} onChange={(event) => onChange({ websiteAccent: event.target.value })} /></label><label>Viewport<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onChange({ viewport: event.target.value })}><option value="desktop">Desktop · 1440</option><option value="tablet">Tablet · 768</option><option value="mobile">Mobile · 390</option></select></label><p className={styles.inspectorHint}>Changes render live in the interactive prototype on the canvas.</p></>}
+      {(kind === 'website' || kind === 'prototype') && <><label>Headline<input value={typeof node.data.websiteHeadline === 'string' ? node.data.websiteHeadline : 'Fall in love with every look'} onChange={(event) => onChange({ websiteHeadline: event.target.value })} /></label><label>Supporting copy<textarea rows={3} value={typeof node.data.websiteBody === 'string' ? node.data.websiteBody : 'New arrivals for the season ahead.'} onChange={(event) => onChange({ websiteBody: event.target.value })} /></label><label>Call to action<input value={typeof node.data.websiteCta === 'string' ? node.data.websiteCta : 'Shop the collection'} onChange={(event) => onChange({ websiteCta: event.target.value })} /></label><label>Accent color<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : '#3978f6'} onChange={(event) => onChange({ websiteAccent: event.target.value })} /></label><label>Viewport<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onChange({ viewport: event.target.value })}><option value="desktop">Desktop · 1440</option><option value="tablet">Tablet · 768</option><option value="mobile">Mobile · 390</option></select></label><p className={styles.inspectorHint}>Changes render live in the interactive prototype on the canvas.</p></>}
       {kind === 'workflow' && <><label>Execution target<select><option>BuilderForce.AI</option><option>Campaign Strategist</option></select></label><label>Approval mode<select><option>Required before publish</option><option>Fully autonomous</option></select></label><button className={styles.fullButton} onClick={onRun}>▶ Run workflow</button></>}
       {kind === 'dashboard' && <><label>Date range<select><option>Last 30 days</option><option>Last 7 days</option><option>Quarter to date</option></select></label><button className={styles.fullButton}>Refresh live data</button></>}
       {kind === 'dataset' && <><label>Import CSV or TSV<input type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImportDataset(file); }} /></label><p className={styles.inspectorHint}>A safe preview of up to 500 rows is stored with this session. Connect it to a dashboard or ask Brain to analyze it.</p><button className={styles.fullButton} onClick={onVisualizeDataset}>Create visualization</button></>}
+      {kind === 'voice' && <><label>Voice script<textarea rows={5} value={typeof node.data.voiceScript === 'string' ? node.data.voiceScript : ''} placeholder="Write or dictate what this Voice Object should say…" onChange={(event) => onChange({ voiceScript: event.target.value })} /></label><label>Experience<select value={typeof node.data.voiceMode === 'string' ? node.data.voiceMode : 'narration'} onChange={(event) => onChange({ voiceMode: event.target.value })}><option value="narration">Narration</option><option value="assistant">Interactive assistant</option><option value="standup">Stand-up facilitator</option></select></label><button type="button" className={styles.fullButton} onClick={() => onChange({ status: 'Ready for voice generation', subtitle: String(node.data.voiceScript || '') })}>Prepare voice experience</button></>}
       {kind === 'project' && <><label>Project view<select value={typeof node.data.projectLens === 'string' ? node.data.projectLens : 'everything'} onChange={(event) => onChange({ projectLens: event.target.value })}><option value="everything">Everything</option><option value="delivery">Delivery</option><option value="metrics">Metrics</option><option value="customer-feedback">Customer feedback</option></select></label><p className={styles.inspectorHint}>Project context is optional. Add its related items to compare work visually or ground Brain in the complete project.</p><button className={styles.fullButton} onClick={onExpandProject}>Add all related items</button><button className={styles.fullButton} onClick={onCompareProjects}>Compare projects on canvas</button></>}
       {kind === 'projectComparison' && <><p className={styles.inspectorHint}>This comparison retains the source endpoints and fetch timestamp used for every project. Refresh to compare current delivery, velocity, and feature evidence.</p><button className={styles.fullButton} onClick={onCompareProjects}>Refresh project comparison</button><SourceList sources={node.data.sources} /></>}
       {kind === 'mockup' && <><label>Delivery project<select><option>BuilderForce launch</option><option>No project</option></select></label><label>Assign agent<select><option>Campaign Strategist</option><option>Web Analyst</option></select></label><button className={styles.fullButton} onClick={onDeliverMockup}>Add to project and assign</button></>}
@@ -1050,7 +1409,7 @@ function Inspector({ node, sessionId, persistence, role, editable, members, onCh
       {kind === 'standup' && <><p className={styles.inspectorHint}>Gather every Staff Member and Agent currently on the canvas. With a saved Project, this starts the canonical stand-up ceremony and keeps its resource link in the session.</p><button className={styles.fullButton} onClick={onStartStandup}>Gather and start stand-up</button></>}
       {kind === 'frame' && <><label>Purpose<input value={typeof node.data.framePurpose === 'string' ? node.data.framePurpose : 'Arrange related objects here'} onChange={(event) => onChange({ framePurpose: event.target.value })} /></label><label>Fill color<input type="color" value={typeof node.data.frameColor === 'string' ? node.data.frameColor : '#f8f6ff'} onChange={(event) => onChange({ frameColor: event.target.value })} /></label><label>Border color<input type="color" value={typeof node.data.frameBorder === 'string' ? node.data.frameBorder : '#9d8bea'} onChange={(event) => onChange({ frameBorder: event.target.value })} /></label><button className={styles.fullButton} onClick={onSaveFramePreset}>Save as reusable frame</button></>}
       {kind === 'drawing' && <><label>Stroke color<input type="color" value={typeof node.data.stroke === 'string' ? node.data.stroke : '#5b5ce2'} onChange={(event) => onChange({ stroke: event.target.value })} /></label><label>Stroke width<input type="range" min="1" max="12" value={typeof node.data.strokeWidth === 'number' ? node.data.strokeWidth : 3} onChange={(event) => onChange({ strokeWidth: Number(event.target.value) })} /></label><p className={styles.inspectorHint}>Resize, annotate, connect, or use this sketch as visual context for Brain.</p></>}
-      {!['agent', 'staff', 'website', 'workflow', 'dashboard', 'project', 'mockup', 'evermind', 'standup', 'frame', 'drawing'].includes(kind) && <p className={styles.inspectorHint}>This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.</p>}
+      {!['agent', 'staff', 'website', 'prototype', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'mockup', 'evermind', 'standup', 'frame', 'drawing'].includes(kind) && <p className={styles.inspectorHint}>This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.</p>}
       </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} persistence={persistence} role={role} members={members} />}
     </div>
     <footer><span>Resource · {role}</span><code>{node.data.resourceId || `session:${node.id}`}</code><button className={styles.fullButton} disabled={!editable} onClick={() => onChange({ status: 'Saved' })}>Save changes</button></footer>

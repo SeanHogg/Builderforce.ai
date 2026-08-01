@@ -11817,5 +11817,16 @@
       "suppressedTitle": "Efectos suprimidos",
       "noSteps": "El agente no produjo ningún efecto: ni escribió código ni guardó nada."
     }
+  },
+  "creationCanvas": {
+    "sessionTitle": "Título de la sesión", "saved": "Sesión guardada", "activeCollaborators": "Colaboradores activos",
+    "newSession": "Nueva sesión", "templates": "Plantillas", "history": "Historial", "draw": "Dibujar", "branch": "Crear rama", "merge": "Fusionar", "present": "Presentar", "exitPresentation": "Salir de la presentación", "share": "Compartir", "run": "Ejecutar", "saveCollaborate": "Guardar y colaborar",
+    "addToCanvas": "Añadir al Lienzo", "searchEverything": "Buscar en todo…", "askBrain": "Pregunta a Brain sobre este Lienzo", "sendBrain": "Enviar a Brain", "entireCanvas": "Todo el Lienzo", "loading": "Cargando tu Lienzo…", "requestAccess": "Solicitar acceso", "accessRequired": "Acceso necesario",
+    "canvasTemplates": "Plantillas del Lienzo", "savedAccount": "Guardado en tu cuenta", "reusableFrames": "Tus marcos reutilizables", "marketplacePacks": "Paquetes de Objetos reutilizables y seguros",
+    "details": "Detalles", "activity": "Actividad", "name": "Nombre", "saveChanges": "Guardar cambios", "next": "Siguiente", "startCreating": "Empezar a crear",
+    "duplicate": "Duplicar", "align": "Alinear", "frame": "Enmarcar", "lock": "Bloquear", "unlock": "Desbloquear", "hide": "Ocultar", "showHidden": "Mostrar ocultos", "hideHidden": "Ocultar elementos ocultos", "focus": "Enfocar", "edge": "Conexión", "conversation": "Conversación", "tutorial": "Tutorial",
+    "live": "En directo", "offlineRetry": "Sin conexión · se reintentarán los cambios", "reconnecting": "Reconectando…", "connecting": "Conectando…", "largeSession": "Sesión grande · {count} Objetos",
+    "dashboardTitle": "Sesiones de Create", "dashboardSubtitle": "Vuelve a un Lienzo y continúa justo donde lo dejaste.", "searchSessions": "Buscar Sesiones, Objetos, Proyectos o personas…", "active": "Activas", "archived": "Archivadas", "continueCreating": "Seguir creando", "sharedWithMe": "Compartidas conmigo", "recentlyCompleted": "Completadas recientemente",
+    "object": {"workflow":"Flujo de trabajo","project":"Proyecto","website":"Sitio web","dashboard":"Panel","chat":"Chat","agent":"Agente","staff":"Miembro del equipo","evaluation":"Evaluación","dataset":"Conjunto de datos","table":"Tabla","spreadsheet":"Hoja de cálculo","chart":"Gráfico","report":"Informe","kpi":"KPI","prototype":"WYSIWYG","code":"Código","browser":"Vista del navegador","llm":"LLM","voice":"Voz","document":"Documento","slides":"Diapositivas","knowledge":"Conocimiento","file":"Archivo","url":"URL","note":"Nota","drawing":"Dibujo","frame":"Marco","comment":"Comentario","timer":"Temporizador","roadmap":"Hoja de ruta","prd":"PRD","release":"Lanzamiento","task":"Tarea","mockup":"Maqueta","mockupSet":"Conjunto de maquetas","featureSummary":"Resumen de funciones","team":"Equipo","role":"Rol","mcp":"Herramienta conectada","evermind":"Evermind","projectComparison":"Comparación de proyectos","standup":"Reunión diaria","repository":"Repositorio","selection":"Selección del editor","diagnostics":"Diagnósticos","terminal":"Salida del terminal","service":"Servicio local"}
   }
 }

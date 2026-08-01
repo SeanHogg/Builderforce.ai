@@ -1,29 +1,5 @@
-export type CreationObjectKind =
-  | 'workflow'
-  | 'project'
-  | 'website'
-  | 'dashboard'
-  | 'chat'
-  | 'agent'
-  | 'staff'
-  | 'evaluation'
-  | 'dataset'
-  | 'table' | 'spreadsheet' | 'chart' | 'report' | 'kpi'
-  | 'prototype' | 'code' | 'browser' | 'llm'
-  | 'voice'
-  | 'document' | 'slides' | 'knowledge' | 'file' | 'url'
-  | 'note'
-  | 'drawing' | 'frame' | 'comment' | 'timer'
-  | 'roadmap'
-  | 'prd' | 'release'
-  | 'task'
-  | 'mockup'
-  | 'mockupSet'
-  | 'featureSummary'
-  | 'team' | 'role' | 'mcp'
-  | 'evermind'
-  | 'projectComparison'
-  | 'standup';
+export type { CreationObjectKind } from '@builderforce/creation-canvas-contract';
+import type { CreationObjectKind } from '@builderforce/creation-canvas-contract';
 
 export type CreationNodeData = {
   [key: string]: unknown;

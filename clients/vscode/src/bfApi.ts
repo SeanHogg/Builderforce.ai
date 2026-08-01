@@ -532,11 +532,24 @@ export interface BfCreationSessionDetail {
   role: "viewer" | "commenter" | "editor" | "runner" | "owner";
   objects: BfCreationObject[];
   connections: BfCreationConnection[];
-  members: Array<{ userId: string; displayName?: string | null; role: string }>;
+  currentUserId?: string;
+  members: Array<{ userId: string; displayName?: string | null; role: string; lastSeenAt?: string | null; typing?: boolean; selection?: string[]; viewport?: Record<string, unknown> }>;
 }
 
-export async function listCreationSessions(secrets: vscode.SecretStorage): Promise<Array<{ id: string; title: string; revision: number; lastActivityAt: string }>> {
-  const result = await authed<{ sessions: Array<{ id: string; title: string; revision: number; lastActivityAt: string }> }>(secrets, "/api/creation-sessions?limit=50");
+export interface BfCreationSessionSummary {
+  id: string;
+  title: string;
+  revision: number;
+  lastActivityAt: string;
+  status?: "active" | "archived";
+  pinned?: boolean;
+  unread?: boolean;
+  collaboratorCount?: number;
+  preview?: { objects?: Array<{ status?: string }> } | null;
+}
+
+export async function listCreationSessions(secrets: vscode.SecretStorage): Promise<BfCreationSessionSummary[]> {
+  const result = await authed<{ sessions: BfCreationSessionSummary[] }>(secrets, "/api/creation-sessions?limit=50");
   return result?.sessions ?? [];
 }
 
@@ -558,6 +571,44 @@ export async function applyCreationCommands(
     body: JSON.stringify({ commands, atomic: true }),
   });
   if (!result) throw new Error("Canvas change failed");
+  return result;
+}
+
+export interface BfCreationComment {
+  id: string;
+  objectId?: string | null;
+  body: string;
+  authorName?: string | null;
+  createdAt: string;
+  resolvedAt?: string | null;
+}
+
+export async function listCreationComments(secrets: vscode.SecretStorage, sessionId: string, objectId?: string): Promise<BfCreationComment[]> {
+  const suffix = objectId ? `?objectId=${encodeURIComponent(objectId)}` : "";
+  const result = await authed<{ comments: BfCreationComment[] }>(secrets, `/api/creation-sessions/${encodeURIComponent(sessionId)}/comments${suffix}`);
+  return result?.comments ?? [];
+}
+
+export async function createCreationComment(secrets: vscode.SecretStorage, sessionId: string, body: string, objectId?: string): Promise<BfCreationComment> {
+  const result = await authed<BfCreationComment>(secrets, `/api/creation-sessions/${encodeURIComponent(sessionId)}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ body, objectId: objectId || null }),
+  });
+  if (!result) throw new Error("Comment could not be saved");
+  return result;
+}
+
+export async function updateCreationPresence(
+  secrets: vscode.SecretStorage,
+  sessionId: string,
+  revision: number,
+  selection: string[] = [],
+): Promise<{ revision: number; currentUserId?: string; members: BfCreationSessionDetail["members"] }> {
+  const result = await authed<{ revision: number; currentUserId?: string; members: BfCreationSessionDetail["members"] }>(secrets, `/api/creation-sessions/${encodeURIComponent(sessionId)}/presence`, {
+    method: "POST",
+    body: JSON.stringify({ revision, selection, typing: false }),
+  });
+  if (!result) throw new Error("Presence could not be updated");
   return result;
 }
 

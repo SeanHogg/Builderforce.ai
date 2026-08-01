@@ -24,6 +24,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // mirrors how `api` resolves it via tsconfig paths), so the editor surface runs the
 // SAME tool definitions as the cloud. Bundle it from its TS entry…
 const agentToolsRoot = path.resolve(here, "../../packages/agent-tools/src");
+const creationCanvasContract = path.resolve(here, "../../packages/creation-canvas-contract/src/index.ts");
 
 /** …and rewrite its NodeNext `./x.js` relative imports to the real `./x.ts` source
  *  (esbuild won't map .js→.ts on its own). Scoped to that package so nothing else
@@ -51,7 +52,7 @@ const options = harness
       // The harness never runs inside the editor, so `vscode` must not even be
       // reachable — anything that reaches for it belongs on the extension side.
       external: ["vscode", "react", "react-dom"],
-      alias: { "@builderforce/agent-tools": path.join(agentToolsRoot, "index.ts") },
+      alias: { "@builderforce/agent-tools": path.join(agentToolsRoot, "index.ts"), "@builderforce/creation-canvas-contract": creationCanvasContract },
       plugins: [agentToolsTsResolve],
       sourcemap: true,
       logLevel: "warning",
@@ -64,7 +65,7 @@ const options = harness
       format: "cjs",
       target: "node20",
       external: ["vscode"],
-      alias: { "@builderforce/agent-tools": path.join(agentToolsRoot, "index.ts") },
+      alias: { "@builderforce/agent-tools": path.join(agentToolsRoot, "index.ts"), "@builderforce/creation-canvas-contract": creationCanvasContract },
       plugins: [agentToolsTsResolve],
       sourcemap: !production,
       minify: production,

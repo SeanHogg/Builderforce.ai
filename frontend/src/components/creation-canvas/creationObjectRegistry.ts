@@ -1,4 +1,5 @@
 import type { CreationNodeData, CreationObjectKind } from './types';
+import { CREATION_CONNECTION_KINDS, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
 
 export type CreationObjectGroup = 'Build' | 'Data' | 'Knowledge' | 'Insights' | 'Work' | 'People' | 'Agents' | 'Models' | 'Collaborate' | 'Integrations';
 
@@ -8,9 +9,17 @@ export interface CreationObjectDefinition {
   icon: string;
   group: CreationObjectGroup;
   createData: () => CreationNodeData;
+  capability?: string;
+  renderer: 'creation';
+  inspector: 'creation';
+  actions: readonly string[];
+  allowedConnections: readonly CreationConnectionKind[];
+  contextAdapter: (data: CreationNodeData) => Record<string, unknown>;
+  previewAdapter: (data: CreationNodeData) => { kind: CreationObjectKind; title: string; status?: string };
 }
+type BaseCreationObjectDefinition = Pick<CreationObjectDefinition, 'kind' | 'label' | 'icon' | 'group' | 'createData'>;
 
-export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = [
+const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'workflow', label: 'Workflow', icon: '⌘', group: 'Build', createData: () => ({ kind: 'workflow', title: 'Untitled workflow', status: 'Ready' }) },
   { kind: 'website', label: 'Website', icon: '◎', group: 'Build', createData: () => ({ kind: 'website', title: 'Website concept', status: 'Draft' }) },
   { kind: 'chat', label: 'Chat', icon: '●', group: 'Build', createData: () => ({ kind: 'chat', title: 'Brain' }) },
@@ -28,6 +37,11 @@ export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = [
   { kind: 'prototype', label: 'WYSIWYG', icon: '▣', group: 'Build', createData: () => ({ kind: 'prototype', title: 'Interactive prototype', status: 'Draft' }) },
   { kind: 'code', label: 'Code', icon: '</>', group: 'Build', createData: () => ({ kind: 'code', title: 'Code workspace', status: 'Draft' }) },
   { kind: 'browser', label: 'Browser preview', icon: '◎', group: 'Build', createData: () => ({ kind: 'browser', title: 'Live preview', status: 'Ready' }) },
+  { kind: 'repository', label: 'Repository', icon: '⑂', group: 'Build', createData: () => ({ kind: 'repository', title: 'Source repository', status: 'Linked from VS Code' }) },
+  { kind: 'selection', label: 'Editor selection', icon: '⌗', group: 'Build', createData: () => ({ kind: 'selection', title: 'Editor selection', status: 'Referenced from VS Code' }) },
+  { kind: 'diagnostics', label: 'Diagnostics', icon: '⚠', group: 'Build', createData: () => ({ kind: 'diagnostics', title: 'Editor diagnostics', status: 'Live editor context' }) },
+  { kind: 'terminal', label: 'Terminal output', icon: '>_', group: 'Build', createData: () => ({ kind: 'terminal', title: 'Terminal output', status: 'Review for secrets' }) },
+  { kind: 'service', label: 'Local service', icon: '◎', group: 'Build', createData: () => ({ kind: 'service', title: 'Local service', status: 'Preview from VS Code' }) },
   { kind: 'llm', label: 'LLM', icon: '◉', group: 'Models', createData: () => ({ kind: 'llm', title: 'Language model', status: 'Blueprint', model: 'gpt-4o' }) },
   { kind: 'project', label: 'Project', icon: '▦', group: 'Work', createData: () => ({ kind: 'project', title: 'BuilderForce launch', status: 'Not linked', subtitle: 'Search for a canonical project in the inspector.' }) },
   { kind: 'task', label: 'Task', icon: '✓', group: 'Work', createData: () => ({ kind: 'task', title: 'Build approved mockup', status: 'Ready', role: 'Campaign Strategist' }) },
@@ -53,7 +67,29 @@ export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = [
   { kind: 'timer', label: 'Timer', icon: '◷', group: 'Collaborate', createData: () => ({ kind: 'timer', title: 'Focus timer', status: '05:00' }) },
   { kind: 'mcp', label: 'MCP tool', icon: '⌘', group: 'Integrations', createData: () => ({ kind: 'mcp', title: 'Connected tool', status: 'Choose operation' }) },
   { kind: 'evermind', label: 'Evermind', icon: '🧠', group: 'Models', createData: () => ({ kind: 'evermind', title: 'Untitled Evermind', status: 'Blueprint', subtitle: 'Create, teach, tune, evaluate, and publish a self-learning model on this canvas.', evermindVersion: 0, contributions: 0 }) },
-] as const;
+] as const satisfies readonly BaseCreationObjectDefinition[];
+
+const CAPABILITIES: Partial<Record<CreationObjectKind, string>> = {
+  evermind: 'evermind', mcp: 'integrations', agent: 'agents', llm: 'models', voice: 'voice',
+};
+const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
+  workflow: ['edit', 'run'], website: ['edit', 'preview', 'publish'], prototype: ['edit', 'preview'],
+  dataset: ['import', 'profile', 'visualize'], chart: ['refresh', 'drill'], dashboard: ['refresh', 'drill'],
+  project: ['expand', 'compare'], task: ['assign', 'deliver'], agent: ['inspect', 'configure', 'assign'],
+  evermind: ['teach', 'train', 'evaluate', 'publish'], voice: ['record', 'play'], mcp: ['authenticate', 'execute'],
+};
+const CONTEXT_FIELDS = ['kind', 'title', 'subtitle', 'status', 'resourceId', 'model', 'role', 'focus'] as const;
+
+export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = BASE_CREATION_OBJECT_REGISTRY.map((definition) => ({
+  ...definition,
+  ...(CAPABILITIES[definition.kind] ? { capability: CAPABILITIES[definition.kind] } : {}),
+  renderer: 'creation' as const,
+  inspector: 'creation' as const,
+  actions: ACTIONS[definition.kind] ?? ['inspect'],
+  allowedConnections: CREATION_CONNECTION_KINDS,
+  contextAdapter: (data: CreationNodeData) => Object.fromEntries(CONTEXT_FIELDS.flatMap((field) => data[field] == null ? [] : [[field, data[field]]])),
+  previewAdapter: (data: CreationNodeData) => ({ kind: data.kind, title: data.title, ...(data.status ? { status: data.status } : {}) }),
+}));
 
 const byKind = new Map(CREATION_OBJECT_REGISTRY.map((definition) => [definition.kind, definition]));
 
@@ -65,6 +101,10 @@ export function creationObjectDefinition(kind: CreationObjectKind): CreationObje
 
 export function createDefaultCreationData(kind: CreationObjectKind): CreationNodeData {
   return creationObjectDefinition(kind).createData();
+}
+
+export function availableCreationObjects(capabilities: ReadonlySet<string>): readonly CreationObjectDefinition[] {
+  return CREATION_OBJECT_REGISTRY.filter((definition) => !definition.capability || capabilities.has(definition.capability));
 }
 
 export const CREATION_PALETTE_GROUPS = (['Build', 'Data', 'Knowledge', 'Insights', 'Work', 'People', 'Agents', 'Models', 'Collaborate', 'Integrations'] as const)

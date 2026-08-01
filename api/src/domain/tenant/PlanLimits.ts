@@ -8,6 +8,20 @@ import { TenantPlan } from '../shared/types';
  * these numbers inline.
  */
 export interface PlanLimits {
+  /** Active + archived durable Creation Sessions; -1 = unlimited. */
+  maxCreationSessions: number;
+  /** Members (including owner) allowed in one Creation Session. */
+  maxCreationSessionCollaborators: number;
+  /** Private/tenant reusable Creation Session templates. */
+  maxCreationSessionTemplates: number;
+  /** Retained revision snapshots per Creation Session. */
+  maxCreationSessionHistory: number;
+  /** Rows a Canvas Dataset may profile/process in one request. */
+  maxCreationDatasetRows: number;
+  /** Simultaneously present editors/runners/owners in a Creation Session. */
+  maxCreationRealtimeEditors: number;
+  /** Stored artifact bytes attributable to one Creation Session. */
+  maxCreationArtifactBytes: number;
   /** Maximum number of registered AgentHosts (0 = blocked, -1 = unlimited) */
   maxAgentHosts: number;
   /** Maximum number of projects */
@@ -100,6 +114,13 @@ export interface PlanLimits {
 
 export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
   [TenantPlan.FREE]: {
+    maxCreationSessions: 10,
+    maxCreationSessionCollaborators: 3,
+    maxCreationSessionTemplates: 3,
+    maxCreationSessionHistory: 50,
+    maxCreationDatasetRows: 500,
+    maxCreationRealtimeEditors: 3,
+    maxCreationArtifactBytes: 100_000_000,
     maxAgentHosts: 1,
     maxProjects: 5,
     maxSeats: 1,
@@ -122,6 +143,13 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     advancedInsights: false,
   },
   [TenantPlan.PRO]: {
+    maxCreationSessions: 500,
+    maxCreationSessionCollaborators: 25,
+    maxCreationSessionTemplates: 100,
+    maxCreationSessionHistory: 500,
+    maxCreationDatasetRows: 50_000,
+    maxCreationRealtimeEditors: 25,
+    maxCreationArtifactBytes: 10_000_000_000,
     maxAgentHosts: 3,
     maxProjects: -1,
     maxSeats: 1,
@@ -144,6 +172,13 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     advancedInsights: true,
   },
   [TenantPlan.TEAMS]: {
+    maxCreationSessions: -1,
+    maxCreationSessionCollaborators: -1,
+    maxCreationSessionTemplates: -1,
+    maxCreationSessionHistory: 5_000,
+    maxCreationDatasetRows: 1_000_000,
+    maxCreationRealtimeEditors: 100,
+    maxCreationArtifactBytes: -1,
     maxAgentHosts: -1,
     maxProjects: -1,
     maxSeats: -1,

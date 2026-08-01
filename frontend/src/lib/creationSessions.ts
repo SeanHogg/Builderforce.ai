@@ -9,6 +9,7 @@ export interface LocalCreationSnapshot {
   version: 1;
   title: string;
   initialPrompt?: string;
+  timeline?: Array<{ clientMessageId: string; role: 'user' | 'assistant' | 'system'; body: string; createdAt: string }>;
   nodes: CreationFlowNode[];
   edges: Edge[];
   viewport?: { x: number; y: number; zoom: number };
@@ -54,6 +55,7 @@ export function createLocalCreationSession(prompt: string): string {
     version: 1,
     title,
     initialPrompt: prompt.trim(),
+    timeline: prompt.trim() ? [{ clientMessageId: `initial:${crypto.randomUUID()}`, role: 'user', body: prompt.trim(), createdAt: now }] : [],
     updatedAt: now,
     nodes,
     edges,
@@ -72,6 +74,7 @@ export function readLocalCreationSession(sessionId: string): LocalCreationSnapsh
       version: 1,
       title: typeof parsed.title === 'string' ? parsed.title : 'Untitled session',
       initialPrompt: typeof parsed.initialPrompt === 'string' ? parsed.initialPrompt : undefined,
+      timeline: Array.isArray(parsed.timeline) ? parsed.timeline.filter((message): message is NonNullable<LocalCreationSnapshot['timeline']>[number] => !!message && typeof message.clientMessageId === 'string' && (message.role === 'user' || message.role === 'assistant' || message.role === 'system') && typeof message.body === 'string' && typeof message.createdAt === 'string') : [],
       nodes: parsed.nodes,
       edges: parsed.edges,
       viewport: parsed.viewport && typeof parsed.viewport.x === 'number' && typeof parsed.viewport.y === 'number' && typeof parsed.viewport.zoom === 'number' ? parsed.viewport : undefined,
@@ -108,9 +111,9 @@ export function creationGraphFromSnapshot(snapshot: Pick<LocalCreationSnapshot, 
       id: edge.id,
       sourceObjectId: edge.source,
       targetObjectId: edge.target,
-      kind: typeof edge.type === 'string' ? edge.type : 'reference',
+      kind: typeof edge.data?.connectionKind === 'string' ? edge.data.connectionKind : 'reference',
       label: typeof edge.label === 'string' ? edge.label : null,
-      metadata: { animated: !!edge.animated },
+      metadata: { animated: !!edge.animated, rendererType: typeof edge.type === 'string' ? edge.type : 'smoothstep' },
     })),
     ...(snapshot.viewport ? { viewport: snapshot.viewport } : {}),
   };

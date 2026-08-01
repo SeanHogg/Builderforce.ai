@@ -22,9 +22,8 @@ export default function CreationSessionClient({ sessionId }: { sessionId: string
     claiming.current = true;
     void (async () => {
       try {
-        const created = await creationSessionsApi.create({ title: snapshot.title, initialPrompt: snapshot.initialPrompt });
         const graph = creationGraphFromSnapshot(snapshot);
-        await creationSessionsApi.saveGraph(created.session.id, { ...graph, expectedRevision: created.session.revision });
+        const created = await creationSessionsApi.claim({ clientSessionId: sessionId, title: snapshot.title, initialPrompt: snapshot.initialPrompt, timeline: snapshot.timeline, ...graph });
         removeLocalCreationSession(sessionId);
         router.replace(`/create/${created.session.id}`);
       } catch (error) {

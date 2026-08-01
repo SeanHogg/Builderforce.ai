@@ -165,6 +165,9 @@ export function activate(context: vscode.ExtensionContext): void {
         void vscode.window.showErrorMessage(vscode.l10n.t("Could not open Creation Sessions: {0}", (error as Error).message));
       }
     }),
+    vscode.commands.registerCommand("builderforce.openCreationSessionItem", (session: bfApi.BfCreationSessionSummary) => {
+      CreationCanvasPanel.open(context, session.id, session.title);
+    }),
     attention.onDidChange(() => {
       tree.refresh(); projects.refresh(); inbox.refresh(); updateManagerStatus();
       // Per-session chat tabs show the same live status as the Sessions rows, off the

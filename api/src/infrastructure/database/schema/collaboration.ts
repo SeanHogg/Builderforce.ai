@@ -1000,6 +1000,8 @@ export const creationSessions = pgTable('creation_sessions', {
   createdAt:      timestamp('created_at').notNull().defaultNow(),
   updatedAt:      timestamp('updated_at').notNull().defaultNow(),
   archivedAt:     timestamp('archived_at'),
+  branchParentSessionId: uuid('branch_parent_session_id').references((): AnyPgColumn => creationSessions.id, { onDelete: 'set null' }),
+  branchBaseRevision: bigint('branch_base_revision', { mode: 'number' }),
 }, (t) => ({
   byTenantActivity: index('idx_creation_sessions_tenant_activity').on(t.tenantId, t.status, t.lastActivityAt),
   byCreator: index('idx_creation_sessions_creator').on(t.createdBy, t.lastActivityAt),
@@ -1015,14 +1017,33 @@ export const creationSessionObjects = pgTable('creation_session_objects', {
   resourceRevision: varchar('resource_revision', { length: 128 }),
   canvasData:       jsonb('canvas_data').notNull().default(sql`'{}'::jsonb`),
   content:          jsonb('content'),
+  searchText:       text('search_text').notNull().default(''),
   createdBy:        varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   updatedBy:        varchar('updated_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  lockedBy:         varchar('locked_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  lockExpiresAt:    timestamp('lock_expires_at'),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
   bySession: index('idx_creation_objects_session').on(t.sessionId, t.createdAt),
   byResource: uniqueIndex('uq_creation_objects_resource').on(t.sessionId, t.resourceType, t.resourceId)
     .where(sql`${t.resourceId} IS NOT NULL`),
+}));
+
+/** Session-owned Brain/user transcript. It deliberately does not live inside a
+ * Chat placement: removing a visual Chat Object must never erase conversation. */
+export const creationSessionTimeline = pgTable('creation_session_timeline', {
+  id:              bigserial('id', { mode: 'number' }).primaryKey(),
+  sessionId:       uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),
+  clientMessageId: varchar('client_message_id', { length: 128 }).notNull(),
+  messageRole:     varchar('message_role', { length: 16 }).notNull(),
+  body:            text('body').notNull(),
+  metadata:        jsonb('metadata').notNull().default(sql`'{}'::jsonb`),
+  createdBy:       varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  bySession: index('idx_creation_timeline_session_id').on(t.sessionId, t.id),
+  messageId: uniqueIndex('uq_creation_timeline_message').on(t.sessionId, t.clientMessageId),
 }));
 
 export const creationSessionConnections = pgTable('creation_session_connections', {
@@ -1049,11 +1070,33 @@ export const creationSessionMembers = pgTable('creation_session_members', {
   selection:        jsonb('selection').notNull().default(sql`'[]'::jsonb`),
   typing:           boolean('typing').notNull().default(false),
   pinned:           boolean('pinned').notNull().default(false),
+  watchState:       varchar('watch_state', { length: 24 }).notNull().default('mentions'),
+  followingUserId:  varchar('following_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   joinedAt:         timestamp('joined_at').notNull().defaultNow(),
 }, (t) => ({
   pk: primaryKey({ columns: [t.sessionId, t.userId] }),
   byUser: index('idx_creation_members_user').on(t.userId, t.joinedAt),
   byPresence: index('idx_creation_members_presence').on(t.sessionId, t.lastSeenAt),
+}));
+
+/** One-time, expiring invitation to a Creation Session. Only a SHA-256 token
+ * digest is stored so a database read cannot be used to join the Session. */
+export const creationSessionInvites = pgTable('creation_session_invites', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  sessionId:  uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  email:      varchar('email', { length: 320 }).notNull(),
+  role:       varchar('role', { length: 16 }).notNull(),
+  tokenHash:  varchar('token_hash', { length: 64 }).notNull().unique(),
+  expiresAt:  timestamp('expires_at').notNull(),
+  acceptedBy: varchar('accepted_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  acceptedAt: timestamp('accepted_at'),
+  revokedAt:  timestamp('revoked_at'),
+  createdBy:  varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  bySession: index('idx_creation_session_invites_session').on(t.sessionId, t.createdAt),
+  byEmail: index('idx_creation_session_invites_email').on(t.tenantId, t.email, t.expiresAt),
 }));
 
 export const creationSessionSnapshots = pgTable('creation_session_snapshots', {
@@ -1113,3 +1156,31 @@ export const creationSessionProjectLinks = pgTable('creation_session_project_lin
   pk: primaryKey({ columns: [t.sessionId, t.projectId] }),
   byProject: index('idx_creation_project_links_project').on(t.projectId, t.createdAt),
 }));
+
+/** Tenant-authored reusable Session graphs. Built-in Marketplace packs remain
+ * code-signed catalog entries; private/tenant variants persist here. */
+export const creationSessionTemplates = pgTable('creation_session_templates', {
+  id:                   uuid('id').primaryKey().defaultRandom(),
+  tenantId:             integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:            uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
+  name:                 varchar('name', { length: 160 }).notNull(),
+  description:          text('description'),
+  category:             varchar('category', { length: 80 }).notNull().default('Custom'),
+  graph:                jsonb('graph').notNull(),
+  visibility:           varchar('visibility', { length: 16 }).notNull().default('private'),
+  marketplaceListingId: varchar('marketplace_listing_id', { length: 128 }),
+  createdBy:            varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  updatedBy:            varchar('updated_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:            timestamp('created_at').notNull().defaultNow(),
+  updatedAt:            timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant: index('idx_creation_templates_tenant_updated').on(t.tenantId, t.segmentId, t.updatedAt),
+  byMarketplace: index('idx_creation_templates_marketplace').on(t.marketplaceListingId).where(sql`${t.marketplaceListingId} IS NOT NULL`),
+}));
+
+export const creationSessionClaims = pgTable('creation_session_claims', {
+  userId:          varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  clientSessionId: varchar('client_session_id', { length: 160 }).notNull(),
+  serverSessionId: uuid('server_session_id').notNull().unique().references(() => creationSessions.id, { onDelete: 'cascade' }),
+  claimedAt:       timestamp('claimed_at').notNull().defaultNow(),
+}, (t) => ({ pk: primaryKey({ columns: [t.userId, t.clientSessionId] }) }));

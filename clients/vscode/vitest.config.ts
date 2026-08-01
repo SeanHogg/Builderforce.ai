@@ -25,7 +25,10 @@ const agentToolsTsResolve = {
 export default defineConfig({
   plugins: [agentToolsTsResolve],
   resolve: {
-    alias: { '@builderforce/agent-tools': path.join(agentToolsRoot, 'index.ts') },
+    alias: {
+      '@builderforce/agent-tools': path.join(agentToolsRoot, 'index.ts'),
+      '@builderforce/creation-canvas-contract': path.resolve(here, '../../packages/creation-canvas-contract/src/index.ts'),
+    },
   },
   test: {
     // The harness drives the run loop headlessly — no DOM, no extension host.

@@ -59,7 +59,7 @@ This closes a loop that chat tools usually leave open:
 
 **prompt → context → artifact → review → governed execution → measurable outcome**
 
-The same tenant session is also available in the BuilderForce VS Code extension as a native full editor tab. Web collaborators can contribute customer, design, and business context while developers add repository files, selections, diagnostics, terminal output, and local previews to the same canvas.
+The same tenant session is also available in the BuilderForce VS Code extension as a native full editor tab. Web collaborators can contribute customer, design, and business context while developers add files or selections, diagnostics, repository/branch context, pasted terminal output, local services, and browser previews to the same Canvas. Linked files open directly in the editor, and Session/object comments remain connected across surfaces.
 
 Chat remains a great place to begin. Creation Canvas makes it possible to stay with the work after the answer arrives.
 

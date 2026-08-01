@@ -12,6 +12,13 @@ describe('PlanLimits — image credits are a distinct budget from tokens', () =>
   it('every plan declares an imageCreditsDailyLimit independent of tokenDailyLimit', () => {
     for (const plan of [TenantPlan.FREE, TenantPlan.PRO, TenantPlan.TEAMS]) {
       const l = getLimits(plan);
+      expect(typeof l.maxCreationSessions).toBe('number');
+      expect(typeof l.maxCreationSessionCollaborators).toBe('number');
+      expect(typeof l.maxCreationSessionTemplates).toBe('number');
+      expect(typeof l.maxCreationSessionHistory).toBe('number');
+      expect(typeof l.maxCreationDatasetRows).toBe('number');
+      expect(typeof l.maxCreationRealtimeEditors).toBe('number');
+      expect(typeof l.maxCreationArtifactBytes).toBe('number');
       expect(typeof l.imageCreditsDailyLimit).toBe('number');
       expect(l.imageCreditsDailyLimit).toBeGreaterThan(0);
       // The two budgets are tracked separately — not derived from one another.

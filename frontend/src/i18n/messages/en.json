@@ -11817,5 +11817,16 @@
       "suppressedTitle": "Suppressed effects",
       "noSteps": "The agent produced no effects at all — it neither wrote code nor stored anything."
     }
+  },
+  "creationCanvas": {
+    "sessionTitle": "Session title", "saved": "Session saved", "activeCollaborators": "Active collaborators",
+    "newSession": "New session", "templates": "Templates", "history": "History", "draw": "Draw", "branch": "Branch", "merge": "Merge", "present": "Present", "exitPresentation": "Exit presentation", "share": "Share", "run": "Run", "saveCollaborate": "Save & collaborate",
+    "addToCanvas": "Add to canvas", "searchEverything": "Search everything…", "askBrain": "Ask Brain about this canvas", "sendBrain": "Send to Brain", "entireCanvas": "Entire canvas", "loading": "Loading your canvas…", "requestAccess": "Request access", "accessRequired": "Access required",
+    "canvasTemplates": "Canvas templates", "savedAccount": "Saved to your account", "reusableFrames": "Your reusable frames", "marketplacePacks": "Reusable, capability-safe object packs",
+    "details": "Details", "activity": "Activity", "name": "Name", "saveChanges": "Save changes", "next": "Next", "startCreating": "Start creating",
+    "duplicate": "Duplicate", "align": "Align", "frame": "Frame", "lock": "Lock", "unlock": "Unlock", "hide": "Hide", "showHidden": "Show hidden", "hideHidden": "Hide hidden", "focus": "Focus", "edge": "Connection", "conversation": "Conversation", "tutorial": "Tutorial",
+    "live": "Live", "offlineRetry": "Offline · edits will retry", "reconnecting": "Reconnecting…", "connecting": "Connecting…", "largeSession": "Large Session · {count} Objects",
+    "dashboardTitle": "Create Sessions", "dashboardSubtitle": "Return to a Canvas and continue exactly where you left off.", "searchSessions": "Search Sessions, Objects, Projects, people…", "active": "Active", "archived": "Archived", "continueCreating": "Continue creating", "sharedWithMe": "Shared with me", "recentlyCompleted": "Recently completed",
+    "object": {"workflow":"Workflow","project":"Project","website":"Website","dashboard":"Dashboard","chat":"Chat","agent":"Agent","staff":"Staff member","evaluation":"Evaluation","dataset":"Dataset","table":"Table","spreadsheet":"Spreadsheet","chart":"Chart","report":"Report","kpi":"KPI","prototype":"WYSIWYG","code":"Code","browser":"Browser preview","llm":"LLM","voice":"Voice","document":"Document","slides":"Slides","knowledge":"Knowledge","file":"File","url":"URL","note":"Note","drawing":"Drawing","frame":"Frame","comment":"Comment","timer":"Timer","roadmap":"Roadmap","prd":"PRD","release":"Release","task":"Task","mockup":"Mockup","mockupSet":"Mockup set","featureSummary":"Feature summary","team":"Team","role":"Role","mcp":"Connected tool","evermind":"Evermind","projectComparison":"Project comparison","standup":"Stand-up","repository":"Repository","selection":"Editor selection","diagnostics":"Diagnostics","terminal":"Terminal output","service":"Local service"}
   }
 }

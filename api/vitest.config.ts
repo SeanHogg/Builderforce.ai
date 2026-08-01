@@ -19,6 +19,9 @@ export default defineConfig({
       '@builderforce/agent-stall': fileURLToPath(
         new URL('../packages/agent-stall/src/index.ts', import.meta.url),
       ),
+      '@builderforce/creation-canvas-contract': fileURLToPath(
+        new URL('../packages/creation-canvas-contract/src/index.ts', import.meta.url),
+      ),
     },
   },
 });
