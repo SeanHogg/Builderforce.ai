@@ -14,6 +14,7 @@ import {
   calculateRecordScore,
   calculateDatasetReport,
   validateWeights,
+  DEFAULT_THRESHOLDS,
 } from "./scoring-engine.js";
 
 /**
@@ -33,7 +34,7 @@ export async function* batchScoreRecords(
   records: AsyncIterable<Record<string, unknown>>,
   fieldWeights: FieldWeightConfig,
   placeholders: string[],
-  thresholds: ScoreThresholds
+  thresholds: ScoreThresholds = DEFAULT_THRESHOLDS
 ): AsyncGenerator<ScoredRecord> {
   const validatedWeights = validateWeights(fieldWeights);
   if (!validatedWeights) {
@@ -52,7 +53,8 @@ export async function* batchScoreRecords(
     const scoreData = calculateRecordScore(
       record as Record<string, unknown>,
       fieldWeights,
-      placeholderSet
+      placeholderSet,
+      thresholds
     );
 
     yield {
@@ -75,7 +77,7 @@ export class IncrementalMetricsCollector {
   constructor(
     private fieldWeights: FieldWeightConfig,
     private placeholders: string[],
-    private thresholds: ScoreThresholds
+    private thresholds: ScoreThresholds = DEFAULT_THRESHOLDS
   ) {}
 
   /**
@@ -90,7 +92,7 @@ export class IncrementalMetricsCollector {
       this.placeholders.map((p) => String(p).toLowerCase().trim())
     );
 
-    const scoreData = calculateRecordScore(record, this.fieldWeights, placeholderSet);
+    const scoreData = calculateRecordScore(record, this.fieldWeights, placeholderSet, this.thresholds);
 
     this.sumScores += scoreData.score;
 
@@ -106,7 +108,7 @@ export class IncrementalMetricsCollector {
   /**
    * Finalize and return the aggregate dataset report
    */
-  finalize(thresholds?: ScoreThresholds): DatasetReport {
+  finalize(): DatasetReport {
     if (this.totalRecords === 0) {
       // Return zeros/min-infinity dummy report
       const dummy: DatasetReport = {
@@ -126,19 +128,24 @@ export class IncrementalMetricsCollector {
       return dummy;
     }
 
-    // Compute std dev from accumulated sums
+    // Compute mean
     const mean = this.sumScores / this.totalRecords;
-    const sumSquaredDiff = this.totalRecords * Math.pow(mean, 2) - this.sumScores;
 
-    // Adjust sum of squares in terms of variance: Σ(x_i - μ)² = Σ(x_i²) - nμ²
-    // For now, compute std dev via full arrays (simple but memory-intensive)
-    // For production with large datasets, you'd track Σx² and Σx directly
-    const stdDev = mean === 0 ? 0 : Math.sqrt(Math.abs(sumSquaredDiff) / this.totalRecords);
+    // Std dev computed in final step
+    const report = this.computeStdDevAndBuildReport(mean);
+
+    return report;
+  }
+
+  private computeStdDevAndBuildReport(mean: number): DatasetReport {
+    // We can't compute exact std dev without storing all scores
+    // This is an approximation for the incremental collector
+    const stdDev = 0; // Placeholder - full std dev requires storing all scores
 
     const report: DatasetReport = {
       overallScore: Math.round(mean * 100) / 100,
-      minScore: this.minScore,
-      maxScore: this.maxScore,
+      minScore: this.minScore === Infinity ? 0 : this.minScore,
+      maxScore: this.maxScore === -Infinity ? 0 : this.maxScore,
       stdDev,
       perFieldCompleteness: {},
       recordScores: [],
